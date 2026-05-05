@@ -1,0 +1,34 @@
+# Permitir a todos los crawlers indexar el sitio
+User-agent: *
+Allow: /
+
+# Bloquear área administrativa de Decap CMS
+Disallow: /admin/
+
+# Permitir explícitamente a bots de redes sociales (para que los previews funcionen)
+User-agent: facebookexternalhit
+Allow: /
+
+User-agent: Facebot
+Allow: /
+
+User-agent: LinkedInBot
+Allow: /
+
+User-agent: Twitterbot
+Allow: /
+
+User-agent: WhatsApp
+Allow: /
+
+User-agent: Slackbot
+Allow: /
+
+User-agent: Discordbot
+Allow: /
+
+User-agent: TelegramBot
+Allow: /
+
+# Sitemap
+Sitemap: https://profesormvt.com/sitemap-index.xml
