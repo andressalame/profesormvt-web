@@ -34,13 +34,7 @@ import '../styles/home.css';
         </div>
       </div>
       <div class="hero-photo">
-        <span class="hero-photo-tag">FOTO</span>
-        <div class="photo-placeholder">
-          <strong>Foto Hero</strong>
-          Retrato profesional de Andrés<br>
-          en el estudio · mirando a cámara<br>
-          (vertical 4:5)
-        </div>
+        <img src="/andres-piano-hero.jpg" alt="Andrés Salame, profesor de música, sentado al piano en su estudio" />
       </div>
     </div>
   </div>
@@ -542,12 +536,7 @@ import '../styles/home.css';
   <div class="container">
     <div class="sobre-grid">
       <div class="sobre-photo">
-        <div class="photo-placeholder">
-          <strong>Foto Andrés</strong>
-          Retrato profesional<br>
-          tocando piano o cantando<br>
-          (vertical 4:5)
-        </div>
+        <img src="/andres-banjo-escenario.jpg" alt="Andrés Salame tocando banjo como frontman de Los Tramboyos en escenario" />
       </div>
       <div class="sobre-text">
         <span class="label">sobre andrés</span>
@@ -732,5 +721,18 @@ import '../styles/home.css';
     });
   });
 </script>
+
+
+<style>
+  .hero-photo img,
+  .sobre-photo img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: center;
+    border-radius: 4px;
+    display: block;
+  }
+</style>
 
 </Layout>
