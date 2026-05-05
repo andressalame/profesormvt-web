@@ -1,4 +1,4 @@
-# Profesor MVT · Web!
+# Profesor MVT · Web
 
 Sitio web de [profesormvt.com](https://profesormvt.com) — clases de canto (MVT), piano (Faber & Faber), composición (Hook Theory) y teoría musical.
 
