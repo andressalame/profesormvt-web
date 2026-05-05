@@ -3,8 +3,9 @@
 
 backend:
   name: github
-  repo: TU_USUARIO_GITHUB/profesormvt-web  # ⚠️ Reemplazar TU_USUARIO_GITHUB con el tuyo después de crear el repo
+      repo: andressalame/profesormvt-web
   branch: main
+    base_url: https://api.netlify.com
 
 # Carpeta donde se subirán las imágenes
 media_folder: "public/images/blog"
