@@ -1,0 +1,43 @@
+# Decap CMS Configuration
+# Documentación: https://decapcms.org/docs/
+
+backend:
+  name: github
+  repo: TU_USUARIO_GITHUB/profesormvt-web  # ⚠️ Reemplazar TU_USUARIO_GITHUB con el tuyo después de crear el repo
+  branch: main
+
+# Carpeta donde se subirán las imágenes
+media_folder: "public/images/blog"
+public_folder: "/images/blog"
+
+# Editor experience
+publish_mode: simple
+
+collections:
+  - name: "blog"
+    label: "Posts del Blog"
+    folder: "src/content/blog"
+    create: true
+    slug: "{{slug}}"
+    extension: "md"
+    format: "frontmatter"
+    editor:
+      preview: false
+    fields:
+      - { label: "Título", name: "title", widget: "string" }
+      - { label: "Resumen (excerpt)", name: "excerpt", widget: "text", hint: "Las primeras 2-3 líneas que se ven en el listado del blog. Máximo 200 caracteres." }
+      - label: "Categoría"
+        name: "category"
+        widget: "select"
+        options:
+          - { label: "Voz", value: "voz" }
+          - { label: "Piano", value: "piano" }
+          - { label: "Composición", value: "composicion" }
+          - { label: "Teoría", value: "teoria" }
+          - { label: "Método", value: "metodo" }
+      - { label: "Fecha de publicación", name: "date", widget: "datetime", format: "YYYY-MM-DD", date_format: "YYYY-MM-DD", time_format: false }
+      - { label: "Tiempo de lectura", name: "readTime", widget: "string", default: "5 MIN", hint: "Ej. '5 MIN', '8 MIN'" }
+      - { label: "¿Post destacado?", name: "featured", widget: "boolean", default: false, hint: "Solo uno debería estar destacado a la vez. Aparece grande arriba del listado." }
+      - { label: "Imagen de portada", name: "image", widget: "image", required: false, hint: "Opcional. Si no la pones, se usa el color de la categoría." }
+      - { label: "¿Borrador?", name: "draft", widget: "boolean", default: false, hint: "Si está marcado, NO se publica. Útil para guardar avances sin que sean públicos." }
+      - { label: "Contenido", name: "body", widget: "markdown", hint: "El cuerpo del post. Puedes usar negritas, títulos H2/H3, listas, citas, imágenes, etc." }

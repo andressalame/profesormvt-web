@@ -1,0 +1,121 @@
+---
+// Footer compartido entre home y blog
+---
+
+<footer>
+  <div class="container">
+    <div class="footer-grid">
+      <div class="footer-brand">
+        <div class="logo">profesor<em class="mark">mvt</em><span class="dot"></span></div>
+        <p>
+          Vocal coaching con MVT, piano con Faber &amp; Faber, composición con Hook Theory.
+          Para adultos que quieren tomarse la música en serio — sin trucos, con método.
+        </p>
+      </div>
+      <div class="footer-col">
+        <h4>Disciplinas</h4>
+        <ul>
+          <li><a href="/#metodo-canto">Canto · MVT</a></li>
+          <li><a href="/#metodo-piano">Piano · Faber</a></li>
+          <li><a href="/#metodo-composicion">Composición · Hook</a></li>
+          <li><a href="/#servicios">Teoría musical</a></li>
+        </ul>
+      </div>
+      <div class="footer-col">
+        <h4>Sitio</h4>
+        <ul>
+          <li><a href="/#precios">Precios</a></li>
+          <li><a href="/#sobre">Sobre mí</a></li>
+          <li><a href="/#faq">FAQ</a></li>
+          <li><a href="/blog">Blog</a></li>
+        </ul>
+      </div>
+      <div class="footer-col">
+        <h4>Estudio</h4>
+        <ul>
+          <li>San Isidro, Lima</li>
+          <li>Av. Salaverry / JV Prado</li>
+          <li><a href="https://instagram.com/asalamecordova">Instagram</a></li>
+          <li><a href="https://tiktok.com/@profesordecantomvt">TikTok</a></li>
+        </ul>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <span>© 2026 Profesor MVT · Todos los derechos reservados</span>
+      <span>Lima · Perú</span>
+    </div>
+  </div>
+</footer>
+
+<style>
+  footer {
+    background: var(--ink);
+    color: var(--cream);
+    padding: 80px 0 32px;
+    position: relative;
+    z-index: 2;
+  }
+  .footer-grid {
+    display: grid;
+    grid-template-columns: 1.4fr 1fr 1fr 1fr;
+    gap: 48px;
+    margin-bottom: 56px;
+  }
+  .footer-brand .logo {
+    color: var(--cream);
+    font-size: 28px;
+    margin-bottom: 16px;
+    font-family: 'Fraunces', serif;
+    font-weight: 500;
+    display: flex; align-items: baseline; gap: 8px;
+  }
+  .footer-brand .logo .mark { color: var(--wine); font-style: italic; }
+  .footer-brand .logo .dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--wine);
+    display: inline-block;
+    transform: translateY(-3px);
+  }
+  .footer-brand p {
+    font-size: 14.5px;
+    color: rgba(244, 234, 219, 0.65);
+    line-height: 1.6;
+    max-width: 360px;
+  }
+  .footer-col h4 {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--gold);
+    font-weight: 500;
+    margin-bottom: 18px;
+  }
+  .footer-col ul { list-style: none; }
+  .footer-col ul li { margin-bottom: 10px; }
+  .footer-col ul li a {
+    font-size: 14.5px;
+    color: rgba(244, 234, 219, 0.78);
+    transition: color 0.2s;
+  }
+  .footer-col ul li a:hover { color: var(--gold); }
+  .footer-bottom {
+    border-top: 1px solid rgba(244, 234, 219, 0.15);
+    padding-top: 32px;
+    display: flex; justify-content: space-between; align-items: center;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: rgba(244, 234, 219, 0.5);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+
+  @media (max-width: 960px) {
+    .footer-grid { grid-template-columns: 1fr 1fr; gap: 32px; }
+  }
+  @media (max-width: 540px) {
+    .footer-grid { grid-template-columns: 1fr; }
+    .footer-bottom { flex-direction: column; gap: 12px; text-align: center; }
+  }
+</style>

@@ -1,0 +1,73 @@
+---
+export interface Props {
+  activeNav?: string;
+}
+const { activeNav } = Astro.props;
+---
+
+<nav class="nav">
+  <div class="nav-inner">
+    <a href="/" class="logo">profesor<em class="mark">mvt</em><span class="dot"></span></a>
+    <ul class="nav-links">
+      <li><a href="/#metodo-canto">Canto</a></li>
+      <li><a href="/#metodo-piano">Piano</a></li>
+      <li><a href="/#metodo-composicion">Composición</a></li>
+      <li><a href="/#precios">Precios</a></li>
+      <li><a href="/#sobre">Sobre mí</a></li>
+      <li><a href="/blog" class={activeNav === 'blog' ? 'active' : ''}>Blog</a></li>
+      <li><a href="/#cta-final" class="nav-cta">Clase de prueba →</a></li>
+    </ul>
+  </div>
+</nav>
+
+<style>
+  .nav {
+    position: sticky; top: 0; z-index: 100;
+    background: rgba(244, 234, 219, 0.92);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--hairline);
+  }
+  .nav-inner {
+    max-width: 1240px;
+    margin: 0 auto;
+    padding: 18px 48px;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .logo {
+    font-family: 'Fraunces', serif;
+    font-size: 22px;
+    font-weight: 500;
+    letter-spacing: -0.01em;
+    color: var(--ink);
+    display: flex; align-items: baseline; gap: 8px;
+  }
+  .logo .mark { color: var(--wine); font-style: italic; }
+  .logo .dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--wine);
+    display: inline-block;
+    transform: translateY(-3px);
+  }
+  .nav-links { display: flex; align-items: center; gap: 26px; list-style: none; }
+  .nav-links a { font-size: 14.5px; color: var(--ink-soft); transition: color 0.2s; }
+  .nav-links a.active { color: var(--wine); font-weight: 500; }
+  .nav-links a:hover { color: var(--wine); }
+  .nav-cta {
+    background: var(--wine);
+    color: var(--cream) !important;
+    padding: 10px 20px;
+    border-radius: 999px;
+    font-size: 14px;
+    font-weight: 500;
+    transition: background 0.2s;
+  }
+  .nav-cta:hover { background: var(--wine-deep); }
+
+  @media (max-width: 960px) {
+    .nav-inner { padding: 14px 28px; }
+    .nav-links { gap: 16px; }
+    .nav-links li:not(:last-child) { display: none; }
+  }
+</style>
