@@ -2,7 +2,7 @@
 
 Sitio web de [profesormvt.com](https://profesormvt.com) — clases de canto (MVT), piano (Faber & Faber), composición (Hook Theory) y teoría musical.
 
-Stack: **Astro + Decap CMS + Cloudflare Pages + GitHub** (todo gratis).
+Stack: **Astro + Decap CMS + Cloudflare Pages + GitHub** (todo gratis). 
 
 ---
 
