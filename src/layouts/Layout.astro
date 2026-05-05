@@ -18,20 +18,73 @@ const { title, description, activeNav } = Astro.props;
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+  <!-- SEO básico -->
   <title>{title}</title>
   <meta name="description" content={description} />
+  <meta name="keywords" content="clases de canto Lima, vocal coaching MVT, clases de piano adultos, Faber Faber piano, composición Hook Theory, profesor música San Isidro, clases música online Perú" />
+  <meta name="author" content="Andrés Salame" />
+  <link rel="canonical" href="https://profesormvt.com/" />
+
+  <!-- Open Graph (Facebook, Instagram, WhatsApp, LinkedIn) -->
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://profesormvt.com/" />
+  <meta property="og:title" content="Profesor MVT — Clases de música para adultos en Lima y online" />
+  <meta property="og:description" content="Clases de canto con método MVT, piano con Faber & Faber, composición con Hook Theory. Para adultos que quieren tomarse la música en serio. Clase de prueba S/50." />
+  <meta property="og:image" content="https://profesormvt.com/andres-piano-hero.jpg" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta property="og:image:alt" content="Andrés Salame, profesor de música, sentado al piano en su estudio" />
+  <meta property="og:locale" content="es_PE" />
+  <meta property="og:site_name" content="Profesor MVT" />
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:url" content="https://profesormvt.com/" />
+  <meta name="twitter:title" content="Profesor MVT — Clases de música para adultos en Lima y online" />
+  <meta name="twitter:description" content="Clases de canto con método MVT, piano con Faber & Faber, composición con Hook Theory. Para adultos que quieren tomarse la música en serio. Clase de prueba S/50." />
+  <meta name="twitter:image" content="https://profesormvt.com/andres-piano-hero.jpg" />
+  <meta name="twitter:image:alt" content="Andrés Salame, profesor de música, sentado al piano en su estudio" />
 
   <!-- ============= META PIXEL HERE ============= -->
   <!-- Reemplazar este comentario con el código del Pixel de Meta cuando lo migres desde Wix -->
   <!-- Lo encuentras en: Meta Business Suite → Events Manager → Tu Pixel → Settings -->
 
-  <!-- Open Graph -->
-  <meta property="og:title" content={title} />
-  <meta property="og:description" content={description} />
-  <meta property="og:type" content="website" />
-  <meta property="og:url" content={Astro.url.href} />
-
   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+
+  <!-- Structured Data (JSON-LD) — Schema.org para Google -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "EducationalOrganization",
+    "name": "Profesor MVT",
+    "description": "Clases de canto con método MVT, piano con Faber & Faber, composición con Hook Theory y teoría musical para adultos.",
+    "url": "https://profesormvt.com",
+    "logo": "https://profesormvt.com/andres-piano-hero.jpg",
+    "image": "https://profesormvt.com/andres-piano-hero.jpg",
+    "address": {
+      "@type": "PostalAddress",
+      "addressLocality": "San Isidro",
+      "addressRegion": "Lima",
+      "addressCountry": "PE"
+    },
+    "founder": {
+      "@type": "Person",
+      "name": "Andrés Salame",
+      "jobTitle": "Profesor de música"
+    },
+    "sameAs": [
+      "https://instagram.com/asalamecordova",
+      "https://tiktok.com/@profesordecantomvt"
+    ],
+    "offers": {
+      "@type": "Offer",
+      "name": "Clase de prueba",
+      "price": "50",
+      "priceCurrency": "PEN"
+    }
+  }
+  </script>
 </head>
 <body>
   <Nav activeNav={activeNav} />
