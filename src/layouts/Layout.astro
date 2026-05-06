@@ -46,9 +46,23 @@ const { title, description, activeNav } = Astro.props;
   <meta name="twitter:image" content="https://profesormvt.com/andres-piano-hero.jpg" />
   <meta name="twitter:image:alt" content="Andrés Salame, profesor de música, sentado al piano en su estudio" />
 
-  <!-- ============= META PIXEL HERE ============= -->
-  <!-- Reemplazar este comentario con el código del Pixel de Meta cuando lo migres desde Wix -->
-  <!-- Lo encuentras en: Meta Business Suite → Events Manager → Tu Pixel → Settings -->
+  <!-- Meta Pixel Code -->
+  <script>
+    !function(f,b,e,v,n,t,s)
+    {if(f.fbq)return;n=f.fbq=function(){n.callMethod?
+    n.callMethod.apply(n,arguments):n.queue.push(arguments)};
+    if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';
+    n.queue=[];t=b.createElement(e);t.async=!0;
+    t.src=v;s=b.getElementsByTagName(e)[0];
+    s.parentNode.insertBefore(t,s)}(window, document,'script',
+    'https://connect.facebook.net/en_US/fbevents.js');
+    fbq('init', '1281275673536185');
+    fbq('track', 'PageView');
+  </script>
+  <noscript><img height="1" width="1" style="display:none"
+    src="https://www.facebook.com/tr?id=1281275673536185&ev=PageView&noscript=1"
+  /></noscript>
+  <!-- End Meta Pixel Code -->
 
   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
 
@@ -91,5 +105,39 @@ const { title, description, activeNav } = Astro.props;
   <slot />
   <Footer />
   <WhatsAppFloat />
+
+  <!-- Meta Pixel — Custom Event Tracking -->
+  <script>
+    // Track WhatsApp clicks as Lead events
+    document.addEventListener('DOMContentLoaded', function() {
+      // Encuentra TODOS los links que apunten a wa.me o whatsapp
+      const whatsappLinks = document.querySelectorAll('a[href*="wa.me"], a[href*="whatsapp.com"], a[href*="api.whatsapp.com"]');
+
+      whatsappLinks.forEach(link => {
+        link.addEventListener('click', function() {
+          if (typeof fbq !== 'undefined') {
+            fbq('track', 'Lead', {
+              content_name: 'WhatsApp Click',
+              content_category: 'Contact'
+            });
+          }
+        });
+      });
+
+      // Track Calendly clicks as Schedule events
+      const calendlyLinks = document.querySelectorAll('a[href*="calendly.com"]');
+
+      calendlyLinks.forEach(link => {
+        link.addEventListener('click', function() {
+          if (typeof fbq !== 'undefined') {
+            fbq('track', 'Schedule', {
+              content_name: 'Calendly Click',
+              content_category: 'Booking'
+            });
+          }
+        });
+      });
+    });
+  </script>
 </body>
 </html>
