@@ -68,36 +68,36 @@ const { title, description, activeNav } = Astro.props;
 
   <!-- Structured Data (JSON-LD) — Schema.org para Google -->
   <script type="application/ld+json">
-  {
-    "@context": "https://schema.org",
-    "@type": "EducationalOrganization",
-    "name": "Profesor MVT",
-    "description": "Clases de canto con método MVT, piano con Faber & Faber, composición con Hook Theory y teoría musical para adultos.",
-    "url": "https://profesormvt.com",
-    "logo": "https://profesormvt.com/andres-piano-hero.jpg",
-    "image": "https://profesormvt.com/andres-piano-hero.jpg",
-    "address": {
-      "@type": "PostalAddress",
-      "addressLocality": "San Isidro",
-      "addressRegion": "Lima",
-      "addressCountry": "PE"
-    },
-    "founder": {
-      "@type": "Person",
-      "name": "Andrés Salame",
-      "jobTitle": "Profesor de música"
-    },
-    "sameAs": [
-      "https://instagram.com/asalamecordova",
-      "https://tiktok.com/@profesordecantomvt"
-    ],
-    "offers": {
-      "@type": "Offer",
-      "name": "Clase de prueba",
-      "price": "50",
-      "priceCurrency": "PEN"
+    {
+      "@context": "https://schema.org",
+      "@type": "EducationalOrganization",
+      "name": "Profesor MVT",
+      "description": "Clases de canto con método MVT, piano con Faber & Faber, composición con Hook Theory y teoría musical para adultos.",
+      "url": "https://profesormvt.com",
+      "logo": "https://profesormvt.com/andres-piano-hero.jpg",
+      "image": "https://profesormvt.com/andres-piano-hero.jpg",
+      "address": {
+        "@type": "PostalAddress",
+        "addressLocality": "San Isidro",
+        "addressRegion": "Lima",
+        "addressCountry": "PE"
+      },
+      "founder": {
+        "@type": "Person",
+        "name": "Andrés Salame",
+        "jobTitle": "Profesor de música"
+      },
+      "sameAs": [
+        "https://instagram.com/asalamecordova",
+        "https://tiktok.com/@profesordecantomvt"
+      ],
+      "offers": {
+        "@type": "Offer",
+        "name": "Clase de prueba",
+        "price": "50",
+        "priceCurrency": "PEN"
+      }
     }
-  }
   </script>
 </head>
 <body>
@@ -106,20 +106,28 @@ const { title, description, activeNav } = Astro.props;
   <Footer />
   <WhatsAppFloat />
 
-  <!-- Meta Pixel — Custom Event Tracking -->
+  <!-- Meta Pixel — Custom Event Tracking with Beacon Transport -->
   <script>
-    // Track WhatsApp clicks as Lead events
     document.addEventListener('DOMContentLoaded', function() {
-      // Encuentra TODOS los links que apunten a wa.me o whatsapp
+      // Track WhatsApp clicks as Lead events
       const whatsappLinks = document.querySelectorAll('a[href*="wa.me"], a[href*="whatsapp.com"], a[href*="api.whatsapp.com"]');
 
       whatsappLinks.forEach(link => {
-        link.addEventListener('click', function() {
+        link.addEventListener('click', function(e) {
           if (typeof fbq !== 'undefined') {
+            // Use sendBeacon-style tracking to ensure event fires before navigation
             fbq('track', 'Lead', {
               content_name: 'WhatsApp Click',
               content_category: 'Contact'
+            }, {
+              eventID: 'whatsapp_lead_' + Date.now()
             });
+
+            // Also send via navigator.sendBeacon as backup for cross-page navigation
+            if (navigator.sendBeacon) {
+              const pixelUrl = 'https://www.facebook.com/tr/?id=1281275673536185&ev=Lead&cd[content_name]=WhatsApp+Click&cd[content_category]=Contact&noscript=1';
+              navigator.sendBeacon(pixelUrl);
+            }
           }
         });
       });
@@ -128,12 +136,20 @@ const { title, description, activeNav } = Astro.props;
       const calendlyLinks = document.querySelectorAll('a[href*="calendly.com"]');
 
       calendlyLinks.forEach(link => {
-        link.addEventListener('click', function() {
+        link.addEventListener('click', function(e) {
           if (typeof fbq !== 'undefined') {
             fbq('track', 'Schedule', {
               content_name: 'Calendly Click',
               content_category: 'Booking'
+            }, {
+              eventID: 'calendly_schedule_' + Date.now()
             });
+
+            // Backup beacon
+            if (navigator.sendBeacon) {
+              const pixelUrl = 'https://www.facebook.com/tr/?id=1281275673536185&ev=Schedule&cd[content_name]=Calendly+Click&cd[content_category]=Booking&noscript=1';
+              navigator.sendBeacon(pixelUrl);
+            }
           }
         });
       });
