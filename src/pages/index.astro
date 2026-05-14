@@ -12,6 +12,7 @@ import '../styles/home.css';
     <div class="hero-grid">
       <div class="hero-text">
         <span class="label">canto · piano · composición · método moderno · san isidro &amp; online</span>
+        <p class="hero-clarity">Canto, piano y composición para adultos · San Isidro u online</p>
         <h1>Tu voz no<br>necesita más<br>esfuerzo. <em>Necesita coordinación.</em></h1>
         <p class="lead">
           Métodos modernos para adultos que quieren tomarse la música en serio — sin trucos, sin misticismo, con resultados medibles. San Isidro u online.
@@ -726,6 +727,19 @@ import '../styles/home.css';
     object-position: center;
     border-radius: 4px;
     display: block;
+  }
+  .hero-clarity {
+    display: none;
+    font-size: 1.05rem;
+    line-height: 1.35;
+    color: var(--ink, #2b2b2b);
+    margin: 0.5rem 0 1.2rem 0;
+    font-weight: 500;
+  }
+  @media (max-width: 768px) {
+    .hero-clarity {
+      display: block;
+    }
   }
 </style>
 
