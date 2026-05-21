@@ -15,59 +15,60 @@ const { activeNav } = Astro.props;
       <li><a href="/#precios">Precios</a></li>
       <li><a href="/#sobre">Sobre mí</a></li>
       <li><a href="/blog" class={activeNav === 'blog' ? 'active' : ''}>Blog</a></li>
-      <li><a href="/#cta-final" class="nav-cta">Clase de prueba →</a></li>
+      <li><a href="https://wa.me/51989077928?text=Hola%20Andrés%2C%20quiero%20reservar%20la%20clase%20de%20prueba%20S%2F50" class="nav-cta" target="_blank" rel="noopener">Clase de prueba →</a></li>
     </ul>
   </div>
 </nav>
 
 <style>
-  .nav {
-    position: sticky; top: 0; z-index: 100;
-    background: rgba(244, 234, 219, 0.92);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-    border-bottom: 1px solid var(--hairline);
-  }
-  .nav-inner {
-    max-width: 1240px;
-    margin: 0 auto;
-    padding: 18px 48px;
-    display: flex; align-items: center; justify-content: space-between;
-  }
-  .logo {
-    font-family: 'Fraunces', serif;
-    font-size: 22px;
-    font-weight: 500;
-    letter-spacing: -0.01em;
-    color: var(--ink);
-    display: flex; align-items: baseline; gap: 8px;
-  }
-  .logo .mark { color: var(--wine); font-style: italic; }
-  .logo .dot {
-    width: 6px; height: 6px;
-    border-radius: 50%;
-    background: var(--wine);
-    display: inline-block;
-    transform: translateY(-3px);
-  }
-  .nav-links { display: flex; align-items: center; gap: 26px; list-style: none; }
-  .nav-links a { font-size: 14.5px; color: var(--ink-soft); transition: color 0.2s; }
-  .nav-links a.active { color: var(--wine); font-weight: 500; }
-  .nav-links a:hover { color: var(--wine); }
-  .nav-cta {
-    background: var(--wine);
-    color: var(--cream) !important;
-    padding: 10px 20px;
-    border-radius: 999px;
-    font-size: 14px;
-    font-weight: 500;
-    transition: background 0.2s;
-  }
-  .nav-cta:hover { background: var(--wine-deep); }
+.nav {
+  position: sticky; top: 0; z-index: 100;
+  background: rgba(15, 15, 14, 0.92);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--color-line);
+}
+.nav-inner {
+  max-width: 1240px;
+  margin: 0 auto;
+  padding: 18px 48px;
+  display: flex; align-items: center; justify-content: space-between;
+}
+.logo {
+  font-family: 'Fraunces', serif;
+  font-size: 22px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  color: var(--color-bone);
+  display: flex; align-items: baseline; gap: 8px;
+}
+.logo .mark { color: var(--color-ember); font-style: italic; }
+.logo .dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--color-ember);
+  display: inline-block;
+  transform: translateY(-3px);
+}
+.nav-links { display: flex; align-items: center; gap: 26px; list-style: none; }
+.nav-links a { font-size: 14.5px; color: var(--color-bone-mute); transition: color 0.2s; }
+.nav-links a.active { color: var(--color-ember); font-weight: 500; }
+.nav-links a:hover { color: var(--color-ember); }
+.nav-cta {
+  background: var(--color-ember);
+  color: var(--color-bone) !important;
+  padding: 10px 20px;
+  border-radius: 4px;
+  font-size: 13.5px;
+  font-weight: 600;
+  transition: background 0.2s;
+  letter-spacing: 0.01em;
+}
+.nav-cta:hover { background: var(--wine-deep); color: var(--color-bone) !important; }
 
-  @media (max-width: 960px) {
-    .nav-inner { padding: 14px 28px; }
-    .nav-links { gap: 16px; }
-    .nav-links li:not(:last-child) { display: none; }
-  }
+@media (max-width: 960px) {
+  .nav-inner { padding: 14px 28px; }
+  .nav-links { gap: 14px; }
+  .nav-links li:not(:last-child) { display: none; }
+}
 </style>
