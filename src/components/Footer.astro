@@ -8,9 +8,10 @@
       <div class="footer-brand">
         <div class="logo">profesor<em class="mark">mvt</em><span class="dot"></span></div>
         <p>
-          Vocal coaching con MVT, piano con Faber &amp; Faber, composición con Hook Theory.
-          Para adultos que quieren tomarse la música en serio — sin trucos, con método.
+          Canto con MVT, piano con Faber &amp; Faber, composición con Hook Theory.
+          Para adultos entre 20 y 45 años que quieren tomarse la música en serio.
         </p>
+        <p class="footer-address">Av. Salaverry / Av. JV Prado, San Isidro · Lima</p>
       </div>
       <div class="footer-col">
         <h4>Disciplinas</h4>
@@ -31,91 +32,109 @@
         </ul>
       </div>
       <div class="footer-col">
-        <h4>Estudio</h4>
+        <h4>Contacto</h4>
         <ul>
-          <li>San Isidro, Lima</li>
-          <li>Av. Salaverry / JV Prado</li>
-          <li><a href="https://instagram.com/asalamecordova">Instagram</a></li>
-          <li><a href="https://tiktok.com/@profesordecantomvt">TikTok</a></li>
+          <li><a href="https://wa.me/51989077928?text=Hola%20Andrés" target="_blank" rel="noopener">
+            <svg viewBox="0 0 24 24" style="width:14px;height:14px;fill:currentColor;display:inline;margin-right:4px;"><path d="M.057 24l1.687-6.163a11.867 11.867 0 01-1.587-5.946C.16 5.335 5.495 0 12.05 0a11.817 11.817 0 018.413 3.488 11.824 11.824 0 013.48 8.414c-.003 6.557-5.338 11.892-11.893 11.892a11.9 11.9 0 01-5.688-1.448L.057 24z"/></svg>
+            WhatsApp
+          </a></li>
+          <li><a href="https://instagram.com/asalamecordova" target="_blank" rel="noopener">
+            Instagram
+          </a></li>
+          <li><a href="https://tiktok.com/@profesordecantomvt" target="_blank" rel="noopener">
+            TikTok
+          </a></li>
         </ul>
       </div>
     </div>
     <div class="footer-bottom">
       <span>© 2026 Profesor MVT · Todos los derechos reservados</span>
-      <span>Lima · Perú</span>
+      <span>San Isidro · Lima · Perú</span>
     </div>
   </div>
 </footer>
 
 <style>
-  footer {
-    background: var(--ink);
-    color: var(--cream);
-    padding: 80px 0 32px;
-    position: relative;
-    z-index: 2;
-  }
-  .footer-grid {
-    display: grid;
-    grid-template-columns: 1.4fr 1fr 1fr 1fr;
-    gap: 48px;
-    margin-bottom: 56px;
-  }
-  .footer-brand .logo {
-    color: var(--cream);
-    font-size: 28px;
-    margin-bottom: 16px;
-    font-family: 'Fraunces', serif;
-    font-weight: 500;
-    display: flex; align-items: baseline; gap: 8px;
-  }
-  .footer-brand .logo .mark { color: var(--wine); font-style: italic; }
-  .footer-brand .logo .dot {
-    width: 6px; height: 6px;
-    border-radius: 50%;
-    background: var(--wine);
-    display: inline-block;
-    transform: translateY(-3px);
-  }
-  .footer-brand p {
-    font-size: 14.5px;
-    color: rgba(244, 234, 219, 0.65);
-    line-height: 1.6;
-    max-width: 360px;
-  }
-  .footer-col h4 {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 11px;
-    letter-spacing: 0.18em;
-    text-transform: uppercase;
-    color: var(--gold);
-    font-weight: 500;
-    margin-bottom: 18px;
-  }
-  .footer-col ul { list-style: none; }
-  .footer-col ul li { margin-bottom: 10px; }
-  .footer-col ul li a {
-    font-size: 14.5px;
-    color: rgba(244, 234, 219, 0.78);
-    transition: color 0.2s;
-  }
-  .footer-col ul li a:hover { color: var(--gold); }
-  .footer-bottom {
-    border-top: 1px solid rgba(244, 234, 219, 0.15);
-    padding-top: 32px;
-    display: flex; justify-content: space-between; align-items: center;
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 11px;
-    color: rgba(244, 234, 219, 0.5);
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-  }
+footer {
+  background: var(--color-ink-soft);
+  color: var(--color-bone);
+  padding: 80px 0 32px;
+  position: relative;
+  z-index: 2;
+  border-top: 1px solid var(--color-line);
+}
+.footer-grid {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr 1fr 1fr;
+  gap: 48px;
+  margin-bottom: 56px;
+}
+.footer-brand .logo {
+  color: var(--color-bone);
+  font-size: 26px;
+  margin-bottom: 16px;
+  font-family: 'Fraunces', serif;
+  font-weight: 500;
+  display: flex; align-items: baseline; gap: 8px;
+}
+.footer-brand .logo .mark { color: var(--color-ember); font-style: italic; }
+.footer-brand .logo .dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--color-ember);
+  display: inline-block;
+  transform: translateY(-3px);
+}
+.footer-brand p {
+  font-size: 14px;
+  color: var(--color-bone-mute);
+  line-height: 1.6;
+  max-width: 340px;
+  margin-bottom: 8px;
+}
+.footer-address {
+  font-family: 'JetBrains Mono', monospace !important;
+  font-size: 11px !important;
+  color: var(--color-text-mute) !important;
+  letter-spacing: 0.05em;
+}
+.footer-col h4 {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--color-ember);
+  font-weight: 500;
+  margin-bottom: 18px;
+}
+.footer-col ul { list-style: none; }
+.footer-col ul li { margin-bottom: 10px; }
+.footer-col ul li a {
+  font-size: 14px;
+  color: var(--color-bone-mute);
+  transition: color 0.2s;
+  display: flex;
+  align-items: center;
+}
+.footer-col ul li a:hover { color: var(--color-ember); }
+.footer-col ul li a svg { fill: var(--color-bone-mute); transition: fill 0.2s; }
+.footer-col ul li a:hover svg { fill: var(--color-ember); }
+.footer-bottom {
+  border-top: 1px solid var(--color-line);
+  padding-top: 28px;
+  display: flex; justify-content: space-between; align-items: center;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  color: var(--color-text-mute);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
 
-  @media (max-width: 960px) {
-    .footer-grid { grid-template-columns: 1fr 1fr; gap: 32px; }
-  }
-  @media (max-width: 540px) {
-    .footer-grid { grid-template-columns: 1fr; }
-    .footer-bottom { flex-direction: column; gap: 12px; text-align: center; }
-  }
+@media (max-width: 960px) {
+  .footer-grid { grid-template-columns: 1fr 1fr; gap: 32px; }
+}
+@media (max-width: 540px) {
+  .footer-grid { grid-template-columns: 1fr; }
+  .footer-bottom { flex-direction: column; gap: 12px; text-align: center; }
+}
 </style>
