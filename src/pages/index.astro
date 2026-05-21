@@ -3,40 +3,76 @@ import Layout from '../layouts/Layout.astro';
 import '../styles/home.css';
 ---
 <Layout
-  title="Profesor MVT · Vocal coaching, piano y composición para adultos · San Isidro & online"
-  description="Clases de canto con método MVT, piano con Faber & Faber, composición con Hook Theory, y teoría musical. San Isidro y online. Clase de prueba S/50."
+  title="Profesor MVT · Canto, piano y composición para adultos · San Isidro & online"
+  description="Clases de canto con método MVT, piano y composición para adultos entre 20 y 45 años. Presencial en San Isidro u online. Clase de prueba S/50."
 >
 
+<!-- ==================== HERO ==================== -->
 <section class="hero">
   <div class="container">
     <div class="hero-grid">
       <div class="hero-text">
-        <span class="label">canto · piano · composición · método moderno · san isidro &amp; online</span>
-        <p class="hero-clarity">Canto, piano y composición para adultos · San Isidro u online</p>
-        <h1>Tu voz no<br>necesita más<br>esfuerzo. <em>Necesita coordinación.</em></h1>
+        <span class="hero-eyebrow">[ ADULTOS · 20 A 45 ]</span>
+        <h1>Canto, piano y composición para <em>adultos</em>.</h1>
         <p class="lead">
-          Métodos modernos para adultos que quieren tomarse la música en serio — sin trucos, sin misticismo, con resultados medibles. San Isidro u online.
+          Presencial en San Isidro u online. Método MVT, formación clásica y
+          experiencia real en la industria — no academia genérica.
         </p>
         <div class="hero-ctas">
-          <a href="#cta-final" class="btn-primary">
-            Clase de prueba · S/50
-            <svg viewBox="0 0 24 24"><path d="M14 5l7 7-7 7-1.4-1.4 4.6-4.6H3v-2h21.2L14 6.4z"/></svg>
+          <a href="https://wa.me/51989077928?text=Hola%20Andrés%2C%20quiero%20reservar%20la%20clase%20de%20prueba%20S%2F50" class="btn-primary" target="_blank" rel="noopener">
+            Reservar prueba — S/50 →
           </a>
-          <a href="#metodo-canto" class="btn-ghost">Conocer los métodos</a>
+          <a href="#precios" class="btn-ghost">Ver paquetes</a>
         </div>
-        <div class="hero-badges">
-          <span>Canto · MVT</span>
-          <span>Piano · Faber &amp; Faber</span>
-          <span>Composición · Hook Theory</span>
-          <span>Presencial &amp; online</span>
-        </div>
+        <p class="hero-microcopy">// incluye diagnóstico vocal escrito en PDF</p>
       </div>
       <div class="hero-photo">
-        <img src="/andres-piano-hero.jpg" alt="Andrés Salame, profesor de música, sentado al piano en su estudio" />
+        <img src="/andres-piano-hero.jpg" alt="Andrés Salame, frontman y compositor, profesor de canto, piano y composición en San Isidro" />
       </div>
     </div>
   </div>
 </section>
+
+<!-- ==================== CREDENCIALES ==================== -->
+<div class="credentials-strip">
+  <div class="container">
+    <span class="strip-title">// CREDENCIALES</span>
+    <div class="credentials-grid">
+      <div class="credential-cell">
+        <span class="cred-number">+200</span>
+        <span class="cred-label">CANCIONES<br>COMPUESTAS</span>
+      </div>
+      <div class="credential-cell">
+        <span class="cred-number">+20</span>
+        <span class="cred-label">CONCIERTOS<br>PRODUCIDOS</span>
+      </div>
+      <div class="credential-cell">
+        <span class="cred-number">UPC</span>
+        <span class="cred-label">ESTUDIOS<br>MÚSICA</span>
+      </div>
+      <div class="credential-cell">
+        <span class="cred-number">ULima</span>
+        <span class="cred-label">ESTUDIOS<br>PSICOLOGÍA</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== INDUSTRIA ==================== -->
+<div class="industry-strip">
+  <div class="container">
+    <span class="strip-title">// INDUSTRIA</span>
+    <div class="industry-list">
+      <span>FRONTMAN · TRAMBOYOS</span><span class="sep">/</span>
+      <span>MANAGEMENT · KIDS ON COFFEE</span><span class="sep">/</span>
+      <span>EX-MGR · MALOS AMIGOS</span><span class="sep">/</span>
+      <span>MACERADOZ</span><span class="sep">/</span>
+      <span>TUPORAQUÍ YOPORALLÁ</span><span class="sep">/</span>
+      <span>BASTIAN GUIJA</span><span class="sep">/</span>
+      <span>LONZO MIRANDA</span>
+    </div>
+  </div>
+</div>
 
 <!-- ==================== ¿TE IDENTIFICAS? ==================== -->
 <section class="alt-bg" id="identifica">
@@ -44,18 +80,15 @@ import '../styles/home.css';
     <div class="section-head">
       <span class="label">para quienes esto va</span>
       <h2>¿Te <em>suena familiar</em>?</h2>
-      <p class="sub">
-        Si te identificas con alguno de estos, los métodos que enseño se diseñaron exactamente para resolverlo.
-      </p>
+      <p class="sub">Si te identificas con alguno de estos, los métodos que enseño se diseñaron exactamente para resolverlo.</p>
     </div>
-
     <div class="pain-grid">
       <div class="pain-card">
         <span class="num"><span class="disc">CANTO</span> 01</span>
         <h3>Llevas años con esa <em>canción atragantada</em> en el estribillo.</h3>
         <p>Cada vez que intentas el agudo, sale apretado, raspado, o simplemente no sale. Y ya probaste de todo.</p>
       </div>
-      <div class="pain-card piano">
+      <div class="pain-card">
         <span class="num"><span class="disc">PIANO</span> 02</span>
         <h3>Sigues tocando las <em>mismas tres canciones</em> que aprendiste hace años.</h3>
         <p>Te estancaste. Sabes algunos acordes, pero no logras avanzar a las canciones que te gustan de verdad.</p>
@@ -65,15 +98,14 @@ import '../styles/home.css';
         <h3>Te dijeron <em>"apoya más fuerte"</em> — y no funciona.</h3>
         <p>Has hecho ejercicios respiratorios, has empujado el aire desde el diafragma, y sigues sin cantar como te gustaría.</p>
       </div>
-      <div class="pain-card piano">
+      <div class="pain-card">
         <span class="num"><span class="disc">PIANO · TEORÍA</span> 04</span>
         <h3>No entiendes la <em>armonía</em> detrás de las canciones que amas.</h3>
         <p>Memorizas acordes pero no sabes por qué suenan así. Quieres componer o improvisar y no sabes ni por dónde empezar.</p>
       </div>
     </div>
-
     <div class="pain-conclusion">
-      No es falta de talento. Es <strong>método mal aplicado.</strong> Y eso tiene solución específica, progresiva y comprobable — para canto y para piano.
+      No es falta de talento. Es <strong>método mal aplicado.</strong> Y eso tiene solución específica, progresiva y comprobable.
     </div>
   </div>
 </section>
@@ -84,179 +116,113 @@ import '../styles/home.css';
     <div class="section-head">
       <span class="label">para canto · método mvt</span>
       <h2>Cuatro principios. <em>Cero misticismo.</em></h2>
-      <p class="sub">
-        Modern Vocal Training (MVT) es una metodología contemporánea basada en la fisiología real de la voz.
-        Estos son los pilares que trabajamos en cada clase de canto.
-      </p>
+      <p class="sub">Modern Vocal Training (MVT) es una metodología contemporánea basada en la fisiología real de la voz.</p>
     </div>
-
     <div class="pillars">
       <div class="pillar">
         <span class="num">PRINCIPIO · 01</span>
         <h3><em>Coordinación</em> muscular</h3>
-        <p>
-          Entrenamos los músculos vocales como cualquier otro grupo muscular del cuerpo —
-          específico, progresivo, medible. El agudo no sale por "sentirlo más", sale porque
-          la musculatura está coordinada.
-        </p>
+        <p>Entrenamos los músculos vocales como cualquier otro grupo muscular del cuerpo — específico, progresivo, medible.</p>
       </div>
       <div class="pillar">
         <span class="num">PRINCIPIO · 02</span>
         <h3>Equilibrio de <em>resonancia</em></h3>
-        <p>
-          Aprendemos a manejar dónde resuena la voz —pecho, máscara, cabeza— y a transitar
-          entre registros sin saltos audibles ni rupturas. Eso es lo que llaman "voz mixta",
-          pero sin trucos.
-        </p>
+        <p>Aprendemos a manejar dónde resuena la voz —pecho, máscara, cabeza— y a transitar entre registros sin rupturas.</p>
       </div>
       <div class="pillar">
         <span class="num">PRINCIPIO · 03</span>
         <h3>Cierre <em>cordal</em> saludable</h3>
-        <p>
-          El cierre apropiado de las cuerdas vocales es la base de proyección, claridad
-          y resistencia. Sin abuso, sin hiperfunción. La voz se sostiene sola, no la sostienes tú.
-        </p>
+        <p>El cierre apropiado de las cuerdas vocales es la base de proyección, claridad y resistencia. Sin abuso.</p>
       </div>
       <div class="pillar">
         <span class="num">PRINCIPIO · 04</span>
         <h3>Liberación de <em>constricción</em></h3>
-        <p>
-          Aflojamos lo que aprieta. La libertad vocal viene de quitar tensión innecesaria,
-          no de añadir esfuerzo. Mandíbula, lengua, falsas cuerdas — todo se enseña a soltar.
-        </p>
+        <p>Aflojamos lo que aprieta. La libertad vocal viene de quitar tensión innecesaria, no de añadir esfuerzo.</p>
       </div>
     </div>
-
     <div class="pillar-counter">
       Esto es lo opuesto al consejo común de "apoya más fuerte". La voz no funciona con esfuerzo añadido — funciona con coordinación entrenada.
     </div>
   </div>
 </section>
 
-<!-- ==================== MÉTODO PIANO (FABER) ==================== -->
+<!-- ==================== MÉTODO PIANO ==================== -->
 <section class="warm-bg" id="metodo-piano">
   <div class="container">
     <div class="section-head" style="text-align: center;">
-      <span class="label clay" style="display: inline-block;">para piano · faber &amp; faber piano adventures</span>
+      <span class="label" style="display: inline-block;">para piano · faber &amp; faber piano adventures</span>
     </div>
-
     <div class="piano-method-intro">
-      <div class="quote">
-        Toca lo que escuchas. <em>No lo que te imponen.</em>
-      </div>
-      <p>
-        El piano para adultos no debería empezar con "Para Elisa" ni con tres meses de Hanon.
-        Faber &amp; Faber es el método de piano más usado por profesores serios alrededor del
-        mundo, y funciona increíble para adultos cuando se aplica con criterio adulto —
-        no infantilizado.
-      </p>
+      <div class="quote">Toca lo que escuchas. <em>No lo que te imponen.</em></div>
+      <p>El piano para adultos no debería empezar con "Para Elisa" ni con tres meses de Hanon. Faber &amp; Faber es el método de piano más usado por profesores serios alrededor del mundo.</p>
     </div>
-
     <div class="piano-methods">
-
       <div class="piano-method-card">
         <div class="card-tag">EL MÉTODO · FABER &amp; FABER</div>
         <h3>Piano Adventures<em>Nancy &amp; Randall Faber</em></h3>
         <div class="tagline">La estructura clásica del aprendizaje moderno.</div>
-        <p>
-          Creado por los Faber, es la metodología contemporánea más respetada para enseñar
-          piano. Integra técnica, lectura, teoría y escucha desde el primer libro — todo
-          conectado, nada compartimentado.
-        </p>
+        <p>Integra técnica, lectura, teoría y escucha desde el primer libro — todo conectado, nada compartimentado.</p>
         <ul>
-          <li><strong>Multi-tonalidad temprana:</strong> aprendes en varias claves desde el inicio, no estancado en Do mayor</li>
+          <li><strong>Multi-tonalidad temprana:</strong> aprendes en varias claves desde el inicio</li>
           <li><strong>Cuatro libros por nivel:</strong> Lesson, Theory, Performance y Technique &amp; Artistry</li>
           <li><strong>Progresión secuenciada:</strong> Primer Level → Level 1 → 2A → 2B → 3A → 3B → 4 → 5</li>
           <li><strong>Repertorio variado:</strong> clásico, contemporáneo, jazz y pop adaptado</li>
         </ul>
       </div>
-
       <div class="piano-method-card">
         <div class="card-tag">LA ADAPTACIÓN · PARA ADULTO</div>
         <h3>Cómo lo enseño<em>a alumnos adultos</em></h3>
         <div class="tagline">El método no es para niños. El adulto tiene necesidades distintas.</div>
-        <p>
-          La pedagogía Faber es excelente para cualquier edad, pero un adulto necesita un
-          enfoque distinto al de un niño. Esto es lo que ajusto en cada clase para que tu
-          tiempo cuente.
-        </p>
+        <p>Un adulto necesita un enfoque distinto al de un niño. Esto es lo que ajusto en cada clase.</p>
         <ul>
           <li><strong>Ritmo más rápido:</strong> saltamos lo que no te aporta, profundizamos donde sí</li>
           <li><strong>Repertorio personal:</strong> aplicamos el método a las canciones que te gustan</li>
           <li><strong>Conexión con tu objetivo:</strong> acompañar tu voz, tocar tus favoritas, improvisar</li>
-          <li><strong>Práctica realista:</strong> rutinas adaptadas a tu vida adulta — no 4 horas diarias</li>
+          <li><strong>Práctica realista:</strong> rutinas adaptadas a tu vida adulta</li>
         </ul>
       </div>
-
     </div>
-
-    <div class="piano-synthesis">
-      Faber te da el <strong>método mundial</strong>. Mi enseñanza te da la <strong>adaptación adulta</strong>. Juntas: piano serio, sin infantilismo.
-    </div>
+    <div class="piano-synthesis">Faber te da el <strong>método mundial</strong>. Mi enseñanza te da la <strong>adaptación adulta</strong>. Juntas: piano serio, sin infantilismo.</div>
   </div>
 </section>
 
-<!-- ==================== MÉTODO COMPOSICIÓN (HOOK THEORY) ==================== -->
+<!-- ==================== MÉTODO COMPOSICIÓN ==================== -->
 <section class="alt-bg" id="metodo-composicion">
   <div class="container">
     <div class="section-head" style="text-align: center;">
-      <span class="label" style="display: inline-block; color: var(--gold-deep);">para composición · hook theory</span>
+      <span class="label" style="display: inline-block;">para composición · hook theory</span>
     </div>
-
     <div class="piano-method-intro">
-      <div class="quote" style="color: var(--ink);">
-        Componer no es inspiración. <em style="color: var(--gold-deep);">Es metodología.</em>
-      </div>
-      <p>
-        Hook Theory propone que escribir canciones — pop, rock, jazz, R&amp;B — es una
-        habilidad estructurada, no un don místico. A través del análisis funcional de cientos
-        de canciones existentes, aprendes los patrones, te apropias del lenguaje, y
-        eventualmente escribes el tuyo.
-      </p>
+      <div class="quote">Componer no es inspiración. <em>Es metodología.</em></div>
+      <p>Hook Theory propone que escribir canciones es una habilidad estructurada, no un don místico. A través del análisis funcional aprendes los patrones y eventualmente escribes el tuyo.</p>
     </div>
-
     <div class="piano-methods">
-
-      <div class="piano-method-card" style="border-color: rgba(166, 134, 79, 0.3);">
-        <div class="card-tag" style="color: var(--gold-deep);">HERRAMIENTA · ANÁLISIS</div>
-        <h3>Theorytab<em style="color: var(--gold-deep);">Base de canciones analizadas</em></h3>
-        <div class="tagline" style="color: var(--gold-deep);">Aprende leyendo lo que otros escribieron.</div>
-        <p>
-          Theorytab es una base de datos masiva con miles de canciones populares analizadas
-          en notación funcional. Aprendes a "leer" la armonía de tus canciones favoritas y
-          empiezas a oír el patrón detrás del pop, rock, R&amp;B y jazz.
-        </p>
-        <ul style="border-top-color: rgba(166, 134, 79, 0.2);">
+      <div class="piano-method-card">
+        <div class="card-tag">HERRAMIENTA · ANÁLISIS</div>
+        <h3>Theorytab<em>Base de canciones analizadas</em></h3>
+        <div class="tagline">Aprende leyendo lo que otros escribieron.</div>
+        <p>Base de datos masiva con miles de canciones populares analizadas en notación funcional.</p>
+        <ul>
           <li><strong>Notación funcional:</strong> los acordes en números (1-4-5-6) — universal y memorable</li>
-          <li><strong>Catálogo de hits reales:</strong> "Despacito", "Someone Like You", "Stairway to Heaven" desglosados</li>
+          <li><strong>Catálogo de hits reales:</strong> canciones desglosadas que ya conoces</li>
           <li><strong>Patrones armónicos:</strong> entiendes por qué ciertas progresiones suenan así</li>
           <li><strong>Aplicación inmediata:</strong> traes la canción que te gusta, la analizamos juntos</li>
         </ul>
       </div>
-
-      <div class="piano-method-card" style="border-color: rgba(166, 134, 79, 0.3);">
-        <div class="card-tag" style="color: var(--gold-deep);">PROCESO · DE ANÁLISIS A CREACIÓN</div>
-        <h3>Cómo enseño<em style="color: var(--gold-deep);">composición a adultos</em></h3>
-        <div class="tagline" style="color: var(--gold-deep);">De entender canciones a escribir las tuyas.</div>
-        <p>
-          Composición no es ejercicio de inspiración esperando a la musa. Es proceso —
-          escuchar, identificar, apropiarse, escribir, refinar. Trabajamos con tu DAW de
-          preferencia (Logic, Ableton, FL Studio, GarageBand) o herramientas como Hookpad
-          para visualizar la estructura.
-        </p>
-        <ul style="border-top-color: rgba(166, 134, 79, 0.2);">
+      <div class="piano-method-card">
+        <div class="card-tag">PROCESO · DE ANÁLISIS A CREACIÓN</div>
+        <h3>Cómo enseño<em>composición a adultos</em></h3>
+        <div class="tagline">De entender canciones a escribir las tuyas.</div>
+        <p>Composición es proceso — escuchar, identificar, apropiarse, escribir, refinar. Trabajamos con tu DAW de preferencia.</p>
+        <ul>
           <li><strong>Identificar patrones:</strong> en las canciones que admiras y quieres emular</li>
-          <li><strong>Estructura y forma:</strong> verso, pre-coro, coro, puente — cómo se construye una canción</li>
+          <li><strong>Estructura y forma:</strong> verso, pre-coro, coro, puente</li>
           <li><strong>Letra y melodía:</strong> escritura aplicada, no teoría abstracta</li>
           <li><strong>Tu primer demo:</strong> trabajamos hacia que termines una canción real</li>
         </ul>
       </div>
-
     </div>
-
-    <div class="piano-synthesis" style="background: var(--wine);">
-      De analizar canciones existentes a escribir las tuyas. <strong>Composición pop seria, sin misticismo, con método.</strong>
-    </div>
+    <div class="piano-synthesis">De analizar canciones existentes a escribir las tuyas. <strong>Composición seria, sin misticismo, con método.</strong></div>
   </div>
 </section>
 
@@ -266,24 +232,16 @@ import '../styles/home.css';
     <div class="section-head">
       <span class="label">qué enseño</span>
       <h2>Cuatro disciplinas, <em>métodos modernos</em>.</h2>
-      <p class="sub">
-        Cada disciplina con su metodología específica. Canto, piano y composición son los
-        ejes principales — teoría las atraviesa todas. Puedes tomar una sola o combinarlas.
-      </p>
+      <p class="sub">Cada disciplina con su metodología específica. Puedes tomar una sola o combinarlas.</p>
     </div>
-
     <div class="servicios-grid">
-
-      <div class="servicio featured-canto">
+      <div class="servicio">
         <span class="badge-method">método mvt</span>
         <div class="servicio-icon">
           <svg viewBox="0 0 24 24"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.91-3c-.49 0-.9.36-.98.85C16.52 14.2 14.47 16 12 16s-4.52-1.8-4.93-4.15c-.08-.49-.49-.85-.98-.85-.61 0-1.09.54-1 1.14.49 3 2.89 5.35 5.91 5.78V20c0 .55.45 1 1 1s1-.45 1-1v-2.08c3.02-.43 5.42-2.78 5.91-5.78.1-.6-.39-1.14-1-1.14z"/></svg>
         </div>
         <h3>Canto · Vocal coaching MVT</h3>
-        <p>
-          Para quien quiere cantar bien de verdad. Trabajamos técnica, afinación, resonancia,
-          rango y expresión artística aplicada a tu repertorio.
-        </p>
+        <p>Para quien quiere cantar bien de verdad. Técnica, afinación, resonancia, rango y expresión artística.</p>
         <ul>
           <li>Coordinación y entrenamiento muscular</li>
           <li>Trabajo de registros (pecho, mixto, cabeza)</li>
@@ -291,17 +249,13 @@ import '../styles/home.css';
           <li>Anatomía vocal y autodiagnóstico</li>
         </ul>
       </div>
-
-      <div class="servicio featured-piano">
+      <div class="servicio">
         <span class="badge-method">faber &amp; faber</span>
         <div class="servicio-icon">
           <svg viewBox="0 0 24 24"><path d="M21 8H3a1 1 0 00-1 1v6a1 1 0 001 1h18a1 1 0 001-1V9a1 1 0 00-1-1zM7 14H5v-3h2v3zm4 0H9v-3h2v3zm4 0h-2v-3h2v3zm4 0h-2v-3h2v3z"/></svg>
         </div>
         <h3>Piano · Faber &amp; Faber</h3>
-        <p>
-          Piano serio para adultos con la metodología más respetada del mundo, adaptada a tu ritmo
-          y tus gustos. De principiante a nivel intermedio-avanzado.
-        </p>
+        <p>Piano serio para adultos con la metodología más respetada del mundo, adaptada a tu ritmo y tus gustos.</p>
         <ul>
           <li>Lectura, técnica y teoría integradas</li>
           <li>Multi-tonalidad desde el inicio</li>
@@ -309,17 +263,13 @@ import '../styles/home.css';
           <li>Repertorio personalizado a tus gustos</li>
         </ul>
       </div>
-
-      <div class="servicio featured-comp">
+      <div class="servicio">
         <span class="badge-method">hook theory</span>
         <div class="servicio-icon">
           <svg viewBox="0 0 24 24"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg>
         </div>
         <h3>Composición · Hook Theory</h3>
-        <p>
-          Para quien quiere escribir sus propias canciones. Análisis funcional con Theorytab,
-          identificación de patrones, escritura aplicada y demo en tu DAW de preferencia.
-        </p>
+        <p>Para quien quiere escribir sus propias canciones. Análisis funcional, patrones, escritura y demo.</p>
         <ul>
           <li>Análisis funcional de canciones reales</li>
           <li>Notación 1-4-5-6 (lenguaje universal)</li>
@@ -327,23 +277,18 @@ import '../styles/home.css';
           <li>De referencia a tu primera canción terminada</li>
         </ul>
       </div>
-
       <div class="servicio">
         <div class="servicio-icon">
-          <svg viewBox="0 0 24 24"><path d="M19 3H5c-1.11 0-2 .89-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.11-.9-2-2-2zM7 7h2v6H7V7zm6 8H7v-1h6v1zm4-3h-2V7h2v5zm0-6H7V5h10v1z"/></svg>
+          <svg viewBox="0 0 24 24"><path d="M19 3H5c-1.11 0-2 .89-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.11-.9-2-2-2z"/></svg>
         </div>
         <h3>Teoría musical</h3>
-        <p>
-          Sin pizarras aburridas. Aprendes la teoría que de verdad usas: intervalos,
-          escalas, armonía funcional y modos — aplicada a música real.
-        </p>
+        <p>Sin pizarras aburridas. Intervalos, escalas, armonía funcional y modos — aplicada a música real.</p>
         <ul>
           <li>Solfeo melódico y rítmico</li>
           <li>Análisis de canciones que te gustan</li>
           <li>Funcional para canto, piano y composición</li>
         </ul>
       </div>
-
     </div>
   </div>
 </section>
@@ -354,12 +299,8 @@ import '../styles/home.css';
     <div class="section-head">
       <span class="label">cómo es una clase</span>
       <h2>Una clase, <em>cuatro momentos</em>.</h2>
-      <p class="sub">
-        Tanto las clases de canto como de piano siguen una estructura clara —
-        para que sepas qué esperar, y para que cada minuto cuente.
-      </p>
+      <p class="sub">Tanto las clases de canto como de piano siguen una estructura clara — para que cada minuto cuente.</p>
     </div>
-
     <div class="proceso">
       <div class="step">
         <span class="num">01</span>
@@ -383,7 +324,7 @@ import '../styles/home.css';
         <span class="num">04</span>
         <h4>Práctica para casa</h4>
         <span class="duration">5 MIN</span>
-        <p>Te llevas un audio o nota con los ejercicios específicos para la semana. Sin esto, el progreso se estanca.</p>
+        <p>Te llevas un audio o nota con los ejercicios específicos para la semana.</p>
       </div>
     </div>
   </div>
@@ -394,38 +335,26 @@ import '../styles/home.css';
   <div class="container">
     <div class="sobre-grid">
       <div class="sobre-photo">
-        <img src="/andres-banjo-escenario.jpg" alt="Andrés Salame tocando banjo como frontman de Los Tramboyos en escenario" />
+        <img src="/andres-banjo-escenario.jpg" alt="Andrés Salame tocando banjo como frontman de Tramboyos en escenario" />
       </div>
       <div class="sobre-text">
         <span class="label">sobre andrés</span>
-        <h2>Profesor, músico, <em>nerd metodológico</em>.</h2>
+        <h2>Sobre Andrés</h2>
+        <span class="sobre-subtitle">Músico que enseña. No profesor que toca.</span>
         <p>
-          Empecé con piano a los 9 años en la academia AIDEM, y guitarra autodidacta en paralelo. Estudié composición y negocios musicales en la Universidad Peruana de Ciencias Aplicadas, management de artistas en KidsOnCoffee, y el Nivel 1 de Modern Vocal Training. También tengo estudios en psicología por la Universidad de Lima.
+          Vengo de la industria. Frontman y compositor de Tramboyos —banda de punk rock alternativo—,
+          management de Kids on Coffee y ex-manager de Malos Amigos, Maceradoz, Tuporaquí Yoporallá,
+          Bastian Guija y Lonzo Miranda. He compuesto más de 200 canciones y producido más de 20 conciertos.
         </p>
         <p>
-          Esa combinación es la que define cómo enseño. MVT me dio el marco fisiológico para canto. La UPC me enseñó Faber &amp; Faber, la pedagogía estructurada para piano; y Hook Theory, el sistema funcional para composición. La psicología me enseñó a enseñar, entender, relajar y validar las emociones de otros adultos.
+          Estudios en música en UPC y psicología en ULima. Esa combinación es inusual y la noto en
+          cada clase: entender la voz también es entender a quién la usa.
         </p>
         <p>
-          Fuera del estudio, fui el frontman de Los Tramboyos y trabajé como manager de artistas para Malos Amigos, Maceradoz y Bastian Guija, entre otros. Esa parte del oficio me dio perspectiva real de la música, o sea aprender lo que es estar arriba del escenario y cómo interactuar con otros artistas, no solo enseñarlo.
+          Enseño canto con metodología MVT (Modern Vocal Training), piano y composición. Mi alumno típico
+          es un adulto entre 20 y 45 años que se preguntó alguna vez si no era muy tarde para aprender música.
+          Spoiler: no lo es.
         </p>
-        <p>
-          Mi forma de trabajar parte de tres principios: disciplina, sistematización y honestidad técnica. Si la voz funciona por fisiología y la armonía por relaciones funcionales, la clase también debería ser específica, medible y replicable.
-        </p>
-
-        <div class="sobre-credentials">
-          <div class="credential">
-            <span class="num">2</span>
-            <span class="desc">Años enseñando<br>música a adultos</span>
-          </div>
-          <div class="credential">
-            <span class="num">69</span>
-            <span class="desc">Alumnos<br>entrenados</span>
-          </div>
-          <div class="credential">
-            <span class="num">3</span>
-            <span class="desc">Métodos:<br>MVT · Faber · Hook</span>
-          </div>
-        </div>
       </div>
     </div>
   </div>
@@ -438,12 +367,13 @@ import '../styles/home.css';
       <span class="label">testimonios</span>
       <h2>Lo que dicen mis <em>alumnos</em>.</h2>
     </div>
-
     <div class="testimonios-grid">
-      <div class="testimonio mixed">
+      <div class="testimonio">
         <span class="disc-tag">COMPOSICIÓN · HOOK THEORY</span>
         <blockquote>
-          Llevaba años escribiendo letras en una libreta sin saber qué hacer con ellas. Con Andrés entendí que componer no era esperar inspiración, sino que existen varios métodos para componer. Poco a poco, empecé a analizar canciones que admiraba y a entender por qué funcionaban. Hoy puedo expresar lo que siento con herramientas poéticas y de composición, y puedo incluso improvisar canciones completas tras mucha práctica. Nunca pensé que podría lograr hacer esto pero Andrés me enseñó que sí se puede con mucho esfuerzo y dedicación.
+          Llevaba años escribiendo letras en una libreta sin saber qué hacer con ellas. Con Andrés entendí que
+          componer no era esperar inspiración. Poco a poco, empecé a analizar canciones que admiraba y a entender
+          por qué funcionaban. Hoy puedo improvisar canciones completas. Nunca pensé que podría lograr hacer esto.
         </blockquote>
         <div class="testimonio-author">
           <div class="testimonio-avatar">F</div>
@@ -453,11 +383,12 @@ import '../styles/home.css';
           </div>
         </div>
       </div>
-
       <div class="testimonio">
         <span class="disc-tag">CANTO · MVT</span>
         <blockquote>
-          Me caso este año y mi sueño era cantarle a mi novio en la boda. Cuando empecé con Andrés ni siquiera llegaba al coro de la canción que elegí. Ocho meses después, no solo la canto entera y de forma balanceada, sino que también he adquirido la coordinación necesaria para cantar varias canciones que no sabía que podría cantar. Muchas gracias por ayudarme a impresionar a mi novio y a nuestros familiares.
+          Me caso este año y mi sueño era cantarle a mi novio en la boda. Cuando empecé con Andrés ni siquiera
+          llegaba al coro de la canción que elegí. Ocho meses después, no solo la canto entera y de forma
+          balanceada, sino que también he adquirido la coordinación necesaria para cantar varias canciones más.
         </blockquote>
         <div class="testimonio-author">
           <div class="testimonio-avatar">C</div>
@@ -467,11 +398,12 @@ import '../styles/home.css';
           </div>
         </div>
       </div>
-
-      <div class="testimonio piano">
+      <div class="testimonio">
         <span class="disc-tag">PIANO · FABER &amp; FABER</span>
         <blockquote>
-          He estado enfocándome en mí de forma holística, por lo cual quise lograr ser más disciplinada. No esperaba que el piano se convirtiera en lo más constante de mi semana, pero así es. La forma en que Andrés estructura las clases me obligó a desarrollar disciplina de un modo que se trasladó a otras áreas de mi vida. Logré desconectarme del ruido digital y ser mucho más disciplinada en varias cosas que antes no podía.
+          No esperaba que el piano se convirtiera en lo más constante de mi semana, pero así es. La forma en que
+          Andrés estructura las clases me obligó a desarrollar disciplina de un modo que se trasladó a otras áreas
+          de mi vida. Logré desconectarme del ruido digital y ser mucho más disciplinada.
         </blockquote>
         <div class="testimonio-author">
           <div class="testimonio-avatar">N</div>
@@ -492,27 +424,26 @@ import '../styles/home.css';
       <span class="label">paquetes mensuales</span>
       <h2>Precios <em>claros</em>. Sin letra chica.</h2>
       <p class="sub">
-        Los mismos paquetes para canto, piano, teoría o composición. Puedes mezclar disciplinas
-        dentro del mismo paquete — por ejemplo, 4h de canto + 4h de piano en el Intensivo.
+        Los mismos paquetes para canto, piano, teoría o composición. Puedes mezclar disciplinas dentro del mismo paquete.
       </p>
     </div>
 
     <div class="precios-grid">
 
       <div class="precio-card">
-        <span class="tier-label">Suelta</span>
-        <h3>Una clase</h3>
-        <p class="tier-detail">Ideal para probar o reforzar puntualmente</p>
+        <span class="tier-label">Esencial</span>
+        <h3>4 horas / mes</h3>
+        <p class="tier-detail">1 clase por semana · ritmo cómodo</p>
         <div class="precio-amount">
-          <span class="currency">S/</span>70<span class="period">/clase</span>
+          <span class="currency">S/</span>250<span class="period">/mes</span>
         </div>
         <ul>
-          <li>1 hora · 1 clase</li>
-          <li>Canto, piano, teoría o composición</li>
+          <li>4 horas · 4 clases al mes</li>
+          <li>Una disciplina o mezcla</li>
           <li>Presencial u online</li>
           <li>Plan personalizado</li>
         </ul>
-        <a href="#cta-final" class="precio-cta">Reservar clase</a>
+        <a href="https://wa.me/51989077928?text=Hola%20Andrés%2C%20me%20interesa%20el%20paquete%20Esencial%20S%2F250" class="precio-cta" target="_blank" rel="noopener">Reservar</a>
       </div>
 
       <div class="precio-card featured">
@@ -523,7 +454,6 @@ import '../styles/home.css';
         <div class="precio-amount">
           <span class="currency">S/</span>450<span class="period">/mes</span>
         </div>
-        <span class="precio-savings">ahorras S/110 vs clase suelta</span>
         <ul>
           <li>8 horas · 8 clases al mes</li>
           <li>Mezcla disciplinas (canto + piano, etc.)</li>
@@ -532,24 +462,42 @@ import '../styles/home.css';
           <li>Audios y videos de seguimiento</li>
           <li>Mejor curva de progreso</li>
         </ul>
-        <a href="#cta-final" class="precio-cta">Empezar el intensivo</a>
+        <a href="https://wa.me/51989077928?text=Hola%20Andrés%2C%20me%20interesa%20el%20paquete%20Intensivo%20S%2F450" class="precio-cta" target="_blank" rel="noopener">Reservar</a>
       </div>
 
       <div class="precio-card">
-        <span class="tier-label">Esencial</span>
-        <h3>4 horas / mes</h3>
-        <p class="tier-detail">1 clase por semana · ritmo cómodo</p>
+        <span class="tier-label">Esencial Trimestral (Lock-In)</span>
+        <h3>12 horas en 3 meses</h3>
+        <p class="tier-detail">4h/mes · mes 3 al 50%</p>
         <div class="precio-amount">
-          <span class="currency">S/</span>250<span class="period">/mes</span>
+          <span class="currency">S/</span>625<span class="period"> pagado de una</span>
         </div>
-        <span class="precio-savings">ahorras S/30 vs clase suelta</span>
+        <span class="precio-savings">mes 3 al 50%</span>
         <ul>
-          <li>4 horas · 4 clases al mes</li>
-          <li>Una disciplina enfocada</li>
+          <li>12 horas en 3 meses</li>
+          <li>Pago único adelantado</li>
           <li>Presencial u online</li>
-          <li>Plan personalizado</li>
+          <li>Plan trimestral personalizado</li>
         </ul>
-        <a href="#cta-final" class="precio-cta">Empezar el esencial</a>
+        <a href="https://wa.me/51989077928?text=Hola%20Andrés%2C%20me%20interesa%20el%20Esencial%20Trimestral%20S%2F625" class="precio-cta" target="_blank" rel="noopener">Reservar</a>
+      </div>
+
+      <div class="precio-card">
+        <span class="tier-label">Intensivo Trimestral (Lock-In)</span>
+        <h3>24 horas en 3 meses</h3>
+        <p class="tier-detail">8h/mes · mes 3 al 50%</p>
+        <div class="precio-amount">
+          <span class="currency">S/</span>1,125<span class="period"> pagado de una</span>
+        </div>
+        <span class="precio-savings">mes 3 al 50%</span>
+        <ul>
+          <li>24 horas en 3 meses</li>
+          <li>Pago único adelantado</li>
+          <li>Mezcla disciplinas</li>
+          <li>Plan trimestral personalizado</li>
+          <li>Audios y videos de seguimiento</li>
+        </ul>
+        <a href="https://wa.me/51989077928?text=Hola%20Andrés%2C%20me%20interesa%20el%20Intensivo%20Trimestral%20S%2F1125" class="precio-cta" target="_blank" rel="noopener">Reservar</a>
       </div>
 
     </div>
@@ -561,11 +509,11 @@ import '../styles/home.css';
       </div>
       <div>
         <span class="trust-label">Modalidades</span>
-        <span class="trust-text">Presencial en San Isidro<br>Online desde cualquier ciudad</span>
+        <span class="trust-text">Presencial en San Isidro<br>Av. Salaverry / Av. JV Prado</span>
       </div>
       <div>
         <span class="trust-label">Prueba</span>
-        <span class="trust-text">Clase de prueba S/50<br>(descuento sobre suelta)</span>
+        <span class="trust-text">Clase de prueba S/50<br>incluye diagnóstico vocal en PDF</span>
       </div>
     </div>
   </div>
@@ -586,11 +534,7 @@ import '../styles/home.css';
           <span class="arrow">+</span>
         </button>
         <div class="faq-answer">
-          <p>
-            Para nada — ni en canto ni en piano. Más de la mitad de mis alumnos empiezan
-            sin haber tomado clases nunca. El método se adapta a tu nivel: el primer mes
-            es de evaluación y construcción de base.
-          </p>
+          <p>Para nada — ni en canto ni en piano. Más de la mitad de mis alumnos empiezan sin haber tomado clases nunca. El método se adapta a tu nivel: el primer mes es de evaluación y construcción de base.</p>
         </div>
       </div>
 
@@ -600,29 +544,7 @@ import '../styles/home.css';
           <span class="arrow">+</span>
         </button>
         <div class="faq-answer">
-          <p>
-            Es un mito común. Faber &amp; Faber es el método más usado por profesores serios alrededor
-            del mundo porque la pedagogía es excelente — para cualquier edad. La diferencia
-            con un adulto es el ritmo (más rápido) y el repertorio (adaptado a tus gustos).
-            Los principios pedagógicos siguen siendo los mismos. En la clase de prueba te
-            muestro cómo se ve un libro Faber &amp; Faber aplicado a un adulto.
-          </p>
-        </div>
-      </div>
-
-      <div class="faq-item">
-        <button class="faq-question">
-          <span>¿Hook Theory es solo para componer? ¿Y si no quiero componer?</span>
-          <span class="arrow">+</span>
-        </button>
-        <div class="faq-answer">
-          <p>
-            Hook Theory está pensado principalmente para composición — pero sus herramientas
-            (Theorytab, notación funcional) también sirven mucho a alumnos de canto y piano
-            que quieren entender la armonía de las canciones que tocan o cantan. Es opcional:
-            si solo te interesa cantar o tocar piano, no es obligatorio. Si te interesa
-            componer, es tu método.
-          </p>
+          <p>Es un mito común. Faber &amp; Faber es el método más usado por profesores serios alrededor del mundo porque la pedagogía es excelente — para cualquier edad. La diferencia con un adulto es el ritmo (más rápido) y el repertorio (adaptado a tus gustos).</p>
         </div>
       </div>
 
@@ -632,12 +554,7 @@ import '../styles/home.css';
           <span class="arrow">+</span>
         </button>
         <div class="faq-answer">
-          <p>
-            En las primeras 2-3 clases ya vas a notar cambios chicos pero claros — sobre todo
-            en cómo se siente cantar/tocar (menos aprieto, más libertad). El progreso técnico
-            medible (rango vocal, lectura, fluidez en piano) se ve a las 6-8 semanas con
-            práctica constante. Tanto la voz como las manos son musculatura: necesitan tiempo y repetición.
-          </p>
+          <p>En las primeras 2-3 clases ya vas a notar cambios chicos pero claros — sobre todo en cómo se siente cantar/tocar. El progreso técnico medible se ve a las 6-8 semanas con práctica constante.</p>
         </div>
       </div>
 
@@ -647,13 +564,7 @@ import '../styles/home.css';
           <span class="arrow">+</span>
         </button>
         <div class="faq-answer">
-          <p>
-            Sí, y de hecho lo recomiendo si te interesan varias. En el paquete Intensivo (8h/mes)
-            puedes hacer, por ejemplo, 4h de canto + 2h de piano + 2h de composición. O 6h de piano
-            + 2h de composición. Las disciplinas se refuerzan entre sí — un cantante que toca piano
-            entiende armonía mejor; un compositor que canta conecta con la melodía de otra forma.
-            En la clase de prueba lo diseñamos según tus objetivos.
-          </p>
+          <p>Sí, y de hecho lo recomiendo si te interesan varias. En el paquete Intensivo (8h/mes) puedes hacer, por ejemplo, 4h de canto + 2h de piano + 2h de composición. En la clase de prueba lo diseñamos según tus objetivos.</p>
         </div>
       </div>
 
@@ -663,13 +574,7 @@ import '../styles/home.css';
           <span class="arrow">+</span>
         </button>
         <div class="faq-answer">
-          <p>
-            Las dos. Presencial en San Isidro (Av. Salaverry con Av. JV Prado) u online por
-            Zoom/Meet. Para piano necesitas tener un piano o teclado en casa (mín. 61 teclas
-            con sensibilidad al toque). Para canto, audífonos y un ambiente silencioso. La
-            calidad pedagógica online es prácticamente la misma cuando las clases están
-            bien estructuradas, que es lo que hago.
-          </p>
+          <p>Las dos. Presencial en San Isidro (Av. Salaverry con Av. JV Prado) u online por Zoom/Meet. Para piano necesitas tener un piano o teclado en casa (mín. 61 teclas con sensibilidad al toque).</p>
         </div>
       </div>
 
@@ -679,29 +584,23 @@ import '../styles/home.css';
           <span class="arrow">+</span>
         </button>
         <div class="faq-answer">
-          <p>
-            En Perú: Plin, Yape o Agora. Para alumnos online en otros países: USD, EUR o MXN
-            (Wise, PayPal o transferencia internacional). El pago del paquete se hace al inicio
-            del mes y queda activo durante 30 días desde la primera clase.
-          </p>
+          <p>En Perú: Plin, Yape o Agora. Para alumnos online en otros países: USD, EUR o MXN (Wise, PayPal o transferencia internacional). El pago del paquete se hace al inicio del mes.</p>
         </div>
       </div>
-
     </div>
   </div>
 </section>
 
 <!-- ==================== CTA FINAL ==================== -->
-<section class="wine-bg cta-final" id="cta-final">
+<section class="cta-final" id="cta-final">
   <div class="container-narrow">
     <h2>Empieza con<br><em>una clase de S/50.</em></h2>
     <p>
-      Una hora completa con descuento sobre el precio normal (S/70 → S/50). Conoces el método
-      (canto MVT, piano Faber &amp; Faber o composición Hook Theory), evalúas mi forma de enseñar, y
-      decides si quieres seguir. Si sigues, los S/50 se descuentan de tu primer paquete.
+      Una hora completa. Conoces el método, evalúas mi forma de enseñar, y decides si quieres seguir.
+      Si sigues, los S/50 se descuentan de tu primer paquete.
     </p>
     <div class="ctas">
-      <a href="https://wa.me/51989077928?text=Hola%20Andr%C3%A9s%2C%20vi%20tu%20web%20y%20me%20interesa%20la%20clase%20de%20prueba" class="btn-primary">
+      <a href="https://wa.me/51989077928?text=Hola%20Andrés%2C%20vi%20tu%20web%20y%20me%20interesa%20la%20clase%20de%20prueba%20S%2F50" class="btn-primary" target="_blank" rel="noopener">
         <svg viewBox="0 0 24 24"><path d="M.057 24l1.687-6.163a11.867 11.867 0 01-1.587-5.946C.16 5.335 5.495 0 12.05 0a11.817 11.817 0 018.413 3.488 11.824 11.824 0 013.48 8.414c-.003 6.557-5.338 11.892-11.893 11.892a11.9 11.9 0 01-5.688-1.448L.057 24zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884a9.86 9.86 0 001.594 5.39l-.999 3.648 3.745-.978zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372s-1.04 1.016-1.04 2.479 1.065 2.876 1.213 3.074c.149.198 2.095 3.2 5.076 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413z"/></svg>
         Reservar por WhatsApp
       </a>
@@ -710,37 +609,23 @@ import '../styles/home.css';
 </section>
 
 <script is:inline>
-  document.querySelectorAll('.faq-question').forEach(btn => {
-    btn.addEventListener('click', () => {
-      btn.parentElement.classList.toggle('open');
-    });
+document.querySelectorAll('.faq-question').forEach(btn => {
+  btn.addEventListener('click', () => {
+    btn.parentElement.classList.toggle('open');
   });
+});
 </script>
 
-
 <style>
-  .hero-photo img,
-  .sobre-photo img {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-    object-position: center;
-    border-radius: 4px;
-    display: block;
-  }
-  .hero-clarity {
-    display: none;
-    font-size: 1.05rem;
-    line-height: 1.35;
-    color: var(--ink, #2b2b2b);
-    margin: 0.5rem 0 1.2rem 0;
-    font-weight: 500;
-  }
-  @media (max-width: 768px) {
-    .hero-clarity {
-      display: block;
-    }
-  }
+.hero-photo img,
+.sobre-photo img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+  border-radius: 2px;
+  display: block;
+}
 </style>
 
 </Layout>
