@@ -1,5 +1,5 @@
 ---
-title: Por qué *"apoya más fuerte"* es el peor consejo vocal que puedes recibir
+title: 'Por qué "apoya más fuerte" es el peor consejo vocal que puedes recibir'
 excerpt: Llevas años escuchando que el secreto del canto está en "apoyar desde
   el diafragma" o "empujar el aire". Y es probable que ese consejo te haya
   frustrado más de lo que te ha ayudado. Te explico por qué, desde la

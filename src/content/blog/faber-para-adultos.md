@@ -1,5 +1,5 @@
 ---
-title: 'Faber & Faber para adultos: por qué un método "para niños" funciona *increíble*'
+title: 'Faber & Faber para adultos: por qué un método "para niños" funciona increíble'
 excerpt: 'El método de piano más usado por profesores serios alrededor del mundo tiene fama de ser para niños. Es un mito que cuesta dinero y motivación a muchos adultos. Te explico por qué Faber funciona perfectamente para adultos cuando se aplica con criterio.'
 category: 'piano'
 date: 2026-04-28

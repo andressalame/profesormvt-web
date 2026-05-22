@@ -1,0 +1,51 @@
+---
+import Layout from '../layouts/Layout.astro';
+---
+<Layout
+  title="Página no encontrada · Profesor MVT"
+  description="La página que buscas no existe o se movió. Vuelve al inicio o explora el blog."
+>
+  <section class="notfound">
+    <div class="container-narrow">
+      <span class="nf-code">404</span>
+      <h1>Esta nota no existe en la partitura.</h1>
+      <p>La página que buscas se movió o nunca existió. Pero la música sigue:</p>
+      <div class="nf-ctas">
+        <a href="/" class="btn-primary">← Volver al inicio</a>
+        <a href="/blog" class="btn-ghost">Ir al blog</a>
+      </div>
+    </div>
+  </section>
+</Layout>
+
+<style>
+  .notfound {
+    min-height: 60vh;
+    display: flex;
+    align-items: center;
+    text-align: center;
+    padding: 80px 0;
+  }
+  .nf-code {
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--color-ember);
+    font-size: 18px;
+    letter-spacing: 0.2em;
+    display: block;
+    margin-bottom: 16px;
+  }
+  .notfound h1 {
+    font-size: clamp(28px, 5vw, 44px);
+    margin-bottom: 16px;
+  }
+  .notfound p {
+    color: var(--color-bone-mute);
+    margin-bottom: 32px;
+  }
+  .nf-ctas {
+    display: flex;
+    gap: 14px;
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+</style>

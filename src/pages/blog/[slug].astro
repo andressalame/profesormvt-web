@@ -33,11 +33,16 @@ const related = allPosts
   .filter(p => p.slug !== post.slug && p.data.category === post.data.category)
   .sort((a, b) => b.data.date.valueOf() - a.data.date.valueOf())
   .slice(0, 3);
+
+const postImageURL = new URL(post.data.image || '/andres-piano-hero.jpg', Astro.site).href;
+const postURL = new URL(`/blog/${post.slug}/`, Astro.site).href;
 ---
 
 <Layout
   title={`${post.data.title} · Profesor MVT`}
   description={post.data.excerpt}
+  type="article"
+  image={post.data.image || '/andres-piano-hero.jpg'}
   activeNav="blog"
 >
 
@@ -103,5 +108,23 @@ const related = allPosts
     </div>
   </section>
 )}
+
+<script type="application/ld+json" set:html={JSON.stringify({
+  "@context": "https://schema.org",
+  "@type": "BlogPosting",
+  "headline": post.data.title,
+  "description": post.data.excerpt,
+  "image": postImageURL,
+  "datePublished": post.data.date.toISOString(),
+  "dateModified": post.data.date.toISOString(),
+  "inLanguage": "es",
+  "author": { "@type": "Person", "name": "Andrés Salame", "url": "https://profesormvt.com" },
+  "publisher": {
+    "@type": "Organization",
+    "name": "Profesor MVT",
+    "logo": { "@type": "ImageObject", "url": "https://profesormvt.com/logo.png" }
+  },
+  "mainEntityOfPage": { "@type": "WebPage", "@id": postURL }
+})} />
 
 </Layout>

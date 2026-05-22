@@ -1,5 +1,5 @@
 ---
-title: 'Hook Theory: cómo leer la *armonía* de tus canciones favoritas (y empezar a componer las tuyas)'
+title: 'Hook Theory: cómo leer la armonía de tus canciones favoritas (y empezar a componer las tuyas)'
 excerpt: 'Si quieres componer pero no sabes por dónde empezar, Hook Theory es el atajo que cambia todo. La notación funcional (1-4-5-6) te muestra el patrón detrás del pop, rock y jazz — y te enseña a oír música con otros ojos.'
 category: 'composicion'
 date: 2026-04-21
