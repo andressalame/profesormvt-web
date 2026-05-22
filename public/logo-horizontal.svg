@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 210 72" width="210" height="72" role="img" aria-label="MVT Profesor">
+  <!-- graduation cap (ember) -->
+  <g fill="#D04A1C">
+    <path d="M28 40 L52 40 L48 49 Q40 53 32 49 Z"/>
+    <path d="M40 26 L61 35 L40 44 L19 35 Z"/>
+  </g>
+  <path d="M40 35 L59 35 L59 47" fill="none" stroke="#D04A1C" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="59" cy="49" r="2.7" fill="#D04A1C"/>
+  <!-- MVT wordmark (ink) -->
+  <g fill="none" stroke="#0F0F0E" stroke-width="6" stroke-linecap="round" stroke-linejoin="round">
+    <polyline points="84,52 84,22 99,40 114,22 114,52"/>
+    <polyline points="124,22 136,52 148,22"/>
+    <path d="M158 22 L194 22 M176 22 L176 52"/>
+  </g>
+</svg>

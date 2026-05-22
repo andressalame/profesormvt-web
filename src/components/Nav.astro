@@ -7,7 +7,7 @@ const { activeNav } = Astro.props;
 
 <nav class="nav">
   <div class="nav-inner">
-    <a href="/" class="logo">profesor<em class="mark">mvt</em><span class="dot"></span></a>
+    <a href="/" class="logo"><img src="/favicon.svg" alt="" class="logo-mark" width="30" height="30" />profesor<em class="mark">mvt</em><span class="dot"></span></a>
     <ul class="nav-links">
       <li><a href="/#metodo-canto">Canto</a></li>
       <li><a href="/#metodo-piano">Piano</a></li>
@@ -40,7 +40,13 @@ const { activeNav } = Astro.props;
   font-weight: 500;
   letter-spacing: -0.01em;
   color: var(--color-bone);
-  display: flex; align-items: baseline; gap: 8px;
+  display: flex; align-items: center; gap: 9px;
+}
+.logo-mark {
+  width: 30px; height: 30px;
+  border-radius: 7px;
+  display: block;
+  flex-shrink: 0;
 }
 .logo .mark { color: var(--color-ember); font-style: italic; }
 .logo .dot {
