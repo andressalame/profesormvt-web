@@ -17,14 +17,23 @@ const {
   title,
   description,
   activeNav,
-  image = '/andres-piano-hero.jpg',
-  imageAlt = 'Andrés Salame, profesor de música, sentado al piano en su estudio',
+  image = '/og-image.jpg',
+  imageAlt = 'Profesor MVT — Clases de canto, piano y composición para adultos en San Isidro y online. Clase de prueba S/50.',
   type = 'website',
 } = Astro.props;
 
 // URLs absolutas calculadas por página
 const canonicalURL = new URL(Astro.url.pathname, Astro.site).href;
 const ogImageURL = new URL(image, Astro.site).href;
+
+// ============================================================
+//  ANALYTICS / ADS — pega tus IDs aquí cuando los tengas.
+//  Mientras estén vacíos ('') no se carga nada.
+// ============================================================
+const GA4_ID = '';                     // GA4, ej: 'G-ABCD1234XY'
+const GOOGLE_ADS_ID = '';              // Google Ads, ej: 'AW-123456789'
+const GOOGLE_ADS_WHATSAPP_LABEL = '';  // etiqueta de conversión, ej: 'AbC-D_efG'
+const gtagId = GA4_ID || GOOGLE_ADS_ID;
 ---
 
 <!DOCTYPE html>
@@ -63,6 +72,20 @@ const ogImageURL = new URL(image, Astro.site).href;
   <meta name="twitter:image" content={ogImageURL} />
   <meta name="twitter:image:alt" content={imageAlt} />
 
+  <!-- Google tag (GA4 + Google Ads) — se activa solo si hay IDs arriba -->
+  {gtagId && (
+    <>
+      <script async src={`https://www.googletagmanager.com/gtag/js?id=${gtagId}`}></script>
+      <script is:inline define:vars={{ GA4_ID, GOOGLE_ADS_ID }}>
+        window.dataLayer = window.dataLayer || [];
+        function gtag(){dataLayer.push(arguments);}
+        gtag('js', new Date());
+        if (GA4_ID) gtag('config', GA4_ID);
+        if (GOOGLE_ADS_ID) gtag('config', GOOGLE_ADS_ID);
+      </script>
+    </>
+  )}
+
   <!-- Meta Pixel Code -->
   <script>
     !function(f,b,e,v,n,t,s)
@@ -99,10 +122,13 @@ const ogImageURL = new URL(image, Astro.site).href;
       "image": "https://profesormvt.com/andres-piano-hero.jpg",
       "address": {
         "@type": "PostalAddress",
+        "streetAddress": "Av. Salaverry 2900",
         "addressLocality": "San Isidro",
         "addressRegion": "Lima",
+        "postalCode": "15076",
         "addressCountry": "PE"
       },
+      "areaServed": ["San Isidro", "Lima", "Perú", "Online"],
       "founder": {
         "@type": "Person",
         "name": "Andrés Salame",
@@ -128,7 +154,7 @@ const ogImageURL = new URL(image, Astro.site).href;
   <WhatsAppFloat />
 
   <!-- Meta Pixel — Custom Event Tracking with Beacon Transport -->
-  <script>
+  <script is:inline define:vars={{ GOOGLE_ADS_ID, GOOGLE_ADS_WHATSAPP_LABEL }}>
     document.addEventListener('DOMContentLoaded', function() {
       // Track WhatsApp clicks as Lead events
       const whatsappLinks = document.querySelectorAll('a[href*="wa.me"], a[href*="whatsapp.com"], a[href*="api.whatsapp.com"]');
@@ -149,6 +175,13 @@ const ogImageURL = new URL(image, Astro.site).href;
               const pixelUrl = 'https://www.facebook.com/tr/?id=1281275673536185&ev=Lead&cd[content_name]=WhatsApp+Click&cd[content_category]=Contact&noscript=1';
               navigator.sendBeacon(pixelUrl);
             }
+          }
+
+          // Google Ads: conversión de WhatsApp (se activa solo si configuraste el ID y la etiqueta arriba)
+          if (typeof gtag !== 'undefined' && GOOGLE_ADS_ID && GOOGLE_ADS_WHATSAPP_LABEL) {
+            gtag('event', 'conversion', {
+              send_to: GOOGLE_ADS_ID + '/' + GOOGLE_ADS_WHATSAPP_LABEL
+            });
           }
         });
       });

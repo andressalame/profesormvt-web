@@ -34,7 +34,7 @@ const related = allPosts
   .sort((a, b) => b.data.date.valueOf() - a.data.date.valueOf())
   .slice(0, 3);
 
-const postImageURL = new URL(post.data.image || '/andres-piano-hero.jpg', Astro.site).href;
+const postImageURL = new URL(post.data.image || '/og-image.jpg', Astro.site).href;
 const postURL = new URL(`/blog/${post.slug}/`, Astro.site).href;
 ---
 
@@ -42,7 +42,7 @@ const postURL = new URL(`/blog/${post.slug}/`, Astro.site).href;
   title={`${post.data.title} · Profesor MVT`}
   description={post.data.excerpt}
   type="article"
-  image={post.data.image || '/andres-piano-hero.jpg'}
+  image={post.data.image || '/og-image.jpg'}
   activeNav="blog"
 >
 
