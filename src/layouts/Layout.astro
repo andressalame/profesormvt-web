@@ -1,213 +1,201 @@
 ---
-import '../styles/global.css';
-import Nav from '../components/Nav.astro';
-import Footer from '../components/Footer.astro';
-import WhatsAppFloat from '../components/WhatsAppFloat.astro';
+// ═══════════════════════════════════════════════════════════
+// Layout principal del sitio Profesor MVT
+// Incluye: meta tags SEO, Open Graph, Twitter Cards, geo tags
+// ═══════════════════════════════════════════════════════════
 
 export interface Props {
-  title: string;
-  description: string;
-  activeNav?: string;
+  title?: string;
+  description?: string;
   image?: string;
-  imageAlt?: string;
-  type?: 'website' | 'article';
+  canonicalURL?: string;
 }
 
 const {
-  title,
-  description,
-  activeNav,
-  image = '/og-image.jpg',
-  imageAlt = 'Profesor MVT — Clases de canto, piano y composición para adultos en San Isidro y online. Clase de prueba S/50.',
-  type = 'website',
+  title = "Profesor MVT en Lima · Canto, piano y composición para adultos",
+  description = "Clases de canto (técnica MVT), piano y composición para adultos en Lima (San Isidro) y online. Con Andrés Salame. Prueba con diagnóstico vocal en PDF.",
+  image = "/og-image.jpg",
+  canonicalURL = Astro.url.href,
 } = Astro.props;
 
-// URLs absolutas calculadas por página
-const canonicalURL = new URL(Astro.url.pathname, Astro.site).href;
-const ogImageURL = new URL(image, Astro.site).href;
-
-// ============================================================
-//  ANALYTICS / ADS — pega tus IDs aquí cuando los tengas.
-//  Mientras estén vacíos ('') no se carga nada.
-// ============================================================
-const GA4_ID = 'G-SE3T7ECJPZ';         // GA4, ej: 'G-ABCD1234XY'
-const GOOGLE_ADS_ID = '';              // Google Ads, ej: 'AW-123456789'
-const GOOGLE_ADS_WHATSAPP_LABEL = '';  // etiqueta de conversión, ej: 'AbC-D_efG'
-const gtagId = GA4_ID || GOOGLE_ADS_ID;
+const siteURL = "https://profesormvt.com";
+const fullImageURL = image.startsWith("http") ? image : `${siteURL}${image}`;
 ---
 
-<!DOCTYPE html>
-<html lang="es">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<!doctype html>
+<html lang="es-PE">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="generator" content={Astro.generator} />
 
-  <!-- Fuentes (preconnect + carga no bloqueante) -->
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;0,9..144,500;0,9..144,600;0,9..144,700;0,9..144,900;1,9..144,300;1,9..144,400;1,9..144,500;1,9..144,600&family=Instrument+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&family=JetBrains+Mono:wght@400;500;600;700&display=swap" />
+    <!-- ═══════════ PRIMARY META ═══════════ -->
+    <title>{title}</title>
+    <meta name="title" content={title} />
+    <meta name="description" content={description} />
 
-  <!-- SEO básico -->
-  <title>{title}</title>
-  <meta name="description" content={description} />
-  <meta name="keywords" content="clases de canto Lima, vocal coaching MVT, clases de piano adultos, Faber Faber piano, composición Hook Theory, profesor música San Isidro, clases música online Perú" />
-  <meta name="author" content="Andrés Salame" />
-  <link rel="canonical" href={canonicalURL} />
+    <!-- ═══════════ OPEN GRAPH (Facebook, WhatsApp, LinkedIn) ═══════════ -->
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content={canonicalURL} />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:image" content={fullImageURL} />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Profesor MVT — Clases de canto, piano y composición para adultos en Lima" />
+    <meta property="og:locale" content="es_PE" />
+    <meta property="og:site_name" content="Profesor MVT" />
 
-  <!-- Open Graph (Facebook, Instagram, WhatsApp, LinkedIn) -->
-  <meta property="og:type" content={type} />
-  <meta property="og:url" content={canonicalURL} />
-  <meta property="og:title" content={title} />
-  <meta property="og:description" content={description} />
-  <meta property="og:image" content={ogImageURL} />
-  <meta property="og:image:alt" content={imageAlt} />
-  <meta property="og:locale" content="es_PE" />
-  <meta property="og:site_name" content="Profesor MVT" />
+    <!-- ═══════════ TWITTER / X CARD ═══════════ -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:url" content={canonicalURL} />
+    <meta name="twitter:title" content={title} />
+    <meta name="twitter:description" content={description} />
+    <meta name="twitter:image" content={fullImageURL} />
+    <meta name="twitter:image:alt" content="Profesor MVT — Clases de canto, piano y composición para adultos en Lima" />
 
-  <!-- Twitter Card -->
-  <meta name="twitter:card" content="summary_large_image" />
-  <meta name="twitter:url" content={canonicalURL} />
-  <meta name="twitter:title" content={title} />
-  <meta name="twitter:description" content={description} />
-  <meta name="twitter:image" content={ogImageURL} />
-  <meta name="twitter:image:alt" content={imageAlt} />
+    <!-- ═══════════ SEO TÉCNICO ═══════════ -->
+    <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1" />
+    <meta name="googlebot" content="index, follow" />
+    <meta name="author" content="Andrés Salame" />
+    <meta http-equiv="Content-Language" content="es-PE" />
+    <link rel="canonical" href={canonicalURL} />
 
-  <!-- Google tag (GA4 + Google Ads) — se activa solo si hay IDs arriba -->
-  {gtagId && (
-    <>
-      <script async src={`https://www.googletagmanager.com/gtag/js?id=${gtagId}`}></script>
-      <script is:inline define:vars={{ GA4_ID, GOOGLE_ADS_ID }}>
-        window.dataLayer = window.dataLayer || [];
-        function gtag(){dataLayer.push(arguments);}
-        gtag('js', new Date());
-        if (GA4_ID) gtag('config', GA4_ID);
-        if (GOOGLE_ADS_ID) gtag('config', GOOGLE_ADS_ID);
-      </script>
-    </>
-  )}
+    <!-- ═══════════ GEO TAGS (negocio local Lima) ═══════════ -->
+    <meta name="geo.region" content="PE-LIM" />
+    <meta name="geo.placename" content="San Isidro, Lima, Perú" />
+    <meta name="geo.position" content="-12.0931;-77.0465" />
+    <meta name="ICBM" content="-12.0931, -77.0465" />
 
-  <!-- Meta Pixel Code -->
-  <script>
-    !function(f,b,e,v,n,t,s)
-    {if(f.fbq)return;n=f.fbq=function(){n.callMethod?
-    n.callMethod.apply(n,arguments):n.queue.push(arguments)};
-    if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';
-    n.queue=[];t=b.createElement(e);t.async=!0;
-    t.src=v;s=b.getElementsByTagName(e)[0];
-    s.parentNode.insertBefore(t,s)}(window, document,'script',
-    'https://connect.facebook.net/en_US/fbevents.js');
-    fbq('init', '1281275673536185');
-    fbq('track', 'PageView');
-  </script>
-  <noscript><img height="1" width="1" style="display:none"
-    src="https://www.facebook.com/tr?id=1281275673536185&ev=PageView&noscript=1"
-  /></noscript>
-  <!-- End Meta Pixel Code -->
-
-  <!-- Favicons -->
-  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
-  <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
-  <meta name="theme-color" content="#0F0F0E" />
-
-  <!-- Structured Data (JSON-LD) — Schema.org para Google -->
-  <script type="application/ld+json">
-    {
+    <!-- ═══════════ STRUCTURED DATA (JSON-LD) ═══════════ -->
+    <!-- Le dice a Google que eres un negocio local con servicios -->
+    <script type="application/ld+json" set:html={JSON.stringify({
       "@context": "https://schema.org",
-      "@type": "EducationalOrganization",
+      "@type": "LocalBusiness",
+      "@id": `${siteURL}/#business`,
       "name": "Profesor MVT",
-      "description": "Clases de canto con método MVT, piano con Faber & Faber, composición con Hook Theory y teoría musical para adultos.",
-      "url": "https://profesormvt.com",
-      "logo": "https://profesormvt.com/logo.png",
-      "image": "https://profesormvt.com/andres-piano-hero.jpg",
+      "alternateName": "Andrés Salame — Profesor MVT",
+      "description": description,
+      "url": siteURL,
+      "telephone": "+51-XXX-XXX-XXX",
+      "image": fullImageURL,
+      "priceRange": "S/50 - S/450",
       "address": {
         "@type": "PostalAddress",
-        "streetAddress": "Av. Salaverry 2900",
+        "streetAddress": "Av. Salaverry / Av. JV Prado",
         "addressLocality": "San Isidro",
         "addressRegion": "Lima",
-        "postalCode": "15076",
         "addressCountry": "PE"
       },
-      "areaServed": ["San Isidro", "Lima", "Perú", "Online"],
+      "geo": {
+        "@type": "GeoCoordinates",
+        "latitude": -12.0931,
+        "longitude": -77.0465
+      },
+      "areaServed": [
+        { "@type": "City", "name": "Lima" },
+        { "@type": "Country", "name": "Perú" }
+      ],
       "founder": {
         "@type": "Person",
         "name": "Andrés Salame",
-        "jobTitle": "Profesor de música"
+        "jobTitle": "Profesor de música — canto MVT, piano y composición",
+        "sameAs": [
+          "https://instagram.com/asalamecordova",
+          "https://tiktok.com/@profesordecantomvt"
+        ]
       },
       "sameAs": [
-        "https://instagram.com/asalamecordova",
+        "https://instagram.com/profesordecantomvt",
         "https://tiktok.com/@profesordecantomvt"
-      ],
-      "offers": {
-        "@type": "Offer",
-        "name": "Clase de prueba",
-        "price": "50",
-        "priceCurrency": "PEN"
+      ]
+    })} />
+
+    <!-- Servicios que ofreces -->
+    <script type="application/ld+json" set:html={JSON.stringify({
+      "@context": "https://schema.org",
+      "@type": "Service",
+      "serviceType": "Clases de canto, piano y composición",
+      "provider": { "@id": `${siteURL}/#business` },
+      "areaServed": "Lima, Perú",
+      "hasOfferCatalog": {
+        "@type": "OfferCatalog",
+        "name": "Paquetes de clases",
+        "itemListElement": [
+          {
+            "@type": "Offer",
+            "name": "Clase de prueba",
+            "price": "50",
+            "priceCurrency": "PEN",
+            "description": "Incluye diagnóstico vocal escrito en PDF"
+          },
+          {
+            "@type": "Offer",
+            "name": "Esencial",
+            "price": "250",
+            "priceCurrency": "PEN",
+            "description": "4 horas al mes (1 clase semanal)"
+          },
+          {
+            "@type": "Offer",
+            "name": "Intensivo",
+            "price": "450",
+            "priceCurrency": "PEN",
+            "description": "8 horas al mes (2 clases semanales)"
+          },
+          {
+            "@type": "Offer",
+            "name": "Lock-In Trimestral Esencial",
+            "price": "625",
+            "priceCurrency": "PEN",
+            "description": "12 horas en 3 meses, mes 3 al 50%"
+          },
+          {
+            "@type": "Offer",
+            "name": "Lock-In Trimestral Intensivo",
+            "price": "1125",
+            "priceCurrency": "PEN",
+            "description": "24 horas en 3 meses, mes 3 al 50%"
+          }
+        ]
       }
-    }
-  </script>
-</head>
-<body>
-  <Nav activeNav={activeNav} />
-  <slot />
-  <Footer />
-  <WhatsAppFloat />
+    })} />
 
-  <!-- Meta Pixel — Custom Event Tracking with Beacon Transport -->
-  <script is:inline define:vars={{ GOOGLE_ADS_ID, GOOGLE_ADS_WHATSAPP_LABEL }}>
-    document.addEventListener('DOMContentLoaded', function() {
-      // Track WhatsApp clicks as Lead events
-      const whatsappLinks = document.querySelectorAll('a[href*="wa.me"], a[href*="whatsapp.com"], a[href*="api.whatsapp.com"]');
+    <!-- ═══════════ FAVICONS COMPLETOS ═══════════ -->
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png" />
+    <meta name="theme-color" content="#0F0F0E" />
 
-      whatsappLinks.forEach(link => {
-        link.addEventListener('click', function(e) {
-          if (typeof fbq !== 'undefined') {
-            // Use sendBeacon-style tracking to ensure event fires before navigation
-            fbq('track', 'Lead', {
-              content_name: 'WhatsApp Click',
-              content_category: 'Contact'
-            }, {
-              eventID: 'whatsapp_lead_' + Date.now()
-            });
+    <!-- ═══════════ PRECONNECT (mejora velocidad) ═══════════ -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 
-            // Also send via navigator.sendBeacon as backup for cross-page navigation
-            if (navigator.sendBeacon) {
-              const pixelUrl = 'https://www.facebook.com/tr/?id=1281275673536185&ev=Lead&cd[content_name]=WhatsApp+Click&cd[content_category]=Contact&noscript=1';
-              navigator.sendBeacon(pixelUrl);
-            }
-          }
+    <!-- ═══════════ META PIXEL (ya instalado en el sitio) ═══════════ -->
+    <!-- Tu Meta Pixel + Conversions API ya están corriendo. Si no, ponlos aquí. -->
+  </head>
 
-          // Google Ads: conversión de WhatsApp (se activa solo si configuraste el ID y la etiqueta arriba)
-          if (typeof gtag !== 'undefined' && GOOGLE_ADS_ID && GOOGLE_ADS_WHATSAPP_LABEL) {
-            gtag('event', 'conversion', {
-              send_to: GOOGLE_ADS_ID + '/' + GOOGLE_ADS_WHATSAPP_LABEL
-            });
-          }
-        });
-      });
-
-      // Track Calendly clicks as Schedule events
-      const calendlyLinks = document.querySelectorAll('a[href*="calendly.com"]');
-
-      calendlyLinks.forEach(link => {
-        link.addEventListener('click', function(e) {
-          if (typeof fbq !== 'undefined') {
-            fbq('track', 'Schedule', {
-              content_name: 'Calendly Click',
-              content_category: 'Booking'
-            }, {
-              eventID: 'calendly_schedule_' + Date.now()
-            });
-
-            // Backup beacon
-            if (navigator.sendBeacon) {
-              const pixelUrl = 'https://www.facebook.com/tr/?id=1281275673536185&ev=Schedule&cd[content_name]=Calendly+Click&cd[content_category]=Booking&noscript=1';
-              navigator.sendBeacon(pixelUrl);
-            }
-          }
-        });
-      });
-    });
-  </script>
-</body>
+  <body>
+    <slot />
+  </body>
 </html>
+
+<style is:global>
+  /* Reset básico */
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+  }
+
+  html {
+    background: #0F0F0E;
+    color: #EBE5D6;
+  }
+
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  }
+</style>
