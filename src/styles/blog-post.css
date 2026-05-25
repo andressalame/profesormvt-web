@@ -3,6 +3,9 @@
 :root {
   --slate: #3F5560;
   --slate-deep: #2D3D45;
+  --forest: #2E5E4E;
+  --card-bg: #161514;
+  --on-ember: #160B06;
 }
 
 .post-article {
@@ -204,17 +207,17 @@
 }
 
 .post-body code {
-  background: var(--cream-warm);
+  background: var(--color-line);
   padding: 2px 7px;
   border-radius: 3px;
   font-size: 0.88em;
-  color: var(--wine-deep);
+  color: var(--wine-light);
   font-family: 'JetBrains Mono', monospace;
 }
 
 .post-body pre {
-  background: var(--ink);
-  color: var(--cream);
+  background: var(--paper-deep);
+  color: var(--color-bone);
   padding: 20px 24px;
   border-radius: 4px;
   overflow-x: auto;
@@ -222,6 +225,7 @@
   font-size: 14px;
   line-height: 1.6;
   margin: 24px 0;
+  border: 1px solid var(--color-line);
 }
 .post-body pre code {
   background: transparent;
@@ -322,7 +326,7 @@
   gap: 24px;
 }
 .related-card {
-  background: var(--cream);
+  background: var(--card-bg);
   padding: 28px 26px;
   border-radius: 6px;
   border: 1px solid var(--hairline);

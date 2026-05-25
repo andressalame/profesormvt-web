@@ -10,18 +10,20 @@
     --color-bone-mute: #C2BCAE;
     --color-ember:     #D04A1C;
     --color-line:      #232220;
-    --color-text-mute: #8A8377;
+    --color-text-mute: #A8A296;
 
-  /* Legacy aliases (mapped to new palette) */
+  /* Legacy aliases — REMAPEADOS para fondo oscuro (2026-05-25)
+     Antes apuntaban a tonos oscuros (texto negro sobre negro = invisible).
+     Ahora apuntan a tonos claros legibles sobre el fondo ink. */
   --cream:       #EBE5D6;
-    --cream-warm:  #C2BCAE;
-    --paper:       #0F0F0E;
-    --paper-deep:  #161514;
-    --ink:         #0F0F0E;
-    --ink-soft:    #161514;
-    --ink-faint:   #8A8377;
+    --cream-warm:  #232220;        /* era #C2BCAE: se usa como fondo de code/chips → ahora oscuro */
+    --paper:       #161514;        /* era #0F0F0E: se usa como fondo de tarjetas/pills */
+    --paper-deep:  #0F0F0E;
+    --ink:         #EBE5D6;        /* era #0F0F0E: se usa como COLOR DE TEXTO → ahora bone */
+    --ink-soft:    #C2BCAE;        /* era #161514: texto secundario → ahora bone-mute */
+    --ink-faint:   #A8A296;        /* era #8A8377: texto terciario → ahora gris claro legible */
     --wine:        #D04A1C;
-    --wine-deep:   #A83A15;
+    --wine-deep:   #E05A2A;        /* era #A83A15: como hover sobre oscuro conviene más claro */
     --wine-light:  #E05A2A;
     --clay:        #D04A1C;
     --clay-deep:   #A83A15;

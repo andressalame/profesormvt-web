@@ -3,6 +3,9 @@
 :root {
   --slate: #3F5560;
   --slate-deep: #2D3D45;
+  --forest: #2E5E4E;        /* faltaba: usado por categoría "método" */
+  --card-bg: #161514;       /* fondo de tarjetas sobre el ink */
+  --on-ember: #160B06;      /* texto oscuro legible sobre naranja/ember */
 }
 
 .blog-hero {
@@ -73,8 +76,8 @@
   gap: 8px;
   font-family: inherit;
 }
-.cat-pill:hover { background: var(--cream-warm); color: var(--ink); }
-.cat-pill.active { background: var(--ink); color: var(--cream); border-color: var(--ink); }
+.cat-pill:hover { background: var(--color-line); color: var(--color-bone); }
+.cat-pill.active { background: var(--color-ember); color: var(--on-ember); border-color: var(--color-ember); }
 .cat-pill .dot { width: 6px; height: 6px; border-radius: 50%; }
 .cat-pill.cat-voz .dot { background: var(--wine); }
 .cat-pill.cat-piano .dot { background: var(--clay); }
@@ -133,7 +136,7 @@
   top: 24px;
   left: 24px;
   background: rgba(255, 255, 255, 0.95);
-  color: var(--ink);
+  color: var(--paper-deep);
   padding: 6px 12px;
   border-radius: 999px;
   font-family: 'JetBrains Mono', monospace;
@@ -157,7 +160,7 @@
 }
 .featured-content .meta .featured-pill {
   background: var(--gold);
-  color: var(--ink);
+  color: var(--on-ember);
   padding: 3px 10px;
   border-radius: 3px;
   font-weight: 600;
@@ -188,17 +191,17 @@
 .featured-cta {
   align-self: flex-start;
   padding: 14px 26px;
-  background: var(--ink);
-  color: var(--cream);
+  background: var(--color-ember);
+  color: var(--on-ember);
   border-radius: 999px;
   font-size: 14.5px;
-  font-weight: 500;
+  font-weight: 600;
   display: inline-flex;
   align-items: center;
   gap: 10px;
   transition: all 0.2s;
 }
-.featured-cta:hover { background: var(--wine); transform: translateY(-1px); }
+.featured-cta:hover { background: var(--wine-deep); transform: translateY(-1px); }
 .featured-cta::after { content: '→'; }
 
 .posts-section {
@@ -252,7 +255,7 @@
   top: 16px;
   left: 16px;
   background: rgba(255, 255, 255, 0.95);
-  color: var(--ink);
+  color: var(--paper-deep);
   padding: 4px 10px;
   border-radius: 3px;
   font-family: 'JetBrains Mono', monospace;
@@ -327,7 +330,7 @@
   align-items: center;
   gap: 10px;
   background: var(--gold);
-  color: var(--ink);
+  color: var(--on-ember);
   padding: 16px 30px;
   border-radius: 999px;
   font-size: 15px;
