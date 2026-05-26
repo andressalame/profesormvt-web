@@ -8,9 +8,27 @@ export interface Props {
   title: string;
   description: string;
   activeNav?: string;
+  /** Tipo de Open Graph: 'website' (default) o 'article' para posts del blog */
+  type?: string;
+  /** Imagen para previews al compartir. Ruta relativa (ej: '/og-image.jpg') o absoluta */
+  image?: string;
+  /** Fecha de publicación (solo artículos) */
+  publishedTime?: string;
 }
 
-const { title, description, activeNav } = Astro.props;
+const {
+  title,
+  description,
+  activeNav,
+  type = 'website',
+  image = '/og-image.jpg',
+  publishedTime,
+} = Astro.props;
+
+// URL canónica limpia
+const canonicalURL = new URL(Astro.url.pathname, Astro.site).href.replace(/\/$/, '') || Astro.site;
+// Imagen absoluta para Open Graph (las redes exigen URL completa)
+const socialImage = new URL(image, Astro.site).href;
 ---
 
 <!DOCTYPE html>
@@ -20,6 +38,8 @@ const { title, description, activeNav } = Astro.props;
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>{title}</title>
   <meta name="description" content={description} />
+  <link rel="canonical" href={canonicalURL} />
+  <meta name="robots" content="index, follow" />
 
   <!-- ============= META PIXEL HERE ============= -->
   <!-- Reemplazar este comentario con el código del Pixel de Meta cuando lo migres desde Wix -->
@@ -28,8 +48,18 @@ const { title, description, activeNav } = Astro.props;
   <!-- Open Graph -->
   <meta property="og:title" content={title} />
   <meta property="og:description" content={description} />
-  <meta property="og:type" content="website" />
-  <meta property="og:url" content={Astro.url.href} />
+  <meta property="og:type" content={type} />
+  <meta property="og:url" content={canonicalURL} />
+  <meta property="og:image" content={socialImage} />
+  <meta property="og:locale" content="es_PE" />
+  <meta property="og:site_name" content="Profesor MVT" />
+  {publishedTime && <meta property="article:published_time" content={publishedTime} />}
+
+  <!-- Twitter / X -->
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content={title} />
+  <meta name="twitter:description" content={description} />
+  <meta name="twitter:image" content={socialImage} />
 
   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
 </head>
