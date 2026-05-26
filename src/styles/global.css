@@ -30,6 +30,8 @@
     --gold:        #D04A1C;
     --gold-soft:   #E05A2A;
     --gold-deep:   #A83A15;
+    --slate:       #3F5560;        /* categoría composición (también en blog.css) */
+    --forest:      #2E5E4E;        /* categoría método (también en blog.css) */
 
   /* Hairlines / shadows */
   --hairline:        rgba(235, 229, 214, 0.10);
