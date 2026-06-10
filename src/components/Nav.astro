@@ -28,10 +28,18 @@ const { activeNav } = Astro.props;
 <style>
 .nav {
   position: sticky; top: 0; z-index: 100;
-  background: rgba(15, 15, 14, 0.92);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border-bottom: 1px solid var(--color-line);
+  background: transparent;
+  border-bottom: 1px solid transparent;
+  transition: background 0.2s ease, backdrop-filter 0.2s ease, border-color 0.2s ease;
+}
+.nav.scrolled {
+  background: rgba(13, 11, 10, 0.92);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border-bottom-color: #2A2926;
+}
+@media (prefers-reduced-motion: reduce) {
+  .nav { transition: none; }
 }
 .nav-inner {
   max-width: 1240px;
@@ -103,3 +111,12 @@ const { activeNav } = Astro.props;
   .nav-links li:not(:last-child):not(.nav-login-li) { display: none; }
 }
 </style>
+
+<script>
+  const nav = document.querySelector('.nav');
+  if (nav) {
+    const onScroll = () => nav.classList.toggle('scrolled', window.scrollY > 40);
+    onScroll();
+    window.addEventListener('scroll', onScroll, { passive: true });
+  }
+</script>

@@ -778,12 +778,20 @@ section.dark-bg .sub { color: var(--color-bone-mute); }
 }
 .faq-item.open .arrow { transform: rotate(45deg); }
 .faq-answer {
-    max-height: 0;
-    overflow: hidden;
-    transition: max-height 0.4s ease, padding 0.4s ease;
+    display: grid;
+    grid-template-rows: 0fr;
+    transition: grid-template-rows 0.25s ease;
 }
-.faq-item.open .faq-answer { max-height: 600px; padding-bottom: 24px; }
-.faq-answer p { color: var(--color-bone-mute); font-size: 15.5px; line-height: 1.65; max-width: 720px; }
+.faq-item.open .faq-answer { grid-template-rows: 1fr; }
+.faq-answer p {
+    overflow: hidden;
+    min-height: 0;
+    color: var(--color-bone-mute);
+    font-size: 15.5px;
+    line-height: 1.65;
+    max-width: 720px;
+    padding-bottom: 24px;
+}
 
 /* ============================================== */
 /* CTA FINAL */
@@ -929,3 +937,235 @@ section.warm-bg { background: var(--color-ink-soft); }
     font-weight: 500;
 }
 @media (max-width: 768px) { .hero-clarity { display: block; } }
+
+/* ============================================================= */
+/* MOTION SYSTEM — reveals · marquee · micro-interacciones (2026) */
+/* Solo transform/opacity. Sin JS, todo se ve normal (gate html.js). */
+/* ============================================================= */
+
+/* --- A. Reveals --- */
+html.js [data-reveal] {
+    opacity: 0;
+    transform: translateY(14px);
+    transition: opacity 0.38s cubic-bezier(0.2, 0.8, 0.2, 1),
+                transform 0.38s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+html.js [data-reveal].is-revealed { opacity: 1; transform: none; }
+
+/* Regla naranja decorativa bajo títulos de sección (3px × 64px, scaleX) */
+.section-head h2::after {
+    content: '';
+    display: block;
+    width: 64px;
+    height: 3px;
+    margin-top: 24px;
+    background: var(--color-ember);
+    transform-origin: left;
+    transform: scaleX(1);
+    transition: transform 0.45s cubic-bezier(0.2, 0.8, 0.2, 1);
+    transition-delay: 0.12s;
+}
+html.js .section-head h2::after { transform: scaleX(0); }
+html.js .section-head h2.is-revealed::after { transform: scaleX(1); }
+
+/* Subrayado naranja que se dibuja bajo la itálica del H1 del hero */
+.hero h1 em { position: relative; }
+.hero h1 em::after {
+    content: '';
+    position: absolute;
+    left: 0; right: 0;
+    bottom: -0.06em;
+    height: 3px;
+    background: var(--color-ember);
+    transform-origin: left;
+    transform: scaleX(1);
+    transition: transform 0.5s cubic-bezier(0.2, 0.8, 0.2, 1);
+    transition-delay: 0.5s;
+}
+html.js .hero h1 em::after { transform: scaleX(0); }
+html.js .hero h1.is-revealed em::after { transform: scaleX(1); }
+
+/* --- B. Marquee (LA firma) --- */
+.marquee {
+    background: #0d0b0a;
+    border-top: 1px solid #2A2926;
+    border-bottom: 1px solid #2A2926;
+    overflow: hidden;
+    position: relative;
+    z-index: 2;
+}
+.marquee-track {
+    display: flex;
+    width: max-content;
+    animation: marquee 28s linear infinite;
+    will-change: transform;
+}
+.marquee:hover .marquee-track { animation-play-state: paused; }
+.mq-content {
+    flex: 0 0 auto;
+    white-space: nowrap;
+    padding: 13px 0;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12.5px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: #8a8276;
+}
+.mq-content .mq-sep { color: #cc4e1f; margin: 0 14px; }
+@keyframes marquee {
+    from { transform: translateX(0); }
+    to { transform: translateX(-50%); }
+}
+
+/* --- C. Micro-interacciones --- */
+.pillar { position: relative; }
+@media (hover: hover) {
+    .testimonio, .precio-card, .pillar {
+        transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.2s ease;
+    }
+    .testimonio:hover, .precio-card:hover, .pillar:hover {
+        transform: translate(-2px, -2px);
+        box-shadow: 0 0 0 1px #cc4e1f, 4px 4px 0 rgba(204, 78, 31, 0.35);
+        z-index: 5;
+    }
+}
+.btn-primary:active,
+.btn-ghost:active,
+.precio-cta:active,
+.btn-outline:active { transform: scale(0.98); }
+.arrow-i { display: inline-block; transition: transform 0.15s ease; }
+.btn-primary:hover .arrow-i,
+.btn-outline:hover .arrow-i,
+.precio-online:hover .arrow-i { transform: translateX(4px); }
+
+/* --- D. CTAs ghost (estilo nav) + link online de precios --- */
+.btn-outline {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: transparent;
+    color: #EBE5D6;
+    border: 1px solid rgba(235, 229, 214, 0.35);
+    padding: 16px 24px;
+    border-radius: 4px;
+    font-size: 15px;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+    cursor: pointer;
+    transition: border-color 0.15s ease, color 0.15s ease, transform 0.15s ease;
+}
+.btn-outline:hover { border-color: #cc4e1f; color: #cc4e1f; }
+.precio-online {
+    display: block;
+    text-align: center;
+    margin-top: 10px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.04em;
+    color: var(--color-text-mute);
+    transition: color 0.15s ease;
+}
+.precio-online:hover { color: #cc4e1f; }
+
+/* --- E. Sección "Tu portal de alumno" + mini maqueta --- */
+.portal-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 56px;
+    align-items: center;
+}
+.portal-text .label { display: block; margin-bottom: 18px; }
+.portal-text h2 {
+    font-size: clamp(34px, 4vw, 52px);
+    line-height: 1.05;
+    letter-spacing: -0.02em;
+    color: var(--color-bone);
+    margin-bottom: 28px;
+}
+.portal-points { list-style: none; margin: 0 0 32px; }
+.portal-points li {
+    position: relative;
+    padding: 12px 0 12px 30px;
+    font-size: 16.5px;
+    line-height: 1.5;
+    color: var(--color-bone-mute);
+    border-top: 1px solid var(--color-line);
+}
+.portal-points li:first-child { border-top: none; }
+.portal-points li::before {
+    content: '→';
+    position: absolute;
+    left: 0;
+    color: var(--color-ember);
+    font-weight: 600;
+}
+.portal-cta { margin-bottom: 14px; }
+.portal-sub {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10.5px;
+    letter-spacing: 0.08em;
+    color: var(--color-text-mute);
+    line-height: 1.5;
+}
+.portal-mock { display: flex; justify-content: center; }
+.mock-card {
+    background: #141210;
+    border: 1px solid #2A2926;
+    border-radius: 4px;
+    padding: 28px 30px;
+    width: 100%;
+    max-width: 360px;
+    transform: rotate(-1.2deg);
+    box-shadow: 0 18px 48px rgba(0, 0, 0, 0.35);
+}
+.mock-pill {
+    display: inline-block;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    color: #5f8a52;
+    background: rgba(95, 138, 82, 0.16);
+    border: 1px solid #5f8a52;
+    padding: 4px 10px;
+    border-radius: 2px;
+    margin-bottom: 18px;
+}
+.mock-count { display: flex; align-items: baseline; gap: 10px; margin-bottom: 22px; }
+.mock-num { font-family: 'Fraunces', serif; font-size: 72px; line-height: 0.9; color: var(--color-ember); }
+.mock-de { font-family: 'Fraunces', serif; font-style: italic; font-size: 22px; color: var(--color-text-mute); }
+.mock-tickets { display: flex; gap: 7px; flex-wrap: wrap; }
+.ticket {
+    width: 22px; height: 34px;
+    background: #cc4e1f;
+    border-radius: 3px;
+    position: relative;
+    flex: 0 0 auto;
+}
+.ticket::before, .ticket::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    width: 8px; height: 8px;
+    background: #141210;
+    border-radius: 50%;
+    transform: translateY(-50%);
+}
+.ticket::before { left: -4px; }
+.ticket::after { right: -4px; }
+.ticket.used { background: #2A2926; }
+@media (max-width: 960px) {
+    .portal-grid { grid-template-columns: 1fr; gap: 36px; }
+}
+
+/* --- F. prefers-reduced-motion: TODO estático --- */
+@media (prefers-reduced-motion: reduce) {
+    html.js [data-reveal] { opacity: 1 !important; transform: none !important; transition: none !important; }
+    html.js .section-head h2::after,
+    html.js .hero h1 em::after { transform: scaleX(1) !important; transition: none !important; }
+    .marquee-track { animation: none !important; }
+    .faq-answer { transition: none !important; }
+    .arrow-i { transition: none !important; transform: none !important; }
+    .testimonio:hover, .precio-card:hover, .pillar:hover { transform: none !important; box-shadow: none !important; }
+    .btn-primary:hover, .btn-primary:active, .btn-ghost:active, .precio-cta:active, .btn-outline:active { transform: none !important; }
+}
