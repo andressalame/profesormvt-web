@@ -48,7 +48,7 @@ async function hashPass(password, saltHex){
   const salt = new Uint8Array(saltHex.match(/../g).map(h => parseInt(h, 16)));
   const key = await crypto.subtle.importKey("raw", enc.encode(password), "PBKDF2", false, ["deriveBits"]);
   const bits = await crypto.subtle.deriveBits(
-    { name: "PBKDF2", hash: "SHA-256", salt, iterations: 210000 }, key, 256
+    { name: "PBKDF2", hash: "SHA-256", salt, iterations: 100000 }, key, 256
   );
   return hex(bits);
 }
