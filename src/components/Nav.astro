@@ -14,7 +14,6 @@ const { activeNav } = Astro.props;
       <li><a href="/#precios">Precios</a></li>
       <li><a href="/#sobre">Sobre mí</a></li>
       <li><a href="/#testimonios">Testimonios</a></li>
-      <li><a href="/blog" class={activeNav === 'blog' ? 'active' : ''}>Blog</a></li>
       <li>
         <a href="https://discord.gg/MCBEa3fcTU" class="nav-discord" target="_blank" rel="noopener" aria-label="Únete a la comunidad de Discord">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 00-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 00-.0785-.037 19.7363 19.7363 0 00-4.8852 1.515.0699.0699 0 00-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 00.0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 00.0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 00-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 01-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 01.0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 01.0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 01-.0066.1276 12.2986 12.2986 0 01-1.873.8914.0766.0766 0 00-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 00.0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 00.0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 00-.0312-.0286zM8.02 15.3312c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9555-2.4189 2.157-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.9555 2.4189-2.1569 2.4189zm7.9748 0c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9554-2.4189 2.1569-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.946 2.4189-2.1568 2.4189Z"/></svg>
@@ -62,8 +61,8 @@ const { activeNav } = Astro.props;
   display: inline-block;
   transform: translateY(-3px);
 }
-.nav-links { display: flex; align-items: center; gap: 26px; list-style: none; }
-.nav-links a { font-size: 14.5px; color: var(--color-bone-mute); transition: color 0.2s; }
+.nav-links { display: flex; align-items: center; gap: 30px; list-style: none; }
+.nav-links a { font-size: 14.5px; color: var(--color-bone-mute); transition: color 0.2s; white-space: nowrap; }
 .nav-links a.active { color: var(--color-ember); font-weight: 500; }
 .nav-links a:hover { color: var(--color-ember); }
 .nav-cta {
@@ -92,20 +91,11 @@ const { activeNav } = Astro.props;
 }
 .nav-login:hover { border-color: #cc4e1f; color: #cc4e1f !important; }
 
-/* Botón Comunidad (Discord) — secundario, con borde */
+/* Comunidad (Discord) — link de texto simple, como los demás del nav */
 .nav-discord {
-  display: inline-flex; align-items: center; gap: 7px;
-  border: 1px solid var(--color-ember);
-  color: var(--color-ember) !important;
-  padding: 9px 16px;
-  border-radius: 4px;
-  font-size: 13.5px;
-  font-weight: 600;
-  transition: background 0.2s, color 0.2s;
-  letter-spacing: 0.01em;
+  display: inline-flex; align-items: center; gap: 6px;
 }
-.nav-discord svg { width: 18px; height: 18px; fill: currentColor; flex-shrink: 0; }
-.nav-discord:hover { background: var(--color-ember); color: var(--color-bone) !important; }
+.nav-discord svg { width: 16px; height: 16px; fill: currentColor; flex-shrink: 0; }
 
 @media (max-width: 960px) {
   .nav-inner { padding: 14px 28px; }
