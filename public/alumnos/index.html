@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<!-- Portal de alumnos · ProfesorMVT — destino: public/alumnos/index.html -->
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="robots" content="noindex, nofollow" />
+<title>Portal de alumno · ProfesorMVT</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:ital,wght@0,400;0,500;0,600;1,400&family=JetBrains+Mono:wght@400;500;700&family=Playfair+Display:ital,wght@0,600;0,700;1,600;1,700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0d0b0a; --panel:#141210; --panel2:#191613;
+    --accent:#cc4e1f; --cream:#EBE5D6; --muted:#8a8276; --line:#2A2926;
+    --green:#5f8a52; --amber:#d99a3c; --red:#cc3a1f;
+    --mono:'JetBrains Mono',ui-monospace,monospace;
+    --display:'Playfair Display',Georgia,serif;
+    --body:'Instrument Sans',system-ui,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{background:var(--bg);color:var(--cream);font-family:var(--body);font-size:15.5px;line-height:1.5;-webkit-font-smoothing:antialiased;}
+  .wrap{max-width:680px;margin:0 auto;padding:30px 20px 70px;}
+  a{color:var(--accent);text-decoration:none}
+  a:hover{text-decoration:underline}
+  button{cursor:pointer}
+
+  .eyebrow{font-family:var(--mono);text-transform:uppercase;letter-spacing:.18em;font-size:11.5px;color:var(--accent);font-weight:700;}
+  h1{font-family:var(--display);font-weight:700;font-size:clamp(30px,7vw,44px);margin:.18em 0 .08em;line-height:1.04;}
+  h1 em{font-style:italic;color:var(--accent);}
+  .sub{font-family:var(--mono);text-transform:uppercase;letter-spacing:.12em;font-size:11px;color:var(--muted);}
+  .rule{height:3px;background:var(--accent);border:0;margin:16px 0 24px;}
+
+  .hidden{display:none!important}
+
+  /* ---------- LOGIN ---------- */
+  .login-card{max-width:430px;margin:9vh auto 0;}
+  .field label{display:block;font-family:var(--mono);text-transform:uppercase;letter-spacing:.09em;font-size:11px;color:var(--muted);margin-bottom:7px;}
+  .code-input{width:100%;background:var(--panel);border:1px solid var(--line);color:var(--cream);
+    font-family:var(--mono);font-size:22px;letter-spacing:.35em;text-transform:uppercase;text-align:center;
+    padding:14px 12px;border-radius:3px;}
+  .code-input:focus{outline:2px solid var(--accent);outline-offset:1px;border-color:var(--accent);}
+  .btn{font-family:var(--mono);text-transform:uppercase;letter-spacing:.09em;font-size:13px;font-weight:700;
+    padding:13px 18px;border-radius:3px;border:1px solid var(--accent);background:var(--accent);color:var(--bg);
+    width:100%;margin-top:14px;transition:filter .12s;}
+  .btn:hover{filter:brightness(1.12);}
+  .btn[disabled]{opacity:.6;cursor:wait;}
+  .err{color:var(--red);font-size:13.5px;margin-top:12px;min-height:1.2em;}
+  .login-hint{margin-top:22px;font-size:13.5px;color:var(--muted);line-height:1.55;}
+
+  /* ---------- DASHBOARD ---------- */
+  .topbar{display:flex;justify-content:space-between;align-items:center;gap:12px;}
+  .linkbtn{background:none;border:none;color:var(--muted);font-family:var(--mono);font-size:11px;
+    text-transform:uppercase;letter-spacing:.09em;padding:6px 0;}
+  .linkbtn:hover{color:var(--accent);}
+
+  .lab{font-family:var(--mono);text-transform:uppercase;letter-spacing:.1em;font-size:11px;color:var(--muted);}
+
+  .hero{margin:6px 0 4px;}
+  .hero .big{font-family:var(--display);font-weight:700;font-size:clamp(72px,21vw,108px);line-height:.9;color:var(--accent);}
+  .hero .of{font-family:var(--display);font-style:italic;font-size:clamp(20px,5vw,28px);color:var(--muted);margin-left:6px;}
+  .pill{font-family:var(--mono);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;
+    padding:5px 11px;border-radius:2px;display:inline-block;margin-top:10px;}
+  .pill.green{background:rgba(95,138,82,.16);color:var(--green);border:1px solid var(--green);}
+  .pill.amber{background:rgba(217,154,60,.16);color:var(--amber);border:1px solid var(--amber);}
+  .pill.red{background:rgba(204,58,31,.16);color:var(--red);border:1px solid var(--red);}
+
+  /* tickets */
+  .stubs{display:flex;gap:8px;flex-wrap:wrap;margin:18px 0 6px;}
+  .stub{width:30px;height:46px;background:var(--accent);border-radius:3px;position:relative;flex:0 0 auto;}
+  .stub::before,.stub::after{content:"";position:absolute;top:50%;width:11px;height:11px;background:var(--bg);border-radius:50%;transform:translateY(-50%);}
+  .stub::before{left:-5.5px}
+  .stub::after{right:-5.5px}
+  .stub:nth-child(3n){transform:rotate(-2.4deg);}
+  .stub:nth-child(3n+1){transform:rotate(1.6deg);}
+  .stub.used{background:var(--line);opacity:.55;}
+  .stubcap{font-family:var(--mono);font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:26px;}
+
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:18px 20px;margin-bottom:14px;}
+  .card h3{font-family:var(--mono);text-transform:uppercase;letter-spacing:.12em;font-size:11px;color:var(--accent);font-weight:700;margin:0 0 10px;}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+  @media (max-width:520px){ .grid2{grid-template-columns:1fr;} }
+  .kv .v{font-family:var(--display);font-size:21px;margin-top:2px;}
+  .kv .v small{font-family:var(--body);font-size:13px;color:var(--muted);}
+  .note{font-size:12.5px;color:var(--muted);margin-top:8px;line-height:1.5;}
+  .warn{color:var(--amber);}
+
+  .renew{border:1px solid var(--accent);border-left:5px solid var(--accent);background:linear-gradient(180deg,rgba(204,78,31,.10),rgba(204,78,31,.03));}
+  .renew h2{font-family:var(--display);font-style:italic;font-weight:700;font-size:26px;margin:2px 0 8px;color:var(--cream);}
+  .renew p{margin:0 0 14px;font-size:14.5px;}
+  .wa{display:inline-block;font-family:var(--mono);text-transform:uppercase;letter-spacing:.08em;font-size:12.5px;font-weight:700;
+    background:var(--accent);color:var(--bg);padding:12px 18px;border-radius:3px;border:1px solid var(--accent);}
+  .wa:hover{filter:brightness(1.12);text-decoration:none;}
+
+  .tarea{border-left:5px solid var(--accent);}
+  .tarea .t{font-family:var(--display);font-size:20px;line-height:1.3;}
+  .tarea .meta{font-family:var(--mono);font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;margin-top:8px;}
+
+  .hist{list-style:none;margin:0;padding:0;}
+  .hist li{display:grid;grid-template-columns:92px 1fr;gap:12px;padding:11px 0;border-bottom:1px solid var(--line);}
+  .hist li:last-child{border-bottom:0;}
+  .hist .f{font-family:var(--mono);font-size:11.5px;color:var(--muted);padding-top:3px;}
+  .hist .pill{margin:0 0 5px;}
+  .hist .w{font-size:14px;}
+  .hist .tk{font-size:12.5px;color:var(--muted);}
+  @media (max-width:430px){ .hist li{grid-template-columns:1fr;gap:4px;} }
+
+  .empty{color:var(--muted);font-family:var(--mono);font-size:12px;text-transform:uppercase;letter-spacing:.08em;padding:8px 0;}
+  .loading{font-family:var(--mono);font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);padding:40px 0;text-align:center;}
+  .footnote{margin-top:34px;font-size:12px;color:var(--muted);border-top:1px solid var(--line);padding-top:14px;
+    font-family:var(--mono);text-transform:uppercase;letter-spacing:.08em;}
+  .footnote a{color:var(--muted);}
+  .footnote a:hover{color:var(--accent);}
+  @media (prefers-reduced-motion:reduce){*{transition:none!important;}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- ============ LOGIN ============ -->
+  <section id="viewLogin" class="login-card">
+    <div class="eyebrow">// PROFESORMVT</div>
+    <h1>Portal de <em>alumno</em></h1>
+    <div class="sub">Tus clases · Tu tarea · Tu avance</div>
+    <hr class="rule" />
+    <div class="field">
+      <label for="codigo">Código de alumno</label>
+      <input id="codigo" class="code-input" type="text" maxlength="12" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="······" />
+    </div>
+    <button class="btn" id="btnEntrar">Entrar</button>
+    <div class="err" id="loginErr"></div>
+    <p class="login-hint">Tu código es personal y te lo paso yo por WhatsApp.<br>
+      ¿No lo tienes a la mano? <a href="https://wa.me/51989077928?text=Hola%20Andr%C3%A9s%2C%20no%20tengo%20mi%20c%C3%B3digo%20del%20portal%20de%20alumno%20%F0%9F%8E%B8" target="_blank" rel="noopener">Pídemelo aquí</a>.</p>
+  </section>
+
+  <!-- ============ DASHBOARD ============ -->
+  <section id="viewDash" class="hidden">
+    <div class="topbar">
+      <div class="eyebrow">// PROFESORMVT — PORTAL DE ALUMNO</div>
+      <button class="linkbtn" id="btnSalir">Salir</button>
+    </div>
+    <h1 id="dNombre"></h1>
+    <div class="sub" id="dPlan"></div>
+    <hr class="rule" />
+
+    <div class="lab">Clases restantes</div>
+    <div class="hero"><span class="big" id="dRestantes">0</span><span class="of" id="dDe"></span></div>
+    <span class="pill" id="dEstado"></span>
+
+    <div class="stubs" id="dStubs"></div>
+    <div class="stubcap">Cada ticket = una clase de tu paquete · los apagados ya se usaron</div>
+
+    <div class="card renew hidden" id="cardRenew">
+      <h3>// Renovación</h3>
+      <h2 id="rTitulo"></h2>
+      <p id="rTexto"></p>
+      <a class="wa" id="rBtn" target="_blank" rel="noopener">Renovar por WhatsApp</a>
+    </div>
+
+    <div class="card tarea hidden" id="cardTarea">
+      <h3>// Tu tarea de esta semana</h3>
+      <div class="t" id="tTexto"></div>
+      <div class="meta" id="tMeta"></div>
+    </div>
+
+    <div class="card">
+      <h3>// Tu plan</h3>
+      <div class="grid2">
+        <div class="kv"><div class="lab">Reprogramaciones disponibles</div><div class="v" id="dReprog"></div>
+          <div class="note">Avísame con 24h de anticipación y la reprogramación no consume clase.</div></div>
+        <div class="kv"><div class="lab">Horario fijo</div><div class="v" id="dHorario"></div></div>
+        <div class="kv"><div class="lab">Paquete</div><div class="v" id="dPaquete"></div></div>
+        <div class="kv"><div class="lab">Pago</div><div class="v" id="dPago"></div><div class="note warn hidden" id="dPagoNote">Tienes un pago pendiente — coordinémoslo por WhatsApp.</div></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>// Historial de clases</h3>
+      <ul class="hist" id="dHist"></ul>
+      <div class="empty hidden" id="dHistEmpty">Aún no hay clases registradas</div>
+    </div>
+
+    <div class="footnote">
+      ¿Algo no cuadra? <a href="https://wa.me/51989077928" target="_blank" rel="noopener">Escríbeme</a> ·
+      PROFESORMVT.COM / @ASALAMECORDOVA
+    </div>
+  </section>
+
+  <div class="loading hidden" id="viewLoading">Cargando tu avance…</div>
+</div>
+
+<script>
+"use strict";
+var KEY = "pmvt_alumno_codigo";
+var WA_PROFE = "51989077928";
+
+function $(id){ return document.getElementById(id); }
+function esc(s){ return String(s==null?"":s).replace(/[&<>"]/g,function(m){return {"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[m];}); }
+function show(id){ $(id).classList.remove("hidden"); }
+function hide(id){ $(id).classList.add("hidden"); }
+
+function setView(v){
+  ["viewLogin","viewDash","viewLoading"].forEach(hide);
+  show(v);
+}
+
+function pillClass(estado){
+  if(estado === "Activo") return "green";
+  if(estado === "⚠ Última clase") return "amber";
+  return "red";
+}
+
+function render(d){
+  $("dNombre").innerHTML = 'Hola, <em>' + esc(d.nombre.split(" ")[0]) + '</em>';
+  $("dPlan").textContent = (d.curso || "") + " · " + (d.paquete || "");
+  $("dRestantes").textContent = d.restantes;
+  $("dDe").textContent = "de " + d.compradas;
+  var est = $("dEstado");
+  est.textContent = d.estado;
+  est.className = "pill " + pillClass(d.estado);
+
+  // tickets
+  var stubs = "";
+  for(var i=0;i<d.compradas;i++){
+    stubs += '<div class="stub' + (i < d.usadas ? " used" : "") + '"></div>';
+  }
+  $("dStubs").innerHTML = stubs;
+
+  // renovación
+  if(d.estado !== "Activo"){
+    var ultima = d.estado === "⚠ Última clase";
+    $("rTitulo").textContent = ultima ? "Te queda 1 clase" : "Paquete completado";
+    $("rTexto").textContent = ultima
+      ? "Para no cortar el ritmo que llevas, deja tu renovación lista antes de la próxima sesión. Pregúntame por el plan trimestral: el 3er mes va al 50%."
+      : "Tu paquete llegó a su fin — renueva hoy y seguimos exactamente donde quedamos. Pregúntame por el plan trimestral: el 3er mes va al 50%.";
+    var msg = "Hola Andrés, soy " + d.nombre + " 🎸 Mi paquete de " + (d.curso||"clases") +
+      (ultima ? " está por terminar" : " ya terminó") + " y quiero renovarlo. ¿Me cuentas del plan trimestral?";
+    $("rBtn").href = "https://wa.me/" + WA_PROFE + "?text=" + encodeURIComponent(msg);
+    show("cardRenew");
+  } else { hide("cardRenew"); }
+
+  // tarea de la semana = la más reciente con tarea
+  var conTarea = (d.historial || []).find(function(r){ return r.tarea && r.tarea.trim(); });
+  if(conTarea){
+    $("tTexto").textContent = conTarea.tarea;
+    $("tMeta").textContent = "De tu clase del " + (conTarea.fecha || "—");
+    show("cardTarea");
+  } else { hide("cardTarea"); }
+
+  // plan
+  $("dReprog").innerHTML = d.reprogRestantes + ' <small>de ' + d.reprogPermitidas + '</small>';
+  $("dHorario").textContent = d.horario || "—";
+  $("dPaquete").innerHTML = esc(d.paquete||"—") + (d.monto ? ' <small>· S/ ' + d.monto + '</small>' : '');
+  $("dPago").textContent = d.pago || "—";
+  if(d.pago && d.pago !== "Pagado") show("dPagoNote"); else hide("dPagoNote");
+
+  // historial
+  var h = d.historial || [];
+  if(h.length === 0){ $("dHist").innerHTML=""; show("dHistEmpty"); }
+  else{
+    hide("dHistEmpty");
+    $("dHist").innerHTML = h.map(function(r){
+      var pc = r.estado==="Asistió" ? "green" : (r.estado==="Reprogramó" ? "amber" : "red");
+      return '<li><div class="f">'+esc(r.fecha||"")+'</div><div>'+
+        '<span class="pill '+pc+'">'+esc(r.estado||"")+'</span>'+
+        (r.trabajo ? '<div class="w">'+esc(r.trabajo)+'</div>' : '')+
+        (r.tarea ? '<div class="tk">Tarea: '+esc(r.tarea)+'</div>' : '')+
+        '</div></li>';
+    }).join("");
+  }
+  setView("viewDash");
+}
+
+function login(code, silencioso){
+  if(!silencioso){ $("btnEntrar").disabled = true; $("loginErr").textContent=""; }
+  setView("viewLoading");
+  fetch("/api/login",{
+    method:"POST",
+    headers:{ "content-type":"application/json" },
+    body: JSON.stringify({ codigo: code })
+  }).then(function(res){
+    if(res.ok) return res.json().then(function(d){
+      try{ localStorage.setItem(KEY, code); }catch(e){}
+      render(d);
+    });
+    return res.json().catch(function(){return {};}).then(function(){
+      try{ localStorage.removeItem(KEY); }catch(e){}
+      setView("viewLogin");
+      $("loginErr").textContent = "Código no válido. Revísalo o pídemelo de nuevo por WhatsApp.";
+    });
+  }).catch(function(){
+    setView("viewLogin");
+    $("loginErr").textContent = "No se pudo conectar. Revisa tu internet e intenta de nuevo.";
+  }).finally(function(){ $("btnEntrar").disabled = false; });
+}
+
+$("btnEntrar").addEventListener("click",function(){
+  var code = $("codigo").value.trim().toUpperCase();
+  if(!code){ $("loginErr").textContent = "Escribe tu código."; return; }
+  login(code,false);
+});
+$("codigo").addEventListener("keydown",function(e){ if(e.key==="Enter") $("btnEntrar").click(); });
+
+$("btnSalir").addEventListener("click",function(){
+  try{ localStorage.removeItem(KEY); }catch(e){}
+  $("codigo").value=""; $("loginErr").textContent="";
+  setView("viewLogin");
+});
+
+/* auto-login si ya entró antes en este equipo */
+(function init(){
+  var saved = null;
+  try{ saved = localStorage.getItem(KEY); }catch(e){}
+  if(saved){ login(saved,true); } else { setView("viewLogin"); }
+})();
+</script>
+</body>
+</html>

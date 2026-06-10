@@ -1,0 +1,643 @@
+<!DOCTYPE html>
+<!-- CRM admin · ProfesorMVT — destino: public/admin/crm/index.html (URL: /admin/crm/) -->
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="robots" content="noindex, nofollow" />
+<title>CRM · ProfesorMVT</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:ital,wght@0,400;0,500;0,600;1,400&family=JetBrains+Mono:wght@400;500;700&family=Playfair+Display:ital,wght@0,600;0,700;1,600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0d0b0a; --panel:#141210; --panel2:#191613;
+    --accent:#cc4e1f; --cream:#EBE5D6; --muted:#8a8276; --line:#2A2926;
+    --green:#5f8a52; --amber:#d99a3c; --red:#cc3a1f;
+    --mono:'JetBrains Mono',ui-monospace,monospace;
+    --display:'Playfair Display',Georgia,serif;
+    --body:'Instrument Sans',system-ui,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{background:var(--bg);color:var(--cream);font-family:var(--body);font-size:15px;line-height:1.45;-webkit-font-smoothing:antialiased;}
+  .wrap{max-width:1220px;margin:0 auto;padding:28px 20px 80px;}
+  a{color:var(--accent);text-decoration:none}
+
+  .eyebrow{font-family:var(--mono);text-transform:uppercase;letter-spacing:.18em;font-size:12px;color:var(--accent);font-weight:700;}
+  h1{font-family:var(--display);font-weight:700;font-size:clamp(30px,5vw,46px);margin:.15em 0 .1em;line-height:1.02;}
+  h1 em{font-style:italic;color:var(--accent);}
+  .sub{font-family:var(--mono);text-transform:uppercase;letter-spacing:.12em;font-size:11px;color:var(--muted);}
+  .rule{height:3px;background:var(--accent);border:0;margin:14px 0 22px;}
+
+  .bar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;margin-bottom:22px;}
+  .tabs{display:flex;flex-wrap:wrap;gap:6px;}
+  .tab{font-family:var(--mono);text-transform:uppercase;letter-spacing:.1em;font-size:12px;font-weight:500;color:var(--muted);background:transparent;border:1px solid var(--line);padding:9px 14px;cursor:pointer;border-radius:2px;transition:all .12s;}
+  .tab:hover{color:var(--cream);border-color:var(--muted);}
+  .tab.active{color:var(--bg);background:var(--accent);border-color:var(--accent);font-weight:700;}
+  .tools{display:flex;gap:8px;flex-wrap:wrap;align-items:center;}
+  .syncdot{font-family:var(--mono);font-size:10.5px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);}
+  .syncdot.ok{color:var(--green);} .syncdot.err{color:var(--red);}
+
+  button{font-family:var(--body);cursor:pointer;}
+  .btn{font-family:var(--mono);text-transform:uppercase;letter-spacing:.08em;font-size:12px;font-weight:700;padding:10px 16px;border-radius:2px;border:1px solid var(--accent);background:var(--accent);color:var(--bg);transition:filter .12s;}
+  .btn:hover{filter:brightness(1.12);}
+  .btn.ghost{background:transparent;color:var(--cream);border-color:var(--line);font-weight:500;}
+  .btn.ghost:hover{border-color:var(--accent);color:var(--accent);}
+  .btn.sm{padding:6px 11px;font-size:11px;}
+
+  .panel{display:none;}
+  .panel.active{display:block;}
+
+  .grid{display:grid;gap:14px;}
+  .group{margin-bottom:26px;}
+  .group h2{font-family:var(--mono);text-transform:uppercase;letter-spacing:.14em;font-size:12px;color:var(--accent);font-weight:700;margin:0 0 12px;padding-bottom:8px;border-bottom:1px solid var(--line);}
+  .cards{grid-template-columns:repeat(auto-fit,minmax(170px,1fr));}
+  .card{background:var(--panel);border:1px solid var(--line);padding:16px 18px;border-radius:3px;}
+  .card .lab{font-family:var(--mono);text-transform:uppercase;letter-spacing:.08em;font-size:10.5px;color:var(--muted);}
+  .card .num{font-family:var(--display);font-size:34px;line-height:1;margin-top:8px;color:var(--cream);}
+  .card.hot{border-color:var(--accent);} .card.hot .num{color:var(--accent);}
+  .card.red{border-color:var(--red);} .card.red .num{color:var(--red);}
+
+  .tablewrap{overflow-x:auto;border:1px solid var(--line);border-radius:3px;}
+  table{border-collapse:collapse;width:100%;min-width:760px;}
+  th,td{text-align:left;padding:11px 12px;border-bottom:1px solid var(--line);vertical-align:middle;white-space:nowrap;}
+  th{font-family:var(--mono);text-transform:uppercase;letter-spacing:.06em;font-size:10.5px;color:var(--accent);font-weight:700;background:var(--panel2);position:sticky;top:0;}
+  tbody tr{background:var(--panel);}
+  tbody tr:hover{background:var(--panel2);}
+  td.name{font-weight:600;white-space:normal;min-width:130px;}
+  td.notes{white-space:normal;color:var(--muted);font-size:13px;min-width:150px;}
+  .code{font-family:var(--mono);font-size:12px;letter-spacing:.12em;color:var(--accent);}
+  .pill{font-family:var(--mono);font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;padding:4px 9px;border-radius:2px;display:inline-block;}
+  .pill.green{background:rgba(95,138,82,.16);color:var(--green);border:1px solid var(--green);}
+  .pill.amber{background:rgba(217,154,60,.16);color:var(--amber);border:1px solid var(--amber);}
+  .pill.red{background:rgba(204,58,31,.16);color:var(--red);border:1px solid var(--red);}
+  .pill.pago-pend{background:transparent;color:var(--amber);border:1px dashed var(--amber);}
+  .pill.pago-ok{background:transparent;color:var(--muted);border:1px solid var(--line);}
+  .big{font-family:var(--display);font-size:19px;}
+  .rowact{display:flex;gap:6px;flex-wrap:wrap;}
+  .empty{padding:30px;text-align:center;color:var(--muted);font-family:var(--mono);font-size:12px;text-transform:uppercase;letter-spacing:.08em;}
+
+  .overlay{position:fixed;inset:0;background:rgba(0,0,0,.78);display:none;align-items:flex-start;justify-content:center;padding:30px 16px;z-index:50;overflow-y:auto;}
+  .overlay.open{display:flex;}
+  .modal{background:var(--panel);border:1px solid var(--accent);border-radius:4px;max-width:560px;width:100%;padding:26px;}
+  .modal h3{font-family:var(--display);font-size:24px;margin:0 0 4px;}
+  .modal h3 em{font-style:italic;color:var(--accent);}
+  .modal .mlab{font-family:var(--mono);text-transform:uppercase;letter-spacing:.1em;font-size:10.5px;color:var(--accent);margin-bottom:18px;}
+  .field{margin-bottom:14px;}
+  .field label{display:block;font-family:var(--mono);text-transform:uppercase;letter-spacing:.07em;font-size:10.5px;color:var(--muted);margin-bottom:5px;}
+  .field input,.field select,.field textarea{width:100%;background:var(--bg);border:1px solid var(--line);color:var(--cream);font-family:var(--body);font-size:14px;padding:9px 11px;border-radius:2px;}
+  .field input:focus,.field select:focus,.field textarea:focus{outline:2px solid var(--accent);outline-offset:1px;border-color:var(--accent);}
+  .field textarea{resize:vertical;min-height:54px;}
+  .frow{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+  .modal-actions{display:flex;gap:10px;justify-content:flex-end;margin-top:20px;}
+  .hint{font-size:12.5px;color:var(--muted);margin-top:-4px;margin-bottom:14px;}
+  .err{color:var(--red);font-size:13px;min-height:1.2em;margin-top:8px;}
+
+  .pricerow{display:flex;align-items:center;gap:14px;max-width:420px;margin-bottom:12px;}
+  .pricerow .pk{font-family:var(--mono);font-size:12px;text-transform:uppercase;letter-spacing:.06em;flex:1;}
+  .pricerow input{width:110px;background:var(--bg);border:1px solid var(--line);color:var(--cream);padding:8px 10px;border-radius:2px;font-family:var(--mono);}
+  .footnote{margin-top:36px;font-size:12.5px;color:var(--muted);border-top:1px solid var(--line);padding-top:14px;line-height:1.6;}
+  .toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%) translateY(20px);background:var(--accent);color:var(--bg);font-family:var(--mono);font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;padding:11px 18px;border-radius:3px;opacity:0;transition:all .2s;pointer-events:none;z-index:99;}
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+  @media (max-width:560px){ .frow{grid-template-columns:1fr;} .card .num{font-size:28px;} }
+  @media (prefers-reduced-motion:reduce){*{transition:none!important;}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="eyebrow">// PROFESORMVT — CRM</div>
+  <h1>Control de <em>alumnos</em></h1>
+  <div class="sub">Clases · Asistencias · Reprogramaciones · Renovaciones</div>
+  <hr class="rule" />
+
+  <div class="bar">
+    <div class="tabs">
+      <button class="tab active" data-tab="resumen">Resumen</button>
+      <button class="tab" data-tab="alumnos">Alumnos</button>
+      <button class="tab" data-tab="registro">Registro</button>
+      <button class="tab" data-tab="precios">Precios</button>
+    </div>
+    <div class="tools">
+      <span class="syncdot" id="syncdot">—</span>
+      <button class="btn ghost sm" id="btnExport">Exportar</button>
+      <button class="btn ghost sm" id="btnImport">Importar</button>
+      <button class="btn ghost sm" id="btnCsv">CSV alumnos</button>
+      <button class="btn ghost sm" id="btnLogoutAdmin" title="Cambiar clave de admin">Clave</button>
+      <input type="file" id="fileImport" accept="application/json" style="display:none" />
+    </div>
+  </div>
+
+  <section class="panel active" id="panel-resumen">
+    <div class="group"><h2>// Alumnos</h2><div class="grid cards" id="resAlumnos"></div></div>
+    <div class="group"><h2>// Este mes</h2><div class="grid cards" id="resMes"></div></div>
+    <div class="group"><h2>// Histórico</h2><div class="grid cards" id="resHist"></div></div>
+  </section>
+
+  <section class="panel" id="panel-alumnos">
+    <div style="margin-bottom:16px;"><button class="btn" id="btnNuevoAlumno">+ Nuevo alumno</button></div>
+    <div class="tablewrap">
+      <table id="tablaAlumnos">
+        <thead><tr>
+          <th>Alumno</th><th>Código portal</th><th>Curso</th><th>Paquete</th><th>Pago</th><th>Horario</th>
+          <th>Clases rest.</th><th>Reprog. rest.</th><th>Estado</th><th>Notas</th><th></th>
+        </tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="panel" id="panel-registro">
+    <div style="margin-bottom:16px;"><button class="btn" id="btnNuevoRegistro">+ Registrar clase</button></div>
+    <div class="tablewrap">
+      <table id="tablaRegistro">
+        <thead><tr>
+          <th>Fecha</th><th>Alumno</th><th>Curso</th><th>Estado</th><th>¿Qué se trabajó?</th><th>Tarea</th><th></th>
+        </tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="panel" id="panel-precios">
+    <div class="group">
+      <h2>// Precios de paquetes (S/)</h2>
+      <p class="hint">El monto de cada alumno se calcula con estos precios. Edítalos cuando cambien.</p>
+      <div id="preciosBox"></div>
+      <button class="btn sm" id="btnGuardarPrecios" style="margin-top:8px;">Guardar precios</button>
+    </div>
+  </section>
+
+  <div class="footnote">
+    Los datos viven en tu base de datos (Cloudflare D1) — puedes entrar desde cualquier equipo con tu clave de admin.
+    Los alumnos ven SOLO lo suyo en <strong>/alumnos</strong> con su código personal. PROFESORMVT.COM — uso interno.
+  </div>
+</div>
+
+<!-- Candado admin -->
+<div class="overlay" id="ovLock">
+  <div class="modal">
+    <h3>Acceso de <em>admin</em></h3>
+    <div class="mlab">// Solo Andrés</div>
+    <div class="field">
+      <label for="lockToken">Clave de administrador</label>
+      <input id="lockToken" type="password" autocomplete="off" />
+    </div>
+    <div class="err" id="lockErr"></div>
+    <div class="modal-actions"><button class="btn" id="btnLockEnter">Entrar</button></div>
+  </div>
+</div>
+
+<!-- Modal alumno -->
+<div class="overlay" id="ovAlumno">
+  <div class="modal">
+    <h3 id="alumnoTitulo">Nuevo <em>alumno</em></h3>
+    <div class="mlab">// Una fila por alumno</div>
+    <input type="hidden" id="a_id" />
+    <input type="hidden" id="a_codigo" />
+    <div class="frow">
+      <div class="field"><label>Nombre</label><input id="a_nombre" type="text" placeholder="Nombre y apellido" /></div>
+      <div class="field"><label>WhatsApp (con 51…)</label><input id="a_whatsapp" type="text" placeholder="51989077928" /></div>
+    </div>
+    <div class="frow">
+      <div class="field"><label>Curso</label><select id="a_curso"><option>Canto</option><option>Piano</option><option>Composición</option></select></div>
+      <div class="field"><label>Paquete</label><select id="a_paquete"></select></div>
+    </div>
+    <div class="frow">
+      <div class="field"><label>Fecha de compra</label><input id="a_fecha" type="date" /></div>
+      <div class="field"><label>Estado de pago</label><select id="a_pago"><option>Pagado</option><option>Pendiente</option></select></div>
+    </div>
+    <div class="field"><label>Horario fijo</label><input id="a_horario" type="text" placeholder="Martes 18:00" /></div>
+    <div class="field"><label>Notas</label><textarea id="a_notas" placeholder="Objetivo, observaciones…"></textarea></div>
+    <div class="modal-actions">
+      <button class="btn ghost" data-close>Cancelar</button>
+      <button class="btn" id="btnGuardarAlumno">Guardar alumno</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal registro -->
+<div class="overlay" id="ovRegistro">
+  <div class="modal">
+    <h3>Registrar <em>clase</em></h3>
+    <div class="mlab">// Una fila por sesión / aviso</div>
+    <div class="frow">
+      <div class="field"><label>Fecha</label><input id="r_fecha" type="date" /></div>
+      <div class="field"><label>Alumno</label><select id="r_alumno"></select></div>
+    </div>
+    <div class="frow">
+      <div class="field"><label>Estado</label><select id="r_estado"><option>Asistió</option><option>Reprogramó</option><option>Falta</option></select></div>
+      <div class="field"><label>Curso</label><input id="r_curso" type="text" readonly /></div>
+    </div>
+    <p class="hint">Asistió y Falta consumen 1 clase. Reprogramar dentro del límite no consume; pasarse del límite cuenta como falta.</p>
+    <div class="field"><label>¿Qué se trabajó?</label><input id="r_trabajo" type="text" /></div>
+    <div class="field"><label>Tarea asignada</label><input id="r_tarea" type="text" /></div>
+    <div class="modal-actions">
+      <button class="btn ghost" data-close>Cancelar</button>
+      <button class="btn" id="btnGuardarRegistro">Guardar</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+"use strict";
+/* ---------- Reglas (idénticas al Excel y al Worker) ---------- */
+var PAQUETES = {
+  "Paquete 4":  { clases:4,  reprog:2 },
+  "Paquete 8":  { clases:8,  reprog:3 },
+  "Paquete 12": { clases:12, reprog:4 },
+  "Clase suelta": { clases:1, reprog:0 }
+};
+var PRECIOS_DEFAULT = { "Paquete 4":250, "Paquete 8":450, "Paquete 12":600, "Clase suelta":70 };
+var TOKEN_KEY = "pmvt_admin_token";
+var CACHE_KEY = "pmvt_admin_cache";
+var PORTAL_URL = (location.origin && location.origin.indexOf("http")===0)
+  ? location.origin + "/alumnos" : "https://profesormvt.com/alumnos";
+
+var db = { alumnos:[], registro:[], precios:Object.assign({},PRECIOS_DEFAULT) };
+var token = null;
+
+function el(id){ return document.getElementById(id); }
+function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(m){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m];}); }
+function uid(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,7); }
+function genCode(){
+  var abc = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"; // sin 0/O/1/I/L para no confundir
+  var c, existe;
+  do {
+    c = "";
+    for(var i=0;i<6;i++) c += abc[Math.floor(Math.random()*abc.length)];
+    existe = db.alumnos.some(function(a){ return a.codigo === c; });
+  } while(existe);
+  return c;
+}
+function setSync(txt, cls){ var d=el("syncdot"); d.textContent=txt; d.className="syncdot "+(cls||""); }
+
+/* ---------- API ---------- */
+function authHeaders(){ return { "authorization":"Bearer "+token, "content-type":"application/json" }; }
+function apiGet(){
+  return fetch("/api/admin/data",{ headers: authHeaders() }).then(function(res){
+    if(res.status===401) throw {auth:true};
+    if(!res.ok) throw new Error("HTTP "+res.status);
+    return res.json();
+  });
+}
+function apiPut(){
+  setSync("Guardando…","");
+  var payload = { alumnos: db.alumnos, registro: db.registro, precios: db.precios };
+  return fetch("/api/admin/data",{ method:"PUT", headers: authHeaders(), body: JSON.stringify(payload) })
+    .then(function(res){
+      if(res.status===401) throw {auth:true};
+      if(!res.ok) throw new Error("HTTP "+res.status);
+      cacheLocal();
+      setSync("Guardado ✓","ok");
+    })
+    .catch(function(e){
+      if(e && e.auth){ lock("Tu clave ya no es válida."); }
+      setSync("Sin guardar ✗","err");
+      toast("No se pudo guardar — revisa conexión");
+    });
+}
+function cacheLocal(){ try{ localStorage.setItem(CACHE_KEY, JSON.stringify(db)); }catch(e){} }
+
+/* ---------- Candado ---------- */
+function lock(msg){
+  el("lockErr").textContent = msg||"";
+  el("ovLock").classList.add("open");
+  el("lockToken").value="";
+  setTimeout(function(){ el("lockToken").focus(); },60);
+}
+function unlock(){
+  el("ovLock").classList.remove("open");
+}
+el("btnLockEnter").addEventListener("click",function(){
+  var t = el("lockToken").value.trim();
+  if(!t){ el("lockErr").textContent="Escribe tu clave."; return; }
+  token = t;
+  el("btnLockEnter").disabled = true;
+  apiGet().then(function(data){
+    try{ localStorage.setItem(TOKEN_KEY, token); }catch(e){}
+    db = data; if(!db.precios) db.precios=Object.assign({},PRECIOS_DEFAULT);
+    normaliza();
+    cacheLocal();
+    unlock(); renderAll(); setSync("Conectado ✓","ok");
+  }).catch(function(e){
+    if(e && e.auth){ el("lockErr").textContent="Clave incorrecta."; }
+    else { el("lockErr").textContent="No se pudo conectar con la API."; }
+  }).finally(function(){ el("btnLockEnter").disabled=false; });
+});
+el("lockToken").addEventListener("keydown",function(e){ if(e.key==="Enter") el("btnLockEnter").click(); });
+el("btnLogoutAdmin").addEventListener("click",function(){
+  try{ localStorage.removeItem(TOKEN_KEY); }catch(e){}
+  token=null; lock("Ingresa tu clave de admin.");
+});
+
+/* ---------- Normalizar datos (compat) ---------- */
+function normaliza(){
+  // asegura codigo en cada alumno y alumnoId en cada registro
+  db.alumnos.forEach(function(a){ if(!a.codigo) a.codigo = genCode(); if(!a.id) a.id = uid(); });
+  var porNombre = {};
+  db.alumnos.forEach(function(a){ porNombre[a.nombre]=a.id; });
+  db.registro.forEach(function(r){
+    if(!r.alumnoId && r.alumno_id) r.alumnoId = r.alumno_id;
+    if(!r.alumnoId && r.alumno && porNombre[r.alumno]) r.alumnoId = porNombre[r.alumno];
+    if(!r.id) r.id = uid();
+  });
+  db.registro = db.registro.filter(function(r){ return !!r.alumnoId; });
+}
+
+/* ---------- Cálculo por alumno ---------- */
+function computeAlumno(a){
+  var pk = PAQUETES[a.paquete] || {clases:0,reprog:0};
+  var regs = db.registro.filter(function(r){ return r.alumnoId === a.id; });
+  var asistio=0, reprogramo=0, falta=0;
+  regs.forEach(function(r){
+    if(r.estado==="Asistió") asistio++;
+    else if(r.estado==="Reprogramó") reprogramo++;
+    else if(r.estado==="Falta") falta++;
+  });
+  var exceso = Math.max(0, reprogramo - pk.reprog);
+  var usadas = asistio + falta + exceso;
+  var saldo = pk.clases - usadas;
+  var estado, clase;
+  if(saldo <= 0){ estado="Completado — renovar"; clase="red"; }
+  else if(saldo === 1){ estado="⚠ Última clase"; clase="amber"; }
+  else { estado="Activo"; clase="green"; }
+  return { compradas:pk.clases, usadas:usadas, restantes:Math.max(0,saldo),
+           reprogPermit:pk.reprog, reprogUsadas:reprogramo, reprogRest:Math.max(0,pk.reprog-reprogramo),
+           estado:estado, clase:clase, monto:db.precios[a.paquete]||0 };
+}
+
+/* ---------- Render ---------- */
+function card(lab,num,cls){ return '<div class="card '+(cls||'')+'"><div class="lab">'+lab+'</div><div class="num">'+num+'</div></div>'; }
+
+function renderResumen(){
+  var cs = db.alumnos.map(computeAlumno);
+  var activos = cs.filter(function(c){return c.estado==="Activo";}).length;
+  var ultima  = cs.filter(function(c){return c.estado==="⚠ Última clase";}).length;
+  var compl   = cs.filter(function(c){return c.estado==="Completado — renovar";}).length;
+  var pagosP  = db.alumnos.filter(function(a){return a.pago!=="Pagado";}).length;
+
+  var now=new Date(); var ym=now.getFullYear()+"-"+String(now.getMonth()+1).padStart(2,"0");
+  var mes=db.registro.filter(function(r){return (r.fecha||"").slice(0,7)===ym;});
+  var dictMes=mes.filter(function(r){return r.estado==="Asistió";}).length;
+  var faltaMes=mes.filter(function(r){return r.estado==="Falta";}).length;
+  var repMes=mes.filter(function(r){return r.estado==="Reprogramó";}).length;
+
+  var dictTotal=db.registro.filter(function(r){return r.estado==="Asistió";}).length;
+  var ingresos=db.alumnos.reduce(function(s,a){return s+(a.pago==="Pagado"?(db.precios[a.paquete]||0):0);},0);
+
+  el("resAlumnos").innerHTML =
+    card("Activos",activos,"")+
+    card("⚠ Última clase — hablar renovación",ultima,"hot")+
+    card("Completados — renovar hoy",compl,"red")+
+    card("Pagos pendientes",pagosP,pagosP>0?"hot":"");
+  el("resMes").innerHTML = card("Clases dictadas",dictMes,"")+card("Faltas",faltaMes,"")+card("Reprogramaciones",repMes,"");
+  el("resHist").innerHTML = card("Clases dictadas (total)",dictTotal,"")+card("Ingresos cobrados",("S/ "+ingresos),"");
+}
+
+function renderAlumnos(){
+  var tb = el("tablaAlumnos").querySelector("tbody");
+  if(db.alumnos.length===0){ tb.innerHTML='<tr><td colspan="11" class="empty">Sin alumnos todavía — agrega el primero</td></tr>'; return; }
+  tb.innerHTML = db.alumnos.map(function(a){
+    var c = computeAlumno(a);
+    var renovBtn = (c.clase!=="green") ? '<button class="btn sm" data-renovar="'+a.id+'">Renovar</button>' : '';
+    var pago = a.pago==="Pagado" ? '<span class="pill pago-ok">Pagado</span>' : '<span class="pill pago-pend">Pendiente</span>';
+    return '<tr>'+
+      '<td class="name">'+esc(a.nombre)+'<br><span style="font-family:var(--mono);font-size:10.5px;color:var(--muted)">'+esc(a.whatsapp||'')+'</span></td>'+
+      '<td><span class="code">'+esc(a.codigo||'')+'</span><br><button class="btn ghost sm" data-invite="'+a.id+'" style="margin-top:5px">Copiar invitación</button></td>'+
+      '<td>'+esc(a.curso)+'</td>'+
+      '<td>'+esc(a.paquete)+'<br><span style="color:var(--muted);font-size:12px">S/ '+c.monto+'</span></td>'+
+      '<td>'+pago+'</td>'+
+      '<td>'+esc(a.horario||'—')+'</td>'+
+      '<td><span class="big">'+c.restantes+'</span> <span style="color:var(--muted);font-size:12px">/ '+c.compradas+'</span></td>'+
+      '<td><span class="big">'+c.reprogRest+'</span> <span style="color:var(--muted);font-size:12px">/ '+c.reprogPermit+'</span></td>'+
+      '<td><span class="pill '+c.clase+'">'+esc(c.estado)+'</span></td>'+
+      '<td class="notes">'+esc(a.notas||'')+'</td>'+
+      '<td><div class="rowact">'+renovBtn+'<button class="btn ghost sm" data-edit="'+a.id+'">Editar</button><button class="btn ghost sm" data-del="'+a.id+'">×</button></div></td>'+
+    '</tr>';
+  }).join("");
+}
+
+function nombreDe(alumnoId){
+  var a = db.alumnos.find(function(x){return x.id===alumnoId;});
+  return a ? a.nombre : "(alumno borrado)";
+}
+
+function renderRegistro(){
+  var tb = el("tablaRegistro").querySelector("tbody");
+  if(db.registro.length===0){ tb.innerHTML='<tr><td colspan="7" class="empty">Sin clases registradas todavía</td></tr>'; return; }
+  var sorted = db.registro.slice().sort(function(x,y){ return (y.fecha||"").localeCompare(x.fecha||""); });
+  tb.innerHTML = sorted.map(function(r){
+    var pc = r.estado==="Asistió"?"green":(r.estado==="Reprogramó"?"amber":"red");
+    return '<tr>'+
+      '<td style="font-family:var(--mono);font-size:12px">'+esc(r.fecha||'')+'</td>'+
+      '<td class="name">'+esc(nombreDe(r.alumnoId))+'</td>'+
+      '<td>'+esc(r.curso||'')+'</td>'+
+      '<td><span class="pill '+pc+'">'+esc(r.estado)+'</span></td>'+
+      '<td class="notes">'+esc(r.trabajo||'')+'</td>'+
+      '<td class="notes">'+esc(r.tarea||'')+'</td>'+
+      '<td><button class="btn ghost sm" data-delreg="'+r.id+'">×</button></td>'+
+    '</tr>';
+  }).join("");
+}
+
+function renderPrecios(){
+  el("preciosBox").innerHTML = Object.keys(PAQUETES).map(function(p){
+    return '<div class="pricerow"><span class="pk">'+p+'</span><input type="number" min="0" data-precio="'+p+'" value="'+(db.precios[p]||0)+'" /></div>';
+  }).join("");
+}
+
+function fillSelects(){
+  el("a_paquete").innerHTML = Object.keys(PAQUETES).map(function(p){return '<option>'+p+'</option>';}).join("");
+  el("r_alumno").innerHTML = db.alumnos.map(function(a){
+    return '<option value="'+a.id+'">'+esc(a.nombre)+'</option>';
+  }).join("") || '<option value="">— agrega un alumno primero —</option>';
+}
+
+function renderAll(){ renderResumen(); renderAlumnos(); renderRegistro(); renderPrecios(); fillSelects(); }
+
+/* ---------- Tabs ---------- */
+document.querySelectorAll(".tab").forEach(function(t){
+  t.addEventListener("click",function(){
+    document.querySelectorAll(".tab").forEach(function(x){x.classList.remove("active");});
+    document.querySelectorAll(".panel").forEach(function(x){x.classList.remove("active");});
+    t.classList.add("active");
+    el("panel-"+t.dataset.tab).classList.add("active");
+  });
+});
+
+/* ---------- Modales genérico ---------- */
+function openOv(id){ el(id).classList.add("open"); }
+function closeOv(id){ el(id).classList.remove("open"); }
+document.querySelectorAll("[data-close]").forEach(function(b){ b.addEventListener("click",function(){ b.closest(".overlay").classList.remove("open"); }); });
+document.querySelectorAll(".overlay").forEach(function(o){
+  if(o.id==="ovLock") return; // el candado no se cierra clickeando afuera
+  o.addEventListener("click",function(e){ if(e.target===o) o.classList.remove("open"); });
+});
+
+/* ---------- Alumno ---------- */
+el("btnNuevoAlumno").addEventListener("click",function(){
+  el("alumnoTitulo").innerHTML='Nuevo <em>alumno</em>';
+  el("a_id").value=""; el("a_codigo").value="";
+  el("a_nombre").value=""; el("a_whatsapp").value="";
+  el("a_curso").value="Canto"; fillSelects(); el("a_paquete").value="Paquete 4";
+  el("a_fecha").value=new Date().toISOString().slice(0,10); el("a_pago").value="Pagado";
+  el("a_horario").value=""; el("a_notas").value="";
+  openOv("ovAlumno");
+});
+el("btnGuardarAlumno").addEventListener("click",function(){
+  var nombre = el("a_nombre").value.trim();
+  if(!nombre){ toast("Ponle nombre al alumno"); return; }
+  var id = el("a_id").value;
+  var codigo = el("a_codigo").value || genCode();
+  var obj = { id:id||uid(), codigo:codigo, nombre:nombre, whatsapp:el("a_whatsapp").value.trim(),
+    curso:el("a_curso").value, paquete:el("a_paquete").value, fecha:el("a_fecha").value,
+    pago:el("a_pago").value, horario:el("a_horario").value.trim(), notas:el("a_notas").value.trim() };
+  if(id){ db.alumnos = db.alumnos.map(function(a){ return a.id===id?obj:a; }); }
+  else { db.alumnos.push(obj); }
+  apiPut(); renderAll(); closeOv("ovAlumno");
+  toast(id ? "Alumno guardado" : "Alumno creado — código: "+codigo);
+});
+
+document.body.addEventListener("click",function(e){
+  var ed=e.target.closest("[data-edit]"), dl=e.target.closest("[data-del]"),
+      rv=e.target.closest("[data-renovar]"), dr=e.target.closest("[data-delreg]"),
+      inv=e.target.closest("[data-invite]");
+  if(ed){ var a=db.alumnos.find(function(x){return x.id===ed.dataset.edit;}); if(!a)return;
+    el("alumnoTitulo").innerHTML='Editar <em>alumno</em>'; fillSelects();
+    el("a_id").value=a.id; el("a_codigo").value=a.codigo||"";
+    el("a_nombre").value=a.nombre; el("a_whatsapp").value=a.whatsapp||"";
+    el("a_curso").value=a.curso; el("a_paquete").value=a.paquete; el("a_fecha").value=a.fecha||"";
+    el("a_pago").value=a.pago; el("a_horario").value=a.horario||""; el("a_notas").value=a.notas||"";
+    openOv("ovAlumno");
+  }
+  if(dl){ var al=db.alumnos.find(function(x){return x.id===dl.dataset.del;});
+    if(al && confirm("¿Borrar a "+al.nombre+"? Sus registros de clase también se borran.")){
+      db.alumnos=db.alumnos.filter(function(x){return x.id!==dl.dataset.del;});
+      db.registro=db.registro.filter(function(r){return r.alumnoId!==dl.dataset.del;});
+      apiPut(); renderAll(); toast("Alumno borrado");
+    }
+  }
+  if(dr){ if(confirm("¿Borrar este registro de clase?")){
+      db.registro=db.registro.filter(function(x){return x.id!==dr.dataset.delreg;});
+      apiPut(); renderAll(); toast("Registro borrado");
+    }
+  }
+  if(rv){ var ar=db.alumnos.find(function(x){return x.id===rv.dataset.renovar;}); if(ar) renovar(ar); }
+  if(inv){ var ai=db.alumnos.find(function(x){return x.id===inv.dataset.invite;}); if(ai) copiarInvitacion(ai); }
+});
+
+/* ---------- Registro ---------- */
+function syncCurso(){
+  var a=db.alumnos.find(function(x){return x.id===el("r_alumno").value;});
+  el("r_curso").value=a?a.curso:"";
+}
+el("r_alumno").addEventListener("change",syncCurso);
+el("btnNuevoRegistro").addEventListener("click",function(){
+  if(db.alumnos.length===0){ toast("Agrega un alumno primero"); return; }
+  fillSelects();
+  el("r_fecha").value=new Date().toISOString().slice(0,10);
+  el("r_estado").value="Asistió"; el("r_trabajo").value=""; el("r_tarea").value="";
+  syncCurso();
+  openOv("ovRegistro");
+});
+el("btnGuardarRegistro").addEventListener("click",function(){
+  var alumnoId=el("r_alumno").value;
+  if(!alumnoId){ toast("Elige un alumno"); return; }
+  db.registro.push({ id:uid(), fecha:el("r_fecha").value, alumnoId:alumnoId, curso:el("r_curso").value,
+    estado:el("r_estado").value, trabajo:el("r_trabajo").value.trim(), tarea:el("r_tarea").value.trim() });
+  apiPut(); renderAll(); closeOv("ovRegistro"); toast("Clase registrada");
+});
+
+/* ---------- Renovar (tu WhatsApp al alumno) ---------- */
+function renovar(a){
+  var num=(a.whatsapp||"").replace(/\D/g,"");
+  if(num.length===9) num="51"+num;
+  if(!num){ toast("Este alumno no tiene WhatsApp guardado"); return; }
+  var msg="Hola "+a.nombre+", ¡qué tal! Vamos cerrando tu paquete de "+a.curso+" y no quiero que pierdas el ritmo que llevas. "+
+          "¿Cuadramos la renovación? Te cuento del plan trimestral (el 3er mes va al 50%) para que reserves tus horarios fijos. ¿Le entramos?";
+  window.open("https://wa.me/"+num+"?text="+encodeURIComponent(msg),"_blank");
+}
+
+/* ---------- Invitación al portal ---------- */
+function copiarInvitacion(a){
+  var msg = "¡"+a.nombre.split(" ")[0]+"! Ya tienes tu portal de alumno 🎸 Entra aquí: "+PORTAL_URL+
+    " y pon tu código personal: "+a.codigo+". Ahí ves tus clases restantes, tu tarea de la semana y tu historial. Guárdalo, es solo tuyo.";
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(msg).then(function(){ toast("Invitación copiada — pégala en WhatsApp"); })
+      .catch(function(){ prompt("Copia la invitación:", msg); });
+  } else { prompt("Copia la invitación:", msg); }
+}
+
+/* ---------- Precios ---------- */
+el("btnGuardarPrecios").addEventListener("click",function(){
+  document.querySelectorAll("[data-precio]").forEach(function(inp){
+    db.precios[inp.dataset.precio]=Number(inp.value)||0;
+  });
+  apiPut(); renderAll(); toast("Precios guardados");
+});
+
+/* ---------- Export / Import / CSV ---------- */
+el("btnExport").addEventListener("click",function(){
+  var blob=new Blob([JSON.stringify(db,null,2)],{type:"application/json"});
+  downloadBlob(blob,"crm-profesormvt-"+new Date().toISOString().slice(0,10)+".json");
+  toast("Respaldo exportado");
+});
+el("btnImport").addEventListener("click",function(){ el("fileImport").click(); });
+el("fileImport").addEventListener("change",function(e){
+  var f=e.target.files[0]; if(!f)return;
+  var rd=new FileReader();
+  rd.onload=function(){
+    try{
+      var d=JSON.parse(rd.result);
+      if(!d.alumnos||!d.registro) throw 0;
+      if(!confirm("Esto reemplaza los datos actuales (también en la base de datos). ¿Continuar?")) return;
+      db=d; if(!db.precios) db.precios=Object.assign({},PRECIOS_DEFAULT);
+      normaliza();
+      apiPut(); renderAll(); toast("Datos importados");
+    }catch(err){ toast("Archivo inválido"); }
+  };
+  rd.readAsText(f); e.target.value="";
+});
+el("btnCsv").addEventListener("click",function(){
+  var head=["Alumno","Código","WhatsApp","Curso","Paquete","Fecha compra","Monto","Estado pago","Horario","Clases compradas","Clases usadas","Clases restantes","Reprog permitidas","Reprog usadas","Reprog restantes","Estado","Notas"];
+  var rows=db.alumnos.map(function(a){ var c=computeAlumno(a);
+    return [a.nombre,a.codigo,a.whatsapp,a.curso,a.paquete,a.fecha,c.monto,a.pago,a.horario,c.compradas,c.usadas,c.restantes,c.reprogPermit,c.reprogUsadas,c.reprogRest,c.estado,a.notas]; });
+  var csv=[head].concat(rows).map(function(r){ return r.map(function(v){ return '"'+String(v==null?'':v).replace(/"/g,'""')+'"'; }).join(","); }).join("\r\n");
+  downloadBlob(new Blob(["\ufeff"+csv],{type:"text/csv;charset=utf-8"}),"alumnos-profesormvt.csv");
+  toast("CSV exportado");
+});
+function downloadBlob(blob,name){
+  var url=URL.createObjectURL(blob); var a=document.createElement("a");
+  a.href=url; a.download=name; document.body.appendChild(a); a.click();
+  setTimeout(function(){ URL.revokeObjectURL(url); a.remove(); },100);
+}
+
+/* ---------- Toast ---------- */
+var toastT;
+function toast(msg){ var t=el("toast"); t.textContent=msg; t.classList.add("show"); clearTimeout(toastT); toastT=setTimeout(function(){t.classList.remove("show");},2400); }
+
+/* ---------- Init ---------- */
+(function init(){
+  try{ token = localStorage.getItem(TOKEN_KEY); }catch(e){}
+  if(!token){ lock(""); return; }
+  setSync("Conectando…","");
+  apiGet().then(function(data){
+    db=data; if(!db.precios) db.precios=Object.assign({},PRECIOS_DEFAULT);
+    normaliza(); cacheLocal(); renderAll(); setSync("Conectado ✓","ok");
+  }).catch(function(e){
+    if(e && e.auth){ lock("Tu clave ya no es válida."); return; }
+    // sin conexión: muestra la última copia local en modo lectura práctica
+    try{
+      var c=localStorage.getItem(CACHE_KEY);
+      if(c){ db=JSON.parse(c); renderAll(); setSync("Sin conexión — copia local","err"); toast("Sin conexión: viendo última copia local"); return; }
+    }catch(err){}
+    setSync("Sin conexión ✗","err");
+    toast("No se pudo conectar con la API");
+  });
+})();
+</script>
+</body>
+</html>

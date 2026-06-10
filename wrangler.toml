@@ -1,6 +1,14 @@
 name = "profesormvt-web"
+main = "worker/index.js"
 compatibility_date = "2026-05-06"
 
 [assets]
 directory = "./dist"
 not_found_handling = "404-page"
+binding = "ASSETS"
+run_worker_first = ["/api/*"]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "profesormvt-crm"
+database_id = "e0c9c96a-5f17-4ae1-b2c8-b5e692fe0849"
