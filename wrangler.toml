@@ -1,6 +1,11 @@
 name = "profesormvt-web"
 main = "worker/index.js"
 compatibility_date = "2026-05-06"
+compatibility_flags = ["nodejs_compat"]
+
+send_email = [
+  { name = "AVISOS" }
+]
 
 [assets]
 directory = "./dist"

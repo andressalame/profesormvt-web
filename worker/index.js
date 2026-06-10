@@ -19,6 +19,9 @@
 */
 "use strict";
 
+import { EmailMessage } from "cloudflare:email";
+import { createMimeMessage } from "mimetext";
+
 const PAQUETES = {
   "Paquete 4":    { clases: 4,  reprog: 2 },
   "Paquete 8":    { clases: 8,  reprog: 3 },
@@ -117,6 +120,29 @@ async function crearSesion(env, cuentaId){
   await env.DB.prepare("INSERT INTO sesiones (token, cuenta_id, expira) VALUES (?1, ?2, ?3)")
     .bind(token, cuentaId, expira).run();
   return token;
+}
+
+/* ---------- Aviso por email a Andrés cuando un alumno declara un pago ----------
+   Best-effort: se llama fuera de la transacción de la compra. Si falla, la compra
+   ya quedó registrada y el portal responde ok igual. */
+async function avisarCompra(env, info){
+  const msg = createMimeMessage();
+  msg.setSender({ name: "Avisos ProfesorMVT", addr: "avisos@profesormvt.com" });
+  msg.setRecipient("andressalame@gmail.com");
+  msg.setSubject(`Pago por confirmar: ${info.paquete} — S/${info.monto}`);
+  msg.addMessage({
+    contentType: "text/plain",
+    data:
+      "Un alumno declaró un pago en el portal y está pendiente de confirmar.\n\n" +
+      "Comprador: " + info.nombre + " (" + info.email + ")\n" +
+      "Curso:     " + info.curso + "\n" +
+      "Paquete:   " + info.paquete + "\n" +
+      "Monto:     S/" + info.monto + "\n" +
+      "N° de operación: " + (info.op || "—") + "\n\n" +
+      "Verifica tu Yape/Plin y confírmalo (o recházalo) en el CRM:\n" +
+      "https://profesormvt.com/admin/crm/\n"
+  });
+  await env.AVISOS.send(new EmailMessage("avisos@profesormvt.com", "andressalame@gmail.com", msg.asRaw()));
 }
 
 export default {
@@ -244,9 +270,15 @@ export default {
         ).bind(cu.id).first();
         if (ya) return json({ error: "Ya tienes un pago en verificación. Te confirmo apenas lo vea." }, 409);
 
+        const monto = precios[paquete] || 0;
         await env.DB.prepare(
           "INSERT INTO compras (id,cuenta_id,curso,paquete,monto,op_numero,estado,fecha) VALUES (?1,?2,?3,?4,?5,?6,'pendiente',?7)"
-        ).bind(crypto.randomUUID(), cu.id, curso, paquete, precios[paquete] || 0, op, hoy()).run();
+        ).bind(crypto.randomUUID(), cu.id, curso, paquete, monto, op, hoy()).run();
+
+        // Aviso por email — fuera de la transacción: si el correo falla, la compra IGUAL queda registrada.
+        try {
+          await avisarCompra(env, { nombre: cu.nombre, email: cu.email, curso, paquete, monto, op });
+        } catch (e) { /* best-effort: el aviso no bloquea la compra */ }
 
         return json({ ok: true });
       }
