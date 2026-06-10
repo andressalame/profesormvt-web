@@ -21,6 +21,7 @@
 
 import { EmailMessage } from "cloudflare:email";
 import { createMimeMessage } from "mimetext";
+import { buildPushPayload } from "@block65/webcrypto-web-push";
 
 const PAQUETES = {
   "Paquete 4":    { clases: 4,  reprog: 2 },
@@ -143,6 +144,42 @@ async function avisarCompra(env, info){
       "https://profesormvt.com/admin/crm/\n"
   });
   await env.AVISOS.send(new EmailMessage("avisos@profesormvt.com", "andressalame@gmail.com", msg.asRaw()));
+}
+
+/* ---------- Aviso por Web Push (VAPID) a los dispositivos suscritos del admin ----------
+   Best-effort, con try/catch POR suscripción: una mala no tumba al resto.
+   Las suscripciones caducadas (404/410) se borran solas. Devuelve cuántas se enviaron. */
+async function avisarPush(env, info){
+  if (!env.VAPID_PUBLIC_KEY || !env.VAPID_PRIVATE_KEY) return 0;
+  const { results } = await env.DB.prepare("SELECT * FROM push_subs").all();
+  const subs = results || [];
+  const vapid = {
+    subject: "mailto:andressalame@gmail.com",
+    publicKey: env.VAPID_PUBLIC_KEY,
+    privateKey: env.VAPID_PRIVATE_KEY
+  };
+  let enviados = 0;
+  for (const fila of subs){
+    try {
+      const sub = { endpoint: fila.endpoint, keys: { p256dh: fila.p256dh, auth: fila.auth } };
+      const msg = {
+        data: JSON.stringify({
+          title: "Pago por confirmar: " + info.paquete + " — S/" + info.monto,
+          body: info.nombre + " · " + info.curso + (info.op ? (" · op " + info.op) : ""),
+          url: "https://profesormvt.com/admin/crm/"
+        }),
+        options: { ttl: 86400, urgency: "high" }
+      };
+      const payload = await buildPushPayload(msg, sub, vapid);
+      const res = await fetch(sub.endpoint, payload);
+      if (res.status === 404 || res.status === 410){
+        await env.DB.prepare("DELETE FROM push_subs WHERE endpoint = ?1").bind(fila.endpoint).run();
+      } else if (res.ok){
+        enviados++;
+      }
+    } catch (e) { /* una suscripción mala no debe tumbar al resto */ }
+  }
+  return enviados;
 }
 
 export default {
@@ -280,6 +317,10 @@ export default {
           await avisarCompra(env, { nombre: cu.nombre, email: cu.email, curso, paquete, monto, op });
         } catch (e) { /* best-effort: el aviso no bloquea la compra */ }
 
+        try {
+          await avisarPush(env, { nombre: cu.nombre, email: cu.email, curso, paquete, monto, op });
+        } catch (e) { /* best-effort: el push no bloquea la compra */ }
+
         return json({ ok: true });
       }
 
@@ -297,7 +338,7 @@ export default {
           const compras  = (await env.DB.prepare("SELECT * FROM compras ORDER BY CASE estado WHEN 'pendiente' THEN 0 ELSE 1 END, fecha DESC").all()).results || [];
           const precios  = await loadPrecios(env);
           const config   = await loadConfig(env);
-          return json({ alumnos, registro, precios, cuentas, compras, config });
+          return json({ alumnos, registro, precios, cuentas, compras, config, vapid_public: env.VAPID_PUBLIC_KEY || "" });
         }
 
         if (url.pathname === "/api/admin/data" && request.method === "PUT"){
@@ -425,6 +466,28 @@ export default {
             return json({ ok: true });
           }
           return json({ error: "Acción no válida" }, 400);
+        }
+
+        /* ----- Web Push (suscripciones del admin) ----- */
+        if (url.pathname === "/api/admin/push/suscribir" && request.method === "POST"){
+          const b = await request.json().catch(() => ({}));
+          const s = b.subscription || {};
+          const keys = s.keys || {};
+          if (!s.endpoint || !keys.p256dh || !keys.auth) return json({ error: "Suscripción inválida" }, 400);
+          await env.DB.prepare(
+            "INSERT OR REPLACE INTO push_subs (endpoint,p256dh,auth,dispositivo,creada) VALUES (?1,?2,?3,?4,?5)"
+          ).bind(s.endpoint, keys.p256dh, keys.auth, String(b.dispositivo || "").slice(0, 120), hoy()).run();
+          return json({ ok: true });
+        }
+
+        if (url.pathname === "/api/admin/push/probar" && request.method === "POST"){
+          const enviados = await avisarPush(env, { paquete: "PRUEBA", monto: 0, nombre: "Push de prueba", curso: "—", op: "" });
+          return json({ ok: true, enviados });
+        }
+
+        if (url.pathname === "/api/admin/push/estado" && request.method === "GET"){
+          const row = await env.DB.prepare("SELECT COUNT(*) AS n FROM push_subs").first();
+          return json({ suscripciones: (row && row.n) || 0 });
         }
       }
 

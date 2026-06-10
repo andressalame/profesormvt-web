@@ -6,6 +6,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <meta name="robots" content="noindex, nofollow" />
 <title>CRM · ProfesorMVT</title>
+<link rel="manifest" href="/admin/crm/manifest.webmanifest">
+<link rel="apple-touch-icon" href="/admin/crm/icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="CRM MVT">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:ital,wght@0,400;0,500;0,600;1,400&family=JetBrains+Mono:wght@400;500;700&family=Playfair+Display:ital,wght@0,600;0,700;1,600&display=swap" rel="stylesheet">
@@ -207,6 +211,14 @@
       <p class="hint">Hasta que llenes el número, el portal manda a los alumnos a coordinarte el pago por WhatsApp.</p>
     </div>
     <button class="btn" id="btnGuardarAjustes">Guardar ajustes</button>
+    <div class="group" style="margin-top:26px;">
+      <h2>// Avisos push en este dispositivo</h2>
+      <p class="hint" id="pushEstado">En iPhone: primero añade esta página a tu pantalla de inicio (Compartir → Añadir a pantalla de inicio) y ábrela desde el ícono.</p>
+      <div class="rowact">
+        <button class="btn" id="btnPushOn">Activar avisos aquí</button>
+        <button class="btn ghost" id="btnPushTest">Enviar push de prueba</button>
+      </div>
+    </div>
   </section>
 
   <div class="footnote">
@@ -789,6 +801,43 @@ function downloadBlob(blob,name){
   a.href=url; a.download=name; document.body.appendChild(a); a.click();
   setTimeout(function(){URL.revokeObjectURL(url);a.remove();},100);
 }
+
+/* ---------- Avisos push (Web Push / VAPID) ---------- */
+function urlB64(b){var p='='.repeat((4-b.length%4)%4);var s=(b+p).replace(/-/g,'+').replace(/_/g,'/');var r=atob(s);var a=new Uint8Array(r.length);for(var i=0;i<r.length;i++)a[i]=r.charCodeAt(i);return a;}
+
+function refrescarPushEstado(){
+  return fetch("/api/admin/push/estado",{headers:hdr()})
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      if(d && typeof d.suscripciones!=="undefined"){
+        el("pushEstado").textContent = "Avisos push activos en "+d.suscripciones+" dispositivo(s).";
+      }
+    }).catch(function(){});
+}
+
+el("btnPushOn").addEventListener("click",function(){
+  if(!('serviceWorker' in navigator) || !('PushManager' in window)){ toast("Este navegador no soporta push"); return; }
+  if(!db.vapid_public){ toast("Falta la clave VAPID — recarga e intenta de nuevo"); return; }
+  navigator.serviceWorker.register('/admin/crm/sw.js').then(function(reg){
+    return Notification.requestPermission().then(function(perm){
+      if(perm!=='granted'){ toast("Permiso denegado"); return; }
+      return reg.pushManager.subscribe({ userVisibleOnly:true, applicationServerKey: urlB64(db.vapid_public) })
+        .then(function(sub){
+          return apiPost('/api/admin/push/suscribir', { subscription: sub.toJSON(), dispositivo: navigator.userAgent.slice(0,80) });
+        })
+        .then(function(){
+          toast("Avisos activados en este dispositivo");
+          refrescarPushEstado();
+        });
+    });
+  }).catch(function(e){ toast("No se pudo activar: "+((e&&e.message)||"error")); });
+});
+
+el("btnPushTest").addEventListener("click",function(){
+  apiPost('/api/admin/push/probar', {})
+    .then(function(d){ toast("Push enviado a "+((d&&d.enviados)||0)+" dispositivos"); })
+    .catch(function(e){ toast((e&&e.message)||"No se pudo enviar"); });
+});
 
 /* ---------- Init ---------- */
 (function init(){

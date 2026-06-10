@@ -1,0 +1,13 @@
+{
+  "name": "ProfesorMVT CRM",
+  "short_name": "CRM MVT",
+  "start_url": "/admin/crm/",
+  "scope": "/admin/crm/",
+  "display": "standalone",
+  "background_color": "#0d0b0a",
+  "theme_color": "#cc4e1f",
+  "icons": [
+    { "src": "/admin/crm/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/admin/crm/icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}

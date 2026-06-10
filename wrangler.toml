@@ -7,6 +7,9 @@ send_email = [
   { name = "AVISOS" }
 ]
 
+[vars]
+VAPID_PUBLIC_KEY = "BOvh-j1DbMRYE_vHhKcp1kxNbT4hnlndhsX1evIqwsCMYyvE5sfijYoy9a9ztiSu24XVGJsabtTiLhgN1LM4or4"
+
 [assets]
 directory = "./dist"
 not_found_handling = "404-page"
