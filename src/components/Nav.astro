@@ -21,6 +21,7 @@ const { activeNav } = Astro.props;
           Comunidad
         </a>
       </li>
+      <li class="nav-login-li"><a href="/alumnos/" class="nav-login">Ingresar</a></li>
       <li><a href="https://wa.me/51989077928?text=Hola%20Andrés%2C%20quiero%20reservar%20la%20clase%20de%20prueba%20S%2F50" class="nav-cta" target="_blank" rel="noopener">Clase de prueba →</a></li>
     </ul>
   </div>
@@ -77,6 +78,20 @@ const { activeNav } = Astro.props;
 }
 .nav-cta:hover { background: var(--wine-deep); color: var(--color-bone) !important; }
 
+/* Botón Ingresar (portal de alumnos) — ghost */
+.nav-login {
+  background: transparent;
+  color: #EBE5D6 !important;
+  border: 1px solid rgba(235, 229, 214, 0.35);
+  padding: 10px 20px;
+  border-radius: 4px;
+  font-size: 13.5px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  transition: border-color 0.15s, color 0.15s;
+}
+.nav-login:hover { border-color: #cc4e1f; color: #cc4e1f !important; }
+
 /* Botón Comunidad (Discord) — secundario, con borde */
 .nav-discord {
   display: inline-flex; align-items: center; gap: 7px;
@@ -95,6 +110,6 @@ const { activeNav } = Astro.props;
 @media (max-width: 960px) {
   .nav-inner { padding: 14px 28px; }
   .nav-links { gap: 14px; }
-  .nav-links li:not(:last-child) { display: none; }
+  .nav-links li:not(:last-child):not(.nav-login-li) { display: none; }
 }
 </style>

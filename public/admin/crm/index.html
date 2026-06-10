@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- CRM admin · ProfesorMVT — destino: public/admin/crm/index.html (URL: /admin/crm/) -->
+<!-- CRM admin v2 · ProfesorMVT — destino: public/admin/crm/index.html -->
 <html lang="es">
 <head>
 <meta charset="UTF-8" />
@@ -21,7 +21,7 @@
   *{box-sizing:border-box}
   html,body{margin:0}
   body{background:var(--bg);color:var(--cream);font-family:var(--body);font-size:15px;line-height:1.45;-webkit-font-smoothing:antialiased;}
-  .wrap{max-width:1220px;margin:0 auto;padding:28px 20px 80px;}
+  .wrap{max-width:1240px;margin:0 auto;padding:28px 20px 80px;}
   a{color:var(--accent);text-decoration:none}
 
   .eyebrow{font-family:var(--mono);text-transform:uppercase;letter-spacing:.18em;font-size:12px;color:var(--accent);font-weight:700;}
@@ -32,9 +32,10 @@
 
   .bar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;margin-bottom:22px;}
   .tabs{display:flex;flex-wrap:wrap;gap:6px;}
-  .tab{font-family:var(--mono);text-transform:uppercase;letter-spacing:.1em;font-size:12px;font-weight:500;color:var(--muted);background:transparent;border:1px solid var(--line);padding:9px 14px;cursor:pointer;border-radius:2px;transition:all .12s;}
+  .tab{font-family:var(--mono);text-transform:uppercase;letter-spacing:.1em;font-size:12px;font-weight:500;color:var(--muted);background:transparent;border:1px solid var(--line);padding:9px 14px;cursor:pointer;border-radius:2px;transition:all .12s;position:relative;}
   .tab:hover{color:var(--cream);border-color:var(--muted);}
   .tab.active{color:var(--bg);background:var(--accent);border-color:var(--accent);font-weight:700;}
+  .tab .dot{position:absolute;top:-5px;right:-5px;background:var(--red);color:var(--cream);font-size:10px;font-weight:700;min-width:17px;height:17px;border-radius:9px;display:inline-flex;align-items:center;justify-content:center;padding:0 4px;}
   .tools{display:flex;gap:8px;flex-wrap:wrap;align-items:center;}
   .syncdot{font-family:var(--mono);font-size:10.5px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);}
   .syncdot.ok{color:var(--green);} .syncdot.err{color:var(--red);}
@@ -45,6 +46,9 @@
   .btn.ghost{background:transparent;color:var(--cream);border-color:var(--line);font-weight:500;}
   .btn.ghost:hover{border-color:var(--accent);color:var(--accent);}
   .btn.sm{padding:6px 11px;font-size:11px;}
+  .btn.ok{background:var(--green);border-color:var(--green);}
+  .btn.no{background:transparent;border-color:var(--red);color:var(--red);}
+  .btn.no:hover{background:var(--red);color:var(--cream);}
 
   .panel{display:none;}
   .panel.active{display:block;}
@@ -67,11 +71,12 @@
   tbody tr:hover{background:var(--panel2);}
   td.name{font-weight:600;white-space:normal;min-width:130px;}
   td.notes{white-space:normal;color:var(--muted);font-size:13px;min-width:150px;}
-  .code{font-family:var(--mono);font-size:12px;letter-spacing:.12em;color:var(--accent);}
+  .mini{font-family:var(--mono);font-size:10.5px;color:var(--muted);}
   .pill{font-family:var(--mono);font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;padding:4px 9px;border-radius:2px;display:inline-block;}
   .pill.green{background:rgba(95,138,82,.16);color:var(--green);border:1px solid var(--green);}
   .pill.amber{background:rgba(217,154,60,.16);color:var(--amber);border:1px solid var(--amber);}
   .pill.red{background:rgba(204,58,31,.16);color:var(--red);border:1px solid var(--red);}
+  .pill.gray{background:transparent;color:var(--muted);border:1px solid var(--line);}
   .pill.pago-pend{background:transparent;color:var(--amber);border:1px dashed var(--amber);}
   .pill.pago-ok{background:transparent;color:var(--muted);border:1px solid var(--line);}
   .big{font-family:var(--display);font-size:19px;}
@@ -90,14 +95,15 @@
   .field input:focus,.field select:focus,.field textarea:focus{outline:2px solid var(--accent);outline-offset:1px;border-color:var(--accent);}
   .field textarea{resize:vertical;min-height:54px;}
   .frow{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
-  .modal-actions{display:flex;gap:10px;justify-content:flex-end;margin-top:20px;}
+  .modal-actions{display:flex;gap:10px;justify-content:flex-end;margin-top:20px;flex-wrap:wrap;}
   .hint{font-size:12.5px;color:var(--muted);margin-top:-4px;margin-bottom:14px;}
   .err{color:var(--red);font-size:13px;min-height:1.2em;margin-top:8px;}
 
-  .pricerow{display:flex;align-items:center;gap:14px;max-width:420px;margin-bottom:12px;}
-  .pricerow .pk{font-family:var(--mono);font-size:12px;text-transform:uppercase;letter-spacing:.06em;flex:1;}
-  .pricerow input{width:110px;background:var(--bg);border:1px solid var(--line);color:var(--cream);padding:8px 10px;border-radius:2px;font-family:var(--mono);}
+  .cfgrow{display:flex;align-items:center;gap:14px;max-width:560px;margin-bottom:12px;flex-wrap:wrap;}
+  .cfgrow .pk{font-family:var(--mono);font-size:12px;text-transform:uppercase;letter-spacing:.06em;flex:0 0 190px;}
+  .cfgrow input{flex:1;min-width:180px;background:var(--bg);border:1px solid var(--line);color:var(--cream);padding:8px 10px;border-radius:2px;font-family:var(--mono);}
   .footnote{margin-top:36px;font-size:12.5px;color:var(--muted);border-top:1px solid var(--line);padding-top:14px;line-height:1.6;}
+  .footnote code{font-family:var(--mono);color:var(--cream);font-size:12px;}
   .toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%) translateY(20px);background:var(--accent);color:var(--bg);font-family:var(--mono);font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;padding:11px 18px;border-radius:3px;opacity:0;transition:all .2s;pointer-events:none;z-index:99;}
   .toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
   @media (max-width:560px){ .frow{grid-template-columns:1fr;} .card .num{font-size:28px;} }
@@ -108,7 +114,7 @@
 <div class="wrap">
   <div class="eyebrow">// PROFESORMVT — CRM</div>
   <h1>Control de <em>alumnos</em></h1>
-  <div class="sub">Clases · Asistencias · Reprogramaciones · Renovaciones</div>
+  <div class="sub">Clases · Pagos · Cuentas · Renovaciones</div>
   <hr class="rule" />
 
   <div class="bar">
@@ -116,19 +122,21 @@
       <button class="tab active" data-tab="resumen">Resumen</button>
       <button class="tab" data-tab="alumnos">Alumnos</button>
       <button class="tab" data-tab="registro">Registro</button>
-      <button class="tab" data-tab="precios">Precios</button>
+      <button class="tab" data-tab="pagos">Pagos<span class="dot hidden" id="dotPagos">0</span></button>
+      <button class="tab" data-tab="cuentas">Cuentas</button>
+      <button class="tab" data-tab="ajustes">Ajustes</button>
     </div>
     <div class="tools">
       <span class="syncdot" id="syncdot">—</span>
       <button class="btn ghost sm" id="btnExport">Exportar</button>
-      <button class="btn ghost sm" id="btnImport">Importar</button>
       <button class="btn ghost sm" id="btnCsv">CSV alumnos</button>
-      <button class="btn ghost sm" id="btnLogoutAdmin" title="Cambiar clave de admin">Clave</button>
-      <input type="file" id="fileImport" accept="application/json" style="display:none" />
+      <button class="btn ghost sm" id="btnCsvEmails">CSV emails</button>
+      <button class="btn ghost sm" id="btnLogoutAdmin" title="Cambiar clave guardada en este navegador">Clave</button>
     </div>
   </div>
 
   <section class="panel active" id="panel-resumen">
+    <div class="group"><h2>// Hoy</h2><div class="grid cards" id="resHoy"></div></div>
     <div class="group"><h2>// Alumnos</h2><div class="grid cards" id="resAlumnos"></div></div>
     <div class="group"><h2>// Este mes</h2><div class="grid cards" id="resMes"></div></div>
     <div class="group"><h2>// Histórico</h2><div class="grid cards" id="resHist"></div></div>
@@ -139,7 +147,7 @@
     <div class="tablewrap">
       <table id="tablaAlumnos">
         <thead><tr>
-          <th>Alumno</th><th>Código portal</th><th>Curso</th><th>Paquete</th><th>Pago</th><th>Horario</th>
+          <th>Alumno</th><th>Cuenta</th><th>Curso</th><th>Paquete</th><th>Pago</th><th>Horario</th>
           <th>Clases rest.</th><th>Reprog. rest.</th><th>Estado</th><th>Notas</th><th></th>
         </tr></thead>
         <tbody></tbody>
@@ -159,18 +167,51 @@
     </div>
   </section>
 
-  <section class="panel" id="panel-precios">
+  <section class="panel" id="panel-pagos">
     <div class="group">
-      <h2>// Precios de paquetes (S/)</h2>
-      <p class="hint">El monto de cada alumno se calcula con estos precios. Edítalos cuando cambien.</p>
-      <div id="preciosBox"></div>
-      <button class="btn sm" id="btnGuardarPrecios" style="margin-top:8px;">Guardar precios</button>
+      <h2>// Pendientes de confirmar</h2>
+      <p class="hint">Verifica en tu app de Yape/Plin que el monto llegó y dale Confirmar: el paquete se activa solo (primera compra crea al alumno; renovación abre nuevo ciclo).</p>
+      <div class="tablewrap">
+        <table><thead><tr><th>Fecha</th><th>Quién</th><th>Curso</th><th>Paquete</th><th>Monto</th><th>N° op.</th><th></th></tr></thead>
+        <tbody id="tbPendientes"></tbody></table>
+      </div>
+    </div>
+    <div class="group">
+      <h2>// Procesadas</h2>
+      <div class="tablewrap">
+        <table><thead><tr><th>Fecha</th><th>Quién</th><th>Paquete</th><th>Monto</th><th>Estado</th></tr></thead>
+        <tbody id="tbProcesadas"></tbody></table>
+      </div>
     </div>
   </section>
 
+  <section class="panel" id="panel-cuentas">
+    <p class="hint">Toda persona que se registra en el portal aparece aquí. Vincula la cuenta a su ficha de alumno para que vea sus clases. "Promos ✓" = aceptó recibir publicidad (usa "CSV emails" arriba).</p>
+    <div class="tablewrap">
+      <table><thead><tr><th>Nombre</th><th>Correo</th><th>WhatsApp</th><th>Promos</th><th>Alumno vinculado</th><th>Creada</th><th></th></tr></thead>
+      <tbody id="tbCuentas"></tbody></table>
+    </div>
+  </section>
+
+  <section class="panel" id="panel-ajustes">
+    <div class="group">
+      <h2>// Precios de paquetes (S/)</h2>
+      <p class="hint">El monto de compra del portal y de cada alumno sale de aquí.</p>
+      <div id="preciosBox"></div>
+    </div>
+    <div class="group">
+      <h2>// Pagos y reservas del portal</h2>
+      <div class="cfgrow"><span class="pk">Número Yape / Plin</span><input id="cfg_pago_numero" type="text" placeholder="989 077 928" /></div>
+      <div class="cfgrow"><span class="pk">Titular (como sale en Yape)</span><input id="cfg_pago_titular" type="text" placeholder="Andrés S." /></div>
+      <div class="cfgrow"><span class="pk">Link de Calendly</span><input id="cfg_calendly_url" type="text" placeholder="https://calendly.com/tu-usuario/clase" /></div>
+      <p class="hint">Hasta que llenes el número, el portal manda a los alumnos a coordinarte el pago por WhatsApp.</p>
+    </div>
+    <button class="btn" id="btnGuardarAjustes">Guardar ajustes</button>
+  </section>
+
   <div class="footnote">
-    Los datos viven en tu base de datos (Cloudflare D1) — puedes entrar desde cualquier equipo con tu clave de admin.
-    Los alumnos ven SOLO lo suyo en <strong>/alumnos</strong> con su código personal. PROFESORMVT.COM — uso interno.
+    Datos en tu Cloudflare D1 — entra desde cualquier equipo con tu clave de admin. Los alumnos ven SOLO lo suyo en <strong>/alumnos</strong> con su cuenta.
+    ¿Cambiar la clave de admin? Por seguridad se hace por terminal: <code>npx wrangler secret put ADMIN_TOKEN</code> (la nueva rige al instante).
   </div>
 </div>
 
@@ -179,10 +220,7 @@
   <div class="modal">
     <h3>Acceso de <em>admin</em></h3>
     <div class="mlab">// Solo Andrés</div>
-    <div class="field">
-      <label for="lockToken">Clave de administrador</label>
-      <input id="lockToken" type="password" autocomplete="off" />
-    </div>
+    <div class="field"><label for="lockToken">Clave de administrador</label><input id="lockToken" type="password" autocomplete="off" /></div>
     <div class="err" id="lockErr"></div>
     <div class="modal-actions"><button class="btn" id="btnLockEnter">Entrar</button></div>
   </div>
@@ -193,11 +231,10 @@
   <div class="modal">
     <h3 id="alumnoTitulo">Nuevo <em>alumno</em></h3>
     <div class="mlab">// Una fila por alumno</div>
-    <input type="hidden" id="a_id" />
-    <input type="hidden" id="a_codigo" />
+    <input type="hidden" id="a_id" /><input type="hidden" id="a_codigo" /><input type="hidden" id="a_ciclo" />
     <div class="frow">
-      <div class="field"><label>Nombre</label><input id="a_nombre" type="text" placeholder="Nombre y apellido" /></div>
-      <div class="field"><label>WhatsApp (con 51…)</label><input id="a_whatsapp" type="text" placeholder="51989077928" /></div>
+      <div class="field"><label>Nombre</label><input id="a_nombre" type="text" /></div>
+      <div class="field"><label>WhatsApp (con 51…)</label><input id="a_whatsapp" type="text" /></div>
     </div>
     <div class="frow">
       <div class="field"><label>Curso</label><select id="a_curso"><option>Canto</option><option>Piano</option><option>Composición</option></select></div>
@@ -208,7 +245,7 @@
       <div class="field"><label>Estado de pago</label><select id="a_pago"><option>Pagado</option><option>Pendiente</option></select></div>
     </div>
     <div class="field"><label>Horario fijo</label><input id="a_horario" type="text" placeholder="Martes 18:00" /></div>
-    <div class="field"><label>Notas</label><textarea id="a_notas" placeholder="Objetivo, observaciones…"></textarea></div>
+    <div class="field"><label>Notas</label><textarea id="a_notas"></textarea></div>
     <div class="modal-actions">
       <button class="btn ghost" data-close>Cancelar</button>
       <button class="btn" id="btnGuardarAlumno">Guardar alumno</button>
@@ -239,11 +276,32 @@
   </div>
 </div>
 
+<!-- Modal vincular / reset -->
+<div class="overlay" id="ovCuenta">
+  <div class="modal">
+    <h3 id="cuentaTitulo">Cuenta</h3>
+    <div class="mlab" id="cuentaSub">//</div>
+    <input type="hidden" id="cu_id" />
+    <div id="cuVincular" class="hidden">
+      <div class="field"><label>Vincular a la ficha de alumno</label><select id="cu_alumno"></select></div>
+      <p class="hint">Al vincular, esa persona ve en su portal las clases de esa ficha.</p>
+    </div>
+    <div id="cuReset" class="hidden">
+      <div class="field"><label>Nueva contraseña (mínimo 8)</label><input id="cu_pass" type="text" /></div>
+      <p class="hint">Se cierran sus sesiones abiertas. Pásale la nueva por WhatsApp.</p>
+    </div>
+    <div class="err" id="cuErr"></div>
+    <div class="modal-actions">
+      <button class="btn ghost" data-close>Cancelar</button>
+      <button class="btn" id="btnCuentaOk">Guardar</button>
+    </div>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script>
 "use strict";
-/* ---------- Reglas (idénticas al Excel y al Worker) ---------- */
 var PAQUETES = {
   "Paquete 4":  { clases:4,  reprog:2 },
   "Paquete 8":  { clases:8,  reprog:3 },
@@ -252,79 +310,70 @@ var PAQUETES = {
 };
 var PRECIOS_DEFAULT = { "Paquete 4":250, "Paquete 8":450, "Paquete 12":600, "Clase suelta":70 };
 var TOKEN_KEY = "pmvt_admin_token";
-var CACHE_KEY = "pmvt_admin_cache";
-var PORTAL_URL = (location.origin && location.origin.indexOf("http")===0)
-  ? location.origin + "/alumnos" : "https://profesormvt.com/alumnos";
 
-var db = { alumnos:[], registro:[], precios:Object.assign({},PRECIOS_DEFAULT) };
+var db = { alumnos:[], registro:[], precios:Object.assign({},PRECIOS_DEFAULT), cuentas:[], compras:[], config:{} };
 var token = null;
+var cuentaModo = null;
 
 function el(id){ return document.getElementById(id); }
 function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(m){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m];}); }
 function uid(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,7); }
-function genCode(){
-  var abc = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"; // sin 0/O/1/I/L para no confundir
-  var c, existe;
-  do {
-    c = "";
-    for(var i=0;i<6;i++) c += abc[Math.floor(Math.random()*abc.length)];
-    existe = db.alumnos.some(function(a){ return a.codigo === c; });
-  } while(existe);
-  return c;
-}
-function setSync(txt, cls){ var d=el("syncdot"); d.textContent=txt; d.className="syncdot "+(cls||""); }
+function setSync(txt,cls){ var d=el("syncdot"); d.textContent=txt; d.className="syncdot "+(cls||""); }
+var toastT;
+function toast(msg){ var t=el("toast"); t.textContent=msg; t.classList.add("show"); clearTimeout(toastT); toastT=setTimeout(function(){t.classList.remove("show");},2400); }
 
 /* ---------- API ---------- */
-function authHeaders(){ return { "authorization":"Bearer "+token, "content-type":"application/json" }; }
+function hdr(){ return { "authorization":"Bearer "+token, "content-type":"application/json" }; }
 function apiGet(){
-  return fetch("/api/admin/data",{ headers: authHeaders() }).then(function(res){
-    if(res.status===401) throw {auth:true};
-    if(!res.ok) throw new Error("HTTP "+res.status);
-    return res.json();
+  return fetch("/api/admin/data",{headers:hdr()}).then(function(r){
+    if(r.status===401) throw {auth:true};
+    if(!r.ok) throw new Error("HTTP "+r.status);
+    return r.json();
   });
 }
 function apiPut(){
   setSync("Guardando…","");
-  var payload = { alumnos: db.alumnos, registro: db.registro, precios: db.precios };
-  return fetch("/api/admin/data",{ method:"PUT", headers: authHeaders(), body: JSON.stringify(payload) })
-    .then(function(res){
-      if(res.status===401) throw {auth:true};
-      if(!res.ok) throw new Error("HTTP "+res.status);
-      cacheLocal();
+  return fetch("/api/admin/data",{method:"PUT",headers:hdr(),
+    body:JSON.stringify({alumnos:db.alumnos,registro:db.registro,precios:db.precios})})
+    .then(function(r){
+      if(r.status===401) throw {auth:true};
+      if(!r.ok) throw new Error("HTTP "+r.status);
       setSync("Guardado ✓","ok");
     })
     .catch(function(e){
-      if(e && e.auth){ lock("Tu clave ya no es válida."); }
-      setSync("Sin guardar ✗","err");
-      toast("No se pudo guardar — revisa conexión");
+      if(e&&e.auth){ lock("Tu clave ya no es válida."); }
+      setSync("Sin guardar ✗","err"); toast("No se pudo guardar");
     });
 }
-function cacheLocal(){ try{ localStorage.setItem(CACHE_KEY, JSON.stringify(db)); }catch(e){} }
+function apiPost(path, body){
+  return fetch(path,{method:"POST",headers:hdr(),body:JSON.stringify(body)}).then(function(r){
+    return r.json().catch(function(){return {};}).then(function(d){
+      if(r.status===401) throw {auth:true};
+      if(!r.ok){ var e=new Error(d.error||("HTTP "+r.status)); throw e; }
+      return d;
+    });
+  });
+}
+function recargar(){
+  return apiGet().then(function(d){
+    db=d; if(!db.precios) db.precios=Object.assign({},PRECIOS_DEFAULT);
+    db.cuentas=db.cuentas||[]; db.compras=db.compras||[]; db.config=db.config||{};
+    renderAll(); setSync("Conectado ✓","ok");
+  });
+}
 
 /* ---------- Candado ---------- */
-function lock(msg){
-  el("lockErr").textContent = msg||"";
-  el("ovLock").classList.add("open");
-  el("lockToken").value="";
-  setTimeout(function(){ el("lockToken").focus(); },60);
-}
-function unlock(){
-  el("ovLock").classList.remove("open");
-}
+function lock(msg){ el("lockErr").textContent=msg||""; el("ovLock").classList.add("open"); el("lockToken").value=""; setTimeout(function(){el("lockToken").focus();},60); }
+function unlock(){ el("ovLock").classList.remove("open"); }
 el("btnLockEnter").addEventListener("click",function(){
-  var t = el("lockToken").value.trim();
+  var t=el("lockToken").value.trim();
   if(!t){ el("lockErr").textContent="Escribe tu clave."; return; }
-  token = t;
-  el("btnLockEnter").disabled = true;
-  apiGet().then(function(data){
-    try{ localStorage.setItem(TOKEN_KEY, token); }catch(e){}
-    db = data; if(!db.precios) db.precios=Object.assign({},PRECIOS_DEFAULT);
-    normaliza();
-    cacheLocal();
-    unlock(); renderAll(); setSync("Conectado ✓","ok");
+  token=t; el("btnLockEnter").disabled=true;
+  recargar().then(function(){
+    try{ localStorage.setItem(TOKEN_KEY,token); }catch(e){}
+    unlock();
   }).catch(function(e){
-    if(e && e.auth){ el("lockErr").textContent="Clave incorrecta."; }
-    else { el("lockErr").textContent="No se pudo conectar con la API."; }
+    el("lockErr").textContent = (e&&e.auth)?"Clave incorrecta.":"No se pudo conectar con la API.";
   }).finally(function(){ el("btnLockEnter").disabled=false; });
 });
 el("lockToken").addEventListener("keydown",function(e){ if(e.key==="Enter") el("btnLockEnter").click(); });
@@ -333,86 +382,94 @@ el("btnLogoutAdmin").addEventListener("click",function(){
   token=null; lock("Ingresa tu clave de admin.");
 });
 
-/* ---------- Normalizar datos (compat) ---------- */
-function normaliza(){
-  // asegura codigo en cada alumno y alumnoId en cada registro
-  db.alumnos.forEach(function(a){ if(!a.codigo) a.codigo = genCode(); if(!a.id) a.id = uid(); });
-  var porNombre = {};
-  db.alumnos.forEach(function(a){ porNombre[a.nombre]=a.id; });
-  db.registro.forEach(function(r){
-    if(!r.alumnoId && r.alumno_id) r.alumnoId = r.alumno_id;
-    if(!r.alumnoId && r.alumno && porNombre[r.alumno]) r.alumnoId = porNombre[r.alumno];
-    if(!r.id) r.id = uid();
-  });
-  db.registro = db.registro.filter(function(r){ return !!r.alumnoId; });
-}
-
-/* ---------- Cálculo por alumno ---------- */
+/* ---------- Cálculo (ciclo actual) ---------- */
 function computeAlumno(a){
   var pk = PAQUETES[a.paquete] || {clases:0,reprog:0};
-  var regs = db.registro.filter(function(r){ return r.alumnoId === a.id; });
-  var asistio=0, reprogramo=0, falta=0;
+  var ciclo = a.ciclo||1;
+  var regs = db.registro.filter(function(r){ return (r.alumnoId||r.alumno_id)===a.id && (r.ciclo||1)===ciclo; });
+  var asistio=0,reprogramo=0,falta=0;
   regs.forEach(function(r){
-    if(r.estado==="Asistió") asistio++;
-    else if(r.estado==="Reprogramó") reprogramo++;
-    else if(r.estado==="Falta") falta++;
+    if(r.estado==="Asistió")asistio++;
+    else if(r.estado==="Reprogramó")reprogramo++;
+    else if(r.estado==="Falta")falta++;
   });
-  var exceso = Math.max(0, reprogramo - pk.reprog);
-  var usadas = asistio + falta + exceso;
-  var saldo = pk.clases - usadas;
-  var estado, clase;
-  if(saldo <= 0){ estado="Completado — renovar"; clase="red"; }
-  else if(saldo === 1){ estado="⚠ Última clase"; clase="amber"; }
-  else { estado="Activo"; clase="green"; }
-  return { compradas:pk.clases, usadas:usadas, restantes:Math.max(0,saldo),
-           reprogPermit:pk.reprog, reprogUsadas:reprogramo, reprogRest:Math.max(0,pk.reprog-reprogramo),
-           estado:estado, clase:clase, monto:db.precios[a.paquete]||0 };
+  var exceso=Math.max(0,reprogramo-pk.reprog);
+  var usadas=asistio+falta+exceso;
+  var saldo=pk.clases-usadas;
+  var estado,clase;
+  if(saldo<=0){estado="Completado — renovar";clase="red";}
+  else if(saldo===1){estado="⚠ Última clase";clase="amber";}
+  else{estado="Activo";clase="green";}
+  return {compradas:pk.clases,usadas:usadas,restantes:Math.max(0,saldo),
+          reprogPermit:pk.reprog,reprogRest:Math.max(0,pk.reprog-reprogramo),
+          estado:estado,clase:clase,monto:db.precios[a.paquete]||0};
+}
+function cuentaDeAlumno(alumnoId){
+  return db.cuentas.find(function(c){ return c.alumno_id===alumnoId; }) || null;
+}
+function nombreCuenta(cuentaId){
+  var c=db.cuentas.find(function(x){return x.id===cuentaId;});
+  return c ? (c.nombre+" · "+c.email) : "(cuenta borrada)";
 }
 
 /* ---------- Render ---------- */
 function card(lab,num,cls){ return '<div class="card '+(cls||'')+'"><div class="lab">'+lab+'</div><div class="num">'+num+'</div></div>'; }
 
 function renderResumen(){
-  var cs = db.alumnos.map(computeAlumno);
-  var activos = cs.filter(function(c){return c.estado==="Activo";}).length;
-  var ultima  = cs.filter(function(c){return c.estado==="⚠ Última clase";}).length;
-  var compl   = cs.filter(function(c){return c.estado==="Completado — renovar";}).length;
-  var pagosP  = db.alumnos.filter(function(a){return a.pago!=="Pagado";}).length;
+  var pend=db.compras.filter(function(c){return c.estado==="pendiente";}).length;
+  var cs=db.alumnos.map(computeAlumno);
+  var activos=cs.filter(function(c){return c.estado==="Activo";}).length;
+  var ultima=cs.filter(function(c){return c.estado==="⚠ Última clase";}).length;
+  var compl=cs.filter(function(c){return c.estado==="Completado — renovar";}).length;
+  var mkt=db.cuentas.filter(function(c){return c.marketing;}).length;
 
   var now=new Date(); var ym=now.getFullYear()+"-"+String(now.getMonth()+1).padStart(2,"0");
   var mes=db.registro.filter(function(r){return (r.fecha||"").slice(0,7)===ym;});
   var dictMes=mes.filter(function(r){return r.estado==="Asistió";}).length;
   var faltaMes=mes.filter(function(r){return r.estado==="Falta";}).length;
   var repMes=mes.filter(function(r){return r.estado==="Reprogramó";}).length;
+  var ingresosMes=db.compras.filter(function(c){return c.estado==="confirmada" && (c.fecha||"").slice(0,7)===ym;})
+    .reduce(function(s,c){return s+(Number(c.monto)||0);},0);
 
   var dictTotal=db.registro.filter(function(r){return r.estado==="Asistió";}).length;
-  var ingresos=db.alumnos.reduce(function(s,a){return s+(a.pago==="Pagado"?(db.precios[a.paquete]||0):0);},0);
+  var ingresosTot=db.compras.filter(function(c){return c.estado==="confirmada";})
+    .reduce(function(s,c){return s+(Number(c.monto)||0);},0);
 
+  el("resHoy").innerHTML =
+    card("Pagos por confirmar",pend,pend>0?"red":"")+
+    card("Cuentas en el portal",db.cuentas.length,"")+
+    card("Emails con permiso de promos",mkt,"");
   el("resAlumnos").innerHTML =
     card("Activos",activos,"")+
     card("⚠ Última clase — hablar renovación",ultima,"hot")+
-    card("Completados — renovar hoy",compl,"red")+
-    card("Pagos pendientes",pagosP,pagosP>0?"hot":"");
-  el("resMes").innerHTML = card("Clases dictadas",dictMes,"")+card("Faltas",faltaMes,"")+card("Reprogramaciones",repMes,"");
-  el("resHist").innerHTML = card("Clases dictadas (total)",dictTotal,"")+card("Ingresos cobrados",("S/ "+ingresos),"");
+    card("Completados — renovar hoy",compl,"red");
+  el("resMes").innerHTML =
+    card("Clases dictadas",dictMes,"")+card("Faltas",faltaMes,"")+
+    card("Reprogramaciones",repMes,"")+card("Cobrado por el portal","S/ "+ingresosMes,"");
+  el("resHist").innerHTML =
+    card("Clases dictadas (total)",dictTotal,"")+card("Cobrado por el portal (total)","S/ "+ingresosTot,"");
+
+  var dot=el("dotPagos");
+  if(pend>0){ dot.textContent=pend; dot.classList.remove("hidden"); } else dot.classList.add("hidden");
 }
 
 function renderAlumnos(){
-  var tb = el("tablaAlumnos").querySelector("tbody");
-  if(db.alumnos.length===0){ tb.innerHTML='<tr><td colspan="11" class="empty">Sin alumnos todavía — agrega el primero</td></tr>'; return; }
-  tb.innerHTML = db.alumnos.map(function(a){
-    var c = computeAlumno(a);
-    var renovBtn = (c.clase!=="green") ? '<button class="btn sm" data-renovar="'+a.id+'">Renovar</button>' : '';
-    var pago = a.pago==="Pagado" ? '<span class="pill pago-ok">Pagado</span>' : '<span class="pill pago-pend">Pendiente</span>';
+  var tb=el("tablaAlumnos").querySelector("tbody");
+  if(db.alumnos.length===0){ tb.innerHTML='<tr><td colspan="11" class="empty">Sin alumnos todavía</td></tr>'; return; }
+  tb.innerHTML=db.alumnos.map(function(a){
+    var c=computeAlumno(a);
+    var cu=cuentaDeAlumno(a.id);
+    var renovBtn=(c.clase!=="green")?'<button class="btn sm" data-renovar="'+a.id+'">Renovar</button>':'';
+    var pago=a.pago==="Pagado"?'<span class="pill pago-ok">Pagado</span>':'<span class="pill pago-pend">Pendiente</span>';
     return '<tr>'+
-      '<td class="name">'+esc(a.nombre)+'<br><span style="font-family:var(--mono);font-size:10.5px;color:var(--muted)">'+esc(a.whatsapp||'')+'</span></td>'+
-      '<td><span class="code">'+esc(a.codigo||'')+'</span><br><button class="btn ghost sm" data-invite="'+a.id+'" style="margin-top:5px">Copiar invitación</button></td>'+
+      '<td class="name">'+esc(a.nombre)+'<br><span class="mini">'+esc(a.whatsapp||'')+'</span></td>'+
+      '<td>'+(cu?'<span class="mini">'+esc(cu.email)+'</span>':'<span class="pill gray">Sin cuenta</span>')+'</td>'+
       '<td>'+esc(a.curso)+'</td>'+
-      '<td>'+esc(a.paquete)+'<br><span style="color:var(--muted);font-size:12px">S/ '+c.monto+'</span></td>'+
+      '<td>'+esc(a.paquete)+'<br><span class="mini">S/ '+c.monto+' · ciclo '+(a.ciclo||1)+'</span></td>'+
       '<td>'+pago+'</td>'+
       '<td>'+esc(a.horario||'—')+'</td>'+
-      '<td><span class="big">'+c.restantes+'</span> <span style="color:var(--muted);font-size:12px">/ '+c.compradas+'</span></td>'+
-      '<td><span class="big">'+c.reprogRest+'</span> <span style="color:var(--muted);font-size:12px">/ '+c.reprogPermit+'</span></td>'+
+      '<td><span class="big">'+c.restantes+'</span> <span class="mini">/ '+c.compradas+'</span></td>'+
+      '<td><span class="big">'+c.reprogRest+'</span> <span class="mini">/ '+c.reprogPermit+'</span></td>'+
       '<td><span class="pill '+c.clase+'">'+esc(c.estado)+'</span></td>'+
       '<td class="notes">'+esc(a.notas||'')+'</td>'+
       '<td><div class="rowact">'+renovBtn+'<button class="btn ghost sm" data-edit="'+a.id+'">Editar</button><button class="btn ghost sm" data-del="'+a.id+'">×</button></div></td>'+
@@ -421,19 +478,18 @@ function renderAlumnos(){
 }
 
 function nombreDe(alumnoId){
-  var a = db.alumnos.find(function(x){return x.id===alumnoId;});
-  return a ? a.nombre : "(alumno borrado)";
+  var a=db.alumnos.find(function(x){return x.id===alumnoId;});
+  return a?a.nombre:"(alumno borrado)";
 }
-
 function renderRegistro(){
-  var tb = el("tablaRegistro").querySelector("tbody");
+  var tb=el("tablaRegistro").querySelector("tbody");
   if(db.registro.length===0){ tb.innerHTML='<tr><td colspan="7" class="empty">Sin clases registradas todavía</td></tr>'; return; }
-  var sorted = db.registro.slice().sort(function(x,y){ return (y.fecha||"").localeCompare(x.fecha||""); });
-  tb.innerHTML = sorted.map(function(r){
-    var pc = r.estado==="Asistió"?"green":(r.estado==="Reprogramó"?"amber":"red");
+  var sorted=db.registro.slice().sort(function(x,y){return (y.fecha||"").localeCompare(x.fecha||"");});
+  tb.innerHTML=sorted.map(function(r){
+    var pc=r.estado==="Asistió"?"green":(r.estado==="Reprogramó"?"amber":"red");
     return '<tr>'+
-      '<td style="font-family:var(--mono);font-size:12px">'+esc(r.fecha||'')+'</td>'+
-      '<td class="name">'+esc(nombreDe(r.alumnoId))+'</td>'+
+      '<td class="mini">'+esc(r.fecha||'')+'</td>'+
+      '<td class="name">'+esc(nombreDe(r.alumnoId||r.alumno_id))+'</td>'+
       '<td>'+esc(r.curso||'')+'</td>'+
       '<td><span class="pill '+pc+'">'+esc(r.estado)+'</span></td>'+
       '<td class="notes">'+esc(r.trabajo||'')+'</td>'+
@@ -443,44 +499,88 @@ function renderRegistro(){
   }).join("");
 }
 
-function renderPrecios(){
-  el("preciosBox").innerHTML = Object.keys(PAQUETES).map(function(p){
-    return '<div class="pricerow"><span class="pk">'+p+'</span><input type="number" min="0" data-precio="'+p+'" value="'+(db.precios[p]||0)+'" /></div>';
+function renderPagos(){
+  var pend=db.compras.filter(function(c){return c.estado==="pendiente";});
+  var proc=db.compras.filter(function(c){return c.estado!=="pendiente";});
+  el("tbPendientes").innerHTML = pend.length===0
+    ? '<tr><td colspan="7" class="empty">Nada pendiente — bandeja limpia</td></tr>'
+    : pend.map(function(c){
+        return '<tr>'+
+          '<td class="mini">'+esc(c.fecha||'')+'</td>'+
+          '<td class="name">'+esc(nombreCuenta(c.cuenta_id))+'</td>'+
+          '<td>'+esc(c.curso||'')+'</td>'+
+          '<td>'+esc(c.paquete)+'</td>'+
+          '<td><span class="big">S/ '+(c.monto||0)+'</span></td>'+
+          '<td class="mini">'+esc(c.op_numero||'—')+'</td>'+
+          '<td><div class="rowact"><button class="btn ok sm" data-confirmar="'+c.id+'">Confirmar ✓</button><button class="btn no sm" data-rechazar="'+c.id+'">Rechazar</button></div></td>'+
+        '</tr>';
+      }).join("");
+  el("tbProcesadas").innerHTML = proc.length===0
+    ? '<tr><td colspan="5" class="empty">Aún sin compras procesadas</td></tr>'
+    : proc.map(function(c){
+        var p=c.estado==="confirmada"?'<span class="pill green">Confirmada</span>':'<span class="pill red">Rechazada</span>';
+        return '<tr><td class="mini">'+esc(c.fecha||'')+'</td><td class="name">'+esc(nombreCuenta(c.cuenta_id))+'</td>'+
+          '<td>'+esc(c.paquete)+'</td><td>S/ '+(c.monto||0)+'</td><td>'+p+'</td></tr>';
+      }).join("");
+}
+
+function renderCuentas(){
+  var tb=el("tbCuentas");
+  if(db.cuentas.length===0){ tb.innerHTML='<tr><td colspan="7" class="empty">Nadie se ha registrado todavía</td></tr>'; return; }
+  tb.innerHTML=db.cuentas.map(function(c){
+    var vinc=c.alumno_id?esc(nombreDe(c.alumno_id)):'<span class="pill gray">Sin vincular</span>';
+    return '<tr>'+
+      '<td class="name">'+esc(c.nombre)+'</td>'+
+      '<td class="mini">'+esc(c.email)+'</td>'+
+      '<td class="mini">'+esc(c.whatsapp||'—')+'</td>'+
+      '<td>'+(c.marketing?'<span class="pill green">✓</span>':'<span class="pill gray">—</span>')+'</td>'+
+      '<td>'+vinc+'</td>'+
+      '<td class="mini">'+esc(c.creada||'')+'</td>'+
+      '<td><div class="rowact">'+
+        '<button class="btn ghost sm" data-vincular="'+c.id+'">Vincular</button>'+
+        '<button class="btn ghost sm" data-resetpass="'+c.id+'">Reset clave</button>'+
+        '<button class="btn ghost sm" data-delcuenta="'+c.id+'">×</button>'+
+      '</div></td>'+
+    '</tr>';
   }).join("");
 }
 
-function fillSelects(){
-  el("a_paquete").innerHTML = Object.keys(PAQUETES).map(function(p){return '<option>'+p+'</option>';}).join("");
-  el("r_alumno").innerHTML = db.alumnos.map(function(a){
-    return '<option value="'+a.id+'">'+esc(a.nombre)+'</option>';
-  }).join("") || '<option value="">— agrega un alumno primero —</option>';
+function renderAjustes(){
+  el("preciosBox").innerHTML=Object.keys(PAQUETES).map(function(p){
+    return '<div class="cfgrow"><span class="pk">'+p+'</span><input type="number" min="0" data-precio="'+p+'" value="'+(db.precios[p]||0)+'" /></div>';
+  }).join("");
+  el("cfg_pago_numero").value=(db.config&&db.config.pago_numero)||"";
+  el("cfg_pago_titular").value=(db.config&&db.config.pago_titular)||"";
+  el("cfg_calendly_url").value=(db.config&&db.config.calendly_url)||"";
 }
 
-function renderAll(){ renderResumen(); renderAlumnos(); renderRegistro(); renderPrecios(); fillSelects(); }
+function fillSelects(){
+  el("a_paquete").innerHTML=Object.keys(PAQUETES).map(function(p){return '<option>'+p+'</option>';}).join("");
+  el("r_alumno").innerHTML=db.alumnos.map(function(a){return '<option value="'+a.id+'">'+esc(a.nombre)+'</option>';}).join("")
+    || '<option value="">— agrega un alumno primero —</option>';
+}
+function renderAll(){ renderResumen(); renderAlumnos(); renderRegistro(); renderPagos(); renderCuentas(); renderAjustes(); fillSelects(); }
 
-/* ---------- Tabs ---------- */
+/* ---------- Tabs / modales ---------- */
 document.querySelectorAll(".tab").forEach(function(t){
   t.addEventListener("click",function(){
     document.querySelectorAll(".tab").forEach(function(x){x.classList.remove("active");});
     document.querySelectorAll(".panel").forEach(function(x){x.classList.remove("active");});
-    t.classList.add("active");
-    el("panel-"+t.dataset.tab).classList.add("active");
+    t.classList.add("active"); el("panel-"+t.dataset.tab).classList.add("active");
   });
 });
-
-/* ---------- Modales genérico ---------- */
 function openOv(id){ el(id).classList.add("open"); }
 function closeOv(id){ el(id).classList.remove("open"); }
 document.querySelectorAll("[data-close]").forEach(function(b){ b.addEventListener("click",function(){ b.closest(".overlay").classList.remove("open"); }); });
 document.querySelectorAll(".overlay").forEach(function(o){
-  if(o.id==="ovLock") return; // el candado no se cierra clickeando afuera
+  if(o.id==="ovLock") return;
   o.addEventListener("click",function(e){ if(e.target===o) o.classList.remove("open"); });
 });
 
 /* ---------- Alumno ---------- */
 el("btnNuevoAlumno").addEventListener("click",function(){
   el("alumnoTitulo").innerHTML='Nuevo <em>alumno</em>';
-  el("a_id").value=""; el("a_codigo").value="";
+  el("a_id").value=""; el("a_codigo").value=""; el("a_ciclo").value="1";
   el("a_nombre").value=""; el("a_whatsapp").value="";
   el("a_curso").value="Canto"; fillSelects(); el("a_paquete").value="Paquete 4";
   el("a_fecha").value=new Date().toISOString().slice(0,10); el("a_pago").value="Pagado";
@@ -488,45 +588,56 @@ el("btnNuevoAlumno").addEventListener("click",function(){
   openOv("ovAlumno");
 });
 el("btnGuardarAlumno").addEventListener("click",function(){
-  var nombre = el("a_nombre").value.trim();
+  var nombre=el("a_nombre").value.trim();
   if(!nombre){ toast("Ponle nombre al alumno"); return; }
-  var id = el("a_id").value;
-  var codigo = el("a_codigo").value || genCode();
-  var obj = { id:id||uid(), codigo:codigo, nombre:nombre, whatsapp:el("a_whatsapp").value.trim(),
-    curso:el("a_curso").value, paquete:el("a_paquete").value, fecha:el("a_fecha").value,
-    pago:el("a_pago").value, horario:el("a_horario").value.trim(), notas:el("a_notas").value.trim() };
-  if(id){ db.alumnos = db.alumnos.map(function(a){ return a.id===id?obj:a; }); }
-  else { db.alumnos.push(obj); }
-  apiPut(); renderAll(); closeOv("ovAlumno");
-  toast(id ? "Alumno guardado" : "Alumno creado — código: "+codigo);
+  var id=el("a_id").value;
+  var obj={ id:id||uid(), codigo:el("a_codigo").value||uid().slice(-6).toUpperCase(),
+    ciclo:Number(el("a_ciclo").value)||1,
+    nombre:nombre, whatsapp:el("a_whatsapp").value.trim(), curso:el("a_curso").value,
+    paquete:el("a_paquete").value, fecha:el("a_fecha").value, pago:el("a_pago").value,
+    horario:el("a_horario").value.trim(), notas:el("a_notas").value.trim() };
+  if(id){ db.alumnos=db.alumnos.map(function(a){return a.id===id?obj:a;}); }
+  else{ db.alumnos.push(obj); }
+  apiPut().then(renderAll); closeOv("ovAlumno"); toast("Alumno guardado");
 });
 
 document.body.addEventListener("click",function(e){
   var ed=e.target.closest("[data-edit]"), dl=e.target.closest("[data-del]"),
       rv=e.target.closest("[data-renovar]"), dr=e.target.closest("[data-delreg]"),
-      inv=e.target.closest("[data-invite]");
+      cf=e.target.closest("[data-confirmar]"), rj=e.target.closest("[data-rechazar]"),
+      vi=e.target.closest("[data-vincular]"), rp=e.target.closest("[data-resetpass]"),
+      dc=e.target.closest("[data-delcuenta]");
   if(ed){ var a=db.alumnos.find(function(x){return x.id===ed.dataset.edit;}); if(!a)return;
     el("alumnoTitulo").innerHTML='Editar <em>alumno</em>'; fillSelects();
-    el("a_id").value=a.id; el("a_codigo").value=a.codigo||"";
+    el("a_id").value=a.id; el("a_codigo").value=a.codigo||""; el("a_ciclo").value=a.ciclo||1;
     el("a_nombre").value=a.nombre; el("a_whatsapp").value=a.whatsapp||"";
     el("a_curso").value=a.curso; el("a_paquete").value=a.paquete; el("a_fecha").value=a.fecha||"";
     el("a_pago").value=a.pago; el("a_horario").value=a.horario||""; el("a_notas").value=a.notas||"";
     openOv("ovAlumno");
   }
   if(dl){ var al=db.alumnos.find(function(x){return x.id===dl.dataset.del;});
-    if(al && confirm("¿Borrar a "+al.nombre+"? Sus registros de clase también se borran.")){
+    if(al && confirm("¿Borrar a "+al.nombre+"? Sus registros también se borran (las cuentas vinculadas quedan sin vincular).")){
       db.alumnos=db.alumnos.filter(function(x){return x.id!==dl.dataset.del;});
-      db.registro=db.registro.filter(function(r){return r.alumnoId!==dl.dataset.del;});
-      apiPut(); renderAll(); toast("Alumno borrado");
+      db.registro=db.registro.filter(function(r){return (r.alumnoId||r.alumno_id)!==dl.dataset.del;});
+      apiPut().then(recargar); toast("Alumno borrado");
     }
   }
   if(dr){ if(confirm("¿Borrar este registro de clase?")){
       db.registro=db.registro.filter(function(x){return x.id!==dr.dataset.delreg;});
-      apiPut(); renderAll(); toast("Registro borrado");
+      apiPut().then(renderAll); toast("Registro borrado");
     }
   }
   if(rv){ var ar=db.alumnos.find(function(x){return x.id===rv.dataset.renovar;}); if(ar) renovar(ar); }
-  if(inv){ var ai=db.alumnos.find(function(x){return x.id===inv.dataset.invite;}); if(ai) copiarInvitacion(ai); }
+  if(cf){ procesarCompra(cf.dataset.confirmar,"confirmar"); }
+  if(rj){ if(confirm("¿Rechazar esta compra? (úsalo si el pago nunca llegó)")) procesarCompra(rj.dataset.rechazar,"rechazar"); }
+  if(vi){ abrirCuenta(vi.dataset.vincular,"vincular"); }
+  if(rp){ abrirCuenta(rp.dataset.resetpass,"reset"); }
+  if(dc){ var cb=db.cuentas.find(function(x){return x.id===dc.dataset.delcuenta;});
+    if(cb && confirm("¿Borrar la cuenta de "+cb.email+"? (Su ficha de alumno, si existe, se conserva.)")){
+      apiPost("/api/admin/cuenta",{id:cb.id,accion:"borrar"}).then(function(){ recargar(); toast("Cuenta borrada"); })
+        .catch(function(err){ toast(err.message||"No se pudo borrar"); });
+    }
+  }
 });
 
 /* ---------- Registro ---------- */
@@ -540,102 +651,124 @@ el("btnNuevoRegistro").addEventListener("click",function(){
   fillSelects();
   el("r_fecha").value=new Date().toISOString().slice(0,10);
   el("r_estado").value="Asistió"; el("r_trabajo").value=""; el("r_tarea").value="";
-  syncCurso();
-  openOv("ovRegistro");
+  syncCurso(); openOv("ovRegistro");
 });
 el("btnGuardarRegistro").addEventListener("click",function(){
   var alumnoId=el("r_alumno").value;
   if(!alumnoId){ toast("Elige un alumno"); return; }
-  db.registro.push({ id:uid(), fecha:el("r_fecha").value, alumnoId:alumnoId, curso:el("r_curso").value,
+  var a=db.alumnos.find(function(x){return x.id===alumnoId;});
+  db.registro.push({ id:uid(), fecha:el("r_fecha").value, alumnoId:alumnoId,
+    ciclo:(a&&a.ciclo)||1, curso:el("r_curso").value,
     estado:el("r_estado").value, trabajo:el("r_trabajo").value.trim(), tarea:el("r_tarea").value.trim() });
-  apiPut(); renderAll(); closeOv("ovRegistro"); toast("Clase registrada");
+  apiPut().then(renderAll); closeOv("ovRegistro"); toast("Clase registrada");
 });
 
-/* ---------- Renovar (tu WhatsApp al alumno) ---------- */
+/* ---------- Pagos ---------- */
+function procesarCompra(id, accion){
+  apiPost("/api/admin/compra",{id:id,accion:accion}).then(function(){
+    recargar(); toast(accion==="confirmar"?"Paquete activado ✓":"Compra rechazada");
+  }).catch(function(e){ toast(e.message||"No se pudo procesar"); });
+}
+
+/* ---------- Cuentas ---------- */
+function abrirCuenta(id, modo){
+  var c=db.cuentas.find(function(x){return x.id===id;}); if(!c) return;
+  cuentaModo=modo;
+  el("cu_id").value=id;
+  el("cuErr").textContent="";
+  el("cuentaTitulo").innerHTML = (modo==="vincular"?'Vincular <em>cuenta</em>':'Reset de <em>clave</em>');
+  el("cuentaSub").textContent="// "+c.email;
+  el("cuVincular").classList.toggle("hidden",modo!=="vincular");
+  el("cuReset").classList.toggle("hidden",modo!=="reset");
+  if(modo==="vincular"){
+    var vinculados={};
+    db.cuentas.forEach(function(x){ if(x.alumno_id && x.id!==id) vinculados[x.alumno_id]=true; });
+    var opts='<option value="">— Sin vincular —</option>'+db.alumnos
+      .filter(function(a){ return !vinculados[a.id]; })
+      .map(function(a){ return '<option value="'+a.id+'"'+(c.alumno_id===a.id?' selected':'')+'>'+esc(a.nombre)+' ('+esc(a.curso)+')</option>'; }).join("");
+    el("cu_alumno").innerHTML=opts;
+  } else {
+    el("cu_pass").value="";
+  }
+  openOv("ovCuenta");
+}
+el("btnCuentaOk").addEventListener("click",function(){
+  var id=el("cu_id").value;
+  if(cuentaModo==="vincular"){
+    apiPost("/api/admin/cuenta",{id:id,accion:"vincular",alumno_id:el("cu_alumno").value||null})
+      .then(function(){ closeOv("ovCuenta"); recargar(); toast("Vínculo actualizado"); })
+      .catch(function(e){ el("cuErr").textContent=e.message||"Error"; });
+  } else {
+    var p=el("cu_pass").value;
+    if(p.length<8){ el("cuErr").textContent="Mínimo 8 caracteres."; return; }
+    apiPost("/api/admin/cuenta",{id:id,accion:"reset",password:p})
+      .then(function(){ closeOv("ovCuenta"); toast("Clave actualizada — pásasela por WhatsApp"); })
+      .catch(function(e){ el("cuErr").textContent=e.message||"Error"; });
+  }
+});
+
+/* ---------- Renovar por WhatsApp ---------- */
 function renovar(a){
   var num=(a.whatsapp||"").replace(/\D/g,"");
   if(num.length===9) num="51"+num;
   if(!num){ toast("Este alumno no tiene WhatsApp guardado"); return; }
   var msg="Hola "+a.nombre+", ¡qué tal! Vamos cerrando tu paquete de "+a.curso+" y no quiero que pierdas el ritmo que llevas. "+
-          "¿Cuadramos la renovación? Te cuento del plan trimestral (el 3er mes va al 50%) para que reserves tus horarios fijos. ¿Le entramos?";
+          "¿Cuadramos la renovación? Te cuento del plan trimestral (el 3er mes va al 50%) para que reserves tus horarios fijos. "+
+          "Puedes renovar tú mismo desde tu portal: https://profesormvt.com/alumnos/ ¿Le entramos?";
   window.open("https://wa.me/"+num+"?text="+encodeURIComponent(msg),"_blank");
 }
 
-/* ---------- Invitación al portal ---------- */
-function copiarInvitacion(a){
-  var msg = "¡"+a.nombre.split(" ")[0]+"! Ya tienes tu portal de alumno 🎸 Entra aquí: "+PORTAL_URL+
-    " y pon tu código personal: "+a.codigo+". Ahí ves tus clases restantes, tu tarea de la semana y tu historial. Guárdalo, es solo tuyo.";
-  if(navigator.clipboard && navigator.clipboard.writeText){
-    navigator.clipboard.writeText(msg).then(function(){ toast("Invitación copiada — pégala en WhatsApp"); })
-      .catch(function(){ prompt("Copia la invitación:", msg); });
-  } else { prompt("Copia la invitación:", msg); }
-}
-
-/* ---------- Precios ---------- */
-el("btnGuardarPrecios").addEventListener("click",function(){
+/* ---------- Ajustes ---------- */
+el("btnGuardarAjustes").addEventListener("click",function(){
   document.querySelectorAll("[data-precio]").forEach(function(inp){
     db.precios[inp.dataset.precio]=Number(inp.value)||0;
   });
-  apiPut(); renderAll(); toast("Precios guardados");
+  var cfg={ pago_numero:el("cfg_pago_numero").value.trim(),
+            pago_titular:el("cfg_pago_titular").value.trim(),
+            calendly_url:el("cfg_calendly_url").value.trim() };
+  Promise.all([ apiPut(), apiPost("/api/admin/config",cfg) ])
+    .then(function(){ db.config=Object.assign(db.config||{},cfg); renderAll(); toast("Ajustes guardados"); })
+    .catch(function(){ toast("No se pudieron guardar los ajustes"); });
 });
 
-/* ---------- Export / Import / CSV ---------- */
+/* ---------- Export ---------- */
 el("btnExport").addEventListener("click",function(){
   var blob=new Blob([JSON.stringify(db,null,2)],{type:"application/json"});
   downloadBlob(blob,"crm-profesormvt-"+new Date().toISOString().slice(0,10)+".json");
   toast("Respaldo exportado");
 });
-el("btnImport").addEventListener("click",function(){ el("fileImport").click(); });
-el("fileImport").addEventListener("change",function(e){
-  var f=e.target.files[0]; if(!f)return;
-  var rd=new FileReader();
-  rd.onload=function(){
-    try{
-      var d=JSON.parse(rd.result);
-      if(!d.alumnos||!d.registro) throw 0;
-      if(!confirm("Esto reemplaza los datos actuales (también en la base de datos). ¿Continuar?")) return;
-      db=d; if(!db.precios) db.precios=Object.assign({},PRECIOS_DEFAULT);
-      normaliza();
-      apiPut(); renderAll(); toast("Datos importados");
-    }catch(err){ toast("Archivo inválido"); }
-  };
-  rd.readAsText(f); e.target.value="";
-});
 el("btnCsv").addEventListener("click",function(){
-  var head=["Alumno","Código","WhatsApp","Curso","Paquete","Fecha compra","Monto","Estado pago","Horario","Clases compradas","Clases usadas","Clases restantes","Reprog permitidas","Reprog usadas","Reprog restantes","Estado","Notas"];
+  var head=["Alumno","WhatsApp","Curso","Paquete","Ciclo","Fecha compra","Monto","Estado pago","Horario","Clases compradas","Clases usadas","Clases restantes","Reprog restantes","Estado","Notas"];
   var rows=db.alumnos.map(function(a){ var c=computeAlumno(a);
-    return [a.nombre,a.codigo,a.whatsapp,a.curso,a.paquete,a.fecha,c.monto,a.pago,a.horario,c.compradas,c.usadas,c.restantes,c.reprogPermit,c.reprogUsadas,c.reprogRest,c.estado,a.notas]; });
-  var csv=[head].concat(rows).map(function(r){ return r.map(function(v){ return '"'+String(v==null?'':v).replace(/"/g,'""')+'"'; }).join(","); }).join("\r\n");
-  downloadBlob(new Blob(["\ufeff"+csv],{type:"text/csv;charset=utf-8"}),"alumnos-profesormvt.csv");
-  toast("CSV exportado");
+    return [a.nombre,a.whatsapp,a.curso,a.paquete,(a.ciclo||1),a.fecha,c.monto,a.pago,a.horario,c.compradas,c.usadas,c.restantes,c.reprogRest,c.estado,a.notas]; });
+  descargaCsv(head,rows,"alumnos-profesormvt.csv");
 });
+el("btnCsvEmails").addEventListener("click",function(){
+  var head=["Nombre","Email","WhatsApp","Acepta promos","Creada","Alumno vinculado"];
+  var rows=db.cuentas.map(function(c){
+    return [c.nombre,c.email,c.whatsapp||"",(c.marketing?"SI":"NO"),c.creada||"",(c.alumno_id?nombreDe(c.alumno_id):"")];
+  });
+  descargaCsv(head,rows,"emails-profesormvt.csv");
+  toast("Recuerda: promos solo a los que dicen SI");
+});
+function descargaCsv(head,rows,nombre){
+  var csv=[head].concat(rows).map(function(r){return r.map(function(v){return '"'+String(v==null?'':v).replace(/"/g,'""')+'"';}).join(",");}).join("\r\n");
+  downloadBlob(new Blob(["\ufeff"+csv],{type:"text/csv;charset=utf-8"}),nombre);
+}
 function downloadBlob(blob,name){
   var url=URL.createObjectURL(blob); var a=document.createElement("a");
   a.href=url; a.download=name; document.body.appendChild(a); a.click();
-  setTimeout(function(){ URL.revokeObjectURL(url); a.remove(); },100);
+  setTimeout(function(){URL.revokeObjectURL(url);a.remove();},100);
 }
-
-/* ---------- Toast ---------- */
-var toastT;
-function toast(msg){ var t=el("toast"); t.textContent=msg; t.classList.add("show"); clearTimeout(toastT); toastT=setTimeout(function(){t.classList.remove("show");},2400); }
 
 /* ---------- Init ---------- */
 (function init(){
-  try{ token = localStorage.getItem(TOKEN_KEY); }catch(e){}
+  try{ token=localStorage.getItem(TOKEN_KEY); }catch(e){}
   if(!token){ lock(""); return; }
   setSync("Conectando…","");
-  apiGet().then(function(data){
-    db=data; if(!db.precios) db.precios=Object.assign({},PRECIOS_DEFAULT);
-    normaliza(); cacheLocal(); renderAll(); setSync("Conectado ✓","ok");
-  }).catch(function(e){
-    if(e && e.auth){ lock("Tu clave ya no es válida."); return; }
-    // sin conexión: muestra la última copia local en modo lectura práctica
-    try{
-      var c=localStorage.getItem(CACHE_KEY);
-      if(c){ db=JSON.parse(c); renderAll(); setSync("Sin conexión — copia local","err"); toast("Sin conexión: viendo última copia local"); return; }
-    }catch(err){}
-    setSync("Sin conexión ✗","err");
-    toast("No se pudo conectar con la API");
+  recargar().catch(function(e){
+    if(e&&e.auth){ lock("Tu clave ya no es válida."); return; }
+    setSync("Sin conexión ✗","err"); toast("No se pudo conectar con la API");
   });
 })();
 </script>

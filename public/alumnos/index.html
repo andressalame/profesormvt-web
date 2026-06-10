@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Portal de alumnos · ProfesorMVT — destino: public/alumnos/index.html -->
+<!-- Portal de alumnos v2 · ProfesorMVT — destino: public/alumnos/index.html -->
 <html lang="es">
 <head>
 <meta charset="UTF-8" />
@@ -25,6 +25,7 @@
   a{color:var(--accent);text-decoration:none}
   a:hover{text-decoration:underline}
   button{cursor:pointer}
+  .hidden{display:none!important}
 
   .eyebrow{font-family:var(--mono);text-transform:uppercase;letter-spacing:.18em;font-size:11.5px;color:var(--accent);font-weight:700;}
   h1{font-family:var(--display);font-weight:700;font-size:clamp(30px,7vw,44px);margin:.18em 0 .08em;line-height:1.04;}
@@ -32,41 +33,47 @@
   .sub{font-family:var(--mono);text-transform:uppercase;letter-spacing:.12em;font-size:11px;color:var(--muted);}
   .rule{height:3px;background:var(--accent);border:0;margin:16px 0 24px;}
 
-  .hidden{display:none!important}
-
-  /* ---------- LOGIN ---------- */
-  .login-card{max-width:430px;margin:9vh auto 0;}
-  .field label{display:block;font-family:var(--mono);text-transform:uppercase;letter-spacing:.09em;font-size:11px;color:var(--muted);margin-bottom:7px;}
-  .code-input{width:100%;background:var(--panel);border:1px solid var(--line);color:var(--cream);
-    font-family:var(--mono);font-size:22px;letter-spacing:.35em;text-transform:uppercase;text-align:center;
-    padding:14px 12px;border-radius:3px;}
-  .code-input:focus{outline:2px solid var(--accent);outline-offset:1px;border-color:var(--accent);}
+  /* ---------- AUTH ---------- */
+  .auth-card{max-width:440px;margin:6vh auto 0;}
+  .authtabs{display:flex;gap:6px;margin-bottom:20px;}
+  .atab{flex:1;font-family:var(--mono);text-transform:uppercase;letter-spacing:.09em;font-size:12px;font-weight:500;
+    color:var(--muted);background:transparent;border:1px solid var(--line);padding:11px 10px;border-radius:2px;transition:all .12s;}
+  .atab.active{color:var(--bg);background:var(--accent);border-color:var(--accent);font-weight:700;}
+  .field{margin-bottom:14px;}
+  .field label{display:block;font-family:var(--mono);text-transform:uppercase;letter-spacing:.08em;font-size:10.5px;color:var(--muted);margin-bottom:6px;}
+  .field input,.field select{width:100%;background:var(--panel);border:1px solid var(--line);color:var(--cream);
+    font-family:var(--body);font-size:15px;padding:11px 12px;border-radius:3px;}
+  .field input:focus,.field select:focus{outline:2px solid var(--accent);outline-offset:1px;border-color:var(--accent);}
+  .check{display:flex;gap:10px;align-items:flex-start;font-size:13px;color:var(--muted);margin:14px 0 4px;line-height:1.5;}
+  .check input{width:16px;height:16px;margin-top:2px;accent-color:var(--accent);flex:0 0 auto;}
   .btn{font-family:var(--mono);text-transform:uppercase;letter-spacing:.09em;font-size:13px;font-weight:700;
     padding:13px 18px;border-radius:3px;border:1px solid var(--accent);background:var(--accent);color:var(--bg);
     width:100%;margin-top:14px;transition:filter .12s;}
   .btn:hover{filter:brightness(1.12);}
   .btn[disabled]{opacity:.6;cursor:wait;}
+  .btn.ghost{background:transparent;color:var(--cream);border-color:var(--line);font-weight:500;width:auto;}
+  .btn.ghost:hover{border-color:var(--accent);color:var(--accent);filter:none;}
   .err{color:var(--red);font-size:13.5px;margin-top:12px;min-height:1.2em;}
-  .login-hint{margin-top:22px;font-size:13.5px;color:var(--muted);line-height:1.55;}
+  .auth-hint{margin-top:18px;font-size:13px;color:var(--muted);line-height:1.55;}
 
-  /* ---------- DASHBOARD ---------- */
+  /* ---------- DASH ---------- */
   .topbar{display:flex;justify-content:space-between;align-items:center;gap:12px;}
   .linkbtn{background:none;border:none;color:var(--muted);font-family:var(--mono);font-size:11px;
     text-transform:uppercase;letter-spacing:.09em;padding:6px 0;}
   .linkbtn:hover{color:var(--accent);}
-
   .lab{font-family:var(--mono);text-transform:uppercase;letter-spacing:.1em;font-size:11px;color:var(--muted);}
+
+  .pill{font-family:var(--mono);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;
+    padding:5px 11px;border-radius:2px;display:inline-block;}
+  .pill.green{background:rgba(95,138,82,.16);color:var(--green);border:1px solid var(--green);}
+  .pill.amber{background:rgba(217,154,60,.16);color:var(--amber);border:1px solid var(--amber);}
+  .pill.gray{background:transparent;color:var(--muted);border:1px solid var(--line);}
+  .pill.red{background:rgba(204,58,31,.16);color:var(--red);border:1px solid var(--red);}
 
   .hero{margin:6px 0 4px;}
   .hero .big{font-family:var(--display);font-weight:700;font-size:clamp(72px,21vw,108px);line-height:.9;color:var(--accent);}
   .hero .of{font-family:var(--display);font-style:italic;font-size:clamp(20px,5vw,28px);color:var(--muted);margin-left:6px;}
-  .pill{font-family:var(--mono);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;
-    padding:5px 11px;border-radius:2px;display:inline-block;margin-top:10px;}
-  .pill.green{background:rgba(95,138,82,.16);color:var(--green);border:1px solid var(--green);}
-  .pill.amber{background:rgba(217,154,60,.16);color:var(--amber);border:1px solid var(--amber);}
-  .pill.red{background:rgba(204,58,31,.16);color:var(--red);border:1px solid var(--red);}
 
-  /* tickets */
   .stubs{display:flex;gap:8px;flex-wrap:wrap;margin:18px 0 6px;}
   .stub{width:30px;height:46px;background:var(--accent);border-radius:3px;position:relative;flex:0 0 auto;}
   .stub::before,.stub::after{content:"";position:absolute;top:50%;width:11px;height:11px;background:var(--bg);border-radius:50%;transform:translateY(-50%);}
@@ -86,12 +93,20 @@
   .note{font-size:12.5px;color:var(--muted);margin-top:8px;line-height:1.5;}
   .warn{color:var(--amber);}
 
-  .renew{border:1px solid var(--accent);border-left:5px solid var(--accent);background:linear-gradient(180deg,rgba(204,78,31,.10),rgba(204,78,31,.03));}
-  .renew h2{font-family:var(--display);font-style:italic;font-weight:700;font-size:26px;margin:2px 0 8px;color:var(--cream);}
-  .renew p{margin:0 0 14px;font-size:14.5px;}
+  .accentcard{border:1px solid var(--accent);border-left:5px solid var(--accent);
+    background:linear-gradient(180deg,rgba(204,78,31,.10),rgba(204,78,31,.03));}
+  .accentcard h2{font-family:var(--display);font-style:italic;font-weight:700;font-size:26px;margin:2px 0 8px;color:var(--cream);}
+  .accentcard p{margin:0 0 14px;font-size:14.5px;}
   .wa{display:inline-block;font-family:var(--mono);text-transform:uppercase;letter-spacing:.08em;font-size:12.5px;font-weight:700;
     background:var(--accent);color:var(--bg);padding:12px 18px;border-radius:3px;border:1px solid var(--accent);}
   .wa:hover{filter:brightness(1.12);text-decoration:none;}
+  .wa.ghost{background:transparent;color:var(--cream);border-color:var(--line);font-weight:500;}
+  .wa.ghost:hover{border-color:var(--accent);color:var(--accent);filter:none;}
+  .ctas{display:flex;gap:10px;flex-wrap:wrap;}
+
+  .banner{border:1px dashed var(--amber);border-radius:4px;padding:14px 16px;margin-bottom:14px;
+    font-size:14px;color:var(--amber);background:rgba(217,154,60,.07);}
+  .banner strong{font-family:var(--mono);font-size:12px;text-transform:uppercase;letter-spacing:.06em;}
 
   .tarea{border-left:5px solid var(--accent);}
   .tarea .t{font-family:var(--display);font-size:20px;line-height:1.3;}
@@ -106,32 +121,64 @@
   .hist .tk{font-size:12.5px;color:var(--muted);}
   @media (max-width:430px){ .hist li{grid-template-columns:1fr;gap:4px;} }
 
+  /* compra modal */
+  .overlay{position:fixed;inset:0;background:rgba(0,0,0,.78);display:none;align-items:flex-start;justify-content:center;padding:30px 16px;z-index:50;overflow-y:auto;}
+  .overlay.open{display:flex;}
+  .modal{background:var(--panel);border:1px solid var(--accent);border-radius:4px;max-width:480px;width:100%;padding:26px;}
+  .modal h3{font-family:var(--display);font-size:24px;margin:0 0 4px;}
+  .modal h3 em{font-style:italic;color:var(--accent);}
+  .mlab{font-family:var(--mono);text-transform:uppercase;letter-spacing:.1em;font-size:10.5px;color:var(--accent);margin-bottom:16px;}
+  .paybox{background:var(--bg);border:1px solid var(--line);border-radius:3px;padding:14px;margin:12px 0;}
+  .paybox .num{font-family:var(--mono);font-size:22px;letter-spacing:.12em;color:var(--accent);font-weight:700;}
+  .steps{font-size:13.5px;color:var(--cream);margin:10px 0 0;padding-left:18px;line-height:1.7;}
+  .modal-actions{display:flex;gap:10px;justify-content:flex-end;margin-top:18px;flex-wrap:wrap;}
+  .montoview{font-family:var(--display);font-size:30px;color:var(--accent);}
+
   .empty{color:var(--muted);font-family:var(--mono);font-size:12px;text-transform:uppercase;letter-spacing:.08em;padding:8px 0;}
   .loading{font-family:var(--mono);font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);padding:40px 0;text-align:center;}
   .footnote{margin-top:34px;font-size:12px;color:var(--muted);border-top:1px solid var(--line);padding-top:14px;
     font-family:var(--mono);text-transform:uppercase;letter-spacing:.08em;}
   .footnote a{color:var(--muted);}
   .footnote a:hover{color:var(--accent);}
+  .toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%) translateY(20px);background:var(--accent);color:var(--bg);
+    font-family:var(--mono);font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;
+    padding:11px 18px;border-radius:3px;opacity:0;transition:all .2s;pointer-events:none;z-index:99;}
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
   @media (prefers-reduced-motion:reduce){*{transition:none!important;}}
 </style>
 </head>
 <body>
 <div class="wrap">
 
-  <!-- ============ LOGIN ============ -->
-  <section id="viewLogin" class="login-card">
+  <!-- ============ AUTH ============ -->
+  <section id="viewAuth" class="auth-card hidden">
     <div class="eyebrow">// PROFESORMVT</div>
     <h1>Portal de <em>alumno</em></h1>
     <div class="sub">Tus clases · Tu tarea · Tu avance</div>
     <hr class="rule" />
-    <div class="field">
-      <label for="codigo">Código de alumno</label>
-      <input id="codigo" class="code-input" type="text" maxlength="12" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="······" />
+    <div class="authtabs">
+      <button class="atab active" id="tabLogin">Ingresar</button>
+      <button class="atab" id="tabReg">Crear cuenta</button>
     </div>
-    <button class="btn" id="btnEntrar">Entrar</button>
-    <div class="err" id="loginErr"></div>
-    <p class="login-hint">Tu código es personal y te lo paso yo por WhatsApp.<br>
-      ¿No lo tienes a la mano? <a href="https://wa.me/51989077928?text=Hola%20Andr%C3%A9s%2C%20no%20tengo%20mi%20c%C3%B3digo%20del%20portal%20de%20alumno%20%F0%9F%8E%B8" target="_blank" rel="noopener">Pídemelo aquí</a>.</p>
+
+    <div id="formLogin">
+      <div class="field"><label for="l_email">Correo</label><input id="l_email" type="email" autocomplete="email" /></div>
+      <div class="field"><label for="l_pass">Contraseña</label><input id="l_pass" type="password" autocomplete="current-password" /></div>
+      <button class="btn" id="btnLogin">Ingresar</button>
+      <div class="err" id="loginErr"></div>
+      <p class="auth-hint">¿Olvidaste tu contraseña? <a href="https://wa.me/51989077928?text=Hola%20Andr%C3%A9s%2C%20olvid%C3%A9%20mi%20contrase%C3%B1a%20del%20portal%20de%20alumno" target="_blank" rel="noopener">Escríbeme por WhatsApp</a> y te la restablezco.</p>
+    </div>
+
+    <div id="formReg" class="hidden">
+      <div class="field"><label for="r_nombre">Nombre y apellido</label><input id="r_nombre" type="text" autocomplete="name" /></div>
+      <div class="field"><label for="r_email">Correo</label><input id="r_email" type="email" autocomplete="email" /></div>
+      <div class="field"><label for="r_whats">WhatsApp (opcional)</label><input id="r_whats" type="tel" placeholder="989 077 928" /></div>
+      <div class="field"><label for="r_pass">Contraseña (mínimo 8 caracteres)</label><input id="r_pass" type="password" autocomplete="new-password" /></div>
+      <label class="check"><input type="checkbox" id="r_mkt" />
+        <span>Quiero recibir novedades, tips y promociones de ProfesorMVT por correo. (Opcional)</span></label>
+      <button class="btn" id="btnReg">Crear mi cuenta</button>
+      <div class="err" id="regErr"></div>
+    </div>
   </section>
 
   <!-- ============ DASHBOARD ============ -->
@@ -144,41 +191,70 @@
     <div class="sub" id="dPlan"></div>
     <hr class="rule" />
 
-    <div class="lab">Clases restantes</div>
-    <div class="hero"><span class="big" id="dRestantes">0</span><span class="of" id="dDe"></span></div>
     <span class="pill" id="dEstado"></span>
 
-    <div class="stubs" id="dStubs"></div>
-    <div class="stubcap">Cada ticket = una clase de tu paquete · los apagados ya se usaron</div>
+    <div class="banner hidden" id="banPendiente"></div>
 
-    <div class="card renew hidden" id="cardRenew">
-      <h3>// Renovación</h3>
-      <h2 id="rTitulo"></h2>
-      <p id="rTexto"></p>
-      <a class="wa" id="rBtn" target="_blank" rel="noopener">Renovar por WhatsApp</a>
-    </div>
+    <!-- ===== Con paquete ===== -->
+    <div id="zonaPaquete" class="hidden">
+      <div class="lab" style="margin-top:18px;">Clases restantes</div>
+      <div class="hero"><span class="big" id="dRestantes">0</span><span class="of" id="dDe"></span></div>
+      <div class="stubs" id="dStubs"></div>
+      <div class="stubcap">Cada ticket = una clase de tu paquete · los apagados ya se usaron</div>
 
-    <div class="card tarea hidden" id="cardTarea">
-      <h3>// Tu tarea de esta semana</h3>
-      <div class="t" id="tTexto"></div>
-      <div class="meta" id="tMeta"></div>
-    </div>
+      <div class="card accentcard hidden" id="cardRenew">
+        <h3>// Renovación</h3>
+        <h2 id="rTitulo"></h2>
+        <p id="rTexto"></p>
+        <div class="ctas">
+          <button class="wa" id="rComprar">Renovar mi paquete</button>
+          <a class="wa ghost" id="rWa" target="_blank" rel="noopener">Hablar con Andrés</a>
+        </div>
+      </div>
 
-    <div class="card">
-      <h3>// Tu plan</h3>
-      <div class="grid2">
-        <div class="kv"><div class="lab">Reprogramaciones disponibles</div><div class="v" id="dReprog"></div>
-          <div class="note">Avísame con 24h de anticipación y la reprogramación no consume clase.</div></div>
-        <div class="kv"><div class="lab">Horario fijo</div><div class="v" id="dHorario"></div></div>
-        <div class="kv"><div class="lab">Paquete</div><div class="v" id="dPaquete"></div></div>
-        <div class="kv"><div class="lab">Pago</div><div class="v" id="dPago"></div><div class="note warn hidden" id="dPagoNote">Tienes un pago pendiente — coordinémoslo por WhatsApp.</div></div>
+      <div class="card accentcard hidden" id="cardCalendly">
+        <h3>// Tus horarios</h3>
+        <h2>Reserva tus clases</h2>
+        <p>Elige tus horarios de preferencia según tu paquete. Si necesitas mover alguno, avísame con 24h y no consume clase.</p>
+        <a class="wa" id="btnCalendly" target="_blank" rel="noopener">Elegir mis horarios →</a>
+      </div>
+
+      <div class="card tarea hidden" id="cardTarea">
+        <h3>// Tu tarea de esta semana</h3>
+        <div class="t" id="tTexto"></div>
+        <div class="meta" id="tMeta"></div>
+      </div>
+
+      <div class="card">
+        <h3>// Tu plan</h3>
+        <div class="grid2">
+          <div class="kv"><div class="lab">Reprogramaciones disponibles</div><div class="v" id="dReprog"></div>
+            <div class="note">Avísame con 24h de anticipación y la reprogramación no consume clase.</div></div>
+          <div class="kv"><div class="lab">Horario fijo</div><div class="v" id="dHorario"></div></div>
+          <div class="kv"><div class="lab">Paquete</div><div class="v" id="dPaquete"></div></div>
+          <div class="kv"><div class="lab">Pago</div><div class="v" id="dPago"></div>
+            <div class="note warn hidden" id="dPagoNote">Tienes un pago pendiente — coordinémoslo por WhatsApp.</div></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>// Historial de clases</h3>
+        <ul class="hist" id="dHist"></ul>
+        <div class="empty hidden" id="dHistEmpty">Aún no hay clases registradas</div>
       </div>
     </div>
 
-    <div class="card">
-      <h3>// Historial de clases</h3>
-      <ul class="hist" id="dHist"></ul>
-      <div class="empty hidden" id="dHistEmpty">Aún no hay clases registradas</div>
+    <!-- ===== Sin paquete (Inactivo) ===== -->
+    <div id="zonaInactivo" class="hidden">
+      <div class="card accentcard" style="margin-top:18px;">
+        <h3>// Empieza aquí</h3>
+        <h2>Aún no tienes un paquete activo</h2>
+        <p>Elige tu paquete de clases 1 a 1 (canto, piano o composición) y arrancamos esta misma semana. ¿Primera vez? La clase de prueba cuesta S/50 e incluye tu diagnóstico vocal en PDF.</p>
+        <div class="ctas">
+          <button class="wa" id="iComprar">Comprar mi paquete</button>
+          <a class="wa ghost" id="iPrueba" target="_blank" rel="noopener">Reservar clase de prueba (S/50)</a>
+        </div>
+      </div>
     </div>
 
     <div class="footnote">
@@ -190,129 +266,288 @@
   <div class="loading hidden" id="viewLoading">Cargando tu avance…</div>
 </div>
 
+<!-- ============ MODAL COMPRA ============ -->
+<div class="overlay" id="ovCompra">
+  <div class="modal">
+    <div id="compraPaso1">
+      <h3>Comprar <em>paquete</em></h3>
+      <div class="mlab">// Pago por Yape o Plin</div>
+      <div class="field"><label for="c_curso">Curso</label>
+        <select id="c_curso"><option>Canto</option><option>Piano</option><option>Composición</option></select></div>
+      <div class="field"><label for="c_paquete">Paquete</label><select id="c_paquete"></select></div>
+      <div class="lab">Total a pagar</div>
+      <div class="montoview" id="c_monto">S/ 0</div>
+
+      <div class="paybox" id="payboxOk">
+        <div class="lab">Yapea o Plinea a</div>
+        <div class="num" id="payNumero"></div>
+        <div class="note" id="payTitular"></div>
+        <ol class="steps">
+          <li>Paga el monto exacto desde tu app.</li>
+          <li>En el mensaje del pago pon tu correo.</li>
+          <li>Vuelve aquí y toca <strong>“Ya pagué”</strong>.</li>
+        </ol>
+      </div>
+      <div class="paybox hidden" id="payboxNo">
+        <div class="note">Para coordinar el pago, escríbeme directo por WhatsApp y lo cuadramos al toque.</div>
+      </div>
+
+      <div class="field" style="margin-top:12px;"><label for="c_op">N° de operación (opcional, ayuda a confirmar más rápido)</label>
+        <input id="c_op" type="text" maxlength="40" /></div>
+      <div class="err" id="compraErr"></div>
+      <div class="modal-actions">
+        <button class="btn ghost" data-close style="width:auto;margin-top:0;">Cancelar</button>
+        <button class="btn" id="btnYaPague" style="width:auto;margin-top:0;">Ya pagué ✓</button>
+      </div>
+    </div>
+    <div id="compraPaso2" class="hidden">
+      <h3>¡Pago <em>registrado</em>!</h3>
+      <div class="mlab">// En verificación</div>
+      <p style="font-size:14.5px;">Apenas vea tu yapeo/plineo activo tu paquete — suele ser el mismo día, casi siempre en minutos. Te aparecerá aquí mismo, en tu dashboard.</p>
+      <p style="font-size:13.5px;color:var(--muted);">¿Quieres acelerarlo? Avísame por WhatsApp y lo confirmo al toque.</p>
+      <div class="modal-actions">
+        <a class="wa ghost" id="btnAvisar" target="_blank" rel="noopener">Avisar por WhatsApp</a>
+        <button class="btn" data-close style="width:auto;margin-top:0;">Listo</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
 <script>
 "use strict";
-var KEY = "pmvt_alumno_codigo";
+var KEY = "pmvt_sesion";
 var WA_PROFE = "51989077928";
+var ME = null;
 
 function $(id){ return document.getElementById(id); }
 function esc(s){ return String(s==null?"":s).replace(/[&<>"]/g,function(m){return {"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[m];}); }
 function show(id){ $(id).classList.remove("hidden"); }
 function hide(id){ $(id).classList.add("hidden"); }
+function setView(v){ ["viewAuth","viewDash","viewLoading"].forEach(hide); show(v); }
+function getTok(){ try{ return localStorage.getItem(KEY); }catch(e){ return null; } }
+function setTok(t){ try{ if(t) localStorage.setItem(KEY,t); else localStorage.removeItem(KEY); }catch(e){} }
+var toastT;
+function toast(msg){ var t=$("toast"); t.textContent=msg; t.classList.add("show"); clearTimeout(toastT); toastT=setTimeout(function(){t.classList.remove("show");},2400); }
 
-function setView(v){
-  ["viewLogin","viewDash","viewLoading"].forEach(hide);
-  show(v);
+function api(path, opts){
+  opts = opts || {};
+  opts.headers = opts.headers || {};
+  var tok = getTok();
+  if(tok) opts.headers["authorization"] = "Bearer " + tok;
+  if(opts.body && !opts.headers["content-type"]) opts.headers["content-type"] = "application/json";
+  return fetch(path, opts).then(function(res){
+    return res.json().catch(function(){ return {}; }).then(function(data){
+      if(!res.ok){ var e = new Error(data.error || "Error"); e.status = res.status; e.data = data; throw e; }
+      return data;
+    });
+  });
 }
 
-function pillClass(estado){
-  if(estado === "Activo") return "green";
-  if(estado === "⚠ Última clase") return "amber";
-  return "red";
+/* ---------- AUTH ---------- */
+function setAuthTab(which){
+  var login = which === "login";
+  $("tabLogin").classList.toggle("active", login);
+  $("tabReg").classList.toggle("active", !login);
+  $("formLogin").classList.toggle("hidden", !login);
+  $("formReg").classList.toggle("hidden", login);
+}
+$("tabLogin").addEventListener("click",function(){ setAuthTab("login"); });
+$("tabReg").addEventListener("click",function(){ setAuthTab("reg"); });
+
+$("btnLogin").addEventListener("click",function(){
+  $("loginErr").textContent="";
+  var email=$("l_email").value.trim(), pass=$("l_pass").value;
+  if(!email || !pass){ $("loginErr").textContent="Completa correo y contraseña."; return; }
+  $("btnLogin").disabled=true;
+  api("/api/login",{method:"POST",body:JSON.stringify({email:email,password:pass})})
+    .then(function(d){ setTok(d.token); cargarMe(); })
+    .catch(function(e){ $("loginErr").textContent = e.message || "No se pudo ingresar."; })
+    .finally(function(){ $("btnLogin").disabled=false; });
+});
+$("l_pass").addEventListener("keydown",function(e){ if(e.key==="Enter") $("btnLogin").click(); });
+
+$("btnReg").addEventListener("click",function(){
+  $("regErr").textContent="";
+  var nombre=$("r_nombre").value.trim(), email=$("r_email").value.trim(),
+      pass=$("r_pass").value, whats=$("r_whats").value.trim(), mkt=$("r_mkt").checked;
+  if(!nombre || !email || !pass){ $("regErr").textContent="Completa nombre, correo y contraseña."; return; }
+  if(pass.length<8){ $("regErr").textContent="La contraseña necesita mínimo 8 caracteres."; return; }
+  $("btnReg").disabled=true;
+  api("/api/registro",{method:"POST",body:JSON.stringify({nombre:nombre,email:email,password:pass,whatsapp:whats,marketing:mkt})})
+    .then(function(d){ setTok(d.token); cargarMe(); })
+    .catch(function(e){
+      $("regErr").textContent = e.message || "No se pudo crear la cuenta.";
+      if(e.status===409){ setAuthTab("login"); $("l_email").value=email; $("loginErr").textContent=e.message; }
+    })
+    .finally(function(){ $("btnReg").disabled=false; });
+});
+
+$("btnSalir").addEventListener("click",function(){
+  api("/api/logout",{method:"POST"}).catch(function(){});
+  setTok(null); ME=null;
+  setAuthTab("login"); setView("viewAuth");
+});
+
+/* ---------- DASHBOARD ---------- */
+function pillEstado(estado){
+  if(estado==="Activo") return "green";
+  if(estado==="Renovar pronto") return "amber";
+  return "gray"; // Inactivo
 }
 
 function render(d){
-  $("dNombre").innerHTML = 'Hola, <em>' + esc(d.nombre.split(" ")[0]) + '</em>';
-  $("dPlan").textContent = (d.curso || "") + " · " + (d.paquete || "");
-  $("dRestantes").textContent = d.restantes;
-  $("dDe").textContent = "de " + d.compradas;
+  ME = d;
+  $("dNombre").innerHTML = 'Hola, <em>' + esc((d.cuenta.nombre||"").split(" ")[0]) + '</em>';
   var est = $("dEstado");
   est.textContent = d.estado;
-  est.className = "pill " + pillClass(d.estado);
+  est.className = "pill " + pillEstado(d.estado);
 
-  // tickets
-  var stubs = "";
-  for(var i=0;i<d.compradas;i++){
-    stubs += '<div class="stub' + (i < d.usadas ? " used" : "") + '"></div>';
-  }
-  $("dStubs").innerHTML = stubs;
+  // banner de compra pendiente
+  if(d.compraPendiente){
+    $("banPendiente").innerHTML = '<strong>// Pago en verificación</strong><br>Tu ' +
+      esc(d.compraPendiente.paquete) + ' de ' + esc(d.compraPendiente.curso||"") +
+      ' (S/ ' + (d.compraPendiente.monto||0) + ', ' + esc(d.compraPendiente.fecha||"") +
+      ') está en verificación. Te lo activo apenas vea el pago — suele ser en minutos.';
+    show("banPendiente");
+  } else { hide("banPendiente"); }
 
-  // renovación
-  if(d.estado !== "Activo"){
-    var ultima = d.estado === "⚠ Última clase";
-    $("rTitulo").textContent = ultima ? "Te queda 1 clase" : "Paquete completado";
-    $("rTexto").textContent = ultima
-      ? "Para no cortar el ritmo que llevas, deja tu renovación lista antes de la próxima sesión. Pregúntame por el plan trimestral: el 3er mes va al 50%."
-      : "Tu paquete llegó a su fin — renueva hoy y seguimos exactamente donde quedamos. Pregúntame por el plan trimestral: el 3er mes va al 50%.";
-    var msg = "Hola Andrés, soy " + d.nombre + " 🎸 Mi paquete de " + (d.curso||"clases") +
-      (ultima ? " está por terminar" : " ya terminó") + " y quiero renovarlo. ¿Me cuentas del plan trimestral?";
-    $("rBtn").href = "https://wa.me/" + WA_PROFE + "?text=" + encodeURIComponent(msg);
-    show("cardRenew");
-  } else { hide("cardRenew"); }
+  if(d.alumno){
+    show("zonaPaquete"); hide("zonaInactivo");
+    var a = d.alumno;
+    $("dPlan").textContent = (a.curso||"") + " · " + (a.paquete||"");
+    $("dRestantes").textContent = a.restantes;
+    $("dDe").textContent = "de " + a.compradas;
 
-  // tarea de la semana = la más reciente con tarea
-  var conTarea = (d.historial || []).find(function(r){ return r.tarea && r.tarea.trim(); });
-  if(conTarea){
-    $("tTexto").textContent = conTarea.tarea;
-    $("tMeta").textContent = "De tu clase del " + (conTarea.fecha || "—");
-    show("cardTarea");
-  } else { hide("cardTarea"); }
+    var stubs="";
+    for(var i=0;i<a.compradas;i++) stubs += '<div class="stub'+(i<a.usadas?" used":"")+'"></div>';
+    $("dStubs").innerHTML = stubs;
 
-  // plan
-  $("dReprog").innerHTML = d.reprogRestantes + ' <small>de ' + d.reprogPermitidas + '</small>';
-  $("dHorario").textContent = d.horario || "—";
-  $("dPaquete").innerHTML = esc(d.paquete||"—") + (d.monto ? ' <small>· S/ ' + d.monto + '</small>' : '');
-  $("dPago").textContent = d.pago || "—";
-  if(d.pago && d.pago !== "Pagado") show("dPagoNote"); else hide("dPagoNote");
+    // renovación
+    if(d.estado==="Renovar pronto" && !d.compraPendiente){
+      var ultima = a.restantes===1;
+      $("rTitulo").textContent = ultima ? "Te queda 1 clase" : "Paquete completado";
+      $("rTexto").textContent = ultima
+        ? "Para no cortar el ritmo, deja tu renovación lista antes de la próxima sesión. Pregúntame por el plan trimestral: el 3er mes va al 50%."
+        : "Tu paquete llegó a su fin — renueva hoy y seguimos exactamente donde quedamos. Pregúntame por el plan trimestral: el 3er mes va al 50%.";
+      var msg = "Hola Andrés, soy "+d.cuenta.nombre+" 🎸 Quiero renovar mi paquete de "+(a.curso||"clases")+". ¿Me cuentas del plan trimestral?";
+      $("rWa").href = "https://wa.me/"+WA_PROFE+"?text="+encodeURIComponent(msg);
+      show("cardRenew");
+    } else { hide("cardRenew"); }
 
-  // historial
-  var h = d.historial || [];
-  if(h.length === 0){ $("dHist").innerHTML=""; show("dHistEmpty"); }
-  else{
-    hide("dHistEmpty");
-    $("dHist").innerHTML = h.map(function(r){
-      var pc = r.estado==="Asistió" ? "green" : (r.estado==="Reprogramó" ? "amber" : "red");
-      return '<li><div class="f">'+esc(r.fecha||"")+'</div><div>'+
-        '<span class="pill '+pc+'">'+esc(r.estado||"")+'</span>'+
-        (r.trabajo ? '<div class="w">'+esc(r.trabajo)+'</div>' : '')+
-        (r.tarea ? '<div class="tk">Tarea: '+esc(r.tarea)+'</div>' : '')+
-        '</div></li>';
-    }).join("");
+    // calendly
+    if(ME.config && ME.config.calendly_url){
+      $("btnCalendly").href = ME.config.calendly_url;
+      show("cardCalendly");
+    } else { hide("cardCalendly"); }
+
+    // tarea
+    var conTarea = (a.historial||[]).find(function(r){ return r.tarea && r.tarea.trim(); });
+    if(conTarea){
+      $("tTexto").textContent = conTarea.tarea;
+      $("tMeta").textContent = "De tu clase del " + (conTarea.fecha||"—");
+      show("cardTarea");
+    } else { hide("cardTarea"); }
+
+    $("dReprog").innerHTML = a.reprogRestantes + ' <small>de ' + a.reprogPermitidas + '</small>';
+    $("dHorario").textContent = a.horario || "Por definir";
+    $("dPaquete").innerHTML = esc(a.paquete||"—") + (a.monto?' <small>· S/ '+a.monto+'</small>':'');
+    $("dPago").textContent = a.pago || "—";
+    if(a.pago && a.pago!=="Pagado") show("dPagoNote"); else hide("dPagoNote");
+
+    var h = a.historial||[];
+    if(h.length===0){ $("dHist").innerHTML=""; show("dHistEmpty"); }
+    else{
+      hide("dHistEmpty");
+      $("dHist").innerHTML = h.map(function(r){
+        var pc = r.estado==="Asistió"?"green":(r.estado==="Reprogramó"?"amber":"red");
+        return '<li><div class="f">'+esc(r.fecha||"")+'</div><div>'+
+          '<span class="pill '+pc+'">'+esc(r.estado||"")+'</span>'+
+          (r.trabajo?'<div class="w">'+esc(r.trabajo)+'</div>':'')+
+          (r.tarea?'<div class="tk">Tarea: '+esc(r.tarea)+'</div>':'')+
+          '</div></li>';
+      }).join("");
+    }
+  } else {
+    hide("zonaPaquete"); show("zonaInactivo");
+    $("dPlan").textContent = "Sin paquete activo";
+    var msgP = "Hola Andrés, quiero agendar mi clase de prueba (S/50) 🎸 Soy "+d.cuenta.nombre+", me registré en el portal.";
+    $("iPrueba").href = "https://wa.me/"+WA_PROFE+"?text="+encodeURIComponent(msgP);
+    if(d.compraPendiente){ $("iComprar").disabled = true; $("iComprar").style.opacity=.6; }
+    else { $("iComprar").disabled = false; $("iComprar").style.opacity=1; }
   }
   setView("viewDash");
 }
 
-function login(code, silencioso){
-  if(!silencioso){ $("btnEntrar").disabled = true; $("loginErr").textContent=""; }
+function cargarMe(){
   setView("viewLoading");
-  fetch("/api/login",{
-    method:"POST",
-    headers:{ "content-type":"application/json" },
-    body: JSON.stringify({ codigo: code })
-  }).then(function(res){
-    if(res.ok) return res.json().then(function(d){
-      try{ localStorage.setItem(KEY, code); }catch(e){}
-      render(d);
-    });
-    return res.json().catch(function(){return {};}).then(function(){
-      try{ localStorage.removeItem(KEY); }catch(e){}
-      setView("viewLogin");
-      $("loginErr").textContent = "Código no válido. Revísalo o pídemelo de nuevo por WhatsApp.";
-    });
-  }).catch(function(){
-    setView("viewLogin");
-    $("loginErr").textContent = "No se pudo conectar. Revisa tu internet e intenta de nuevo.";
-  }).finally(function(){ $("btnEntrar").disabled = false; });
+  api("/api/me").then(render).catch(function(e){
+    setTok(null);
+    setAuthTab("login");
+    setView("viewAuth");
+    if(e.status!==401) $("loginErr").textContent = "No se pudo conectar. Intenta de nuevo.";
+  });
 }
 
-$("btnEntrar").addEventListener("click",function(){
-  var code = $("codigo").value.trim().toUpperCase();
-  if(!code){ $("loginErr").textContent = "Escribe tu código."; return; }
-  login(code,false);
-});
-$("codigo").addEventListener("keydown",function(e){ if(e.key==="Enter") $("btnEntrar").click(); });
+/* ---------- COMPRA ---------- */
+function abrirCompra(){
+  if(!ME) return;
+  if(ME.compraPendiente){ toast("Ya tienes un pago en verificación"); return; }
+  // paquetes desde precios reales (sin clase suelta en compra web)
+  var orden = ["Paquete 4","Paquete 8","Paquete 12"];
+  var labels = { "Paquete 4":"Paquete 4 — 4 clases", "Paquete 8":"Paquete 8 — 8 clases", "Paquete 12":"Paquete 12 — 12 clases" };
+  $("c_paquete").innerHTML = orden.filter(function(p){ return ME.precios && (p in ME.precios); })
+    .map(function(p){ return '<option value="'+p+'">'+labels[p]+' · S/ '+ME.precios[p]+'</option>'; }).join("");
+  if(ME.alumno && ME.alumno.curso) $("c_curso").value = ME.alumno.curso;
+  actualizaMonto();
 
-$("btnSalir").addEventListener("click",function(){
-  try{ localStorage.removeItem(KEY); }catch(e){}
-  $("codigo").value=""; $("loginErr").textContent="";
-  setView("viewLogin");
+  if(ME.config && ME.config.pago_numero){
+    $("payNumero").textContent = ME.config.pago_numero;
+    $("payTitular").textContent = ME.config.pago_titular ? ("A nombre de: " + ME.config.pago_titular) : "";
+    show("payboxOk"); hide("payboxNo");
+  } else {
+    hide("payboxOk"); show("payboxNo");
+  }
+  $("c_op").value=""; $("compraErr").textContent="";
+  show("compraPaso1"); hide("compraPaso2");
+  $("ovCompra").classList.add("open");
+}
+function actualizaMonto(){
+  var p = $("c_paquete").value;
+  var m = (ME && ME.precios && ME.precios[p]) || 0;
+  $("c_monto").textContent = "S/ " + m;
+}
+$("c_paquete").addEventListener("change", actualizaMonto);
+$("iComprar").addEventListener("click", abrirCompra);
+$("rComprar").addEventListener("click", abrirCompra);
+
+$("btnYaPague").addEventListener("click",function(){
+  $("compraErr").textContent="";
+  var paquete=$("c_paquete").value, curso=$("c_curso").value, op=$("c_op").value.trim();
+  if(!paquete){ $("compraErr").textContent="Elige un paquete."; return; }
+  $("btnYaPague").disabled=true;
+  api("/api/comprar",{method:"POST",body:JSON.stringify({paquete:paquete,curso:curso,op_numero:op})})
+    .then(function(){
+      var m=(ME&&ME.precios&&ME.precios[paquete])||0;
+      var aviso="Hola Andrés, acabo de yapear S/ "+m+" por el "+paquete+" ("+curso+") 🎸 Soy "+ME.cuenta.nombre+" — "+ME.cuenta.email;
+      $("btnAvisar").href="https://wa.me/"+WA_PROFE+"?text="+encodeURIComponent(aviso);
+      hide("compraPaso1"); show("compraPaso2");
+      api("/api/me").then(function(d){ ME=d; render(d); }).catch(function(){});
+    })
+    .catch(function(e){ $("compraErr").textContent = e.message || "No se pudo registrar."; })
+    .finally(function(){ $("btnYaPague").disabled=false; });
 });
 
-/* auto-login si ya entró antes en este equipo */
+document.querySelectorAll("[data-close]").forEach(function(b){
+  b.addEventListener("click",function(){ $("ovCompra").classList.remove("open"); });
+});
+$("ovCompra").addEventListener("click",function(e){ if(e.target===$("ovCompra")) $("ovCompra").classList.remove("open"); });
+
+/* ---------- init ---------- */
 (function init(){
-  var saved = null;
-  try{ saved = localStorage.getItem(KEY); }catch(e){}
-  if(saved){ login(saved,true); } else { setView("viewLogin"); }
+  if(getTok()){ cargarMe(); }
+  else { setAuthTab("login"); setView("viewAuth"); }
 })();
 </script>
 </body>
