@@ -314,13 +314,15 @@ var TOKEN_KEY = "pmvt_admin_token";
 var db = { alumnos:[], registro:[], precios:Object.assign({},PRECIOS_DEFAULT), cuentas:[], compras:[], config:{} };
 var token = null;
 var cuentaModo = null;
+var refreshInterval = null;
+var prevPendientes = 0;
 
 function el(id){ return document.getElementById(id); }
 function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(m){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m];}); }
 function uid(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,7); }
 function setSync(txt,cls){ var d=el("syncdot"); d.textContent=txt; d.className="syncdot "+(cls||""); }
 var toastT;
-function toast(msg){ var t=el("toast"); t.textContent=msg; t.classList.add("show"); clearTimeout(toastT); toastT=setTimeout(function(){t.classList.remove("show");},2400); }
+function toast(msg, dur){ var t=el("toast"); t.textContent=msg; t.classList.add("show"); clearTimeout(toastT); toastT=setTimeout(function(){t.classList.remove("show");}, dur||2400); }
 
 /* ---------- API ---------- */
 function hdr(){ return { "authorization":"Bearer "+token, "content-type":"application/json" }; }
@@ -362,6 +364,32 @@ function recargar(){
   });
 }
 
+/* ---------- Auto-refresh silencioso (cada 30s) ---------- */
+function contarPendientes(){
+  return (db.compras||[]).filter(function(c){ return c.estado==="pendiente"; }).length;
+}
+function refrescoSilencioso(){
+  if(!token) return;                          // solo con sesión activa
+  apiGet().then(function(d){                  // GET en segundo plano: no toca syncdot ni spinner
+    if(!d) return;
+    var nuevoPend = (d.compras||[]).filter(function(c){ return c.estado==="pendiente"; }).length;
+    var aumento = nuevoPend > prevPendientes;
+    db=d; if(!db.precios) db.precios=Object.assign({},PRECIOS_DEFAULT);
+    db.cuentas=db.cuentas||[]; db.compras=db.compras||[]; db.config=db.config||{};
+    prevPendientes = nuevoPend;
+    renderAll();                              // siempre re-render (refleja cambios de otro dispositivo)
+    if(aumento){ toast("Nuevo pago por confirmar 🔔", 5000); }
+  }).catch(function(){ /* red o 401: no hacer nada, el intervalo sigue corriendo */ });
+}
+function iniciarRefresco(){
+  prevPendientes = contarPendientes();        // línea base con los datos ya cargados
+  if(refreshInterval) clearInterval(refreshInterval);
+  refreshInterval = setInterval(refrescoSilencioso, 30000);
+}
+function detenerRefresco(){
+  if(refreshInterval){ clearInterval(refreshInterval); refreshInterval=null; }
+}
+
 /* ---------- Candado ---------- */
 function lock(msg){ el("lockErr").textContent=msg||""; el("ovLock").classList.add("open"); el("lockToken").value=""; setTimeout(function(){el("lockToken").focus();},60); }
 function unlock(){ el("ovLock").classList.remove("open"); }
@@ -371,13 +399,14 @@ el("btnLockEnter").addEventListener("click",function(){
   token=t; el("btnLockEnter").disabled=true;
   recargar().then(function(){
     try{ localStorage.setItem(TOKEN_KEY,token); }catch(e){}
-    unlock();
+    unlock(); iniciarRefresco();
   }).catch(function(e){
     el("lockErr").textContent = (e&&e.auth)?"Clave incorrecta.":"No se pudo conectar con la API.";
   }).finally(function(){ el("btnLockEnter").disabled=false; });
 });
 el("lockToken").addEventListener("keydown",function(e){ if(e.key==="Enter") el("btnLockEnter").click(); });
 el("btnLogoutAdmin").addEventListener("click",function(){
+  detenerRefresco();
   try{ localStorage.removeItem(TOKEN_KEY); }catch(e){}
   token=null; lock("Ingresa tu clave de admin.");
 });
@@ -766,7 +795,7 @@ function downloadBlob(blob,name){
   try{ token=localStorage.getItem(TOKEN_KEY); }catch(e){}
   if(!token){ lock(""); return; }
   setSync("Conectando…","");
-  recargar().catch(function(e){
+  recargar().then(iniciarRefresco).catch(function(e){
     if(e&&e.auth){ lock("Tu clave ya no es válida."); return; }
     setSync("Sin conexión ✗","err"); toast("No se pudo conectar con la API");
   });
