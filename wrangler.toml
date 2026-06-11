@@ -20,3 +20,7 @@ run_worker_first = ["/api/*"]
 binding = "DB"
 database_name = "profesormvt-crm"
 database_id = "e0c9c96a-5f17-4ae1-b2c8-b5e692fe0849"
+
+[[r2_buckets]]
+binding = "RECURSOS_R2"
+bucket_name = "profesormvt-recursos"

@@ -202,13 +202,15 @@
     <div class="group">
       <h2>// Publicar recurso</h2>
       <div class="frow">
+        <div class="field"><label>Tipo</label><select id="rec_tipo"><option value="link">Link</option><option value="pdf">Archivo PDF</option></select></div>
         <div class="field"><label>Título</label><input id="rec_titulo" type="text" placeholder="Guía de calentamiento vocal" /></div>
-        <div class="field"><label>Link</label><input id="rec_url" type="text" placeholder="https://..." /></div>
       </div>
       <div class="frow">
-        <div class="field"><label>Descripción (opcional)</label><input id="rec_desc" type="text" /></div>
+        <div class="field" id="rec_url_wrap"><label>Link</label><input id="rec_url" type="text" placeholder="https://..." /></div>
+        <div class="field hidden" id="rec_file_wrap"><label>Archivo PDF (máx. 15 MB)</label><input id="rec_file" type="file" accept="application/pdf" /></div>
         <div class="field"><label>Curso</label><select id="rec_curso"><option>Todos</option><option>Canto</option><option>Piano</option><option>Composición</option></select></div>
       </div>
+      <div class="field"><label>Descripción (opcional)</label><input id="rec_desc" type="text" /></div>
       <button class="btn" id="btnPublicarRec">Publicar</button>
     </div>
     <div class="group">
@@ -657,9 +659,10 @@ function renderRecursos(){
   if(rec.length===0){ tb.innerHTML='<tr><td colspan="6" class="empty">Aún no has publicado recursos.</td></tr>'; return; }
   tb.innerHTML=rec.map(function(r){
     var urlCorta=String(r.url||'').replace(/^https?:\/\//,'').slice(0,42);
+    var esPdf=String(r.url||'').indexOf('/api/recurso/archivo/')===0;
     return '<tr>'+
       '<td class="mini">'+esc(r.fecha||'')+'</td>'+
-      '<td class="name">'+esc(r.titulo||'')+'</td>'+
+      '<td class="name">'+esc(r.titulo||'')+(esPdf?' <span class="pill gray" style="padding:2px 6px;font-size:9px">PDF</span>':'')+'</td>'+
       '<td><span class="pill gray">'+esc(r.curso||'Todos')+'</span></td>'+
       '<td class="mini"><a href="'+esc(r.url||'#')+'" target="_blank" rel="noopener">'+esc(urlCorta)+'</a></td>'+
       '<td class="notes">'+esc(r.descripcion||'')+'</td>'+
@@ -848,20 +851,56 @@ el("btnGuardarAjustes").addEventListener("click",function(){
 });
 
 /* ---------- Recursos ---------- */
+el("rec_tipo").addEventListener("change",function(){
+  var pdf = el("rec_tipo").value==="pdf";
+  el("rec_url_wrap").classList.toggle("hidden", pdf);
+  el("rec_file_wrap").classList.toggle("hidden", !pdf);
+});
+function limpiarFormRecurso(){
+  el("rec_titulo").value=""; el("rec_url").value=""; el("rec_desc").value="";
+  el("rec_curso").value="Todos"; el("rec_file").value="";
+}
 el("btnPublicarRec").addEventListener("click",function(){
-  var titulo=el("rec_titulo").value.trim(), urlR=el("rec_url").value.trim(),
-      desc=el("rec_desc").value.trim(), curso=el("rec_curso").value;
+  var titulo=el("rec_titulo").value.trim(), desc=el("rec_desc").value.trim(), curso=el("rec_curso").value;
   if(titulo.length<2){ toast("Ponle un título al recurso"); return; }
+  var btn=el("btnPublicarRec");
+
+  if(el("rec_tipo").value==="pdf"){
+    var f = el("rec_file").files && el("rec_file").files[0];
+    if(!f){ toast("Elige un archivo PDF"); return; }
+    if(!(f.type==="application/pdf" || /\.pdf$/i.test(f.name)) || f.size > 15*1024*1024){
+      toast("Solo PDFs de hasta 15 MB."); return;
+    }
+    var fd=new FormData();
+    fd.append("archivo", f); fd.append("titulo", titulo);
+    fd.append("descripcion", desc); fd.append("curso", curso);
+    btn.disabled=true; var prevTxt=btn.textContent; btn.textContent="Subiendo…";
+    // OJO: sin content-type manual — el navegador pone el boundary del multipart
+    fetch("/api/admin/recurso/archivo",{method:"POST",headers:{"authorization":"Bearer "+token},body:fd})
+      .then(function(r){
+        return r.json().catch(function(){return {};}).then(function(d){
+          if(r.status===401) throw {auth:true};
+          if(!r.ok) throw new Error(d.error||("HTTP "+r.status));
+        });
+      })
+      .then(function(){ limpiarFormRecurso(); return recargar(); })
+      .then(function(){ toast("PDF publicado"); })
+      .catch(function(e){
+        if(e&&e.auth){ lock("Tu clave ya no es válida."); }
+        toast((e&&e.message)||"No se pudo subir");
+      })
+      .finally(function(){ btn.disabled=false; btn.textContent=prevTxt; });
+    return;
+  }
+
+  var urlR=el("rec_url").value.trim();
   if(!/^https?:\/\//i.test(urlR)){ toast("El link debe empezar con http:// o https://"); return; }
-  el("btnPublicarRec").disabled=true;
+  btn.disabled=true;
   apiPost("/api/admin/recurso",{accion:"crear",titulo:titulo,url:urlR,descripcion:desc,curso:curso})
-    .then(function(){
-      el("rec_titulo").value=""; el("rec_url").value=""; el("rec_desc").value=""; el("rec_curso").value="Todos";
-      return recargar();
-    })
+    .then(function(){ limpiarFormRecurso(); return recargar(); })
     .then(function(){ toast("Recurso publicado"); })
     .catch(function(e){ toast((e&&e.message)||"No se pudo publicar"); })
-    .finally(function(){ el("btnPublicarRec").disabled=false; });
+    .finally(function(){ btn.disabled=false; });
 });
 document.body.addEventListener("click",function(e){
   var dr=e.target.closest("[data-delrec]");

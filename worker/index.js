@@ -269,6 +269,21 @@ export default {
         return json({ google_client_id: cfg.google_client_id || "" });
       }
 
+      /* ============ ARCHIVO DE RECURSO (PDF servido desde R2) ============ */
+      if (url.pathname.startsWith("/api/recurso/archivo/") && request.method === "GET"){
+        const key = url.pathname.slice("/api/recurso/archivo/".length);
+        if (!/^[a-f0-9-]{36}\.pdf$/.test(key)) return json({ error: "Archivo no encontrado" }, 404);
+        const obj = await env.RECURSOS_R2.get(key);
+        if (!obj) return json({ error: "Archivo no encontrado" }, 404);
+        return new Response(obj.body, {
+          headers: {
+            "content-type": "application/pdf",
+            "content-disposition": (obj.httpMetadata && obj.httpMetadata.contentDisposition) || "inline",
+            "cache-control": "public, max-age=3600"
+          }
+        });
+      }
+
       /* ============ REGISTRO (ahora acepta ref opcional) ============ */
       if (url.pathname === "/api/registro" && request.method === "POST"){
         const b = await request.json().catch(() => ({}));
@@ -615,10 +630,47 @@ export default {
             return json({ ok: true });
           }
           if (b.accion === "borrar"){
-            await env.DB.prepare("DELETE FROM recursos WHERE id = ?1").bind(String(b.id || "")).run();
+            const idRec = String(b.id || "");
+            // Cascade: si el recurso es un PDF subido, borrar primero el objeto en R2
+            const rec = await env.DB.prepare("SELECT url FROM recursos WHERE id = ?1").bind(idRec).first();
+            if (rec && typeof rec.url === "string" && rec.url.startsWith("/api/recurso/archivo/")){
+              const key = rec.url.slice("/api/recurso/archivo/".length);
+              try { await env.RECURSOS_R2.delete(key); } catch (e) { /* un huérfano en R2 no bloquea el borrado */ }
+            }
+            await env.DB.prepare("DELETE FROM recursos WHERE id = ?1").bind(idRec).run();
             return json({ ok: true });
           }
           return json({ error: "Acción no válida" }, 400);
+        }
+
+        /* -------- Recursos: subir archivo PDF a R2 -------- */
+        if (url.pathname === "/api/admin/recurso/archivo" && request.method === "POST"){
+          const form = await request.formData().catch(() => null);
+          if (!form) return json({ error: "Formulario inválido" }, 400);
+          const archivo = form.get("archivo");
+          const titulo = String(form.get("titulo") || "").trim();
+          const descripcion = String(form.get("descripcion") || "").trim().slice(0, 300);
+          const cursos = ["Todos", "Canto", "Piano", "Composición"];
+          const curso = cursos.includes(form.get("curso")) ? form.get("curso") : "Todos";
+          if (titulo.length < 2) return json({ error: "Ponle un título al recurso." }, 400);
+
+          const esArchivo = archivo && typeof archivo !== "string" && typeof archivo.arrayBuffer === "function";
+          const esPdf = esArchivo && (archivo.type === "application/pdf" || /\.pdf$/i.test(archivo.name || ""));
+          if (!esPdf || archivo.size > 15 * 1024 * 1024){
+            return json({ error: "Solo PDFs de hasta 15 MB." }, 400);
+          }
+
+          const key = crypto.randomUUID() + ".pdf";
+          const nombreLimpio = (String(archivo.name || "documento.pdf")
+            .replace(/["\\\x00-\x1f\x7f]/g, "").slice(0, 80)) || "documento.pdf";
+          // R2 acepta el File/Blob directo (longitud conocida); un stream suelto sería rechazado
+          await env.RECURSOS_R2.put(key, archivo, {
+            httpMetadata: { contentType: "application/pdf", contentDisposition: 'inline; filename="' + nombreLimpio + '"' }
+          });
+          await env.DB.prepare(
+            "INSERT INTO recursos (id,titulo,descripcion,url,curso,fecha) VALUES (?1,?2,?3,?4,?5,?6)"
+          ).bind(crypto.randomUUID(), titulo, descripcion, "/api/recurso/archivo/" + key, curso, hoy()).run();
+          return json({ ok: true });
         }
 
         if (url.pathname === "/api/admin/compra" && request.method === "POST"){

@@ -746,8 +746,9 @@ function renderComunidad(){
   if(rec.length===0){ $("recList").innerHTML=""; show("recVacio"); return; }
   hide("recVacio");
   $("recList").innerHTML = rec.map(function(r){
+    var esPdf = String(r.url||"").indexOf("/api/recurso/archivo/")===0;
     return '<div class="card rec">'+
-      '<div class="rec-top"><span class="rtag">'+esc(r.curso||"Todos")+'</span><span class="rfecha">'+esc(r.fecha||"")+'</span></div>'+
+      '<div class="rec-top"><span><span class="rtag">'+esc(r.curso||"Todos")+'</span>'+(esPdf?' <span class="rtag">PDF</span>':'')+'</span><span class="rfecha">'+esc(r.fecha||"")+'</span></div>'+
       '<h3>'+esc(r.titulo||"")+'</h3>'+
       (r.descripcion?'<p>'+esc(r.descripcion)+'</p>':'')+
       '<a class="btn ghost sm" href="'+esc(r.url||"#")+'" target="_blank" rel="noopener">Abrir →</a>'+
