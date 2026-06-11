@@ -472,6 +472,25 @@ var toastT;
 function toast(msg){ var t=$("toast"); t.textContent=msg; t.classList.add("show"); clearTimeout(toastT); toastT=setTimeout(function(){t.classList.remove("show");},2600); }
 function setPantalla(p){ ["viewLoading","viewAuth","app"].forEach(hide); show(p); }
 function kv(lab,vHtml){ return '<div class="kv"><div class="lab">'+lab+'</div><div class="v">'+vHtml+'</div></div>'; }
+/* tarea_audio: JSON array [{u,n}] (nuevo) o string con un solo url (formato viejo) */
+function parseAudios(v){
+  v=String(v==null?"":v).trim();
+  if(!v) return [];
+  if(v.charAt(0)==="["){
+    try{ var a=JSON.parse(v); return Array.isArray(a)?a.filter(function(x){return x&&typeof x.u==="string"&&x.u;}):[]; }
+    catch(e){ return []; }
+  }
+  return [{u:v,n:"Audio"}];
+}
+function audiosDe(r){ return (r && r.tarea_audios) ? r.tarea_audios : parseAudios(r && r.tarea_audio); }
+function audioPlayersHtml(audios, full){
+  return audios.map(function(a){
+    return '<div style="margin-top:8px">'+
+      '<div class="lab" style="font-size:10px;margin-bottom:3px">♪ '+esc(a.n||"Audio")+'</div>'+
+      '<audio controls preload="none" src="'+esc(a.u)+'" style="'+(full?'width:100%':'display:block;width:210px;max-width:100%;height:30px')+'"></audio>'+
+    '</div>';
+  }).join("");
+}
 
 function api(path, opts){
   opts = opts || {};
@@ -613,12 +632,10 @@ function renderInicio(){
 /* ---------- VISTA: MIS CLASES ---------- */
 function renderClases(){
   var h = (ME.alumno && ME.alumno.historial) || [];
-  var con = h.find(function(r){ return (r.tarea && String(r.tarea).trim()) || r.tarea_audio; });
+  var con = h.find(function(r){ return (r.tarea && String(r.tarea).trim()) || audiosDe(r).length; });
   if(con){
     $("cTareaTxt").textContent = con.tarea || "";
-    $("cTareaAudio").innerHTML = con.tarea_audio
-      ? '<audio controls preload="none" src="'+esc(con.tarea_audio)+'" style="width:100%"></audio>'
-      : "";
+    $("cTareaAudio").innerHTML = audioPlayersHtml(audiosDe(con), true);
     $("cTareaMeta").textContent = "De tu clase del " + (con.fecha||"—");
     show("cTarea");
   } else hide("cTarea");
@@ -626,9 +643,7 @@ function renderClases(){
   show("cWrap"); hide("cVacio");
   $("cTabla").querySelector("tbody").innerHTML = h.map(function(r){
     var pc = r.estado==="Asistió"?"green":(r.estado==="Reprogramó"?"amber":"gray");
-    var audioCell = r.tarea_audio
-      ? '<audio controls preload="none" src="'+esc(r.tarea_audio)+'" style="display:block;width:210px;max-width:100%;height:30px;margin-top:6px"></audio>'
-      : "";
+    var audioCell = audioPlayersHtml(audiosDe(r), false);
     return '<tr><td class="mono">'+esc(r.fecha||"")+'</td>'+
       '<td><span class="pill '+pc+'">'+esc(r.estado||"")+'</span></td>'+
       '<td>'+esc(r.trabajo||"")+'</td><td class="mut">'+esc(r.tarea||"")+audioCell+'</td></tr>';

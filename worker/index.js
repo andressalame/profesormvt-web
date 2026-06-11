@@ -77,6 +77,18 @@ function nombreArchivoLimpio(n){
   }
   return out.slice(0, 80) || "archivo";
 }
+/* registro.tarea_audio: JSON array [{u,n}] (nuevo) o string con un solo url (formato viejo) */
+function parseAudios(valor){
+  const v = String(valor == null ? "" : valor).trim();
+  if (!v) return [];
+  if (v.startsWith("[")){
+    try {
+      const arr = JSON.parse(v);
+      return Array.isArray(arr) ? arr.filter(a => a && typeof a.u === "string" && a.u) : [];
+    } catch (e) { return []; }
+  }
+  return [{ u: v, n: "Audio" }];
+}
 
 /* base64url -> bytes (soporta unicode en el payload del JWT) */
 function b64uBytes(s){
@@ -448,7 +460,7 @@ export default {
             const { results } = await env.DB.prepare(
               "SELECT fecha, estado, trabajo, tarea, COALESCE(tarea_audio,'') AS tarea_audio FROM registro WHERE alumno_id = ?1 AND COALESCE(ciclo,1) = ?2 ORDER BY fecha ASC, id ASC"
             ).bind(alumno.id, ciclo).all();
-            historial = results || [];
+            historial = (results || []).map(r => Object.assign({}, r, { tarea_audios: parseAudios(r.tarea_audio) }));
             computed = compute(alumno, historial, precios);
             const ch = await env.DB.prepare(
               "SELECT COUNT(*) AS n FROM registro WHERE alumno_id = ?1 AND estado = 'Asistió'"
@@ -691,7 +703,7 @@ export default {
           return json({ ok: true });
         }
 
-        /* -------- Audio de tarea por clase (subir / borrar) -------- */
+        /* -------- Audios de tarea por clase (hasta 5; subir / borrar uno) -------- */
         if (url.pathname === "/api/admin/registro/audio" && request.method === "POST"){
           const form = await request.formData().catch(() => null);
           if (!form) return json({ error: "Formulario inválido" }, 400);
@@ -699,19 +711,28 @@ export default {
           const reg = await env.DB.prepare("SELECT id, COALESCE(tarea_audio,'') AS tarea_audio FROM registro WHERE id = ?1").bind(registroId).first();
           if (!reg) return json({ error: "Registro no encontrado" }, 404);
 
-          const borrarViejo = async () => {
-            if (reg.tarea_audio && reg.tarea_audio.startsWith("/api/recurso/archivo/")){
-              const oldKey = reg.tarea_audio.slice("/api/recurso/archivo/".length);
-              try { await env.RECURSOS_R2.delete(oldKey); } catch (e) { /* huérfano no bloquea */ }
-            }
+          const lista = parseAudios(reg.tarea_audio);
+          const guardarLista = async (l) => {
+            await env.DB.prepare("UPDATE registro SET tarea_audio = ?1 WHERE id = ?2")
+              .bind(l.length ? JSON.stringify(l) : "", registroId).run();
           };
 
           if (form.get("accion") === "borrar"){
-            await borrarViejo();
-            await env.DB.prepare("UPDATE registro SET tarea_audio = '' WHERE id = ?1").bind(registroId).run();
-            return json({ ok: true });
+            const urlB = String(form.get("url") || "");
+            const idx = lista.findIndex(a => a.u === urlB);
+            if (idx < 0) return json({ error: "Audio no encontrado" }, 404);
+            if (urlB.startsWith("/api/recurso/archivo/")){
+              const oldKey = urlB.slice("/api/recurso/archivo/".length);
+              try { await env.RECURSOS_R2.delete(oldKey); } catch (e) { /* huérfano no bloquea */ }
+            }
+            lista.splice(idx, 1);
+            await guardarLista(lista);
+            return json({ ok: true, audios: lista });
           }
 
+          if (lista.length >= 5){
+            return json({ error: "Máximo 5 audios por clase. Quita uno primero." }, 400);
+          }
           const archivo = form.get("archivo");
           const esArchivo = archivo && typeof archivo !== "string" && typeof archivo.arrayBuffer === "function";
           const ext = esArchivo ? extArchivo(archivo.name) : null;
@@ -719,14 +740,14 @@ export default {
             return json({ error: "Solo audios mp3/m4a/ogg/wav de hasta 25 MB." }, 400);
           }
 
-          await borrarViejo(); // reemplazo sin huérfanos
           const key = crypto.randomUUID() + "." + ext;
+          const nombre = nombreArchivoLimpio(archivo.name);
           await env.RECURSOS_R2.put(key, archivo, {
-            httpMetadata: { contentType: MIME_ARCHIVO[ext], contentDisposition: 'inline; filename="' + nombreArchivoLimpio(archivo.name) + '"' }
+            httpMetadata: { contentType: MIME_ARCHIVO[ext], contentDisposition: 'inline; filename="' + nombre + '"' }
           });
-          const urlAudio = "/api/recurso/archivo/" + key;
-          await env.DB.prepare("UPDATE registro SET tarea_audio = ?1 WHERE id = ?2").bind(urlAudio, registroId).run();
-          return json({ ok: true, url: urlAudio });
+          lista.push({ u: "/api/recurso/archivo/" + key, n: nombre });
+          await guardarLista(lista);
+          return json({ ok: true, audios: lista });
         }
 
         if (url.pathname === "/api/admin/compra" && request.method === "POST"){

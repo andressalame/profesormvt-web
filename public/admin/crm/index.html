@@ -148,7 +148,8 @@
   </section>
 
   <section class="panel" id="panel-alumnos">
-    <div style="margin-bottom:16px;"><button class="btn" id="btnNuevoAlumno">+ Nuevo alumno</button></div>
+    <div style="margin-bottom:10px;"><button class="btn" id="btnNuevoAlumno">+ Nuevo alumno</button></div>
+    <p class="hint" style="margin-bottom:16px;">¿Te equivocaste registrando una clase? Edita o borra esa fila en REGISTRO — el saldo se recalcula solo.</p>
     <div class="tablewrap">
       <table id="tablaAlumnos">
         <thead><tr>
@@ -281,7 +282,8 @@
     </div>
     <div class="frow">
       <div class="field"><label>Curso</label><select id="a_curso"><option>Canto</option><option>Piano</option><option>Composición</option></select></div>
-      <div class="field"><label>Paquete</label><select id="a_paquete"></select></div>
+      <div class="field"><label>Paquete</label><select id="a_paquete"></select>
+        <p class="hint" style="margin:6px 0 0;">Cambiar el paquete recalcula las clases restantes del ciclo actual.</p></div>
     </div>
     <div class="frow">
       <div class="field"><label>Fecha de compra</label><input id="a_fecha" type="date" /></div>
@@ -363,6 +365,16 @@ var prevPendientes = 0;
 function el(id){ return document.getElementById(id); }
 function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(m){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m];}); }
 function uid(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,7); }
+/* tarea_audio: JSON array [{u,n}] (nuevo) o string con un solo url (formato viejo) */
+function parseAudios(v){
+  v=String(v==null?'':v).trim();
+  if(!v) return [];
+  if(v.charAt(0)==='['){
+    try{ var a=JSON.parse(v); return Array.isArray(a)?a.filter(function(x){return x&&typeof x.u==='string'&&x.u;}):[]; }
+    catch(e){ return []; }
+  }
+  return [{u:v,n:'Audio'}];
+}
 function setSync(txt,cls){ var d=el("syncdot"); d.textContent=txt; d.className="syncdot "+(cls||""); }
 var toastT;
 function toast(msg, dur){ var t=el("toast"); t.textContent=msg; t.classList.add("show"); clearTimeout(toastT); toastT=setTimeout(function(){t.classList.remove("show");}, dur||2400); }
@@ -559,11 +571,15 @@ function renderRegistro(){
   var sorted=db.registro.slice().sort(function(x,y){return (y.fecha||"").localeCompare(x.fecha||"");});
   tb.innerHTML=sorted.map(function(r){
     var pc=r.estado==="Asistió"?"green":(r.estado==="Reprogramó"?"amber":"red");
-    var audioBtns = r.tarea_audio
-      ? '<span class="pill gray" style="padding:2px 6px;font-size:9px">♪ audio</span>'+
-        '<button class="btn ghost sm" data-audiocambiar="'+r.id+'">Cambiar</button>'+
-        '<button class="btn ghost sm" data-audioquitar="'+r.id+'">Quitar</button>'
-      : '<button class="btn ghost sm" data-audiocambiar="'+r.id+'">♪ Adjuntar audio</button>';
+    var audios = parseAudios(r.tarea_audio);
+    var audioBtns = audios.map(function(a){
+      return '<span class="pill gray" style="padding:2px 6px;font-size:9px">♪ '+esc(a.n||'Audio')+
+        ' <button data-audioquitar="'+r.id+'" data-audiourl="'+esc(a.u)+'" title="Quitar este audio" '+
+        'style="background:none;border:0;color:var(--red);font-weight:700;padding:0 1px;cursor:pointer">×</button></span>';
+    }).join('');
+    audioBtns += (audios.length>=5)
+      ? '<button class="btn ghost sm" disabled title="Máximo 5">♪ Añadir audio</button>'
+      : '<button class="btn ghost sm" data-audiocambiar="'+r.id+'">♪ Añadir audio</button>';
     return '<tr>'+
       '<td class="mini">'+esc(r.fecha||'')+'</td>'+
       '<td class="name">'+esc(nombreDe(r.alumnoId||r.alumno_id))+'</td>'+
@@ -937,8 +953,9 @@ function postAudio(fd){
 document.body.addEventListener("click",function(e){
   var ac=e.target.closest("[data-audiocambiar]"), aq=e.target.closest("[data-audioquitar]");
   if(ac){ audioRegId=ac.dataset.audiocambiar; el("fileAudio").value=""; el("fileAudio").click(); }
-  if(aq && confirm("¿Quitar el audio de esta clase?")){
+  if(aq && confirm("¿Quitar este audio?")){
     var fd=new FormData(); fd.append("registro_id",aq.dataset.audioquitar); fd.append("accion","borrar");
+    fd.append("url",aq.dataset.audiourl||"");
     postAudio(fd)
       .then(function(){ return recargar(); })
       .then(function(){ toast("Audio quitado"); })
@@ -964,7 +981,7 @@ el("fileAudio").addEventListener("change",function(e){
     .catch(function(err){
       if(err&&err.auth){ lock("Tu clave ya no es válida."); }
       toast((err&&err.message)||"No se pudo subir");
-      if(btn){ btn.disabled=false; btn.textContent="♪ Adjuntar audio"; }
+      if(btn){ btn.disabled=false; btn.textContent="♪ Añadir audio"; }
     })
     .finally(function(){ audioRegId=null; el("fileAudio").value=""; });
 });
