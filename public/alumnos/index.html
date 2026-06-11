@@ -537,11 +537,27 @@ function parseAudios(v){
   return [{u:v,n:"Audio"}];
 }
 function audiosDe(r){ return (r && r.tarea_audios) ? r.tarea_audios : parseAudios(r && r.tarea_audio); }
-function audioPlayersHtml(audios, full){
-  return audios.map(function(a){
-    return '<div style="margin-top:8px">'+
-      '<div class="lab" style="font-size:10px;margin-bottom:3px">♪ '+esc(a.n||"Audio")+'</div>'+
-      '<audio controls preload="none" src="'+esc(a.u)+'" style="'+(full?'width:100%':'display:block;width:210px;max-width:100%;height:30px')+'"></audio>'+
+function tipoAdjunto(u){
+  var m=String(u||"").toLowerCase().match(/\.(pdf|mp3|m4a|ogg|wav|png|jpg|jpeg)$/);
+  if(!m) return "AUDIO";
+  if(m[1]==="pdf") return "PDF";
+  if(m[1]==="png"||m[1]==="jpg"||m[1]==="jpeg") return "IMG";
+  return "AUDIO";
+}
+function adjuntosHtml(adjuntos, full){
+  return adjuntos.map(function(a){
+    var tipo = tipoAdjunto(a.u);
+    if(tipo==="AUDIO"){
+      return '<div style="margin-top:8px">'+
+        '<div class="lab" style="font-size:10px;margin-bottom:3px">♪ '+esc(a.n||"Audio")+'</div>'+
+        '<audio controls preload="none" src="'+esc(a.u)+'" style="'+(full?'width:100%':'display:block;width:210px;max-width:100%;height:30px')+'"></audio>'+
+      '</div>';
+    }
+    return '<div style="margin-top:8px;display:flex;align-items:center;gap:8px;'+(full?'':'max-width:240px;')+
+      'background:var(--bg);border:1px solid var(--line);border-radius:3px;padding:7px 10px;text-align:left;">'+
+      '<span class="rtag" style="flex:0 0 auto">'+tipo+'</span>'+
+      '<span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12.5px;">'+esc(a.n||tipo)+'</span>'+
+      '<a class="btn ghost sm" style="flex:0 0 auto;padding:5px 9px;font-size:10px;" href="'+esc(a.u)+'" target="_blank" rel="noopener">Abrir →</a>'+
     '</div>';
   }).join("");
 }
@@ -689,7 +705,7 @@ function renderClases(){
   var con = h.find(function(r){ return (r.tarea && String(r.tarea).trim()) || audiosDe(r).length; });
   if(con){
     $("cTareaTxt").textContent = con.tarea || "";
-    $("cTareaAudio").innerHTML = audioPlayersHtml(audiosDe(con), true);
+    $("cTareaAudio").innerHTML = adjuntosHtml(audiosDe(con), true);
     $("cTareaMeta").textContent = "De tu clase del " + (con.fecha||"—");
     show("cTarea");
   } else hide("cTarea");
@@ -697,7 +713,7 @@ function renderClases(){
   show("cWrap"); hide("cVacio");
   $("cTabla").querySelector("tbody").innerHTML = h.map(function(r){
     var pc = r.estado==="Asistió"?"green":(r.estado==="Reprogramó"?"amber":"gray");
-    var audioCell = audioPlayersHtml(audiosDe(r), false);
+    var audioCell = adjuntosHtml(audiosDe(r), false);
     return '<tr><td class="mono">'+esc(r.fecha||"")+'</td>'+
       '<td><span class="pill '+pc+'">'+esc(r.estado||"")+'</span></td>'+
       '<td>'+esc(r.trabajo||"")+'</td><td class="mut">'+esc(r.tarea||"")+audioCell+'</td></tr>';
@@ -833,8 +849,7 @@ function renderRecursos(){
   hide("recVacio");
   $("recList").innerHTML = rec.map(function(r){
     var urlRec = String(r.url||"");
-    var extm = urlRec.toLowerCase().match(/\.(pdf|mp3|m4a|ogg|wav)$/);
-    var tagA = (urlRec.indexOf("/api/recurso/archivo/")===0 && extm) ? (extm[1]==="pdf"?"PDF":"AUDIO") : "";
+    var tagA = (urlRec.indexOf("/api/recurso/archivo/")===0) ? tipoAdjunto(urlRec) : "";
     return '<div class="card rec">'+
       '<div class="rec-top"><span><span class="rtag">'+esc(r.curso||"Todos")+'</span>'+(tagA?' <span class="rtag">'+tagA+'</span>':'')+'</span><span class="rfecha">'+esc(r.fecha||"")+'</span></div>'+
       '<h3>'+esc(r.titulo||"")+'</h3>'+

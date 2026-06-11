@@ -164,7 +164,7 @@
 
   <section class="panel" id="panel-registro">
     <div style="margin-bottom:16px;"><button class="btn" id="btnNuevoRegistro">+ Registrar clase</button></div>
-    <input type="file" id="fileAudio" accept="audio/*" style="display:none" />
+    <input type="file" id="fileAudio" accept="audio/*,application/pdf,image/png,image/jpeg" style="display:none" />
     <div class="tablewrap">
       <table id="tablaRegistro">
         <thead><tr>
@@ -205,12 +205,12 @@
     <div class="group">
       <h2>// Publicar recurso</h2>
       <div class="frow">
-        <div class="field"><label>Tipo</label><select id="rec_tipo"><option value="link">Link</option><option value="pdf">Archivo (PDF o audio)</option></select></div>
+        <div class="field"><label>Tipo</label><select id="rec_tipo"><option value="link">Link</option><option value="pdf">Archivo (PDF, audio o imagen)</option></select></div>
         <div class="field"><label>Título</label><input id="rec_titulo" type="text" placeholder="Guía de calentamiento vocal" /></div>
       </div>
       <div class="frow">
         <div class="field" id="rec_url_wrap"><label>Link</label><input id="rec_url" type="text" placeholder="https://..." /></div>
-        <div class="field hidden" id="rec_file_wrap"><label>Archivo PDF o audio (máx. 25 MB)</label><input id="rec_file" type="file" accept="application/pdf,audio/*" /></div>
+        <div class="field hidden" id="rec_file_wrap"><label>Archivo PDF, audio o imagen (máx. 25 MB)</label><input id="rec_file" type="file" accept="application/pdf,audio/*,image/png,image/jpeg" /></div>
         <div class="field"><label>Curso</label><select id="rec_curso"><option>Todos</option><option>Canto</option><option>Piano</option><option>Composición</option></select></div>
       </div>
       <div class="field"><label>Descripción (opcional)</label><input id="rec_desc" type="text" /></div>
@@ -388,6 +388,13 @@ function parseAudios(v){
     catch(e){ return []; }
   }
   return [{u:v,n:'Audio'}];
+}
+function tipoAdjunto(u){
+  var m=String(u||'').toLowerCase().match(/\.(pdf|mp3|m4a|ogg|wav|png|jpg|jpeg)$/);
+  if(!m) return 'AUDIO';
+  if(m[1]==='pdf') return 'PDF';
+  if(m[1]==='png'||m[1]==='jpg'||m[1]==='jpeg') return 'IMG';
+  return 'AUDIO';
 }
 function setSync(txt,cls){ var d=el("syncdot"); d.textContent=txt; d.className="syncdot "+(cls||""); }
 var toastT;
@@ -587,13 +594,15 @@ function renderRegistro(){
     var pc=r.estado==="Asistió"?"green":(r.estado==="Reprogramó"?"amber":"red");
     var audios = parseAudios(r.tarea_audio);
     var audioBtns = audios.map(function(a){
-      return '<span class="pill gray" style="padding:2px 6px;font-size:9px">♪ '+esc(a.n||'Audio')+
-        ' <button data-audioquitar="'+r.id+'" data-audiourl="'+esc(a.u)+'" title="Quitar este audio" '+
+      var tipo = tipoAdjunto(a.u);
+      return '<span class="pill gray" style="padding:2px 6px;font-size:9px">'+
+        '<span style="color:var(--accent);font-weight:700">'+tipo+'</span> '+esc(a.n||tipo)+
+        ' <button data-audioquitar="'+r.id+'" data-audiourl="'+esc(a.u)+'" title="Quitar este adjunto" '+
         'style="background:none;border:0;color:var(--red);font-weight:700;padding:0 1px;cursor:pointer">×</button></span>';
     }).join('');
-    audioBtns += (audios.length>=5)
-      ? '<button class="btn ghost sm" disabled title="Máximo 5">♪ Añadir audio</button>'
-      : '<button class="btn ghost sm" data-audiocambiar="'+r.id+'">♪ Añadir audio</button>';
+    audioBtns += (audios.length>=8)
+      ? '<button class="btn ghost sm" disabled title="Máximo 8">+ Adjuntar</button>'
+      : '<button class="btn ghost sm" data-audiocambiar="'+r.id+'">+ Adjuntar</button>';
     return '<tr>'+
       '<td class="mini">'+esc(r.fecha||'')+'</td>'+
       '<td class="name">'+esc(nombreDe(r.alumnoId||r.alumno_id))+'</td>'+
@@ -696,8 +705,7 @@ function renderRecursos(){
   tb.innerHTML=rec.map(function(r){
     var urlCorta=String(r.url||'').replace(/^https?:\/\//,'').slice(0,42);
     var urlRec=String(r.url||'');
-    var extm=urlRec.toLowerCase().match(/\.(pdf|mp3|m4a|ogg|wav)$/);
-    var tagArchivo=(urlRec.indexOf('/api/recurso/archivo/')===0 && extm) ? (extm[1]==='pdf'?'PDF':'AUDIO') : '';
+    var tagArchivo=(urlRec.indexOf('/api/recurso/archivo/')===0) ? tipoAdjunto(urlRec) : '';
     return '<tr>'+
       '<td class="mini">'+esc(r.fecha||'')+'</td>'+
       '<td class="name">'+esc(r.titulo||'')+(tagArchivo?' <span class="pill gray" style="padding:2px 6px;font-size:9px">'+tagArchivo+'</span>':'')+'</td>'+
@@ -971,8 +979,8 @@ el("btnPublicarRec").addEventListener("click",function(){
   if(el("rec_tipo").value==="pdf"){
     var f = el("rec_file").files && el("rec_file").files[0];
     if(!f){ toast("Elige un archivo PDF"); return; }
-    if(!/\.(pdf|mp3|m4a|ogg|wav)$/i.test(f.name) || f.size > 25*1024*1024){
-      toast("Solo PDFs o audios (mp3/m4a/ogg/wav) de hasta 25 MB."); return;
+    if(!/\.(pdf|mp3|m4a|ogg|wav|png|jpg|jpeg)$/i.test(f.name) || f.size > 25*1024*1024){
+      toast("Solo PDFs, audios (mp3/m4a/ogg/wav) o imágenes (png/jpg) de hasta 25 MB."); return;
     }
     var fd=new FormData();
     fd.append("archivo", f); fd.append("titulo", titulo);
@@ -1032,12 +1040,12 @@ function postAudio(fd){
 document.body.addEventListener("click",function(e){
   var ac=e.target.closest("[data-audiocambiar]"), aq=e.target.closest("[data-audioquitar]");
   if(ac){ audioRegId=ac.dataset.audiocambiar; el("fileAudio").value=""; el("fileAudio").click(); }
-  if(aq && confirm("¿Quitar este audio?")){
+  if(aq && confirm("¿Quitar este adjunto?")){
     var fd=new FormData(); fd.append("registro_id",aq.dataset.audioquitar); fd.append("accion","borrar");
     fd.append("url",aq.dataset.audiourl||"");
     postAudio(fd)
       .then(function(){ return recargar(); })
-      .then(function(){ toast("Audio quitado"); })
+      .then(function(){ toast("Adjunto quitado"); })
       .catch(function(err){
         if(err&&err.auth){ lock("Tu clave ya no es válida."); }
         toast((err&&err.message)||"No se pudo quitar");
@@ -1047,8 +1055,8 @@ document.body.addEventListener("click",function(e){
 el("fileAudio").addEventListener("change",function(e){
   var f=e.target.files && e.target.files[0];
   if(!f || !audioRegId) return;
-  if(!/\.(mp3|m4a|ogg|wav)$/i.test(f.name) || f.size>25*1024*1024){
-    toast("Solo audios mp3/m4a/ogg/wav de hasta 25 MB."); return;
+  if(!/\.(mp3|m4a|ogg|wav|pdf|png|jpg|jpeg)$/i.test(f.name) || f.size>25*1024*1024){
+    toast("Solo audios (mp3/m4a/ogg/wav), PDF o imágenes (png/jpg) de hasta 25 MB."); return;
   }
   var btn=document.querySelector('[data-audiocambiar="'+audioRegId+'"]');
   if(btn){ btn.disabled=true; btn.textContent="Subiendo…"; }
@@ -1056,11 +1064,11 @@ el("fileAudio").addEventListener("change",function(e){
   // OJO: sin content-type manual — el navegador pone el boundary del multipart
   postAudio(fd)
     .then(function(){ return recargar(); })
-    .then(function(){ toast("Audio adjuntado"); })
+    .then(function(){ toast("Adjunto subido"); })
     .catch(function(err){
       if(err&&err.auth){ lock("Tu clave ya no es válida."); }
       toast((err&&err.message)||"No se pudo subir");
-      if(btn){ btn.disabled=false; btn.textContent="♪ Añadir audio"; }
+      if(btn){ btn.disabled=false; btn.textContent="+ Adjuntar"; }
     })
     .finally(function(){ audioRegId=null; el("fileAudio").value=""; });
 });

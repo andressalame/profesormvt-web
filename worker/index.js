@@ -63,9 +63,10 @@ async function hashPass(password, saltHex){
 function emailOk(e){ return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(e); }
 
 /* ---------- archivos en R2 (PDF / audio) ---------- */
-const MIME_ARCHIVO = { pdf: "application/pdf", mp3: "audio/mpeg", m4a: "audio/mp4", ogg: "audio/ogg", wav: "audio/wav" };
+const MIME_ARCHIVO = { pdf: "application/pdf", mp3: "audio/mpeg", m4a: "audio/mp4", ogg: "audio/ogg", wav: "audio/wav",
+                       png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg" };
 function extArchivo(nombre){
-  const m = String(nombre || "").toLowerCase().match(/\.(pdf|mp3|m4a|ogg|wav)$/);
+  const m = String(nombre || "").toLowerCase().match(/\.(pdf|mp3|m4a|ogg|wav|png|jpg|jpeg)$/);
   return m ? m[1] : null;
 }
 /* nombre para content-disposition: sin comillas, backslashes ni caracteres de control */
@@ -319,7 +320,7 @@ export default {
       /* ============ ARCHIVO DE RECURSO (PDF / audio servido desde R2) ============ */
       if (url.pathname.startsWith("/api/recurso/archivo/") && request.method === "GET"){
         const key = url.pathname.slice("/api/recurso/archivo/".length);
-        const m = key.match(/^[a-f0-9-]{36}\.(pdf|mp3|m4a|ogg|wav)$/);
+        const m = key.match(/^[a-f0-9-]{36}\.(pdf|mp3|m4a|ogg|wav|png|jpg|jpeg)$/);
         if (!m) return json({ error: "Archivo no encontrado" }, 404);
         const obj = await env.RECURSOS_R2.get(key);
         if (!obj) return json({ error: "Archivo no encontrado" }, 404);
@@ -762,7 +763,7 @@ export default {
           const esArchivo = archivo && typeof archivo !== "string" && typeof archivo.arrayBuffer === "function";
           const ext = esArchivo ? extArchivo(archivo.name) : null;
           if (!ext || archivo.size > 25 * 1024 * 1024){
-            return json({ error: "Solo PDFs o audios (mp3/m4a/ogg/wav) de hasta 25 MB." }, 400);
+            return json({ error: "Solo PDFs, audios (mp3/m4a/ogg/wav) o imágenes (png/jpg) de hasta 25 MB." }, 400);
           }
 
           const key = crypto.randomUUID() + "." + ext;
@@ -777,7 +778,7 @@ export default {
           return json({ ok: true });
         }
 
-        /* -------- Audios de tarea por clase (hasta 5; subir / borrar uno) -------- */
+        /* -------- Adjuntos de tarea por clase (audio/PDF/imagen; hasta 8; subir / borrar uno) -------- */
         if (url.pathname === "/api/admin/registro/audio" && request.method === "POST"){
           const form = await request.formData().catch(() => null);
           if (!form) return json({ error: "Formulario inválido" }, 400);
@@ -804,14 +805,14 @@ export default {
             return json({ ok: true, audios: lista });
           }
 
-          if (lista.length >= 5){
-            return json({ error: "Máximo 5 audios por clase. Quita uno primero." }, 400);
+          if (lista.length >= 8){
+            return json({ error: "Máximo 8 adjuntos por clase. Quita uno primero." }, 400);
           }
           const archivo = form.get("archivo");
           const esArchivo = archivo && typeof archivo !== "string" && typeof archivo.arrayBuffer === "function";
           const ext = esArchivo ? extArchivo(archivo.name) : null;
-          if (!ext || ext === "pdf" || archivo.size > 25 * 1024 * 1024){
-            return json({ error: "Solo audios mp3/m4a/ogg/wav de hasta 25 MB." }, 400);
+          if (!ext || archivo.size > 25 * 1024 * 1024){
+            return json({ error: "Solo audios (mp3/m4a/ogg/wav), PDF o imágenes (png/jpg) de hasta 25 MB." }, 400);
           }
 
           const key = crypto.randomUUID() + "." + ext;
