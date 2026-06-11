@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Portal de alumnos v2 · ProfesorMVT — destino: public/alumnos/index.html -->
+<!-- Portal de alumnos v3 (Dashboard 2.0) · ProfesorMVT — destino: public/alumnos/index.html -->
 <html lang="es">
 <head>
 <meta charset="UTF-8" />
@@ -21,20 +21,47 @@
   *{box-sizing:border-box}
   html,body{margin:0}
   body{background:var(--bg);color:var(--cream);font-family:var(--body);font-size:15.5px;line-height:1.5;-webkit-font-smoothing:antialiased;}
-  .wrap{max-width:680px;margin:0 auto;padding:30px 20px 70px;}
   a{color:var(--accent);text-decoration:none}
-  a:hover{text-decoration:underline}
-  button{cursor:pointer}
+  button{cursor:pointer;font-family:var(--body)}
   .hidden{display:none!important}
+  a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--accent);outline-offset:2px;}
 
   .eyebrow{font-family:var(--mono);text-transform:uppercase;letter-spacing:.18em;font-size:11.5px;color:var(--accent);font-weight:700;}
-  h1{font-family:var(--display);font-weight:700;font-size:clamp(30px,7vw,44px);margin:.18em 0 .08em;line-height:1.04;}
+  h1{font-family:var(--display);font-weight:700;font-size:clamp(28px,5.5vw,40px);margin:.18em 0 .08em;line-height:1.04;}
   h1 em{font-style:italic;color:var(--accent);}
   .sub{font-family:var(--mono);text-transform:uppercase;letter-spacing:.12em;font-size:11px;color:var(--muted);}
-  .rule{height:3px;background:var(--accent);border:0;margin:16px 0 24px;}
+  .rule{height:3px;background:var(--accent);border:0;margin:14px 0 22px;}
+  .lab{font-family:var(--mono);text-transform:uppercase;letter-spacing:.1em;font-size:11px;color:var(--muted);}
+  .note{font-size:13px;color:var(--muted);line-height:1.55;}
+
+  .btn{font-family:var(--mono);text-transform:uppercase;letter-spacing:.08em;font-size:12.5px;font-weight:700;
+    padding:12px 18px;border-radius:3px;border:1px solid var(--accent);background:var(--accent);color:var(--bg);
+    display:inline-block;transition:filter .12s;}
+  .btn:hover{filter:brightness(1.12);}
+  .btn:active{transform:scale(.98);}
+  .btn[disabled]{opacity:.55;cursor:not-allowed;}
+  .btn.ghost{background:transparent;color:var(--cream);border-color:var(--line);font-weight:500;}
+  .btn.ghost:hover{border-color:var(--accent);color:var(--accent);filter:none;}
+  .btn.sm{padding:8px 13px;font-size:11.5px;}
+  .btn.no{background:transparent;border-color:var(--line);color:var(--muted);font-weight:500;}
+  .btn.no:hover{border-color:var(--red);color:var(--red);}
+
+  .pill{font-family:var(--mono);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;
+    padding:5px 11px;border-radius:2px;display:inline-block;}
+  .pill.green{background:rgba(95,138,82,.16);color:var(--green);border:1px solid var(--green);}
+  .pill.amber{background:rgba(217,154,60,.16);color:var(--amber);border:1px solid var(--amber);}
+  .pill.gray{background:transparent;color:var(--muted);border:1px solid var(--line);}
+
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:20px 22px;margin-bottom:14px;}
+  .card h3{font-family:var(--mono);text-transform:uppercase;letter-spacing:.12em;font-size:11px;color:var(--accent);font-weight:700;margin:0 0 12px;}
+  .banner{border:1px dashed var(--amber);border-radius:4px;padding:14px 16px;margin-bottom:14px;
+    font-size:14px;color:var(--amber);background:rgba(217,154,60,.07);}
+  .banner strong{font-family:var(--mono);font-size:11.5px;text-transform:uppercase;letter-spacing:.06em;}
+  .banner.naranja{border-color:var(--accent);color:var(--cream);background:rgba(204,78,31,.08);}
+  .banner.naranja strong{color:var(--accent);}
 
   /* ---------- AUTH ---------- */
-  .auth-card{max-width:440px;margin:6vh auto 0;}
+  .auth-card{max-width:440px;margin:6vh auto 0;padding:0 20px 70px;}
   .authtabs{display:flex;gap:6px;margin-bottom:20px;}
   .atab{flex:1;font-family:var(--mono);text-transform:uppercase;letter-spacing:.09em;font-size:12px;font-weight:500;
     color:var(--muted);background:transparent;border:1px solid var(--line);padding:11px 10px;border-radius:2px;transition:all .12s;}
@@ -43,86 +70,106 @@
   .field label{display:block;font-family:var(--mono);text-transform:uppercase;letter-spacing:.08em;font-size:10.5px;color:var(--muted);margin-bottom:6px;}
   .field input,.field select{width:100%;background:var(--panel);border:1px solid var(--line);color:var(--cream);
     font-family:var(--body);font-size:15px;padding:11px 12px;border-radius:3px;}
-  .field input:focus,.field select:focus{outline:2px solid var(--accent);outline-offset:1px;border-color:var(--accent);}
   .check{display:flex;gap:10px;align-items:flex-start;font-size:13px;color:var(--muted);margin:14px 0 4px;line-height:1.5;}
   .check input{width:16px;height:16px;margin-top:2px;accent-color:var(--accent);flex:0 0 auto;}
-  .btn{font-family:var(--mono);text-transform:uppercase;letter-spacing:.09em;font-size:13px;font-weight:700;
-    padding:13px 18px;border-radius:3px;border:1px solid var(--accent);background:var(--accent);color:var(--bg);
-    width:100%;margin-top:14px;transition:filter .12s;}
-  .btn:hover{filter:brightness(1.12);}
-  .btn[disabled]{opacity:.6;cursor:wait;}
-  .btn.ghost{background:transparent;color:var(--cream);border-color:var(--line);font-weight:500;width:auto;}
-  .btn.ghost:hover{border-color:var(--accent);color:var(--accent);filter:none;}
+  .btn.full{width:100%;margin-top:14px;}
   .err{color:var(--red);font-size:13.5px;margin-top:12px;min-height:1.2em;}
   .auth-hint{margin-top:18px;font-size:13px;color:var(--muted);line-height:1.55;}
+  .gwrap{margin-top:20px;}
+  .gwrap .or{font-family:var(--mono);font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);margin-bottom:14px;text-align:center;}
+  .gbtn{display:flex;justify-content:center;}
 
-  /* ---------- DASH ---------- */
-  .topbar{display:flex;justify-content:space-between;align-items:center;gap:12px;}
-  .linkbtn{background:none;border:none;color:var(--muted);font-family:var(--mono);font-size:11px;
-    text-transform:uppercase;letter-spacing:.09em;padding:6px 0;}
-  .linkbtn:hover{color:var(--accent);}
-  .lab{font-family:var(--mono);text-transform:uppercase;letter-spacing:.1em;font-size:11px;color:var(--muted);}
+  /* ---------- APP LAYOUT ---------- */
+  .app{display:flex;min-height:100vh;}
+  .side{width:230px;flex:0 0 230px;position:fixed;top:0;bottom:0;left:0;background:var(--panel);
+    border-right:1px solid var(--line);display:flex;flex-direction:column;padding:24px 14px 18px;z-index:50;}
+  .side .logo{font-family:var(--display);font-weight:700;font-size:21px;color:var(--cream);padding:0 10px;display:block;}
+  .side .logo em{font-style:italic;color:var(--accent);}
+  .side .logo .dot{display:inline-block;width:5px;height:5px;border-radius:50%;background:var(--accent);margin-left:3px;transform:translateY(-8px);}
+  .side .slab{font-family:var(--mono);font-size:9.5px;letter-spacing:.18em;text-transform:uppercase;color:var(--muted);padding:4px 10px 0;}
+  .side nav{display:flex;flex-direction:column;gap:4px;margin-top:26px;flex:1;}
+  .side nav a{display:flex;align-items:center;gap:11px;font-family:var(--mono);text-transform:uppercase;letter-spacing:.09em;
+    font-size:12px;font-weight:500;color:var(--muted);padding:11px 12px;border-radius:3px;border-left:3px solid transparent;transition:all .12s;}
+  .side nav a svg{width:17px;height:17px;flex:0 0 auto;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;}
+  .side nav a:hover{color:var(--cream);background:var(--panel2);}
+  .side nav a.active{color:var(--accent);background:rgba(204,78,31,.08);border-left-color:var(--accent);font-weight:700;}
+  .side-out{background:none;border:1px solid var(--line);border-radius:3px;color:var(--muted);font-family:var(--mono);
+    font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;padding:9px 10px;}
+  .side-out:hover{border-color:var(--red);color:var(--red);}
 
-  .pill{font-family:var(--mono);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;
-    padding:5px 11px;border-radius:2px;display:inline-block;}
-  .pill.green{background:rgba(95,138,82,.16);color:var(--green);border:1px solid var(--green);}
-  .pill.amber{background:rgba(217,154,60,.16);color:var(--amber);border:1px solid var(--amber);}
-  .pill.gray{background:transparent;color:var(--muted);border:1px solid var(--line);}
-  .pill.red{background:rgba(204,58,31,.16);color:var(--red);border:1px solid var(--red);}
+  .main{margin-left:230px;flex:1;padding:36px clamp(18px,4.5vw,52px) 90px;max-width:1010px;width:100%;}
+  .view{display:none;}
+  .view.active{display:block;}
 
-  .hero{margin:6px 0 4px;}
-  .hero .big{font-family:var(--display);font-weight:700;font-size:clamp(72px,21vw,108px);line-height:.9;color:var(--accent);}
-  .hero .of{font-family:var(--display);font-style:italic;font-size:clamp(20px,5vw,28px);color:var(--muted);margin-left:6px;}
-
-  .stubs{display:flex;gap:8px;flex-wrap:wrap;margin:18px 0 6px;}
-  .stub{width:30px;height:46px;background:var(--accent);border-radius:3px;position:relative;flex:0 0 auto;}
-  .stub::before,.stub::after{content:"";position:absolute;top:50%;width:11px;height:11px;background:var(--bg);border-radius:50%;transform:translateY(-50%);}
-  .stub::before{left:-5.5px}
-  .stub::after{right:-5.5px}
+  /* ---------- INICIO ---------- */
+  .hero-num{margin:6px 0 2px;}
+  .hero-num .big{font-family:var(--display);font-weight:700;font-size:clamp(64px,14vw,96px);line-height:.95;color:var(--accent);}
+  .hero-num .of{font-family:var(--display);font-style:italic;font-size:clamp(18px,4vw,26px);color:var(--muted);margin-left:8px;}
+  .stubs{display:flex;gap:8px;flex-wrap:wrap;margin:16px 0 6px;}
+  .stub{width:28px;height:44px;background:var(--accent);border-radius:3px;position:relative;flex:0 0 auto;}
+  .stub::before,.stub::after{content:"";position:absolute;top:50%;width:10px;height:10px;background:var(--panel);border-radius:50%;transform:translateY(-50%);}
+  .stub::before{left:-5px}
+  .stub::after{right:-5px}
   .stub:nth-child(3n){transform:rotate(-2.4deg);}
   .stub:nth-child(3n+1){transform:rotate(1.6deg);}
   .stub.used{background:var(--line);opacity:.55;}
-  .stubcap{font-family:var(--mono);font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:26px;}
-
-  .card{background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:18px 20px;margin-bottom:14px;}
-  .card h3{font-family:var(--mono);text-transform:uppercase;letter-spacing:.12em;font-size:11px;color:var(--accent);font-weight:700;margin:0 0 10px;}
-  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
-  @media (max-width:520px){ .grid2{grid-template-columns:1fr;} }
-  .kv .v{font-family:var(--display);font-size:21px;margin-top:2px;}
+  .stubcap{font-family:var(--mono);font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:6px;}
+  .plan-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:18px;border-top:1px solid var(--line);padding-top:16px;}
+  .kv .v{font-family:var(--display);font-size:20px;margin-top:2px;}
   .kv .v small{font-family:var(--body);font-size:13px;color:var(--muted);}
-  .note{font-size:12.5px;color:var(--muted);margin-top:8px;line-height:1.5;}
-  .warn{color:var(--amber);}
+  .ministat{font-family:var(--mono);font-size:11.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);}
+  .empty-state h2{font-family:var(--display);font-style:italic;font-weight:700;font-size:25px;margin:2px 0 8px;}
+  .empty-state p{margin:0 0 16px;font-size:14.5px;color:var(--muted);}
 
-  .accentcard{border:1px solid var(--accent);border-left:5px solid var(--accent);
-    background:linear-gradient(180deg,rgba(204,78,31,.10),rgba(204,78,31,.03));}
-  .accentcard h2{font-family:var(--display);font-style:italic;font-weight:700;font-size:26px;margin:2px 0 8px;color:var(--cream);}
-  .accentcard p{margin:0 0 14px;font-size:14.5px;}
-  .wa{display:inline-block;font-family:var(--mono);text-transform:uppercase;letter-spacing:.08em;font-size:12.5px;font-weight:700;
-    background:var(--accent);color:var(--bg);padding:12px 18px;border-radius:3px;border:1px solid var(--accent);}
-  .wa:hover{filter:brightness(1.12);text-decoration:none;}
-  .wa.ghost{background:transparent;color:var(--cream);border-color:var(--line);font-weight:500;}
-  .wa.ghost:hover{border-color:var(--accent);color:var(--accent);filter:none;}
-  .ctas{display:flex;gap:10px;flex-wrap:wrap;}
-
-  .banner{border:1px dashed var(--amber);border-radius:4px;padding:14px 16px;margin-bottom:14px;
-    font-size:14px;color:var(--amber);background:rgba(217,154,60,.07);}
-  .banner strong{font-family:var(--mono);font-size:12px;text-transform:uppercase;letter-spacing:.06em;}
-
+  /* ---------- TABLAS ---------- */
+  .tablewrap{overflow-x:auto;}
+  table{border-collapse:collapse;width:100%;min-width:520px;}
+  th,td{text-align:left;padding:11px 12px;border-bottom:1px solid var(--line);vertical-align:top;}
+  th{font-family:var(--mono);text-transform:uppercase;letter-spacing:.07em;font-size:10.5px;color:var(--accent);font-weight:700;}
+  tr:last-child td{border-bottom:0;}
+  td.mono{font-family:var(--mono);font-size:12px;color:var(--muted);white-space:nowrap;}
+  td.mut,span.mut{color:var(--muted);font-size:13.5px;}
+  .empty{color:var(--muted);font-family:var(--mono);font-size:12px;text-transform:uppercase;letter-spacing:.08em;padding:10px 0;}
   .tarea{border-left:5px solid var(--accent);}
-  .tarea .t{font-family:var(--display);font-size:20px;line-height:1.3;}
+  .tarea .t{font-family:var(--display);font-size:20px;line-height:1.35;}
   .tarea .meta{font-family:var(--mono);font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;margin-top:8px;}
 
-  .hist{list-style:none;margin:0;padding:0;}
-  .hist li{display:grid;grid-template-columns:92px 1fr;gap:12px;padding:11px 0;border-bottom:1px solid var(--line);}
-  .hist li:last-child{border-bottom:0;}
-  .hist .f{font-family:var(--mono);font-size:11.5px;color:var(--muted);padding-top:3px;}
-  .hist .pill{margin:0 0 5px;}
-  .hist .w{font-size:14px;}
-  .hist .tk{font-size:12.5px;color:var(--muted);}
-  @media (max-width:430px){ .hist li{grid-template-columns:1fr;gap:4px;} }
+  /* ---------- COMPRAR ---------- */
+  .tiers{display:grid;grid-template-columns:repeat(auto-fit,minmax(235px,1fr));gap:14px;}
+  .tier{background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:22px;position:relative;display:flex;flex-direction:column;gap:6px;}
+  .tier.featured{border-color:var(--accent);}
+  .tier .badge{position:absolute;top:-11px;left:18px;background:var(--accent);color:var(--bg);font-family:var(--mono);
+    font-size:10px;font-weight:700;letter-spacing:.08em;padding:4px 9px;border-radius:2px;}
+  .tier .tlab{font-family:var(--mono);text-transform:uppercase;letter-spacing:.12em;font-size:11px;color:var(--accent);font-weight:700;}
+  .tier h3{font-family:var(--display);font-weight:700;font-size:21px;margin:0;}
+  .tier .tprecio{font-family:var(--display);font-size:34px;margin:6px 0 2px;}
+  .tier .tprecio .cur{font-size:16px;color:var(--muted);margin-right:2px;}
+  .strike{text-decoration:line-through;color:var(--muted);font-size:18px;margin-right:8px;}
+  .tier .tdesc{font-family:var(--mono);font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--green);}
+  .tier .btn{margin-top:14px;text-align:center;}
 
-  /* compra modal */
-  .overlay{position:fixed;inset:0;background:rgba(0,0,0,.78);display:none;align-items:flex-start;justify-content:center;padding:30px 16px;z-index:50;overflow-y:auto;}
+  /* ---------- REFERIDOS ---------- */
+  .refcode{font-family:var(--mono);font-size:clamp(30px,7vw,44px);letter-spacing:.3em;color:var(--accent);font-weight:700;margin:10px 0 16px;}
+  .ctas{display:flex;gap:10px;flex-wrap:wrap;}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+  .stat .num{font-family:var(--display);font-size:42px;line-height:1;color:var(--cream);}
+  .stat .lab{margin-top:8px;}
+
+  /* ---------- COMUNIDAD ---------- */
+  .rec h3{font-family:var(--display);font-size:19px;margin:6px 0 4px;color:var(--cream);text-transform:none;letter-spacing:0;}
+  .rec p{margin:0 0 12px;font-size:14px;color:var(--muted);}
+  .rec-top{display:flex;justify-content:space-between;align-items:center;}
+  .rtag{font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;
+    color:var(--accent);border:1px solid var(--accent);padding:3px 8px;border-radius:2px;}
+  .rfecha{font-family:var(--mono);font-size:10.5px;color:var(--muted);}
+
+  /* ---------- CUENTA ---------- */
+  .kv-rows .kv{margin-bottom:14px;}
+  .chip{display:inline-block;font-family:var(--mono);font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;
+    color:var(--green);border:1px solid var(--green);background:rgba(95,138,82,.12);padding:6px 11px;border-radius:2px;margin-top:4px;}
+
+  /* ---------- MODAL ---------- */
+  .overlay{position:fixed;inset:0;background:rgba(0,0,0,.78);display:none;align-items:flex-start;justify-content:center;padding:30px 16px;z-index:80;overflow-y:auto;}
   .overlay.open{display:flex;}
   .modal{background:var(--panel);border:1px solid var(--accent);border-radius:4px;max-width:480px;width:100%;padding:26px;}
   .modal h3{font-family:var(--display);font-size:24px;margin:0 0 4px;}
@@ -133,137 +180,226 @@
   .steps{font-size:13.5px;color:var(--cream);margin:10px 0 0;padding-left:18px;line-height:1.7;}
   .modal-actions{display:flex;gap:10px;justify-content:flex-end;margin-top:18px;flex-wrap:wrap;}
   .montoview{font-family:var(--display);font-size:30px;color:var(--accent);}
+  .montonote{font-family:var(--mono);font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--green);min-height:1.2em;}
 
-  .empty{color:var(--muted);font-family:var(--mono);font-size:12px;text-transform:uppercase;letter-spacing:.08em;padding:8px 0;}
-  .loading{font-family:var(--mono);font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);padding:40px 0;text-align:center;}
-  .footnote{margin-top:34px;font-size:12px;color:var(--muted);border-top:1px solid var(--line);padding-top:14px;
-    font-family:var(--mono);text-transform:uppercase;letter-spacing:.08em;}
-  .footnote a{color:var(--muted);}
-  .footnote a:hover{color:var(--accent);}
+  .loading{font-family:var(--mono);font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);padding:60px 0;text-align:center;}
   .toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%) translateY(20px);background:var(--accent);color:var(--bg);
     font-family:var(--mono);font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;
     padding:11px 18px;border-radius:3px;opacity:0;transition:all .2s;pointer-events:none;z-index:99;}
   .toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
-  @media (prefers-reduced-motion:reduce){*{transition:none!important;}}
+
+  /* ---------- MÓVIL: sidebar -> tabs inferiores ---------- */
+  @media (max-width:859px){
+    .side{top:auto;bottom:0;left:0;right:0;width:100%;height:64px;flex-direction:row;align-items:stretch;
+      padding:0;border-right:0;border-top:1px solid var(--line);}
+    .side .logo,.side .slab,.side-out{display:none;}
+    .side nav{flex-direction:row;margin:0;gap:0;width:100%;flex:1;}
+    .side nav a{flex:1;flex-direction:column;justify-content:center;align-items:center;gap:3px;
+      font-size:8.5px;letter-spacing:.05em;padding:6px 2px;border-left:0;border-top:3px solid transparent;border-radius:0;}
+    .side nav a.active{border-left:0;border-top-color:var(--accent);background:transparent;}
+    .main{margin-left:0;padding:26px 18px 110px;}
+    .plan-grid{grid-template-columns:1fr;}
+    .grid2{grid-template-columns:1fr;}
+    .toast{bottom:78px;}
+  }
+  @media (prefers-reduced-motion:reduce){
+    *{transition:none!important;animation:none!important;}
+    .btn:active{transform:none;}
+  }
 </style>
 </head>
 <body>
-<div class="wrap">
 
-  <!-- ============ AUTH ============ -->
-  <section id="viewAuth" class="auth-card hidden">
-    <div class="eyebrow">// PROFESORMVT</div>
-    <h1>Portal de <em>alumno</em></h1>
-    <div class="sub">Tus clases · Tu tarea · Tu avance</div>
-    <hr class="rule" />
-    <div class="authtabs">
-      <button class="atab active" id="tabLogin">Ingresar</button>
-      <button class="atab" id="tabReg">Crear cuenta</button>
-    </div>
+<div class="loading hidden" id="viewLoading">Cargando tu portal…</div>
 
-    <div id="formLogin">
-      <div class="field"><label for="l_email">Correo</label><input id="l_email" type="email" autocomplete="email" /></div>
-      <div class="field"><label for="l_pass">Contraseña</label><input id="l_pass" type="password" autocomplete="current-password" /></div>
-      <button class="btn" id="btnLogin">Ingresar</button>
-      <div class="err" id="loginErr"></div>
-      <p class="auth-hint">¿Olvidaste tu contraseña? <a href="https://wa.me/51989077928?text=Hola%20Andr%C3%A9s%2C%20olvid%C3%A9%20mi%20contrase%C3%B1a%20del%20portal%20de%20alumno" target="_blank" rel="noopener">Escríbeme por WhatsApp</a> y te la restablezco.</p>
-    </div>
+<!-- ============ AUTH (login / registro) ============ -->
+<section id="viewAuth" class="auth-card hidden">
+  <div class="eyebrow">// PROFESORMVT</div>
+  <h1>Portal de <em>alumno</em></h1>
+  <div class="sub">Tus clases · Tu avance · Tu comunidad</div>
+  <hr class="rule" />
+  <div class="authtabs">
+    <button class="atab active" id="tabLogin">Ingresar</button>
+    <button class="atab" id="tabReg">Crear cuenta</button>
+  </div>
 
-    <div id="formReg" class="hidden">
-      <div class="field"><label for="r_nombre">Nombre y apellido</label><input id="r_nombre" type="text" autocomplete="name" /></div>
-      <div class="field"><label for="r_email">Correo</label><input id="r_email" type="email" autocomplete="email" /></div>
-      <div class="field"><label for="r_whats">WhatsApp (opcional)</label><input id="r_whats" type="tel" placeholder="989 077 928" /></div>
-      <div class="field"><label for="r_pass">Contraseña (mínimo 8 caracteres)</label><input id="r_pass" type="password" autocomplete="new-password" /></div>
-      <label class="check"><input type="checkbox" id="r_mkt" />
-        <span>Quiero recibir novedades, tips y promociones de ProfesorMVT por correo. (Opcional)</span></label>
-      <button class="btn" id="btnReg">Crear mi cuenta</button>
-      <div class="err" id="regErr"></div>
-    </div>
-  </section>
+  <div id="formLogin">
+    <div class="field"><label for="l_email">Correo</label><input id="l_email" type="email" autocomplete="email" /></div>
+    <div class="field"><label for="l_pass">Contraseña</label><input id="l_pass" type="password" autocomplete="current-password" /></div>
+    <button class="btn full" id="btnLogin">Ingresar</button>
+    <div class="err" id="loginErr"></div>
+    <p class="auth-hint">¿Olvidaste tu contraseña? <a href="https://wa.me/51989077928?text=Hola%20Andr%C3%A9s%2C%20olvid%C3%A9%20mi%20contrase%C3%B1a%20del%20portal%20de%20alumno" target="_blank" rel="noopener">Escríbeme por WhatsApp</a> y te la restablezco.</p>
+  </div>
 
-  <!-- ============ DASHBOARD ============ -->
-  <section id="viewDash" class="hidden">
-    <div class="topbar">
+  <div id="formReg" class="hidden">
+    <div class="field"><label for="r_nombre">Nombre y apellido</label><input id="r_nombre" type="text" autocomplete="name" /></div>
+    <div class="field"><label for="r_email">Correo</label><input id="r_email" type="email" autocomplete="email" /></div>
+    <div class="field"><label for="r_whats">WhatsApp (opcional)</label><input id="r_whats" type="tel" placeholder="989 077 928" /></div>
+    <div class="field"><label for="r_pass">Contraseña (mínimo 8 caracteres)</label><input id="r_pass" type="password" autocomplete="new-password" /></div>
+    <div class="field"><label for="r_ref">¿Quién te recomendó? (código, opcional)</label><input id="r_ref" type="text" maxlength="12" autocapitalize="characters" spellcheck="false" placeholder="AB12CD" /></div>
+    <label class="check"><input type="checkbox" id="r_mkt" />
+      <span>Quiero recibir novedades, tips y promociones de ProfesorMVT por correo. (Opcional)</span></label>
+    <button class="btn full" id="btnReg">Crear mi cuenta</button>
+    <div class="err" id="regErr"></div>
+  </div>
+
+  <div class="gwrap hidden" id="gWrap">
+    <div class="or">— o —</div>
+    <div class="gbtn"><div id="g_id_signin"></div></div>
+  </div>
+</section>
+
+<!-- ============ APP (SPA con sidebar) ============ -->
+<div id="app" class="app hidden">
+  <aside class="side">
+    <a class="logo" href="#inicio">profesor<em>mvt</em><span class="dot"></span></a>
+    <div class="slab">Portal de alumno</div>
+    <nav aria-label="Navegación del portal">
+      <a href="#inicio" data-v="inicio"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11l9-8 9 8"/><path d="M5 9.5V21h14V9.5"/></svg>Inicio</a>
+      <a href="#clases" data-v="clases"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16M4 12h16M4 19h10"/></svg>Mis clases</a>
+      <a href="#comprar" data-v="comprar"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7h2l2.4 10.2A2 2 0 0 0 9.3 19h7.4a2 2 0 0 0 1.9-1.6L21 9H6"/><circle cx="10" cy="21" r="1"/><circle cx="17" cy="21" r="1"/></svg>Comprar</a>
+      <a href="#referidos" data-v="referidos"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="8" width="18" height="4"/><path d="M5 12v8h14v-8M12 8v12M12 8s-4-.5-4-3a2 2 0 0 1 4-1 2 2 0 0 1 4 1c0 2.5-4 3-4 3z"/></svg>Referidos</a>
+      <a href="#comunidad" data-v="comunidad"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12a8 8 0 0 1-8 8H4l2-3a8 8 0 1 1 15-5z"/></svg>Comunidad</a>
+      <a href="#cuenta" data-v="cuenta"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 5-5.5 8-5.5s6.5 1.5 8 5.5"/></svg>Mi cuenta</a>
+    </nav>
+    <button class="side-out" id="btnSalirSide">Cerrar sesión</button>
+  </aside>
+
+  <main class="main">
+
+    <!-- ===== INICIO ===== -->
+    <section class="view" id="v-inicio">
       <div class="eyebrow">// PROFESORMVT — PORTAL DE ALUMNO</div>
-      <button class="linkbtn" id="btnSalir">Salir</button>
-    </div>
-    <h1 id="dNombre"></h1>
-    <div class="sub" id="dPlan"></div>
-    <hr class="rule" />
+      <h1 id="iHola"></h1>
+      <div class="sub" id="iPlanLine"></div>
+      <hr class="rule" />
+      <div class="banner naranja hidden" id="iPend"></div>
 
-    <span class="pill" id="dEstado"></span>
+      <div class="card hidden" id="iPkg">
+        <span class="pill" id="iEstado"></span>
+        <div class="lab" style="margin-top:16px;">Clases restantes</div>
+        <div class="hero-num"><span class="big" id="iRest">0</span><span class="of" id="iDe"></span></div>
+        <div class="stubs" id="iStubs"></div>
+        <div class="stubcap">Cada ticket = una clase de tu paquete · los apagados ya se usaron</div>
+        <a class="btn sm hidden" href="#comprar" id="iRenov" style="margin-top:8px;">Renovar mi paquete →</a>
+        <div class="plan-grid" id="iPlan"></div>
+      </div>
 
-    <div class="banner hidden" id="banPendiente"></div>
+      <div class="card empty-state hidden" id="iVacio">
+        <span class="pill gray">Inactivo</span>
+        <h2 style="margin-top:12px;">Aún no tienes un paquete activo</h2>
+        <p>Elige tu paquete de clases 1 a 1 (canto, piano o composición) y arrancamos esta misma semana.</p>
+        <a class="btn" href="#comprar">Ver paquetes →</a>
+      </div>
 
-    <!-- ===== Con paquete ===== -->
-    <div id="zonaPaquete" class="hidden">
-      <div class="lab" style="margin-top:18px;">Clases restantes</div>
-      <div class="hero"><span class="big" id="dRestantes">0</span><span class="of" id="dDe"></span></div>
-      <div class="stubs" id="dStubs"></div>
-      <div class="stubcap">Cada ticket = una clase de tu paquete · los apagados ya se usaron</div>
+      <div class="card hidden" id="iCalWrap">
+        <h3>// TUS HORARIOS</h3>
+        <p class="note" style="margin:0 0 12px;">Elige tus horarios de preferencia según tu paquete. Si necesitas mover alguno, avísame con 24h y no consume clase.</p>
+        <a class="btn ghost sm" id="iCal" target="_blank" rel="noopener">Elegir mis horarios →</a>
+      </div>
 
-      <div class="card accentcard hidden" id="cardRenew">
-        <h3>// Renovación</h3>
-        <h2 id="rTitulo"></h2>
-        <p id="rTexto"></p>
-        <div class="ctas">
-          <button class="wa" id="rComprar">Renovar mi paquete</button>
-          <a class="wa ghost" id="rWa" target="_blank" rel="noopener">Hablar con Andrés</a>
+      <p class="ministat hidden" id="iHist"></p>
+    </section>
+
+    <!-- ===== MIS CLASES ===== -->
+    <section class="view" id="v-clases">
+      <div class="eyebrow">// MIS CLASES</div>
+      <h1>Mis <em>clases</em></h1>
+      <hr class="rule" />
+      <div class="card tarea hidden" id="cTarea">
+        <h3>// TU TAREA DE LA SEMANA</h3>
+        <div class="t" id="cTareaTxt"></div>
+        <div class="meta" id="cTareaMeta"></div>
+      </div>
+      <div class="card hidden" id="cWrap">
+        <div class="tablewrap">
+          <table id="cTabla">
+            <thead><tr><th>Fecha</th><th>Estado</th><th>Qué trabajamos</th><th>Tarea</th></tr></thead>
+            <tbody></tbody>
+          </table>
         </div>
       </div>
+      <div class="empty hidden" id="cVacio">Aquí verás tus clases registradas después de tu primera sesión.</div>
+    </section>
 
-      <div class="card accentcard hidden" id="cardCalendly">
-        <h3>// Tus horarios</h3>
-        <h2>Reserva tus clases</h2>
-        <p>Elige tus horarios de preferencia según tu paquete. Si necesitas mover alguno, avísame con 24h y no consume clase.</p>
-        <a class="wa" id="btnCalendly" target="_blank" rel="noopener">Elegir mis horarios →</a>
-      </div>
+    <!-- ===== COMPRAR ===== -->
+    <section class="view" id="v-comprar">
+      <div class="eyebrow">// COMPRAR</div>
+      <h1>Elige tu <em>paquete</em></h1>
+      <div class="sub">Pago por Yape o Plin · activación el mismo día</div>
+      <hr class="rule" />
+      <div class="banner hidden" id="bCredito"></div>
+      <div class="banner naranja hidden" id="bPendC"></div>
+      <div class="tiers" id="tiers"></div>
+    </section>
 
-      <div class="card tarea hidden" id="cardTarea">
-        <h3>// Tu tarea de esta semana</h3>
-        <div class="t" id="tTexto"></div>
-        <div class="meta" id="tMeta"></div>
-      </div>
-
+    <!-- ===== REFERIDOS ===== -->
+    <section class="view" id="v-referidos">
+      <div class="eyebrow">// REFERIDOS</div>
+      <h1>Invita y <em>gana</em></h1>
+      <hr class="rule" />
       <div class="card">
-        <h3>// Tu plan</h3>
-        <div class="grid2">
-          <div class="kv"><div class="lab">Reprogramaciones disponibles</div><div class="v" id="dReprog"></div>
-            <div class="note">Avísame con 24h de anticipación y la reprogramación no consume clase.</div></div>
-          <div class="kv"><div class="lab">Horario fijo</div><div class="v" id="dHorario"></div></div>
-          <div class="kv"><div class="lab">Paquete</div><div class="v" id="dPaquete"></div></div>
-          <div class="kv"><div class="lab">Pago</div><div class="v" id="dPago"></div>
-            <div class="note warn hidden" id="dPagoNote">Tienes un pago pendiente — coordinémoslo por WhatsApp.</div></div>
-        </div>
-      </div>
-
-      <div class="card">
-        <h3>// Historial de clases</h3>
-        <ul class="hist" id="dHist"></ul>
-        <div class="empty hidden" id="dHistEmpty">Aún no hay clases registradas</div>
-      </div>
-    </div>
-
-    <!-- ===== Sin paquete (Inactivo) ===== -->
-    <div id="zonaInactivo" class="hidden">
-      <div class="card accentcard" style="margin-top:18px;">
-        <h3>// Empieza aquí</h3>
-        <h2>Aún no tienes un paquete activo</h2>
-        <p>Elige tu paquete de clases 1 a 1 (canto, piano o composición) y arrancamos esta misma semana. ¿Primera vez? La clase de prueba cuesta S/50 e incluye tu diagnóstico vocal en PDF.</p>
+        <div class="lab">// TU CÓDIGO</div>
+        <div class="refcode" id="rCode">······</div>
         <div class="ctas">
-          <button class="wa" id="iComprar">Comprar mi paquete</button>
-          <a class="wa ghost" id="iPrueba" target="_blank" rel="noopener">Reservar clase de prueba (S/50)</a>
+          <button class="btn" id="btnCopiarRef">Copiar</button>
+          <a class="btn ghost" id="btnWaRef" target="_blank" rel="noopener">Compartir por WhatsApp</a>
         </div>
       </div>
-    </div>
+      <div class="grid2">
+        <div class="card stat"><div class="num" id="rReg">0</div><div class="lab">amigos registrados</div></div>
+        <div class="card stat"><div class="num" id="rCom">0</div><div class="lab">ya compraron</div></div>
+      </div>
+      <p class="note">Cuando un amigo compra su primer paquete con tu código, ganas <strong style="color:var(--cream)">S/50 de descuento</strong> para tu próxima compra.</p>
+    </section>
 
-    <div class="footnote">
-      ¿Algo no cuadra? <a href="https://wa.me/51989077928" target="_blank" rel="noopener">Escríbeme</a> ·
-      PROFESORMVT.COM / @ASALAMECORDOVA
-    </div>
-  </section>
+    <!-- ===== COMUNIDAD ===== -->
+    <section class="view" id="v-comunidad">
+      <div class="eyebrow">// COMUNIDAD</div>
+      <h1>Comunidad y <em>recursos</em></h1>
+      <hr class="rule" />
+      <div class="card">
+        <h3>// DISCORD</h3>
+        <p class="note" style="margin:0 0 14px;">Tu material extra, comunidad y anuncios viven aquí.</p>
+        <a class="btn" id="btnDiscord" target="_blank" rel="noopener">Entrar al Discord →</a>
+      </div>
+      <div class="lab" style="margin:22px 0 10px;">// RECURSOS</div>
+      <div id="recList"></div>
+      <div class="empty hidden" id="recVacio">Pronto subiré material aquí. Mientras, todo lo nuevo lo aviso en el Discord.</div>
+    </section>
 
-  <div class="loading hidden" id="viewLoading">Cargando tu avance…</div>
+    <!-- ===== MI CUENTA ===== -->
+    <section class="view" id="v-cuenta">
+      <div class="eyebrow">// MI CUENTA</div>
+      <h1>Mi <em>cuenta</em></h1>
+      <hr class="rule" />
+      <div class="card">
+        <h3>// TUS DATOS</h3>
+        <div class="kv-rows" id="ctaDatos"></div>
+        <span class="chip hidden" id="ctaGoogle">Conectado con Google ✓</span>
+        <p class="note hidden" id="ctaSoloGoogle" style="margin-top:10px;">Ingresas con Google, no necesitas contraseña.</p>
+      </div>
+      <div class="card hidden" id="ctaPassCard">
+        <h3>// CAMBIAR CONTRASEÑA</h3>
+        <div class="field"><label for="p_actual">Contraseña actual</label><input id="p_actual" type="password" autocomplete="current-password" /></div>
+        <div class="field"><label for="p_nueva">Nueva contraseña (mínimo 8)</label><input id="p_nueva" type="password" autocomplete="new-password" /></div>
+        <div class="field"><label for="p_conf">Confirmar nueva contraseña</label><input id="p_conf" type="password" autocomplete="new-password" /></div>
+        <button class="btn sm" id="btnPass">Actualizar contraseña</button>
+        <div class="err" id="passErr"></div>
+      </div>
+      <div class="card hidden" id="ctaPagos">
+        <h3>// HISTORIAL DE PAGOS</h3>
+        <div class="tablewrap">
+          <table id="pTabla">
+            <thead><tr><th>Fecha</th><th>Paquete</th><th>Monto</th><th>Estado</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+      <button class="btn no" id="btnSalir">Cerrar sesión</button>
+    </section>
+
+  </main>
 </div>
 
 <!-- ============ MODAL COMPRA ============ -->
@@ -277,6 +413,7 @@
       <div class="field"><label for="c_paquete">Paquete</label><select id="c_paquete"></select></div>
       <div class="lab">Total a pagar</div>
       <div class="montoview" id="c_monto">S/ 0</div>
+      <div class="montonote" id="c_montoNote"></div>
 
       <div class="paybox" id="payboxOk">
         <div class="lab">Yapea o Plinea a</div>
@@ -296,18 +433,18 @@
         <input id="c_op" type="text" maxlength="40" /></div>
       <div class="err" id="compraErr"></div>
       <div class="modal-actions">
-        <button class="btn ghost" data-close style="width:auto;margin-top:0;">Cancelar</button>
-        <button class="btn" id="btnYaPague" style="width:auto;margin-top:0;">Ya pagué ✓</button>
+        <button class="btn ghost" data-close>Cancelar</button>
+        <button class="btn" id="btnYaPague">Ya pagué ✓</button>
       </div>
     </div>
     <div id="compraPaso2" class="hidden">
       <h3>¡Pago <em>registrado</em>!</h3>
       <div class="mlab">// En verificación</div>
-      <p style="font-size:14.5px;">Apenas vea tu yapeo/plineo activo tu paquete — suele ser el mismo día, casi siempre en minutos. Te aparecerá aquí mismo, en tu dashboard.</p>
-      <p style="font-size:13.5px;color:var(--muted);">¿Quieres acelerarlo? Avísame por WhatsApp y lo confirmo al toque.</p>
+      <p style="font-size:14.5px;">Apenas vea tu yapeo/plineo activo tu paquete — suele ser el mismo día, casi siempre en minutos. Te aparecerá aquí mismo, en tu portal.</p>
+      <p class="note">¿Quieres acelerarlo? Avísame por WhatsApp y lo confirmo al toque.</p>
       <div class="modal-actions">
-        <a class="wa ghost" id="btnAvisar" target="_blank" rel="noopener">Avisar por WhatsApp</a>
-        <button class="btn" data-close style="width:auto;margin-top:0;">Listo</button>
+        <a class="btn ghost" id="btnAvisar" target="_blank" rel="noopener">Avisar por WhatsApp</a>
+        <button class="btn" data-close>Listo</button>
       </div>
     </div>
   </div>
@@ -320,16 +457,20 @@
 var KEY = "pmvt_sesion";
 var WA_PROFE = "51989077928";
 var ME = null;
+var GOOGLE_CLIENT = "";
+var REF_URL = "";
+try{ REF_URL = (new URLSearchParams(location.search).get("ref") || "").trim().toUpperCase(); }catch(e){}
 
 function $(id){ return document.getElementById(id); }
 function esc(s){ return String(s==null?"":s).replace(/[&<>"]/g,function(m){return {"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[m];}); }
 function show(id){ $(id).classList.remove("hidden"); }
 function hide(id){ $(id).classList.add("hidden"); }
-function setView(v){ ["viewAuth","viewDash","viewLoading"].forEach(hide); show(v); }
 function getTok(){ try{ return localStorage.getItem(KEY); }catch(e){ return null; } }
 function setTok(t){ try{ if(t) localStorage.setItem(KEY,t); else localStorage.removeItem(KEY); }catch(e){} }
 var toastT;
-function toast(msg){ var t=$("toast"); t.textContent=msg; t.classList.add("show"); clearTimeout(toastT); toastT=setTimeout(function(){t.classList.remove("show");},2400); }
+function toast(msg){ var t=$("toast"); t.textContent=msg; t.classList.add("show"); clearTimeout(toastT); toastT=setTimeout(function(){t.classList.remove("show");},2600); }
+function setPantalla(p){ ["viewLoading","viewAuth","app"].forEach(hide); show(p); }
+function kv(lab,vHtml){ return '<div class="kv"><div class="lab">'+lab+'</div><div class="v">'+vHtml+'</div></div>'; }
 
 function api(path, opts){
   opts = opts || {};
@@ -371,11 +512,12 @@ $("l_pass").addEventListener("keydown",function(e){ if(e.key==="Enter") $("btnLo
 $("btnReg").addEventListener("click",function(){
   $("regErr").textContent="";
   var nombre=$("r_nombre").value.trim(), email=$("r_email").value.trim(),
-      pass=$("r_pass").value, whats=$("r_whats").value.trim(), mkt=$("r_mkt").checked;
+      pass=$("r_pass").value, whats=$("r_whats").value.trim(), mkt=$("r_mkt").checked,
+      ref=$("r_ref").value.trim().toUpperCase();
   if(!nombre || !email || !pass){ $("regErr").textContent="Completa nombre, correo y contraseña."; return; }
   if(pass.length<8){ $("regErr").textContent="La contraseña necesita mínimo 8 caracteres."; return; }
   $("btnReg").disabled=true;
-  api("/api/registro",{method:"POST",body:JSON.stringify({nombre:nombre,email:email,password:pass,whatsapp:whats,marketing:mkt})})
+  api("/api/registro",{method:"POST",body:JSON.stringify({nombre:nombre,email:email,password:pass,whatsapp:whats,marketing:mkt,ref:ref||undefined})})
     .then(function(d){ setTok(d.token); cargarMe(); })
     .catch(function(e){
       $("regErr").textContent = e.message || "No se pudo crear la cuenta.";
@@ -384,170 +526,309 @@ $("btnReg").addEventListener("click",function(){
     .finally(function(){ $("btnReg").disabled=false; });
 });
 
-$("btnSalir").addEventListener("click",function(){
-  api("/api/logout",{method:"POST"}).catch(function(){});
-  setTok(null); ME=null;
-  setAuthTab("login"); setView("viewAuth");
+/* ---------- GOOGLE SIGN-IN (solo si está configurado) ---------- */
+function cargarGoogle(){
+  var s=document.createElement("script");
+  s.src="https://accounts.google.com/gsi/client"; s.async=true; s.defer=true;
+  s.onload=function(){
+    if(!(window.google && google.accounts && google.accounts.id)) return;
+    try{
+      google.accounts.id.initialize({ client_id: GOOGLE_CLIENT, callback: onGoogleCred });
+      google.accounts.id.renderButton($("g_id_signin"), { theme:"outline", size:"large", width:280, text:"continue_with" });
+      show("gWrap");
+    }catch(e){}
+  };
+  document.head.appendChild(s);
+}
+function onGoogleCred(resp){
+  if(!resp || !resp.credential) return;
+  var ref = ($("r_ref").value || "").trim().toUpperCase() || REF_URL || "";
+  api("/api/login/google",{method:"POST",body:JSON.stringify({credential:resp.credential, ref:ref||undefined})})
+    .then(function(d){ setTok(d.token); cargarMe(); })
+    .catch(function(e){
+      setPantalla("viewAuth");
+      $("loginErr").textContent = e.message || "No se pudo ingresar con Google.";
+    });
+}
+
+/* ---------- ROUTER (SPA por hash) ---------- */
+var VISTAS = ["inicio","clases","comprar","referidos","comunidad","cuenta"];
+function vistaActual(){
+  var h=(location.hash||"#inicio").replace("#","");
+  return VISTAS.indexOf(h)>=0 ? h : "inicio";
+}
+function renderActive(){
+  if(!ME) return;
+  var v=vistaActual();
+  document.querySelectorAll(".side nav a").forEach(function(a){
+    var on = a.dataset.v===v;
+    a.classList.toggle("active", on);
+    if(on) a.setAttribute("aria-current","page"); else a.removeAttribute("aria-current");
+  });
+  document.querySelectorAll(".view").forEach(function(s){ s.classList.toggle("active", s.id==="v-"+v); });
+  RENDER[v]();
+}
+window.addEventListener("hashchange", renderActive);
+
+/* ---------- VISTA: INICIO ---------- */
+function renderInicio(){
+  $("iHola").innerHTML = 'Hola, <em>'+esc((ME.cuenta.nombre||"").split(" ")[0])+'</em>';
+  if(ME.compraPendiente){
+    $("iPend").innerHTML = '<strong>// PAGO EN VERIFICACIÓN</strong><br>Tu pago de '+esc(ME.compraPendiente.paquete)+
+      ' está en verificación — te confirmo apenas lo vea.';
+    show("iPend");
+  } else hide("iPend");
+
+  var a = ME.alumno;
+  if(a){
+    show("iPkg"); hide("iVacio");
+    $("iPlanLine").textContent = (a.curso||"") + " · " + (a.paquete||"");
+    var est=$("iEstado"); est.textContent=ME.estado;
+    est.className = "pill " + (ME.estado==="Activo"?"green":(ME.estado==="Renovar pronto"?"amber":"gray"));
+    $("iRest").textContent = a.restantes;
+    $("iDe").textContent = "de " + a.compradas;
+    var s=""; for(var i=0;i<a.compradas;i++) s += '<div class="stub'+(i<a.usadas?" used":"")+'"></div>';
+    $("iStubs").innerHTML = s;
+    if(ME.estado==="Renovar pronto" && !ME.compraPendiente) show("iRenov"); else hide("iRenov");
+    $("iPlan").innerHTML =
+      kv("Reprogramaciones disponibles", a.reprogRestantes+' <small>de '+a.reprogPermitidas+'</small>')+
+      kv("Horario fijo", esc(a.horario||"Por definir"))+
+      kv("Paquete", esc(a.paquete||"—")+(a.monto?' <small>· S/ '+a.monto+'</small>':''))+
+      kv("Pago", esc(a.pago||"—"));
+  } else {
+    hide("iPkg"); show("iVacio");
+    $("iPlanLine").textContent = "Sin paquete activo";
+  }
+
+  if(ME.config && ME.config.calendly_url && a){ $("iCal").href=ME.config.calendly_url; show("iCalWrap"); }
+  else hide("iCalWrap");
+
+  if(Number(ME.clasesHistorico)>0){
+    $("iHist").textContent = ME.clasesHistorico + " clases tomadas en total";
+    show("iHist");
+  } else hide("iHist");
+}
+
+/* ---------- VISTA: MIS CLASES ---------- */
+function renderClases(){
+  var h = (ME.alumno && ME.alumno.historial) || [];
+  var con = h.find(function(r){ return r.tarea && String(r.tarea).trim(); });
+  if(con){
+    $("cTareaTxt").textContent = con.tarea;
+    $("cTareaMeta").textContent = "De tu clase del " + (con.fecha||"—");
+    show("cTarea");
+  } else hide("cTarea");
+  if(h.length===0){ hide("cWrap"); show("cVacio"); return; }
+  show("cWrap"); hide("cVacio");
+  $("cTabla").querySelector("tbody").innerHTML = h.map(function(r){
+    var pc = r.estado==="Asistió"?"green":(r.estado==="Reprogramó"?"amber":"gray");
+    return '<tr><td class="mono">'+esc(r.fecha||"")+'</td>'+
+      '<td><span class="pill '+pc+'">'+esc(r.estado||"")+'</span></td>'+
+      '<td>'+esc(r.trabajo||"")+'</td><td class="mut">'+esc(r.tarea||"")+'</td></tr>';
+  }).join("");
+}
+
+/* ---------- VISTA: COMPRAR ---------- */
+var TIERS = [
+  { pk:"Paquete 4",  nombre:"Esencial",  horas:4 },
+  { pk:"Paquete 8",  nombre:"Intensivo", horas:8, badge:"★ MÁS ELEGIDO" },
+  { pk:"Paquete 12", nombre:"Estrella",  horas:12 }
+];
+function calc(pk){
+  var precio = (ME.precios && ME.precios[pk]) || 0;
+  var cred = Number(ME.credito) || 0;
+  var desc = Math.min(cred, precio);
+  return { precio:precio, desc:desc, final:Math.max(0, precio-desc) };
+}
+function renderComprar(){
+  var cred = Number(ME.credito) || 0;
+  if(cred>0){
+    $("bCredito").innerHTML = '<strong>// CRÉDITO</strong><br>Tienes S/'+cred+
+      ' de crédito por referidos — se aplica solo en tu próxima compra.';
+    show("bCredito");
+  } else hide("bCredito");
+  if(ME.compraPendiente){
+    $("bPendC").innerHTML = '<strong>// PAGO EN VERIFICACIÓN</strong><br>Tu pago de '+esc(ME.compraPendiente.paquete)+
+      ' está en verificación — te confirmo apenas lo vea.';
+    show("bPendC");
+  } else hide("bPendC");
+
+  $("tiers").innerHTML = TIERS.filter(function(t){ return ME.precios && (t.pk in ME.precios); }).map(function(t){
+    var c = calc(t.pk);
+    var precioHtml = c.desc>0
+      ? '<span class="strike">S/ '+c.precio+'</span><span class="cur">S/</span>'+c.final
+      : '<span class="cur">S/</span>'+c.precio;
+    return '<div class="tier'+(t.badge?' featured':'')+'">'+
+      (t.badge?'<span class="badge">'+t.badge+'</span>':'')+
+      '<span class="tlab">'+t.nombre+'</span>'+
+      '<h3>Paquete de '+t.horas+' horas</h3>'+
+      '<div class="tprecio">'+precioHtml+'</div>'+
+      (c.desc>0?'<div class="tdesc">incluye -S/'+c.desc+' de tu crédito</div>':'')+
+      '<button class="btn" data-comprar="'+t.pk+'"'+(ME.compraPendiente?' disabled':'')+'>Comprar →</button>'+
+    '</div>';
+  }).join("");
+}
+$("tiers").addEventListener("click",function(e){
+  var b=e.target.closest("[data-comprar]");
+  if(b && !b.disabled) abrirCompra(b.dataset.comprar);
 });
 
-/* ---------- DASHBOARD ---------- */
-function pillEstado(estado){
-  if(estado==="Activo") return "green";
-  if(estado==="Renovar pronto") return "amber";
-  return "gray"; // Inactivo
-}
-
-function render(d){
-  ME = d;
-  $("dNombre").innerHTML = 'Hola, <em>' + esc((d.cuenta.nombre||"").split(" ")[0]) + '</em>';
-  var est = $("dEstado");
-  est.textContent = d.estado;
-  est.className = "pill " + pillEstado(d.estado);
-
-  // banner de compra pendiente
-  if(d.compraPendiente){
-    $("banPendiente").innerHTML = '<strong>// Pago en verificación</strong><br>Tu ' +
-      esc(d.compraPendiente.paquete) + ' de ' + esc(d.compraPendiente.curso||"") +
-      ' (S/ ' + (d.compraPendiente.monto||0) + ', ' + esc(d.compraPendiente.fecha||"") +
-      ') está en verificación. Te lo activo apenas vea el pago — suele ser en minutos.';
-    show("banPendiente");
-  } else { hide("banPendiente"); }
-
-  if(d.alumno){
-    show("zonaPaquete"); hide("zonaInactivo");
-    var a = d.alumno;
-    $("dPlan").textContent = (a.curso||"") + " · " + (a.paquete||"");
-    $("dRestantes").textContent = a.restantes;
-    $("dDe").textContent = "de " + a.compradas;
-
-    var stubs="";
-    for(var i=0;i<a.compradas;i++) stubs += '<div class="stub'+(i<a.usadas?" used":"")+'"></div>';
-    $("dStubs").innerHTML = stubs;
-
-    // renovación
-    if(d.estado==="Renovar pronto" && !d.compraPendiente){
-      var ultima = a.restantes===1;
-      $("rTitulo").textContent = ultima ? "Te queda 1 clase" : "Paquete completado";
-      $("rTexto").textContent = ultima
-        ? "Para no cortar el ritmo, deja tu renovación lista antes de la próxima sesión. Pregúntame por el plan trimestral: el 3er mes va al 50%."
-        : "Tu paquete llegó a su fin — renueva hoy y seguimos exactamente donde quedamos. Pregúntame por el plan trimestral: el 3er mes va al 50%.";
-      var msg = "Hola Andrés, soy "+d.cuenta.nombre+" 🎸 Quiero renovar mi paquete de "+(a.curso||"clases")+". ¿Me cuentas del plan trimestral?";
-      $("rWa").href = "https://wa.me/"+WA_PROFE+"?text="+encodeURIComponent(msg);
-      show("cardRenew");
-    } else { hide("cardRenew"); }
-
-    // calendly
-    if(ME.config && ME.config.calendly_url){
-      $("btnCalendly").href = ME.config.calendly_url;
-      show("cardCalendly");
-    } else { hide("cardCalendly"); }
-
-    // tarea
-    var conTarea = (a.historial||[]).find(function(r){ return r.tarea && r.tarea.trim(); });
-    if(conTarea){
-      $("tTexto").textContent = conTarea.tarea;
-      $("tMeta").textContent = "De tu clase del " + (conTarea.fecha||"—");
-      show("cardTarea");
-    } else { hide("cardTarea"); }
-
-    $("dReprog").innerHTML = a.reprogRestantes + ' <small>de ' + a.reprogPermitidas + '</small>';
-    $("dHorario").textContent = a.horario || "Por definir";
-    $("dPaquete").innerHTML = esc(a.paquete||"—") + (a.monto?' <small>· S/ '+a.monto+'</small>':'');
-    $("dPago").textContent = a.pago || "—";
-    if(a.pago && a.pago!=="Pagado") show("dPagoNote"); else hide("dPagoNote");
-
-    var h = a.historial||[];
-    if(h.length===0){ $("dHist").innerHTML=""; show("dHistEmpty"); }
-    else{
-      hide("dHistEmpty");
-      $("dHist").innerHTML = h.map(function(r){
-        var pc = r.estado==="Asistió"?"green":(r.estado==="Reprogramó"?"amber":"red");
-        return '<li><div class="f">'+esc(r.fecha||"")+'</div><div>'+
-          '<span class="pill '+pc+'">'+esc(r.estado||"")+'</span>'+
-          (r.trabajo?'<div class="w">'+esc(r.trabajo)+'</div>':'')+
-          (r.tarea?'<div class="tk">Tarea: '+esc(r.tarea)+'</div>':'')+
-          '</div></li>';
-      }).join("");
-    }
-  } else {
-    hide("zonaPaquete"); show("zonaInactivo");
-    $("dPlan").textContent = "Sin paquete activo";
-    var msgP = "Hola Andrés, quiero agendar mi clase de prueba (S/50) 🎸 Soy "+d.cuenta.nombre+", me registré en el portal.";
-    $("iPrueba").href = "https://wa.me/"+WA_PROFE+"?text="+encodeURIComponent(msgP);
-    if(d.compraPendiente){ $("iComprar").disabled = true; $("iComprar").style.opacity=.6; }
-    else { $("iComprar").disabled = false; $("iComprar").style.opacity=1; }
-  }
-  setView("viewDash");
-}
-
-function cargarMe(){
-  setView("viewLoading");
-  api("/api/me").then(render).catch(function(e){
-    setTok(null);
-    setAuthTab("login");
-    setView("viewAuth");
-    if(e.status!==401) $("loginErr").textContent = "No se pudo conectar. Intenta de nuevo.";
-  });
-}
-
-/* ---------- COMPRA ---------- */
-function abrirCompra(){
+/* ---------- MODAL COMPRA ---------- */
+function abrirCompra(pk){
   if(!ME) return;
   if(ME.compraPendiente){ toast("Ya tienes un pago en verificación"); return; }
-  // paquetes desde precios reales (sin clase suelta en compra web)
-  var orden = ["Paquete 4","Paquete 8","Paquete 12"];
-  var labels = { "Paquete 4":"Paquete 4 — 4 clases", "Paquete 8":"Paquete 8 — 8 clases", "Paquete 12":"Paquete 12 — 12 clases" };
-  $("c_paquete").innerHTML = orden.filter(function(p){ return ME.precios && (p in ME.precios); })
-    .map(function(p){ return '<option value="'+p+'">'+labels[p]+' · S/ '+ME.precios[p]+'</option>'; }).join("");
+  $("c_paquete").innerHTML = TIERS.filter(function(t){ return ME.precios && (t.pk in ME.precios); })
+    .map(function(t){ var c=calc(t.pk); return '<option value="'+t.pk+'">'+t.nombre+' — '+t.horas+'h · S/ '+c.final+'</option>'; }).join("");
+  if(pk) $("c_paquete").value = pk;
   if(ME.alumno && ME.alumno.curso) $("c_curso").value = ME.alumno.curso;
   actualizaMonto();
-
   if(ME.config && ME.config.pago_numero){
     $("payNumero").textContent = ME.config.pago_numero;
     $("payTitular").textContent = ME.config.pago_titular ? ("A nombre de: " + ME.config.pago_titular) : "";
     show("payboxOk"); hide("payboxNo");
-  } else {
-    hide("payboxOk"); show("payboxNo");
-  }
+  } else { hide("payboxOk"); show("payboxNo"); }
   $("c_op").value=""; $("compraErr").textContent="";
   show("compraPaso1"); hide("compraPaso2");
   $("ovCompra").classList.add("open");
 }
 function actualizaMonto(){
-  var p = $("c_paquete").value;
-  var m = (ME && ME.precios && ME.precios[p]) || 0;
-  $("c_monto").textContent = "S/ " + m;
+  var c = calc($("c_paquete").value);
+  $("c_monto").innerHTML = (c.desc>0?'<span class="strike">S/ '+c.precio+'</span> ':'') + 'S/ ' + c.final;
+  $("c_montoNote").textContent = c.desc>0 ? ("Incluye -S/"+c.desc+" de tu crédito de referidos") : "";
 }
 $("c_paquete").addEventListener("change", actualizaMonto);
-$("iComprar").addEventListener("click", abrirCompra);
-$("rComprar").addEventListener("click", abrirCompra);
 
 $("btnYaPague").addEventListener("click",function(){
   $("compraErr").textContent="";
   var paquete=$("c_paquete").value, curso=$("c_curso").value, op=$("c_op").value.trim();
   if(!paquete){ $("compraErr").textContent="Elige un paquete."; return; }
+  var c = calc(paquete);
   $("btnYaPague").disabled=true;
   api("/api/comprar",{method:"POST",body:JSON.stringify({paquete:paquete,curso:curso,op_numero:op})})
     .then(function(){
-      var m=(ME&&ME.precios&&ME.precios[paquete])||0;
-      var aviso="Hola Andrés, acabo de yapear S/ "+m+" por el "+paquete+" ("+curso+") 🎸 Soy "+ME.cuenta.nombre+" — "+ME.cuenta.email;
-      $("btnAvisar").href="https://wa.me/"+WA_PROFE+"?text="+encodeURIComponent(aviso);
+      var aviso = "Hola Andrés, acabo de yapear S/ "+c.final+" por el "+paquete+" ("+curso+") 🎸 Soy "+ME.cuenta.nombre+" — "+ME.cuenta.email;
+      $("btnAvisar").href = "https://wa.me/"+WA_PROFE+"?text="+encodeURIComponent(aviso);
       hide("compraPaso1"); show("compraPaso2");
-      api("/api/me").then(function(d){ ME=d; render(d); }).catch(function(){});
+      api("/api/me").then(function(d){ ME=d; renderActive(); }).catch(function(){});
     })
     .catch(function(e){ $("compraErr").textContent = e.message || "No se pudo registrar."; })
     .finally(function(){ $("btnYaPague").disabled=false; });
 });
-
 document.querySelectorAll("[data-close]").forEach(function(b){
   b.addEventListener("click",function(){ $("ovCompra").classList.remove("open"); });
 });
 $("ovCompra").addEventListener("click",function(e){ if(e.target===$("ovCompra")) $("ovCompra").classList.remove("open"); });
 
-/* ---------- init ---------- */
+/* ---------- VISTA: REFERIDOS ---------- */
+function renderReferidos(){
+  var code = ME.ref_code || "——";
+  $("rCode").textContent = code;
+  $("rReg").textContent = (ME.referidos && ME.referidos.registrados) || 0;
+  $("rCom").textContent = (ME.referidos && ME.referidos.compraron) || 0;
+  var msg = "¡Aprende música conmigo en ProfesorMVT! Usa mi código "+code+
+    " al registrarte: https://profesormvt.com/alumnos/?ref="+code;
+  $("btnWaRef").href = "https://wa.me/?text="+encodeURIComponent(msg);
+}
+$("btnCopiarRef").addEventListener("click",function(){
+  var code = (ME && ME.ref_code) || "";
+  if(!code) return;
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(code).then(function(){ toast("Código copiado"); })
+      .catch(function(){ prompt("Copia tu código:", code); });
+  } else prompt("Copia tu código:", code);
+});
+
+/* ---------- VISTA: COMUNIDAD ---------- */
+function renderComunidad(){
+  var du = (ME.config && ME.config.discord_url) || "";
+  if(du){ $("btnDiscord").href = du; show("btnDiscord"); } else hide("btnDiscord");
+  var rec = ME.recursos || [];
+  if(rec.length===0){ $("recList").innerHTML=""; show("recVacio"); return; }
+  hide("recVacio");
+  $("recList").innerHTML = rec.map(function(r){
+    return '<div class="card rec">'+
+      '<div class="rec-top"><span class="rtag">'+esc(r.curso||"Todos")+'</span><span class="rfecha">'+esc(r.fecha||"")+'</span></div>'+
+      '<h3>'+esc(r.titulo||"")+'</h3>'+
+      (r.descripcion?'<p>'+esc(r.descripcion)+'</p>':'')+
+      '<a class="btn ghost sm" href="'+esc(r.url||"#")+'" target="_blank" rel="noopener">Abrir →</a>'+
+    '</div>';
+  }).join("");
+}
+
+/* ---------- VISTA: MI CUENTA ---------- */
+function renderCuenta(){
+  $("ctaDatos").innerHTML =
+    kv("Nombre", esc(ME.cuenta.nombre||"—"))+
+    kv("Correo", esc(ME.cuenta.email||"—"))+
+    kv("WhatsApp", esc(ME.cuenta.whatsapp||"—"));
+  if(ME.cuenta.tieneGoogle) show("ctaGoogle"); else hide("ctaGoogle");
+  if(ME.cuenta.tienePassword){ show("ctaPassCard"); hide("ctaSoloGoogle"); }
+  else { hide("ctaPassCard"); show("ctaSoloGoogle"); }
+
+  var pagos = ME.pagos || [];
+  if(pagos.length){
+    show("ctaPagos");
+    $("pTabla").querySelector("tbody").innerHTML = pagos.map(function(p){
+      var pc = p.estado==="confirmada"?"green":(p.estado==="pendiente"?"amber":"gray");
+      var monto = "S/ "+(p.monto||0) + (Number(p.descuento)>0?' <span class="mut">(-S/'+p.descuento+' crédito)</span>':'');
+      return '<tr><td class="mono">'+esc(p.fecha||"")+'</td><td>'+esc(p.paquete||"")+'</td>'+
+        '<td>'+monto+'</td><td><span class="pill '+pc+'">'+esc(p.estado||"")+'</span></td></tr>';
+    }).join("");
+  } else hide("ctaPagos");
+}
+$("btnPass").addEventListener("click",function(){
+  $("passErr").textContent="";
+  var actual=$("p_actual").value, nueva=$("p_nueva").value, conf=$("p_conf").value;
+  if(!actual || !nueva){ $("passErr").textContent="Completa los campos."; return; }
+  if(nueva.length<8){ $("passErr").textContent="La nueva contraseña necesita mínimo 8 caracteres."; return; }
+  if(nueva!==conf){ $("passErr").textContent="Las contraseñas no coinciden."; return; }
+  $("btnPass").disabled=true;
+  api("/api/cuenta/password",{method:"POST",body:JSON.stringify({actual:actual,nueva:nueva})})
+    .then(function(){
+      toast("Contraseña actualizada");
+      $("p_actual").value=""; $("p_nueva").value=""; $("p_conf").value="";
+    })
+    .catch(function(e){ $("passErr").textContent = e.message || "No se pudo actualizar."; })
+    .finally(function(){ $("btnPass").disabled=false; });
+});
+
+/* ---------- SESIÓN ---------- */
+function salir(){
+  api("/api/logout",{method:"POST"}).catch(function(){});
+  setTok(null); ME=null;
+  setAuthTab("login");
+  setPantalla("viewAuth");
+}
+$("btnSalir").addEventListener("click", salir);
+$("btnSalirSide").addEventListener("click", salir);
+
+var RENDER = { inicio:renderInicio, clases:renderClases, comprar:renderComprar,
+               referidos:renderReferidos, comunidad:renderComunidad, cuenta:renderCuenta };
+
+function cargarMe(){
+  setPantalla("viewLoading");
+  api("/api/me").then(function(d){
+    ME = d;
+    setPantalla("app");
+    if(!location.hash) location.hash = "#inicio";
+    renderActive();
+  }).catch(function(e){
+    setTok(null); ME=null;
+    setAuthTab(REF_URL ? "reg" : "login");
+    setPantalla("viewAuth");
+    if(e.status!==401) $("loginErr").textContent = "No se pudo conectar. Intenta de nuevo.";
+  });
+}
+
+/* ---------- INIT ---------- */
 (function init(){
+  if(REF_URL) $("r_ref").value = REF_URL;
+  fetch("/api/publico").then(function(r){ return r.json(); }).then(function(d){
+    GOOGLE_CLIENT = (d && d.google_client_id) || "";
+    if(GOOGLE_CLIENT) cargarGoogle();
+  }).catch(function(){});
   if(getTok()){ cargarMe(); }
-  else { setAuthTab("login"); setView("viewAuth"); }
+  else { setAuthTab(REF_URL ? "reg" : "login"); setPantalla("viewAuth"); }
 })();
 </script>
 </body>
