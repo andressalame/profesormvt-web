@@ -228,8 +228,10 @@
       padding:0;border-right:0;border-top:1px solid var(--line);}
     .side .logo,.side .slab,.side-out{display:none;}
     .side nav{flex-direction:row;margin:0;gap:0;width:100%;flex:1;}
-    .side nav a{flex:1;flex-direction:column;justify-content:center;align-items:center;gap:3px;
-      font-size:8.5px;letter-spacing:.05em;padding:6px 2px;border-left:0;border-top:3px solid transparent;border-radius:0;}
+    .side nav a{flex:1;flex-direction:column;justify-content:center;align-items:center;gap:0;
+      padding:6px 0;border-left:0;border-top:3px solid transparent;border-radius:0;}
+    .side nav a span{display:none;} /* 7 tabs: solo íconos en móvil (aria-label/title presentes) */
+    .side nav a svg{width:21px;height:21px;}
     .side nav a.active{border-left:0;border-top-color:var(--accent);background:transparent;}
     .main{margin-left:0;padding:26px 18px 110px;}
     .plan-grid{grid-template-columns:1fr;}
@@ -289,12 +291,13 @@
     <a class="logo" href="#inicio">profesor<em>mvt</em><span class="dot"></span></a>
     <div class="slab">Portal de alumno</div>
     <nav aria-label="Navegación del portal">
-      <a href="#inicio" data-v="inicio"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11l9-8 9 8"/><path d="M5 9.5V21h14V9.5"/></svg>Inicio</a>
-      <a href="#clases" data-v="clases"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16M4 12h16M4 19h10"/></svg>Mis clases</a>
-      <a href="#comprar" data-v="comprar"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7h2l2.4 10.2A2 2 0 0 0 9.3 19h7.4a2 2 0 0 0 1.9-1.6L21 9H6"/><circle cx="10" cy="21" r="1"/><circle cx="17" cy="21" r="1"/></svg>Comprar</a>
-      <a href="#referidos" data-v="referidos"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="8" width="18" height="4"/><path d="M5 12v8h14v-8M12 8v12M12 8s-4-.5-4-3a2 2 0 0 1 4-1 2 2 0 0 1 4 1c0 2.5-4 3-4 3z"/></svg>Referidos</a>
-      <a href="#comunidad" data-v="comunidad"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12a8 8 0 0 1-8 8H4l2-3a8 8 0 1 1 15-5z"/></svg>Comunidad</a>
-      <a href="#cuenta" data-v="cuenta"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 5-5.5 8-5.5s6.5 1.5 8 5.5"/></svg>Mi cuenta</a>
+      <a href="#inicio" data-v="inicio" aria-label="Inicio" title="Inicio"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11l9-8 9 8"/><path d="M5 9.5V21h14V9.5"/></svg><span>Inicio</span></a>
+      <a href="#clases" data-v="clases" aria-label="Mis clases" title="Mis clases"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16M4 12h16M4 19h10"/></svg><span>Mis clases</span></a>
+      <a href="#recursos" data-v="recursos" aria-label="Recursos" title="Recursos"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7a1 1 0 0 1 1-1h5l2 2h9a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z"/></svg><span>Recursos</span></a>
+      <a href="#comunidad" data-v="comunidad" aria-label="Comunidad" title="Comunidad"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12a8 8 0 0 1-8 8H4l2-3a8 8 0 1 1 15-5z"/></svg><span>Comunidad</span></a>
+      <a href="#comprar" data-v="comprar" aria-label="Comprar" title="Comprar"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7h2l2.4 10.2A2 2 0 0 0 9.3 19h7.4a2 2 0 0 0 1.9-1.6L21 9H6"/><circle cx="10" cy="21" r="1"/><circle cx="17" cy="21" r="1"/></svg><span>Comprar</span></a>
+      <a href="#referidos" data-v="referidos" aria-label="Referidos" title="Referidos"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="8" width="18" height="4"/><path d="M5 12v8h14v-8M12 8v12M12 8s-4-.5-4-3a2 2 0 0 1 4-1 2 2 0 0 1 4 1c0 2.5-4 3-4 3z"/></svg><span>Referidos</span></a>
+      <a href="#cuenta" data-v="cuenta" aria-label="Mi cuenta" title="Mi cuenta"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 5-5.5 8-5.5s6.5 1.5 8 5.5"/></svg><span>Mi cuenta</span></a>
     </nav>
     <button class="side-out" id="btnSalirSide">Cerrar sesión</button>
   </aside>
@@ -377,7 +380,8 @@
         <div class="lab">// TU CÓDIGO</div>
         <div class="refcode" id="rCode">······</div>
         <div class="ctas">
-          <button class="btn" id="btnCopiarRef">Copiar</button>
+          <button class="btn" id="btnCopiarRef">Copiar código</button>
+          <button class="btn ghost" id="btnCopiarLink">Copiar link</button>
           <a class="btn ghost" id="btnWaRef" target="_blank" rel="noopener">Compartir por WhatsApp</a>
         </div>
       </div>
@@ -388,19 +392,22 @@
       <p class="note">Cuando un amigo compra su primer paquete con tu código, ganas <strong style="color:var(--cream)">S/50 de descuento</strong> para tu próxima compra.</p>
     </section>
 
+    <!-- ===== RECURSOS ===== -->
+    <section class="view" id="v-recursos">
+      <div class="eyebrow">// RECURSOS</div>
+      <hr class="rule" />
+      <div id="recList"></div>
+      <div class="empty hidden" id="recVacio">Pronto subiré material aquí — atento al chat y al Discord.</div>
+    </section>
+
     <!-- ===== COMUNIDAD ===== -->
     <section class="view" id="v-comunidad">
       <div class="eyebrow">// COMUNIDAD</div>
-      <h1>Comunidad y <em>recursos</em></h1>
       <hr class="rule" />
       <div class="card">
-        <h3>// DISCORD</h3>
-        <p class="note" style="margin:0 0 14px;">Tu material extra, comunidad y anuncios viven aquí.</p>
+        <p class="note" style="margin:0 0 14px;">Únete a nuestro servidor de Discord — anuncios, comunidad y más.</p>
         <a class="btn" id="btnDiscord" target="_blank" rel="noopener">Entrar al Discord →</a>
       </div>
-      <div class="lab" style="margin:22px 0 10px;">// RECURSOS</div>
-      <div id="recList"></div>
-      <div class="empty hidden" id="recVacio">Pronto subiré material aquí. Mientras, todo lo nuevo lo aviso en el Discord.</div>
     </section>
 
     <!-- ===== MI CUENTA ===== -->
@@ -619,7 +626,7 @@ function onGoogleCred(resp){
 }
 
 /* ---------- ROUTER (SPA por hash) ---------- */
-var VISTAS = ["inicio","clases","comprar","referidos","comunidad","cuenta"];
+var VISTAS = ["inicio","clases","recursos","comunidad","comprar","referidos","cuenta"];
 function vistaActual(){
   var h=(location.hash||"#inicio").replace("#","");
   return VISTAS.indexOf(h)>=0 ? h : "inicio";
@@ -798,19 +805,29 @@ function renderReferidos(){
     " al registrarte: https://profesormvt.com/alumnos/?ref="+code;
   $("btnWaRef").href = "https://wa.me/?text="+encodeURIComponent(msg);
 }
-$("btnCopiarRef").addEventListener("click",function(){
-  var code = (ME && ME.ref_code) || "";
-  if(!code) return;
+function copiarTexto(txt, okMsg){
+  if(!txt) return;
   if(navigator.clipboard && navigator.clipboard.writeText){
-    navigator.clipboard.writeText(code).then(function(){ toast("Código copiado"); })
-      .catch(function(){ prompt("Copia tu código:", code); });
-  } else prompt("Copia tu código:", code);
+    navigator.clipboard.writeText(txt).then(function(){ toast(okMsg); })
+      .catch(function(){ prompt("Copia:", txt); });
+  } else prompt("Copia:", txt);
+}
+$("btnCopiarRef").addEventListener("click",function(){
+  copiarTexto((ME && ME.ref_code) || "", "Código copiado");
+});
+$("btnCopiarLink").addEventListener("click",function(){
+  var code = (ME && ME.ref_code) || "";
+  if(code) copiarTexto("https://profesormvt.com/alumnos/?ref="+code, "Link copiado");
 });
 
-/* ---------- VISTA: COMUNIDAD ---------- */
+/* ---------- VISTA: COMUNIDAD (solo Discord) ---------- */
 function renderComunidad(){
   var du = (ME.config && ME.config.discord_url) || "";
   if(du){ $("btnDiscord").href = du; show("btnDiscord"); } else hide("btnDiscord");
+}
+
+/* ---------- VISTA: RECURSOS ---------- */
+function renderRecursos(){
   var rec = ME.recursos || [];
   if(rec.length===0){ $("recList").innerHTML=""; show("recVacio"); return; }
   hide("recVacio");
@@ -965,8 +982,8 @@ function salir(){
 $("btnSalir").addEventListener("click", salir);
 $("btnSalirSide").addEventListener("click", salir);
 
-var RENDER = { inicio:renderInicio, clases:renderClases, comprar:renderComprar,
-               referidos:renderReferidos, comunidad:renderComunidad, cuenta:renderCuenta };
+var RENDER = { inicio:renderInicio, clases:renderClases, recursos:renderRecursos, comunidad:renderComunidad,
+               comprar:renderComprar, referidos:renderReferidos, cuenta:renderCuenta };
 
 function cargarMe(){
   setPantalla("viewLoading");
