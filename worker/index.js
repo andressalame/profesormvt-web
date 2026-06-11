@@ -62,6 +62,22 @@ async function hashPass(password, saltHex){
 }
 function emailOk(e){ return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(e); }
 
+/* ---------- archivos en R2 (PDF / audio) ---------- */
+const MIME_ARCHIVO = { pdf: "application/pdf", mp3: "audio/mpeg", m4a: "audio/mp4", ogg: "audio/ogg", wav: "audio/wav" };
+function extArchivo(nombre){
+  const m = String(nombre || "").toLowerCase().match(/\.(pdf|mp3|m4a|ogg|wav)$/);
+  return m ? m[1] : null;
+}
+/* nombre para content-disposition: sin comillas, backslashes ni caracteres de control */
+function nombreArchivoLimpio(n){
+  let out = "";
+  for (const ch of String(n || "archivo")){
+    const c = ch.charCodeAt(0);
+    if (c >= 32 && c !== 127 && ch !== '"' && ch !== "\\") out += ch;
+  }
+  return out.slice(0, 80) || "archivo";
+}
+
 /* base64url -> bytes (soporta unicode en el payload del JWT) */
 function b64uBytes(s){
   s = String(s || "").replace(/-/g, "+").replace(/_/g, "/");
@@ -269,15 +285,17 @@ export default {
         return json({ google_client_id: cfg.google_client_id || "" });
       }
 
-      /* ============ ARCHIVO DE RECURSO (PDF servido desde R2) ============ */
+      /* ============ ARCHIVO DE RECURSO (PDF / audio servido desde R2) ============ */
       if (url.pathname.startsWith("/api/recurso/archivo/") && request.method === "GET"){
         const key = url.pathname.slice("/api/recurso/archivo/".length);
-        if (!/^[a-f0-9-]{36}\.pdf$/.test(key)) return json({ error: "Archivo no encontrado" }, 404);
+        const m = key.match(/^[a-f0-9-]{36}\.(pdf|mp3|m4a|ogg|wav)$/);
+        if (!m) return json({ error: "Archivo no encontrado" }, 404);
         const obj = await env.RECURSOS_R2.get(key);
         if (!obj) return json({ error: "Archivo no encontrado" }, 404);
+        const ct = (obj.httpMetadata && obj.httpMetadata.contentType) || MIME_ARCHIVO[m[1]] || "application/octet-stream";
         return new Response(obj.body, {
           headers: {
-            "content-type": "application/pdf",
+            "content-type": ct,
             "content-disposition": (obj.httpMetadata && obj.httpMetadata.contentDisposition) || "inline",
             "cache-control": "public, max-age=3600"
           }
@@ -428,7 +446,7 @@ export default {
           if (alumno){
             const ciclo = alumno.ciclo || 1;
             const { results } = await env.DB.prepare(
-              "SELECT fecha, estado, trabajo, tarea FROM registro WHERE alumno_id = ?1 AND COALESCE(ciclo,1) = ?2 ORDER BY fecha ASC, id ASC"
+              "SELECT fecha, estado, trabajo, tarea, COALESCE(tarea_audio,'') AS tarea_audio FROM registro WHERE alumno_id = ?1 AND COALESCE(ciclo,1) = ?2 ORDER BY fecha ASC, id ASC"
             ).bind(alumno.id, ciclo).all();
             historial = results || [];
             computed = compute(alumno, historial, precios);
@@ -584,10 +602,11 @@ export default {
           }
           for (const r of body.registro){
             stmts.push(env.DB.prepare(
-              "INSERT INTO registro (id,fecha,alumno_id,curso,estado,trabajo,tarea,ciclo) VALUES (?1,?2,?3,?4,?5,?6,?7,?8)"
+              "INSERT INTO registro (id,fecha,alumno_id,curso,estado,trabajo,tarea,ciclo,tarea_audio) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9)"
             ).bind(
               r.id, r.fecha || "", r.alumnoId || r.alumno_id,
-              r.curso || "", r.estado || "", r.trabajo || "", r.tarea || "", r.ciclo || 1
+              r.curso || "", r.estado || "", r.trabajo || "", r.tarea || "", r.ciclo || 1,
+              r.tarea_audio || ""
             ));
           }
           const precios = body.precios || {};
@@ -643,7 +662,7 @@ export default {
           return json({ error: "Acción no válida" }, 400);
         }
 
-        /* -------- Recursos: subir archivo PDF a R2 -------- */
+        /* -------- Recursos: subir archivo (PDF o audio) a R2 -------- */
         if (url.pathname === "/api/admin/recurso/archivo" && request.method === "POST"){
           const form = await request.formData().catch(() => null);
           if (!form) return json({ error: "Formulario inválido" }, 400);
@@ -655,22 +674,59 @@ export default {
           if (titulo.length < 2) return json({ error: "Ponle un título al recurso." }, 400);
 
           const esArchivo = archivo && typeof archivo !== "string" && typeof archivo.arrayBuffer === "function";
-          const esPdf = esArchivo && (archivo.type === "application/pdf" || /\.pdf$/i.test(archivo.name || ""));
-          if (!esPdf || archivo.size > 15 * 1024 * 1024){
-            return json({ error: "Solo PDFs de hasta 15 MB." }, 400);
+          const ext = esArchivo ? extArchivo(archivo.name) : null;
+          if (!ext || archivo.size > 25 * 1024 * 1024){
+            return json({ error: "Solo PDFs o audios (mp3/m4a/ogg/wav) de hasta 25 MB." }, 400);
           }
 
-          const key = crypto.randomUUID() + ".pdf";
-          const nombreLimpio = (String(archivo.name || "documento.pdf")
-            .replace(/["\\\x00-\x1f\x7f]/g, "").slice(0, 80)) || "documento.pdf";
+          const key = crypto.randomUUID() + "." + ext;
+          const nombreLimpio = nombreArchivoLimpio(archivo.name);
           // R2 acepta el File/Blob directo (longitud conocida); un stream suelto sería rechazado
           await env.RECURSOS_R2.put(key, archivo, {
-            httpMetadata: { contentType: "application/pdf", contentDisposition: 'inline; filename="' + nombreLimpio + '"' }
+            httpMetadata: { contentType: MIME_ARCHIVO[ext], contentDisposition: 'inline; filename="' + nombreLimpio + '"' }
           });
           await env.DB.prepare(
             "INSERT INTO recursos (id,titulo,descripcion,url,curso,fecha) VALUES (?1,?2,?3,?4,?5,?6)"
           ).bind(crypto.randomUUID(), titulo, descripcion, "/api/recurso/archivo/" + key, curso, hoy()).run();
           return json({ ok: true });
+        }
+
+        /* -------- Audio de tarea por clase (subir / borrar) -------- */
+        if (url.pathname === "/api/admin/registro/audio" && request.method === "POST"){
+          const form = await request.formData().catch(() => null);
+          if (!form) return json({ error: "Formulario inválido" }, 400);
+          const registroId = String(form.get("registro_id") || "");
+          const reg = await env.DB.prepare("SELECT id, COALESCE(tarea_audio,'') AS tarea_audio FROM registro WHERE id = ?1").bind(registroId).first();
+          if (!reg) return json({ error: "Registro no encontrado" }, 404);
+
+          const borrarViejo = async () => {
+            if (reg.tarea_audio && reg.tarea_audio.startsWith("/api/recurso/archivo/")){
+              const oldKey = reg.tarea_audio.slice("/api/recurso/archivo/".length);
+              try { await env.RECURSOS_R2.delete(oldKey); } catch (e) { /* huérfano no bloquea */ }
+            }
+          };
+
+          if (form.get("accion") === "borrar"){
+            await borrarViejo();
+            await env.DB.prepare("UPDATE registro SET tarea_audio = '' WHERE id = ?1").bind(registroId).run();
+            return json({ ok: true });
+          }
+
+          const archivo = form.get("archivo");
+          const esArchivo = archivo && typeof archivo !== "string" && typeof archivo.arrayBuffer === "function";
+          const ext = esArchivo ? extArchivo(archivo.name) : null;
+          if (!ext || ext === "pdf" || archivo.size > 25 * 1024 * 1024){
+            return json({ error: "Solo audios mp3/m4a/ogg/wav de hasta 25 MB." }, 400);
+          }
+
+          await borrarViejo(); // reemplazo sin huérfanos
+          const key = crypto.randomUUID() + "." + ext;
+          await env.RECURSOS_R2.put(key, archivo, {
+            httpMetadata: { contentType: MIME_ARCHIVO[ext], contentDisposition: 'inline; filename="' + nombreArchivoLimpio(archivo.name) + '"' }
+          });
+          const urlAudio = "/api/recurso/archivo/" + key;
+          await env.DB.prepare("UPDATE registro SET tarea_audio = ?1 WHERE id = ?2").bind(urlAudio, registroId).run();
+          return json({ ok: true, url: urlAudio });
         }
 
         if (url.pathname === "/api/admin/compra" && request.method === "POST"){

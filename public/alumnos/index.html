@@ -309,6 +309,7 @@
       <div class="card tarea hidden" id="cTarea">
         <h3>// TU TAREA DE LA SEMANA</h3>
         <div class="t" id="cTareaTxt"></div>
+        <div id="cTareaAudio" style="margin-top:10px;"></div>
         <div class="meta" id="cTareaMeta"></div>
       </div>
       <div class="card hidden" id="cWrap">
@@ -612,9 +613,12 @@ function renderInicio(){
 /* ---------- VISTA: MIS CLASES ---------- */
 function renderClases(){
   var h = (ME.alumno && ME.alumno.historial) || [];
-  var con = h.find(function(r){ return r.tarea && String(r.tarea).trim(); });
+  var con = h.find(function(r){ return (r.tarea && String(r.tarea).trim()) || r.tarea_audio; });
   if(con){
-    $("cTareaTxt").textContent = con.tarea;
+    $("cTareaTxt").textContent = con.tarea || "";
+    $("cTareaAudio").innerHTML = con.tarea_audio
+      ? '<audio controls preload="none" src="'+esc(con.tarea_audio)+'" style="width:100%"></audio>'
+      : "";
     $("cTareaMeta").textContent = "De tu clase del " + (con.fecha||"—");
     show("cTarea");
   } else hide("cTarea");
@@ -622,9 +626,12 @@ function renderClases(){
   show("cWrap"); hide("cVacio");
   $("cTabla").querySelector("tbody").innerHTML = h.map(function(r){
     var pc = r.estado==="Asistió"?"green":(r.estado==="Reprogramó"?"amber":"gray");
+    var audioCell = r.tarea_audio
+      ? '<audio controls preload="none" src="'+esc(r.tarea_audio)+'" style="display:block;width:210px;max-width:100%;height:30px;margin-top:6px"></audio>'
+      : "";
     return '<tr><td class="mono">'+esc(r.fecha||"")+'</td>'+
       '<td><span class="pill '+pc+'">'+esc(r.estado||"")+'</span></td>'+
-      '<td>'+esc(r.trabajo||"")+'</td><td class="mut">'+esc(r.tarea||"")+'</td></tr>';
+      '<td>'+esc(r.trabajo||"")+'</td><td class="mut">'+esc(r.tarea||"")+audioCell+'</td></tr>';
   }).join("");
 }
 
@@ -746,9 +753,11 @@ function renderComunidad(){
   if(rec.length===0){ $("recList").innerHTML=""; show("recVacio"); return; }
   hide("recVacio");
   $("recList").innerHTML = rec.map(function(r){
-    var esPdf = String(r.url||"").indexOf("/api/recurso/archivo/")===0;
+    var urlRec = String(r.url||"");
+    var extm = urlRec.toLowerCase().match(/\.(pdf|mp3|m4a|ogg|wav)$/);
+    var tagA = (urlRec.indexOf("/api/recurso/archivo/")===0 && extm) ? (extm[1]==="pdf"?"PDF":"AUDIO") : "";
     return '<div class="card rec">'+
-      '<div class="rec-top"><span><span class="rtag">'+esc(r.curso||"Todos")+'</span>'+(esPdf?' <span class="rtag">PDF</span>':'')+'</span><span class="rfecha">'+esc(r.fecha||"")+'</span></div>'+
+      '<div class="rec-top"><span><span class="rtag">'+esc(r.curso||"Todos")+'</span>'+(tagA?' <span class="rtag">'+tagA+'</span>':'')+'</span><span class="rfecha">'+esc(r.fecha||"")+'</span></div>'+
       '<h3>'+esc(r.titulo||"")+'</h3>'+
       (r.descripcion?'<p>'+esc(r.descripcion)+'</p>':'')+
       '<a class="btn ghost sm" href="'+esc(r.url||"#")+'" target="_blank" rel="noopener">Abrir →</a>'+
