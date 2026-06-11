@@ -128,6 +128,7 @@
       <button class="tab" data-tab="registro">Registro</button>
       <button class="tab" data-tab="pagos">Pagos<span class="dot hidden" id="dotPagos">0</span></button>
       <button class="tab" data-tab="cuentas">Cuentas</button>
+      <button class="tab" data-tab="recursos">Recursos</button>
       <button class="tab" data-tab="ajustes">Ajustes</button>
     </div>
     <div class="tools">
@@ -197,6 +198,29 @@
     </div>
   </section>
 
+  <section class="panel" id="panel-recursos">
+    <div class="group">
+      <h2>// Publicar recurso</h2>
+      <div class="frow">
+        <div class="field"><label>Título</label><input id="rec_titulo" type="text" placeholder="Guía de calentamiento vocal" /></div>
+        <div class="field"><label>Link</label><input id="rec_url" type="text" placeholder="https://..." /></div>
+      </div>
+      <div class="frow">
+        <div class="field"><label>Descripción (opcional)</label><input id="rec_desc" type="text" /></div>
+        <div class="field"><label>Curso</label><select id="rec_curso"><option>Todos</option><option>Canto</option><option>Piano</option><option>Composición</option></select></div>
+      </div>
+      <button class="btn" id="btnPublicarRec">Publicar</button>
+    </div>
+    <div class="group">
+      <h2>// RECURSOS PUBLICADOS</h2>
+      <p class="hint">Lo que publiques aquí aparece en la sección Comunidad del portal del alumno. "Todos" lo ven todos; un curso específico solo lo ven sus alumnos.</p>
+      <div class="tablewrap">
+        <table><thead><tr><th>Fecha</th><th>Título</th><th>Curso</th><th>Link</th><th>Descripción</th><th></th></tr></thead>
+        <tbody id="tbRecursos"></tbody></table>
+      </div>
+    </div>
+  </section>
+
   <section class="panel" id="panel-ajustes">
     <div class="group">
       <h2>// Precios de paquetes (S/)</h2>
@@ -209,6 +233,10 @@
       <div class="cfgrow"><span class="pk">Titular (como sale en Yape)</span><input id="cfg_pago_titular" type="text" placeholder="Andrés S." /></div>
       <div class="cfgrow"><span class="pk">Link de Calendly</span><input id="cfg_calendly_url" type="text" placeholder="https://calendly.com/tu-usuario/clase" /></div>
       <p class="hint">Hasta que llenes el número, el portal manda a los alumnos a coordinarte el pago por WhatsApp.</p>
+      <div class="cfgrow"><span class="pk">Link del Discord</span><input id="cfg_discord_url" type="text" placeholder="https://discord.gg/..." /></div>
+      <p class="hint" style="margin-top:-4px;">Botón "Entrar al Discord" en el portal.</p>
+      <div class="cfgrow"><span class="pk">Google Client ID</span><input id="cfg_google_client_id" type="text" placeholder="xxxxx.apps.googleusercontent.com" /></div>
+      <p class="hint" style="margin-top:-4px;">Enciende el botón de Google del portal · termina en .apps.googleusercontent.com</p>
     </div>
     <button class="btn" id="btnGuardarAjustes">Guardar ajustes</button>
     <div class="group" style="margin-top:26px;">
@@ -323,7 +351,7 @@ var PAQUETES = {
 var PRECIOS_DEFAULT = { "Paquete 4":250, "Paquete 8":450, "Paquete 12":600, "Clase suelta":70 };
 var TOKEN_KEY = "pmvt_admin_token";
 
-var db = { alumnos:[], registro:[], precios:Object.assign({},PRECIOS_DEFAULT), cuentas:[], compras:[], config:{} };
+var db = { alumnos:[], registro:[], precios:Object.assign({},PRECIOS_DEFAULT), cuentas:[], compras:[], recursos:[], config:{} };
 var token = null;
 var cuentaModo = null;
 var refreshInterval = null;
@@ -371,7 +399,7 @@ function apiPost(path, body){
 function recargar(){
   return apiGet().then(function(d){
     db=d; if(!db.precios) db.precios=Object.assign({},PRECIOS_DEFAULT);
-    db.cuentas=db.cuentas||[]; db.compras=db.compras||[]; db.config=db.config||{};
+    db.cuentas=db.cuentas||[]; db.compras=db.compras||[]; db.recursos=db.recursos||[]; db.config=db.config||{};
     renderAll(); setSync("Conectado ✓","ok");
   });
 }
@@ -387,7 +415,7 @@ function refrescoSilencioso(){
     var nuevoPend = (d.compras||[]).filter(function(c){ return c.estado==="pendiente"; }).length;
     var aumento = nuevoPend > prevPendientes;
     db=d; if(!db.precios) db.precios=Object.assign({},PRECIOS_DEFAULT);
-    db.cuentas=db.cuentas||[]; db.compras=db.compras||[]; db.config=db.config||{};
+    db.cuentas=db.cuentas||[]; db.compras=db.compras||[]; db.recursos=db.recursos||[]; db.config=db.config||{};
     prevPendientes = nuevoPend;
     renderAll();                              // siempre re-render (refleja cambios de otro dispositivo)
     if(aumento){ toast("Nuevo pago por confirmar 🔔", 5000); }
@@ -540,6 +568,28 @@ function renderRegistro(){
   }).join("");
 }
 
+function cuentaPorId(id){ return db.cuentas.find(function(c){return c.id===id;}) || null; }
+function cuentaPorRef(code){ if(!code) return null; return db.cuentas.find(function(c){return c.ref_code===code;}) || null; }
+/* Línea informativa de referidos bajo el nombre del comprador (el worker premia/consume solo) */
+function infoReferido(compra, esPendiente){
+  var cu=cuentaPorId(compra.cuenta_id);
+  if(!cu || !cu.ref_por) return "";
+  var refidor=cuentaPorRef(cu.ref_por);
+  if(!refidor) return "";
+  var html='<br><span class="mini">Referido por '+esc(refidor.nombre)+'</span>';
+  if(esPendiente){
+    var yaConfirmo=db.compras.some(function(x){return x.cuenta_id===compra.cuenta_id && x.estado==="confirmada";});
+    if(!yaConfirmo){
+      html+='<br><span class="mini" style="color:var(--accent)">★ 1ª compra — al confirmar, '+esc(refidor.nombre)+' gana S/50</span>';
+    }
+  }
+  return html;
+}
+function lineaDescuento(c){
+  return Number(c.descuento)>0
+    ? '<br><span class="mini" style="color:var(--accent)">Crédito aplicado: −S/'+Number(c.descuento)+'</span>'
+    : '';
+}
 function renderPagos(){
   var pend=db.compras.filter(function(c){return c.estado==="pendiente";});
   var proc=db.compras.filter(function(c){return c.estado!=="pendiente";});
@@ -548,10 +598,10 @@ function renderPagos(){
     : pend.map(function(c){
         return '<tr>'+
           '<td class="mini">'+esc(c.fecha||'')+'</td>'+
-          '<td class="name">'+esc(nombreCuenta(c.cuenta_id))+'</td>'+
+          '<td class="name">'+esc(nombreCuenta(c.cuenta_id))+infoReferido(c,true)+'</td>'+
           '<td>'+esc(c.curso||'')+'</td>'+
           '<td>'+esc(c.paquete)+'</td>'+
-          '<td><span class="big">S/ '+(c.monto||0)+'</span></td>'+
+          '<td><span class="big">S/ '+(c.monto||0)+'</span>'+lineaDescuento(c)+'</td>'+
           '<td class="mini">'+esc(c.op_numero||'—')+'</td>'+
           '<td><div class="rowact"><button class="btn ok sm" data-confirmar="'+c.id+'">Confirmar ✓</button><button class="btn no sm" data-rechazar="'+c.id+'">Rechazar</button></div></td>'+
         '</tr>';
@@ -560,8 +610,8 @@ function renderPagos(){
     ? '<tr><td colspan="5" class="empty">Aún sin compras procesadas</td></tr>'
     : proc.map(function(c){
         var p=c.estado==="confirmada"?'<span class="pill green">Confirmada</span>':'<span class="pill red">Rechazada</span>';
-        return '<tr><td class="mini">'+esc(c.fecha||'')+'</td><td class="name">'+esc(nombreCuenta(c.cuenta_id))+'</td>'+
-          '<td>'+esc(c.paquete)+'</td><td>S/ '+(c.monto||0)+'</td><td>'+p+'</td></tr>';
+        return '<tr><td class="mini">'+esc(c.fecha||'')+'</td><td class="name">'+esc(nombreCuenta(c.cuenta_id))+infoReferido(c,false)+'</td>'+
+          '<td>'+esc(c.paquete)+'</td><td>S/ '+(c.monto||0)+lineaDescuento(c)+'</td><td>'+p+'</td></tr>';
       }).join("");
 }
 
@@ -570,8 +620,12 @@ function renderCuentas(){
   if(db.cuentas.length===0){ tb.innerHTML='<tr><td colspan="7" class="empty">Nadie se ha registrado todavía</td></tr>'; return; }
   tb.innerHTML=db.cuentas.map(function(c){
     var vinc=c.alumno_id?esc(nombreDe(c.alumno_id)):'<span class="pill gray">Sin vincular</span>';
+    var gchip=(c.tiene_google===1)?' <span class="pill green" title="Conectado con Google" style="padding:2px 6px;font-size:9.5px">G</span>':'';
+    var extra='<span class="mini">'+esc(c.ref_code||'')+'</span>'+
+      (Number(c.credito)>0?' <span class="mini" style="color:var(--accent);font-weight:700">S/'+Number(c.credito)+'</span>':'')+
+      (c.ref_por?' <span class="mini">· ref: '+esc(c.ref_por)+'</span>':'');
     return '<tr>'+
-      '<td class="name">'+esc(c.nombre)+'</td>'+
+      '<td class="name">'+esc(c.nombre)+gchip+'<br>'+extra+'</td>'+
       '<td class="mini">'+esc(c.email)+'</td>'+
       '<td class="mini">'+esc(c.whatsapp||'—')+'</td>'+
       '<td>'+(c.marketing?'<span class="pill green">✓</span>':'<span class="pill gray">—</span>')+'</td>'+
@@ -593,6 +647,25 @@ function renderAjustes(){
   el("cfg_pago_numero").value=(db.config&&db.config.pago_numero)||"";
   el("cfg_pago_titular").value=(db.config&&db.config.pago_titular)||"";
   el("cfg_calendly_url").value=(db.config&&db.config.calendly_url)||"";
+  el("cfg_discord_url").value=(db.config&&db.config.discord_url)||"";
+  el("cfg_google_client_id").value=(db.config&&db.config.google_client_id)||"";
+}
+
+function renderRecursos(){
+  var tb=el("tbRecursos");
+  var rec=db.recursos||[];
+  if(rec.length===0){ tb.innerHTML='<tr><td colspan="6" class="empty">Aún no has publicado recursos.</td></tr>'; return; }
+  tb.innerHTML=rec.map(function(r){
+    var urlCorta=String(r.url||'').replace(/^https?:\/\//,'').slice(0,42);
+    return '<tr>'+
+      '<td class="mini">'+esc(r.fecha||'')+'</td>'+
+      '<td class="name">'+esc(r.titulo||'')+'</td>'+
+      '<td><span class="pill gray">'+esc(r.curso||'Todos')+'</span></td>'+
+      '<td class="mini"><a href="'+esc(r.url||'#')+'" target="_blank" rel="noopener">'+esc(urlCorta)+'</a></td>'+
+      '<td class="notes">'+esc(r.descripcion||'')+'</td>'+
+      '<td><button class="btn ghost sm" data-delrec="'+r.id+'">Borrar</button></td>'+
+    '</tr>';
+  }).join("");
 }
 
 function fillSelects(){
@@ -600,7 +673,7 @@ function fillSelects(){
   el("r_alumno").innerHTML=db.alumnos.map(function(a){return '<option value="'+a.id+'">'+esc(a.nombre)+'</option>';}).join("")
     || '<option value="">— agrega un alumno primero —</option>';
 }
-function renderAll(){ renderResumen(); renderAlumnos(); renderRegistro(); renderPagos(); renderCuentas(); renderAjustes(); fillSelects(); }
+function renderAll(){ renderResumen(); renderAlumnos(); renderRegistro(); renderPagos(); renderCuentas(); renderRecursos(); renderAjustes(); fillSelects(); }
 
 /* ---------- Tabs / modales ---------- */
 document.querySelectorAll(".tab").forEach(function(t){
@@ -766,10 +839,40 @@ el("btnGuardarAjustes").addEventListener("click",function(){
   });
   var cfg={ pago_numero:el("cfg_pago_numero").value.trim(),
             pago_titular:el("cfg_pago_titular").value.trim(),
-            calendly_url:el("cfg_calendly_url").value.trim() };
+            calendly_url:el("cfg_calendly_url").value.trim(),
+            discord_url:el("cfg_discord_url").value.trim(),
+            google_client_id:el("cfg_google_client_id").value.trim() };
   Promise.all([ apiPut(), apiPost("/api/admin/config",cfg) ])
     .then(function(){ db.config=Object.assign(db.config||{},cfg); renderAll(); toast("Ajustes guardados"); })
     .catch(function(){ toast("No se pudieron guardar los ajustes"); });
+});
+
+/* ---------- Recursos ---------- */
+el("btnPublicarRec").addEventListener("click",function(){
+  var titulo=el("rec_titulo").value.trim(), urlR=el("rec_url").value.trim(),
+      desc=el("rec_desc").value.trim(), curso=el("rec_curso").value;
+  if(titulo.length<2){ toast("Ponle un título al recurso"); return; }
+  if(!/^https?:\/\//i.test(urlR)){ toast("El link debe empezar con http:// o https://"); return; }
+  el("btnPublicarRec").disabled=true;
+  apiPost("/api/admin/recurso",{accion:"crear",titulo:titulo,url:urlR,descripcion:desc,curso:curso})
+    .then(function(){
+      el("rec_titulo").value=""; el("rec_url").value=""; el("rec_desc").value=""; el("rec_curso").value="Todos";
+      return recargar();
+    })
+    .then(function(){ toast("Recurso publicado"); })
+    .catch(function(e){ toast((e&&e.message)||"No se pudo publicar"); })
+    .finally(function(){ el("btnPublicarRec").disabled=false; });
+});
+document.body.addEventListener("click",function(e){
+  var dr=e.target.closest("[data-delrec]");
+  if(!dr) return;
+  var r=(db.recursos||[]).find(function(x){return x.id===dr.dataset.delrec;});
+  if(r && confirm('¿Borrar el recurso "'+r.titulo+'"?')){
+    apiPost("/api/admin/recurso",{accion:"borrar",id:r.id})
+      .then(function(){ return recargar(); })
+      .then(function(){ toast("Recurso borrado"); })
+      .catch(function(err){ toast((err&&err.message)||"No se pudo borrar"); });
+  }
 });
 
 /* ---------- Export ---------- */
