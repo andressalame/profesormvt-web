@@ -222,6 +222,25 @@ async function crearSesion(env, cuentaId){
   return token;
 }
 
+/* ---------- chat: auth dual (sesión de alumno O ADMIN_TOKEN) ---------- */
+async function authChat(env, request){
+  const auth = request.headers.get("authorization") || "";
+  if (auth.startsWith("Bearer ") && env.ADMIN_TOKEN && auth === "Bearer " + env.ADMIN_TOKEN){
+    return { admin: true };
+  }
+  const cu = await cuentaDeSesion(env, request);
+  return cu ? { admin: false, cu } : null;
+}
+/* texto del chat: sin caracteres de control, recortado */
+function limpiarTextoChat(t){
+  let out = "";
+  for (const ch of String(t || "")){
+    const c = ch.charCodeAt(0);
+    if (c >= 32 && c !== 127) out += ch;
+  }
+  return out.trim();
+}
+
 /* ---------- Aviso por email a Andrés cuando un alumno declara un pago ----------
    Best-effort: se llama fuera de la transacción de la compra. Si falla, la compra
    ya quedó registrada y el portal responde ok igual. */
@@ -312,6 +331,61 @@ export default {
             "cache-control": "public, max-age=3600"
           }
         });
+      }
+
+      /* ============ CHAT GENERAL (sesión de alumno o admin) ============ */
+      if (url.pathname === "/api/chat" && request.method === "GET"){
+        const who = await authChat(env, request);
+        if (!who) return json({ error: "Sesión expirada" }, 401);
+        let desde = parseInt(url.searchParams.get("desde") || "0", 10);
+        if (!Number.isFinite(desde) || desde < 0) desde = 0;
+        let rows;
+        if (desde > 0){
+          rows = (await env.DB.prepare(
+            "SELECT rowid AS rid,id,cuenta_id,nombre,es_admin,texto,fecha FROM chat_mensajes WHERE rowid > ?1 ORDER BY rowid ASC LIMIT 100"
+          ).bind(desde).all()).results || [];
+        } else {
+          rows = (await env.DB.prepare(
+            "SELECT * FROM (SELECT rowid AS rid,id,cuenta_id,nombre,es_admin,texto,fecha FROM chat_mensajes ORDER BY rowid DESC LIMIT 100) ORDER BY rid ASC"
+          ).all()).results || [];
+        }
+        let max = desde;
+        const mensajes = rows.map(m => {
+          if (m.rid > max) max = m.rid;
+          return {
+            rid: m.rid, id: m.id, nombre: m.nombre, es_admin: m.es_admin ? 1 : 0,
+            texto: m.texto, fecha: m.fecha,
+            mio: who.admin ? (m.es_admin === 1) : (m.cuenta_id === who.cu.id)
+          };
+        });
+        return json({ mensajes, max });
+      }
+
+      if (url.pathname === "/api/chat" && request.method === "POST"){
+        const who = await authChat(env, request);
+        if (!who) return json({ error: "Sesión expirada" }, 401);
+        const b = await request.json().catch(() => ({}));
+        const texto = limpiarTextoChat(b.texto);
+        if (!texto) return json({ error: "Escribe un mensaje." }, 400);
+        if (texto.length > 500) return json({ error: "Máximo 500 caracteres." }, 400);
+
+        let nombre, esAdmin, cuentaId;
+        if (who.admin){
+          nombre = "Profe Andrés"; esAdmin = 1; cuentaId = null;
+        } else {
+          if (!who.cu.alumno_id) return json({ error: "El chat se abre cuando activas tu primer paquete 🙂" }, 403);
+          nombre = who.cu.nombre; esAdmin = 0; cuentaId = who.cu.id;
+          const ult = await env.DB.prepare(
+            "SELECT MAX(fecha) AS f FROM chat_mensajes WHERE cuenta_id = ?1"
+          ).bind(cuentaId).first();
+          if (ult && ult.f && (Date.now() - new Date(ult.f).getTime()) < 3000){
+            return json({ error: "Despacio :) un mensaje cada 3 segundos." }, 429);
+          }
+        }
+        await env.DB.prepare(
+          "INSERT INTO chat_mensajes (id,cuenta_id,nombre,es_admin,texto,fecha) VALUES (?1,?2,?3,?4,?5,?6)"
+        ).bind(crypto.randomUUID(), cuentaId, nombre, esAdmin, texto, new Date().toISOString()).run();
+        return json({ ok: true });
       }
 
       /* ============ REGISTRO (ahora acepta ref opcional) ============ */
@@ -748,6 +822,13 @@ export default {
           lista.push({ u: "/api/recurso/archivo/" + key, n: nombre });
           await guardarLista(lista);
           return json({ ok: true, audios: lista });
+        }
+
+        /* -------- Chat: borrar mensaje -------- */
+        if (url.pathname === "/api/admin/chat/borrar" && request.method === "POST"){
+          const b = await request.json().catch(() => ({}));
+          await env.DB.prepare("DELETE FROM chat_mensajes WHERE id = ?1").bind(String(b.id || "")).run();
+          return json({ ok: true });
         }
 
         if (url.pathname === "/api/admin/compra" && request.method === "POST"){

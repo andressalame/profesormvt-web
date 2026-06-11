@@ -188,6 +188,40 @@
     padding:11px 18px;border-radius:3px;opacity:0;transition:all .2s;pointer-events:none;z-index:99;}
   .toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
 
+  /* ---------- CHAT ---------- */
+  .chat{position:fixed;top:0;right:0;bottom:0;width:300px;background:var(--panel);border-left:1px solid var(--line);display:flex;flex-direction:column;z-index:70;}
+  .chat-head{font-family:var(--mono);font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--accent);font-weight:700;padding:15px 14px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;flex:0 0 auto;}
+  .chat-head button{background:none;border:1px solid var(--line);border-radius:3px;color:var(--muted);font-family:var(--mono);font-size:11px;padding:3px 9px;cursor:pointer;}
+  .chat-head button:hover{border-color:var(--accent);color:var(--accent);}
+  .chat-msgs{flex:1;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:10px;}
+  .chat-msg{max-width:88%;align-self:flex-start;}
+  .chat-msg.mio{align-self:flex-end;text-align:right;background:rgba(204,78,31,.08);border:1px solid var(--line);border-radius:4px;padding:6px 9px;}
+  .chat-meta{font-family:var(--mono);font-size:9.5px;color:var(--muted);letter-spacing:.05em;margin-bottom:2px;}
+  .chat-profe{color:var(--bg);background:var(--accent);font-weight:700;padding:1px 5px;border-radius:2px;margin-right:5px;font-size:9px;}
+  .chat-texto{font-size:13.5px;line-height:1.45;overflow-wrap:break-word;}
+  .chat-input{display:flex;gap:8px;padding:10px;border-top:1px solid var(--line);flex:0 0 auto;}
+  .chat-input input{flex:1;min-width:0;background:var(--bg);border:1px solid var(--line);color:var(--cream);padding:9px 10px;border-radius:3px;font-family:var(--body);font-size:13.5px;}
+  .chat-bloqueado{padding:12px 14px;border-top:1px solid var(--line);font-size:12.5px;color:var(--amber);flex:0 0 auto;}
+  .chat-vacio{color:var(--muted);font-family:var(--mono);font-size:11px;text-transform:uppercase;letter-spacing:.08em;text-align:center;padding:18px 0;}
+  .chat-strip{position:fixed;top:0;right:0;bottom:0;width:38px;background:var(--panel);border:0;border-left:1px solid var(--line);display:none;align-items:center;justify-content:center;cursor:pointer;z-index:70;font-size:17px;}
+  .chat-fab{position:fixed;right:16px;bottom:84px;width:52px;height:52px;border-radius:50%;background:var(--accent);border:1px solid var(--accent);font-size:22px;display:none;align-items:center;justify-content:center;z-index:70;box-shadow:0 4px 14px rgba(0,0,0,.45);cursor:pointer;}
+  .chat-dot{position:absolute;top:6px;right:6px;width:11px;height:11px;border-radius:50%;background:var(--accent);border:2px solid var(--panel);}
+  .chat-fab .chat-dot{background:#fff;border-color:var(--accent);top:4px;right:4px;}
+  @media (min-width:1100px){
+    .main{margin-right:316px;}
+    body.chat-cerrado .main{margin-right:54px;}
+    body.chat-cerrado .chat{display:none;}
+    body.chat-cerrado .chat-strip{display:flex;}
+    .chat-fab{display:none!important;}
+  }
+  @media (max-width:1099px){
+    .chat{display:none;inset:0;width:100%;z-index:95;}
+    body.chat-overlay .chat{display:flex;}
+    .chat-strip{display:none!important;}
+    .chat-fab{display:flex;}
+    body.chat-overlay .chat-fab{display:none;}
+  }
+
   /* ---------- MÓVIL: sidebar -> tabs inferiores ---------- */
   @media (max-width:859px){
     .side{top:auto;bottom:0;left:0;right:0;width:100%;height:64px;flex-direction:row;align-items:stretch;
@@ -401,6 +435,19 @@
     </section>
 
   </main>
+
+  <!-- ===== CHAT (persiste en todas las vistas) ===== -->
+  <aside class="chat" id="chatPanel" aria-label="Chat de alumnos">
+    <div class="chat-head"><span>// CHAT DE ALUMNOS</span><button id="chatToggle" aria-label="Cerrar chat">—</button></div>
+    <div class="chat-msgs" id="chatMsgs"></div>
+    <div class="chat-input" id="chatInputWrap">
+      <input id="chatTexto" maxlength="500" placeholder="Escribe un mensaje…" autocomplete="off" />
+      <button class="btn sm" id="chatEnviar">›</button>
+    </div>
+    <div class="chat-bloqueado hidden" id="chatBloqueado"></div>
+  </aside>
+  <button class="chat-strip" id="chatStrip" title="Abrir chat">💬<span class="chat-dot hidden" id="chatDotStrip"></span></button>
+  <button class="chat-fab" id="chatFab" aria-label="Abrir chat">💬<span class="chat-dot hidden" id="chatDotFab"></span></button>
 </div>
 
 <!-- ============ MODAL COMPRA ============ -->
@@ -817,9 +864,100 @@ $("btnPass").addEventListener("click",function(){
     .finally(function(){ $("btnPass").disabled=false; });
 });
 
+/* ---------- CHAT ---------- */
+var CHAT_KEY = "pmvt_chat_abierto";
+var chatMax = 0, chatInterval = null;
+function chatEsMovil(){ return window.innerWidth < 1100; }
+function chatVisible(){
+  if(document.body.classList.contains("chat-overlay")) return true;
+  return !chatEsMovil() && !document.body.classList.contains("chat-cerrado");
+}
+function horaDe(f){
+  try{ var d=new Date(f); if(isNaN(d.getTime())) return "";
+    return String(d.getHours()).padStart(2,"0")+":"+String(d.getMinutes()).padStart(2,"0");
+  }catch(e){ return ""; }
+}
+function chatDots(on){
+  $("chatDotStrip").classList.toggle("hidden", !on);
+  $("chatDotFab").classList.toggle("hidden", !on);
+}
+function chatScrollFondo(){ var b=$("chatMsgs"); b.scrollTop=b.scrollHeight; }
+function chatRender(msgs, append){
+  var box=$("chatMsgs");
+  var abajo = box.scrollTop + box.clientHeight >= box.scrollHeight - 40;
+  var html = msgs.map(function(m){
+    return '<div class="chat-msg'+(m.mio?' mio':'')+'">'+
+      '<div class="chat-meta">'+(m.es_admin?'<span class="chat-profe">PROFE</span>':'')+esc(m.nombre)+' · '+horaDe(m.fecha)+'</div>'+
+      '<div class="chat-texto">'+esc(m.texto)+'</div></div>';
+  }).join("");
+  if(append){ box.insertAdjacentHTML("beforeend", html); if(abajo) chatScrollFondo(); }
+  else { box.innerHTML = html || '<div class="chat-vacio">Sé el primero en escribir 🎸</div>'; chatScrollFondo(); }
+}
+function chatPoll(){
+  if(!getTok()) return;
+  api("/api/chat?desde="+chatMax).then(function(d){
+    var nuevos=(d.mensajes||[]).length;
+    if(nuevos){
+      chatRender(d.mensajes, chatMax>0);
+      if(!chatVisible()) chatDots(true);
+    } else if(chatMax===0){ chatRender([], false); }
+    if(typeof d.max==="number" && d.max>chatMax) chatMax=d.max;
+  }).catch(function(){});
+}
+function chatIniciar(){
+  chatMax=0; $("chatMsgs").innerHTML="";
+  show("chatInputWrap"); hide("chatBloqueado"); $("chatTexto").value="";
+  if(!chatEsMovil()){
+    var abierto=true;
+    try{ abierto = localStorage.getItem(CHAT_KEY) !== "0"; }catch(e){}
+    document.body.classList.toggle("chat-cerrado", !abierto);
+  }
+  chatPoll();
+  if(chatInterval) clearInterval(chatInterval);
+  chatInterval=setInterval(chatPoll, 20000);
+}
+function chatDetener(){
+  if(chatInterval){ clearInterval(chatInterval); chatInterval=null; }
+  document.body.classList.remove("chat-overlay");
+}
+$("chatToggle").addEventListener("click",function(){
+  if(chatEsMovil()){ document.body.classList.remove("chat-overlay"); }
+  else {
+    document.body.classList.add("chat-cerrado");
+    try{ localStorage.setItem(CHAT_KEY,"0"); }catch(e){}
+  }
+});
+$("chatStrip").addEventListener("click",function(){
+  document.body.classList.remove("chat-cerrado");
+  try{ localStorage.setItem(CHAT_KEY,"1"); }catch(e){}
+  chatDots(false); chatScrollFondo();
+});
+$("chatFab").addEventListener("click",function(){
+  document.body.classList.add("chat-overlay");
+  chatDots(false); chatScrollFondo();
+});
+function chatEnviarMsg(){
+  var t=$("chatTexto").value.trim();
+  if(!t) return;
+  $("chatEnviar").disabled=true;
+  api("/api/chat",{method:"POST",body:JSON.stringify({texto:t})})
+    .then(function(){ $("chatTexto").value=""; chatPoll(); })
+    .catch(function(e){
+      if(e.status===403){
+        hide("chatInputWrap");
+        $("chatBloqueado").textContent = e.message || "El chat se abre cuando activas tu primer paquete 🙂";
+        show("chatBloqueado");
+      } else toast(e.message||"No se pudo enviar");
+    })
+    .finally(function(){ $("chatEnviar").disabled=false; });
+}
+$("chatEnviar").addEventListener("click", chatEnviarMsg);
+$("chatTexto").addEventListener("keydown",function(e){ if(e.key==="Enter") chatEnviarMsg(); });
+
 /* ---------- SESIÓN ---------- */
 function salir(){
   api("/api/logout",{method:"POST"}).catch(function(){});
+  chatDetener();
   setTok(null); ME=null;
   setAuthTab("login");
   setPantalla("viewAuth");
@@ -837,6 +975,7 @@ function cargarMe(){
     setPantalla("app");
     if(!location.hash) location.hash = "#inicio";
     renderActive();
+    chatIniciar();
   }).catch(function(e){
     setTok(null); ME=null;
     setAuthTab(REF_URL ? "reg" : "login");

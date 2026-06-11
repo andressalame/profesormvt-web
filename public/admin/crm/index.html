@@ -130,6 +130,7 @@
       <button class="tab" data-tab="cuentas">Cuentas</button>
       <button class="tab" data-tab="recursos">Recursos</button>
       <button class="tab" data-tab="ajustes">Ajustes</button>
+      <button class="tab" data-tab="chat">Chat</button>
     </div>
     <div class="tools">
       <span class="syncdot" id="syncdot">—</span>
@@ -249,6 +250,19 @@
       <div class="rowact">
         <button class="btn" id="btnPushOn">Activar avisos aquí</button>
         <button class="btn ghost" id="btnPushTest">Enviar push de prueba</button>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel" id="panel-chat">
+    <div class="group">
+      <h2>// CHAT DE ALUMNOS</h2>
+      <p class="hint">Los alumnos con paquete activo escriben; todos los registrados leen. Tú publicas con el badge PROFE. El × borra el mensaje para todos.</p>
+      <div id="chatAdmMsgs" style="max-height:55vh;overflow-y:auto;background:var(--panel);border:1px solid var(--line);border-radius:3px;padding:12px;display:flex;flex-direction:column;gap:10px;"></div>
+      <div style="display:flex;gap:8px;margin-top:10px;">
+        <input id="chatAdmTexto" maxlength="500" placeholder="Escribe como Profe Andrés…" autocomplete="off"
+          style="flex:1;min-width:0;background:var(--bg);border:1px solid var(--line);color:var(--cream);padding:9px 11px;border-radius:2px;font-family:var(--body);font-size:14px;" />
+        <button class="btn" id="chatAdmEnviar">Enviar</button>
       </div>
     </div>
   </section>
@@ -847,6 +861,71 @@ el("btnCuentaOk").addEventListener("click",function(){
       .catch(function(e){ el("cuErr").textContent=e.message||"Error"; });
   }
 });
+
+/* ---------- Chat (pestaña; poll SOLO mientras está activa) ---------- */
+var chatAdmMax=0, chatAdmInt=null;
+function chatAdmHora(f){
+  try{ var d=new Date(f); if(isNaN(d.getTime())) return "";
+    return String(d.getHours()).padStart(2,"0")+":"+String(d.getMinutes()).padStart(2,"0");
+  }catch(e){ return ""; }
+}
+function chatAdmRender(msgs, append){
+  var box=el("chatAdmMsgs");
+  var abajo = box.scrollTop + box.clientHeight >= box.scrollHeight - 40;
+  var html = msgs.map(function(m){
+    return '<div style="'+(m.mio?'align-self:flex-end;text-align:right;background:rgba(204,78,31,.08);border:1px solid var(--line);border-radius:4px;padding:6px 9px;':'align-self:flex-start;')+'max-width:88%;">'+
+      '<div class="mini" style="margin-bottom:2px;">'+
+        (m.es_admin?'<span style="color:var(--bg);background:var(--accent);font-weight:700;padding:1px 5px;border-radius:2px;margin-right:5px;font-size:9px">PROFE</span>':'')+
+        esc(m.nombre)+' · '+chatAdmHora(m.fecha)+
+        ' <button data-chatdel="'+esc(m.id)+'" title="Borrar mensaje" style="background:none;border:0;color:var(--red);font-weight:700;cursor:pointer;padding:0 2px">×</button>'+
+      '</div>'+
+      '<div style="font-size:13.5px;overflow-wrap:break-word;">'+esc(m.texto)+'</div>'+
+    '</div>';
+  }).join("");
+  if(append){ box.insertAdjacentHTML("beforeend", html); if(abajo) box.scrollTop=box.scrollHeight; }
+  else { box.innerHTML = html || '<div class="empty">Sin mensajes todavía</div>'; box.scrollTop=box.scrollHeight; }
+}
+function chatAdmPoll(){
+  if(!token) return;
+  fetch("/api/chat?desde="+chatAdmMax,{headers:hdr()}).then(function(r){ return r.json(); }).then(function(d){
+    if(!d || !d.mensajes) return;
+    if(d.mensajes.length) chatAdmRender(d.mensajes, chatAdmMax>0);
+    else if(chatAdmMax===0) chatAdmRender([], false);
+    if(typeof d.max==="number" && d.max>chatAdmMax) chatAdmMax=d.max;
+  }).catch(function(){});
+}
+function chatAdmIniciar(){
+  chatAdmMax=0; el("chatAdmMsgs").innerHTML="";
+  chatAdmPoll();
+  if(chatAdmInt) clearInterval(chatAdmInt);
+  chatAdmInt=setInterval(chatAdmPoll, 15000);
+}
+function chatAdmDetener(){ if(chatAdmInt){ clearInterval(chatAdmInt); chatAdmInt=null; } }
+document.querySelectorAll(".tab").forEach(function(t){
+  t.addEventListener("click",function(){
+    if(t.dataset.tab==="chat") chatAdmIniciar(); else chatAdmDetener();
+  });
+});
+el("chatAdmMsgs").addEventListener("click",function(e){
+  var b=e.target.closest("[data-chatdel]");
+  if(!b) return;
+  if(confirm("¿Borrar este mensaje?")){
+    apiPost("/api/admin/chat/borrar",{id:b.dataset.chatdel})
+      .then(function(){ chatAdmIniciar(); toast("Mensaje borrado"); })
+      .catch(function(err){ toast((err&&err.message)||"No se pudo borrar"); });
+  }
+});
+function chatAdmEnviarMsg(){
+  var t=el("chatAdmTexto").value.trim();
+  if(!t) return;
+  el("chatAdmEnviar").disabled=true;
+  apiPost("/api/chat",{texto:t})
+    .then(function(){ el("chatAdmTexto").value=""; chatAdmPoll(); })
+    .catch(function(err){ toast((err&&err.message)||"No se pudo enviar"); })
+    .finally(function(){ el("chatAdmEnviar").disabled=false; });
+}
+el("chatAdmEnviar").addEventListener("click", chatAdmEnviarMsg);
+el("chatAdmTexto").addEventListener("keydown",function(e){ if(e.key==="Enter") chatAdmEnviarMsg(); });
 
 /* ---------- Renovar por WhatsApp ---------- */
 function renovar(a){
