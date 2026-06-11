@@ -1,21 +1,23 @@
-/* API CRM ProfesorMVT v2 — Cloudflare Worker + D1
-   Destino en el repo: worker/index.js (reemplaza al v1)
+/* API CRM ProfesorMVT v3 — Cloudflare Worker + D1
+   Destino en el repo: worker/index.js
 
-   ALUMNO (público / con sesión Bearer):
-     POST /api/registro   {nombre,email,password,whatsapp?,marketing?} -> {token}
-     POST /api/login      {email,password}                             -> {token}
-     POST /api/logout     (Bearer)                                     -> {ok}
-     GET  /api/me         (Bearer) -> cuenta + estado + datos de SU paquete + compra pendiente + precios + config
-     POST /api/comprar    (Bearer) {curso,paquete,op_numero?}          -> compra pendiente
+   CONSERVADO DE v2 (integrado en este merge):
+     1. Imports de mimetext + cloudflare:email + @block65/webcrypto-web-push
+     2. Las funciones avisarCompra(env, info) y avisarPush(env, info) — email + Web Push al declarar un pago
+     3. Los endpoints /api/admin/push/suscribir, /api/admin/push/probar, /api/admin/push/estado
 
-   ADMIN (Authorization: Bearer ADMIN_TOKEN):
-     GET  /api/admin/data    -> {alumnos, registro, precios, cuentas, compras, config}
-     PUT  /api/admin/data    -> reemplaza alumnos/registro/precios (transaccional)
-     POST /api/admin/config  {calendly_url?, pago_numero?, pago_titular?}
-     POST /api/admin/compra  {id, accion:'confirmar'|'rechazar'}  (confirmar activa el paquete)
-     POST /api/admin/cuenta  {id, accion:'vincular'|'reset'|'borrar', alumno_id?, password?}
-
-   Cualquier otra ruta -> assets estáticos (binding ASSETS)
+   NUEVO EN v3 (Dashboard 2.0 — ola 1):
+     GET  /api/publico                 -> {google_client_id}  (sin auth; el portal decide si muestra el botón Google)
+     POST /api/login/google            {credential, ref?} -> {token}  (verifica JWT de Google con WebCrypto)
+     POST /api/cuenta/password         (Bearer) {actual, nueva} -> {ok}
+     POST /api/registro                ahora acepta ref opcional (código de referido; inválido se ignora)
+     GET  /api/me                      ahora incluye: ref_code, credito, referidos{registrados,compraron},
+                                       recursos[], pagos[], clasesHistorico, tieneGoogle, tienePassword, discord_url
+     POST /api/comprar                 aplica crédito como descuento (snapshot en compras.descuento)
+     POST /api/admin/compra confirmar  + premia S/50 al referidor en la 1ª compra confirmada del referido
+                                       + consume el crédito usado por el comprador
+     POST /api/admin/recurso           {accion:'crear'|'borrar', ...}
+     POST /api/admin/config            acepta también discord_url y google_client_id
 */
 "use strict";
 
@@ -31,6 +33,7 @@ const PAQUETES = {
 };
 const PRECIOS_DEFAULT = { "Paquete 4": 250, "Paquete 8": 450, "Paquete 12": 600, "Clase suelta": 70 };
 const SESION_DIAS = 30;
+const CREDITO_REFERIDO = 50; // S/ que gana el referidor cuando su amigo confirma su 1ª compra
 
 const json = (data, status) => new Response(JSON.stringify(data), {
   status: status || 200,
@@ -53,10 +56,79 @@ async function hashPass(password, saltHex){
   const key = await crypto.subtle.importKey("raw", enc.encode(password), "PBKDF2", false, ["deriveBits"]);
   const bits = await crypto.subtle.deriveBits(
     { name: "PBKDF2", hash: "SHA-256", salt, iterations: 100000 }, key, 256
+    // 100000 = máximo permitido por Cloudflare Workers
   );
   return hex(bits);
 }
 function emailOk(e){ return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(e); }
+
+/* base64url -> bytes (soporta unicode en el payload del JWT) */
+function b64uBytes(s){
+  s = String(s || "").replace(/-/g, "+").replace(/_/g, "/");
+  while (s.length % 4) s += "=";
+  const bin = atob(s);
+  const a = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) a[i] = bin.charCodeAt(i);
+  return a;
+}
+
+/* ---------- referidos ---------- */
+async function genRefCode(env){
+  for (let i = 0; i < 5; i++){
+    const code = randHex(3).toUpperCase(); // 6 caracteres
+    const existe = await env.DB.prepare("SELECT id FROM cuentas WHERE ref_code = ?1").bind(code).first();
+    if (!existe) return code;
+  }
+  return randHex(4).toUpperCase(); // fallback 8 chars
+}
+/* Devuelve el ref_code canónico si existe; null si el código es inválido (se ignora en silencio) */
+async function buscarRefCode(env, ref){
+  const code = String(ref || "").trim().toUpperCase();
+  if (!/^[A-Z0-9]{4,12}$/.test(code)) return null;
+  const fila = await env.DB.prepare("SELECT ref_code FROM cuentas WHERE ref_code = ?1").bind(code).first();
+  return fila ? fila.ref_code : null;
+}
+
+/* ---------- Google Sign-In: verificación del ID token (JWT RS256) ---------- */
+async function verificarGoogle(env, credential){
+  const cfg = await loadConfig(env);
+  const clientId = (cfg.google_client_id || "").trim();
+  if (!clientId) return { error: "El ingreso con Google no está configurado todavía." };
+
+  const partes = String(credential || "").split(".");
+  if (partes.length !== 3) return { error: "Credencial inválida." };
+
+  let header, payload;
+  try {
+    header  = JSON.parse(new TextDecoder().decode(b64uBytes(partes[0])));
+    payload = JSON.parse(new TextDecoder().decode(b64uBytes(partes[1])));
+  } catch (e) { return { error: "Credencial inválida." }; }
+
+  if (payload.aud !== clientId) return { error: "Esa credencial es de otra aplicación." };
+  if (payload.iss !== "https://accounts.google.com" && payload.iss !== "accounts.google.com"){
+    return { error: "Emisor inválido." };
+  }
+  if (!payload.exp || payload.exp * 1000 < Date.now()) return { error: "La credencial expiró. Intenta de nuevo." };
+  if (!payload.email || (payload.email_verified !== true && payload.email_verified !== "true")){
+    return { error: "Tu correo de Google no está verificado." };
+  }
+
+  const res = await fetch("https://www.googleapis.com/oauth2/v3/certs", {
+    cf: { cacheTtl: 3600, cacheEverything: true }
+  });
+  const jwks = await res.json().catch(() => null);
+  const jwk = (jwks && Array.isArray(jwks.keys)) ? jwks.keys.find(k => k.kid === header.kid) : null;
+  if (!jwk) return { error: "No pude validar con Google. Intenta de nuevo en unos segundos." };
+
+  const key = await crypto.subtle.importKey(
+    "jwk", jwk, { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" }, false, ["verify"]
+  );
+  const ok = await crypto.subtle.verify(
+    "RSASSA-PKCS1-v1_5", key, b64uBytes(partes[2]), enc.encode(partes[0] + "." + partes[1])
+  );
+  if (!ok) return { error: "Firma inválida." };
+  return { payload };
+}
 
 /* ---------- reglas (idénticas al Excel/admin) ---------- */
 function compute(alumno, regs, precios){
@@ -81,11 +153,10 @@ function compute(alumno, regs, precios){
     monto: precios[alumno.paquete] != null ? precios[alumno.paquete] : 0
   };
 }
-/* Estado simple que ve el alumno */
 function estadoAlumno(c){
-  if (!c) return "Inactivo";                 // nunca matriculado (o sin paquete)
+  if (!c) return "Inactivo";
   if (c.saldo > 1) return "Activo";
-  return "Renovar pronto";                   // última clase o paquete completado
+  return "Renovar pronto";
 }
 
 async function loadPrecios(env){
@@ -96,7 +167,7 @@ async function loadPrecios(env){
 }
 async function loadConfig(env){
   const { results } = await env.DB.prepare("SELECT clave, valor FROM config").all();
-  const c = { calendly_url: "", pago_numero: "", pago_titular: "" };
+  const c = { calendly_url: "", pago_numero: "", pago_titular: "", discord_url: "", google_client_id: "" };
   for (const row of (results || [])) c[row.clave] = row.valor || "";
   return c;
 }
@@ -192,7 +263,13 @@ export default {
     if (request.method === "OPTIONS") return new Response(null, { status: 204 });
 
     try {
-      /* ============ REGISTRO ============ */
+      /* ============ PÚBLICO (sin auth): el portal lee esto antes del login ============ */
+      if (url.pathname === "/api/publico" && request.method === "GET"){
+        const cfg = await loadConfig(env);
+        return json({ google_client_id: cfg.google_client_id || "" });
+      }
+
+      /* ============ REGISTRO (ahora acepta ref opcional) ============ */
       if (url.pathname === "/api/registro" && request.method === "POST"){
         const b = await request.json().catch(() => ({}));
         const nombre = String(b.nombre || "").trim();
@@ -208,18 +285,21 @@ export default {
         const existe = await env.DB.prepare("SELECT id FROM cuentas WHERE email = ?1").bind(email).first();
         if (existe) return json({ error: "Ya existe una cuenta con ese correo. Prueba ingresar." }, 409);
 
+        const refPor = await buscarRefCode(env, b.ref);   // inválido -> null (se ignora)
+        const refCode = await genRefCode(env);
+
         const salt = randHex(16);
         const hash = await hashPass(password, salt);
         const id = crypto.randomUUID();
         await env.DB.prepare(
-          "INSERT INTO cuentas (id,email,nombre,whatsapp,pass_hash,pass_salt,marketing,alumno_id,creada) VALUES (?1,?2,?3,?4,?5,?6,?7,NULL,?8)"
-        ).bind(id, email, nombre, whatsapp, hash, salt, marketing, hoy()).run();
+          "INSERT INTO cuentas (id,email,nombre,whatsapp,pass_hash,pass_salt,marketing,alumno_id,creada,ref_code,ref_por,credito) VALUES (?1,?2,?3,?4,?5,?6,?7,NULL,?8,?9,?10,0)"
+        ).bind(id, email, nombre, whatsapp, hash, salt, marketing, hoy(), refCode, refPor || "").run();
 
         const token = await crearSesion(env, id);
         return json({ token });
       }
 
-      /* ============ LOGIN ============ */
+      /* ============ LOGIN con contraseña ============ */
       if (url.pathname === "/api/login" && request.method === "POST"){
         const b = await request.json().catch(() => ({}));
         const email = String(b.email || "").trim().toLowerCase();
@@ -231,10 +311,49 @@ export default {
           await new Promise(r => setTimeout(r, 350));
           return json({ error: "Correo o contraseña incorrectos." }, 401);
         }
+        if (!c.pass_hash){
+          return json({ error: "Esta cuenta ingresa con el botón de Google." }, 401);
+        }
         const hash = await hashPass(password, c.pass_salt);
         if (!safeEq(hash, c.pass_hash)){
           await new Promise(r => setTimeout(r, 350));
           return json({ error: "Correo o contraseña incorrectos." }, 401);
+        }
+        const token = await crearSesion(env, c.id);
+        return json({ token });
+      }
+
+      /* ============ LOGIN con Google ============ */
+      if (url.pathname === "/api/login/google" && request.method === "POST"){
+        const b = await request.json().catch(() => ({}));
+        const v = await verificarGoogle(env, b.credential);
+        if (v.error) return json({ error: v.error }, 401);
+
+        const p = v.payload;
+        const email = String(p.email).toLowerCase();
+        const sub = String(p.sub);
+
+        let c = await env.DB.prepare("SELECT * FROM cuentas WHERE google_id = ?1").bind(sub).first();
+        if (!c){
+          c = await env.DB.prepare("SELECT * FROM cuentas WHERE email = ?1").bind(email).first();
+          if (c){
+            if (c.google_id && c.google_id !== sub){
+              return json({ error: "Ese correo ya está vinculado a otra cuenta de Google." }, 409);
+            }
+            // Cuenta email+password existente: se vincula a Google (ambos métodos siguen funcionando)
+            await env.DB.prepare("UPDATE cuentas SET google_id = ?1 WHERE id = ?2").bind(sub, c.id).run();
+          }
+        }
+        if (!c){
+          // Cuenta nueva creada con Google (sin contraseña)
+          const refPor = await buscarRefCode(env, b.ref);
+          const refCode = await genRefCode(env);
+          const id = crypto.randomUUID();
+          const nombre = (String(p.name || "").trim() || email.split("@")[0]).slice(0, 80);
+          await env.DB.prepare(
+            "INSERT INTO cuentas (id,email,nombre,whatsapp,pass_hash,pass_salt,marketing,alumno_id,creada,ref_code,ref_por,credito,google_id) VALUES (?1,?2,?3,'','','',0,NULL,?4,?5,?6,0,?7)"
+          ).bind(id, email, nombre, hoy(), refCode, refPor || "", sub).run();
+          c = { id };
         }
         const token = await crearSesion(env, c.id);
         return json({ token });
@@ -249,6 +368,29 @@ export default {
         return json({ ok: true });
       }
 
+      /* ============ CAMBIAR CONTRASEÑA (self-service) ============ */
+      if (url.pathname === "/api/cuenta/password" && request.method === "POST"){
+        const cu = await cuentaDeSesion(env, request);
+        if (!cu) return json({ error: "Sesión expirada" }, 401);
+        if (!cu.pass_hash){
+          return json({ error: "Tu cuenta ingresa con el botón de Google y no usa contraseña." }, 400);
+        }
+        const b = await request.json().catch(() => ({}));
+        const actual = String(b.actual || "");
+        const nueva = String(b.nueva || "");
+        const hash = await hashPass(actual, cu.pass_salt);
+        if (!safeEq(hash, cu.pass_hash)) return json({ error: "Tu contraseña actual no coincide." }, 401);
+        if (nueva.length < 8) return json({ error: "La nueva contraseña necesita mínimo 8 caracteres." }, 400);
+        const salt = randHex(16);
+        const nuevoHash = await hashPass(nueva, salt);
+        await env.DB.batch([
+          env.DB.prepare("UPDATE cuentas SET pass_hash = ?1, pass_salt = ?2 WHERE id = ?3").bind(nuevoHash, salt, cu.id),
+          // cierra las demás sesiones; la actual sigue viva
+          env.DB.prepare("DELETE FROM sesiones WHERE cuenta_id = ?1 AND token <> ?2").bind(cu.id, cu._token)
+        ]);
+        return json({ ok: true });
+      }
+
       /* ============ ME (dashboard del alumno) ============ */
       if (url.pathname === "/api/me" && request.method === "GET"){
         const cu = await cuentaDeSesion(env, request);
@@ -257,7 +399,15 @@ export default {
         const precios = await loadPrecios(env);
         const config = await loadConfig(env);
 
+        // ref_code perezoso (cuentas creadas antes de v4 sin backfill no deberían existir, pero por si acaso)
+        let refCode = cu.ref_code || "";
+        if (!refCode){
+          refCode = await genRefCode(env);
+          await env.DB.prepare("UPDATE cuentas SET ref_code = ?1 WHERE id = ?2").bind(refCode, cu.id).run();
+        }
+
         let alumno = null, computed = null, historial = [];
+        let clasesHistorico = 0;
         if (cu.alumno_id){
           alumno = await env.DB.prepare("SELECT * FROM alumnos WHERE id = ?1").bind(cu.alumno_id).first();
           if (alumno){
@@ -267,14 +417,34 @@ export default {
             ).bind(alumno.id, ciclo).all();
             historial = results || [];
             computed = compute(alumno, historial, precios);
+            const ch = await env.DB.prepare(
+              "SELECT COUNT(*) AS n FROM registro WHERE alumno_id = ?1 AND estado = 'Asistió'"
+            ).bind(alumno.id).first();
+            clasesHistorico = (ch && Number(ch.n)) || 0;
           }
         }
         const pendiente = await env.DB.prepare(
-          "SELECT paquete, curso, monto, fecha FROM compras WHERE cuenta_id = ?1 AND estado = 'pendiente' ORDER BY fecha DESC LIMIT 1"
+          "SELECT paquete, curso, monto, COALESCE(descuento,0) AS descuento, fecha FROM compras WHERE cuenta_id = ?1 AND estado = 'pendiente' ORDER BY fecha DESC LIMIT 1"
         ).bind(cu.id).first();
 
+        const refStats = await env.DB.prepare(
+          "SELECT COUNT(*) AS registrados, COALESCE(SUM(CASE WHEN alumno_id IS NOT NULL THEN 1 ELSE 0 END),0) AS compraron FROM cuentas WHERE ref_por = ?1"
+        ).bind(refCode).first();
+
+        const cursoAl = alumno ? (alumno.curso || "") : "";
+        const recursos = (await env.DB.prepare(
+          "SELECT id, titulo, descripcion, url, curso, fecha FROM recursos WHERE curso = 'Todos' OR curso = ?1 ORDER BY fecha DESC, rowid DESC"
+        ).bind(cursoAl).all()).results || [];
+
+        const pagos = (await env.DB.prepare(
+          "SELECT fecha, curso, paquete, monto, COALESCE(descuento,0) AS descuento, estado FROM compras WHERE cuenta_id = ?1 ORDER BY fecha DESC, rowid DESC LIMIT 20"
+        ).bind(cu.id).all()).results || [];
+
         return json({
-          cuenta: { nombre: cu.nombre, email: cu.email, whatsapp: cu.whatsapp || "" },
+          cuenta: {
+            nombre: cu.nombre, email: cu.email, whatsapp: cu.whatsapp || "",
+            tieneGoogle: !!cu.google_id, tienePassword: !!cu.pass_hash
+          },
           estado: estadoAlumno(computed),
           alumno: (alumno && computed) ? {
             curso: alumno.curso || "", paquete: alumno.paquete || "",
@@ -286,11 +456,23 @@ export default {
           } : null,
           compraPendiente: pendiente || null,
           precios,
-          config: { calendly_url: config.calendly_url, pago_numero: config.pago_numero, pago_titular: config.pago_titular }
+          credito: Number(cu.credito) || 0,
+          ref_code: refCode,
+          referidos: {
+            registrados: (refStats && Number(refStats.registrados)) || 0,
+            compraron: (refStats && Number(refStats.compraron)) || 0
+          },
+          recursos,
+          pagos,
+          clasesHistorico,
+          config: {
+            calendly_url: config.calendly_url, pago_numero: config.pago_numero,
+            pago_titular: config.pago_titular, discord_url: config.discord_url
+          }
         });
       }
 
-      /* ============ COMPRAR (declarar pago) ============ */
+      /* ============ COMPRAR (declarar pago; el crédito se aplica como descuento) ============ */
       if (url.pathname === "/api/comprar" && request.method === "POST"){
         const cu = await cuentaDeSesion(env, request);
         if (!cu) return json({ error: "Sesión expirada" }, 401);
@@ -307,21 +489,20 @@ export default {
         ).bind(cu.id).first();
         if (ya) return json({ error: "Ya tienes un pago en verificación. Te confirmo apenas lo vea." }, 409);
 
-        const monto = precios[paquete] || 0;
+        const precio = precios[paquete] || 0;
+        const credito = Number(cu.credito) || 0;
+        const descuento = Math.min(credito, precio);   // snapshot; se consume recién al CONFIRMAR
+        const monto = Math.max(0, precio - descuento);
+
         await env.DB.prepare(
-          "INSERT INTO compras (id,cuenta_id,curso,paquete,monto,op_numero,estado,fecha) VALUES (?1,?2,?3,?4,?5,?6,'pendiente',?7)"
-        ).bind(crypto.randomUUID(), cu.id, curso, paquete, monto, op, hoy()).run();
+          "INSERT INTO compras (id,cuenta_id,curso,paquete,monto,descuento,op_numero,estado,fecha) VALUES (?1,?2,?3,?4,?5,?6,?7,'pendiente',?8)"
+        ).bind(crypto.randomUUID(), cu.id, curso, paquete, monto, descuento, op, hoy()).run();
 
-        // Aviso por email — fuera de la transacción: si el correo falla, la compra IGUAL queda registrada.
-        try {
-          await avisarCompra(env, { nombre: cu.nombre, email: cu.email, curso, paquete, monto, op });
-        } catch (e) { /* best-effort: el aviso no bloquea la compra */ }
+        const info = { nombre: cu.nombre, email: cu.email, curso, paquete, monto, op };
+        try { await avisarCompra(env, info); } catch (e) {}
+        try { await avisarPush(env, info); } catch (e) {}
 
-        try {
-          await avisarPush(env, { nombre: cu.nombre, email: cu.email, curso, paquete, monto, op });
-        } catch (e) { /* best-effort: el push no bloquea la compra */ }
-
-        return json({ ok: true });
+        return json({ ok: true, monto, descuento });
       }
 
       /* ============ ADMIN ============ */
@@ -331,14 +512,40 @@ export default {
           return json({ error: "No autorizado" }, 401);
         }
 
+        /* ----- Web Push (suscripciones del admin) ----- */
+        if (url.pathname === "/api/admin/push/suscribir" && request.method === "POST"){
+          const b = await request.json().catch(() => ({}));
+          const s = b.subscription || {};
+          const keys = s.keys || {};
+          if (!s.endpoint || !keys.p256dh || !keys.auth) return json({ error: "Suscripción inválida" }, 400);
+          await env.DB.prepare(
+            "INSERT OR REPLACE INTO push_subs (endpoint,p256dh,auth,dispositivo,creada) VALUES (?1,?2,?3,?4,?5)"
+          ).bind(s.endpoint, keys.p256dh, keys.auth, String(b.dispositivo || "").slice(0, 120), hoy()).run();
+          return json({ ok: true });
+        }
+
+        if (url.pathname === "/api/admin/push/probar" && request.method === "POST"){
+          const enviados = await avisarPush(env, { paquete: "PRUEBA", monto: 0, nombre: "Push de prueba", curso: "—", op: "" });
+          return json({ ok: true, enviados });
+        }
+
+        if (url.pathname === "/api/admin/push/estado" && request.method === "GET"){
+          const row = await env.DB.prepare("SELECT COUNT(*) AS n FROM push_subs").first();
+          return json({ suscripciones: (row && row.n) || 0 });
+        }
+
         if (url.pathname === "/api/admin/data" && request.method === "GET"){
           const alumnos  = (await env.DB.prepare("SELECT * FROM alumnos ORDER BY nombre").all()).results || [];
           const registro = (await env.DB.prepare("SELECT * FROM registro ORDER BY fecha DESC, id DESC").all()).results || [];
-          const cuentas  = (await env.DB.prepare("SELECT id,email,nombre,whatsapp,marketing,alumno_id,creada FROM cuentas ORDER BY creada DESC").all()).results || [];
+          const cuentas  = (await env.DB.prepare(
+            "SELECT id,email,nombre,whatsapp,marketing,alumno_id,creada,ref_code,ref_por,credito, CASE WHEN google_id IS NULL OR google_id='' THEN 0 ELSE 1 END AS tiene_google FROM cuentas ORDER BY creada DESC"
+          ).all()).results || [];
           const compras  = (await env.DB.prepare("SELECT * FROM compras ORDER BY CASE estado WHEN 'pendiente' THEN 0 ELSE 1 END, fecha DESC").all()).results || [];
+          const recursos = (await env.DB.prepare("SELECT * FROM recursos ORDER BY fecha DESC, rowid DESC").all()).results || [];
           const precios  = await loadPrecios(env);
           const config   = await loadConfig(env);
-          return json({ alumnos, registro, precios, cuentas, compras, config, vapid_public: env.VAPID_PUBLIC_KEY || "" });
+          return json({ alumnos, registro, precios, cuentas, compras, recursos, config,
+                        vapid_public: env.VAPID_PUBLIC_KEY || "" });
         }
 
         if (url.pathname === "/api/admin/data" && request.method === "PUT"){
@@ -378,7 +585,7 @@ export default {
 
         if (url.pathname === "/api/admin/config" && request.method === "POST"){
           const b = await request.json().catch(() => ({}));
-          const claves = ["calendly_url", "pago_numero", "pago_titular"];
+          const claves = ["calendly_url", "pago_numero", "pago_titular", "discord_url", "google_client_id"];
           const stmts = [];
           for (const k of claves){
             if (k in b){
@@ -391,6 +598,29 @@ export default {
           return json({ ok: true });
         }
 
+        /* -------- Recursos (material para el portal) -------- */
+        if (url.pathname === "/api/admin/recurso" && request.method === "POST"){
+          const b = await request.json().catch(() => ({}));
+          if (b.accion === "crear"){
+            const titulo = String(b.titulo || "").trim();
+            const urlR = String(b.url || "").trim();
+            const descripcion = String(b.descripcion || "").trim().slice(0, 300);
+            const cursos = ["Todos", "Canto", "Piano", "Composición"];
+            const curso = cursos.includes(b.curso) ? b.curso : "Todos";
+            if (titulo.length < 2) return json({ error: "Ponle un título al recurso." }, 400);
+            if (!/^https?:\/\//i.test(urlR)) return json({ error: "El link debe empezar con http:// o https://" }, 400);
+            await env.DB.prepare(
+              "INSERT INTO recursos (id,titulo,descripcion,url,curso,fecha) VALUES (?1,?2,?3,?4,?5,?6)"
+            ).bind(crypto.randomUUID(), titulo, descripcion, urlR, curso, hoy()).run();
+            return json({ ok: true });
+          }
+          if (b.accion === "borrar"){
+            await env.DB.prepare("DELETE FROM recursos WHERE id = ?1").bind(String(b.id || "")).run();
+            return json({ ok: true });
+          }
+          return json({ error: "Acción no válida" }, 400);
+        }
+
         if (url.pathname === "/api/admin/compra" && request.method === "POST"){
           const b = await request.json().catch(() => ({}));
           const compra = await env.DB.prepare("SELECT * FROM compras WHERE id = ?1").bind(String(b.id || "")).first();
@@ -398,6 +628,7 @@ export default {
           if (compra.estado !== "pendiente") return json({ error: "Esa compra ya fue procesada" }, 409);
 
           if (b.accion === "rechazar"){
+            // El crédito nunca se descontó (solo era snapshot), así que no hay nada que devolver
             await env.DB.prepare("UPDATE compras SET estado = 'rechazada' WHERE id = ?1").bind(compra.id).run();
             return json({ ok: true });
           }
@@ -410,7 +641,6 @@ export default {
             if (cu.alumno_id){
               const al = await env.DB.prepare("SELECT * FROM alumnos WHERE id = ?1").bind(cu.alumno_id).first();
               if (al){
-                // Renovación: nuevo ciclo, el conteo arranca de cero, historial se conserva
                 stmts.push(env.DB.prepare(
                   "UPDATE alumnos SET paquete = ?1, curso = ?2, pago = 'Pagado', fecha = ?3, ciclo = COALESCE(ciclo,1) + 1 WHERE id = ?4"
                 ).bind(compra.paquete, compra.curso || al.curso, hoy(), al.id));
@@ -418,13 +648,37 @@ export default {
               }
             }
             if (!renovado){
-              // Primera matrícula (o vínculo roto): crear alumno y vincular
               const nuevoId = crypto.randomUUID();
               stmts.push(env.DB.prepare(
                 "INSERT INTO alumnos (id,codigo,nombre,whatsapp,curso,paquete,fecha,pago,horario,notas,ciclo) VALUES (?1,?2,?3,?4,?5,?6,?7,'Pagado','','Creado por compra web',1)"
               ).bind(nuevoId, randHex(3).toUpperCase(), cu.nombre, cu.whatsapp || "", compra.curso || "Canto", compra.paquete, hoy()));
               stmts.push(env.DB.prepare("UPDATE cuentas SET alumno_id = ?1 WHERE id = ?2").bind(nuevoId, cu.id));
             }
+
+            /* --- Referidos: ¿es la PRIMERA compra confirmada de esta cuenta? --- */
+            const previas = await env.DB.prepare(
+              "SELECT COUNT(*) AS n FROM compras WHERE cuenta_id = ?1 AND estado = 'confirmada'"
+            ).bind(cu.id).first();
+            const esPrimera = !previas || !Number(previas.n);
+            if (esPrimera && cu.ref_por){
+              const refidor = await env.DB.prepare(
+                "SELECT id FROM cuentas WHERE ref_code = ?1"
+              ).bind(cu.ref_por).first();
+              if (refidor && refidor.id !== cu.id){
+                stmts.push(env.DB.prepare(
+                  "UPDATE cuentas SET credito = COALESCE(credito,0) + ?1 WHERE id = ?2"
+                ).bind(CREDITO_REFERIDO, refidor.id));
+              }
+            }
+
+            /* --- Consumir el crédito que esta compra usó como descuento --- */
+            const usado = Number(compra.descuento) || 0;
+            if (usado > 0){
+              stmts.push(env.DB.prepare(
+                "UPDATE cuentas SET credito = CASE WHEN COALESCE(credito,0) - ?1 < 0 THEN 0 ELSE COALESCE(credito,0) - ?1 END WHERE id = ?2"
+              ).bind(usado, cu.id));
+            }
+
             stmts.push(env.DB.prepare("UPDATE compras SET estado = 'confirmada' WHERE id = ?1").bind(compra.id));
             await env.DB.batch(stmts);
             return json({ ok: true });
@@ -466,28 +720,6 @@ export default {
             return json({ ok: true });
           }
           return json({ error: "Acción no válida" }, 400);
-        }
-
-        /* ----- Web Push (suscripciones del admin) ----- */
-        if (url.pathname === "/api/admin/push/suscribir" && request.method === "POST"){
-          const b = await request.json().catch(() => ({}));
-          const s = b.subscription || {};
-          const keys = s.keys || {};
-          if (!s.endpoint || !keys.p256dh || !keys.auth) return json({ error: "Suscripción inválida" }, 400);
-          await env.DB.prepare(
-            "INSERT OR REPLACE INTO push_subs (endpoint,p256dh,auth,dispositivo,creada) VALUES (?1,?2,?3,?4,?5)"
-          ).bind(s.endpoint, keys.p256dh, keys.auth, String(b.dispositivo || "").slice(0, 120), hoy()).run();
-          return json({ ok: true });
-        }
-
-        if (url.pathname === "/api/admin/push/probar" && request.method === "POST"){
-          const enviados = await avisarPush(env, { paquete: "PRUEBA", monto: 0, nombre: "Push de prueba", curso: "—", op: "" });
-          return json({ ok: true, enviados });
-        }
-
-        if (url.pathname === "/api/admin/push/estado" && request.method === "GET"){
-          const row = await env.DB.prepare("SELECT COUNT(*) AS n FROM push_subs").first();
-          return json({ suscripciones: (row && row.n) || 0 });
         }
       }
 
