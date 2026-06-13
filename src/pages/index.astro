@@ -1,978 +1,461 @@
 ---
-import Layout from '../layouts/Layout.astro';
-import '../styles/home.css';
-
-// Cinta marquee (LA firma) — separadores en naranja, contenido duplicado para loop
-const marqueeHTML = 'CANTO <span class="mq-sep">·</span> PIANO <span class="mq-sep">·</span> COMPOSICIÓN <span class="mq-sep">·</span> MÉTODO MVT <span class="mq-sep">·</span> +200 CANCIONES COMPUESTAS <span class="mq-sep">·</span> SAN ISIDRO <span class="mq-sep">·</span> ONLINE EN VIVO <span class="mq-sep">·</span> ADULTOS <span class="mq-sep">·</span> ';
----
-<Layout
-  title="Profesor MVT en Lima · Canto, piano y composición para adultos"
-  description="Clases de canto (técnica MVT), piano y composición para adultos en Lima (San Isidro) y online. Con Andrés Salame. Prueba con diagnóstico vocal en PDF."
->
-
-<script is:inline>document.documentElement.classList.add('js');</script>
-
-<!-- ==================== HERO ==================== -->
-<section class="hero">
-  <div class="container">
-    <div class="hero-grid">
-      <div class="hero-text" data-reveal-group data-reveal-step="80">
-        <span class="hero-eyebrow" data-reveal>[ ADULTOS · 20 A 45 ]</span>
-        <h1 data-reveal>Canto, piano y composición para <em>adultos</em>.</h1>
-        <p class="lead" data-reveal>
-          Presencial en San Isidro u online. Método MVT, formación clásica y
-          experiencia real en la industria — no academia genérica.
-        </p>
-        <div class="hero-ctas" data-reveal>
-          <a href="https://wa.me/51989077928?text=Hola%20Andrés%2C%20quiero%20reservar%20la%20clase%20de%20prueba%20S%2F50" class="btn-primary" target="_blank" rel="noopener">
-            Reservar prueba — S/50 <span class="arrow-i">→</span>
-          </a>
-          <a href="/alumnos/" class="btn-outline">Comprar mi paquete online <span class="arrow-i">→</span></a>
-          <a href="#precios" class="btn-ghost">Ver paquetes</a>
-        </div>
-        <p class="hero-microcopy" data-reveal>// incluye diagnóstico vocal escrito en PDF</p>
-      </div>
-      <div class="hero-photo" data-reveal>
-        <img src="/andres-piano-hero.jpg" width="1125" height="1500" loading="eager" fetchpriority="high" decoding="async" alt="Andrés Salame, frontman y compositor, profesor de canto, piano y composición en San Isidro" />
-      </div>
-    </div>
-  </div>
-</section>
-
-<!-- ==================== CREDENCIALES ==================== -->
-<div class="credentials-strip">
-  <div class="container">
-    <span class="strip-title" data-reveal>// CREDENCIALES</span>
-    <div class="credentials-grid" data-reveal>
-      <div class="credential-cell">
-        <span class="cred-number">+200</span>
-        <span class="cred-label">CANCIONES<br>COMPUESTAS</span>
-      </div>
-      <div class="credential-cell">
-        <span class="cred-number">+20</span>
-        <span class="cred-label">CONCIERTOS<br>PRODUCIDOS</span>
-      </div>
-      <div class="credential-cell">
-        <span class="cred-number">UPC</span>
-        <span class="cred-label">ESTUDIOS<br>MÚSICA</span>
-      </div>
-      <div class="credential-cell">
-        <span class="cred-number">ULima</span>
-        <span class="cred-label">ESTUDIOS<br>PSICOLOGÍA</span>
-      </div>
-    </div>
-  </div>
-</div>
-
-<!-- ==================== INDUSTRIA ==================== -->
-<div class="industry-strip">
-  <div class="container">
-    <span class="strip-title" data-reveal>// INDUSTRIA</span>
-    <div class="industry-list" data-reveal>
-      <span>FRONTMAN · TRAMBOYOS</span><span class="sep">/</span>
-      <span>MANAGEMENT · KIDS ON COFFEE</span><span class="sep">/</span>
-      <span>EX-MGR · MALOS AMIGOS</span><span class="sep">/</span>
-      <span>MACERADOZ</span><span class="sep">/</span>
-      <span>TUPORAQUÍ YOPORALLÁ</span><span class="sep">/</span>
-      <span>BASTIAN GUIJA</span><span class="sep">/</span>
-      <span>LONZO MIRANDA</span>
-    </div>
-  </div>
-</div>
-
-<!-- ==================== ¿TE IDENTIFICAS? ==================== -->
-<section class="alt-bg" id="identifica">
-  <div class="container">
-    <div class="section-head">
-      <span class="label" data-reveal>para quienes esto va</span>
-      <h2 data-reveal>¿Te <em>suena familiar</em>?</h2>
-      <p class="sub" data-reveal>Si te identificas con alguno de estos, los métodos que enseño se diseñaron exactamente para resolverlo.</p>
-    </div>
-    <div class="pain-grid" data-reveal-group data-reveal-step="60">
-      <div class="pain-card" data-reveal>
-        <span class="num"><span class="disc">CANTO</span> 01</span>
-        <h3>Llevas años con esa <em>canción atragantada</em> en el estribillo.</h3>
-        <p>Cada vez que intentas el agudo, sale apretado, raspado, o simplemente no sale. Y ya probaste de todo.</p>
-      </div>
-      <div class="pain-card" data-reveal>
-        <span class="num"><span class="disc">PIANO</span> 02</span>
-        <h3>Sigues tocando las <em>mismas tres canciones</em> que aprendiste hace años.</h3>
-        <p>Te estancaste. Sabes algunos acordes, pero no logras avanzar a las canciones que te gustan de verdad.</p>
-      </div>
-      <div class="pain-card" data-reveal>
-        <span class="num"><span class="disc">CANTO</span> 03</span>
-        <h3>Te dijeron <em>"apoya más fuerte"</em> — y no funciona.</h3>
-        <p>Has hecho ejercicios respiratorios, has empujado el aire desde el diafragma, y sigues sin cantar como te gustaría.</p>
-      </div>
-      <div class="pain-card" data-reveal>
-        <span class="num"><span class="disc">PIANO · TEORÍA</span> 04</span>
-        <h3>No entiendes la <em>armonía</em> detrás de las canciones que amas.</h3>
-        <p>Memorizas acordes pero no sabes por qué suenan así. Quieres componer o improvisar y no sabes ni por dónde empezar.</p>
-      </div>
-    </div>
-    <div class="pain-conclusion" data-reveal>
-      No es falta de talento. Es <strong>método mal aplicado.</strong> Y eso tiene solución específica, progresiva y comprobable.
-    </div>
-  </div>
-</section>
-
-<!-- ==================== CINTA MARQUEE (firma 1) ==================== -->
-<div class="marquee" role="presentation">
-  <div class="marquee-track">
-    <span class="mq-content" set:html={marqueeHTML} />
-    <span class="mq-content" aria-hidden="true" set:html={marqueeHTML} />
-  </div>
-</div>
-
-<!-- ==================== MÉTODO MVT ==================== -->
-<section class="dark-bg" id="metodo-canto">
-  <div class="container">
-    <div class="section-head">
-      <span class="label" data-reveal>para canto · método mvt</span>
-      <h2 data-reveal>Cuatro principios. <em>Cero misticismo.</em></h2>
-      <p class="sub" data-reveal>Modern Vocal Training (MVT) es una metodología contemporánea basada en la fisiología real de la voz.</p>
-    </div>
-    <div class="pillars" data-reveal-group data-reveal-step="60">
-      <div class="pillar" data-reveal>
-        <span class="num">PRINCIPIO · 01</span>
-        <h3><em>Coordinación</em> muscular</h3>
-        <p>Entrenamos los músculos vocales como cualquier otro grupo muscular del cuerpo — específico, progresivo, medible.</p>
-      </div>
-      <div class="pillar" data-reveal>
-        <span class="num">PRINCIPIO · 02</span>
-        <h3>Equilibrio de <em>resonancia</em></h3>
-        <p>Aprendemos a manejar dónde resuena la voz —pecho, máscara, cabeza— y a transitar entre registros sin rupturas.</p>
-      </div>
-      <div class="pillar" data-reveal>
-        <span class="num">PRINCIPIO · 03</span>
-        <h3>Cierre <em>cordal</em> saludable</h3>
-        <p>El cierre apropiado de las cuerdas vocales es la base de proyección, claridad y resistencia. Sin abuso.</p>
-      </div>
-      <div class="pillar" data-reveal>
-        <span class="num">PRINCIPIO · 04</span>
-        <h3>Liberación de <em>constricción</em></h3>
-        <p>Aflojamos lo que aprieta. La libertad vocal viene de quitar tensión innecesaria, no de añadir esfuerzo.</p>
-      </div>
-    </div>
-    <div class="pillar-counter" data-reveal>
-      Esto es lo opuesto al consejo común de "apoya más fuerte". La voz no funciona con esfuerzo añadido — funciona con coordinación entrenada.
-    </div>
-  </div>
-</section>
-
-<!-- ==================== MÉTODO PIANO ==================== -->
-<section class="warm-bg" id="metodo-piano">
-  <div class="container">
-    <div class="section-head" style="text-align: center;">
-      <span class="label" style="display: inline-block;" data-reveal>para piano · faber &amp; faber piano adventures</span>
-    </div>
-    <div class="piano-method-intro" data-reveal>
-      <div class="quote">Toca lo que escuchas. <em>No lo que te imponen.</em></div>
-      <p>El piano para adultos no debería empezar con "Para Elisa" ni con tres meses de Hanon. Faber &amp; Faber es el método de piano más usado por profesores serios alrededor del mundo.</p>
-    </div>
-    <div class="piano-methods" data-reveal-group data-reveal-step="60">
-      <div class="piano-method-card" data-reveal>
-        <div class="card-tag">EL MÉTODO · FABER &amp; FABER</div>
-        <h3>Piano Adventures<em>Nancy &amp; Randall Faber</em></h3>
-        <div class="tagline">La estructura clásica del aprendizaje moderno.</div>
-        <p>Integra técnica, lectura, teoría y escucha desde el primer libro — todo conectado, nada compartimentado.</p>
-        <ul>
-          <li><strong>Multi-tonalidad temprana:</strong> aprendes en varias claves desde el inicio</li>
-          <li><strong>Cuatro libros por nivel:</strong> Lesson, Theory, Performance y Technique &amp; Artistry</li>
-          <li><strong>Progresión secuenciada:</strong> Primer Level → Level 1 → 2A → 2B → 3A → 3B → 4 → 5</li>
-          <li><strong>Repertorio variado:</strong> clásico, contemporáneo, jazz y pop adaptado</li>
-        </ul>
-      </div>
-      <div class="piano-method-card" data-reveal>
-        <div class="card-tag">LA ADAPTACIÓN · PARA ADULTO</div>
-        <h3>Cómo lo enseño<em>a alumnos adultos</em></h3>
-        <div class="tagline">El método no es para niños. El adulto tiene necesidades distintas.</div>
-        <p>Un adulto necesita un enfoque distinto al de un niño. Esto es lo que ajusto en cada clase.</p>
-        <ul>
-          <li><strong>Ritmo más rápido:</strong> saltamos lo que no te aporta, profundizamos donde sí</li>
-          <li><strong>Repertorio personal:</strong> aplicamos el método a las canciones que te gustan</li>
-          <li><strong>Conexión con tu objetivo:</strong> acompañar tu voz, tocar tus favoritas, improvisar</li>
-          <li><strong>Práctica realista:</strong> rutinas adaptadas a tu vida adulta</li>
-        </ul>
-      </div>
-    </div>
-    <div class="piano-synthesis" data-reveal>Faber te da el <strong>método mundial</strong>. Mi enseñanza te da la <strong>adaptación adulta</strong>. Juntas: piano serio, sin infantilismo.</div>
-  </div>
-</section>
-
-<!-- ==================== MÉTODO COMPOSICIÓN ==================== -->
-<section class="alt-bg" id="metodo-composicion">
-  <div class="container">
-    <div class="section-head" style="text-align: center;">
-      <span class="label" style="display: inline-block;" data-reveal>para composición · hook theory</span>
-    </div>
-    <div class="piano-method-intro" data-reveal>
-      <div class="quote">Componer no es inspiración. <em>Es metodología.</em></div>
-      <p>Hook Theory propone que escribir canciones es una habilidad estructurada, no un don místico. A través del análisis funcional aprendes los patrones y eventualmente escribes el tuyo.</p>
-    </div>
-    <div class="piano-methods" data-reveal-group data-reveal-step="60">
-      <div class="piano-method-card" data-reveal>
-        <div class="card-tag">HERRAMIENTA · ANÁLISIS</div>
-        <h3>Theorytab<em>Base de canciones analizadas</em></h3>
-        <div class="tagline">Aprende leyendo lo que otros escribieron.</div>
-        <p>Base de datos masiva con miles de canciones populares analizadas en notación funcional.</p>
-        <ul>
-          <li><strong>Notación funcional:</strong> los acordes en números (1-4-5-6) — universal y memorable</li>
-          <li><strong>Catálogo de hits reales:</strong> canciones desglosadas que ya conoces</li>
-          <li><strong>Patrones armónicos:</strong> entiendes por qué ciertas progresiones suenan así</li>
-          <li><strong>Aplicación inmediata:</strong> traes la canción que te gusta, la analizamos juntos</li>
-        </ul>
-      </div>
-      <div class="piano-method-card" data-reveal>
-        <div class="card-tag">PROCESO · DE ANÁLISIS A CREACIÓN</div>
-        <h3>Cómo enseño<em>composición a adultos</em></h3>
-        <div class="tagline">De entender canciones a escribir las tuyas.</div>
-        <p>Composición es proceso — escuchar, identificar, apropiarse, escribir, refinar. Trabajamos con tu DAW de preferencia.</p>
-        <ul>
-          <li><strong>Identificar patrones:</strong> en las canciones que admiras y quieres emular</li>
-          <li><strong>Estructura y forma:</strong> verso, pre-coro, coro, puente</li>
-          <li><strong>Letra y melodía:</strong> escritura aplicada, no teoría abstracta</li>
-          <li><strong>Tu primer demo:</strong> trabajamos hacia que termines una canción real</li>
-        </ul>
-      </div>
-    </div>
-    <div class="piano-synthesis" data-reveal>De analizar canciones existentes a escribir las tuyas. <strong>Composición seria, sin misticismo, con método.</strong></div>
-  </div>
-</section>
-
-<!-- ==================== SERVICIOS ==================== -->
-<section id="servicios">
-  <div class="container">
-    <div class="section-head">
-      <span class="label" data-reveal>qué enseño</span>
-      <h2 data-reveal>Cuatro disciplinas, <em>métodos modernos</em>.</h2>
-      <p class="sub" data-reveal>Cada disciplina con su metodología específica. Puedes tomar una sola o combinarlas.</p>
-    </div>
-    <div class="servicios-grid" data-reveal-group data-reveal-step="60">
-      <div class="servicio" data-reveal>
-        <span class="badge-method">método mvt</span>
-        <div class="servicio-icon">
-          <svg viewBox="0 0 24 24"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.91-3c-.49 0-.9.36-.98.85C16.52 14.2 14.47 16 12 16s-4.52-1.8-4.93-4.15c-.08-.49-.49-.85-.98-.85-.61 0-1.09.54-1 1.14.49 3 2.89 5.35 5.91 5.78V20c0 .55.45 1 1 1s1-.45 1-1v-2.08c3.02-.43 5.42-2.78 5.91-5.78.1-.6-.39-1.14-1-1.14z"/></svg>
-        </div>
-        <h3>Canto · Vocal coaching MVT</h3>
-        <p>Para quien quiere cantar bien de verdad. Técnica, afinación, resonancia, rango y expresión artística.</p>
-        <ul>
-          <li>Coordinación y entrenamiento muscular</li>
-          <li>Trabajo de registros (pecho, mixto, cabeza)</li>
-          <li>Aplicación a canciones reales</li>
-          <li>Anatomía vocal y autodiagnóstico</li>
-        </ul>
-      </div>
-      <div class="servicio" data-reveal>
-        <span class="badge-method">faber &amp; faber</span>
-        <div class="servicio-icon">
-          <svg viewBox="0 0 24 24"><path d="M21 8H3a1 1 0 00-1 1v6a1 1 0 001 1h18a1 1 0 001-1V9a1 1 0 00-1-1zM7 14H5v-3h2v3zm4 0H9v-3h2v3zm4 0h-2v-3h2v3zm4 0h-2v-3h2v3z"/></svg>
-        </div>
-        <h3>Piano · Faber &amp; Faber</h3>
-        <p>Piano serio para adultos con la metodología más respetada del mundo, adaptada a tu ritmo y tus gustos.</p>
-        <ul>
-          <li>Lectura, técnica y teoría integradas</li>
-          <li>Multi-tonalidad desde el inicio</li>
-          <li>Acompañamiento e improvisación</li>
-          <li>Repertorio personalizado a tus gustos</li>
-        </ul>
-      </div>
-      <div class="servicio" data-reveal>
-        <span class="badge-method">hook theory</span>
-        <div class="servicio-icon">
-          <svg viewBox="0 0 24 24"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg>
-        </div>
-        <h3>Composición · Hook Theory</h3>
-        <p>Para quien quiere escribir sus propias canciones. Análisis funcional, patrones, escritura y demo.</p>
-        <ul>
-          <li>Análisis funcional de canciones reales</li>
-          <li>Notación 1-4-5-6 (lenguaje universal)</li>
-          <li>Estructura, melodía y letra</li>
-          <li>De referencia a tu primera canción terminada</li>
-        </ul>
-      </div>
-      <div class="servicio" data-reveal>
-        <div class="servicio-icon">
-          <svg viewBox="0 0 24 24"><path d="M19 3H5c-1.11 0-2 .89-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.11-.9-2-2-2z"/></svg>
-        </div>
-        <h3>Teoría musical</h3>
-        <p>Sin pizarras aburridas. Intervalos, escalas, armonía funcional y modos — aplicada a música real.</p>
-        <ul>
-          <li>Solfeo melódico y rítmico</li>
-          <li>Análisis de canciones que te gustan</li>
-          <li>Funcional para canto, piano y composición</li>
-        </ul>
-      </div>
-    </div>
-  </div>
-</section>
-
-<!-- ==================== PROCESO ==================== -->
-<section class="alt-bg">
-  <div class="container">
-    <div class="section-head">
-      <span class="label" data-reveal>cómo es una clase</span>
-      <h2 data-reveal>Una clase, <em>cuatro momentos</em>.</h2>
-      <p class="sub" data-reveal>Tanto las clases de canto como de piano siguen una estructura clara — para que cada minuto cuente.</p>
-    </div>
-    <div class="proceso" data-reveal-group data-reveal-step="60">
-      <div class="step" data-reveal>
-        <span class="num">01</span>
-        <h4>Calentamiento</h4>
-        <span class="duration">10 MIN</span>
-        <p>Canto: SOVT y SOG. Piano: ejercicios de Faber Technique &amp; Artistry. Prepara músculos sin desgaste.</p>
-      </div>
-      <div class="step" data-reveal>
-        <span class="num">02</span>
-        <h4>Trabajo técnico</h4>
-        <span class="duration">20 MIN</span>
-        <p>Ejercicios específicos según lo que toca esta semana — coordinación vocal o técnica pianística.</p>
-      </div>
-      <div class="step" data-reveal>
-        <span class="num">03</span>
-        <h4>Aplicación a tu canción</h4>
-        <span class="duration">25 MIN</span>
-        <p>Llevamos lo trabajado al repertorio real. La parte que más cuesta — y la que más se nota.</p>
-      </div>
-      <div class="step" data-reveal>
-        <span class="num">04</span>
-        <h4>Práctica para casa</h4>
-        <span class="duration">5 MIN</span>
-        <p>Te llevas un audio o nota con los ejercicios específicos para la semana.</p>
-      </div>
-    </div>
-  </div>
-</section>
-
-<!-- ==================== SOBRE ANDRÉS ==================== -->
-<section id="sobre">
-  <div class="container">
-    <div class="sobre-grid">
-      <div class="sobre-photo" data-reveal>
-        <img src="/andres-banjo-escenario.jpg" width="1125" height="1500" loading="lazy" decoding="async" alt="Andrés Salame tocando banjo como frontman de Tramboyos en escenario" />
-      </div>
-      <div class="sobre-text" data-reveal>
-        <span class="label">sobre andrés</span>
-        <h2>Sobre Andrés</h2>
-        <span class="sobre-subtitle">Músico que enseña. No profesor que toca.</span>
-        <p>
-          Vengo de la industria. Frontman y compositor de Tramboyos —banda de punk rock alternativo—,
-          management de Kids on Coffee y ex-manager de Malos Amigos, Maceradoz, Tuporaquí Yoporallá,
-          Bastian Guija y Lonzo Miranda. He compuesto más de 200 canciones y producido más de 20 conciertos.
-        </p>
-        <p>
-          Estudios en música en UPC y psicología en ULima. Esa combinación es inusual y la noto en
-          cada clase: entender la voz también es entender a quién la usa.
-        </p>
-        <p>
-          Enseño canto con metodología MVT (Modern Vocal Training), piano y composición. Mi alumno típico
-          es un adulto entre 20 y 45 años que se preguntó alguna vez si no era muy tarde para aprender música.
-          Spoiler: no lo es.
-        </p>
-      </div>
-    </div>
-  </div>
-</section>
-
-<!-- ==================== TESTIMONIOS ==================== -->
-<section class="alt-bg" id="testimonios">
-  <div class="container">
-    <div class="section-head">
-      <span class="label" data-reveal>testimonios</span>
-      <h2 data-reveal>Lo que dicen mis <em>alumnos</em>.</h2>
-      <p class="sub" data-reveal>★★★★★ &nbsp;5,0 · 20 opiniones verificadas en Google y Superprof.</p>
-    </div>
-    <div class="testimonios-grid" data-reveal-group data-reveal-step="60">
-
-      <!-- ===== HISTORIAS (testimonios extensos) ===== -->
-      <div class="testimonio" data-reveal>
-        <span class="disc-tag">COMPOSICIÓN · HOOK THEORY</span>
-        <blockquote>
-          Llevaba años escribiendo letras en una libreta sin saber qué hacer con ellas. Con Andrés entendí que
-          componer no era esperar inspiración. Poco a poco, empecé a analizar canciones que admiraba y a entender
-          por qué funcionaban. Hoy puedo improvisar canciones completas. Nunca pensé que podría lograr hacer esto.
-        </blockquote>
-        <div class="testimonio-author">
-          <div class="testimonio-avatar">F</div>
-          <div class="testimonio-meta">
-            <div class="testimonio-name">Fernando</div>
-            <div class="testimonio-detail">1 AÑO · INTENSIVO</div>
-          </div>
-        </div>
-      </div>
-      <div class="testimonio" data-reveal>
-        <span class="disc-tag">CANTO · MVT</span>
-        <blockquote>
-          Me caso este año y mi sueño era cantarle a mi novio en la boda. Cuando empecé con Andrés ni siquiera
-          llegaba al coro de la canción que elegí. Ocho meses después, no solo la canto entera y de forma
-          balanceada, sino que también he adquirido la coordinación necesaria para cantar varias canciones más.
-        </blockquote>
-        <div class="testimonio-author">
-          <div class="testimonio-avatar">C</div>
-          <div class="testimonio-meta">
-            <div class="testimonio-name">Carla</div>
-            <div class="testimonio-detail">8 MESES · ESENCIAL</div>
-          </div>
-        </div>
-      </div>
-      <div class="testimonio" data-reveal>
-        <span class="disc-tag">PIANO · FABER &amp; FABER</span>
-        <blockquote>
-          No esperaba que el piano se convirtiera en lo más constante de mi semana, pero así es. La forma en que
-          Andrés estructura las clases me obligó a desarrollar disciplina de un modo que se trasladó a otras áreas
-          de mi vida. Logré desconectarme del ruido digital y ser mucho más disciplinada.
-        </blockquote>
-        <div class="testimonio-author">
-          <div class="testimonio-avatar">N</div>
-          <div class="testimonio-meta">
-            <div class="testimonio-name">Nicole</div>
-            <div class="testimonio-detail">6 MESES · ESENCIAL</div>
-          </div>
-        </div>
-      </div>
-
-      <!-- ===== RESEÑAS GOOGLE (verificadas) ===== -->
-      <div class="testimonio" data-reveal>
-        <span class="disc-tag">★★★★★ RESEÑA GOOGLE</span>
-        <blockquote>
-          Me encantaron las clases personalizadas y sobre todo cómo te desafía a llegar más allá conociendo tus límites y habilidades ✨
-        </blockquote>
-        <div class="testimonio-author">
-          <div class="testimonio-avatar">G</div>
-          <div class="testimonio-meta">
-            <div class="testimonio-name">Gianella Castro</div>
-            <div class="testimonio-detail">GOOGLE · <a href="https://g.page/r/CevbO7ON9f4CEAE" target="_blank" rel="noopener" style="color:#cc4e1f;text-decoration:none;">ver reseña ↗</a></div>
-          </div>
-        </div>
-      </div>
-      <div class="testimonio" data-reveal>
-        <span class="disc-tag">★★★★★ RESEÑA GOOGLE</span>
-        <blockquote>
-          Excelente profesor, explica demasiado bien y es muy paciente y divertido :D
-        </blockquote>
-        <div class="testimonio-author">
-          <div class="testimonio-avatar">S</div>
-          <div class="testimonio-meta">
-            <div class="testimonio-name">Santino Amigo</div>
-            <div class="testimonio-detail">GOOGLE · <a href="https://g.page/r/CevbO7ON9f4CEAE" target="_blank" rel="noopener" style="color:#cc4e1f;text-decoration:none;">ver reseña ↗</a></div>
-          </div>
-        </div>
-      </div>
-      <div class="testimonio" data-reveal>
-        <span class="disc-tag">★★★★★ RESEÑA GOOGLE</span>
-        <blockquote>
-          Muy buen profesor. Te hace sentir en confianza desde el minuto uno.
-        </blockquote>
-        <div class="testimonio-author">
-          <div class="testimonio-avatar">F</div>
-          <div class="testimonio-meta">
-            <div class="testimonio-name">Fernando Yerrén</div>
-            <div class="testimonio-detail">GOOGLE · <a href="https://g.page/r/CevbO7ON9f4CEAE" target="_blank" rel="noopener" style="color:#cc4e1f;text-decoration:none;">ver reseña ↗</a></div>
-          </div>
-        </div>
-      </div>
-      <div class="testimonio" data-reveal>
-        <span class="disc-tag">★★★★★ RESEÑA GOOGLE</span>
-        <blockquote>
-          Me encantan las clases. Me ha ayudado mucho a confiar en mis habilidades :)
-        </blockquote>
-        <div class="testimonio-author">
-          <div class="testimonio-avatar">N</div>
-          <div class="testimonio-meta">
-            <div class="testimonio-name">Nuria Carrera</div>
-            <div class="testimonio-detail">GOOGLE · <a href="https://g.page/r/CevbO7ON9f4CEAE" target="_blank" rel="noopener" style="color:#cc4e1f;text-decoration:none;">ver reseña ↗</a></div>
-          </div>
-        </div>
-      </div>
-      <div class="testimonio" data-reveal>
-        <span class="disc-tag">★★★★★ RESEÑA GOOGLE</span>
-        <blockquote>
-          Gran profe, clases divertidas, buena enseñanza, recomendado 🤘
-        </blockquote>
-        <div class="testimonio-author">
-          <div class="testimonio-avatar">F</div>
-          <div class="testimonio-meta">
-            <div class="testimonio-name">Fernando Campos</div>
-            <div class="testimonio-detail">GOOGLE · <a href="https://g.page/r/CevbO7ON9f4CEAE" target="_blank" rel="noopener" style="color:#cc4e1f;text-decoration:none;">ver reseña ↗</a></div>
-          </div>
-        </div>
-      </div>
-      <div class="testimonio" data-reveal>
-        <span class="disc-tag">★★★★★ RESEÑA GOOGLE</span>
-        <blockquote>
-          Andrés es un capo de profesor. Desde el día uno pude aprender a componer.
-        </blockquote>
-        <div class="testimonio-author">
-          <div class="testimonio-avatar">G</div>
-          <div class="testimonio-meta">
-            <div class="testimonio-name">Gigi Nieto</div>
-            <div class="testimonio-detail">GOOGLE · <a href="https://g.page/r/CevbO7ON9f4CEAE" target="_blank" rel="noopener" style="color:#cc4e1f;text-decoration:none;">ver reseña ↗</a></div>
-          </div>
-        </div>
-      </div>
-      <div class="testimonio" data-reveal>
-        <span class="disc-tag">★★★★★ RESEÑA GOOGLE</span>
-        <blockquote>
-          Siempre tuve curiosidad por aprender piano y gracias a Andrés pude comenzar este camino desde cero.
-        </blockquote>
-        <div class="testimonio-author">
-          <div class="testimonio-avatar">N</div>
-          <div class="testimonio-meta">
-            <div class="testimonio-name">Noelia Pascual</div>
-            <div class="testimonio-detail">GOOGLE · PIANO · <a href="https://g.page/r/CevbO7ON9f4CEAE" target="_blank" rel="noopener" style="color:#cc4e1f;text-decoration:none;">ver reseña ↗</a></div>
-          </div>
-        </div>
-      </div>
-      <div class="testimonio" data-reveal>
-        <span class="disc-tag">★★★★★ RESEÑA GOOGLE</span>
-        <blockquote>
-          Super chévere el profe, me ayudó mucho.
-        </blockquote>
-        <div class="testimonio-author">
-          <div class="testimonio-avatar">A</div>
-          <div class="testimonio-meta">
-            <div class="testimonio-name">Alvaro Cornejo</div>
-            <div class="testimonio-detail">GOOGLE · <a href="https://g.page/r/CevbO7ON9f4CEAE" target="_blank" rel="noopener" style="color:#cc4e1f;text-decoration:none;">ver reseña ↗</a></div>
-          </div>
-        </div>
-      </div>
-      <div class="testimonio" data-reveal>
-        <span class="disc-tag">★★★★★ RESEÑA GOOGLE</span>
-        <blockquote>
-          Super dinámico, lo recomiendo!
-        </blockquote>
-        <div class="testimonio-author">
-          <div class="testimonio-avatar">J</div>
-          <div class="testimonio-meta">
-            <div class="testimonio-name">Jimmy Miñán</div>
-            <div class="testimonio-detail">GOOGLE · <a href="https://g.page/r/CevbO7ON9f4CEAE" target="_blank" rel="noopener" style="color:#cc4e1f;text-decoration:none;">ver reseña ↗</a></div>
-          </div>
-        </div>
-      </div>
-
-      <!-- ===== RESEÑAS SUPERPROF (verificadas) ===== -->
-      <div class="testimonio" data-reveal>
-        <span class="disc-tag">★★★★★ SUPERPROF · CANTO</span>
-        <blockquote>
-          Antes no sabía por qué me iba tan mal en la facultad de derecho. Después de estas clases sigo sin saberlo, pero puedo cantar toda la música deprimente que me gusta. 10/10
-        </blockquote>
-        <div class="testimonio-author">
-          <div class="testimonio-avatar">S</div>
-          <div class="testimonio-meta">
-            <div class="testimonio-name">Sebastián</div>
-            <div class="testimonio-detail">SUPERPROF · <a href="https://www.superprof.pe/clases-canto-piano-composicion-para-adultos-san-isidro-online.html" target="_blank" rel="noopener" style="color:#cc4e1f;text-decoration:none;">ver reseña ↗</a></div>
-          </div>
-        </div>
-      </div>
-      <div class="testimonio" data-reveal>
-        <span class="disc-tag">★★★★★ SUPERPROF · PIANO</span>
-        <blockquote>
-          Empecé desde cero y sin experiencia. Andrés fue muy paciente y atento desde el primer día, haciendo que el proceso fuera cómodo y motivador. Sin duda volvería a tomar clases con él.
-        </blockquote>
-        <div class="testimonio-author">
-          <div class="testimonio-avatar">N</div>
-          <div class="testimonio-meta">
-            <div class="testimonio-name">Noelia</div>
-            <div class="testimonio-detail">SUPERPROF · <a href="https://www.superprof.pe/clases-canto-piano-composicion-para-adultos-san-isidro-online.html" target="_blank" rel="noopener" style="color:#cc4e1f;text-decoration:none;">ver reseña ↗</a></div>
-          </div>
-        </div>
-      </div>
-      <div class="testimonio" data-reveal>
-        <span class="disc-tag">★★★★★ SUPERPROF · CANTO</span>
-        <blockquote>
-          Me enseñó a mejorar mi técnica de canto a un nivel que no pensé que podría alcanzar. Tomé clases presenciales y virtuales, en ambos casos fue genial todo.
-        </blockquote>
-        <div class="testimonio-author">
-          <div class="testimonio-avatar">J</div>
-          <div class="testimonio-meta">
-            <div class="testimonio-name">Juancarlos</div>
-            <div class="testimonio-detail">SUPERPROF · <a href="https://www.superprof.pe/clases-canto-piano-composicion-para-adultos-san-isidro-online.html" target="_blank" rel="noopener" style="color:#cc4e1f;text-decoration:none;">ver reseña ↗</a></div>
-          </div>
-        </div>
-      </div>
-      <div class="testimonio" data-reveal>
-        <span class="disc-tag">★★★★★ SUPERPROF · COMPOSICIÓN</span>
-        <blockquote>
-          Gran clase y excelente profesor. Explica todo súper claro y ya en las primeras clases pude componer mis primeras canciones.
-        </blockquote>
-        <div class="testimonio-author">
-          <div class="testimonio-avatar">A</div>
-          <div class="testimonio-meta">
-            <div class="testimonio-name">Alvaro José</div>
-            <div class="testimonio-detail">SUPERPROF · <a href="https://www.superprof.pe/clases-canto-piano-composicion-para-adultos-san-isidro-online.html" target="_blank" rel="noopener" style="color:#cc4e1f;text-decoration:none;">ver reseña ↗</a></div>
-          </div>
-        </div>
-      </div>
-      <div class="testimonio" data-reveal>
-        <span class="disc-tag">★★★★★ SUPERPROF · CANTO</span>
-        <blockquote>
-          Sus clases son dinámicas, claras y motivadoras, logrando que uno gane confianza mientras aprende y disfruta la música. Lo recomiendo totalmente.
-        </blockquote>
-        <div class="testimonio-author">
-          <div class="testimonio-avatar">R</div>
-          <div class="testimonio-meta">
-            <div class="testimonio-name">Renzo</div>
-            <div class="testimonio-detail">SUPERPROF · <a href="https://www.superprof.pe/clases-canto-piano-composicion-para-adultos-san-isidro-online.html" target="_blank" rel="noopener" style="color:#cc4e1f;text-decoration:none;">ver reseña ↗</a></div>
-          </div>
-        </div>
-      </div>
-      <div class="testimonio" data-reveal>
-        <span class="disc-tag">★★★★★ SUPERPROF · CANTO</span>
-        <blockquote>
-          Sus clases de canto me siguen sirviendo mucho para mejorar mi técnica. Son entretenidas: realiza diagnóstico, recomendaciones y ejercicios para hacer fuera de clase.
-        </blockquote>
-        <div class="testimonio-author">
-          <div class="testimonio-avatar">F</div>
-          <div class="testimonio-meta">
-            <div class="testimonio-name">Fernando</div>
-            <div class="testimonio-detail">SUPERPROF · <a href="https://www.superprof.pe/clases-canto-piano-composicion-para-adultos-san-isidro-online.html" target="_blank" rel="noopener" style="color:#cc4e1f;text-decoration:none;">ver reseña ↗</a></div>
-          </div>
-        </div>
-      </div>
-      <div class="testimonio" data-reveal>
-        <span class="disc-tag">★★★★★ SUPERPROF · CANTO</span>
-        <blockquote>
-          Conocí a Andrés en 2018 y desde el primer momento supe que era un músico excepcional. Me ayudó mucho a mejorar mi voz mixta, que era lo que más me había costado por años.
-        </blockquote>
-        <div class="testimonio-author">
-          <div class="testimonio-avatar">N</div>
-          <div class="testimonio-meta">
-            <div class="testimonio-name">Nicole</div>
-            <div class="testimonio-detail">SUPERPROF · <a href="https://www.superprof.pe/clases-canto-piano-composicion-para-adultos-san-isidro-online.html" target="_blank" rel="noopener" style="color:#cc4e1f;text-decoration:none;">ver reseña ↗</a></div>
-          </div>
-        </div>
-      </div>
-      <div class="testimonio" data-reveal>
-        <span class="disc-tag">★★★★★ SUPERPROF · CANTO</span>
-        <blockquote>
-          Es alguien bastante paciente y sabe explicar demasiado bien.
-        </blockquote>
-        <div class="testimonio-author">
-          <div class="testimonio-avatar">S</div>
-          <div class="testimonio-meta">
-            <div class="testimonio-name">Santino</div>
-            <div class="testimonio-detail">SUPERPROF · <a href="https://www.superprof.pe/clases-canto-piano-composicion-para-adultos-san-isidro-online.html" target="_blank" rel="noopener" style="color:#cc4e1f;text-decoration:none;">ver reseña ↗</a></div>
-          </div>
-        </div>
-      </div>
-      <div class="testimonio" data-reveal>
-        <span class="disc-tag">★★★★★ SUPERPROF · CANTO</span>
-        <blockquote>
-          Gran tipo, apasionado y se preocupa por ti, más aún si pones de tu parte. ¡No hay pierde!
-        </blockquote>
-        <div class="testimonio-author">
-          <div class="testimonio-avatar">C</div>
-          <div class="testimonio-meta">
-            <div class="testimonio-name">Carlos A.</div>
-            <div class="testimonio-detail">SUPERPROF · <a href="https://www.superprof.pe/clases-canto-piano-composicion-para-adultos-san-isidro-online.html" target="_blank" rel="noopener" style="color:#cc4e1f;text-decoration:none;">ver reseña ↗</a></div>
-          </div>
-        </div>
-      </div>
-
-    </div>
-  </div>
-</section>
-
-<!-- ==================== CINTA MARQUEE (firma 2) ==================== -->
-<div class="marquee" role="presentation">
-  <div class="marquee-track">
-    <span class="mq-content" set:html={marqueeHTML} />
-    <span class="mq-content" aria-hidden="true" set:html={marqueeHTML} />
-  </div>
-</div>
-
-<!-- ==================== TU PORTAL DE ALUMNO ==================== -->
-<!-- Tu portal de alumno -->
-<section id="portal-alumno" aria-label="Tu portal de alumno">
-  <div class="container">
-    <div class="portal-grid">
-      <div class="portal-text">
-        <span class="label" data-reveal>// TU PORTAL DE ALUMNO</span>
-        <h2 data-reveal>Tu avance, en tu bolsillo.</h2>
-        <ul class="portal-points" data-reveal-group data-reveal-step="60">
-          <li data-reveal>Ve tus clases restantes y tu historial en tiempo real</li>
-          <li data-reveal>Tu tarea de la semana siempre a la mano</li>
-          <li data-reveal>Compra y renueva tu paquete con Yape o Plin sin salir de casa</li>
-        </ul>
-        <a href="/alumnos/" class="btn-outline portal-cta" data-reveal>Crear mi cuenta <span class="arrow-i">→</span></a>
-        <p class="portal-sub" data-reveal>CREAR CUENTA ES GRATIS · PAGAS SOLO CUANDO COMPRAS TU PAQUETE</p>
-      </div>
-      <div class="portal-mock" data-reveal>
-        <div class="mock-card">
-          <span class="mock-pill">ACTIVO</span>
-          <div class="mock-count"><span class="mock-num">5</span><span class="mock-de">de 8</span></div>
-          <div class="mock-tickets">
-            <span class="ticket used"></span>
-            <span class="ticket used"></span>
-            <span class="ticket used"></span>
-            <span class="ticket"></span>
-            <span class="ticket"></span>
-            <span class="ticket"></span>
-            <span class="ticket"></span>
-            <span class="ticket"></span>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-</section>
-
-<!-- ==================== PRECIOS ==================== -->
-<section id="precios">
-  <div class="container">
-    <div class="section-head">
-      <span class="label" data-reveal>paquetes mensuales</span>
-      <h2 data-reveal>Precios <em>claros</em>. Sin letra chica.</h2>
-      <p class="sub" data-reveal>
-        Los mismos paquetes para canto, piano, teoría o composición. Puedes mezclar disciplinas dentro del mismo paquete.
-      </p>
-    </div>
-
-    <div class="precios-grid" data-reveal-group data-reveal-step="60">
-
-      <div class="precio-card" data-reveal>
-        <span class="tier-label">Esencial</span>
-        <h3>Paquete de 4 horas</h3>
-        <p class="tier-detail">¡Distribuye tus horas como prefieras!<br>Recomendado: 1 clase por semana · ritmo cómodo</p>
-        <div class="precio-amount">
-          <span class="currency">S/</span>250
-        </div>
-        <ul>
-          <li>1 disciplina</li>
-          <li>Presencial u online</li>
-          <li>Plan personalizado</li>
-          <li>¡Acceso a material extra en el Discord!</li>
-          <li>Línea directa conmigo por WhatsApp para cualquier duda</li>
-        </ul>
-        <a href="https://wa.me/51989077928?text=Hola%20Andrés%2C%20me%20interesa%20el%20paquete%20Esencial%20S%2F250" class="precio-cta" target="_blank" rel="noopener">Reservar</a>
-        <a href="/alumnos/" class="precio-online">o cómpralo online <span class="arrow-i">→</span></a>
-      </div>
-
-      <div class="precio-card featured" data-reveal>
-        <span class="badge-elegido">★ MÁS ELEGIDO</span>
-        <span class="tier-label">Intensivo</span>
-        <h3>Paquete de 8 horas</h3>
-        <p class="tier-detail">¡Distribuye tus horas como prefieras!<br>Recomendado: 2 clases por semana</p>
-        <div class="precio-amount">
-          <span class="currency">S/</span>450
-        </div>
-        <ul>
-          <li>1 o 2 disciplinas</li>
-          <li>Presencial u online</li>
-          <li>Plan personalizado</li>
-          <li>¡Acceso a material extra en el Discord!</li>
-          <li>Línea directa conmigo por WhatsApp para cualquier duda</li>
-        </ul>
-        <a href="https://wa.me/51989077928?text=Hola%20Andrés%2C%20me%20interesa%20el%20paquete%20Intensivo%20S%2F450" class="precio-cta" target="_blank" rel="noopener">Reservar</a>
-        <a href="/alumnos/" class="precio-online">o cómpralo online <span class="arrow-i">→</span></a>
-      </div>
-
-      <div class="precio-card" data-reveal>
-        <span class="tier-label">Estrella</span>
-        <h3>Paquete de 12 horas</h3>
-        <p class="tier-detail">¡Distribuye tus horas como prefieras!<br>Recomendado: 3 clases por semana · máximo progreso</p>
-        <div class="precio-amount">
-          <span class="currency">S/</span>600
-        </div>
-        <ul>
-          <li>1, 2 o 3 disciplinas</li>
-          <li>Presencial u online</li>
-          <li>Plan personalizado</li>
-          <li>¡Acceso a material extra en el Discord!</li>
-          <li>Línea directa conmigo por WhatsApp para cualquier duda</li>
-        </ul>
-        <a href="https://wa.me/51989077928?text=Hola%20Andrés%2C%20me%20interesa%20el%20paquete%20Estrella%20S%2F600" class="precio-cta" target="_blank" rel="noopener">Reservar</a>
-        <a href="/alumnos/" class="precio-online">o cómpralo online <span class="arrow-i">→</span></a>
-      </div>
-
-    </div>
-
-    <div class="precios-trust" data-reveal>
-      <div>
-        <span class="trust-label">Pagos</span>
-        <span class="trust-text">Plin · Yape · Agora<br>USD · EUR · MXN para online</span>
-      </div>
-      <div>
-        <span class="trust-label">Modalidades</span>
-        <span class="trust-text">Presencial en San Isidro<br>Av. Salaverry / Av. JV Prado</span>
-      </div>
-      <div>
-        <span class="trust-label">Prueba</span>
-        <span class="trust-text">Clase de prueba S/50<br>incluye diagnóstico vocal en PDF</span>
-      </div>
-    </div>
-  </div>
-</section>
-
-<!-- ==================== FAQ ==================== -->
-<section class="alt-bg" id="faq">
-  <div class="container-narrow">
-    <div class="section-head">
-      <span class="label" data-reveal>preguntas frecuentes</span>
-      <h2 data-reveal>Lo que <em>siempre</em> me preguntan.</h2>
-    </div>
-
-    <div class="faq-list" data-reveal-group data-reveal-step="60">
-      <div class="faq-item" data-reveal>
-        <button class="faq-question">
-          <span>¿Tengo que tener experiencia previa para empezar?</span>
-          <span class="arrow">+</span>
-        </button>
-        <div class="faq-answer">
-          <p>Para nada — ni en canto ni en piano. Más de la mitad de mis alumnos empiezan sin haber tomado clases nunca. El método se adapta a tu nivel: el primer mes es de evaluación y construcción de base.</p>
-        </div>
-      </div>
-
-      <div class="faq-item" data-reveal>
-        <button class="faq-question">
-          <span>¿Faber &amp; Faber no es solo para niños?</span>
-          <span class="arrow">+</span>
-        </button>
-        <div class="faq-answer">
-          <p>Es un mito común. Faber &amp; Faber es el método más usado por profesores serios alrededor del mundo porque la pedagogía es excelente — para cualquier edad. La diferencia con un adulto es el ritmo (más rápido) y el repertorio (adaptado a tus gustos).</p>
-        </div>
-      </div>
-
-      <div class="faq-item" data-reveal>
-        <button class="faq-question">
-          <span>¿Cuándo empezaré a notar el progreso?</span>
-          <span class="arrow">+</span>
-        </button>
-        <div class="faq-answer">
-          <p>En las primeras 2-3 clases ya vas a notar cambios chicos pero claros — sobre todo en cómo se siente cantar/tocar. El progreso técnico medible se ve a las 6-8 semanas con práctica constante.</p>
-        </div>
-      </div>
-
-      <div class="faq-item" data-reveal>
-        <button class="faq-question">
-          <span>¿Puedo combinar canto, piano y composición en el mismo paquete?</span>
-          <span class="arrow">+</span>
-        </button>
-        <div class="faq-answer">
-          <p>Sí, y de hecho lo recomiendo si te interesan varias. En el paquete Intensivo (8h/mes) puedes hacer, por ejemplo, 4h de canto + 2h de piano + 2h de composición. En la clase de prueba lo diseñamos según tus objetivos.</p>
-        </div>
-      </div>
-
-      <div class="faq-item" data-reveal>
-        <button class="faq-question">
-          <span>¿Es online o presencial?</span>
-          <span class="arrow">+</span>
-        </button>
-        <div class="faq-answer">
-          <p>Las dos. Presencial en San Isidro (Av. Salaverry con Av. JV Prado) u online por Zoom/Meet. Para piano necesitas tener un piano o teclado en casa (mín. 61 teclas con sensibilidad al toque).</p>
-        </div>
-      </div>
-
-      <div class="faq-item" data-reveal>
-        <button class="faq-question">
-          <span>¿Cómo se paga? ¿Acepta moneda extranjera?</span>
-          <span class="arrow">+</span>
-        </button>
-        <div class="faq-answer">
-          <p>En Perú: Plin, Yape o Agora. Para alumnos online en otros países: USD, EUR o MXN (Wise, PayPal o transferencia internacional). El pago del paquete se hace al inicio del mes.</p>
-        </div>
-      </div>
-    </div>
-  </div>
-</section>
-
-<!-- ==================== FAQ SCHEMA (rich results) ==================== -->
-<script type="application/ld+json" set:html={JSON.stringify({
-  "@context": "https://schema.org",
-  "@type": "FAQPage",
-  "mainEntity": [
-    {
-      "@type": "Question",
-      "name": "¿Tengo que tener experiencia previa para empezar?",
-      "acceptedAnswer": { "@type": "Answer", "text": "Para nada — ni en canto ni en piano. Más de la mitad de mis alumnos empiezan sin haber tomado clases nunca. El método se adapta a tu nivel: el primer mes es de evaluación y construcción de base." }
-    },
-    {
-      "@type": "Question",
-      "name": "¿Faber & Faber no es solo para niños?",
-      "acceptedAnswer": { "@type": "Answer", "text": "Es un mito común. Faber & Faber es el método más usado por profesores serios alrededor del mundo porque la pedagogía es excelente para cualquier edad. La diferencia con un adulto es el ritmo (más rápido) y el repertorio (adaptado a tus gustos)." }
-    },
-    {
-      "@type": "Question",
-      "name": "¿Cuándo empezaré a notar el progreso?",
-      "acceptedAnswer": { "@type": "Answer", "text": "En las primeras 2-3 clases ya vas a notar cambios chicos pero claros, sobre todo en cómo se siente cantar o tocar. El progreso técnico medible se ve a las 6-8 semanas con práctica constante." }
-    },
-    {
-      "@type": "Question",
-      "name": "¿Puedo combinar canto, piano y composición en el mismo paquete?",
-      "acceptedAnswer": { "@type": "Answer", "text": "Sí, y de hecho lo recomiendo si te interesan varias. En el paquete Intensivo (8h/mes) puedes hacer, por ejemplo, 4h de canto + 2h de piano + 2h de composición. En la clase de prueba lo diseñamos según tus objetivos." }
-    },
-    {
-      "@type": "Question",
-      "name": "¿Las clases son online o presenciales?",
-      "acceptedAnswer": { "@type": "Answer", "text": "Las dos. Presencial en San Isidro (Av. Salaverry con Av. JV Prado) u online por Zoom o Meet. Para piano necesitas tener un piano o teclado en casa (mínimo 61 teclas con sensibilidad al toque)." }
-    },
-    {
-      "@type": "Question",
-      "name": "¿Cómo se paga? ¿Acepta moneda extranjera?",
-      "acceptedAnswer": { "@type": "Answer", "text": "En Perú: Plin, Yape o Agora. Para alumnos online en otros países: USD, EUR o MXN (Wise, PayPal o transferencia internacional). El pago del paquete se hace al inicio del mes." }
-    }
+// Home oficial · ProfesorMVT — rediseño punk (reemplaza la versión anterior)
+// Página standalone (sin Layout) para controlar 100% el diseño, conservando Meta Pixel + SEO.
+const title = "Profesor MVT · Canto, piano y composición para adultos en Lima";
+const description = "Clases 1 a 1 de canto (método MVT), piano (Faber & Faber) y composición para adultos en Lima (San Isidro) y online. Con Andrés Salame, músico real. Prueba S/50 con diagnóstico vocal en PDF.";
+const faqSchema = {
+  "@context":"https://schema.org","@type":"FAQPage","mainEntity":[
+    {"@type":"Question","name":"¿Tengo que tener experiencia previa para empezar?","acceptedAnswer":{"@type":"Answer","text":"Para nada, ni en canto ni en piano. Más de la mitad de mis alumnos empiezan sin haber tomado clases nunca. El método se adapta a tu nivel."}},
+    {"@type":"Question","name":"¿Faber & Faber no es solo para niños?","acceptedAnswer":{"@type":"Answer","text":"Es un mito común. Es el método más usado por profesores serios del mundo, para cualquier edad. Con un adulto cambia el ritmo y el repertorio."}},
+    {"@type":"Question","name":"¿Cuándo empezaré a notar el progreso?","acceptedAnswer":{"@type":"Answer","text":"En las primeras 2-3 clases ya notas cambios chicos pero claros. El progreso técnico medible se ve a las 6-8 semanas con práctica constante."}},
+    {"@type":"Question","name":"¿Puedo combinar canto, piano y composición?","acceptedAnswer":{"@type":"Answer","text":"Sí. En el paquete Intensivo de 8h/mes puedes hacer 4h de canto, 2h de piano y 2h de composición."}},
+    {"@type":"Question","name":"¿Las clases son online o presenciales?","acceptedAnswer":{"@type":"Answer","text":"Las dos. Presencial en San Isidro u online por Zoom o Meet. Para piano necesitas un teclado de mínimo 61 teclas con sensibilidad al toque."}},
+    {"@type":"Question","name":"¿Cómo se paga? ¿Acepta moneda extranjera?","acceptedAnswer":{"@type":"Answer","text":"En Perú: Plin, Yape o Agora. Online: USD, EUR o MXN por Wise, PayPal o transferencia. El pago es al inicio del mes."}}
   ]
-})} />
+};
+---
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>{title}</title>
+<meta name="description" content={description} />
+<link rel="canonical" href="https://profesormvt.com/" />
+<meta name="robots" content="index, follow" />
+<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
 
-<!-- ==================== CTA FINAL ==================== -->
-<section class="cta-final" id="cta-final">
-  <div class="container-narrow">
-    <h2 data-reveal>Empieza con<br><em>una clase de S/50.</em></h2>
-    <p data-reveal>
-      Una hora completa. Conoces el método, evalúas mi forma de enseñar, y decides si quieres seguir.
-      Si sigues, los S/50 se descuentan de tu primer paquete.
-    </p>
-    <div class="ctas" data-reveal>
-      <a href="https://wa.me/51989077928?text=Hola%20Andrés%2C%20vi%20tu%20web%20y%20me%20interesa%20la%20clase%20de%20prueba%20S%2F50" class="btn-primary" target="_blank" rel="noopener">
-        <svg viewBox="0 0 24 24"><path d="M.057 24l1.687-6.163a11.867 11.867 0 01-1.587-5.946C.16 5.335 5.495 0 12.05 0a11.817 11.817 0 018.413 3.488 11.824 11.824 0 013.48 8.414c-.003 6.557-5.338 11.892-11.893 11.892a11.9 11.9 0 01-5.688-1.448L.057 24zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884a9.86 9.86 0 001.594 5.39l-.999 3.648 3.745-.978zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372s-1.04 1.016-1.04 2.479 1.065 2.876 1.213 3.074c.149.198 2.095 3.2 5.076 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413z"/></svg>
-        Reservar por WhatsApp
-      </a>
-      <a href="/alumnos/" class="btn-outline">Comprar paquete online <span class="arrow-i">→</span></a>
+<script is:inline>
+  !function(f,b,e,v,n,t,s){if(f.fbq)return;n=f.fbq=function(){n.callMethod?n.callMethod.apply(n,arguments):n.queue.push(arguments)};if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';n.queue=[];t=b.createElement(e);t.async=!0;t.src=v;s=b.getElementsByTagName(e)[0];s.parentNode.insertBefore(t,s)}(window,document,'script','https://connect.facebook.net/en_US/fbevents.js');
+  fbq('init','1281275673536185');fbq('track','PageView');
+</script>
+<noscript><img height="1" width="1" style="display:none" src="https://www.facebook.com/tr?id=1281275673536185&ev=PageView&noscript=1"/></noscript>
+
+<meta property="og:title" content={title} />
+<meta property="og:description" content={description} />
+<meta property="og:type" content="website" />
+<meta property="og:url" content="https://profesormvt.com/" />
+<meta property="og:image" content="https://profesormvt.com/og-image.jpg" />
+<meta property="og:locale" content="es_PE" />
+<meta property="og:site_name" content="Profesor MVT" />
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content={title} />
+<meta name="twitter:description" content={description} />
+<meta name="twitter:image" content="https://profesormvt.com/og-image.jpg" />
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Space+Grotesk:wght@400;500;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<script type="application/ld+json" set:html={JSON.stringify(faqSchema)} is:inline></script>
+<style>
+  :root{
+    --bg:#0d0b0a; --panel:#15110f; --panel2:#1c1714; --accent:#e8501f; --accent2:#ff6a35;
+    --cream:#f3ede0; --muted:#8a8276; --line:#2A2926;
+    --mono:'JetBrains Mono',monospace; --display:'Anton',Impact,sans-serif; --body:'Space Grotesk',system-ui,sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{scroll-behavior:smooth}
+  body{background:var(--bg);color:var(--cream);font-family:var(--body);line-height:1.5;-webkit-font-smoothing:antialiased;overflow-x:hidden}
+  body::before{content:"";position:fixed;inset:0;z-index:9999;pointer-events:none;opacity:.05;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")}
+  a{color:inherit;text-decoration:none}
+  .wrap{max-width:1180px;margin:0 auto;padding:0 24px}
+  .narrow{max-width:780px}
+  .mono{font-family:var(--mono);text-transform:uppercase;letter-spacing:.16em;font-size:12px;color:var(--accent);font-weight:700}
+  section{position:relative}
+  .top{position:sticky;top:0;z-index:100;background:rgba(13,11,10,.85);backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
+  .top .wrap{display:flex;align-items:center;justify-content:space-between;height:60px}
+  .logo{font-family:var(--display);font-size:25px;text-transform:uppercase;letter-spacing:.01em}
+  .logo em{font-style:normal;color:var(--accent)}
+  .top a.cta{font-family:var(--mono);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;border:1px solid var(--accent);color:var(--accent);padding:9px 15px;border-radius:2px;transition:.18s}
+  .top a.cta:hover{background:var(--accent);color:var(--bg)}
+  .btn{font-family:var(--mono);text-transform:uppercase;letter-spacing:.06em;font-size:13px;font-weight:700;padding:15px 22px;border-radius:2px;border:2px solid var(--accent);background:var(--accent);color:var(--bg);transition:.16s;display:inline-flex;gap:9px;cursor:pointer}
+  .btn:hover{transform:translate(-2px,-2px);box-shadow:5px 5px 0 var(--cream)}
+  .btn.ghost{background:transparent;color:var(--cream)}
+  .btn.ghost:hover{box-shadow:5px 5px 0 var(--accent)}
+  .shead{margin-bottom:36px;max-width:42em}
+  .shead h2{font-family:var(--display);text-transform:uppercase;font-size:clamp(34px,6vw,72px);line-height:.92;letter-spacing:.005em;margin:8px 0}
+  .shead h2 .o,.o{color:var(--accent)}
+  .shead p{color:var(--muted);font-size:16px;max-width:36em}
+  .hero{padding:clamp(36px,6vw,70px) 0 clamp(44px,6vw,80px)}
+  .hero-grid{display:grid;grid-template-columns:1.25fr .75fr;gap:clamp(26px,4vw,56px);align-items:center}
+  h1.mega{font-family:var(--display);text-transform:uppercase;font-size:clamp(58px,11vw,148px);line-height:.86;letter-spacing:.005em;margin-top:20px}
+  h1.mega .hl{color:var(--accent);position:relative;display:inline-block}
+  h1.mega .hl::after{content:"";position:absolute;left:-2px;right:-2px;bottom:.1em;height:.12em;background:var(--accent);opacity:.32;transform:skewX(-12deg)}
+  .subline{font-family:var(--body);font-weight:700;font-size:clamp(16px,2.4vw,24px);margin-top:16px;letter-spacing:-.01em}
+  .subline .b{background:var(--accent);color:var(--bg);padding:1px 9px;display:inline-block;transform:rotate(-1.5deg)}
+  .lead{font-size:clamp(15px,1.9vw,18px);color:#cfc7b8;max-width:30em;margin:22px 0 28px;line-height:1.6}
+  .lead b{color:var(--cream);font-weight:700}
+  .ctas{display:flex;gap:12px;flex-wrap:wrap;align-items:center}
+  .micro{font-family:var(--mono);font-size:11px;letter-spacing:.04em;color:var(--muted);margin-top:18px}
+  .hero-photo{position:relative;transform:rotate(-1.5deg)}
+  .hero-photo img{width:100%;aspect-ratio:3/4;object-fit:cover;display:block;border:3px solid var(--cream);filter:grayscale(.4) contrast(1.08)}
+  .hero-photo .tint{position:absolute;inset:0;background:var(--accent);mix-blend-mode:color;opacity:.42}
+  .hero-photo .cap{position:absolute;bottom:10px;left:10px;right:10px;font-family:var(--mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--cream);background:rgba(13,11,10,.82);padding:7px 10px;border:1px solid var(--accent)}
+  .sticker{position:absolute;top:-16px;right:-10px;z-index:5;font-family:var(--mono);font-weight:700;font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--bg);background:var(--accent);padding:7px 11px;transform:rotate(6deg)}
+  .marquee{border-top:2px solid var(--cream);border-bottom:2px solid var(--cream);background:var(--accent);overflow:hidden;white-space:nowrap}
+  .mq-track{display:inline-flex;animation:scroll 26s linear infinite}
+  .mq-track span{font-family:var(--display);text-transform:uppercase;font-size:18px;letter-spacing:.02em;color:var(--bg);padding:9px 0}
+  .mq-track .s{padding:0 18px;opacity:.5}
+  @keyframes scroll{to{transform:translateX(-50%)}}
+  .industry{padding:18px 0;border-bottom:1px solid var(--line)}
+  .industry .wrap{display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center;font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+  .industry .sep{color:var(--accent)}
+  .manifesto{padding:clamp(40px,6vw,72px) 0;border-bottom:1px solid var(--line)}
+  .manifesto p{font-family:var(--display);text-transform:uppercase;font-size:clamp(26px,4.6vw,52px);line-height:1.02;letter-spacing:.005em;max-width:18em}
+  .creds{padding:clamp(38px,5vw,64px) 0}
+  .creds-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:var(--line);border:1px solid var(--line)}
+  .cell{background:var(--bg);padding:28px 20px;transition:.2s}
+  .cell:hover{background:var(--panel)}
+  .cell .n{font-family:var(--display);font-size:clamp(40px,5.5vw,64px);line-height:1;color:var(--accent)}
+  .cell .l{font-family:var(--mono);font-size:11px;letter-spacing:.09em;text-transform:uppercase;color:var(--muted);margin-top:10px;line-height:1.5}
+  .blk{padding:clamp(44px,6vw,80px) 0;border-top:1px solid var(--line)}
+  .blk.panel{background:var(--panel)}
+  .pillars,.proceso{display:grid;grid-template-columns:repeat(4,1fr);gap:16px}
+  .pillar,.step{border:1px solid var(--line);border-top:4px solid var(--accent);padding:22px 20px;background:var(--bg);transition:.2s}
+  .pillar:hover,.step:hover,.mcard:hover,.dcard:hover{transform:translateY(-4px);border-color:var(--muted)}
+  .pillar .num,.step .num,.mcard .tag,.dcard .k{font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--accent);font-weight:700}
+  .pillar h3,.step h4{font-family:var(--display);text-transform:uppercase;font-size:22px;letter-spacing:.01em;margin:10px 0 8px}
+  .pillar p,.step p,.mcard p,.dcard p{color:var(--muted);font-size:14px;line-height:1.55}
+  .step .dur{font-family:var(--mono);font-size:10.5px;color:var(--accent);letter-spacing:.08em;display:block;margin-bottom:6px}
+  .counter{margin-top:26px;font-family:var(--display);text-transform:uppercase;font-size:clamp(18px,2.6vw,30px);line-height:1.05;max-width:24em}
+  .mcards{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:24px}
+  .mcard{border:1px solid var(--line);padding:26px;background:var(--bg);transition:.2s}
+  .mcard h3{font-family:var(--display);text-transform:uppercase;font-size:26px;letter-spacing:.01em;margin:10px 0 4px}
+  .mcard .tl{font-family:var(--body);font-weight:700;font-size:14px;color:var(--cream);margin-bottom:10px}
+  .mcard ul{list-style:none;margin-top:12px;display:flex;flex-direction:column;gap:8px}
+  .mcard li{font-size:13.5px;color:var(--muted);padding-left:18px;position:relative;line-height:1.45}
+  .mcard li::before{content:"\2192";position:absolute;left:0;color:var(--accent)}
+  .mcard li b{color:var(--cream);font-weight:700}
+  .quote{font-family:var(--display);text-transform:uppercase;font-size:clamp(24px,3.6vw,40px);line-height:1.02;max-width:20em}
+  .quote-p{color:var(--muted);font-size:15px;max-width:40em;margin-top:14px;line-height:1.6}
+  .disc-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-top:26px}
+  .dcard{border:1px solid var(--line);padding:22px 18px;transition:.2s}
+  .dcard h4{font-family:var(--display);text-transform:uppercase;font-size:23px;letter-spacing:.01em;margin:8px 0 6px}
+  .sobre-grid{display:grid;grid-template-columns:.8fr 1.2fr;gap:clamp(24px,4vw,52px);align-items:center}
+  .sobre-photo img{width:100%;aspect-ratio:3/4;object-fit:cover;border:3px solid var(--cream);filter:grayscale(.4) contrast(1.08);transform:rotate(1.5deg)}
+  .sobre-text h2{font-family:var(--display);text-transform:uppercase;font-size:clamp(34px,5vw,60px);line-height:.94;margin:6px 0 4px}
+  .sobre-text .st{font-family:var(--body);font-weight:700;color:var(--accent);font-size:17px;margin-bottom:14px}
+  .sobre-text p{color:#cfc7b8;font-size:15px;line-height:1.65;margin-bottom:12px}
+  .tgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+  .tcard{border:1px solid var(--line);border-left:4px solid var(--accent);padding:22px;background:var(--bg)}
+  .tcard .dt{font-family:var(--mono);font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--accent);font-weight:700}
+  .tcard blockquote{font-size:14.5px;line-height:1.55;color:#cfc7b8;margin:12px 0}
+  .tcard .au{display:flex;align-items:center;gap:10px}
+  .tcard .av{width:34px;height:34px;background:var(--accent);color:var(--bg);font-family:var(--display);font-size:17px;display:flex;align-items:center;justify-content:center}
+  .tcard .nm{font-weight:700;font-size:14px}
+  .tcard .mt{font-family:var(--mono);font-size:9.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+  .revmq{margin-top:18px;border-top:1px solid var(--line);border-bottom:1px solid var(--line);overflow:hidden;white-space:nowrap;padding:14px 0}
+  .revmq .rt{display:inline-flex;animation:scroll 40s linear infinite}
+  .revmq q{font-size:14px;color:var(--muted);padding:0 28px}
+  .revmq q b{color:var(--cream);font-weight:700}
+  .portal-grid{display:grid;grid-template-columns:1fr .8fr;gap:clamp(24px,4vw,52px);align-items:center}
+  .portal-text ul{list-style:none;margin:18px 0;display:flex;flex-direction:column;gap:10px}
+  .portal-text li{padding-left:20px;position:relative;color:#cfc7b8;font-size:15px}
+  .portal-text li::before{content:"\25C6";position:absolute;left:0;color:var(--accent);font-size:11px;top:3px}
+  .portal-sub{font-family:var(--mono);font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-top:14px}
+  .ptitle{font-family:var(--display);text-transform:uppercase;font-size:clamp(34px,5vw,60px);line-height:.94;margin:8px 0}
+  .mock{border:3px solid var(--cream);background:var(--panel);padding:26px;transform:rotate(1.5deg)}
+  .mock .mp{font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.08em;color:var(--accent);border:1px solid var(--accent);display:inline-block;padding:3px 9px}
+  .mock .mc{font-family:var(--display);font-size:64px;line-height:1;margin:14px 0 4px}
+  .mock .mc small{font-family:var(--body);font-size:18px;color:var(--muted);font-weight:400}
+  .mock .tix{display:flex;gap:6px;flex-wrap:wrap;margin-top:12px}
+  .mock .tk{width:24px;height:38px;background:var(--accent);border-radius:2px}
+  .mock .tk.u{background:var(--line)}
+  .precios{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:8px}
+  .pc{border:1px solid var(--line);padding:28px 24px;background:var(--bg);display:flex;flex-direction:column;transition:.2s}
+  .pc:hover{transform:translateY(-5px);border-color:var(--muted)}
+  .pc.feat{background:var(--accent);color:var(--bg);border-color:var(--accent)}
+  .pc .badge{font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--bg);background:var(--cream);display:inline-block;padding:4px 10px;margin-bottom:10px;width:fit-content}
+  .pc .tier{font-family:var(--mono);font-size:12px;letter-spacing:.1em;text-transform:uppercase;font-weight:700;color:var(--accent)}
+  .pc.feat .tier{color:var(--bg)}
+  .pc h3{font-family:var(--display);text-transform:uppercase;font-size:26px;margin:6px 0}
+  .pc .det{font-size:13px;color:var(--muted);min-height:38px}
+  .pc.feat .det{color:rgba(13,11,10,.7)}
+  .pc .amt{font-family:var(--display);font-size:60px;line-height:1;margin:14px 0}
+  .pc .amt sup{font-size:24px;vertical-align:super;opacity:.7}
+  .pc ul{list-style:none;margin:8px 0 18px;display:flex;flex-direction:column;gap:7px;flex:1}
+  .pc li{font-size:13.5px;padding-left:18px;position:relative;color:#cfc7b8;line-height:1.4}
+  .pc.feat li{color:rgba(13,11,10,.82)}
+  .pc li::before{content:"\2713";position:absolute;left:0;color:var(--accent);font-weight:700}
+  .pc.feat li::before{color:var(--bg)}
+  .pc .pcta{font-family:var(--mono);font-weight:700;font-size:12px;letter-spacing:.06em;text-transform:uppercase;text-align:center;padding:13px;border:2px solid var(--accent);color:var(--accent);transition:.16s}
+  .pc .pcta:hover{background:var(--accent);color:var(--bg)}
+  .pc.feat .pcta{border-color:var(--bg);color:var(--bg)}
+  .pc.feat .pcta:hover{background:var(--bg);color:var(--accent)}
+  .pc .online{font-family:var(--mono);font-size:10.5px;text-align:center;color:var(--muted);margin-top:9px;letter-spacing:.04em}
+  .trust{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:24px;border-top:1px solid var(--line);padding-top:22px}
+  .trust .tl{font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--accent);font-weight:700;display:block;margin-bottom:6px}
+  .trust .tx{font-size:13.5px;color:var(--muted);line-height:1.5}
+  .faq-list{display:flex;flex-direction:column;gap:10px;margin-top:8px}
+  .faq{border:1px solid var(--line);background:var(--bg)}
+  .faq button{width:100%;display:flex;justify-content:space-between;align-items:center;gap:14px;background:none;border:0;color:var(--cream);font-family:var(--body);font-weight:700;font-size:16px;text-align:left;padding:18px 20px;cursor:pointer}
+  .faq .ar{font-family:var(--display);color:var(--accent);font-size:24px;line-height:1;transition:.2s}
+  .faq .ans{max-height:0;overflow:hidden;transition:max-height .28s ease}
+  .faq.open .ans{max-height:260px}
+  .faq.open .ar{transform:rotate(45deg)}
+  .faq .ans p{padding:0 20px 18px;color:var(--muted);font-size:14.5px;line-height:1.6}
+  .band{padding:clamp(54px,8vw,104px) 0;text-align:center;border-top:1px solid var(--line)}
+  .band h2{font-family:var(--display);text-transform:uppercase;font-size:clamp(42px,8vw,104px);line-height:.88;letter-spacing:.005em;margin-bottom:18px}
+  .band p{color:var(--muted);max-width:32em;margin:0 auto 26px;font-size:16px}
+  .band .ctas{justify-content:center}
+  .foot{border-top:2px solid var(--accent);padding:44px 0 30px;background:var(--panel)}
+  .foot-grid{display:flex;flex-wrap:wrap;justify-content:space-between;gap:24px;margin-bottom:28px}
+  .foot .logo{font-size:30px}
+  .foot .ft{font-size:13px;color:var(--muted);margin-top:8px;max-width:22em;line-height:1.5}
+  .foot-links{display:flex;flex-wrap:wrap;gap:18px;font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+  .foot-links a:hover{color:var(--accent)}
+  .foot-bottom{border-top:1px solid var(--line);padding-top:18px;display:flex;flex-wrap:wrap;justify-content:space-between;gap:10px;font-family:var(--mono);font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+  .wafloat{position:fixed;bottom:22px;right:22px;z-index:200;width:56px;height:56px;border-radius:50%;background:#25D366;display:flex;align-items:center;justify-content:center;box-shadow:0 6px 20px rgba(0,0,0,.4);transition:.2s}
+  .wafloat:hover{transform:scale(1.08)}
+  .wafloat svg{width:30px;height:30px;fill:#fff}
+  .reveal{opacity:0;transform:translateY(20px);transition:opacity .6s ease,transform .6s ease}
+  .reveal.in{opacity:1;transform:none}
+  @media(max-width:860px){
+    .hero-grid,.sobre-grid,.portal-grid{grid-template-columns:1fr}
+    .hero-photo,.mock{max-width:380px;margin-top:8px}
+    .pillars,.proceso,.creds-grid,.disc-grid{grid-template-columns:repeat(2,1fr)}
+    .mcards,.tgrid,.precios,.trust{grid-template-columns:1fr}
+  }
+  @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}.reveal{opacity:1;transform:none}}
+</style>
+</head>
+<body>
+
+<header class="top"><div class="wrap">
+  <span class="logo">Profesor<em>MVT</em></span>
+  <a class="cta" href="https://wa.me/51989077928?text=Hola%20Andrés%2C%20quiero%20la%20clase%20de%20prueba" target="_blank" rel="noopener">Reservar prueba →</a>
+</div></header>
+
+<section class="hero"><div class="wrap hero-grid">
+  <div class="hero-text">
+    <span class="mono reveal">[ Método MVT · San Isidro · Online en vivo ]</span>
+    <h1 class="mega reveal">Aprende música<br>como <span class="hl">adulto</span>.</h1>
+    <p class="subline reveal">Clases <span class="b">1 a 1</span> · 100% personalizadas a ti.</p>
+    <p class="lead reveal">Canto, piano y composición con método real — no academia genérica. Te enseña alguien que <b>compuso +200 canciones y vivió de la música</b>, no un profesor de manual.</p>
+    <div class="ctas reveal">
+      <a class="btn" href="https://wa.me/51989077928?text=Hola%20Andrés%2C%20quiero%20reservar%20la%20clase%20de%20prueba%20S%2F50" target="_blank" rel="noopener">Reservar prueba — S/50 →</a>
+      <a class="btn ghost" href="#precios">Ver paquetes</a>
     </div>
+    <p class="micro reveal">// incluye diagnóstico vocal escrito en PDF</p>
+  </div>
+  <div class="hero-photo reveal">
+    <span class="sticker">★ Ex-Tramboyos</span>
+    <img src="/andres-piano-hero.jpg" alt="Andrés Salame, músico y profesor de canto, piano y composición" />
+    <span class="tint"></span>
+    <span class="cap">Andrés Salame · músico, no profesor de manual</span>
+  </div>
+</div></section>
+
+<div class="marquee"><div class="mq-track">
+  <span>Canto<i class="s">/</i>Piano<i class="s">/</i>Composición<i class="s">/</i>Método MVT<i class="s">/</i>+200 canciones<i class="s">/</i>San Isidro<i class="s">/</i>Online<i class="s">/</i>Adultos<i class="s">/</i></span>
+  <span aria-hidden="true">Canto<i class="s">/</i>Piano<i class="s">/</i>Composición<i class="s">/</i>Método MVT<i class="s">/</i>+200 canciones<i class="s">/</i>San Isidro<i class="s">/</i>Online<i class="s">/</i>Adultos<i class="s">/</i></span>
+</div></div>
+
+<div class="industry"><div class="wrap">
+  <span>Frontman · Tramboyos</span><span class="sep">/</span><span>Mgmt · Kids on Coffee</span><span class="sep">/</span><span>Ex-mgr · Malos Amigos</span><span class="sep">/</span><span>Maceradoz</span><span class="sep">/</span><span>Tuporaquí Yoporallá</span><span class="sep">/</span><span>Bastian Guija</span><span class="sep">/</span><span>Lonzo Miranda</span>
+</div></div>
+
+<section class="manifesto"><div class="wrap">
+  <p class="reveal">No es talento.<br>Es <span class="o">método</span> mal aplicado.</p>
+</div></section>
+
+<section class="creds"><div class="wrap">
+  <span class="mono reveal" style="display:block;margin-bottom:22px">// Credenciales reales</span>
+  <div class="creds-grid reveal">
+    <div class="cell"><div class="n">+200</div><div class="l">Canciones<br>compuestas</div></div>
+    <div class="cell"><div class="n">+20</div><div class="l">Conciertos<br>producidos</div></div>
+    <div class="cell"><div class="n">UPC</div><div class="l">Estudios<br>en música</div></div>
+    <div class="cell"><div class="n">ULima</div><div class="l">Estudios<br>en psicología</div></div>
+  </div>
+</div></section>
+
+<section class="blk panel" id="identifica"><div class="wrap">
+  <div class="shead reveal"><span class="mono">para quienes esto va</span><h2>¿Te <span class="o">suena familiar</span>?</h2><p>Si te identificas con alguno de estos, los métodos que enseño se diseñaron exactamente para resolverlo.</p></div>
+  <div class="pillars">
+    <div class="pillar reveal"><span class="num">Canto · 01</span><h3>Canción atragantada</h3><p>Cada vez que intentas el agudo sale apretado, raspado, o no sale. Y ya probaste de todo.</p></div>
+    <div class="pillar reveal"><span class="num">Piano · 02</span><h3>Las mismas 3 canciones</h3><p>Te estancaste. Sabes algunos acordes pero no logras avanzar a lo que te gusta de verdad.</p></div>
+    <div class="pillar reveal"><span class="num">Canto · 03</span><h3>"Apoya más fuerte"</h3><p>Empujaste el aire desde el diafragma mil veces, y sigues sin cantar como te gustaría.</p></div>
+    <div class="pillar reveal"><span class="num">Teoría · 04</span><h3>No entiendes la armonía</h3><p>Memorizas acordes pero no sabes por qué suenan así. Quieres componer y no sabes por dónde empezar.</p></div>
+  </div>
+  <p class="counter reveal">Eso tiene solución <span class="o">específica</span>, progresiva y comprobable.</p>
+</div></section>
+
+<section class="blk" id="metodo-canto"><div class="wrap">
+  <div class="shead reveal"><span class="mono">canto · método mvt</span><h2>Cuatro principios.<br><span class="o">Cero misticismo.</span></h2><p>Modern Vocal Training: una metodología contemporánea basada en la fisiología real de la voz.</p></div>
+  <div class="pillars">
+    <div class="pillar reveal"><span class="num">Principio · 01</span><h3>Coordinación</h3><p>Entrenamos los músculos vocales como cualquier grupo muscular: específico, progresivo, medible.</p></div>
+    <div class="pillar reveal"><span class="num">Principio · 02</span><h3>Resonancia</h3><p>Manejar dónde resuena la voz —pecho, máscara, cabeza— y transitar entre registros sin rupturas.</p></div>
+    <div class="pillar reveal"><span class="num">Principio · 03</span><h3>Cierre cordal</h3><p>El cierre apropiado de las cuerdas es la base de proyección, claridad y resistencia. Sin abuso.</p></div>
+    <div class="pillar reveal"><span class="num">Principio · 04</span><h3>Sin constricción</h3><p>La libertad vocal viene de quitar tensión innecesaria, no de añadir esfuerzo.</p></div>
+  </div>
+  <p class="counter reveal">Lo opuesto a "apoya más fuerte". La voz funciona con <span class="o">coordinación</span> entrenada, no con esfuerzo añadido.</p>
+</div></section>
+
+<section class="blk panel" id="metodo-piano"><div class="wrap">
+  <div class="shead reveal"><span class="mono">piano · faber &amp; faber</span></div>
+  <div class="quote reveal">Toca lo que escuchas.<br><span class="o">No lo que te imponen.</span></div>
+  <p class="quote-p reveal">El piano para adultos no debería empezar con "Para Elisa" ni tres meses de Hanon. Faber &amp; Faber es el método más usado por profesores serios del mundo.</p>
+  <div class="mcards">
+    <div class="mcard reveal"><span class="tag">El método · Faber &amp; Faber</span><h3>Piano Adventures</h3><div class="tl">La estructura clásica del aprendizaje moderno.</div><p>Técnica, lectura, teoría y escucha desde el primer libro — todo conectado.</p><ul><li><b>Multi-tonalidad</b> desde el inicio</li><li><b>4 libros por nivel:</b> Lesson, Theory, Performance, Technique</li><li><b>Progresión secuenciada</b> nivel a nivel</li><li><b>Repertorio variado:</b> clásico, jazz y pop</li></ul></div>
+    <div class="mcard reveal"><span class="tag">La adaptación · para adulto</span><h3>Cómo lo enseño</h3><div class="tl">El método no es para niños. El adulto es distinto.</div><p>Un adulto necesita otro enfoque. Esto es lo que ajusto en cada clase.</p><ul><li><b>Ritmo más rápido:</b> saltamos lo que no aporta</li><li><b>Repertorio personal:</b> tus canciones</li><li><b>Conexión con tu objetivo</b></li><li><b>Práctica realista</b> para tu vida adulta</li></ul></div>
+  </div>
+</div></section>
+
+<section class="blk" id="metodo-composicion"><div class="wrap">
+  <div class="shead reveal"><span class="mono">composición · hook theory</span></div>
+  <div class="quote reveal">Componer no es inspiración.<br><span class="o">Es metodología.</span></div>
+  <p class="quote-p reveal">Escribir canciones es una habilidad estructurada, no un don místico. Con análisis funcional aprendes los patrones y eventualmente escribes el tuyo.</p>
+  <div class="mcards">
+    <div class="mcard reveal"><span class="tag">Herramienta · análisis</span><h3>Theorytab</h3><div class="tl">Aprende leyendo lo que otros escribieron.</div><p>Miles de canciones populares analizadas en notación funcional.</p><ul><li><b>Notación 1-4-5-6:</b> universal y memorable</li><li><b>Hits reales</b> que ya conoces, desglosados</li><li><b>Patrones armónicos</b> explicados</li><li><b>Aplicación inmediata:</b> traes tu canción</li></ul></div>
+    <div class="mcard reveal"><span class="tag">Proceso · de análisis a creación</span><h3>Cómo enseño</h3><div class="tl">De entender canciones a escribir las tuyas.</div><p>Escuchar, identificar, apropiarse, escribir, refinar. Con tu DAW de preferencia.</p><ul><li><b>Identificar patrones</b> en lo que admiras</li><li><b>Estructura:</b> verso, pre-coro, coro, puente</li><li><b>Letra y melodía</b> aplicadas</li><li><b>Tu primer demo</b> terminado</li></ul></div>
+  </div>
+</div></section>
+
+<section class="blk panel"><div class="wrap">
+  <div class="shead reveal"><span class="mono">qué enseño</span><h2>Cuatro disciplinas.<br><span class="o">Métodos modernos.</span></h2><p>Cada una con su metodología. Toma una sola o combínalas en el mismo paquete.</p></div>
+  <div class="disc-grid">
+    <div class="dcard reveal"><span class="k">Método MVT</span><h4>Canto</h4><p>Técnica, afinación, resonancia, rango y expresión.</p></div>
+    <div class="dcard reveal"><span class="k">Faber &amp; Faber</span><h4>Piano</h4><p>Piano serio para adultos, adaptado a tu ritmo y gustos.</p></div>
+    <div class="dcard reveal"><span class="k">Hook Theory</span><h4>Composición</h4><p>Análisis funcional, patrones, escritura y demo.</p></div>
+    <div class="dcard reveal"><span class="k">Aplicada</span><h4>Teoría</h4><p>Sin pizarras aburridas. Armonía sobre música real.</p></div>
+  </div>
+</div></section>
+
+<section class="blk"><div class="wrap">
+  <div class="shead reveal"><span class="mono">cómo es una clase</span><h2>Una clase,<br><span class="o">cuatro momentos.</span></h2><p>Canto o piano siguen una estructura clara — para que cada minuto cuente.</p></div>
+  <div class="proceso">
+    <div class="step reveal"><span class="num">01</span><h4>Calentamiento</h4><span class="dur">10 min</span><p>Canto: SOVT y SOG. Piano: Technique &amp; Artistry. Prepara los músculos sin desgaste.</p></div>
+    <div class="step reveal"><span class="num">02</span><h4>Técnico</h4><span class="dur">20 min</span><p>Ejercicios específicos según lo que toca esta semana — coordinación o técnica.</p></div>
+    <div class="step reveal"><span class="num">03</span><h4>Tu canción</h4><span class="dur">25 min</span><p>Llevamos lo trabajado al repertorio real. La parte que más cuesta y más se nota.</p></div>
+    <div class="step reveal"><span class="num">04</span><h4>Para casa</h4><span class="dur">5 min</span><p>Te llevas un audio o nota con los ejercicios de la semana.</p></div>
+  </div>
+</div></section>
+
+<section class="blk panel" id="sobre"><div class="wrap">
+  <div class="sobre-grid">
+    <div class="sobre-photo reveal"><img src="/andres-banjo-escenario.jpg" alt="Andrés Salame como frontman de Tramboyos en escenario" /></div>
+    <div class="sobre-text reveal">
+      <span class="mono">sobre andrés</span>
+      <h2>Músico que enseña.<br><span class="o">No profesor que toca.</span></h2>
+      <p>Vengo de la industria. Frontman y compositor de Tramboyos —punk rock alternativo—, management en Kids on Coffee y ex-manager de Malos Amigos, Maceradoz, Tuporaquí Yoporallá, Bastian Guija y Lonzo Miranda. +200 canciones compuestas y +20 conciertos producidos.</p>
+      <p>Estudios en música (UPC) y psicología (ULima). Esa combinación es inusual y la noto en cada clase: entender la voz también es entender a quién la usa.</p>
+      <p>Mi alumno típico es un adulto de 20 a 45 que se preguntó si no era muy tarde para aprender música. Spoiler: no lo es.</p>
+    </div>
+  </div>
+</div></section>
+
+<section class="blk" id="testimonios"><div class="wrap">
+  <div class="shead reveal"><span class="mono">testimonios</span><h2>Lo que dicen<br>mis <span class="o">alumnos.</span></h2><p>★★★★★ 5,0 · 20 opiniones verificadas en Google y Superprof.</p></div>
+  <div class="tgrid">
+    <div class="tcard reveal"><span class="dt">Composición · Hook Theory</span><blockquote>Llevaba años escribiendo letras sin saber qué hacer con ellas. Entendí que componer no era esperar inspiración. Hoy puedo improvisar canciones completas. Nunca pensé que lo lograría.</blockquote><div class="au"><span class="av">F</span><div><div class="nm">Fernando</div><div class="mt">1 año · Intensivo</div></div></div></div>
+    <div class="tcard reveal"><span class="dt">Canto · MVT</span><blockquote>Me caso este año y mi sueño era cantarle a mi novio. Cuando empecé ni llegaba al coro. Ocho meses después la canto entera y balanceada, y varias canciones más.</blockquote><div class="au"><span class="av">C</span><div><div class="nm">Carla</div><div class="mt">8 meses · Esencial</div></div></div></div>
+    <div class="tcard reveal"><span class="dt">Piano · Faber &amp; Faber</span><blockquote>No esperaba que el piano fuera lo más constante de mi semana. La forma en que Andrés estructura las clases me dio una disciplina que se trasladó a otras áreas de mi vida.</blockquote><div class="au"><span class="av">N</span><div><div class="nm">Nicole</div><div class="mt">6 meses · Esencial</div></div></div></div>
+  </div>
+  <div class="revmq"><div class="rt">
+    <q>"Explica demasiado bien, paciente y divertido" — <b>Santino</b></q><q>"Te hace sentir en confianza desde el minuto uno" — <b>Fernando Y.</b></q><q>"Me ayudó mucho a confiar en mis habilidades" — <b>Nuria</b></q><q>"Clases divertidas, buena enseñanza, recomendado" — <b>Fernando C.</b></q><q>"Desde el día uno pude aprender a componer" — <b>Gigi</b></q><q>"Sus clases son dinámicas, claras y motivadoras" — <b>Renzo</b></q><q>"Súper paciente y atento desde el primer día" — <b>Noelia</b></q>
+    <q aria-hidden="true">"Explica demasiado bien, paciente y divertido" — <b>Santino</b></q><q aria-hidden="true">"Te hace sentir en confianza desde el minuto uno" — <b>Fernando Y.</b></q><q aria-hidden="true">"Me ayudó mucho a confiar en mis habilidades" — <b>Nuria</b></q><q aria-hidden="true">"Clases divertidas, buena enseñanza, recomendado" — <b>Fernando C.</b></q><q aria-hidden="true">"Desde el día uno pude aprender a componer" — <b>Gigi</b></q><q aria-hidden="true">"Sus clases son dinámicas, claras y motivadoras" — <b>Renzo</b></q><q aria-hidden="true">"Súper paciente y atento desde el primer día" — <b>Noelia</b></q>
+  </div></div>
+</div></section>
+
+<section class="blk panel" id="portal"><div class="wrap">
+  <div class="portal-grid">
+    <div class="portal-text reveal">
+      <span class="mono">// tu portal de alumno</span>
+      <h2 class="ptitle">Tu avance,<br>en tu <span class="o">bolsillo.</span></h2>
+      <ul>
+        <li>Ve tus clases restantes y tu historial en tiempo real</li>
+        <li>Tu tarea de la semana siempre a la mano</li>
+        <li>Compra y renueva tu paquete con Yape o Plin sin salir de casa</li>
+      </ul>
+      <a class="btn ghost" href="/alumnos/">Crear mi cuenta →</a>
+      <p class="portal-sub">Crear cuenta es gratis · pagas solo cuando compras tu paquete</p>
+    </div>
+    <div class="mock reveal">
+      <span class="mp">Activo</span>
+      <div class="mc">5<small> de 8</small></div>
+      <div class="tix"><span class="tk u"></span><span class="tk u"></span><span class="tk u"></span><span class="tk"></span><span class="tk"></span><span class="tk"></span><span class="tk"></span><span class="tk"></span></div>
+    </div>
+  </div>
+</div></section>
+
+<section class="blk" id="precios"><div class="wrap">
+  <div class="shead reveal"><span class="mono">paquetes mensuales</span><h2>Precios <span class="o">claros.</span><br>Sin letra chica.</h2><p>Los mismos paquetes para canto, piano, teoría o composición. Mezcla disciplinas en el mismo paquete.</p></div>
+  <div class="precios">
+    <div class="pc reveal">
+      <span class="tier">Esencial</span><h3>4 horas</h3><p class="det">Distribuye tus horas. Recomendado: 1 clase/semana.</p>
+      <div class="amt"><sup>S/</sup>250</div>
+      <ul><li>1 disciplina</li><li>Presencial u online</li><li>Plan personalizado</li><li>Material extra en Discord</li><li>WhatsApp directo conmigo</li></ul>
+      <a class="pcta" href="https://wa.me/51989077928?text=Hola%20Andrés%2C%20me%20interesa%20el%20paquete%20Esencial%20S%2F250" target="_blank" rel="noopener">Reservar</a>
+      <a class="online" href="/alumnos/">o cómpralo online →</a>
+    </div>
+    <div class="pc feat reveal">
+      <span class="badge">★ Más elegido</span><span class="tier">Intensivo</span><h3>8 horas</h3><p class="det">Distribuye tus horas. Recomendado: 2 clases/semana.</p>
+      <div class="amt"><sup>S/</sup>450</div>
+      <ul><li>1 o 2 disciplinas</li><li>Presencial u online</li><li>Plan personalizado</li><li>Material extra en Discord</li><li>WhatsApp directo conmigo</li></ul>
+      <a class="pcta" href="https://wa.me/51989077928?text=Hola%20Andrés%2C%20me%20interesa%20el%20paquete%20Intensivo%20S%2F450" target="_blank" rel="noopener">Reservar</a>
+      <a class="online" href="/alumnos/" style="color:rgba(13,11,10,.7)">o cómpralo online →</a>
+    </div>
+    <div class="pc reveal">
+      <span class="tier">Estrella</span><h3>12 horas</h3><p class="det">Distribuye tus horas. Recomendado: 3 clases/semana.</p>
+      <div class="amt"><sup>S/</sup>600</div>
+      <ul><li>1, 2 o 3 disciplinas</li><li>Presencial u online</li><li>Plan personalizado</li><li>Material extra en Discord</li><li>WhatsApp directo conmigo</li></ul>
+      <a class="pcta" href="https://wa.me/51989077928?text=Hola%20Andrés%2C%20me%20interesa%20el%20paquete%20Estrella%20S%2F600" target="_blank" rel="noopener">Reservar</a>
+      <a class="online" href="/alumnos/">o cómpralo online →</a>
+    </div>
+  </div>
+  <div class="trust reveal">
+    <div><span class="tl">Pagos</span><span class="tx">Plin · Yape · Agora<br>USD · EUR · MXN para online</span></div>
+    <div><span class="tl">Modalidades</span><span class="tx">Presencial en San Isidro<br>Av. Salaverry / Av. JV Prado</span></div>
+    <div><span class="tl">Prueba</span><span class="tx">Clase de prueba S/50<br>incluye diagnóstico vocal en PDF</span></div>
+  </div>
+</div></section>
+
+<section class="blk panel" id="faq"><div class="wrap narrow">
+  <div class="shead reveal"><span class="mono">preguntas frecuentes</span><h2>Lo que <span class="o">siempre</span> me preguntan.</h2></div>
+  <div class="faq-list">
+    <div class="faq reveal"><button>¿Tengo que tener experiencia previa?<span class="ar">+</span></button><div class="ans"><p>Para nada — ni en canto ni en piano. Más de la mitad de mis alumnos empiezan sin haber tomado clases nunca. El método se adapta a tu nivel.</p></div></div>
+    <div class="faq reveal"><button>¿Faber &amp; Faber no es solo para niños?<span class="ar">+</span></button><div class="ans"><p>Mito común. Es el método más usado por profesores serios del mundo, para cualquier edad. Con un adulto cambia el ritmo (más rápido) y el repertorio (tus gustos).</p></div></div>
+    <div class="faq reveal"><button>¿Cuándo notaré el progreso?<span class="ar">+</span></button><div class="ans"><p>En las primeras 2-3 clases ya notas cambios chicos pero claros. El progreso técnico medible se ve a las 6-8 semanas con práctica constante.</p></div></div>
+    <div class="faq reveal"><button>¿Puedo combinar canto, piano y composición?<span class="ar">+</span></button><div class="ans"><p>Sí, y lo recomiendo. En el Intensivo (8h/mes) puedes hacer 4h de canto + 2h de piano + 2h de composición. En la prueba lo diseñamos según tus objetivos.</p></div></div>
+    <div class="faq reveal"><button>¿Es online o presencial?<span class="ar">+</span></button><div class="ans"><p>Las dos. Presencial en San Isidro (Av. Salaverry con Av. JV Prado) u online por Zoom/Meet. Para piano necesitas teclado en casa (mín. 61 teclas con sensibilidad).</p></div></div>
+    <div class="faq reveal"><button>¿Cómo se paga? ¿Acepta moneda extranjera?<span class="ar">+</span></button><div class="ans"><p>En Perú: Plin, Yape o Agora. Online en otros países: USD, EUR o MXN (Wise, PayPal o transferencia). El pago del paquete es al inicio del mes.</p></div></div>
+  </div>
+</div></section>
+
+<section class="band" id="cta-final"><div class="wrap narrow">
+  <h2 class="reveal">Empieza con una<br>clase de <span class="o">S/50.</span></h2>
+  <p class="reveal">Una hora completa. Conoces el método, evalúas mi forma de enseñar, y decides. Si sigues, los S/50 se descuentan de tu primer paquete.</p>
+  <div class="ctas reveal">
+    <a class="btn" href="https://wa.me/51989077928?text=Hola%20Andrés%2C%20vi%20tu%20web%20y%20me%20interesa%20la%20clase%20de%20prueba%20S%2F50" target="_blank" rel="noopener">Reservar por WhatsApp →</a>
+    <a class="btn ghost" href="/alumnos/">Comprar online →</a>
   </div>
 </section>
 
-<script is:inline>
-document.querySelectorAll('.faq-question').forEach(btn => {
-  btn.addEventListener('click', () => {
-    btn.parentElement.classList.toggle('open');
-  });
-});
-</script>
+<footer class="foot"><div class="wrap">
+  <div class="foot-grid">
+    <div>
+      <span class="logo">Profesor<em>MVT</em></span>
+      <p class="ft">Canto, piano y composición para adultos. Método real, cero misticismo. San Isidro y online.</p>
+    </div>
+    <div class="foot-links">
+      <a href="#metodo-canto">Método</a><a href="#precios">Precios</a><a href="#sobre">Sobre</a><a href="#faq">FAQ</a><a href="/alumnos/">Portal</a><a href="https://www.instagram.com/asalamecordova/" target="_blank" rel="noopener">Instagram</a>
+    </div>
+  </div>
+  <div class="foot-bottom">
+    <span>© Profesor MVT · San Isidro, Lima</span>
+    <span>Hecho con método, no con misticismo</span>
+  </div>
+</div></footer>
+
+<a class="wafloat" href="https://wa.me/51989077928?text=Hola%20Andrés%2C%20vi%20tu%20web%20y%20quiero%20info" target="_blank" rel="noopener" aria-label="Escríbeme por WhatsApp">
+  <svg viewBox="0 0 24 24"><path d="M.057 24l1.687-6.163a11.867 11.867 0 01-1.587-5.946C.16 5.335 5.495 0 12.05 0a11.817 11.817 0 018.413 3.488 11.824 11.824 0 013.48 8.414c-.003 6.557-5.338 11.892-11.893 11.892a11.9 11.9 0 01-5.688-1.448L.057 24zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884a9.86 9.86 0 001.594 5.39l-.999 3.648 3.745-.978zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372s-1.04 1.016-1.04 2.479 1.065 2.876 1.213 3.074c.149.198 2.095 3.2 5.076 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413z"/></svg>
+</a>
 
 <script is:inline>
-(function () {
-  var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  // Stagger: transition-delay por índice dentro de cada grupo
-  document.querySelectorAll('[data-reveal-group]').forEach(function (group) {
-    var step = parseInt(group.getAttribute('data-reveal-step') || '60', 10);
-    var items = group.querySelectorAll(':scope > [data-reveal]');
-    items.forEach(function (el, i) { el.style.transitionDelay = (i * step) + 'ms'; });
-  });
-  var nodes = document.querySelectorAll('[data-reveal]');
-  if (reduce || !('IntersectionObserver' in window)) {
-    nodes.forEach(function (el) { el.classList.add('is-revealed'); });
-    return;
-  }
-  var io = new IntersectionObserver(function (entries, obs) {
-    entries.forEach(function (e) {
-      if (e.isIntersecting) { e.target.classList.add('is-revealed'); obs.unobserve(e.target); }
-    });
-  }, { threshold: 0.15, rootMargin: '0px 0px -8% 0px' });
-  nodes.forEach(function (el) { io.observe(el); });
-})();
+  document.querySelectorAll('.faq button').forEach(function(b){b.addEventListener('click',function(){b.parentElement.classList.toggle('open');});});
+  var io=new IntersectionObserver(function(es){es.forEach(function(e){if(e.isIntersecting){e.target.classList.add('in');io.unobserve(e.target);}});},{threshold:.1});
+  document.querySelectorAll('.reveal').forEach(function(el){io.observe(el);});
 </script>
-
-<style>
-.hero-photo img,
-.sobre-photo img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  object-position: center;
-  border-radius: 2px;
-  display: block;
-}
-</style>
-
-</Layout>
+</body>
+</html>
