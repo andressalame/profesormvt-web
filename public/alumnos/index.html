@@ -242,6 +242,21 @@
     *{transition:none!important;animation:none!important;}
     .btn:active{transform:none;}
   }
+  /* ===== Polish visual (micro-animaciones + profundidad) ===== */
+  @keyframes fadeUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
+  @keyframes popIn{from{opacity:0;transform:scale(.92)}to{opacity:1;transform:scale(1)}}
+  @keyframes fadeOnly{from{opacity:0}to{opacity:1}}
+  .view.active{animation:fadeUp .4s ease both;}
+  .card{transition:transform .18s ease,border-color .18s ease,box-shadow .18s ease;}
+  .card:hover{transform:translateY(-3px);border-color:var(--muted);box-shadow:0 12px 30px rgba(0,0,0,.4);}
+  .side nav a{transition:all .15s ease;}
+  .side nav a:hover{transform:translateX(2px);}
+  .hero-num .big{animation:popIn .5s cubic-bezier(.2,.8,.2,1) both;}
+  .stub{animation:fadeOnly .45s ease both;}
+  .stub:nth-child(2){animation-delay:.04s}.stub:nth-child(3){animation-delay:.08s}.stub:nth-child(4){animation-delay:.12s}.stub:nth-child(5){animation-delay:.16s}.stub:nth-child(6){animation-delay:.2s}.stub:nth-child(7){animation-delay:.24s}.stub:nth-child(8){animation-delay:.28s}
+  .btn{transition:filter .12s,transform .08s,box-shadow .12s;}
+  .atab{transition:all .15s ease;}
+  @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important;}}
 </style>
 </head>
 <body>
