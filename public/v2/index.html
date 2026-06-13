@@ -1,17 +1,17 @@
 <!DOCTYPE html>
-<!-- PREVIEW v2.1 (rediseño punk) · ProfesorMVT — destino: public/v2/index.html · NO es la home en vivo -->
+<!-- PREVIEW v2.2 (rediseño punk · página completa) · ProfesorMVT — destino: public/v2/index.html · NO es la home en vivo -->
 <html lang="es">
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <meta name="robots" content="noindex, nofollow" />
-<title>ProfesorMVT · preview v2</title>
+<title>Profesor MVT · Canto, piano y composición para adultos (preview v2)</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Anton&family=Space+Grotesk:wght@400;500;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
 <style>
   :root{
-    --bg:#0d0b0a; --panel:#15110f; --accent:#e8501f; --accent2:#ff6a35;
+    --bg:#0d0b0a; --panel:#15110f; --panel2:#1c1714; --accent:#e8501f; --accent2:#ff6a35;
     --cream:#f3ede0; --muted:#8a8276; --line:#2A2926;
     --mono:'JetBrains Mono',monospace; --display:'Anton',Impact,sans-serif; --body:'Space Grotesk',system-ui,sans-serif;
   }
@@ -22,8 +22,9 @@
     background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")}
   a{color:inherit;text-decoration:none}
   .wrap{max-width:1180px;margin:0 auto;padding:0 24px}
+  .narrow{max-width:780px}
   .mono{font-family:var(--mono);text-transform:uppercase;letter-spacing:.16em;font-size:12px;color:var(--accent);font-weight:700}
-  .disp{font-family:var(--display);font-weight:400;text-transform:uppercase;letter-spacing:.005em;line-height:.92}
+  section{position:relative}
 
   .top{position:sticky;top:0;z-index:100;background:rgba(13,11,10,.85);backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
   .top .wrap{display:flex;align-items:center;justify-content:space-between;height:60px}
@@ -32,28 +33,32 @@
   .top a.cta{font-family:var(--mono);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;border:1px solid var(--accent);color:var(--accent);padding:9px 15px;border-radius:2px;transition:.18s}
   .top a.cta:hover{background:var(--accent);color:var(--bg)}
 
-  .hero{position:relative;padding:clamp(36px,6vw,70px) 0 clamp(44px,6vw,80px)}
+  .btn{font-family:var(--mono);text-transform:uppercase;letter-spacing:.06em;font-size:13px;font-weight:700;padding:15px 22px;border-radius:2px;border:2px solid var(--accent);background:var(--accent);color:var(--bg);transition:.16s;display:inline-flex;gap:9px;cursor:pointer}
+  .btn:hover{transform:translate(-2px,-2px);box-shadow:5px 5px 0 var(--cream)}
+  .btn.ghost{background:transparent;color:var(--cream)}
+  .btn.ghost:hover{box-shadow:5px 5px 0 var(--accent)}
+
+  .shead{margin-bottom:36px;max-width:42em}
+  .shead h2{font-family:var(--display);text-transform:uppercase;font-size:clamp(34px,6vw,72px);line-height:.92;letter-spacing:.005em;margin:8px 0}
+  .shead h2 .o,.o{color:var(--accent)}
+  .shead p{color:var(--muted);font-size:16px;max-width:36em}
+
+  .hero{padding:clamp(36px,6vw,70px) 0 clamp(44px,6vw,80px)}
   .hero-grid{display:grid;grid-template-columns:1.25fr .75fr;gap:clamp(26px,4vw,56px);align-items:center}
-  .eyebrow{display:inline-block;margin-bottom:20px}
-  h1.mega{font-family:var(--display);text-transform:uppercase;font-size:clamp(58px,11vw,148px);line-height:.86;letter-spacing:.005em}
+  h1.mega{font-family:var(--display);text-transform:uppercase;font-size:clamp(58px,11vw,148px);line-height:.86;letter-spacing:.005em;margin-top:20px}
   h1.mega .hl{color:var(--accent);position:relative;display:inline-block}
   h1.mega .hl::after{content:"";position:absolute;left:-2px;right:-2px;bottom:.1em;height:.12em;background:var(--accent);opacity:.32;transform:skewX(-12deg)}
-  .subline{font-family:var(--body);font-weight:700;font-size:clamp(16px,2.4vw,24px);color:var(--cream);margin-top:16px;letter-spacing:-.01em}
+  .subline{font-family:var(--body);font-weight:700;font-size:clamp(16px,2.4vw,24px);margin-top:16px;letter-spacing:-.01em}
   .subline .b{background:var(--accent);color:var(--bg);padding:1px 9px;display:inline-block;transform:rotate(-1.5deg)}
   .lead{font-size:clamp(15px,1.9vw,18px);color:#cfc7b8;max-width:30em;margin:22px 0 28px;line-height:1.6}
   .lead b{color:var(--cream);font-weight:700}
   .ctas{display:flex;gap:12px;flex-wrap:wrap;align-items:center}
-  .btn{font-family:var(--mono);text-transform:uppercase;letter-spacing:.06em;font-size:13px;font-weight:700;padding:15px 22px;border-radius:2px;border:2px solid var(--accent);background:var(--accent);color:var(--bg);transition:.16s;display:inline-flex;gap:9px}
-  .btn:hover{transform:translate(-2px,-2px);box-shadow:5px 5px 0 var(--cream)}
-  .btn.ghost{background:transparent;color:var(--cream)}
-  .btn.ghost:hover{box-shadow:5px 5px 0 var(--accent)}
   .micro{font-family:var(--mono);font-size:11px;letter-spacing:.04em;color:var(--muted);margin-top:18px}
-
   .hero-photo{position:relative;transform:rotate(-1.5deg)}
   .hero-photo img{width:100%;aspect-ratio:3/4;object-fit:cover;display:block;border:3px solid var(--cream);filter:grayscale(.4) contrast(1.08)}
-  .hero-photo .tint{position:absolute;inset:0;background:var(--accent);mix-blend-mode:color;opacity:.42;border:3px solid transparent}
+  .hero-photo .tint{position:absolute;inset:0;background:var(--accent);mix-blend-mode:color;opacity:.42}
   .hero-photo .cap{position:absolute;bottom:10px;left:10px;right:10px;font-family:var(--mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--cream);background:rgba(13,11,10,.82);padding:7px 10px;border:1px solid var(--accent)}
-  .sticker{position:absolute;top:-16px;right:-10px;z-index:5;font-family:var(--mono);font-weight:700;font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--bg);background:var(--accent);padding:7px 11px;transform:rotate(6deg);border-radius:1px}
+  .sticker{position:absolute;top:-16px;right:-10px;z-index:5;font-family:var(--mono);font-weight:700;font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--bg);background:var(--accent);padding:7px 11px;transform:rotate(6deg)}
 
   .marquee{border-top:2px solid var(--cream);border-bottom:2px solid var(--cream);background:var(--accent);overflow:hidden;white-space:nowrap}
   .mq-track{display:inline-flex;animation:scroll 26s linear infinite}
@@ -61,9 +66,12 @@
   .mq-track .s{padding:0 18px;opacity:.5}
   @keyframes scroll{to{transform:translateX(-50%)}}
 
+  .industry{padding:18px 0;border-bottom:1px solid var(--line)}
+  .industry .wrap{display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center;font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+  .industry .sep{color:var(--accent)}
+
   .manifesto{padding:clamp(40px,6vw,72px) 0;border-bottom:1px solid var(--line)}
   .manifesto p{font-family:var(--display);text-transform:uppercase;font-size:clamp(26px,4.6vw,52px);line-height:1.02;letter-spacing:.005em;max-width:18em}
-  .manifesto .o{color:var(--accent)}
 
   .creds{padding:clamp(38px,5vw,64px) 0}
   .creds-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:var(--line);border:1px solid var(--line)}
@@ -72,42 +80,114 @@
   .cell .n{font-family:var(--display);font-size:clamp(40px,5.5vw,64px);line-height:1;color:var(--accent)}
   .cell .l{font-family:var(--mono);font-size:11px;letter-spacing:.09em;text-transform:uppercase;color:var(--muted);margin-top:10px;line-height:1.5}
 
-  .pain{padding:clamp(44px,6vw,80px) 0;background:var(--panel);border-top:1px solid var(--line)}
-  .shead{margin-bottom:36px}
-  .shead h2{font-family:var(--display);text-transform:uppercase;font-size:clamp(34px,6vw,72px);line-height:.92;letter-spacing:.005em;margin:8px 0}
-  .shead h2 .o{color:var(--accent)}
-  .shead p{color:var(--muted);font-size:16px;max-width:34em}
-  .pain-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:16px}
-  .pcard{border:1px solid var(--line);padding:24px;background:var(--bg);transition:.2s;border-left:4px solid var(--accent)}
-  .pcard:hover{transform:translateY(-4px);border-color:var(--muted);border-left-color:var(--accent)}
-  .pcard .tag{font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--accent);font-weight:700}
-  .pcard h3{font-family:var(--body);font-weight:700;font-size:20px;line-height:1.18;margin:11px 0 9px;letter-spacing:-.01em}
-  .pcard h3 .o{color:var(--accent)}
-  .pcard p{color:var(--muted);font-size:15px;line-height:1.55}
-  .pain-concl{margin-top:28px;font-family:var(--display);text-transform:uppercase;font-size:clamp(20px,3vw,34px);line-height:1.05;max-width:20em}
-  .pain-concl .o{color:var(--accent)}
+  .blk{padding:clamp(44px,6vw,80px) 0;border-top:1px solid var(--line)}
+  .blk.panel{background:var(--panel)}
+  .pillars,.proceso{display:grid;grid-template-columns:repeat(4,1fr);gap:16px}
+  .pillar,.step{border:1px solid var(--line);border-top:4px solid var(--accent);padding:22px 20px;background:var(--bg);transition:.2s}
+  .pillar:hover,.step:hover,.mcard:hover,.dcard:hover{transform:translateY(-4px);border-color:var(--muted)}
+  .pillar .num,.step .num,.mcard .tag,.dcard .k{font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--accent);font-weight:700}
+  .pillar h3,.step h4{font-family:var(--display);text-transform:uppercase;font-size:22px;letter-spacing:.01em;margin:10px 0 8px}
+  .pillar p,.step p,.mcard p,.dcard p{color:var(--muted);font-size:14px;line-height:1.55}
+  .step .dur{font-family:var(--mono);font-size:10.5px;color:var(--accent);letter-spacing:.08em;display:block;margin-bottom:6px}
+  .counter{margin-top:26px;font-family:var(--display);text-transform:uppercase;font-size:clamp(18px,2.6vw,30px);line-height:1.05;max-width:24em}
 
-  .disc{padding:clamp(40px,5vw,64px) 0}
-  .disc-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-top:30px}
+  .mcards{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:24px}
+  .mcard{border:1px solid var(--line);padding:26px;background:var(--bg);transition:.2s}
+  .mcard h3{font-family:var(--display);text-transform:uppercase;font-size:26px;letter-spacing:.01em;margin:10px 0 4px}
+  .mcard .tl{font-family:var(--body);font-weight:700;font-size:14px;color:var(--cream);margin-bottom:10px}
+  .mcard ul{list-style:none;margin-top:12px;display:flex;flex-direction:column;gap:8px}
+  .mcard li{font-size:13.5px;color:var(--muted);padding-left:18px;position:relative;line-height:1.45}
+  .mcard li::before{content:"→";position:absolute;left:0;color:var(--accent)}
+  .mcard li b{color:var(--cream);font-weight:700}
+  .quote{font-family:var(--display);text-transform:uppercase;font-size:clamp(24px,3.6vw,40px);line-height:1.02;max-width:20em}
+  .quote-p{color:var(--muted);font-size:15px;max-width:40em;margin-top:14px;line-height:1.6}
+
+  .disc-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-top:26px}
   .dcard{border:1px solid var(--line);padding:22px 18px;transition:.2s}
-  .dcard:hover{background:var(--panel);transform:translateY(-3px)}
-  .dcard .k{font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
   .dcard h4{font-family:var(--display);text-transform:uppercase;font-size:23px;letter-spacing:.01em;margin:8px 0 6px}
-  .dcard p{font-size:13.5px;color:var(--muted);line-height:1.5}
 
-  .band{padding:clamp(50px,7vw,96px) 0;text-align:center;border-top:1px solid var(--line)}
-  .band h2{font-family:var(--display);text-transform:uppercase;font-size:clamp(42px,8vw,96px);line-height:.9;letter-spacing:.005em;margin-bottom:18px}
-  .band h2 .o{color:var(--accent)}
-  .band p{color:var(--muted);max-width:30em;margin:0 auto 26px;font-size:16px}
+  .sobre-grid{display:grid;grid-template-columns:.8fr 1.2fr;gap:clamp(24px,4vw,52px);align-items:center}
+  .sobre-photo img{width:100%;aspect-ratio:3/4;object-fit:cover;border:3px solid var(--cream);filter:grayscale(.4) contrast(1.08);transform:rotate(1.5deg)}
+  .sobre-text h2{font-family:var(--display);text-transform:uppercase;font-size:clamp(34px,5vw,60px);line-height:.94;margin:6px 0 4px}
+  .sobre-text .st{font-family:var(--body);font-weight:700;color:var(--accent);font-size:17px;margin-bottom:14px}
+  .sobre-text p{color:#cfc7b8;font-size:15px;line-height:1.65;margin-bottom:12px}
+
+  .tgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+  .tcard{border:1px solid var(--line);border-left:4px solid var(--accent);padding:22px;background:var(--bg)}
+  .tcard .dt{font-family:var(--mono);font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--accent);font-weight:700}
+  .tcard blockquote{font-size:14.5px;line-height:1.55;color:#cfc7b8;margin:12px 0}
+  .tcard .au{display:flex;align-items:center;gap:10px}
+  .tcard .av{width:34px;height:34px;background:var(--accent);color:var(--bg);font-family:var(--display);font-size:17px;display:flex;align-items:center;justify-content:center}
+  .tcard .nm{font-weight:700;font-size:14px}
+  .tcard .mt{font-family:var(--mono);font-size:9.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+  .revmq{margin-top:18px;border-top:1px solid var(--line);border-bottom:1px solid var(--line);overflow:hidden;white-space:nowrap;padding:14px 0}
+  .revmq .rt{display:inline-flex;animation:scroll 40s linear infinite}
+  .revmq q{font-size:14px;color:var(--muted);padding:0 28px;position:relative}
+  .revmq q b{color:var(--cream);font-weight:700}
+
+  .portal-grid{display:grid;grid-template-columns:1fr .8fr;gap:clamp(24px,4vw,52px);align-items:center}
+  .portal-text ul{list-style:none;margin:18px 0;display:flex;flex-direction:column;gap:10px}
+  .portal-text li{padding-left:20px;position:relative;color:#cfc7b8;font-size:15px}
+  .portal-text li::before{content:"◆";position:absolute;left:0;color:var(--accent);font-size:11px;top:3px}
+  .portal-sub{font-family:var(--mono);font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-top:14px}
+  .mock{border:3px solid var(--cream);background:var(--panel);padding:26px;transform:rotate(1.5deg)}
+  .mock .mp{font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.08em;color:var(--accent);border:1px solid var(--accent);display:inline-block;padding:3px 9px}
+  .mock .mc{font-family:var(--display);font-size:64px;line-height:1;margin:14px 0 4px}
+  .mock .mc small{font-family:var(--body);font-size:18px;color:var(--muted);font-weight:400}
+  .mock .tix{display:flex;gap:6px;flex-wrap:wrap;margin-top:12px}
+  .mock .tk{width:24px;height:38px;background:var(--accent);border-radius:2px}
+  .mock .tk.u{background:var(--line)}
+
+  .precios{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:8px}
+  .pc{border:1px solid var(--line);padding:28px 24px;background:var(--bg);display:flex;flex-direction:column;transition:.2s}
+  .pc:hover{transform:translateY(-5px);border-color:var(--muted)}
+  .pc.feat{background:var(--accent);color:var(--bg);border-color:var(--accent)}
+  .pc .badge{font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--bg);background:var(--cream);display:inline-block;padding:4px 10px;margin-bottom:10px;width:fit-content}
+  .pc .tier{font-family:var(--mono);font-size:12px;letter-spacing:.1em;text-transform:uppercase;font-weight:700;color:var(--accent)}
+  .pc.feat .tier{color:var(--bg)}
+  .pc h3{font-family:var(--display);text-transform:uppercase;font-size:26px;margin:6px 0}
+  .pc .det{font-size:13px;color:var(--muted);min-height:38px}
+  .pc.feat .det{color:rgba(13,11,10,.7)}
+  .pc .amt{font-family:var(--display);font-size:60px;line-height:1;margin:14px 0}
+  .pc .amt sup{font-size:24px;vertical-align:super;opacity:.7}
+  .pc ul{list-style:none;margin:8px 0 18px;display:flex;flex-direction:column;gap:7px;flex:1}
+  .pc li{font-size:13.5px;padding-left:18px;position:relative;color:#cfc7b8;line-height:1.4}
+  .pc.feat li{color:rgba(13,11,10,.82)}
+  .pc li::before{content:"✓";position:absolute;left:0;color:var(--accent);font-weight:700}
+  .pc.feat li::before{color:var(--bg)}
+  .pc .pcta{font-family:var(--mono);font-weight:700;font-size:12px;letter-spacing:.06em;text-transform:uppercase;text-align:center;padding:13px;border:2px solid var(--accent);color:var(--accent);transition:.16s}
+  .pc .pcta:hover{background:var(--accent);color:var(--bg)}
+  .pc.feat .pcta{border-color:var(--bg);color:var(--bg)}
+  .pc.feat .pcta:hover{background:var(--bg);color:var(--accent)}
+  .pc .online{font-family:var(--mono);font-size:10.5px;text-align:center;color:var(--muted);margin-top:9px;letter-spacing:.04em}
+  .trust{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:24px;border-top:1px solid var(--line);padding-top:22px}
+  .trust .tl{font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--accent);font-weight:700;display:block;margin-bottom:6px}
+  .trust .tx{font-size:13.5px;color:var(--muted);line-height:1.5}
+
+  .faq-list{display:flex;flex-direction:column;gap:10px;margin-top:8px}
+  .faq{border:1px solid var(--line);background:var(--bg)}
+  .faq button{width:100%;display:flex;justify-content:space-between;align-items:center;gap:14px;background:none;border:0;color:var(--cream);font-family:var(--body);font-weight:700;font-size:16px;text-align:left;padding:18px 20px;cursor:pointer}
+  .faq .ar{font-family:var(--display);color:var(--accent);font-size:24px;line-height:1}
+  .faq .ans{max-height:0;overflow:hidden;transition:max-height .28s ease}
+  .faq.open .ans{max-height:240px}
+  .faq.open .ar{transform:rotate(45deg)}
+  .faq .ans p{padding:0 20px 18px;color:var(--muted);font-size:14.5px;line-height:1.6}
+
+  .band{padding:clamp(54px,8vw,104px) 0;text-align:center;border-top:1px solid var(--line)}
+  .band h2{font-family:var(--display);text-transform:uppercase;font-size:clamp(42px,8vw,104px);line-height:.88;letter-spacing:.005em;margin-bottom:18px}
+  .band p{color:var(--muted);max-width:32em;margin:0 auto 26px;font-size:16px}
+  .band .ctas{justify-content:center}
   .foot{border-top:1px solid var(--line);padding:24px 0;text-align:center}
   .foot .mono{color:var(--muted);font-weight:400;letter-spacing:.1em}
 
   .reveal{opacity:0;transform:translateY(20px);transition:opacity .6s ease,transform .6s ease}
   .reveal.in{opacity:1;transform:none}
 
-  @media(max-width:820px){
-    .hero-grid{grid-template-columns:1fr}.hero-photo{max-width:380px;margin-top:8px}
-    .creds-grid,.disc-grid{grid-template-columns:repeat(2,1fr)}.pain-grid{grid-template-columns:1fr}
+  @media(max-width:860px){
+    .hero-grid,.sobre-grid,.portal-grid{grid-template-columns:1fr}
+    .hero-photo,.mock{max-width:380px;margin-top:8px}
+    .pillars,.proceso,.creds-grid,.disc-grid{grid-template-columns:repeat(2,1fr)}
+    .mcards,.tgrid,.precios,.trust{grid-template-columns:1fr}
   }
   @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}.reveal{opacity:1;transform:none}}
 </style>
@@ -124,7 +204,7 @@
 <section class="hero">
   <div class="wrap hero-grid">
     <div class="hero-text">
-      <span class="eyebrow mono reveal">[ Método MVT · San Isidro · Online en vivo ]</span>
+      <span class="mono reveal">[ Método MVT · San Isidro · Online en vivo ]</span>
       <h1 class="mega reveal">Aprende música<br>como <span class="hl">adulto</span>.</h1>
       <p class="subline reveal">Clases <span class="b">1 a 1</span> · 100% personalizadas a ti.</p>
       <p class="lead reveal">Canto, piano y composición con método real — no academia genérica. Te enseña alguien que <b>compuso +200 canciones y vivió de la música</b>, no un profesor de manual.</p>
@@ -136,79 +216,204 @@
     </div>
     <div class="hero-photo reveal">
       <span class="sticker">★ Ex-Tramboyos</span>
-      <img src="/andres-piano-hero.jpg" alt="Andrés Salame, músico y profesor" />
+      <img src="/andres-piano-hero.jpg" alt="Andrés Salame, músico y profesor de canto, piano y composición" />
       <span class="tint"></span>
       <span class="cap">Andrés Salame · músico, no profesor de manual</span>
     </div>
   </div>
 </section>
 
-<div class="marquee">
-  <div class="mq-track">
-    <span>Canto<i class="s">/</i>Piano<i class="s">/</i>Composición<i class="s">/</i>Método MVT<i class="s">/</i>+200 canciones<i class="s">/</i>San Isidro<i class="s">/</i>Online<i class="s">/</i>Adultos<i class="s">/</i></span>
-    <span aria-hidden="true">Canto<i class="s">/</i>Piano<i class="s">/</i>Composición<i class="s">/</i>Método MVT<i class="s">/</i>+200 canciones<i class="s">/</i>San Isidro<i class="s">/</i>Online<i class="s">/</i>Adultos<i class="s">/</i></span>
-  </div>
-</div>
+<div class="marquee"><div class="mq-track">
+  <span>Canto<i class="s">/</i>Piano<i class="s">/</i>Composición<i class="s">/</i>Método MVT<i class="s">/</i>+200 canciones<i class="s">/</i>San Isidro<i class="s">/</i>Online<i class="s">/</i>Adultos<i class="s">/</i></span>
+  <span aria-hidden="true">Canto<i class="s">/</i>Piano<i class="s">/</i>Composición<i class="s">/</i>Método MVT<i class="s">/</i>+200 canciones<i class="s">/</i>San Isidro<i class="s">/</i>Online<i class="s">/</i>Adultos<i class="s">/</i></span>
+</div></div>
 
-<section class="manifesto">
-  <div class="wrap">
-    <p class="reveal">No es talento.<br>Es <span class="o">método</span> mal aplicado.</p>
-  </div>
-</section>
+<div class="industry"><div class="wrap">
+  <span>Frontman · Tramboyos</span><span class="sep">/</span><span>Mgmt · Kids on Coffee</span><span class="sep">/</span><span>Ex-mgr · Malos Amigos</span><span class="sep">/</span><span>Maceradoz</span><span class="sep">/</span><span>Tuporaquí Yoporallá</span><span class="sep">/</span><span>Bastian Guija</span><span class="sep">/</span><span>Lonzo Miranda</span>
+</div></div>
 
-<section class="creds">
-  <div class="wrap">
-    <span class="mono reveal" style="display:block;margin-bottom:22px">// Credenciales reales</span>
-    <div class="creds-grid reveal">
-      <div class="cell"><div class="n">+200</div><div class="l">Canciones<br>compuestas</div></div>
-      <div class="cell"><div class="n">+20</div><div class="l">Conciertos<br>producidos</div></div>
-      <div class="cell"><div class="n">UPC</div><div class="l">Estudios<br>en música</div></div>
-      <div class="cell"><div class="n">ULima</div><div class="l">Estudios<br>en psicología</div></div>
+<section class="manifesto"><div class="wrap">
+  <p class="reveal">No es talento.<br>Es <span class="o">método</span> mal aplicado.</p>
+</div></section>
+
+<section class="creds"><div class="wrap">
+  <span class="mono reveal" style="display:block;margin-bottom:22px">// Credenciales reales</span>
+  <div class="creds-grid reveal">
+    <div class="cell"><div class="n">+200</div><div class="l">Canciones<br>compuestas</div></div>
+    <div class="cell"><div class="n">+20</div><div class="l">Conciertos<br>producidos</div></div>
+    <div class="cell"><div class="n">UPC</div><div class="l">Estudios<br>en música</div></div>
+    <div class="cell"><div class="n">ULima</div><div class="l">Estudios<br>en psicología</div></div>
+  </div>
+</div></section>
+
+<section class="blk panel" id="identifica"><div class="wrap">
+  <div class="shead reveal"><span class="mono">para quienes esto va</span><h2>¿Te <span class="o">suena familiar</span>?</h2><p>Si te identificas con alguno de estos, los métodos que enseño se diseñaron exactamente para resolverlo.</p></div>
+  <div class="pillars">
+    <div class="pillar reveal"><span class="num">Canto · 01</span><h3>Canción atragantada</h3><p>Cada vez que intentas el agudo sale apretado, raspado, o no sale. Y ya probaste de todo.</p></div>
+    <div class="pillar reveal"><span class="num">Piano · 02</span><h3>Las mismas 3 canciones</h3><p>Te estancaste. Sabes algunos acordes pero no logras avanzar a lo que te gusta de verdad.</p></div>
+    <div class="pillar reveal"><span class="num">Canto · 03</span><h3>"Apoya más fuerte"</h3><p>Empujaste el aire desde el diafragma mil veces, y sigues sin cantar como te gustaría.</p></div>
+    <div class="pillar reveal"><span class="num">Teoría · 04</span><h3>No entiendes la armonía</h3><p>Memorizas acordes pero no sabes por qué suenan así. Quieres componer y no sabes por dónde empezar.</p></div>
+  </div>
+  <p class="counter reveal">Eso tiene solución <span class="o">específica</span>, progresiva y comprobable.</p>
+</div></section>
+
+<section class="blk" id="metodo-canto"><div class="wrap">
+  <div class="shead reveal"><span class="mono">canto · método mvt</span><h2>Cuatro principios.<br><span class="o">Cero misticismo.</span></h2><p>Modern Vocal Training: una metodología contemporánea basada en la fisiología real de la voz.</p></div>
+  <div class="pillars">
+    <div class="pillar reveal"><span class="num">Principio · 01</span><h3>Coordinación</h3><p>Entrenamos los músculos vocales como cualquier otro grupo muscular: específico, progresivo, medible.</p></div>
+    <div class="pillar reveal"><span class="num">Principio · 02</span><h3>Resonancia</h3><p>Manejar dónde resuena la voz —pecho, máscara, cabeza— y transitar entre registros sin rupturas.</p></div>
+    <div class="pillar reveal"><span class="num">Principio · 03</span><h3>Cierre cordal</h3><p>El cierre apropiado de las cuerdas es la base de proyección, claridad y resistencia. Sin abuso.</p></div>
+    <div class="pillar reveal"><span class="num">Principio · 04</span><h3>Sin constricción</h3><p>La libertad vocal viene de quitar tensión innecesaria, no de añadir esfuerzo.</p></div>
+  </div>
+  <p class="counter reveal">Lo opuesto a "apoya más fuerte". La voz funciona con <span class="o">coordinación</span> entrenada, no con esfuerzo añadido.</p>
+</div></section>
+
+<section class="blk panel" id="metodo-piano"><div class="wrap">
+  <div class="shead reveal"><span class="mono">piano · faber & faber</span></div>
+  <div class="quote reveal">Toca lo que escuchas.<br><span class="o">No lo que te imponen.</span></div>
+  <p class="quote-p reveal">El piano para adultos no debería empezar con "Para Elisa" ni tres meses de Hanon. Faber & Faber es el método más usado por profesores serios del mundo.</p>
+  <div class="mcards">
+    <div class="mcard reveal"><span class="tag">El método · Faber & Faber</span><h3>Piano Adventures</h3><div class="tl">La estructura clásica del aprendizaje moderno.</div><p>Técnica, lectura, teoría y escucha desde el primer libro — todo conectado.</p><ul><li><b>Multi-tonalidad</b> desde el inicio</li><li><b>4 libros por nivel:</b> Lesson, Theory, Performance, Technique</li><li><b>Progresión secuenciada</b> nivel a nivel</li><li><b>Repertorio variado:</b> clásico, jazz y pop</li></ul></div>
+    <div class="mcard reveal"><span class="tag">La adaptación · para adulto</span><h3>Cómo lo enseño</h3><div class="tl">El método no es para niños. El adulto es distinto.</div><p>Un adulto necesita otro enfoque. Esto es lo que ajusto en cada clase.</p><ul><li><b>Ritmo más rápido:</b> saltamos lo que no aporta</li><li><b>Repertorio personal:</b> tus canciones</li><li><b>Conexión con tu objetivo</b></li><li><b>Práctica realista</b> para tu vida adulta</li></ul></div>
+  </div>
+</div></section>
+
+<section class="blk" id="metodo-composicion"><div class="wrap">
+  <div class="shead reveal"><span class="mono">composición · hook theory</span></div>
+  <div class="quote reveal">Componer no es inspiración.<br><span class="o">Es metodología.</span></div>
+  <p class="quote-p reveal">Escribir canciones es una habilidad estructurada, no un don místico. Con análisis funcional aprendes los patrones y eventualmente escribes el tuyo.</p>
+  <div class="mcards">
+    <div class="mcard reveal"><span class="tag">Herramienta · análisis</span><h3>Theorytab</h3><div class="tl">Aprende leyendo lo que otros escribieron.</div><p>Miles de canciones populares analizadas en notación funcional.</p><ul><li><b>Notación 1-4-5-6:</b> universal y memorable</li><li><b>Hits reales</b> que ya conoces, desglosados</li><li><b>Patrones armónicos</b> explicados</li><li><b>Aplicación inmediata:</b> traes tu canción</li></ul></div>
+    <div class="mcard reveal"><span class="tag">Proceso · de análisis a creación</span><h3>Cómo enseño</h3><div class="tl">De entender canciones a escribir las tuyas.</div><p>Escuchar, identificar, apropiarse, escribir, refinar. Con tu DAW de preferencia.</p><ul><li><b>Identificar patrones</b> en lo que admiras</li><li><b>Estructura:</b> verso, pre-coro, coro, puente</li><li><b>Letra y melodía</b> aplicadas</li><li><b>Tu primer demo</b> terminado</li></ul></div>
+  </div>
+</div></section>
+
+<section class="blk panel"><div class="wrap">
+  <div class="shead reveal"><span class="mono">qué enseño</span><h2>Cuatro disciplinas.<br><span class="o">Métodos modernos.</span></h2><p>Cada una con su metodología. Toma una sola o combínalas en el mismo paquete.</p></div>
+  <div class="disc-grid">
+    <div class="dcard reveal"><span class="k">Método MVT</span><h4>Canto</h4><p>Técnica, afinación, resonancia, rango y expresión.</p></div>
+    <div class="dcard reveal"><span class="k">Faber & Faber</span><h4>Piano</h4><p>Piano serio para adultos, adaptado a tu ritmo y gustos.</p></div>
+    <div class="dcard reveal"><span class="k">Hook Theory</span><h4>Composición</h4><p>Análisis funcional, patrones, escritura y demo.</p></div>
+    <div class="dcard reveal"><span class="k">Aplicada</span><h4>Teoría</h4><p>Sin pizarras aburridas. Armonía sobre música real.</p></div>
+  </div>
+</div></section>
+
+<section class="blk"><div class="wrap">
+  <div class="shead reveal"><span class="mono">cómo es una clase</span><h2>Una clase,<br><span class="o">cuatro momentos.</span></h2><p>Canto o piano siguen una estructura clara — para que cada minuto cuente.</p></div>
+  <div class="proceso">
+    <div class="step reveal"><span class="num">01</span><h4>Calentamiento</h4><span class="dur">10 min</span><p>Canto: SOVT y SOG. Piano: Technique & Artistry. Prepara los músculos sin desgaste.</p></div>
+    <div class="step reveal"><span class="num">02</span><h4>Técnico</h4><span class="dur">20 min</span><p>Ejercicios específicos según lo que toca esta semana — coordinación o técnica.</p></div>
+    <div class="step reveal"><span class="num">03</span><h4>Tu canción</h4><span class="dur">25 min</span><p>Llevamos lo trabajado al repertorio real. La parte que más cuesta y más se nota.</p></div>
+    <div class="step reveal"><span class="num">04</span><h4>Para casa</h4><span class="dur">5 min</span><p>Te llevas un audio o nota con los ejercicios de la semana.</p></div>
+  </div>
+</div></section>
+
+<section class="blk panel" id="sobre"><div class="wrap">
+  <div class="sobre-grid">
+    <div class="sobre-photo reveal"><img src="/andres-banjo-escenario.jpg" alt="Andrés Salame como frontman de Tramboyos en escenario" /></div>
+    <div class="sobre-text reveal">
+      <span class="mono">sobre andrés</span>
+      <h2>Músico que enseña.<br><span class="o">No profesor que toca.</span></h2>
+      <p>Vengo de la industria. Frontman y compositor de Tramboyos —punk rock alternativo—, management en Kids on Coffee y ex-manager de Malos Amigos, Maceradoz, Tuporaquí Yoporallá, Bastian Guija y Lonzo Miranda. +200 canciones compuestas y +20 conciertos producidos.</p>
+      <p>Estudios en música (UPC) y psicología (ULima). Esa combinación es inusual y la noto en cada clase: entender la voz también es entender a quién la usa.</p>
+      <p>Mi alumno típico es un adulto de 20 a 45 que se preguntó si no era muy tarde para aprender música. Spoiler: no lo es.</p>
     </div>
   </div>
-</section>
+</div></section>
 
-<section class="pain">
-  <div class="wrap">
-    <div class="shead reveal">
-      <span class="mono">para quienes esto va</span>
-      <h2>¿Te <span class="o">suena familiar</span>?</h2>
-      <p>Si te identificas con alguno de estos, los métodos que enseño se diseñaron exactamente para resolverlo.</p>
-    </div>
-    <div class="pain-grid">
-      <div class="pcard reveal"><span class="tag">Canto · 01</span><h3>Llevas años con esa <span class="o">canción atragantada</span> en el estribillo.</h3><p>Cada vez que intentas el agudo, sale apretado, raspado, o simplemente no sale. Y ya probaste de todo.</p></div>
-      <div class="pcard reveal"><span class="tag">Piano · 02</span><h3>Tocas las <span class="o">mismas tres canciones</span> de hace años.</h3><p>Te estancaste. Sabes algunos acordes, pero no logras avanzar a las canciones que te gustan de verdad.</p></div>
-      <div class="pcard reveal"><span class="tag">Canto · 03</span><h3>Te dijeron <span class="o">"apoya más fuerte"</span> — y no funciona.</h3><p>Has empujado el aire desde el diafragma mil veces, y sigues sin cantar como te gustaría.</p></div>
-      <div class="pcard reveal"><span class="tag">Teoría · 04</span><h3>No entiendes la <span class="o">armonía</span> detrás de lo que amas.</h3><p>Memorizas acordes pero no sabes por qué suenan así. Quieres componer y no sabes por dónde empezar.</p></div>
-    </div>
-    <p class="pain-concl reveal">Eso tiene solución <span class="o">específica</span> y comprobable.</p>
+<section class="blk" id="testimonios"><div class="wrap">
+  <div class="shead reveal"><span class="mono">testimonios</span><h2>Lo que dicen<br>mis <span class="o">alumnos.</span></h2><p>★★★★★ 5,0 · 20 opiniones verificadas en Google y Superprof.</p></div>
+  <div class="tgrid">
+    <div class="tcard reveal"><span class="dt">Composición · Hook Theory</span><blockquote>Llevaba años escribiendo letras sin saber qué hacer con ellas. Entendí que componer no era esperar inspiración. Hoy puedo improvisar canciones completas. Nunca pensé que lo lograría.</blockquote><div class="au"><span class="av">F</span><div><div class="nm">Fernando</div><div class="mt">1 año · Intensivo</div></div></div></div>
+    <div class="tcard reveal"><span class="dt">Canto · MVT</span><blockquote>Me caso este año y mi sueño era cantarle a mi novio. Cuando empecé ni llegaba al coro. Ocho meses después la canto entera y balanceada, y varias canciones más.</blockquote><div class="au"><span class="av">C</span><div><div class="nm">Carla</div><div class="mt">8 meses · Esencial</div></div></div></div>
+    <div class="tcard reveal"><span class="dt">Piano · Faber & Faber</span><blockquote>No esperaba que el piano fuera lo más constante de mi semana. La forma en que Andrés estructura las clases me dio una disciplina que se trasladó a otras áreas de mi vida.</blockquote><div class="au"><span class="av">N</span><div><div class="nm">Nicole</div><div class="mt">6 meses · Esencial</div></div></div></div>
   </div>
-</section>
+  <div class="revmq"><div class="rt">
+    <q>"Explica demasiado bien, paciente y divertido" — <b>Santino</b></q><q>"Te hace sentir en confianza desde el minuto uno" — <b>Fernando Y.</b></q><q>"Me ayudó mucho a confiar en mis habilidades" — <b>Nuria</b></q><q>"Clases divertidas, buena enseñanza, recomendado" — <b>Fernando C.</b></q><q>"Desde el día uno pude aprender a componer" — <b>Gigi</b></q><q>"Sus clases son dinámicas, claras y motivadoras" — <b>Renzo</b></q><q>"Súper paciente y atento desde el primer día" — <b>Noelia</b></q>
+    <q aria-hidden="true">"Explica demasiado bien, paciente y divertido" — <b>Santino</b></q><q aria-hidden="true">"Te hace sentir en confianza desde el minuto uno" — <b>Fernando Y.</b></q><q aria-hidden="true">"Me ayudó mucho a confiar en mis habilidades" — <b>Nuria</b></q><q aria-hidden="true">"Clases divertidas, buena enseñanza, recomendado" — <b>Fernando C.</b></q><q aria-hidden="true">"Desde el día uno pude aprender a componer" — <b>Gigi</b></q><q aria-hidden="true">"Sus clases son dinámicas, claras y motivadoras" — <b>Renzo</b></q><q aria-hidden="true">"Súper paciente y atento desde el primer día" — <b>Noelia</b></q>
+  </div></div>
+</div></section>
 
-<section class="disc">
-  <div class="wrap">
-    <span class="mono reveal" style="display:block">// qué enseño</span>
-    <div class="disc-grid">
-      <div class="dcard reveal"><span class="k">Método MVT</span><h4>Canto</h4><p>Técnica, resonancia, rango y registros. Coordinación, no fuerza bruta.</p></div>
-      <div class="dcard reveal"><span class="k">Faber & Faber</span><h4>Piano</h4><p>El método más serio del mundo, adaptado al adulto y a tus gustos.</p></div>
-      <div class="dcard reveal"><span class="k">Hook Theory</span><h4>Composición</h4><p>De analizar las canciones que amas a escribir las tuyas.</p></div>
-      <div class="dcard reveal"><span class="k">Aplicada</span><h4>Teoría</h4><p>Sin pizarras aburridas. Armonía funcional sobre música real.</p></div>
+<section class="blk panel" id="portal"><div class="wrap">
+  <div class="portal-grid">
+    <div class="portal-text reveal">
+      <span class="mono">// tu portal de alumno</span>
+      <h2 class="shead" style="margin:8px 0 0"><span style="font-family:var(--display);text-transform:uppercase;font-size:clamp(34px,5vw,60px);line-height:.94;display:block">Tu avance,<br>en tu <span class="o">bolsillo.</span></span></h2>
+      <ul>
+        <li>Ve tus clases restantes y tu historial en tiempo real</li>
+        <li>Tu tarea de la semana siempre a la mano</li>
+        <li>Compra y renueva tu paquete con Yape o Plin sin salir de casa</li>
+      </ul>
+      <a class="btn ghost" href="/alumnos/">Crear mi cuenta →</a>
+      <p class="portal-sub">Crear cuenta es gratis · pagas solo cuando compras tu paquete</p>
+    </div>
+    <div class="mock reveal">
+      <span class="mp">Activo</span>
+      <div class="mc">5<small> de 8</small></div>
+      <div class="tix"><span class="tk u"></span><span class="tk u"></span><span class="tk u"></span><span class="tk"></span><span class="tk"></span><span class="tk"></span><span class="tk"></span><span class="tk"></span></div>
     </div>
   </div>
-</section>
+</div></section>
 
-<section class="band" id="precios">
-  <div class="wrap">
-    <h2 class="reveal">Empieza con<br>una clase de <span class="o">S/50</span></h2>
-    <p class="reveal">Una hora completa. Conoces el método, evalúas mi forma de enseñar, y decides. Si sigues, los S/50 se descuentan de tu primer paquete.</p>
-    <a class="btn reveal" href="https://wa.me/51989077928?text=Hola%20Andrés%2C%20vi%20tu%20web%20y%20me%20interesa%20la%20clase%20de%20prueba%20S%2F50" target="_blank" rel="noopener">Reservar por WhatsApp →</a>
+<section class="blk" id="precios"><div class="wrap">
+  <div class="shead reveal"><span class="mono">paquetes mensuales</span><h2>Precios <span class="o">claros.</span><br>Sin letra chica.</h2><p>Los mismos paquetes para canto, piano, teoría o composición. Mezcla disciplinas en el mismo paquete.</p></div>
+  <div class="precios">
+    <div class="pc reveal">
+      <span class="tier">Esencial</span><h3>4 horas</h3><p class="det">Distribuye tus horas. Recomendado: 1 clase/semana.</p>
+      <div class="amt"><sup>S/</sup>250</div>
+      <ul><li>1 disciplina</li><li>Presencial u online</li><li>Plan personalizado</li><li>Material extra en Discord</li><li>WhatsApp directo conmigo</li></ul>
+      <a class="pcta" href="https://wa.me/51989077928?text=Hola%20Andrés%2C%20me%20interesa%20el%20paquete%20Esencial%20S%2F250" target="_blank" rel="noopener">Reservar</a>
+      <a class="online" href="/alumnos/">o cómpralo online →</a>
+    </div>
+    <div class="pc feat reveal">
+      <span class="badge">★ Más elegido</span><span class="tier">Intensivo</span><h3>8 horas</h3><p class="det">Distribuye tus horas. Recomendado: 2 clases/semana.</p>
+      <div class="amt"><sup>S/</sup>450</div>
+      <ul><li>1 o 2 disciplinas</li><li>Presencial u online</li><li>Plan personalizado</li><li>Material extra en Discord</li><li>WhatsApp directo conmigo</li></ul>
+      <a class="pcta" href="https://wa.me/51989077928?text=Hola%20Andrés%2C%20me%20interesa%20el%20paquete%20Intensivo%20S%2F450" target="_blank" rel="noopener">Reservar</a>
+      <a class="online" href="/alumnos/" style="color:rgba(13,11,10,.7)">o cómpralo online →</a>
+    </div>
+    <div class="pc reveal">
+      <span class="tier">Estrella</span><h3>12 horas</h3><p class="det">Distribuye tus horas. Recomendado: 3 clases/semana.</p>
+      <div class="amt"><sup>S/</sup>600</div>
+      <ul><li>1, 2 o 3 disciplinas</li><li>Presencial u online</li><li>Plan personalizado</li><li>Material extra en Discord</li><li>WhatsApp directo conmigo</li></ul>
+      <a class="pcta" href="https://wa.me/51989077928?text=Hola%20Andrés%2C%20me%20interesa%20el%20paquete%20Estrella%20S%2F600" target="_blank" rel="noopener">Reservar</a>
+      <a class="online" href="/alumnos/">o cómpralo online →</a>
+    </div>
   </div>
-</section>
+  <div class="trust reveal">
+    <div><span class="tl">Pagos</span><span class="tx">Plin · Yape · Agora<br>USD · EUR · MXN para online</span></div>
+    <div><span class="tl">Modalidades</span><span class="tx">Presencial en San Isidro<br>Av. Salaverry / Av. JV Prado</span></div>
+    <div><span class="tl">Prueba</span><span class="tx">Clase de prueba S/50<br>incluye diagnóstico vocal en PDF</span></div>
+  </div>
+</div></section>
+
+<section class="blk panel" id="faq"><div class="wrap narrow">
+  <div class="shead reveal"><span class="mono">preguntas frecuentes</span><h2>Lo que <span class="o">siempre</span> me preguntan.</h2></div>
+  <div class="faq-list">
+    <div class="faq reveal"><button>¿Tengo que tener experiencia previa?<span class="ar">+</span></button><div class="ans"><p>Para nada — ni en canto ni en piano. Más de la mitad de mis alumnos empiezan sin haber tomado clases nunca. El método se adapta a tu nivel.</p></div></div>
+    <div class="faq reveal"><button>¿Faber & Faber no es solo para niños?<span class="ar">+</span></button><div class="ans"><p>Mito común. Es el método más usado por profesores serios del mundo, para cualquier edad. Con un adulto cambia el ritmo (más rápido) y el repertorio (tus gustos).</p></div></div>
+    <div class="faq reveal"><button>¿Cuándo notaré el progreso?<span class="ar">+</span></button><div class="ans"><p>En las primeras 2-3 clases ya notas cambios chicos pero claros. El progreso técnico medible se ve a las 6-8 semanas con práctica constante.</p></div></div>
+    <div class="faq reveal"><button>¿Puedo combinar canto, piano y composición?<span class="ar">+</span></button><div class="ans"><p>Sí, y lo recomiendo. En el Intensivo (8h/mes) puedes hacer 4h de canto + 2h de piano + 2h de composición. En la prueba lo diseñamos según tus objetivos.</p></div></div>
+    <div class="faq reveal"><button>¿Es online o presencial?<span class="ar">+</span></button><div class="ans"><p>Las dos. Presencial en San Isidro (Av. Salaverry con Av. JV Prado) u online por Zoom/Meet. Para piano necesitas teclado en casa (mín. 61 teclas con sensibilidad).</p></div></div>
+    <div class="faq reveal"><button>¿Cómo se paga? ¿Acepta moneda extranjera?<span class="ar">+</span></button><div class="ans"><p>En Perú: Plin, Yape o Agora. Online en otros países: USD, EUR o MXN (Wise, PayPal o transferencia). El pago del paquete es al inicio del mes.</p></div></div>
+  </div>
+</div></section>
+
+<section class="band" id="cta-final"><div class="wrap narrow">
+  <h2 class="reveal">Empieza con una<br>clase de <span class="o">S/50.</span></h2>
+  <p class="reveal">Una hora completa. Conoces el método, evalúas mi forma de enseñar, y decides. Si sigues, los S/50 se descuentan de tu primer paquete.</p>
+  <div class="ctas reveal">
+    <a class="btn" href="https://wa.me/51989077928?text=Hola%20Andrés%2C%20vi%20tu%20web%20y%20me%20interesa%20la%20clase%20de%20prueba%20S%2F50" target="_blank" rel="noopener">Reservar por WhatsApp →</a>
+    <a class="btn ghost" href="/alumnos/">Comprar online →</a>
+  </div>
+</div></section>
 
 <div class="foot"><div class="wrap"><span class="mono">// preview v2 · rediseño punk en evaluación — no es la home oficial</span></div></div>
 
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"FAQPage","mainEntity":[{"@type":"Question","name":"¿Tengo que tener experiencia previa para empezar?","acceptedAnswer":{"@type":"Answer","text":"Para nada, ni en canto ni en piano. Más de la mitad de mis alumnos empiezan sin haber tomado clases nunca. El método se adapta a tu nivel."}},{"@type":"Question","name":"¿Faber & Faber no es solo para niños?","acceptedAnswer":{"@type":"Answer","text":"Es un mito común. Es el método más usado por profesores serios del mundo, para cualquier edad. Con un adulto cambia el ritmo y el repertorio."}},{"@type":"Question","name":"¿Cuándo empezaré a notar el progreso?","acceptedAnswer":{"@type":"Answer","text":"En las primeras 2-3 clases ya notas cambios chicos pero claros. El progreso técnico medible se ve a las 6-8 semanas con práctica constante."}},{"@type":"Question","name":"¿Puedo combinar canto, piano y composición?","acceptedAnswer":{"@type":"Answer","text":"Sí. En el paquete Intensivo de 8h/mes puedes hacer 4h de canto, 2h de piano y 2h de composición."}},{"@type":"Question","name":"¿Las clases son online o presenciales?","acceptedAnswer":{"@type":"Answer","text":"Las dos. Presencial en San Isidro u online por Zoom o Meet. Para piano necesitas un teclado de mínimo 61 teclas con sensibilidad al toque."}},{"@type":"Question","name":"¿Cómo se paga? ¿Acepta moneda extranjera?","acceptedAnswer":{"@type":"Answer","text":"En Perú: Plin, Yape o Agora. Online: USD, EUR o MXN por Wise, PayPal o transferencia. El pago es al inicio del mes."}}]}</script>
 <script>
-  var io=new IntersectionObserver(function(es){es.forEach(function(e){if(e.isIntersecting){e.target.classList.add('in');io.unobserve(e.target);}});},{threshold:.12});
+  document.querySelectorAll('.faq button').forEach(function(b){b.addEventListener('click',function(){b.parentElement.classList.toggle('open');});});
+  var io=new IntersectionObserver(function(es){es.forEach(function(e){if(e.isIntersecting){e.target.classList.add('in');io.unobserve(e.target);}});},{threshold:.1});
   document.querySelectorAll('.reveal').forEach(function(el){io.observe(el);});
 </script>
 </body>
