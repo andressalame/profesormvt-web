@@ -263,6 +263,14 @@
   .btn:not(.ghost):not(.no):hover{box-shadow:3px 3px 0 var(--cream)}
   body::after{content:"";position:fixed;left:-44px;bottom:-44px;width:230px;height:230px;z-index:0;pointer-events:none;opacity:.06;background:no-repeat center/contain url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100' fill='none' stroke='%23e8501f' stroke-width='4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M50 6 L59 41 L94 50 L59 59 L50 94 L41 59 L6 50 L41 41 Z'/%3E%3C/svg%3E")}
   .punkbg{position:fixed;inset:0;pointer-events:none;z-index:9998;opacity:.07;background:url(/punk-bg.svg) center center/cover no-repeat}
+  .onb-steps{list-style:none;margin:16px 0;padding:0;display:flex;flex-direction:column;gap:9px;text-align:left}
+  .onb-steps li{font-size:14px;color:#cfc7b8;line-height:1.5;border-left:3px solid var(--accent);padding:5px 0 5px 14px}
+  .onb-steps b{color:var(--cream);font-weight:700}
+  .onb-guide{margin-top:20px;border-top:1px solid var(--line);padding-top:16px;text-align:left}
+  .onb-h{font-family:var(--mono);font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--accent);font-weight:700;margin-bottom:10px}
+  .onb-guide ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:7px}
+  .onb-guide li{font-size:13.5px;color:var(--muted);line-height:1.45}
+  .onb-guide b{color:var(--cream);font-weight:700}
 </style>
 </head>
 <body>
@@ -345,10 +353,27 @@
       </div>
 
       <div class="card empty-state hidden" id="iVacio">
-        <span class="pill gray">Inactivo</span>
-        <h2 style="margin-top:12px;">Aún no tienes un paquete activo</h2>
-        <p>Elige tu paquete de clases 1 a 1 (canto, piano o composición) y arrancamos esta misma semana.</p>
-        <a class="btn" href="#comprar">Ver paquetes →</a>
+        <span class="pill amber">Bienvenido</span>
+        <h2 style="margin-top:12px;">¡Tu cuenta está lista! 🤘</h2>
+        <p>Este es tu portal: acá manejas tus clases, pagos y material. Para arrancar son 3 pasos:</p>
+        <ol class="onb-steps">
+          <li><b>1 · Compra tu paquete.</b> Elige canto, piano o composición (o combínalos). Pagas con Yape o Plin y se activa el mismo día.</li>
+          <li><b>2 · Elige tus horarios.</b> Coordinamos tus clases 1 a 1 a tu ritmo.</li>
+          <li><b>3 · Aprende y avanza.</b> Aquí verás tus clases restantes, tu tarea de la semana y el material exclusivo.</li>
+        </ol>
+        <a class="btn full" href="#comprar">Comprar mi primer paquete →</a>
+        <div class="onb-guide">
+          <div class="onb-h">// Cómo moverte por el portal</div>
+          <ul>
+            <li><b>Inicio</b> — tu plan, clases restantes y horarios de un vistazo.</li>
+            <li><b>Mis clases</b> — tu historial y la tarea de la semana.</li>
+            <li><b>Recursos</b> — PDFs y audios (se desbloquean al activar tu paquete).</li>
+            <li><b>Comunidad</b> — entra al Discord de alumnos.</li>
+            <li><b>Comprar</b> — paquetes y renovaciones.</li>
+            <li><b>Referidos</b> — trae un amigo y ganas S/50.</li>
+            <li><b>Mi cuenta</b> — tus datos y sesión.</li>
+          </ul>
+        </div>
       </div>
 
       <div class="card hidden" id="iCalWrap">
@@ -867,7 +892,7 @@ function renderComunidad(){
 /* ---------- VISTA: RECURSOS ---------- */
 function renderRecursos(){
   var rec = ME.recursos || [];
-  if(rec.length===0){ $("recList").innerHTML=""; show("recVacio"); return; }
+  if(rec.length===0){ $("recList").innerHTML=""; $("recVacio").textContent = ME.recursosBloqueados ? "Los recursos exclusivos se desbloquean cuando activas tu primer paquete." : "Pronto subiré material aquí — atento al chat y al Discord."; show("recVacio"); return; }
   hide("recVacio");
   $("recList").innerHTML = rec.map(function(r){
     var urlRec = String(r.url||"");
