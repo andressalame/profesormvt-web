@@ -66,6 +66,7 @@
   .card .num{font-family:var(--display);font-size:34px;line-height:1;margin-top:8px;color:var(--cream);}
   .card.hot{border-color:var(--accent);} .card.hot .num{color:var(--accent);}
   .card.red{border-color:var(--red);} .card.red .num{color:var(--red);}
+  .card.green{border-color:#3ea66a;} .card.green .num{color:#3ea66a;}
 
   .tablewrap{overflow-x:auto;border:1px solid var(--line);border-radius:3px;}
   table{border-collapse:collapse;width:100%;min-width:760px;}
@@ -526,6 +527,8 @@ function renderResumen(){
   var activos=cs.filter(function(c){return c.estado==="Activo";}).length;
   var ultima=cs.filter(function(c){return c.estado==="⚠ Última clase";}).length;
   var compl=cs.filter(function(c){return c.estado==="Completado — renovar";}).length;
+  // MRR: suma del plan mensual de los alumnos en ciclo activo (Activo + Última clase), sin "Clase suelta" (no es recurrente)
+  var mrr=cs.reduce(function(s,c,i){ var a=db.alumnos[i]; if(a && a.paquete==="Clase suelta") return s; return (c.estado==="Activo"||c.estado==="⚠ Última clase") ? s+(Number(c.monto)||0) : s; },0);
   var mkt=db.cuentas.filter(function(c){return c.marketing;}).length;
 
   var now=new Date(); var ym=now.getFullYear()+"-"+String(now.getMonth()+1).padStart(2,"0");
@@ -547,7 +550,8 @@ function renderResumen(){
   el("resAlumnos").innerHTML =
     card("Activos",activos,"")+
     card("⚠ Última clase — hablar renovación",ultima,"hot")+
-    card("Completados — renovar hoy",compl,"red");
+    card("Completados — renovar hoy",compl,"red")+
+    card("MRR (recurrente/mes)","S/ "+mrr,"green");
   el("resMes").innerHTML =
     card("Clases dictadas",dictMes,"")+card("Faltas",faltaMes,"")+
     card("Reprogramaciones",repMes,"")+card("Cobrado por el portal","S/ "+ingresosMes,"");
