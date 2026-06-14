@@ -35,13 +35,13 @@ const faqSchema = {
 <meta property="og:description" content={description} />
 <meta property="og:type" content="website" />
 <meta property="og:url" content="https://profesormvt.com/" />
-<meta property="og:image" content="https://profesormvt.com/og-image.jpg" />
+<meta property="og:image" content="https://profesormvt.com/og-image.png" />
 <meta property="og:locale" content="es_PE" />
 <meta property="og:site_name" content="Profesor MVT" />
 <meta name="twitter:card" content="summary_large_image" />
 <meta name="twitter:title" content={title} />
 <meta name="twitter:description" content={description} />
-<meta name="twitter:image" content="https://profesormvt.com/og-image.jpg" />
+<meta name="twitter:image" content="https://profesormvt.com/og-image.png" />
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -66,6 +66,7 @@ const faqSchema = {
   .top{position:sticky;top:0;z-index:100;background:rgba(13,11,10,.85);backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
   .top .wrap{display:flex;align-items:center;justify-content:space-between;height:60px}
   .logo{font-family:var(--display);font-size:25px;text-transform:uppercase;letter-spacing:.01em}
+  .logo-img{height:46px;width:auto;display:block}
   .logo em{font-style:normal;color:var(--accent)}
   .top a.cta{font-family:var(--mono);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;border:1px solid var(--accent);color:var(--accent);padding:9px 15px;border-radius:2px;transition:.18s}
   .top a.cta:hover{background:var(--accent);color:var(--bg)}
@@ -202,6 +203,7 @@ const faqSchema = {
   .foot{border-top:2px solid var(--accent);padding:44px 0 30px;background:var(--panel)}
   .foot-grid{display:flex;flex-wrap:wrap;justify-content:space-between;gap:24px;margin-bottom:28px}
   .foot .logo{font-size:30px}
+  .foot .logo-img{height:56px}
   .foot .ft{font-size:13px;color:var(--muted);margin-top:8px;max-width:22em;line-height:1.5}
   .foot-links{display:flex;flex-wrap:wrap;gap:18px;font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
   .foot-links a:hover{color:var(--accent)}
@@ -225,7 +227,7 @@ const faqSchema = {
 <div class="punkbg" aria-hidden="true"></div>
 
 <header class="top"><div class="wrap">
-  <span class="logo">Profesor<em>MVT</em></span>
+  <img src="/logo-mvt.png" alt="Profesor MVT" class="logo-img" />
   <a class="cta" href="/alumnos/">Crear cuenta →</a>
 </div></header>
 
@@ -433,7 +435,7 @@ const faqSchema = {
 <footer class="foot"><div class="wrap">
   <div class="foot-grid">
     <div>
-      <span class="logo">Profesor<em>MVT</em></span>
+      <img src="/logo-mvt.png" alt="Profesor MVT" class="logo-img" />
       <p class="ft">Canto, piano y composición para adultos. Método real, cero misticismo. San Isidro y online.</p>
     </div>
     <div class="foot-links">
