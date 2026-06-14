@@ -1,6 +1,6 @@
 # Profesor MVT · Web
 
-Sitio web de [profesormvt.com](https://profesormvt.com) — clases de canto (MVT), piano (Faber & Faber), composición (Hook Theory) y teoría musical.
+Sitio web de [profesormvt.com](https://profesormvt.com) — clases de canto (MVT), piano, composición (Hook Theory) y teoría musical.
 
 Stack: **Astro + Decap CMS + Cloudflare Pages + GitHub** (todo gratis). 
 
@@ -39,7 +39,7 @@ profesormvt-astro/
 │   │   ├── config.ts      ← Schema del blog
 │   │   └── blog/          ← Los posts en markdown viven aquí
 │   │       ├── apoya-mas-fuerte-mal-consejo.md
-│   │       ├── faber-para-adultos.md
+│   │       ├── piano-para-adultos-toca-tus-canciones.md
 │   │       └── hook-theory-composicion.md
 │   ├── layouts/
 │   │   └── Layout.astro   ← El "molde" de todas las páginas. ⚠️ Aquí va el Pixel de Meta cuando lo migres.
@@ -97,7 +97,7 @@ La home no está en Decap CMS — vive como código en `src/pages/index.astro`. 
 El proyecto ya viene con 3 posts redactados completamente — no son placeholder, son contenido real y publicable:
 
 1. **"Por qué *apoya más fuerte* es el peor consejo vocal..."** — Featured (destacado). Voz/MVT.
-2. **"Faber & Faber para adultos..."** — Piano.
+2. **"Piano para adultos: toca tus canciones..."** — Piano.
 3. **"Hook Theory: cómo leer la armonía..."** — Composición.
 
 Si los lees y quieres cambios antes de que estén públicos, puedes editar directamente los archivos en `src/content/blog/`. O si prefieres no publicarlos todavía, agrega `draft: true` en su frontmatter — no aparecerán en el sitio hasta que lo cambies a `false`.

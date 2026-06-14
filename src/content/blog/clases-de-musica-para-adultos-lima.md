@@ -19,7 +19,7 @@ No es lo mismo. Un adulto aprende distinto a un niño: necesita un ritmo más r�
 Un buen profesor trabaja con metodologías probadas, no con "vamos viendo". Para que tengas referencia, estos son los métodos serios por disciplina:
 
 - **Canto:** MVT (Modern Vocal Training), basado en la fisiología real de la voz, no en metáforas místicas.
-- **Piano:** Faber & Faber Piano Adventures, el más usado por profesores serios del mundo.
+- **Piano:** técnica de dedos, independencia y coordinación a dos manos para tocar tus canciones favoritas pronto.
 - **Composición:** Hook Theory, que enseña a componer analizando patrones de canciones reales.
 
 Si el profesor te puede explicar *con qué método* trabaja y *por qué*, buena señal. Si todo es a ojo, cuidado.
@@ -46,4 +46,4 @@ Ojo con el "primera clase gratis" como único gancho: a veces significa que el v
 
 Aprender música de adulto en Lima es totalmente viable —presencial o en línea— si eliges a alguien que enseñe *para adultos*, con método, y que use la primera clase para entenderte, no solo para venderte.
 
-Yo doy clases de canto (MVT), piano (Faber & Faber) y composición (Hook Theory) para adultos, presenciales en San Isidro y online para todo el Perú y el extranjero. La clase de prueba incluye un diagnóstico vocal escrito. [Escríbeme por WhatsApp](https://wa.me/51989077928) y armamos tu plan.
+Yo doy clases de canto (MVT), piano y composición (Hook Theory) para adultos, presenciales en San Isidro y online para todo el Perú y el extranjero. La clase de prueba incluye un diagnóstico vocal escrito. [Escríbeme por WhatsApp](https://wa.me/51989077928) y armamos tu plan.

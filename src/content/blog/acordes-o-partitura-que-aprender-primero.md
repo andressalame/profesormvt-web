@@ -31,7 +31,7 @@ Quieres tocar piezas clásicas, leer música compleja, interpretar obras tal cua
 
 En la práctica no es "uno u otro de forma pura". El enfoque que funciona para adultos es **empezar tocando** (acordes y melodías simples que suenen rápido) e ir **introduciendo lectura a medida que se necesita**. Así tienes la motivación de acordes y la base sólida de la lectura, sin que ninguna te aburra.
 
-El método Faber & Faber, que uso en clase, está construido justo así: integra lectura, técnica, teoría y oído desde el primer libro, sin obligarte a elegir un bando. Avanzas en todo a la vez, a un ritmo que no te estanca.
+El enfoque que uso en clase está construido justo así: integra lectura, técnica, teoría y oído desde el inicio, sin obligarte a elegir un bando. Avanzas en todo a la vez, a un ritmo que no te estanca.
 
 ## El error de los dos extremos
 

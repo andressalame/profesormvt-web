@@ -30,11 +30,11 @@ Una hoja de ruta realista para un adulto que practica con constancia:
 
 Sí, en tres meses puedes tocar una canción entera. No de concierto, pero reconocible y satisfactoria. Eso es lo que te mantiene enganchado.
 
-## Por qué uso Faber & Faber (y no es "para niños")
+## Cómo trabajamos la técnica
 
-El método que uso es Faber & Faber Piano Adventures, el más usado por profesores serios en el mundo. Tiene fama de infantil por las ilustraciones de los primeros libros, pero la pedagogía es de primer nivel: integra técnica, lectura, teoría y oído desde el inicio, y te saca rápido del estancamiento en Do mayor donde otros métodos te dejan meses.
+Lo que entrenamos no es magia ni "talento": es **fuerza en los dedos, independencia de cada mano y coordinación a dos manos**, integrando técnica, lectura y oído desde el inicio. Eso te saca rápido del estancamiento en Do mayor donde otros enfoques te dejan meses.
 
-La diferencia con un adulto es el **ritmo** (más rápido, saltamos lo que no aporta) y el **repertorio** (lo adaptamos a la música que te gusta). El motor es el mismo; el manejo es distinto.
+La diferencia con un adulto es el **ritmo** (más rápido, saltamos lo que no aporta) y el **repertorio** (lo adaptamos a la música que te gusta). Mismo motor; manejo distinto.
 
 ## Cuánto practicar para de verdad avanzar
 
