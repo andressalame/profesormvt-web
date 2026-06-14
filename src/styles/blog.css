@@ -31,7 +31,7 @@
 }
 .blog-hero h1 {
   font-size: clamp(48px, 6vw, 84px);
-  line-height: 0.98;
+  line-height: 1.08;
   letter-spacing: -0.025em;
   font-weight: 400;
   margin-bottom: 22px;
