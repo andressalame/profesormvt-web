@@ -1,12 +1,11 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="Profesor MVT">
-  <rect width="64" height="64" rx="14" fill="#D04A1C"/>
-  <path d="M20 24 L44 24 L40 33 Q32 37 24 33 Z" fill="#EBE5D6"/>
-  <path d="M32 10 L53 19 L32 28 L11 19 Z" fill="#EBE5D6"/>
-  <path d="M32 19 L51 19 L51 31" fill="none" stroke="#EBE5D6" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
-  <circle cx="51" cy="33" r="2.6" fill="#EBE5D6"/>
-  <g fill="none" stroke="#EBE5D6" stroke-width="4.2" stroke-linecap="round" stroke-linejoin="round">
-    <polyline points="10,52 10,42 16,49 22,42 22,52"/>
-    <polyline points="27,42 31.5,52 36,42"/>
-    <path d="M41 42 L53 42 M47 42 L47 52"/>
+  <rect width="64" height="64" rx="14" fill="#e8501f"/>
+  <g transform="translate(4.375,2.625) scale(2.5)" fill="#f3ede0">
+    <rect x="5" y="2.5" width="3.2" height="12.5" rx="1.6"/>
+    <rect x="15.8" y="2.5" width="3.2" height="12.5" rx="1.6"/>
+    <rect x="8.7" y="9" width="3.1" height="6.5" rx="1.55"/>
+    <rect x="12.2" y="9" width="3.1" height="6.5" rx="1.55"/>
+    <rect x="4.6" y="12" width="14.8" height="9" rx="4"/>
+    <rect x="2.8" y="12.2" width="5.5" height="3.3" rx="1.65"/>
   </g>
 </svg>
