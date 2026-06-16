@@ -1119,6 +1119,11 @@ $("btnSalirSide").addEventListener("click", salir);
 var RENDER = { inicio:renderInicio, clases:renderClases, recursos:renderRecursos, comunidad:renderComunidad,
                comprar:renderComprar, referidos:renderReferidos, cuenta:renderCuenta };
 
+function autoVerificarPago(){
+  api("/api/mp/verificar",{method:"POST",body:"{}"}).then(function(r){
+    if(r && r.confirmada){ api("/api/me").then(function(d){ ME=d; renderActive(); toast("¡Listo! Tu paquete está activo 🎸"); }).catch(function(){}); }
+  }).catch(function(){});
+}
 function manejarRetornoPago(){
   var pago;
   try { pago = new URLSearchParams(location.search).get("pago"); } catch(e){ pago = null; }
@@ -1126,7 +1131,6 @@ function manejarRetornoPago(){
   try { history.replaceState({}, "", location.pathname + location.hash); } catch(e){}
   if(pago === "ok"){
     toast("Pago aprobado. Activando tu paquete…");
-    api("/api/mp/verificar",{method:"POST",body:"{}"}).then(function(){ return api("/api/me"); }).then(function(d){ ME=d; renderActive(); }).catch(function(){});
     var n = 0, t = setInterval(function(){
       n++;
       api("/api/me").then(function(d){
@@ -1149,6 +1153,7 @@ function cargarMe(){
     if(!location.hash) location.hash = "#inicio";
     renderActive();
     chatIniciar();
+    autoVerificarPago();
     manejarRetornoPago();
   }).catch(function(e){
     setTok(null); ME=null;
