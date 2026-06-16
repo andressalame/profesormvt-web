@@ -516,6 +516,7 @@
       <div class="field"><label for="c_metodo">Método de pago</label>
         <select id="c_metodo">
           <option value="Yape/Plin/Sip">Yape / Plin / Sip</option>
+          <option value="Tarjeta (Mercado Pago)">Tarjeta de crédito/débito</option>
           <option value="Transferencia BCP">Transferencia BCP</option>
           <option value="Transferencia Scotiabank">Transferencia Scotiabank</option>
           <option value="Crypto USDT">Crypto (USDT)</option>
@@ -832,7 +833,7 @@ function actualizaMonto(){
   $("c_monto").innerHTML = (c.desc>0?'<span class="strike">S/ '+c.precio+'</span> ':'') + 'S/ ' + c.final;
   $("c_montoNote").textContent = c.desc>0 ? ("Incluye -S/"+c.desc+" de tu crédito de referidos") : "";
 }
-$("c_paquete").addEventListener("change", actualizaMonto);
+$("c_paquete").addEventListener("change", function(){ actualizaMonto(); renderPaybox(); });
 function renderPaybox(){
   var cf = (ME && ME.config) || {};
   var m = $("c_metodo").value;
@@ -846,8 +847,20 @@ function renderPaybox(){
     html = '<div class="lab">Transferencia Scotiabank (Soles)</div><div class="num">'+(cf.scotia_cuenta||"-")+'</div><div class="note">CCI: '+(cf.scotia_cci||"-")+'</div>'+titular;
   } else if(m === "Crypto USDT"){
     html = '<div class="lab">'+(cf.crypto_moneda||"USDT")+' por red '+(cf.crypto_red||"Tron (TRC20)")+'</div><div class="num" style="font-size:14px;word-break:break-all;">'+(cf.crypto_wallet||"-")+'</div><div class="note">Envía el equivalente del total en '+(cf.crypto_moneda||"USDT")+' por esa red.</div>';
+  } else if(m === "Tarjeta (Mercado Pago)"){
+    var MPLINKS = { "Paquete 4":"https://mpago.la/345fLua", "Paquete 8":"https://mpago.la/2qQzrzK", "Paquete 12":"https://mpago.la/31TfMmv" };
+    var pk = $("c_paquete").value, mpurl = MPLINKS[pk];
+    if(mpurl){
+      var cc = calc(pk), lista = cc.final + cc.desc;
+      html = '<div class="lab">Tarjeta de crédito o débito</div>'
+        + '<a class="btn" href="'+mpurl+'" target="_blank" rel="noopener" style="width:100%;justify-content:center;margin:4px 0 2px;">Pagar S/ '+lista+' con tarjeta →</a>'
+        + (cc.desc>0 ? '<div class="note">El link de tarjeta cobra el precio de lista (S/ '+lista+'). Para usar tu crédito de referido (-S/'+cc.desc+'), paga con Yape/Plin/Sip o coordínalo por WhatsApp.</div>' : '')
+        + '<ol class="steps"><li>Toca el botón y paga con tu tarjeta (se abre Mercado Pago).</li><li>Sube la captura del comprobante aquí abajo.</li><li>Vuelve y toca <strong>“Ya pagué”</strong>.</li></ol>';
+    } else {
+      html = '<div class="note">Elige un paquete arriba para ver el link de tarjeta.</div>';
+    }
   }
-  html += '<ol class="steps"><li>Paga el monto exacto.</li><li>Sube la captura del pago aquí abajo.</li><li>Toca <strong>“Ya pagué”</strong>.</li></ol>';
+  if(m !== "Tarjeta (Mercado Pago)") html += '<ol class="steps"><li>Paga el monto exacto.</li><li>Sube la captura del pago aquí abajo.</li><li>Toca <strong>“Ya pagué”</strong>.</li></ol>';
   $("payboxOk").innerHTML = html;
   show("payboxOk"); hide("payboxNo");
 }
