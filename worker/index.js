@@ -826,6 +826,25 @@ export default {
         }
       }
 
+      /* ----- Iman de lead: captura el correo y entrega la guia (lead magnet) ----- */
+      if (url.pathname === "/api/lead" && request.method === "POST"){
+        const b = await request.json().catch(() => ({}));
+        const pdf = "/recursos/composicion-primera-cancion.pdf";
+        if (b.website) return json({ ok: true, pdf });   // honeypot: lo lleno un bot, se descarta en silencio
+        const email = String(b.email || "").trim().toLowerCase().slice(0, 120);
+        if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return json({ error: "Correo no valido." }, 400);
+        const marca = String(b.marca || "MVT").trim().slice(0, 20);
+        const fuente = String(b.fuente || "").trim().slice(0, 60);
+        const interes = String(b.interes || "composicion").trim().slice(0, 60);
+        const ya = await env.DB.prepare("SELECT id FROM leads WHERE email = ?1 AND marca = ?2").bind(email, marca).first();
+        if (!ya){
+          await env.DB.prepare(
+            "INSERT INTO leads (id,email,marca,fuente,interes,fecha) VALUES (?1,?2,?3,?4,?5,?6)"
+          ).bind(crypto.randomUUID(), email, marca, fuente, interes, hoy()).run();
+        }
+        return json({ ok: true, pdf });
+      }
+
       /* ============ ADMIN ============ */
       if (url.pathname.startsWith("/api/admin/")){
         const auth = request.headers.get("authorization") || "";
