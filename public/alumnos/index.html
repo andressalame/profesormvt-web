@@ -509,30 +509,30 @@
   <div class="modal">
     <div id="compraPaso1">
       <h3>Comprar <em>paquete</em></h3>
-      <div class="mlab">// Pago por Yape o Plin</div>
+      <div class="mlab">// Elige cómo pagar</div>
       <div class="field"><label for="c_curso">Curso</label>
         <select id="c_curso"><option>Canto</option><option>Piano</option><option>Composición</option></select></div>
       <div class="field"><label for="c_paquete">Paquete</label><select id="c_paquete"></select></div>
+      <div class="field"><label for="c_metodo">Método de pago</label>
+        <select id="c_metodo">
+          <option value="Yape/Plin/Sip">Yape / Plin / Sip</option>
+          <option value="Transferencia BCP">Transferencia BCP</option>
+          <option value="Transferencia Scotiabank">Transferencia Scotiabank</option>
+          <option value="Crypto USDT">Crypto (USDT)</option>
+        </select></div>
       <div class="lab">Total a pagar</div>
       <div class="montoview" id="c_monto">S/ 0</div>
       <div class="montonote" id="c_montoNote"></div>
 
-      <div class="paybox" id="payboxOk">
-        <div class="lab">Yapea o Plinea a</div>
-        <div class="num" id="payNumero"></div>
-        <div class="note" id="payTitular"></div>
-        <ol class="steps">
-          <li>Paga el monto exacto desde tu app.</li>
-          <li>En el mensaje del pago pon tu correo.</li>
-          <li>Vuelve aquí y toca <strong>“Ya pagué”</strong>.</li>
-        </ol>
-      </div>
+      <div class="paybox" id="payboxOk"></div>
       <div class="paybox hidden" id="payboxNo">
         <div class="note">Para coordinar el pago, escríbeme directo por WhatsApp y lo cuadramos al toque.</div>
       </div>
 
-      <div class="field" style="margin-top:12px;"><label for="c_op">N° de operación (opcional, ayuda a confirmar más rápido)</label>
+      <div class="field" style="margin-top:12px;"><label for="c_op">N° de operación o hash (opcional, ayuda a confirmar más rápido)</label>
         <input id="c_op" type="text" maxlength="40" /></div>
+      <div class="field"><label for="c_screenshot">Captura del pago (recomendado, para confirmar al toque)</label>
+        <input id="c_screenshot" type="file" accept="image/*" /></div>
       <div class="err" id="compraErr"></div>
       <div class="modal-actions">
         <button class="btn ghost" data-close>Cancelar</button>
@@ -821,12 +821,9 @@ function abrirCompra(pk){
   if(pk) $("c_paquete").value = pk;
   if(ME.alumno && ME.alumno.curso) $("c_curso").value = ME.alumno.curso;
   actualizaMonto();
-  if(ME.config && ME.config.pago_numero){
-    $("payNumero").textContent = ME.config.pago_numero;
-    $("payTitular").textContent = ME.config.pago_titular ? ("A nombre de: " + ME.config.pago_titular) : "";
-    show("payboxOk"); hide("payboxNo");
-  } else { hide("payboxOk"); show("payboxNo"); }
-  $("c_op").value=""; $("compraErr").textContent="";
+  $("c_metodo").value = "Yape/Plin/Sip";
+  renderPaybox();
+  $("c_op").value=""; if($("c_screenshot")) $("c_screenshot").value=""; $("compraErr").textContent="";
   show("compraPaso1"); hide("compraPaso2");
   $("ovCompra").classList.add("open");
 }
@@ -836,16 +833,38 @@ function actualizaMonto(){
   $("c_montoNote").textContent = c.desc>0 ? ("Incluye -S/"+c.desc+" de tu crédito de referidos") : "";
 }
 $("c_paquete").addEventListener("change", actualizaMonto);
+function renderPaybox(){
+  var cf = (ME && ME.config) || {};
+  var m = $("c_metodo").value;
+  var titular = cf.pago_titular ? ('<div class="note">A nombre de: '+cf.pago_titular+'</div>') : '';
+  var html = "";
+  if(m === "Yape/Plin/Sip"){
+    html = cf.pago_numero ? ('<div class="lab">Yape, Plin o Sip a</div><div class="num">'+cf.pago_numero+'</div>'+titular) : '<div class="note">Aún no configurado.</div>';
+  } else if(m === "Transferencia BCP"){
+    html = '<div class="lab">Transferencia BCP (Soles)</div><div class="num">'+(cf.bcp_cuenta||"-")+'</div><div class="note">CCI: '+(cf.bcp_cci||"-")+'</div>'+titular;
+  } else if(m === "Transferencia Scotiabank"){
+    html = '<div class="lab">Transferencia Scotiabank (Soles)</div><div class="num">'+(cf.scotia_cuenta||"-")+'</div><div class="note">CCI: '+(cf.scotia_cci||"-")+'</div>'+titular;
+  } else if(m === "Crypto USDT"){
+    html = '<div class="lab">'+(cf.crypto_moneda||"USDT")+' por red '+(cf.crypto_red||"Tron (TRC20)")+'</div><div class="num" style="font-size:14px;word-break:break-all;">'+(cf.crypto_wallet||"-")+'</div><div class="note">Envía el equivalente del total en '+(cf.crypto_moneda||"USDT")+' por esa red.</div>';
+  }
+  html += '<ol class="steps"><li>Paga el monto exacto.</li><li>Sube la captura del pago aquí abajo.</li><li>Toca <strong>“Ya pagué”</strong>.</li></ol>';
+  $("payboxOk").innerHTML = html;
+  show("payboxOk"); hide("payboxNo");
+}
+$("c_metodo").addEventListener("change", renderPaybox);
 
 $("btnYaPague").addEventListener("click",function(){
   $("compraErr").textContent="";
-  var paquete=$("c_paquete").value, curso=$("c_curso").value, op=$("c_op").value.trim();
+  var paquete=$("c_paquete").value, curso=$("c_curso").value, op=$("c_op").value.trim(), metodo=$("c_metodo").value;
   if(!paquete){ $("compraErr").textContent="Elige un paquete."; return; }
   var c = calc(paquete);
   $("btnYaPague").disabled=true;
-  api("/api/comprar",{method:"POST",body:JSON.stringify({paquete:paquete,curso:curso,op_numero:op})})
+  var f = ($("c_screenshot") && $("c_screenshot").files) ? $("c_screenshot").files[0] : null;
+  comprimirImg(f).then(function(comprobante){
+    return api("/api/comprar",{method:"POST",body:JSON.stringify({paquete:paquete,curso:curso,op_numero:op,metodo:metodo,comprobante:comprobante})});
+  })
     .then(function(){
-      var aviso = "Hola Andrés, acabo de yapear S/ "+c.final+" por el "+paquete+" ("+curso+") 🎸 Soy "+ME.cuenta.nombre+" — "+ME.cuenta.email;
+      var aviso = "Hola Andrés, acabo de pagar S/ "+c.final+" por el "+paquete+" ("+curso+") via "+metodo+" 🎸 Soy "+ME.cuenta.nombre+" - "+ME.cuenta.email;
       $("btnAvisar").href = "https://wa.me/"+WA_PROFE+"?text="+encodeURIComponent(aviso);
       hide("compraPaso1"); show("compraPaso2");
       api("/api/me").then(function(d){ ME=d; renderActive(); }).catch(function(){});
@@ -853,6 +872,26 @@ $("btnYaPague").addEventListener("click",function(){
     .catch(function(e){ $("compraErr").textContent = e.message || "No se pudo registrar."; })
     .finally(function(){ $("btnYaPague").disabled=false; });
 });
+function comprimirImg(file){
+  return new Promise(function(resolve){
+    if(!file){ resolve(""); return; }
+    var fr = new FileReader();
+    fr.onload = function(){
+      var img = new Image();
+      img.onload = function(){
+        var max=1100, w=img.width, h=img.height;
+        if(w>max||h>max){ var r=Math.min(max/w,max/h); w=Math.round(w*r); h=Math.round(h*r); }
+        var cv=document.createElement("canvas"); cv.width=w; cv.height=h;
+        cv.getContext("2d").drawImage(img,0,0,w,h);
+        try { resolve(cv.toDataURL("image/jpeg",0.7)); } catch(e){ resolve(""); }
+      };
+      img.onerror=function(){ resolve(""); };
+      img.src=fr.result;
+    };
+    fr.onerror=function(){ resolve(""); };
+    fr.readAsDataURL(file);
+  });
+}
 document.querySelectorAll("[data-close]").forEach(function(b){
   b.addEventListener("click",function(){ $("ovCompra").classList.remove("open"); });
 });

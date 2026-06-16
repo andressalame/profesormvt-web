@@ -196,7 +196,7 @@ async function loadPrecios(env){
 }
 async function loadConfig(env){
   const { results } = await env.DB.prepare("SELECT clave, valor FROM config").all();
-  const c = { calendly_url: "", pago_numero: "", pago_titular: "", discord_url: "", google_client_id: "" };
+  const c = { calendly_url: "", pago_numero: "", pago_titular: "", discord_url: "", google_client_id: "", bcp_cuenta: "", bcp_cci: "", scotia_cuenta: "", scotia_cci: "", crypto_moneda: "", crypto_red: "", crypto_wallet: "" };
   for (const row of (results || [])) c[row.clave] = row.valor || "";
   return c;
 }
@@ -258,8 +258,10 @@ async function avisarCompra(env, info){
       "Curso:     " + info.curso + "\n" +
       "Paquete:   " + info.paquete + "\n" +
       "Monto:     S/" + info.monto + "\n" +
-      "N° de operación: " + (info.op || "—") + "\n\n" +
-      "Verifica tu Yape/Plin y confírmalo (o recházalo) en el CRM:\n" +
+      "Método:    " + (info.metodo || "(no indicado)") + "\n" +
+      "N° de operación: " + (info.op || "-") + "\n" +
+      (info.comprobanteUrl ? ("Comprobante (screenshot): " + info.comprobanteUrl + "\n") : "") +
+      "\nVerifica el pago y confírmalo (o recházalo) en el CRM:\n" +
       "https://profesormvt.com/admin/crm/\n"
   });
   await env.AVISOS.send(new EmailMessage("avisos@profesormvt.com", "andressalame@gmail.com", msg.asRaw()));
@@ -284,7 +286,7 @@ async function avisarPush(env, info){
       const msg = {
         data: JSON.stringify({
           title: "Pago por confirmar: " + info.paquete + " — S/" + info.monto,
-          body: info.nombre + " · " + info.curso + (info.op ? (" · op " + info.op) : ""),
+          body: info.nombre + " · " + info.curso + (info.metodo ? (" · " + info.metodo) : "") + (info.op ? (" · op " + info.op) : ""),
           url: "https://profesormvt.com/admin/crm/"
         }),
         options: { ttl: 86400, urgency: "high" }
@@ -590,7 +592,10 @@ export default {
           clasesHistorico,
           config: {
             calendly_url: config.calendly_url, pago_numero: config.pago_numero,
-            pago_titular: config.pago_titular, discord_url: config.discord_url
+            pago_titular: config.pago_titular, discord_url: config.discord_url,
+            bcp_cuenta: config.bcp_cuenta, bcp_cci: config.bcp_cci,
+            scotia_cuenta: config.scotia_cuenta, scotia_cci: config.scotia_cci,
+            crypto_moneda: config.crypto_moneda, crypto_red: config.crypto_red, crypto_wallet: config.crypto_wallet
           }
         });
       }
@@ -603,6 +608,8 @@ export default {
         const paquete = String(b.paquete || "");
         const curso = String(b.curso || "").trim() || "Canto";
         const op = String(b.op_numero || "").trim().slice(0, 40);
+        const metodo = String(b.metodo || "").trim().slice(0, 40);
+        const comprobante = typeof b.comprobante === "string" ? b.comprobante : "";
 
         const precios = await loadPrecios(env);
         if (!(paquete in PAQUETES)) return json({ error: "Paquete no válido." }, 400);
@@ -617,11 +624,24 @@ export default {
         const descuento = Math.min(credito, precio);   // snapshot; se consume recién al CONFIRMAR
         const monto = Math.max(0, precio - descuento);
 
-        await env.DB.prepare(
-          "INSERT INTO compras (id,cuenta_id,curso,paquete,monto,descuento,op_numero,estado,fecha) VALUES (?1,?2,?3,?4,?5,?6,?7,'pendiente',?8)"
-        ).bind(crypto.randomUUID(), cu.id, curso, paquete, monto, descuento, op, hoy()).run();
+        let comprobanteKey = "";
+        if (comprobante) {
+          try {
+            const b64 = comprobante.indexOf(",") >= 0 ? comprobante.slice(comprobante.indexOf(",") + 1) : comprobante;
+            const bytes = Uint8Array.from(atob(b64), ch => ch.charCodeAt(0));
+            if (bytes.length > 0 && bytes.length <= 5000000) {
+              comprobanteKey = crypto.randomUUID() + ".jpg";
+              await env.RECURSOS_R2.put(comprobanteKey, bytes, { httpMetadata: { contentType: "image/jpeg" } });
+            }
+          } catch (e) { comprobanteKey = ""; }
+        }
 
-        const info = { nombre: cu.nombre, email: cu.email, curso, paquete, monto, op };
+        await env.DB.prepare(
+          "INSERT INTO compras (id,cuenta_id,curso,paquete,monto,descuento,op_numero,estado,fecha,metodo,comprobante) VALUES (?1,?2,?3,?4,?5,?6,?7,'pendiente',?8,?9,?10)"
+        ).bind(crypto.randomUUID(), cu.id, curso, paquete, monto, descuento, op, hoy(), metodo, comprobanteKey).run();
+
+        const comprobanteUrl = comprobanteKey ? ("https://profesormvt.com/api/recurso/archivo/" + comprobanteKey) : "";
+        const info = { nombre: cu.nombre, email: cu.email, curso, paquete, monto, op, metodo, comprobanteUrl };
         try { await avisarCompra(env, info); } catch (e) {}
         try { await avisarPush(env, info); } catch (e) {}
 
@@ -709,7 +729,7 @@ export default {
 
         if (url.pathname === "/api/admin/config" && request.method === "POST"){
           const b = await request.json().catch(() => ({}));
-          const claves = ["calendly_url", "pago_numero", "pago_titular", "discord_url", "google_client_id"];
+          const claves = ["calendly_url", "pago_numero", "pago_titular", "discord_url", "google_client_id", "bcp_cuenta", "bcp_cci", "scotia_cuenta", "scotia_cci", "crypto_moneda", "crypto_red", "crypto_wallet"];
           const stmts = [];
           for (const k of claves){
             if (k in b){

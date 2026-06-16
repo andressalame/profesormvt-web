@@ -265,6 +265,14 @@
       <p class="hint" style="margin-top:-4px;">Botón "Entrar al Discord" en el portal.</p>
       <div class="cfgrow"><span class="pk">Google Client ID</span><input id="cfg_google_client_id" type="text" placeholder="xxxxx.apps.googleusercontent.com" /></div>
       <p class="hint" style="margin-top:-4px;">Enciende el botón de Google del portal · termina en .apps.googleusercontent.com</p>
+      <div class="cfgrow"><span class="pk">BCP cuenta (Soles)</span><input id="cfg_bcp_cuenta" type="text" placeholder="19300343797068" /></div>
+      <div class="cfgrow"><span class="pk">BCP CCI</span><input id="cfg_bcp_cci" type="text" placeholder="00219310034379706817" /></div>
+      <div class="cfgrow"><span class="pk">Scotiabank cuenta (Soles)</span><input id="cfg_scotia_cuenta" type="text" placeholder="5621567824" /></div>
+      <div class="cfgrow"><span class="pk">Scotiabank CCI</span><input id="cfg_scotia_cci" type="text" placeholder="00901020562156782404" /></div>
+      <div class="cfgrow"><span class="pk">Crypto moneda</span><input id="cfg_crypto_moneda" type="text" placeholder="USDT" /></div>
+      <div class="cfgrow"><span class="pk">Crypto red</span><input id="cfg_crypto_red" type="text" placeholder="Tron (TRC20)" /></div>
+      <div class="cfgrow"><span class="pk">Crypto wallet</span><input id="cfg_crypto_wallet" type="text" placeholder="T..." /></div>
+      <p class="hint" style="margin-top:-4px;">Salen en el portal como métodos de pago al comprar.</p>
     </div>
     <button class="btn" id="btnGuardarAjustes">Guardar ajustes</button>
     <div class="group" style="margin-top:26px;">
@@ -722,6 +730,13 @@ function renderAjustes(){
   el("cfg_calendly_url").value=(db.config&&db.config.calendly_url)||"";
   el("cfg_discord_url").value=(db.config&&db.config.discord_url)||"";
   el("cfg_google_client_id").value=(db.config&&db.config.google_client_id)||"";
+  el("cfg_bcp_cuenta").value=(db.config&&db.config.bcp_cuenta)||"";
+  el("cfg_bcp_cci").value=(db.config&&db.config.bcp_cci)||"";
+  el("cfg_scotia_cuenta").value=(db.config&&db.config.scotia_cuenta)||"";
+  el("cfg_scotia_cci").value=(db.config&&db.config.scotia_cci)||"";
+  el("cfg_crypto_moneda").value=(db.config&&db.config.crypto_moneda)||"";
+  el("cfg_crypto_red").value=(db.config&&db.config.crypto_red)||"";
+  el("cfg_crypto_wallet").value=(db.config&&db.config.crypto_wallet)||"";
 }
 
 function renderRecursos(){
@@ -981,7 +996,14 @@ el("btnGuardarAjustes").addEventListener("click",function(){
             pago_titular:el("cfg_pago_titular").value.trim(),
             calendly_url:el("cfg_calendly_url").value.trim(),
             discord_url:el("cfg_discord_url").value.trim(),
-            google_client_id:el("cfg_google_client_id").value.trim() };
+            google_client_id:el("cfg_google_client_id").value.trim(),
+            bcp_cuenta:el("cfg_bcp_cuenta").value.trim(),
+            bcp_cci:el("cfg_bcp_cci").value.trim(),
+            scotia_cuenta:el("cfg_scotia_cuenta").value.trim(),
+            scotia_cci:el("cfg_scotia_cci").value.trim(),
+            crypto_moneda:el("cfg_crypto_moneda").value.trim(),
+            crypto_red:el("cfg_crypto_red").value.trim(),
+            crypto_wallet:el("cfg_crypto_wallet").value.trim() };
   Promise.all([ apiPut(), apiPost("/api/admin/config",cfg) ])
     .then(function(){ db.config=Object.assign(db.config||{},cfg); renderAll(); toast("Ajustes guardados"); })
     .catch(function(){ toast("No se pudieron guardar los ajustes"); });

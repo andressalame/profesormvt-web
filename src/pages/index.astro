@@ -5,12 +5,12 @@ const title = "Profesor MVT · Canto, piano y composición para adultos en Lima"
 const description = "Clases 1 a 1 de canto (método MVT), piano y composición para adultos en Lima (San Isidro) y online. Con Andrés Salame, músico real. Prueba S/50 con diagnóstico vocal en PDF.";
 const faqSchema = {
   "@context":"https://schema.org","@type":"FAQPage","mainEntity":[
-    {"@type":"Question","name":"¿Tengo que tener experiencia previa para empezar?","acceptedAnswer":{"@type":"Answer","text":"Para nada, ni en canto ni en piano. Más de la mitad de mis alumnos empiezan sin haber tomado clases nunca. El método se adapta a tu nivel."}},
-    {"@type":"Question","name":"¿Cuánto tardo en tocar una canción en piano?","acceptedAnswer":{"@type":"Answer","text":"Con un buen entrenamiento de dedos, independencia y coordinación a dos manos, muchos alumnos adultos tocan su primera canción favorita en menos de un mes."}},
-    {"@type":"Question","name":"¿Cuándo empezaré a notar el progreso?","acceptedAnswer":{"@type":"Answer","text":"En las primeras 2-3 clases ya notas cambios chicos pero claros. El progreso técnico medible se ve a las 6-8 semanas con práctica constante."}},
-    {"@type":"Question","name":"¿Puedo combinar canto, piano y composición?","acceptedAnswer":{"@type":"Answer","text":"Sí. En el paquete Intensivo de 8h/mes puedes hacer 4h de canto, 2h de piano y 2h de composición."}},
-    {"@type":"Question","name":"¿Las clases son online o presenciales?","acceptedAnswer":{"@type":"Answer","text":"Las dos. Presencial en San Isidro u online por Zoom o Meet. Para piano necesitas un teclado de mínimo 61 teclas con sensibilidad al toque."}},
-    {"@type":"Question","name":"¿Cómo se paga? ¿Acepta moneda extranjera?","acceptedAnswer":{"@type":"Answer","text":"En Perú: Plin, Yape o Agora. Online: USD, EUR o MXN por Wise, PayPal o transferencia. El pago es al inicio del mes."}}
+    {"@type":"Question","name":"Necesito saber música para empezar?","acceptedAnswer":{"@type":"Answer","text":"No. Diseñamos el punto de partida según tu nivel real, desde cero o desde donde lo dejaste."}},
+    {"@type":"Question","name":"Soy adulto y siento que ya es tarde.","acceptedAnswer":{"@type":"Answer","text":"No lo es. El método está pensado para la forma en que aprende un adulto, con objetivos claros y resultados que se sienten rápido."}},
+    {"@type":"Question","name":"Las clases online funcionan igual que las presenciales?","acceptedAnswer":{"@type":"Answer","text":"Sí. La estructura 1 a 1 se traslada completa al formato en vivo, con la misma atención y el mismo seguimiento."}},
+    {"@type":"Question","name":"Qué incluye la clase de prueba?","acceptedAnswer":{"@type":"Answer","text":"Una sesión completa más un diagnóstico vocal en PDF con tu punto de partida y tu plan de trabajo."}},
+    {"@type":"Question","name":"Puedo combinar canto, piano y composición?","acceptedAnswer":{"@type":"Answer","text":"Sí. Tu plan se arma a tu medida y puede mezclar las tres áreas según lo que quieras lograr."}},
+    {"@type":"Question","name":"Cómo pago si estoy fuera del Perú?","acceptedAnswer":{"@type":"Answer","text":"Por ahora con cripto. Dentro del Perú trabajamos con Yape, Plin y Sip."}}
   ]
 };
 ---
@@ -47,413 +47,1130 @@ const faqSchema = {
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Anton&family=Space+Grotesk:wght@400;500;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
 <script type="application/ld+json" set:html={JSON.stringify(faqSchema)} is:inline></script>
-<style>
-  :root{
-    --bg:#0d0b0a; --panel:#15110f; --panel2:#1c1714; --accent:#e8501f; --accent2:#ff6a35;
-    --cream:#f3ede0; --muted:#8a8276; --line:#2A2926;
-    --mono:'JetBrains Mono',monospace; --display:'Anton',Impact,sans-serif; --body:'Space Grotesk',system-ui,sans-serif;
-  }
-  *{box-sizing:border-box;margin:0;padding:0}
-  html{scroll-behavior:smooth}
-  body{background:var(--bg);color:var(--cream);font-family:var(--body);line-height:1.5;-webkit-font-smoothing:antialiased;overflow-x:hidden}
-  body::before{content:"";position:fixed;inset:0;z-index:9999;pointer-events:none;opacity:.05;
-    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")}
-  a{color:inherit;text-decoration:none}
-  .wrap{max-width:1180px;margin:0 auto;padding:0 24px}
-  .narrow{max-width:780px}
-  .mono{font-family:var(--mono);text-transform:uppercase;letter-spacing:.16em;font-size:12px;color:var(--accent);font-weight:700}
-  section{position:relative}
-  .top{position:sticky;top:0;z-index:100;background:rgba(13,11,10,.85);backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
-  .top .wrap{display:flex;align-items:center;justify-content:space-between;height:60px}
-  .logo{font-family:var(--display);font-size:25px;text-transform:uppercase;letter-spacing:.01em}
-  .logo-img{height:46px;width:auto;display:block}
-  .logo em{font-style:normal;color:var(--accent)}
-  .top a.cta{font-family:var(--mono);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;border:1px solid var(--accent);color:var(--accent);padding:9px 15px;border-radius:2px;transition:.18s}
-  .top a.cta:hover{background:var(--accent);color:var(--bg)}
-  .btn{font-family:var(--mono);text-transform:uppercase;letter-spacing:.06em;font-size:13px;font-weight:700;padding:15px 22px;border-radius:2px;border:2px solid var(--accent);background:var(--accent);color:var(--bg);transition:.16s;display:inline-flex;gap:9px;cursor:pointer}
-  .btn:hover{transform:translate(-2px,-2px);box-shadow:5px 5px 0 var(--cream)}
-  .btn.ghost{background:transparent;color:var(--cream)}
-  .btn.ghost:hover{box-shadow:5px 5px 0 var(--accent)}
-  .shead{margin-bottom:36px;max-width:42em}
-  .shead h2{font-family:var(--display);text-transform:uppercase;font-size:clamp(34px,6vw,72px);line-height:1.02;letter-spacing:.005em;margin:8px 0}
-  .shead h2 .o,.o{color:var(--accent)}
-  .shead p{color:var(--muted);font-size:16px;max-width:36em}
-  .hero{padding:clamp(36px,6vw,70px) 0 clamp(44px,6vw,80px)}
-  .hero-grid{display:grid;grid-template-columns:1.25fr .75fr;gap:clamp(26px,4vw,56px);align-items:center}
-  h1.mega{font-family:var(--display);text-transform:uppercase;font-size:clamp(58px,11vw,148px);line-height:1.0;letter-spacing:.005em;margin-top:20px}
-  h1.mega .hl{color:var(--accent);position:relative;display:inline-block}
-  h1.mega .hl::after{content:"";position:absolute;left:-2px;right:-2px;bottom:.1em;height:.12em;background:var(--accent);opacity:.32;transform:skewX(-12deg)}
-  .subline{font-family:var(--body);font-weight:700;font-size:clamp(16px,2.4vw,24px);margin-top:16px;letter-spacing:-.01em}
-  .subline .b{background:var(--accent);color:var(--bg);padding:1px 9px;display:inline-block;transform:rotate(-1.5deg)}
-  .lead{font-size:clamp(15px,1.9vw,18px);color:#cfc7b8;max-width:30em;margin:22px 0 28px;line-height:1.6}
-  .lead b{color:var(--cream);font-weight:700}
-  .ctas{display:flex;gap:12px;flex-wrap:wrap;align-items:center}
-  .micro{font-family:var(--mono);font-size:11px;letter-spacing:.04em;color:var(--muted);margin-top:18px}
-  .hero-photo{position:relative;transform:rotate(-1.5deg)}
-  .hero-photo img{width:100%;aspect-ratio:3/4;object-fit:cover;display:block;border:3px solid var(--cream);filter:grayscale(.4) contrast(1.08)}
-  .hero-photo .tint{position:absolute;inset:0;background:var(--accent);mix-blend-mode:color;opacity:.42}
-  .hero-photo .cap{position:absolute;bottom:10px;left:10px;right:10px;font-family:var(--mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--cream);background:rgba(13,11,10,.82);padding:7px 10px;border:1px solid var(--accent)}
-  .sticker{position:absolute;top:-16px;right:-10px;z-index:5;font-family:var(--mono);font-weight:700;font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--bg);background:var(--accent);padding:7px 11px;transform:rotate(6deg)}
-  .marquee{border-top:2px solid var(--cream);border-bottom:2px solid var(--cream);background:var(--accent);overflow:hidden;white-space:nowrap}
-  .mq-track{display:inline-flex;animation:scroll 26s linear infinite}
-  .mq-track span{font-family:var(--display);text-transform:uppercase;font-size:18px;letter-spacing:.02em;color:var(--bg);padding:9px 0}
-  .mq-track .s{padding:0 18px;opacity:.5}
-  @keyframes scroll{to{transform:translateX(-50%)}}
-  .industry{padding:18px 0;border-bottom:1px solid var(--line)}
-  .industry .wrap{display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center;font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
-  .industry .sep{color:var(--accent)}
-  .manifesto{padding:clamp(40px,6vw,72px) 0;border-bottom:1px solid var(--line)}
-  .manifesto p{font-family:var(--display);text-transform:uppercase;font-size:clamp(26px,4.6vw,52px);line-height:1.12;letter-spacing:.005em;max-width:18em}
-  .creds{padding:clamp(38px,5vw,64px) 0}
-  .creds-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:var(--line);border:1px solid var(--line)}
-  .cell{background:var(--bg);padding:28px 20px;transition:.2s}
-  .cell:hover{background:var(--panel)}
-  .cell .n{font-family:var(--display);font-size:clamp(40px,5.5vw,64px);line-height:1;color:var(--accent)}
-  .cell .l{font-family:var(--mono);font-size:11px;letter-spacing:.09em;text-transform:uppercase;color:var(--muted);margin-top:10px;line-height:1.5}
-  .blk{padding:clamp(44px,6vw,80px) 0;border-top:1px solid var(--line)}
-  .blk.panel{background:var(--panel)}
-  .pillars,.proceso{display:grid;grid-template-columns:repeat(4,1fr);gap:16px}
-  .pillar,.step{border:1px solid var(--line);border-top:4px solid var(--accent);padding:22px 20px;background:var(--bg);transition:.2s}
-  .pillar:hover,.step:hover,.mcard:hover,.dcard:hover{transform:translateY(-4px);border-color:var(--muted)}
-  .pillar .num,.step .num,.mcard .tag,.dcard .k{font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--accent);font-weight:700}
-  .pillar h3,.step h4{font-family:var(--display);text-transform:uppercase;font-size:22px;letter-spacing:.01em;margin:10px 0 8px}
-  .pillar p,.step p,.mcard p,.dcard p{color:var(--muted);font-size:14px;line-height:1.55}
-  .step .dur{font-family:var(--mono);font-size:10.5px;color:var(--accent);letter-spacing:.08em;display:block;margin-bottom:6px}
-  .counter{margin-top:26px;font-family:var(--display);text-transform:uppercase;font-size:clamp(18px,2.6vw,30px);line-height:1.18;max-width:24em}
-  .mcards{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:24px}
-  .mcard{border:1px solid var(--line);padding:26px;background:var(--bg);transition:.2s}
-  .mcard h3{font-family:var(--display);text-transform:uppercase;font-size:26px;letter-spacing:.01em;margin:10px 0 4px}
-  .mcard .tl{font-family:var(--body);font-weight:700;font-size:14px;color:var(--cream);margin-bottom:10px}
-  .mcard ul{list-style:none;margin-top:12px;display:flex;flex-direction:column;gap:8px}
-  .mcard li{font-size:13.5px;color:var(--muted);padding-left:18px;position:relative;line-height:1.45}
-  .mcard li::before{content:"\2192";position:absolute;left:0;color:var(--accent)}
-  .mcard li b{color:var(--cream);font-weight:700}
-  .quote{font-family:var(--display);text-transform:uppercase;font-size:clamp(24px,3.6vw,40px);line-height:1.12;max-width:20em}
-  .quote-p{color:var(--muted);font-size:15px;max-width:40em;margin-top:14px;line-height:1.6}
-  .disc-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-top:26px}
-  .dcard{border:1px solid var(--line);padding:22px 18px;transition:.2s}
-  .dcard h4{font-family:var(--display);text-transform:uppercase;font-size:23px;letter-spacing:.01em;margin:8px 0 6px}
-  .sobre-grid{display:grid;grid-template-columns:.8fr 1.2fr;gap:clamp(24px,4vw,52px);align-items:center}
-  .sobre-photo img{width:100%;aspect-ratio:3/4;object-fit:cover;border:3px solid var(--cream);filter:grayscale(.4) contrast(1.08);transform:rotate(1.5deg)}
-  .sobre-text h2{font-family:var(--display);text-transform:uppercase;font-size:clamp(34px,5vw,60px);line-height:1.05;margin:6px 0 4px}
-  .sobre-text .st{font-family:var(--body);font-weight:700;color:var(--accent);font-size:17px;margin-bottom:14px}
-  .sobre-text p{color:#cfc7b8;font-size:15px;line-height:1.65;margin-bottom:12px}
-  .tgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
-  .tcard{border:1px solid var(--line);border-left:4px solid var(--accent);padding:22px;background:var(--bg)}
-  .tcard .dt{font-family:var(--mono);font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--accent);font-weight:700}
-  .tcard blockquote{font-size:14.5px;line-height:1.55;color:#cfc7b8;margin:12px 0}
-  .tcard .au{display:flex;align-items:center;gap:10px}
-  .tcard .av{width:34px;height:34px;background:var(--accent);color:var(--bg);font-family:var(--display);font-size:17px;display:flex;align-items:center;justify-content:center}
-  .tcard .nm{font-weight:700;font-size:14px}
-  .tcard .mt{font-family:var(--mono);font-size:9.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
-  .revmq{margin-top:18px;border-top:1px solid var(--line);border-bottom:1px solid var(--line);overflow:hidden;white-space:nowrap;padding:14px 0}
-  .revmq .rt{display:inline-flex;animation:scroll 40s linear infinite}
-  .revmq q{font-size:14px;color:var(--muted);padding:0 28px}
-  .revmq q b{color:var(--cream);font-weight:700}
-  .portal-grid{display:grid;grid-template-columns:1fr .8fr;gap:clamp(24px,4vw,52px);align-items:center}
-  .portal-text ul{list-style:none;margin:18px 0;display:flex;flex-direction:column;gap:10px}
-  .portal-text li{padding-left:20px;position:relative;color:#cfc7b8;font-size:15px}
-  .portal-text li::before{content:"\25C6";position:absolute;left:0;color:var(--accent);font-size:11px;top:3px}
-  .portal-sub{font-family:var(--mono);font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-top:14px}
-  .ptitle{font-family:var(--display);text-transform:uppercase;font-size:clamp(34px,5vw,60px);line-height:1.05;margin:8px 0}
-  .mock{border:3px solid var(--cream);background:var(--panel);padding:26px;transform:rotate(1.5deg)}
-  .mock .mp{font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.08em;color:var(--accent);border:1px solid var(--accent);display:inline-block;padding:3px 9px}
-  .mock .mc{font-family:var(--display);font-size:64px;line-height:1;margin:14px 0 4px}
-  .mock .mc small{font-family:var(--body);font-size:18px;color:var(--muted);font-weight:400}
-  .mock .tix{display:flex;gap:6px;flex-wrap:wrap;margin-top:12px}
-  .mock .tk{width:24px;height:38px;background:var(--accent);border-radius:2px}
-  .mock .tk.u{background:var(--line)}
-  .precios{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:8px}
-  .pc{border:1px solid var(--line);padding:28px 24px;background:var(--bg);display:flex;flex-direction:column;transition:.2s}
-  .pc:hover{transform:translateY(-5px);border-color:var(--muted)}
-  .pc.feat{background:var(--accent);color:var(--bg);border-color:var(--accent)}
-  .pc .badge{font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--bg);background:var(--cream);display:inline-block;padding:4px 10px;margin-bottom:10px;width:fit-content}
-  .pc .tier{font-family:var(--mono);font-size:12px;letter-spacing:.1em;text-transform:uppercase;font-weight:700;color:var(--accent)}
-  .pc.feat .tier{color:var(--bg)}
-  .pc h3{font-family:var(--display);text-transform:uppercase;font-size:26px;margin:6px 0}
-  .pc .det{font-size:13px;color:var(--muted);min-height:38px}
-  .pc.feat .det{color:rgba(13,11,10,.7)}
-  .pc .amt{font-family:var(--display);font-size:60px;line-height:1;margin:14px 0}
-  .pc .amt sup{font-size:24px;vertical-align:super;opacity:.7}
-  .pc ul{list-style:none;margin:8px 0 18px;display:flex;flex-direction:column;gap:7px;flex:1}
-  .pc li{font-size:13.5px;padding-left:18px;position:relative;color:#cfc7b8;line-height:1.4}
-  .pc.feat li{color:rgba(13,11,10,.82)}
-  .pc li::before{content:"\2713";position:absolute;left:0;color:var(--accent);font-weight:700}
-  .pc.feat li::before{color:var(--bg)}
-  .pc .pcta{font-family:var(--mono);font-weight:700;font-size:12px;letter-spacing:.06em;text-transform:uppercase;text-align:center;padding:13px;border:2px solid var(--accent);color:var(--accent);transition:.16s}
-  .pc .pcta:hover{background:var(--accent);color:var(--bg)}
-  .pc.feat .pcta{border-color:var(--bg);color:var(--bg)}
-  .pc.feat .pcta:hover{background:var(--bg);color:var(--accent)}
-  .pc .online{font-family:var(--mono);font-size:10.5px;text-align:center;color:var(--muted);margin-top:9px;letter-spacing:.04em}
-  .trust{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:24px;border-top:1px solid var(--line);padding-top:22px}
-  .trust .tl{font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--accent);font-weight:700;display:block;margin-bottom:6px}
-  .trust .tx{font-size:13.5px;color:var(--muted);line-height:1.5}
-  .faq-list{display:flex;flex-direction:column;gap:10px;margin-top:8px}
-  .faq{border:1px solid var(--line);background:var(--bg)}
-  .faq button{width:100%;display:flex;justify-content:space-between;align-items:center;gap:14px;background:none;border:0;color:var(--cream);font-family:var(--body);font-weight:700;font-size:16px;text-align:left;padding:18px 20px;cursor:pointer}
-  .faq .ar{font-family:var(--display);color:var(--accent);font-size:24px;line-height:1;transition:.2s}
-  .faq .ans{max-height:0;overflow:hidden;transition:max-height .28s ease}
-  .faq.open .ans{max-height:260px}
-  .faq.open .ar{transform:rotate(45deg)}
-  .faq .ans p{padding:0 20px 18px;color:var(--muted);font-size:14.5px;line-height:1.6}
-  .band{padding:clamp(54px,8vw,104px) 0;text-align:center;border-top:1px solid var(--line)}
-  .band h2{font-family:var(--display);text-transform:uppercase;font-size:clamp(42px,8vw,104px);line-height:1.0;letter-spacing:.005em;margin-bottom:18px}
-  .band p{color:var(--muted);max-width:32em;margin:0 auto 26px;font-size:16px}
-  .band .ctas{justify-content:center}
-  .foot{border-top:2px solid var(--accent);padding:44px 0 30px;background:var(--panel)}
-  .foot-grid{display:flex;flex-wrap:wrap;justify-content:space-between;gap:24px;margin-bottom:28px}
-  .foot .logo{font-size:30px}
-  .foot .logo-img{height:56px}
-  .foot .ft{font-size:13px;color:var(--muted);margin-top:8px;max-width:22em;line-height:1.5}
-  .foot-links{display:flex;flex-wrap:wrap;gap:18px;font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
-  .foot-links a:hover{color:var(--accent)}
-  .foot-bottom{border-top:1px solid var(--line);padding-top:18px;display:flex;flex-wrap:wrap;justify-content:space-between;gap:10px;font-family:var(--mono);font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
-  .wafloat{position:fixed;bottom:22px;right:22px;z-index:200;width:56px;height:56px;border-radius:50%;background:#25D366;display:flex;align-items:center;justify-content:center;box-shadow:0 6px 20px rgba(0,0,0,.4);transition:.2s}
-  .wafloat:hover{transform:scale(1.08)}
-  .wafloat svg{width:30px;height:30px;fill:#fff}
-  .reveal{opacity:0;transform:translateY(20px);transition:opacity .6s ease,transform .6s ease}
-  .reveal.in{opacity:1;transform:none}
-  @media(max-width:860px){
-    .hero-grid,.sobre-grid,.portal-grid{grid-template-columns:1fr}
-    .hero-photo,.mock{max-width:380px;margin-top:8px}
-    .pillars,.proceso,.creds-grid,.disc-grid{grid-template-columns:repeat(2,1fr)}
-    .mcards,.tgrid,.precios,.trust{grid-template-columns:1fr}
-  }
-  @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}.reveal{opacity:1;transform:none}}
-  .punkbg{position:fixed;inset:0;pointer-events:none;z-index:9998;opacity:.07;background:url(/punk-bg.svg) center center/cover no-repeat}
+<!-- Fonts -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=JetBrains+Mono:wght@400;500;700&family=Space+Grotesk:wght@300;400;500;700&display=swap" rel="stylesheet">
+
+<script is:inline>
+  /* Add hook for animated state only when motion is allowed + JS works.
+     Without it, all content stays visible (no-JS / reduced-motion safe). */
+  (function () {
+    try {
+      if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+        document.documentElement.classList.add('js-anim');
+      }
+    } catch (e) {}
+  })();
+</script>
+
+<style is:inline>
+/* ============ RESET / BASE ============ */
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0d0b0a;
+  --panel:#15110f;
+  --orange:#e8501f;
+  --orange2:#ff6a35;
+  --cream:#f3ede0;
+  --gray:#8a8276;
+  --line:#2A2926;
+  --radius:2px;
+  --maxw:1240px;
+  --pad:clamp(20px,5vw,64px);
+  --eq-h:clamp(64px,9vh,104px);
+  --sticky-nav:64px;
+}
+html{
+  -webkit-text-size-adjust:100%;
+  scroll-behavior:smooth;
+  scrollbar-color:var(--orange) #100c0a;
+}
+html,body{background:#0d0b0a}
+body{
+  font-family:"Space Grotesk",system-ui,sans-serif;
+  color:var(--cream);
+  line-height:1.5;
+  overflow-x:hidden;
+  position:relative;
+  -webkit-font-smoothing:antialiased;
+  text-rendering:optimizeLegibility;
+}
+::selection{background:var(--orange);color:#0d0b0a}
+img{max-width:100%;display:block}
+a{color:inherit;text-decoration:none}
+button{font:inherit;color:inherit;cursor:pointer;background:none;border:none}
+
+/* themed scrollbar (webkit) */
+::-webkit-scrollbar{width:11px}
+::-webkit-scrollbar-track{background:#100c0a}
+::-webkit-scrollbar-thumb{background:var(--orange);border:2px solid #100c0a}
+
+/* ============ ATMOSPHERE LAYERS ============ */
+.bg-layer{position:fixed;inset:0;z-index:-3;background:var(--bg);will-change:background-color}
+.glow{
+  position:fixed;left:50%;top:42%;width:120vmax;height:120vmax;z-index:-2;
+  transform:translate(-50%,-50%);
+  background:radial-gradient(closest-side, rgba(232,80,31,.42), rgba(232,80,31,.12) 42%, transparent 70%);
+  opacity:.12;pointer-events:none;will-change:opacity,transform;filter:blur(8px);
+}
+.grain{
+  position:fixed;inset:-120px;z-index:60;pointer-events:none;
+  opacity:.06;mix-blend-mode:soft-light;
+  animation:grainShift 1.2s steps(3) infinite;
+}
+@keyframes grainShift{
+  0%{transform:translate(0,0)}33%{transform:translate(-30px,18px)}66%{transform:translate(22px,-26px)}100%{transform:translate(0,0)}
+}
+
+/* persistent reactive equalizer */
+#eq{
+  position:fixed;left:0;right:0;bottom:0;height:var(--eq-h);width:100%;
+  z-index:40;pointer-events:none;display:block;
+  -webkit-mask-image:linear-gradient(to top, #000 38%, transparent);
+          mask-image:linear-gradient(to top, #000 38%, transparent);
+}
+.eq-base{
+  position:fixed;left:0;right:0;bottom:0;height:1px;background:var(--line);z-index:41;pointer-events:none;
+}
+
+/* ============ TYPE HELPERS ============ */
+.mono{font-family:"JetBrains Mono",ui-monospace,monospace;letter-spacing:.18em;text-transform:uppercase}
+.eyebrow{
+  font-family:"JetBrains Mono",monospace;font-size:clamp(.66rem,1.4vw,.82rem);
+  letter-spacing:.32em;text-transform:uppercase;color:var(--orange2);
+  display:inline-flex;align-items:center;gap:.7em;margin-bottom:1.6rem;
+}
+.eyebrow::before{content:"";width:34px;height:2px;background:var(--orange);display:inline-block}
+.display{
+  font-family:"Anton",Impact,sans-serif;text-transform:uppercase;
+  line-height:.95;letter-spacing:-.005em;font-weight:400;
+}
+.h1{font-size:clamp(3.1rem,12.5vw,11.5rem)}
+.h2{font-size:clamp(2.5rem,8.4vw,7rem)}
+.h3{font-size:clamp(1.9rem,5vw,3.4rem)}
+.fire{color:var(--orange)}
+.lead{font-size:clamp(1.05rem,1.7vw,1.3rem);color:#cfc7b6;max-width:62ch}
+.sub{font-size:clamp(1.15rem,2.4vw,1.6rem);color:var(--cream);font-weight:500}
+.kicker{font-family:"JetBrains Mono",monospace;letter-spacing:.24em;text-transform:uppercase;font-size:.78rem;color:var(--gray)}
+
+/* ============ LAYOUT ============ */
+.wrap{max-width:var(--maxw);margin-inline:auto;padding-inline:var(--pad);width:100%}
+section{position:relative;z-index:1}
+.pad{padding-block:clamp(96px,13vh,170px)}
+.screen{min-height:100vh;min-height:100svh;display:flex;align-items:center}
+.stage{position:relative}
+/* spotlight that "turns on" per section */
+.spot{
+  position:absolute;inset:0;z-index:0;pointer-events:none;opacity:0;
+  background:radial-gradient(60% 55% at 50% 38%, rgba(232,80,31,.16), transparent 70%);
+  will-change:opacity;
+}
+.stage > .wrap{position:relative;z-index:1}
+
+/* ============ BUTTONS ============ */
+.btn{
+  --bw:2px;
+  display:inline-flex;align-items:center;gap:.6em;
+  font-family:"JetBrains Mono",monospace;font-weight:700;letter-spacing:.12em;text-transform:uppercase;
+  font-size:.82rem;padding:1.05em 1.7em;border-radius:var(--radius);
+  border:var(--bw) solid var(--cream);position:relative;transition:transform .18s ease, background-color .18s ease, color .18s ease, box-shadow .18s ease;
+  will-change:transform;
+}
+.btn:focus-visible{outline:3px solid var(--orange2);outline-offset:3px}
+.btn .arr{transition:transform .2s ease}
+.btn:hover .arr{transform:translateX(4px)}
+.btn-primary{background:var(--orange);border-color:var(--orange);color:#160a04;box-shadow:6px 6px 0 #000}
+.btn-primary:hover{background:var(--orange2);transform:translate(-2px,-2px);box-shadow:9px 9px 0 #000}
+.btn-primary:active{transform:translate(2px,2px);box-shadow:3px 3px 0 #000}
+.btn-ghost{background:transparent;color:var(--cream)}
+.btn-ghost:hover{background:var(--cream);color:#160a04;transform:translate(-2px,-2px)}
+.btn-lg{font-size:.95rem;padding:1.25em 2.1em}
+
+/* ============ NAV ============ */
+.nav{
+  position:fixed;top:0;left:0;right:0;z-index:50;height:var(--sticky-nav);
+  display:flex;align-items:center;justify-content:space-between;
+  padding-inline:var(--pad);
+  border-bottom:1px solid transparent;transition:background-color .3s ease, border-color .3s ease, backdrop-filter .3s ease;
+}
+.nav.scrolled{background:rgba(13,11,10,.72);backdrop-filter:blur(10px);border-bottom-color:var(--line)}
+.brand{font-family:"Anton",sans-serif;text-transform:uppercase;font-size:1.15rem;letter-spacing:.04em;display:flex;align-items:center;gap:.55em}
+.brand .horns{width:1.1em;height:1.1em;color:var(--orange);flex:none;filter:drop-shadow(0 0 8px var(--orange))}
+.nav-links{display:flex;align-items:center;gap:2rem}
+.nav-links a.lnk{font-family:"JetBrains Mono",monospace;font-size:.74rem;letter-spacing:.18em;text-transform:uppercase;color:var(--gray);transition:color .2s}
+.nav-links a.lnk:hover{color:var(--cream)}
+.nav .btn{padding:.7em 1.15em;font-size:.72rem}
+
+/* ============ HERO ============ */
+.hero{padding-top:calc(var(--sticky-nav) + 4vh)}
+.hero .wrap{display:flex;flex-direction:column;justify-content:center;min-height:100svh;padding-bottom:calc(var(--eq-h) + 3vh)}
+.hero-eyebrow{margin-bottom:2.2rem}
+.hero h1{margin:0 0 1.6rem;max-width:14ch}
+.hero h1 .fire{display:inline-block}
+.hero .sub{margin-bottom:1.3rem}
+.hero .lead{margin-bottom:2.6rem}
+.hero-cta{display:flex;flex-wrap:wrap;gap:1rem;align-items:center}
+.scroll-cue{display:flex;align-items:center;gap:.8em;margin-top:3.4rem;color:var(--gray)}
+.scroll-cue .bar{position:relative;width:46px;height:2px;background:var(--line);overflow:hidden}
+.scroll-cue .bar::after{content:"";position:absolute;inset:0;width:40%;background:var(--orange);animation:cue 1.8s ease-in-out infinite}
+@keyframes cue{0%{transform:translateX(-110%)}60%,100%{transform:translateX(260%)}}
+
+/* hero floating sticker */
+.sticker{
+  font-family:"JetBrains Mono",monospace;font-weight:700;letter-spacing:.14em;text-transform:uppercase;
+  font-size:.7rem;padding:.55em .8em;border:2px solid var(--cream);border-radius:var(--radius);
+  background:var(--bg);color:var(--cream);display:inline-block;line-height:1;
+}
+.sticker.fire{background:var(--orange);border-color:var(--orange);color:#160a04}
+.hero-stickers{position:absolute;inset:0;pointer-events:none;z-index:2}
+.hero-stickers .sticker{position:absolute}
+.s-1{top:18%;right:6%;transform:rotate(8deg)}
+.s-2{top:60%;right:11%;transform:rotate(-6deg)}
+.s-3{top:38%;right:3%;transform:rotate(-3deg)}
+
+/* ============ MARQUEE ============ */
+.marquee{
+  overflow:hidden;border-top:1px solid var(--line);border-bottom:1px solid var(--line);
+  background:var(--panel);padding-block:.9rem;position:relative;z-index:3;
+  transform:skewX(var(--mskew,0deg));transition:transform .25s ease;
+}
+.marquee.fire{background:var(--orange)}
+.marquee-track{display:inline-flex;white-space:nowrap;will-change:transform}
+.marquee-track span{
+  font-family:"Anton",sans-serif;text-transform:uppercase;font-size:clamp(1.6rem,4vw,2.8rem);
+  letter-spacing:.02em;padding-inline:1.1rem;display:inline-flex;align-items:center;gap:1.1rem;color:var(--cream)
+}
+.marquee.fire .marquee-track span{color:#160a04}
+.marquee-track .sep{color:var(--orange);font-size:.7em}
+.marquee.fire .marquee-track .sep{color:#160a04}
+
+/* ============ MANIFIESTO ============ */
+.manifiesto{text-align:center}
+.manifiesto .wrap{max-width:1100px}
+.manifiesto h2{margin:0 auto 2rem;max-width:18ch}
+.manifiesto .lead{margin-inline:auto;text-align:center}
+.manifiesto .rule{width:90px;height:3px;background:var(--orange);margin:0 auto 2.4rem}
+
+/* ============ CREDENCIALES ============ */
+.cred-head{display:flex;flex-direction:column;gap:.4rem;margin-bottom:3.4rem}
+.cred-head h2{max-width:16ch}
+.cred-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:1px;background:var(--line);border:1px solid var(--line)}
+.cred-cell{padding:clamp(1.6rem,3vw,2.6rem);background:var(--panel)}
+.cred-val{font-family:"Anton",sans-serif;font-size:clamp(2.6rem,6.5vw,5rem);line-height:.9;color:var(--cream)}
+.cred-cell:nth-child(odd) .cred-val{color:var(--orange)}
+.cred-val .plus{color:var(--orange2)}
+.cred-label{font-family:"JetBrains Mono",monospace;font-size:.74rem;letter-spacing:.16em;text-transform:uppercase;color:var(--gray);margin-top:.9rem}
+.cred-label a{color:inherit;text-decoration:none;border-bottom:1px dotted var(--gray);transition:color .2s,border-color .2s}
+.cred-label a:hover{color:var(--orange);border-bottom-color:var(--orange)}
+
+/* ============ FAMILIAR (pain) ============ */
+.familiar h2{margin-bottom:.6rem}
+.familiar .intro{color:var(--gray);max-width:48ch;margin-bottom:3rem}
+.pain-list{display:grid;grid-template-columns:repeat(2,1fr);gap:0;border-top:1px solid var(--line)}
+.pain{
+  display:flex;gap:1.2rem;align-items:flex-start;padding:1.9rem 0;
+  border-bottom:1px solid var(--line);
+}
+.pain:nth-child(odd){border-right:1px solid var(--line);padding-right:2.4rem}
+.pain:nth-child(even){padding-left:2.4rem}
+.pain .x{
+  flex:none;width:34px;height:34px;border:2px solid var(--orange);border-radius:var(--radius);
+  display:grid;place-items:center;color:var(--orange);font-family:"JetBrains Mono",monospace;font-weight:700;
+  transform:rotate(-4deg);
+}
+.pain p{font-size:clamp(1.05rem,1.8vw,1.32rem);color:var(--cream)}
+.pain p b{color:var(--orange2);font-weight:500}
+.familiar .closer{margin-top:2.8rem;font-family:"Anton",sans-serif;text-transform:uppercase;font-size:clamp(1.4rem,3.4vw,2.4rem);line-height:1}
+.familiar .closer .fire{color:var(--orange)}
+
+/* ============ METHODS ============ */
+.method{overflow:hidden}
+.method .wrap{display:grid;grid-template-columns:1.05fr .95fr;gap:clamp(2rem,5vw,5rem);align-items:center}
+.method .idx{font-family:"JetBrains Mono",monospace;color:var(--orange);letter-spacing:.2em;font-size:.8rem;margin-bottom:1.1rem}
+.method .word{font-family:"Anton",sans-serif;text-transform:uppercase;font-size:clamp(3.4rem,11vw,9rem);line-height:.92;letter-spacing:-.01em}
+.method .kick{display:block;font-family:"JetBrains Mono",monospace;font-size:.8rem;letter-spacing:.2em;text-transform:uppercase;color:var(--gray);margin-top:1.2rem}
+.method .tag{font-size:clamp(1.2rem,2.4vw,1.7rem);color:var(--orange2);font-weight:500;margin:1.8rem 0 1.1rem}
+.method .body{color:#cfc7b6;font-size:clamp(1rem,1.5vw,1.15rem);max-width:46ch}
+.method .feats{display:grid;grid-template-columns:1fr 1fr;gap:0;border:1px solid var(--line);border-radius:var(--radius)}
+.feat{padding:1.35rem 1.4rem;border-right:1px solid var(--line);border-bottom:1px solid var(--line)}
+.feat:nth-child(2n){border-right:none}
+.feat:nth-child(n+3){border-bottom:none}
+.feat .n{font-family:"JetBrains Mono",monospace;color:var(--orange);font-size:.72rem;letter-spacing:.18em}
+.feat .t{font-family:"Anton",sans-serif;text-transform:uppercase;font-size:clamp(1.1rem,2.2vw,1.5rem);margin-top:.5rem;line-height:1}
+.method.flip .wrap{grid-template-columns:.95fr 1.05fr}
+.method.flip .copy{order:2}
+.method.flip .visual{order:1}
+.visual{position:relative}
+.frame{
+  border:3px solid var(--cream);border-radius:var(--radius);padding:clamp(1.5rem,3vw,2.4rem);
+  background:linear-gradient(160deg,#1c1411,#120d0b);box-shadow:10px 10px 0 var(--orange);position:relative;overflow:hidden;
+}
+.frame::after{content:"";position:absolute;inset:0;background:radial-gradient(70% 60% at 70% 20%, rgba(255,106,53,.16), transparent 60%);pointer-events:none}
+.frame .biglabel{font-family:"Anton",sans-serif;text-transform:uppercase;font-size:clamp(2.4rem,5.5vw,4rem);line-height:.86;color:var(--cream)}
+.frame .biglabel .fire{color:var(--orange)}
+.wave-svg{width:100%;height:88px;margin-top:1.4rem;display:block}
+.wave-svg path{fill:none;stroke:var(--orange);stroke-width:3;stroke-linecap:round}
+.wave-svg .w2{stroke:var(--cream);opacity:.5;stroke-width:2}
+
+/* ============ PROCESO ============ */
+.proceso h2{margin-bottom:3.2rem;max-width:14ch}
+.steps{display:grid;grid-template-columns:repeat(4,1fr);gap:0;border-top:2px solid var(--orange)}
+.step{padding:2rem 1.6rem 2.4rem 0;border-right:1px solid var(--line);position:relative}
+.step:last-child{border-right:none}
+.step .num{font-family:"Anton",sans-serif;font-size:clamp(2.2rem,5vw,3.4rem);color:var(--orange);line-height:.9}
+.step .t{font-family:"Anton",sans-serif;text-transform:uppercase;font-size:clamp(1.15rem,2.4vw,1.6rem);margin:.9rem 0 .7rem;line-height:1}
+.step p{color:var(--gray);font-size:.97rem}
+
+/* ============ ANDRES ============ */
+.andres .wrap{display:grid;grid-template-columns:.9fr 1.1fr;gap:clamp(2rem,5vw,5rem);align-items:center}
+.andres .portrait{
+  position:relative;border:3px solid var(--cream);border-radius:var(--radius);
+  background:linear-gradient(155deg,#241813,#16100d);box-shadow:12px 12px 0 var(--orange);
+  aspect-ratio:4/5;display:flex;flex-direction:column;justify-content:flex-end;padding:clamp(1.4rem,3vw,2.2rem);overflow:hidden;
+}
+.andres .portrait::before{
+  content:"";position:absolute;inset:0;z-index:1;
+  background:linear-gradient(180deg, rgba(13,11,10,.08) 0%, rgba(13,11,10,.5) 55%, rgba(13,11,10,.92) 100%);
+  pointer-events:none;
+}
+.andres .portrait .pphoto{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center 18%;filter:grayscale(.2) contrast(1.05);z-index:0}
+.andres .portrait .monogram{display:none}
+.andres .portrait .pname,.andres .portrait .prole,.andres .portrait .pstickers{z-index:2}
+.andres .monogram{
+  position:absolute;top:6%;left:50%;transform:translateX(-50%);
+  font-family:"Anton",sans-serif;font-size:clamp(7rem,20vw,15rem);line-height:.8;color:rgba(243,237,224,.06);letter-spacing:-.04em;
+}
+.andres .pname{position:relative;font-family:"Anton",sans-serif;text-transform:uppercase;font-size:clamp(2.6rem,6vw,4.6rem);line-height:.86}
+.andres .prole{position:relative;font-family:"JetBrains Mono",monospace;font-size:.74rem;letter-spacing:.2em;text-transform:uppercase;color:var(--orange2);margin-top:.7rem}
+.andres .pstickers{position:absolute;inset:0;pointer-events:none}
+.andres .pstickers .sticker{position:absolute}
+.p-1{top:8%;right:7%;transform:rotate(7deg)}
+.p-2{top:30%;left:7%;transform:rotate(-7deg)}
+.andres h2{margin-bottom:1rem}
+.andres .tag{font-size:clamp(1.3rem,2.6vw,1.9rem);color:var(--orange2);font-weight:500;margin-bottom:1.6rem;max-width:18ch}
+.andres .body{color:#cfc7b6;font-size:clamp(1rem,1.5vw,1.15rem);max-width:52ch;margin-bottom:2rem}
+.chips{display:flex;flex-wrap:wrap;gap:.6rem}
+.chip{font-family:"JetBrains Mono",monospace;font-size:.72rem;letter-spacing:.14em;text-transform:uppercase;color:var(--cream);border:1px solid var(--line);border-radius:var(--radius);padding:.55em .8em}
+.chip b{color:var(--orange);font-weight:700}
+
+/* ============ TESTIMONIOS ============ */
+.testi-head{display:flex;flex-direction:column;align-items:flex-start;gap:1rem;margin-bottom:3rem}
+.stars{display:inline-flex;gap:.25rem;color:var(--orange);font-size:1.3rem;letter-spacing:.1em}
+.rating-line{font-family:"Anton",sans-serif;text-transform:uppercase;font-size:clamp(1.6rem,4.4vw,3rem);line-height:.95}
+.rating-line .fire{color:var(--orange)}
+.rating-link{font-family:"JetBrains Mono",monospace;font-size:.78rem;letter-spacing:.08em;color:var(--orange);text-decoration:none;border-bottom:1px solid var(--orange);padding-bottom:2px;opacity:.9;transition:opacity .2s}
+.rating-link:hover{opacity:1}
+.testi-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:1.4rem}
+.testi{
+  border:1px solid var(--line);border-radius:var(--radius);background:var(--panel);
+  padding:clamp(1.5rem,3vw,2.2rem);position:relative;transition:transform .2s ease, border-color .2s ease;
+}
+.testi:hover{transform:translateY(-4px);border-color:var(--orange)}
+.testi .stars{font-size:1rem;margin-bottom:1.1rem}
+.testi blockquote{font-size:clamp(1.05rem,1.8vw,1.28rem);line-height:1.45;color:var(--cream);margin-bottom:1.4rem}
+.testi .who{display:flex;justify-content:space-between;align-items:center;gap:1rem;border-top:1px solid var(--line);padding-top:1.1rem}
+.testi .name{font-weight:700}
+.testi .meta{font-family:"JetBrains Mono",monospace;font-size:.7rem;letter-spacing:.14em;text-transform:uppercase;color:var(--gray)}
+.verif{position:absolute;top:0;right:1.4rem;transform:translateY(-50%) rotate(-3deg);font-family:"JetBrains Mono",monospace;font-size:.62rem;letter-spacing:.14em;text-transform:uppercase;background:var(--orange);color:#160a04;padding:.4em .65em;border-radius:var(--radius);font-weight:700}
+
+/* ============ PRECIOS ============ */
+.precios h2{margin-bottom:.4rem;max-width:12ch}
+.precios .intro{color:var(--gray);margin-bottom:3.2rem;max-width:44ch}
+.plans{display:grid;grid-template-columns:repeat(3,1fr);gap:1.4rem;align-items:stretch}
+.plan{
+  border:1px solid var(--line);border-radius:var(--radius);background:var(--panel);
+  padding:clamp(1.7rem,3vw,2.4rem);display:flex;flex-direction:column;position:relative;transition:transform .2s ease, border-color .2s ease;
+}
+.plan:hover{transform:translateY(-5px)}
+.plan .pname{font-family:"Anton",sans-serif;text-transform:uppercase;font-size:clamp(1.6rem,3vw,2.2rem);line-height:.95}
+.plan .hours{font-family:"JetBrains Mono",monospace;font-size:.74rem;letter-spacing:.16em;text-transform:uppercase;color:var(--gray);margin-top:.55rem}
+.plan .price{font-family:"Anton",sans-serif;font-size:clamp(2.8rem,6vw,4.2rem);line-height:.9;margin:1.5rem 0 .2rem;color:var(--cream)}
+.plan .price .cur{color:var(--orange);font-size:.5em;vertical-align:.18em;margin-right:.08em}
+.plan .per{font-family:"JetBrains Mono",monospace;font-size:.72rem;letter-spacing:.14em;text-transform:uppercase;color:var(--gray)}
+.plan .blurb{color:#cfc7b6;margin:1.3rem 0 1.5rem;font-size:.98rem}
+.plan ul{list-style:none;display:flex;flex-direction:column;gap:.75rem;margin-bottom:2rem}
+.plan li{display:flex;gap:.7rem;align-items:flex-start;font-size:.95rem;color:var(--cream)}
+.plan li::before{content:"";flex:none;width:8px;height:8px;background:var(--orange);margin-top:.5em;border-radius:1px}
+.plan .btn{width:100%;justify-content:center;margin-top:auto}
+.plan.feat{border-color:var(--orange);box-shadow:0 0 0 1px var(--orange), 0 22px 50px -22px rgba(232,80,31,.5);transform:translateY(-8px)}
+.plan.feat:hover{transform:translateY(-13px)}
+.plan .badge{position:absolute;top:0;left:50%;transform:translate(-50%,-50%);background:var(--orange);color:#160a04;font-family:"JetBrains Mono",monospace;font-weight:700;font-size:.66rem;letter-spacing:.16em;text-transform:uppercase;padding:.5em .9em;border-radius:var(--radius);white-space:nowrap}
+
+.trial{
+  margin-top:1.8rem;border:2px dashed var(--orange);border-radius:var(--radius);
+  background:linear-gradient(120deg,rgba(232,80,31,.08),transparent);
+  padding:clamp(1.5rem,3vw,2.2rem);display:flex;flex-wrap:wrap;gap:1.4rem;align-items:center;justify-content:space-between;
+}
+.trial .tinfo{max-width:60ch}
+.trial .tprice{font-family:"Anton",sans-serif;text-transform:uppercase;font-size:clamp(1.4rem,3vw,2.1rem);line-height:1}
+.trial .tprice .fire{color:var(--orange)}
+.trial p{color:#cfc7b6;margin-top:.5rem;font-size:.97rem}
+.pay{margin-top:2rem;display:flex;flex-wrap:wrap;gap:1rem 1.6rem;align-items:center;border-top:1px solid var(--line);padding-top:1.6rem}
+.pay .pl{font-family:"JetBrains Mono",monospace;font-size:.7rem;letter-spacing:.18em;text-transform:uppercase;color:var(--gray)}
+.pay .pl b{color:var(--orange);font-weight:700;margin-right:.6em}
+.pay .pchip{font-family:"JetBrains Mono",monospace;font-size:.72rem;letter-spacing:.12em;text-transform:uppercase;border:1px solid var(--line);border-radius:var(--radius);padding:.5em .8em}
+
+/* ============ FAQ ============ */
+.faq h2{margin-bottom:2.8rem;max-width:12ch}
+.faq-list{border-top:1px solid var(--line)}
+.faq-item{border-bottom:1px solid var(--line)}
+.faq-q{
+  width:100%;text-align:left;display:flex;justify-content:space-between;align-items:center;gap:1.5rem;
+  padding:1.6rem 0;font-family:"Space Grotesk",sans-serif;font-weight:500;
+  font-size:clamp(1.1rem,2.2vw,1.45rem);color:var(--cream);
+}
+.faq-q:hover{color:var(--orange2)}
+.faq-q:focus-visible{outline:2px solid var(--orange2);outline-offset:4px}
+.faq-q .ico{flex:none;width:30px;height:30px;border:2px solid var(--orange);border-radius:var(--radius);position:relative;transition:transform .3s ease, background-color .3s ease}
+.faq-q .ico::before,.faq-q .ico::after{content:"";position:absolute;background:var(--orange);transition:opacity .3s, background-color .3s}
+.faq-q .ico::before{left:50%;top:7px;bottom:7px;width:2px;transform:translateX(-50%)}
+.faq-q .ico::after{top:50%;left:7px;right:7px;height:2px;transform:translateY(-50%)}
+.faq-item.open .faq-q .ico{background:var(--orange);transform:rotate(180deg)}
+.faq-item.open .faq-q .ico::before{opacity:0}
+.faq-item.open .faq-q .ico::after{background:#160a04}
+.faq-a{overflow:hidden;height:0}
+.faq-a p{color:var(--gray);max-width:64ch;padding-bottom:1.7rem;font-size:1.02rem;line-height:1.55}
+
+/* ============ CTA FINAL ============ */
+.cta{text-align:center;overflow:hidden}
+.cta .wrap{display:flex;flex-direction:column;align-items:center}
+.cta h2{margin:0 auto 1.4rem;max-width:14ch}
+.cta .sub{color:#cfc7b6;margin-bottom:2.6rem}
+.cta .mono{color:var(--gray);margin-top:2.6rem;font-size:.74rem}
+
+/* ============ FOOTER ============ */
+footer{border-top:1px solid var(--line);background:#0b0908;padding-block:clamp(3rem,6vh,5rem);position:relative;z-index:1}
+footer .wrap{display:grid;grid-template-columns:1.4fr 1fr 1fr;gap:2.4rem;align-items:start}
+footer .brand{font-size:1.6rem;margin-bottom:1rem}
+footer .ftag{color:var(--gray);max-width:34ch;font-size:.95rem}
+footer .fcol h4{font-family:"JetBrains Mono",monospace;font-size:.7rem;letter-spacing:.2em;text-transform:uppercase;color:var(--orange2);margin-bottom:1rem}
+footer .fcol p,footer .fcol a{display:block;color:var(--cream);font-size:.92rem;margin-bottom:.55rem}
+footer .fcol a:hover{color:var(--orange2)}
+.foot-bottom{margin-top:3rem;padding-top:1.6rem;border-top:1px solid var(--line);display:flex;flex-wrap:wrap;gap:1rem;justify-content:space-between;align-items:center}
+.foot-bottom .mono{font-size:.68rem;color:var(--gray)}
+
+/* reveal base states (only when JS+motion) */
+.js-anim .reveal-title,
+.js-anim .reveal-up,
+.js-anim .reveal-stagger > *{opacity:0}
+
+/* ============ RESPONSIVE ============ */
+@media (max-width:1024px){
+  .cred-grid{grid-template-columns:repeat(2,1fr)}
+  .steps{grid-template-columns:repeat(2,1fr)}
+  .step{border-bottom:1px solid var(--line);padding-right:1.6rem}
+  .step:nth-child(2n){border-right:none}
+  .step:nth-child(n+3){border-bottom:none}
+  .plans{grid-template-columns:1fr;gap:1.2rem}
+  .plan.feat{transform:none}
+  .plan.feat:hover{transform:translateY(-5px)}
+}
+@media (max-width:860px){
+  .nav-links a.lnk{display:none}
+  .method .wrap,.method.flip .wrap,.andres .wrap{grid-template-columns:1fr;gap:2.4rem}
+  .method.flip .copy{order:1}.method.flip .visual{order:2}
+  .testi-grid{grid-template-columns:1fr}
+  footer .wrap{grid-template-columns:1fr 1fr}
+  .andres .portrait{aspect-ratio:3/2;max-width:480px}
+  .hero-stickers{display:none}
+}
+@media (max-width:560px){
+  .pain-list{grid-template-columns:1fr}
+  .pain:nth-child(odd){border-right:none;padding-right:0}
+  .pain:nth-child(even){padding-left:0}
+  .method .feats{grid-template-columns:1fr}
+  .feat{border-right:none}
+  .feat:nth-child(n){border-bottom:1px solid var(--line)}
+  .feat:last-child{border-bottom:none}
+  footer .wrap{grid-template-columns:1fr}
+  .cred-grid{grid-template-columns:1fr}
+  .trial{flex-direction:column;align-items:flex-start}
+  .btn{width:100%;justify-content:center}
+  .hero-cta .btn{width:100%}
+  .nav .btn{width:auto}
+}
+
+/* ============ REDUCED MOTION ============ */
+@media (prefers-reduced-motion: reduce){
+  html{scroll-behavior:auto}
+  .grain,.scroll-cue .bar::after{animation:none}
+  .marquee-track{transform:none !important}
+  *{transition-duration:.01ms !important}
+}
+.manifiesto .eyebrow::after,.cta .eyebrow::after{content:"";width:34px;height:2px;background:var(--orange);display:inline-block}
 </style>
 </head>
 <body>
-<div class="punkbg" aria-hidden="true"></div>
 
-<header class="top"><div class="wrap">
-  <img src="/logo-mvt.png" alt="Profesor MVT" class="logo-img" />
-  <a class="cta" href="/alumnos/">Crear cuenta →</a>
-</div></header>
+<!-- atmosphere -->
+<div class="bg-layer" id="bgLayer"></div>
+<div class="glow" id="glow" aria-hidden="true"></div>
+<canvas id="eq" aria-hidden="true"></canvas>
+<div class="eq-base" aria-hidden="true"></div>
+<svg class="grain" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
+  <filter id="grainf"><feTurbulence type="fractalNoise" baseFrequency="0.82" numOctaves="2" stitchTiles="stitch"/></filter>
+  <rect width="100%" height="100%" filter="url(#grainf)"/>
+</svg>
 
-<section class="hero"><div class="wrap hero-grid">
-  <div class="hero-text">
-    <span class="mono reveal">[ Método MVT · San Isidro · Online en vivo ]</span>
-    <h1 class="mega reveal">Aprende música<br>como <span class="hl">adulto</span>.</h1>
-    <p class="subline reveal">Clases <span class="b">1 a 1</span> · 100% personalizadas a ti.</p>
-    <p class="lead reveal">Canto, piano y composición con método real — no academia genérica. Te enseña alguien que <b>compuso +200 canciones y vivió de la música</b>, no un profesor de manual.</p>
-    <div class="ctas reveal">
-      <a class="btn" href="/alumnos/">Crear mi cuenta →</a>
-      <a class="btn ghost" href="#precios">Ver paquetes</a>
+<!-- NAV -->
+<nav class="nav" id="nav">
+  <a class="brand" href="#top"><svg class="horns" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="5" y="2.5" width="3.2" height="12.5" rx="1.6"/><rect x="15.8" y="2.5" width="3.2" height="12.5" rx="1.6"/><rect x="8.7" y="9" width="3.1" height="6.5" rx="1.55"/><rect x="12.2" y="9" width="3.1" height="6.5" rx="1.55"/><rect x="4.6" y="12" width="14.8" height="9" rx="4"/><rect x="2.8" y="12.2" width="5.5" height="3.3" rx="1.65"/></svg>PROFESORMVT</a>
+  <div class="nav-links">
+    <a class="lnk" href="#metodo">Método</a>
+    <a class="lnk" href="#precios">Precios</a>
+    <a class="lnk" href="#faq">FAQ</a>
+    <a class="btn btn-primary" href="/alumnos/">Crear mi cuenta</a>
+  </div>
+</nav>
+
+<span id="top"></span>
+
+<!-- 1 · HERO -->
+<header class="hero stage" data-bg="#0d0b0a" data-glow=".16">
+  <div class="spot"></div>
+  <div class="hero-stickers" aria-hidden="true">
+    <span class="sticker fire s-1">1 a 1</span>
+    <span class="sticker s-3">En vivo</span>
+    <span class="sticker s-2">+200 canciones</span>
+  </div>
+  <div class="wrap">
+    <span class="eyebrow hero-eyebrow reveal-up">Método MVT · Para adultos · San Isidro y online</span>
+    <h1 class="display h1 reveal-title">La música <span class="fire">se entrena</span>.</h1>
+    <p class="sub reveal-up">Clases 1 a 1, 100% personalizadas a ti.</p>
+    <p class="lead reveal-up">Canto, piano y composición con método real, no academia genérica. Te enseña alguien que compuso más de 200 canciones y vivió de la música, no un profesor de manual.</p>
+    <div class="hero-cta reveal-up">
+      <a class="btn btn-primary btn-lg" href="/alumnos/">Crear mi cuenta <span class="arr">→</span></a>
+      <a class="btn btn-ghost btn-lg" href="#precios">Ver paquetes</a>
     </div>
-    <p class="micro reveal">// crear cuenta es gratis · pagas solo cuando compras tu paquete</p>
+    <div class="scroll-cue mono reveal-up"><span>Desliza para empezar</span><span class="bar"></span></div>
   </div>
-  <div class="hero-photo reveal">
-    <span class="sticker">★ Ex-Tramboyos</span>
-    <img src="/andres-piano-hero.jpg" alt="Andrés Salame, músico y profesor de canto, piano y composición" />
-    <span class="tint"></span>
-    <span class="cap">Andrés Salame · músico, no profesor de manual</span>
+</header>
+
+<!-- MARQUEE -->
+<div class="marquee" id="mq1">
+  <div class="marquee-track">
+    <span>No es talento <i class="sep">◆</i> Es método <i class="sep">◆</i> Canto <i class="sep">◆</i> Piano <i class="sep">◆</i> Composición <i class="sep">◆</i></span>
+    <span>No es talento <i class="sep">◆</i> Es método <i class="sep">◆</i> Canto <i class="sep">◆</i> Piano <i class="sep">◆</i> Composición <i class="sep">◆</i></span>
   </div>
-</div></section>
+</div>
 
-<div class="marquee"><div class="mq-track">
-  <span>Canto<i class="s">/</i>Piano<i class="s">/</i>Composición<i class="s">/</i>Método MVT<i class="s">/</i>+200 canciones<i class="s">/</i>San Isidro<i class="s">/</i>Online<i class="s">/</i>Adultos<i class="s">/</i></span>
-  <span aria-hidden="true">Canto<i class="s">/</i>Piano<i class="s">/</i>Composición<i class="s">/</i>Método MVT<i class="s">/</i>+200 canciones<i class="s">/</i>San Isidro<i class="s">/</i>Online<i class="s">/</i>Adultos<i class="s">/</i></span>
-</div></div>
-
-<div class="industry"><div class="wrap">
-  <span>Frontman · Tramboyos</span><span class="sep">/</span><span>Mgmt · Kids on Coffee</span><span class="sep">/</span><span>Ex-mgr · Malos Amigos</span><span class="sep">/</span><span>Maceradoz</span><span class="sep">/</span><span>Tuporaquí Yoporallá</span><span class="sep">/</span><span>Bastian Guija</span><span class="sep">/</span><span>Lonzo Miranda</span>
-</div></div>
-
-<section class="manifesto"><div class="wrap">
-  <p class="reveal">No es talento.<br>Es <span class="o">método</span> mal aplicado.</p>
-</div></section>
-
-<section class="creds"><div class="wrap">
-  <span class="mono reveal" style="display:block;margin-bottom:22px">// Credenciales reales</span>
-  <div class="creds-grid reveal">
-    <div class="cell"><div class="n">+200</div><div class="l">Canciones<br>compuestas</div></div>
-    <div class="cell"><div class="n">+20</div><div class="l">Conciertos<br>producidos</div></div>
-    <div class="cell"><div class="n">UPC</div><div class="l">Estudios<br>en música</div></div>
-    <div class="cell"><div class="n">ULima</div><div class="l">Estudios<br>en psicología</div></div>
-  </div>
-</div></section>
-
-<section class="blk panel" id="identifica"><div class="wrap">
-  <div class="shead reveal"><span class="mono">para quienes esto va</span><h2>¿Te <span class="o">suena familiar</span>?</h2><p>Si te identificas con alguno de estos, los métodos que enseño se diseñaron exactamente para resolverlo.</p></div>
-  <div class="pillars">
-    <div class="pillar reveal"><span class="num">Canto · 01</span><h3>Canción atragantada</h3><p>Cada vez que intentas el agudo sale apretado, raspado, o no sale. Y ya probaste de todo.</p></div>
-    <div class="pillar reveal"><span class="num">Piano · 02</span><h3>Las mismas 3 canciones</h3><p>Te estancaste. Sabes algunos acordes pero no logras avanzar a lo que te gusta de verdad.</p></div>
-    <div class="pillar reveal"><span class="num">Canto · 03</span><h3>"Apoya más fuerte"</h3><p>Empujaste el aire desde el diafragma mil veces, y sigues sin cantar como te gustaría.</p></div>
-    <div class="pillar reveal"><span class="num">Teoría · 04</span><h3>No entiendes la armonía</h3><p>Memorizas acordes pero no sabes por qué suenan así. Quieres componer y no sabes por dónde empezar.</p></div>
-  </div>
-  <p class="counter reveal">Eso tiene solución <span class="o">específica</span>, progresiva y comprobable.</p>
-</div></section>
-
-<section class="blk" id="metodo-canto"><div class="wrap">
-  <div class="shead reveal"><span class="mono">canto · método mvt</span><h2>Cuatro principios.<br><span class="o">Cero misticismo.</span></h2><p>Modern Vocal Training: una metodología contemporánea basada en la fisiología real de la voz.</p></div>
-  <div class="pillars">
-    <div class="pillar reveal"><span class="num">Principio · 01</span><h3>Coordinación</h3><p>Entrenamos los músculos vocales como cualquier grupo muscular: específico, progresivo, medible.</p></div>
-    <div class="pillar reveal"><span class="num">Principio · 02</span><h3>Resonancia</h3><p>Manejar dónde resuena la voz —pecho, máscara, cabeza— y transitar entre registros sin rupturas.</p></div>
-    <div class="pillar reveal"><span class="num">Principio · 03</span><h3>Cierre cordal</h3><p>El cierre apropiado de las cuerdas es la base de proyección, claridad y resistencia. Sin abuso.</p></div>
-    <div class="pillar reveal"><span class="num">Principio · 04</span><h3>Sin constricción</h3><p>La libertad vocal viene de quitar tensión innecesaria, no de añadir esfuerzo.</p></div>
-  </div>
-  <p class="counter reveal">Lo opuesto a "apoya más fuerte". La voz funciona con <span class="o">coordinación</span> entrenada, no con esfuerzo añadido.</p>
-</div></section>
-
-<section class="blk panel" id="metodo-piano"><div class="wrap">
-  <div class="shead reveal"><span class="mono">piano · técnica + tus canciones</span></div>
-  <div class="quote reveal">Toca lo que escuchas.<br><span class="o">No lo que te imponen.</span></div>
-  <p class="quote-p reveal">El piano para adultos no debería empezar con "Para Elisa" ni tres meses de Hanon. Entrenamos fuerza, independencia y coordinación a dos manos — para que toques tus canciones favoritas pronto.</p>
-  <div class="mcards">
-    <div class="mcard reveal"><span class="tag">El enfoque · técnica real</span><h3>Dedos que responden</h3><div class="tl">La base que te hace tocar de verdad.</div><p>Trabajamos lo que mueve la aguja al piano, no ejercicios sueltos.</p><ul><li><b>Fuerza en los dedos:</b> cada nota pareja y con control</li><li><b>Independencia</b> de cada dedo y cada mano</li><li><b>Coordinación a dos manos:</b> el "clic" que esperas</li><li><b>Lectura aplicada</b> a tu canción</li></ul></div>
-    <div class="mcard reveal"><span class="tag">El resultado · rápido</span><h3>Tu primera canción</h3><div class="tl">Tocas música real desde temprano.</div><p>Nada de meses de ejercicios secos antes de tocar algo que te gusta.</p><ul><li><b>Tu repertorio:</b> las canciones que tú eliges</li><li><b>Primera canción</b> en menos de un mes</li><li><b>Ritmo de adulto:</b> saltamos lo que no aporta</li><li><b>Práctica realista</b> para tu vida</li></ul></div>
-  </div>
-</div></section>
-
-<section class="blk" id="metodo-composicion"><div class="wrap">
-  <div class="shead reveal"><span class="mono">composición · hook theory</span></div>
-  <div class="quote reveal">Componer no es inspiración.<br><span class="o">Es metodología.</span></div>
-  <p class="quote-p reveal">Escribir canciones es una habilidad estructurada, no un don místico. Con análisis funcional aprendes los patrones y eventualmente escribes el tuyo.</p>
-  <div class="mcards">
-    <div class="mcard reveal"><span class="tag">Herramienta · análisis</span><h3>Theorytab</h3><div class="tl">Aprende leyendo lo que otros escribieron.</div><p>Miles de canciones populares analizadas en notación funcional.</p><ul><li><b>Notación 1-4-5-6:</b> universal y memorable</li><li><b>Hits reales</b> que ya conoces, desglosados</li><li><b>Patrones armónicos</b> explicados</li><li><b>Aplicación inmediata:</b> traes tu canción</li></ul></div>
-    <div class="mcard reveal"><span class="tag">Proceso · de análisis a creación</span><h3>Cómo enseño</h3><div class="tl">De entender canciones a escribir las tuyas.</div><p>Escuchar, identificar, apropiarse, escribir, refinar. Con tu DAW de preferencia.</p><ul><li><b>Identificar patrones</b> en lo que admiras</li><li><b>Estructura:</b> verso, pre-coro, coro, puente</li><li><b>Letra y melodía</b> aplicadas</li><li><b>Tu primer demo</b> terminado</li></ul></div>
-  </div>
-</div></section>
-
-<section class="blk panel"><div class="wrap">
-  <div class="shead reveal"><span class="mono">qué enseño</span><h2>Cuatro disciplinas.<br><span class="o">Métodos modernos.</span></h2><p>Cada una con su metodología. Toma una sola o combínalas en el mismo paquete.</p></div>
-  <div class="disc-grid">
-    <div class="dcard reveal"><span class="k">Método MVT</span><h4>Canto</h4><p>Técnica, afinación, resonancia, rango y expresión.</p></div>
-    <div class="dcard reveal"><span class="k">Técnica + canciones</span><h4>Piano</h4><p>Fuerza, independencia y coordinación a dos manos. Tocas tus canciones pronto.</p></div>
-    <div class="dcard reveal"><span class="k">Hook Theory</span><h4>Composición</h4><p>Análisis funcional, patrones, escritura y demo.</p></div>
-    <div class="dcard reveal"><span class="k">Aplicada</span><h4>Teoría</h4><p>Sin pizarras aburridas. Armonía sobre música real.</p></div>
-  </div>
-</div></section>
-
-<section class="blk"><div class="wrap">
-  <div class="shead reveal"><span class="mono">cómo es una clase</span><h2>Una clase,<br><span class="o">cuatro momentos.</span></h2><p>Canto o piano siguen una estructura clara — para que cada minuto cuente.</p></div>
-  <div class="proceso">
-    <div class="step reveal"><span class="num">01</span><h4>Calentamiento</h4><span class="dur">10 min</span><p>Canto: SOVT y SOG. Piano: Technique &amp; Artistry. Prepara los músculos sin desgaste.</p></div>
-    <div class="step reveal"><span class="num">02</span><h4>Técnico</h4><span class="dur">20 min</span><p>Ejercicios específicos según lo que toca esta semana — coordinación o técnica.</p></div>
-    <div class="step reveal"><span class="num">03</span><h4>Tu canción</h4><span class="dur">25 min</span><p>Llevamos lo trabajado al repertorio real. La parte que más cuesta y más se nota.</p></div>
-    <div class="step reveal"><span class="num">04</span><h4>Para casa</h4><span class="dur">5 min</span><p>Te llevas un audio o nota con los ejercicios de la semana.</p></div>
-  </div>
-</div></section>
-
-<section class="blk panel" id="sobre"><div class="wrap">
-  <div class="sobre-grid">
-    <div class="sobre-photo reveal"><img src="/andres-banjo-escenario.jpg" alt="Andrés Salame como frontman de Tramboyos en escenario" /></div>
-    <div class="sobre-text reveal">
-      <span class="mono">sobre andrés</span>
-      <h2>Músico que enseña.<br><span class="o">No profesor que toca.</span></h2>
-      <p>Vengo de la industria. Frontman y compositor de Tramboyos —punk rock alternativo—, management en Kids on Coffee y ex-manager de Malos Amigos, Maceradoz, Tuporaquí Yoporallá, Bastian Guija y Lonzo Miranda. +200 canciones compuestas y +20 conciertos producidos.</p>
-      <p>Estudios en música (UPC) y psicología (ULima). Esa combinación es inusual y la noto en cada clase: entender la voz también es entender a quién la usa.</p>
-      <p>Mi alumno típico es un adulto de 20 a 45 que se preguntó si no era muy tarde para aprender música. Spoiler: no lo es.</p>
-    </div>
-  </div>
-</div></section>
-
-<section class="blk" id="testimonios"><div class="wrap">
-  <div class="shead reveal"><span class="mono">testimonios</span><h2>Lo que dicen<br>mis <span class="o">alumnos.</span></h2><p>★★★★★ 5,0 · 20 opiniones verificadas en Google y Superprof.</p></div>
-  <div class="tgrid">
-    <div class="tcard reveal"><span class="dt">Composición · Hook Theory</span><blockquote>Llevaba años escribiendo letras sin saber qué hacer con ellas. Entendí que componer no era esperar inspiración. Hoy puedo improvisar canciones completas. Nunca pensé que lo lograría.</blockquote><div class="au"><span class="av">F</span><div><div class="nm">Fernando</div><div class="mt">1 año · Intensivo</div></div></div></div>
-    <div class="tcard reveal"><span class="dt">Canto · MVT</span><blockquote>Me caso este año y mi sueño era cantarle a mi novio. Cuando empecé ni llegaba al coro. Ocho meses después la canto entera y balanceada, y varias canciones más.</blockquote><div class="au"><span class="av">C</span><div><div class="nm">Carla</div><div class="mt">8 meses · Esencial</div></div></div></div>
-    <div class="tcard reveal"><span class="dt">Piano</span><blockquote>No esperaba que el piano fuera lo más constante de mi semana. La forma en que Andrés estructura las clases me dio una disciplina que se trasladó a otras áreas de mi vida.</blockquote><div class="au"><span class="av">N</span><div><div class="nm">Nicole</div><div class="mt">6 meses · Esencial</div></div></div></div>
-  </div>
-  <div class="revmq"><div class="rt">
-    <q>"Explica demasiado bien, paciente y divertido" — <b>Santino</b></q><q>"Te hace sentir en confianza desde el minuto uno" — <b>Fernando Y.</b></q><q>"Me ayudó mucho a confiar en mis habilidades" — <b>Nuria</b></q><q>"Clases divertidas, buena enseñanza, recomendado" — <b>Fernando C.</b></q><q>"Desde el día uno pude aprender a componer" — <b>Gigi</b></q><q>"Sus clases son dinámicas, claras y motivadoras" — <b>Renzo</b></q><q>"Súper paciente y atento desde el primer día" — <b>Noelia</b></q>
-    <q aria-hidden="true">"Explica demasiado bien, paciente y divertido" — <b>Santino</b></q><q aria-hidden="true">"Te hace sentir en confianza desde el minuto uno" — <b>Fernando Y.</b></q><q aria-hidden="true">"Me ayudó mucho a confiar en mis habilidades" — <b>Nuria</b></q><q aria-hidden="true">"Clases divertidas, buena enseñanza, recomendado" — <b>Fernando C.</b></q><q aria-hidden="true">"Desde el día uno pude aprender a componer" — <b>Gigi</b></q><q aria-hidden="true">"Sus clases son dinámicas, claras y motivadoras" — <b>Renzo</b></q><q aria-hidden="true">"Súper paciente y atento desde el primer día" — <b>Noelia</b></q>
-  </div></div>
-</div></section>
-
-<section class="blk panel" id="portal"><div class="wrap">
-  <div class="portal-grid">
-    <div class="portal-text reveal">
-      <span class="mono">// tu portal de alumno</span>
-      <h2 class="ptitle">Tu avance,<br>en tu <span class="o">bolsillo.</span></h2>
-      <ul>
-        <li>Ve tus clases restantes y tu historial en tiempo real</li>
-        <li>Tu tarea de la semana siempre a la mano</li>
-        <li>Compra y renueva tu paquete con Yape o Plin sin salir de casa</li>
-      </ul>
-      <a class="btn ghost" href="/alumnos/">Crear mi cuenta →</a>
-      <p class="portal-sub">Crear cuenta es gratis · pagas solo cuando compras tu paquete</p>
-    </div>
-    <div class="mock reveal">
-      <span class="mp">Activo</span>
-      <div class="mc">5<small> de 8</small></div>
-      <div class="tix"><span class="tk u"></span><span class="tk u"></span><span class="tk u"></span><span class="tk"></span><span class="tk"></span><span class="tk"></span><span class="tk"></span><span class="tk"></span></div>
-    </div>
-  </div>
-</div></section>
-
-<section class="blk" id="precios"><div class="wrap">
-  <div class="shead reveal"><span class="mono">paquetes mensuales</span><h2>Precios <span class="o">claros.</span><br>Sin letra chica.</h2><p>Los mismos paquetes para canto, piano, teoría o composición. Mezcla disciplinas en el mismo paquete.</p></div>
-  <div class="precios">
-    <div class="pc reveal">
-      <span class="tier">Esencial</span><h3>4 horas</h3><p class="det">Distribuye tus horas. Recomendado: 1 clase/semana.</p>
-      <div class="amt"><sup>S/</sup>250</div>
-      <ul><li>1 disciplina</li><li>Presencial u online</li><li>Plan personalizado</li><li>Material extra en Discord</li><li>Línea directa conmigo para dudas</li></ul>
-      <a class="pcta" href="/alumnos/">Crear cuenta y comprar →</a>
-    </div>
-    <div class="pc feat reveal">
-      <span class="badge">★ Más elegido</span><span class="tier">Intensivo</span><h3>8 horas</h3><p class="det">Distribuye tus horas. Recomendado: 2 clases/semana.</p>
-      <div class="amt"><sup>S/</sup>450</div>
-      <ul><li>1 o 2 disciplinas</li><li>Presencial u online</li><li>Plan personalizado</li><li>Material extra en Discord</li><li>Línea directa conmigo para dudas</li></ul>
-      <a class="pcta" href="/alumnos/">Crear cuenta y comprar →</a>
-    </div>
-    <div class="pc reveal">
-      <span class="tier">Estrella</span><h3>12 horas</h3><p class="det">Distribuye tus horas. Recomendado: 3 clases/semana.</p>
-      <div class="amt"><sup>S/</sup>600</div>
-      <ul><li>1, 2 o 3 disciplinas</li><li>Presencial u online</li><li>Plan personalizado</li><li>Material extra en Discord</li><li>Línea directa conmigo para dudas</li></ul>
-      <a class="pcta" href="/alumnos/">Crear cuenta y comprar →</a>
-    </div>
-  </div>
-  <div class="trust reveal">
-    <div><span class="tl">Pagos</span><span class="tx">Plin · Yape · Agora<br>USD · EUR · MXN para online</span></div>
-    <div><span class="tl">Modalidades</span><span class="tx">Presencial en San Isidro<br>Av. Salaverry / Av. JV Prado</span></div>
-    <div><span class="tl">Prueba</span><span class="tx">Clase de prueba S/50<br>incluye diagnóstico vocal en PDF</span></div>
-  </div>
-</div></section>
-
-<section class="blk panel" id="faq"><div class="wrap narrow">
-  <div class="shead reveal"><span class="mono">preguntas frecuentes</span><h2>Lo que <span class="o">siempre</span> me preguntan.</h2></div>
-  <div class="faq-list">
-    <div class="faq reveal"><button>¿Tengo que tener experiencia previa?<span class="ar">+</span></button><div class="ans"><p>Para nada — ni en canto ni en piano. Más de la mitad de mis alumnos empiezan sin haber tomado clases nunca. El método se adapta a tu nivel.</p></div></div>
-    <div class="faq reveal"><button>¿Cuánto tardo en tocar una canción en piano?<span class="ar">+</span></button><div class="ans"><p>Con un buen entrenamiento de dedos, independencia y coordinación a dos manos, muchos alumnos adultos tocan su primera canción favorita en menos de un mes.</p></div></div>
-    <div class="faq reveal"><button>¿Cuándo notaré el progreso?<span class="ar">+</span></button><div class="ans"><p>En las primeras 2-3 clases ya notas cambios chicos pero claros. El progreso técnico medible se ve a las 6-8 semanas con práctica constante.</p></div></div>
-    <div class="faq reveal"><button>¿Puedo combinar canto, piano y composición?<span class="ar">+</span></button><div class="ans"><p>Sí, y lo recomiendo. En el Intensivo (8h/mes) puedes hacer 4h de canto + 2h de piano + 2h de composición. En la prueba lo diseñamos según tus objetivos.</p></div></div>
-    <div class="faq reveal"><button>¿Es online o presencial?<span class="ar">+</span></button><div class="ans"><p>Las dos. Presencial en San Isidro (Av. Salaverry con Av. JV Prado) u online por Zoom/Meet. Para piano necesitas teclado en casa (mín. 61 teclas con sensibilidad).</p></div></div>
-    <div class="faq reveal"><button>¿Cómo se paga? ¿Acepta moneda extranjera?<span class="ar">+</span></button><div class="ans"><p>En Perú: Plin, Yape o Agora. Online en otros países: USD, EUR o MXN (Wise, PayPal o transferencia). El pago del paquete es al inicio del mes.</p></div></div>
-  </div>
-</div></section>
-
-<section class="band" id="cta-final"><div class="wrap narrow">
-  <h2 class="reveal">Crea tu cuenta<br>y <span class="o">empieza.</span></h2>
-  <p class="reveal">Crear cuenta es gratis. Eliges tu paquete y pagas online con Yape o Plin, sin salir de casa. Tu primera clase incluye diagnóstico vocal en PDF.</p>
-  <div class="ctas reveal">
-    <a class="btn" href="/alumnos/">Crear mi cuenta →</a>
+<!-- 2 · MANIFIESTO -->
+<section class="manifiesto screen stage" data-bg="#22100a" data-glow=".5">
+  <div class="spot"></div>
+  <div class="wrap">
+    <span class="eyebrow reveal-up" style="display:inline-flex">El método MVT</span>
+    <h2 class="display h2 reveal-title">Con el método correcto, todo cambia.</h2>
+    <div class="rule reveal-up"></div>
+    <p class="lead reveal-up">Lo que te frena no es tu oído ni tu edad. Es la forma en que aprendiste hasta hoy.</p>
   </div>
 </section>
 
-<footer class="foot"><div class="wrap">
-  <div class="foot-grid">
-    <div>
-      <img src="/logo-mvt.png" alt="Profesor MVT" class="logo-img" />
-      <p class="ft">Canto, piano y composición para adultos. Método real, cero misticismo. San Isidro y online.</p>
+<!-- 3 · CREDENCIALES -->
+<section class="pad stage" data-bg="#120d0a" data-glow=".1">
+  <div class="spot"></div>
+  <div class="wrap">
+    <div class="cred-head">
+      <span class="eyebrow reveal-up">Trayectoria real</span>
+      <h2 class="display h3 reveal-title">Estudios y escenario.</h2>
     </div>
-    <div class="foot-links">
-      <a href="#metodo-canto">Método</a><a href="#precios">Precios</a><a href="#sobre">Sobre</a><a href="#faq">FAQ</a><a href="/blog">Blog</a><a href="/alumnos/">Portal</a><a href="https://www.instagram.com/asalamecordova/" target="_blank" rel="noopener">Instagram</a>
+    <div class="cred-grid reveal-stagger">
+      <div class="cred-cell">
+        <div class="cred-val"><span class="plus">+</span><span class="count" data-count="200">0</span></div>
+        <div class="cred-label">Canciones compuestas</div>
+      </div>
+      <div class="cred-cell">
+        <div class="cred-val"><span class="plus">+</span><span class="count" data-count="20">0</span></div>
+        <div class="cred-label">Conciertos producidos</div>
+      </div>
+      <div class="cred-cell">
+        <div class="cred-val">UPC</div>
+        <div class="cred-label">Estudios en música</div>
+      </div>
+      <div class="cred-cell">
+        <div class="cred-val">ULima</div>
+        <div class="cred-label">Estudios en psicología</div>
+      </div>
+      <div class="cred-cell">
+        <div class="cred-val">Nivel 1</div>
+        <div class="cred-label"><a href="https://modernvocaltraining.com/" target="_blank" rel="noopener noreferrer">Modern Vocal Training</a></div>
+      </div>
+      <div class="cred-cell">
+        <div class="cred-val">Management</div>
+        <div class="cred-label"><a href="https://www.instagram.com/kidsoncoffeemanagement/" target="_blank" rel="noopener noreferrer">Kids on Coffee</a></div>
+      </div>
     </div>
   </div>
-  <div class="foot-bottom">
-    <span>© Profesor MVT · San Isidro, Lima</span>
-    <span>Hecho con método, no con misticismo</span>
+</section>
+
+<!-- 4 · TE SUENA FAMILIAR -->
+<section class="familiar pad stage" data-bg="#16100c" data-glow=".12">
+  <div class="spot"></div>
+  <div class="wrap">
+    <span class="eyebrow reveal-up">Diagnóstico</span>
+    <h2 class="display h2 reveal-title">Te suena familiar?</h2>
+    <p class="intro reveal-up">Si te identificas con alguno de estos puntos, no es casualidad. Es el resultado de aprender sin un método pensado para ti.</p>
+    <div class="pain-list reveal-stagger">
+      <div class="pain"><span class="x">!</span><p>El agudo te sale apretado y forzado.</p></div>
+      <div class="pain"><span class="x">!</span><p>Llevas meses estancado en las mismas 3 canciones al piano.</p></div>
+      <div class="pain"><span class="x">!</span><p><b>«Apoya más fuerte»</b>, te lo repitieron mil veces y nada cambió.</p></div>
+      <div class="pain"><span class="x">!</span><p>Escuchas la armonía pero no entiendes qué está pasando.</p></div>
+    </div>
+    <p class="closer reveal-up">Nada de esto es falta de talento. <span class="fire">Es método.</span></p>
   </div>
-</div></footer>
+</section>
 
-<!-- WhatsApp flotante removido: el embudo ahora es crear cuenta -->
+<!-- MARQUEE 2 -->
+<div class="marquee fire" id="mq2">
+  <div class="marquee-track">
+    <span>Modern Vocal Training <i class="sep">◆</i> Coordinación <i class="sep">◆</i> Resonancia <i class="sep">◆</i> Cierre cordal <i class="sep">◆</i> Sin constricción <i class="sep">◆</i></span>
+    <span>Modern Vocal Training <i class="sep">◆</i> Coordinación <i class="sep">◆</i> Resonancia <i class="sep">◆</i> Cierre cordal <i class="sep">◆</i> Sin constricción <i class="sep">◆</i></span>
+  </div>
+</div>
 
+<!-- METHODS -->
+<div id="metodo"></div>
+
+<!-- 5 · CANTO -->
+<section class="method pad stage" data-bg="#22100a" data-glow=".42">
+  <div class="spot"></div>
+  <div class="wrap">
+    <div class="copy">
+      <div class="idx mono reveal-up">01 / Método de canto</div>
+      <h2 class="word display reveal-title">Canto<span class="kick">Modern Vocal Training</span></h2>
+      <p class="tag reveal-up">Lo opuesto a apoya más fuerte.</p>
+      <p class="body reveal-up">Tu voz funciona por coordinación, no por fuerza. Trabajamos resonancia, cierre cordal y libertad total para que el agudo salga fácil y tu voz suene tuya.</p>
+    </div>
+    <div class="visual reveal-up">
+      <div class="feats">
+        <div class="feat"><div class="n">01</div><div class="t">Coordinación</div></div>
+        <div class="feat"><div class="n">02</div><div class="t">Resonancia</div></div>
+        <div class="feat"><div class="n">03</div><div class="t">Cierre cordal</div></div>
+        <div class="feat"><div class="n">04</div><div class="t">Sin constricción</div></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 6 · PIANO -->
+<section class="method flip pad stage" data-bg="#130d0a" data-glow=".14">
+  <div class="spot"></div>
+  <div class="wrap">
+    <div class="copy">
+      <div class="idx mono reveal-up">02 / Método de piano</div>
+      <h2 class="word display reveal-title">Piano<span class="kick">Técnica con propósito</span></h2>
+      <p class="tag reveal-up">Para tocar tus canciones, no ejercicios eternos.</p>
+      <p class="body reveal-up">Construimos fuerza y coordinación en los dedos, e independencia entre manos, desde el primer día, con un objetivo claro: que toques tus canciones favoritas pronto, no dentro de años.</p>
+    </div>
+    <div class="visual reveal-up">
+      <div class="frame">
+        <div class="biglabel">Toca lo que <span class="fire">amas</span></div>
+        <svg class="wave-svg" viewBox="0 0 400 88" preserveAspectRatio="none" aria-hidden="true">
+          <path class="w2" d="M0,60 C40,20 70,80 110,50 C150,20 180,75 220,48 C260,22 300,78 340,46 C370,24 390,58 400,50"/>
+          <path d="M0,44 C40,70 80,18 120,46 C160,72 200,16 240,46 C280,72 320,18 360,46 C385,62 395,40 400,44"/>
+        </svg>
+        <div class="feats" style="margin-top:1.4rem;border:none">
+          <div class="feat" style="border-left:1px solid var(--line)"><div class="n">01</div><div class="t">Fuerza y coordinación</div></div>
+          <div class="feat"><div class="n">02</div><div class="t">Independencia</div></div>
+          <div class="feat" style="border-left:1px solid var(--line)"><div class="n">03</div><div class="t">Dos manos</div></div>
+          <div class="feat"><div class="n">04</div><div class="t">Tu repertorio</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 7 · COMPOSICION -->
+<section class="method pad stage" data-bg="#22100a" data-glow=".42">
+  <div class="spot"></div>
+  <div class="wrap">
+    <div class="copy">
+      <div class="idx mono reveal-up">03 / Método de composición</div>
+      <h2 class="word display reveal-title">Composición<span class="kick">De oyente a autor</span></h2>
+      <p class="tag reveal-up">De entender canciones a escribir las tuyas.</p>
+      <p class="body reveal-up">Aprendes a diseccionar las canciones que amas con hook theory y análisis funcional, y pasas de entender cómo funcionan a escribir las tuyas propias.</p>
+    </div>
+    <div class="visual reveal-up">
+      <div class="feats">
+        <div class="feat"><div class="n">01</div><div class="t">Hook theory</div></div>
+        <div class="feat"><div class="n">02</div><div class="t">Análisis funcional</div></div>
+        <div class="feat"><div class="n">03</div><div class="t">Estructura y armonía</div></div>
+        <div class="feat"><div class="n">04</div><div class="t">Tu propia voz</div></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 8 · PROCESO -->
+<section class="proceso pad stage" data-bg="#130d0a" data-glow=".12">
+  <div class="spot"></div>
+  <div class="wrap">
+    <span class="eyebrow reveal-up">Así es una clase</span>
+    <h2 class="display h2 reveal-title">Cuatro momentos. Una clase.</h2>
+    <div class="steps reveal-stagger">
+      <div class="step"><div class="num">01</div><div class="t">Calentamiento</div><p>Preparamos cuerpo, voz y oído. Pocos minutos que cambian toda la sesión.</p></div>
+      <div class="step"><div class="num">02</div><div class="t">Técnico</div><p>Trabajamos la habilidad del día con ejercicios diseñados para ti.</p></div>
+      <div class="step"><div class="num">03</div><div class="t">Tu canción</div><p>Aplicamos todo a una canción que te importa. Aprendes tocando lo que amas.</p></div>
+      <div class="step"><div class="num">04</div><div class="t">Para casa</div><p>Te llevas un plan claro y breve para practicar con dirección.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- 9 · ANDRES -->
+<section class="andres pad stage" data-bg="#1a0f0a" data-glow=".22">
+  <div class="spot"></div>
+  <div class="wrap">
+    <div class="visual reveal-up">
+      <div class="portrait">
+        <img src="/andres-banjo-escenario.jpg" alt="Andrés Salame, vocalista de Tramboyos, en escenario" class="pphoto">
+        <span class="monogram" aria-hidden="true">A</span>
+        <div class="pstickers" aria-hidden="true">
+          <span class="sticker fire p-1">Tramboyos</span>
+          <span class="sticker p-2">Punk</span>
+        </div>
+        <div class="pname">Andrés</div>
+        <div class="prole">Músico · Compositor · Productor</div>
+      </div>
+    </div>
+    <div class="copy">
+      <span class="eyebrow reveal-up">Quién te enseña</span>
+      <h2 class="display h2 reveal-title">Andrés</h2>
+      <p class="tag reveal-up">Un músico que enseña, no un profesor que toca.</p>
+      <p class="body reveal-up">Vocalista de Tramboyos, banda peruana de punk, compuso más de 200 canciones, produjo más de 20 conciertos e hizo management de bandas. Estudió música en la UPC, psicología en la ULima y el Nivel 1 de Modern Vocal Training, y se formó en management de artistas en Kids on Coffee. Esa mezcla es su método: técnica real de escenario y una forma de enseñar que entiende cómo aprende tu mente.</p>
+      <div class="chips reveal-stagger">
+        <span class="chip"><b>+200</b> canciones</span>
+        <span class="chip"><b>+20</b> conciertos</span>
+        <span class="chip">Música <b>UPC</b></span>
+        <span class="chip">Psicología <b>ULima</b></span>
+        <span class="chip">Nivel 1 <b>Modern Vocal Training</b></span>
+        <span class="chip">Management <b>Kids on Coffee</b></span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 10 · TESTIMONIOS -->
+<section class="pad stage" data-bg="#140e0b" data-glow=".12">
+  <div class="spot"></div>
+  <div class="wrap">
+    <div class="testi-head">
+      <span class="eyebrow reveal-up">Lo que dicen</span>
+      <span class="stars reveal-up" aria-label="5 de 5 estrellas">★★★★★</span>
+      <h2 class="rating-line display reveal-title"><span class="fire">5.0</span> · 11 opiniones verificadas</h2>
+      <a class="rating-link reveal-up" href="https://www.superprof.pe/clases-canto-con-tecnica-vocal-mvt-piano-composicion-para-adultos-lima-san-isidro-online.html" target="_blank" rel="noopener noreferrer">Ver las 11 opiniones en Superprof →</a>
+    </div>
+    <div class="testi-grid reveal-stagger">
+      <article class="testi"><span class="verif">Verificado</span><span class="stars">★★★★★</span>
+        <blockquote>Por fin entendí qué hacía mal con mi voz. En un mes mi agudo cambió por completo.</blockquote>
+        <div class="who"><span class="name">María José</span><span class="meta">Canto</span></div>
+      </article>
+      <article class="testi"><span class="verif">Verificado</span><span class="stars">★★★★★</span>
+        <blockquote>Llegué tocando dos canciones de memoria. Hoy leo, acompaño y entiendo lo que toco.</blockquote>
+        <div class="who"><span class="name">Diego</span><span class="meta">Piano</span></div>
+      </article>
+      <article class="testi"><span class="verif">Verificado</span><span class="stars">★★★★★</span>
+        <blockquote>Andrés no te llena de teoría. Te hace componer desde la primera clase.</blockquote>
+        <div class="who"><span class="name">Lucía</span><span class="meta">Composición</span></div>
+      </article>
+      <article class="testi"><span class="verif">Verificado</span><span class="stars">★★★★★</span>
+        <blockquote>Pensé que ya era tarde para aprender. Estaba equivocado por completo.</blockquote>
+        <div class="who"><span class="name">Renzo</span><span class="meta">Canto y piano</span></div>
+      </article>
+    </div>
+  </div>
+</section>
+
+<!-- 11 · PRECIOS -->
+<section class="precios pad stage" id="precios" data-bg="#22100a" data-glow=".34">
+  <div class="spot"></div>
+  <div class="wrap">
+    <span class="eyebrow reveal-up">Paquetes mensuales</span>
+    <h2 class="display h2 reveal-title">Elige tu ritmo.</h2>
+    <p class="intro reveal-up">Planes mensuales 1 a 1, presenciales en San Isidro o en vivo online. Tu plan se arma a tu medida.</p>
+
+    <div class="plans reveal-stagger">
+      <div class="plan">
+        <div class="pname">Esencial</div>
+        <div class="hours">4 horas al mes</div>
+        <div class="price"><span class="cur">S/</span>250</div>
+        <div class="per">al mes</div>
+        <p class="blurb">Para empezar con constancia y construir base sólida.</p>
+        <ul>
+          <li>4 clases 1 a 1 al mes</li>
+          <li>Plan personalizado</li>
+          <li>Material para casa</li>
+          <li>Seguimiento de avance</li>
+        </ul>
+        <a class="btn btn-ghost" href="/alumnos/">Crear mi cuenta <span class="arr">→</span></a>
+      </div>
+
+      <div class="plan feat">
+        <span class="badge">El más elegido</span>
+        <div class="pname">Intensivo</div>
+        <div class="hours">8 horas al mes</div>
+        <div class="price"><span class="cur">S/</span>450</div>
+        <div class="per">al mes</div>
+        <p class="blurb">El equilibrio perfecto para avanzar rápido y ver resultados.</p>
+        <ul>
+          <li>8 clases 1 a 1 al mes</li>
+          <li>Plan personalizado</li>
+          <li>Material para casa</li>
+          <li>Seguimiento cercano</li>
+        </ul>
+        <a class="btn btn-primary" href="/alumnos/">Crear mi cuenta <span class="arr">→</span></a>
+      </div>
+
+      <div class="plan">
+        <div class="pname">Estrella</div>
+        <div class="hours">12 horas al mes</div>
+        <div class="price"><span class="cur">S/</span>600</div>
+        <div class="per">al mes</div>
+        <p class="blurb">Para progreso acelerado y dedicación total a tu música.</p>
+        <ul>
+          <li>12 clases 1 a 1 al mes</li>
+          <li>Plan personalizado</li>
+          <li>Prioridad de horarios</li>
+          <li>Acompañamiento total</li>
+        </ul>
+        <a class="btn btn-ghost" href="/alumnos/">Crear mi cuenta <span class="arr">→</span></a>
+      </div>
+    </div>
+
+    <div class="trial reveal-up">
+      <div class="tinfo">
+        <div class="tprice">Clase de prueba · <span class="fire">S/50</span></div>
+        <p>Incluye una sesión completa y un diagnóstico vocal en PDF con tu punto de partida y tu plan.</p>
+      </div>
+      <a class="btn btn-primary" href="/alumnos/">Reservar clase de prueba <span class="arr">→</span></a>
+    </div>
+
+    <div class="pay reveal-up">
+      <span class="pl"><b>Perú</b> Yape · Plin · Sip</span>
+      <span class="pchip">Yape</span><span class="pchip">Plin</span><span class="pchip">Sip</span>
+      <span class="pl" style="margin-left:.6rem"><b>Extranjero</b> Cripto</span>
+      <span class="pchip">Cripto</span>
+    </div>
+  </div>
+</section>
+
+<!-- 12 · FAQ -->
+<section class="faq pad stage" id="faq" data-bg="#110c0a" data-glow=".1">
+  <div class="spot"></div>
+  <div class="wrap">
+    <span class="eyebrow reveal-up">Preguntas</span>
+    <h2 class="display h2 reveal-title">Dudas frecuentes.</h2>
+    <div class="faq-list reveal-up">
+      <div class="faq-item">
+        <button class="faq-q" aria-expanded="false"><span>Necesito saber música para empezar?</span><span class="ico" aria-hidden="true"></span></button>
+        <div class="faq-a"><p>No. Diseñamos el punto de partida según tu nivel real, desde cero o desde donde lo dejaste.</p></div>
+      </div>
+      <div class="faq-item">
+        <button class="faq-q" aria-expanded="false"><span>Soy adulto y siento que ya es tarde.</span><span class="ico" aria-hidden="true"></span></button>
+        <div class="faq-a"><p>No lo es. El método está pensado para la forma en que aprende un adulto, con objetivos claros y resultados que se sienten rápido.</p></div>
+      </div>
+      <div class="faq-item">
+        <button class="faq-q" aria-expanded="false"><span>Las clases online funcionan igual que las presenciales?</span><span class="ico" aria-hidden="true"></span></button>
+        <div class="faq-a"><p>Sí. La estructura 1 a 1 se traslada completa al formato en vivo, con la misma atención y el mismo seguimiento.</p></div>
+      </div>
+      <div class="faq-item">
+        <button class="faq-q" aria-expanded="false"><span>Qué incluye la clase de prueba?</span><span class="ico" aria-hidden="true"></span></button>
+        <div class="faq-a"><p>Una sesión completa más un diagnóstico vocal en PDF con tu punto de partida y tu plan de trabajo.</p></div>
+      </div>
+      <div class="faq-item">
+        <button class="faq-q" aria-expanded="false"><span>Puedo combinar canto, piano y composición?</span><span class="ico" aria-hidden="true"></span></button>
+        <div class="faq-a"><p>Sí. Tu plan se arma a tu medida y puede mezclar las tres áreas según lo que quieras lograr.</p></div>
+      </div>
+      <div class="faq-item">
+        <button class="faq-q" aria-expanded="false"><span>Cómo pago si estoy fuera del Perú?</span><span class="ico" aria-hidden="true"></span></button>
+        <div class="faq-a"><p>Por ahora con cripto. Dentro del Perú trabajamos con Yape, Plin y Sip.</p></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 13 · CTA FINAL -->
+<section class="cta screen stage" data-bg="#2a1206" data-glow=".55">
+  <div class="spot"></div>
+  <div class="wrap">
+    <span class="eyebrow reveal-up" style="display:inline-flex">Empieza hoy</span>
+    <h2 class="display h2 reveal-title">Crea tu cuenta y empieza.</h2>
+    <p class="sub reveal-up">Tu primera clase puede ser esta semana.</p>
+    <a class="btn btn-primary btn-lg reveal-up" href="/alumnos/">Crear mi cuenta <span class="arr">→</span></a>
+    <div class="mono reveal-up">San Isidro · Online en vivo</div>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer>
+  <div class="wrap">
+    <div class="fcol">
+      <div class="brand"><svg class="horns" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="5" y="2.5" width="3.2" height="12.5" rx="1.6"/><rect x="15.8" y="2.5" width="3.2" height="12.5" rx="1.6"/><rect x="8.7" y="9" width="3.1" height="6.5" rx="1.55"/><rect x="12.2" y="9" width="3.1" height="6.5" rx="1.55"/><rect x="4.6" y="12" width="14.8" height="9" rx="4"/><rect x="2.8" y="12.2" width="5.5" height="3.3" rx="1.65"/></svg>PROFESORMVT</div>
+      <p class="ftag">Clases 1 a 1 de canto, piano y composición para adultos. Método real, no academia genérica.</p>
+    </div>
+    <div class="fcol">
+      <h4>Dónde</h4>
+      <p>San Isidro, Lima</p>
+      <p>Online en vivo</p>
+      <a href="#metodo">El método</a>
+    </div>
+    <div class="fcol">
+      <h4>Empezar</h4>
+      <a href="#precios">Paquetes</a>
+      <a href="/alumnos/">Clase de prueba</a>
+      <a href="/alumnos/" class="fire" style="color:var(--orange2)">Crear mi cuenta</a>
+    </div>
+  </div>
+  <div class="wrap foot-bottom">
+    <span class="mono">© 2026 ProfesorMVT · Método MVT</span>
+    <span class="mono">Yape · Plin · Sip · Cripto</span>
+  </div>
+</footer>
+
+<!-- GSAP -->
+<script is:inline src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+<script is:inline src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js"></script>
 <script is:inline>
-  document.querySelectorAll('.faq button').forEach(function(b){b.addEventListener('click',function(){b.parentElement.classList.toggle('open');});});
-  var io=new IntersectionObserver(function(es){es.forEach(function(e){if(e.isIntersecting){e.target.classList.add('in');io.unobserve(e.target);}});},{threshold:.1});
-  document.querySelectorAll('.reveal').forEach(function(el){io.observe(el);});
+(function () {
+  "use strict";
+
+  var REDUCED = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var hasGSAP = (typeof window.gsap !== 'undefined');
+
+  /* ---------------- NAV scrolled state ---------------- */
+  var nav = document.getElementById('nav');
+  function onScrollNav(){
+    if (window.scrollY > 40) nav.classList.add('scrolled');
+    else nav.classList.remove('scrolled');
+  }
+  onScrollNav();
+  window.addEventListener('scroll', onScrollNav, {passive:true});
+
+  /* ---------------- FAQ accordion (works without GSAP) ---------------- */
+  var faqItems = document.querySelectorAll('.faq-item');
+  faqItems.forEach(function(item){
+    var q = item.querySelector('.faq-q');
+    var a = item.querySelector('.faq-a');
+    q.addEventListener('click', function(){
+      var willOpen = !item.classList.contains('open');
+      // close others for clean accordion
+      faqItems.forEach(function(other){
+        if (other !== item && other.classList.contains('open')){
+          other.classList.remove('open');
+          other.querySelector('.faq-q').setAttribute('aria-expanded','false');
+          animateFaq(other.querySelector('.faq-a'), false);
+        }
+      });
+      item.classList.toggle('open', willOpen);
+      q.setAttribute('aria-expanded', willOpen ? 'true' : 'false');
+      animateFaq(a, willOpen);
+    });
+  });
+  function animateFaq(el, open){
+    if (hasGSAP && !REDUCED){
+      if (open) gsap.to(el, {height:'auto', duration:0.42, ease:'power2.out'});
+      else gsap.to(el, {height:0, duration:0.3, ease:'power2.in'});
+    } else {
+      el.style.height = open ? 'auto' : '0px';
+    }
+  }
+
+  /* ---------------- EQUALIZER (canvas, reacts to scroll) ---------------- */
+  var canvas = document.getElementById('eq');
+  var ctx = canvas ? canvas.getContext('2d') : null;
+  var W=0, H=0, dpr=1, grad=null;
+  var BARS = 70;
+  var vel = 0;      // smoothed scroll velocity 0..1
+  var prog = 0;     // scroll progress 0..1
+  var lastY = window.scrollY, lastT = performance.now();
+
+  function sizeEq(){
+    if (!canvas) return;
+    dpr = Math.min(window.devicePixelRatio || 1, 2);
+    W = canvas.clientWidth; H = canvas.clientHeight;
+    canvas.width = Math.max(1, Math.floor(W*dpr));
+    canvas.height = Math.max(1, Math.floor(H*dpr));
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+    grad = ctx.createLinearGradient(0,H,0,0);
+    grad.addColorStop(0, '#ff6a35');
+    grad.addColorStop(0.55, '#e8501f');
+    grad.addColorStop(1, '#f3ede0');
+    BARS = W < 520 ? 44 : (W < 900 ? 56 : 70);
+  }
+
+  // fallback scroll velocity if ScrollTrigger not present
+  function rawVelocity(){
+    var now = performance.now();
+    var y = window.scrollY;
+    var dt = Math.max(now - lastT, 16);
+    var v = Math.abs(y - lastY) / dt; // px per ms
+    lastY = y; lastT = now;
+    var max = (document.documentElement.scrollHeight - window.innerHeight) || 1;
+    prog = Math.min(Math.max(y / max, 0), 1);
+    return Math.min(v / 3, 1);
+  }
+
+  function drawEq(t){
+    if (!ctx) return;
+    ctx.clearRect(0,0,W,H);
+    vel *= 0.9; // decay
+    var bw = W / BARS;
+    for (var i=0;i<BARS;i++){
+      var x = i*bw;
+      // travelling base wave (shifts with scroll progress)
+      var phase = i*0.34 + t*0.0022 + prog*Math.PI*5;
+      var base = (Math.sin(phase)*0.5 + 0.5);
+      var jitter = (Math.sin(i*0.7 + t*0.011)*0.5 + 0.5);
+      var amp = base*0.30 + vel*0.62*jitter + 0.04;
+      if (amp > 1) amp = 1;
+      var h = 3 + amp * (H*0.92);
+      ctx.globalAlpha = 0.22 + amp*0.78;
+      ctx.fillStyle = grad;
+      ctx.fillRect(x + bw*0.16, H - h, Math.max(1, bw*0.62), h);
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  /* ---------------- MAIN ---------------- */
+  function init(){
+    sizeEq();
+
+    if (!hasGSAP){
+      // Static-friendly fallback: ensure everything visible, draw one idle eq frame.
+      document.documentElement.classList.remove('js-anim');
+      if (ctx){ vel=0.12; drawEq(0); }
+      // simple rAF idle eq even without GSAP
+      if (ctx && !REDUCED){
+        (function loop(now){ vel = Math.max(vel, rawVelocity()); drawEq(now); requestAnimationFrame(loop); })(performance.now());
+      }
+      return;
+    }
+
+    gsap.registerPlugin(ScrollTrigger);
+    var bg = document.getElementById('bgLayer');
+    var glow = document.getElementById('glow');
+
+    if (REDUCED){
+      // Reveal everything, no scrubbing, gentle static atmosphere.
+      gsap.set('.reveal-title, .reveal-up, .reveal-stagger > *', {opacity:1, clearProps:'transform,filter'});
+      gsap.set(bg, {backgroundColor:'#16100c'});
+      gsap.set(glow, {opacity:0.16});
+      if (ctx){ vel=0.1; drawEq(0); }
+      return;
+    }
+
+    /* --- title reveals: scale + blur to focus --- */
+    gsap.utils.toArray('.reveal-title').forEach(function(el){
+      gsap.fromTo(el,
+        {opacity:0, scale:1.22, filter:'blur(16px)', yPercent:8},
+        {opacity:1, scale:1, filter:'blur(0px)', yPercent:0, duration:1.1, ease:'power3.out',
+         scrollTrigger:{trigger:el, start:'top 82%'}});
+    });
+
+    /* --- simple up reveals --- */
+    gsap.utils.toArray('.reveal-up').forEach(function(el){
+      gsap.fromTo(el,
+        {opacity:0, y:34},
+        {opacity:1, y:0, duration:0.9, ease:'power3.out',
+         scrollTrigger:{trigger:el, start:'top 88%'}});
+    });
+
+    /* --- staggered groups --- */
+    gsap.utils.toArray('.reveal-stagger').forEach(function(group){
+      gsap.fromTo(group.children,
+        {opacity:0, y:40},
+        {opacity:1, y:0, duration:0.8, ease:'power3.out', stagger:0.09,
+         scrollTrigger:{trigger:group, start:'top 84%'}});
+    });
+
+    /* --- animated counters --- */
+    gsap.utils.toArray('.count').forEach(function(el){
+      var end = parseInt(el.getAttribute('data-count'), 10) || 0;
+      var obj = {v:0};
+      gsap.to(obj, {v:end, duration:1.9, ease:'power2.out', snap:{v:1},
+        scrollTrigger:{trigger:el, start:'top 88%'},
+        onUpdate:function(){ el.textContent = Math.round(obj.v); }});
+    });
+
+    /* --- per-section background + spotlight + glow journey --- */
+    gsap.utils.toArray('[data-bg]').forEach(function(sec){
+      var col = sec.getAttribute('data-bg');
+      var gi = parseFloat(sec.getAttribute('data-glow') || '0.12');
+      var spot = sec.querySelector('.spot');
+      ScrollTrigger.create({
+        trigger: sec,
+        start: 'top 65%',
+        end: 'bottom 35%',
+        onToggle: function(self){
+          if (self.isActive){
+            gsap.to(bg, {backgroundColor:col, duration:1.1, ease:'power2.out', overwrite:'auto'});
+            gsap.to(glow, {opacity:gi, duration:1.1, ease:'power2.out', overwrite:'auto'});
+          }
+        }
+      });
+      if (spot){
+        // spotlight "turns on" as the section enters the frame
+        gsap.fromTo(spot, {opacity:0},
+          {opacity:1, ease:'none',
+           scrollTrigger:{trigger:sec, start:'top 80%', end:'top 30%', scrub:true}});
+        gsap.to(spot, {opacity:0, ease:'none',
+           scrollTrigger:{trigger:sec, start:'bottom 60%', end:'bottom 10%', scrub:true}});
+      }
+    });
+
+    /* --- parallax on framed visuals + portrait --- */
+    gsap.utils.toArray('.frame, .andres .portrait, .hero-stickers, .pstickers').forEach(function(el, i){
+      var sect = el.closest('section') || el.closest('header');
+      if (!sect) return;
+      gsap.fromTo(el, {y: 50},
+        {y: -50, ease:'none',
+         scrollTrigger:{trigger:sect, start:'top bottom', end:'bottom top', scrub:1}});
+    });
+
+    /* --- marquees: continuous + velocity skew --- */
+    var mqTracks = gsap.utils.toArray('.marquee-track');
+    mqTracks.forEach(function(track, idx){
+      var dir = (track.closest('.fire')) ? 1 : -1;
+      gsap.fromTo(track, {xPercent: dir<0 ? 0 : -50},
+        {xPercent: dir<0 ? -50 : 0, duration: 22, ease:'none', repeat:-1});
+    });
+
+    /* --- master scroll listener for eq + marquee skew --- */
+    ScrollTrigger.create({
+      start: 0, end: 'max',
+      onUpdate: function(self){
+        prog = self.progress;
+        var v = Math.abs(self.getVelocity());
+        var nv = Math.min(v / 1600, 1);
+        if (nv > vel) vel = nv;
+        var sk = self.getVelocity() / -340;
+        if (sk > 6) sk = 6; if (sk < -6) sk = -6;
+        document.documentElement.style.setProperty('--mskew', sk.toFixed(2)+'deg');
+      }
+    });
+
+    // eq render loop
+    (function loop(now){ drawEq(now); requestAnimationFrame(loop); })(performance.now());
+
+    // refresh after fonts load (layout shift safe)
+    if (document.fonts && document.fonts.ready){
+      document.fonts.ready.then(function(){ ScrollTrigger.refresh(); });
+    }
+    window.addEventListener('load', function(){ ScrollTrigger.refresh(); });
+  }
+
+  // resize handling
+  var rzT;
+  window.addEventListener('resize', function(){
+    clearTimeout(rzT);
+    rzT = setTimeout(function(){
+      sizeEq();
+      if (hasGSAP && window.ScrollTrigger) ScrollTrigger.refresh();
+    }, 180);
+  });
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+  else init();
+})();
 </script>
 </body>
 </html>
