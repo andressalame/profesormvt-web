@@ -797,6 +797,35 @@ export default {
         }
       }
 
+      /* ----- Respaldo: al volver del pago, el portal pide verificar contra MP
+              y confirmar (por si el webhook se atrasó o no llegó) ----- */
+      if (url.pathname === "/api/mp/verificar" && request.method === "POST"){
+        const cu = await cuentaDeSesion(env, request);
+        if (!cu) return json({ error: "Sesión expirada" }, 401);
+        if (!env.MP_ACCESS_TOKEN) return json({ ok: true, confirmada: false });
+        const compra = await env.DB.prepare(
+          "SELECT * FROM compras WHERE cuenta_id = ?1 AND estado = 'iniciada' ORDER BY rowid DESC LIMIT 1"
+        ).bind(cu.id).first();
+        if (!compra) return json({ ok: true, confirmada: false });
+        try {
+          const r = await fetch("https://api.mercadopago.com/v1/payments/search?external_reference=" + encodeURIComponent(compra.id) + "&sort=date_created&criteria=desc", {
+            headers: { "Authorization": "Bearer " + env.MP_ACCESS_TOKEN }
+          });
+          if (!r.ok) return json({ ok: true, confirmada: false });
+          const data = await r.json();
+          const pagos = (data && data.results) || [];
+          const aprobado = pagos.find(p => p && p.status === "approved" && Math.round(Number(p.transaction_amount)) === Math.round(Number(compra.monto)));
+          if (!aprobado) return json({ ok: true, confirmada: false });
+          const res = await confirmarCompra(env, compra);
+          if (res.ok){
+            try { await avisarCompra(env, { confirmadoAuto: true, nombre: res.cu.nombre, email: res.cu.email, curso: compra.curso, paquete: compra.paquete, monto: compra.monto, metodo: "Tarjeta (Mercado Pago)", op: "MP " + aprobado.id }); } catch (e) {}
+          }
+          return json({ ok: true, confirmada: !!res.ok });
+        } catch (e) {
+          return json({ ok: true, confirmada: false });
+        }
+      }
+
       /* ============ ADMIN ============ */
       if (url.pathname.startsWith("/api/admin/")){
         const auth = request.headers.get("authorization") || "";

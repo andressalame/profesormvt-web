@@ -1126,6 +1126,7 @@ function manejarRetornoPago(){
   try { history.replaceState({}, "", location.pathname + location.hash); } catch(e){}
   if(pago === "ok"){
     toast("Pago aprobado. Activando tu paquete…");
+    api("/api/mp/verificar",{method:"POST",body:"{}"}).then(function(){ return api("/api/me"); }).then(function(d){ ME=d; renderActive(); }).catch(function(){});
     var n = 0, t = setInterval(function(){
       n++;
       api("/api/me").then(function(d){
