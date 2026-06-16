@@ -1,0 +1,159 @@
+---
+// Landing del lead magnet de composicion — destino de los Meta Ads.
+// Captura el correo (/api/lead), entrega el PDF, dispara fbq('track','Lead').
+const title = "Guía gratis: De oyente a autor | ProfesorMVT";
+const description = "Descarga gratis la guía para empezar a componer tu primera canción. 3 herramientas que usan los hits, explicadas claro. Por ProfesorMVT.";
+const WA = "51989077928";
+---
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>{title}</title>
+<meta name="description" content={description} />
+<link rel="canonical" href="https://profesormvt.com/guia-composicion/" />
+<meta name="robots" content="index, follow" />
+<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+
+<script is:inline>
+  !function(f,b,e,v,n,t,s){if(f.fbq)return;n=f.fbq=function(){n.callMethod?n.callMethod.apply(n,arguments):n.queue.push(arguments)};if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';n.queue=[];t=b.createElement(e);t.async=!0;t.src=v;s=b.getElementsByTagName(e)[0];s.parentNode.insertBefore(t,s)}(window,document,'script','https://connect.facebook.net/en_US/fbevents.js');
+  fbq('init','1281275673536185');fbq('track','PageView');
+</script>
+<noscript><img height="1" width="1" style="display:none" src="https://www.facebook.com/tr?id=1281275673536185&ev=PageView&noscript=1"/></noscript>
+
+<meta property="og:title" content={title} />
+<meta property="og:description" content={description} />
+<meta property="og:type" content="website" />
+<meta property="og:image" content="https://profesormvt.com/og-image.png" />
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Space+Grotesk:wght@400;500;700&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style is:inline>
+  :root{ --bg:#0d0b0a; --panel:#15110f; --accent:#e8501f; --accent2:#ff6a35; --cream:#f3ede0; --muted:#8a8276; --line:#2A2926;
+    --mono:'JetBrains Mono',monospace; --display:'Anton',Impact,sans-serif; --body:'Space Grotesk',system-ui,sans-serif; }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--cream);font-family:var(--body);line-height:1.55;-webkit-font-smoothing:antialiased;overflow-x:hidden}
+  body::before{content:"";position:fixed;inset:0;z-index:0;pointer-events:none;opacity:.05;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")}
+  .wrap{max-width:680px;margin:0 auto;padding:0 22px;position:relative;z-index:1}
+  .nav{padding:20px 0;display:flex;align-items:center;gap:9px}
+  .brand{font-family:var(--display);text-transform:uppercase;font-size:19px;letter-spacing:.04em;display:flex;align-items:center;gap:8px}
+  .brand svg{width:19px;height:19px;color:var(--accent);filter:drop-shadow(0 0 7px var(--accent))}
+  .eyebrow{font-family:var(--mono);text-transform:uppercase;letter-spacing:.2em;font-size:11px;color:var(--accent);font-weight:700;margin-top:34px}
+  h1{font-family:var(--display);text-transform:uppercase;font-size:clamp(40px,9vw,68px);line-height:.98;letter-spacing:.005em;margin:10px 0 14px}
+  h1 .o{color:var(--accent)}
+  .lead{font-size:clamp(15px,2.4vw,18px);color:#cfc7b6;margin-bottom:26px;max-width:42em}
+  .lead b{color:var(--cream);font-weight:700}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:clamp(20px,4vw,30px)}
+  .inside{font-family:var(--mono);text-transform:uppercase;letter-spacing:.14em;font-size:11px;color:var(--muted);margin-bottom:14px}
+  ul{list-style:none;margin:0 0 22px}
+  li{display:flex;gap:11px;align-items:flex-start;padding:7px 0;font-size:15px;color:var(--cream)}
+  li::before{content:"";flex:none;width:18px;height:18px;margin-top:2px;border-radius:50%;background:var(--accent);
+    -webkit-mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='black' d='M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z'/%3E%3C/svg%3E") center/14px no-repeat;
+    mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='black' d='M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z'/%3E%3C/svg%3E") center/14px no-repeat}
+  form{display:flex;flex-direction:column;gap:10px}
+  input[type=email]{font-family:var(--body);font-size:16px;padding:15px 16px;border-radius:6px;border:1px solid var(--line);background:#0d0b0a;color:var(--cream);width:100%}
+  input[type=email]:focus{outline:none;border-color:var(--accent)}
+  .hp{position:absolute;left:-9999px;opacity:0;height:0;width:0}
+  .btn{font-family:var(--mono);text-transform:uppercase;letter-spacing:.06em;font-size:14px;font-weight:700;padding:16px 22px;border-radius:6px;border:2px solid var(--accent);background:var(--accent);color:#160a04;cursor:pointer;transition:.15s;display:inline-flex;gap:8px;justify-content:center;align-items:center}
+  .btn:hover{transform:translateY(-2px);box-shadow:4px 4px 0 var(--cream)}
+  .btn:disabled{opacity:.6;cursor:default;transform:none;box-shadow:none}
+  .micro{font-family:var(--mono);font-size:10.5px;letter-spacing:.04em;color:var(--muted);margin-top:4px}
+  .err{color:var(--accent2);font-size:13px;margin-top:8px;min-height:1px}
+  .proof{display:flex;align-items:center;gap:10px;margin:22px 0;font-size:13.5px;color:#cfc7b6;flex-wrap:wrap}
+  .stars{color:var(--accent);letter-spacing:.1em}
+  .wa{display:inline-flex;align-items:center;gap:8px;margin-top:6px;font-size:14px;color:var(--cream);border:1px solid var(--line);border-radius:6px;padding:13px 18px;text-decoration:none;transition:.15s}
+  .wa:hover{border-color:var(--accent)}
+  .ok{display:none}
+  .ok h2{font-family:var(--display);text-transform:uppercase;font-size:clamp(30px,7vw,48px);line-height:1;margin-bottom:10px}
+  .ok .o{color:var(--accent)}
+  footer{margin:50px 0 30px;border-top:1px solid var(--line);padding-top:16px;font-family:var(--mono);font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);text-align:center}
+  .center{display:grid;place-items:center;text-align:center}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <nav class="nav">
+    <span class="brand"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="5" y="2.5" width="3.2" height="12.5" rx="1.6"/><rect x="15.8" y="2.5" width="3.2" height="12.5" rx="1.6"/><rect x="8.7" y="9" width="3.1" height="6.5" rx="1.55"/><rect x="12.2" y="9" width="3.1" height="6.5" rx="1.55"/><rect x="4.6" y="12" width="14.8" height="9" rx="4"/><rect x="2.8" y="12.2" width="5.5" height="3.3" rx="1.65"/></svg>PROFESORMVT</span>
+  </nav>
+
+  <div id="formView">
+    <div class="eyebrow">Guía gratis · Composición</div>
+    <h1>De oyente <span class="o">a autor</span></h1>
+    <p class="lead">Aprende a escribir tu primera canción con <b>3 herramientas que usan los hits</b>, explicadas claro y sin teoría pesada. Te la mando en PDF, gratis, ahora mismo.</p>
+
+    <div class="card">
+      <div class="inside">Lo que vas a aprender</div>
+      <ul>
+        <li>Por qué arrancar por el gancho y no por el principio.</li>
+        <li>Cómo "prestarle los huesos" a un hit para escribir lo tuyo.</li>
+        <li>El truco para que tu letra entre por el oído.</li>
+      </ul>
+      <form id="leadForm">
+        <input type="text" class="hp" name="website" tabindex="-1" autocomplete="off" aria-hidden="true" />
+        <input type="email" id="email" name="email" placeholder="tu@correo.com" required autocomplete="email" />
+        <button type="submit" class="btn" id="leadBtn">Descargar la guía gratis →</button>
+        <div class="micro">Sin spam. Tu correo solo para mandarte la guía y, de vez en cuando, algo útil.</div>
+        <div class="err" id="leadErr"></div>
+      </form>
+    </div>
+
+    <div class="proof">
+      <span class="stars">★★★★★</span>
+      <span><b>5.0</b> · 11 opiniones · te enseña alguien que compuso <b>+200 canciones</b></span>
+    </div>
+
+    <a class="wa" href={`https://wa.me/${WA}?text=${encodeURIComponent('Hola Andrés, vengo de la guía de composición y quiero más info de las clases')}`} target="_blank" rel="noopener">O escríbeme directo por WhatsApp →</a>
+  </div>
+
+  <div class="ok center" id="okView" style="display:none">
+    <div class="eyebrow">Listo</div>
+    <h2>Tu guía está <span class="o">lista</span></h2>
+    <p class="lead" style="margin:0 auto 22px">Te abrí la guía en otra pestaña. Si no se abrió, descárgala con el botón.</p>
+    <a class="btn" id="pdfBtn" href="/recursos/composicion-primera-cancion.pdf" target="_blank" rel="noopener">Descargar mi guía →</a>
+    <a class="wa" style="margin-top:18px" href={`https://wa.me/${WA}?text=${encodeURIComponent('Hola Andrés, ya descargué la guía de composición y quiero saber de las clases')}`} target="_blank" rel="noopener">Quiero más: escríbeme por WhatsApp →</a>
+  </div>
+
+  <footer>ProfesorMVT · Canto · Piano · Composición para adultos · San Isidro y online</footer>
+</div>
+
+<script is:inline>
+  (function(){
+    var form = document.getElementById('leadForm');
+    var btn = document.getElementById('leadBtn');
+    var err = document.getElementById('leadErr');
+    form.addEventListener('submit', function(e){
+      e.preventDefault();
+      err.textContent = '';
+      var email = document.getElementById('email').value.trim();
+      var hp = form.querySelector('input[name=website]').value;
+      btn.disabled = true; btn.textContent = 'Enviando...';
+      fetch('/api/lead', {
+        method:'POST', headers:{'content-type':'application/json'},
+        body: JSON.stringify({ email: email, website: hp, marca:'MVT', fuente:'landing-composicion', interes:'composicion' })
+      })
+      .then(function(r){ return r.json(); })
+      .then(function(d){
+        if(d && d.ok){
+          if(window.fbq) fbq('track','Lead');
+          document.getElementById('pdfBtn').href = d.pdf || '/recursos/composicion-primera-cancion.pdf';
+          document.getElementById('formView').style.display = 'none';
+          document.getElementById('okView').style.display = 'grid';
+          window.scrollTo(0,0);
+          try { window.open(d.pdf || '/recursos/composicion-primera-cancion.pdf', '_blank'); } catch(e){}
+        } else {
+          err.textContent = (d && d.error) || 'Algo salió mal. Intenta de nuevo.';
+          btn.disabled = false; btn.textContent = 'Descargar la guía gratis →';
+        }
+      })
+      .catch(function(){
+        err.textContent = 'No se pudo enviar. Revisa tu conexión e intenta de nuevo.';
+        btn.disabled = false; btn.textContent = 'Descargar la guía gratis →';
+      });
+    });
+  })();
+</script>
+</body>
+</html>
