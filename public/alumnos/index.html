@@ -848,21 +848,41 @@ function renderPaybox(){
   } else if(m === "Crypto USDT"){
     html = '<div class="lab">'+(cf.crypto_moneda||"USDT")+' por red '+(cf.crypto_red||"Tron (TRC20)")+'</div><div class="num" style="font-size:14px;word-break:break-all;">'+(cf.crypto_wallet||"-")+'</div><div class="note">Envía el equivalente del total en '+(cf.crypto_moneda||"USDT")+' por esa red.</div>';
   } else if(m === "Tarjeta (Mercado Pago)"){
-    var MPLINKS = { "Paquete 4":"https://mpago.la/345fLua", "Paquete 8":"https://mpago.la/2qQzrzK", "Paquete 12":"https://mpago.la/31TfMmv" };
-    var pk = $("c_paquete").value, mpurl = MPLINKS[pk];
-    if(mpurl){
-      var cc = calc(pk), lista = cc.final + cc.desc;
+    var pk = $("c_paquete").value;
+    if(pk){
+      var cc = calc(pk);
       html = '<div class="lab">Tarjeta de crédito o débito</div>'
-        + '<a class="btn" href="'+mpurl+'" target="_blank" rel="noopener" style="width:100%;justify-content:center;margin:4px 0 2px;">Pagar S/ '+lista+' con tarjeta →</a>'
-        + (cc.desc>0 ? '<div class="note">El link de tarjeta cobra el precio de lista (S/ '+lista+'). Para usar tu crédito de referido (-S/'+cc.desc+'), paga con Yape/Plin/Sip o coordínalo por WhatsApp.</div>' : '')
-        + '<ol class="steps"><li>Toca el botón y paga con tu tarjeta (se abre Mercado Pago).</li><li>Sube la captura del comprobante aquí abajo.</li><li>Vuelve y toca <strong>“Ya pagué”</strong>.</li></ol>';
+        + '<button type="button" class="btn" id="btnPagarTarjeta" style="width:100%;justify-content:center;margin:4px 0 2px;">Pagar S/ '+cc.final+' con tarjeta →</button>'
+        + '<div class="note">Te llevamos a Mercado Pago para pagar con tu tarjeta (puedes en cuotas). Al terminar, tu paquete se activa solo.</div>';
     } else {
-      html = '<div class="note">Elige un paquete arriba para ver el link de tarjeta.</div>';
+      html = '<div class="note">Elige un paquete arriba.</div>';
     }
   }
   if(m !== "Tarjeta (Mercado Pago)") html += '<ol class="steps"><li>Paga el monto exacto.</li><li>Sube la captura del pago aquí abajo.</li><li>Toca <strong>“Ya pagué”</strong>.</li></ol>';
+  var esTarjeta = (m === "Tarjeta (Mercado Pago)");
+  var opF = $("c_op") && $("c_op").closest(".field"); if(opF) opF.style.display = esTarjeta ? "none" : "";
+  var ssF = $("c_screenshot") && $("c_screenshot").closest(".field"); if(ssF) ssF.style.display = esTarjeta ? "none" : "";
+  if($("btnYaPague")) $("btnYaPague").style.display = esTarjeta ? "none" : "";
   $("payboxOk").innerHTML = html;
+  var btnT = document.getElementById("btnPagarTarjeta");
+  if(btnT) btnT.addEventListener("click", pagarConTarjeta);
   show("payboxOk"); hide("payboxNo");
+}
+function pagarConTarjeta(){
+  $("compraErr").textContent="";
+  var paquete=$("c_paquete").value, curso=$("c_curso").value;
+  if(!paquete){ $("compraErr").textContent="Elige un paquete."; return; }
+  var btn=document.getElementById("btnPagarTarjeta");
+  if(btn){ btn.disabled=true; btn.textContent="Abriendo Mercado Pago…"; }
+  api("/api/mp/crear",{method:"POST",body:JSON.stringify({paquete:paquete,curso:curso})})
+    .then(function(r){
+      if(r && r.init_point){ window.location.href = r.init_point; }
+      else { throw new Error((r && r.error) || "No se pudo iniciar el pago."); }
+    })
+    .catch(function(e){
+      $("compraErr").textContent = (e && e.message) || "No se pudo iniciar el pago con tarjeta.";
+      if(btn){ btn.disabled=false; btn.textContent="Reintentar pago con tarjeta →"; }
+    });
 }
 $("c_metodo").addEventListener("change", renderPaybox);
 
@@ -1099,6 +1119,27 @@ $("btnSalirSide").addEventListener("click", salir);
 var RENDER = { inicio:renderInicio, clases:renderClases, recursos:renderRecursos, comunidad:renderComunidad,
                comprar:renderComprar, referidos:renderReferidos, cuenta:renderCuenta };
 
+function manejarRetornoPago(){
+  var pago;
+  try { pago = new URLSearchParams(location.search).get("pago"); } catch(e){ pago = null; }
+  if(!pago) return;
+  try { history.replaceState({}, "", location.pathname + location.hash); } catch(e){}
+  if(pago === "ok"){
+    toast("Pago aprobado. Activando tu paquete…");
+    var n = 0, t = setInterval(function(){
+      n++;
+      api("/api/me").then(function(d){
+        ME = d; renderActive();
+        if(ME && !ME.compraPendiente && ME.alumno && ME.alumno.pago === "Pagado"){ clearInterval(t); toast("¡Listo! Tu paquete está activo 🎸"); }
+      }).catch(function(){});
+      if(n >= 5) clearInterval(t);
+    }, 2500);
+  } else if(pago === "pendiente"){
+    toast("Tu pago está en proceso. Apenas se apruebe, activo tu paquete.");
+  } else if(pago === "error"){
+    toast("El pago no se completó. Puedes intentarlo de nuevo.");
+  }
+}
 function cargarMe(){
   setPantalla("viewLoading");
   api("/api/me").then(function(d){
@@ -1107,6 +1148,7 @@ function cargarMe(){
     if(!location.hash) location.hash = "#inicio";
     renderActive();
     chatIniciar();
+    manejarRetornoPago();
   }).catch(function(e){
     setTok(null); ME=null;
     setAuthTab(REF_URL ? "reg" : "login");

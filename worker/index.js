@@ -246,14 +246,17 @@ function limpiarTextoChat(t){
    Best-effort: se llama fuera de la transacción de la compra. Si falla, la compra
    ya quedó registrada y el portal responde ok igual. */
 async function avisarCompra(env, info){
+  const auto = !!info.confirmadoAuto;
   const msg = createMimeMessage();
   msg.setSender({ name: "Avisos ProfesorMVT", addr: "avisos@profesormvt.com" });
   msg.setRecipient("andressalame@gmail.com");
-  msg.setSubject(`Pago por confirmar: ${info.paquete} — S/${info.monto}`);
+  msg.setSubject((auto ? "Pago con tarjeta CONFIRMADO (auto): " : "Pago por confirmar: ") + `${info.paquete} — S/${info.monto}`);
   msg.addMessage({
     contentType: "text/plain",
     data:
-      "Un alumno declaró un pago en el portal y está pendiente de confirmar.\n\n" +
+      (auto
+        ? "Mercado Pago confirmó un pago con tarjeta y activé el paquete AUTOMÁTICAMENTE. No tienes que hacer nada.\n\n"
+        : "Un alumno declaró un pago en el portal y está pendiente de confirmar.\n\n") +
       "Comprador: " + info.nombre + " (" + info.email + ")\n" +
       "Curso:     " + info.curso + "\n" +
       "Paquete:   " + info.paquete + "\n" +
@@ -261,10 +264,65 @@ async function avisarCompra(env, info){
       "Método:    " + (info.metodo || "(no indicado)") + "\n" +
       "N° de operación: " + (info.op || "-") + "\n" +
       (info.comprobanteUrl ? ("Comprobante (screenshot): " + info.comprobanteUrl + "\n") : "") +
-      "\nVerifica el pago y confírmalo (o recházalo) en el CRM:\n" +
-      "https://profesormvt.com/admin/crm/\n"
+      (auto
+        ? "\nYa está activado. Lo puedes ver en el CRM:\nhttps://profesormvt.com/admin/crm/\n"
+        : "\nVerifica el pago y confírmalo (o recházalo) en el CRM:\nhttps://profesormvt.com/admin/crm/\n")
   });
   await env.AVISOS.send(new EmailMessage("avisos@profesormvt.com", "andressalame@gmail.com", msg.asRaw()));
+}
+
+/* ---------- Confirmar una compra (reutilizado por el CRM y por el webhook de Mercado Pago).
+   Acepta estado 'pendiente' (declarada manual) o 'iniciada' (checkout de tarjeta ya pagado).
+   Hace lo mismo que el botón "confirmar" del CRM: renueva/crea alumno, premia al referidor
+   en la 1ª compra confirmada, consume el crédito usado y marca la compra 'confirmada'. ---------- */
+async function confirmarCompra(env, compra){
+  if (!compra) return { ok: false, error: "Compra no encontrada", status: 404 };
+  if (compra.estado !== "pendiente" && compra.estado !== "iniciada"){
+    return { ok: false, error: "Esa compra ya fue procesada", status: 409 };
+  }
+  const cu = await env.DB.prepare("SELECT * FROM cuentas WHERE id = ?1").bind(compra.cuenta_id).first();
+  if (!cu) return { ok: false, error: "La cuenta de esa compra ya no existe", status: 404 };
+
+  const stmts = [];
+  let renovado = false;
+  if (cu.alumno_id){
+    const al = await env.DB.prepare("SELECT * FROM alumnos WHERE id = ?1").bind(cu.alumno_id).first();
+    if (al){
+      stmts.push(env.DB.prepare(
+        "UPDATE alumnos SET paquete = ?1, curso = ?2, pago = 'Pagado', fecha = ?3, ciclo = COALESCE(ciclo,1) + 1 WHERE id = ?4"
+      ).bind(compra.paquete, compra.curso || al.curso, hoy(), al.id));
+      renovado = true;
+    }
+  }
+  if (!renovado){
+    const nuevoId = crypto.randomUUID();
+    stmts.push(env.DB.prepare(
+      "INSERT INTO alumnos (id,codigo,nombre,whatsapp,curso,paquete,fecha,pago,horario,notas,ciclo) VALUES (?1,?2,?3,?4,?5,?6,?7,'Pagado','','Creado por compra web',1)"
+    ).bind(nuevoId, randHex(3).toUpperCase(), cu.nombre, cu.whatsapp || "", compra.curso || "Canto", compra.paquete, hoy()));
+    stmts.push(env.DB.prepare("UPDATE cuentas SET alumno_id = ?1 WHERE id = ?2").bind(nuevoId, cu.id));
+  }
+
+  const previas = await env.DB.prepare(
+    "SELECT COUNT(*) AS n FROM compras WHERE cuenta_id = ?1 AND estado = 'confirmada'"
+  ).bind(cu.id).first();
+  const esPrimera = !previas || !Number(previas.n);
+  if (esPrimera && cu.ref_por){
+    const refidor = await env.DB.prepare("SELECT id FROM cuentas WHERE ref_code = ?1").bind(cu.ref_por).first();
+    if (refidor && refidor.id !== cu.id){
+      stmts.push(env.DB.prepare("UPDATE cuentas SET credito = COALESCE(credito,0) + ?1 WHERE id = ?2").bind(CREDITO_REFERIDO, refidor.id));
+    }
+  }
+
+  const usado = Number(compra.descuento) || 0;
+  if (usado > 0){
+    stmts.push(env.DB.prepare(
+      "UPDATE cuentas SET credito = CASE WHEN COALESCE(credito,0) - ?1 < 0 THEN 0 ELSE COALESCE(credito,0) - ?1 END WHERE id = ?2"
+    ).bind(usado, cu.id));
+  }
+
+  stmts.push(env.DB.prepare("UPDATE compras SET estado = 'confirmada' WHERE id = ?1").bind(compra.id));
+  await env.DB.batch(stmts);
+  return { ok: true, cu, compra };
 }
 
 /* ---------- Aviso por Web Push (VAPID) a los dispositivos suscritos del admin ----------
@@ -648,6 +706,97 @@ export default {
         return json({ ok: true, monto, descuento });
       }
 
+      /* ----- Tarjeta con Mercado Pago: crea el cobro por API (Checkout Pro) ----- */
+      if (url.pathname === "/api/mp/crear" && request.method === "POST"){
+        const cu = await cuentaDeSesion(env, request);
+        if (!cu) return json({ error: "Sesión expirada" }, 401);
+        if (!env.MP_ACCESS_TOKEN) return json({ error: "El pago con tarjeta no está disponible por ahora." }, 503);
+        const b = await request.json().catch(() => ({}));
+        const paquete = String(b.paquete || "");
+        const curso = String(b.curso || "").trim() || "Canto";
+        if (!(paquete in PAQUETES)) return json({ error: "Paquete no válido." }, 400);
+
+        const pend = await env.DB.prepare(
+          "SELECT id FROM compras WHERE cuenta_id = ?1 AND estado = 'pendiente'"
+        ).bind(cu.id).first();
+        if (pend) return json({ error: "Ya tienes un pago en verificación. Te confirmo apenas lo vea." }, 409);
+        await env.DB.prepare("DELETE FROM compras WHERE cuenta_id = ?1 AND estado = 'iniciada'").bind(cu.id).run();
+
+        const precios = await loadPrecios(env);
+        const precio = precios[paquete] || 0;
+        const credito = Number(cu.credito) || 0;
+        const descuento = Math.min(credito, precio);
+        const monto = Math.max(0, precio - descuento);
+        if (monto < 1) return json({ error: "Tu crédito cubre el paquete completo. Escríbeme por WhatsApp para activarlo." }, 400);
+
+        const compraId = crypto.randomUUID();
+        await env.DB.prepare(
+          "INSERT INTO compras (id,cuenta_id,curso,paquete,monto,descuento,op_numero,estado,fecha,metodo,comprobante) VALUES (?1,?2,?3,?4,?5,?6,'','iniciada',?7,?8,'')"
+        ).bind(compraId, cu.id, curso, paquete, monto, descuento, hoy(), "Tarjeta (Mercado Pago)").run();
+
+        const nombrePaquete = ({ "Paquete 4":"Plan Esencial", "Paquete 8":"Plan Intensivo", "Paquete 12":"Plan Estrella", "Clase suelta":"Clase suelta" })[paquete] || paquete;
+        const pref = {
+          items: [{ title: nombrePaquete + " - ProfesorMVT (" + curso + ")", quantity: 1, unit_price: monto, currency_id: "PEN" }],
+          external_reference: compraId,
+          notification_url: "https://profesormvt.com/api/mp/webhook",
+          back_urls: {
+            success: "https://profesormvt.com/alumnos/?pago=ok",
+            pending: "https://profesormvt.com/alumnos/?pago=pendiente",
+            failure: "https://profesormvt.com/alumnos/?pago=error"
+          },
+          auto_return: "approved",
+          payer: { name: cu.nombre || "", email: cu.email || "" },
+          statement_descriptor: "PROFESORMVT"
+        };
+        let mpData = {};
+        try {
+          const mpRes = await fetch("https://api.mercadopago.com/checkout/preferences", {
+            method: "POST",
+            headers: { "Authorization": "Bearer " + env.MP_ACCESS_TOKEN, "Content-Type": "application/json" },
+            body: JSON.stringify(pref)
+          });
+          if (mpRes.ok) mpData = await mpRes.json().catch(() => ({}));
+        } catch (e) { mpData = {}; }
+
+        if (!mpData.init_point){
+          await env.DB.prepare("DELETE FROM compras WHERE id = ?1").bind(compraId).run();
+          return json({ error: "No se pudo iniciar el pago con tarjeta. Intenta de nuevo o usa otro método." }, 502);
+        }
+        return json({ ok: true, init_point: mpData.init_point });
+      }
+
+      /* ----- Webhook de Mercado Pago: confirma la compra automáticamente ----- */
+      if (url.pathname === "/api/mp/webhook" && request.method === "POST"){
+        let payId = url.searchParams.get("data.id") || url.searchParams.get("id") || "";
+        const tipo = url.searchParams.get("type") || url.searchParams.get("topic") || "";
+        if (!payId){
+          const wb = await request.json().catch(() => ({}));
+          payId = (wb && wb.data && wb.data.id) ? String(wb.data.id) : (wb && wb.id ? String(wb.id) : "");
+        }
+        if (!payId || (tipo && tipo !== "payment")) return new Response("ok", { status: 200 });
+        if (!env.MP_ACCESS_TOKEN) return new Response("ok", { status: 200 });
+        try {
+          const r = await fetch("https://api.mercadopago.com/v1/payments/" + encodeURIComponent(payId), {
+            headers: { "Authorization": "Bearer " + env.MP_ACCESS_TOKEN }
+          });
+          if (!r.ok) return new Response("ok", { status: 200 });
+          const pay = await r.json();
+          if (!pay || pay.status !== "approved") return new Response("ok", { status: 200 });
+          const compraId = String(pay.external_reference || "");
+          if (!compraId) return new Response("ok", { status: 200 });
+          const compra = await env.DB.prepare("SELECT * FROM compras WHERE id = ?1").bind(compraId).first();
+          if (!compra || compra.estado === "confirmada") return new Response("ok", { status: 200 });
+          if (Math.round(Number(pay.transaction_amount)) !== Math.round(Number(compra.monto))) return new Response("ok", { status: 200 });
+          const res = await confirmarCompra(env, compra);
+          if (res.ok){
+            try { await avisarCompra(env, { confirmadoAuto: true, nombre: res.cu.nombre, email: res.cu.email, curso: compra.curso, paquete: compra.paquete, monto: compra.monto, metodo: "Tarjeta (Mercado Pago)", op: "MP " + payId }); } catch (e) {}
+          }
+          return new Response("ok", { status: 200 });
+        } catch (e) {
+          return new Response("error", { status: 500 });
+        }
+      }
+
       /* ============ ADMIN ============ */
       if (url.pathname.startsWith("/api/admin/")){
         const auth = request.headers.get("authorization") || "";
@@ -683,7 +832,7 @@ export default {
           const cuentas  = (await env.DB.prepare(
             "SELECT id,email,nombre,whatsapp,marketing,alumno_id,creada,ref_code,ref_por,credito, CASE WHEN google_id IS NULL OR google_id='' THEN 0 ELSE 1 END AS tiene_google FROM cuentas ORDER BY creada DESC"
           ).all()).results || [];
-          const compras  = (await env.DB.prepare("SELECT * FROM compras ORDER BY CASE estado WHEN 'pendiente' THEN 0 ELSE 1 END, fecha DESC").all()).results || [];
+          const compras  = (await env.DB.prepare("SELECT * FROM compras WHERE estado != 'iniciada' ORDER BY CASE estado WHEN 'pendiente' THEN 0 ELSE 1 END, fecha DESC").all()).results || [];
           const recursos = (await env.DB.prepare("SELECT * FROM recursos ORDER BY fecha DESC, rowid DESC").all()).results || [];
           const precios  = await loadPrecios(env);
           const config   = await loadConfig(env);
@@ -867,55 +1016,8 @@ export default {
             return json({ ok: true });
           }
           if (b.accion === "confirmar"){
-            const cu = await env.DB.prepare("SELECT * FROM cuentas WHERE id = ?1").bind(compra.cuenta_id).first();
-            if (!cu) return json({ error: "La cuenta de esa compra ya no existe" }, 404);
-
-            const stmts = [];
-            let renovado = false;
-            if (cu.alumno_id){
-              const al = await env.DB.prepare("SELECT * FROM alumnos WHERE id = ?1").bind(cu.alumno_id).first();
-              if (al){
-                stmts.push(env.DB.prepare(
-                  "UPDATE alumnos SET paquete = ?1, curso = ?2, pago = 'Pagado', fecha = ?3, ciclo = COALESCE(ciclo,1) + 1 WHERE id = ?4"
-                ).bind(compra.paquete, compra.curso || al.curso, hoy(), al.id));
-                renovado = true;
-              }
-            }
-            if (!renovado){
-              const nuevoId = crypto.randomUUID();
-              stmts.push(env.DB.prepare(
-                "INSERT INTO alumnos (id,codigo,nombre,whatsapp,curso,paquete,fecha,pago,horario,notas,ciclo) VALUES (?1,?2,?3,?4,?5,?6,?7,'Pagado','','Creado por compra web',1)"
-              ).bind(nuevoId, randHex(3).toUpperCase(), cu.nombre, cu.whatsapp || "", compra.curso || "Canto", compra.paquete, hoy()));
-              stmts.push(env.DB.prepare("UPDATE cuentas SET alumno_id = ?1 WHERE id = ?2").bind(nuevoId, cu.id));
-            }
-
-            /* --- Referidos: ¿es la PRIMERA compra confirmada de esta cuenta? --- */
-            const previas = await env.DB.prepare(
-              "SELECT COUNT(*) AS n FROM compras WHERE cuenta_id = ?1 AND estado = 'confirmada'"
-            ).bind(cu.id).first();
-            const esPrimera = !previas || !Number(previas.n);
-            if (esPrimera && cu.ref_por){
-              const refidor = await env.DB.prepare(
-                "SELECT id FROM cuentas WHERE ref_code = ?1"
-              ).bind(cu.ref_por).first();
-              if (refidor && refidor.id !== cu.id){
-                stmts.push(env.DB.prepare(
-                  "UPDATE cuentas SET credito = COALESCE(credito,0) + ?1 WHERE id = ?2"
-                ).bind(CREDITO_REFERIDO, refidor.id));
-              }
-            }
-
-            /* --- Consumir el crédito que esta compra usó como descuento --- */
-            const usado = Number(compra.descuento) || 0;
-            if (usado > 0){
-              stmts.push(env.DB.prepare(
-                "UPDATE cuentas SET credito = CASE WHEN COALESCE(credito,0) - ?1 < 0 THEN 0 ELSE COALESCE(credito,0) - ?1 END WHERE id = ?2"
-              ).bind(usado, cu.id));
-            }
-
-            stmts.push(env.DB.prepare("UPDATE compras SET estado = 'confirmada' WHERE id = ?1").bind(compra.id));
-            await env.DB.batch(stmts);
-            return json({ ok: true });
+            const r = await confirmarCompra(env, compra);
+            return r.ok ? json({ ok: true }) : json({ error: r.error }, r.status || 400);
           }
           return json({ error: "Acción no válida" }, 400);
         }
