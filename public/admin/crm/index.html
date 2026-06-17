@@ -151,6 +151,7 @@
       <button class="tab" data-tab="registro">Registro</button>
       <button class="tab" data-tab="pagos">Pagos<span class="dot hidden" id="dotPagos">0</span></button>
       <button class="tab" data-tab="cuentas">Cuentas</button>
+      <button class="tab" data-tab="leads">Leads</button>
       <button class="tab" data-tab="recursos">Recursos</button>
       <button class="tab" data-tab="ajustes">Ajustes</button>
       <button class="tab" data-tab="chat">Chat</button>
@@ -221,6 +222,14 @@
     <div class="tablewrap">
       <table><thead><tr><th>Nombre</th><th>Correo</th><th>WhatsApp</th><th>Promos</th><th>Alumno vinculado</th><th>Creada</th><th></th></tr></thead>
       <tbody id="tbCuentas"></tbody></table>
+    </div>
+  </section>
+
+  <section class="panel" id="panel-leads">
+    <p class="hint">Correos capturados con la guía gratis (landing, blog, home). A los más calientes, escríbeles tú por WhatsApp para cerrarlos.</p>
+    <div class="tablewrap">
+      <table><thead><tr><th>Fecha</th><th>Correo</th><th>Fuente</th><th>Interés</th></tr></thead>
+      <tbody id="tbLeads"></tbody></table>
     </div>
   </section>
 
@@ -466,7 +475,7 @@ function apiPost(path, body){
 function recargar(){
   return apiGet().then(function(d){
     db=d; if(!db.precios) db.precios=Object.assign({},PRECIOS_DEFAULT);
-    db.cuentas=db.cuentas||[]; db.compras=db.compras||[]; db.recursos=db.recursos||[]; db.config=db.config||{};
+    db.cuentas=db.cuentas||[]; db.compras=db.compras||[]; db.recursos=db.recursos||[]; db.leads=db.leads||[]; db.config=db.config||{};
     renderAll(); setSync("Conectado ✓","ok");
   });
 }
@@ -482,7 +491,7 @@ function refrescoSilencioso(){
     var nuevoPend = (d.compras||[]).filter(function(c){ return c.estado==="pendiente"; }).length;
     var aumento = nuevoPend > prevPendientes;
     db=d; if(!db.precios) db.precios=Object.assign({},PRECIOS_DEFAULT);
-    db.cuentas=db.cuentas||[]; db.compras=db.compras||[]; db.recursos=db.recursos||[]; db.config=db.config||{};
+    db.cuentas=db.cuentas||[]; db.compras=db.compras||[]; db.recursos=db.recursos||[]; db.leads=db.leads||[]; db.config=db.config||{};
     prevPendientes = nuevoPend;
     renderAll();                              // siempre re-render (refleja cambios de otro dispositivo)
     if(aumento){ toast("Nuevo pago por confirmar 🔔", 5000); }
@@ -576,6 +585,7 @@ function renderResumen(){
   el("resHoy").innerHTML =
     card("Pagos por confirmar",pend,pend>0?"red":"")+
     card("Cuentas en el portal",db.cuentas.length,"")+
+    card("Leads capturados",(db.leads||[]).length,"")+
     card("Emails con permiso de promos",mkt,"");
   el("resAlumnos").innerHTML =
     card("Activos",activos,"")+
@@ -763,7 +773,14 @@ function fillSelects(){
   el("r_alumno").innerHTML=db.alumnos.map(function(a){return '<option value="'+a.id+'">'+esc(a.nombre)+'</option>';}).join("")
     || '<option value="">— agrega un alumno primero —</option>';
 }
-function renderAll(){ renderResumen(); renderAlumnos(); renderRegistro(); renderPagos(); renderCuentas(); renderRecursos(); renderAjustes(); fillSelects(); }
+function renderLeads(){
+  var tb=el("tbLeads"); if(!tb) return;
+  if(!db.leads || db.leads.length===0){ tb.innerHTML='<tr><td colspan="4" class="empty">Aún no hay leads capturados</td></tr>'; return; }
+  tb.innerHTML=db.leads.map(function(l){
+    return '<tr><td>'+esc(l.fecha||'')+'</td><td>'+esc(l.email||'')+'</td><td>'+esc(l.fuente||'')+'</td><td>'+esc(l.interes||'')+'</td></tr>';
+  }).join("");
+}
+function renderAll(){ renderResumen(); renderAlumnos(); renderRegistro(); renderPagos(); renderCuentas(); renderLeads(); renderRecursos(); renderAjustes(); fillSelects(); }
 
 /* ---------- Tabs / modales ---------- */
 document.querySelectorAll(".tab").forEach(function(t){

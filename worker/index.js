@@ -1018,9 +1018,10 @@ export default {
           ).all()).results || [];
           const compras  = (await env.DB.prepare("SELECT * FROM compras WHERE estado != 'iniciada' ORDER BY CASE estado WHEN 'pendiente' THEN 0 ELSE 1 END, fecha DESC").all()).results || [];
           const recursos = (await env.DB.prepare("SELECT * FROM recursos ORDER BY fecha DESC, rowid DESC").all()).results || [];
+          const leads    = (await env.DB.prepare("SELECT id,email,marca,fuente,interes,fecha FROM leads ORDER BY fecha DESC, rowid DESC LIMIT 1000").all()).results || [];
           const precios  = await loadPrecios(env);
           const config   = await loadConfig(env);
-          return json({ alumnos, registro, precios, cuentas, compras, recursos, config,
+          return json({ alumnos, registro, precios, cuentas, compras, recursos, leads, config,
                         vapid_public: env.VAPID_PUBLIC_KEY || "" });
         }
 
