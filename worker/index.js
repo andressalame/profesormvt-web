@@ -271,6 +271,39 @@ async function avisarCompra(env, info){
   await env.AVISOS.send(new EmailMessage("avisos@profesormvt.com", "andressalame@gmail.com", msg.asRaw()));
 }
 
+/* ---------- Email transaccional a CUALQUIER destinatario (Cloudflare Email Sending).
+   Requiere el dominio dado de alta en Email Sending. Best-effort: si falla, devuelve false
+   (asi la captura del lead nunca se rompe aunque el correo aun no este habilitado). ---------- */
+async function enviarCorreo(env, { to, subject, html, text, from }){
+  if (!env.AVISOS || !to || !subject) return false;
+  try {
+    await env.AVISOS.send({
+      to: to,
+      from: from || { email: "hola@profesormvt.com", name: "Andrés · ProfesorMVT" },
+      subject: subject,
+      html: html || "",
+      text: text || (html ? html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim() : "")
+    });
+    return true;
+  } catch (e) { return false; }
+}
+
+/* Correo de bienvenida + entrega de la guia cuando alguien deja su correo (lead magnet) */
+async function correoBienvenidaLead(env, to){
+  const url = "https://profesormvt.com/recursos/composicion-primera-cancion.pdf";
+  const html =
+    '<div style="font-family:Arial,Helvetica,sans-serif;max-width:480px;margin:0 auto;color:#1a1a1a;font-size:15px;line-height:1.6">' +
+      '<p>Hola,</p>' +
+      '<p>Aquí está tu guía <b>"De oyente a autor"</b>: las 3 herramientas para empezar a componer tu primera canción.</p>' +
+      '<p style="text-align:center;margin:26px 0"><a href="' + url + '" style="background:#e8501f;color:#ffffff;text-decoration:none;font-weight:bold;padding:14px 26px;border-radius:6px;display:inline-block">Descargar mi guía</a></p>' +
+      '<p>Componer se entrena, no es un don. Si quieres pasar de oyente a autor en serio, tu primera clase de prueba cuesta S/50 e incluye un plan armado a tu medida, con alguien que ha compuesto más de 200 canciones.</p>' +
+      '<p>Un abrazo,<br><b>Andrés</b><br>ProfesorMVT</p>' +
+      '<p style="font-size:12px;color:#888888;margin-top:26px">profesormvt.com · Canto, piano y composición para adultos</p>' +
+    '</div>';
+  const text = 'Hola,\n\nAquí está tu guía "De oyente a autor": ' + url + '\n\nComponer se entrena, no es un don. Si quieres pasar de oyente a autor en serio, tu primera clase de prueba cuesta S/50 e incluye un plan a tu medida.\n\nUn abrazo,\nAndrés - ProfesorMVT\nprofesormvt.com';
+  return enviarCorreo(env, { to: to, subject: "Tu guía de composición", html: html, text: text });
+}
+
 /* ---------- Confirmar una compra (reutilizado por el CRM y por el webhook de Mercado Pago).
    Acepta estado 'pendiente' (declarada manual) o 'iniciada' (checkout de tarjeta ya pagado).
    Hace lo mismo que el botón "confirmar" del CRM: renueva/crea alumno, premia al referidor
@@ -362,7 +395,7 @@ async function avisarPush(env, info){
 }
 
 export default {
-  async fetch(request, env){
+  async fetch(request, env, ctx){
     const url = new URL(request.url);
 
     if (!url.pathname.startsWith("/api/")){
@@ -841,6 +874,7 @@ export default {
           await env.DB.prepare(
             "INSERT INTO leads (id,email,marca,fuente,interes,fecha) VALUES (?1,?2,?3,?4,?5,?6)"
           ).bind(crypto.randomUUID(), email, marca, fuente, interes, hoy()).run();
+          if (marca === "MVT") ctx.waitUntil(correoBienvenidaLead(env, email));
         }
         return json({ ok: true, pdf });
       }
