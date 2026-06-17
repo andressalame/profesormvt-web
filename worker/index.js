@@ -271,20 +271,27 @@ async function avisarCompra(env, info){
   await env.AVISOS.send(new EmailMessage("avisos@profesormvt.com", "andressalame@gmail.com", msg.asRaw()));
 }
 
-/* ---------- Email transaccional a CUALQUIER destinatario (Cloudflare Email Sending).
-   Requiere el dominio dado de alta en Email Sending. Best-effort: si falla, devuelve false
-   (asi la captura del lead nunca se rompe aunque el correo aun no este habilitado). ---------- */
+/* ---------- Email transaccional a CUALQUIER destinatario (via Resend, plan gratis).
+   Requiere el secreto RESEND_API_KEY y el dominio verificado en Resend. Best-effort:
+   si falla o aun no esta configurado, devuelve false y la captura del lead no se rompe. ---------- */
 async function enviarCorreo(env, { to, subject, html, text, from }){
-  if (!env.AVISOS || !to || !subject) return false;
+  if (!env.RESEND_API_KEY || !to || !subject) return false;
+  const remitente = (from && from.email)
+    ? ((from.name ? from.name + " " : "") + "<" + from.email + ">")
+    : "Andrés de ProfesorMVT <hola@profesormvt.com>";
   try {
-    await env.AVISOS.send({
-      to: to,
-      from: from || { email: "hola@profesormvt.com", name: "Andrés · ProfesorMVT" },
-      subject: subject,
-      html: html || "",
-      text: text || (html ? html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim() : "")
+    const r = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: { "Authorization": "Bearer " + env.RESEND_API_KEY, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        from: remitente,
+        to: Array.isArray(to) ? to : [to],
+        subject: subject,
+        html: html || undefined,
+        text: text || (html ? html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim() : undefined)
+      })
     });
-    return true;
+    return r.ok;
   } catch (e) { return false; }
 }
 
