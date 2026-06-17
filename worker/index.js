@@ -510,6 +510,109 @@ async function procesarRenovaciones(env){
   return enviados;
 }
 
+/* ============ NURTURE DE LEADS ============
+   El lead que deja su correo por la guía recibe HOY un solo correo (la guía) y nada más. Este motor
+   le hace seguimiento automático: lo empuja a la clase de prueba S/50 mientras está tibio, sin que
+   Andrés mueva un dedo. Convierte el ~90% del tráfico pagado que hoy se enfría. Reusa Resend + D1.
+   Pasos de la secuencia: día desde la captura -> número de correo de seguimiento. */
+const NURTURE_PASOS = [
+  { paso: 1, dia: 2 },   // ~2 días después: empuje suave + bajar la barrera
+  { paso: 2, dia: 5 }    // ~5 días después: la oferta concreta de la clase de prueba
+];
+
+/* Correo de seguimiento a un lead que dejó su correo y todavía no compra. paso = 1 | 2. */
+async function correoNurtureLead(env, to, paso){
+  if (!to) return false;
+  const horarios = "https://profesormvt.com/horarios";
+  const wrap = function(inner){
+    return '<div style="font-family:Arial,Helvetica,sans-serif;max-width:480px;margin:0 auto;color:#1a1a1a;font-size:15px;line-height:1.6">' +
+      inner +
+      '<p>Un abrazo,<br><b>Andrés</b><br>ProfesorMVT</p>' +
+      '<p style="font-size:12px;color:#888888;margin-top:26px">profesormvt.com · Canto, piano y composición para adultos</p>' +
+    '</div>';
+  };
+  const boton = function(texto){
+    return '<p style="text-align:center;margin:26px 0"><a href="' + horarios + '" style="background:#e8501f;color:#ffffff;text-decoration:none;font-weight:bold;padding:14px 26px;border-radius:6px;display:inline-block">' + texto + '</a></p>';
+  };
+  let subject, html, text;
+  if (paso === 1){
+    subject = "Aprender música de adulto sí se entrena";
+    html = wrap(
+      '<p>Hola,</p>' +
+      '<p>Te bajaste la guía hace un par de días, así que te escribo por una sola razón: la mayoría de adultos cree que ya se le pasó el tren para cantar, tocar o componer. No es verdad. Esto no es talento, es entrenamiento, y se entrena a cualquier edad.</p>' +
+      '<p>La forma más rápida de comprobarlo es una clase de prueba (S/50) con un diagnóstico hecho a tu medida: en una hora ves exactamente dónde estás y qué te falta para sonar como quieres.</p>' +
+      boton("Ver horarios disponibles") +
+      '<p>Eliges tu horario ahí mismo, cuando quieras.</p>'
+    );
+    text = 'Hola,\n\nTe bajaste la guía hace un par de días. La mayoría de adultos cree que ya se le pasó el tren para cantar, tocar o componer. No es verdad: esto no es talento, es entrenamiento, y se entrena a cualquier edad.\n\nLa forma más rápida de comprobarlo es una clase de prueba (S/50) con un diagnóstico a tu medida. Mira los horarios disponibles aquí: ' + horarios + '\n\nUn abrazo,\nAndrés - ProfesorMVT';
+  } else {
+    subject = "Tu clase de prueba con diagnóstico te espera";
+    html = wrap(
+      '<p>Hola,</p>' +
+      '<p>Te lo dejo claro para que decidas sin vueltas. Tu clase de prueba cuesta S/50 e incluye:</p>' +
+      '<ul style="padding-left:18px">' +
+        '<li>Una hora 1 a 1, en persona (San Isidro) u online.</li>' +
+        '<li>Un diagnóstico de dónde estás y un plan armado a tu medida.</li>' +
+        '<li>Te enseña alguien que ha compuesto más de 200 canciones y trabajó años en la industria.</li>' +
+      '</ul>' +
+      '<p>No es una clase de relleno: es la sesión donde ya empiezas a avanzar.</p>' +
+      boton("Elegir mi horario") +
+      '<p>Si tienes dudas antes de reservar, responde este correo y lo vemos.</p>'
+    );
+    text = 'Hola,\n\nTu clase de prueba cuesta S/50 e incluye:\n- Una hora 1 a 1, en persona (San Isidro) u online.\n- Un diagnóstico de dónde estás y un plan a tu medida.\n- Te enseña alguien que ha compuesto más de 200 canciones y trabajó años en la industria.\n\nNo es una clase de relleno: es donde ya empiezas a avanzar. Elige tu horario aquí: ' + horarios + '\n\nSi tienes dudas, responde este correo.\n\nUn abrazo,\nAndrés - ProfesorMVT';
+  }
+  return enviarCorreo(env, { to: to, subject: subject, html: html, text: text });
+}
+
+/* Resumen a Andrés de a qué leads se les hizo seguimiento hoy (via AVISOS, gratis). */
+async function avisarNurtureResumen(env, enviados){
+  if (!env.AVISOS || !enviados.length) return;
+  const lista = enviados.map(function(e){ return "- " + e.email + " · correo de seguimiento " + e.paso; }).join("\n");
+  const msg = createMimeMessage();
+  msg.setSender({ name: "Avisos ProfesorMVT", addr: "avisos@profesormvt.com" });
+  msg.setRecipient("andressalame@gmail.com");
+  msg.setSubject("Nurture de leads: " + enviados.length + " correos de seguimiento hoy");
+  msg.addMessage({ contentType: "text/plain", data: "El sistema le hizo seguimiento (por correo) a estos leads que dejaron su correo y aún no compran:\n\n" + lista + "\n\nSi a alguno te interesa cerrarlo a mano, escríbele por WhatsApp.\n" });
+  await env.AVISOS.send(new EmailMessage("avisos@profesormvt.com", "andressalame@gmail.com", msg.asRaw()));
+}
+
+/* Cron de nurture: a cada lead de MVT que no es cuenta todavía, le manda el correo de seguimiento que
+   le toca según los días desde que dejó su correo, una sola vez por paso. Arranca APAGADO: no manda
+   nada hasta que 'nurture_activo' = '1' en config (lo enciende Andrés). Solo a leads NUEVOS: la
+   migración v14 deja el backlog viejo en nurture_paso = 99, fuera de la secuencia. */
+async function procesarNurtureLeads(env){
+  const cfg = await loadConfig(env);
+  if (cfg.nurture_activo !== "1") return [];   // interruptor de seguridad: APAGADO por defecto
+  const ultimoPaso = NURTURE_PASOS[NURTURE_PASOS.length - 1].paso;
+  const { results: leads } = await env.DB.prepare(
+    "SELECT id, email, fecha, nurture_paso FROM leads WHERE marca = 'MVT' AND COALESCE(nurture_paso,0) < ?1"
+  ).bind(ultimoPaso).all();
+  const ahora = Date.now();
+  const enviados = []; let fallos = 0;
+  for (const l of (leads || [])){
+    const pasoActual = Number(l.nurture_paso) || 0;
+    // Si el lead ya se volvió cuenta (registró o compró), corta la secuencia: lo toman onboarding/renovación.
+    const cuenta = await env.DB.prepare("SELECT id FROM cuentas WHERE LOWER(email) = ?1").bind(String(l.email).toLowerCase()).first();
+    if (cuenta){
+      await env.DB.prepare("UPDATE leads SET nurture_paso = 99 WHERE id = ?1").bind(l.id).run();
+      continue;
+    }
+    const dias = Math.floor((ahora - Date.parse(l.fecha + "T00:00:00Z")) / 86400000);
+    // El paso a enviar: el mayor cuyo umbral de días ya se cumplió y que aún no recibió (no manda 2 el mismo día).
+    let aEnviar = null;
+    for (const p of NURTURE_PASOS){ if (p.paso > pasoActual && dias >= p.dia) aEnviar = p.paso; }
+    if (!aEnviar) continue;
+    const ok = await correoNurtureLead(env, l.email, aEnviar);
+    if (ok){
+      await env.DB.prepare("UPDATE leads SET nurture_paso = ?1 WHERE id = ?2").bind(aEnviar, l.id).run();
+      enviados.push({ email: l.email, paso: aEnviar });
+    } else { fallos++; }
+  }
+  if (enviados.length){ try { await avisarNurtureResumen(env, enviados); } catch (e) {} }
+  await reportarSaludCorreo(env, fallos, fallos + enviados.length);
+  return enviados;
+}
+
 /* ---------- Aviso por Web Push (VAPID) a los dispositivos suscritos del admin ----------
    Best-effort, con try/catch POR suscripción: una mala no tumba al resto.
    Las suscripciones caducadas (404/410) se borran solas. Devuelve cuántas se enviaron. */
@@ -2151,6 +2254,8 @@ export default {
     // Renovaciones: una sola vez al día, en el disparo de las 14:00 UTC (≈ 09:00 Lima).
     if (new Date().getUTCHours() === 14){
       ctx.waitUntil(procesarRenovaciones(env).catch(function(){}));
+      // Nurture de leads: mismo disparo diario. Apagado por defecto (config.nurture_activo).
+      ctx.waitUntil(procesarNurtureLeads(env).catch(function(){}));
     }
     // Backup diario: 1 vez al día a las 07:00 UTC (≈ 02:00 Lima, madrugada tranquila).
     if (new Date().getUTCHours() === 7){
