@@ -399,6 +399,67 @@ async function confirmarCompra(env, compra){
   return { ok: true, cu, compra };
 }
 
+/* Correo de recordatorio de renovacion al alumno (se le acaban las clases) */
+async function correoRenovacion(env, alumno, to, c){
+  if (!to) return false;
+  const nombre = ((alumno.nombre || "").trim().split(/\s+/)[0]) || "";
+  const restantes = Number(c.restantes) || 0;
+  const frase = restantes <= 0
+    ? "Ya usaste todas las clases de tu paquete"
+    : (restantes === 1 ? "Te queda 1 clase de tu paquete" : ("Te quedan " + restantes + " clases de tu paquete"));
+  const portal = "https://profesormvt.com/alumnos/";
+  const html =
+    '<div style="font-family:Arial,Helvetica,sans-serif;max-width:480px;margin:0 auto;color:#1a1a1a;font-size:15px;line-height:1.6">' +
+      '<p>¡Hola' + (nombre ? ' ' + nombre : '') + '! 🎸</p>' +
+      '<p>' + frase + '. Para no cortar el ritmo justo cuando se empieza a notar el avance, renueva y seguimos:</p>' +
+      '<p style="text-align:center;margin:26px 0"><a href="' + portal + '" style="background:#e8501f;color:#ffffff;text-decoration:none;font-weight:bold;padding:14px 26px;border-radius:6px;display:inline-block">Renovar mi paquete</a></p>' +
+      '<p>Tip: si quieres el mejor precio por clase y asegurar tu cupo, el <b>Plan Estrella</b> (12 clases) es la mejor opción. Lo ves al renovar.</p>' +
+      '<p>Cualquier cosa me escribes directo.</p>' +
+      '<p>Un abrazo,<br><b>Andrés</b><br>ProfesorMVT</p>' +
+    '</div>';
+  const text = '¡Hola' + (nombre ? ' ' + nombre : '') + '!\n\n' + frase + '. Para no cortar el ritmo, renueva aquí: ' + portal + '\n\nTip: el Plan Estrella (12 clases) es el mejor precio por clase.\n\nUn abrazo,\nAndrés - ProfesorMVT';
+  return enviarCorreo(env, { to: to, subject: "Se te están acabando las clases 🎸", html: html, text: text });
+}
+
+/* Resumen a Andres de a quien se le recordo renovar (via AVISOS, a su correo verificado, gratis) */
+async function avisarRenovacionesResumen(env, enviados){
+  if (!env.AVISOS || !enviados.length) return;
+  const lista = enviados.map(function(e){ return "- " + e.nombre + " (" + e.email + ") · " + e.restantes + " clases restantes"; }).join("\n");
+  const msg = createMimeMessage();
+  msg.setSender({ name: "Avisos ProfesorMVT", addr: "avisos@profesormvt.com" });
+  msg.setRecipient("andressalame@gmail.com");
+  msg.setSubject("Recordatorios de renovacion enviados hoy: " + enviados.length);
+  msg.addMessage({ contentType: "text/plain", data: "El sistema le recordo renovar (por correo) a:\n\n" + lista + "\n\nA los importantes, dales tu empujon personal por WhatsApp.\n" });
+  await env.AVISOS.send(new EmailMessage("avisos@profesormvt.com", "andressalame@gmail.com", msg.asRaw()));
+}
+
+/* Cron de renovaciones: detecta alumnos "Renovar pronto" (1 clase o menos) y les manda el
+   recordatorio UNA sola vez por ciclo. Reusa la misma logica del CRM (compute/estadoAlumno).
+   Solo a alumnos con cuenta web (tienen correo); los demas los maneja Andres a mano. */
+async function procesarRenovaciones(env){
+  const precios = await loadPrecios(env);
+  const { results: alumnos } = await env.DB.prepare(
+    "SELECT a.*, c.email AS _email FROM alumnos a JOIN cuentas c ON c.alumno_id = a.id WHERE a.pago = 'Pagado' AND c.email IS NOT NULL AND c.email != ''"
+  ).all();
+  const enviados = [];
+  for (const a of (alumnos || [])){
+    const ciclo = Number(a.ciclo) || 1;
+    if ((Number(a.recordatorio_ciclo) || 0) >= ciclo) continue;   // ya avisado este ciclo
+    const { results: regs } = await env.DB.prepare(
+      "SELECT estado FROM registro WHERE alumno_id = ?1 AND COALESCE(ciclo,1) = ?2"
+    ).bind(a.id, ciclo).all();
+    const c = compute(a, regs || [], precios);
+    if (estadoAlumno(c) !== "Renovar pronto") continue;
+    const ok = await correoRenovacion(env, a, a._email, c);
+    if (ok){
+      await env.DB.prepare("UPDATE alumnos SET recordatorio_ciclo = ?1 WHERE id = ?2").bind(ciclo, a.id).run();
+      enviados.push({ nombre: a.nombre, email: a._email, restantes: c.restantes });
+    }
+  }
+  if (enviados.length){ try { await avisarRenovacionesResumen(env, enviados); } catch (e) {} }
+  return enviados;
+}
+
 /* ---------- Aviso por Web Push (VAPID) a los dispositivos suscritos del admin ----------
    Best-effort, con try/catch POR suscripción: una mala no tumba al resto.
    Las suscripciones caducadas (404/410) se borran solas. Devuelve cuántas se enviaron. */
@@ -1186,5 +1247,9 @@ export default {
     } catch (e) {
       return json({ error: "Error del servidor" }, 500);
     }
+  },
+
+  async scheduled(event, env, ctx){
+    ctx.waitUntil(procesarRenovaciones(env).catch(function(){}));
   }
 };
