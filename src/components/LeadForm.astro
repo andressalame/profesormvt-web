@@ -1,0 +1,83 @@
+---
+// Bloque reusable de captura de lead (imán = guía de composición).
+// Se usa en el home y al pie de cada post del blog. Postea a /api/lead.
+const { fuente = "web" } = Astro.props;
+---
+<section class="lf">
+  <div class="lf-box">
+    <div class="lf-view" data-view>
+      <span class="lf-eyebrow">Guía gratis · Composición</span>
+      <h2 class="lf-h">De oyente <span class="lf-o">a autor</span></h2>
+      <p class="lf-p">Te regalo la guía para empezar a componer tu primera canción: 3 herramientas que usan los hits, en PDF. Déjame tu correo y te la mando ahora.</p>
+      <form class="lf-form" data-fuente={fuente} novalidate>
+        <input type="text" class="lf-hp" name="website" tabindex="-1" autocomplete="off" aria-hidden="true" />
+        <input type="email" class="lf-email" name="email" placeholder="tu@correo.com" required autocomplete="email" />
+        <button type="submit" class="lf-btn">Descargar gratis →</button>
+      </form>
+      <div class="lf-micro">Sin spam. Solo para mandarte la guía.</div>
+      <div class="lf-err" data-err></div>
+    </div>
+    <div class="lf-ok" data-ok hidden>
+      <h2 class="lf-h">Tu guía está <span class="lf-o">lista</span></h2>
+      <p class="lf-p">Te la abrí en otra pestaña. Si no, descárgala aquí.</p>
+      <a class="lf-btn lf-btn-link" data-pdf href="/recursos/composicion-primera-cancion.pdf" target="_blank" rel="noopener">Descargar mi guía →</a>
+    </div>
+  </div>
+</section>
+
+<style>
+  .lf{ padding:44px 18px; display:flex; justify-content:center; position:relative; z-index:1; }
+  .lf-box{ width:100%; max-width:600px; background:#15110f; border:1px solid #2A2926; border-radius:12px; padding:clamp(24px,4vw,34px) clamp(20px,3.5vw,30px); }
+  .lf-eyebrow{ font-family:"JetBrains Mono",monospace; text-transform:uppercase; letter-spacing:.2em; font-size:11px; color:#e8501f; font-weight:700; }
+  .lf-h{ font-family:"Anton",Impact,sans-serif; text-transform:uppercase; font-size:clamp(28px,5vw,42px); line-height:1; letter-spacing:.005em; color:#f3ede0; margin:8px 0 10px; }
+  .lf-h .lf-o{ color:#e8501f; }
+  .lf-p{ font-family:"Space Grotesk",system-ui,sans-serif; font-size:15px; line-height:1.55; color:#cfc7b6; margin:0 0 18px; max-width:50ch; }
+  .lf-form{ display:flex; gap:10px; flex-wrap:wrap; }
+  .lf-email{ flex:1 1 220px; font-family:"Space Grotesk",system-ui,sans-serif; font-size:16px; padding:14px 15px; border-radius:6px; border:1px solid #2A2926; background:#0d0b0a; color:#f3ede0; }
+  .lf-email::placeholder{ color:#6f6a60; }
+  .lf-email:focus{ outline:none; border-color:#e8501f; }
+  .lf-hp{ position:absolute; left:-9999px; width:0; height:0; opacity:0; }
+  .lf-btn{ font-family:"JetBrains Mono",monospace; text-transform:uppercase; letter-spacing:.06em; font-size:13px; font-weight:700; padding:14px 20px; border-radius:6px; border:2px solid #e8501f; background:#e8501f; color:#160a04; cursor:pointer; transition:.15s; white-space:nowrap; }
+  .lf-btn:hover{ transform:translateY(-2px); box-shadow:3px 3px 0 #f3ede0; }
+  .lf-btn:disabled{ opacity:.6; transform:none; box-shadow:none; cursor:default; }
+  .lf-btn-link{ display:inline-block; text-decoration:none; margin-top:6px; }
+  .lf-micro{ font-family:"JetBrains Mono",monospace; font-size:10.5px; letter-spacing:.04em; color:#8a8276; margin-top:9px; }
+  .lf-err{ color:#ff6a35; font-size:13px; margin-top:8px; }
+  @media (max-width:520px){ .lf-btn{ width:100%; } }
+</style>
+
+<script>
+  document.querySelectorAll('.lf-form').forEach(function(form){
+    var box = form.closest('.lf-box');
+    var view = box.querySelector('[data-view]');
+    var ok = box.querySelector('[data-ok]');
+    var errEl = box.querySelector('[data-err]');
+    var pdfEl = box.querySelector('[data-pdf]');
+    var btn = form.querySelector('.lf-btn');
+    var PDF = '/recursos/composicion-primera-cancion.pdf';
+    form.addEventListener('submit', function(e){
+      e.preventDefault();
+      errEl.textContent = '';
+      var email = form.querySelector('.lf-email').value.trim();
+      var hp = form.querySelector('input[name=website]').value;
+      btn.disabled = true; btn.textContent = 'Enviando...';
+      fetch('/api/lead', {
+        method:'POST', headers:{'content-type':'application/json'},
+        body: JSON.stringify({ email:email, website:hp, marca:'MVT', fuente: form.getAttribute('data-fuente') || 'web', interes:'composicion' })
+      })
+      .then(function(r){ return r.json(); })
+      .then(function(d){
+        if(d && d.ok){
+          if(window.fbq) fbq('track','Lead');
+          if(pdfEl) pdfEl.href = d.pdf || PDF;
+          view.hidden = true; ok.hidden = false;
+          try { window.open(d.pdf || PDF, '_blank'); } catch(err){}
+        } else {
+          errEl.textContent = (d && d.error) || 'Algo salió mal. Intenta de nuevo.';
+          btn.disabled = false; btn.textContent = 'Descargar gratis →';
+        }
+      })
+      .catch(function(){ errEl.textContent = 'No se pudo enviar. Intenta de nuevo.'; btn.disabled = false; btn.textContent = 'Descargar gratis →'; });
+    });
+  });
+</script>
