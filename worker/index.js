@@ -311,6 +311,39 @@ async function correoBienvenidaLead(env, to){
   return enviarCorreo(env, { to: to, subject: "Tu guía de composición", html: html, text: text });
 }
 
+/* Correo de bienvenida al alumno cuando se confirma su PRIMERA compra (onboarding automatico) */
+async function correoBienvenidaAlumno(env, cu, compra){
+  if (!cu || !cu.email) return false;
+  let cfg = {};
+  try { cfg = await loadConfig(env); } catch (e) { cfg = {}; }
+  const nombre = ((cu.nombre || "").trim().split(/\s+/)[0]) || "";
+  const nombrePaquete = ({ "Paquete 4":"Esencial", "Paquete 8":"Intensivo", "Paquete 12":"Estrella", "Clase suelta":"Clase suelta" })[compra.paquete] || compra.paquete || "";
+  const portal = "https://profesormvt.com/alumnos/";
+  const wa = "https://wa.me/51989077928";
+  const discordLine = cfg.discord_url
+    ? '<li><b>Tu Discord (zona VIP):</b> <a href="' + cfg.discord_url + '">entra aquí</a>, ahí resolvemos dudas y compartimos material entre clases.</li>'
+    : '';
+  const agendaLine = cfg.calendly_url
+    ? '<li><b>Agenda tu primera clase:</b> <a href="' + cfg.calendly_url + '">elige tu horario aquí</a>.</li>'
+    : '<li><b>Agenda tu primera clase:</b> escríbeme por <a href="' + wa + '">WhatsApp</a> y la cuadramos.</li>';
+  const html =
+    '<div style="font-family:Arial,Helvetica,sans-serif;max-width:480px;margin:0 auto;color:#1a1a1a;font-size:15px;line-height:1.6">' +
+      '<p>¡Bienvenido' + (nombre ? ' ' + nombre : '') + '! 🎸</p>' +
+      '<p>Acabas de dar el paso y me alegra un montón tenerte. Tu paquete <b>' + nombrePaquete + '</b> ya está activo. Acá tienes todo para arrancar:</p>' +
+      '<ul style="padding-left:18px">' +
+        '<li><b>Tu portal:</b> <a href="' + portal + '">' + portal + '</a>, ahí ves tus clases, tu material y tu avance.</li>' +
+        discordLine + agendaLine +
+      '</ul>' +
+      '<p>Cualquier cosa me escribes directo. Vamos a hacer que esto suene.</p>' +
+      '<p>Un abrazo,<br><b>Andrés</b><br>ProfesorMVT</p>' +
+    '</div>';
+  const text = '¡Bienvenido' + (nombre ? ' ' + nombre : '') + '!\n\nTu paquete ' + nombrePaquete + ' ya está activo. Para arrancar:\n- Tu portal: ' + portal + '\n' +
+    (cfg.discord_url ? '- Discord: ' + cfg.discord_url + '\n' : '') +
+    (cfg.calendly_url ? '- Agenda tu clase: ' + cfg.calendly_url + '\n' : '- Agenda escribiéndome por WhatsApp: ' + wa + '\n') +
+    '\nCualquier cosa me escribes.\n\nUn abrazo,\nAndrés - ProfesorMVT';
+  return enviarCorreo(env, { to: cu.email, subject: "Ya estás dentro de ProfesorMVT 🎸", html: html, text: text });
+}
+
 /* ---------- Confirmar una compra (reutilizado por el CRM y por el webhook de Mercado Pago).
    Acepta estado 'pendiente' (declarada manual) o 'iniciada' (checkout de tarjeta ya pagado).
    Hace lo mismo que el botón "confirmar" del CRM: renueva/crea alumno, premia al referidor
@@ -362,6 +395,7 @@ async function confirmarCompra(env, compra){
 
   stmts.push(env.DB.prepare("UPDATE compras SET estado = 'confirmada' WHERE id = ?1").bind(compra.id));
   await env.DB.batch(stmts);
+  if (esPrimera) { try { await correoBienvenidaAlumno(env, cu, compra); } catch (e) {} }
   return { ok: true, cu, compra };
 }
 
