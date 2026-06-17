@@ -1,0 +1,262 @@
+---
+import Layout from '../layouts/Layout.astro';
+---
+
+<Layout
+  title="Horarios disponibles | ProfesorMVT"
+  description="Mira en vivo los horarios libres para tus clases de canto, piano o composición. Elige el tuyo, crea tu cuenta y resérvalo en un minuto."
+  activeNav="horarios"
+>
+  <main class="hor">
+    <!-- ===== HERO ===== -->
+    <section class="hor-hero">
+      <div class="container-narrow">
+        <p class="label">Agenda en vivo</p>
+        <h1>Estos son mis horarios <em>disponibles</em></h1>
+        <p class="lead">
+          Sin escribirme ni esperar respuesta. Mira los espacios libres ahora mismo,
+          elige el tuyo y resérvalo creando tu cuenta. Toma un minuto.
+        </p>
+      </div>
+    </section>
+
+    <!-- ===== CÓMO FUNCIONA ===== -->
+    <section class="hor-pasos">
+      <div class="container">
+        <ol class="pasos">
+          <li>
+            <span class="num">1</span>
+            <h3>Elige tu horario</h3>
+            <p>Revisa el calendario en vivo y encuentra el espacio que te acomoda.</p>
+          </li>
+          <li>
+            <span class="num">2</span>
+            <h3>Crea tu cuenta y paga</h3>
+            <p>Yape, Plin o tarjeta. Tu paquete se activa al instante, sin coordinar nada por chat.</p>
+          </li>
+          <li>
+            <span class="num">3</span>
+            <h3>Reserva y listo</h3>
+            <p>Apartas tu clase y te llega la invitación con el link de Meet. Así de simple.</p>
+          </li>
+        </ol>
+      </div>
+    </section>
+
+    <!-- ===== CALENDARIO EN VIVO ===== -->
+    <section class="hor-cal">
+      <div class="container-narrow">
+        <div class="cal-head">
+          <h2>Horarios libres</h2>
+          <p class="note">Se actualizan en vivo. Lunes a sábado, mañana y tarde (hora Lima).</p>
+        </div>
+        <div id="calBox" class="cal-box">
+          <p class="note" style="margin:0">Cargando horarios…</p>
+        </div>
+        <div class="cal-cta">
+          <a href="/alumnos/" class="btn-cta">Crear mi cuenta y reservar →</a>
+          <p class="note">Para apartar un horario necesitas una cuenta. Crearla es gratis y toma un minuto.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== CIERRE ===== -->
+    <section class="hor-fin">
+      <div class="container-narrow">
+        <h2>¿Listo para arrancar?</h2>
+        <p class="lead">Crea tu cuenta, elige tu plan y reserva tu primera clase hoy mismo.</p>
+        <div class="fin-cta">
+          <a href="/alumnos/" class="btn-cta">Empezar ahora →</a>
+          <a href="/#precios" class="btn-ghost">Ver planes y precios</a>
+        </div>
+      </div>
+    </section>
+  </main>
+</Layout>
+
+<style>
+  .hor { position: relative; z-index: 2; }
+
+  .hor-hero { padding: 80px 0 40px; text-align: center; }
+  .hor-hero h1 { font-size: clamp(38px, 6vw, 64px); line-height: 1.05; margin: 16px 0 0; }
+  .hor-hero h1 em { color: var(--color-ember); }
+  .hor-hero .lead {
+    max-width: 620px; margin: 22px auto 0;
+    font-size: 19px; color: var(--color-bone-mute); line-height: 1.6;
+  }
+
+  /* Pasos */
+  .hor-pasos { padding: 30px 0; }
+  .pasos {
+    list-style: none; display: grid; grid-template-columns: repeat(3, 1fr);
+    gap: 18px; max-width: 1000px; margin: 0 auto;
+  }
+  .pasos li {
+    background: var(--color-ink-soft);
+    border: 1px solid var(--color-line);
+    border-radius: 12px; padding: 28px 24px;
+  }
+  .pasos .num {
+    font-family: 'JetBrains Mono', monospace;
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 34px; height: 34px; border-radius: 50%;
+    background: var(--color-ember); color: var(--color-ink);
+    font-weight: 700; font-size: 15px; margin-bottom: 14px;
+  }
+  .pasos h3 { font-size: 20px; margin: 0 0 6px; }
+  .pasos p { color: var(--color-bone-mute); font-size: 15px; margin: 0; line-height: 1.5; }
+
+  /* Calendario */
+  .hor-cal { padding: 50px 0 40px; }
+  .cal-head { text-align: center; margin-bottom: 26px; }
+  .cal-head h2 { font-size: clamp(28px, 4vw, 40px); }
+  .note { color: var(--color-text-mute); font-size: 14px; margin: 8px 0 0; }
+
+  .cal-box {
+    background: var(--color-ink-soft);
+    border: 1px solid var(--color-line);
+    border-radius: 16px;
+    padding: 26px;
+    max-width: 540px; margin: 0 auto;
+  }
+  .calmes {
+    font-family: 'JetBrains Mono', monospace; font-size: 12px;
+    text-transform: uppercase; letter-spacing: .08em;
+    color: var(--color-bone); margin: 0 0 14px; text-align: center;
+  }
+  .cal { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
+  .cal .cdow {
+    font-family: 'JetBrains Mono', monospace; font-size: 10px;
+    color: var(--color-text-mute); text-align: center;
+    text-transform: uppercase; padding: 2px 0 6px;
+  }
+  .calc {
+    min-height: 42px; display: flex; align-items: center; justify-content: center;
+    border: 1px solid transparent; border-radius: 8px;
+    font-size: 14px; color: var(--color-text-mute);
+  }
+  .calc.has {
+    color: var(--color-bone); border: 1px solid var(--color-line);
+    background: var(--color-ink); cursor: pointer; font-weight: 600;
+  }
+  .calc.has:hover { border-color: var(--color-ember); color: var(--color-ember); }
+  .calc.sel {
+    background: var(--color-ember); color: var(--color-ink) !important;
+    border-color: var(--color-ember); font-weight: 700;
+  }
+  .cal-dia-titulo {
+    margin-top: 22px; font-family: 'Fraunces', serif; font-size: 19px;
+    text-transform: capitalize; color: var(--color-bone);
+  }
+  .cal-horas { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+  .cal-hora {
+    font-family: 'JetBrains Mono', monospace; font-size: 13px;
+    padding: 8px 14px; border-radius: 6px;
+    border: 1px solid var(--color-line); background: var(--color-ink);
+    color: var(--color-bone); transition: border-color .15s, color .15s;
+  }
+  .cal-hora:hover { border-color: var(--color-ember); color: var(--color-ember); }
+
+  .cal-cta { text-align: center; margin-top: 34px; }
+
+  .btn-cta {
+    display: inline-block; background: var(--color-ember);
+    color: var(--color-bone) !important; font-weight: 600;
+    padding: 15px 30px; border-radius: 6px; font-size: 16px;
+    transition: background .2s;
+  }
+  .btn-cta:hover { background: var(--wine-deep); }
+  .btn-ghost {
+    display: inline-block; border: 1px solid var(--hairline-strong);
+    color: var(--color-bone) !important; font-weight: 600;
+    padding: 15px 30px; border-radius: 6px; font-size: 16px;
+    transition: border-color .15s, color .15s;
+  }
+  .btn-ghost:hover { border-color: var(--color-ember); color: var(--color-ember) !important; }
+
+  /* Cierre */
+  .hor-fin { padding: 50px 0 90px; text-align: center; }
+  .hor-fin h2 { font-size: clamp(28px, 4vw, 42px); }
+  .hor-fin .lead { color: var(--color-bone-mute); font-size: 18px; margin: 14px auto 0; max-width: 540px; }
+  .fin-cta { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; margin-top: 30px; }
+
+  @media (max-width: 760px) {
+    .pasos { grid-template-columns: 1fr; }
+    .hor-hero { padding: 56px 0 30px; }
+  }
+</style>
+
+<script is:inline>
+  (function () {
+    var MESES = ["enero","febrero","marzo","abril","mayo","junio","julio","agosto","setiembre","octubre","noviembre","diciembre"];
+    var DIAS_LARGO = ["domingo","lunes","martes","miércoles","jueves","viernes","sábado"];
+    var SLOTS = [];
+    var DIA = "";
+
+    function $(id){ return document.getElementById(id); }
+    function fmtFecha(iso){
+      var d = new Date(iso);
+      try { return d.toLocaleDateString("es-PE", { weekday:"long", day:"numeric", month:"long" }); }
+      catch(e){ return DIAS_LARGO[d.getDay()] + " " + d.getDate(); }
+    }
+    function fmtHora(iso){
+      var d = new Date(iso);
+      try { return d.toLocaleTimeString("es-PE", { hour:"2-digit", minute:"2-digit" }); }
+      catch(e){ return ("0"+d.getHours()).slice(-2) + ":" + ("0"+d.getMinutes()).slice(-2); }
+    }
+    function diaKey(iso){ var d = new Date(iso); return d.getFullYear()+"-"+d.getMonth()+"-"+d.getDate(); }
+
+    function pintar(){
+      var box = $("calBox");
+      if (SLOTS.length === 0){
+        box.innerHTML = '<p class="note" style="margin:0">No hay horarios libres en las próximas semanas. Crea tu cuenta y escríbeme desde el portal para cuadrar uno.</p>';
+        return;
+      }
+      var mapa = {};
+      SLOTS.forEach(function(iso){ var k = diaKey(iso); (mapa[k] = mapa[k] || []).push(iso); });
+      if (!DIA || !mapa[DIA]) DIA = diaKey(SLOTS[0]);
+
+      var hoy = new Date(); hoy.setHours(0,0,0,0);
+      var ini = new Date(hoy); ini.setDate(ini.getDate() - ((hoy.getDay()+6)%7));
+      var ult = new Date(SLOTS[SLOTS.length-1]); ult.setHours(0,0,0,0);
+      var fin = new Date(ult); fin.setDate(fin.getDate() + ((7-ult.getDay())%7));
+
+      var mesIni = MESES[ini.getMonth()], mesFin = MESES[fin.getMonth()];
+      var label = (mesIni === mesFin ? mesIni : mesIni + " — " + mesFin) + " " + fin.getFullYear();
+
+      var celdas = ["L","M","M","J","V","S","D"].map(function(d){ return '<div class="cdow">'+d+'</div>'; }).join("");
+      var cur = new Date(ini);
+      while (cur <= fin){
+        var k = cur.getFullYear()+"-"+cur.getMonth()+"-"+cur.getDate();
+        var has = !!mapa[k];
+        var cls = "calc" + (has ? " has" : "") + (k === DIA ? " sel" : "");
+        celdas += '<div class="'+cls+'"' + (has ? ' data-day="'+k+'"' : '') + '>' + cur.getDate() + '</div>';
+        cur.setDate(cur.getDate()+1);
+      }
+
+      var diaSlots = mapa[DIA] || [];
+      var titulo = fmtFecha(diaSlots[0] || SLOTS[0]);
+      var horas = diaSlots.map(function(iso){
+        return '<a class="cal-hora" href="/alumnos/">' + fmtHora(iso) + '</a>';
+      }).join("");
+
+      box.innerHTML =
+        '<div class="calmes">' + label + '</div>' +
+        '<div class="cal">' + celdas + '</div>' +
+        '<div class="cal-dia-titulo">' + titulo + '</div>' +
+        '<div class="cal-horas">' + horas + '</div>';
+    }
+
+    $("calBox").addEventListener("click", function(e){
+      var dia = e.target.closest("[data-day]");
+      if (dia){ DIA = dia.dataset.day; pintar(); }
+    });
+
+    fetch("/api/agenda/slots-publicos")
+      .then(function(r){ return r.json(); })
+      .then(function(d){ SLOTS = (d && d.slots) || []; pintar(); })
+      .catch(function(){
+        $("calBox").innerHTML = '<p class="note" style="margin:0">No pude cargar los horarios. Recarga la página en un momento.</p>';
+      });
+  })();
+</script>

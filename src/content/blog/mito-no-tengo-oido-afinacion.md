@@ -43,4 +43,4 @@ Mucha gente "desafina" más cuando está nerviosa o se cree incapaz, porque la t
 
 ¿Existe la amusia, una condición real donde el cerebro procesa mal las alturas? Sí, pero es **rarísima** — afecta a un porcentaje minúsculo de la población. Las probabilidades de que tú la tengas son ínfimas. Si "desafinas", casi con certeza es coordinación sin entrenar, no un cableado defectuoso.
 
-Así que no, no es que "no tengas oído". Es que nadie te enseñó a coordinar lo que oyes con lo que produces — y eso se entrena como cualquier otra habilidad. En la clase de prueba evaluamos tu oído perceptivo y tu control por separado, para saber exactamente qué trabajar. [Escríbeme por WhatsApp](https://wa.me/51989077928).
+Así que no, no es que "no tengas oído". Es que nadie te enseñó a coordinar lo que oyes con lo que produces — y eso se entrena como cualquier otra habilidad. En la clase de prueba evaluamos tu oído perceptivo y tu control por separado, para saber exactamente qué trabajar. [Reserva tu clase de prueba](/horarios/).

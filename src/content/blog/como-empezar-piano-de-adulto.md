@@ -40,4 +40,4 @@ La diferencia con un adulto es el **ritmo** (más rápido, saltamos lo que no ap
 
 La respuesta honesta: **frecuencia le gana a duración.** Quince a veinte minutos diarios rinden muchísimo más que una maratón de dos horas el fin de semana. El cerebro consolida la coordinación motora con repetición espaciada, no con atracones.
 
-Si quieres empezar con un plan ordenado en vez de tutoriales sueltos de YouTube que te dejan a medias, en la clase de prueba evaluamos tu punto de partida y armamos tu ruta. [Escríbeme por WhatsApp](https://wa.me/51989077928) y lo vemos.
+Si quieres empezar con un plan ordenado en vez de tutoriales sueltos de YouTube que te dejan a medias, en la clase de prueba evaluamos tu punto de partida y armamos tu ruta. [Reserva tu clase de prueba](/horarios/) y lo vemos.

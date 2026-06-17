@@ -54,4 +54,4 @@ Lo que NO debería pasar: que elijas pregrabado pensando que es "como online". E
 
 Lo presencial y el online en vivo son ambas buenas opciones — la mejor es la que te permita ser **constante**, porque la constancia le gana a todo lo demás. Lo único que sí conviene evitar es el curso pregrabado sin acompañamiento.
 
-Yo doy clases en ambas modalidades: presenciales en San Isidro (Lima) y online en vivo para todo el Perú y el extranjero. Si tienes dudas de cuál te conviene según tu caso, lo conversamos y probamos. [Escríbeme por WhatsApp](https://wa.me/51989077928).
+Yo doy clases en ambas modalidades: presenciales en San Isidro (Lima) y online en vivo para todo el Perú y el extranjero. Si tienes dudas de cuál te conviene según tu caso, lo conversamos y probamos. [Reserva tu clase de prueba](/horarios/).

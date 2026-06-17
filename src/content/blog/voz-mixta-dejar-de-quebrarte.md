@@ -44,4 +44,4 @@ No se arregla en un día, pero el camino es claro y progresivo:
 
 Con diagnóstico correcto y práctica constante, muchos alumnos notan mejoras en la zona de paso en pocas semanas. No es que de pronto cantes como tu ídolo, pero el quiebre se suaviza y empiezas a *confiar* en tus agudos en vez de temerles. Esa confianza cambia cómo cantas todo lo demás.
 
-La voz mixta es de las cosas que más se disfrutan al destrabarse, porque abre repertorio que antes ni intentabas. Si te quiebras siempre en el mismo punto, en la clase de prueba lo diagnosticamos y te muestro por dónde empezar. [Escríbeme por WhatsApp](https://wa.me/51989077928).
+La voz mixta es de las cosas que más se disfrutan al destrabarse, porque abre repertorio que antes ni intentabas. Si te quiebras siempre en el mismo punto, en la clase de prueba lo diagnosticamos y te muestro por dónde empezar. [Reserva tu clase de prueba](/horarios/).

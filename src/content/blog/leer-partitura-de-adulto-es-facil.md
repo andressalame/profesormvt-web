@@ -38,4 +38,4 @@ Mucha gente intenta memorizar cada nota individualmente, como quien memoriza un 
 
 Depende de tu objetivo (lo hablo a fondo en el artículo sobre acordes vs partitura). Para repertorio clásico, sí es la base. Para acompañarte cantando, puedes avanzar mucho con acordes y sumar lectura después. Pero incluso si tu meta es el pop, saber leer aunque sea básico te abre puertas: acceder a partituras, entender mejor la música, comunicarte con otros músicos.
 
-La partitura no es un examen de ingreso reservado a prodigios. Es un mapa lógico que tu cabeza adulta está perfectamente equipada para leer. En clase la introducimos al ritmo justo —ni tan lento que aburra, ni tan rápido que abrume— conectada siempre a música real. [Escríbeme por WhatsApp](https://wa.me/51989077928) y te muestro lo accesible que es.
+La partitura no es un examen de ingreso reservado a prodigios. Es un mapa lógico que tu cabeza adulta está perfectamente equipada para leer. En clase la introducimos al ritmo justo —ni tan lento que aburra, ni tan rápido que abrume— conectada siempre a música real. [Reserva tu clase de prueba](/horarios/) y te muestro lo accesible que es.

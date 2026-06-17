@@ -40,4 +40,4 @@ Ahora juntas: progresión + melodía + letra dentro de la estructura que robaste
 
 Va a ser imperfecta. Y está perfecto que lo sea. Ningún compositor escribió su mejor canción primero. La primera sirve para una sola cosa: **demostrarte que puedes terminar una.** A partir de ahí, todo es refinar el proceso.
 
-Componer es una habilidad estructurada, no una lotería genética. Si quieres aprender el proceso completo —análisis, estructura, letra y melodía— hasta terminar tu primer demo de verdad, eso es exactamente lo que trabajamos en clase. [Escríbeme por WhatsApp](https://wa.me/51989077928) y empezamos por tu idea.
+Componer es una habilidad estructurada, no una lotería genética. Si quieres aprender el proceso completo —análisis, estructura, letra y melodía— hasta terminar tu primer demo de verdad, eso es exactamente lo que trabajamos en clase. [Reserva tu clase de prueba](/horarios/) y empezamos por tu idea.

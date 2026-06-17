@@ -6,6 +6,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <meta name="robots" content="noindex, nofollow" />
 <title>Portal de alumno · ProfesorMVT</title>
+<link rel="manifest" href="/alumnos/manifest.webmanifest">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="ProfesorMVT">
+<meta name="theme-color" content="#e8501f">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Anton&family=Space+Grotesk:wght@400;500;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
@@ -44,6 +49,14 @@
   .btn.ghost{background:transparent;color:var(--cream);border-color:var(--line);font-weight:500;}
   .btn.ghost:hover{border-color:var(--accent);color:var(--accent);filter:none;}
   .btn.sm{padding:8px 13px;font-size:11.5px;}
+  .calmes{font-family:var(--mono);font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--cream);margin:0 0 12px;}
+  .cal{display:grid;grid-template-columns:repeat(7,1fr);gap:5px;}
+  .cal .cdow{font-family:var(--mono);font-size:10px;color:var(--muted);text-align:center;text-transform:uppercase;padding:2px 0 4px;}
+  .calc{min-height:40px;display:flex;align-items:center;justify-content:center;border:1px solid transparent;border-radius:6px;font-size:14px;color:var(--muted);}
+  .calc.has{color:var(--cream);border:1px solid var(--line);background:var(--panel2);cursor:pointer;font-weight:600;}
+  .calc.has:hover{border-color:var(--accent);color:var(--accent);}
+  .calc.sel{background:var(--accent);color:var(--bg)!important;border-color:var(--accent);font-weight:700;}
+  .agslotsdia{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;}
   .btn.no{background:transparent;border-color:var(--line);color:var(--muted);font-weight:500;}
   .btn.no:hover{border-color:var(--red);color:var(--red);}
 
@@ -54,6 +67,7 @@
   .pill.gray{background:transparent;color:var(--muted);border:1px solid var(--line);}
 
   .card{background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:20px 22px;margin-bottom:14px;}
+  .card.nudge{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent) inset;}
   .card h3{font-family:var(--mono);text-transform:uppercase;letter-spacing:.12em;font-size:11px;color:var(--accent);font-weight:700;margin:0 0 12px;}
   .banner{border:1px dashed var(--amber);border-radius:4px;padding:14px 16px;margin-bottom:14px;
     font-size:14px;color:var(--amber);background:rgba(217,154,60,.07);}
@@ -192,6 +206,8 @@
   /* ---------- CHAT ---------- */
   .chat{position:fixed;top:0;right:0;bottom:0;width:300px;background:var(--panel);border-left:1px solid var(--line);display:flex;flex-direction:column;z-index:70;}
   .chat-head{font-family:var(--mono);font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--accent);font-weight:700;padding:15px 14px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;flex:0 0 auto;}
+  .chat-tab{background:none;border:1px solid var(--line);border-radius:3px;color:var(--muted);font-family:var(--mono);font-size:10px;letter-spacing:.06em;text-transform:uppercase;padding:3px 7px;cursor:pointer;}
+  .chat-tab.active{border-color:var(--accent);color:var(--accent);}
   .chat-head button{background:none;border:1px solid var(--line);border-radius:3px;color:var(--muted);font-family:var(--mono);font-size:11px;padding:3px 9px;cursor:pointer;}
   .chat-head button:hover{border-color:var(--accent);color:var(--accent);}
   .chat-msgs{flex:1;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:10px;}
@@ -323,6 +339,7 @@
     <nav aria-label="Navegación del portal">
       <a href="#inicio" data-v="inicio" aria-label="Inicio" title="Inicio"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11l9-8 9 8"/><path d="M5 9.5V21h14V9.5"/></svg><span>Inicio</span></a>
       <a href="#clases" data-v="clases" aria-label="Mis clases" title="Mis clases"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16M4 12h16M4 19h10"/></svg><span>Mis clases</span></a>
+      <a href="#agenda" data-v="agenda" aria-label="Agenda" title="Agenda"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M3 9h18M8 2v4M16 2v4"/></svg><span>Agenda</span></a>
       <a href="#recursos" data-v="recursos" aria-label="Recursos" title="Recursos"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7a1 1 0 0 1 1-1h5l2 2h9a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z"/></svg><span>Recursos</span></a>
       <a href="#comunidad" data-v="comunidad" aria-label="Comunidad" title="Comunidad"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12a8 8 0 0 1-8 8H4l2-3a8 8 0 1 1 15-5z"/></svg><span>Comunidad</span></a>
       <a href="#comprar" data-v="comprar" aria-label="Comprar" title="Comprar"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7h2l2.4 10.2A2 2 0 0 0 9.3 19h7.4a2 2 0 0 0 1.9-1.6L21 9H6"/><circle cx="10" cy="21" r="1"/><circle cx="17" cy="21" r="1"/></svg><span>Comprar</span></a>
@@ -378,8 +395,8 @@
 
       <div class="card hidden" id="iCalWrap">
         <h3>// TUS HORARIOS</h3>
-        <p class="note" style="margin:0 0 12px;">Elige tus horarios de preferencia según tu paquete. Si necesitas mover alguno, avísame con 24h y no consume clase.</p>
-        <a class="btn ghost sm" id="iCal" target="_blank" rel="noopener">Elegir mis horarios →</a>
+        <p class="note" id="iCalNota" style="margin:0 0 12px;"></p>
+        <a class="btn sm" href="#agenda">Reservar / ver mis clases →</a>
       </div>
 
       <p class="ministat hidden" id="iHist"></p>
@@ -405,6 +422,36 @@
         </div>
       </div>
       <div class="empty hidden" id="cVacio">Aquí verás tus clases registradas después de tu primera sesión.</div>
+    </section>
+
+    <!-- ===== AGENDA ===== -->
+    <section class="view" id="v-agenda">
+      <div class="eyebrow">// AGENDA</div>
+      <h1>Reserva tus <em>clases</em></h1>
+      <hr class="rule" />
+
+      <div class="card" id="agSinPaquete" style="display:none">
+        <p class="note" style="margin:0;">Para reservar clases primero activa un paquete. <a href="#comprar">Ver paquetes →</a></p>
+      </div>
+
+      <div id="agConPaquete" style="display:none">
+        <p class="ministat" id="agSaldo" style="margin:0 0 14px;"></p>
+
+        <div class="card" style="margin-bottom:16px;">
+          <h3>// MIS PRÓXIMAS CLASES</h3>
+          <div id="agProx"></div>
+        </div>
+
+        <div class="card">
+          <h3>// RESERVAR UNA CLASE</h3>
+          <div class="agtipo" style="display:flex;gap:8px;margin:8px 0 12px;flex-wrap:wrap;">
+            <button class="btn sm" data-tipo="suelta">Clase suelta</button>
+            <button class="btn ghost sm" data-tipo="fija">Horario fijo semanal</button>
+          </div>
+          <p class="note" id="agTipoNota" style="margin:0 0 16px;"></p>
+          <div id="agSlots"><p class="note" style="margin:0">Cargando horarios…</p></div>
+        </div>
+      </div>
     </section>
 
     <!-- ===== COMPRAR ===== -->
@@ -468,6 +515,13 @@
         <span class="chip hidden" id="ctaGoogle">Conectado con Google ✓</span>
         <p class="note hidden" id="ctaSoloGoogle" style="margin-top:10px;">Ingresas con Google, no necesitas contraseña.</p>
       </div>
+      <div class="card" id="ctaAvisosCard">
+        <h3>// AVISOS</h3>
+        <p class="note" id="avisosTxt" style="margin:0 0 12px;">Activa los avisos para enterarte de tus clases, tareas y respuestas del profe.</p>
+        <button class="btn sm" id="btnAvisosOn">Activar avisos en este dispositivo</button>
+        <button class="btn ghost sm hidden" id="btnAvisosOff">Desactivar avisos</button>
+        <p class="note hidden" id="avisosNoSop" style="margin-top:10px;">Tu navegador no soporta avisos. En iPhone: abre desde "Agregar a inicio".</p>
+      </div>
       <div class="card hidden" id="ctaPassCard">
         <h3>// CAMBIAR CONTRASEÑA</h3>
         <div class="field"><label for="p_actual">Contraseña actual</label><input id="p_actual" type="password" autocomplete="current-password" /></div>
@@ -492,7 +546,13 @@
 
   <!-- ===== CHAT (persiste en todas las vistas) ===== -->
   <aside class="chat" id="chatPanel" aria-label="Chat de alumnos">
-    <div class="chat-head"><span>// CHAT DE ALUMNOS</span><button id="chatToggle" aria-label="Cerrar chat">—</button></div>
+    <div class="chat-head">
+      <span style="display:flex;gap:6px;">
+        <button class="chat-tab active" data-canal="grupal">Grupal</button>
+        <button class="chat-tab" data-canal="privado">Con el profe</button>
+      </span>
+      <button id="chatToggle" aria-label="Cerrar chat">—</button>
+    </div>
     <div class="chat-msgs" id="chatMsgs"></div>
     <div class="chat-input" id="chatInputWrap">
       <input id="chatTexto" maxlength="500" placeholder="Escribe un mensaje…" autocomplete="off" />
@@ -690,7 +750,7 @@ function onGoogleCred(resp){
 }
 
 /* ---------- ROUTER (SPA por hash) ---------- */
-var VISTAS = ["inicio","clases","recursos","comunidad","comprar","referidos","cuenta"];
+var VISTAS = ["inicio","clases","agenda","recursos","comunidad","comprar","referidos","cuenta"];
 function vistaActual(){
   var h=(location.hash||"#inicio").replace("#","");
   return VISTAS.indexOf(h)>=0 ? h : "inicio";
@@ -730,7 +790,7 @@ function renderInicio(){
     if(ME.estado==="Renovar pronto" && !ME.compraPendiente) show("iRenov"); else hide("iRenov");
     $("iPlan").innerHTML =
       kv("Reprogramaciones disponibles", a.reprogRestantes+' <small>de '+a.reprogPermitidas+'</small>')+
-      kv("Horario fijo", esc(a.horario||"Por definir"))+
+      kv("Horario fijo", esc((a.horarioFijo&&a.horarioFijo.length)?a.horarioFijo.join(" · "):(a.horario||"Por definir")))+
       kv("Paquete", esc(a.paquete||"—")+(a.monto?' <small>· S/ '+a.monto+'</small>':''))+
       kv("Pago", esc(a.pago||"—"));
   } else {
@@ -738,8 +798,14 @@ function renderInicio(){
     $("iPlanLine").textContent = "Sin paquete activo";
   }
 
-  if(ME.config && ME.config.calendly_url && a){ $("iCal").href=ME.config.calendly_url; show("iCalWrap"); }
-  else hide("iCalWrap");
+  if(a){
+    var nProx = (ME.proximasClases||[]).length;
+    $("iCalNota").textContent = nProx>0
+      ? "Tienes "+nProx+" clase"+(nProx===1?"":"s")+" agendada"+(nProx===1?"":"s")+". Reserva, mueve o agrega más desde tu agenda."
+      : "Tu paquete está activo. Reserva tu primera clase ahora (suelto o fijo semanal).";
+    $("iCalWrap").classList.toggle("nudge", alumnoActivoSinReservar());
+    show("iCalWrap");
+  } else hide("iCalWrap");
 
   if(Number(ME.clasesHistorico)>0){
     $("iHist").textContent = ME.clasesHistorico + " clases tomadas en total";
@@ -770,6 +836,7 @@ function renderClases(){
 
 /* ---------- VISTA: COMPRAR ---------- */
 var TIERS = [
+  { pk:"Clase de prueba", nombre:"Clase de prueba", horas:1, primera:true, badge:"★ EMPIEZA AQUÍ", desc:"1 clase con diagnóstico" },
   { pk:"Paquete 4",  nombre:"Esencial",  horas:4 },
   { pk:"Paquete 8",  nombre:"Intensivo", horas:8, badge:"★ MÁS ELEGIDO" },
   { pk:"Paquete 12", nombre:"Estrella",  horas:12 }
@@ -793,7 +860,7 @@ function renderComprar(){
     show("bPendC");
   } else hide("bPendC");
 
-  $("tiers").innerHTML = TIERS.filter(function(t){ return ME.precios && (t.pk in ME.precios); }).map(function(t){
+  $("tiers").innerHTML = TIERS.filter(function(t){ return ME.precios && (t.pk in ME.precios) && (!t.primera || !ME.alumno); }).map(function(t){
     var c = calc(t.pk);
     var precioHtml = c.desc>0
       ? '<span class="strike">S/ '+c.precio+'</span><span class="cur">S/</span>'+c.final
@@ -801,8 +868,9 @@ function renderComprar(){
     return '<div class="tier'+(t.badge?' featured':'')+'">'+
       (t.badge?'<span class="badge">'+t.badge+'</span>':'')+
       '<span class="tlab">'+t.nombre+'</span>'+
-      '<h3>Paquete de '+t.horas+' horas</h3>'+
+      '<h3>'+(t.primera ? 'Tu primera clase' : 'Paquete de '+t.horas+' horas')+'</h3>'+
       '<div class="tprecio">'+precioHtml+'</div>'+
+      (t.desc?'<div class="tdesc">'+t.desc+'</div>':'')+
       (c.desc>0?'<div class="tdesc">incluye -S/'+c.desc+' de tu crédito</div>':'')+
       '<button class="btn" data-comprar="'+t.pk+'"'+(ME.compraPendiente?' disabled':'')+'>Comprar →</button>'+
     '</div>';
@@ -817,8 +885,8 @@ $("tiers").addEventListener("click",function(e){
 function abrirCompra(pk){
   if(!ME) return;
   if(ME.compraPendiente){ toast("Ya tienes un pago en verificación"); return; }
-  $("c_paquete").innerHTML = TIERS.filter(function(t){ return ME.precios && (t.pk in ME.precios); })
-    .map(function(t){ var c=calc(t.pk); return '<option value="'+t.pk+'">'+t.nombre+' — '+t.horas+'h · S/ '+c.final+'</option>'; }).join("");
+  $("c_paquete").innerHTML = TIERS.filter(function(t){ return ME.precios && (t.pk in ME.precios) && (!t.primera || !ME.alumno); })
+    .map(function(t){ var c=calc(t.pk); var et=(t.primera?'1 clase':t.horas+'h'); return '<option value="'+t.pk+'">'+t.nombre+' — '+et+' · S/ '+c.final+'</option>'; }).join("");
   if(pk) $("c_paquete").value = pk;
   if(ME.alumno && ME.alumno.curso) $("c_curso").value = ME.alumno.curso;
   actualizaMonto();
@@ -900,7 +968,7 @@ $("btnYaPague").addEventListener("click",function(){
       var aviso = "Hola Andrés, acabo de pagar S/ "+c.final+" por el "+paquete+" ("+curso+") via "+metodo+" 🎸 Soy "+ME.cuenta.nombre+" - "+ME.cuenta.email;
       $("btnAvisar").href = "https://wa.me/"+WA_PROFE+"?text="+encodeURIComponent(aviso);
       hide("compraPaso1"); show("compraPaso2");
-      api("/api/me").then(function(d){ ME=d; renderActive(); }).catch(function(){});
+      api("/api/me").then(function(d){ ME=d; renderActive(); empujarAReservar(); }).catch(function(){});
     })
     .catch(function(e){ $("compraErr").textContent = e.message || "No se pudo registrar."; })
     .finally(function(){ $("btnYaPague").disabled=false; });
@@ -998,7 +1066,54 @@ function renderCuenta(){
         '<td>'+monto+'</td><td><span class="pill '+pc+'">'+esc(p.estado||"")+'</span></td></tr>';
     }).join("");
   } else hide("ctaPagos");
+  renderAvisos();
 }
+
+/* ---------- AVISOS PUSH (alumno) ---------- */
+function urlB64(b){var p='='.repeat((4-b.length%4)%4);var s=(b+p).replace(/-/g,'+').replace(/_/g,'/');var r=atob(s);var a=new Uint8Array(r.length);for(var i=0;i<r.length;i++)a[i]=r.charCodeAt(i);return a;}
+function pushSoportado(){ return ('serviceWorker' in navigator) && ('PushManager' in window) && ('Notification' in window); }
+function mostrarAvisos(activos){
+  if(activos){ hide("btnAvisosOn"); show("btnAvisosOff"); $("avisosTxt").textContent="Avisos activados en este dispositivo ✓"; }
+  else { show("btnAvisosOn"); hide("btnAvisosOff"); $("avisosTxt").textContent="Activa los avisos para enterarte de tus clases, tareas y respuestas del profe."; }
+}
+function renderAvisos(){
+  if(!pushSoportado()){ hide("btnAvisosOn"); hide("btnAvisosOff"); show("avisosNoSop"); return; }
+  hide("avisosNoSop");
+  navigator.serviceWorker.getRegistration('/alumnos/sw.js').then(function(reg){
+    if(!reg) return mostrarAvisos(false);
+    return reg.pushManager.getSubscription().then(function(sub){ mostrarAvisos(!!sub); });
+  }).catch(function(){ mostrarAvisos(false); });
+}
+function avisosOn(){
+  if(!pushSoportado()){ toast("Tu navegador no soporta avisos"); return; }
+  var vapid = (ME && ME.config && ME.config.vapid_public) || "";
+  if(!vapid){ toast("Avisos no disponibles por ahora"); return; }
+  $("btnAvisosOn").disabled=true;
+  navigator.serviceWorker.register('/alumnos/sw.js').then(function(reg){
+    return Notification.requestPermission().then(function(perm){
+      if(perm!=='granted'){ toast("Permiso denegado"); return; }
+      return reg.pushManager.subscribe({ userVisibleOnly:true, applicationServerKey: urlB64(vapid) })
+        .then(function(sub){ return api('/api/push/suscribir',{method:"POST",body:JSON.stringify({subscription:sub.toJSON(),dispositivo:navigator.userAgent.slice(0,80)})}); })
+        .then(function(){ toast("Avisos activados 🎸"); renderAvisos(); });
+    });
+  }).catch(function(e){ toast("No se pudo activar: "+((e&&e.message)||"error")); })
+    .finally(function(){ $("btnAvisosOn").disabled=false; });
+}
+function avisosOff(){
+  $("btnAvisosOff").disabled=true;
+  navigator.serviceWorker.getRegistration('/alumnos/sw.js').then(function(reg){
+    if(!reg) return;
+    return reg.pushManager.getSubscription().then(function(sub){
+      if(!sub) return;
+      var ep = sub.endpoint;
+      return sub.unsubscribe().then(function(){ return api('/api/push/quitar',{method:"POST",body:JSON.stringify({endpoint:ep})}); });
+    });
+  }).then(function(){ toast("Avisos desactivados"); renderAvisos(); })
+    .catch(function(){ toast("No se pudo desactivar"); })
+    .finally(function(){ $("btnAvisosOff").disabled=false; });
+}
+$("btnAvisosOn").addEventListener("click", avisosOn);
+$("btnAvisosOff").addEventListener("click", avisosOff);
 $("btnPass").addEventListener("click",function(){
   $("passErr").textContent="";
   var actual=$("p_actual").value, nueva=$("p_nueva").value, conf=$("p_conf").value;
@@ -1017,7 +1132,7 @@ $("btnPass").addEventListener("click",function(){
 
 /* ---------- CHAT ---------- */
 var CHAT_KEY = "pmvt_chat_abierto";
-var chatMax = 0, chatInterval = null;
+var chatMax = 0, chatInterval = null, chatCanal = "grupal";
 function chatEsMovil(){ return window.innerWidth < 1100; }
 function chatVisible(){
   if(document.body.classList.contains("chat-overlay")) return true;
@@ -1044,9 +1159,12 @@ function chatRender(msgs, append){
   if(append){ box.insertAdjacentHTML("beforeend", html); if(abajo) chatScrollFondo(); }
   else { box.innerHTML = html || '<div class="chat-vacio">Sé el primero en escribir 🎸</div>'; chatScrollFondo(); }
 }
+function chatBase(){ return chatCanal==="privado" ? "/api/chat/privado" : "/api/chat"; }
 function chatPoll(){
   if(!getTok()) return;
-  api("/api/chat?desde="+chatMax).then(function(d){
+  var canalAlPedir = chatCanal;
+  api(chatBase()+"?desde="+chatMax).then(function(d){
+    if(canalAlPedir!==chatCanal) return;          // cambió de pestaña mientras llegaba
     var nuevos=(d.mensajes||[]).length;
     if(nuevos){
       chatRender(d.mensajes, chatMax>0);
@@ -1055,15 +1173,26 @@ function chatPoll(){
     if(typeof d.max==="number" && d.max>chatMax) chatMax=d.max;
   }).catch(function(){});
 }
+function chatSetCanal(canal){
+  chatCanal = (canal==="privado") ? "privado" : "grupal";
+  chatMax = 0; $("chatMsgs").innerHTML="";
+  document.querySelectorAll(".chat-tab").forEach(function(b){ b.classList.toggle("active", b.dataset.canal===chatCanal); });
+  show("chatInputWrap"); hide("chatBloqueado");
+  if(chatCanal==="privado" && (!ME || !ME.alumno)){
+    hide("chatInputWrap");
+    $("chatBloqueado").textContent = "El chat con el profe se abre cuando actives tu primer paquete 🙂";
+    show("chatBloqueado");
+  }
+  chatPoll();
+}
 function chatIniciar(){
-  chatMax=0; $("chatMsgs").innerHTML="";
-  show("chatInputWrap"); hide("chatBloqueado"); $("chatTexto").value="";
+  $("chatTexto").value="";
   if(!chatEsMovil()){
     var abierto=true;
     try{ abierto = localStorage.getItem(CHAT_KEY) !== "0"; }catch(e){}
     document.body.classList.toggle("chat-cerrado", !abierto);
   }
-  chatPoll();
+  chatSetCanal("grupal");
   if(chatInterval) clearInterval(chatInterval);
   chatInterval=setInterval(chatPoll, 20000);
 }
@@ -1091,7 +1220,7 @@ function chatEnviarMsg(){
   var t=$("chatTexto").value.trim();
   if(!t) return;
   $("chatEnviar").disabled=true;
-  api("/api/chat",{method:"POST",body:JSON.stringify({texto:t})})
+  api(chatBase(),{method:"POST",body:JSON.stringify({texto:t})})
     .then(function(){ $("chatTexto").value=""; chatPoll(); })
     .catch(function(e){
       if(e.status===403){
@@ -1104,6 +1233,7 @@ function chatEnviarMsg(){
 }
 $("chatEnviar").addEventListener("click", chatEnviarMsg);
 $("chatTexto").addEventListener("keydown",function(e){ if(e.key==="Enter") chatEnviarMsg(); });
+document.querySelectorAll(".chat-tab").forEach(function(b){ b.addEventListener("click",function(){ chatSetCanal(b.dataset.canal); }); });
 
 /* ---------- SESIÓN ---------- */
 function salir(){
@@ -1116,13 +1246,179 @@ function salir(){
 $("btnSalir").addEventListener("click", salir);
 $("btnSalirSide").addEventListener("click", salir);
 
-var RENDER = { inicio:renderInicio, clases:renderClases, recursos:renderRecursos, comunidad:renderComunidad,
+/* ---------- VISTA: AGENDA ---------- */
+var AG_SLOTS = [];
+var AG_TIPO = "suelta";
+var AG_CARGANDO = false;
+var AG_DIA = "";
+var AG_MESES = ["enero","febrero","marzo","abril","mayo","junio","julio","agosto","setiembre","octubre","noviembre","diciembre"];
+var DIAS_LARGO = ["domingo","lunes","martes","miércoles","jueves","viernes","sábado"];
+
+function fmtFechaLocal(iso){
+  var d = new Date(iso);
+  try{ return d.toLocaleDateString("es-PE",{weekday:"long",day:"numeric",month:"long"}); }
+  catch(e){ return DIAS_LARGO[d.getDay()]+" "+d.getDate(); }
+}
+function fmtHoraLocal(iso){
+  var d = new Date(iso);
+  try{ return d.toLocaleTimeString("es-PE",{hour:"2-digit",minute:"2-digit"}); }
+  catch(e){ return ("0"+d.getHours()).slice(-2)+":"+("0"+d.getMinutes()).slice(-2); }
+}
+function diaKeyLocal(iso){ var d=new Date(iso); return d.getFullYear()+"-"+d.getMonth()+"-"+d.getDate(); }
+
+function renderAgenda(){
+  var a = ME.alumno;
+  if(!a){ $("agSinPaquete").style.display=""; $("agConPaquete").style.display="none"; return; }
+  $("agSinPaquete").style.display="none"; $("agConPaquete").style.display="";
+
+  var rest = Number(a.restantes)||0;
+  $("agSaldo").textContent = "Te quedan "+rest+" clase"+(rest===1?"":"s")+" en tu paquete "+(a.paquete||"");
+
+  var prox = ME.proximasClases || [];
+  if(prox.length===0){
+    $("agProx").innerHTML = '<p class="note" style="margin:0">Todavía no tienes clases agendadas. Reserva abajo 👇</p>';
+  } else {
+    $("agProx").innerHTML = prox.map(function(r){
+      var badge = '<span class="rtag">'+(r.tipo==="fija"?"FIJA":"SUELTA")+'</span>';
+      return '<div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--line);">'+
+        '<div style="flex:1;min-width:0;">'+
+          '<div style="font-weight:600;text-transform:capitalize;">'+esc(fmtFechaLocal(r.inicio_utc))+'</div>'+
+          '<div class="note" style="margin:0;">'+esc(fmtHoraLocal(r.inicio_utc))+' '+badge+'</div>'+
+        '</div>'+
+        '<button class="btn ghost sm" data-cancelar="'+esc(r.id)+'">Cancelar</button>'+
+      '</div>';
+    }).join("");
+  }
+
+  setTipoReserva(AG_TIPO);
+  cargarSlots();
+}
+
+function setTipoReserva(t){
+  AG_TIPO = t==="fija" ? "fija" : "suelta";
+  document.querySelectorAll("#v-agenda .agtipo [data-tipo]").forEach(function(b){
+    b.classList.toggle("ghost", b.dataset.tipo!==AG_TIPO);
+  });
+  $("agTipoNota").textContent = AG_TIPO==="fija"
+    ? "Reservas el mismo día y hora las próximas 4 semanas. Si tu plan tiene más horas, puedes elegir varios horarios fijos."
+    : "Reservas una sola clase en el horario que elijas.";
+}
+
+function cargarSlots(){
+  if(AG_CARGANDO) return;
+  AG_CARGANDO = true;
+  $("agSlots").innerHTML = '<p class="note" style="margin:0">Cargando horarios…</p>';
+  api("/api/agenda/slots").then(function(d){
+    AG_SLOTS = (d && d.slots) || [];
+    pintarSlots();
+  }).catch(function(){
+    $("agSlots").innerHTML = '<p class="note" style="margin:0">No pude cargar los horarios. Reintenta.</p>';
+  }).finally(function(){ AG_CARGANDO=false; });
+}
+
+function pintarSlots(){
+  if(AG_SLOTS.length===0){
+    $("agSlots").innerHTML = '<p class="note" style="margin:0">No hay horarios libres en las próximas semanas. Escríbeme y lo cuadramos.</p>';
+    return;
+  }
+  // agrupo los slots por día (clave local)
+  var mapa = {};
+  AG_SLOTS.forEach(function(iso){ var k=diaKeyLocal(iso); (mapa[k]=mapa[k]||[]).push(iso); });
+  // día seleccionado: el guardado si aún tiene cupo, si no el primero disponible
+  if(!AG_DIA || !mapa[AG_DIA]) AG_DIA = diaKeyLocal(AG_SLOTS[0]);
+
+  // rango del calendario: lunes de esta semana → domingo de la semana del último slot
+  var hoy = new Date(); hoy.setHours(0,0,0,0);
+  var ini = new Date(hoy); ini.setDate(ini.getDate() - ((hoy.getDay()+6)%7));
+  var ult = new Date(AG_SLOTS[AG_SLOTS.length-1]); ult.setHours(0,0,0,0);
+  var fin = new Date(ult); fin.setDate(fin.getDate() + ((7-ult.getDay())%7));
+
+  var mesIni = AG_MESES[ini.getMonth()], mesFin = AG_MESES[fin.getMonth()];
+  var label = (mesIni===mesFin ? mesIni : mesIni+" — "+mesFin) + " " + fin.getFullYear();
+
+  var celdas = ["L","M","M","J","V","S","D"].map(function(d){ return '<div class="cdow">'+d+'</div>'; }).join("");
+  var cur = new Date(ini);
+  while(cur <= fin){
+    var k = cur.getFullYear()+"-"+cur.getMonth()+"-"+cur.getDate();
+    var has = !!mapa[k];
+    var cls = "calc"+(has?" has":" empty")+(k===AG_DIA?" sel":"");
+    celdas += '<div class="'+cls+'"'+(has?' data-day="'+k+'"':'')+'>'+cur.getDate()+'</div>';
+    cur.setDate(cur.getDate()+1);
+  }
+
+  var diaSlots = mapa[AG_DIA] || [];
+  var titulo = fmtFechaLocal(diaSlots[0] || AG_SLOTS[0]);
+  var slotsHtml = diaSlots.map(function(iso){
+    return '<button class="btn ghost sm" data-slot="'+esc(iso)+'">'+esc(fmtHoraLocal(iso))+'</button>';
+  }).join("");
+
+  $("agSlots").innerHTML =
+    '<div class="calmes">'+esc(label)+'</div>'+
+    '<div class="cal">'+celdas+'</div>'+
+    '<div style="margin-top:18px;font-weight:700;text-transform:capitalize;">'+esc(titulo)+'</div>'+
+    '<div class="agslotsdia">'+slotsHtml+'</div>';
+}
+
+function reservarSlot(iso){
+  var label = fmtFechaLocal(iso)+" "+fmtHoraLocal(iso);
+  var msg = AG_TIPO==="fija"
+    ? "Vas a reservar el horario fijo de "+label+" las próximas 4 semanas. ¿Confirmas?"
+    : "Vas a reservar tu clase del "+label+". ¿Confirmas?";
+  if(!confirm(msg)) return;
+  api("/api/agenda/reservar",{method:"POST",body:JSON.stringify({inicio_utc:iso, tipo:AG_TIPO})})
+    .then(function(r){
+      if(r.tipo==="fija"){
+        var m = "Listo, aparté "+r.reservadas+" clase"+(r.reservadas===1?"":"s")+" 🎸";
+        if(r.saltadas && r.saltadas.length){
+          var fechas = r.saltadas.map(function(iso){ return fmtFechaLocal(iso); }).join(", ");
+          m += ". No estaba libre: "+fechas+" (no se descuentan, resérvalas sueltas cuando quieras).";
+        }
+        toast(m);
+      } else {
+        toast("Clase reservada 🎸");
+      }
+      return api("/api/me");
+    })
+    .then(function(d){ ME=d; renderAgenda(); })
+    .catch(function(e){ toast(e.message || "No se pudo reservar."); cargarSlots(); });
+}
+
+function cancelarClase(id){
+  if(!confirm("¿Cancelar esta clase? Con menos de 6 horas de anticipación cuenta como clase usada.")) return;
+  api("/api/agenda/cancelar",{method:"POST",body:JSON.stringify({id:id})})
+    .then(function(r){ toast(r.mensaje || "Clase cancelada."); return api("/api/me"); })
+    .then(function(d){ ME=d; renderAgenda(); })
+    .catch(function(e){ toast(e.message || "No se pudo cancelar."); });
+}
+
+$("v-agenda").addEventListener("click", function(e){
+  var dia = e.target.closest("[data-day]");
+  if(dia){ AG_DIA = dia.dataset.day; pintarSlots(); return; }
+  var t = e.target.closest("[data-tipo]");
+  if(t){ setTipoReserva(t.dataset.tipo); pintarSlots(); return; }
+  var s = e.target.closest("[data-slot]");
+  if(s){ reservarSlot(s.dataset.slot); return; }
+  var c = e.target.closest("[data-cancelar]");
+  if(c){ cancelarClase(c.dataset.cancelar); return; }
+});
+
+var RENDER = { inicio:renderInicio, clases:renderClases, agenda:renderAgenda, recursos:renderRecursos, comunidad:renderComunidad,
                comprar:renderComprar, referidos:renderReferidos, cuenta:renderCuenta };
 
 function autoVerificarPago(){
   api("/api/mp/verificar",{method:"POST",body:"{}"}).then(function(r){
     if(r && r.confirmada){ api("/api/me").then(function(d){ ME=d; renderActive(); toast("¡Listo! Tu paquete está activo 🎸"); }).catch(function(){}); }
   }).catch(function(){});
+}
+function alumnoActivoSinReservar(){
+  return !!(ME && ME.alumno && (Number(ME.alumno.restantes)||0) > 0
+            && ((ME.proximasClases||[]).length === 0)
+            && !ME.compraPendiente);
+}
+function empujarAReservar(){
+  if(!alumnoActivoSinReservar()) return;        // no molestar si no aplica
+  if(vistaActual() === "agenda") return;        // ya está en la agenda
+  location.hash = "#agenda";                    // dispara renderActive -> renderAgenda
 }
 function manejarRetornoPago(){
   var pago;
@@ -1135,7 +1431,11 @@ function manejarRetornoPago(){
       n++;
       api("/api/me").then(function(d){
         ME = d; renderActive();
-        if(ME && !ME.compraPendiente && ME.alumno && ME.alumno.pago === "Pagado"){ clearInterval(t); toast("¡Listo! Tu paquete está activo 🎸"); }
+        if(ME && !ME.compraPendiente && ME.alumno && ME.alumno.pago === "Pagado"){
+          clearInterval(t);
+          toast("¡Listo! Tu paquete está activo 🎸 Ahora reserva tu primera clase.");
+          empujarAReservar();
+        }
       }).catch(function(){});
       if(n >= 5) clearInterval(t);
     }, 2500);
@@ -1154,7 +1454,12 @@ function cargarMe(){
     renderActive();
     chatIniciar();
     autoVerificarPago();
+    var vinoDeRetornoTarjeta = false;
+    try { vinoDeRetornoTarjeta = !!new URLSearchParams(location.search).get("pago"); } catch(e){}
     manejarRetornoPago();
+    // Nudge a reservar al cargar el portal (cubre el caso Yape ya confirmado por el profe).
+    // Si venimos de retorno de tarjeta, manejarRetornoPago() ya se encarga del empuje.
+    if(!vinoDeRetornoTarjeta) empujarAReservar();
   }).catch(function(e){
     setTok(null); ME=null;
     setAuthTab(REF_URL ? "reg" : "login");

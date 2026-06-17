@@ -37,4 +37,4 @@ El círculo de quintas no es un tema aislado: se enlaza con todo lo demás de te
 
 Seamos honestos: muchísimos músicos tocan y componen genial sin pensar conscientemente en el círculo. No es un requisito para empezar. Es una **herramienta de poder** que acelera tu comprensión y te da atajos, especialmente útil si compones o quieres entender por qué ciertos cambios de tono funcionan. Llega cuando ya tienes una base, no el día uno.
 
-El círculo de quintas asusta por cómo se ve, pero es un mapa amigable una vez que entiendes para qué lo usas. Si quieres aprender teoría como herramienta práctica —no como diagramas que memorizar y olvidar— eso es justo cómo la enseño. [Escríbeme por WhatsApp](https://wa.me/51989077928) y te muestro cómo se aplica a tu música.
+El círculo de quintas asusta por cómo se ve, pero es un mapa amigable una vez que entiendes para qué lo usas. Si quieres aprender teoría como herramienta práctica —no como diagramas que memorizar y olvidar— eso es justo cómo la enseño. [Reserva tu clase de prueba](/horarios/) y te muestro cómo se aplica a tu música.

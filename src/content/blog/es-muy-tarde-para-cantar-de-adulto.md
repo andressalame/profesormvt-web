@@ -41,4 +41,4 @@ Tres cosas marcan la diferencia entre quien avanza y quien tira la toalla:
 
 Si llevas años con esa "espina" de cantar y nunca empezaste por miedo a que fuera tarde, este es el permiso que estabas esperando: no lo es. Lo único que se hace tarde es seguir esperando.
 
-¿Quieres saber exactamente en qué punto está tu voz hoy? En la clase de prueba hacemos un diagnóstico vocal completo y armamos un plan a tu medida. [Escríbeme por WhatsApp](https://wa.me/51989077928) y lo coordinamos.
+¿Quieres saber exactamente en qué punto está tu voz hoy? En la clase de prueba hacemos un diagnóstico vocal completo y armamos un plan a tu medida. [Reserva tu clase de prueba](/horarios/) y lo coordinamos.

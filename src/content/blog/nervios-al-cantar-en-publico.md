@@ -37,4 +37,4 @@ La confianza al cantar no llega de creerte talentoso de un día para otro. Llega
 
 Los nervios no se eliminan, se domestican. Y se domestican practicando la situación, no evitándola.
 
-Si llevas tiempo cantando solo donde nadie te escucha, no es porque no tengas lo necesario. Es porque nunca entrenaste la parte mental, que es la mitad del canto que casi nadie te enseña. En la clase de prueba (S/50) hacemos un diagnóstico de tu voz y de dónde se te traba bajo presión, y armamos un plan para las dos cosas. [Escríbeme por WhatsApp](https://wa.me/51989077928) y lo vemos.
+Si llevas tiempo cantando solo donde nadie te escucha, no es porque no tengas lo necesario. Es porque nunca entrenaste la parte mental, que es la mitad del canto que casi nadie te enseña. En la clase de prueba (S/50) hacemos un diagnóstico de tu voz y de dónde se te traba bajo presión, y armamos un plan para las dos cosas. [Reserva tu clase de prueba](/horarios/) y lo vemos.

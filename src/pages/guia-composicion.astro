@@ -3,7 +3,6 @@
 // Captura el correo (/api/lead), entrega el PDF, dispara fbq('track','Lead').
 const title = "Guía gratis: De oyente a autor | ProfesorMVT";
 const description = "Descarga gratis la guía para empezar a componer tu primera canción. 3 herramientas que usan los hits, explicadas claro. Por ProfesorMVT.";
-const WA = "51989077928";
 ---
 <!DOCTYPE html>
 <html lang="es">
@@ -105,7 +104,7 @@ const WA = "51989077928";
       <span><b>5.0</b> · 11 opiniones · te enseña alguien que compuso <b>+200 canciones</b></span>
     </div>
 
-    <a class="wa" href={`https://wa.me/${WA}?text=${encodeURIComponent('Hola Andrés, vengo de la guía de composición y quiero más info de las clases')}`} target="_blank" rel="noopener">O escríbeme directo por WhatsApp →</a>
+    <a class="wa" href="/horarios/">O mira los horarios y reserva tu clase de prueba →</a>
   </div>
 
   <div class="ok center" id="okView" style="display:none">
@@ -113,7 +112,7 @@ const WA = "51989077928";
     <h2>Tu guía está <span class="o">lista</span></h2>
     <p class="lead" style="margin:0 auto 22px">Te abrí la guía en otra pestaña. Si no se abrió, descárgala con el botón.</p>
     <a class="btn" id="pdfBtn" href="/recursos/composicion-primera-cancion.pdf" target="_blank" rel="noopener">Descargar mi guía →</a>
-    <a class="wa" style="margin-top:18px" href={`https://wa.me/${WA}?text=${encodeURIComponent('Hola Andrés, ya descargué la guía de composición y quiero saber de las clases')}`} target="_blank" rel="noopener">Quiero más: escríbeme por WhatsApp →</a>
+    <a class="wa" style="margin-top:18px" href="/horarios/">Quiero clases: mira los horarios →</a>
   </div>
 
   <footer>ProfesorMVT · Canto · Piano · Composición para adultos · San Isidro y online</footer>

@@ -44,4 +44,4 @@ La armonía funcional se expresa muy bien en **notación funcional** (números: 
 
 El error es estudiarla como teoría abstracta en un cuaderno. La forma que funciona: **analizar canciones que ya amas.** Tomas un tema que te gusta, identificas las funciones de sus acordes, y de pronto "ves" la armonía funcionando en algo que conoces de memoria. La teoría anclada a música real se queda; la teoría en el vacío se evapora.
 
-La armonía funcional es de esos conceptos que, una vez que hacen clic, cambian para siempre cómo escuchas música — empiezas a oír la estructura debajo de la superficie. Si quieres entenderla aplicada a tus canciones, con el enfoque de Hook Theory que uso en clase, [escríbeme por WhatsApp](https://wa.me/51989077928) y lo vemos con un tema que elijas.
+La armonía funcional es de esos conceptos que, una vez que hacen clic, cambian para siempre cómo escuchas música — empiezas a oír la estructura debajo de la superficie. Si quieres entenderla aplicada a tus canciones, con el enfoque de Hook Theory que uso en clase, [reserva tu clase de prueba](/horarios/) y lo vemos con un tema que elijas.

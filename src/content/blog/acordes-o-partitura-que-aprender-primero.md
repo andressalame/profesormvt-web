@@ -44,4 +44,4 @@ El punto dulce está en el medio, ponderado según lo que *tú* quieres tocar.
 
 Pregúntate una sola cosa: **¿qué quiero estar tocando en seis meses?** Si la respuesta es "acompañarme cantando mis canciones", arranca con peso en acordes. Si es "tocar esta pieza clásica", arranca con peso en lectura. Y si no estás seguro, un buen profesor lo balancea por ti.
 
-En la clase de prueba justamente partimos de tu objetivo para definir el balance correcto, y no perder meses en el camino equivocado. [Escríbeme por WhatsApp](https://wa.me/51989077928) y lo definimos.
+En la clase de prueba justamente partimos de tu objetivo para definir el balance correcto, y no perder meses en el camino equivocado. [Reserva tu clase de prueba](/horarios/) y lo definimos.

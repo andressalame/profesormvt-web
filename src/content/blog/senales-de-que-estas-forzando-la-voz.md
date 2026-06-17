@@ -47,4 +47,4 @@ Si te pasan seguido, estás forzando.
 
 Si tienes ronquera persistente por más de dos semanas sin explicación, pérdida de voz recurrente, o dolor que no cede, vale la pena ver a un otorrinolaringólogo o foniatra. No es alarmismo: es el mismo sentido común de revisar una lesión que no sana. Tu voz lo merece.
 
-Cantar bien y cantar sano son la misma cosa: la buena técnica *es* la que no daña. Si quieres aprender a cantar con potencia pero sin forzar —cuidando tu instrumento para toda la vida— eso está en el centro del método que enseño. En la clase de prueba revisamos si hay tensión o abuso en tu forma de cantar. [Escríbeme por WhatsApp](https://wa.me/51989077928).
+Cantar bien y cantar sano son la misma cosa: la buena técnica *es* la que no daña. Si quieres aprender a cantar con potencia pero sin forzar —cuidando tu instrumento para toda la vida— eso está en el centro del método que enseño. En la clase de prueba revisamos si hay tensión o abuso en tu forma de cantar. [Reserva tu clase de prueba](/horarios/).

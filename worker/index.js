@@ -29,9 +29,10 @@ const PAQUETES = {
   "Paquete 4":    { clases: 4,  reprog: 2 },
   "Paquete 8":    { clases: 8,  reprog: 3 },
   "Paquete 12":   { clases: 12, reprog: 4 },
-  "Clase suelta": { clases: 1,  reprog: 0 }
+  "Clase suelta": { clases: 1,  reprog: 0 },
+  "Clase de prueba": { clases: 1, reprog: 0 }   // 1 clase con diagnóstico, solo para leads nuevos
 };
-const PRECIOS_DEFAULT = { "Paquete 4": 250, "Paquete 8": 450, "Paquete 12": 600, "Clase suelta": 70 };
+const PRECIOS_DEFAULT = { "Paquete 4": 250, "Paquete 8": 450, "Paquete 12": 600, "Clase suelta": 70, "Clase de prueba": 50 };
 const SESION_DIAS = 30;
 const CREDITO_REFERIDO = 50; // S/ que gana el referidor cuando su amigo confirma su 1ª compra
 
@@ -159,8 +160,11 @@ async function verificarGoogle(env, credential){
   return { payload };
 }
 
-/* ---------- reglas (idénticas al Excel/admin) ---------- */
-function compute(alumno, regs, precios){
+/* ---------- reglas (idénticas al Excel/admin) ----------
+   reservasUsadas (opcional): clases de la AGENDA que ya consumen crédito de este
+   ciclo — reservas futuras (apartan), completadas (asistió) y faltas (cancelación
+   tardía). Así una reserva descuenta del paquete igual que un registro. */
+function compute(alumno, regs, precios, reservasUsadas){
   const pk = PAQUETES[alumno.paquete] || { clases: 0, reprog: 0 };
   let asistio = 0, reprogramo = 0, falta = 0;
   for (const r of regs){
@@ -169,7 +173,7 @@ function compute(alumno, regs, precios){
     else if (r.estado === "Falta") falta++;
   }
   const exceso = Math.max(0, reprogramo - pk.reprog);
-  const usadas = asistio + falta + exceso;
+  const usadas = asistio + falta + exceso + (Number(reservasUsadas) || 0);
   const saldo = pk.clases - usadas;
   return {
     compradas: pk.clases,
@@ -196,7 +200,9 @@ async function loadPrecios(env){
 }
 async function loadConfig(env){
   const { results } = await env.DB.prepare("SELECT clave, valor FROM config").all();
-  const c = { calendly_url: "", pago_numero: "", pago_titular: "", discord_url: "", google_client_id: "", bcp_cuenta: "", bcp_cci: "", scotia_cuenta: "", scotia_cci: "", crypto_moneda: "", crypto_red: "", crypto_wallet: "" };
+  const c = { calendly_url: "", pago_numero: "", pago_titular: "", discord_url: "", google_client_id: "", bcp_cuenta: "", bcp_cci: "", scotia_cuenta: "", scotia_cci: "", crypto_moneda: "", crypto_red: "", crypto_wallet: "",
+              gcal_client_id: "", gcal_client_secret: "", gcal_refresh_token: "", gcal_calendar_id: "primary", gcal_nonce: "",
+              salud_gcal: "ok", salud_gcal_aviso_utc: "", salud_correo_estado: "ok", salud_correo_aviso_utc: "" };
   for (const row of (results || [])) c[row.clave] = row.valor || "";
   return c;
 }
@@ -317,7 +323,7 @@ async function correoBienvenidaAlumno(env, cu, compra){
   let cfg = {};
   try { cfg = await loadConfig(env); } catch (e) { cfg = {}; }
   const nombre = ((cu.nombre || "").trim().split(/\s+/)[0]) || "";
-  const nombrePaquete = ({ "Paquete 4":"Esencial", "Paquete 8":"Intensivo", "Paquete 12":"Estrella", "Clase suelta":"Clase suelta" })[compra.paquete] || compra.paquete || "";
+  const nombrePaquete = ({ "Paquete 4":"Esencial", "Paquete 8":"Intensivo", "Paquete 12":"Estrella", "Clase suelta":"Clase suelta", "Clase de prueba":"Clase de prueba" })[compra.paquete] || compra.paquete || "";
   const portal = "https://profesormvt.com/alumnos/";
   const wa = "https://wa.me/51989077928";
   const discordLine = cfg.discord_url
@@ -356,6 +362,12 @@ async function confirmarCompra(env, compra){
   const cu = await env.DB.prepare("SELECT * FROM cuentas WHERE id = ?1").bind(compra.cuenta_id).first();
   if (!cu) return { ok: false, error: "La cuenta de esa compra ya no existe", status: 404 };
 
+  // La clase de prueba es solo para la PRIMERA clase de una cuenta nueva. Si la cuenta ya es alumno,
+  // nunca confirmar la prueba: evita que pise el paquete vigente (rama 'renovado') o que se apilen 2.
+  if (compra.paquete === "Clase de prueba" && cu.alumno_id){
+    return { ok: false, error: "La clase de prueba es solo para la primera clase de una cuenta nueva.", status: 400 };
+  }
+
   const stmts = [];
   let renovado = false;
   if (cu.alumno_id){
@@ -379,10 +391,20 @@ async function confirmarCompra(env, compra){
     "SELECT COUNT(*) AS n FROM compras WHERE cuenta_id = ?1 AND estado = 'confirmada'"
   ).bind(cu.id).first();
   const esPrimera = !previas || !Number(previas.n);
-  if (esPrimera && cu.ref_por){
-    const refidor = await env.DB.prepare("SELECT id FROM cuentas WHERE ref_code = ?1").bind(cu.ref_por).first();
-    if (refidor && refidor.id !== cu.id){
-      stmts.push(env.DB.prepare("UPDATE cuentas SET credito = COALESCE(credito,0) + ?1 WHERE id = ?2").bind(CREDITO_REFERIDO, refidor.id));
+
+  // El premio de referido (S/50) se gana con la primera compra de un PAQUETE real, NO con la clase
+  // de prueba S/50 (si no, un referido que solo prueba dispararía S/50 de crédito por una venta de S/50,
+  // y se abriría un loop de auto-referidos baratos). Si hizo prueba y LUEGO compra paquete, ahí sí paga.
+  if (compra.paquete !== "Clase de prueba" && cu.ref_por){
+    const previasReales = await env.DB.prepare(
+      "SELECT COUNT(*) AS n FROM compras WHERE cuenta_id = ?1 AND estado = 'confirmada' AND paquete != 'Clase de prueba'"
+    ).bind(cu.id).first();
+    const esPrimeraReal = !previasReales || !Number(previasReales.n);
+    if (esPrimeraReal){
+      const refidor = await env.DB.prepare("SELECT id FROM cuentas WHERE ref_code = ?1").bind(cu.ref_por).first();
+      if (refidor && refidor.id !== cu.id){
+        stmts.push(env.DB.prepare("UPDATE cuentas SET credito = COALESCE(credito,0) + ?1 WHERE id = ?2").bind(CREDITO_REFERIDO, refidor.id));
+      }
     }
   }
 
@@ -396,6 +418,13 @@ async function confirmarCompra(env, compra){
   stmts.push(env.DB.prepare("UPDATE compras SET estado = 'confirmada' WHERE id = ?1").bind(compra.id));
   await env.DB.batch(stmts);
   if (esPrimera) { try { await correoBienvenidaAlumno(env, cu, compra); } catch (e) {} }
+  try {
+    await avisarPushAlumno(env, cu.id, {
+      title: "Pago confirmado 🎸",
+      body: "Tu paquete " + (compra.paquete || "") + " ya está activo. Reserva tu próxima clase.",
+      url: "https://profesormvt.com/alumnos/#agenda"
+    });
+  } catch (e) {}
   return { ok: true, cu, compra };
 }
 
@@ -433,6 +462,25 @@ async function avisarRenovacionesResumen(env, enviados){
   await env.AVISOS.send(new EmailMessage("avisos@profesormvt.com", "andressalame@gmail.com", msg.asRaw()));
 }
 
+/* Aviso a Andrés de que el backup diario corrió OK (via AVISOS, gratis). Solo el resumen, no el archivo. */
+async function avisarBackup(env, r){
+  if (!env.AVISOS || !r) return;
+  try {
+    const kb = Math.round(r.bytes / 1024);
+    const msg = createMimeMessage();
+    msg.setSender({ name: "Avisos ProfesorMVT", addr: "avisos@profesormvt.com" });
+    msg.setRecipient("andressalame@gmail.com");
+    msg.setSubject("Backup diario OK · " + r.key);
+    msg.addMessage({ contentType: "text/plain", data:
+      "El respaldo automatico del CRM corrio sin problemas.\n\n" +
+      "Archivo: " + r.key + "\n" +
+      "Tamano:  " + kb + " KB\n" +
+      "Filas:   " + r.filas + "\n\n" +
+      "Vive en R2 (bucket profesormvt-recursos), se conservan los ultimos 30 dias.\n" });
+    await env.AVISOS.send(new EmailMessage("avisos@profesormvt.com", "andressalame@gmail.com", msg.asRaw()));
+  } catch (e) {}
+}
+
 /* Cron de renovaciones: detecta alumnos "Renovar pronto" (1 clase o menos) y les manda el
    recordatorio UNA sola vez por ciclo. Reusa la misma logica del CRM (compute/estadoAlumno).
    Solo a alumnos con cuenta web (tienen correo); los demas los maneja Andres a mano. */
@@ -441,59 +489,480 @@ async function procesarRenovaciones(env){
   const { results: alumnos } = await env.DB.prepare(
     "SELECT a.*, c.email AS _email FROM alumnos a JOIN cuentas c ON c.alumno_id = a.id WHERE a.pago = 'Pagado' AND c.email IS NOT NULL AND c.email != ''"
   ).all();
-  const enviados = [];
+  const enviados = []; let fallos = 0;
   for (const a of (alumnos || [])){
     const ciclo = Number(a.ciclo) || 1;
     if ((Number(a.recordatorio_ciclo) || 0) >= ciclo) continue;   // ya avisado este ciclo
     const { results: regs } = await env.DB.prepare(
       "SELECT estado FROM registro WHERE alumno_id = ?1 AND COALESCE(ciclo,1) = ?2"
     ).bind(a.id, ciclo).all();
-    const c = compute(a, regs || [], precios);
+    const rUsadas = await reservasUsadasCount(env, a.id, ciclo);
+    const c = compute(a, regs || [], precios, rUsadas);
     if (estadoAlumno(c) !== "Renovar pronto") continue;
     const ok = await correoRenovacion(env, a, a._email, c);
     if (ok){
       await env.DB.prepare("UPDATE alumnos SET recordatorio_ciclo = ?1 WHERE id = ?2").bind(ciclo, a.id).run();
       enviados.push({ nombre: a.nombre, email: a._email, restantes: c.restantes });
-    }
+    } else { fallos++; }
   }
   if (enviados.length){ try { await avisarRenovacionesResumen(env, enviados); } catch (e) {} }
+  await reportarSaludCorreo(env, fallos, fallos + enviados.length);
   return enviados;
 }
 
 /* ---------- Aviso por Web Push (VAPID) a los dispositivos suscritos del admin ----------
    Best-effort, con try/catch POR suscripción: una mala no tumba al resto.
    Las suscripciones caducadas (404/410) se borran solas. Devuelve cuántas se enviaron. */
-async function avisarPush(env, info){
-  if (!env.VAPID_PUBLIC_KEY || !env.VAPID_PRIVATE_KEY) return 0;
-  const { results } = await env.DB.prepare("SELECT * FROM push_subs").all();
-  const subs = results || [];
-  const vapid = {
-    subject: "mailto:andressalame@gmail.com",
-    publicKey: env.VAPID_PUBLIC_KEY,
-    privateKey: env.VAPID_PRIVATE_KEY
-  };
+// Base: manda 'payload' (title/body/url) a una lista de filas push_subs. Best-effort.
+async function enviarPushA(env, subs, payload){
+  if (!env.VAPID_PUBLIC_KEY || !env.VAPID_PRIVATE_KEY || !subs || !subs.length) return 0;
+  const vapid = { subject: "mailto:andressalame@gmail.com", publicKey: env.VAPID_PUBLIC_KEY, privateKey: env.VAPID_PRIVATE_KEY };
   let enviados = 0;
   for (const fila of subs){
     try {
       const sub = { endpoint: fila.endpoint, keys: { p256dh: fila.p256dh, auth: fila.auth } };
       const msg = {
         data: JSON.stringify({
-          title: "Pago por confirmar: " + info.paquete + " — S/" + info.monto,
-          body: info.nombre + " · " + info.curso + (info.metodo ? (" · " + info.metodo) : "") + (info.op ? (" · op " + info.op) : ""),
-          url: "https://profesormvt.com/admin/crm/"
+          title: payload.title || "ProfesorMVT",
+          body:  payload.body  || "",
+          url:   payload.url   || "https://profesormvt.com/"
         }),
-        options: { ttl: 86400, urgency: "high" }
+        options: { ttl: 86400, urgency: payload.urgency || "high" }
       };
-      const payload = await buildPushPayload(msg, sub, vapid);
-      const res = await fetch(sub.endpoint, payload);
+      const built = await buildPushPayload(msg, sub, vapid);
+      const res = await fetch(sub.endpoint, built);
       if (res.status === 404 || res.status === 410){
         await env.DB.prepare("DELETE FROM push_subs WHERE endpoint = ?1").bind(fila.endpoint).run();
-      } else if (res.ok){
-        enviados++;
-      }
+      } else if (res.ok){ enviados++; }
     } catch (e) { /* una suscripción mala no debe tumbar al resto */ }
   }
   return enviados;
+}
+
+/* Admin (cuenta_id IS NULL). info.title/body/url genérico; si no, arma el de "pago por confirmar". */
+async function avisarPush(env, info){
+  const { results } = await env.DB.prepare("SELECT * FROM push_subs WHERE cuenta_id IS NULL").all();
+  return enviarPushA(env, results || [], {
+    title: info.title || ("Pago por confirmar: " + info.paquete + " — S/" + info.monto),
+    body:  info.body  || (info.nombre + " · " + info.curso + (info.metodo ? (" · " + info.metodo) : "") + (info.op ? (" · op " + info.op) : "")),
+    url:   info.url   || "https://profesormvt.com/admin/crm/"
+  });
+}
+
+/* Alumno: manda 'payload' a TODOS los dispositivos de esa cuenta. Aislado por cuenta_id. */
+async function avisarPushAlumno(env, cuentaId, payload){
+  if (!cuentaId) return 0;
+  const { results } = await env.DB.prepare("SELECT * FROM push_subs WHERE cuenta_id = ?1").bind(cuentaId).all();
+  return enviarPushA(env, results || [], payload);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   BACKUP AUTOMÁTICO (servidor → R2). Dump fiel de todas las tablas D1 a un JSON
+   con fecha en RECURSOS_R2 bajo backups/AAAA-MM-DD.json. Sin Google Drive: el
+   respaldo vive en la misma infra de Cloudflare. Best-effort, no tumba el cron.
+   ═══════════════════════════════════════════════════════════════════════════ */
+const BACKUP_TABLAS = [
+  "alumnos", "registro", "precios", "cuentas", "compras", "recursos",
+  "leads", "config", "reservas", "disponibilidad", "sesiones",
+  "push_subs", "chat_mensajes"
+];
+const BACKUP_PREFIX = "backups/";
+const BACKUP_RETENCION_DIAS = 30;
+
+async function dumpTablas(env){
+  const data = {};
+  for (const t of BACKUP_TABLAS){
+    try { data[t] = (await env.DB.prepare("SELECT * FROM " + t).all()).results || []; }
+    catch (e) { data[t] = { error: "no se pudo leer la tabla" }; }
+  }
+  return data;
+}
+
+// Serializa el dump, lo guarda en R2 y limpia los backups con más de N días.
+async function correrBackup(env){
+  if (!env.RECURSOS_R2) return null;
+  const fecha = hoy();
+  const tablas = await dumpTablas(env);
+  let filas = 0;
+  for (const t of BACKUP_TABLAS){ if (Array.isArray(tablas[t])) filas += tablas[t].length; }
+  const payload = JSON.stringify({
+    _meta: { generado: new Date().toISOString(), fecha, version: "backup-v1", db: "profesormvt-crm", tablas: BACKUP_TABLAS },
+    datos: tablas
+  });
+  const key = BACKUP_PREFIX + fecha + ".json";   // 1 por día; si el cron repite el mismo día, sobrescribe
+  await env.RECURSOS_R2.put(key, payload, { httpMetadata: { contentType: "application/json; charset=utf-8" } });
+  await limpiarBackupsViejos(env);
+  return { key, bytes: payload.length, filas };
+}
+
+async function limpiarBackupsViejos(env){
+  try {
+    const corte = new Date(Date.now() - BACKUP_RETENCION_DIAS * 86400000).toISOString().slice(0, 10);
+    let cursor;
+    do {
+      const lista = await env.RECURSOS_R2.list({ prefix: BACKUP_PREFIX, cursor });
+      for (const obj of (lista.objects || [])){
+        const m = obj.key.match(/^backups\/(\d{4}-\d{2}-\d{2})\.json$/);
+        if (m && m[1] < corte){ try { await env.RECURSOS_R2.delete(obj.key); } catch (e) {} }
+      }
+      cursor = lista.truncated ? lista.cursor : null;
+    } while (cursor);
+  } catch (e) { /* la limpieza nunca debe tumbar el backup */ }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   AGENDA PROPIA (reemplazo de Calendly)
+   Lima es UTC-5 fijo (sin horario de verano), así que la conversión es exacta:
+   instante UTC = hora-pared-Lima + 5h.
+   ═══════════════════════════════════════════════════════════════════════════ */
+const LIMA_OFFSET_MS = 5 * 3600 * 1000;
+const CLASE_MIN = 60;             // duración de la clase
+const HORIZONTE_SEMANAS = 4;      // hasta cuándo se puede reservar adelante
+const SERIE_SEMANAS = 4;          // una reserva fija aparta las próximas 4 semanas ("de 4 en 4")
+const ANTICIPACION_MIN_H = 12;    // no se puede reservar con menos de 12h de anticipación
+const CANCELA_MIN_H = 6;          // reprogramar/cancelar con >=6h no consume la clase
+
+// Componentes de fecha/hora en zona Lima a partir de un instante UTC.
+function limaParts(d){
+  const l = new Date(d.getTime() - LIMA_OFFSET_MS);
+  return { y: l.getUTCFullYear(), m: l.getUTCMonth(), d: l.getUTCDate(),
+           dow: l.getUTCDay(), h: l.getUTCHours(), min: l.getUTCMinutes() };
+}
+// Instante UTC (Date) para una fecha-Lima (y,m,d) a las 'HH:MM' hora Lima.
+function limaToUtc(y, m, d, hhmm){
+  const p = String(hhmm).split(":");
+  const H = Number(p[0]) || 0, M = Number(p[1]) || 0;
+  return new Date(Date.UTC(y, m, d, H, M) + LIMA_OFFSET_MS);
+}
+function hhmm(p){ return String(p.h).padStart(2, "0") + ":" + String(p.min).padStart(2, "0"); }
+
+// Cuántas clases del paquete consume ya la agenda (este ciclo).
+async function reservasUsadasCount(env, alumnoId, ciclo){
+  const r = await env.DB.prepare(
+    "SELECT COUNT(*) AS n FROM reservas WHERE alumno_id = ?1 AND COALESCE(ciclo,1) = ?2 AND estado IN ('reservada','completada','falta')"
+  ).bind(alumnoId, ciclo).first();
+  return (r && Number(r.n)) || 0;
+}
+
+const DIAS_FIJO = ["Domingo","Lunes","Martes","Miércoles","Jueves","Viernes","Sábado"];
+
+// Horario(s) fijo(s) DERIVADO(s) de las reservas tipo 'fija' reservadas a futuro (zona Lima).
+// Una serie (serie_id) = un horario. Devuelve array de etiquetas ["Martes 10:00", ...].
+// Fuente única de verdad: el horario refleja la agenda real, no un campo escrito a mano.
+async function horarioFijoDerivado(env, alumnoId){
+  if (!alumnoId) return [];
+  const { results } = await env.DB.prepare(
+    "SELECT id, serie_id, inicio_utc FROM reservas " +
+    "WHERE alumno_id = ?1 AND tipo = 'fija' AND estado = 'reservada' AND inicio_utc >= ?2 " +
+    "ORDER BY inicio_utc ASC"
+  ).bind(alumnoId, new Date().toISOString()).all();
+  const porSerie = new Map();          // clave de serie -> primera reserva (la más próxima)
+  for (const r of (results || [])){
+    const k = r.serie_id || r.id;      // datos viejos sin serie_id: cada reserva es su propia serie
+    if (!porSerie.has(k)) porSerie.set(k, r);
+  }
+  const etiquetas = new Map();         // "Martes 10:00" -> [dow, "HH:MM"] para ordenar y deduplicar
+  for (const r of porSerie.values()){
+    const p = limaParts(new Date(Date.parse(r.inicio_utc)));
+    const label = DIAS_FIJO[p.dow] + " " + hhmm(p);
+    if (!etiquetas.has(label)) etiquetas.set(label, [p.dow, hhmm(p)]);
+  }
+  return [...etiquetas.entries()]
+    .sort((a,b)=> a[1][0]-b[1][0] || a[1][1].localeCompare(b[1][1]))
+    .map(e => e[0]);
+}
+
+// ¿Ese instante ISO es un slot real y reservable? (existe en disponibilidad, dentro del horizonte y con anticipación).
+async function slotValido(env, iso, opts){
+  const t = Date.parse(iso);
+  if (!Number.isFinite(t)) return false;
+  const now = Date.now();
+  if (t <= now + ANTICIPACION_MIN_H * 3600000) return false;
+  // Las semanas 2-4 de una serie fija caen más allá del horizonte de oferta; para
+  // ellas saltamos el techo (igual se validan disponibilidad + freebusy + anticipación).
+  if (!(opts && opts.ignorarHorizonte) && t > now + HORIZONTE_SEMANAS * 7 * 86400000) return false;
+  const p = limaParts(new Date(t));
+  if (p.min !== 0) return false;                       // los slots arrancan en punto
+  const row = await env.DB.prepare(
+    "SELECT 1 AS ok FROM disponibilidad WHERE dia_semana = ?1 AND hora = ?2 AND activo = 1"
+  ).bind(p.dow, hhmm(p)).first();
+  if (!row) return false;
+  // no dejar reservar encima de algo que Andrés tiene ocupado en su Google Calendar
+  const busy = await gcalBusy(env, new Date(t).toISOString(), new Date(t + CLASE_MIN * 60000).toISOString());
+  if (chocaConBusy(busy, t)) return false;
+  return true;
+}
+
+// Lista de slots libres en las próximas HORIZONTE_SEMANAS semanas (ISO UTC, ordenados).
+async function generarSlots(env){
+  const { results: disp } = await env.DB.prepare(
+    "SELECT dia_semana, hora FROM disponibilidad WHERE activo = 1"
+  ).all();
+  const porDia = {};
+  for (const r of (disp || [])){ (porDia[r.dia_semana] = porDia[r.dia_semana] || []).push(r.hora); }
+
+  const now = Date.now();
+  const hastaMs = now + HORIZONTE_SEMANAS * 7 * 86400000;
+  const { results: tomadas } = await env.DB.prepare(
+    "SELECT inicio_utc FROM reservas WHERE estado IN ('reservada','completada') AND inicio_utc >= ?1 AND inicio_utc <= ?2"
+  ).bind(new Date(now).toISOString(), new Date(hastaMs).toISOString()).all();
+  const ocupados = new Set((tomadas || []).map(r => r.inicio_utc));
+
+  // Bloques ocupados en el Google Calendar de Andrés (si está conectado): esos slots no se ofrecen.
+  const busy = await gcalBusy(env, new Date(now).toISOString(), new Date(hastaMs).toISOString());
+
+  // Arrancamos en la medianoche-Lima de hoy y avanzamos día por día (no hay DST, +86.4M es exacto).
+  const p0 = limaParts(new Date(now));
+  const medianocheHoy = limaToUtc(p0.y, p0.m, p0.d, "00:00").getTime();
+  const slots = [];
+  for (let i = 0; i <= HORIZONTE_SEMANAS * 7; i++){
+    const p = limaParts(new Date(medianocheHoy + i * 86400000));
+    const horas = porDia[p.dow] || [];
+    for (const h of horas){
+      const ms = limaToUtc(p.y, p.m, p.d, h).getTime();
+      if (ms <= now + ANTICIPACION_MIN_H * 3600000 || ms > hastaMs) continue;
+      const iso = new Date(ms).toISOString();
+      if (!ocupados.has(iso) && !chocaConBusy(busy, ms)) slots.push(iso);
+    }
+  }
+  slots.sort();
+  return slots;
+}
+
+/* Correo de recordatorio de clase al alumno (via Resend). cuando = '24h' | '2h'. */
+async function correoRecordatorioClase(env, cuenta, reserva, cuando){
+  if (!cuenta || !cuenta.email) return false;
+  const p = limaParts(new Date(Date.parse(reserva.inicio_utc)));
+  const dias = ["domingo","lunes","martes","miércoles","jueves","viernes","sábado"];
+  const horaLima = dias[p.dow] + " " + hhmm(p) + " (hora Lima)";
+  const nombre = ((cuenta.nombre || "").trim().split(/\s+/)[0]) || "";
+  const portal = "https://profesormvt.com/alumnos/";
+  const titulo = cuando === "24h" ? "Tu clase es mañana" : "Tu clase es en un par de horas";
+  const intro = cuando === "24h"
+    ? "Te recuerdo que mañana tienes clase" + (reserva.curso ? " de " + reserva.curso : "") + ":"
+    : "Pronto arrancamos" + (reserva.curso ? " tu clase de " + reserva.curso : " tu clase") + ":";
+  const html =
+    '<div style="font-family:Arial,Helvetica,sans-serif;max-width:480px;margin:0 auto;color:#1a1a1a;font-size:15px;line-height:1.6">' +
+      '<p>Hola' + (nombre ? ' ' + nombre : '') + ',</p>' +
+      '<p>' + intro + '</p>' +
+      '<p style="font-size:18px;font-weight:bold;color:#e8501f;margin:14px 0">' + horaLima + '</p>' +
+      '<p>Si necesitas moverla, hazlo desde tu portal con al menos 6 horas de anticipación y no se descuenta la clase: <a href="' + portal + '">' + portal + '</a></p>' +
+      '<p>Nos vemos. A romperla 🎸</p>' +
+      '<p style="font-size:12px;color:#888;margin-top:24px">ProfesorMVT</p>' +
+    '</div>';
+  return enviarCorreo(env, { to: cuenta.email, subject: titulo + " — ProfesorMVT", html: html });
+}
+
+/* Cron: manda el recordatorio T-24h y T-2h a las clases reservadas, una sola vez
+   cada uno (flags aviso_24 / aviso_2). Pensado para correr cada hora. */
+async function procesarRecordatoriosClase(env){
+  const now = Date.now();
+  const ventana24 = new Date(now + 24 * 3600000).toISOString();
+  const ventana2  = new Date(now + 2 * 3600000).toISOString();
+  const ventana1  = new Date(now + 1 * 3600000).toISOString();
+  const ahoraIso  = new Date(now).toISOString();
+  let enviados = 0, fallos = 0;
+
+  // T-24h: clases que caen dentro de las próximas 24h (y a más de 2h) sin aviso de 24h.
+  const r24 = (await env.DB.prepare(
+    "SELECT r.*, c.id AS _cuenta_id, c.email AS _email, c.nombre AS _nombre FROM reservas r JOIN cuentas c ON c.alumno_id = r.alumno_id " +
+    "WHERE r.estado = 'reservada' AND r.aviso_24 = 0 AND r.inicio_utc > ?1 AND r.inicio_utc <= ?2 AND c.email IS NOT NULL AND c.email != ''"
+  ).bind(ventana2, ventana24).all()).results || [];
+  for (const r of r24){
+    const ok = await correoRecordatorioClase(env, { email: r._email, nombre: r._nombre }, r, "24h");
+    try { await avisarPushAlumno(env, r._cuenta_id, { title: "Tu clase es mañana 🎸", body: (r.curso ? r.curso + " · " : "") + hhmm(limaParts(new Date(Date.parse(r.inicio_utc)))) + " (hora Lima). Toca para ver tu agenda.", url: "https://profesormvt.com/alumnos/#agenda" }); } catch (e) {}
+    if (ok){ await env.DB.prepare("UPDATE reservas SET aviso_24 = 1 WHERE id = ?1").bind(r.id).run(); enviados++; } else { fallos++; }
+  }
+  // T-2h: clases que caen dentro de las próximas 2h sin aviso de 2h.
+  const r2 = (await env.DB.prepare(
+    "SELECT r.*, c.id AS _cuenta_id, c.email AS _email, c.nombre AS _nombre FROM reservas r JOIN cuentas c ON c.alumno_id = r.alumno_id " +
+    "WHERE r.estado = 'reservada' AND r.aviso_2 = 0 AND r.inicio_utc > ?1 AND r.inicio_utc <= ?2 AND c.email IS NOT NULL AND c.email != ''"
+  ).bind(ahoraIso, ventana2).all()).results || [];
+  for (const r of r2){
+    const ok = await correoRecordatorioClase(env, { email: r._email, nombre: r._nombre }, r, "2h");
+    if (ok){ await env.DB.prepare("UPDATE reservas SET aviso_24 = 1, aviso_2 = 1 WHERE id = ?1").bind(r.id).run(); enviados++; } else { fallos++; }
+  }
+  // T-1h: push (solo) "tu clase es en 1 hora". El correo imminente sigue siendo el de 2h.
+  const r1 = (await env.DB.prepare(
+    "SELECT r.*, c.id AS _cuenta_id FROM reservas r JOIN cuentas c ON c.alumno_id = r.alumno_id " +
+    "WHERE r.estado = 'reservada' AND r.aviso_1h = 0 AND r.inicio_utc > ?1 AND r.inicio_utc <= ?2"
+  ).bind(ahoraIso, ventana1).all()).results || [];
+  for (const r of r1){
+    try { await avisarPushAlumno(env, r._cuenta_id, { title: "Tu clase es en 1 hora ⏰", body: "Arrancamos a las " + hhmm(limaParts(new Date(Date.parse(r.inicio_utc)))) + " (hora Lima). Toca para ver tu agenda.", url: "https://profesormvt.com/alumnos/#agenda" }); } catch (e) {}
+    await env.DB.prepare("UPDATE reservas SET aviso_1h = 1 WHERE id = ?1").bind(r.id).run();
+  }
+  await reportarSaludCorreo(env, fallos, r24.length + r2.length);
+  return enviados;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   GOOGLE CALENDAR (Fase B) — integración de UNA sola cuenta (la de Andrés).
+   OAuth de servidor: guardamos su refresh_token una vez y el Worker mintea
+   access tokens para crear/borrar eventos. Todo best-effort: si no está
+   conectado o Google falla, las reservas siguen funcionando igual.
+   ═══════════════════════════════════════════════════════════════════════════ */
+const GCAL_REDIRECT = "https://profesormvt.com/api/google/oauth/callback";
+const GCAL_SCOPE = "https://www.googleapis.com/auth/calendar";
+let _gcalTok = { value: "", exp: 0 };
+let _gcalLastRefreshFailed = false;   // true si el último intento de refresh (con credenciales) falló
+
+async function gcalAccessToken(env){
+  if (_gcalTok.value && Date.now() < _gcalTok.exp - 60000) return _gcalTok.value;
+  const cfg = await loadConfig(env);
+  if (!cfg.gcal_refresh_token || !cfg.gcal_client_id || !cfg.gcal_client_secret) return null;  // no configurado: no es incidencia
+  const body = new URLSearchParams({
+    client_id: cfg.gcal_client_id, client_secret: cfg.gcal_client_secret,
+    refresh_token: cfg.gcal_refresh_token, grant_type: "refresh_token"
+  });
+  let r;
+  try {
+    r = await fetch("https://oauth2.googleapis.com/token", {
+      method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" }, body: body.toString()
+    });
+  } catch (e) { _gcalLastRefreshFailed = true; return null; }
+  if (!r.ok) { _gcalLastRefreshFailed = true; return null; }
+  const d = await r.json().catch(() => null);
+  if (!d || !d.access_token) { _gcalLastRefreshFailed = true; return null; }
+  _gcalLastRefreshFailed = false;
+  _gcalTok = { value: d.access_token, exp: Date.now() + (Number(d.expires_in) || 3600) * 1000 };
+  return d.access_token;
+}
+
+/* Crea el evento en el calendario de Andrés (con Meet + invitación al alumno).
+   Devuelve el event id, o "" si no está conectado / falló. */
+async function gcalCrearEvento(env, info){
+  try {
+    const tok = await gcalAccessToken(env);
+    if (!tok) return "";
+    const cfg = await loadConfig(env);
+    const calId = cfg.gcal_calendar_id || "primary";
+    const evt = {
+      summary: "Clase" + (info.curso ? " de " + info.curso : "") + (info.alumnoNombre ? " · " + info.alumnoNombre : ""),
+      description: "Clase reservada desde el portal de ProfesorMVT.",
+      start: { dateTime: info.inicio_utc, timeZone: "America/Lima" },
+      end:   { dateTime: info.fin_utc,    timeZone: "America/Lima" },
+      reminders: { useDefault: true },
+      conferenceData: { createRequest: { requestId: crypto.randomUUID(), conferenceSolutionKey: { type: "hangoutsMeet" } } }
+    };
+    if (info.email) evt.attendees = [{ email: info.email }];
+    const r = await fetch(
+      "https://www.googleapis.com/calendar/v3/calendars/" + encodeURIComponent(calId) + "/events?conferenceDataVersion=1&sendUpdates=all",
+      { method: "POST", headers: { "authorization": "Bearer " + tok, "content-type": "application/json" }, body: JSON.stringify(evt) }
+    );
+    if (!r.ok) return "";
+    const d = await r.json().catch(() => null);
+    return (d && d.id) || "";
+  } catch (e) { return ""; }
+}
+
+async function gcalBorrarEvento(env, eventId){
+  try {
+    if (!eventId) return;
+    const tok = await gcalAccessToken(env);
+    if (!tok) return;
+    const cfg = await loadConfig(env);
+    const calId = cfg.gcal_calendar_id || "primary";
+    await fetch(
+      "https://www.googleapis.com/calendar/v3/calendars/" + encodeURIComponent(calId) + "/events/" + encodeURIComponent(eventId) + "?sendUpdates=all",
+      { method: "DELETE", headers: { "authorization": "Bearer " + tok } }
+    );
+  } catch (e) {}
+}
+
+/* Bloques OCUPADOS del calendario de Andrés entre dos instantes (freeBusy).
+   Devuelve [[iniMs,finMs],...]. Best-effort: si no está conectado o Google falla,
+   devuelve [] (no bloquea nada, las reservas siguen). */
+async function gcalBusy(env, timeMinIso, timeMaxIso){
+  try {
+    const tok = await gcalAccessToken(env);
+    if (!tok) return [];
+    const cfg = await loadConfig(env);
+    const calId = cfg.gcal_calendar_id || "primary";
+    const r = await fetch("https://www.googleapis.com/calendar/v3/freeBusy", {
+      method: "POST",
+      headers: { "authorization": "Bearer " + tok, "content-type": "application/json" },
+      body: JSON.stringify({ timeMin: timeMinIso, timeMax: timeMaxIso, items: [{ id: calId }] })
+    });
+    if (!r.ok) return [];
+    const d = await r.json().catch(() => null);
+    const cals = d && d.calendars;
+    const cal = cals && (cals[calId] || cals.primary);
+    const busy = (cal && cal.busy) || [];
+    return busy
+      .map(b => [Date.parse(b.start), Date.parse(b.end)])
+      .filter(x => Number.isFinite(x[0]) && Number.isFinite(x[1]));
+  } catch (e) { return []; }
+}
+
+/* ¿El slot [ms, ms+CLASE_MIN) choca con algún bloque ocupado? */
+function chocaConBusy(busy, ms){
+  const ini = ms, fin = ms + CLASE_MIN * 60000;
+  for (const b of busy){ if (ini < b[1] && fin > b[0]) return true; }
+  return false;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   MONITOREO + ALARMAS. Las dependencias que corren solas (Google Calendar para
+   el freebusy, Resend para los correos) hoy fallan en silencio. Estas funciones
+   detectan la caída y AVISAN a Andrés (push + correo por AVISOS, que es un canal
+   distinto a Resend), una sola vez por incidencia. NOTA: el anti-doble-reserva
+   entre alumnos NO depende de gcal — lo garantiza el UNIQUE INDEX
+   idx_reservas_slot_unico + el try/catch del INSERT. gcal es solo complemento.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* Correo de alerta a Andrés vía AVISOS (Cloudflare Email, NO Resend → llega aunque Resend esté caído). */
+async function alertaCorreoAndres(env, asunto, cuerpo){
+  if (!env.AVISOS) return;
+  const msg = createMimeMessage();
+  msg.setSender({ name: "Avisos ProfesorMVT", addr: "avisos@profesormvt.com" });
+  msg.setRecipient("andressalame@gmail.com");
+  msg.setSubject(asunto);
+  msg.addMessage({ contentType: "text/plain", data: cuerpo + "\n" });
+  await env.AVISOS.send(new EmailMessage("avisos@profesormvt.com", "andressalame@gmail.com", msg.asRaw()));
+}
+
+/* Chequeo de salud de Google Calendar para el cron. Solo alerta si gcal ESTÁ
+   configurado pero el refresh falla (token revocado/expirado). 1 aviso por
+   incidencia (flag salud_gcal en config) y otro al recuperarse. */
+async function chequearSaludGcal(env){
+  const cfg = await loadConfig(env);
+  if (!cfg.gcal_refresh_token || !cfg.gcal_client_id || !cfg.gcal_client_secret) return;  // no configurado: no es caída
+  _gcalLastRefreshFailed = false;
+  const tok = await gcalAccessToken(env);
+  const caido = (!tok && _gcalLastRefreshFailed);
+  const estadoPrevio = cfg.salud_gcal || "ok";
+  if (caido && estadoPrevio !== "caido"){
+    await env.DB.prepare("UPDATE config SET valor = 'caido' WHERE clave = 'salud_gcal'").run();
+    await env.DB.prepare("UPDATE config SET valor = ?1 WHERE clave = 'salud_gcal_aviso_utc'").bind(new Date().toISOString()).run();
+    const title = "Google Calendar desconectado";
+    const body = "El token de Google Calendar dejo de funcionar. La vitrina puede ofrecer horarios que ya tienes ocupados. Reconectalo en CRM > Ajustes.";
+    try { await avisarPush(env, { title, body, url: "https://profesormvt.com/admin/crm/" }); } catch (e) {}
+    try { await alertaCorreoAndres(env, title, body + "\n\nhttps://profesormvt.com/admin/crm/"); } catch (e) {}
+  } else if (!caido && estadoPrevio === "caido"){
+    await env.DB.prepare("UPDATE config SET valor = 'ok' WHERE clave = 'salud_gcal'").run();
+    try { await avisarPush(env, { title: "Google Calendar reconectado", body: "Ya volvio a funcionar.", url: "https://profesormvt.com/admin/crm/" }); } catch (e) {}
+    try { await alertaCorreoAndres(env, "Google Calendar reconectado", "Google Calendar volvio a funcionar."); } catch (e) {}
+  }
+}
+
+/* Registra y alerta si un lote de correos (recordatorios/renovaciones) falló entero.
+   intentos = correos tratados; fallos = los que devolvieron false. 1 aviso por incidencia. */
+async function reportarSaludCorreo(env, fallos, intentos){
+  if (intentos <= 0) return;
+  const loteCaido = (fallos === intentos);
+  const cfg = await loadConfig(env);
+  const estadoPrevio = cfg.salud_correo_estado || "ok";
+  if (loteCaido && estadoPrevio !== "caido"){
+    await env.DB.prepare("UPDATE config SET valor = 'caido' WHERE clave = 'salud_correo_estado'").run();
+    await env.DB.prepare("UPDATE config SET valor = ?1 WHERE clave = 'salud_correo_aviso_utc'").bind(new Date().toISOString()).run();
+    const title = "Los correos no estan saliendo";
+    const body = "Fallaron los " + intentos + " correos del ultimo lote (recordatorios/renovaciones). Revisa Resend (RESEND_API_KEY / dominio).";
+    try { await avisarPush(env, { title, body, url: "https://profesormvt.com/admin/crm/" }); } catch (e) {}
+    try { await alertaCorreoAndres(env, title, body); } catch (e) {}
+  } else if (!loteCaido && estadoPrevio === "caido"){
+    await env.DB.prepare("UPDATE config SET valor = 'ok' WHERE clave = 'salud_correo_estado'").run();
+    try { await avisarPush(env, { title: "Los correos volvieron", body: "El ultimo lote salio bien.", url: "https://profesormvt.com/admin/crm/" }); } catch (e) {}
+  }
 }
 
 export default {
@@ -538,11 +1007,11 @@ export default {
         let rows;
         if (desde > 0){
           rows = (await env.DB.prepare(
-            "SELECT rowid AS rid,id,cuenta_id,nombre,es_admin,texto,fecha FROM chat_mensajes WHERE rowid > ?1 ORDER BY rowid ASC LIMIT 100"
+            "SELECT rowid AS rid,id,cuenta_id,nombre,es_admin,texto,fecha FROM chat_mensajes WHERE hilo='grupal' AND rowid > ?1 ORDER BY rowid ASC LIMIT 100"
           ).bind(desde).all()).results || [];
         } else {
           rows = (await env.DB.prepare(
-            "SELECT * FROM (SELECT rowid AS rid,id,cuenta_id,nombre,es_admin,texto,fecha FROM chat_mensajes ORDER BY rowid DESC LIMIT 100) ORDER BY rid ASC"
+            "SELECT * FROM (SELECT rowid AS rid,id,cuenta_id,nombre,es_admin,texto,fecha FROM chat_mensajes WHERE hilo='grupal' ORDER BY rowid DESC LIMIT 100) ORDER BY rid ASC"
           ).all()).results || [];
         }
         let max = desde;
@@ -572,15 +1041,85 @@ export default {
           if (!who.cu.alumno_id) return json({ error: "El chat se abre cuando activas tu primer paquete 🙂" }, 403);
           nombre = who.cu.nombre; esAdmin = 0; cuentaId = who.cu.id;
           const ult = await env.DB.prepare(
-            "SELECT MAX(fecha) AS f FROM chat_mensajes WHERE cuenta_id = ?1"
+            "SELECT MAX(fecha) AS f FROM chat_mensajes WHERE cuenta_id = ?1 AND hilo = 'grupal'"
           ).bind(cuentaId).first();
           if (ult && ult.f && (Date.now() - new Date(ult.f).getTime()) < 3000){
             return json({ error: "Despacio :) un mensaje cada 3 segundos." }, 429);
           }
         }
         await env.DB.prepare(
-          "INSERT INTO chat_mensajes (id,cuenta_id,nombre,es_admin,texto,fecha) VALUES (?1,?2,?3,?4,?5,?6)"
+          "INSERT INTO chat_mensajes (id,cuenta_id,nombre,es_admin,texto,fecha,hilo) VALUES (?1,?2,?3,?4,?5,?6,'grupal')"
         ).bind(crypto.randomUUID(), cuentaId, nombre, esAdmin, texto, new Date().toISOString()).run();
+        return json({ ok: true });
+      }
+
+      /* ============ CHAT PRIVADO 1-a-1 (alumno ↔ profe) ============
+         El hilo del alumno se deriva SIEMPRE de su sesión (who.cu.id), nunca de un
+         parámetro del cliente → un alumno no puede leer el hilo de otro. */
+      if (url.pathname === "/api/chat/privado" && request.method === "GET"){
+        const who = await authChat(env, request);
+        if (!who) return json({ error: "Sesión expirada" }, 401);
+        let hilo;
+        if (who.admin){
+          hilo = String(url.searchParams.get("cuenta") || "").trim();
+          if (!/^[0-9a-fA-F-]{8,64}$/.test(hilo)) return json({ error: "Conversación no válida" }, 400);
+          if (hilo === "grupal") return json({ error: "Usa /api/chat para el grupal" }, 400);
+        } else {
+          if (!who.cu.alumno_id) return json({ mensajes: [], max: 0 });
+          hilo = who.cu.id;
+        }
+        let desde = parseInt(url.searchParams.get("desde") || "0", 10);
+        if (!Number.isFinite(desde) || desde < 0) desde = 0;
+        let rows;
+        if (desde > 0){
+          rows = (await env.DB.prepare(
+            "SELECT rowid AS rid,id,cuenta_id,nombre,es_admin,texto,fecha FROM chat_mensajes WHERE hilo = ?1 AND rowid > ?2 ORDER BY rowid ASC LIMIT 100"
+          ).bind(hilo, desde).all()).results || [];
+        } else {
+          rows = (await env.DB.prepare(
+            "SELECT * FROM (SELECT rowid AS rid,id,cuenta_id,nombre,es_admin,texto,fecha FROM chat_mensajes WHERE hilo = ?1 ORDER BY rowid DESC LIMIT 100) ORDER BY rid ASC"
+          ).bind(hilo).all()).results || [];
+        }
+        let max = desde;
+        const mensajes = rows.map(m => {
+          if (m.rid > max) max = m.rid;
+          return { rid: m.rid, id: m.id, nombre: m.nombre, es_admin: m.es_admin ? 1 : 0,
+                   texto: m.texto, fecha: m.fecha,
+                   mio: who.admin ? (m.es_admin === 1) : (m.cuenta_id === who.cu.id) };
+        });
+        return json({ mensajes, max });
+      }
+
+      if (url.pathname === "/api/chat/privado" && request.method === "POST"){
+        const who = await authChat(env, request);
+        if (!who) return json({ error: "Sesión expirada" }, 401);
+        const b = await request.json().catch(() => ({}));
+        const texto = limpiarTextoChat(b.texto);
+        if (!texto) return json({ error: "Escribe un mensaje." }, 400);
+        if (texto.length > 500) return json({ error: "Máximo 500 caracteres." }, 400);
+        let hilo, nombre, esAdmin, cuentaId;
+        if (who.admin){
+          hilo = String(b.cuenta || "").trim();
+          if (!/^[0-9a-fA-F-]{8,64}$/.test(hilo)) return json({ error: "Conversación no válida" }, 400);
+          const dest = await env.DB.prepare("SELECT id FROM cuentas WHERE id = ?1").bind(hilo).first();
+          if (!dest) return json({ error: "Esa cuenta no existe" }, 404);
+          nombre = "Profe Andrés"; esAdmin = 1; cuentaId = null;
+        } else {
+          if (!who.cu.alumno_id) return json({ error: "El chat con el profe se abre cuando activas tu primer paquete 🙂" }, 403);
+          hilo = who.cu.id;
+          nombre = who.cu.nombre; esAdmin = 0; cuentaId = who.cu.id;
+          const ult = await env.DB.prepare(
+            "SELECT MAX(fecha) AS f FROM chat_mensajes WHERE hilo = ?1 AND es_admin = 0"
+          ).bind(hilo).first();
+          if (ult && ult.f && (Date.now() - new Date(ult.f).getTime()) < 3000){
+            return json({ error: "Despacio :) un mensaje cada 3 segundos." }, 429);
+          }
+        }
+        await env.DB.prepare(
+          "INSERT INTO chat_mensajes (id,cuenta_id,nombre,es_admin,texto,fecha,hilo) VALUES (?1,?2,?3,?4,?5,?6,?7)"
+        ).bind(crypto.randomUUID(), cuentaId, nombre, esAdmin, texto, new Date().toISOString(), hilo).run();
+        // Aviso push al alumno cuando el profe le responde en su hilo privado.
+        if (who.admin){ try { await avisarPushAlumno(env, hilo, { title: "Mensaje del profe 💬", body: texto.slice(0, 90), url: "https://profesormvt.com/alumnos/" }); } catch (e) {} }
         return json({ ok: true });
       }
 
@@ -706,6 +1245,29 @@ export default {
         return json({ ok: true });
       }
 
+      /* ============ PUSH del alumno (suscribir / quitar) ============ */
+      if (url.pathname === "/api/push/suscribir" && request.method === "POST"){
+        const cu = await cuentaDeSesion(env, request);
+        if (!cu) return json({ error: "Sesión expirada" }, 401);
+        const b = await request.json().catch(() => ({}));
+        const s = b.subscription || {};
+        const keys = s.keys || {};
+        if (!s.endpoint || !keys.p256dh || !keys.auth) return json({ error: "Suscripción inválida" }, 400);
+        await env.DB.prepare(
+          "INSERT OR REPLACE INTO push_subs (endpoint,p256dh,auth,dispositivo,creada,cuenta_id) VALUES (?1,?2,?3,?4,?5,?6)"
+        ).bind(s.endpoint, keys.p256dh, keys.auth, String(b.dispositivo || "").slice(0, 120), hoy(), cu.id).run();
+        return json({ ok: true });
+      }
+      if (url.pathname === "/api/push/quitar" && request.method === "POST"){
+        const cu = await cuentaDeSesion(env, request);
+        if (!cu) return json({ error: "Sesión expirada" }, 401);
+        const b = await request.json().catch(() => ({}));
+        const endpoint = String((b.subscription && b.subscription.endpoint) || b.endpoint || "");
+        if (!endpoint) return json({ error: "Falta el endpoint" }, 400);
+        await env.DB.prepare("DELETE FROM push_subs WHERE endpoint = ?1 AND cuenta_id = ?2").bind(endpoint, cu.id).run();
+        return json({ ok: true });
+      }
+
       /* ============ ME (dashboard del alumno) ============ */
       if (url.pathname === "/api/me" && request.method === "GET"){
         const cu = await cuentaDeSesion(env, request);
@@ -723,6 +1285,8 @@ export default {
 
         let alumno = null, computed = null, historial = [];
         let clasesHistorico = 0;
+        let proximasClases = [];
+        let horarioFijo = [];
         if (cu.alumno_id){
           alumno = await env.DB.prepare("SELECT * FROM alumnos WHERE id = ?1").bind(cu.alumno_id).first();
           if (alumno){
@@ -731,7 +1295,12 @@ export default {
               "SELECT fecha, estado, trabajo, tarea, COALESCE(tarea_audio,'') AS tarea_audio FROM registro WHERE alumno_id = ?1 AND COALESCE(ciclo,1) = ?2 ORDER BY fecha ASC, id ASC"
             ).bind(alumno.id, ciclo).all();
             historial = (results || []).map(r => Object.assign({}, r, { tarea_audios: parseAudios(r.tarea_audio) }));
-            computed = compute(alumno, historial, precios);
+            const rUsadas = await reservasUsadasCount(env, alumno.id, ciclo);
+            computed = compute(alumno, historial, precios, rUsadas);
+            horarioFijo = await horarioFijoDerivado(env, alumno.id);
+            proximasClases = (await env.DB.prepare(
+              "SELECT id, inicio_utc, fin_utc, tipo, curso FROM reservas WHERE alumno_id = ?1 AND estado = 'reservada' AND inicio_utc >= ?2 ORDER BY inicio_utc ASC"
+            ).bind(alumno.id, new Date().toISOString()).all()).results || [];
             const ch = await env.DB.prepare(
               "SELECT COUNT(*) AS n FROM registro WHERE alumno_id = ?1 AND estado = 'Asistió'"
             ).bind(alumno.id).first();
@@ -765,7 +1334,7 @@ export default {
           estado: estadoAlumno(computed),
           alumno: (alumno && computed) ? {
             curso: alumno.curso || "", paquete: alumno.paquete || "",
-            horario: alumno.horario || "", pago: alumno.pago || "",
+            horario: alumno.horario || "", horarioFijo: horarioFijo, pago: alumno.pago || "",
             compradas: computed.compradas, usadas: computed.usadas, restantes: computed.restantes,
             reprogPermitidas: computed.reprogPermitidas, reprogRestantes: computed.reprogRestantes,
             monto: computed.monto,
@@ -783,12 +1352,14 @@ export default {
           recursosBloqueados: !esAlumnoOEx,
           pagos,
           clasesHistorico,
+          proximasClases,
           config: {
             calendly_url: config.calendly_url, pago_numero: config.pago_numero,
             pago_titular: config.pago_titular, discord_url: config.discord_url,
             bcp_cuenta: config.bcp_cuenta, bcp_cci: config.bcp_cci,
             scotia_cuenta: config.scotia_cuenta, scotia_cci: config.scotia_cci,
-            crypto_moneda: config.crypto_moneda, crypto_red: config.crypto_red, crypto_wallet: config.crypto_wallet
+            crypto_moneda: config.crypto_moneda, crypto_red: config.crypto_red, crypto_wallet: config.crypto_wallet,
+            vapid_public: env.VAPID_PUBLIC_KEY || ""
           }
         });
       }
@@ -806,6 +1377,8 @@ export default {
 
         const precios = await loadPrecios(env);
         if (!(paquete in PAQUETES)) return json({ error: "Paquete no válido." }, 400);
+        // La clase de prueba es solo para tu primera clase: si la cuenta ya es alumno, no aplica.
+        if (paquete === "Clase de prueba" && cu.alumno_id) return json({ error: "La clase de prueba es solo para tu primera clase. Elige un paquete para seguir." }, 400);
 
         const ya = await env.DB.prepare(
           "SELECT id FROM compras WHERE cuenta_id = ?1 AND estado = 'pendiente'"
@@ -850,6 +1423,8 @@ export default {
         const paquete = String(b.paquete || "");
         const curso = String(b.curso || "").trim() || "Canto";
         if (!(paquete in PAQUETES)) return json({ error: "Paquete no válido." }, 400);
+        // La clase de prueba es solo para tu primera clase: si la cuenta ya es alumno, no aplica.
+        if (paquete === "Clase de prueba" && cu.alumno_id) return json({ error: "La clase de prueba es solo para tu primera clase. Elige un paquete para seguir." }, 400);
 
         const pend = await env.DB.prepare(
           "SELECT id FROM compras WHERE cuenta_id = ?1 AND estado = 'pendiente'"
@@ -869,7 +1444,7 @@ export default {
           "INSERT INTO compras (id,cuenta_id,curso,paquete,monto,descuento,op_numero,estado,fecha,metodo,comprobante) VALUES (?1,?2,?3,?4,?5,?6,'','iniciada',?7,?8,'')"
         ).bind(compraId, cu.id, curso, paquete, monto, descuento, hoy(), "Tarjeta (Mercado Pago)").run();
 
-        const nombrePaquete = ({ "Paquete 4":"Plan Esencial", "Paquete 8":"Plan Intensivo", "Paquete 12":"Plan Estrella", "Clase suelta":"Clase suelta" })[paquete] || paquete;
+        const nombrePaquete = ({ "Paquete 4":"Plan Esencial", "Paquete 8":"Plan Intensivo", "Paquete 12":"Plan Estrella", "Clase suelta":"Clase suelta", "Clase de prueba":"Clase de prueba" })[paquete] || paquete;
         const pref = {
           items: [{ title: nombrePaquete + " - ProfesorMVT (" + curso + ")", quantity: 1, unit_price: monto, currency_id: "PEN" }],
           external_reference: compraId,
@@ -982,10 +1557,253 @@ export default {
       }
 
       /* ============ ADMIN ============ */
+      /* ============ GOOGLE CALENDAR: callback OAuth (lo abre el redirect de Google) ============ */
+      if (url.pathname === "/api/google/oauth/callback" && request.method === "GET"){
+        const code = url.searchParams.get("code") || "";
+        const state = url.searchParams.get("state") || "";
+        const cfg = await loadConfig(env);
+        const pagina = function(ok, msg){
+          return new Response(
+            "<!doctype html><meta charset=utf-8><meta name=viewport content='width=device-width,initial-scale=1'>" +
+            "<body style='font-family:system-ui,sans-serif;background:#0d0b0a;color:#f3ede0;display:flex;min-height:90vh;align-items:center;justify-content:center;text-align:center;padding:24px'>" +
+            "<div><h2 style='color:" + (ok ? "#3fb950" : "#e8501f") + ";font-size:20px'>" + msg + "</h2>" +
+            "<p style='color:#8a8276'>Ya puedes cerrar esta pestaña y volver al CRM.</p></div>",
+            { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" } }
+          );
+        };
+        if (!code || !state || !cfg.gcal_nonce || !safeEq(state, cfg.gcal_nonce)){
+          return pagina(false, "No pude validar la conexión. Reintenta desde el CRM.");
+        }
+        const body = new URLSearchParams({
+          code, client_id: cfg.gcal_client_id, client_secret: cfg.gcal_client_secret,
+          redirect_uri: GCAL_REDIRECT, grant_type: "authorization_code"
+        });
+        const r = await fetch("https://oauth2.googleapis.com/token", {
+          method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" }, body: body.toString()
+        });
+        const d = await r.json().catch(() => null);
+        if (!r.ok || !d || !d.refresh_token){
+          return pagina(false, "Google no devolvió el token. Asegúrate de elegir tu cuenta y aceptar los permisos.");
+        }
+        await env.DB.batch([
+          env.DB.prepare("INSERT INTO config (clave,valor) VALUES ('gcal_refresh_token',?1) ON CONFLICT(clave) DO UPDATE SET valor=?1").bind(d.refresh_token),
+          env.DB.prepare("INSERT INTO config (clave,valor) VALUES ('gcal_nonce','') ON CONFLICT(clave) DO UPDATE SET valor=''")
+        ]);
+        _gcalTok = { value: "", exp: 0 };
+        return pagina(true, "¡Google Calendar conectado! 🎸");
+      }
+
+      /* ============ AGENDA: slots libres (alumno logueado) ============ */
+      /* ===== AGENDA: vitrina PÚBLICA de horarios libres (sin sesión) =====
+         Para que un interesado vea qué horarios hay ANTES de crear cuenta y pagar.
+         Solo lectura: los mismos slots libres del portal, sin datos de nadie. */
+      if (url.pathname === "/api/agenda/slots-publicos" && request.method === "GET"){
+        const slots = await generarSlots(env);
+        return json({ slots });
+      }
+
+      if (url.pathname === "/api/agenda/slots" && request.method === "GET"){
+        const cu = await cuentaDeSesion(env, request);
+        if (!cu) return json({ error: "Sesión expirada" }, 401);
+        const slots = await generarSlots(env);
+        return json({ slots });
+      }
+
+      /* ============ AGENDA: reservar (clase suelta o serie fija semanal) ============ */
+      if (url.pathname === "/api/agenda/reservar" && request.method === "POST"){
+        const cu = await cuentaDeSesion(env, request);
+        if (!cu) return json({ error: "Sesión expirada" }, 401);
+        if (!cu.alumno_id) return json({ error: "Reservas disponibles cuando activas tu paquete 🙂" }, 403);
+
+        const b = await request.json().catch(() => ({}));
+        const tipo = b.tipo === "fija" ? "fija" : "suelta";
+        const iso = String(b.inicio_utc || "");
+        if (!(await slotValido(env, iso))) return json({ error: "Ese horario ya no está disponible. Elige otro." }, 400);
+
+        const alumno = await env.DB.prepare("SELECT * FROM alumnos WHERE id = ?1").bind(cu.alumno_id).first();
+        if (!alumno) return json({ error: "No encuentro tu ficha de alumno." }, 400);
+        const precios = await loadPrecios(env);
+        const ciclo = Number(alumno.ciclo) || 1;
+        const { results: regs } = await env.DB.prepare(
+          "SELECT estado FROM registro WHERE alumno_id = ?1 AND COALESCE(ciclo,1) = ?2"
+        ).bind(alumno.id, ciclo).all();
+        const rUsadas = await reservasUsadasCount(env, alumno.id, ciclo);
+        const restantes = compute(alumno, regs || [], precios, rUsadas).restantes;
+        if (restantes < 1) return json({ error: "No te quedan clases en tu paquete. Renueva para reservar más." }, 409);
+
+        const nowIso = new Date().toISOString();
+        const startMs = Date.parse(iso);
+
+        if (tipo === "suelta"){
+          const fin = new Date(startMs + CLASE_MIN * 60000).toISOString();
+          const rid = crypto.randomUUID();
+          try {
+            await env.DB.prepare(
+              "INSERT INTO reservas (id,alumno_id,inicio_utc,fin_utc,tipo,serie_id,estado,curso,ciclo,creada) VALUES (?1,?2,?3,?4,'suelta','','reservada',?5,?6,?7)"
+            ).bind(rid, alumno.id, iso, fin, alumno.curso || "", ciclo, nowIso).run();
+          } catch (e){ return json({ error: "Justo tomaron ese horario. Elige otro." }, 409); }
+          const eid = await gcalCrearEvento(env, { inicio_utc: iso, fin_utc: fin, curso: alumno.curso, alumnoNombre: alumno.nombre, email: cu.email });
+          if (eid) await env.DB.prepare("UPDATE reservas SET gcal_event_id = ?1 WHERE id = ?2").bind(eid, rid).run();
+          return json({ ok: true, reservadas: 1, tipo: "suelta" });
+        }
+
+        // fija: el mismo día y hora las próximas SERIE_SEMANAS semanas ("de 4 en 4"),
+        // con tope en las clases que le quedan en el paquete (Esencial 4 = 1 slot fijo,
+        // Intensivo 8 = 2 slots, Estrella 12 = 3 slots). Revisamos el freebusy de CADA
+        // semana en serie: la que choque con el Google Calendar de Andrés (o ya esté
+        // tomada) se salta y NO consume crédito; el alumno luego la reserva suelta.
+        const objetivo = Math.min(SERIE_SEMANAS, restantes);
+        const serie = crypto.randomUUID();
+        let creadas = 0;
+        const saltadas = [];
+        for (let i = 0; i < SERIE_SEMANAS && creadas < objetivo; i++){
+          const t = startMs + i * 7 * 86400000;
+          const isoT = new Date(t).toISOString();
+          if (!(await slotValido(env, isoT, { ignorarHorizonte: true }))){ saltadas.push(isoT); continue; }
+          const finT = new Date(t + CLASE_MIN * 60000).toISOString();
+          const rid = crypto.randomUUID();
+          try {
+            await env.DB.prepare(
+              "INSERT INTO reservas (id,alumno_id,inicio_utc,fin_utc,tipo,serie_id,estado,curso,ciclo,creada) VALUES (?1,?2,?3,?4,'fija',?5,'reservada',?6,?7,?8)"
+            ).bind(rid, alumno.id, isoT, finT, serie, alumno.curso || "", ciclo, nowIso).run();
+            creadas++;
+          } catch (e){ saltadas.push(isoT); continue; /* justo tomaron esa semana: la salto */ }
+          const eid = await gcalCrearEvento(env, { inicio_utc: isoT, fin_utc: finT, curso: alumno.curso, alumnoNombre: alumno.nombre, email: cu.email });
+          if (eid) await env.DB.prepare("UPDATE reservas SET gcal_event_id = ?1 WHERE id = ?2").bind(eid, rid).run();
+        }
+        if (creadas === 0) return json({ error: "No pude apartar el horario fijo (sin cupos esas semanas o sin clases en tu paquete)." }, 409);
+        return json({ ok: true, reservadas: creadas, tipo: "fija", saltadas });
+      }
+
+      /* ============ AGENDA: cancelar / reprogramar una clase ============ */
+      if (url.pathname === "/api/agenda/cancelar" && request.method === "POST"){
+        const cu = await cuentaDeSesion(env, request);
+        if (!cu || !cu.alumno_id) return json({ error: "Sesión expirada" }, 401);
+        const b = await request.json().catch(() => ({}));
+        const r = await env.DB.prepare("SELECT * FROM reservas WHERE id = ?1").bind(String(b.id || "")).first();
+        if (!r || r.alumno_id !== cu.alumno_id) return json({ error: "No encuentro esa clase." }, 404);
+        if (r.estado !== "reservada") return json({ error: "Esa clase ya no se puede cancelar." }, 400);
+        const horas = (Date.parse(r.inicio_utc) - Date.now()) / 3600000;
+        const libre = horas >= CANCELA_MIN_H;
+        await env.DB.prepare("UPDATE reservas SET estado = ?1 WHERE id = ?2").bind(libre ? "cancelada" : "falta", r.id).run();
+        if (r.gcal_event_id) await gcalBorrarEvento(env, r.gcal_event_id);
+        return json({
+          ok: true, libre,
+          mensaje: libre ? "Listo, cancelé la clase y no se descuenta." : "Cancelaste con menos de 6 horas, así que esta vez sí cuenta como clase usada."
+        });
+      }
+
       if (url.pathname.startsWith("/api/admin/")){
         const auth = request.headers.get("authorization") || "";
         if (!env.ADMIN_TOKEN || auth !== "Bearer " + env.ADMIN_TOKEN){
           return json({ error: "No autorizado" }, 401);
+        }
+
+        /* ----- Google Calendar: estado / iniciar conexión / desconectar ----- */
+        if (url.pathname === "/api/admin/google/estado" && request.method === "GET"){
+          const cfg = await loadConfig(env);
+          return json({
+            conectado: !!cfg.gcal_refresh_token,
+            tieneCredenciales: !!(cfg.gcal_client_id && cfg.gcal_client_secret),
+            calendar_id: cfg.gcal_calendar_id || "primary",
+            redirect_uri: GCAL_REDIRECT
+          });
+        }
+        if (url.pathname === "/api/admin/google/url" && request.method === "POST"){
+          const cfg = await loadConfig(env);
+          if (!cfg.gcal_client_id || !cfg.gcal_client_secret){
+            return json({ error: "Primero pega el Client ID y el Client Secret y guarda los ajustes." }, 400);
+          }
+          const nonce = randHex(16);
+          await env.DB.prepare(
+            "INSERT INTO config (clave,valor) VALUES ('gcal_nonce',?1) ON CONFLICT(clave) DO UPDATE SET valor=?1"
+          ).bind(nonce).run();
+          const u = "https://accounts.google.com/o/oauth2/v2/auth?" + new URLSearchParams({
+            client_id: cfg.gcal_client_id, redirect_uri: GCAL_REDIRECT, response_type: "code",
+            scope: GCAL_SCOPE, access_type: "offline", prompt: "consent", state: nonce, include_granted_scopes: "true"
+          }).toString();
+          return json({ url: u });
+        }
+        if (url.pathname === "/api/admin/google/desconectar" && request.method === "POST"){
+          await env.DB.prepare(
+            "INSERT INTO config (clave,valor) VALUES ('gcal_refresh_token','') ON CONFLICT(clave) DO UPDATE SET valor=''"
+          ).run();
+          _gcalTok = { value: "", exp: 0 };
+          return json({ ok: true });
+        }
+
+        /* ----- Agenda: disponibilidad semanal ----- */
+        if (url.pathname === "/api/admin/disponibilidad" && request.method === "GET"){
+          const rows = (await env.DB.prepare(
+            "SELECT dia_semana, hora, activo FROM disponibilidad ORDER BY dia_semana, hora"
+          ).all()).results || [];
+          return json({ disponibilidad: rows });
+        }
+        if (url.pathname === "/api/admin/disponibilidad" && request.method === "POST"){
+          const b = await request.json().catch(() => ({}));
+          const activos = Array.isArray(b.activos) ? b.activos : [];
+          const stmts = [ env.DB.prepare("DELETE FROM disponibilidad") ];
+          for (const s of activos){
+            const dia = Number(s.dia_semana);
+            const h = String(s.hora || "");
+            if (dia >= 0 && dia <= 6 && /^\d{2}:\d{2}$/.test(h)){
+              stmts.push(env.DB.prepare("INSERT OR IGNORE INTO disponibilidad (dia_semana,hora,activo) VALUES (?1,?2,1)").bind(dia, h));
+            }
+          }
+          await env.DB.batch(stmts);
+          return json({ ok: true, total: stmts.length - 1 });
+        }
+
+        /* ----- Agenda: próximas reservas (con nombre del alumno) ----- */
+        if (url.pathname === "/api/admin/agenda" && request.method === "GET"){
+          const desde = new Date(Date.now() - 7 * 86400000).toISOString();
+          const rows = (await env.DB.prepare(
+            "SELECT r.id, r.alumno_id, r.inicio_utc, r.fin_utc, r.tipo, r.serie_id, r.estado, r.curso, r.nota, a.nombre AS alumno_nombre " +
+            "FROM reservas r LEFT JOIN alumnos a ON a.id = r.alumno_id WHERE r.inicio_utc >= ?1 ORDER BY r.inicio_utc ASC"
+          ).bind(desde).all()).results || [];
+          return json({ reservas: rows });
+        }
+
+        /* ----- Agenda: bloquear un slot / sembrar una clase fija existente ----- */
+        if (url.pathname === "/api/admin/agenda/bloquear" && request.method === "POST"){
+          const b = await request.json().catch(() => ({}));
+          const t0 = Date.parse(String(b.inicio_utc || ""));
+          if (!Number.isFinite(t0)) return json({ error: "Fecha inválida" }, 400);
+          const alumnoId = b.alumno_id ? String(b.alumno_id) : null;
+          const nota = String(b.nota || "").slice(0, 200);
+          const fija = !!b.fija;
+          let curso = "", ciclo = 1;
+          if (alumnoId){
+            const al = await env.DB.prepare("SELECT curso, ciclo FROM alumnos WHERE id = ?1").bind(alumnoId).first();
+            if (al){ curso = al.curso || ""; ciclo = Number(al.ciclo) || 1; }
+          }
+          const tipo = alumnoId ? (fija ? "fija" : "suelta") : "bloqueo";
+          const serie = fija ? crypto.randomUUID() : "";
+          const horizonMs = Date.now() + HORIZONTE_SEMANAS * 7 * 86400000;
+          const nowIso = new Date().toISOString();
+          let creadas = 0;
+          for (let t = t0; t <= horizonMs; t += 7 * 86400000){
+            const isoT = new Date(t).toISOString();
+            const finT = new Date(t + CLASE_MIN * 60000).toISOString();
+            try {
+              await env.DB.prepare(
+                "INSERT INTO reservas (id,alumno_id,inicio_utc,fin_utc,tipo,serie_id,estado,curso,nota,ciclo,creada) VALUES (?1,?2,?3,?4,?5,?6,'reservada',?7,?8,?9,?10)"
+              ).bind(crypto.randomUUID(), alumnoId, isoT, finT, tipo, serie, curso, nota, ciclo, nowIso).run();
+              creadas++;
+            } catch (e){ /* ese instante ya estaba ocupado: lo salto */ }
+            if (!fija) break;
+          }
+          return json({ ok: creadas > 0, creadas });
+        }
+
+        /* ----- Agenda: marcar asistencia / cerrar una reserva ----- */
+        if (url.pathname === "/api/admin/agenda/marcar" && request.method === "POST"){
+          const b = await request.json().catch(() => ({}));
+          const id = String(b.id || "");
+          const nuevo = String(b.estado || "");
+          if (!["completada", "falta", "cancelada"].includes(nuevo)) return json({ error: "Estado inválido" }, 400);
+          await env.DB.prepare("UPDATE reservas SET estado = ?1 WHERE id = ?2").bind(nuevo, id).run();
+          return json({ ok: true });
         }
 
         /* ----- Web Push (suscripciones del admin) ----- */
@@ -1012,6 +1830,24 @@ export default {
 
         if (url.pathname === "/api/admin/data" && request.method === "GET"){
           const alumnos  = (await env.DB.prepare("SELECT * FROM alumnos ORDER BY nombre").all()).results || [];
+          // Horario(s) fijo(s) derivado(s) de la agenda, en un solo barrido (sin N+1). Fuente única de verdad.
+          const { results: fijasRows } = await env.DB.prepare(
+            "SELECT alumno_id, serie_id, id, inicio_utc FROM reservas " +
+            "WHERE tipo='fija' AND estado='reservada' AND inicio_utc >= ?1 ORDER BY inicio_utc ASC"
+          ).bind(new Date().toISOString()).all();
+          const fijasPorAlumno = {}, seriesVistas = {};
+          for (const r of (fijasRows || [])){
+            const aid = r.alumno_id; if (!aid) continue;
+            const k = r.serie_id || r.id;
+            (seriesVistas[aid] = seriesVistas[aid] || new Set());
+            if (seriesVistas[aid].has(k)) continue;   // solo la reserva más próxima de cada serie
+            seriesVistas[aid].add(k);
+            const p = limaParts(new Date(Date.parse(r.inicio_utc)));
+            const label = DIAS_FIJO[p.dow] + " " + hhmm(p);
+            (fijasPorAlumno[aid] = fijasPorAlumno[aid] || []);
+            if (fijasPorAlumno[aid].indexOf(label) === -1) fijasPorAlumno[aid].push(label);
+          }
+          for (const a of alumnos){ a.horarioFijo = fijasPorAlumno[a.id] || []; }
           const registro = (await env.DB.prepare("SELECT * FROM registro ORDER BY fecha DESC, id DESC").all()).results || [];
           const cuentas  = (await env.DB.prepare(
             "SELECT id,email,nombre,whatsapp,marketing,alumno_id,creada,ref_code,ref_por,credito, CASE WHEN google_id IS NULL OR google_id='' THEN 0 ELSE 1 END AS tiene_google FROM cuentas ORDER BY creada DESC"
@@ -1023,6 +1859,34 @@ export default {
           const config   = await loadConfig(env);
           return json({ alumnos, registro, precios, cuentas, compras, recursos, leads, config,
                         vapid_public: env.VAPID_PUBLIC_KEY || "" });
+        }
+
+        /* ----- Backups del servidor (solo admin) ----- */
+        if (url.pathname === "/api/admin/backups" && request.method === "GET"){
+          const out = [];
+          let cursor;
+          do {
+            const lista = await env.RECURSOS_R2.list({ prefix: BACKUP_PREFIX, cursor });
+            for (const o of (lista.objects || [])) out.push({ key: o.key, bytes: o.size, subido: o.uploaded });
+            cursor = lista.truncated ? lista.cursor : null;
+          } while (cursor);
+          out.sort((a, b) => b.key.localeCompare(a.key));
+          return json({ backups: out });
+        }
+        if (url.pathname === "/api/admin/backup/descargar" && request.method === "GET"){
+          const f = url.searchParams.get("fecha") || "";
+          if (!/^\d{4}-\d{2}-\d{2}$/.test(f)) return json({ error: "Fecha inválida" }, 400);
+          const obj = await env.RECURSOS_R2.get(BACKUP_PREFIX + f + ".json");
+          if (!obj) return json({ error: "No hay backup de ese día" }, 404);
+          return new Response(obj.body, { headers: {
+            "content-type": "application/json; charset=utf-8",
+            "content-disposition": 'attachment; filename="backup-' + f + '.json"',
+            "cache-control": "no-store"
+          }});
+        }
+        if (url.pathname === "/api/admin/backup/ahora" && request.method === "POST"){
+          const r = await correrBackup(env);
+          return r ? json({ ok: true, key: r.key, bytes: r.bytes, filas: r.filas }) : json({ error: "No se pudo correr el backup" }, 500);
         }
 
         if (url.pathname === "/api/admin/data" && request.method === "PUT"){
@@ -1063,7 +1927,7 @@ export default {
 
         if (url.pathname === "/api/admin/config" && request.method === "POST"){
           const b = await request.json().catch(() => ({}));
-          const claves = ["calendly_url", "pago_numero", "pago_titular", "discord_url", "google_client_id", "bcp_cuenta", "bcp_cci", "scotia_cuenta", "scotia_cci", "crypto_moneda", "crypto_red", "crypto_wallet"];
+          const claves = ["calendly_url", "pago_numero", "pago_titular", "discord_url", "google_client_id", "bcp_cuenta", "bcp_cci", "scotia_cuenta", "scotia_cci", "crypto_moneda", "crypto_red", "crypto_wallet", "gcal_client_id", "gcal_client_secret", "gcal_calendar_id"];
           const stmts = [];
           for (const k of claves){
             if (k in b){
@@ -1189,6 +2053,35 @@ export default {
           return json({ ok: true });
         }
 
+        /* Chat privado: lista de conversaciones (un row por hilo, con el último mensaje). */
+        if (url.pathname === "/api/admin/chat/hilos" && request.method === "GET"){
+          const { results } = await env.DB.prepare(
+            "SELECT m.hilo AS cuenta_id, c.nombre AS nombre, c.email AS email, cnt.n AS total, " +
+            "       m.texto AS ultimo_texto, m.es_admin AS ultimo_admin, m.fecha AS ultima_fecha " +
+            "FROM chat_mensajes m " +
+            "JOIN cuentas c ON c.id = m.hilo " +
+            "JOIN (SELECT hilo, MAX(rowid) AS mx, COUNT(*) AS n FROM chat_mensajes WHERE hilo <> 'grupal' GROUP BY hilo) cnt " +
+            "     ON cnt.hilo = m.hilo AND cnt.mx = m.rowid " +
+            "WHERE m.hilo <> 'grupal' ORDER BY m.rowid DESC"
+          ).all();
+          return json({ hilos: results || [] });
+        }
+
+        /* Avisar "nueva tarea" a un alumno (manual, desde el CRM). */
+        if (url.pathname === "/api/admin/push/tarea" && request.method === "POST"){
+          const b = await request.json().catch(() => ({}));
+          const alumnoId = String(b.alumno_id || "");
+          if (!alumnoId) return json({ error: "Falta alumno_id" }, 400);
+          const cuenta = await env.DB.prepare("SELECT id FROM cuentas WHERE alumno_id = ?1").bind(alumnoId).first();
+          if (!cuenta) return json({ ok: true, enviados: 0 });
+          const enviados = await avisarPushAlumno(env, cuenta.id, {
+            title: "Tienes tarea nueva 🎶",
+            body: String(b.texto || "Tu profe te dejó una nueva tarea. Toca para verla.").slice(0, 140),
+            url: "https://profesormvt.com/alumnos/#clases"
+          });
+          return json({ ok: true, enviados });
+        }
+
         if (url.pathname === "/api/admin/compra" && request.method === "POST"){
           const b = await request.json().catch(() => ({}));
           const compra = await env.DB.prepare("SELECT * FROM compras WHERE id = ?1").bind(String(b.id || "")).first();
@@ -1251,6 +2144,17 @@ export default {
   },
 
   async scheduled(event, env, ctx){
-    ctx.waitUntil(procesarRenovaciones(env).catch(function(){}));
+    // Recordatorios de clase: cada hora (necesario para el T-2h).
+    ctx.waitUntil(procesarRecordatoriosClase(env).catch(function(){}));
+    // Salud de Google Calendar: cada hora, alerta 1 vez por incidencia (detección ≤1h).
+    ctx.waitUntil(chequearSaludGcal(env).catch(function(){}));
+    // Renovaciones: una sola vez al día, en el disparo de las 14:00 UTC (≈ 09:00 Lima).
+    if (new Date().getUTCHours() === 14){
+      ctx.waitUntil(procesarRenovaciones(env).catch(function(){}));
+    }
+    // Backup diario: 1 vez al día a las 07:00 UTC (≈ 02:00 Lima, madrugada tranquila).
+    if (new Date().getUTCHours() === 7){
+      ctx.waitUntil(correrBackup(env).then(function(r){ return r ? avisarBackup(env, r) : null; }).catch(function(){}));
+    }
   }
 };

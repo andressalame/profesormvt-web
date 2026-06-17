@@ -40,4 +40,4 @@ Aplica ese patrón desde cualquier nota y obtienes su escala mayor. Aplícalo de
 
 El error es practicarlas como gimnasia de dedos desconectada de la música. El enfoque que funciona: aprender la escala **dentro de una canción real** que la use. Tocas la canción, identificas la escala, y la teoría queda anclada a algo que te importa. La memorización por contexto pega; la memorización por repetición seca se olvida en una semana.
 
-La teoría no es un requisito aburrido antes de hacer música. Es la lente que hace que la música que ya amas tenga más sentido. Si quieres entenderla aplicada a tus canciones —sin pizarras muertas— lo trabajamos en clase. [Escríbeme por WhatsApp](https://wa.me/51989077928) y te muestro cómo se ve en la práctica.
+La teoría no es un requisito aburrido antes de hacer música. Es la lente que hace que la música que ya amas tenga más sentido. Si quieres entenderla aplicada a tus canciones —sin pizarras muertas— lo trabajamos en clase. [Reserva tu clase de prueba](/horarios/) y te muestro cómo se ve en la práctica.

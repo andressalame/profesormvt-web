@@ -48,4 +48,4 @@ Son la misma familia de funciones reordenadas. Entender una te acerca a todas.
 
 Aprender esta progresión no te hace un compositor "fórmula". Te da un **piso firme** desde el cual crear: una vez que entiendes por qué funciona, puedes romperla a propósito, sustituir acordes, y desarrollar tu propio sonido. Primero dominas la regla; luego la rompes con criterio.
 
-Trabajar con notación funcional y analizar las canciones que amas para encontrar estos patrones es justo el corazón del método Hook Theory que uso en clase. Si quieres componer o tocar de oído con esta lógica, [escríbeme por WhatsApp](https://wa.me/51989077928) y empezamos con una canción que te guste.
+Trabajar con notación funcional y analizar las canciones que amas para encontrar estos patrones es justo el corazón del método Hook Theory que uso en clase. Si quieres componer o tocar de oído con esta lógica, [reserva tu clase de prueba](/horarios/) y empezamos con una canción que te guste.

@@ -1,0 +1,13 @@
+{
+  "name": "ProfesorMVT · Portal de alumno",
+  "short_name": "ProfesorMVT",
+  "start_url": "/alumnos/",
+  "scope": "/alumnos/",
+  "display": "standalone",
+  "background_color": "#0d0b0a",
+  "theme_color": "#e8501f",
+  "icons": [
+    { "src": "/apple-touch-icon.png", "sizes": "180x180", "type": "image/png" },
+    { "src": "/logo-mvt.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
+  ]
+}

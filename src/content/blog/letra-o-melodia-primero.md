@@ -49,4 +49,4 @@ Esperar a tener "la idea completa" antes de escribir nada. Las canciones no lleg
 
 Cuando estés trabado, **graba todo**. El celular es tu mejor aliado: tarareos, frases sueltas, ideas a medias. La mayoría será descartable, pero entre el material en bruto está la semilla de la canción. Filtrar viene después; primero, cantidad.
 
-No hay una regla sagrada sobre qué va primero — hay enfoques, y todos son válidos. Lo que distingue a quien termina canciones de quien solo las sueña es que el primero *empieza* con lo que tiene a mano. Si quieres aprender a componer con un proceso claro de principio a demo, [escríbeme por WhatsApp](https://wa.me/51989077928) y trabajamos tu idea.
+No hay una regla sagrada sobre qué va primero — hay enfoques, y todos son válidos. Lo que distingue a quien termina canciones de quien solo las sueña es que el primero *empieza* con lo que tiene a mano. Si quieres aprender a componer con un proceso claro de principio a demo, [reserva tu clase de prueba](/horarios/) y trabajamos tu idea.

@@ -48,4 +48,4 @@ Sí, en **tres meses** puedes tocar una canción entera (simplificada). Eso es l
 
 La incómoda: nadie toca bien en una semana, y si alguien te promete eso, te está vendiendo humo. La buena: el progreso temprano en piano es muy gratificante porque *suena* desde temprano. A diferencia de otros instrumentos donde los primeros meses son puro ruido, el piano te da recompensas reconocibles rápido.
 
-Con un plan ordenado y la canción correcta para tu nivel, tu primera pieza completa está a unos pocos meses de distancia. En la clase de prueba evaluamos tu punto de partida y elegimos esa primera canción para que el camino sea motivador desde el inicio. [Escríbeme por WhatsApp](https://wa.me/51989077928).
+Con un plan ordenado y la canción correcta para tu nivel, tu primera pieza completa está a unos pocos meses de distancia. En la clase de prueba evaluamos tu punto de partida y elegimos esa primera canción para que el camino sea motivador desde el inicio. [Reserva tu clase de prueba](/horarios/).

@@ -41,4 +41,4 @@ Las letras que conectan suelen tener algo que daba un poco de vergüenza decir. 
 
 Un recordatorio práctico: si ya tienes melodía, la letra tiene que respetar su ritmo y sus acentos. Una palabra fuerte debe caer en una nota fuerte. Si metes sílabas a la fuerza, se nota y se siente incómodo de cantar. Lee la letra *cantándola*, no leyéndola, para detectar dónde tropieza.
 
-Encontrar de qué hablar no es esperar una musa: es entrenar la mirada para ver los detalles concretos donde vive la emoción. Si quieres aprender a escribir letras que conecten —con análisis de canciones que admiras y trabajo sobre tus propias ideas— eso es parte de lo que hacemos en clase. [Escríbeme por WhatsApp](https://wa.me/51989077928).
+Encontrar de qué hablar no es esperar una musa: es entrenar la mirada para ver los detalles concretos donde vive la emoción. Si quieres aprender a escribir letras que conecten —con análisis de canciones que admiras y trabajo sobre tus propias ideas— eso es parte de lo que hacemos en clase. [Reserva tu clase de prueba](/horarios/).

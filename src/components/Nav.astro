@@ -11,6 +11,7 @@ const { activeNav } = Astro.props;
       <li><a href="/#metodo-canto">Canto</a></li>
       <li><a href="/#metodo-piano">Piano</a></li>
       <li><a href="/#metodo-composicion">Composición</a></li>
+      <li><a href="/horarios/" class={activeNav === 'horarios' ? 'active' : ''}>Horarios</a></li>
       <li><a href="/#precios">Precios</a></li>
       <li><a href="/#sobre">Sobre mí</a></li>
       <li><a href="/#testimonios">Testimonios</a></li>
@@ -21,7 +22,7 @@ const { activeNav } = Astro.props;
         </a>
       </li>
       <li class="nav-login-li"><a href="/alumnos/" class="nav-login">Ingresar</a></li>
-      <li><a href="https://wa.me/51989077928?text=Hola%20Andrés%2C%20quiero%20reservar%20la%20clase%20de%20prueba%20S%2F50" class="nav-cta" target="_blank" rel="noopener">Clase de prueba →</a></li>
+      <li><a href="/horarios/" class="nav-cta">Clase de prueba →</a></li>
     </ul>
   </div>
 </nav>

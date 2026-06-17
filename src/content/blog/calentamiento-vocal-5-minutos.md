@@ -36,4 +36,4 @@ Hazla en este orden. Cada paso prepara al siguiente.
 
 Calienta **siempre** antes de cantar en serio: ensayo, clase, presentación. Cinco minutos basta para uso normal; si vas a cantar mucho rato o un repertorio exigente, estira a diez. Y cuando termines de cantar fuerte, un "enfriamiento" suave (sirenas muy ligeras, burbujeo) ayuda a que la voz vuelva a su estado de reposo.
 
-Una rutina corta pero constante cuida tu instrumento mejor que cualquier truco aislado. Si quieres una rutina de calentamiento hecha a la medida de tu voz y tu repertorio —con los ejercicios exactos para tus puntos débiles— eso es parte de lo que armamos en clase. [Escríbeme por WhatsApp](https://wa.me/51989077928).
+Una rutina corta pero constante cuida tu instrumento mejor que cualquier truco aislado. Si quieres una rutina de calentamiento hecha a la medida de tu voz y tu repertorio —con los ejercicios exactos para tus puntos débiles— eso es parte de lo que armamos en clase. [Reserva tu clase de prueba](/horarios/).

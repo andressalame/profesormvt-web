@@ -41,4 +41,4 @@ El enfoque útil combina tres frentes:
 
 Canta una frase y fíjate: ¿tu voz suena "soplada", con aire de más? Si sí, tu problema es cierre cordal, no falta de aire. ¿Llegas con potencia al inicio pero te apagas al final? Es dosificación. Identificar cuál de los dos te pasa cambia por completo qué deberías practicar.
 
-Quedarte sin aire es frustrante pero muy entrenable, y casi siempre se arregla por el lado que nadie mira: la salida, no la entrada. En la clase de prueba diagnosticamos si tu tema es cierre, presión o dosificación, y vas directo a la causa. [Escríbeme por WhatsApp](https://wa.me/51989077928).
+Quedarte sin aire es frustrante pero muy entrenable, y casi siempre se arregla por el lado que nadie mira: la salida, no la entrada. En la clase de prueba diagnosticamos si tu tema es cierre, presión o dosificación, y vas directo a la causa. [Reserva tu clase de prueba](/horarios/).

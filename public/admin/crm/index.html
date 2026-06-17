@@ -109,6 +109,12 @@
   .cfgrow{display:flex;align-items:center;gap:14px;max-width:560px;margin-bottom:12px;flex-wrap:wrap;}
   .cfgrow .pk{font-family:var(--mono);font-size:12px;text-transform:uppercase;letter-spacing:.06em;flex:0 0 190px;}
   .cfgrow input{flex:1;min-width:180px;background:var(--bg);border:1px solid var(--line);color:var(--cream);padding:8px 10px;border-radius:2px;font-family:var(--mono);}
+  .cfgrow select{flex:1;min-width:180px;background:var(--bg);border:1px solid var(--line);color:var(--cream);padding:8px 10px;border-radius:2px;font-family:var(--mono);}
+  .dispt{border-collapse:collapse;}
+  .dispt th{padding:4px 6px;font-family:var(--mono);font-size:11px;color:var(--muted);text-transform:uppercase;}
+  .dispt td{padding:3px;text-align:center;}
+  .dcell{width:40px;height:30px;border:1px solid var(--line);background:var(--bg);border-radius:3px;cursor:pointer;color:var(--accent);font-weight:700;font-size:13px;}
+  .dcell.on{background:var(--accent);color:var(--bg);border-color:var(--accent);}
   .footnote{margin-top:36px;font-size:12.5px;color:var(--muted);border-top:1px solid var(--line);padding-top:14px;line-height:1.6;}
   .footnote code{font-family:var(--mono);color:var(--cream);font-size:12px;}
   .toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%) translateY(20px);background:var(--accent);color:var(--bg);font-family:var(--mono);font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;padding:11px 18px;border-radius:3px;opacity:0;transition:all .2s;pointer-events:none;z-index:99;}
@@ -149,6 +155,7 @@
       <button class="tab active" data-tab="resumen">Resumen</button>
       <button class="tab" data-tab="alumnos">Alumnos</button>
       <button class="tab" data-tab="registro">Registro</button>
+      <button class="tab" data-tab="agenda">Agenda</button>
       <button class="tab" data-tab="pagos">Pagos<span class="dot hidden" id="dotPagos">0</span></button>
       <button class="tab" data-tab="cuentas">Cuentas</button>
       <button class="tab" data-tab="leads">Leads</button>
@@ -159,6 +166,7 @@
     <div class="tools">
       <span class="syncdot" id="syncdot">—</span>
       <button class="btn ghost sm" id="btnExport">Exportar</button>
+      <button class="btn ghost sm" id="btnBackupSrv" title="Corre el respaldo del servidor (R2) y lo descarga">Backup servidor</button>
       <button class="btn ghost sm" id="btnCsv">CSV alumnos</button>
       <button class="btn ghost sm" id="btnCsvEmails">CSV emails</button>
       <button class="btn ghost sm" id="btnLogoutAdmin" title="Cambiar clave guardada en este navegador">Clave</button>
@@ -258,6 +266,32 @@
     </div>
   </section>
 
+  <section class="panel" id="panel-agenda">
+    <div class="group">
+      <h2>// Próximas clases reservadas</h2>
+      <p class="hint">Lo que los alumnos reservaron desde su portal, más lo que bloquees aquí. Marca asistencia para cerrar la clase (Asistió y Falta consumen 1 clase del paquete).</p>
+      <div class="tablewrap"><table id="tablaAgenda"><thead><tr><th>Cuándo (Lima)</th><th>Alumno</th><th>Tipo</th><th>Estado</th><th></th></tr></thead><tbody></tbody></table></div>
+      <div class="empty hidden" id="agAdminVacio">No hay clases próximas todavía.</div>
+    </div>
+
+    <div class="group">
+      <h2>// Bloquear o sembrar una clase existente</h2>
+      <p class="hint">Aparta un horario que ya está tomado (tu clase fija de hoy, o un bloqueo personal) para que nadie reserve encima. Si eliges un alumno y marcas "cada semana", le creas su horario fijo. Hora de Lima.</p>
+      <div class="cfgrow"><span class="pk">Día y hora</span><input id="ag_dt" type="datetime-local" /></div>
+      <div class="cfgrow"><span class="pk">Alumno (opcional)</span><select id="ag_alumno"><option value="">— Solo bloquear (sin alumno) —</option></select></div>
+      <div class="cfgrow"><span class="pk">Repetir</span><label style="display:flex;align-items:center;gap:8px;font-size:13px;"><input id="ag_fija" type="checkbox" style="flex:0 0 auto;min-width:0;width:auto;" /> Cada semana (horario fijo)</label></div>
+      <div class="cfgrow"><span class="pk">Nota (opcional)</span><input id="ag_nota" type="text" placeholder="Ej: clase fija de Juan" /></div>
+      <button class="btn" id="btnBloquearSlot">Apartar este horario</button>
+    </div>
+
+    <div class="group">
+      <h2>// Mi disponibilidad semanal</h2>
+      <p class="hint">Marca las horas en las que aceptas clases. Los alumnos solo verán slots libres dentro de esto. Hora de Lima.</p>
+      <div class="tablewrap" id="dispGrid"></div>
+      <button class="btn" id="btnGuardarDisp" style="margin-top:12px;">Guardar disponibilidad</button>
+    </div>
+  </section>
+
   <section class="panel" id="panel-ajustes">
     <div class="group">
       <h2>// Precios de paquetes (S/)</h2>
@@ -283,6 +317,19 @@
       <div class="cfgrow"><span class="pk">Crypto wallet</span><input id="cfg_crypto_wallet" type="text" placeholder="T..." /></div>
       <p class="hint" style="margin-top:-4px;">Salen en el portal como métodos de pago al comprar.</p>
     </div>
+    <div class="group">
+      <h2>// Google Calendar</h2>
+      <p class="hint">Conecta tu Google Calendar y cada reserva caerá en tu calendario con link de Meet, y el alumno recibe la invitación. Pega el Client ID y el Secret de Google Cloud, dale "Guardar ajustes" y luego "Conectar".</p>
+      <div class="cfgrow"><span class="pk">Client ID</span><input id="cfg_gcal_client_id" type="text" placeholder="xxxxx.apps.googleusercontent.com" /></div>
+      <div class="cfgrow"><span class="pk">Client Secret</span><input id="cfg_gcal_client_secret" type="text" placeholder="GOCSPX-..." /></div>
+      <div class="cfgrow"><span class="pk">Calendario</span><input id="cfg_gcal_calendar_id" type="text" placeholder="primary" /></div>
+      <div class="cfgrow"><span class="pk">Redirect URI (cópialo en Google Cloud)</span><input id="cfg_gcal_redirect" type="text" readonly style="opacity:.85" /></div>
+      <div class="rowact" style="margin-top:8px;">
+        <span class="pill gray" id="gcalEstado" style="cursor:pointer" title="Clic para verificar">— sin verificar —</span>
+        <button class="btn" id="btnGcalConectar">Conectar Google Calendar</button>
+        <button class="btn ghost" id="btnGcalDesconectar">Desconectar</button>
+      </div>
+    </div>
     <button class="btn" id="btnGuardarAjustes">Guardar ajustes</button>
     <div class="group" style="margin-top:26px;">
       <h2>// Avisos push en este dispositivo</h2>
@@ -296,8 +343,15 @@
 
   <section class="panel" id="panel-chat">
     <div class="group">
-      <h2>// CHAT DE ALUMNOS</h2>
-      <p class="hint">Los alumnos con paquete activo escriben; todos los registrados leen. Tú publicas con el badge PROFE. El × borra el mensaje para todos.</p>
+      <h2>// CHAT</h2>
+      <p class="hint">Grupal = todos los alumnos lo leen. Privado = 1 a 1 con un alumno (solo tú y él lo ven). El × borra un mensaje.</p>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;align-items:center;" id="chatConvs">
+        <button class="btn ghost sm chatconv active" data-conv="grupal">Grupal</button>
+      </div>
+      <select id="chatNuevoAlumno" title="Abrir conversación con un alumno" style="margin-bottom:10px;background:var(--bg);border:1px solid var(--line);color:var(--cream);padding:8px 10px;border-radius:2px;font-family:var(--body);font-size:13px;max-width:280px;">
+        <option value="">+ Escribir a un alumno…</option>
+      </select>
+      <div id="chatAdmTitulo" class="mini" style="margin-bottom:6px;color:var(--muted);">Conversación: Grupal</div>
       <div id="chatAdmMsgs" style="max-height:55vh;overflow-y:auto;background:var(--panel);border:1px solid var(--line);border-radius:3px;padding:12px;display:flex;flex-direction:column;gap:10px;"></div>
       <div style="display:flex;gap:8px;margin-top:10px;">
         <input id="chatAdmTexto" maxlength="500" placeholder="Escribe como Profe Andrés…" autocomplete="off"
@@ -343,7 +397,8 @@
       <div class="field"><label>Fecha de compra</label><input id="a_fecha" type="date" /></div>
       <div class="field"><label>Estado de pago</label><select id="a_pago"><option>Pagado</option><option>Pendiente</option></select></div>
     </div>
-    <div class="field"><label>Horario fijo</label><input id="a_horario" type="text" placeholder="Martes 18:00" /></div>
+    <div class="field"><label>Nota de horario (manual, opcional)</label><input id="a_horario" type="text" placeholder="Solo si no usa la agenda. Ej: Martes 18:00" />
+      <p class="hint" id="a_horario_derivado" style="margin:4px 0 0;"></p></div>
     <div class="field"><label>Notas</label><textarea id="a_notas"></textarea></div>
     <div class="modal-actions">
       <button class="btn ghost" data-close>Cancelar</button>
@@ -355,8 +410,9 @@
 <!-- Modal registro -->
 <div class="overlay" id="ovRegistro">
   <div class="modal">
-    <h3>Registrar <em>clase</em></h3>
+    <h3 id="regTitulo">Registrar <em>clase</em></h3>
     <div class="mlab">// Una fila por sesión / aviso</div>
+    <input id="r_id" type="hidden" />
     <div class="frow">
       <div class="field"><label>Fecha</label><input id="r_fecha" type="date" /></div>
       <div class="field"><label>Alumno</label><select id="r_alumno"></select></div>
@@ -484,6 +540,13 @@ function recargar(){
 function contarPendientes(){
   return (db.compras||[]).filter(function(c){ return c.estado==="pendiente"; }).length;
 }
+function hayModalAbierto(){ return !!document.querySelector(".overlay.open"); }
+/* Re-render del refresco silencioso: pinta las tablas pero NO toca el formulario de Ajustes,
+   para no borrar credenciales (Client ID / Secret) que aún no guardaste. */
+function renderSilencioso(){
+  renderResumen(); renderAlumnos(); renderRegistro(); renderPagos();
+  renderCuentas(); renderLeads(); renderRecursos(); fillSelects();
+}
 function refrescoSilencioso(){
   if(!token) return;                          // solo con sesión activa
   apiGet().then(function(d){                  // GET en segundo plano: no toca syncdot ni spinner
@@ -493,7 +556,8 @@ function refrescoSilencioso(){
     db=d; if(!db.precios) db.precios=Object.assign({},PRECIOS_DEFAULT);
     db.cuentas=db.cuentas||[]; db.compras=db.compras||[]; db.recursos=db.recursos||[]; db.leads=db.leads||[]; db.config=db.config||{};
     prevPendientes = nuevoPend;
-    renderAll();                              // siempre re-render (refleja cambios de otro dispositivo)
+    // si hay un modal abierto (registrar clase, editar alumno, etc.) NO repintamos: perderías lo que estás escribiendo/eligiendo
+    if(!hayModalAbierto()) renderSilencioso();
     if(aumento){ toast("Nuevo pago por confirmar 🔔", 5000); }
   }).catch(function(){ /* red o 401: no hacer nada, el intervalo sigue corriendo */ });
 }
@@ -616,7 +680,7 @@ function renderAlumnos(){
       '<td>'+esc(a.curso)+'</td>'+
       '<td>'+esc(a.paquete)+'<br><span class="mini">S/ '+c.monto+' · ciclo '+(a.ciclo||1)+'</span></td>'+
       '<td>'+pago+'</td>'+
-      '<td>'+esc(a.horario||'—')+'</td>'+
+      '<td>'+esc((a.horarioFijo&&a.horarioFijo.length)?a.horarioFijo.join(' · '):(a.horario? a.horario+' (manual)':'—'))+'</td>'+
       '<td><span class="big">'+c.restantes+'</span> <span class="mini">/ '+c.compradas+'</span></td>'+
       '<td><span class="big">'+c.reprogRest+'</span> <span class="mini">/ '+c.reprogPermit+'</span></td>'+
       '<td><span class="pill '+c.clase+'">'+esc(c.estado)+'</span></td>'+
@@ -654,7 +718,7 @@ function renderRegistro(){
       '<td><span class="pill '+pc+'">'+esc(r.estado)+'</span></td>'+
       '<td class="notes">'+esc(r.trabajo||'')+'</td>'+
       '<td class="notes">'+esc(r.tarea||'')+'</td>'+
-      '<td><div class="rowact">'+audioBtns+'<button class="btn ghost sm" data-delreg="'+r.id+'">×</button></div></td>'+
+      '<td><div class="rowact"><button class="btn ghost sm" data-editreg="'+r.id+'" title="Editar esta clase">✎</button>'+audioBtns+(r.tarea?'<button class="btn ghost sm" data-avisartarea="'+esc(r.alumnoId||r.alumno_id)+'" data-tareatxt="'+esc(r.tarea)+'" title="Avisar al alumno por push">🔔 Avisar</button>':'')+'<button class="btn ghost sm" data-delreg="'+r.id+'">×</button></div></td>'+
     '</tr>';
   }).join("");
 }
@@ -747,6 +811,10 @@ function renderAjustes(){
   el("cfg_crypto_moneda").value=(db.config&&db.config.crypto_moneda)||"";
   el("cfg_crypto_red").value=(db.config&&db.config.crypto_red)||"";
   el("cfg_crypto_wallet").value=(db.config&&db.config.crypto_wallet)||"";
+  el("cfg_gcal_client_id").value=(db.config&&db.config.gcal_client_id)||"";
+  el("cfg_gcal_client_secret").value=(db.config&&db.config.gcal_client_secret)||"";
+  el("cfg_gcal_calendar_id").value=(db.config&&db.config.gcal_calendar_id)||"primary";
+  gcalRefrescarEstado();
 }
 
 function renderRecursos(){
@@ -769,9 +837,13 @@ function renderRecursos(){
 }
 
 function fillSelects(){
+  /* conservar lo que ya estaba elegido: si no, el auto-refresh resetea el select al primer alumno */
+  var prevPk=el("a_paquete").value, prevAl=el("r_alumno").value;
   el("a_paquete").innerHTML=Object.keys(PAQUETES).map(function(p){return '<option>'+p+'</option>';}).join("");
   el("r_alumno").innerHTML=db.alumnos.map(function(a){return '<option value="'+a.id+'">'+esc(a.nombre)+'</option>';}).join("")
     || '<option value="">— agrega un alumno primero —</option>';
+  if(prevPk) el("a_paquete").value=prevPk;
+  if(prevAl) el("r_alumno").value=prevAl;
 }
 function renderLeads(){
   var tb=el("tbLeads"); if(!tb) return;
@@ -782,12 +854,105 @@ function renderLeads(){
 }
 function renderAll(){ renderResumen(); renderAlumnos(); renderRegistro(); renderPagos(); renderCuentas(); renderLeads(); renderRecursos(); renderAjustes(); fillSelects(); }
 
+/* ---------- AGENDA (admin) ---------- */
+var AG_DISP = [], AG_RESERVAS = [];
+var AG_HORAS = ["08:00","09:00","10:00","11:00","12:00","13:00","14:00","15:00","16:00","17:00","18:00","19:00","20:00","21:00"];
+var AG_DOW = [{n:"Lun",d:1},{n:"Mar",d:2},{n:"Mié",d:3},{n:"Jue",d:4},{n:"Vie",d:5},{n:"Sáb",d:6},{n:"Dom",d:0}];
+
+function fmtLima(iso){
+  try{ return new Date(iso).toLocaleString("es-PE",{timeZone:"America/Lima",weekday:"short",day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"}); }
+  catch(e){ return iso; }
+}
+/* datetime-local (hora-pared Lima, UTC-5) -> ISO UTC */
+function limaInputToUtc(val){
+  var m = String(val||"").match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/);
+  if(!m) return null;
+  return new Date(Date.UTC(+m[1], +m[2]-1, +m[3], +m[4]+5, +m[5])).toISOString();
+}
+function dispActiva(dow,hora){
+  for(var i=0;i<AG_DISP.length;i++){ if(AG_DISP[i].dia_semana===dow && AG_DISP[i].hora===hora) return AG_DISP[i].activo!==0; }
+  return false;
+}
+function cargarAgenda(){
+  el("dispGrid").innerHTML = '<p class="hint">Cargando…</p>';
+  Promise.all([
+    fetch("/api/admin/disponibilidad",{headers:hdr()}).then(function(r){return r.json();}),
+    fetch("/api/admin/agenda",{headers:hdr()}).then(function(r){return r.json();})
+  ]).then(function(res){
+    AG_DISP = (res[0] && res[0].disponibilidad) || [];
+    AG_RESERVAS = (res[1] && res[1].reservas) || [];
+    renderAgendaAdmin();
+  }).catch(function(){ toast("No pude cargar la agenda"); });
+}
+function renderAgendaAdmin(){
+  var html = '<table class="dispt"><thead><tr><th></th>'+AG_DOW.map(function(d){return '<th>'+d.n+'</th>';}).join("")+'</tr></thead><tbody>';
+  AG_HORAS.forEach(function(h){
+    html += '<tr><td style="font-weight:600;font-family:var(--mono);font-size:12px;">'+h+'</td>'+AG_DOW.map(function(d){
+      var on = dispActiva(d.d,h);
+      return '<td><button class="dcell'+(on?" on":"")+'" data-dow="'+d.d+'" data-hora="'+h+'">'+(on?"✓":"")+'</button></td>';
+    }).join("")+'</tr>';
+  });
+  el("dispGrid").innerHTML = html + '</tbody></table>';
+
+  var sel = el("ag_alumno"), actual = sel.value;
+  sel.innerHTML = '<option value="">— Solo bloquear (sin alumno) —</option>'+
+    (db.alumnos||[]).slice().sort(function(a,b){return (a.nombre||"").localeCompare(b.nombre||"");})
+      .map(function(a){return '<option value="'+esc(a.id)+'">'+esc(a.nombre)+'</option>';}).join("");
+  sel.value = actual;
+
+  var tb = el("tablaAgenda").querySelector("tbody");
+  if(AG_RESERVAS.length===0){ tb.innerHTML=""; el("agAdminVacio").classList.remove("hidden"); return; }
+  el("agAdminVacio").classList.add("hidden");
+  tb.innerHTML = AG_RESERVAS.map(function(r){
+    var quien = r.alumno_nombre ? esc(r.alumno_nombre) : '<span class="hint" style="margin:0">'+(r.tipo==="bloqueo"?"(bloqueo)":"—")+(r.nota?" · "+esc(r.nota):"")+'</span>';
+    var acc = "";
+    if(r.estado==="reservada"){
+      acc = '<button class="btn ghost sm" data-ag-marcar="completada" data-id="'+esc(r.id)+'">Asistió</button> '+
+            '<button class="btn ghost sm" data-ag-marcar="falta" data-id="'+esc(r.id)+'">Falta</button> '+
+            '<button class="btn ghost sm" data-ag-marcar="cancelada" data-id="'+esc(r.id)+'">Cancelar</button>';
+    }
+    return '<tr><td style="white-space:nowrap;">'+esc(fmtLima(r.inicio_utc))+'</td><td>'+quien+'</td><td>'+esc(r.tipo)+'</td><td>'+esc(r.estado)+'</td><td style="white-space:nowrap;">'+acc+'</td></tr>';
+  }).join("");
+}
+el("panel-agenda").addEventListener("click",function(e){
+  var cell = e.target.closest(".dcell");
+  if(cell){ var on=cell.classList.toggle("on"); cell.textContent=on?"✓":""; return; }
+  var mb = e.target.closest("[data-ag-marcar]");
+  if(mb){
+    apiPost("/api/admin/agenda/marcar",{id:mb.dataset.id, estado:mb.dataset.agMarcar})
+      .then(function(){ toast("Listo"); cargarAgenda(); })
+      .catch(function(err){ toast(err.message||"No se pudo"); });
+  }
+});
+el("btnGuardarDisp").addEventListener("click",function(){
+  var activos = [];
+  el("dispGrid").querySelectorAll(".dcell.on").forEach(function(c){ activos.push({dia_semana:Number(c.dataset.dow), hora:c.dataset.hora}); });
+  apiPost("/api/admin/disponibilidad",{activos:activos})
+    .then(function(){ toast("Disponibilidad guardada"); cargarAgenda(); })
+    .catch(function(e){ toast(e.message||"No se pudo guardar"); });
+});
+el("btnBloquearSlot").addEventListener("click",function(){
+  var iso = limaInputToUtc(el("ag_dt").value);
+  if(!iso){ toast("Elige día y hora"); return; }
+  apiPost("/api/admin/agenda/bloquear",{
+    inicio_utc: iso,
+    alumno_id: el("ag_alumno").value || undefined,
+    fija: el("ag_fija").checked,
+    nota: el("ag_nota").value.trim()
+  }).then(function(r){
+    toast(r.creadas>0 ? ("Horario apartado ("+r.creadas+")") : "Ese horario ya estaba ocupado");
+    el("ag_nota").value="";
+    cargarAgenda();
+  }).catch(function(e){ toast(e.message||"No se pudo"); });
+});
+
 /* ---------- Tabs / modales ---------- */
 document.querySelectorAll(".tab").forEach(function(t){
   t.addEventListener("click",function(){
     document.querySelectorAll(".tab").forEach(function(x){x.classList.remove("active");});
     document.querySelectorAll(".panel").forEach(function(x){x.classList.remove("active");});
     t.classList.add("active"); el("panel-"+t.dataset.tab).classList.add("active");
+    if(t.dataset.tab==="agenda") cargarAgenda();
   });
 });
 function openOv(id){ el(id).classList.add("open"); }
@@ -805,7 +970,7 @@ el("btnNuevoAlumno").addEventListener("click",function(){
   el("a_nombre").value=""; el("a_whatsapp").value="";
   el("a_curso").value="Canto"; fillSelects(); el("a_paquete").value="Paquete 4";
   el("a_fecha").value=new Date().toISOString().slice(0,10); el("a_pago").value="Pagado";
-  el("a_horario").value=""; el("a_notas").value="";
+  el("a_horario").value=""; el("a_notas").value=""; el("a_horario_derivado").textContent="";
   openOv("ovAlumno");
 });
 el("btnGuardarAlumno").addEventListener("click",function(){
@@ -825,15 +990,27 @@ el("btnGuardarAlumno").addEventListener("click",function(){
 document.body.addEventListener("click",function(e){
   var ed=e.target.closest("[data-edit]"), dl=e.target.closest("[data-del]"),
       rv=e.target.closest("[data-renovar]"), dr=e.target.closest("[data-delreg]"),
+      er=e.target.closest("[data-editreg]"),
       cf=e.target.closest("[data-confirmar]"), rj=e.target.closest("[data-rechazar]"),
       vi=e.target.closest("[data-vincular]"), rp=e.target.closest("[data-resetpass]"),
-      dc=e.target.closest("[data-delcuenta]");
+      dc=e.target.closest("[data-delcuenta]"),
+      at=e.target.closest("[data-avisartarea]");
+  if(at){
+    var aid=at.dataset.avisartarea, txt=at.dataset.tareatxt||"";
+    if(aid && confirm("¿Avisar al alumno por push de su nueva tarea?")){
+      apiPost("/api/admin/push/tarea",{alumno_id:aid, texto:txt})
+        .then(function(r){ toast((r&&r.enviados)?"Aviso enviado 🔔":"El alumno no tiene avisos activados aún"); })
+        .catch(function(err){ toast((err&&err.message)||"No se pudo avisar"); });
+    }
+    return;
+  }
   if(ed){ var a=db.alumnos.find(function(x){return x.id===ed.dataset.edit;}); if(!a)return;
     el("alumnoTitulo").innerHTML='Editar <em>alumno</em>'; fillSelects();
     el("a_id").value=a.id; el("a_codigo").value=a.codigo||""; el("a_ciclo").value=a.ciclo||1;
     el("a_nombre").value=a.nombre; el("a_whatsapp").value=a.whatsapp||"";
     el("a_curso").value=a.curso; el("a_paquete").value=a.paquete; el("a_fecha").value=a.fecha||"";
     el("a_pago").value=a.pago; el("a_horario").value=a.horario||""; el("a_notas").value=a.notas||"";
+    el("a_horario_derivado").textContent=(a.horarioFijo&&a.horarioFijo.length)?("Agenda: "+a.horarioFijo.join(" · ")):"Sin horario fijo en la agenda";
     openOv("ovAlumno");
   }
   if(dl){ var al=db.alumnos.find(function(x){return x.id===dl.dataset.del;});
@@ -847,6 +1024,18 @@ document.body.addEventListener("click",function(e){
       db.registro=db.registro.filter(function(x){return x.id!==dr.dataset.delreg;});
       apiPut().then(renderAll); toast("Registro borrado");
     }
+  }
+  if(er){ var rg=db.registro.find(function(x){return x.id===er.dataset.editreg;}); if(!rg)return;
+    fillSelects();
+    el("regTitulo").innerHTML='Editar <em>clase</em>';
+    el("r_id").value=rg.id;
+    el("r_fecha").value=rg.fecha||"";
+    el("r_alumno").value=(rg.alumnoId||rg.alumno_id)||"";
+    el("r_estado").value=rg.estado||"Asistió";
+    el("r_trabajo").value=rg.trabajo||"";
+    el("r_tarea").value=rg.tarea||"";
+    syncCurso(); if(rg.curso) el("r_curso").value=rg.curso;   // conservar el curso original de la clase
+    openOv("ovRegistro");
   }
   if(rv){ var ar=db.alumnos.find(function(x){return x.id===rv.dataset.renovar;}); if(ar) renovar(ar); }
   if(cf){ procesarCompra(cf.dataset.confirmar,"confirmar"); }
@@ -870,6 +1059,8 @@ el("r_alumno").addEventListener("change",syncCurso);
 el("btnNuevoRegistro").addEventListener("click",function(){
   if(db.alumnos.length===0){ toast("Agrega un alumno primero"); return; }
   fillSelects();
+  el("regTitulo").innerHTML='Registrar <em>clase</em>';
+  el("r_id").value="";
   el("r_fecha").value=new Date().toISOString().slice(0,10);
   el("r_estado").value="Asistió"; el("r_trabajo").value=""; el("r_tarea").value="";
   syncCurso(); openOv("ovRegistro");
@@ -878,10 +1069,17 @@ el("btnGuardarRegistro").addEventListener("click",function(){
   var alumnoId=el("r_alumno").value;
   if(!alumnoId){ toast("Elige un alumno"); return; }
   var a=db.alumnos.find(function(x){return x.id===alumnoId;});
-  db.registro.push({ id:uid(), fecha:el("r_fecha").value, alumnoId:alumnoId,
-    ciclo:(a&&a.ciclo)||1, curso:el("r_curso").value,
-    estado:el("r_estado").value, trabajo:el("r_trabajo").value.trim(), tarea:el("r_tarea").value.trim() });
-  apiPut().then(renderAll); closeOv("ovRegistro"); toast("Clase registrada");
+  var editId=el("r_id").value;
+  var campos={ fecha:el("r_fecha").value, alumnoId:alumnoId, alumno_id:alumnoId,
+    curso:el("r_curso").value, estado:el("r_estado").value,
+    trabajo:el("r_trabajo").value.trim(), tarea:el("r_tarea").value.trim() };
+  if(editId){
+    // editar: conservamos lo que el modal no toca (adjuntos, ciclo)
+    db.registro=db.registro.map(function(x){ return x.id===editId ? Object.assign({},x,campos) : x; });
+  } else {
+    db.registro.push(Object.assign({ id:uid(), ciclo:(a&&a.ciclo)||1 }, campos));
+  }
+  apiPut().then(renderAll); closeOv("ovRegistro"); toast(editId?"Clase actualizada ✓":"Clase registrada");
 });
 
 /* ---------- Pagos ---------- */
@@ -929,7 +1127,7 @@ el("btnCuentaOk").addEventListener("click",function(){
 });
 
 /* ---------- Chat (pestaña; poll SOLO mientras está activa) ---------- */
-var chatAdmMax=0, chatAdmInt=null;
+var chatAdmMax=0, chatAdmInt=null, chatAdmConv="grupal";
 function chatAdmHora(f){
   try{ var d=new Date(f); if(isNaN(d.getTime())) return "";
     return String(d.getHours()).padStart(2,"0")+":"+String(d.getMinutes()).padStart(2,"0");
@@ -951,20 +1149,59 @@ function chatAdmRender(msgs, append){
   if(append){ box.insertAdjacentHTML("beforeend", html); if(abajo) box.scrollTop=box.scrollHeight; }
   else { box.innerHTML = html || '<div class="empty">Sin mensajes todavía</div>'; box.scrollTop=box.scrollHeight; }
 }
+function chatAdmUrl(desde){
+  if(chatAdmConv==="grupal") return "/api/chat?desde="+desde;
+  return "/api/chat/privado?cuenta="+encodeURIComponent(chatAdmConv)+"&desde="+desde;
+}
 function chatAdmPoll(){
   if(!token) return;
-  fetch("/api/chat?desde="+chatAdmMax,{headers:hdr()}).then(function(r){ return r.json(); }).then(function(d){
+  var convAlPedir = chatAdmConv;
+  fetch(chatAdmUrl(chatAdmMax),{headers:hdr()}).then(function(r){ return r.json(); }).then(function(d){
+    if(convAlPedir!==chatAdmConv) return;
     if(!d || !d.mensajes) return;
     if(d.mensajes.length) chatAdmRender(d.mensajes, chatAdmMax>0);
     else if(chatAdmMax===0) chatAdmRender([], false);
     if(typeof d.max==="number" && d.max>chatAdmMax) chatAdmMax=d.max;
   }).catch(function(){});
 }
-function chatAdmIniciar(){
-  chatAdmMax=0; el("chatAdmMsgs").innerHTML="";
+function chatAdmSetConv(conv, label){
+  chatAdmConv = conv; chatAdmMax = 0; el("chatAdmMsgs").innerHTML="";
+  el("chatAdmTitulo").textContent = "Conversación: " + (label || "Grupal");
+  document.querySelectorAll(".chatconv").forEach(function(b){ b.classList.toggle("active", b.dataset.conv===conv); });
   chatAdmPoll();
+}
+function chatAdmCargarHilos(){
+  fetch("/api/admin/chat/hilos",{headers:hdr()}).then(function(r){ return r.json(); }).then(function(d){
+    var cont=el("chatConvs");
+    cont.querySelectorAll(".chatconv:not([data-conv='grupal'])").forEach(function(n){ n.remove(); });
+    (d.hilos||[]).forEach(function(h){
+      var b=document.createElement("button");
+      b.className="btn ghost sm chatconv";
+      b.dataset.conv=h.cuenta_id;
+      b.dataset.label=h.nombre||h.email||"Alumno";
+      b.title=(h.ultimo_admin? "Tú: ":"")+(h.ultimo_texto||"");
+      b.textContent=(h.nombre||h.email||"Alumno");
+      if(h.cuenta_id===chatAdmConv) b.classList.add("active");
+      cont.appendChild(b);
+    });
+  }).catch(function(){});
+}
+function chatAdmLlenarAlumnos(){
+  var sel=el("chatNuevoAlumno"); if(!sel) return;
+  var actual=sel.value;
+  var ops='<option value="">+ Escribir a un alumno…</option>';
+  (db.cuentas||[]).filter(function(c){ return c.alumno_id; })
+    .sort(function(a,b){ return (a.nombre||"").localeCompare(b.nombre||""); })
+    .forEach(function(c){ ops+='<option value="'+esc(c.id)+'">'+esc(c.nombre||c.email||"Alumno")+'</option>'; });
+  sel.innerHTML=ops; sel.value=actual;
+}
+function chatAdmIniciar(){
+  chatAdmConv="grupal"; chatAdmMax=0; el("chatAdmMsgs").innerHTML="";
+  chatAdmLlenarAlumnos();
+  chatAdmCargarHilos();
+  chatAdmSetConv("grupal","Grupal");
   if(chatAdmInt) clearInterval(chatAdmInt);
-  chatAdmInt=setInterval(chatAdmPoll, 15000);
+  chatAdmInt=setInterval(function(){ chatAdmPoll(); chatAdmCargarHilos(); }, 15000);
 }
 function chatAdmDetener(){ if(chatAdmInt){ clearInterval(chatAdmInt); chatAdmInt=null; } }
 document.querySelectorAll(".tab").forEach(function(t){
@@ -985,11 +1222,23 @@ function chatAdmEnviarMsg(){
   var t=el("chatAdmTexto").value.trim();
   if(!t) return;
   el("chatAdmEnviar").disabled=true;
-  apiPost("/api/chat",{texto:t})
-    .then(function(){ el("chatAdmTexto").value=""; chatAdmPoll(); })
+  var p, body;
+  if(chatAdmConv==="grupal"){ p="/api/chat"; body={texto:t}; }
+  else { p="/api/chat/privado"; body={texto:t, cuenta:chatAdmConv}; }
+  apiPost(p,body)
+    .then(function(){ el("chatAdmTexto").value=""; chatAdmPoll(); chatAdmCargarHilos(); })
     .catch(function(err){ toast((err&&err.message)||"No se pudo enviar"); })
     .finally(function(){ el("chatAdmEnviar").disabled=false; });
 }
+el("chatConvs").addEventListener("click",function(e){
+  var b=e.target.closest(".chatconv"); if(!b) return;
+  chatAdmSetConv(b.dataset.conv, b.dataset.label||"Grupal");
+});
+el("chatNuevoAlumno").addEventListener("change",function(){
+  var v=this.value; if(!v) return;
+  chatAdmSetConv(v, this.options[this.selectedIndex].text);
+  this.value="";
+});
 el("chatAdmEnviar").addEventListener("click", chatAdmEnviarMsg);
 el("chatAdmTexto").addEventListener("keydown",function(e){ if(e.key==="Enter") chatAdmEnviarMsg(); });
 
@@ -1020,11 +1269,37 @@ el("btnGuardarAjustes").addEventListener("click",function(){
             scotia_cci:el("cfg_scotia_cci").value.trim(),
             crypto_moneda:el("cfg_crypto_moneda").value.trim(),
             crypto_red:el("cfg_crypto_red").value.trim(),
-            crypto_wallet:el("cfg_crypto_wallet").value.trim() };
+            crypto_wallet:el("cfg_crypto_wallet").value.trim(),
+            gcal_client_id:el("cfg_gcal_client_id").value.trim(),
+            gcal_client_secret:el("cfg_gcal_client_secret").value.trim(),
+            gcal_calendar_id:el("cfg_gcal_calendar_id").value.trim()||"primary" };
   Promise.all([ apiPut(), apiPost("/api/admin/config",cfg) ])
     .then(function(){ db.config=Object.assign(db.config||{},cfg); renderAll(); toast("Ajustes guardados"); })
     .catch(function(){ toast("No se pudieron guardar los ajustes"); });
 });
+
+/* ---------- Google Calendar ---------- */
+function gcalRefrescarEstado(){
+  fetch("/api/admin/google/estado",{headers:hdr()}).then(function(r){return r.json();}).then(function(d){
+    if(el("cfg_gcal_redirect")) el("cfg_gcal_redirect").value=d.redirect_uri||"";
+    var p=el("gcalEstado"); if(!p) return;
+    if(d.conectado){ p.textContent="Conectado ✓"; p.className="pill green"; }
+    else if(d.tieneCredenciales){ p.textContent="Listo para conectar"; p.className="pill amber"; }
+    else { p.textContent="Falta Client ID / Secret"; p.className="pill gray"; }
+  }).catch(function(){});
+}
+el("btnGcalConectar").addEventListener("click",function(){
+  apiPost("/api/admin/google/url",{}).then(function(d){
+    if(d.url) window.open(d.url,"_blank","noopener");
+    toast("Aprueba en la ventana de Google y vuelve. Refresco el estado en unos segundos.");
+    setTimeout(gcalRefrescarEstado, 9000);
+  }).catch(function(e){ toast(e.message||"No se pudo iniciar la conexión"); });
+});
+el("btnGcalDesconectar").addEventListener("click",function(){
+  if(!confirm("¿Desconectar Google Calendar? Las reservas seguirán funcionando, pero ya no se crearán eventos.")) return;
+  apiPost("/api/admin/google/desconectar",{}).then(function(){ toast("Desconectado"); gcalRefrescarEstado(); }).catch(function(){});
+});
+el("gcalEstado").addEventListener("click", gcalRefrescarEstado);
 
 /* ---------- Recursos ---------- */
 el("rec_tipo").addEventListener("change",function(){
@@ -1143,6 +1418,17 @@ el("btnExport").addEventListener("click",function(){
   var blob=new Blob([JSON.stringify(db,null,2)],{type:"application/json"});
   downloadBlob(blob,"crm-profesormvt-"+new Date().toISOString().slice(0,10)+".json");
   toast("Respaldo exportado");
+});
+el("btnBackupSrv").addEventListener("click",function(){
+  var b=el("btnBackupSrv"); b.disabled=true; toast("Corriendo backup del servidor…");
+  apiPost("/api/admin/backup/ahora",{}).then(function(r){
+    toast("Backup OK ("+Math.round((r.bytes||0)/1024)+" KB · "+r.filas+" filas)");
+    var f=(String(r.key||"").match(/(\d{4}-\d{2}-\d{2})/)||[])[1];
+    return f ? fetch("/api/admin/backup/descargar?fecha="+f,{headers:hdr()}) : null;
+  }).then(function(res){ return (res&&res.ok)?res.blob():null; })
+    .then(function(blob){ if(blob) downloadBlob(blob,"backup-servidor.json"); })
+    .catch(function(){ toast("No se pudo correr el backup"); })
+    .finally(function(){ b.disabled=false; });
 });
 el("btnCsv").addEventListener("click",function(){
   var head=["Alumno","WhatsApp","Curso","Paquete","Ciclo","Fecha compra","Monto","Estado pago","Horario","Clases compradas","Clases usadas","Clases restantes","Reprog restantes","Estado","Notas"];
