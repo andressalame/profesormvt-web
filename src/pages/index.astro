@@ -2,6 +2,7 @@
 // Home oficial · ProfesorMVT — rediseño punk (reemplaza la versión anterior)
 // Página standalone (sin Layout) para controlar 100% el diseño, conservando Meta Pixel + SEO.
 import LeadForm from '../components/LeadForm.astro';
+import Nav from '../components/Nav.astro';
 const title = "Profesor MVT · Canto, piano y composición para adultos en Lima";
 const description = "Clases 1 a 1 de canto (método MVT), piano y composición para adultos en Lima (San Isidro) y online. Con Andrés Salame, músico real. Prueba S/50 con diagnóstico vocal en PDF.";
 const faqSchema = {
@@ -540,16 +541,7 @@ footer .fcol a:hover{color:var(--orange2)}
 </svg>
 
 <!-- NAV -->
-<nav class="nav" id="nav">
-  <a class="brand" href="#top"><svg class="horns" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="5" y="2.5" width="3.2" height="12.5" rx="1.6"/><rect x="15.8" y="2.5" width="3.2" height="12.5" rx="1.6"/><rect x="8.7" y="9" width="3.1" height="6.5" rx="1.55"/><rect x="12.2" y="9" width="3.1" height="6.5" rx="1.55"/><rect x="4.6" y="12" width="14.8" height="9" rx="4"/><rect x="2.8" y="12.2" width="5.5" height="3.3" rx="1.65"/></svg>PROFESORMVT</a>
-  <div class="nav-links">
-    <a class="lnk" href="#metodo">Método</a>
-    <a class="lnk" href="#precios">Precios</a>
-    <a class="lnk" href="/horarios/">Horarios</a>
-    <a class="lnk" href="#faq">FAQ</a>
-    <a class="btn btn-primary" href="/alumnos/">Crear mi cuenta</a>
-  </div>
-</nav>
+<Nav />
 
 <span id="top"></span>
 

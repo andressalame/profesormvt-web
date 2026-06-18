@@ -1,122 +1,75 @@
 ---
+// Nav compartido del sitio (mismo diseño punk del home en TODAS las páginas).
+// Autocontenido: colores y fuentes literales para que se vea idéntico tanto en el home
+// (standalone, sin variables globales) como en las páginas con Layout.
 export interface Props {
   activeNav?: string;
 }
 const { activeNav } = Astro.props;
 ---
-<nav class="nav">
-  <div class="nav-inner">
-    <a href="/" class="logo"><img src="/favicon.svg" alt="" class="logo-mark" width="30" height="30" />profesor<em class="mark">mvt</em><span class="dot"></span></a>
-    <ul class="nav-links">
-      <li><a href="/#metodo-canto">Canto</a></li>
-      <li><a href="/#metodo-piano">Piano</a></li>
-      <li><a href="/#metodo-composicion">Composición</a></li>
-      <li><a href="/horarios/" class={activeNav === 'horarios' ? 'active' : ''}>Horarios</a></li>
-      <li><a href="/#precios">Precios</a></li>
-      <li><a href="/#sobre">Sobre mí</a></li>
-      <li><a href="/#testimonios">Testimonios</a></li>
-      <li>
-        <a href="https://discord.gg/MCBEa3fcTU" class="nav-discord" target="_blank" rel="noopener" aria-label="Únete a la comunidad de Discord">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 00-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 00-.0785-.037 19.7363 19.7363 0 00-4.8852 1.515.0699.0699 0 00-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 00.0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 00.0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 00-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 01-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 01.0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 01.0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 01-.0066.1276 12.2986 12.2986 0 01-1.873.8914.0766.0766 0 00-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 00.0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 00.0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 00-.0312-.0286zM8.02 15.3312c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9555-2.4189 2.157-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.9555 2.4189-2.1569 2.4189zm7.9748 0c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9554-2.4189 2.1569-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.946 2.4189-2.1568 2.4189Z"/></svg>
-          Comunidad
-        </a>
-      </li>
-      <li class="nav-login-li"><a href="/alumnos/" class="nav-login">Ingresar</a></li>
-      <li><a href="/horarios/" class="nav-cta">Clase de prueba →</a></li>
-    </ul>
+<nav class="snav" id="nav">
+  <a class="snav-brand" href="/" aria-label="ProfesorMVT inicio">
+    <svg class="snav-horns" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="5" y="2.5" width="3.2" height="12.5" rx="1.6"/><rect x="15.8" y="2.5" width="3.2" height="12.5" rx="1.6"/><rect x="8.7" y="9" width="3.1" height="6.5" rx="1.55"/><rect x="12.2" y="9" width="3.1" height="6.5" rx="1.55"/><rect x="4.6" y="12" width="14.8" height="9" rx="4"/><rect x="2.8" y="12.2" width="5.5" height="3.3" rx="1.65"/></svg>PROFESORMVT
+  </a>
+  <div class="snav-links">
+    <a class="snav-link" href="/#metodo">Método</a>
+    <a href="/horarios/" class:list={["snav-link", { active: activeNav === 'horarios' }]}>Horarios</a>
+    <a class="snav-link" href="/#precios">Precios</a>
+    <a class="snav-link" href="/#faq">FAQ</a>
+    <a class="snav-link snav-discord" href="https://discord.gg/MCBEa3fcTU" target="_blank" rel="noopener" aria-label="Comunidad en Discord">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 00-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 00-.0785-.037 19.7363 19.7363 0 00-4.8852 1.515.0699.0699 0 00-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 00.0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 00.0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 00-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 01-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 01.0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 01.0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 01-.0066.1276 12.2986 12.2986 0 01-1.873.8914.0766.0766 0 00-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 00.0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 00.0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 00-.0312-.0286zM8.02 15.3312c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9555-2.4189 2.157-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.9555 2.4189-2.1569 2.4189zm7.9748 0c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9554-2.4189 2.1569-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.946 2.4189-2.1568 2.4189Z"/></svg>
+      Comunidad
+    </a>
+    <a class="snav-ghost" href="/alumnos/">Ingresar</a>
+    <a class="snav-cta" href="/horarios/">Clase de prueba →</a>
   </div>
 </nav>
 <style>
-.nav {
-  position: sticky; top: 0; z-index: 100;
-  background: transparent;
-  border-bottom: 1px solid transparent;
-  transition: background 0.2s ease, backdrop-filter 0.2s ease, border-color 0.2s ease;
-}
-.nav.scrolled {
-  background: rgba(13, 11, 10, 0.92);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  border-bottom-color: #2A2926;
-}
-@media (prefers-reduced-motion: reduce) {
-  .nav { transition: none; }
-}
-.nav-inner {
-  max-width: 1240px;
-  margin: 0 auto;
-  padding: 18px 48px;
-  display: flex; align-items: center; justify-content: space-between;
-}
-.logo {
-  font-family: 'Fraunces', serif;
-  font-size: 22px;
-  font-weight: 500;
-  letter-spacing: -0.01em;
-  color: var(--color-bone);
-  display: flex; align-items: center; gap: 9px;
-}
-.logo-mark {
-  width: 30px; height: 30px;
-  border-radius: 7px;
-  display: block;
-  flex-shrink: 0;
-}
-.logo .mark { color: var(--color-ember); font-style: italic; }
-.logo .dot {
-  width: 6px; height: 6px;
-  border-radius: 50%;
-  background: var(--color-ember);
-  display: inline-block;
-  transform: translateY(-3px);
-}
-.nav-links { display: flex; align-items: center; gap: 30px; list-style: none; }
-.nav-links a { font-size: 14.5px; color: var(--color-bone-mute); transition: color 0.2s; white-space: nowrap; }
-.nav-links a.active { color: var(--color-ember); font-weight: 500; }
-.nav-links a:hover { color: var(--color-ember); }
-.nav-cta {
-  background: var(--color-ember);
-  color: var(--color-bone) !important;
-  padding: 10px 20px;
-  border-radius: 4px;
-  font-size: 13.5px;
-  font-weight: 600;
-  transition: background 0.2s;
-  letter-spacing: 0.01em;
-}
-.nav-cta:hover { background: var(--wine-deep); color: var(--color-bone) !important; }
+  .snav{
+    position: sticky; top: 0; z-index: 50; height: 64px;
+    display: flex; align-items: center; justify-content: space-between;
+    padding-inline: clamp(20px, 5vw, 64px);
+    border-bottom: 1px solid transparent;
+    transition: background-color .3s ease, border-color .3s ease, backdrop-filter .3s ease;
+  }
+  .snav.scrolled{ background: rgba(13,11,10,.82); backdrop-filter: blur(10px); border-bottom-color: #2A2926; }
+  .snav-brand{
+    font-family: "Anton", Impact, sans-serif; text-transform: uppercase;
+    font-size: 1.15rem; letter-spacing: .04em; color: #f3ede0;
+    display: flex; align-items: center; gap: .55em; text-decoration: none;
+  }
+  .snav-horns{ width: 1.1em; height: 1.1em; color: #e8501f; flex: none; filter: drop-shadow(0 0 8px #e8501f); }
+  .snav-links{ display: flex; align-items: center; gap: 1.7rem; }
+  .snav-link{
+    font-family: "JetBrains Mono", monospace; font-size: .74rem; letter-spacing: .16em;
+    text-transform: uppercase; color: #8a8276; transition: color .2s; text-decoration: none;
+    white-space: nowrap; display: inline-flex; align-items: center; gap: .4em;
+  }
+  .snav-link:hover{ color: #f3ede0; }
+  .snav-link.active{ color: #e8501f; }
+  .snav-discord svg{ width: 15px; height: 15px; fill: currentColor; flex: none; }
+  .snav-ghost, .snav-cta{
+    font-family: "JetBrains Mono", monospace; font-weight: 700; letter-spacing: .1em;
+    text-transform: uppercase; font-size: .7rem; padding: .72em 1.2em; border-radius: 2px;
+    text-decoration: none; white-space: nowrap; transition: transform .15s ease, background-color .15s ease, color .15s ease, border-color .15s ease;
+  }
+  .snav-ghost{ background: transparent; color: #f3ede0; border: 2px solid rgba(243,237,224,.35); }
+  .snav-ghost:hover{ border-color: #e8501f; color: #e8501f; }
+  .snav-cta{ background: #e8501f; color: #160a04; border: 2px solid #e8501f; box-shadow: 4px 4px 0 #000; }
+  .snav-cta:hover{ background: #ff6a35; border-color: #ff6a35; transform: translate(-2px,-2px); box-shadow: 6px 6px 0 #000; }
 
-/* Botón Ingresar (portal de alumnos) — ghost */
-.nav-login {
-  background: transparent;
-  color: #EBE5D6 !important;
-  border: 1px solid rgba(235, 229, 214, 0.35);
-  padding: 10px 20px;
-  border-radius: 4px;
-  font-size: 13.5px;
-  font-weight: 600;
-  letter-spacing: 0.01em;
-  transition: border-color 0.15s, color 0.15s;
-}
-.nav-login:hover { border-color: #cc4e1f; color: #cc4e1f !important; }
-
-/* Comunidad (Discord) — link de texto simple, como los demás del nav */
-.nav-discord {
-  display: inline-flex; align-items: center; gap: 6px;
-}
-.nav-discord svg { width: 16px; height: 16px; fill: currentColor; flex-shrink: 0; }
-
-@media (max-width: 960px) {
-  .nav-inner { padding: 14px 28px; }
-  .nav-links { gap: 14px; }
-  .nav-links li:not(:last-child):not(.nav-login-li) { display: none; }
-}
+  @media (max-width: 980px){
+    .snav-links{ gap: 1.1rem; }
+    .snav-link, .snav-discord, .snav-ghost{ display: none; }
+  }
+  @media (prefers-reduced-motion: reduce){
+    .snav, .snav-cta{ transition: none; }
+  }
 </style>
-
 <script>
-  const nav = document.querySelector('.nav');
-  if (nav) {
-    const onScroll = () => nav.classList.toggle('scrolled', window.scrollY > 40);
+  const snav = document.getElementById('nav');
+  if (snav){
+    const onScroll = () => snav.classList.toggle('scrolled', window.scrollY > 40);
     onScroll();
     window.addEventListener('scroll', onScroll, { passive: true });
   }

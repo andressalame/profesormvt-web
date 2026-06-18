@@ -119,43 +119,46 @@ import Layout from '../layouts/Layout.astro';
     padding: 26px;
     max-width: 540px; margin: 0 auto;
   }
-  .calmes {
+  /* El calendario se inyecta por JS (box.innerHTML), así que sus elementos NO llevan el
+     atributo de scope de Astro. Por eso estos selectores van :global (anclados a .cal-box
+     para no filtrarse al resto del sitio). Sin esto, el calendario sale sin estilos. */
+  .cal-box :global(.calmes) {
     font-family: 'JetBrains Mono', monospace; font-size: 12px;
     text-transform: uppercase; letter-spacing: .08em;
     color: var(--color-bone); margin: 0 0 14px; text-align: center;
   }
-  .cal { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
-  .cal .cdow {
+  .cal-box :global(.cal) { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
+  .cal-box :global(.cal .cdow) {
     font-family: 'JetBrains Mono', monospace; font-size: 10px;
     color: var(--color-text-mute); text-align: center;
     text-transform: uppercase; padding: 2px 0 6px;
   }
-  .calc {
+  .cal-box :global(.calc) {
     min-height: 42px; display: flex; align-items: center; justify-content: center;
     border: 1px solid transparent; border-radius: 8px;
     font-size: 14px; color: var(--color-text-mute);
   }
-  .calc.has {
+  .cal-box :global(.calc.has) {
     color: var(--color-bone); border: 1px solid var(--color-line);
     background: var(--color-ink); cursor: pointer; font-weight: 600;
   }
-  .calc.has:hover { border-color: var(--color-ember); color: var(--color-ember); }
-  .calc.sel {
+  .cal-box :global(.calc.has:hover) { border-color: var(--color-ember); color: var(--color-ember); }
+  .cal-box :global(.calc.sel) {
     background: var(--color-ember); color: var(--color-ink) !important;
     border-color: var(--color-ember); font-weight: 700;
   }
-  .cal-dia-titulo {
+  .cal-box :global(.cal-dia-titulo) {
     margin-top: 22px; font-family: 'Fraunces', serif; font-size: 19px;
     text-transform: capitalize; color: var(--color-bone);
   }
-  .cal-horas { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
-  .cal-hora {
+  .cal-box :global(.cal-horas) { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+  .cal-box :global(.cal-hora) {
     font-family: 'JetBrains Mono', monospace; font-size: 13px;
     padding: 8px 14px; border-radius: 6px;
     border: 1px solid var(--color-line); background: var(--color-ink);
     color: var(--color-bone); transition: border-color .15s, color .15s;
   }
-  .cal-hora:hover { border-color: var(--color-ember); color: var(--color-ember); }
+  .cal-box :global(.cal-hora:hover) { border-color: var(--color-ember); color: var(--color-ember); }
 
   .cal-cta { text-align: center; margin-top: 34px; }
 
