@@ -26,6 +26,12 @@ const WA = 'https://wa.me/51989077928';
 </div>
 
 <style>
+  /* Colores propios para que el widget funcione igual en páginas con Layout y en la home
+     standalone (que no carga global.css). Definidos en .cbot, cascadean a fab y panel. */
+  .cbot{
+    --color-ember:#e8501f; --color-bone:#f3ede0; --color-ink:#0d0b0a;
+    --color-ink-soft:#161514; --color-line:#2a2926; --color-bone-mute:#9b9384;
+  }
   .cbot-fab{
     position: fixed; bottom: 24px; right: 24px; z-index: 200;
     width: 58px; height: 58px; border-radius: 50%; border: none; cursor: pointer;
