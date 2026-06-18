@@ -613,6 +613,73 @@ async function procesarNurtureLeads(env){
   return enviados;
 }
 
+/* ============ CHATBOT (burbuja flotante con IA) ============
+   Reemplaza la burbuja de WhatsApp por un asistente que responde dudas y, si no alcanza,
+   pasa el WhatsApp de Andrés. Claude Haiku via /api/chatbot. Arranca con degradación elegante:
+   si no hay ANTHROPIC_API_KEY, responde con el WhatsApp y no rompe nada. */
+const CHATBOT_WA = "https://wa.me/51989077928";
+const CHATBOT_SYSTEM =
+  "Eres el asistente virtual de ProfesorMVT, la marca de Andrés Salamé-Córdova: clases 1 a 1 de canto (método MVT), piano y composición para ADULTOS, presenciales en San Isidro (Lima) o en vivo online.\n\n" +
+  "PLANES Y PRECIOS (en soles, S/):\n" +
+  "- Clase de prueba: S/50. Una sesión completa con diagnóstico vocal en PDF. NO es gratis: ese es el mejor punto de partida. Solo para cuentas nuevas.\n" +
+  "- Clase suelta: S/70.\n" +
+  "- Plan Esencial: S/250 al mes (4 clases).\n" +
+  "- Plan Intensivo: S/450 al mes (8 clases). El más elegido.\n" +
+  "- Plan Estrella: S/600 (12 clases). El mejor precio por clase.\n\n" +
+  "PAGOS: desde Perú con Yape, Plin, Sip, tarjeta o transferencia (la tarjeta activa el paquete al instante). Desde el extranjero, con tarjeta o cripto.\n\n" +
+  "CÓMO EMPIEZA UN ALUMNO: ve los horarios libres en profesormvt.com/horarios (sin cuenta), luego crea su cuenta en profesormvt.com/alumnos, paga su paquete o la clase de prueba, y reserva su clase. Todo self-service.\n\n" +
+  "DATOS DE MÉTODO: el canto usa el método MVT (coordinación del músculo vocal, cierre cordal, resonancia). El piano se enfoca en fuerza e independencia de dedos para tocar tus canciones rápido. La composición usa herramientas reales para escribir tus propias canciones. No necesitas saber música para empezar, y nunca es tarde para un adulto.\n\n" +
+  "REGLAS DE CONVERSACIÓN (obligatorias):\n" +
+  "- Antes de soltar precios o planes, califica: pregunta qué le gustaría lograr y si lo quiere presencial u online. Recomienda el plan que encaje, no toda la lista.\n" +
+  "- Tono: español peruano de clase alta, limpio, cálido pero seco, empoderador. NUNCA uses 'pe' ni 'causa' ni vulgaridades. NUNCA uses guiones largos (em dash). Los signos de exclamación o pregunta van solo al cierre, nunca abras con signo invertido.\n" +
+  "- NUNCA prometas resultados garantizados ni inventes datos, números, reseñas o titulaciones. Si no sabes algo, dilo y ofrece el WhatsApp.\n" +
+  "- NUNCA menosprecies al alumno ni a Andrés. Empodera siempre: aprender música es entrenamiento, no talento de nacimiento.\n" +
+  "- Respuestas cortas y claras, máximo 4 frases. Empuja a ver horarios o crear cuenta cuando tenga sentido.\n" +
+  "- Si la persona quiere agendar en firme, pide hablar con Andrés, tiene una duda que no puedes resolver, o algo se sale de las clases, dale su WhatsApp: " + CHATBOT_WA + "\n" +
+  "Eres el asistente, no Andrés. Si te preguntan, eres su asistente virtual.";
+
+/* Llama a Claude Haiku con la historia del chat y devuelve la respuesta. Degrada con el WhatsApp. */
+async function responderChatbot(env, mensajes){
+  const fallback = "Para eso lo mejor es que hables directo con Andrés. Escríbele por WhatsApp y lo cuadran: " + CHATBOT_WA;
+  if (!env.ANTHROPIC_API_KEY) return fallback;
+  try {
+    const r = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "x-api-key": env.ANTHROPIC_API_KEY,
+        "anthropic-version": "2023-06-01",
+        "content-type": "application/json"
+      },
+      body: JSON.stringify({
+        model: "claude-haiku-4-5",
+        max_tokens: 400,
+        system: CHATBOT_SYSTEM,
+        messages: mensajes
+      })
+    });
+    if (!r.ok) return fallback;
+    const data = await r.json();
+    const texto = (data && Array.isArray(data.content) ? data.content : [])
+      .filter(function(b){ return b && b.type === "text"; })
+      .map(function(b){ return b.text; }).join("").trim();
+    return texto || fallback;
+  } catch (e) { return fallback; }
+}
+
+/* Rate-limit del chatbot por IP y hora. Devuelve true si la IP YA pasó el tope (debe frenarse). */
+async function chatbotPasoTope(env, ip){
+  if (!ip) return false;
+  const ventana = new Date().toISOString().slice(0, 13);   // YYYY-MM-DDTHH
+  const LIMITE = 40;                                        // mensajes por IP por hora
+  try {
+    await env.DB.prepare(
+      "INSERT INTO chatbot_uso (ip, ventana, n) VALUES (?1, ?2, 1) ON CONFLICT(ip, ventana) DO UPDATE SET n = n + 1"
+    ).bind(ip, ventana).run();
+    const row = await env.DB.prepare("SELECT n FROM chatbot_uso WHERE ip = ?1 AND ventana = ?2").bind(ip, ventana).first();
+    return !!(row && Number(row.n) > LIMITE);
+  } catch (e) { return false; }   // si la tabla aún no existe, no bloquear
+}
+
 /* ---------- Aviso por Web Push (VAPID) a los dispositivos suscritos del admin ----------
    Best-effort, con try/catch POR suscripción: una mala no tumba al resto.
    Las suscripciones caducadas (404/410) se borran solas. Devuelve cuántas se enviaron. */
@@ -1659,6 +1726,24 @@ export default {
         return json({ ok: true, pdf });
       }
 
+      if (url.pathname === "/api/chatbot" && request.method === "POST"){
+        const b = await request.json().catch(() => ({}));
+        let mensajes = Array.isArray(b.mensajes) ? b.mensajes : [];
+        mensajes = mensajes
+          .filter(function(m){ return m && (m.role === "user" || m.role === "assistant") && typeof m.content === "string"; })
+          .map(function(m){ return { role: m.role, content: m.content.slice(0, 600) }; })
+          .slice(-10);
+        if (!mensajes.length || mensajes[mensajes.length - 1].role !== "user"){
+          return json({ error: "Mensaje vacío." }, 400);
+        }
+        const ip = request.headers.get("CF-Connecting-IP") || "";
+        if (await chatbotPasoTope(env, ip)){
+          return json({ reply: "Recibiste varias respuestas seguidas. Para seguir, escríbele directo a Andrés por WhatsApp: " + CHATBOT_WA });
+        }
+        const reply = await responderChatbot(env, mensajes);
+        return json({ reply: reply });
+      }
+
       /* ============ ADMIN ============ */
       /* ============ GOOGLE CALENDAR: callback OAuth (lo abre el redirect de Google) ============ */
       if (url.pathname === "/api/google/oauth/callback" && request.method === "GET"){
@@ -2260,6 +2345,9 @@ export default {
     // Backup diario: 1 vez al día a las 07:00 UTC (≈ 02:00 Lima, madrugada tranquila).
     if (new Date().getUTCHours() === 7){
       ctx.waitUntil(correrBackup(env).then(function(r){ return r ? avisarBackup(env, r) : null; }).catch(function(){}));
+      // Limpia las ventanas viejas del rate-limit del chatbot (deja las últimas ~2 días).
+      ctx.waitUntil(env.DB.prepare("DELETE FROM chatbot_uso WHERE ventana < ?1")
+        .bind(new Date(Date.now() - 2 * 86400000).toISOString().slice(0, 13)).run().catch(function(){}));
     }
   }
 };

@@ -1,0 +1,169 @@
+---
+// Burbuja flotante de chatbot con IA (reemplaza la de WhatsApp). Aparece en todas las páginas
+// vía Layout. Habla con /api/chatbot (Claude Haiku) y deriva a WhatsApp cuando hace falta.
+const WA = 'https://wa.me/51989077928';
+---
+<div class="cbot">
+  <button class="cbot-fab" id="cbotFab" aria-label="Abrir asistente" aria-expanded="false">
+    <svg viewBox="0 0 24 24" aria-hidden="true" class="ico-chat"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8z"/></svg>
+    <svg viewBox="0 0 24 24" aria-hidden="true" class="ico-close"><path d="M18 6 6 18M6 6l12 12"/></svg>
+  </button>
+
+  <div class="cbot-panel" id="cbotPanel" role="dialog" aria-label="Asistente de ProfesorMVT" hidden>
+    <div class="cbot-head">
+      <span class="cbot-title">Asistente de ProfesorMVT</span>
+      <button class="cbot-x" id="cbotClose" aria-label="Cerrar">&times;</button>
+    </div>
+    <div class="cbot-msgs" id="cbotMsgs" aria-live="polite"></div>
+    <form class="cbot-input" id="cbotForm">
+      <input id="cbotText" type="text" maxlength="600" placeholder="Escribe tu pregunta…" autocomplete="off" />
+      <button type="submit" class="cbot-send" aria-label="Enviar">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M22 2 11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg>
+      </button>
+    </form>
+    <a class="cbot-wa" href={WA} target="_blank" rel="noopener">Hablar con Andrés por WhatsApp</a>
+  </div>
+</div>
+
+<style>
+  .cbot-fab{
+    position: fixed; bottom: 24px; right: 24px; z-index: 200;
+    width: 58px; height: 58px; border-radius: 50%; border: none; cursor: pointer;
+    background: var(--color-ember); color: var(--color-bone);
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 6px 24px rgba(208,74,28,.4), 0 2px 8px rgba(0,0,0,.25);
+    transition: transform .18s ease, background .18s ease;
+  }
+  .cbot-fab:hover{ transform: translateY(-2px); }
+  .cbot-fab svg{ width: 26px; height: 26px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  .cbot-fab .ico-close{ display: none; }
+  .cbot.open .cbot-fab .ico-chat{ display: none; }
+  .cbot.open .cbot-fab .ico-close{ display: block; }
+
+  .cbot-panel{
+    position: fixed; bottom: 92px; right: 24px; z-index: 200;
+    width: 360px; max-width: calc(100vw - 32px); height: 480px; max-height: calc(100vh - 130px);
+    display: flex; flex-direction: column; overflow: hidden;
+    background: var(--color-ink-soft); border: 1px solid var(--color-line);
+    border-radius: 12px; box-shadow: 0 18px 50px rgba(0,0,0,.5);
+  }
+  .cbot-panel[hidden]{ display: none; }
+  .cbot-head{
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 16px; border-bottom: 1px solid var(--color-line); flex: 0 0 auto;
+    background: var(--color-ember);
+  }
+  .cbot-title{ font-family: 'JetBrains Mono', monospace; font-size: 12px; letter-spacing: .04em; text-transform: uppercase; font-weight: 700; color: var(--color-bone); }
+  .cbot-x{ background: none; border: none; color: var(--color-bone); font-size: 22px; line-height: 1; cursor: pointer; padding: 0 4px; }
+
+  .cbot-msgs{ flex: 1 1 auto; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 10px; }
+  .cbot-msg{ max-width: 85%; padding: 10px 13px; border-radius: 12px; font-size: 14px; line-height: 1.45; white-space: pre-wrap; word-wrap: break-word; }
+  .cbot-msg.bot{ align-self: flex-start; background: #232220; color: var(--color-bone); border-bottom-left-radius: 3px; }
+  .cbot-msg.user{ align-self: flex-end; background: var(--color-ember); color: var(--color-bone); border-bottom-right-radius: 3px; }
+  .cbot-msg a{ color: inherit; text-decoration: underline; }
+  .cbot-typing{ align-self: flex-start; color: var(--color-bone-mute); font-size: 13px; font-style: italic; }
+
+  .cbot-input{ display: flex; gap: 8px; padding: 12px; border-top: 1px solid var(--color-line); flex: 0 0 auto; }
+  .cbot-input input{
+    flex: 1 1 auto; background: var(--color-ink); border: 1px solid var(--color-line);
+    border-radius: 8px; padding: 10px 12px; color: var(--color-bone); font-size: 14px; font-family: inherit;
+  }
+  .cbot-input input:focus{ outline: none; border-color: var(--color-ember); }
+  .cbot-send{
+    flex: 0 0 auto; width: 42px; border: none; border-radius: 8px; cursor: pointer;
+    background: var(--color-ember); color: var(--color-bone); display: flex; align-items: center; justify-content: center;
+  }
+  .cbot-send svg{ width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  .cbot-send:disabled{ opacity: .5; cursor: default; }
+
+  .cbot-wa{ text-align: center; padding: 9px; font-family: 'JetBrains Mono', monospace; font-size: 11px; letter-spacing: .03em; text-transform: uppercase; color: var(--color-bone-mute); border-top: 1px solid var(--color-line); flex: 0 0 auto; }
+  .cbot-wa:hover{ color: var(--color-ember); }
+
+  @media (max-width: 520px){
+    .cbot-fab{ bottom: 16px; right: 16px; width: 52px; height: 52px; }
+    .cbot-panel{ bottom: 80px; right: 16px; }
+  }
+  @media (prefers-reduced-motion: reduce){ .cbot-fab{ transition: none; } }
+</style>
+
+<script>
+  (function(){
+    var WA = 'https://wa.me/51989077928';
+    var root = document.querySelector('.cbot');
+    var fab = document.getElementById('cbotFab');
+    var panel = document.getElementById('cbotPanel');
+    var closeBtn = document.getElementById('cbotClose');
+    var msgsEl = document.getElementById('cbotMsgs');
+    var form = document.getElementById('cbotForm');
+    var input = document.getElementById('cbotText');
+    if (!root || !fab || !panel || !form || !input || !msgsEl) return;
+
+    var historia = [];   // [{role, content}]
+    var ocupado = false;
+    var iniciado = false;
+
+    function escapar(s){ var d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+    function conLinks(s){
+      return escapar(s).replace(/(https?:\/\/[^\s]+)/g, function(u){
+        return '<a href="' + u + '" target="_blank" rel="noopener">' + u + '</a>';
+      });
+    }
+    function pintar(role, texto){
+      var el = document.createElement('div');
+      el.className = 'cbot-msg ' + (role === 'user' ? 'user' : 'bot');
+      el.innerHTML = conLinks(texto);
+      msgsEl.appendChild(el);
+      msgsEl.scrollTop = msgsEl.scrollHeight;
+    }
+    function typing(on){
+      var ex = document.getElementById('cbotTyping');
+      if (on && !ex){
+        var t = document.createElement('div'); t.id = 'cbotTyping'; t.className = 'cbot-typing'; t.textContent = 'Escribiendo…';
+        msgsEl.appendChild(t); msgsEl.scrollTop = msgsEl.scrollHeight;
+      } else if (!on && ex){ ex.remove(); }
+    }
+
+    function abrir(){
+      panel.hidden = false; root.classList.add('open'); fab.setAttribute('aria-expanded', 'true');
+      if (!iniciado){
+        iniciado = true;
+        pintar('bot', 'Hola! Soy el asistente de ProfesorMVT. Te puedo contar de las clases de canto, piano y composición, los planes y cómo reservar tu clase de prueba. Cuéntame, qué te gustaría lograr con tu música?');
+      }
+      setTimeout(function(){ input.focus(); }, 50);
+    }
+    function cerrar(){ panel.hidden = true; root.classList.remove('open'); fab.setAttribute('aria-expanded', 'false'); }
+
+    fab.addEventListener('click', function(){ panel.hidden ? abrir() : cerrar(); });
+    if (closeBtn) closeBtn.addEventListener('click', cerrar);
+    document.addEventListener('keydown', function(e){ if (e.key === 'Escape' && !panel.hidden) cerrar(); });
+
+    form.addEventListener('submit', function(e){
+      e.preventDefault();
+      if (ocupado) return;
+      var texto = (input.value || '').trim();
+      if (!texto) return;
+      input.value = '';
+      pintar('user', texto);
+      historia.push({ role: 'user', content: texto });
+      ocupado = true; typing(true);
+
+      fetch('/api/chatbot', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ mensajes: historia })
+      })
+      .then(function(r){ return r.json(); })
+      .then(function(d){
+        typing(false);
+        var reply = (d && d.reply) ? d.reply : ('Algo falló de mi lado. Escríbele directo a Andrés por WhatsApp: ' + WA);
+        pintar('bot', reply);
+        historia.push({ role: 'assistant', content: reply });
+      })
+      .catch(function(){
+        typing(false);
+        pintar('bot', 'No pude conectarme. Escríbele directo a Andrés por WhatsApp: ' + WA);
+      })
+      .then(function(){ ocupado = false; });
+    });
+  })();
+</script>
