@@ -29,6 +29,28 @@ const {
 const canonicalURL = new URL(Astro.url.pathname, Astro.site).href.replace(/\/$/, '') || Astro.site;
 // Imagen absoluta para Open Graph (las redes exigen URL completa)
 const socialImage = new URL(image, Astro.site).href;
+
+// Schema de negocio local: ayuda a Google a entender que es un servicio de Lima (refuerza el pack local).
+const localBusinessSchema = {
+  "@context":"https://schema.org","@type":["LocalBusiness","MusicSchool"],
+  "@id":"https://profesormvt.com/#business",
+  "name":"ProfesorMVT",
+  "alternateName":"Andrés Salamé-Córdova · Clases de canto, piano y composición",
+  "description":"Clases 1 a 1 de canto (método MVT), piano y composición para adultos en Lima (San Isidro) y online.",
+  "url":"https://profesormvt.com/",
+  "telephone":"+51989077928",
+  "image":"https://profesormvt.com/og-image.jpg",
+  "priceRange":"S/50 - S/600",
+  "areaServed":[{"@type":"City","name":"Lima"},{"@type":"AdministrativeArea","name":"Lima Metropolitana"}],
+  "address":{"@type":"PostalAddress","addressLocality":"San Isidro","addressRegion":"Lima","addressCountry":"PE"},
+  "geo":{"@type":"GeoCoordinates","latitude":-12.0976,"longitude":-77.0365},
+  "knowsAbout":["Clases de canto","Técnica vocal MVT","Clases de piano","Composición musical"],
+  "sameAs":[
+    "https://www.instagram.com/asalamecordova/",
+    "https://www.facebook.com/profile.php?id=61588980507102",
+    "https://www.tiktok.com/@profesormvt.com"
+  ]
+};
 ---
 
 <!DOCTYPE html>
@@ -75,6 +97,7 @@ const socialImage = new URL(image, Astro.site).href;
   <meta name="twitter:image" content={socialImage} />
 
   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <script type="application/ld+json" set:html={JSON.stringify(localBusinessSchema)} is:inline></script>
 </head>
 <body>
   <Nav activeNav={activeNav} />

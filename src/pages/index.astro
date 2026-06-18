@@ -11,7 +11,28 @@ const faqSchema = {
     {"@type":"Question","name":"Las clases online funcionan igual que las presenciales?","acceptedAnswer":{"@type":"Answer","text":"Sí. La estructura 1 a 1 se traslada completa al formato en vivo, con la misma atención y el mismo seguimiento."}},
     {"@type":"Question","name":"Qué incluye la clase de prueba?","acceptedAnswer":{"@type":"Answer","text":"Una sesión completa más un diagnóstico vocal en PDF con tu punto de partida y tu plan de trabajo."}},
     {"@type":"Question","name":"Puedo combinar canto, piano y composición?","acceptedAnswer":{"@type":"Answer","text":"Sí. Tu plan se arma a tu medida y puede mezclar las tres áreas según lo que quieras lograr."}},
-    {"@type":"Question","name":"Cómo pago si estoy fuera del Perú?","acceptedAnswer":{"@type":"Answer","text":"Por ahora con cripto. Dentro del Perú trabajamos con Yape, Plin y Sip."}}
+    {"@type":"Question","name":"Cómo pago, desde Perú o del extranjero?","acceptedAnswer":{"@type":"Answer","text":"Desde Perú pagas con Yape, Plin, Sip, tarjeta de crédito o débito, o transferencia. La tarjeta se procesa al instante y activa tu paquete solo. Desde el extranjero, con tarjeta o cripto."}}
+  ]
+};
+// Schema de negocio local: ayuda a Google a entender que es un servicio de Lima (refuerza el pack local).
+const localBusinessSchema = {
+  "@context":"https://schema.org","@type":["LocalBusiness","MusicSchool"],
+  "@id":"https://profesormvt.com/#business",
+  "name":"ProfesorMVT",
+  "alternateName":"Andrés Salamé-Córdova · Clases de canto, piano y composición",
+  "description":"Clases 1 a 1 de canto (método MVT), piano y composición para adultos en Lima (San Isidro) y online.",
+  "url":"https://profesormvt.com/",
+  "telephone":"+51989077928",
+  "image":"https://profesormvt.com/og-image.jpg",
+  "priceRange":"S/50 - S/600",
+  "areaServed":[{"@type":"City","name":"Lima"},{"@type":"AdministrativeArea","name":"Lima Metropolitana"}],
+  "address":{"@type":"PostalAddress","addressLocality":"San Isidro","addressRegion":"Lima","addressCountry":"PE"},
+  "geo":{"@type":"GeoCoordinates","latitude":-12.0976,"longitude":-77.0365},
+  "knowsAbout":["Clases de canto","Técnica vocal MVT","Clases de piano","Composición musical"],
+  "sameAs":[
+    "https://www.instagram.com/asalamecordova/",
+    "https://www.facebook.com/profile.php?id=61588980507102",
+    "https://www.tiktok.com/@profesormvt.com"
   ]
 };
 ---
@@ -48,6 +69,7 @@ const faqSchema = {
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Anton&family=Space+Grotesk:wght@400;500;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
 <script type="application/ld+json" set:html={JSON.stringify(faqSchema)} is:inline></script>
+<script type="application/ld+json" set:html={JSON.stringify(localBusinessSchema)} is:inline></script>
 <!-- Fonts -->
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -407,6 +429,9 @@ section{position:relative;z-index:1}
 .trial .tprice{font-family:"Anton",sans-serif;text-transform:uppercase;font-size:clamp(1.4rem,3vw,2.1rem);line-height:1}
 .trial .tprice .fire{color:var(--orange)}
 .trial p{color:#cfc7b6;margin-top:.5rem;font-size:.97rem}
+.trial .thint{color:#9b9384;font-size:.86rem;margin-top:.55rem}
+.trial .tcta{display:flex;flex-direction:column;gap:.7rem;flex-shrink:0}
+.trial .tcta .btn{justify-content:center;white-space:nowrap}
 .pay{margin-top:2rem;display:flex;flex-wrap:wrap;gap:1rem 1.6rem;align-items:center;border-top:1px solid var(--line);padding-top:1.6rem}
 .pay .pl{font-family:"JetBrains Mono",monospace;font-size:.7rem;letter-spacing:.18em;text-transform:uppercase;color:var(--gray)}
 .pay .pl b{color:var(--orange);font-weight:700;margin-right:.6em}
@@ -520,6 +545,7 @@ footer .fcol a:hover{color:var(--orange2)}
   <div class="nav-links">
     <a class="lnk" href="#metodo">Método</a>
     <a class="lnk" href="#precios">Precios</a>
+    <a class="lnk" href="/horarios/">Horarios</a>
     <a class="lnk" href="#faq">FAQ</a>
     <a class="btn btn-primary" href="/alumnos/">Crear mi cuenta</a>
   </div>
@@ -841,15 +867,19 @@ footer .fcol a:hover{color:var(--orange2)}
       <div class="tinfo">
         <div class="tprice">Clase de prueba · <span class="fire">S/50</span></div>
         <p>Incluye una sesión completa y un diagnóstico vocal en PDF con tu punto de partida y tu plan.</p>
+        <p class="thint">Mira los espacios libres antes de decidir. Sin escribir ni crear cuenta.</p>
       </div>
-      <a class="btn btn-primary" href="/alumnos/">Reservar clase de prueba <span class="arr">→</span></a>
+      <div class="tcta">
+        <a class="btn btn-primary" href="/alumnos/">Reservar clase de prueba <span class="arr">→</span></a>
+        <a class="btn btn-ghost" href="/horarios/">Ver horarios disponibles <span class="arr">→</span></a>
+      </div>
     </div>
 
     <div class="pay reveal-up">
-      <span class="pl"><b>Perú</b> Yape · Plin · Sip</span>
-      <span class="pchip">Yape</span><span class="pchip">Plin</span><span class="pchip">Sip</span>
-      <span class="pl" style="margin-left:.6rem"><b>Extranjero</b> Cripto</span>
-      <span class="pchip">Cripto</span>
+      <span class="pl"><b>Perú</b> Yape · Plin · Sip · Tarjeta</span>
+      <span class="pchip">Yape</span><span class="pchip">Plin</span><span class="pchip">Sip</span><span class="pchip">Tarjeta</span>
+      <span class="pl" style="margin-left:.6rem"><b>Extranjero</b> Tarjeta · Cripto</span>
+      <span class="pchip">Tarjeta</span><span class="pchip">Cripto</span>
     </div>
   </div>
 </section>
@@ -882,8 +912,8 @@ footer .fcol a:hover{color:var(--orange2)}
         <div class="faq-a"><p>Sí. Tu plan se arma a tu medida y puede mezclar las tres áreas según lo que quieras lograr.</p></div>
       </div>
       <div class="faq-item">
-        <button class="faq-q" aria-expanded="false"><span>Cómo pago si estoy fuera del Perú?</span><span class="ico" aria-hidden="true"></span></button>
-        <div class="faq-a"><p>Por ahora con cripto. Dentro del Perú trabajamos con Yape, Plin y Sip.</p></div>
+        <button class="faq-q" aria-expanded="false"><span>Cómo pago, desde Perú o del extranjero?</span><span class="ico" aria-hidden="true"></span></button>
+        <div class="faq-a"><p>Desde Perú pagas con Yape, Plin, Sip, tarjeta de crédito o débito, o transferencia. La tarjeta se procesa al instante y activa tu paquete solo. Desde el extranjero, con tarjeta o cripto.</p></div>
       </div>
     </div>
   </div>
@@ -919,13 +949,14 @@ footer .fcol a:hover{color:var(--orange2)}
     <div class="fcol">
       <h4>Empezar</h4>
       <a href="#precios">Paquetes</a>
+      <a href="/horarios/">Horarios disponibles</a>
       <a href="/alumnos/">Clase de prueba</a>
       <a href="/alumnos/" class="fire" style="color:var(--orange2)">Crear mi cuenta</a>
     </div>
   </div>
   <div class="wrap foot-bottom">
     <span class="mono">© 2026 ProfesorMVT · Método MVT</span>
-    <span class="mono">Yape · Plin · Sip · Cripto</span>
+    <span class="mono">Yape · Plin · Sip · Tarjeta · Cripto</span>
   </div>
 </footer>
 
