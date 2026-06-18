@@ -638,30 +638,18 @@ const CHATBOT_SYSTEM =
   "- Si la persona quiere agendar en firme, pide hablar con Andrés, tiene una duda que no puedes resolver, o algo se sale de las clases, dale su WhatsApp: " + CHATBOT_WA + "\n" +
   "Eres el asistente, no Andrés. Si te preguntan, eres su asistente virtual.";
 
-/* Llama a Claude Haiku con la historia del chat y devuelve la respuesta. Degrada con el WhatsApp. */
+/* Llama al chatbot con la historia y devuelve la respuesta. Degrada con el WhatsApp.
+   Usa Workers AI (Llama) de Cloudflare: gratis para el volumen de MVT, sin API key ni saldo.
+   El día que haya presupuesto, se cambia a Claude Haiku para mejor español/guardrails. */
 async function responderChatbot(env, mensajes){
   const fallback = "Para eso lo mejor es que hables directo con Andrés. Escríbele por WhatsApp y lo cuadran: " + CHATBOT_WA;
-  if (!env.ANTHROPIC_API_KEY) return fallback;
+  if (!env.AI) return fallback;
   try {
-    const r = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "x-api-key": env.ANTHROPIC_API_KEY,
-        "anthropic-version": "2023-06-01",
-        "content-type": "application/json"
-      },
-      body: JSON.stringify({
-        model: "claude-haiku-4-5",
-        max_tokens: 400,
-        system: CHATBOT_SYSTEM,
-        messages: mensajes
-      })
+    const resp = await env.AI.run("@cf/meta/llama-3.3-70b-instruct-fp8-fast", {
+      messages: [{ role: "system", content: CHATBOT_SYSTEM }].concat(mensajes),
+      max_tokens: 400
     });
-    if (!r.ok) return fallback;
-    const data = await r.json();
-    const texto = (data && Array.isArray(data.content) ? data.content : [])
-      .filter(function(b){ return b && b.type === "text"; })
-      .map(function(b){ return b.text; }).join("").trim();
+    const texto = (resp && (resp.response || "")).trim();
     return texto || fallback;
   } catch (e) { return fallback; }
 }

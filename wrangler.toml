@@ -25,6 +25,10 @@ database_id = "e0c9c96a-5f17-4ae1-b2c8-b5e692fe0849"
 binding = "RECURSOS_R2"
 bucket_name = "profesormvt-recursos"
 
+# Workers AI (Llama) para el chatbot. Gratis para el volumen de MVT, sin API key ni saldo.
+[ai]
+binding = "AI"
+
 [triggers]
 # Cada hora: alimenta los recordatorios de clase (T-24h y T-2h).
 # Las renovaciones siguen corriendo 1 vez/día (el Worker filtra por la hora 14 UTC).
