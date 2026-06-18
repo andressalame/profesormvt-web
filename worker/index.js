@@ -502,10 +502,97 @@ async function procesarRenovaciones(env){
     const ok = await correoRenovacion(env, a, a._email, c);
     if (ok){
       await env.DB.prepare("UPDATE alumnos SET recordatorio_ciclo = ?1 WHERE id = ?2").bind(ciclo, a.id).run();
+      // Fecha del aviso, para que el win-back (v16) sepa cuándo esperar. Defensivo: si la columna
+      // aún no existe (migración v16 sin aplicar), no rompe el recordatorio que ya funciona.
+      try { await env.DB.prepare("UPDATE alumnos SET recordatorio_fecha = ?1 WHERE id = ?2").bind(new Date().toISOString().slice(0,10), a.id).run(); } catch (e) {}
       enviados.push({ nombre: a.nombre, email: a._email, restantes: c.restantes });
     } else { fallos++; }
   }
   if (enviados.length){ try { await avisarRenovacionesResumen(env, enviados); } catch (e) {} }
+  await reportarSaludCorreo(env, fallos, fallos + enviados.length);
+  return enviados;
+}
+
+/* ============ WIN-BACK DE RENOVACIÓN ============
+   El alumno que recibió el aviso de renovación y NO renovó hoy recibe... nada, y se cae en
+   silencio (churn evitable). Este motor lo reactiva UNA vez: WINBACK_DIA días después del aviso,
+   si sigue "Renovar pronto" (no renovó), le manda un correo cálido y le deja a Andrés el WhatsApp
+   listo para el empujón personal. Arranca APAGADO (config.winback_activo) y dedupea por ciclo
+   (winback_ciclo). Reusa la misma lógica del CRM (compute/estadoAlumno) y Resend + AVISOS. */
+const WINBACK_DIA = 4;   // días tras el aviso de renovación antes de reactivar
+
+/* Correo de win-back al alumno que no renovó. Tono positivo y empoderador, su cupo sigue ahí. */
+async function correoWinBack(env, alumno, to){
+  if (!to) return false;
+  const nombre = ((alumno.nombre || "").trim().split(/\s+/)[0]) || "";
+  const portal = "https://profesormvt.com/alumnos/";
+  const html =
+    '<div style="font-family:Arial,Helvetica,sans-serif;max-width:480px;margin:0 auto;color:#1a1a1a;font-size:15px;line-height:1.6">' +
+      '<p>Hola' + (nombre ? ' ' + nombre : '') + '! 🎸</p>' +
+      '<p>Terminaste tu paquete y aún no renuevas, así que te escribo por una sola razón: tu avance no tiene que parar justo cuando se empieza a notar.</p>' +
+      '<p>Tu cupo sigue aquí. Cuando quieras, retomamos donde lo dejaste y seguimos sumando.</p>' +
+      '<p style="text-align:center;margin:26px 0"><a href="' + portal + '" style="background:#e8501f;color:#ffffff;text-decoration:none;font-weight:bold;padding:14px 26px;border-radius:6px;display:inline-block">Renovar y seguir</a></p>' +
+      '<p>Si prefieres, respóndeme este correo y armamos el plan que mejor te calce.</p>' +
+      '<p>Un abrazo,<br><b>Andrés</b><br>ProfesorMVT</p>' +
+    '</div>';
+  const text = 'Hola' + (nombre ? ' ' + nombre : '') + '!\n\nTerminaste tu paquete y aún no renuevas. Tu avance no tiene que parar justo cuando se empieza a notar: tu cupo sigue aquí y cuando quieras retomamos donde lo dejaste.\n\nRenueva aquí: ' + portal + '\n\nSi prefieres, respóndeme y armamos el plan que mejor te calce.\n\nUn abrazo,\nAndrés - ProfesorMVT';
+  return enviarCorreo(env, { to: to, subject: "Tu cupo sigue aquí 🎸", html: html, text: text });
+}
+
+/* Borrador de WhatsApp en la voz de Andrés (corto, cálido, directo) para el empujón personal. */
+function borradorWhatsAppWinBack(alumno){
+  const nombre = ((alumno.nombre || "").trim().split(/\s+/)[0]) || "";
+  return "Hola" + (nombre ? " " + nombre : "") + "! Vi que se te acabaron las clases :) Le seguimos? Te guardo el cupo, cuando quieras retomamos.";
+}
+
+/* Resumen a Andrés de a quién se reactivó, con el WhatsApp ya redactado para copiar y pegar (via AVISOS, gratis). */
+async function avisarWinBackResumen(env, enviados){
+  if (!env.AVISOS || !enviados.length) return;
+  const lista = enviados.map(function(e){
+    const wa = e.whatsapp ? " · " + e.whatsapp : "";
+    return "- " + e.nombre + " (" + e.email + ")" + wa + "\n  WhatsApp listo: " + e.borrador;
+  }).join("\n\n");
+  const msg = createMimeMessage();
+  msg.setSender({ name: "Avisos ProfesorMVT", addr: "avisos@profesormvt.com" });
+  msg.setRecipient("andressalame@gmail.com");
+  msg.setSubject("Win-back: " + enviados.length + " alumno(s) reactivados hoy");
+  msg.addMessage({ contentType: "text/plain", data: "El sistema reactivó (por correo) a estos alumnos que recibieron el aviso de renovación hace unos días y aún no renuevan. Para los que quieras tocar a mano, el WhatsApp ya está redactado abajo, listo para copiar:\n\n" + lista + "\n" });
+  await env.AVISOS.send(new EmailMessage("avisos@profesormvt.com", "andressalame@gmail.com", msg.asRaw()));
+}
+
+/* Cron de win-back: alumnos que recibieron el aviso de renovación este ciclo, ya pasó WINBACK_DIA y
+   siguen "Renovar pronto" (no renovaron). Les manda el correo de reactivación UNA vez por ciclo.
+   Solo a alumnos con cuenta web (tienen correo). Arranca APAGADO hasta winback_activo = '1'. */
+async function procesarWinBack(env){
+  const cfg = await loadConfig(env);
+  if (cfg.winback_activo !== "1") return [];   // interruptor de seguridad: APAGADO por defecto
+  const precios = await loadPrecios(env);
+  const { results: alumnos } = await env.DB.prepare(
+    "SELECT a.*, c.email AS _email, c.whatsapp AS _wa FROM alumnos a JOIN cuentas c ON c.alumno_id = a.id " +
+    "WHERE a.pago = 'Pagado' AND c.email IS NOT NULL AND c.email != '' " +
+    "AND COALESCE(a.recordatorio_fecha,'') != '' " +
+    "AND COALESCE(a.recordatorio_ciclo,0) >= COALESCE(a.ciclo,1) " +
+    "AND COALESCE(a.winback_ciclo,0) < COALESCE(a.ciclo,1)"
+  ).all();
+  const ahora = Date.now();
+  const enviados = []; let fallos = 0;
+  for (const a of (alumnos || [])){
+    const ciclo = Number(a.ciclo) || 1;
+    const dias = Math.floor((ahora - Date.parse(a.recordatorio_fecha + "T00:00:00Z")) / 86400000);
+    if (dias < WINBACK_DIA) continue;
+    const { results: regs } = await env.DB.prepare(
+      "SELECT estado FROM registro WHERE alumno_id = ?1 AND COALESCE(ciclo,1) = ?2"
+    ).bind(a.id, ciclo).all();
+    const rUsadas = await reservasUsadasCount(env, a.id, ciclo);
+    const c = compute(a, regs || [], precios, rUsadas);
+    if (estadoAlumno(c) !== "Renovar pronto") continue;   // ya renovó o cambió → no molestar
+    const ok = await correoWinBack(env, a, a._email);
+    if (ok){
+      await env.DB.prepare("UPDATE alumnos SET winback_ciclo = ?1 WHERE id = ?2").bind(ciclo, a.id).run();
+      enviados.push({ nombre: a.nombre, email: a._email, whatsapp: (a._wa || a.whatsapp || ""), borrador: borradorWhatsAppWinBack(a) });
+    } else { fallos++; }
+  }
+  if (enviados.length){ try { await avisarWinBackResumen(env, enviados); } catch (e) {} }
   await reportarSaludCorreo(env, fallos, fallos + enviados.length);
   return enviados;
 }
@@ -2327,6 +2414,8 @@ export default {
     // Renovaciones: una sola vez al día, en el disparo de las 14:00 UTC (≈ 09:00 Lima).
     if (new Date().getUTCHours() === 14){
       ctx.waitUntil(procesarRenovaciones(env).catch(function(){}));
+      // Win-back: reactiva al que recibió el aviso y no renovó. Apagado por defecto (config.winback_activo).
+      ctx.waitUntil(procesarWinBack(env).catch(function(){}));
       // Nurture de leads: mismo disparo diario. Apagado por defecto (config.nurture_activo).
       ctx.waitUntil(procesarNurtureLeads(env).catch(function(){}));
     }
