@@ -287,6 +287,20 @@
   .onb-guide ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:7px}
   .onb-guide li{font-size:13.5px;color:var(--muted);line-height:1.45}
   .onb-guide b{color:var(--cream);font-weight:700}
+
+  /* ===== Tour de onboarding (coachmarks, primera vez) ===== */
+  .tour-mask{position:fixed;inset:0;z-index:1000;}
+  .tour-hole{position:absolute;left:0;top:0;width:0;height:0;border-radius:6px;box-shadow:0 0 0 9999px rgba(8,6,5,.74);transition:left .25s ease,top .25s ease,width .25s ease,height .25s ease;pointer-events:none;}
+  .tour-pop{position:absolute;z-index:1001;max-width:330px;width:min(330px,90vw);background:var(--panel);border:1px solid var(--accent);border-radius:5px;padding:18px 20px;box-shadow:0 18px 50px rgba(0,0,0,.5);}
+  .tour-pop .tour-step{font-family:var(--mono);font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);font-weight:700;}
+  .tour-pop h4{font-family:var(--display);font-weight:700;font-size:20px;letter-spacing:.01em;margin:6px 0 8px;color:var(--cream);}
+  .tour-pop p{font-size:14px;line-height:1.5;color:#cfc7b8;margin:0 0 16px;}
+  .tour-actions{display:flex;justify-content:space-between;align-items:center;gap:10px;}
+  .tour-skip{background:none;border:0;color:var(--muted);font-family:var(--mono);font-size:11px;letter-spacing:.06em;text-transform:uppercase;padding:6px 4px;cursor:pointer;}
+  .tour-skip:hover{color:var(--cream);}
+  .tour-next{font-family:var(--mono);text-transform:uppercase;letter-spacing:.08em;font-size:12px;font-weight:700;padding:10px 18px;border-radius:3px;border:1px solid var(--accent);background:var(--accent);color:var(--bg);cursor:pointer;}
+  .tour-next:hover{filter:brightness(1.08);}
+  @media (prefers-reduced-motion: reduce){ .tour-hole{transition:none;} }
 </style>
 </head>
 <body>
@@ -613,6 +627,10 @@
   </div>
 </div>
 
+<div id="tourMask" class="tour-mask hidden" aria-hidden="true">
+  <div id="tourHole" class="tour-hole"></div>
+  <div id="tourPop" class="tour-pop" role="dialog" aria-modal="true" aria-live="polite"></div>
+</div>
 <div class="toast" id="toast"></div>
 
 <script>
@@ -1460,6 +1478,18 @@ function cargarMe(){
     // Nudge a reservar al cargar el portal (cubre el caso Yape ya confirmado por el profe).
     // Si venimos de retorno de tarjeta, manejarRetornoPago() ya se encarga del empuje.
     if(!vinoDeRetornoTarjeta) empujarAReservar();
+    // Onboarding: boton "ver el tour" en Mi cuenta + disparo automatico la primera vez.
+    try {
+      var vc = $("v-cuenta");
+      if(vc && !$("btnTourRepetir")){
+        var bt = document.createElement("button");
+        bt.id="btnTourRepetir"; bt.className="btn ghost sm"; bt.type="button";
+        bt.style.marginTop="16px"; bt.textContent="Ver el tour del portal";
+        bt.onclick=function(){ startTour(); };
+        vc.appendChild(bt);
+      }
+    } catch(e){}
+    if(!tourVisto()) setTimeout(function(){ try{ startTour(); }catch(e){} }, 800);
   }).catch(function(e){
     setTok(null); ME=null;
     setAuthTab(REF_URL ? "reg" : "login");
@@ -1467,6 +1497,96 @@ function cargarMe(){
     if(e.status!==401) $("loginErr").textContent = "No se pudo conectar. Intenta de nuevo.";
   });
 }
+
+/* ---------- TOUR DE ONBOARDING (coachmarks, primera vez) ----------
+   Componente propio en vanilla JS, 0 dependencias. Ancla a los items del nav (siempre
+   presentes en desktop y movil). Skippeable, recuerda por cuenta (localStorage por email),
+   y si un ancla no existe auto-salta ese paso. Todo defensivo: nunca debe romper el portal. */
+var TOUR_STEPS = [
+  { sel:"#iHola", vista:"inicio", titulo:"Este es tu portal",
+    texto:"Acá manejas todo: tus clases, tu material y tus pagos, en un solo lugar. Te muestro lo importante en 30 segundos. Si prefieres explorar solo, dale a Saltar." },
+  { sel:'a[data-v="inicio"]', vista:"inicio", titulo:"Inicio",
+    texto:"Tu resumen de un vistazo: el plan que tienes, cuántas clases te quedan y tus próximos horarios. Cuando actives un paquete, todo aparece aquí." },
+  { sel:'a[data-v="comprar"]', vista:"comprar", titulo:"Activa tu paquete",
+    texto:"Eliges canto, piano o composición y pagas con Yape, Plin o tarjeta. Se activa el mismo día, casi siempre en minutos. Sin paquete no hay clases que reservar, así que parte por acá." },
+  { sel:'a[data-v="agenda"]', vista:"agenda", titulo:"Reserva tus clases",
+    texto:"Con tu paquete activo eliges horarios aquí. Una clase suelta cuando quieras, o un horario fijo semanal para no pensarlo más. También cancelas o reprogramas desde acá." },
+  { sel:'a[data-v="recursos"]', vista:"recursos", titulo:"Tu material",
+    texto:"PDFs, audios y ejercicios que subo para ti. Se desbloquean apenas tu paquete esté activo. Tu tarea de la semana vive en Mis clases." },
+  { sel:".chat-head", selAlt:"#chatFab", vista:"inicio", titulo:"Habla conmigo",
+    texto:"Este es el chat directo. Tienes el canal grupal con la comunidad y un canal privado conmigo para tus dudas. Te respondo por acá." },
+  { sel:'a[data-v="referidos"]', vista:"referidos", titulo:"Trae a un amigo",
+    texto:"Tu código es tuyo. Cuando alguien compra su primer paquete con él, ganas S/50 de descuento para tu próxima compra. Listo, ya conoces tu portal. A darle." }
+];
+var tourIdx = 0;
+
+function tourEmail(){ try{ return (ME && ME.cuenta && ME.cuenta.email) || ""; }catch(e){ return ""; } }
+function tourVisto(){ try{ return localStorage.getItem("pmvt_onb_"+tourEmail())==="1"; }catch(e){ return true; } }
+function marcarTourVisto(){ try{ localStorage.setItem("pmvt_onb_"+tourEmail(),"1"); }catch(e){} }
+
+function tourTarget(step){
+  var el = document.querySelector(step.sel);
+  if((!el || el.getBoundingClientRect().width<2) && step.selAlt) el = document.querySelector(step.selAlt);
+  if(el && el.getBoundingClientRect().width<2) el = null;
+  return el;
+}
+function tourKey(e){ if(e.key==="Escape") cerrarTour(true); }
+function cerrarTour(marcar){
+  if(marcar) marcarTourVisto();
+  var m=$("tourMask"); if(m) m.classList.add("hidden");
+  window.removeEventListener("resize", reposicionarTour);
+  document.removeEventListener("keydown", tourKey);
+}
+function reposicionarTour(){
+  var step = TOUR_STEPS[tourIdx]; if(!step) return;
+  var hole=$("tourHole"), pop=$("tourPop"); if(!hole||!pop) return;
+  var el = tourTarget(step);
+  if(!el){ hole.style.width="0"; hole.style.height="0";
+    pop.style.transform="translate(-50%,-50%)"; pop.style.left="50%"; pop.style.top="50%"; return; }
+  pop.style.transform="none";
+  var r = el.getBoundingClientRect(), pad=6;
+  hole.style.left=(r.left-pad)+"px"; hole.style.top=(r.top-pad)+"px";
+  hole.style.width=(r.width+pad*2)+"px"; hole.style.height=(r.height+pad*2)+"px";
+  var pr = pop.getBoundingClientRect(), vw=window.innerWidth, vh=window.innerHeight, top, left;
+  if(r.bottom + 14 + pr.height < vh) top = r.bottom + 12;
+  else if(r.top - 14 - pr.height > 0) top = r.top - 12 - pr.height;
+  else top = Math.max(12, vh - pr.height - 80);   // deja margen para la tab bar inferior en movil
+  left = Math.min(Math.max(12, r.left + r.width/2 - pr.width/2), vw - pr.width - 12);
+  pop.style.top=top+"px"; pop.style.left=left+"px";
+}
+function pintarPasoTour(){
+  var step = TOUR_STEPS[tourIdx]; if(!step){ cerrarTour(true); return; }
+  var ultimo = tourIdx === TOUR_STEPS.length-1, pop=$("tourPop"); if(!pop) return;
+  pop.innerHTML =
+    '<div class="tour-step">Paso '+(tourIdx+1)+' de '+TOUR_STEPS.length+'</div>'+
+    '<h4></h4><p></p>'+
+    '<div class="tour-actions"><button class="tour-skip" type="button">Saltar</button>'+
+    '<button class="tour-next" type="button">'+(ultimo?"Empezar":"Siguiente")+'</button></div>';
+  pop.querySelector("h4").textContent = step.titulo;
+  pop.querySelector("p").textContent = step.texto;
+  pop.querySelector(".tour-skip").onclick = function(){ cerrarTour(true); };
+  pop.querySelector(".tour-next").onclick = function(){ if(ultimo){ cerrarTour(true); } else { tourIdx++; irAPasoTour(); } };
+  reposicionarTour();
+}
+function irAPasoTour(){
+  var step = TOUR_STEPS[tourIdx]; if(!step){ cerrarTour(true); return; }
+  if(step.vista && vistaActual()!==step.vista){
+    location.hash = "#"+step.vista;
+    requestAnimationFrame(function(){ requestAnimationFrame(pintarPasoTour); });
+  } else { pintarPasoTour(); }
+}
+function startTour(){
+  try{
+    if(!ME) return;
+    var m=$("tourMask"); if(!m) return;
+    tourIdx = 0;
+    m.classList.remove("hidden");
+    window.addEventListener("resize", reposicionarTour);
+    document.addEventListener("keydown", tourKey);
+    irAPasoTour();
+  }catch(e){}
+}
+window.verTour = startTour;
 
 /* ---------- INIT ---------- */
 (function init(){
