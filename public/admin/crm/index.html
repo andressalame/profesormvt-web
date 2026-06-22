@@ -140,38 +140,131 @@
   .btn:not(.ghost):hover{box-shadow:3px 3px 0 var(--cream)}
   body::after{content:"";position:fixed;right:-44px;bottom:-44px;width:240px;height:240px;z-index:0;pointer-events:none;opacity:.06;background:no-repeat center/contain url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100' fill='none' stroke='%23e8501f' stroke-width='4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M50 6 L59 41 L94 50 L59 59 L50 94 L41 59 L6 50 L41 41 Z'/%3E%3C/svg%3E")}
   .punkbg{position:fixed;inset:0;pointer-events:none;z-index:9998;opacity:.07;background:url(/punk-bg.svg) center center/cover no-repeat}
+
+  /* ===== Layout con menú lateral (v3) ===== */
+  .app{display:flex;min-height:100vh;align-items:stretch;}
+  .sidebar{flex:0 0 240px;width:240px;background:var(--panel);border-right:1px solid var(--line);display:flex;flex-direction:column;position:sticky;top:0;height:100vh;overflow-y:auto;z-index:40;}
+  .brand{display:flex;align-items:center;gap:11px;padding:18px 16px 14px;border-bottom:1px solid var(--line);}
+  .brand-foto{width:44px;height:44px;border-radius:50%;object-fit:cover;border:2px solid var(--accent);background:var(--panel2);flex:0 0 auto;}
+  .brand-foto.ph{display:flex;align-items:center;justify-content:center;font-family:var(--display);color:var(--accent);font-size:20px;}
+  .brand-tx{min-width:0;}
+  .brand-name{font-family:var(--display);font-size:18px;line-height:1.04;color:var(--cream);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .brand-sub{font-family:var(--mono);font-size:9px;text-transform:uppercase;letter-spacing:.16em;color:var(--accent);margin-top:3px;}
+  .nav{flex:1;padding:12px 10px 6px;}
+  .navgroup{margin-bottom:13px;}
+  .navgroup-h{font-family:var(--mono);text-transform:uppercase;letter-spacing:.13em;font-size:9px;color:var(--muted);font-weight:700;padding:5px 11px 5px;}
+  .navgroup-h::before{content:"";}
+  .nav .tab{display:flex;align-items:center;gap:9px;width:100%;text-align:left;justify-content:flex-start;border:1px solid transparent;background:transparent;color:var(--muted);padding:8px 11px;border-radius:3px;text-transform:none;letter-spacing:.01em;font-family:var(--body);font-size:14px;font-weight:500;margin:1px 0;transition:background .12s,color .12s;}
+  .nav .tab:hover{color:var(--cream);background:var(--panel2);border-color:transparent;box-shadow:none;}
+  .nav .tab.active{background:var(--accent);color:var(--bg);border-color:var(--accent);font-weight:700;box-shadow:3px 3px 0 var(--cream);transform:none;}
+  .nav .tab .dot{position:static;margin-left:auto;}
+  .sb-tools{padding:11px 12px 16px;border-top:1px solid var(--line);display:flex;flex-direction:column;gap:7px;}
+  .sb-tools .btn{width:100%;text-align:center;}
+  .sb-tools .syncdot{text-align:center;padding:2px 0 4px;}
+  .sb-tools details{margin:0;}
+  .sb-tools summary{list-style:none;cursor:pointer;font-family:var(--mono);font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);padding:5px 2px;}
+  .sb-tools summary::-webkit-details-marker{display:none;}
+  .sb-tools summary:hover{color:var(--cream);}
+  .sb-tools details[open] summary{color:var(--accent);margin-bottom:7px;}
+  .sb-toolsbox{display:flex;flex-direction:column;gap:7px;}
+  .main{flex:1;min-width:0;display:flex;flex-direction:column;}
+  .topbar{display:none;align-items:center;gap:12px;padding:11px 15px;border-bottom:1px solid var(--line);background:var(--panel);position:sticky;top:0;z-index:30;}
+  .topbar .eyebrow{margin:0;}
+  .hamb{background:transparent;border:1px solid var(--line);color:var(--cream);font-size:17px;line-height:1;padding:6px 12px;border-radius:3px;cursor:pointer;}
+  .content{padding:24px 28px 90px;max-width:1180px;width:100%;}
+  .pagehead{margin:0 0 18px;}
+  .pagehead .eyebrow{margin-bottom:2px;}
+  .pagehead h1{font-size:clamp(26px,4vw,38px);margin:.1em 0 .12em;}
+  .pagehead .rule{margin:12px 0 0;}
+  .scrim{position:fixed;inset:0;background:rgba(0,0,0,.62);z-index:35;display:none;}
+  .scrim.show{display:block;}
+  /* filtros de la pestaña Clases */
+  .filtros{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:14px;}
+  .filtros input,.filtros select{background:var(--bg);border:1px solid var(--line);color:var(--cream);font-family:var(--body);font-size:13.5px;padding:8px 11px;border-radius:2px;}
+  .filtros input{min-width:220px;flex:1;max-width:320px;}
+  .filtros input:focus,.filtros select:focus{outline:2px solid var(--accent);outline-offset:1px;border-color:var(--accent);}
+  .filtros .clr{font-family:var(--mono);font-size:11px;color:var(--muted);background:transparent;border:1px solid var(--line);padding:7px 10px;border-radius:2px;cursor:pointer;}
+  .filtros .clr:hover{color:var(--accent);border-color:var(--accent);}
+  /* adjuntos clicables en la tabla de clases */
+  .adj{display:inline-flex;align-items:center;gap:6px;background:var(--panel2);border:1px solid var(--line);border-radius:3px;padding:3px 7px;margin:2px 4px 2px 0;font-size:11.5px;max-width:230px;}
+  .adj a{color:var(--cream);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .adj a:hover{color:var(--accent);}
+  .adj .tg{font-family:var(--mono);font-size:8.5px;font-weight:700;color:var(--accent);letter-spacing:.04em;}
+  .adj .x{background:none;border:0;color:var(--red);font-weight:700;cursor:pointer;padding:0 1px;line-height:1;}
+  .adj audio{height:26px;width:150px;max-width:150px;}
+  td.plan{white-space:normal;color:var(--cream);font-size:13px;min-width:150px;border-left:2px solid rgba(232,80,31,.4);}
+  @media (max-width:880px){
+    .sidebar{position:fixed;left:0;top:0;transform:translateX(-100%);transition:transform .22s ease;box-shadow:6px 0 32px rgba(0,0,0,.55);}
+    .sidebar.open{transform:translateX(0);}
+    .topbar{display:flex;}
+    .content{padding:18px 15px 90px;}
+    .pagehead{display:none;}
+  }
 </style>
 </head>
 <body>
 <div class="punkbg" aria-hidden="true"></div>
-<div class="wrap">
-  <div class="eyebrow">// PROFESORMVT — CRM</div>
-  <h1>Control de <em>alumnos</em></h1>
-  <div class="sub">Clases · Pagos · Cuentas · Renovaciones</div>
-  <hr class="rule" />
-
-  <div class="bar">
-    <div class="tabs">
-      <button class="tab active" data-tab="resumen">Resumen</button>
-      <button class="tab" data-tab="alumnos">Alumnos</button>
-      <button class="tab" data-tab="registro">Registro</button>
-      <button class="tab" data-tab="agenda">Agenda</button>
-      <button class="tab" data-tab="pagos">Pagos<span class="dot hidden" id="dotPagos">0</span></button>
-      <button class="tab" data-tab="cuentas">Cuentas</button>
-      <button class="tab" data-tab="leads">Leads</button>
-      <button class="tab" data-tab="recursos">Recursos</button>
-      <button class="tab" data-tab="ajustes">Ajustes</button>
-      <button class="tab" data-tab="chat">Chat</button>
+<div class="scrim" id="scrim"></div>
+<div class="app">
+  <aside class="sidebar" id="sidebar">
+    <div class="brand">
+      <div class="brand-foto ph" id="navFoto">M</div>
+      <div class="brand-tx">
+        <div class="brand-name" id="navNombre">ProfesorMVT</div>
+        <div class="brand-sub">// CRM</div>
+      </div>
     </div>
-    <div class="tools">
+    <nav class="nav">
+      <div class="navgroup">
+        <div class="navgroup-h">Alumnos</div>
+        <button class="tab" data-tab="alumnos">Alumnos</button>
+        <button class="tab" data-tab="registro">Clases</button>
+        <button class="tab" data-tab="agenda">Agenda</button>
+        <button class="tab" data-tab="chat">Chat</button>
+      </div>
+      <div class="navgroup">
+        <div class="navgroup-h">Dinero &amp; leads</div>
+        <button class="tab" data-tab="pagos">Pagos<span class="dot hidden" id="dotPagos">0</span></button>
+        <button class="tab" data-tab="cuentas">Cuentas</button>
+        <button class="tab" data-tab="leads">Leads</button>
+      </div>
+      <div class="navgroup">
+        <div class="navgroup-h">Material</div>
+        <button class="tab" data-tab="recursos">Recursos</button>
+      </div>
+      <div class="navgroup">
+        <div class="navgroup-h">Mi cuenta</div>
+        <button class="tab active" data-tab="resumen">Resumen</button>
+        <button class="tab" data-tab="perfil">Perfil</button>
+        <button class="tab" data-tab="ajustes">Ajustes</button>
+      </div>
+    </nav>
+    <div class="sb-tools">
       <span class="syncdot" id="syncdot">—</span>
-      <button class="btn ghost sm" id="btnExport">Exportar</button>
-      <button class="btn ghost sm" id="btnBackupSrv" title="Corre el respaldo del servidor (R2) y lo descarga">Backup servidor</button>
-      <button class="btn ghost sm" id="btnCsv">CSV alumnos</button>
-      <button class="btn ghost sm" id="btnCsvEmails">CSV emails</button>
-      <button class="btn ghost sm" id="btnLogoutAdmin" title="Cambiar clave guardada en este navegador">Clave</button>
+      <details>
+        <summary>Datos y respaldo</summary>
+        <div class="sb-toolsbox">
+          <button class="btn ghost sm" id="btnExport">Exportar JSON</button>
+          <button class="btn ghost sm" id="btnBackupSrv" title="Corre el respaldo del servidor (R2) y lo descarga">Backup servidor</button>
+          <button class="btn ghost sm" id="btnCsv">CSV alumnos</button>
+          <button class="btn ghost sm" id="btnCsvEmails">CSV emails</button>
+        </div>
+      </details>
+      <button class="btn ghost sm" id="btnLogoutAdmin" title="Cambiar clave guardada en este navegador">Cambiar clave</button>
     </div>
-  </div>
+  </aside>
+
+  <main class="main">
+    <header class="topbar">
+      <button class="hamb" id="btnMenu" aria-label="Menú">&#9776;</button>
+      <div class="eyebrow" id="topTitle">// Resumen</div>
+    </header>
+    <div class="content">
+      <div class="pagehead">
+        <div class="eyebrow">// PROFESORMVT — CRM</div>
+        <h1 id="pageTitle">Resumen</h1>
+        <hr class="rule" />
+      </div>
 
   <section class="panel active" id="panel-resumen">
     <div class="group"><h2>// Hoy</h2><div class="grid cards" id="resHoy"></div></div>
@@ -195,12 +288,24 @@
   </section>
 
   <section class="panel" id="panel-registro">
-    <div style="margin-bottom:16px;"><button class="btn" id="btnNuevoRegistro">+ Registrar clase</button></div>
+    <div style="margin-bottom:14px;"><button class="btn" id="btnNuevoRegistro">+ Registrar clase</button></div>
     <input type="file" id="fileAudio" accept="audio/*,application/pdf,image/png,image/jpeg" style="display:none" />
+    <div class="filtros">
+      <input id="regBuscar" type="search" placeholder="Buscar: qué se trabajó, tarea, plan…" autocomplete="off" />
+      <select id="regFiltroAlumno"><option value="">Todos los alumnos</option></select>
+      <select id="regFiltroEstado">
+        <option value="">Todo estado</option>
+        <option value="Asistió">Asistió</option>
+        <option value="Reprogramó">Reprogramó</option>
+        <option value="Falta">Falta</option>
+      </select>
+      <button class="clr" id="regLimpiar">Limpiar</button>
+      <span class="mini" id="regContador" style="margin-left:auto;"></span>
+    </div>
     <div class="tablewrap">
       <table id="tablaRegistro">
         <thead><tr>
-          <th>Fecha</th><th>Alumno</th><th>Curso</th><th>Estado</th><th>¿Qué se trabajó?</th><th>Tarea</th><th></th>
+          <th>Fecha</th><th>Alumno</th><th>Curso</th><th>Estado</th><th>¿Qué se trabajó?</th><th>Tarea</th><th>Próxima clase</th><th></th>
         </tr></thead>
         <tbody></tbody>
       </table>
@@ -292,6 +397,27 @@
     </div>
   </section>
 
+  <section class="panel" id="panel-perfil">
+    <div class="group">
+      <h2>// Tu perfil</h2>
+      <p class="hint">Tu nombre y foto aparecen en el menú y, más adelante, en el portal de tus alumnos. Es la cara de tu academia.</p>
+      <div style="display:flex;align-items:center;gap:18px;flex-wrap:wrap;margin-bottom:18px;">
+        <img id="perfilFotoPrev" alt="Foto de perfil" style="width:88px;height:88px;border-radius:50%;object-fit:cover;border:2px solid var(--accent);background:var(--panel2);display:none;" />
+        <div id="perfilFotoPh" class="brand-foto ph" style="width:88px;height:88px;font-size:38px;">M</div>
+        <div>
+          <input type="file" id="perfilFotoInput" accept="image/png,image/jpeg" style="display:none" />
+          <button class="btn ghost sm" id="btnPerfilFoto">Subir / cambiar foto</button>
+          <button class="btn ghost sm" id="btnPerfilFotoQuitar" style="margin-left:6px;">Quitar</button>
+          <p class="hint" style="margin:8px 0 0;">PNG o JPG, hasta 8 MB.</p>
+        </div>
+      </div>
+      <div class="cfgrow"><span class="pk">Nombre de display</span><input id="cfg_profe_nombre" type="text" placeholder="Profe Andrés" /></div>
+      <div class="cfgrow"><span class="pk">Nombre de la academia</span><input id="cfg_profe_marca" type="text" placeholder="ProfesorMVT" /></div>
+      <p class="hint" style="margin-top:-2px;">Si lo dejas vacío, se usa "ProfesorMVT".</p>
+      <button class="btn" id="btnGuardarPerfil" style="margin-top:8px;">Guardar perfil</button>
+    </div>
+  </section>
+
   <section class="panel" id="panel-ajustes">
     <div class="group">
       <h2>// Precios de paquetes (S/)</h2>
@@ -361,11 +487,13 @@
     </div>
   </section>
 
-  <div class="footnote">
-    Datos en tu Cloudflare D1 — entra desde cualquier equipo con tu clave de admin. Los alumnos ven SOLO lo suyo en <strong>/alumnos</strong> con su cuenta.
-    ¿Cambiar la clave de admin? Por seguridad se hace por terminal: <code>npx wrangler secret put ADMIN_TOKEN</code> (la nueva rige al instante).
-  </div>
-</div>
+      <div class="footnote">
+        Datos en tu Cloudflare D1 — entra desde cualquier equipo con tu clave de admin. Los alumnos ven SOLO lo suyo en <strong>/alumnos</strong> con su cuenta.
+        ¿Cambiar la clave de admin? Por seguridad se hace por terminal: <code>npx wrangler secret put ADMIN_TOKEN</code> (la nueva rige al instante).
+      </div>
+    </div><!-- /content -->
+  </main>
+</div><!-- /app -->
 
 <!-- Candado admin -->
 <div class="overlay" id="ovLock">
@@ -424,6 +552,8 @@
     <p class="hint">Asistió y Falta consumen 1 clase. Reprogramar dentro del límite no consume; pasarse del límite cuenta como falta.</p>
     <div class="field"><label>¿Qué se trabajó?</label><input id="r_trabajo" type="text" /></div>
     <div class="field"><label>Tarea asignada</label><input id="r_tarea" type="text" /></div>
+    <div class="field"><label>¿Qué haremos la próxima clase?</label><input id="r_plan" type="text" placeholder="El plan de la siguiente sesión — el alumno también lo ve" />
+      <p class="hint" style="margin:5px 0 0;">Opcional. Aparece en su portal como "Lo que viene".</p></div>
     <div class="modal-actions">
       <button class="btn ghost" data-close>Cancelar</button>
       <button class="btn" id="btnGuardarRegistro">Guardar</button>
@@ -546,6 +676,7 @@ function hayModalAbierto(){ return !!document.querySelector(".overlay.open"); }
 function renderSilencioso(){
   renderResumen(); renderAlumnos(); renderRegistro(); renderPagos();
   renderCuentas(); renderLeads(); renderRecursos(); fillSelects();
+  aplicarPerfilSidebar();   // solo la cabecera del menú (lectura); NO toca el form de Perfil
 }
 function refrescoSilencioso(){
   if(!token) return;                          // solo con sesión activa
@@ -694,23 +825,59 @@ function nombreDe(alumnoId){
   var a=db.alumnos.find(function(x){return x.id===alumnoId;});
   return a?a.nombre:"(alumno borrado)";
 }
+/* un adjunto: audio suena inline; PDF/imagen abre/descarga; × lo quita */
+function adjuntoChip(r,a){
+  var tipo=tipoAdjunto(a.u);
+  var x='<button class="x" data-audioquitar="'+r.id+'" data-audiourl="'+esc(a.u)+'" title="Quitar este adjunto">×</button>';
+  if(tipo==="AUDIO"){
+    return '<span class="adj"><span class="tg">AUDIO</span><audio controls preload="none" src="'+esc(a.u)+'"></audio>'+x+'</span>';
+  }
+  return '<span class="adj"><span class="tg">'+tipo+'</span>'+
+    '<a href="'+esc(a.u)+'" target="_blank" rel="noopener" title="Abrir / descargar">'+esc(a.n||tipo)+' ↗</a>'+x+'</span>';
+}
+function regFiltrados(){
+  var q=(el("regBuscar")&&el("regBuscar").value||"").trim().toLowerCase();
+  var fa=(el("regFiltroAlumno")&&el("regFiltroAlumno").value)||"";
+  var fe=(el("regFiltroEstado")&&el("regFiltroEstado").value)||"";
+  return db.registro.filter(function(r){
+    var aid=r.alumnoId||r.alumno_id;
+    if(fa && aid!==fa) return false;
+    if(fe && r.estado!==fe) return false;
+    if(q){
+      var hay=(nombreDe(aid)+' '+(r.trabajo||'')+' '+(r.tarea||'')+' '+(r.plan||'')+' '+(r.curso||'')+' '+(r.fecha||'')).toLowerCase();
+      if(hay.indexOf(q)<0) return false;
+    }
+    return true;
+  });
+}
 function renderRegistro(){
   var tb=el("tablaRegistro").querySelector("tbody");
-  if(db.registro.length===0){ tb.innerHTML='<tr><td colspan="7" class="empty">Sin clases registradas todavía</td></tr>'; return; }
-  var sorted=db.registro.slice().sort(function(x,y){return (y.fecha||"").localeCompare(x.fecha||"");});
-  tb.innerHTML=sorted.map(function(r){
+  /* poblar el filtro de alumno conservando lo elegido */
+  var selA=el("regFiltroAlumno");
+  if(selA){
+    var prev=selA.value;
+    selA.innerHTML='<option value="">Todos los alumnos</option>'+
+      db.alumnos.slice().sort(function(a,b){return (a.nombre||"").localeCompare(b.nombre||"");})
+        .map(function(a){return '<option value="'+esc(a.id)+'">'+esc(a.nombre)+'</option>';}).join("");
+    selA.value=prev;
+  }
+  var cont=el("regContador");
+  if(db.registro.length===0){
+    tb.innerHTML='<tr><td colspan="8" class="empty">Sin clases registradas todavía</td></tr>';
+    if(cont) cont.textContent="";
+    return;
+  }
+  var rows=regFiltrados().slice().sort(function(x,y){return (y.fecha||"").localeCompare(x.fecha||"");});
+  if(cont) cont.textContent=rows.length+" / "+db.registro.length+" clases";
+  if(rows.length===0){ tb.innerHTML='<tr><td colspan="8" class="empty">Nada coincide con el filtro</td></tr>'; return; }
+  tb.innerHTML=rows.map(function(r){
     var pc=r.estado==="Asistió"?"green":(r.estado==="Reprogramó"?"amber":"red");
-    var audios = parseAudios(r.tarea_audio);
-    var audioBtns = audios.map(function(a){
-      var tipo = tipoAdjunto(a.u);
-      return '<span class="pill gray" style="padding:2px 6px;font-size:9px">'+
-        '<span style="color:var(--accent);font-weight:700">'+tipo+'</span> '+esc(a.n||tipo)+
-        ' <button data-audioquitar="'+r.id+'" data-audiourl="'+esc(a.u)+'" title="Quitar este adjunto" '+
-        'style="background:none;border:0;color:var(--red);font-weight:700;padding:0 1px;cursor:pointer">×</button></span>';
-    }).join('');
-    audioBtns += (audios.length>=8)
+    var audios=parseAudios(r.tarea_audio);
+    var adjHtml=audios.map(function(a){return adjuntoChip(r,a);}).join('');
+    adjHtml += (audios.length>=8)
       ? '<button class="btn ghost sm" disabled title="Máximo 8">+ Adjuntar</button>'
       : '<button class="btn ghost sm" data-audiocambiar="'+r.id+'">+ Adjuntar</button>';
+    var planTd = r.plan ? '<td class="plan">'+esc(r.plan)+'</td>' : '<td class="notes">—</td>';
     return '<tr>'+
       '<td class="mini">'+esc(r.fecha||'')+'</td>'+
       '<td class="name">'+esc(nombreDe(r.alumnoId||r.alumno_id))+'</td>'+
@@ -718,7 +885,8 @@ function renderRegistro(){
       '<td><span class="pill '+pc+'">'+esc(r.estado)+'</span></td>'+
       '<td class="notes">'+esc(r.trabajo||'')+'</td>'+
       '<td class="notes">'+esc(r.tarea||'')+'</td>'+
-      '<td><div class="rowact"><button class="btn ghost sm" data-editreg="'+r.id+'" title="Editar esta clase">✎</button>'+audioBtns+(r.tarea?'<button class="btn ghost sm" data-avisartarea="'+esc(r.alumnoId||r.alumno_id)+'" data-tareatxt="'+esc(r.tarea)+'" title="Avisar al alumno por push">🔔 Avisar</button>':'')+'<button class="btn ghost sm" data-delreg="'+r.id+'">×</button></div></td>'+
+      planTd+
+      '<td><div class="rowact"><button class="btn ghost sm" data-editreg="'+r.id+'" title="Editar esta clase">✎</button>'+adjHtml+(r.tarea?'<button class="btn ghost sm" data-avisartarea="'+esc(r.alumnoId||r.alumno_id)+'" data-tareatxt="'+esc(r.tarea)+'" title="Avisar al alumno por push">🔔 Avisar</button>':'')+'<button class="btn ghost sm" data-delreg="'+r.id+'">×</button></div></td>'+
     '</tr>';
   }).join("");
 }
@@ -817,6 +985,58 @@ function renderAjustes(){
   gcalRefrescarEstado();
 }
 
+/* ---------- Perfil (nombre + foto del profesor) ---------- */
+function inicialPerfil(){
+  var c=db.config||{};
+  return ((c.profe_nombre||c.profe_marca||"M").trim().charAt(0)||"M").toUpperCase();
+}
+function aplicarPerfilSidebar(){
+  var c=db.config||{};
+  var nombre=c.profe_marca||c.profe_nombre||"ProfesorMVT";
+  var nm=el("navNombre"); if(nm) nm.textContent=nombre;
+  var nf=el("navFoto"); if(!nf) return;
+  if(c.profe_foto){
+    nf.outerHTML='<img class="brand-foto" id="navFoto" src="'+esc(c.profe_foto)+'" alt="" />';
+  } else {
+    nf.outerHTML='<div class="brand-foto ph" id="navFoto">'+esc(inicialPerfil())+'</div>';
+  }
+}
+function renderPerfil(){
+  var c=db.config||{};
+  if(el("cfg_profe_nombre")) el("cfg_profe_nombre").value=c.profe_nombre||"";
+  if(el("cfg_profe_marca")) el("cfg_profe_marca").value=c.profe_marca||"";
+  var img=el("perfilFotoPrev"), ph=el("perfilFotoPh");
+  if(img&&ph){
+    if(c.profe_foto){ img.src=c.profe_foto; img.style.display="block"; ph.style.display="none"; }
+    else { img.style.display="none"; ph.style.display="flex"; ph.textContent=inicialPerfil(); }
+  }
+  aplicarPerfilSidebar();
+}
+el("btnGuardarPerfil").addEventListener("click",function(){
+  var cfg={ profe_nombre:el("cfg_profe_nombre").value.trim(), profe_marca:el("cfg_profe_marca").value.trim() };
+  apiPost("/api/admin/config",cfg).then(function(){
+    db.config=Object.assign(db.config||{},cfg); aplicarPerfilSidebar(); toast("Perfil guardado");
+  }).catch(function(){ toast("No se pudo guardar el perfil"); });
+});
+el("btnPerfilFoto").addEventListener("click",function(){ el("perfilFotoInput").value=""; el("perfilFotoInput").click(); });
+el("perfilFotoInput").addEventListener("change",function(e){
+  var f=e.target.files&&e.target.files[0]; if(!f) return;
+  if(!/\.(png|jpg|jpeg)$/i.test(f.name) || f.size>8*1024*1024){ toast("Solo PNG o JPG hasta 8 MB."); return; }
+  var btn=el("btnPerfilFoto"); btn.disabled=true; var prev=btn.textContent; btn.textContent="Subiendo…";
+  var fd=new FormData(); fd.append("archivo",f);
+  fetch("/api/admin/perfil/foto",{method:"POST",headers:{"authorization":"Bearer "+token},body:fd})
+    .then(function(r){ return r.json().catch(function(){return {};}).then(function(d){ if(r.status===401) throw {auth:true}; if(!r.ok) throw new Error(d.error||("HTTP "+r.status)); return d; }); })
+    .then(function(d){ db.config=db.config||{}; db.config.profe_foto=d.url||""; renderPerfil(); toast("Foto actualizada"); })
+    .catch(function(err){ if(err&&err.auth){ lock("Tu clave ya no es válida."); } toast((err&&err.message)||"No se pudo subir"); })
+    .finally(function(){ btn.disabled=false; btn.textContent=prev; });
+});
+el("btnPerfilFotoQuitar").addEventListener("click",function(){
+  if(!(db.config&&db.config.profe_foto)){ toast("No hay foto"); return; }
+  if(!confirm("¿Quitar la foto de perfil?")) return;
+  apiPost("/api/admin/config",{profe_foto:""}).then(function(){ db.config.profe_foto=""; renderPerfil(); toast("Foto quitada"); })
+    .catch(function(){ toast("No se pudo quitar"); });
+});
+
 function renderRecursos(){
   var tb=el("tbRecursos");
   var rec=db.recursos||[];
@@ -852,7 +1072,7 @@ function renderLeads(){
     return '<tr><td>'+esc(l.fecha||'')+'</td><td>'+esc(l.email||'')+'</td><td>'+esc(l.fuente||'')+'</td><td>'+esc(l.interes||'')+'</td></tr>';
   }).join("");
 }
-function renderAll(){ renderResumen(); renderAlumnos(); renderRegistro(); renderPagos(); renderCuentas(); renderLeads(); renderRecursos(); renderAjustes(); fillSelects(); }
+function renderAll(){ renderResumen(); renderAlumnos(); renderRegistro(); renderPagos(); renderCuentas(); renderLeads(); renderRecursos(); renderAjustes(); renderPerfil(); fillSelects(); }
 
 /* ---------- AGENDA (admin) ---------- */
 var AG_DISP = [], AG_RESERVAS = [];
@@ -946,13 +1166,25 @@ el("btnBloquearSlot").addEventListener("click",function(){
   }).catch(function(e){ toast(e.message||"No se pudo"); });
 });
 
+/* ---------- Menú lateral (drawer en móvil) ---------- */
+function cerrarDrawer(){ var s=el("sidebar"); if(s) s.classList.remove("open"); var sc=el("scrim"); if(sc) sc.classList.remove("show"); }
+function abrirDrawer(){ var s=el("sidebar"); if(s) s.classList.add("open"); var sc=el("scrim"); if(sc) sc.classList.add("show"); }
+if(el("btnMenu")) el("btnMenu").addEventListener("click",abrirDrawer);
+if(el("scrim")) el("scrim").addEventListener("click",cerrarDrawer);
+
 /* ---------- Tabs / modales ---------- */
+var TITULOS={resumen:"Resumen",alumnos:"Alumnos",registro:"Clases",agenda:"Agenda",pagos:"Pagos",cuentas:"Cuentas",leads:"Leads",recursos:"Recursos",ajustes:"Ajustes",perfil:"Perfil",chat:"Chat"};
 document.querySelectorAll(".tab").forEach(function(t){
   t.addEventListener("click",function(){
     document.querySelectorAll(".tab").forEach(function(x){x.classList.remove("active");});
     document.querySelectorAll(".panel").forEach(function(x){x.classList.remove("active");});
     t.classList.add("active"); el("panel-"+t.dataset.tab).classList.add("active");
+    var ti=TITULOS[t.dataset.tab]||"CRM";
+    if(el("pageTitle")) el("pageTitle").textContent=ti;
+    if(el("topTitle")) el("topTitle").textContent="// "+ti;
     if(t.dataset.tab==="agenda") cargarAgenda();
+    if(t.dataset.tab==="perfil") renderPerfil();
+    cerrarDrawer();
   });
 });
 function openOv(id){ el(id).classList.add("open"); }
@@ -1034,6 +1266,7 @@ document.body.addEventListener("click",function(e){
     el("r_estado").value=rg.estado||"Asistió";
     el("r_trabajo").value=rg.trabajo||"";
     el("r_tarea").value=rg.tarea||"";
+    el("r_plan").value=rg.plan||"";
     syncCurso(); if(rg.curso) el("r_curso").value=rg.curso;   // conservar el curso original de la clase
     openOv("ovRegistro");
   }
@@ -1056,13 +1289,22 @@ function syncCurso(){
   el("r_curso").value=a?a.curso:"";
 }
 el("r_alumno").addEventListener("change",syncCurso);
+/* ---------- Filtros de Clases ---------- */
+["regBuscar","regFiltroAlumno","regFiltroEstado"].forEach(function(id){
+  var n=el(id); if(!n) return;
+  n.addEventListener("input",renderRegistro);
+  n.addEventListener("change",renderRegistro);
+});
+el("regLimpiar").addEventListener("click",function(){
+  el("regBuscar").value=""; el("regFiltroAlumno").value=""; el("regFiltroEstado").value=""; renderRegistro();
+});
 el("btnNuevoRegistro").addEventListener("click",function(){
   if(db.alumnos.length===0){ toast("Agrega un alumno primero"); return; }
   fillSelects();
   el("regTitulo").innerHTML='Registrar <em>clase</em>';
   el("r_id").value="";
   el("r_fecha").value=new Date().toISOString().slice(0,10);
-  el("r_estado").value="Asistió"; el("r_trabajo").value=""; el("r_tarea").value="";
+  el("r_estado").value="Asistió"; el("r_trabajo").value=""; el("r_tarea").value=""; el("r_plan").value="";
   syncCurso(); openOv("ovRegistro");
 });
 el("btnGuardarRegistro").addEventListener("click",function(){
@@ -1072,7 +1314,7 @@ el("btnGuardarRegistro").addEventListener("click",function(){
   var editId=el("r_id").value;
   var campos={ fecha:el("r_fecha").value, alumnoId:alumnoId, alumno_id:alumnoId,
     curso:el("r_curso").value, estado:el("r_estado").value,
-    trabajo:el("r_trabajo").value.trim(), tarea:el("r_tarea").value.trim() };
+    trabajo:el("r_trabajo").value.trim(), tarea:el("r_tarea").value.trim(), plan:el("r_plan").value.trim() };
   if(editId){
     // editar: conservamos lo que el modal no toca (adjuntos, ciclo)
     db.registro=db.registro.map(function(x){ return x.id===editId ? Object.assign({},x,campos) : x; });

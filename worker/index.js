@@ -201,6 +201,7 @@ async function loadPrecios(env){
 async function loadConfig(env){
   const { results } = await env.DB.prepare("SELECT clave, valor FROM config").all();
   const c = { calendly_url: "", pago_numero: "", pago_titular: "", discord_url: "", google_client_id: "", bcp_cuenta: "", bcp_cci: "", scotia_cuenta: "", scotia_cci: "", crypto_moneda: "", crypto_red: "", crypto_wallet: "",
+              profe_nombre: "", profe_foto: "", profe_marca: "",
               gcal_client_id: "", gcal_client_secret: "", gcal_refresh_token: "", gcal_calendar_id: "primary", gcal_nonce: "",
               salud_gcal: "ok", salud_gcal_aviso_utc: "", salud_correo_estado: "ok", salud_correo_aviso_utc: "" };
   for (const row of (results || [])) c[row.clave] = row.valor || "";
@@ -1210,6 +1211,19 @@ async function reportarSaludCorreo(env, fallos, intentos){
   }
 }
 
+/* Auto-migración guardada: crea registro.plan si falta (schema-v17).
+   Idempotente y aditiva — así el deploy por CI no depende de correr el .sql a mano. */
+let _planColChecked = false;
+async function ensurePlanColumn(env){
+  if (_planColChecked || !env.DB) return;
+  try {
+    const info = await env.DB.prepare("PRAGMA table_info(registro)").all();
+    const tiene = (info.results || []).some(c => c.name === "plan");
+    if (!tiene) await env.DB.prepare("ALTER TABLE registro ADD COLUMN plan TEXT DEFAULT ''").run();
+    _planColChecked = true;
+  } catch (e) { /* otra invocación pudo crearla en paralelo; se reintenta en la próxima request */ }
+}
+
 export default {
   async fetch(request, env, ctx){
     const url = new URL(request.url);
@@ -1220,6 +1234,7 @@ export default {
     if (request.method === "OPTIONS") return new Response(null, { status: 204 });
 
     try {
+      await ensurePlanColumn(env);
       /* ============ PÚBLICO (sin auth): el portal lee esto antes del login ============ */
       if (url.pathname === "/api/publico" && request.method === "GET"){
         const cfg = await loadConfig(env);
@@ -1537,7 +1552,7 @@ export default {
           if (alumno){
             const ciclo = alumno.ciclo || 1;
             const { results } = await env.DB.prepare(
-              "SELECT fecha, estado, trabajo, tarea, COALESCE(tarea_audio,'') AS tarea_audio FROM registro WHERE alumno_id = ?1 AND COALESCE(ciclo,1) = ?2 ORDER BY fecha ASC, id ASC"
+              "SELECT fecha, estado, trabajo, tarea, COALESCE(plan,'') AS plan, COALESCE(tarea_audio,'') AS tarea_audio FROM registro WHERE alumno_id = ?1 AND COALESCE(ciclo,1) = ?2 ORDER BY fecha ASC, id ASC"
             ).bind(alumno.id, ciclo).all();
             historial = (results || []).map(r => Object.assign({}, r, { tarea_audios: parseAudios(r.tarea_audio) }));
             const rUsadas = await reservasUsadasCount(env, alumno.id, ciclo);
@@ -2173,11 +2188,11 @@ export default {
           }
           for (const r of body.registro){
             stmts.push(env.DB.prepare(
-              "INSERT INTO registro (id,fecha,alumno_id,curso,estado,trabajo,tarea,ciclo,tarea_audio) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9)"
+              "INSERT INTO registro (id,fecha,alumno_id,curso,estado,trabajo,tarea,ciclo,tarea_audio,plan) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10)"
             ).bind(
               r.id, r.fecha || "", r.alumnoId || r.alumno_id,
               r.curso || "", r.estado || "", r.trabajo || "", r.tarea || "", r.ciclo || 1,
-              r.tarea_audio || ""
+              r.tarea_audio || "", r.plan || ""
             ));
           }
           const precios = body.precios || {};
@@ -2190,7 +2205,7 @@ export default {
 
         if (url.pathname === "/api/admin/config" && request.method === "POST"){
           const b = await request.json().catch(() => ({}));
-          const claves = ["calendly_url", "pago_numero", "pago_titular", "discord_url", "google_client_id", "bcp_cuenta", "bcp_cci", "scotia_cuenta", "scotia_cci", "crypto_moneda", "crypto_red", "crypto_wallet", "gcal_client_id", "gcal_client_secret", "gcal_calendar_id"];
+          const claves = ["calendly_url", "pago_numero", "pago_titular", "discord_url", "google_client_id", "bcp_cuenta", "bcp_cci", "scotia_cuenta", "scotia_cci", "crypto_moneda", "crypto_red", "crypto_wallet", "profe_nombre", "profe_marca", "profe_foto", "gcal_client_id", "gcal_client_secret", "gcal_calendar_id"];
           const stmts = [];
           for (const k of claves){
             if (k in b){
@@ -2260,6 +2275,33 @@ export default {
             "INSERT INTO recursos (id,titulo,descripcion,url,curso,fecha) VALUES (?1,?2,?3,?4,?5,?6)"
           ).bind(crypto.randomUUID(), titulo, descripcion, "/api/recurso/archivo/" + key, curso, hoy()).run();
           return json({ ok: true });
+        }
+
+        /* -------- Perfil: subir foto del profesor (imagen) a R2 y guardarla en config -------- */
+        if (url.pathname === "/api/admin/perfil/foto" && request.method === "POST"){
+          const form = await request.formData().catch(() => null);
+          if (!form) return json({ error: "Formulario inválido" }, 400);
+          const archivo = form.get("archivo");
+          const esArchivo = archivo && typeof archivo !== "string" && typeof archivo.arrayBuffer === "function";
+          const ext = esArchivo ? extArchivo(archivo.name) : null;
+          if (!ext || !/^(png|jpg|jpeg)$/.test(ext) || archivo.size > 8 * 1024 * 1024){
+            return json({ error: "Solo imágenes (png/jpg) de hasta 8 MB." }, 400);
+          }
+          const key = crypto.randomUUID() + "." + ext;
+          await env.RECURSOS_R2.put(key, archivo, {
+            httpMetadata: { contentType: MIME_ARCHIVO[ext], contentDisposition: "inline" }
+          });
+          // borra la foto anterior si vivía en R2 (no deja huérfanos)
+          const cfgPrev = await loadConfig(env);
+          const fotoUrl = "/api/recurso/archivo/" + key;
+          if (cfgPrev.profe_foto && cfgPrev.profe_foto.startsWith("/api/recurso/archivo/")){
+            const oldKey = cfgPrev.profe_foto.slice("/api/recurso/archivo/".length);
+            try { await env.RECURSOS_R2.delete(oldKey); } catch (e) { /* huérfano no bloquea */ }
+          }
+          await env.DB.prepare(
+            "INSERT INTO config (clave, valor) VALUES ('profe_foto', ?1) ON CONFLICT(clave) DO UPDATE SET valor = ?1"
+          ).bind(fotoUrl).run();
+          return json({ ok: true, url: fotoUrl });
         }
 
         /* -------- Adjuntos de tarea por clase (audio/PDF/imagen; hasta 8; subir / borrar uno) -------- */

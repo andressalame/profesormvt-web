@@ -421,6 +421,11 @@
       <div class="eyebrow">// MIS CLASES</div>
       <h1>Mis <em>clases</em></h1>
       <hr class="rule" />
+      <div class="card tarea hidden" id="cProx">
+        <h3>// LO QUE VIENE</h3>
+        <div class="t" id="cProxTxt"></div>
+        <div class="meta" id="cProxMeta"></div>
+      </div>
       <div class="card tarea hidden" id="cTarea">
         <h3>// TU TAREA DE LA SEMANA</h3>
         <div class="t" id="cTareaTxt"></div>
@@ -430,7 +435,7 @@
       <div class="card hidden" id="cWrap">
         <div class="tablewrap">
           <table id="cTabla">
-            <thead><tr><th>Fecha</th><th>Estado</th><th>Qué trabajamos</th><th>Tarea</th></tr></thead>
+            <thead><tr><th>Fecha</th><th>Estado</th><th>Qué trabajamos</th><th>Tarea</th><th>Lo que viene</th></tr></thead>
             <tbody></tbody>
           </table>
         </div>
@@ -834,7 +839,17 @@ function renderInicio(){
 /* ---------- VISTA: MIS CLASES ---------- */
 function renderClases(){
   var h = (ME.alumno && ME.alumno.historial) || [];
-  var con = h.find(function(r){ return (r.tarea && String(r.tarea).trim()) || audiosDe(r).length; });
+  /* historial viene en orden ascendente: el último con tarea/plan es el más reciente */
+  var con = null, prox = null;
+  for(var i=0;i<h.length;i++){
+    if((h[i].tarea && String(h[i].tarea).trim()) || audiosDe(h[i]).length) con = h[i];
+    if(h[i].plan && String(h[i].plan).trim()) prox = h[i];
+  }
+  if(prox){
+    $("cProxTxt").textContent = prox.plan || "";
+    $("cProxMeta").textContent = "El plan para tu próxima clase";
+    show("cProx");
+  } else hide("cProx");
   if(con){
     $("cTareaTxt").textContent = con.tarea || "";
     $("cTareaAudio").innerHTML = adjuntosHtml(audiosDe(con), true);
@@ -848,7 +863,8 @@ function renderClases(){
     var audioCell = adjuntosHtml(audiosDe(r), false);
     return '<tr><td class="mono">'+esc(r.fecha||"")+'</td>'+
       '<td><span class="pill '+pc+'">'+esc(r.estado||"")+'</span></td>'+
-      '<td>'+esc(r.trabajo||"")+'</td><td class="mut">'+esc(r.tarea||"")+audioCell+'</td></tr>';
+      '<td>'+esc(r.trabajo||"")+'</td><td class="mut">'+esc(r.tarea||"")+audioCell+'</td>'+
+      '<td class="mut">'+esc(r.plan||"")+'</td></tr>';
   }).join("");
 }
 
