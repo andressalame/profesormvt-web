@@ -250,6 +250,7 @@
         <button class="navgroup-h" type="button"><span class="ng-ico">🎵</span><span class="ng-tx">Material</span><span class="ng-chev">⌄</span></button>
         <div class="navgroup-items">
           <button class="tab" data-tab="recursos">Recursos</button>
+          <button class="tab" data-tab="ejercicios">Ejercicios</button>
         </div>
       </div>
       <div class="navgroup">
@@ -390,6 +391,38 @@
       <div class="tablewrap">
         <table><thead><tr><th>Fecha</th><th>Título</th><th>Curso</th><th>Link</th><th>Descripción</th><th></th></tr></thead>
         <tbody id="tbRecursos"></tbody></table>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel" id="panel-ejercicios">
+    <div class="group">
+      <h2>// Subir ejercicio a mi biblioteca</h2>
+      <p class="hint">Tu banco privado de ejercicios (audios, PDFs). <strong>No se publican</strong>: los eliges desde el desplegable al registrar una clase para mandárselos a un alumno como tarea.</p>
+      <div class="frow">
+        <div class="field"><label>Título</label><input id="ej_titulo" type="text" placeholder="Vocalizo de calentamiento (5 min)" /></div>
+        <div class="field"><label>Curso</label><select id="ej_curso"><option>Todos</option><option>Canto</option><option>Piano</option><option>Composición</option></select></div>
+      </div>
+      <div class="field"><label>Archivo: audio, PDF o imagen (máx. 25 MB)</label><input id="ej_file" type="file" accept="audio/*,application/pdf,image/png,image/jpeg" /></div>
+      <div class="field"><label>Descripción (opcional)</label><input id="ej_desc" type="text" placeholder="Ej: subir por semitonos sin forzar" /></div>
+      <button class="btn" id="btnSubirEjercicio">Subir a la biblioteca</button>
+    </div>
+    <div class="group">
+      <h2>// MIS EJERCICIOS</h2>
+      <div class="filtros">
+        <input id="ejBuscar" type="search" placeholder="Buscar ejercicio…" autocomplete="off" />
+        <select id="ejFiltroCurso">
+          <option value="">Todos los cursos</option>
+          <option value="Todos">Todos (general)</option>
+          <option value="Canto">Canto</option>
+          <option value="Piano">Piano</option>
+          <option value="Composición">Composición</option>
+        </select>
+        <span class="mini" id="ejContador" style="margin-left:auto;"></span>
+      </div>
+      <div class="tablewrap">
+        <table><thead><tr><th>Fecha</th><th>Título</th><th>Curso</th><th>Archivo</th><th></th></tr></thead>
+        <tbody id="tbEjercicios"></tbody></table>
       </div>
     </div>
   </section>
@@ -577,6 +610,9 @@
     <div class="field"><label>Tarea asignada</label><input id="r_tarea" type="text" /></div>
     <div class="field"><label>¿Qué haremos la próxima clase?</label><input id="r_plan" type="text" placeholder="El plan de la siguiente sesión — el alumno también lo ve" />
       <p class="hint" style="margin:5px 0 0;">Opcional. Aparece en su portal como "Lo que viene".</p></div>
+    <div class="field"><label>Mandar ejercicio de tu biblioteca (tarea)</label>
+      <select id="r_ejercicio"><option value="">— Ninguno —</option></select>
+      <p class="hint" style="margin:5px 0 0;">Se adjunta a esta clase como tarea para el alumno. Súbelos en Material → Ejercicios.</p></div>
     <div class="modal-actions">
       <button class="btn ghost" data-close>Cancelar</button>
       <button class="btn" id="btnGuardarRegistro">Guardar</button>
@@ -619,7 +655,7 @@ var PAQUETES = {
 var PRECIOS_DEFAULT = { "Paquete 4":250, "Paquete 8":450, "Paquete 12":600, "Clase suelta":70 };
 var TOKEN_KEY = "pmvt_admin_token";
 
-var db = { alumnos:[], registro:[], precios:Object.assign({},PRECIOS_DEFAULT), cuentas:[], compras:[], recursos:[], config:{} };
+var db = { alumnos:[], registro:[], precios:Object.assign({},PRECIOS_DEFAULT), cuentas:[], compras:[], recursos:[], ejercicios:[], config:{} };
 var token = null;
 var cuentaModo = null;
 var refreshInterval = null;
@@ -684,7 +720,7 @@ function apiPost(path, body){
 function recargar(){
   return apiGet().then(function(d){
     db=d; if(!db.precios) db.precios=Object.assign({},PRECIOS_DEFAULT);
-    db.cuentas=db.cuentas||[]; db.compras=db.compras||[]; db.recursos=db.recursos||[]; db.leads=db.leads||[]; db.config=db.config||{};
+    db.cuentas=db.cuentas||[]; db.compras=db.compras||[]; db.recursos=db.recursos||[]; db.ejercicios=db.ejercicios||[]; db.leads=db.leads||[]; db.config=db.config||{};
     renderAll(); setSync("Conectado ✓","ok");
   });
 }
@@ -698,7 +734,7 @@ function hayModalAbierto(){ return !!document.querySelector(".overlay.open"); }
    para no borrar credenciales (Client ID / Secret) que aún no guardaste. */
 function renderSilencioso(){
   renderResumen(); renderAlumnos(); renderRegistro(); renderPagos();
-  renderCuentas(); renderLeads(); renderRecursos(); fillSelects();
+  renderCuentas(); renderLeads(); renderRecursos(); renderEjercicios(); fillSelects();
   aplicarPerfilSidebar();   // solo la cabecera del menú (lectura); NO toca el form de Perfil
 }
 function refrescoSilencioso(){
@@ -708,7 +744,7 @@ function refrescoSilencioso(){
     var nuevoPend = (d.compras||[]).filter(function(c){ return c.estado==="pendiente"; }).length;
     var aumento = nuevoPend > prevPendientes;
     db=d; if(!db.precios) db.precios=Object.assign({},PRECIOS_DEFAULT);
-    db.cuentas=db.cuentas||[]; db.compras=db.compras||[]; db.recursos=db.recursos||[]; db.leads=db.leads||[]; db.config=db.config||{};
+    db.cuentas=db.cuentas||[]; db.compras=db.compras||[]; db.recursos=db.recursos||[]; db.ejercicios=db.ejercicios||[]; db.leads=db.leads||[]; db.config=db.config||{};
     prevPendientes = nuevoPend;
     // si hay un modal abierto (registrar clase, editar alumno, etc.) NO repintamos: perderías lo que estás escribiendo/eligiendo
     if(!hayModalAbierto()) renderSilencioso();
@@ -1079,6 +1115,50 @@ function renderRecursos(){
   }).join("");
 }
 
+/* ---------- Biblioteca de ejercicios ---------- */
+function ejFiltrados(){
+  var q=(el("ejBuscar")&&el("ejBuscar").value||"").trim().toLowerCase();
+  var fc=(el("ejFiltroCurso")&&el("ejFiltroCurso").value)||"";
+  return (db.ejercicios||[]).filter(function(e){
+    if(fc && (e.curso||"Todos")!==fc) return false;
+    if(q){ var hay=((e.titulo||'')+' '+(e.descripcion||'')+' '+(e.curso||'')).toLowerCase(); if(hay.indexOf(q)<0) return false; }
+    return true;
+  });
+}
+function ejArchivoCell(e){
+  var u=String(e.url||''); var tipo=tipoAdjunto(u);
+  if(tipo==="AUDIO") return '<span class="adj"><span class="tg">AUDIO</span><audio controls preload="none" src="'+esc(u)+'"></audio></span>';
+  return '<span class="adj"><span class="tg">'+tipo+'</span><a href="'+esc(u)+'" target="_blank" rel="noopener" title="Abrir / descargar">Abrir ↗</a></span>';
+}
+function renderEjercicios(){
+  var tb=el("tbEjercicios"); if(!tb) return;
+  var cont=el("ejContador");
+  var todos=db.ejercicios||[];
+  if(todos.length===0){ tb.innerHTML='<tr><td colspan="5" class="empty">Aún no tienes ejercicios. Sube tu primer audio arriba.</td></tr>'; if(cont) cont.textContent=""; return; }
+  var rows=ejFiltrados();
+  if(cont) cont.textContent=rows.length+" / "+todos.length;
+  if(rows.length===0){ tb.innerHTML='<tr><td colspan="5" class="empty">Nada coincide con el filtro</td></tr>'; return; }
+  tb.innerHTML=rows.map(function(e){
+    return '<tr>'+
+      '<td class="mini">'+esc(e.fecha||'')+'</td>'+
+      '<td class="name">'+esc(e.titulo||'')+(e.descripcion?'<br><span class="mini">'+esc(e.descripcion)+'</span>':'')+'</td>'+
+      '<td><span class="pill gray">'+esc(e.curso||'Todos')+'</span></td>'+
+      '<td>'+ejArchivoCell(e)+'</td>'+
+      '<td><button class="btn ghost sm" data-delej="'+esc(e.id)+'">Borrar</button></td>'+
+    '</tr>';
+  }).join("");
+}
+/* desplegable del modal de clase: ejercicios del curso del alumno + los "Todos" */
+function fillEjercicioSelect(curso){
+  var sel=el("r_ejercicio"); if(!sel) return;
+  var prev=sel.value;
+  var lista=(db.ejercicios||[]).filter(function(e){ return !curso || (e.curso||"Todos")==="Todos" || (e.curso||"")===curso; });
+  sel.innerHTML='<option value="">— Ninguno —</option>'+lista.map(function(e){
+    return '<option value="'+esc(e.id)+'">'+esc(e.titulo)+(e.curso&&e.curso!=="Todos"?' ('+esc(e.curso)+')':'')+'</option>';
+  }).join("");
+  sel.value=prev;
+}
+
 function fillSelects(){
   /* conservar lo que ya estaba elegido: si no, el auto-refresh resetea el select al primer alumno */
   var prevPk=el("a_paquete").value, prevAl=el("r_alumno").value;
@@ -1095,7 +1175,7 @@ function renderLeads(){
     return '<tr><td>'+esc(l.fecha||'')+'</td><td>'+esc(l.email||'')+'</td><td>'+esc(l.fuente||'')+'</td><td>'+esc(l.interes||'')+'</td></tr>';
   }).join("");
 }
-function renderAll(){ renderResumen(); renderAlumnos(); renderRegistro(); renderPagos(); renderCuentas(); renderLeads(); renderRecursos(); renderAjustes(); renderPerfil(); fillSelects(); }
+function renderAll(){ renderResumen(); renderAlumnos(); renderRegistro(); renderPagos(); renderCuentas(); renderLeads(); renderRecursos(); renderEjercicios(); renderAjustes(); renderPerfil(); fillSelects(); }
 
 /* ---------- AGENDA (admin) ---------- */
 var AG_DISP = [], AG_RESERVAS = [];
@@ -1223,12 +1303,18 @@ function abrirGrupoActivo(){
 abrirGrupoActivo();
 
 /* ---------- Tabs / modales ---------- */
-var TITULOS={resumen:"Resumen",alumnos:"Alumnos",registro:"Clases",agenda:"Agenda",pagos:"Pagos",cuentas:"Cuentas",leads:"Leads",recursos:"Recursos",ajustes:"Ajustes",perfil:"Perfil",chat:"Chat"};
+var TITULOS={resumen:"Resumen",alumnos:"Alumnos",registro:"Clases",agenda:"Agenda",pagos:"Pagos",cuentas:"Cuentas",leads:"Leads",recursos:"Recursos",ejercicios:"Ejercicios",ajustes:"Ajustes",perfil:"Perfil",chat:"Chat"};
 document.querySelectorAll(".tab").forEach(function(t){
   t.addEventListener("click",function(){
     document.querySelectorAll(".tab").forEach(function(x){x.classList.remove("active");});
     document.querySelectorAll(".panel").forEach(function(x){x.classList.remove("active");});
     t.classList.add("active"); el("panel-"+t.dataset.tab).classList.add("active");
+    /* abre el grupo del tab activo en el menú (acordeón single-open) */
+    var g=t.closest(".navgroup");
+    if(g && !g.classList.contains("open")){
+      document.querySelectorAll(".navgroup").forEach(function(x){x.classList.remove("open");});
+      g.classList.add("open");
+    }
     var ti=TITULOS[t.dataset.tab]||"CRM";
     if(el("pageTitle")) el("pageTitle").textContent=ti;
     if(el("topTitle")) el("topTitle").textContent="// "+ti;
@@ -1317,7 +1403,8 @@ document.body.addEventListener("click",function(e){
     el("r_trabajo").value=rg.trabajo||"";
     el("r_tarea").value=rg.tarea||"";
     el("r_plan").value=rg.plan||"";
-    syncCurso(); if(rg.curso) el("r_curso").value=rg.curso;   // conservar el curso original de la clase
+    el("r_ejercicio").value="";
+    syncCurso(); if(rg.curso){ el("r_curso").value=rg.curso; fillEjercicioSelect(rg.curso); }   // conservar el curso original de la clase
     openOv("ovRegistro");
   }
   if(rv){ var ar=db.alumnos.find(function(x){return x.id===rv.dataset.renovar;}); if(ar) renovar(ar); }
@@ -1337,6 +1424,7 @@ document.body.addEventListener("click",function(e){
 function syncCurso(){
   var a=db.alumnos.find(function(x){return x.id===el("r_alumno").value;});
   el("r_curso").value=a?a.curso:"";
+  fillEjercicioSelect(a?a.curso:"");
 }
 el("r_alumno").addEventListener("change",syncCurso);
 /* ---------- Filtros de Clases ---------- */
@@ -1354,7 +1442,7 @@ el("btnNuevoRegistro").addEventListener("click",function(){
   el("regTitulo").innerHTML='Registrar <em>clase</em>';
   el("r_id").value="";
   el("r_fecha").value=new Date().toISOString().slice(0,10);
-  el("r_estado").value="Asistió"; el("r_trabajo").value=""; el("r_tarea").value=""; el("r_plan").value="";
+  el("r_estado").value="Asistió"; el("r_trabajo").value=""; el("r_tarea").value=""; el("r_plan").value=""; el("r_ejercicio").value="";
   syncCurso(); openOv("ovRegistro");
 });
 el("btnGuardarRegistro").addEventListener("click",function(){
@@ -1365,6 +1453,17 @@ el("btnGuardarRegistro").addEventListener("click",function(){
   var campos={ fecha:el("r_fecha").value, alumnoId:alumnoId, alumno_id:alumnoId,
     curso:el("r_curso").value, estado:el("r_estado").value,
     trabajo:el("r_trabajo").value.trim(), tarea:el("r_tarea").value.trim(), plan:el("r_plan").value.trim() };
+  /* si eligió un ejercicio de la biblioteca, lo adjunta a la tarea de esta clase (por referencia, sin resubir) */
+  var ejId=el("r_ejercicio").value;
+  if(ejId){
+    var ej=(db.ejercicios||[]).find(function(x){return x.id===ejId;});
+    if(ej && ej.url){
+      var base=editId ? ((db.registro.find(function(x){return x.id===editId;})||{}).tarea_audio||"") : "";
+      var lista=parseAudios(base);
+      if(!lista.some(function(x){return x.u===ej.url;}) && lista.length<8){ lista.push({u:ej.url, n:ej.titulo||"Ejercicio"}); }
+      campos.tarea_audio=JSON.stringify(lista);
+    }
+  }
   if(editId){
     // editar: conservamos lo que el modal no toca (adjuntos, ciclo)
     db.registro=db.registro.map(function(x){ return x.id===editId ? Object.assign({},x,campos) : x; });
@@ -1653,6 +1752,42 @@ document.body.addEventListener("click",function(e){
     apiPost("/api/admin/recurso",{accion:"borrar",id:r.id})
       .then(function(){ return recargar(); })
       .then(function(){ toast("Recurso borrado"); })
+      .catch(function(err){ toast((err&&err.message)||"No se pudo borrar"); });
+  }
+});
+
+/* ---------- Biblioteca de ejercicios ---------- */
+["ejBuscar","ejFiltroCurso"].forEach(function(id){
+  var n=el(id); if(!n) return;
+  n.addEventListener("input",renderEjercicios);
+  n.addEventListener("change",renderEjercicios);
+});
+el("btnSubirEjercicio").addEventListener("click",function(){
+  var titulo=el("ej_titulo").value.trim();
+  if(titulo.length<2){ toast("Ponle un título al ejercicio"); return; }
+  var f=el("ej_file").files && el("ej_file").files[0];
+  if(!f){ toast("Elige un archivo (audio, PDF o imagen)"); return; }
+  if(!/\.(mp3|m4a|ogg|wav|pdf|png|jpg|jpeg)$/i.test(f.name) || f.size>25*1024*1024){
+    toast("Solo audios (mp3/m4a/ogg/wav), PDF o imágenes (png/jpg) de hasta 25 MB."); return;
+  }
+  var btn=el("btnSubirEjercicio"); btn.disabled=true; var prev=btn.textContent; btn.textContent="Subiendo…";
+  var fd=new FormData();
+  fd.append("archivo",f); fd.append("titulo",titulo);
+  fd.append("curso",el("ej_curso").value); fd.append("descripcion",el("ej_desc").value.trim());
+  fetch("/api/admin/ejercicio/archivo",{method:"POST",headers:{"authorization":"Bearer "+token},body:fd})
+    .then(function(r){ return r.json().catch(function(){return {};}).then(function(d){ if(r.status===401) throw {auth:true}; if(!r.ok) throw new Error(d.error||("HTTP "+r.status)); }); })
+    .then(function(){ el("ej_titulo").value=""; el("ej_desc").value=""; el("ej_file").value=""; el("ej_curso").value="Todos"; return recargar(); })
+    .then(function(){ toast("Ejercicio guardado en tu biblioteca"); })
+    .catch(function(err){ if(err&&err.auth){ lock("Tu clave ya no es válida."); } toast((err&&err.message)||"No se pudo subir"); })
+    .finally(function(){ btn.disabled=false; btn.textContent=prev; });
+});
+document.body.addEventListener("click",function(e){
+  var de=e.target.closest("[data-delej]"); if(!de) return;
+  var ej=(db.ejercicios||[]).find(function(x){return x.id===de.dataset.delej;});
+  if(ej && confirm('¿Borrar el ejercicio "'+ej.titulo+'" de tu biblioteca?\n(Las clases donde ya lo mandaste lo conservan.)')){
+    apiPost("/api/admin/ejercicio",{accion:"borrar",id:ej.id})
+      .then(function(){ return recargar(); })
+      .then(function(){ toast("Ejercicio borrado"); })
       .catch(function(err){ toast((err&&err.message)||"No se pudo borrar"); });
   }
 });

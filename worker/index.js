@@ -1211,17 +1211,20 @@ async function reportarSaludCorreo(env, fallos, intentos){
   }
 }
 
-/* Auto-migración guardada: crea registro.plan si falta (schema-v17).
+/* Auto-migración guardada: registro.plan (v17) + tabla ejercicios (v18).
    Idempotente y aditiva — así el deploy por CI no depende de correr el .sql a mano. */
-let _planColChecked = false;
-async function ensurePlanColumn(env){
-  if (_planColChecked || !env.DB) return;
+let _schemaChecked = false;
+async function ensureSchema(env){
+  if (_schemaChecked || !env.DB) return;
   try {
     const info = await env.DB.prepare("PRAGMA table_info(registro)").all();
     const tiene = (info.results || []).some(c => c.name === "plan");
     if (!tiene) await env.DB.prepare("ALTER TABLE registro ADD COLUMN plan TEXT DEFAULT ''").run();
-    _planColChecked = true;
-  } catch (e) { /* otra invocación pudo crearla en paralelo; se reintenta en la próxima request */ }
+    await env.DB.prepare(
+      "CREATE TABLE IF NOT EXISTS ejercicios (id TEXT PRIMARY KEY, titulo TEXT DEFAULT '', descripcion TEXT DEFAULT '', url TEXT DEFAULT '', curso TEXT DEFAULT 'Todos', fecha TEXT DEFAULT '')"
+    ).run();
+    _schemaChecked = true;
+  } catch (e) { /* otra invocación pudo correrla en paralelo; se reintenta en la próxima request */ }
 }
 
 export default {
@@ -1234,7 +1237,7 @@ export default {
     if (request.method === "OPTIONS") return new Response(null, { status: 204 });
 
     try {
-      await ensurePlanColumn(env);
+      await ensureSchema(env);
       /* ============ PÚBLICO (sin auth): el portal lee esto antes del login ============ */
       if (url.pathname === "/api/publico" && request.method === "GET"){
         const cfg = await loadConfig(env);
@@ -2132,10 +2135,11 @@ export default {
           ).all()).results || [];
           const compras  = (await env.DB.prepare("SELECT * FROM compras WHERE estado != 'iniciada' ORDER BY CASE estado WHEN 'pendiente' THEN 0 ELSE 1 END, fecha DESC").all()).results || [];
           const recursos = (await env.DB.prepare("SELECT * FROM recursos ORDER BY fecha DESC, rowid DESC").all()).results || [];
+          const ejercicios = (await env.DB.prepare("SELECT * FROM ejercicios ORDER BY fecha DESC, rowid DESC").all()).results || [];
           const leads    = (await env.DB.prepare("SELECT id,email,marca,fuente,interes,fecha FROM leads ORDER BY fecha DESC, rowid DESC LIMIT 1000").all()).results || [];
           const precios  = await loadPrecios(env);
           const config   = await loadConfig(env);
-          return json({ alumnos, registro, precios, cuentas, compras, recursos, leads, config,
+          return json({ alumnos, registro, precios, cuentas, compras, recursos, ejercicios, leads, config,
                         vapid_public: env.VAPID_PUBLIC_KEY || "" });
         }
 
@@ -2302,6 +2306,52 @@ export default {
             "INSERT INTO config (clave, valor) VALUES ('profe_foto', ?1) ON CONFLICT(clave) DO UPDATE SET valor = ?1"
           ).bind(fotoUrl).run();
           return json({ ok: true, url: fotoUrl });
+        }
+
+        /* -------- Biblioteca de ejercicios: subir un archivo (audio/PDF/imagen) a R2 -------- */
+        if (url.pathname === "/api/admin/ejercicio/archivo" && request.method === "POST"){
+          const form = await request.formData().catch(() => null);
+          if (!form) return json({ error: "Formulario inválido" }, 400);
+          const archivo = form.get("archivo");
+          const titulo = String(form.get("titulo") || "").trim();
+          const cursos = ["Todos", "Canto", "Piano", "Composición"];
+          const curso = cursos.includes(form.get("curso")) ? form.get("curso") : "Todos";
+          const descripcion = String(form.get("descripcion") || "").trim().slice(0, 300);
+          if (titulo.length < 2) return json({ error: "Ponle un título al ejercicio." }, 400);
+          const esArchivo = archivo && typeof archivo !== "string" && typeof archivo.arrayBuffer === "function";
+          const ext = esArchivo ? extArchivo(archivo.name) : null;
+          if (!ext || archivo.size > 25 * 1024 * 1024){
+            return json({ error: "Solo audios (mp3/m4a/ogg/wav), PDF o imágenes (png/jpg) de hasta 25 MB." }, 400);
+          }
+          const key = crypto.randomUUID() + "." + ext;
+          const nombreLimpio = nombreArchivoLimpio(archivo.name);
+          await env.RECURSOS_R2.put(key, archivo, {
+            httpMetadata: { contentType: MIME_ARCHIVO[ext], contentDisposition: 'inline; filename="' + nombreLimpio + '"' }
+          });
+          await env.DB.prepare(
+            "INSERT INTO ejercicios (id,titulo,descripcion,url,curso,fecha) VALUES (?1,?2,?3,?4,?5,?6)"
+          ).bind(crypto.randomUUID(), titulo, descripcion, "/api/recurso/archivo/" + key, curso, hoy()).run();
+          return json({ ok: true });
+        }
+
+        /* -------- Biblioteca de ejercicios: borrar uno -------- */
+        if (url.pathname === "/api/admin/ejercicio" && request.method === "POST"){
+          const b = await request.json().catch(() => ({}));
+          if (b.accion === "borrar"){
+            const idEj = String(b.id || "");
+            const ej = await env.DB.prepare("SELECT url FROM ejercicios WHERE id = ?1").bind(idEj).first();
+            await env.DB.prepare("DELETE FROM ejercicios WHERE id = ?1").bind(idEj).run();
+            // borra el objeto en R2 solo si ninguna clase lo tiene adjunto (no romper tareas ya enviadas)
+            if (ej && typeof ej.url === "string" && ej.url.startsWith("/api/recurso/archivo/")){
+              const ref = await env.DB.prepare("SELECT COUNT(*) AS n FROM registro WHERE tarea_audio LIKE ?1").bind("%" + ej.url + "%").first();
+              if (!ref || !ref.n){
+                const k = ej.url.slice("/api/recurso/archivo/".length);
+                try { await env.RECURSOS_R2.delete(k); } catch (e) { /* un huérfano no bloquea el borrado */ }
+              }
+            }
+            return json({ ok: true });
+          }
+          return json({ error: "Acción inválida" }, 400);
         }
 
         /* -------- Adjuntos de tarea por clase (audio/PDF/imagen; hasta 8; subir / borrar uno) -------- */
