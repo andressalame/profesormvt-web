@@ -573,7 +573,13 @@
       <div class="field"><label>WhatsApp (con 51…)</label><input id="a_whatsapp" type="text" /></div>
     </div>
     <div class="frow">
-      <div class="field"><label>Curso</label><select id="a_curso"><option>Canto</option><option>Piano</option><option>Composición</option></select></div>
+      <div class="field"><label>Curso(s)</label>
+        <div id="a_cursos" style="display:flex;flex-wrap:wrap;gap:14px;padding:4px 0;">
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-family:var(--body);"><input type="checkbox" value="Canto" style="width:auto;"> Canto</label>
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-family:var(--body);"><input type="checkbox" value="Piano" style="width:auto;"> Piano</label>
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-family:var(--body);"><input type="checkbox" value="Composición" style="width:auto;"> Composición</label>
+        </div>
+        <p class="hint" style="margin:5px 0 0;">Marca todos los que lleva. Para 2+ cursos asegúrate de que el paquete dé las horas (8h o más).</p></div>
       <div class="field"><label>Paquete</label><select id="a_paquete"></select>
         <p class="hint" style="margin:6px 0 0;">Cambiar el paquete recalcula las clases restantes del ciclo actual.</p></div>
     </div>
@@ -603,7 +609,7 @@
     </div>
     <div class="frow">
       <div class="field"><label>Estado</label><select id="r_estado"><option>Asistió</option><option>Reprogramó</option><option>Falta</option></select></div>
-      <div class="field"><label>Curso</label><input id="r_curso" type="text" readonly /></div>
+      <div class="field"><label>Curso de esta clase</label><select id="r_curso"></select></div>
     </div>
     <p class="hint">Asistió y Falta consumen 1 clase. Reprogramar dentro del límite no consume; pasarse del límite cuenta como falta.</p>
     <div class="field"><label>¿Qué se trabajó?</label><input id="r_trabajo" type="text" /></div>
@@ -1332,11 +1338,21 @@ document.querySelectorAll(".overlay").forEach(function(o){
 });
 
 /* ---------- Alumno ---------- */
+function cursosDe(str){ return (str||"").split(",").map(function(s){return s.trim();}).filter(Boolean); }
+function getCursosAlumno(){
+  var box=el("a_cursos"); if(!box) return "";
+  return [].slice.call(box.querySelectorAll("input:checked")).map(function(c){return c.value;}).join(", ");
+}
+function setCursosAlumno(str){
+  var box=el("a_cursos"); if(!box) return;
+  var set=cursosDe(str);
+  [].slice.call(box.querySelectorAll("input")).forEach(function(c){ c.checked=set.indexOf(c.value)>=0; });
+}
 el("btnNuevoAlumno").addEventListener("click",function(){
   el("alumnoTitulo").innerHTML='Nuevo <em>alumno</em>';
   el("a_id").value=""; el("a_codigo").value=""; el("a_ciclo").value="1";
   el("a_nombre").value=""; el("a_whatsapp").value="";
-  el("a_curso").value="Canto"; fillSelects(); el("a_paquete").value="Paquete 4";
+  setCursosAlumno("Canto"); fillSelects(); el("a_paquete").value="Paquete 4";
   el("a_fecha").value=new Date().toISOString().slice(0,10); el("a_pago").value="Pagado";
   el("a_horario").value=""; el("a_notas").value=""; el("a_horario_derivado").textContent="";
   openOv("ovAlumno");
@@ -1347,7 +1363,7 @@ el("btnGuardarAlumno").addEventListener("click",function(){
   var id=el("a_id").value;
   var obj={ id:id||uid(), codigo:el("a_codigo").value||uid().slice(-6).toUpperCase(),
     ciclo:Number(el("a_ciclo").value)||1,
-    nombre:nombre, whatsapp:el("a_whatsapp").value.trim(), curso:el("a_curso").value,
+    nombre:nombre, whatsapp:el("a_whatsapp").value.trim(), curso:getCursosAlumno()||"Canto",
     paquete:el("a_paquete").value, fecha:el("a_fecha").value, pago:el("a_pago").value,
     horario:el("a_horario").value.trim(), notas:el("a_notas").value.trim() };
   if(id){ db.alumnos=db.alumnos.map(function(a){return a.id===id?obj:a;}); }
@@ -1376,7 +1392,7 @@ document.body.addEventListener("click",function(e){
     el("alumnoTitulo").innerHTML='Editar <em>alumno</em>'; fillSelects();
     el("a_id").value=a.id; el("a_codigo").value=a.codigo||""; el("a_ciclo").value=a.ciclo||1;
     el("a_nombre").value=a.nombre; el("a_whatsapp").value=a.whatsapp||"";
-    el("a_curso").value=a.curso; el("a_paquete").value=a.paquete; el("a_fecha").value=a.fecha||"";
+    setCursosAlumno(a.curso); el("a_paquete").value=a.paquete; el("a_fecha").value=a.fecha||"";
     el("a_pago").value=a.pago; el("a_horario").value=a.horario||""; el("a_notas").value=a.notas||"";
     el("a_horario_derivado").textContent=(a.horarioFijo&&a.horarioFijo.length)?("Agenda: "+a.horarioFijo.join(" · ")):"Sin horario fijo en la agenda";
     openOv("ovAlumno");
@@ -1404,7 +1420,14 @@ document.body.addEventListener("click",function(e){
     el("r_tarea").value=rg.tarea||"";
     el("r_plan").value=rg.plan||"";
     el("r_ejercicio").value="";
-    syncCurso(); if(rg.curso){ el("r_curso").value=rg.curso; fillEjercicioSelect(rg.curso); }   // conservar el curso original de la clase
+    syncCurso();
+    if(rg.curso){   // conservar el curso original de la clase aunque el alumno ya no lo lleve
+      var rs=el("r_curso");
+      if(![].slice.call(rs.options).some(function(o){return o.value===rg.curso;})){
+        rs.insertAdjacentHTML("beforeend",'<option value="'+esc(rg.curso)+'">'+esc(rg.curso)+'</option>');
+      }
+      rs.value=rg.curso; fillEjercicioSelect(rg.curso);
+    }
     openOv("ovRegistro");
   }
   if(rv){ var ar=db.alumnos.find(function(x){return x.id===rv.dataset.renovar;}); if(ar) renovar(ar); }
@@ -1423,10 +1446,15 @@ document.body.addEventListener("click",function(e){
 /* ---------- Registro ---------- */
 function syncCurso(){
   var a=db.alumnos.find(function(x){return x.id===el("r_alumno").value;});
-  el("r_curso").value=a?a.curso:"";
-  fillEjercicioSelect(a?a.curso:"");
+  var sel=el("r_curso");
+  var cursos=a?cursosDe(a.curso):[];
+  if(!cursos.length) cursos=[""];
+  sel.innerHTML=cursos.map(function(c){return '<option value="'+esc(c)+'">'+esc(c||"—")+'</option>';}).join("");
+  sel.value=cursos[0];
+  fillEjercicioSelect(cursos[0]);
 }
 el("r_alumno").addEventListener("change",syncCurso);
+el("r_curso").addEventListener("change",function(){ fillEjercicioSelect(el("r_curso").value); });
 /* ---------- Filtros de Clases ---------- */
 ["regBuscar","regFiltroAlumno","regFiltroEstado"].forEach(function(id){
   var n=el(id); if(!n) return;

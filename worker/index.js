@@ -1579,11 +1579,13 @@ export default {
         ).bind(refCode).first();
 
         const cursoAl = alumno ? (alumno.curso || "") : "";
+        const cursosAl = cursoAl.split(",").map(s => s.trim()).filter(Boolean);
         // Recursos SOLO para alumnos y ex-alumnos (cuentas vinculadas a un alumno via alumno_id). Cuentas gratis no reciben recursos.
+        // Un alumno con varios cursos (ej. "Canto, Composición") recibe los recursos de TODOS sus cursos.
         const esAlumnoOEx = !!cu.alumno_id;
-        const recursos = esAlumnoOEx ? ((await env.DB.prepare(
-          "SELECT id, titulo, descripcion, url, curso, fecha FROM recursos WHERE curso = 'Todos' OR curso = ?1 ORDER BY fecha DESC, rowid DESC"
-        ).bind(cursoAl).all()).results || []) : [];
+        const recursos = esAlumnoOEx ? (((await env.DB.prepare(
+          "SELECT id, titulo, descripcion, url, curso, fecha FROM recursos ORDER BY fecha DESC, rowid DESC"
+        ).all()).results || []).filter(r => r.curso === "Todos" || cursosAl.indexOf(r.curso) >= 0)) : [];
 
         const pagos = (await env.DB.prepare(
           "SELECT fecha, curso, paquete, monto, COALESCE(descuento,0) AS descuento, estado FROM compras WHERE cuenta_id = ?1 ORDER BY fecha DESC, rowid DESC LIMIT 20"
