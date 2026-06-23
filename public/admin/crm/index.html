@@ -151,10 +151,18 @@
   .brand-name{font-family:var(--display);font-size:18px;line-height:1.04;color:var(--cream);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
   .brand-sub{font-family:var(--mono);font-size:9px;text-transform:uppercase;letter-spacing:.16em;color:var(--accent);margin-top:3px;}
   .nav{flex:1;padding:12px 10px 6px;}
-  .navgroup{margin-bottom:13px;}
-  .navgroup-h{font-family:var(--mono);text-transform:uppercase;letter-spacing:.13em;font-size:9px;color:var(--muted);font-weight:700;padding:5px 11px 5px;}
-  .navgroup-h::before{content:"";}
-  .nav .tab{display:flex;align-items:center;gap:9px;width:100%;text-align:left;justify-content:flex-start;border:1px solid transparent;background:transparent;color:var(--muted);padding:8px 11px;border-radius:3px;text-transform:none;letter-spacing:.01em;font-family:var(--body);font-size:14px;font-weight:500;margin:1px 0;transition:background .12s,color .12s;}
+  .navgroup{margin-bottom:4px;}
+  .navgroup-h{display:flex;align-items:center;gap:9px;width:100%;background:transparent;border:1px solid transparent;border-radius:3px;padding:9px 11px;cursor:pointer;font-family:var(--mono);text-transform:uppercase;letter-spacing:.1em;font-size:10.5px;color:var(--muted);font-weight:700;transition:color .12s,background .12s;}
+  .navgroup-h::before{content:none;}
+  .navgroup-h:hover{color:var(--cream);background:var(--panel2);}
+  .navgroup-h .ng-ico{flex:0 0 18px;text-align:center;font-size:14px;}
+  .navgroup-h .ng-tx{flex:1;text-align:left;}
+  .navgroup-h .ng-chev{flex:0 0 auto;font-size:11px;opacity:.6;transition:transform .18s;}
+  .navgroup.open>.navgroup-h{color:var(--accent);}
+  .navgroup.open>.navgroup-h .ng-chev{transform:rotate(180deg);opacity:1;}
+  .navgroup-items{display:none;padding:2px 0 4px;}
+  .navgroup.open>.navgroup-items{display:block;animation:fadeUp .2s ease both;}
+  .nav .tab{display:flex;align-items:center;gap:9px;width:100%;text-align:left;justify-content:flex-start;border:1px solid transparent;background:transparent;color:var(--muted);padding:8px 11px 8px 20px;border-radius:3px;text-transform:none;letter-spacing:.01em;font-family:var(--body);font-size:14px;font-weight:500;margin:1px 0;transition:background .12s,color .12s;}
   .nav .tab:hover{color:var(--cream);background:var(--panel2);border-color:transparent;box-shadow:none;}
   .nav .tab.active{background:var(--accent);color:var(--bg);border-color:var(--accent);font-weight:700;box-shadow:3px 3px 0 var(--cream);transform:none;}
   .nav .tab .dot{position:static;margin-left:auto;}
@@ -168,10 +176,15 @@
   .sb-tools details[open] summary{color:var(--accent);margin-bottom:7px;}
   .sb-toolsbox{display:flex;flex-direction:column;gap:7px;}
   .main{flex:1;min-width:0;display:flex;flex-direction:column;}
-  .topbar{display:none;align-items:center;gap:12px;padding:11px 15px;border-bottom:1px solid var(--line);background:var(--panel);position:sticky;top:0;z-index:30;}
-  .topbar .eyebrow{margin:0;}
-  .hamb{background:transparent;border:1px solid var(--line);color:var(--cream);font-size:17px;line-height:1;padding:6px 12px;border-radius:3px;cursor:pointer;}
+  .topbar{display:flex;align-items:center;gap:12px;padding:10px 15px;border-bottom:1px solid var(--line);background:var(--panel);position:sticky;top:0;z-index:30;}
+  .topbar .eyebrow{margin:0;display:none;}
+  .hamb{background:transparent;border:1px solid var(--line);color:var(--cream);font-size:17px;line-height:1;padding:6px 12px;border-radius:3px;cursor:pointer;transition:border-color .12s,color .12s;}
+  .hamb:hover{border-color:var(--accent);color:var(--accent);}
+  .hamb-tx{font-family:var(--mono);font-size:10.5px;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);}
+  .app.collapsed .hamb-tx{color:var(--accent);}
   .content{padding:24px 28px 90px;max-width:1180px;width:100%;}
+  /* colapsar TODO el sidebar (solo desktop): se va a la izquierda y el contenido toma el ancho completo */
+  @media (min-width:881px){ .app.collapsed .sidebar{display:none;} }
   .pagehead{margin:0 0 18px;}
   .pagehead .eyebrow{margin-bottom:2px;}
   .pagehead h1{font-size:clamp(26px,4vw,38px);margin:.1em 0 .12em;}
@@ -196,7 +209,8 @@
   @media (max-width:880px){
     .sidebar{position:fixed;left:0;top:0;transform:translateX(-100%);transition:transform .22s ease;box-shadow:6px 0 32px rgba(0,0,0,.55);}
     .sidebar.open{transform:translateX(0);}
-    .topbar{display:flex;}
+    .topbar .eyebrow{display:block;}
+    .hamb-tx{display:none;}
     .content{padding:18px 15px 90px;}
     .pagehead{display:none;}
   }
@@ -205,7 +219,7 @@
 <body>
 <div class="punkbg" aria-hidden="true"></div>
 <div class="scrim" id="scrim"></div>
-<div class="app">
+<div class="app" id="app">
   <aside class="sidebar" id="sidebar">
     <div class="brand">
       <div class="brand-foto ph" id="navFoto">M</div>
@@ -216,27 +230,35 @@
     </div>
     <nav class="nav">
       <div class="navgroup">
-        <div class="navgroup-h">Alumnos</div>
-        <button class="tab" data-tab="alumnos">Alumnos</button>
-        <button class="tab" data-tab="registro">Clases</button>
-        <button class="tab" data-tab="agenda">Agenda</button>
-        <button class="tab" data-tab="chat">Chat</button>
+        <button class="navgroup-h" type="button"><span class="ng-ico">👥</span><span class="ng-tx">Alumnos</span><span class="ng-chev">⌄</span></button>
+        <div class="navgroup-items">
+          <button class="tab" data-tab="alumnos">Alumnos</button>
+          <button class="tab" data-tab="registro">Clases</button>
+          <button class="tab" data-tab="agenda">Agenda</button>
+          <button class="tab" data-tab="chat">Chat</button>
+        </div>
       </div>
       <div class="navgroup">
-        <div class="navgroup-h">Dinero &amp; leads</div>
-        <button class="tab" data-tab="pagos">Pagos<span class="dot hidden" id="dotPagos">0</span></button>
-        <button class="tab" data-tab="cuentas">Cuentas</button>
-        <button class="tab" data-tab="leads">Leads</button>
+        <button class="navgroup-h" type="button"><span class="ng-ico">💰</span><span class="ng-tx">Dinero &amp; leads</span><span class="ng-chev">⌄</span></button>
+        <div class="navgroup-items">
+          <button class="tab" data-tab="pagos">Pagos<span class="dot hidden" id="dotPagos">0</span></button>
+          <button class="tab" data-tab="cuentas">Cuentas</button>
+          <button class="tab" data-tab="leads">Leads</button>
+        </div>
       </div>
       <div class="navgroup">
-        <div class="navgroup-h">Material</div>
-        <button class="tab" data-tab="recursos">Recursos</button>
+        <button class="navgroup-h" type="button"><span class="ng-ico">🎵</span><span class="ng-tx">Material</span><span class="ng-chev">⌄</span></button>
+        <div class="navgroup-items">
+          <button class="tab" data-tab="recursos">Recursos</button>
+        </div>
       </div>
       <div class="navgroup">
-        <div class="navgroup-h">Mi cuenta</div>
-        <button class="tab active" data-tab="resumen">Resumen</button>
-        <button class="tab" data-tab="perfil">Perfil</button>
-        <button class="tab" data-tab="ajustes">Ajustes</button>
+        <button class="navgroup-h" type="button"><span class="ng-ico">⚙️</span><span class="ng-tx">Mi cuenta</span><span class="ng-chev">⌄</span></button>
+        <div class="navgroup-items">
+          <button class="tab active" data-tab="resumen">Resumen</button>
+          <button class="tab" data-tab="perfil">Perfil</button>
+          <button class="tab" data-tab="ajustes">Ajustes</button>
+        </div>
       </div>
     </nav>
     <div class="sb-tools">
@@ -256,7 +278,8 @@
 
   <main class="main">
     <header class="topbar">
-      <button class="hamb" id="btnMenu" aria-label="Menú">&#9776;</button>
+      <button class="hamb" id="btnMenu" aria-label="Mostrar u ocultar el menú">&#9776;</button>
+      <span class="hamb-tx" id="menuTxt">Menú</span>
       <div class="eyebrow" id="topTitle">// Resumen</div>
     </header>
     <div class="content">
@@ -1166,11 +1189,38 @@ el("btnBloquearSlot").addEventListener("click",function(){
   }).catch(function(e){ toast(e.message||"No se pudo"); });
 });
 
-/* ---------- Menú lateral (drawer en móvil) ---------- */
+/* ---------- Menú lateral: drawer en móvil, colapsar en desktop ---------- */
+var NAV_KEY="pmvt_nav_collapsed";
+function esMovil(){ return window.matchMedia("(max-width:880px)").matches; }
 function cerrarDrawer(){ var s=el("sidebar"); if(s) s.classList.remove("open"); var sc=el("scrim"); if(sc) sc.classList.remove("show"); }
 function abrirDrawer(){ var s=el("sidebar"); if(s) s.classList.add("open"); var sc=el("scrim"); if(sc) sc.classList.add("show"); }
-if(el("btnMenu")) el("btnMenu").addEventListener("click",abrirDrawer);
+function toggleNav(){
+  if(esMovil()){
+    if(el("sidebar").classList.contains("open")) cerrarDrawer(); else abrirDrawer();
+  } else {
+    var col=el("app").classList.toggle("collapsed");
+    try{ localStorage.setItem(NAV_KEY, col?"1":"0"); }catch(e){}
+  }
+}
+if(el("btnMenu")) el("btnMenu").addEventListener("click",toggleNav);
 if(el("scrim")) el("scrim").addEventListener("click",cerrarDrawer);
+window.addEventListener("resize",function(){ if(!esMovil()) cerrarDrawer(); });
+/* restaurar la preferencia de colapso en desktop */
+try{ if(localStorage.getItem(NAV_KEY)==="1") el("app").classList.add("collapsed"); }catch(e){}
+
+/* ---------- Acordeón de grupos (clic en la categoría revela sus subcategorías) ---------- */
+document.querySelectorAll(".navgroup-h").forEach(function(h){
+  h.addEventListener("click",function(){
+    var g=h.parentNode, abierto=g.classList.contains("open");
+    document.querySelectorAll(".navgroup").forEach(function(x){ x.classList.remove("open"); });
+    if(!abierto) g.classList.add("open");
+  });
+});
+function abrirGrupoActivo(){
+  var t=document.querySelector(".nav .tab.active");
+  if(t){ var g=t.closest(".navgroup"); if(g) g.classList.add("open"); }
+}
+abrirGrupoActivo();
 
 /* ---------- Tabs / modales ---------- */
 var TITULOS={resumen:"Resumen",alumnos:"Alumnos",registro:"Clases",agenda:"Agenda",pagos:"Pagos",cuentas:"Cuentas",leads:"Leads",recursos:"Recursos",ajustes:"Ajustes",perfil:"Perfil",chat:"Chat"};
