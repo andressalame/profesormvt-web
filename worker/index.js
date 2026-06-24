@@ -1246,12 +1246,6 @@ export default {
         return json({ google_client_id: cfg.google_client_id || "" });
       }
 
-      /* TEMPORAL (quitar tras usar): dispara el nurture a mano sin esperar al cron. Token de un solo uso. */
-      if (url.pathname === "/api/nurture/run-once" && url.searchParams.get("k") === "2b9ac9efed124b015b474ee832858364"){
-        const enviados = await procesarNurtureLeads(env);
-        return json({ ok: true, total: enviados.length, enviados });
-      }
-
       /* ============ ARCHIVO DE RECURSO (PDF / audio servido desde R2) ============ */
       if (url.pathname.startsWith("/api/recurso/archivo/") && request.method === "GET"){
         const key = url.pathname.slice("/api/recurso/archivo/".length);
