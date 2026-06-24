@@ -604,8 +604,8 @@ async function procesarWinBack(env){
    Andrés mueva un dedo. Convierte el ~90% del tráfico pagado que hoy se enfría. Reusa Resend + D1.
    Pasos de la secuencia: día desde la captura -> número de correo de seguimiento. */
 const NURTURE_PASOS = [
-  { paso: 1, dia: 2 },   // ~2 días después: empuje suave + bajar la barrera
-  { paso: 2, dia: 5 }    // ~5 días después: la oferta concreta de la clase de prueba
+  { paso: 1, dia: 1 },   // ~1 día después: empuje suave + bajar la barrera
+  { paso: 2, dia: 3 }    // ~3 días después: la oferta concreta de la clase de prueba
 ];
 
 /* Correo de seguimiento a un lead que dejó su correo y todavía no compra. paso = 1 | 2. */
@@ -627,12 +627,12 @@ async function correoNurtureLead(env, to, paso){
     subject = "Aprender música de adulto sí se entrena";
     html = wrap(
       '<p>Hola,</p>' +
-      '<p>Te bajaste la guía hace un par de días, así que te escribo por una sola razón: la mayoría de adultos cree que ya se le pasó el tren para cantar, tocar o componer. No es verdad. Esto no es talento, es entrenamiento, y se entrena a cualquier edad.</p>' +
+      '<p>Te bajaste la guía ayer, así que te escribo por una sola razón: la mayoría de adultos cree que ya se le pasó el tren para cantar, tocar o componer. No es verdad. Esto no es talento, es entrenamiento, y se entrena a cualquier edad.</p>' +
       '<p>La forma más rápida de comprobarlo es una clase de prueba (S/50) con un diagnóstico hecho a tu medida: en una hora ves exactamente dónde estás y qué te falta para sonar como quieres.</p>' +
       boton("Ver horarios disponibles") +
       '<p>Eliges tu horario ahí mismo, cuando quieras.</p>'
     );
-    text = 'Hola,\n\nTe bajaste la guía hace un par de días. La mayoría de adultos cree que ya se le pasó el tren para cantar, tocar o componer. No es verdad: esto no es talento, es entrenamiento, y se entrena a cualquier edad.\n\nLa forma más rápida de comprobarlo es una clase de prueba (S/50) con un diagnóstico a tu medida. Mira los horarios disponibles aquí: ' + horarios + '\n\nUn abrazo,\nAndrés - ProfesorMVT';
+    text = 'Hola,\n\nTe bajaste la guía ayer. La mayoría de adultos cree que ya se le pasó el tren para cantar, tocar o componer. No es verdad: esto no es talento, es entrenamiento, y se entrena a cualquier edad.\n\nLa forma más rápida de comprobarlo es una clase de prueba (S/50) con un diagnóstico a tu medida. Mira los horarios disponibles aquí: ' + horarios + '\n\nUn abrazo,\nAndrés - ProfesorMVT';
   } else {
     subject = "Tu clase de prueba con diagnóstico te espera";
     html = wrap(
