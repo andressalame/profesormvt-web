@@ -686,9 +686,11 @@ async function procesarNurtureLeads(env){
       continue;
     }
     const dias = Math.floor((ahora - Date.parse(l.fecha + "T00:00:00Z")) / 86400000);
-    // El paso a enviar: el mayor cuyo umbral de días ya se cumplió y que aún no recibió (no manda 2 el mismo día).
+    // Avanza UN solo paso por corrida: solo el siguiente al que ya recibió, y solo si su umbral de días ya se cumplió.
+    // Así nadie se salta el correo 1 (el día-3 sin correo 1 recibe el 1, no salta al 2) y nunca se mandan 2 el mismo día.
     let aEnviar = null;
-    for (const p of NURTURE_PASOS){ if (p.paso > pasoActual && dias >= p.dia) aEnviar = p.paso; }
+    const siguiente = NURTURE_PASOS.find(function(p){ return p.paso === pasoActual + 1; });
+    if (siguiente && dias >= siguiente.dia) aEnviar = siguiente.paso;
     if (!aEnviar) continue;
     const ok = await correoNurtureLead(env, l.email, aEnviar);
     if (ok){
@@ -1242,6 +1244,12 @@ export default {
       if (url.pathname === "/api/publico" && request.method === "GET"){
         const cfg = await loadConfig(env);
         return json({ google_client_id: cfg.google_client_id || "" });
+      }
+
+      /* TEMPORAL (quitar tras usar): dispara el nurture a mano sin esperar al cron. Token de un solo uso. */
+      if (url.pathname === "/api/nurture/run-once" && url.searchParams.get("k") === "2b9ac9efed124b015b474ee832858364"){
+        const enviados = await procesarNurtureLeads(env);
+        return json({ ok: true, total: enviados.length, enviados });
       }
 
       /* ============ ARCHIVO DE RECURSO (PDF / audio servido desde R2) ============ */
