@@ -388,7 +388,7 @@
         <h2 style="margin-top:12px;">¡Tu cuenta está lista! 🤘</h2>
         <p>Este es tu portal: acá manejas tus clases, pagos y material. Para arrancar son 3 pasos:</p>
         <ol class="onb-steps">
-          <li><b>1 · Compra tu paquete.</b> Elige canto, piano o composición (o combínalos). Pagas con Yape o Plin y se activa el mismo día.</li>
+          <li><b>1 · Compra tu paquete.</b> Elige canto, piano o composición (o combínalos). Con tarjeta se activa al instante; con Yape, Plin o transferencia el mismo día.</li>
           <li><b>2 · Elige tus horarios.</b> Coordinamos tus clases 1 a 1 a tu ritmo.</li>
           <li><b>3 · Aprende y avanza.</b> Aquí verás tus clases restantes, tu tarea de la semana y el material exclusivo.</li>
         </ol>
@@ -477,7 +477,7 @@
     <section class="view" id="v-comprar">
       <div class="eyebrow">// COMPRAR</div>
       <h1>Elige tu <em>paquete</em></h1>
-      <div class="sub">Pago por Yape o Plin · activación el mismo día</div>
+      <div class="sub">Tarjeta, Yape, Plin o transferencia · activación al instante con tarjeta</div>
       <hr class="rule" />
       <div class="banner hidden" id="bCredito"></div>
       <div class="banner naranja hidden" id="bPendC"></div>
@@ -594,8 +594,8 @@
       <div class="field"><label for="c_paquete">Paquete</label><select id="c_paquete"></select></div>
       <div class="field"><label for="c_metodo">Método de pago</label>
         <select id="c_metodo">
+          <option value="Tarjeta (Mercado Pago)">Tarjeta de crédito/débito (confirma al instante)</option>
           <option value="Yape/Plin/Sip">Yape / Plin / Sip</option>
-          <option value="Tarjeta (Mercado Pago)">Tarjeta de crédito/débito</option>
           <option value="Transferencia BCP">Transferencia BCP</option>
           <option value="Transferencia Scotiabank">Transferencia Scotiabank</option>
           <option value="Crypto USDT">Crypto (USDT)</option>
@@ -924,7 +924,7 @@ function abrirCompra(pk){
   if(pk) $("c_paquete").value = pk;
   if(ME.alumno && ME.alumno.curso) $("c_curso").value = ME.alumno.curso;
   actualizaMonto();
-  $("c_metodo").value = "Yape/Plin/Sip";
+  $("c_metodo").value = "Tarjeta (Mercado Pago)";
   renderPaybox();
   $("c_op").value=""; if($("c_screenshot")) $("c_screenshot").value=""; $("compraErr").textContent="";
   show("compraPaso1"); hide("compraPaso2");
