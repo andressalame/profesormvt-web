@@ -500,6 +500,11 @@
       <p class="hint" style="margin-top:-4px;">Salen en el portal como métodos de pago al comprar.</p>
     </div>
     <div class="group">
+      <h2>// Mensajes de WhatsApp</h2>
+      <p class="hint">Plantilla que se usa cuando le das clic a "Enviar mensaje" en la tabla de Alumnos. Usa <code>{nombre}</code> y <code>{curso}</code> — se reemplazan solos. Si lo dejas vacío, se usa el mensaje por defecto.</p>
+      <div class="field"><label>Mensaje de renovación</label><textarea id="cfg_msg_renovacion" style="min-height:110px;" placeholder="Hola {nombre}, ¡qué tal! Vamos cerrando tu paquete de {curso}…"></textarea></div>
+    </div>
+    <div class="group">
       <h2>// Google Calendar</h2>
       <p class="hint">Conecta tu Google Calendar y cada reserva caerá en tu calendario con link de Meet, y el alumno recibe la invitación. Pega el Client ID y el Secret de Google Cloud, dale "Guardar ajustes" y luego "Conectar".</p>
       <div class="cfgrow"><span class="pk">Client ID</span><input id="cfg_gcal_client_id" type="text" placeholder="xxxxx.apps.googleusercontent.com" /></div>
@@ -888,7 +893,7 @@ function renderAlumnos(){
   tb.innerHTML=db.alumnos.map(function(a){
     var c=computeAlumno(a);
     var cu=cuentaDeAlumno(a.id);
-    var renovBtn=(c.clase!=="green")?'<button class="btn sm" data-renovar="'+a.id+'">Renovar</button>':'';
+    var renovBtn=(c.clase!=="green")?'<button class="btn sm" data-renovar="'+a.id+'">Enviar mensaje</button>':'';
     var pago=a.pago==="Pagado"?'<span class="pill pago-ok">Pagado</span>':'<span class="pill pago-pend">Pendiente</span>';
     return '<tr>'+
       '<td class="name">'+esc(a.nombre)+'<br><span class="mini">'+esc(a.whatsapp||'')+'</span></td>'+
@@ -1064,6 +1069,7 @@ function renderAjustes(){
   el("cfg_crypto_moneda").value=(db.config&&db.config.crypto_moneda)||"";
   el("cfg_crypto_red").value=(db.config&&db.config.crypto_red)||"";
   el("cfg_crypto_wallet").value=(db.config&&db.config.crypto_wallet)||"";
+  el("cfg_msg_renovacion").value=(db.config&&db.config.msg_renovacion)||"";
   el("cfg_gcal_client_id").value=(db.config&&db.config.gcal_client_id)||"";
   el("cfg_gcal_client_secret").value=(db.config&&db.config.gcal_client_secret)||"";
   el("cfg_gcal_calendar_id").value=(db.config&&db.config.gcal_calendar_id)||"primary";
@@ -1683,14 +1689,16 @@ el("chatNuevoAlumno").addEventListener("change",function(){
 el("chatAdmEnviar").addEventListener("click", chatAdmEnviarMsg);
 el("chatAdmTexto").addEventListener("keydown",function(e){ if(e.key==="Enter") chatAdmEnviarMsg(); });
 
-/* ---------- Renovar por WhatsApp ---------- */
+/* ---------- Mensaje de renovación por WhatsApp ---------- */
+var MSG_RENOVACION_DEFAULT = "Hola {nombre}, ¡qué tal! Vamos cerrando tu paquete de {curso} y no quiero que pierdas el ritmo que llevas. "+
+  "¿Cuadramos la renovación? Te cuento del plan trimestral (el 3er mes va al 50%) para que reserves tus horarios fijos. "+
+  "Puedes renovar tú mismo desde tu portal: https://profesormvt.com/alumnos/ ¿Le entramos?";
 function renovar(a){
   var num=(a.whatsapp||"").replace(/\D/g,"");
   if(num.length===9) num="51"+num;
   if(!num){ toast("Este alumno no tiene WhatsApp guardado"); return; }
-  var msg="Hola "+a.nombre+", ¡qué tal! Vamos cerrando tu paquete de "+a.curso+" y no quiero que pierdas el ritmo que llevas. "+
-          "¿Cuadramos la renovación? Te cuento del plan trimestral (el 3er mes va al 50%) para que reserves tus horarios fijos. "+
-          "Puedes renovar tú mismo desde tu portal: https://profesormvt.com/alumnos/ ¿Le entramos?";
+  var plantilla=(db.config&&db.config.msg_renovacion) || MSG_RENOVACION_DEFAULT;
+  var msg=plantilla.replace(/\{nombre\}/g,a.nombre).replace(/\{curso\}/g,a.curso||"");
   window.open("https://wa.me/"+num+"?text="+encodeURIComponent(msg),"_blank");
 }
 
@@ -1735,6 +1743,7 @@ el("btnGuardarAjustes").addEventListener("click",function(){
             crypto_moneda:el("cfg_crypto_moneda").value.trim(),
             crypto_red:el("cfg_crypto_red").value.trim(),
             crypto_wallet:el("cfg_crypto_wallet").value.trim(),
+            msg_renovacion:el("cfg_msg_renovacion").value.trim(),
             gcal_client_id:el("cfg_gcal_client_id").value.trim(),
             gcal_client_secret:el("cfg_gcal_client_secret").value.trim(),
             gcal_calendar_id:el("cfg_gcal_calendar_id").value.trim()||"primary" };
