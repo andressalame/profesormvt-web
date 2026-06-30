@@ -648,6 +648,26 @@
   </div>
 </div>
 
+<!-- Modal renovar manual -->
+<div class="overlay" id="ovRenovar">
+  <div class="modal">
+    <h3>Registrar <em>renovación</em></h3>
+    <div class="mlab">// Pago recibido fuera del portal (Yape directo, efectivo, etc.)</div>
+    <input type="hidden" id="rn_id" />
+    <div class="field"><label>Paquete comprado</label><select id="rn_paquete"></select>
+      <p class="hint" style="margin:6px 0 0;">Puede ser igual o distinto al que tenía antes.</p></div>
+    <div class="frow">
+      <div class="field"><label>Fecha de compra</label><input id="rn_fecha" type="date" /></div>
+      <div class="field"><label>Estado de pago</label><select id="rn_pago"><option>Pagado</option><option>Pendiente</option></select></div>
+    </div>
+    <p class="hint">Esto abre un ciclo nuevo: las clases restantes se recalculan desde cero con el paquete elegido. El historial de clases anteriores se conserva, no se borra.</p>
+    <div class="modal-actions">
+      <button class="btn ghost" data-close>Cancelar</button>
+      <button class="btn" id="btnGuardarRenovar">Guardar renovación</button>
+    </div>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script>
@@ -881,7 +901,7 @@ function renderAlumnos(){
       '<td><span class="big">'+c.reprogRest+'</span> <span class="mini">/ '+c.reprogPermit+'</span></td>'+
       '<td><span class="pill '+c.clase+'">'+esc(c.estado)+'</span></td>'+
       '<td class="notes">'+esc(a.notas||'')+'</td>'+
-      '<td><div class="rowact">'+renovBtn+'<button class="btn ghost sm" data-edit="'+a.id+'">Editar</button><button class="btn ghost sm" data-del="'+a.id+'">×</button></div></td>'+
+      '<td><div class="rowact">'+renovBtn+'<button class="btn ghost sm" data-regrenovacion="'+a.id+'" title="Registrar un pago de renovación recibido fuera del portal">+ Renovar</button><button class="btn ghost sm" data-edit="'+a.id+'">Editar</button><button class="btn ghost sm" data-del="'+a.id+'">×</button></div></td>'+
     '</tr>';
   }).join("");
 }
@@ -1378,7 +1398,9 @@ document.body.addEventListener("click",function(e){
       cf=e.target.closest("[data-confirmar]"), rj=e.target.closest("[data-rechazar]"),
       vi=e.target.closest("[data-vincular]"), rp=e.target.closest("[data-resetpass]"),
       dc=e.target.closest("[data-delcuenta]"),
-      at=e.target.closest("[data-avisartarea]");
+      at=e.target.closest("[data-avisartarea]"),
+      rr=e.target.closest("[data-regrenovacion]");
+  if(rr){ abrirRenovar(rr.dataset.regrenovacion); return; }
   if(at){
     var aid=at.dataset.avisartarea, txt=at.dataset.tareatxt||"";
     if(aid && confirm("¿Avisar al alumno por push de su nueva tarea?")){
@@ -1671,6 +1693,30 @@ function renovar(a){
           "Puedes renovar tú mismo desde tu portal: https://profesormvt.com/alumnos/ ¿Le entramos?";
   window.open("https://wa.me/"+num+"?text="+encodeURIComponent(msg),"_blank");
 }
+
+/* ---------- Renovación manual (pago recibido fuera del portal) ---------- */
+function abrirRenovar(alumnoId){
+  var a=db.alumnos.find(function(x){return x.id===alumnoId;}); if(!a) return;
+  el("rn_id").value=a.id;
+  el("rn_paquete").innerHTML=Object.keys(PAQUETES).map(function(p){return '<option>'+p+'</option>';}).join("");
+  el("rn_paquete").value=a.paquete;
+  el("rn_fecha").value=new Date().toISOString().slice(0,10);
+  el("rn_pago").value="Pagado";
+  openOv("ovRenovar");
+}
+el("btnGuardarRenovar").addEventListener("click",function(){
+  var id=el("rn_id").value;
+  var a=db.alumnos.find(function(x){return x.id===id;}); if(!a) return;
+  var nuevoCiclo=(Number(a.ciclo)||1)+1;
+  var obj=Object.assign({},a,{
+    paquete:el("rn_paquete").value,
+    fecha:el("rn_fecha").value,
+    pago:el("rn_pago").value,
+    ciclo:nuevoCiclo
+  });
+  db.alumnos=db.alumnos.map(function(x){return x.id===id?obj:x;});
+  apiPut().then(renderAll); closeOv("ovRenovar"); toast("Renovación registrada — ciclo "+nuevoCiclo);
+});
 
 /* ---------- Ajustes ---------- */
 el("btnGuardarAjustes").addEventListener("click",function(){
