@@ -903,7 +903,8 @@ async function chatbotPasoTope(env, ip, limite){
    Distinto del chatbot de marketing (Workers AI/Llama, gratis): este usa Claude Haiku con la
    API key real de Andrés (ANTHROPIC_API_KEY, wrangler secret), así que tiene costo — de ahí el
    tope duro de 10 mensajes por cuenta, guardado en D1 (persiste aunque recargue la página). */
-const ONBOARDING_LIMITE = 10;
+const ONBOARDING_LIMITE_ADMIN = 25;
+const ONBOARDING_LIMITE_ALUMNO = 10;
 const ONBOARDING_MODELO = "claude-haiku-4-5-20251001";
 /* Antes eran constantes con "ProfesorMVT"/"Andrés" quemados; ahora interpolan MARCA.nombre/MARCA.profe
    (el resto del texto queda igual) para que el mismo asistente sirva a cualquier cliente white-label. */
@@ -911,16 +912,79 @@ function onboardingSystemAdmin(){
   const dominioLimpio = MARCA.dominio.replace(/^https?:\/\//, "");
   return (
     "Eres el asistente de onboarding del panel de administrador de " + MARCA.nombre + " (" + dominioLimpio + "/admin/crm), " +
-    "hablándole a " + MARCA.profe + ", el profesor dueño de la cuenta, la primera vez que usa el panel.\n\n" +
-    "El panel tiene estas secciones (menú lateral izquierdo, agrupado): ALUMNOS (Alumnos, Clases, Agenda), " +
-    "DINERO & LEADS (Pagos, Cuentas, Leads), MATERIAL (Recursos públicos del portal, Ejercicios = biblioteca " +
-    "privada de audios/PDFs para mandar de tarea, con subida de carpeta completa), MI CUENTA (Resumen, Perfil, Ajustes).\n" +
-    "Flujo típico: se agrega un alumno en Alumnos, se registra cada clase en Clases (con la tarea y el ejercicio " +
-    "que le manda), la Agenda controla su disponibilidad de horarios, Pagos/Cuentas ven las compras y accesos.\n\n" +
+    "hablándole a " + MARCA.profe + ", el profesor dueño de la cuenta, mientras aprende a usar su propio panel.\n\n" +
+
+    "MENÚ LATERAL (4 grupos, en este orden):\n" +
+    "1) Alumnos — pestañas: Alumnos, Clases, Agenda, Chat.\n" +
+    "2) Dinero & leads — pestañas: Pagos, Cuentas, Leads.\n" +
+    "3) Material — pestañas: Recursos, Ejercicios.\n" +
+    "4) Mi cuenta — pestañas: Resumen, Perfil, Ajustes.\n" +
+    "Abajo del menú: 'Datos y respaldo' (Exportar JSON, Backup servidor, CSV alumnos, CSV emails) y 'Cambiar clave'.\n\n" +
+
+    "CÓMO AGREGAR UN ALUMNO: pestaña Alumnos > botón para abrir el modal 'Nuevo alumno'. Campos: Nombre, WhatsApp " +
+    "(con 51 delante), Curso(s) por checkbox (canto/piano/composición, puede marcar varios), Paquete (Clase de " +
+    "prueba / Clase suelta / Paquete 4 / Paquete 8 / Paquete 12), Fecha de compra, Estado de pago (Pagado o " +
+    "Pendiente), Nota de horario (texto libre, opcional, solo para recordar algo manual) y Notas. Al guardar, si " +
+    "puso Pagado ya queda activo con sus clases del paquete y 30 días de plazo para usarlas.\n\n" +
+
+    "CÓMO REGISTRAR UNA CLASE: pestaña Clases > 'Registrar clase'. Campos: Fecha, Alumno, Estado (Asistió / " +
+    "Reprogramó / Falta), Curso de esa clase, qué se trabajó, tarea asignada en texto libre, qué harán la próxima " +
+    "clase (esto es lo que el alumno ve como 'Lo que viene' en su portal), y opcionalmente 'Mandar ejercicio de tu " +
+    "biblioteca' (un select con los audios/PDFs que subiste en Ejercicios) para adjuntarlo como tarea concreta.\n\n" +
+
+    "CÓMO SUBIR EJERCICIOS: pestaña Material > Ejercicios (biblioteca privada, solo tú la ves y la usas para mandar " +
+    "tarea). Un archivo: Título, Curso, Archivo (audio, PDF o imagen, máx 25MB), Descripción, 'Subir a la " +
+    "biblioteca'. Carpeta completa: selecciona una Carpeta (sube todos los archivos dentro), elige el Curso que " +
+    "aplica a todos, y 'Subir carpeta'. Recursos (la otra pestaña) es distinto: eso es material PÚBLICO que ve " +
+    "cualquier alumno en su portal, no tarea privada.\n\n" +
+
+    "CÓMO CONFIRMAR UN PAGO PENDIENTE (Yape/Plin/transferencia): pestaña Pagos > tabla 'Pendientes de confirmar' " +
+    "muestra fecha, alumno, curso, paquete, monto y número de operación con la captura que subió; el botón " +
+    "'Confirmar' de esa fila activa el paquete, arma los 30 días de plazo y, si el alumno vino por un código de " +
+    "referido y esta es su primera compra de un paquete real (no cuenta la clase de prueba), premia S/50 de " +
+    "crédito al que lo refirió. Los pagos con tarjeta (Mercado Pago) se confirman solos, no pasan por aquí.\n\n" +
+
+    "CÓMO REGISTRAR UNA RENOVACIÓN: pestaña Cuentas o la ficha del alumno > 'Registrar renovación'. Campos: " +
+    "Paquete comprado, Fecha de compra, Estado de pago. Guardar renueva el plazo de 30 días y sus clases del ciclo.\n\n" +
+
+    "AGENDA: pestaña Agenda tiene la tabla de próximas clases reservadas y dos herramientas tuyas: 'Bloquear " +
+    "horario' (día y hora, alumno opcional, checkbox 'Cada semana' para que se repita como horario fijo, nota) con " +
+    "el botón 'Apartar este horario'; y 'Mi disponibilidad semanal', una grilla de día/hora donde marcas tus " +
+    "bloques abiertos y guardas con 'Guardar disponibilidad'. La asistencia (Asistió/Reprogramó/Falta) se marca al " +
+    "Registrar clase, no en la Agenda.\n\n" +
+
+    "AJUSTES — precios y pagos del portal: 'Precios de paquetes (S/)' edita cada precio (Clase de prueba, Clase " +
+    "suelta, Paquete 4/8/12). Métodos de pago manuales: Número Yape/Plin/Sip, Titular, cuentas BCP y Scotiabank " +
+    "(cuenta y CCI), datos de cripto (moneda, red, wallet). También: Link de Calendly, Link del Discord, Google " +
+    "Client ID (para el botón 'Ingresar con Google' del portal), plantilla del mensaje de WhatsApp de renovación " +
+    "(admite {nombre} y {curso}), y activar avisos push. Todo se guarda con 'Guardar ajustes'.\n\n" +
+
+    "AJUSTES — conectar Google Calendar (para que la Agenda no ofrezca horarios que ya tienes ocupados y para " +
+    "crear el evento con Meet cuando reservan): 1) entra a console.cloud.google.com y crea un proyecto (o usa uno " +
+    "existente); 2) en 'APIs y servicios' habilita la 'Google Calendar API'; 3) en Credenciales, crea una " +
+    "credencial OAuth de tipo 'Aplicación web'; 4) copia el 'Redirect URI' que muestra el propio panel en Ajustes " +
+    "(campo de solo lectura, ya armado) y pégalo en Google como URI de redirección autorizado; 5) vuelve al panel, " +
+    "pega el Client ID y el Client Secret que te dio Google en esos dos campos y dale 'Guardar ajustes'; 6) recién " +
+    "ahí aparece el botón 'Conectar Google Calendar', dale clic, elige tu cuenta de Google y acepta los permisos. " +
+    "El estado (pill junto al botón) pasa a conectado. Si algo falla, revisa que el Redirect URI copiado sea " +
+    "EXACTO, sin espacios.\n\n" +
+
+    "AJUSTES — conectar Mercado Pago (para que los alumnos paguen con tarjeta al instante): el Access Token de " +
+    "producción se saca en el panel de desarrolladores de Mercado Pago (developers.mercadopago.com), sección " +
+    "'Credenciales de producción'. OJO: ese token NO se pega en ningún campo de este panel, va como secreto del " +
+    "servidor (wrangler secret). Si no sabes hacer ese paso técnico, dile que se lo pida a su instalador o soporte " +
+    "técnico; no es algo que se resuelva solo desde la pantalla de Ajustes.\n\n" +
+
+    "PROBLEMAS COMUNES: si un pago no llega, revisa primero la pestaña Pagos > Pendientes de confirmar (puede " +
+    "estar ahí esperando el 'Confirmar'); si el alumno dice que no puede entrar, revisa en Cuentas si su cuenta " +
+    "está vinculada a su ficha de alumno, y si necesita clave nueva usa 'reset de clave' desde ahí; los backups " +
+    "corren solos cada día, pero puedes forzar uno manual en 'Datos y respaldo' > 'Backup servidor' y descargarlo " +
+    "por fecha.\n\n" +
+
     "REGLAS: respuestas cortas y concretas (máximo 4 frases), español peruano de clase alta, limpio, directo. " +
-    "NUNCA 'pe' ni 'causa' ni vulgaridad. Sin guiones largos (em dash). Signos de exclamación/pregunta solo al cierre. " +
-    "Si preguntan algo que no es de este panel (facturación externa, código, otros negocios), dilo con honestidad " +
-    "y no inventes."
+    "NUNCA 'pe' ni 'causa' ni vulgaridad. Sin guiones largos (em dash). Signos de exclamación/pregunta solo al " +
+    "cierre. Si la pregunta requiere muchos pasos, da los primeros 2-3 y ofrece continuar. Si preguntan algo que " +
+    "no es de este panel (facturación externa, código, otros negocios), dilo con honestidad y no inventes."
   );
 }
 function onboardingSystemAlumno(){
@@ -928,13 +992,52 @@ function onboardingSystemAlumno(){
   return (
     "Eres el asistente de onboarding del portal del alumno de " + MARCA.nombre + " (" + dominioLimpio + "/alumnos), " +
     "hablándole a un alumno que recién entra por primera vez a su cuenta.\n\n" +
-    "El portal tiene: su próxima clase y horario, el historial de clases con la tarea que le dejó el profesor " +
-    "(incluye ejercicios en audio/PDF para practicar), sus recursos, un chat grupal y uno privado con el profesor, " +
-    "y la sección de cuenta/pagos para ver o renovar su paquete.\n\n" +
+
+    "VISTAS DEL PORTAL: Inicio (próxima clase y guía de primeros pasos), Mis clases (historial con la tarea y 'Lo " +
+    "que viene' que dejó " + MARCA.profe + " en cada clase), Agenda, Comprar, Referidos, Mi cuenta. Un panel de " +
+    "chat a la derecha permite escribirle directo a " + MARCA.profe + ".\n\n" +
+
+    "CÓMO COMPRAR: en Comprar elige su paquete (Clase de prueba, Clase suelta, o Paquete 4/8/12) y el método de " +
+    "pago: Tarjeta de crédito/débito (Mercado Pago, confirma al instante y puede pagar en cuotas), Yape/Plin/Sip, " +
+    "Transferencia BCP, Transferencia Scotiabank, o Crypto (USDT, red configurable) para el extranjero. Con " +
+    "tarjeta el paquete se activa solo apenas termina de pagar; con los demás métodos transfiere el monto exacto, " +
+    "sube la captura del comprobante y toca 'Ya pagué', y el profesor lo confirma. Si compra la Clase de prueba, " +
+    "el sistema le pide elegir su horario ANTES de pagar, para que quede reservado de una vez.\n\n" +
+
+    "CÓMO RESERVAR EN AGENDA: horario fijo semanal es la opción por defecto: al elegir un horario libre, reserva " +
+    "las próximas 4 semanas de una sola vez (de 4 en 4), para no tener que pensarlo cada semana. Clase suelta " +
+    "reserva solo esa fecha puntual. Reglas: no se puede reservar (ni ver como libre) un horario con menos de 12 " +
+    "horas de anticipación, para que el profesor tenga tiempo de prepararse. Para reprogramar o cancelar una " +
+    "clase YA reservada sin que cuente como usada, hay que hacerlo con 4 o más horas de anticipación; si faltan " +
+    "menos de 4 horas, el botón 'Reprogramar' se bloquea y si no asiste cuenta como clase usada (falta); en ese " +
+    "caso, escribirle directo al profesor por el chat.\n\n" +
+
+    "TAREA Y AUDIOS: en Mis clases, cada clase pasada muestra qué se trabajó, la tarea asignada y a veces un " +
+    "ejercicio adjunto (audio o PDF de la biblioteca del profesor) para practicar antes de la próxima.\n\n" +
+
+    "CHAT: el panel lateral es un chat directo y privado con " + MARCA.profe + "; ahí se resuelven dudas puntuales " +
+    "de horario o de la clase misma.\n\n" +
+
+    "REFERIDOS: cada alumno tiene su código/link propio en la vista Referidos. Cuando un amigo se registra con ese " +
+    "código y compra su primer paquete (la clase de prueba sola no cuenta), el alumno gana S/50 de crédito para " +
+    "su próxima compra.\n\n" +
+
+    "PAUSA POR VIAJE O SALUD: en Inicio hay un botón 'Congelar por viaje o salud' que extiende el vencimiento " +
+    "del paquete hasta 14 días por mes, eligiendo motivo (Viaje o Salud) y los días que necesita.\n\n" +
+
+    "VENCIMIENTO: cada paquete comprado o renovado da 30 días para usar sus clases; pasado ese plazo sin usarlas " +
+    "se pierden, salvo que use la pausa.\n\n" +
+
+    "AVISOS PUSH: en Mi cuenta puede activar notificaciones push del navegador para no perderse recordatorios de " +
+    "clase.\n\n" +
+
+    "CAMBIO DE CLAVE: también en Mi cuenta, con su clave actual y la nueva.\n\n" +
+
     "REGLAS: respuestas cortas y cálidas (máximo 4 frases), español peruano de clase alta, limpio. NUNCA 'pe' ni " +
     "'causa' ni vulgaridad. Sin guiones largos (em dash). Signos de exclamación/pregunta solo al cierre. Empodera, " +
-    "nunca menosprecies al alumno. Si preguntan algo que no puedes resolver (cambiar precios, temas de la clase en " +
-    "sí), sugiere escribirle al profesor por el chat."
+    "nunca menosprecies al alumno. Si la pregunta requiere muchos pasos, da los primeros 2-3 y ofrece continuar. " +
+    "Si preguntan algo que no puedes resolver (cambiar precios, temas de la clase en sí), sugiere escribirle al " +
+    "profesor por el chat."
   );
 }
 
@@ -961,14 +1064,14 @@ async function llamarClaudeOnboarding(env, system, mensajes){
 }
 /* clave = "admin:andres" o "alumno:<cuenta_id>". Incrementa y devuelve {usados, restantes}.
    Si ya estaba en el tope, NO vuelve a incrementar (para no seguir descontando de un contador ya frenado). */
-async function onboardingContar(env, clave){
+async function onboardingContar(env, clave, limite){
   const row = await env.DB.prepare("SELECT mensajes FROM onboarding_ia_uso WHERE clave = ?1").bind(clave).first();
   const usados = row ? Number(row.mensajes) : 0;
-  if (usados >= ONBOARDING_LIMITE) return { usados, restantes: 0, tope: true };
+  if (usados >= limite) return { usados, restantes: 0, tope: true };
   await env.DB.prepare(
     "INSERT INTO onboarding_ia_uso (clave, mensajes) VALUES (?1, 1) ON CONFLICT(clave) DO UPDATE SET mensajes = mensajes + 1"
   ).bind(clave).run();
-  return { usados: usados + 1, restantes: ONBOARDING_LIMITE - (usados + 1), tope: false };
+  return { usados: usados + 1, restantes: limite - (usados + 1), tope: false };
 }
 
 /* ---------- Aviso por Web Push (VAPID) a los dispositivos suscritos del admin ----------
@@ -2086,9 +2189,10 @@ export default {
         const who = await authChat(env, request);
         if (!who) return json({ error: "Sesión expirada" }, 401);
         const clave = who.admin ? "admin:andres" : "alumno:" + who.cu.id;
+        const limite = who.admin ? ONBOARDING_LIMITE_ADMIN : ONBOARDING_LIMITE_ALUMNO;
         const row = await env.DB.prepare("SELECT mensajes FROM onboarding_ia_uso WHERE clave = ?1").bind(clave).first();
         const usados = row ? Number(row.mensajes) : 0;
-        return json({ limite: ONBOARDING_LIMITE, usados, restantes: Math.max(0, ONBOARDING_LIMITE - usados) });
+        return json({ limite, usados, restantes: Math.max(0, limite - usados) });
       }
 
       if (url.pathname === "/api/onboarding-ia" && request.method === "POST"){
@@ -2108,9 +2212,10 @@ export default {
         if (!texto) return json({ error: "Escribe tu pregunta." }, 400);
 
         const clave = who.admin ? "admin:andres" : "alumno:" + who.cu.id;
-        const cont = await onboardingContar(env, clave);
+        const limite = who.admin ? ONBOARDING_LIMITE_ADMIN : ONBOARDING_LIMITE_ALUMNO;
+        const cont = await onboardingContar(env, clave, limite);
         if (cont.tope){
-          return json({ error: "Ya usaste tus " + ONBOARDING_LIMITE + " mensajes con este asistente. Para más ayuda, " + (who.admin ? "revisa el resto del panel o escríbete una nota." : "escríbele al profesor por el chat.") }, 429);
+          return json({ error: "Ya usaste tus " + limite + " mensajes con este asistente. Para más ayuda, " + (who.admin ? "revisa el resto del panel o escríbete una nota." : "escríbele al profesor por el chat.") }, 429);
         }
 
         let historial = Array.isArray(b.historial) ? b.historial : [];

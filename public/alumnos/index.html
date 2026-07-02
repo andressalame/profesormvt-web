@@ -198,6 +198,13 @@
   .montoview{font-family:var(--display);font-size:30px;color:var(--accent);}
   .montonote{font-family:var(--mono);font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--green);min-height:1.2em;}
 
+  /* ---------- WIZARD DE COMPRA ---------- */
+  .wiz-dot{width:8px;height:8px;border-radius:50%;background:var(--line);flex:0 0 auto;}
+  .wiz-dot.on{background:var(--accent);}
+  .wiz-dot.done{background:var(--muted);}
+  .wiz-grupo-lab{font-family:var(--mono);font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:14px 0 4px;}
+  .wiz-grupo-lab:first-child{margin-top:0;}
+
   .loading{font-family:var(--mono);font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);padding:60px 0;text-align:center;}
   .toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%) translateY(20px);background:var(--accent);color:var(--bg);
     font-family:var(--mono);font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;
@@ -604,44 +611,74 @@
   <button class="chat-fab" id="chatFab" aria-label="Abrir chat">💬<span class="chat-dot hidden" id="chatDotFab"></span></button>
 </div>
 
-<!-- ============ MODAL COMPRA ============ -->
+<!-- ============ MODAL COMPRA (wizard) ============ -->
 <div class="overlay" id="ovCompra">
   <div class="modal">
     <div id="compraPaso1">
       <h3>Comprar <em>paquete</em></h3>
-      <div class="mlab">// Elige cómo pagar</div>
-      <div class="field"><label for="c_curso">Curso</label>
-        <select id="c_curso"></select></div>
-      <div class="field"><label for="c_paquete">Paquete</label><select id="c_paquete"></select></div>
-      <div class="field" id="c_slotWrap" style="display:none;">
-        <label>Elige tu horario (lo separamos apenas pagues)</label>
-        <div id="c_slots"><p class="note" style="margin:0">Cargando horarios…</p></div>
-      </div>
-      <div class="field"><label for="c_metodo">Método de pago</label>
-        <select id="c_metodo">
-          <option value="Tarjeta (Mercado Pago)">Tarjeta de crédito/débito (confirma al instante)</option>
-          <option value="Yape/Plin/Sip">Yape / Plin / Sip</option>
-          <option value="Transferencia BCP">Transferencia BCP</option>
-          <option value="Transferencia Scotiabank">Transferencia Scotiabank</option>
-          <option value="Crypto USDT">Crypto (USDT)</option>
-        </select></div>
-      <div class="lab">Total a pagar</div>
-      <div class="montoview" id="c_monto">S/ 0</div>
-      <div class="montonote" id="c_montoNote"></div>
+      <div class="mlab" id="wizMlab">// Paso 1 de 3</div>
+      <div class="wiz-dots" id="wizDots" style="display:flex;gap:6px;margin:-6px 0 16px;"></div>
 
-      <div class="paybox" id="payboxOk"></div>
-      <div class="paybox hidden" id="payboxNo">
-        <div class="note">Para coordinar el pago, escríbeme directo por WhatsApp y lo cuadramos al toque.</div>
+      <!-- Paso W1: Tu paquete -->
+      <div id="wizP1">
+        <div class="field"><label for="c_curso">Curso</label>
+          <select id="c_curso"></select></div>
+        <div class="field"><label for="c_paquete">Paquete</label><select id="c_paquete"></select></div>
+        <div class="lab">Total a pagar</div>
+        <div class="montoview" id="c_monto">S/ 0</div>
+        <div class="montonote" id="c_montoNote"></div>
+        <div class="err" id="wizErr1"></div>
+        <div class="modal-actions">
+          <button class="btn ghost" data-close>Cancelar</button>
+          <button class="btn" id="btnWizP1Next">Siguiente →</button>
+        </div>
       </div>
 
-      <div class="field" style="margin-top:12px;"><label for="c_op">N° de operación o hash (opcional, ayuda a confirmar más rápido)</label>
-        <input id="c_op" type="text" maxlength="40" /></div>
-      <div class="field"><label for="c_screenshot">Captura del pago (recomendado, para confirmar al toque)</label>
-        <input id="c_screenshot" type="file" accept="image/*" /></div>
-      <div class="err" id="compraErr"></div>
-      <div class="modal-actions">
-        <button class="btn ghost" data-close>Cancelar</button>
-        <button class="btn" id="btnYaPague">Ya pagué ✓</button>
+      <!-- Paso W2: Tu horario (solo Clase de prueba) -->
+      <div id="wizP2" class="hidden">
+        <div class="field" id="c_slotWrap">
+          <label>Elige tu horario (lo separamos apenas pagues)</label>
+          <div id="c_slots"><p class="note" style="margin:0">Cargando horarios…</p></div>
+        </div>
+        <div class="err" id="wizErr2"></div>
+        <div class="modal-actions">
+          <button class="btn ghost" id="btnWizP2Back">← Atrás</button>
+          <button class="btn" id="btnWizP2Next">Siguiente →</button>
+        </div>
+      </div>
+
+      <!-- Paso W3: Cómo pagar -->
+      <div id="wizP3" class="hidden">
+        <div class="field"><label for="c_metodo">Método de pago</label>
+          <select id="c_metodo">
+            <optgroup label="Pago automático">
+              <option value="Tarjeta (Mercado Pago)">Tarjeta — confirma al instante</option>
+            </optgroup>
+            <optgroup label="Pago manual">
+              <option value="Yape/Plin/Sip">Yape / Plin / Sip</option>
+              <option value="Transferencia BCP">Transferencia BCP</option>
+              <option value="Transferencia Scotiabank">Transferencia Scotiabank</option>
+              <option value="Crypto USDT">Crypto (USDT)</option>
+            </optgroup>
+          </select>
+        </div>
+
+        <div class="paybox" id="payboxOk"></div>
+        <div class="paybox hidden" id="payboxNo">
+          <div class="note">Para coordinar el pago, escríbeme directo por WhatsApp y lo cuadramos al toque.</div>
+        </div>
+
+        <div class="field" style="margin-top:12px;"><label for="c_op">N° de operación o hash (opcional, ayuda a confirmar más rápido)</label>
+          <input id="c_op" type="text" maxlength="40" /></div>
+        <div class="field"><label for="c_screenshot">Captura del pago (recomendado, para confirmar al toque)</label>
+          <input id="c_screenshot" type="file" accept="image/*" /></div>
+
+        <div class="note" id="wizResumen" style="margin:10px 0 0;"></div>
+        <div class="err" id="compraErr"></div>
+        <div class="modal-actions">
+          <button class="btn ghost" id="btnWizP3Back">← Atrás</button>
+          <button class="btn" id="btnYaPague">Ya pagué ✓</button>
+        </div>
       </div>
     </div>
     <div id="compraPaso2" class="hidden">
@@ -956,9 +993,32 @@ $("tiers").addEventListener("click",function(e){
   if(b && !b.disabled) abrirCompra(b.dataset.comprar);
 });
 
-/* ---------- MODAL COMPRA ---------- */
+/* ---------- MODAL COMPRA (wizard) ---------- */
 var COMPRA_SLOT = null;
 var COMPRA_SLOTS_CACHE = null;
+var WIZ_PASO = 1; // 1=paquete, 2=horario (solo prueba), 3=pago
+
+function esPruebaSel(){ return $("c_paquete").value === "Clase de prueba"; }
+function wizPasos(){ return esPruebaSel() ? [1,2,3] : [1,3]; } // el 2 se salta si no es prueba
+function wizTotal(){ return wizPasos().length; }
+function wizIndiceActual(){ return wizPasos().indexOf(WIZ_PASO)+1; }
+
+function pintarWizDots(){
+  var pasos = wizPasos();
+  $("wizMlab").textContent = "// Paso " + wizIndiceActual() + " de " + wizTotal();
+  $("wizDots").innerHTML = pasos.map(function(p){
+    var cls = "wiz-dot" + (p===WIZ_PASO ? " on" : (pasos.indexOf(p) < pasos.indexOf(WIZ_PASO) ? " done" : ""));
+    return '<span class="'+cls+'"></span>';
+  }).join("");
+}
+function irAWizPaso(p){
+  WIZ_PASO = p;
+  hide("wizP1"); hide("wizP2"); hide("wizP3");
+  if(p===1) show("wizP1");
+  else if(p===2) show("wizP2");
+  else show("wizP3");
+  pintarWizDots();
+}
 
 function abrirCompra(pk){
   if(!ME) return;
@@ -972,16 +1032,22 @@ function abrirCompra(pk){
   actualizaSlotWrap();
   $("c_metodo").value = "Tarjeta (Mercado Pago)";
   renderPaybox();
-  $("c_op").value=""; if($("c_screenshot")) $("c_screenshot").value=""; $("compraErr").textContent="";
+  $("c_op").value=""; if($("c_screenshot")) $("c_screenshot").value=""; $("compraErr").textContent=""; $("wizErr1").textContent=""; $("wizErr2").textContent="";
+  actualizaBtnP1();
   show("compraPaso1"); hide("compraPaso2");
+  irAWizPaso(1);
   $("ovCompra").classList.add("open");
+}
+
+function actualizaBtnP1(){
+  var b = $("btnWizP1Next"); if(!b) return;
+  b.disabled = !$("c_paquete").value;
 }
 
 /* Para la Clase de prueba: elegir el horario ANTES de pagar baja la fricción
    (compromiso concreto antes del checkout, no "pago primero y ya veré cuándo"). */
 function actualizaSlotWrap(){
-  var esPrueba = $("c_paquete").value === "Clase de prueba";
-  $("c_slotWrap").style.display = esPrueba ? "" : "none";
+  var esPrueba = esPruebaSel();
   if(esPrueba && !COMPRA_SLOTS_CACHE) cargarSlotsCompra();
 }
 function cargarSlotsCompra(){
@@ -1020,6 +1086,7 @@ $("c_slots").addEventListener("click", function(e){
   var b = e.target.closest("[data-cslot]");
   if(!b) return;
   COMPRA_SLOT = b.dataset.cslot;
+  $("wizErr2").textContent = "";
   pintarSlotsCompra();
 });
 function actualizaMonto(){
@@ -1027,7 +1094,32 @@ function actualizaMonto(){
   $("c_monto").innerHTML = (c.desc>0?'<span class="strike">S/ '+c.precio+'</span> ':'') + 'S/ ' + c.final;
   $("c_montoNote").textContent = c.desc>0 ? ("Incluye -S/"+c.desc+" de tu crédito de referidos") : "";
 }
-$("c_paquete").addEventListener("change", function(){ actualizaMonto(); renderPaybox(); actualizaSlotWrap(); });
+$("c_paquete").addEventListener("change", function(){ actualizaMonto(); renderPaybox(); actualizaSlotWrap(); actualizaBtnP1(); });
+$("c_curso").addEventListener("change", actualizaBtnP1);
+
+/* ---- Navegación del wizard ---- */
+$("btnWizP1Next").addEventListener("click", function(){
+  $("wizErr1").textContent = "";
+  if(!$("c_paquete").value){ $("wizErr1").textContent = "Elige un paquete."; return; }
+  if(esPruebaSel()){ irAWizPaso(2); }
+  else { pintarResumen(); irAWizPaso(3); }
+});
+$("btnWizP2Back").addEventListener("click", function(){ irAWizPaso(1); });
+$("btnWizP2Next").addEventListener("click", function(){
+  $("wizErr2").textContent = "";
+  if(esPruebaSel() && !COMPRA_SLOT){ $("wizErr2").textContent = "Elige un horario para tu clase de prueba."; return; }
+  pintarResumen();
+  irAWizPaso(3);
+});
+$("btnWizP3Back").addEventListener("click", function(){ irAWizPaso(esPruebaSel() ? 2 : 1); });
+
+function pintarResumen(){
+  var paquete = $("c_paquete").value, curso = $("c_curso").value, c = calc(paquete);
+  var partes = [curso, paquete, "S/ "+c.final];
+  if(c.desc>0) partes.push("incluye -S/"+c.desc+" de crédito");
+  if(esPruebaSel() && COMPRA_SLOT) partes.push(fmtFechaLocal(COMPRA_SLOT)+" "+fmtHoraLocal(COMPRA_SLOT));
+  $("wizResumen").textContent = partes.join(" · ");
+}
 function renderPaybox(){
   var cf = (ME && ME.config) || {};
   var m = $("c_metodo").value;
@@ -1069,8 +1161,8 @@ function pagarConTarjeta(){
   if(btn){ btn.disabled=true; btn.textContent="Abriendo Mercado Pago…"; }
   $("compraErr").textContent="";
   var paquete=$("c_paquete").value, curso=$("c_curso").value;
-  if(!paquete){ $("compraErr").textContent="Elige un paquete."; if(btn){ btn.disabled=false; btn.textContent=txtOrig; } return; }
-  if(paquete==="Clase de prueba" && !COMPRA_SLOT){ $("compraErr").textContent="Elige un horario para tu clase de prueba."; if(btn){ btn.disabled=false; btn.textContent=txtOrig; } return; }
+  if(!paquete){ irAWizPaso(1); $("wizErr1").textContent="Elige un paquete."; if(btn){ btn.disabled=false; btn.textContent=txtOrig; } return; }
+  if(paquete==="Clase de prueba" && !COMPRA_SLOT){ irAWizPaso(2); $("wizErr2").textContent="Elige un horario para tu clase de prueba."; if(btn){ btn.disabled=false; btn.textContent=txtOrig; } return; }
   api("/api/mp/crear",{method:"POST",body:JSON.stringify({paquete:paquete,curso:curso,slot_deseado:(paquete==="Clase de prueba"?COMPRA_SLOT:"")})})
     .then(function(r){
       if(r && r.init_point){ window.location.href = r.init_point; }
@@ -1088,8 +1180,8 @@ $("btnYaPague").addEventListener("click",function(){
   $("btnYaPague").disabled=true;
   $("compraErr").textContent="";
   var paquete=$("c_paquete").value, curso=$("c_curso").value, op=$("c_op").value.trim(), metodo=$("c_metodo").value;
-  if(!paquete){ $("compraErr").textContent="Elige un paquete."; $("btnYaPague").disabled=false; return; }
-  if(paquete==="Clase de prueba" && !COMPRA_SLOT){ $("compraErr").textContent="Elige un horario para tu clase de prueba."; $("btnYaPague").disabled=false; return; }
+  if(!paquete){ irAWizPaso(1); $("wizErr1").textContent="Elige un paquete."; $("btnYaPague").disabled=false; return; }
+  if(paquete==="Clase de prueba" && !COMPRA_SLOT){ irAWizPaso(2); $("wizErr2").textContent="Elige un horario para tu clase de prueba."; $("btnYaPague").disabled=false; return; }
   var c = calc(paquete);
   var f = ($("c_screenshot") && $("c_screenshot").files) ? $("c_screenshot").files[0] : null;
   comprimirImg(f).then(function(comprobante){
