@@ -5,7 +5,7 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <meta name="robots" content="noindex, nofollow" />
-<title>CRM · ProfesorMVT</title>
+<title>CRM</title>
 <link rel="manifest" href="/admin/crm/manifest.webmanifest">
 <link rel="apple-touch-icon" href="/admin/crm/icon-192.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -245,7 +245,7 @@
     <div class="brand">
       <div class="brand-foto ph" id="navFoto">M</div>
       <div class="brand-tx">
-        <div class="brand-name" id="navNombre">ProfesorMVT</div>
+        <div class="brand-name" id="navNombre"></div>
         <div class="brand-sub">// CRM</div>
       </div>
     </div>
@@ -306,7 +306,7 @@
     </header>
     <div class="content">
       <div class="pagehead">
-        <div class="eyebrow">// PROFESORMVT — CRM</div>
+        <div class="eyebrow" id="pageEyebrow">// CRM</div>
         <h1 id="pageTitle">Resumen</h1>
         <hr class="rule" />
       </div>
@@ -401,7 +401,7 @@
       <div class="frow">
         <div class="field" id="rec_url_wrap"><label>Link</label><input id="rec_url" type="text" placeholder="https://..." /></div>
         <div class="field hidden" id="rec_file_wrap"><label>Archivo PDF, audio o imagen (máx. 25 MB)</label><input id="rec_file" type="file" accept="application/pdf,audio/*,image/png,image/jpeg" /></div>
-        <div class="field"><label>Curso</label><select id="rec_curso"><option>Todos</option><option>Canto</option><option>Piano</option><option>Composición</option></select></div>
+        <div class="field"><label>Curso</label><select id="rec_curso"></select></div>
       </div>
       <div class="field"><label>Descripción (opcional)</label><input id="rec_desc" type="text" /></div>
       <button class="btn" id="btnPublicarRec">Publicar</button>
@@ -422,7 +422,7 @@
       <p class="hint">Tu banco privado de ejercicios (audios, PDFs). <strong>No se publican</strong>: los eliges desde el desplegable al registrar una clase para mandárselos a un alumno como tarea.</p>
       <div class="frow">
         <div class="field"><label>Título</label><input id="ej_titulo" type="text" placeholder="Vocalizo de calentamiento (5 min)" /></div>
-        <div class="field"><label>Curso</label><select id="ej_curso"><option>Todos</option><option>Canto</option><option>Piano</option><option>Composición</option></select></div>
+        <div class="field"><label>Curso</label><select id="ej_curso"></select></div>
       </div>
       <div class="field"><label>Archivo: audio, PDF o imagen (máx. 25 MB)</label><input id="ej_file" type="file" accept="audio/*,application/pdf,image/png,image/jpeg" /></div>
       <div class="field"><label>Descripción (opcional)</label><input id="ej_desc" type="text" placeholder="Ej: subir por semitonos sin forzar" /></div>
@@ -433,7 +433,7 @@
       <p class="hint">Elige una carpeta de tu compu (con subcarpetas si quieres) y se sube todo de una: cada archivo entra a tu biblioteca con el nombre del archivo como título, organizado por carpeta.</p>
       <div class="frow">
         <div class="field"><label>Carpeta</label><input id="carp_file" type="file" webkitdirectory multiple /></div>
-        <div class="field"><label>Curso (aplica a todos los archivos de la carpeta)</label><select id="carp_curso"><option>Todos</option><option>Canto</option><option>Piano</option><option>Composición</option></select></div>
+        <div class="field"><label>Curso (aplica a todos los archivos de la carpeta)</label><select id="carp_curso"></select></div>
       </div>
       <button class="btn" id="btnSubirCarpeta">Subir carpeta</button>
       <p class="hint" id="carpEstado"></p>
@@ -442,13 +442,7 @@
       <h2>// MIS EJERCICIOS</h2>
       <div class="filtros">
         <input id="ejBuscar" type="search" placeholder="Buscar ejercicio…" autocomplete="off" />
-        <select id="ejFiltroCurso">
-          <option value="">Todos los cursos</option>
-          <option value="Todos">Todos (general)</option>
-          <option value="Canto">Canto</option>
-          <option value="Piano">Piano</option>
-          <option value="Composición">Composición</option>
-        </select>
+        <select id="ejFiltroCurso"></select>
         <select id="ejFiltroCarpeta">
           <option value="">Todas las carpetas</option>
         </select>
@@ -501,9 +495,9 @@
           <p class="hint" style="margin:8px 0 0;">PNG o JPG, hasta 8 MB.</p>
         </div>
       </div>
-      <div class="cfgrow"><span class="pk">Nombre de display</span><input id="cfg_profe_nombre" type="text" placeholder="Profe Andrés" /></div>
-      <div class="cfgrow"><span class="pk">Nombre de la academia</span><input id="cfg_profe_marca" type="text" placeholder="ProfesorMVT" /></div>
-      <p class="hint" style="margin-top:-2px;">Si lo dejas vacío, se usa "ProfesorMVT".</p>
+      <div class="cfgrow"><span class="pk">Nombre de display</span><input id="cfg_profe_nombre" type="text" placeholder="Profe" /></div>
+      <div class="cfgrow"><span class="pk">Nombre de la academia</span><input id="cfg_profe_marca" type="text" placeholder="" /></div>
+      <p class="hint" style="margin-top:-2px;" id="hintProfeMarca">Si lo dejas vacío, se usa el nombre de la academia.</p>
       <button class="btn" id="btnGuardarPerfil" style="margin-top:8px;">Guardar perfil</button>
     </div>
   </section>
@@ -516,18 +510,18 @@
     </div>
     <div class="group">
       <h2>// Pagos y reservas del portal</h2>
-      <div class="cfgrow"><span class="pk">Número Yape / Plin</span><input id="cfg_pago_numero" type="text" placeholder="989 077 928" /></div>
-      <div class="cfgrow"><span class="pk">Titular (como sale en Yape)</span><input id="cfg_pago_titular" type="text" placeholder="Andrés S." /></div>
+      <div class="cfgrow"><span class="pk">Número Yape / Plin</span><input id="cfg_pago_numero" type="text" placeholder="999 999 999" /></div>
+      <div class="cfgrow"><span class="pk">Titular (como sale en Yape)</span><input id="cfg_pago_titular" type="text" placeholder="Nombre Apellido" /></div>
       <div class="cfgrow"><span class="pk">Link de Calendly</span><input id="cfg_calendly_url" type="text" placeholder="https://calendly.com/tu-usuario/clase" /></div>
       <p class="hint">Hasta que llenes el número, el portal manda a los alumnos a coordinarte el pago por WhatsApp.</p>
       <div class="cfgrow"><span class="pk">Link del Discord</span><input id="cfg_discord_url" type="text" placeholder="https://discord.gg/..." /></div>
       <p class="hint" style="margin-top:-4px;">Botón "Entrar al Discord" en el portal.</p>
       <div class="cfgrow"><span class="pk">Google Client ID</span><input id="cfg_google_client_id" type="text" placeholder="xxxxx.apps.googleusercontent.com" /></div>
       <p class="hint" style="margin-top:-4px;">Enciende el botón de Google del portal · termina en .apps.googleusercontent.com</p>
-      <div class="cfgrow"><span class="pk">BCP cuenta (Soles)</span><input id="cfg_bcp_cuenta" type="text" placeholder="19300343797068" /></div>
-      <div class="cfgrow"><span class="pk">BCP CCI</span><input id="cfg_bcp_cci" type="text" placeholder="00219310034379706817" /></div>
-      <div class="cfgrow"><span class="pk">Scotiabank cuenta (Soles)</span><input id="cfg_scotia_cuenta" type="text" placeholder="5621567824" /></div>
-      <div class="cfgrow"><span class="pk">Scotiabank CCI</span><input id="cfg_scotia_cci" type="text" placeholder="00901020562156782404" /></div>
+      <div class="cfgrow"><span class="pk">BCP cuenta (Soles)</span><input id="cfg_bcp_cuenta" type="text" placeholder="19100000000000" /></div>
+      <div class="cfgrow"><span class="pk">BCP CCI</span><input id="cfg_bcp_cci" type="text" placeholder="00219100000000000000" /></div>
+      <div class="cfgrow"><span class="pk">Scotiabank cuenta (Soles)</span><input id="cfg_scotia_cuenta" type="text" placeholder="0000000000" /></div>
+      <div class="cfgrow"><span class="pk">Scotiabank CCI</span><input id="cfg_scotia_cci" type="text" placeholder="00900100000000000000" /></div>
       <div class="cfgrow"><span class="pk">Crypto moneda</span><input id="cfg_crypto_moneda" type="text" placeholder="USDT" /></div>
       <div class="cfgrow"><span class="pk">Crypto red</span><input id="cfg_crypto_red" type="text" placeholder="Tron (TRC20)" /></div>
       <div class="cfgrow"><span class="pk">Crypto wallet</span><input id="cfg_crypto_wallet" type="text" placeholder="T..." /></div>
@@ -542,7 +536,7 @@
       <h2>// Google Calendar</h2>
       <p class="hint">Conecta tu Google Calendar y cada reserva caerá en tu calendario con link de Meet, y el alumno recibe la invitación. Pega el Client ID y el Secret de Google Cloud, dale "Guardar ajustes" y luego "Conectar".</p>
       <div class="cfgrow"><span class="pk">Client ID</span><input id="cfg_gcal_client_id" type="text" placeholder="xxxxx.apps.googleusercontent.com" /></div>
-      <div class="cfgrow"><span class="pk">Client Secret</span><input id="cfg_gcal_client_secret" type="text" placeholder="GOCSPX-..." /></div>
+      <div class="cfgrow"><span class="pk">Client Secret</span><input id="cfg_gcal_client_secret" type="password" placeholder="GOCSPX-..." /><button type="button" class="btn ghost sm" id="btnVerGcalSecret" style="flex:0 0 auto;">Mostrar</button></div>
       <div class="cfgrow"><span class="pk">Calendario</span><input id="cfg_gcal_calendar_id" type="text" placeholder="primary" /></div>
       <div class="cfgrow"><span class="pk">Redirect URI (cópialo en Google Cloud)</span><input id="cfg_gcal_redirect" type="text" readonly style="opacity:.85" /></div>
       <div class="rowact" style="margin-top:8px;">
@@ -575,7 +569,7 @@
       <div id="chatAdmTitulo" class="mini" style="margin-bottom:6px;color:var(--muted);">Conversación: Grupal</div>
       <div id="chatAdmMsgs" style="max-height:55vh;overflow-y:auto;background:var(--panel);border:1px solid var(--line);border-radius:3px;padding:12px;display:flex;flex-direction:column;gap:10px;"></div>
       <div style="display:flex;gap:8px;margin-top:10px;">
-        <input id="chatAdmTexto" maxlength="500" placeholder="Escribe como Profe Andrés…" autocomplete="off"
+        <input id="chatAdmTexto" maxlength="500" placeholder="Escribe como el profe…" autocomplete="off" title="Se completa con el nombre del profesor al cargar"
           style="flex:1;min-width:0;background:var(--bg);border:1px solid var(--line);color:var(--cream);padding:9px 11px;border-radius:2px;font-family:var(--body);font-size:14px;" />
         <button class="btn" id="chatAdmEnviar">Enviar</button>
       </div>
@@ -594,7 +588,7 @@
 <div class="overlay" id="ovLock">
   <div class="modal">
     <h3>Acceso de <em>admin</em></h3>
-    <div class="mlab">// Solo Andrés</div>
+    <div class="mlab" id="lockMlab">// Solo el profesor</div>
     <div class="field"><label for="lockToken">Clave de administrador</label><input id="lockToken" type="password" autocomplete="off" /></div>
     <div class="err" id="lockErr"></div>
     <div class="modal-actions"><button class="btn" id="btnLockEnter">Entrar</button></div>
@@ -613,11 +607,7 @@
     </div>
     <div class="frow">
       <div class="field"><label>Curso(s)</label>
-        <div id="a_cursos" style="display:flex;flex-wrap:wrap;gap:14px;padding:4px 0;">
-          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-family:var(--body);"><input type="checkbox" value="Canto" style="width:auto;"> Canto</label>
-          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-family:var(--body);"><input type="checkbox" value="Piano" style="width:auto;"> Piano</label>
-          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-family:var(--body);"><input type="checkbox" value="Composición" style="width:auto;"> Composición</label>
-        </div>
+        <div id="a_cursos" style="display:flex;flex-wrap:wrap;gap:14px;padding:4px 0;"></div>
         <p class="hint" style="margin:5px 0 0;">Marca todos los que lleva. Para 2+ cursos asegúrate de que el paquete dé las horas (8h o más).</p></div>
       <div class="field"><label>Paquete</label><select id="a_paquete"></select>
         <p class="hint" style="margin:6px 0 0;">Cambiar el paquete recalcula las clases restantes del ciclo actual.</p></div>
@@ -711,6 +701,17 @@
 
 <script>
 "use strict";
+/* ========== MARCA (white-label): edita SOLO este bloque para otro cliente.
+   Debe calzar con el bloque MARCA del worker. Ver docs/white-label-checklist.md ========== */
+var MARCA = {
+  nombre: "ProfesorMVT",
+  inicial: "M",
+  profe: "Andrés",
+  cursos: ["Canto", "Piano", "Composición"],
+  cursoDefault: "Canto",
+  portalUrl: "https://profesormvt.com/alumnos/",
+  archivoExport: "profesormvt"
+};
 var PAQUETES = {
   "Paquete 4":  { clases:4,  reprog:2 },
   "Paquete 8":  { clases:8,  reprog:3 },
@@ -727,7 +728,7 @@ var refreshInterval = null;
 var prevPendientes = 0;
 
 function el(id){ return document.getElementById(id); }
-function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(m){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m];}); }
+function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,function(m){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m];}); }
 function uid(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,7); }
 /* tarea_audio: JSON array [{u,n}] (nuevo) o string con un solo url (formato viejo) */
 function parseAudios(v){
@@ -770,7 +771,8 @@ function apiPut(){
     })
     .catch(function(e){
       if(e&&e.auth){ lock("Tu clave ya no es válida."); }
-      setSync("Sin guardar ✗","err"); toast("No se pudo guardar");
+      setSync("Sin guardar ✗","err");
+      throw e; // re-lanzar: los callers deciden el toast (no lo mostramos aquí para no pisar su mensaje)
     });
 }
 function apiPost(path, body){
@@ -910,7 +912,7 @@ function renderResumen(){
     card("Activos",activos,"")+
     card("⚠ Última clase — hablar renovación",ultima,"hot")+
     card("Completados — renovar hoy",compl,"red")+
-    card("MRR (recurrente/mes)","S/ "+mrr,"green");
+    card("MRR proyectado /mes","S/ "+mrr,"green");
   el("resMes").innerHTML =
     card("Clases dictadas",dictMes,"")+card("Faltas",faltaMes,"")+
     card("Reprogramaciones",repMes,"")+card("Cobrado por el portal","S/ "+ingresosMes,"");
@@ -1113,11 +1115,11 @@ function renderAjustes(){
 /* ---------- Perfil (nombre + foto del profesor) ---------- */
 function inicialPerfil(){
   var c=db.config||{};
-  return ((c.profe_nombre||c.profe_marca||"M").trim().charAt(0)||"M").toUpperCase();
+  return ((c.profe_nombre||c.profe_marca||MARCA.inicial).trim().charAt(0)||MARCA.inicial).toUpperCase();
 }
 function aplicarPerfilSidebar(){
   var c=db.config||{};
-  var nombre=c.profe_marca||c.profe_nombre||"ProfesorMVT";
+  var nombre=c.profe_marca||c.profe_nombre||MARCA.nombre;
   var nm=el("navNombre"); if(nm) nm.textContent=nombre;
   var nf=el("navFoto"); if(!nf) return;
   if(c.profe_foto){
@@ -1424,7 +1426,7 @@ el("btnNuevoAlumno").addEventListener("click",function(){
   el("alumnoTitulo").innerHTML='Nuevo <em>alumno</em>';
   el("a_id").value=""; el("a_codigo").value=""; el("a_ciclo").value="1";
   el("a_nombre").value=""; el("a_whatsapp").value="";
-  setCursosAlumno("Canto"); fillSelects(); el("a_paquete").value="Paquete 4";
+  setCursosAlumno(MARCA.cursoDefault); fillSelects(); el("a_paquete").value="Paquete 4";
   el("a_fecha").value=new Date().toISOString().slice(0,10); el("a_pago").value="Pagado";
   el("a_horario").value=""; el("a_notas").value=""; el("a_horario_derivado").textContent="";
   openOv("ovAlumno");
@@ -1435,12 +1437,15 @@ el("btnGuardarAlumno").addEventListener("click",function(){
   var id=el("a_id").value;
   var obj={ id:id||uid(), codigo:el("a_codigo").value||uid().slice(-6).toUpperCase(),
     ciclo:Number(el("a_ciclo").value)||1,
-    nombre:nombre, whatsapp:el("a_whatsapp").value.trim(), curso:getCursosAlumno()||"Canto",
+    nombre:nombre, whatsapp:el("a_whatsapp").value.trim(), curso:getCursosAlumno()||MARCA.cursoDefault,
     paquete:el("a_paquete").value, fecha:el("a_fecha").value, pago:el("a_pago").value,
     horario:el("a_horario").value.trim(), notas:el("a_notas").value.trim() };
   if(id){ db.alumnos=db.alumnos.map(function(a){return a.id===id?obj:a;}); }
   else{ db.alumnos.push(obj); }
-  apiPut().then(renderAll); closeOv("ovAlumno"); toast("Alumno guardado");
+  var btn=el("btnGuardarAlumno"); btn.disabled=true;
+  apiPut().then(function(){ renderAll(); closeOv("ovAlumno"); toast("Alumno guardado"); })
+    .catch(function(){ toast("No se pudo guardar. Revisa tu conexión e intenta de nuevo."); })
+    .finally(function(){ btn.disabled=false; });
 });
 
 document.body.addEventListener("click",function(e){
@@ -1473,14 +1478,18 @@ document.body.addEventListener("click",function(e){
   }
   if(dl){ var al=db.alumnos.find(function(x){return x.id===dl.dataset.del;});
     if(al && confirm("¿Borrar a "+al.nombre+"? Sus registros también se borran (las cuentas vinculadas quedan sin vincular).")){
+      dl.disabled=true;
       db.alumnos=db.alumnos.filter(function(x){return x.id!==dl.dataset.del;});
       db.registro=db.registro.filter(function(r){return (r.alumnoId||r.alumno_id)!==dl.dataset.del;});
-      apiPut().then(recargar); toast("Alumno borrado");
+      apiPut().then(function(){ return recargar(); }).then(function(){ toast("Alumno borrado"); })
+        .catch(function(){ toast("No se pudo borrar. Revisa tu conexión e intenta de nuevo."); dl.disabled=false; });
     }
   }
   if(dr){ if(confirm("¿Borrar este registro de clase?")){
+      dr.disabled=true;
       db.registro=db.registro.filter(function(x){return x.id!==dr.dataset.delreg;});
-      apiPut().then(renderAll); toast("Registro borrado");
+      apiPut().then(function(){ renderAll(); toast("Registro borrado"); })
+        .catch(function(){ toast("No se pudo borrar. Revisa tu conexión e intenta de nuevo."); dr.disabled=false; });
     }
   }
   if(er){ var rg=db.registro.find(function(x){return x.id===er.dataset.editreg;}); if(!rg)return;
@@ -1572,7 +1581,10 @@ el("btnGuardarRegistro").addEventListener("click",function(){
   } else {
     db.registro.push(Object.assign({ id:uid(), ciclo:(a&&a.ciclo)||1 }, campos));
   }
-  apiPut().then(renderAll); closeOv("ovRegistro"); toast(editId?"Clase actualizada ✓":"Clase registrada");
+  var btnReg=el("btnGuardarRegistro"); btnReg.disabled=true;
+  apiPut().then(function(){ renderAll(); closeOv("ovRegistro"); toast(editId?"Clase actualizada ✓":"Clase registrada"); })
+    .catch(function(){ toast("No se pudo guardar. Revisa tu conexión e intenta de nuevo."); })
+    .finally(function(){ btnReg.disabled=false; });
 });
 
 /* ---------- Pagos ---------- */
@@ -1738,7 +1750,7 @@ el("chatAdmTexto").addEventListener("keydown",function(e){ if(e.key==="Enter") c
 /* ---------- Mensaje de renovación por WhatsApp ---------- */
 var MSG_RENOVACION_DEFAULT = "Hola {nombre}, ¡qué tal! Vamos cerrando tu paquete de {curso} y no quiero que pierdas el ritmo que llevas. "+
   "¿Cuadramos la renovación? Te cuento del plan trimestral (el 3er mes va al 50%) para que reserves tus horarios fijos. "+
-  "Puedes renovar tú mismo desde tu portal: https://profesormvt.com/alumnos/ ¿Le entramos?";
+  "Puedes renovar tú mismo desde tu portal: "+MARCA.portalUrl+" ¿Le entramos?";
 function renovar(a){
   var num=(a.whatsapp||"").replace(/\D/g,"");
   if(num.length===9) num="51"+num;
@@ -1769,7 +1781,10 @@ el("btnGuardarRenovar").addEventListener("click",function(){
     ciclo:nuevoCiclo
   });
   db.alumnos=db.alumnos.map(function(x){return x.id===id?obj:x;});
-  apiPut().then(renderAll); closeOv("ovRenovar"); toast("Renovación registrada — ciclo "+nuevoCiclo);
+  var btnRen=el("btnGuardarRenovar"); btnRen.disabled=true;
+  apiPut().then(function(){ renderAll(); closeOv("ovRenovar"); toast("Renovación registrada — ciclo "+nuevoCiclo); })
+    .catch(function(){ toast("No se pudo guardar. Revisa tu conexión e intenta de nuevo."); })
+    .finally(function(){ btnRen.disabled=false; });
 });
 
 /* ---------- Ajustes ---------- */
@@ -1799,6 +1814,12 @@ el("btnGuardarAjustes").addEventListener("click",function(){
 });
 
 /* ---------- Google Calendar ---------- */
+if(el("btnVerGcalSecret")) el("btnVerGcalSecret").addEventListener("click",function(){
+  var inp=el("cfg_gcal_client_secret"); if(!inp) return;
+  var mostrar=inp.type==="password";
+  inp.type=mostrar?"text":"password";
+  this.textContent=mostrar?"Ocultar":"Mostrar";
+});
 function gcalRefrescarEstado(){
   fetch("/api/admin/google/estado",{headers:hdr()}).then(function(r){return r.json();}).then(function(d){
     if(el("cfg_gcal_redirect")) el("cfg_gcal_redirect").value=d.redirect_uri||"";
@@ -2011,7 +2032,7 @@ el("fileAudio").addEventListener("change",function(e){
 /* ---------- Export ---------- */
 el("btnExport").addEventListener("click",function(){
   var blob=new Blob([JSON.stringify(db,null,2)],{type:"application/json"});
-  downloadBlob(blob,"crm-profesormvt-"+new Date().toISOString().slice(0,10)+".json");
+  downloadBlob(blob,"crm-"+MARCA.archivoExport+"-"+new Date().toISOString().slice(0,10)+".json");
   toast("Respaldo exportado");
 });
 el("btnBackupSrv").addEventListener("click",function(){
@@ -2029,14 +2050,14 @@ el("btnCsv").addEventListener("click",function(){
   var head=["Alumno","WhatsApp","Curso","Paquete","Ciclo","Fecha compra","Monto","Estado pago","Horario","Clases compradas","Clases usadas","Clases restantes","Reprog restantes","Estado","Notas"];
   var rows=db.alumnos.map(function(a){ var c=computeAlumno(a);
     return [a.nombre,a.whatsapp,a.curso,a.paquete,(a.ciclo||1),a.fecha,c.monto,a.pago,a.horario,c.compradas,c.usadas,c.restantes,c.reprogRest,c.estado,a.notas]; });
-  descargaCsv(head,rows,"alumnos-profesormvt.csv");
+  descargaCsv(head,rows,"alumnos-"+MARCA.archivoExport+".csv");
 });
 el("btnCsvEmails").addEventListener("click",function(){
   var head=["Nombre","Email","WhatsApp","Acepta promos","Creada","Alumno vinculado"];
   var rows=db.cuentas.map(function(c){
     return [c.nombre,c.email,c.whatsapp||"",(c.marketing?"SI":"NO"),c.creada||"",(c.alumno_id?nombreDe(c.alumno_id):"")];
   });
-  descargaCsv(head,rows,"emails-profesormvt.csv");
+  descargaCsv(head,rows,"emails-"+MARCA.archivoExport+".csv");
   toast("Recuerda: promos solo a los que dicen SI");
 });
 function descargaCsv(head,rows,nombre){
@@ -2086,8 +2107,39 @@ el("btnPushTest").addEventListener("click",function(){
     .catch(function(e){ toast((e&&e.message)||"No se pudo enviar"); });
 });
 
+/* ---------- Aplicar MARCA (white-label) al cargar ---------- */
+function aplicarMarcaCursos(){
+  var opts=MARCA.cursos.map(function(c){return '<option value="'+esc(c)+'">'+esc(c)+'</option>';}).join("");
+  var optsConTodos='<option value="Todos">Todos</option>'+opts;
+  ["rec_curso","ej_curso","carp_curso"].forEach(function(id){
+    var sel=el(id); if(sel) sel.innerHTML=optsConTodos;
+  });
+  var fc=el("ejFiltroCurso");
+  if(fc){
+    fc.innerHTML='<option value="">Todos los cursos</option><option value="Todos">Todos (general)</option>'+opts;
+  }
+  var box=el("a_cursos");
+  if(box){
+    box.innerHTML=MARCA.cursos.map(function(c){
+      return '<label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-family:var(--body);"><input type="checkbox" value="'+esc(c)+'" style="width:auto;"> '+esc(c)+'</label>';
+    }).join("");
+  }
+}
+function aplicarMarcaTextos(){
+  document.title="CRM · "+MARCA.nombre;
+  var eyebrow=el("pageEyebrow"); if(eyebrow) eyebrow.textContent="// "+MARCA.nombre.toUpperCase()+" — CRM";
+  var lockMlab=el("lockMlab"); if(lockMlab) lockMlab.textContent="// Solo "+MARCA.profe;
+  var chatTxt=el("chatAdmTexto"); if(chatTxt) chatTxt.placeholder="Escribe como "+MARCA.profe+"…";
+  var nProfe=el("cfg_profe_nombre"); if(nProfe) nProfe.placeholder="Profe "+MARCA.profe;
+  var nMarca=el("cfg_profe_marca"); if(nMarca) nMarca.placeholder=MARCA.nombre;
+  var hintMarca=el("hintProfeMarca"); if(hintMarca) hintMarca.textContent='Si lo dejas vacío, se usa "'+MARCA.nombre+'".';
+  var navN=el("navNombre"); if(navN && !navN.textContent) navN.textContent=MARCA.nombre;
+}
+function aplicarMarca(){ aplicarMarcaCursos(); aplicarMarcaTextos(); }
+
 /* ---------- Init ---------- */
 (function init(){
+  aplicarMarca();
   try{ token=localStorage.getItem(TOKEN_KEY); }catch(e){}
   if(!token){ lock(""); return; }
   setSync("Conectando…","");

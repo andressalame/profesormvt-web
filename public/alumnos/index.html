@@ -332,7 +332,7 @@
 
 <!-- ============ AUTH (login / registro) ============ -->
 <section id="viewAuth" class="auth-card hidden">
-  <div class="eyebrow">// PROFESORMVT</div>
+  <div class="eyebrow" id="eyebrowAuth">// PROFESORMVT</div>
   <h1>Portal de <em>alumno</em></h1>
   <div class="sub">Tus clases · Tu avance · Tu comunidad</div>
   <hr class="rule" />
@@ -346,7 +346,7 @@
     <div class="field"><label for="l_pass">Contraseña</label><input id="l_pass" type="password" autocomplete="current-password" /></div>
     <button class="btn full" id="btnLogin">Ingresar</button>
     <div class="err" id="loginErr"></div>
-    <p class="auth-hint">¿Olvidaste tu contraseña? <a href="https://wa.me/51989077928?text=Hola%20Andr%C3%A9s%2C%20olvid%C3%A9%20mi%20contrase%C3%B1a%20del%20portal%20de%20alumno" target="_blank" rel="noopener">Escríbeme por WhatsApp</a> y te la restablezco.</p>
+    <p class="auth-hint">¿Olvidaste tu contraseña? <a id="lnkOlvide" href="#" target="_blank" rel="noopener">Escríbeme por WhatsApp</a> y te la restablezco.</p>
   </div>
 
   <div id="formReg" class="hidden">
@@ -356,7 +356,7 @@
     <div class="field"><label for="r_pass">Contraseña (mínimo 8 caracteres)</label><input id="r_pass" type="password" autocomplete="new-password" /></div>
     <div class="field"><label for="r_ref">¿Quién te recomendó? (código, opcional)</label><input id="r_ref" type="text" maxlength="12" autocapitalize="characters" spellcheck="false" placeholder="AB12CD" /></div>
     <label class="check"><input type="checkbox" id="r_mkt" />
-      <span>Quiero recibir novedades, tips y promociones de ProfesorMVT por correo. (Opcional)</span></label>
+      <span id="txtMktCheck">Quiero recibir novedades, tips y promociones de ProfesorMVT por correo. (Opcional)</span></label>
     <button class="btn full" id="btnReg">Crear mi cuenta</button>
     <div class="err" id="regErr"></div>
   </div>
@@ -370,7 +370,7 @@
 <!-- ============ APP (SPA con sidebar) ============ -->
 <div id="app" class="app hidden">
   <aside class="side">
-    <a class="logo" href="#inicio">profesor<em>mvt</em><span class="dot"></span></a>
+    <a class="logo" href="#inicio" id="logoSidebar"><span class="dot"></span></a>
     <div class="slab">Portal de alumno</div>
     <nav aria-label="Navegación del portal">
       <a href="#inicio" data-v="inicio" aria-label="Inicio" title="Inicio"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11l9-8 9 8"/><path d="M5 9.5V21h14V9.5"/></svg><span>Inicio</span></a>
@@ -388,7 +388,7 @@
 
     <!-- ===== INICIO ===== -->
     <section class="view" id="v-inicio">
-      <div class="eyebrow">// PROFESORMVT — PORTAL DE ALUMNO</div>
+      <div class="eyebrow" id="eyebrowInicio">// PROFESORMVT — PORTAL DE ALUMNO</div>
       <h1 id="iHola"></h1>
       <div class="sub" id="iPlanLine"></div>
       <hr class="rule" />
@@ -420,7 +420,7 @@
         <h2 style="margin-top:12px;">¡Tu cuenta está lista! 🤘</h2>
         <p>Este es tu portal: acá manejas tus clases, pagos y material. Para arrancar son 3 pasos:</p>
         <ol class="onb-steps">
-          <li><b>1 · Compra tu paquete.</b> Elige canto, piano o composición (o combínalos). Con tarjeta se activa al instante; con Yape, Plin o transferencia el mismo día.</li>
+          <li><b>1 · Compra tu paquete.</b> <span id="txtOnbPaso1">Elige canto, piano o composición (o combínalos).</span> Con tarjeta se activa al instante; con Yape, Plin o transferencia el mismo día.</li>
           <li><b>2 · Elige tus horarios.</b> Coordinamos tus clases 1 a 1 a tu ritmo.</li>
           <li><b>3 · Aprende y avanza.</b> Aquí verás tus clases restantes, tu tarea de la semana y el material exclusivo.</li>
         </ol>
@@ -432,7 +432,7 @@
             <li><b>Mis clases</b> — tu historial y la tarea de la semana.</li>
             <li><b>Recursos</b> — PDFs y audios (se desbloquean al activar tu paquete).</li>
             <li><b>Comprar</b> — paquetes y renovaciones.</li>
-            <li><b>Referidos</b> — trae un amigo y ganas S/50.</li>
+            <li><b>Referidos</b> — trae un amigo y ganas <span id="txtOnbRef">S/50</span>.</li>
             <li><b>Mi cuenta</b> — tus datos y sesión.</li>
           </ul>
         </div>
@@ -533,7 +533,7 @@
         <div class="card stat"><div class="num" id="rReg">0</div><div class="lab">amigos registrados</div></div>
         <div class="card stat"><div class="num" id="rCom">0</div><div class="lab">ya compraron</div></div>
       </div>
-      <p class="note">Cuando un amigo compra su primer paquete con tu código, ganas <strong style="color:var(--cream)">S/50 de descuento</strong> para tu próxima compra.</p>
+      <p class="note">Cuando un amigo compra su primer paquete con tu código, ganas <strong style="color:var(--cream)"><span id="txtRefSoles">S/50</span> de descuento</strong> para tu próxima compra.</p>
     </section>
 
     <!-- ===== RECURSOS ===== -->
@@ -611,7 +611,7 @@
       <h3>Comprar <em>paquete</em></h3>
       <div class="mlab">// Elige cómo pagar</div>
       <div class="field"><label for="c_curso">Curso</label>
-        <select id="c_curso"><option>Canto</option><option>Piano</option><option>Composición</option></select></div>
+        <select id="c_curso"></select></div>
       <div class="field"><label for="c_paquete">Paquete</label><select id="c_paquete"></select></div>
       <div class="field" id="c_slotWrap" style="display:none;">
         <label>Elige tu horario (lo separamos apenas pagues)</label>
@@ -665,8 +665,19 @@
 
 <script>
 "use strict";
+/* ========== MARCA (white-label): edita SOLO este bloque para otro cliente.
+   Debe calzar con el bloque MARCA del worker. Ver docs/white-label-checklist.md ========== */
+var MARCA = {
+  nombre: "ProfesorMVT",
+  logoHtml: 'profesor<em>mvt</em>',      // se inyecta en el sidebar
+  profe: "Andrés",
+  whatsapp: "51989077928",
+  cursos: ["Canto", "Piano", "Composición"],
+  referidoSoles: 50,                      // debe calzar con CREDITO_REFERIDO del worker
+  rubro: "música"
+};
 var KEY = "pmvt_sesion";
-var WA_PROFE = "51989077928";
+var WA_PROFE = MARCA.whatsapp;
 var ME = null;
 var GOOGLE_CLIENT = "";
 var REF_URL = "";
@@ -770,6 +781,9 @@ $("btnReg").addEventListener("click",function(){
       if(e.status===409){ setAuthTab("login"); $("l_email").value=email; $("loginErr").textContent=e.message; }
     })
     .finally(function(){ $("btnReg").disabled=false; });
+});
+["r_nombre","r_email","r_whats","r_pass","r_ref"].forEach(function(id){
+  $(id).addEventListener("keydown",function(e){ if(e.key==="Enter") $("btnReg").click(); });
 });
 
 /* ---------- GOOGLE SIGN-IN (solo si está configurado) ---------- */
@@ -1017,16 +1031,16 @@ $("c_paquete").addEventListener("change", function(){ actualizaMonto(); renderPa
 function renderPaybox(){
   var cf = (ME && ME.config) || {};
   var m = $("c_metodo").value;
-  var titular = cf.pago_titular ? ('<div class="note">A nombre de: '+cf.pago_titular+'</div>') : '';
+  var titular = cf.pago_titular ? ('<div class="note">A nombre de: '+esc(cf.pago_titular)+'</div>') : '';
   var html = "";
   if(m === "Yape/Plin/Sip"){
-    html = cf.pago_numero ? ('<div class="lab">Yape, Plin o Sip a</div><div class="num">'+cf.pago_numero+'</div>'+titular) : '<div class="note">Aún no configurado.</div>';
+    html = cf.pago_numero ? ('<div class="lab">Yape, Plin o Sip a</div><div class="num">'+esc(cf.pago_numero)+'</div>'+titular) : '<div class="note">Aún no configurado.</div>';
   } else if(m === "Transferencia BCP"){
-    html = '<div class="lab">Transferencia BCP (Soles)</div><div class="num">'+(cf.bcp_cuenta||"-")+'</div><div class="note">CCI: '+(cf.bcp_cci||"-")+'</div>'+titular;
+    html = '<div class="lab">Transferencia BCP (Soles)</div><div class="num">'+esc(cf.bcp_cuenta||"-")+'</div><div class="note">CCI: '+esc(cf.bcp_cci||"-")+'</div>'+titular;
   } else if(m === "Transferencia Scotiabank"){
-    html = '<div class="lab">Transferencia Scotiabank (Soles)</div><div class="num">'+(cf.scotia_cuenta||"-")+'</div><div class="note">CCI: '+(cf.scotia_cci||"-")+'</div>'+titular;
+    html = '<div class="lab">Transferencia Scotiabank (Soles)</div><div class="num">'+esc(cf.scotia_cuenta||"-")+'</div><div class="note">CCI: '+esc(cf.scotia_cci||"-")+'</div>'+titular;
   } else if(m === "Crypto USDT"){
-    html = '<div class="lab">'+(cf.crypto_moneda||"USDT")+' por red '+(cf.crypto_red||"Tron (TRC20)")+'</div><div class="num" style="font-size:14px;word-break:break-all;">'+(cf.crypto_wallet||"-")+'</div><div class="note">Envía el equivalente del total en '+(cf.crypto_moneda||"USDT")+' por esa red.</div>';
+    html = '<div class="lab">'+esc(cf.crypto_moneda||"USDT")+' por red '+esc(cf.crypto_red||"Tron (TRC20)")+'</div><div class="num" style="font-size:14px;word-break:break-all;">'+esc(cf.crypto_wallet||"-")+'</div><div class="note">Envía el equivalente del total en '+esc(cf.crypto_moneda||"USDT")+' por esa red.</div>';
   } else if(m === "Tarjeta (Mercado Pago)"){
     var pk = $("c_paquete").value;
     if(pk){
@@ -1049,12 +1063,14 @@ function renderPaybox(){
   show("payboxOk"); hide("payboxNo");
 }
 function pagarConTarjeta(){
+  var btn=document.getElementById("btnPagarTarjeta");
+  if(btn && btn.disabled) return;
+  var txtOrig = btn ? btn.textContent : "";
+  if(btn){ btn.disabled=true; btn.textContent="Abriendo Mercado Pago…"; }
   $("compraErr").textContent="";
   var paquete=$("c_paquete").value, curso=$("c_curso").value;
-  if(!paquete){ $("compraErr").textContent="Elige un paquete."; return; }
-  if(paquete==="Clase de prueba" && !COMPRA_SLOT){ $("compraErr").textContent="Elige un horario para tu clase de prueba."; return; }
-  var btn=document.getElementById("btnPagarTarjeta");
-  if(btn){ btn.disabled=true; btn.textContent="Abriendo Mercado Pago…"; }
+  if(!paquete){ $("compraErr").textContent="Elige un paquete."; if(btn){ btn.disabled=false; btn.textContent=txtOrig; } return; }
+  if(paquete==="Clase de prueba" && !COMPRA_SLOT){ $("compraErr").textContent="Elige un horario para tu clase de prueba."; if(btn){ btn.disabled=false; btn.textContent=txtOrig; } return; }
   api("/api/mp/crear",{method:"POST",body:JSON.stringify({paquete:paquete,curso:curso,slot_deseado:(paquete==="Clase de prueba"?COMPRA_SLOT:"")})})
     .then(function(r){
       if(r && r.init_point){ window.location.href = r.init_point; }
@@ -1068,18 +1084,19 @@ function pagarConTarjeta(){
 $("c_metodo").addEventListener("change", renderPaybox);
 
 $("btnYaPague").addEventListener("click",function(){
+  if($("btnYaPague").disabled) return;
+  $("btnYaPague").disabled=true;
   $("compraErr").textContent="";
   var paquete=$("c_paquete").value, curso=$("c_curso").value, op=$("c_op").value.trim(), metodo=$("c_metodo").value;
-  if(!paquete){ $("compraErr").textContent="Elige un paquete."; return; }
-  if(paquete==="Clase de prueba" && !COMPRA_SLOT){ $("compraErr").textContent="Elige un horario para tu clase de prueba."; return; }
+  if(!paquete){ $("compraErr").textContent="Elige un paquete."; $("btnYaPague").disabled=false; return; }
+  if(paquete==="Clase de prueba" && !COMPRA_SLOT){ $("compraErr").textContent="Elige un horario para tu clase de prueba."; $("btnYaPague").disabled=false; return; }
   var c = calc(paquete);
-  $("btnYaPague").disabled=true;
   var f = ($("c_screenshot") && $("c_screenshot").files) ? $("c_screenshot").files[0] : null;
   comprimirImg(f).then(function(comprobante){
     return api("/api/comprar",{method:"POST",body:JSON.stringify({paquete:paquete,curso:curso,op_numero:op,metodo:metodo,comprobante:comprobante,slot_deseado:(paquete==="Clase de prueba"?COMPRA_SLOT:"")})});
   })
     .then(function(){
-      var aviso = "Hola Andrés, acabo de pagar S/ "+c.final+" por el "+paquete+" ("+curso+") via "+metodo+" 🎸 Soy "+ME.cuenta.nombre+" - "+ME.cuenta.email;
+      var aviso = "Hola "+MARCA.profe+", acabo de pagar S/ "+c.final+" por el "+paquete+" ("+curso+") via "+metodo+" 🎸 Soy "+ME.cuenta.nombre+" - "+ME.cuenta.email;
       $("btnAvisar").href = "https://wa.me/"+WA_PROFE+"?text="+encodeURIComponent(aviso);
       hide("compraPaso1"); show("compraPaso2");
       api("/api/me").then(function(d){ ME=d; renderActive(); empujarAReservar(); }).catch(function(){});
@@ -1118,8 +1135,8 @@ function renderReferidos(){
   $("rCode").textContent = code;
   $("rReg").textContent = (ME.referidos && ME.referidos.registrados) || 0;
   $("rCom").textContent = (ME.referidos && ME.referidos.compraron) || 0;
-  var msg = "¡Aprende música conmigo en ProfesorMVT! Usa mi código "+code+
-    " al registrarte: https://profesormvt.com/alumnos/?ref="+code;
+  var msg = "¡Aprende "+MARCA.rubro+" conmigo en "+MARCA.nombre+"! Usa mi código "+code+
+    " al registrarte: "+location.origin+"/alumnos/?ref="+code;
   $("btnWaRef").href = "https://wa.me/?text="+encodeURIComponent(msg);
 }
 function copiarTexto(txt, okMsg){
@@ -1134,7 +1151,7 @@ $("btnCopiarRef").addEventListener("click",function(){
 });
 $("btnCopiarLink").addEventListener("click",function(){
   var code = (ME && ME.ref_code) || "";
-  if(code) copiarTexto("https://profesormvt.com/alumnos/?ref="+code, "Link copiado");
+  if(code) copiarTexto(location.origin+"/alumnos/?ref="+code, "Link copiado");
 });
 
 /* ---------- VISTA: RECURSOS ---------- */
@@ -1642,7 +1659,7 @@ var TOUR_STEPS = [
   { sel:'a[data-v="inicio"]', vista:"inicio", titulo:"Inicio",
     texto:"Tu resumen de un vistazo: el plan que tienes, cuántas clases te quedan y tus próximos horarios. Cuando actives un paquete, todo aparece aquí." },
   { sel:'a[data-v="comprar"]', vista:"comprar", titulo:"Activa tu paquete",
-    texto:"Eliges canto, piano o composición y pagas con Yape, Plin o tarjeta. Se activa el mismo día, casi siempre en minutos. Sin paquete no hay clases que reservar, así que parte por acá." },
+    texto:"Eliges "+cursosOrLower()+" y pagas con Yape, Plin o tarjeta. Se activa el mismo día, casi siempre en minutos. Sin paquete no hay clases que reservar, así que parte por acá." },
   { sel:'a[data-v="agenda"]', vista:"agenda", titulo:"Reserva tus clases",
     texto:"Con tu paquete activo eliges horarios aquí. Una clase suelta cuando quieras, o un horario fijo semanal para no pensarlo más. También cancelas o reprogramas desde acá." },
   { sel:'a[data-v="recursos"]', vista:"recursos", titulo:"Tu material",
@@ -1650,7 +1667,7 @@ var TOUR_STEPS = [
   { sel:".chat-head", selAlt:"#chatFab", vista:"inicio", titulo:"Habla conmigo",
     texto:"Este es el chat directo. Tienes el canal grupal con la comunidad y un canal privado conmigo para tus dudas. Te respondo por acá." },
   { sel:'a[data-v="referidos"]', vista:"referidos", titulo:"Trae a un amigo",
-    texto:"Tu código es tuyo. Cuando alguien compra su primer paquete con él, ganas S/50 de descuento para tu próxima compra. Listo, ya conoces tu portal. A darle." }
+    texto:"Tu código es tuyo. Cuando alguien compra su primer paquete con él, ganas S/"+MARCA.referidoSoles+" de descuento para tu próxima compra. Listo, ya conoces tu portal. A darle." }
 ];
 var tourIdx = 0;
 
@@ -1722,8 +1739,24 @@ function startTour(){
 }
 window.verTour = startTour;
 
+/* ---------- MARCA: aplica el bloque MARCA al DOM (white-label) ---------- */
+function cursosOrLower(){ return MARCA.cursos.join(", ").replace(/, ([^,]*)$/, " o $1").toLowerCase(); }
+function aplicarMarca(){
+  document.title = "Portal de alumno · " + MARCA.nombre;
+  $("logoSidebar").innerHTML = MARCA.logoHtml + '<span class="dot"></span>';
+  $("eyebrowAuth").textContent = "// " + MARCA.nombre.toUpperCase();
+  $("eyebrowInicio").textContent = "// " + MARCA.nombre.toUpperCase() + " — PORTAL DE ALUMNO";
+  $("lnkOlvide").href = "https://wa.me/"+MARCA.whatsapp+"?text="+encodeURIComponent("Hola "+MARCA.profe+", olvidé mi contraseña del portal de alumno");
+  $("txtMktCheck").textContent = "Quiero recibir novedades, tips y promociones de " + MARCA.nombre + " por correo. (Opcional)";
+  $("c_curso").innerHTML = MARCA.cursos.map(function(c){ return "<option>"+esc(c)+"</option>"; }).join("");
+  $("txtOnbPaso1").textContent = "Elige " + cursosOrLower() + " (o combínalos).";
+  $("txtOnbRef").textContent = "S/" + MARCA.referidoSoles;
+  $("txtRefSoles").textContent = "S/" + MARCA.referidoSoles;
+}
+
 /* ---------- INIT ---------- */
 (function init(){
+  aplicarMarca();
   if(REF_URL) $("r_ref").value = REF_URL;
   fetch("/api/publico").then(function(r){ return r.json(); }).then(function(d){
     GOOGLE_CLIENT = (d && d.google_client_id) || "";

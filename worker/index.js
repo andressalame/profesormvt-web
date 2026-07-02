@@ -25,6 +25,22 @@ import { EmailMessage } from "cloudflare:email";
 import { createMimeMessage } from "mimetext";
 import { buildPushPayload } from "@block65/webcrypto-web-push";
 
+/* ========== MARCA (white-label): TODO lo del negocio sale de aquí.
+   Para desplegar a otro cliente, edita SOLO este bloque (+ los bloques MARCA
+   de public/alumnos/index.html y public/admin/crm/index.html). Ver docs/white-label-checklist.md ========== */
+const MARCA = {
+  nombre: "ProfesorMVT",
+  profe: "Andrés",
+  dominio: "https://profesormvt.com",
+  correoAvisos: "avisos@profesormvt.com",       // remitente (dominio verificado en Resend)
+  correoAdmin: "andressalame@gmail.com",        // a dónde llegan las alertas internas
+  whatsapp: "51989077928",
+  ciudad: "San Isidro, Lima",
+  statementDescriptor: "PROFESORMVT",           // máx 22 chars, extracto de la tarjeta
+  vapidSubject: "mailto:andressalame@gmail.com",
+  leadMagnetPdf: "/recursos/composicion-primera-cancion.pdf",
+};
+
 const PAQUETES = {
   "Paquete 4":    { clases: 4,  reprog: 2 },
   "Paquete 8":    { clases: 8,  reprog: 3 },
@@ -233,7 +249,7 @@ async function crearSesion(env, cuentaId){
 /* ---------- chat: auth dual (sesión de alumno O ADMIN_TOKEN) ---------- */
 async function authChat(env, request){
   const auth = request.headers.get("authorization") || "";
-  if (auth.startsWith("Bearer ") && env.ADMIN_TOKEN && auth === "Bearer " + env.ADMIN_TOKEN){
+  if (auth.startsWith("Bearer ") && env.ADMIN_TOKEN && safeEq(auth, "Bearer " + env.ADMIN_TOKEN)){
     return { admin: true };
   }
   const cu = await cuentaDeSesion(env, request);
@@ -255,8 +271,8 @@ function limpiarTextoChat(t){
 async function avisarCompra(env, info){
   const auto = !!info.confirmadoAuto;
   const msg = createMimeMessage();
-  msg.setSender({ name: "Avisos ProfesorMVT", addr: "avisos@profesormvt.com" });
-  msg.setRecipient("andressalame@gmail.com");
+  msg.setSender({ name: "Avisos " + MARCA.nombre, addr: MARCA.correoAvisos });
+  msg.setRecipient(MARCA.correoAdmin);
   msg.setSubject((auto ? "Pago con tarjeta CONFIRMADO (auto): " : "Pago por confirmar: ") + `${info.paquete} — S/${info.monto}`);
   msg.addMessage({
     contentType: "text/plain",
@@ -272,10 +288,10 @@ async function avisarCompra(env, info){
       "N° de operación: " + (info.op || "-") + "\n" +
       (info.comprobanteUrl ? ("Comprobante (screenshot): " + info.comprobanteUrl + "\n") : "") +
       (auto
-        ? "\nYa está activado. Lo puedes ver en el CRM:\nhttps://profesormvt.com/admin/crm/\n"
-        : "\nVerifica el pago y confírmalo (o recházalo) en el CRM:\nhttps://profesormvt.com/admin/crm/\n")
+        ? "\nYa está activado. Lo puedes ver en el CRM:\n" + MARCA.dominio + "/admin/crm/\n"
+        : "\nVerifica el pago y confírmalo (o recházalo) en el CRM:\n" + MARCA.dominio + "/admin/crm/\n")
   });
-  await env.AVISOS.send(new EmailMessage("avisos@profesormvt.com", "andressalame@gmail.com", msg.asRaw()));
+  await env.AVISOS.send(new EmailMessage(MARCA.correoAvisos, MARCA.correoAdmin, msg.asRaw()));
 }
 
 /* ---------- Email transaccional a CUALQUIER destinatario (via Resend, plan gratis).
@@ -285,7 +301,7 @@ async function enviarCorreo(env, { to, subject, html, text, from }){
   if (!env.RESEND_API_KEY || !to || !subject) return false;
   const remitente = (from && from.email)
     ? ((from.name ? from.name + " " : "") + "<" + from.email + ">")
-    : "Andrés de ProfesorMVT <hola@profesormvt.com>";
+    : (MARCA.profe + " de " + MARCA.nombre + " <hola@" + MARCA.dominio.replace(/^https?:\/\//, "") + ">");
   try {
     const r = await fetch("https://api.resend.com/emails", {
       method: "POST",
@@ -304,17 +320,18 @@ async function enviarCorreo(env, { to, subject, html, text, from }){
 
 /* Correo de bienvenida + entrega de la guia cuando alguien deja su correo (lead magnet) */
 async function correoBienvenidaLead(env, to){
-  const url = "https://profesormvt.com/recursos/composicion-primera-cancion.pdf";
+  const url = MARCA.dominio + MARCA.leadMagnetPdf;
+  const dominioLimpio = MARCA.dominio.replace(/^https?:\/\//, "");
   const html =
     '<div style="font-family:Arial,Helvetica,sans-serif;max-width:480px;margin:0 auto;color:#1a1a1a;font-size:15px;line-height:1.6">' +
       '<p>Hola,</p>' +
       '<p>Aquí está tu guía <b>"De oyente a autor"</b>: las 3 herramientas para empezar a componer tu primera canción.</p>' +
       '<p style="text-align:center;margin:26px 0"><a href="' + url + '" style="background:#e8501f;color:#ffffff;text-decoration:none;font-weight:bold;padding:14px 26px;border-radius:6px;display:inline-block">Descargar mi guía</a></p>' +
       '<p>Componer se entrena, no es un don. Si quieres pasar de oyente a autor en serio, tu primera clase de prueba cuesta S/50 e incluye un plan armado a tu medida, con alguien que ha compuesto más de 200 canciones.</p>' +
-      '<p>Un abrazo,<br><b>Andrés</b><br>ProfesorMVT</p>' +
-      '<p style="font-size:12px;color:#888888;margin-top:26px">profesormvt.com · Canto, piano y composición para adultos</p>' +
+      '<p>Un abrazo,<br><b>' + MARCA.profe + '</b><br>' + MARCA.nombre + '</p>' +
+      '<p style="font-size:12px;color:#888888;margin-top:26px">' + dominioLimpio + ' · Canto, piano y composición para adultos</p>' +
     '</div>';
-  const text = 'Hola,\n\nAquí está tu guía "De oyente a autor": ' + url + '\n\nComponer se entrena, no es un don. Si quieres pasar de oyente a autor en serio, tu primera clase de prueba cuesta S/50 e incluye un plan a tu medida.\n\nUn abrazo,\nAndrés - ProfesorMVT\nprofesormvt.com';
+  const text = 'Hola,\n\nAquí está tu guía "De oyente a autor": ' + url + '\n\nComponer se entrena, no es un don. Si quieres pasar de oyente a autor en serio, tu primera clase de prueba cuesta S/50 e incluye un plan a tu medida.\n\nUn abrazo,\n' + MARCA.profe + ' - ' + MARCA.nombre + '\n' + dominioLimpio;
   return enviarCorreo(env, { to: to, subject: "Tu guía de composición", html: html, text: text });
 }
 
@@ -325,8 +342,8 @@ async function correoBienvenidaAlumno(env, cu, compra){
   try { cfg = await loadConfig(env); } catch (e) { cfg = {}; }
   const nombre = ((cu.nombre || "").trim().split(/\s+/)[0]) || "";
   const nombrePaquete = ({ "Paquete 4":"Esencial", "Paquete 8":"Intensivo", "Paquete 12":"Estrella", "Clase suelta":"Clase suelta", "Clase de prueba":"Clase de prueba" })[compra.paquete] || compra.paquete || "";
-  const portal = "https://profesormvt.com/alumnos/";
-  const wa = "https://wa.me/51989077928";
+  const portal = MARCA.dominio + "/alumnos/";
+  const wa = "https://wa.me/" + MARCA.whatsapp;
   const discordLine = cfg.discord_url
     ? '<li><b>Tu Discord (zona VIP):</b> <a href="' + cfg.discord_url + '">entra aquí</a>, ahí resolvemos dudas y compartimos material entre clases.</li>'
     : '';
@@ -342,13 +359,13 @@ async function correoBienvenidaAlumno(env, cu, compra){
         discordLine + agendaLine +
       '</ul>' +
       '<p>Cualquier cosa me escribes directo. Vamos a hacer que esto suene.</p>' +
-      '<p>Un abrazo,<br><b>Andrés</b><br>ProfesorMVT</p>' +
+      '<p>Un abrazo,<br><b>' + MARCA.profe + '</b><br>' + MARCA.nombre + '</p>' +
     '</div>';
   const text = '¡Bienvenido' + (nombre ? ' ' + nombre : '') + '!\n\nTu paquete ' + nombrePaquete + ' ya está activo. Para arrancar:\n- Tu portal: ' + portal + '\n' +
     (cfg.discord_url ? '- Discord: ' + cfg.discord_url + '\n' : '') +
     (cfg.calendly_url ? '- Agenda tu clase: ' + cfg.calendly_url + '\n' : '- Agenda escribiéndome por WhatsApp: ' + wa + '\n') +
-    '\nCualquier cosa me escribes.\n\nUn abrazo,\nAndrés - ProfesorMVT';
-  return enviarCorreo(env, { to: cu.email, subject: "Ya estás dentro de ProfesorMVT 🎸", html: html, text: text });
+    '\nCualquier cosa me escribes.\n\nUn abrazo,\n' + MARCA.profe + ' - ' + MARCA.nombre;
+  return enviarCorreo(env, { to: cu.email, subject: "Ya estás dentro de " + MARCA.nombre + " 🎸", html: html, text: text });
 }
 
 /* ---------- Confirmar una compra (reutilizado por el CRM y por el webhook de Mercado Pago).
@@ -367,6 +384,17 @@ async function confirmarCompra(env, compra){
   // nunca confirmar la prueba: evita que pise el paquete vigente (rama 'renovado') o que se apilen 2.
   if (compra.paquete === "Clase de prueba" && cu.alumno_id){
     return { ok: false, error: "La clase de prueba es solo para la primera clase de una cuenta nueva.", status: 400 };
+  }
+
+  // Reclamo atómico (evita TOCTOU: dos confirmaciones a la vez -manual + webhook MP, o doble webhook-
+  // ambas leyendo estado 'pendiente' y corriendo los efectos 2 veces). Solo UNA de ellas logra este
+  // UPDATE condicionado; la otra ve 0 filas cambiadas y sale sin repetir correo/crédito/push.
+  const reclamo = await env.DB.prepare(
+    "UPDATE compras SET estado = 'confirmada' WHERE id = ?1 AND estado IN ('pendiente','iniciada')"
+  ).bind(compra.id).run();
+  const filasReclamo = (reclamo && reclamo.meta && (reclamo.meta.changes ?? reclamo.meta.rows_written)) || 0;
+  if (!filasReclamo){
+    return { ok: false, error: "Esa compra ya fue procesada", status: 409, yaProcesada: true };
   }
 
   const stmts = [];
@@ -423,8 +451,19 @@ async function confirmarCompra(env, compra){
     ).bind(usado, cu.id));
   }
 
-  stmts.push(env.DB.prepare("UPDATE compras SET estado = 'confirmada' WHERE id = ?1").bind(compra.id));
-  await env.DB.batch(stmts);
+  // El estado ya quedó en 'confirmada' por el reclamo atómico de arriba; el resto de columnas del
+  // batch son los efectos (alta/renovación de alumno, crédito de referido, descuento consumido).
+  // Si el batch falla, se devuelve el estado original para que la compra no quede "confirmada" sin efectos.
+  try {
+    await env.DB.batch(stmts);
+  } catch (e) {
+    console.error(e);
+    try {
+      await env.DB.prepare("UPDATE compras SET estado = ?1 WHERE id = ?2 AND estado = 'confirmada'")
+        .bind(compra.estado, compra.id).run();
+    } catch (e2) { console.error(e2); }
+    return { ok: false, error: "No se pudo aplicar la compra. Intenta de nuevo.", status: 500 };
+  }
 
   // Si eligió horario ANTES de pagar (Clase de prueba), auto-reservarlo ahora que ya es alumno.
   // Aparte del batch a propósito: si el slot ya no está libre (carrera rara), esto NO debe tumbar
@@ -448,7 +487,7 @@ async function confirmarCompra(env, compra){
     await avisarPushAlumno(env, cu.id, {
       title: "Pago confirmado 🎸",
       body: "Tu paquete " + (compra.paquete || "") + " ya está activo. Reserva tu próxima clase.",
-      url: "https://profesormvt.com/alumnos/#agenda"
+      url: MARCA.dominio + "/alumnos/#agenda"
     });
   } catch (e) {}
   return { ok: true, cu, compra };
@@ -462,7 +501,7 @@ async function correoRenovacion(env, alumno, to, c){
   const frase = restantes <= 0
     ? "Ya usaste todas las clases de tu paquete"
     : (restantes === 1 ? "Te queda 1 clase de tu paquete" : ("Te quedan " + restantes + " clases de tu paquete"));
-  const portal = "https://profesormvt.com/alumnos/";
+  const portal = MARCA.dominio + "/alumnos/";
   const html =
     '<div style="font-family:Arial,Helvetica,sans-serif;max-width:480px;margin:0 auto;color:#1a1a1a;font-size:15px;line-height:1.6">' +
       '<p>¡Hola' + (nombre ? ' ' + nombre : '') + '! 🎸</p>' +
@@ -470,9 +509,9 @@ async function correoRenovacion(env, alumno, to, c){
       '<p style="text-align:center;margin:26px 0"><a href="' + portal + '" style="background:#e8501f;color:#ffffff;text-decoration:none;font-weight:bold;padding:14px 26px;border-radius:6px;display:inline-block">Renovar mi paquete</a></p>' +
       '<p>Tip: si quieres el mejor precio por clase y asegurar tu cupo, el <b>Plan Estrella</b> (12 clases) es la mejor opción. Lo ves al renovar.</p>' +
       '<p>Cualquier cosa me escribes directo.</p>' +
-      '<p>Un abrazo,<br><b>Andrés</b><br>ProfesorMVT</p>' +
+      '<p>Un abrazo,<br><b>' + MARCA.profe + '</b><br>' + MARCA.nombre + '</p>' +
     '</div>';
-  const text = '¡Hola' + (nombre ? ' ' + nombre : '') + '!\n\n' + frase + '. Para no cortar el ritmo, renueva aquí: ' + portal + '\n\nTip: el Plan Estrella (12 clases) es el mejor precio por clase.\n\nUn abrazo,\nAndrés - ProfesorMVT';
+  const text = '¡Hola' + (nombre ? ' ' + nombre : '') + '!\n\n' + frase + '. Para no cortar el ritmo, renueva aquí: ' + portal + '\n\nTip: el Plan Estrella (12 clases) es el mejor precio por clase.\n\nUn abrazo,\n' + MARCA.profe + ' - ' + MARCA.nombre;
   return enviarCorreo(env, { to: to, subject: "Se te están acabando las clases 🎸", html: html, text: text });
 }
 
@@ -481,11 +520,11 @@ async function avisarRenovacionesResumen(env, enviados){
   if (!env.AVISOS || !enviados.length) return;
   const lista = enviados.map(function(e){ return "- " + e.nombre + " (" + e.email + ") · " + e.restantes + " clases restantes"; }).join("\n");
   const msg = createMimeMessage();
-  msg.setSender({ name: "Avisos ProfesorMVT", addr: "avisos@profesormvt.com" });
-  msg.setRecipient("andressalame@gmail.com");
+  msg.setSender({ name: "Avisos " + MARCA.nombre, addr: MARCA.correoAvisos });
+  msg.setRecipient(MARCA.correoAdmin);
   msg.setSubject("Recordatorios de renovacion enviados hoy: " + enviados.length);
   msg.addMessage({ contentType: "text/plain", data: "El sistema le recordo renovar (por correo) a:\n\n" + lista + "\n\nA los importantes, dales tu empujon personal por WhatsApp.\n" });
-  await env.AVISOS.send(new EmailMessage("avisos@profesormvt.com", "andressalame@gmail.com", msg.asRaw()));
+  await env.AVISOS.send(new EmailMessage(MARCA.correoAvisos, MARCA.correoAdmin, msg.asRaw()));
 }
 
 /* Aviso a Andrés de que el backup diario corrió OK (via AVISOS, gratis). Solo el resumen, no el archivo. */
@@ -494,8 +533,8 @@ async function avisarBackup(env, r){
   try {
     const kb = Math.round(r.bytes / 1024);
     const msg = createMimeMessage();
-    msg.setSender({ name: "Avisos ProfesorMVT", addr: "avisos@profesormvt.com" });
-    msg.setRecipient("andressalame@gmail.com");
+    msg.setSender({ name: "Avisos " + MARCA.nombre, addr: MARCA.correoAvisos });
+    msg.setRecipient(MARCA.correoAdmin);
     msg.setSubject("Backup diario OK · " + r.key);
     msg.addMessage({ contentType: "text/plain", data:
       "El respaldo automatico del CRM corrio sin problemas.\n\n" +
@@ -503,7 +542,7 @@ async function avisarBackup(env, r){
       "Tamano:  " + kb + " KB\n" +
       "Filas:   " + r.filas + "\n\n" +
       "Vive en R2 (bucket profesormvt-recursos), se conservan los ultimos 30 dias.\n" });
-    await env.AVISOS.send(new EmailMessage("avisos@profesormvt.com", "andressalame@gmail.com", msg.asRaw()));
+    await env.AVISOS.send(new EmailMessage(MARCA.correoAvisos, MARCA.correoAdmin, msg.asRaw()));
   } catch (e) {}
 }
 
@@ -548,16 +587,16 @@ const VENCE_AVISO_DIAS = 5;
 async function correoAvisoVencimiento(env, alumno, to, diasRestantes, restantes){
   if (!to) return false;
   const nombre = ((alumno.nombre || "").trim().split(/\s+/)[0]) || "";
-  const portal = "https://profesormvt.com/alumnos/";
+  const portal = MARCA.dominio + "/alumnos/";
   const html =
     '<div style="font-family:Arial,Helvetica,sans-serif;max-width:480px;margin:0 auto;color:#1a1a1a;font-size:15px;line-height:1.6">' +
       '<p>Hola' + (nombre ? ' ' + nombre : '') + ' 🎸</p>' +
       '<p>Tu paquete vence en ' + diasRestantes + ' día' + (diasRestantes === 1 ? '' : 's') + ' y todavía te quedan ' + restantes + ' clase' + (restantes === 1 ? '' : 's') + ' por usar.</p>' +
       '<p>Reserva tu horario para no perderlas. Si tienes un viaje o algo de salud que te está complicando venir, puedes congelar tu plazo desde el portal.</p>' +
       '<p style="text-align:center;margin:26px 0"><a href="' + portal + '" style="background:#e8501f;color:#ffffff;text-decoration:none;font-weight:bold;padding:14px 26px;border-radius:6px;display:inline-block">Reservar mi clase</a></p>' +
-      '<p>Un abrazo,<br><b>Andrés</b><br>ProfesorMVT</p>' +
+      '<p>Un abrazo,<br><b>' + MARCA.profe + '</b><br>' + MARCA.nombre + '</p>' +
     '</div>';
-  const text = 'Hola' + (nombre ? ' ' + nombre : '') + '!\n\nTu paquete vence en ' + diasRestantes + ' día(s) y te quedan ' + restantes + ' clase(s) por usar.\n\nReserva aquí: ' + portal + '\n\nSi tienes un viaje o tema de salud, puedes congelar tu plazo desde el portal.\n\nUn abrazo,\nAndrés - ProfesorMVT';
+  const text = 'Hola' + (nombre ? ' ' + nombre : '') + '!\n\nTu paquete vence en ' + diasRestantes + ' día(s) y te quedan ' + restantes + ' clase(s) por usar.\n\nReserva aquí: ' + portal + '\n\nSi tienes un viaje o tema de salud, puedes congelar tu plazo desde el portal.\n\nUn abrazo,\n' + MARCA.profe + ' - ' + MARCA.nombre;
   return enviarCorreo(env, { to: to, subject: "Tu paquete vence en " + diasRestantes + " días — te quedan clases", html: html, text: text });
 }
 
@@ -610,7 +649,7 @@ const WINBACK_DIA = 4;   // días tras el aviso de renovación antes de reactiva
 async function correoWinBack(env, alumno, to){
   if (!to) return false;
   const nombre = ((alumno.nombre || "").trim().split(/\s+/)[0]) || "";
-  const portal = "https://profesormvt.com/alumnos/";
+  const portal = MARCA.dominio + "/alumnos/";
   const html =
     '<div style="font-family:Arial,Helvetica,sans-serif;max-width:480px;margin:0 auto;color:#1a1a1a;font-size:15px;line-height:1.6">' +
       '<p>Hola' + (nombre ? ' ' + nombre : '') + '! 🎸</p>' +
@@ -618,9 +657,9 @@ async function correoWinBack(env, alumno, to){
       '<p>Tu cupo sigue aquí. Cuando quieras, retomamos donde lo dejaste y seguimos sumando.</p>' +
       '<p style="text-align:center;margin:26px 0"><a href="' + portal + '" style="background:#e8501f;color:#ffffff;text-decoration:none;font-weight:bold;padding:14px 26px;border-radius:6px;display:inline-block">Renovar y seguir</a></p>' +
       '<p>Si prefieres, respóndeme este correo y armamos el plan que mejor te calce.</p>' +
-      '<p>Un abrazo,<br><b>Andrés</b><br>ProfesorMVT</p>' +
+      '<p>Un abrazo,<br><b>' + MARCA.profe + '</b><br>' + MARCA.nombre + '</p>' +
     '</div>';
-  const text = 'Hola' + (nombre ? ' ' + nombre : '') + '!\n\nTerminaste tu paquete y aún no renuevas. Tu avance no tiene que parar justo cuando se empieza a notar: tu cupo sigue aquí y cuando quieras retomamos donde lo dejaste.\n\nRenueva aquí: ' + portal + '\n\nSi prefieres, respóndeme y armamos el plan que mejor te calce.\n\nUn abrazo,\nAndrés - ProfesorMVT';
+  const text = 'Hola' + (nombre ? ' ' + nombre : '') + '!\n\nTerminaste tu paquete y aún no renuevas. Tu avance no tiene que parar justo cuando se empieza a notar: tu cupo sigue aquí y cuando quieras retomamos donde lo dejaste.\n\nRenueva aquí: ' + portal + '\n\nSi prefieres, respóndeme y armamos el plan que mejor te calce.\n\nUn abrazo,\n' + MARCA.profe + ' - ' + MARCA.nombre;
   return enviarCorreo(env, { to: to, subject: "Tu cupo sigue aquí 🎸", html: html, text: text });
 }
 
@@ -638,11 +677,11 @@ async function avisarWinBackResumen(env, enviados){
     return "- " + e.nombre + " (" + e.email + ")" + wa + "\n  WhatsApp listo: " + e.borrador;
   }).join("\n\n");
   const msg = createMimeMessage();
-  msg.setSender({ name: "Avisos ProfesorMVT", addr: "avisos@profesormvt.com" });
-  msg.setRecipient("andressalame@gmail.com");
+  msg.setSender({ name: "Avisos " + MARCA.nombre, addr: MARCA.correoAvisos });
+  msg.setRecipient(MARCA.correoAdmin);
   msg.setSubject("Win-back: " + enviados.length + " alumno(s) reactivados hoy");
   msg.addMessage({ contentType: "text/plain", data: "El sistema reactivó (por correo) a estos alumnos que recibieron el aviso de renovación hace unos días y aún no renuevan. Para los que quieras tocar a mano, el WhatsApp ya está redactado abajo, listo para copiar:\n\n" + lista + "\n" });
-  await env.AVISOS.send(new EmailMessage("avisos@profesormvt.com", "andressalame@gmail.com", msg.asRaw()));
+  await env.AVISOS.send(new EmailMessage(MARCA.correoAvisos, MARCA.correoAdmin, msg.asRaw()));
 }
 
 /* Cron de win-back: alumnos que recibieron el aviso de renovación este ciclo, ya pasó WINBACK_DIA y
@@ -695,18 +734,19 @@ const NURTURE_PASOS = [
 /* Correo de seguimiento a un lead que dejó su correo y todavía no compra. paso = 1 | 2. */
 async function correoNurtureLead(env, to, paso){
   if (!to) return false;
-  const horarios = "https://profesormvt.com/horarios";
+  const horarios = MARCA.dominio + "/horarios";
+  const dominioLimpio = MARCA.dominio.replace(/^https?:\/\//, "");
   const wrap = function(inner){
     return '<div style="font-family:Arial,Helvetica,sans-serif;max-width:480px;margin:0 auto;color:#1a1a1a;font-size:15px;line-height:1.6">' +
       inner +
-      '<p>Un abrazo,<br><b>Andrés</b><br>ProfesorMVT</p>' +
-      '<p style="font-size:12px;color:#888888;margin-top:26px">profesormvt.com · Canto, piano y composición para adultos</p>' +
+      '<p>Un abrazo,<br><b>' + MARCA.profe + '</b><br>' + MARCA.nombre + '</p>' +
+      '<p style="font-size:12px;color:#888888;margin-top:26px">' + dominioLimpio + ' · Canto, piano y composición para adultos</p>' +
     '</div>';
   };
   const boton = function(texto){
     return '<p style="text-align:center;margin:26px 0"><a href="' + horarios + '" style="background:#e8501f;color:#ffffff;text-decoration:none;font-weight:bold;padding:14px 26px;border-radius:6px;display:inline-block">' + texto + '</a></p>';
   };
-  const wa = "https://wa.me/51989077928?text=" + encodeURIComponent("Hola! Vi tu correo sobre la clase de prueba y tengo una pregunta antes de reservar 🎤");
+  const wa = "https://wa.me/" + MARCA.whatsapp + "?text=" + encodeURIComponent("Hola! Vi tu correo sobre la clase de prueba y tengo una pregunta antes de reservar 🎤");
   const botonWsp = function(texto){
     return '<p style="text-align:center;margin:0 0 26px"><a href="' + wa + '" style="color:#e8501f;text-decoration:underline;font-weight:bold">' + texto + '</a></p>';
   };
@@ -720,14 +760,14 @@ async function correoNurtureLead(env, to, paso){
       boton("Ver horarios disponibles") +
       '<p>Eliges tu horario ahí mismo, cuando quieras.</p>'
     );
-    text = 'Hola,\n\nTe bajaste la guía ayer. La mayoría de adultos cree que ya se le pasó el tren para cantar, tocar o componer. No es verdad: esto no es talento, es entrenamiento, y se entrena a cualquier edad.\n\nLa forma más rápida de comprobarlo es una clase de prueba (S/50) con un diagnóstico a tu medida. Mira los horarios disponibles aquí: ' + horarios + '\n\nUn abrazo,\nAndrés - ProfesorMVT';
+    text = 'Hola,\n\nTe bajaste la guía ayer. La mayoría de adultos cree que ya se le pasó el tren para cantar, tocar o componer. No es verdad: esto no es talento, es entrenamiento, y se entrena a cualquier edad.\n\nLa forma más rápida de comprobarlo es una clase de prueba (S/50) con un diagnóstico a tu medida. Mira los horarios disponibles aquí: ' + horarios + '\n\nUn abrazo,\n' + MARCA.profe + ' - ' + MARCA.nombre;
   } else {
     subject = "Tu clase de prueba con diagnóstico te espera";
     html = wrap(
       '<p>Hola,</p>' +
       '<p>Te lo dejo claro para que decidas sin vueltas. Tu clase de prueba cuesta S/50 e incluye:</p>' +
       '<ul style="padding-left:18px">' +
-        '<li>Una hora 1 a 1, en persona (San Isidro) u online.</li>' +
+        '<li>Una hora 1 a 1, en persona (' + MARCA.ciudad.split(",")[0] + ') u online.</li>' +
         '<li>Un diagnóstico de dónde estás y un plan armado a tu medida.</li>' +
         '<li>Te enseña alguien que ha compuesto más de 200 canciones y trabajó años en la industria.</li>' +
       '</ul>' +
@@ -736,7 +776,7 @@ async function correoNurtureLead(env, to, paso){
       botonWsp("¿Tienes una duda antes? Escríbeme por WhatsApp") +
       '<p>O si prefieres, responde este correo y lo vemos.</p>'
     );
-    text = 'Hola,\n\nTu clase de prueba cuesta S/50 e incluye:\n- Una hora 1 a 1, en persona (San Isidro) u online.\n- Un diagnóstico de dónde estás y un plan a tu medida.\n- Te enseña alguien que ha compuesto más de 200 canciones y trabajó años en la industria.\n\nNo es una clase de relleno: es donde ya empiezas a avanzar. Elige tu horario aquí: ' + horarios + '\n\n¿Tienes una duda antes? Escríbeme por WhatsApp: ' + wa + '\n\nO si prefieres, responde este correo.\n\nUn abrazo,\nAndrés - ProfesorMVT';
+    text = 'Hola,\n\nTu clase de prueba cuesta S/50 e incluye:\n- Una hora 1 a 1, en persona (' + MARCA.ciudad.split(",")[0] + ') u online.\n- Un diagnóstico de dónde estás y un plan a tu medida.\n- Te enseña alguien que ha compuesto más de 200 canciones y trabajó años en la industria.\n\nNo es una clase de relleno: es donde ya empiezas a avanzar. Elige tu horario aquí: ' + horarios + '\n\n¿Tienes una duda antes? Escríbeme por WhatsApp: ' + wa + '\n\nO si prefieres, responde este correo.\n\nUn abrazo,\n' + MARCA.profe + ' - ' + MARCA.nombre;
   }
   return enviarCorreo(env, { to: to, subject: subject, html: html, text: text });
 }
@@ -746,11 +786,11 @@ async function avisarNurtureResumen(env, enviados){
   if (!env.AVISOS || !enviados.length) return;
   const lista = enviados.map(function(e){ return "- " + e.email + " · correo de seguimiento " + e.paso; }).join("\n");
   const msg = createMimeMessage();
-  msg.setSender({ name: "Avisos ProfesorMVT", addr: "avisos@profesormvt.com" });
-  msg.setRecipient("andressalame@gmail.com");
+  msg.setSender({ name: "Avisos " + MARCA.nombre, addr: MARCA.correoAvisos });
+  msg.setRecipient(MARCA.correoAdmin);
   msg.setSubject("Nurture de leads: " + enviados.length + " correos de seguimiento hoy");
   msg.addMessage({ contentType: "text/plain", data: "El sistema le hizo seguimiento (por correo) a estos leads que dejaron su correo y aún no compran:\n\n" + lista + "\n\nSi a alguno te interesa cerrarlo a mano, escríbele por WhatsApp.\n" });
-  await env.AVISOS.send(new EmailMessage("avisos@profesormvt.com", "andressalame@gmail.com", msg.asRaw()));
+  await env.AVISOS.send(new EmailMessage(MARCA.correoAvisos, MARCA.correoAdmin, msg.asRaw()));
 }
 
 /* Cron de nurture: a cada lead de MVT que no es cuenta todavía, le manda el correo de seguimiento que
@@ -796,36 +836,46 @@ async function procesarNurtureLeads(env){
    Reemplaza la burbuja de WhatsApp por un asistente que responde dudas y, si no alcanza,
    pasa el WhatsApp de Andrés. Claude Haiku via /api/chatbot. Arranca con degradación elegante:
    si no hay ANTHROPIC_API_KEY, responde con el WhatsApp y no rompe nada. */
-const CHATBOT_WA = "https://wa.me/51989077928";
-const CHATBOT_SYSTEM =
-  "Eres el asistente virtual de ProfesorMVT, la marca de Andrés Salamé-Córdova: clases 1 a 1 de canto (método MVT), piano y composición para ADULTOS, presenciales en San Isidro (Lima) o en vivo online.\n\n" +
-  "PLANES Y PRECIOS (en soles, S/):\n" +
-  "- Clase de prueba: S/50. Una sesión completa con diagnóstico vocal en PDF. NO es gratis: ese es el mejor punto de partida. Solo para cuentas nuevas.\n" +
-  "- Clase suelta: S/70.\n" +
-  "- Plan Esencial: S/250 al mes (4 clases).\n" +
-  "- Plan Intensivo: S/450 al mes (8 clases). El más elegido.\n" +
-  "- Plan Estrella: S/600 (12 clases). El mejor precio por clase.\n\n" +
-  "PAGOS: desde Perú con Yape, Plin, Sip, tarjeta o transferencia (la tarjeta activa el paquete al instante). Desde el extranjero, con tarjeta o cripto.\n\n" +
-  "CÓMO EMPIEZA UN ALUMNO: ve los horarios libres en profesormvt.com/horarios (sin cuenta), luego crea su cuenta en profesormvt.com/alumnos, paga su paquete o la clase de prueba, y reserva su clase. Todo self-service.\n\n" +
-  "DATOS DE MÉTODO: el canto usa el método MVT (coordinación del músculo vocal, cierre cordal, resonancia). El piano se enfoca en fuerza e independencia de dedos para tocar tus canciones rápido. La composición usa herramientas reales para escribir tus propias canciones. No necesitas saber música para empezar, y nunca es tarde para un adulto.\n\n" +
-  "REGLAS DE CONVERSACIÓN (obligatorias):\n" +
-  "- Antes de soltar precios o planes, califica: pregunta qué le gustaría lograr y si lo quiere presencial u online. Recomienda el plan que encaje, no toda la lista.\n" +
-  "- Tono: español peruano de clase alta, limpio, cálido pero seco, empoderador. NUNCA uses 'pe' ni 'causa' ni vulgaridades. NUNCA uses guiones largos (em dash). Los signos de exclamación o pregunta van solo al cierre, nunca abras con signo invertido.\n" +
-  "- NUNCA prometas resultados garantizados ni inventes datos, números, reseñas o titulaciones. Si no sabes algo, dilo y ofrece el WhatsApp.\n" +
-  "- NUNCA menosprecies al alumno ni a Andrés. Empodera siempre: aprender música es entrenamiento, no talento de nacimiento.\n" +
-  "- Respuestas cortas y claras, máximo 4 frases. Empuja a ver horarios o crear cuenta cuando tenga sentido.\n" +
-  "- Si la persona quiere agendar en firme, pide hablar con Andrés, tiene una duda que no puedes resolver, o algo se sale de las clases, dale su WhatsApp: " + CHATBOT_WA + "\n" +
-  "Eres el asistente, no Andrés. Si te preguntan, eres su asistente virtual.";
+const CHATBOT_WA = "https://wa.me/" + MARCA.whatsapp;
+/* Antes era una constante con los precios de PRECIOS_DEFAULT quemados: si Andrés cambiaba un
+   precio en el panel, el chatbot seguía citando el viejo. Ahora se arma en caliente con los
+   precios reales de loadPrecios()/loadConfig() cada vez que se llama al chatbot. */
+function chatbotSystem(cfg, precios){
+  const dominioLimpio = MARCA.dominio.replace(/^https?:\/\//, "");
+  const ciudad = MARCA.ciudad.split(",")[0];
+  return (
+    "Eres el asistente virtual de " + MARCA.nombre + ", la marca de " + (cfg && cfg.profe_nombre ? cfg.profe_nombre : MARCA.profe) + ": clases 1 a 1 de canto (método MVT), piano y composición para ADULTOS, presenciales en " + ciudad + " (Lima) o en vivo online.\n\n" +
+    "PLANES Y PRECIOS (en soles, S/):\n" +
+    "- Clase de prueba: S/" + precios["Clase de prueba"] + ". Una sesión completa con diagnóstico vocal en PDF. NO es gratis: ese es el mejor punto de partida. Solo para cuentas nuevas.\n" +
+    "- Clase suelta: S/" + precios["Clase suelta"] + ".\n" +
+    "- Plan Esencial: S/" + precios["Paquete 4"] + " al mes (4 clases).\n" +
+    "- Plan Intensivo: S/" + precios["Paquete 8"] + " al mes (8 clases). El más elegido.\n" +
+    "- Plan Estrella: S/" + precios["Paquete 12"] + " (12 clases). El mejor precio por clase.\n\n" +
+    "PAGOS: desde Perú con Yape, Plin, Sip, tarjeta o transferencia (la tarjeta activa el paquete al instante). Desde el extranjero, con tarjeta o cripto.\n\n" +
+    "CÓMO EMPIEZA UN ALUMNO: ve los horarios libres en " + dominioLimpio + "/horarios (sin cuenta), luego crea su cuenta en " + dominioLimpio + "/alumnos, paga su paquete o la clase de prueba, y reserva su clase. Todo self-service.\n\n" +
+    "DATOS DE MÉTODO: el canto usa el método MVT (coordinación del músculo vocal, cierre cordal, resonancia). El piano se enfoca en fuerza e independencia de dedos para tocar tus canciones rápido. La composición usa herramientas reales para escribir tus propias canciones. No necesitas saber música para empezar, y nunca es tarde para un adulto.\n\n" +
+    "REGLAS DE CONVERSACIÓN (obligatorias):\n" +
+    "- Antes de soltar precios o planes, califica: pregunta qué le gustaría lograr y si lo quiere presencial u online. Recomienda el plan que encaje, no toda la lista.\n" +
+    "- Tono: español peruano de clase alta, limpio, cálido pero seco, empoderador. NUNCA uses 'pe' ni 'causa' ni vulgaridades. NUNCA uses guiones largos (em dash). Los signos de exclamación o pregunta van solo al cierre, nunca abras con signo invertido.\n" +
+    "- NUNCA prometas resultados garantizados ni inventes datos, números, reseñas o titulaciones. Si no sabes algo, dilo y ofrece el WhatsApp.\n" +
+    "- NUNCA menosprecies al alumno ni a " + MARCA.profe + ". Empodera siempre: aprender música es entrenamiento, no talento de nacimiento.\n" +
+    "- Respuestas cortas y claras, máximo 4 frases. Empuja a ver horarios o crear cuenta cuando tenga sentido.\n" +
+    "- Si la persona quiere agendar en firme, pide hablar con " + MARCA.profe + ", tiene una duda que no puedes resolver, o algo se sale de las clases, dale su WhatsApp: " + CHATBOT_WA + "\n" +
+    "Eres el asistente, no " + MARCA.profe + ". Si te preguntan, eres su asistente virtual."
+  );
+}
 
 /* Llama al chatbot con la historia y devuelve la respuesta. Degrada con el WhatsApp.
    Usa Workers AI (Llama) de Cloudflare: gratis para el volumen de MVT, sin API key ni saldo.
    El día que haya presupuesto, se cambia a Claude Haiku para mejor español/guardrails. */
 async function responderChatbot(env, mensajes){
-  const fallback = "Para eso lo mejor es que hables directo con Andrés. Escríbele por WhatsApp y lo cuadran: " + CHATBOT_WA;
+  const fallback = "Para eso lo mejor es que hables directo con " + MARCA.profe + ". Escríbele por WhatsApp y lo cuadran: " + CHATBOT_WA;
   if (!env.AI) return fallback;
   try {
+    const cfg = await loadConfig(env).catch(() => ({}));
+    const precios = await loadPrecios(env).catch(() => PRECIOS_DEFAULT);
     const resp = await env.AI.run("@cf/meta/llama-3.3-70b-instruct-fp8-fast", {
-      messages: [{ role: "system", content: CHATBOT_SYSTEM }].concat(mensajes),
+      messages: [{ role: "system", content: chatbotSystem(cfg, precios) }].concat(mensajes),
       max_tokens: 400
     });
     const texto = (resp && (resp.response || "")).trim();
@@ -833,11 +883,13 @@ async function responderChatbot(env, mensajes){
   } catch (e) { return fallback; }
 }
 
-/* Rate-limit del chatbot por IP y hora. Devuelve true si la IP YA pasó el tope (debe frenarse). */
-async function chatbotPasoTope(env, ip){
+/* Rate-limit por IP y hora sobre la misma tabla chatbot_uso (ip, ventana, n). Devuelve true si la
+   IP YA pasó el tope (debe frenarse). "clave" se guarda en la columna ip (admite un prefijo, ej.
+   "oia:1.2.3.4", para no mezclar contadores de distintos endpoints en la misma fila). */
+async function chatbotPasoTope(env, ip, limite){
   if (!ip) return false;
   const ventana = new Date().toISOString().slice(0, 13);   // YYYY-MM-DDTHH
-  const LIMITE = 40;                                        // mensajes por IP por hora
+  const LIMITE = limite || 40;                              // mensajes por IP por hora (default: chatbot marketing)
   try {
     await env.DB.prepare(
       "INSERT INTO chatbot_uso (ip, ventana, n) VALUES (?1, ?2, 1) ON CONFLICT(ip, ventana) DO UPDATE SET n = n + 1"
@@ -853,28 +905,38 @@ async function chatbotPasoTope(env, ip){
    tope duro de 10 mensajes por cuenta, guardado en D1 (persiste aunque recargue la página). */
 const ONBOARDING_LIMITE = 10;
 const ONBOARDING_MODELO = "claude-haiku-4-5-20251001";
-const ONBOARDING_SYSTEM_ADMIN =
-  "Eres el asistente de onboarding del panel de administrador de ProfesorMVT (profesormvt.com/admin/crm), " +
-  "hablándole a Andrés, el profesor dueño de la cuenta, la primera vez que usa el panel.\n\n" +
-  "El panel tiene estas secciones (menú lateral izquierdo, agrupado): ALUMNOS (Alumnos, Clases, Agenda), " +
-  "DINERO & LEADS (Pagos, Cuentas, Leads), MATERIAL (Recursos públicos del portal, Ejercicios = biblioteca " +
-  "privada de audios/PDFs para mandar de tarea, con subida de carpeta completa), MI CUENTA (Resumen, Perfil, Ajustes).\n" +
-  "Flujo típico: se agrega un alumno en Alumnos, se registra cada clase en Clases (con la tarea y el ejercicio " +
-  "que le manda), la Agenda controla su disponibilidad de horarios, Pagos/Cuentas ven las compras y accesos.\n\n" +
-  "REGLAS: respuestas cortas y concretas (máximo 4 frases), español peruano de clase alta, limpio, directo. " +
-  "NUNCA 'pe' ni 'causa' ni vulgaridad. Sin guiones largos (em dash). Signos de exclamación/pregunta solo al cierre. " +
-  "Si preguntan algo que no es de este panel (facturación externa, código, otros negocios), dilo con honestidad " +
-  "y no inventes.";
-const ONBOARDING_SYSTEM_ALUMNO =
-  "Eres el asistente de onboarding del portal del alumno de ProfesorMVT (profesormvt.com/alumnos), " +
-  "hablándole a un alumno que recién entra por primera vez a su cuenta.\n\n" +
-  "El portal tiene: su próxima clase y horario, el historial de clases con la tarea que le dejó el profesor " +
-  "(incluye ejercicios en audio/PDF para practicar), sus recursos, un chat grupal y uno privado con el profesor, " +
-  "y la sección de cuenta/pagos para ver o renovar su paquete.\n\n" +
-  "REGLAS: respuestas cortas y cálidas (máximo 4 frases), español peruano de clase alta, limpio. NUNCA 'pe' ni " +
-  "'causa' ni vulgaridad. Sin guiones largos (em dash). Signos de exclamación/pregunta solo al cierre. Empodera, " +
-  "nunca menosprecies al alumno. Si preguntan algo que no puedes resolver (cambiar precios, temas de la clase en " +
-  "sí), sugiere escribirle al profesor por el chat.";
+/* Antes eran constantes con "ProfesorMVT"/"Andrés" quemados; ahora interpolan MARCA.nombre/MARCA.profe
+   (el resto del texto queda igual) para que el mismo asistente sirva a cualquier cliente white-label. */
+function onboardingSystemAdmin(){
+  const dominioLimpio = MARCA.dominio.replace(/^https?:\/\//, "");
+  return (
+    "Eres el asistente de onboarding del panel de administrador de " + MARCA.nombre + " (" + dominioLimpio + "/admin/crm), " +
+    "hablándole a " + MARCA.profe + ", el profesor dueño de la cuenta, la primera vez que usa el panel.\n\n" +
+    "El panel tiene estas secciones (menú lateral izquierdo, agrupado): ALUMNOS (Alumnos, Clases, Agenda), " +
+    "DINERO & LEADS (Pagos, Cuentas, Leads), MATERIAL (Recursos públicos del portal, Ejercicios = biblioteca " +
+    "privada de audios/PDFs para mandar de tarea, con subida de carpeta completa), MI CUENTA (Resumen, Perfil, Ajustes).\n" +
+    "Flujo típico: se agrega un alumno en Alumnos, se registra cada clase en Clases (con la tarea y el ejercicio " +
+    "que le manda), la Agenda controla su disponibilidad de horarios, Pagos/Cuentas ven las compras y accesos.\n\n" +
+    "REGLAS: respuestas cortas y concretas (máximo 4 frases), español peruano de clase alta, limpio, directo. " +
+    "NUNCA 'pe' ni 'causa' ni vulgaridad. Sin guiones largos (em dash). Signos de exclamación/pregunta solo al cierre. " +
+    "Si preguntan algo que no es de este panel (facturación externa, código, otros negocios), dilo con honestidad " +
+    "y no inventes."
+  );
+}
+function onboardingSystemAlumno(){
+  const dominioLimpio = MARCA.dominio.replace(/^https?:\/\//, "");
+  return (
+    "Eres el asistente de onboarding del portal del alumno de " + MARCA.nombre + " (" + dominioLimpio + "/alumnos), " +
+    "hablándole a un alumno que recién entra por primera vez a su cuenta.\n\n" +
+    "El portal tiene: su próxima clase y horario, el historial de clases con la tarea que le dejó el profesor " +
+    "(incluye ejercicios en audio/PDF para practicar), sus recursos, un chat grupal y uno privado con el profesor, " +
+    "y la sección de cuenta/pagos para ver o renovar su paquete.\n\n" +
+    "REGLAS: respuestas cortas y cálidas (máximo 4 frases), español peruano de clase alta, limpio. NUNCA 'pe' ni " +
+    "'causa' ni vulgaridad. Sin guiones largos (em dash). Signos de exclamación/pregunta solo al cierre. Empodera, " +
+    "nunca menosprecies al alumno. Si preguntan algo que no puedes resolver (cambiar precios, temas de la clase en " +
+    "sí), sugiere escribirle al profesor por el chat."
+  );
+}
 
 async function llamarClaudeOnboarding(env, system, mensajes){
   if (!env.ANTHROPIC_API_KEY) return null;
@@ -915,16 +977,16 @@ async function onboardingContar(env, clave){
 // Base: manda 'payload' (title/body/url) a una lista de filas push_subs. Best-effort.
 async function enviarPushA(env, subs, payload){
   if (!env.VAPID_PUBLIC_KEY || !env.VAPID_PRIVATE_KEY || !subs || !subs.length) return 0;
-  const vapid = { subject: "mailto:andressalame@gmail.com", publicKey: env.VAPID_PUBLIC_KEY, privateKey: env.VAPID_PRIVATE_KEY };
+  const vapid = { subject: MARCA.vapidSubject, publicKey: env.VAPID_PUBLIC_KEY, privateKey: env.VAPID_PRIVATE_KEY };
   let enviados = 0;
   for (const fila of subs){
     try {
       const sub = { endpoint: fila.endpoint, keys: { p256dh: fila.p256dh, auth: fila.auth } };
       const msg = {
         data: JSON.stringify({
-          title: payload.title || "ProfesorMVT",
+          title: payload.title || MARCA.nombre,
           body:  payload.body  || "",
-          url:   payload.url   || "https://profesormvt.com/"
+          url:   payload.url   || (MARCA.dominio + "/")
         }),
         options: { ttl: 86400, urgency: payload.urgency || "high" }
       };
@@ -944,7 +1006,7 @@ async function avisarPush(env, info){
   return enviarPushA(env, results || [], {
     title: info.title || ("Pago por confirmar: " + info.paquete + " — S/" + info.monto),
     body:  info.body  || (info.nombre + " · " + info.curso + (info.metodo ? (" · " + info.metodo) : "") + (info.op ? (" · op " + info.op) : "")),
-    url:   info.url   || "https://profesormvt.com/admin/crm/"
+    url:   info.url   || (MARCA.dominio + "/admin/crm/")
   });
 }
 
@@ -1136,7 +1198,7 @@ async function correoRecordatorioClase(env, cuenta, reserva, cuando){
   const dias = ["domingo","lunes","martes","miércoles","jueves","viernes","sábado"];
   const horaLima = dias[p.dow] + " " + hhmm(p) + " (hora Lima)";
   const nombre = ((cuenta.nombre || "").trim().split(/\s+/)[0]) || "";
-  const portal = "https://profesormvt.com/alumnos/";
+  const portal = MARCA.dominio + "/alumnos/";
   const titulo = cuando === "24h" ? "Tu clase es mañana" : "Tu clase es en un par de horas";
   const intro = cuando === "24h"
     ? "Te recuerdo que mañana tienes clase" + (reserva.curso ? " de " + reserva.curso : "") + ":"
@@ -1148,9 +1210,9 @@ async function correoRecordatorioClase(env, cuenta, reserva, cuando){
       '<p style="font-size:18px;font-weight:bold;color:#e8501f;margin:14px 0">' + horaLima + '</p>' +
       '<p>Si necesitas moverla, hazlo desde tu portal con al menos 6 horas de anticipación y no se descuenta la clase: <a href="' + portal + '">' + portal + '</a></p>' +
       '<p>Nos vemos. A romperla 🎸</p>' +
-      '<p style="font-size:12px;color:#888;margin-top:24px">ProfesorMVT</p>' +
+      '<p style="font-size:12px;color:#888;margin-top:24px">' + MARCA.nombre + '</p>' +
     '</div>';
-  return enviarCorreo(env, { to: cuenta.email, subject: titulo + " — ProfesorMVT", html: html });
+  return enviarCorreo(env, { to: cuenta.email, subject: titulo + " — " + MARCA.nombre, html: html });
 }
 
 /* Cron: manda el recordatorio T-24h y T-2h a las clases reservadas, una sola vez
@@ -1170,7 +1232,7 @@ async function procesarRecordatoriosClase(env){
   ).bind(ventana2, ventana24).all()).results || [];
   for (const r of r24){
     const ok = await correoRecordatorioClase(env, { email: r._email, nombre: r._nombre }, r, "24h");
-    try { await avisarPushAlumno(env, r._cuenta_id, { title: "Tu clase es mañana 🎸", body: (r.curso ? r.curso + " · " : "") + hhmm(limaParts(new Date(Date.parse(r.inicio_utc)))) + " (hora Lima). Toca para ver tu agenda.", url: "https://profesormvt.com/alumnos/#agenda" }); } catch (e) {}
+    try { await avisarPushAlumno(env, r._cuenta_id, { title: "Tu clase es mañana 🎸", body: (r.curso ? r.curso + " · " : "") + hhmm(limaParts(new Date(Date.parse(r.inicio_utc)))) + " (hora Lima). Toca para ver tu agenda.", url: MARCA.dominio + "/alumnos/#agenda" }); } catch (e) {}
     if (ok){ await env.DB.prepare("UPDATE reservas SET aviso_24 = 1 WHERE id = ?1").bind(r.id).run(); enviados++; } else { fallos++; }
   }
   // T-2h: clases que caen dentro de las próximas 2h sin aviso de 2h.
@@ -1180,7 +1242,7 @@ async function procesarRecordatoriosClase(env){
   ).bind(ahoraIso, ventana2).all()).results || [];
   for (const r of r2){
     const ok = await correoRecordatorioClase(env, { email: r._email, nombre: r._nombre }, r, "2h");
-    if (ok){ await env.DB.prepare("UPDATE reservas SET aviso_24 = 1, aviso_2 = 1 WHERE id = ?1").bind(r.id).run(); enviados++; } else { fallos++; }
+    if (ok){ await env.DB.prepare("UPDATE reservas SET aviso_2 = 1 WHERE id = ?1").bind(r.id).run(); enviados++; } else { fallos++; }
   }
   // T-1h: push (solo) "tu clase es en 1 hora". El correo imminente sigue siendo el de 2h.
   const r1 = (await env.DB.prepare(
@@ -1188,7 +1250,7 @@ async function procesarRecordatoriosClase(env){
     "WHERE r.estado = 'reservada' AND r.aviso_1h = 0 AND r.inicio_utc > ?1 AND r.inicio_utc <= ?2"
   ).bind(ahoraIso, ventana1).all()).results || [];
   for (const r of r1){
-    try { await avisarPushAlumno(env, r._cuenta_id, { title: "Tu clase es en 1 hora ⏰", body: "Arrancamos a las " + hhmm(limaParts(new Date(Date.parse(r.inicio_utc)))) + " (hora Lima). Toca para ver tu agenda.", url: "https://profesormvt.com/alumnos/#agenda" }); } catch (e) {}
+    try { await avisarPushAlumno(env, r._cuenta_id, { title: "Tu clase es en 1 hora ⏰", body: "Arrancamos a las " + hhmm(limaParts(new Date(Date.parse(r.inicio_utc)))) + " (hora Lima). Toca para ver tu agenda.", url: MARCA.dominio + "/alumnos/#agenda" }); } catch (e) {}
     await env.DB.prepare("UPDATE reservas SET aviso_1h = 1 WHERE id = ?1").bind(r.id).run();
   }
   await reportarSaludCorreo(env, fallos, r24.length + r2.length);
@@ -1201,7 +1263,7 @@ async function procesarRecordatoriosClase(env){
    access tokens para crear/borrar eventos. Todo best-effort: si no está
    conectado o Google falla, las reservas siguen funcionando igual.
    ═══════════════════════════════════════════════════════════════════════════ */
-const GCAL_REDIRECT = "https://profesormvt.com/api/google/oauth/callback";
+const GCAL_REDIRECT = MARCA.dominio + "/api/google/oauth/callback";
 const GCAL_SCOPE = "https://www.googleapis.com/auth/calendar";
 let _gcalTok = { value: "", exp: 0 };
 let _gcalLastRefreshFailed = false;   // true si el último intento de refresh (con credenciales) falló
@@ -1238,7 +1300,7 @@ async function gcalCrearEvento(env, info){
     const calId = cfg.gcal_calendar_id || "primary";
     const evt = {
       summary: "Clase" + (info.curso ? " de " + info.curso : "") + (info.alumnoNombre ? " · " + info.alumnoNombre : ""),
-      description: "Clase reservada desde el portal de ProfesorMVT.",
+      description: "Clase reservada desde el portal de " + MARCA.nombre + ".",
       start: { dateTime: info.inicio_utc, timeZone: "America/Lima" },
       end:   { dateTime: info.fin_utc,    timeZone: "America/Lima" },
       reminders: { useDefault: true },
@@ -1314,11 +1376,11 @@ function chocaConBusy(busy, ms){
 async function alertaCorreoAndres(env, asunto, cuerpo){
   if (!env.AVISOS) return;
   const msg = createMimeMessage();
-  msg.setSender({ name: "Avisos ProfesorMVT", addr: "avisos@profesormvt.com" });
-  msg.setRecipient("andressalame@gmail.com");
+  msg.setSender({ name: "Avisos " + MARCA.nombre, addr: MARCA.correoAvisos });
+  msg.setRecipient(MARCA.correoAdmin);
   msg.setSubject(asunto);
   msg.addMessage({ contentType: "text/plain", data: cuerpo + "\n" });
-  await env.AVISOS.send(new EmailMessage("avisos@profesormvt.com", "andressalame@gmail.com", msg.asRaw()));
+  await env.AVISOS.send(new EmailMessage(MARCA.correoAvisos, MARCA.correoAdmin, msg.asRaw()));
 }
 
 /* Chequeo de salud de Google Calendar para el cron. Solo alerta si gcal ESTÁ
@@ -1336,11 +1398,11 @@ async function chequearSaludGcal(env){
     await env.DB.prepare("UPDATE config SET valor = ?1 WHERE clave = 'salud_gcal_aviso_utc'").bind(new Date().toISOString()).run();
     const title = "Google Calendar desconectado";
     const body = "El token de Google Calendar dejo de funcionar. La vitrina puede ofrecer horarios que ya tienes ocupados. Reconectalo en CRM > Ajustes.";
-    try { await avisarPush(env, { title, body, url: "https://profesormvt.com/admin/crm/" }); } catch (e) {}
-    try { await alertaCorreoAndres(env, title, body + "\n\nhttps://profesormvt.com/admin/crm/"); } catch (e) {}
+    try { await avisarPush(env, { title, body, url: MARCA.dominio + "/admin/crm/" }); } catch (e) {}
+    try { await alertaCorreoAndres(env, title, body + "\n\n" + MARCA.dominio + "/admin/crm/"); } catch (e) {}
   } else if (!caido && estadoPrevio === "caido"){
     await env.DB.prepare("UPDATE config SET valor = 'ok' WHERE clave = 'salud_gcal'").run();
-    try { await avisarPush(env, { title: "Google Calendar reconectado", body: "Ya volvio a funcionar.", url: "https://profesormvt.com/admin/crm/" }); } catch (e) {}
+    try { await avisarPush(env, { title: "Google Calendar reconectado", body: "Ya volvio a funcionar.", url: MARCA.dominio + "/admin/crm/" }); } catch (e) {}
     try { await alertaCorreoAndres(env, "Google Calendar reconectado", "Google Calendar volvio a funcionar."); } catch (e) {}
   }
 }
@@ -1357,11 +1419,11 @@ async function reportarSaludCorreo(env, fallos, intentos){
     await env.DB.prepare("UPDATE config SET valor = ?1 WHERE clave = 'salud_correo_aviso_utc'").bind(new Date().toISOString()).run();
     const title = "Los correos no estan saliendo";
     const body = "Fallaron los " + intentos + " correos del ultimo lote (recordatorios/renovaciones). Revisa Resend (RESEND_API_KEY / dominio).";
-    try { await avisarPush(env, { title, body, url: "https://profesormvt.com/admin/crm/" }); } catch (e) {}
+    try { await avisarPush(env, { title, body, url: MARCA.dominio + "/admin/crm/" }); } catch (e) {}
     try { await alertaCorreoAndres(env, title, body); } catch (e) {}
   } else if (!loteCaido && estadoPrevio === "caido"){
     await env.DB.prepare("UPDATE config SET valor = 'ok' WHERE clave = 'salud_correo_estado'").run();
-    try { await avisarPush(env, { title: "Los correos volvieron", body: "El ultimo lote salio bien.", url: "https://profesormvt.com/admin/crm/" }); } catch (e) {}
+    try { await avisarPush(env, { title: "Los correos volvieron", body: "El ultimo lote salio bien.", url: MARCA.dominio + "/admin/crm/" }); } catch (e) {}
   }
 }
 
@@ -1563,7 +1625,7 @@ export default {
           "INSERT INTO chat_mensajes (id,cuenta_id,nombre,es_admin,texto,fecha,hilo) VALUES (?1,?2,?3,?4,?5,?6,?7)"
         ).bind(crypto.randomUUID(), cuentaId, nombre, esAdmin, texto, new Date().toISOString(), hilo).run();
         // Aviso push al alumno cuando el profe le responde en su hilo privado.
-        if (who.admin){ try { await avisarPushAlumno(env, hilo, { title: "Mensaje del profe 💬", body: texto.slice(0, 90), url: "https://profesormvt.com/alumnos/" }); } catch (e) {} }
+        if (who.admin){ try { await avisarPushAlumno(env, hilo, { title: "Mensaje del profe 💬", body: texto.slice(0, 90), url: MARCA.dominio + "/alumnos/" }); } catch (e) {} }
         return json({ ok: true });
       }
 
@@ -1861,7 +1923,7 @@ export default {
           "INSERT INTO compras (id,cuenta_id,curso,paquete,monto,descuento,op_numero,estado,fecha,metodo,comprobante,slot_deseado) VALUES (?1,?2,?3,?4,?5,?6,?7,'pendiente',?8,?9,?10,?11)"
         ).bind(crypto.randomUUID(), cu.id, curso, paquete, monto, descuento, op, hoy(), metodo, comprobanteKey, slotDeseado).run();
 
-        const comprobanteUrl = comprobanteKey ? ("https://profesormvt.com/api/recurso/archivo/" + comprobanteKey) : "";
+        const comprobanteUrl = comprobanteKey ? (MARCA.dominio + "/api/recurso/archivo/" + comprobanteKey) : "";
         const info = { nombre: cu.nombre, email: cu.email, curso, paquete, monto, op, metodo, comprobanteUrl };
         try { await avisarCompra(env, info); } catch (e) {}
         try { await avisarPush(env, info); } catch (e) {}
@@ -1908,17 +1970,17 @@ export default {
 
         const nombrePaquete = ({ "Paquete 4":"Plan Esencial", "Paquete 8":"Plan Intensivo", "Paquete 12":"Plan Estrella", "Clase suelta":"Clase suelta", "Clase de prueba":"Clase de prueba" })[paquete] || paquete;
         const pref = {
-          items: [{ title: nombrePaquete + " - ProfesorMVT (" + curso + ")", quantity: 1, unit_price: monto, currency_id: "PEN" }],
+          items: [{ title: nombrePaquete + " - " + MARCA.nombre + " (" + curso + ")", quantity: 1, unit_price: monto, currency_id: "PEN" }],
           external_reference: compraId,
-          notification_url: "https://profesormvt.com/api/mp/webhook",
+          notification_url: MARCA.dominio + "/api/mp/webhook",
           back_urls: {
-            success: "https://profesormvt.com/alumnos/?pago=ok",
-            pending: "https://profesormvt.com/alumnos/?pago=pendiente",
-            failure: "https://profesormvt.com/alumnos/?pago=error"
+            success: MARCA.dominio + "/alumnos/?pago=ok",
+            pending: MARCA.dominio + "/alumnos/?pago=pendiente",
+            failure: MARCA.dominio + "/alumnos/?pago=error"
           },
           auto_return: "approved",
           payer: { name: cu.nombre || "", email: cu.email || "" },
-          statement_descriptor: "PROFESORMVT"
+          statement_descriptor: MARCA.statementDescriptor
         };
         let mpData = {};
         try {
@@ -1965,6 +2027,7 @@ export default {
           }
           return new Response("ok", { status: 200 });
         } catch (e) {
+          console.error(e);
           return new Response("error", { status: 500 });
         }
       }
@@ -2001,7 +2064,7 @@ export default {
       /* ----- Iman de lead: captura el correo y entrega la guia (lead magnet) ----- */
       if (url.pathname === "/api/lead" && request.method === "POST"){
         const b = await request.json().catch(() => ({}));
-        const pdf = "/recursos/composicion-primera-cancion.pdf";
+        const pdf = MARCA.leadMagnetPdf;
         if (b.website) return json({ ok: true, pdf });   // honeypot: lo lleno un bot, se descarta en silencio
         const email = String(b.email || "").trim().toLowerCase().slice(0, 120);
         if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return json({ error: "Correo no valido." }, 400);
@@ -2031,6 +2094,15 @@ export default {
       if (url.pathname === "/api/onboarding-ia" && request.method === "POST"){
         const who = await authChat(env, request);
         if (!who) return json({ error: "Sesión expirada" }, 401);
+
+        // Tope de 10/cuenta (onboardingContar) no alcanza solo: cualquiera puede registrar cuentas
+        // infinitas para quemar saldo de Claude Haiku. Se suma un tope de 30/hora por IP, sobre la
+        // misma tabla chatbot_uso, con prefijo "oia:" para no mezclarse con el chatbot de marketing.
+        const ipOia = request.headers.get("CF-Connecting-IP") || "";
+        if (ipOia && await chatbotPasoTope(env, "oia:" + ipOia, 30)){
+          return json({ error: "Demasiados mensajes desde tu conexión. Intenta en un rato." }, 429);
+        }
+
         const b = await request.json().catch(() => ({}));
         const texto = limpiarTextoChat(b.texto).slice(0, 500);
         if (!texto) return json({ error: "Escribe tu pregunta." }, 400);
@@ -2048,7 +2120,7 @@ export default {
           .slice(-8);
         const mensajes = historial.concat([{ role: "user", content: texto }]);
 
-        const system = who.admin ? ONBOARDING_SYSTEM_ADMIN : ONBOARDING_SYSTEM_ALUMNO;
+        const system = who.admin ? onboardingSystemAdmin() : onboardingSystemAlumno();
         const reply = await llamarClaudeOnboarding(env, system, mensajes);
         if (!reply){
           return json({ error: "El asistente no está disponible ahora mismo. Intenta en un rato." }, 502);
@@ -2247,7 +2319,7 @@ export default {
           await avisarPush(env, {
             title: "Pausa por " + motivo + ": " + al.nombre,
             body: al.nombre + " congeló " + dias + " día(s) por " + motivo + ". Nuevo vencimiento: " + nuevoVence,
-            url: "https://profesormvt.com/admin/crm/"
+            url: MARCA.dominio + "/admin/crm/"
           });
         } catch (e) {}
         try { await alertaCorreoAndres(env, "Pausa de " + al.nombre + " (" + motivo + ", " + dias + " días)",
@@ -2257,7 +2329,7 @@ export default {
 
       if (url.pathname.startsWith("/api/admin/")){
         const auth = request.headers.get("authorization") || "";
-        if (!env.ADMIN_TOKEN || auth !== "Bearer " + env.ADMIN_TOKEN){
+        if (!env.ADMIN_TOKEN || !safeEq(auth, "Bearer " + env.ADMIN_TOKEN)){
           return json({ error: "No autorizado" }, 401);
         }
 
@@ -2749,7 +2821,7 @@ export default {
           const enviados = await avisarPushAlumno(env, cuenta.id, {
             title: "Tienes tarea nueva 🎶",
             body: String(b.texto || "Tu profe te dejó una nueva tarea. Toca para verla.").slice(0, 140),
-            url: "https://profesormvt.com/alumnos/#clases"
+            url: MARCA.dominio + "/alumnos/#clases"
           });
           return json({ ok: true, enviados });
         }
@@ -2811,6 +2883,7 @@ export default {
 
       return json({ error: "No encontrado" }, 404);
     } catch (e) {
+      console.error(e);
       return json({ error: "Error del servidor" }, 500);
     }
   },
