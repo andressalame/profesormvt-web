@@ -371,6 +371,7 @@ async function confirmarCompra(env, compra){
 
   const stmts = [];
   let renovado = false;
+  let alumnoIdNuevo = null;
   if (cu.alumno_id){
     const al = await env.DB.prepare("SELECT * FROM alumnos WHERE id = ?1").bind(cu.alumno_id).first();
     if (al){
@@ -382,6 +383,7 @@ async function confirmarCompra(env, compra){
   }
   if (!renovado){
     const nuevoId = crypto.randomUUID();
+    alumnoIdNuevo = nuevoId;
     stmts.push(env.DB.prepare(
       "INSERT INTO alumnos (id,codigo,nombre,whatsapp,curso,paquete,fecha,pago,horario,notas,ciclo) VALUES (?1,?2,?3,?4,?5,?6,?7,'Pagado','','Creado por compra web',1)"
     ).bind(nuevoId, randHex(3).toUpperCase(), cu.nombre, cu.whatsapp || "", compra.curso || "Canto", compra.paquete, hoy()));
@@ -418,6 +420,24 @@ async function confirmarCompra(env, compra){
 
   stmts.push(env.DB.prepare("UPDATE compras SET estado = 'confirmada' WHERE id = ?1").bind(compra.id));
   await env.DB.batch(stmts);
+
+  // Si eligió horario ANTES de pagar (Clase de prueba), auto-reservarlo ahora que ya es alumno.
+  // Aparte del batch a propósito: si el slot ya no está libre (carrera rara), esto NO debe tumbar
+  // la confirmación del pago, que ya quedó guardada arriba. El nudge a reservar en el portal cubre el fallback.
+  if (!renovado && alumnoIdNuevo && compra.paquete === "Clase de prueba" && compra.slot_deseado) {
+    try {
+      if (await slotValido(env, compra.slot_deseado)) {
+        const finIso = new Date(Date.parse(compra.slot_deseado) + CLASE_MIN * 60000).toISOString();
+        const rid = crypto.randomUUID();
+        await env.DB.prepare(
+          "INSERT INTO reservas (id,alumno_id,inicio_utc,fin_utc,tipo,serie_id,estado,curso,ciclo,creada) VALUES (?1,?2,?3,?4,'suelta','','reservada',?5,1,?6)"
+        ).bind(rid, alumnoIdNuevo, compra.slot_deseado, finIso, compra.curso || "Canto", new Date().toISOString()).run();
+        const eid = await gcalCrearEvento(env, { inicio_utc: compra.slot_deseado, fin_utc: finIso, curso: compra.curso, alumnoNombre: cu.nombre, email: cu.email });
+        if (eid) await env.DB.prepare("UPDATE reservas SET gcal_event_id = ?1 WHERE id = ?2").bind(eid, rid).run();
+      }
+    } catch (e) { /* alguien tomó ese horario mientras tanto; el alumno lo reserva desde el portal */ }
+  }
+
   if (esPrimera) { try { await correoBienvenidaAlumno(env, cu, compra); } catch (e) {} }
   try {
     await avisarPushAlumno(env, cu.id, {
@@ -622,6 +642,10 @@ async function correoNurtureLead(env, to, paso){
   const boton = function(texto){
     return '<p style="text-align:center;margin:26px 0"><a href="' + horarios + '" style="background:#e8501f;color:#ffffff;text-decoration:none;font-weight:bold;padding:14px 26px;border-radius:6px;display:inline-block">' + texto + '</a></p>';
   };
+  const wa = "https://wa.me/51989077928?text=" + encodeURIComponent("Hola! Vi tu correo sobre la clase de prueba y tengo una pregunta antes de reservar 🎤");
+  const botonWsp = function(texto){
+    return '<p style="text-align:center;margin:0 0 26px"><a href="' + wa + '" style="color:#e8501f;text-decoration:underline;font-weight:bold">' + texto + '</a></p>';
+  };
   let subject, html, text;
   if (paso === 1){
     subject = "Aprender música de adulto sí se entrena";
@@ -645,9 +669,10 @@ async function correoNurtureLead(env, to, paso){
       '</ul>' +
       '<p>No es una clase de relleno: es la sesión donde ya empiezas a avanzar.</p>' +
       boton("Elegir mi horario") +
-      '<p>Si tienes dudas antes de reservar, responde este correo y lo vemos.</p>'
+      botonWsp("¿Tienes una duda antes? Escríbeme por WhatsApp") +
+      '<p>O si prefieres, responde este correo y lo vemos.</p>'
     );
-    text = 'Hola,\n\nTu clase de prueba cuesta S/50 e incluye:\n- Una hora 1 a 1, en persona (San Isidro) u online.\n- Un diagnóstico de dónde estás y un plan a tu medida.\n- Te enseña alguien que ha compuesto más de 200 canciones y trabajó años en la industria.\n\nNo es una clase de relleno: es donde ya empiezas a avanzar. Elige tu horario aquí: ' + horarios + '\n\nSi tienes dudas, responde este correo.\n\nUn abrazo,\nAndrés - ProfesorMVT';
+    text = 'Hola,\n\nTu clase de prueba cuesta S/50 e incluye:\n- Una hora 1 a 1, en persona (San Isidro) u online.\n- Un diagnóstico de dónde estás y un plan a tu medida.\n- Te enseña alguien que ha compuesto más de 200 canciones y trabajó años en la industria.\n\nNo es una clase de relleno: es donde ya empiezas a avanzar. Elige tu horario aquí: ' + horarios + '\n\n¿Tienes una duda antes? Escríbeme por WhatsApp: ' + wa + '\n\nO si prefieres, responde este correo.\n\nUn abrazo,\nAndrés - ProfesorMVT';
   }
   return enviarCorreo(env, { to: to, subject: subject, html: html, text: text });
 }
@@ -1225,6 +1250,11 @@ async function ensureSchema(env){
     await env.DB.prepare(
       "CREATE TABLE IF NOT EXISTS ejercicios (id TEXT PRIMARY KEY, titulo TEXT DEFAULT '', descripcion TEXT DEFAULT '', url TEXT DEFAULT '', curso TEXT DEFAULT 'Todos', fecha TEXT DEFAULT '')"
     ).run();
+    // slot_deseado: el horario que el comprador de la Clase de prueba elige ANTES de pagar
+    // (baja la fricción del checkout). confirmarCompra lo auto-reserva al confirmar el pago.
+    const infoCompras = await env.DB.prepare("PRAGMA table_info(compras)").all();
+    const tieneSlot = (infoCompras.results || []).some(c => c.name === "slot_deseado");
+    if (!tieneSlot) await env.DB.prepare("ALTER TABLE compras ADD COLUMN slot_deseado TEXT DEFAULT ''").run();
     _schemaChecked = true;
   } catch (e) { /* otra invocación pudo correrla en paralelo; se reintenta en la próxima request */ }
 }
@@ -1647,6 +1677,15 @@ export default {
         // La clase de prueba es solo para tu primera clase: si la cuenta ya es alumno, no aplica.
         if (paquete === "Clase de prueba" && cu.alumno_id) return json({ error: "La clase de prueba es solo para tu primera clase. Elige un paquete para seguir." }, 400);
 
+        // Horario elegido ANTES de pagar (solo aplica a la Clase de prueba): se valida ahora
+        // (existe, libre, con anticipación) para no dejar pagar por un horario que ya no sirve.
+        let slotDeseado = "";
+        if (paquete === "Clase de prueba" && b.slot_deseado) {
+          const iso = String(b.slot_deseado);
+          if (!(await slotValido(env, iso))) return json({ error: "Ese horario ya no está disponible. Elige otro." }, 400);
+          slotDeseado = iso;
+        }
+
         const ya = await env.DB.prepare(
           "SELECT id FROM compras WHERE cuenta_id = ?1 AND estado = 'pendiente'"
         ).bind(cu.id).first();
@@ -1670,8 +1709,8 @@ export default {
         }
 
         await env.DB.prepare(
-          "INSERT INTO compras (id,cuenta_id,curso,paquete,monto,descuento,op_numero,estado,fecha,metodo,comprobante) VALUES (?1,?2,?3,?4,?5,?6,?7,'pendiente',?8,?9,?10)"
-        ).bind(crypto.randomUUID(), cu.id, curso, paquete, monto, descuento, op, hoy(), metodo, comprobanteKey).run();
+          "INSERT INTO compras (id,cuenta_id,curso,paquete,monto,descuento,op_numero,estado,fecha,metodo,comprobante,slot_deseado) VALUES (?1,?2,?3,?4,?5,?6,?7,'pendiente',?8,?9,?10,?11)"
+        ).bind(crypto.randomUUID(), cu.id, curso, paquete, monto, descuento, op, hoy(), metodo, comprobanteKey, slotDeseado).run();
 
         const comprobanteUrl = comprobanteKey ? ("https://profesormvt.com/api/recurso/archivo/" + comprobanteKey) : "";
         const info = { nombre: cu.nombre, email: cu.email, curso, paquete, monto, op, metodo, comprobanteUrl };
@@ -1693,6 +1732,13 @@ export default {
         // La clase de prueba es solo para tu primera clase: si la cuenta ya es alumno, no aplica.
         if (paquete === "Clase de prueba" && cu.alumno_id) return json({ error: "La clase de prueba es solo para tu primera clase. Elige un paquete para seguir." }, 400);
 
+        let slotDeseado = "";
+        if (paquete === "Clase de prueba" && b.slot_deseado) {
+          const iso = String(b.slot_deseado);
+          if (!(await slotValido(env, iso))) return json({ error: "Ese horario ya no está disponible. Elige otro." }, 400);
+          slotDeseado = iso;
+        }
+
         const pend = await env.DB.prepare(
           "SELECT id FROM compras WHERE cuenta_id = ?1 AND estado = 'pendiente'"
         ).bind(cu.id).first();
@@ -1708,8 +1754,8 @@ export default {
 
         const compraId = crypto.randomUUID();
         await env.DB.prepare(
-          "INSERT INTO compras (id,cuenta_id,curso,paquete,monto,descuento,op_numero,estado,fecha,metodo,comprobante) VALUES (?1,?2,?3,?4,?5,?6,'','iniciada',?7,?8,'')"
-        ).bind(compraId, cu.id, curso, paquete, monto, descuento, hoy(), "Tarjeta (Mercado Pago)").run();
+          "INSERT INTO compras (id,cuenta_id,curso,paquete,monto,descuento,op_numero,estado,fecha,metodo,comprobante,slot_deseado) VALUES (?1,?2,?3,?4,?5,?6,'','iniciada',?7,?8,'',?9)"
+        ).bind(compraId, cu.id, curso, paquete, monto, descuento, hoy(), "Tarjeta (Mercado Pago)", slotDeseado).run();
 
         const nombrePaquete = ({ "Paquete 4":"Plan Esencial", "Paquete 8":"Plan Intensivo", "Paquete 12":"Plan Estrella", "Clase suelta":"Clase suelta", "Clase de prueba":"Clase de prueba" })[paquete] || paquete;
         const pref = {

@@ -57,6 +57,7 @@
   .calc.has:hover{border-color:var(--accent);color:var(--accent);}
   .calc.sel{background:var(--accent);color:var(--bg)!important;border-color:var(--accent);font-weight:700;}
   .agslotsdia{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;}
+  .agslotsdia .btn.sel{background:var(--accent);color:var(--bg)!important;border-color:var(--accent);font-weight:700;}
   .btn.no{background:transparent;border-color:var(--line);color:var(--muted);font-weight:500;}
   .btn.no:hover{border-color:var(--red);color:var(--red);}
 
@@ -592,6 +593,10 @@
       <div class="field"><label for="c_curso">Curso</label>
         <select id="c_curso"><option>Canto</option><option>Piano</option><option>Composición</option></select></div>
       <div class="field"><label for="c_paquete">Paquete</label><select id="c_paquete"></select></div>
+      <div class="field" id="c_slotWrap" style="display:none;">
+        <label>Elige tu horario (lo separamos apenas pagues)</label>
+        <div id="c_slots"><p class="note" style="margin:0">Cargando horarios…</p></div>
+      </div>
       <div class="field"><label for="c_metodo">Método de pago</label>
         <select id="c_metodo">
           <option value="Tarjeta (Mercado Pago)">Tarjeta de crédito/débito (confirma al instante)</option>
@@ -916,6 +921,9 @@ $("tiers").addEventListener("click",function(e){
 });
 
 /* ---------- MODAL COMPRA ---------- */
+var COMPRA_SLOT = null;
+var COMPRA_SLOTS_CACHE = null;
+
 function abrirCompra(pk){
   if(!ME) return;
   if(ME.compraPendiente){ toast("Ya tienes un pago en verificación"); return; }
@@ -924,18 +932,66 @@ function abrirCompra(pk){
   if(pk) $("c_paquete").value = pk;
   if(ME.alumno && ME.alumno.curso) $("c_curso").value = ME.alumno.curso;
   actualizaMonto();
+  COMPRA_SLOT = null; COMPRA_SLOTS_CACHE = null;
+  actualizaSlotWrap();
   $("c_metodo").value = "Tarjeta (Mercado Pago)";
   renderPaybox();
   $("c_op").value=""; if($("c_screenshot")) $("c_screenshot").value=""; $("compraErr").textContent="";
   show("compraPaso1"); hide("compraPaso2");
   $("ovCompra").classList.add("open");
 }
+
+/* Para la Clase de prueba: elegir el horario ANTES de pagar baja la fricción
+   (compromiso concreto antes del checkout, no "pago primero y ya veré cuándo"). */
+function actualizaSlotWrap(){
+  var esPrueba = $("c_paquete").value === "Clase de prueba";
+  $("c_slotWrap").style.display = esPrueba ? "" : "none";
+  if(esPrueba && !COMPRA_SLOTS_CACHE) cargarSlotsCompra();
+}
+function cargarSlotsCompra(){
+  $("c_slots").innerHTML = '<p class="note" style="margin:0">Cargando horarios…</p>';
+  api("/api/agenda/slots-publicos").then(function(d){
+    COMPRA_SLOTS_CACHE = (d && d.slots) || [];
+    pintarSlotsCompra();
+  }).catch(function(){
+    COMPRA_SLOTS_CACHE = [];
+    $("c_slots").innerHTML = '<p class="note" style="margin:0">No pude cargar horarios ahora. Igual puedes pagar y lo coordinamos después.</p>';
+  });
+}
+function pintarSlotsCompra(){
+  var slots = COMPRA_SLOTS_CACHE || [];
+  if(!slots.length){
+    $("c_slots").innerHTML = '<p class="note" style="margin:0">No hay horarios libres por ahora. Puedes pagar igual y lo coordinamos después.</p>';
+    return;
+  }
+  var mapa = {}, orden = [];
+  slots.slice(0,60).forEach(function(iso){
+    var k = diaKeyLocal(iso);
+    if(!mapa[k]){ mapa[k]=[]; orden.push(k); }
+    mapa[k].push(iso);
+  });
+  $("c_slots").innerHTML = orden.slice(0,6).map(function(k){
+    var diaSlots = mapa[k];
+    var titulo = fmtFechaLocal(diaSlots[0]);
+    var botones = diaSlots.map(function(iso){
+      var sel = iso===COMPRA_SLOT ? " sel" : "";
+      return '<button type="button" class="btn ghost sm'+sel+'" data-cslot="'+esc(iso)+'">'+esc(fmtHoraLocal(iso))+'</button>';
+    }).join("");
+    return '<div style="margin-top:10px;font-weight:700;text-transform:capitalize;font-size:13px;">'+esc(titulo)+'</div><div class="agslotsdia">'+botones+'</div>';
+  }).join("");
+}
+$("c_slots").addEventListener("click", function(e){
+  var b = e.target.closest("[data-cslot]");
+  if(!b) return;
+  COMPRA_SLOT = b.dataset.cslot;
+  pintarSlotsCompra();
+});
 function actualizaMonto(){
   var c = calc($("c_paquete").value);
   $("c_monto").innerHTML = (c.desc>0?'<span class="strike">S/ '+c.precio+'</span> ':'') + 'S/ ' + c.final;
   $("c_montoNote").textContent = c.desc>0 ? ("Incluye -S/"+c.desc+" de tu crédito de referidos") : "";
 }
-$("c_paquete").addEventListener("change", function(){ actualizaMonto(); renderPaybox(); });
+$("c_paquete").addEventListener("change", function(){ actualizaMonto(); renderPaybox(); actualizaSlotWrap(); });
 function renderPaybox(){
   var cf = (ME && ME.config) || {};
   var m = $("c_metodo").value;
@@ -974,9 +1030,10 @@ function pagarConTarjeta(){
   $("compraErr").textContent="";
   var paquete=$("c_paquete").value, curso=$("c_curso").value;
   if(!paquete){ $("compraErr").textContent="Elige un paquete."; return; }
+  if(paquete==="Clase de prueba" && !COMPRA_SLOT){ $("compraErr").textContent="Elige un horario para tu clase de prueba."; return; }
   var btn=document.getElementById("btnPagarTarjeta");
   if(btn){ btn.disabled=true; btn.textContent="Abriendo Mercado Pago…"; }
-  api("/api/mp/crear",{method:"POST",body:JSON.stringify({paquete:paquete,curso:curso})})
+  api("/api/mp/crear",{method:"POST",body:JSON.stringify({paquete:paquete,curso:curso,slot_deseado:(paquete==="Clase de prueba"?COMPRA_SLOT:"")})})
     .then(function(r){
       if(r && r.init_point){ window.location.href = r.init_point; }
       else { throw new Error((r && r.error) || "No se pudo iniciar el pago."); }
@@ -992,11 +1049,12 @@ $("btnYaPague").addEventListener("click",function(){
   $("compraErr").textContent="";
   var paquete=$("c_paquete").value, curso=$("c_curso").value, op=$("c_op").value.trim(), metodo=$("c_metodo").value;
   if(!paquete){ $("compraErr").textContent="Elige un paquete."; return; }
+  if(paquete==="Clase de prueba" && !COMPRA_SLOT){ $("compraErr").textContent="Elige un horario para tu clase de prueba."; return; }
   var c = calc(paquete);
   $("btnYaPague").disabled=true;
   var f = ($("c_screenshot") && $("c_screenshot").files) ? $("c_screenshot").files[0] : null;
   comprimirImg(f).then(function(comprobante){
-    return api("/api/comprar",{method:"POST",body:JSON.stringify({paquete:paquete,curso:curso,op_numero:op,metodo:metodo,comprobante:comprobante})});
+    return api("/api/comprar",{method:"POST",body:JSON.stringify({paquete:paquete,curso:curso,op_numero:op,metodo:metodo,comprobante:comprobante,slot_deseado:(paquete==="Clase de prueba"?COMPRA_SLOT:"")})});
   })
     .then(function(){
       var aviso = "Hola Andrés, acabo de pagar S/ "+c.final+" por el "+paquete+" ("+curso+") via "+metodo+" 🎸 Soy "+ME.cuenta.nombre+" - "+ME.cuenta.email;
