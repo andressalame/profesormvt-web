@@ -847,6 +847,68 @@ async function chatbotPasoTope(env, ip){
   } catch (e) { return false; }   // si la tabla aún no existe, no bloquear
 }
 
+/* ============ IA de onboarding del panel (admin y alumno) ============
+   Distinto del chatbot de marketing (Workers AI/Llama, gratis): este usa Claude Haiku con la
+   API key real de Andrés (ANTHROPIC_API_KEY, wrangler secret), así que tiene costo — de ahí el
+   tope duro de 10 mensajes por cuenta, guardado en D1 (persiste aunque recargue la página). */
+const ONBOARDING_LIMITE = 10;
+const ONBOARDING_MODELO = "claude-haiku-4-5-20251001";
+const ONBOARDING_SYSTEM_ADMIN =
+  "Eres el asistente de onboarding del panel de administrador de ProfesorMVT (profesormvt.com/admin/crm), " +
+  "hablándole a Andrés, el profesor dueño de la cuenta, la primera vez que usa el panel.\n\n" +
+  "El panel tiene estas secciones (menú lateral izquierdo, agrupado): ALUMNOS (Alumnos, Clases, Agenda), " +
+  "DINERO & LEADS (Pagos, Cuentas, Leads), MATERIAL (Recursos públicos del portal, Ejercicios = biblioteca " +
+  "privada de audios/PDFs para mandar de tarea, con subida de carpeta completa), MI CUENTA (Resumen, Perfil, Ajustes).\n" +
+  "Flujo típico: se agrega un alumno en Alumnos, se registra cada clase en Clases (con la tarea y el ejercicio " +
+  "que le manda), la Agenda controla su disponibilidad de horarios, Pagos/Cuentas ven las compras y accesos.\n\n" +
+  "REGLAS: respuestas cortas y concretas (máximo 4 frases), español peruano de clase alta, limpio, directo. " +
+  "NUNCA 'pe' ni 'causa' ni vulgaridad. Sin guiones largos (em dash). Signos de exclamación/pregunta solo al cierre. " +
+  "Si preguntan algo que no es de este panel (facturación externa, código, otros negocios), dilo con honestidad " +
+  "y no inventes.";
+const ONBOARDING_SYSTEM_ALUMNO =
+  "Eres el asistente de onboarding del portal del alumno de ProfesorMVT (profesormvt.com/alumnos), " +
+  "hablándole a un alumno que recién entra por primera vez a su cuenta.\n\n" +
+  "El portal tiene: su próxima clase y horario, el historial de clases con la tarea que le dejó el profesor " +
+  "(incluye ejercicios en audio/PDF para practicar), sus recursos, un chat grupal y uno privado con el profesor, " +
+  "y la sección de cuenta/pagos para ver o renovar su paquete.\n\n" +
+  "REGLAS: respuestas cortas y cálidas (máximo 4 frases), español peruano de clase alta, limpio. NUNCA 'pe' ni " +
+  "'causa' ni vulgaridad. Sin guiones largos (em dash). Signos de exclamación/pregunta solo al cierre. Empodera, " +
+  "nunca menosprecies al alumno. Si preguntan algo que no puedes resolver (cambiar precios, temas de la clase en " +
+  "sí), sugiere escribirle al profesor por el chat.";
+
+async function llamarClaudeOnboarding(env, system, mensajes){
+  if (!env.ANTHROPIC_API_KEY) return null;
+  const resp = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: {
+      "x-api-key": env.ANTHROPIC_API_KEY,
+      "anthropic-version": "2023-06-01",
+      "content-type": "application/json"
+    },
+    body: JSON.stringify({
+      model: ONBOARDING_MODELO,
+      max_tokens: 400,
+      system: system,
+      messages: mensajes
+    })
+  });
+  if (!resp.ok) return null;
+  const data = await resp.json().catch(() => null);
+  const bloque = data && Array.isArray(data.content) ? data.content.find(c => c.type === "text") : null;
+  return bloque ? String(bloque.text || "").trim() : null;
+}
+/* clave = "admin:andres" o "alumno:<cuenta_id>". Incrementa y devuelve {usados, restantes}.
+   Si ya estaba en el tope, NO vuelve a incrementar (para no seguir descontando de un contador ya frenado). */
+async function onboardingContar(env, clave){
+  const row = await env.DB.prepare("SELECT mensajes FROM onboarding_ia_uso WHERE clave = ?1").bind(clave).first();
+  const usados = row ? Number(row.mensajes) : 0;
+  if (usados >= ONBOARDING_LIMITE) return { usados, restantes: 0, tope: true };
+  await env.DB.prepare(
+    "INSERT INTO onboarding_ia_uso (clave, mensajes) VALUES (?1, 1) ON CONFLICT(clave) DO UPDATE SET mensajes = mensajes + 1"
+  ).bind(clave).run();
+  return { usados: usados + 1, restantes: ONBOARDING_LIMITE - (usados + 1), tope: false };
+}
+
 /* ---------- Aviso por Web Push (VAPID) a los dispositivos suscritos del admin ----------
    Best-effort, con try/catch POR suscripción: una mala no tumba al resto.
    Las suscripciones caducadas (404/410) se borran solas. Devuelve cuántas se enviaron. */
@@ -1336,6 +1398,11 @@ async function ensureSchema(env){
     // esperando aprobación — solo avisa a Andrés después).
     await env.DB.prepare(
       "CREATE TABLE IF NOT EXISTS pausas (id TEXT PRIMARY KEY, alumno_id TEXT NOT NULL, ciclo INTEGER DEFAULT 1, motivo TEXT DEFAULT '', dias INTEGER DEFAULT 0, creada TEXT DEFAULT '')"
+    ).run();
+    // onboarding_ia_uso: contador del chat de onboarding (Claude Haiku, tiene costo real) por
+    // cuenta ("admin:andres" o "alumno:<cuenta_id>"), tope duro de 10 mensajes (02-jul-2026).
+    await env.DB.prepare(
+      "CREATE TABLE IF NOT EXISTS onboarding_ia_uso (clave TEXT PRIMARY KEY, mensajes INTEGER DEFAULT 0)"
     ).run();
     _schemaChecked = true;
   } catch (e) { /* otra invocación pudo correrla en paralelo; se reintenta en la próxima request */ }
@@ -1949,6 +2016,44 @@ export default {
           if (marca === "MVT") ctx.waitUntil(correoBienvenidaLead(env, email));
         }
         return json({ ok: true, pdf });
+      }
+
+      /* ============ IA de onboarding del panel (admin o alumno logueado) ============ */
+      if (url.pathname === "/api/onboarding-ia" && request.method === "GET"){
+        const who = await authChat(env, request);
+        if (!who) return json({ error: "Sesión expirada" }, 401);
+        const clave = who.admin ? "admin:andres" : "alumno:" + who.cu.id;
+        const row = await env.DB.prepare("SELECT mensajes FROM onboarding_ia_uso WHERE clave = ?1").bind(clave).first();
+        const usados = row ? Number(row.mensajes) : 0;
+        return json({ limite: ONBOARDING_LIMITE, usados, restantes: Math.max(0, ONBOARDING_LIMITE - usados) });
+      }
+
+      if (url.pathname === "/api/onboarding-ia" && request.method === "POST"){
+        const who = await authChat(env, request);
+        if (!who) return json({ error: "Sesión expirada" }, 401);
+        const b = await request.json().catch(() => ({}));
+        const texto = limpiarTextoChat(b.texto).slice(0, 500);
+        if (!texto) return json({ error: "Escribe tu pregunta." }, 400);
+
+        const clave = who.admin ? "admin:andres" : "alumno:" + who.cu.id;
+        const cont = await onboardingContar(env, clave);
+        if (cont.tope){
+          return json({ error: "Ya usaste tus " + ONBOARDING_LIMITE + " mensajes con este asistente. Para más ayuda, " + (who.admin ? "revisa el resto del panel o escríbete una nota." : "escríbele al profesor por el chat.") }, 429);
+        }
+
+        let historial = Array.isArray(b.historial) ? b.historial : [];
+        historial = historial
+          .filter(function(m){ return m && (m.role === "user" || m.role === "assistant") && typeof m.content === "string"; })
+          .map(function(m){ return { role: m.role, content: m.content.slice(0, 600) }; })
+          .slice(-8);
+        const mensajes = historial.concat([{ role: "user", content: texto }]);
+
+        const system = who.admin ? ONBOARDING_SYSTEM_ADMIN : ONBOARDING_SYSTEM_ALUMNO;
+        const reply = await llamarClaudeOnboarding(env, system, mensajes);
+        if (!reply){
+          return json({ error: "El asistente no está disponible ahora mismo. Intenta en un rato." }, 502);
+        }
+        return json({ reply: reply, restantes: cont.restantes });
       }
 
       if (url.pathname === "/api/chatbot" && request.method === "POST"){

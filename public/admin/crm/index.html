@@ -214,6 +214,27 @@
     .content{padding:18px 15px 90px;}
     .pagehead{display:none;}
   }
+  /* ---------- IA de onboarding (Claude Haiku, tope 10 mensajes) ---------- */
+  .oia-fab{position:fixed;bottom:24px;right:24px;z-index:300;width:54px;height:54px;border-radius:50%;border:1px solid var(--accent);cursor:pointer;background:var(--accent);color:var(--bg);font-family:var(--mono);font-weight:700;font-size:18px;box-shadow:0 6px 24px rgba(232,80,31,.35);}
+  .oia-panel{position:fixed;bottom:88px;right:24px;z-index:300;width:340px;max-width:calc(100vw - 32px);height:440px;max-height:calc(100vh - 130px);display:flex;flex-direction:column;overflow:hidden;background:var(--panel);border:1px solid var(--line);border-radius:8px;box-shadow:0 18px 50px rgba(0,0,0,.55);}
+  .oia-panel[hidden]{display:none;}
+  .oia-head{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:12px 14px;border-bottom:1px solid var(--line);background:var(--accent);flex:0 0 auto;}
+  .oia-title{font-family:var(--mono);font-size:11px;letter-spacing:.06em;text-transform:uppercase;font-weight:700;color:var(--bg);}
+  .oia-count{font-family:var(--mono);font-size:10px;color:var(--bg);opacity:.85;}
+  .oia-x{background:none;border:none;color:var(--bg);font-size:20px;line-height:1;cursor:pointer;padding:0 2px;}
+  .oia-msgs{flex:1 1 auto;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:9px;}
+  .oia-msg{max-width:88%;padding:9px 12px;border-radius:10px;font-size:13.5px;line-height:1.42;white-space:pre-wrap;word-wrap:break-word;}
+  .oia-msg.bot{align-self:flex-start;background:var(--panel2);color:var(--cream);border-bottom-left-radius:2px;}
+  .oia-msg.user{align-self:flex-end;background:var(--accent);color:var(--bg);border-bottom-right-radius:2px;}
+  .oia-typing{align-self:flex-start;color:var(--muted);font-size:12px;font-style:italic;}
+  .oia-input{display:flex;gap:7px;padding:10px;border-top:1px solid var(--line);flex:0 0 auto;}
+  .oia-input input{flex:1 1 auto;background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:9px 10px;color:var(--cream);font-size:13.5px;font-family:inherit;}
+  .oia-input input:focus{outline:none;border-color:var(--accent);}
+  .oia-input input:disabled{opacity:.5;}
+  .oia-send{flex:0 0 auto;padding:0 13px;border:none;border-radius:6px;cursor:pointer;background:var(--accent);color:var(--bg);font-family:var(--mono);font-weight:700;font-size:12px;}
+  .oia-send:disabled{opacity:.5;cursor:default;}
+  .oia-tope{padding:8px 10px;font-family:var(--mono);font-size:10.5px;color:var(--muted);border-top:1px solid var(--line);text-align:center;}
+  #ovLock.open ~ .oia-fab,#ovLock.open ~ .oia-panel{display:none!important;}
 </style>
 </head>
 <body>
@@ -2073,6 +2094,83 @@ el("btnPushTest").addEventListener("click",function(){
   recargar().then(iniciarRefresco).catch(function(e){
     if(e&&e.auth){ lock("Tu clave ya no es válida."); return; }
     setSync("Sin conexión ✗","err"); toast("No se pudo conectar con la API");
+  });
+})();
+</script>
+
+<!-- IA de onboarding (Claude Haiku, tope 10 mensajes) -->
+<button class="oia-fab" id="oiaFab" aria-label="Abrir guía del panel" aria-expanded="false">?</button>
+<div class="oia-panel" id="oiaPanel" role="dialog" aria-label="Guía del panel" hidden>
+  <div class="oia-head">
+    <span class="oia-title">Guía del panel</span>
+    <span class="oia-count" id="oiaCount"></span>
+    <button class="oia-x" id="oiaClose" aria-label="Cerrar">&times;</button>
+  </div>
+  <div class="oia-msgs" id="oiaMsgs" aria-live="polite"></div>
+  <form class="oia-input" id="oiaForm">
+    <input id="oiaText" type="text" maxlength="500" placeholder="Pregúntame algo del panel…" autocomplete="off" />
+    <button type="submit" class="oia-send">Ir</button>
+  </form>
+</div>
+<script>
+(function(){
+  var fab=document.getElementById("oiaFab"), panel=document.getElementById("oiaPanel"),
+      closeBtn=document.getElementById("oiaClose"), msgsEl=document.getElementById("oiaMsgs"),
+      form=document.getElementById("oiaForm"), input=document.getElementById("oiaText"),
+      countEl=document.getElementById("oiaCount");
+  if(!fab||!panel||!form||!input||!msgsEl) return;
+  var historia=[], ocupado=false, iniciado=false, restantes=null;
+
+  function escapar(s){ var d=document.createElement("div"); d.textContent=s; return d.innerHTML; }
+  function pintar(role,texto){
+    var el=document.createElement("div");
+    el.className="oia-msg "+(role==="user"?"user":"bot");
+    el.innerHTML=escapar(texto);
+    msgsEl.appendChild(el); msgsEl.scrollTop=msgsEl.scrollHeight;
+  }
+  function typing(on){
+    var ex=document.getElementById("oiaTyping");
+    if(on && !ex){ var t=document.createElement("div"); t.id="oiaTyping"; t.className="oia-typing"; t.textContent="Escribiendo…"; msgsEl.appendChild(t); msgsEl.scrollTop=msgsEl.scrollHeight; }
+    else if(!on && ex) ex.remove();
+  }
+  function actualizarContador(){
+    if(restantes==null) return;
+    countEl.textContent=restantes+"/10";
+    if(restantes<=0){ input.disabled=true; input.placeholder="Llegaste al tope de mensajes"; }
+  }
+  function abrir(){
+    panel.hidden=false; fab.setAttribute("aria-expanded","true");
+    if(!iniciado){
+      iniciado=true;
+      pintar("bot","Hola, soy tu guía del panel. Pregúntame cómo hacer algo aquí (agregar un alumno, mandar un ejercicio de tarea, ver tus pagos…). Tienes 10 mensajes.");
+      fetch("/api/onboarding-ia",{headers:hdr()}).then(function(r){return r.json();}).then(function(d){
+        if(typeof d.restantes==="number"){ restantes=d.restantes; actualizarContador(); }
+      }).catch(function(){});
+    }
+    setTimeout(function(){ input.focus(); },50);
+  }
+  function cerrar(){ panel.hidden=true; fab.setAttribute("aria-expanded","false"); }
+  fab.addEventListener("click",function(){ panel.hidden?abrir():cerrar(); });
+  if(closeBtn) closeBtn.addEventListener("click",cerrar);
+  document.addEventListener("keydown",function(e){ if(e.key==="Escape" && !panel.hidden) cerrar(); });
+
+  form.addEventListener("submit",function(e){
+    e.preventDefault();
+    if(ocupado || (restantes!=null && restantes<=0)) return;
+    var texto=(input.value||"").trim();
+    if(!texto) return;
+    input.value=""; pintar("user",texto);
+    ocupado=true; typing(true);
+    fetch("/api/onboarding-ia",{method:"POST",headers:hdr(),body:JSON.stringify({texto:texto,historial:historia})})
+      .then(function(r){ return r.json().catch(function(){return {};}).then(function(d){ if(!r.ok) throw new Error(d.error||"No se pudo"); return d; }); })
+      .then(function(d){
+        typing(false);
+        pintar("bot",d.reply);
+        historia.push({role:"user",content:texto}); historia.push({role:"assistant",content:d.reply});
+        if(typeof d.restantes==="number"){ restantes=d.restantes; actualizarContador(); }
+      })
+      .catch(function(err){ typing(false); pintar("bot",(err&&err.message)||"Algo falló, intenta de nuevo."); })
+      .then(function(){ ocupado=false; });
   });
 })();
 </script>
