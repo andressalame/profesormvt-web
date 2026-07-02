@@ -377,7 +377,6 @@
       <a href="#clases" data-v="clases" aria-label="Mis clases" title="Mis clases"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16M4 12h16M4 19h10"/></svg><span>Mis clases</span></a>
       <a href="#agenda" data-v="agenda" aria-label="Agenda" title="Agenda"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M3 9h18M8 2v4M16 2v4"/></svg><span>Agenda</span></a>
       <a href="#recursos" data-v="recursos" aria-label="Recursos" title="Recursos"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7a1 1 0 0 1 1-1h5l2 2h9a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z"/></svg><span>Recursos</span></a>
-      <a href="#comunidad" data-v="comunidad" aria-label="Comunidad" title="Comunidad"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12a8 8 0 0 1-8 8H4l2-3a8 8 0 1 1 15-5z"/></svg><span>Comunidad</span></a>
       <a href="#comprar" data-v="comprar" aria-label="Comprar" title="Comprar"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7h2l2.4 10.2A2 2 0 0 0 9.3 19h7.4a2 2 0 0 0 1.9-1.6L21 9H6"/><circle cx="10" cy="21" r="1"/><circle cx="17" cy="21" r="1"/></svg><span>Comprar</span></a>
       <a href="#referidos" data-v="referidos" aria-label="Referidos" title="Referidos"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="8" width="18" height="4"/><path d="M5 12v8h14v-8M12 8v12M12 8s-4-.5-4-3a2 2 0 0 1 4-1 2 2 0 0 1 4 1c0 2.5-4 3-4 3z"/></svg><span>Referidos</span></a>
       <a href="#cuenta" data-v="cuenta" aria-label="Mi cuenta" title="Mi cuenta"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 5-5.5 8-5.5s6.5 1.5 8 5.5"/></svg><span>Mi cuenta</span></a>
@@ -432,7 +431,6 @@
             <li><b>Inicio</b> — tu plan, clases restantes y horarios de un vistazo.</li>
             <li><b>Mis clases</b> — tu historial y la tarea de la semana.</li>
             <li><b>Recursos</b> — PDFs y audios (se desbloquean al activar tu paquete).</li>
-            <li><b>Comunidad</b> — entra al Discord de alumnos.</li>
             <li><b>Comprar</b> — paquetes y renovaciones.</li>
             <li><b>Referidos</b> — trae un amigo y ganas S/50.</li>
             <li><b>Mi cuenta</b> — tus datos y sesión.</li>
@@ -543,17 +541,7 @@
       <div class="eyebrow">// RECURSOS</div>
       <hr class="rule" />
       <div id="recList"></div>
-      <div class="empty hidden" id="recVacio">Pronto subiré material aquí — atento al chat y al Discord.</div>
-    </section>
-
-    <!-- ===== COMUNIDAD ===== -->
-    <section class="view" id="v-comunidad">
-      <div class="eyebrow">// COMUNIDAD</div>
-      <hr class="rule" />
-      <div class="card">
-        <p class="note" style="margin:0 0 14px;">Únete a nuestro servidor de Discord — anuncios, comunidad y más.</p>
-        <a class="btn" id="btnDiscord" target="_blank" rel="noopener">Entrar al Discord →</a>
-      </div>
+      <div class="empty hidden" id="recVacio">Pronto subiré material aquí — atento al chat.</div>
     </section>
 
     <!-- ===== MI CUENTA ===== -->
@@ -810,7 +798,7 @@ function onGoogleCred(resp){
 }
 
 /* ---------- ROUTER (SPA por hash) ---------- */
-var VISTAS = ["inicio","clases","agenda","recursos","comunidad","comprar","referidos","cuenta"];
+var VISTAS = ["inicio","clases","agenda","recursos","comprar","referidos","cuenta"];
 function vistaActual(){
   var h=(location.hash||"#inicio").replace("#","");
   return VISTAS.indexOf(h)>=0 ? h : "inicio";
@@ -1149,16 +1137,10 @@ $("btnCopiarLink").addEventListener("click",function(){
   if(code) copiarTexto("https://profesormvt.com/alumnos/?ref="+code, "Link copiado");
 });
 
-/* ---------- VISTA: COMUNIDAD (solo Discord) ---------- */
-function renderComunidad(){
-  var du = (ME.config && ME.config.discord_url) || "";
-  if(du){ $("btnDiscord").href = du; show("btnDiscord"); } else hide("btnDiscord");
-}
-
 /* ---------- VISTA: RECURSOS ---------- */
 function renderRecursos(){
   var rec = ME.recursos || [];
-  if(rec.length===0){ $("recList").innerHTML=""; $("recVacio").textContent = ME.recursosBloqueados ? "Los recursos exclusivos se desbloquean cuando activas tu primer paquete." : "Pronto subiré material aquí — atento al chat y al Discord."; show("recVacio"); return; }
+  if(rec.length===0){ $("recList").innerHTML=""; $("recVacio").textContent = ME.recursosBloqueados ? "Los recursos exclusivos se desbloquean cuando activas tu primer paquete." : "Pronto subiré material aquí — atento al chat."; show("recVacio"); return; }
   hide("recVacio");
   $("recList").innerHTML = rec.map(function(r){
     var urlRec = String(r.url||"");
@@ -1374,6 +1356,7 @@ $("btnSalirSide").addEventListener("click", salir);
 
 /* ---------- VISTA: AGENDA ---------- */
 var AG_SLOTS = [];
+var AG_CANCELA_MIN_H = 4; // debe calzar con CANCELA_MIN_H del worker
 var AG_TIPO = "fija"; // horario fijo semanal = default (02-jul-2026): mantiene el ritmo consistente. Clase suelta sigue disponible como 2da opción.
 var AG_CARGANDO = false;
 var AG_DIA = "";
@@ -1439,12 +1422,19 @@ function renderAgenda(){
   } else {
     $("agProx").innerHTML = prox.map(function(r){
       var badge = '<span class="rtag">'+(r.tipo==="fija"?"FIJA":"SUELTA")+'</span>';
+      var horas = (Date.parse(r.inicio_utc) - Date.now()) / 3600000;
+      var puede = horas >= AG_CANCELA_MIN_H;
+      var boton = puede
+        ? '<button class="btn ghost sm" data-cancelar="'+esc(r.id)+'">Reprogramar</button>'
+        : '<button class="btn ghost sm" disabled title="Falta menos de '+AG_CANCELA_MIN_H+'h, ya no se puede reprogramar">Reprogramar</button>';
       return '<div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--line);">'+
         '<div style="flex:1;min-width:0;">'+
           '<div style="font-weight:600;text-transform:capitalize;">'+esc(fmtFechaLocal(r.inicio_utc))+'</div>'+
-          '<div class="note" style="margin:0;">'+esc(fmtHoraLocal(r.inicio_utc))+' '+badge+'</div>'+
+          '<div class="note" style="margin:0;">'+esc(fmtHoraLocal(r.inicio_utc))+' '+badge+
+            (puede?'':' · <span style="color:var(--amber)">ya no se puede reprogramar, si no asistes cuenta como falta</span>')+
+          '</div>'+
         '</div>'+
-        '<button class="btn ghost sm" data-cancelar="'+esc(r.id)+'">Cancelar</button>'+
+        boton+
       '</div>';
     }).join("");
   }
@@ -1543,11 +1533,14 @@ function reservarSlot(iso){
 }
 
 function cancelarClase(id){
-  if(!confirm("¿Cancelar esta clase? Con menos de 6 horas de anticipación cuenta como clase usada.")) return;
+  if(!confirm("¿Reprogramar esta clase? Se libera tu horario actual y eliges uno nuevo. Solo se puede con al menos "+AG_CANCELA_MIN_H+"h de anticipación.")) return;
   api("/api/agenda/cancelar",{method:"POST",body:JSON.stringify({id:id})})
-    .then(function(r){ toast(r.mensaje || "Clase cancelada."); return api("/api/me"); })
-    .then(function(d){ ME=d; renderAgenda(); })
-    .catch(function(e){ toast(e.message || "No se pudo cancelar."); });
+    .then(function(r){ toast(r.mensaje || "Clase liberada."); return api("/api/me"); })
+    .then(function(d){
+      ME=d; renderAgenda();
+      var slots=$("agSlots"); if(slots) slots.scrollIntoView({behavior:"smooth",block:"start"});
+    })
+    .catch(function(e){ toast(e.message || "No se pudo reprogramar."); });
 }
 
 $("v-agenda").addEventListener("click", function(e){
@@ -1561,7 +1554,7 @@ $("v-agenda").addEventListener("click", function(e){
   if(c){ cancelarClase(c.dataset.cancelar); return; }
 });
 
-var RENDER = { inicio:renderInicio, clases:renderClases, agenda:renderAgenda, recursos:renderRecursos, comunidad:renderComunidad,
+var RENDER = { inicio:renderInicio, clases:renderClases, agenda:renderAgenda, recursos:renderRecursos,
                comprar:renderComprar, referidos:renderReferidos, cuenta:renderCuenta };
 
 function autoVerificarPago(){

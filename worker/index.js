@@ -1019,7 +1019,7 @@ const CLASE_MIN = 60;             // duración de la clase
 const HORIZONTE_SEMANAS = 4;      // hasta cuándo se puede reservar adelante
 const SERIE_SEMANAS = 4;          // una reserva fija aparta las próximas 4 semanas ("de 4 en 4")
 const ANTICIPACION_MIN_H = 12;    // no se puede reservar con menos de 12h de anticipación
-const CANCELA_MIN_H = 6;          // reprogramar/cancelar con >=6h no consume la clase
+const CANCELA_MIN_H = 4;          // reprogramar/cancelar con >=4h no consume la clase (02-jul-2026: bajado de 6h)
 const PAUSA_MAX_DIAS = 14;        // tope de días de pausa (viaje/salud) por ciclo, auto-servicio
 
 // Componentes de fecha/hora en zona Lima a partir de un instante UTC.
@@ -2193,7 +2193,11 @@ export default {
         return json({ ok: true, reservadas: creadas, tipo: "fija", saltadas });
       }
 
-      /* ============ AGENDA: cancelar / reprogramar una clase ============ */
+      /* ============ AGENDA: cancelar / reprogramar una clase ============
+         Con >=CANCELA_MIN_H de anticipación: se libera (no consume la clase) y el alumno
+         queda listo para elegir un nuevo horario en el mismo tab. Con MENOS anticipación:
+         el self-service queda BLOQUEADO (no se puede reprogramar) — si el alumno no avisa
+         a tiempo y no asiste, el profesor la marca como falta a mano desde el CRM. */
       if (url.pathname === "/api/agenda/cancelar" && request.method === "POST"){
         const cu = await cuentaDeSesion(env, request);
         if (!cu || !cu.alumno_id) return json({ error: "Sesión expirada" }, 401);
@@ -2202,13 +2206,12 @@ export default {
         if (!r || r.alumno_id !== cu.alumno_id) return json({ error: "No encuentro esa clase." }, 404);
         if (r.estado !== "reservada") return json({ error: "Esa clase ya no se puede cancelar." }, 400);
         const horas = (Date.parse(r.inicio_utc) - Date.now()) / 3600000;
-        const libre = horas >= CANCELA_MIN_H;
-        await env.DB.prepare("UPDATE reservas SET estado = ?1 WHERE id = ?2").bind(libre ? "cancelada" : "falta", r.id).run();
+        if (horas < CANCELA_MIN_H){
+          return json({ error: "Ya no se puede reprogramar: falta menos de " + CANCELA_MIN_H + " horas para tu clase. Si no puedes asistir, escríbele a tu profesor; de lo contrario, cuenta como clase usada." }, 400);
+        }
+        await env.DB.prepare("UPDATE reservas SET estado = 'cancelada' WHERE id = ?1").bind(r.id).run();
         if (r.gcal_event_id) await gcalBorrarEvento(env, r.gcal_event_id);
-        return json({
-          ok: true, libre,
-          mensaje: libre ? "Listo, cancelé la clase y no se descuenta." : "Cancelaste con menos de 6 horas, así que esta vez sí cuenta como clase usada."
-        });
+        return json({ ok: true, mensaje: "Listo, liberé tu horario. Elige tu nuevo horario abajo 👇" });
       }
 
       /* ============ CONGELAR EL PLAZO (viaje / salud) ============
