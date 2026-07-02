@@ -372,12 +372,17 @@ async function confirmarCompra(env, compra){
   const stmts = [];
   let renovado = false;
   let alumnoIdNuevo = null;
+  // Matrícula por mes (02-jul-2026): cada compra confirmada arma un plazo de 30 dias para usar
+  // las horas del paquete, tal cual venga (1/semana en Esencial, 2/semana en Intensivo, etc, via
+  // el horario fijo que ya es el default en el portal). No aplica de forma estricta a Clase de
+  // prueba (1 sola clase), pero ponerle igual el plazo no hace daño.
+  const vence = new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10);
   if (cu.alumno_id){
     const al = await env.DB.prepare("SELECT * FROM alumnos WHERE id = ?1").bind(cu.alumno_id).first();
     if (al){
       stmts.push(env.DB.prepare(
-        "UPDATE alumnos SET paquete = ?1, curso = ?2, pago = 'Pagado', fecha = ?3, ciclo = COALESCE(ciclo,1) + 1 WHERE id = ?4"
-      ).bind(compra.paquete, compra.curso || al.curso, hoy(), al.id));
+        "UPDATE alumnos SET paquete = ?1, curso = ?2, pago = 'Pagado', fecha = ?3, ciclo = COALESCE(ciclo,1) + 1, vence = ?4, aviso_vence_ciclo = 0 WHERE id = ?5"
+      ).bind(compra.paquete, compra.curso || al.curso, hoy(), vence, al.id));
       renovado = true;
     }
   }
@@ -385,8 +390,8 @@ async function confirmarCompra(env, compra){
     const nuevoId = crypto.randomUUID();
     alumnoIdNuevo = nuevoId;
     stmts.push(env.DB.prepare(
-      "INSERT INTO alumnos (id,codigo,nombre,whatsapp,curso,paquete,fecha,pago,horario,notas,ciclo) VALUES (?1,?2,?3,?4,?5,?6,?7,'Pagado','','Creado por compra web',1)"
-    ).bind(nuevoId, randHex(3).toUpperCase(), cu.nombre, cu.whatsapp || "", compra.curso || "Canto", compra.paquete, hoy()));
+      "INSERT INTO alumnos (id,codigo,nombre,whatsapp,curso,paquete,fecha,pago,horario,notas,ciclo,vence) VALUES (?1,?2,?3,?4,?5,?6,?7,'Pagado','','Creado por compra web',1,?8)"
+    ).bind(nuevoId, randHex(3).toUpperCase(), cu.nombre, cu.whatsapp || "", compra.curso || "Canto", compra.paquete, hoy(), vence));
     stmts.push(env.DB.prepare("UPDATE cuentas SET alumno_id = ?1 WHERE id = ?2").bind(nuevoId, cu.id));
   }
 
@@ -530,6 +535,65 @@ async function procesarRenovaciones(env){
     } else { fallos++; }
   }
   if (enviados.length){ try { await avisarRenovacionesResumen(env, enviados); } catch (e) {} }
+  await reportarSaludCorreo(env, fallos, fallos + enviados.length);
+  return enviados;
+}
+
+/* ============ MATRÍCULA POR MES: aviso antes de vencer ============
+   Cada paquete tiene un plazo (alumnos.vence, 30 dias desde la compra/renovación, o más si
+   pidió pausa). VENCE_AVISO_DIAS antes de esa fecha, si le quedan horas SIN usar, se le avisa
+   una vez por ciclo (dedupe con aviso_vence_ciclo, mismo patron que recordatorio_ciclo). */
+const VENCE_AVISO_DIAS = 5;
+
+async function correoAvisoVencimiento(env, alumno, to, diasRestantes, restantes){
+  if (!to) return false;
+  const nombre = ((alumno.nombre || "").trim().split(/\s+/)[0]) || "";
+  const portal = "https://profesormvt.com/alumnos/";
+  const html =
+    '<div style="font-family:Arial,Helvetica,sans-serif;max-width:480px;margin:0 auto;color:#1a1a1a;font-size:15px;line-height:1.6">' +
+      '<p>Hola' + (nombre ? ' ' + nombre : '') + ' 🎸</p>' +
+      '<p>Tu paquete vence en ' + diasRestantes + ' día' + (diasRestantes === 1 ? '' : 's') + ' y todavía te quedan ' + restantes + ' clase' + (restantes === 1 ? '' : 's') + ' por usar.</p>' +
+      '<p>Reserva tu horario para no perderlas. Si tienes un viaje o algo de salud que te está complicando venir, puedes congelar tu plazo desde el portal.</p>' +
+      '<p style="text-align:center;margin:26px 0"><a href="' + portal + '" style="background:#e8501f;color:#ffffff;text-decoration:none;font-weight:bold;padding:14px 26px;border-radius:6px;display:inline-block">Reservar mi clase</a></p>' +
+      '<p>Un abrazo,<br><b>Andrés</b><br>ProfesorMVT</p>' +
+    '</div>';
+  const text = 'Hola' + (nombre ? ' ' + nombre : '') + '!\n\nTu paquete vence en ' + diasRestantes + ' día(s) y te quedan ' + restantes + ' clase(s) por usar.\n\nReserva aquí: ' + portal + '\n\nSi tienes un viaje o tema de salud, puedes congelar tu plazo desde el portal.\n\nUn abrazo,\nAndrés - ProfesorMVT';
+  return enviarCorreo(env, { to: to, subject: "Tu paquete vence en " + diasRestantes + " días — te quedan clases", html: html, text: text });
+}
+
+async function procesarAvisosVencimiento(env){
+  const precios = await loadPrecios(env);
+  const { results: alumnos } = await env.DB.prepare(
+    "SELECT a.*, c.email AS _email FROM alumnos a JOIN cuentas c ON c.alumno_id = a.id " +
+    "WHERE a.pago = 'Pagado' AND c.email IS NOT NULL AND c.email != '' AND COALESCE(a.vence,'') != ''"
+  ).all();
+  const hoyMs = Date.now();
+  const enviados = []; let fallos = 0;
+  for (const a of (alumnos || [])){
+    const ciclo = Number(a.ciclo) || 1;
+    if ((Number(a.aviso_vence_ciclo) || 0) >= ciclo) continue;   // ya avisado este ciclo
+    const venceMs = Date.parse(a.vence + "T23:59:59Z");
+    if (!Number.isFinite(venceMs)) continue;
+    const diasRestantes = Math.ceil((venceMs - hoyMs) / 86400000);
+    if (diasRestantes > VENCE_AVISO_DIAS || diasRestantes < 0) continue;   // fuera de la ventana de aviso
+    const { results: regs } = await env.DB.prepare(
+      "SELECT estado FROM registro WHERE alumno_id = ?1 AND COALESCE(ciclo,1) = ?2"
+    ).bind(a.id, ciclo).all();
+    const rUsadas = await reservasUsadasCount(env, a.id, ciclo);
+    const c = compute(a, regs || [], precios, rUsadas);
+    if (c.restantes < 1) continue;   // ya usó todo, nada que avisar
+    const ok = await correoAvisoVencimiento(env, a, a._email, Math.max(0, diasRestantes), c.restantes);
+    if (ok){
+      await env.DB.prepare("UPDATE alumnos SET aviso_vence_ciclo = ?1 WHERE id = ?2").bind(ciclo, a.id).run();
+      enviados.push({ nombre: a.nombre, email: a._email, diasRestantes, restantes: c.restantes });
+    } else { fallos++; }
+  }
+  if (enviados.length){
+    try {
+      await alertaCorreoAndres(env, "Avisos de vencimiento: " + enviados.length + " alumno(s) hoy",
+        enviados.map(e => "- " + e.nombre + " · vence en " + e.diasRestantes + "d · le quedan " + e.restantes + " clase(s)").join("\n"));
+    } catch (e) {}
+  }
   await reportarSaludCorreo(env, fallos, fallos + enviados.length);
   return enviados;
 }
@@ -894,6 +958,7 @@ const HORIZONTE_SEMANAS = 4;      // hasta cuándo se puede reservar adelante
 const SERIE_SEMANAS = 4;          // una reserva fija aparta las próximas 4 semanas ("de 4 en 4")
 const ANTICIPACION_MIN_H = 12;    // no se puede reservar con menos de 12h de anticipación
 const CANCELA_MIN_H = 6;          // reprogramar/cancelar con >=6h no consume la clase
+const PAUSA_MAX_DIAS = 14;        // tope de días de pausa (viaje/salud) por ciclo, auto-servicio
 
 // Componentes de fecha/hora en zona Lima a partir de un instante UTC.
 function limaParts(d){
@@ -1255,6 +1320,18 @@ async function ensureSchema(env){
     const infoCompras = await env.DB.prepare("PRAGMA table_info(compras)").all();
     const tieneSlot = (infoCompras.results || []).some(c => c.name === "slot_deseado");
     if (!tieneSlot) await env.DB.prepare("ALTER TABLE compras ADD COLUMN slot_deseado TEXT DEFAULT ''").run();
+    // vence: matrícula por mes (02-jul-2026). Cada compra confirmada arma un ritmo semanal fijo
+    // (horario fijo = default) y pone un plazo de 30 dias para usar las horas del paquete.
+    const infoAlumnos = await env.DB.prepare("PRAGMA table_info(alumnos)").all();
+    const tieneVence = (infoAlumnos.results || []).some(c => c.name === "vence");
+    if (!tieneVence) await env.DB.prepare("ALTER TABLE alumnos ADD COLUMN vence TEXT DEFAULT ''").run();
+    const tieneAvisoVence = (infoAlumnos.results || []).some(c => c.name === "aviso_vence_ciclo");
+    if (!tieneAvisoVence) await env.DB.prepare("ALTER TABLE alumnos ADD COLUMN aviso_vence_ciclo INTEGER DEFAULT 0").run();
+    // pausas: congelar el plazo por viaje o salud (auto-servicio, con tope, no bloquea al alumno
+    // esperando aprobación — solo avisa a Andrés después).
+    await env.DB.prepare(
+      "CREATE TABLE IF NOT EXISTS pausas (id TEXT PRIMARY KEY, alumno_id TEXT NOT NULL, ciclo INTEGER DEFAULT 1, motivo TEXT DEFAULT '', dias INTEGER DEFAULT 0, creada TEXT DEFAULT '')"
+    ).run();
     _schemaChecked = true;
   } catch (e) { /* otra invocación pudo correrla en paralelo; se reintenta en la próxima request */ }
 }
@@ -1634,7 +1711,7 @@ export default {
             horario: alumno.horario || "", horarioFijo: horarioFijo, pago: alumno.pago || "",
             compradas: computed.compradas, usadas: computed.usadas, restantes: computed.restantes,
             reprogPermitidas: computed.reprogPermitidas, reprogRestantes: computed.reprogRestantes,
-            monto: computed.monto,
+            monto: computed.monto, vence: alumno.vence || "",
             historial: historial.slice().reverse()
           } : null,
           compraPendiente: pendiente || null,
@@ -2022,6 +2099,47 @@ export default {
           ok: true, libre,
           mensaje: libre ? "Listo, cancelé la clase y no se descuenta." : "Cancelaste con menos de 6 horas, así que esta vez sí cuenta como clase usada."
         });
+      }
+
+      /* ============ CONGELAR EL PLAZO (viaje / salud) ============
+         Auto-servicio, sin esperar aprobación (evita que el alumno quede colgado con su viaje ya
+         encima). Tope de PAUSA_MAX_DIAS por ciclo para que no se use para diluir el mes entero.
+         Solo avisa a Andrés después, por si quiere hablar con el alumno. */
+      if (url.pathname === "/api/agenda/pausar" && request.method === "POST"){
+        const cu = await cuentaDeSesion(env, request);
+        if (!cu || !cu.alumno_id) return json({ error: "Sesión expirada" }, 401);
+        const b = await request.json().catch(() => ({}));
+        const motivo = (b.motivo === "salud") ? "salud" : "viaje";
+        const dias = Math.max(1, Math.min(PAUSA_MAX_DIAS, Number(b.dias) || 0));
+        if (!dias) return json({ error: "Indica cuántos días necesitas." }, 400);
+
+        const al = await env.DB.prepare("SELECT * FROM alumnos WHERE id = ?1").bind(cu.alumno_id).first();
+        if (!al) return json({ error: "No encuentro tu ficha de alumno." }, 400);
+        const ciclo = Number(al.ciclo) || 1;
+        const usados = await env.DB.prepare(
+          "SELECT COALESCE(SUM(dias),0) AS n FROM pausas WHERE alumno_id = ?1 AND ciclo = ?2"
+        ).bind(al.id, ciclo).first();
+        const yaUsados = Number(usados && usados.n) || 0;
+        if (yaUsados + dias > PAUSA_MAX_DIAS){
+          return json({ error: "Ya usaste " + yaUsados + " de " + PAUSA_MAX_DIAS + " días de pausa este mes. Escríbeme por WhatsApp si necesitas más." }, 400);
+        }
+
+        const nuevoVence = new Date(Date.parse(al.vence || hoy()) + dias * 86400000).toISOString().slice(0, 10);
+        await env.DB.batch([
+          env.DB.prepare("INSERT INTO pausas (id,alumno_id,ciclo,motivo,dias,creada) VALUES (?1,?2,?3,?4,?5,?6)")
+            .bind(crypto.randomUUID(), al.id, ciclo, motivo, dias, new Date().toISOString()),
+          env.DB.prepare("UPDATE alumnos SET vence = ?1 WHERE id = ?2").bind(nuevoVence, al.id)
+        ]);
+        try {
+          await avisarPush(env, {
+            title: "Pausa por " + motivo + ": " + al.nombre,
+            body: al.nombre + " congeló " + dias + " día(s) por " + motivo + ". Nuevo vencimiento: " + nuevoVence,
+            url: "https://profesormvt.com/admin/crm/"
+          });
+        } catch (e) {}
+        try { await alertaCorreoAndres(env, "Pausa de " + al.nombre + " (" + motivo + ", " + dias + " días)",
+          al.nombre + " solicitó pausa por " + motivo + " (" + dias + " día(s)). Su paquete ahora vence el " + nuevoVence + "."); } catch (e) {}
+        return json({ ok: true, vence: nuevoVence, dias_usados_ciclo: yaUsados + dias, dias_disponibles: PAUSA_MAX_DIAS - (yaUsados + dias) });
       }
 
       if (url.pathname.startsWith("/api/admin/")){
@@ -2558,6 +2676,8 @@ export default {
       ctx.waitUntil(procesarRenovaciones(env).catch(function(){}));
       // Win-back: reactiva al que recibió el aviso y no renovó. Apagado por defecto (config.winback_activo).
       ctx.waitUntil(procesarWinBack(env).catch(function(){}));
+      // Matrícula por mes: avisa 5 días antes de vencer si le quedan clases sin usar.
+      ctx.waitUntil(procesarAvisosVencimiento(env).catch(function(){}));
       // Nurture de leads: mismo disparo diario. Apagado por defecto (config.nurture_activo).
       ctx.waitUntil(procesarNurtureLeads(env).catch(function(){}));
     }

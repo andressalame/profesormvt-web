@@ -382,6 +382,17 @@
         <div class="stubcap">Cada ticket = una clase de tu paquete · los apagados ya se usaron</div>
         <a class="btn sm hidden" href="#comprar" id="iRenov" style="margin-top:8px;">Renovar mi paquete →</a>
         <div class="plan-grid" id="iPlan"></div>
+        <div id="iPausaWrap" class="hidden" style="margin-top:14px;">
+          <button class="btn ghost sm" id="btnAbrirPausa" type="button">Congelar por viaje o salud</button>
+          <div id="iPausaForm" class="hidden" style="margin-top:10px;">
+            <div class="field"><label for="pausa_motivo">Motivo</label>
+              <select id="pausa_motivo"><option value="viaje">Viaje</option><option value="salud">Salud</option></select></div>
+            <div class="field"><label for="pausa_dias">Días que necesitas (máx 14 por mes)</label>
+              <input id="pausa_dias" type="number" min="1" max="14" value="7" /></div>
+            <div class="err" id="pausaErr"></div>
+            <button class="btn sm" id="btnConfirmarPausa" type="button">Confirmar pausa</button>
+          </div>
+        </div>
       </div>
 
       <div class="card empty-state hidden" id="iVacio">
@@ -465,8 +476,8 @@
         <div class="card">
           <h3>// RESERVAR UNA CLASE</h3>
           <div class="agtipo" style="display:flex;gap:8px;margin:8px 0 12px;flex-wrap:wrap;">
-            <button class="btn sm" data-tipo="suelta">Clase suelta</button>
-            <button class="btn ghost sm" data-tipo="fija">Horario fijo semanal</button>
+            <button class="btn sm" data-tipo="fija">Horario fijo semanal</button>
+            <button class="btn ghost sm" data-tipo="suelta">Clase suelta</button>
           </div>
           <p class="note" id="agTipoNota" style="margin:0 0 16px;"></p>
           <div id="agSlots"><p class="note" style="margin:0">Cargando horarios…</p></div>
@@ -820,7 +831,9 @@ function renderInicio(){
       kv("Reprogramaciones disponibles", a.reprogRestantes+' <small>de '+a.reprogPermitidas+'</small>')+
       kv("Horario fijo", esc((a.horarioFijo&&a.horarioFijo.length)?a.horarioFijo.join(" · "):(a.horario||"Por definir")))+
       kv("Paquete", esc(a.paquete||"—")+(a.monto?' <small>· S/ '+a.monto+'</small>':''))+
-      kv("Pago", esc(a.pago||"—"));
+      kv("Pago", esc(a.pago||"—"))+
+      (a.vence ? kv("Tu paquete vence", esc(fmtFechaLocal(a.vence+"T23:59:59Z"))+' <small>('+diasHasta(a.vence)+')</small>') : "");
+    renderVencePausa(a);
   } else {
     hide("iPkg"); show("iVacio");
     $("iPlanLine").textContent = "Sin paquete activo";
@@ -1340,7 +1353,7 @@ $("btnSalirSide").addEventListener("click", salir);
 
 /* ---------- VISTA: AGENDA ---------- */
 var AG_SLOTS = [];
-var AG_TIPO = "suelta";
+var AG_TIPO = "fija"; // horario fijo semanal = default (02-jul-2026): mantiene el ritmo consistente. Clase suelta sigue disponible como 2da opción.
 var AG_CARGANDO = false;
 var AG_DIA = "";
 var AG_MESES = ["enero","febrero","marzo","abril","mayo","junio","julio","agosto","setiembre","octubre","noviembre","diciembre"];
@@ -1356,6 +1369,39 @@ function fmtHoraLocal(iso){
   try{ return d.toLocaleTimeString("es-PE",{hour:"2-digit",minute:"2-digit"}); }
   catch(e){ return ("0"+d.getHours()).slice(-2)+":"+("0"+d.getMinutes()).slice(-2); }
 }
+function diasHasta(fechaYmd){
+  var ms = Date.parse(fechaYmd+"T23:59:59Z") - Date.now();
+  var d = Math.ceil(ms/86400000);
+  if(d<0) return "vencido";
+  if(d===0) return "hoy";
+  return d===1 ? "mañana" : "en "+d+" días";
+}
+function renderVencePausa(a){
+  if(!a.vence){ hide("iPausaWrap"); return; }
+  show("iPausaWrap");
+  hide("iPausaForm");
+  $("pausaErr").textContent="";
+}
+$("btnAbrirPausa").addEventListener("click",function(){
+  $("iPausaForm").classList.toggle("hidden");
+});
+$("btnConfirmarPausa").addEventListener("click",function(){
+  var motivo = $("pausa_motivo").value;
+  var dias = parseInt($("pausa_dias").value,10);
+  $("pausaErr").textContent="";
+  if(!dias || dias<1 || dias>14){ $("pausaErr").textContent="Elige entre 1 y 14 días."; return; }
+  if(!confirm("¿Congelar tu plazo "+dias+" día(s) por "+motivo+"?")) return;
+  $("btnConfirmarPausa").disabled=true;
+  api("/api/agenda/pausar",{method:"POST",body:JSON.stringify({motivo:motivo,dias:dias})})
+    .then(function(r){
+      toast("Listo, tu paquete ahora vence "+fmtFechaLocal(r.vence+"T23:59:59Z"));
+      hide("iPausaForm");
+      return api("/api/me");
+    })
+    .then(function(d){ ME=d; renderActive(); })
+    .catch(function(e){ $("pausaErr").textContent = e.message || "No se pudo procesar la pausa."; })
+    .finally(function(){ $("btnConfirmarPausa").disabled=false; });
+});
 function diaKeyLocal(iso){ var d=new Date(iso); return d.getFullYear()+"-"+d.getMonth()+"-"+d.getDate(); }
 
 function renderAgenda(){
