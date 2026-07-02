@@ -313,7 +313,7 @@
 
   <section class="panel" id="panel-registro">
     <div style="margin-bottom:14px;"><button class="btn" id="btnNuevoRegistro">+ Registrar clase</button></div>
-    <input type="file" id="fileAudio" accept="audio/*,application/pdf,image/png,image/jpeg" style="display:none" />
+    <input type="file" id="fileAudio" accept="audio/*,application/pdf,image/png,image/jpeg" style="display:none" multiple />
     <div class="filtros">
       <input id="regBuscar" type="search" placeholder="Buscar: qué se trabajó, tarea, plan…" autocomplete="off" />
       <select id="regFiltroAlumno"><option value="">Todos los alumnos</option></select>
@@ -1903,24 +1903,37 @@ document.body.addEventListener("click",function(e){
   }
 });
 el("fileAudio").addEventListener("change",function(e){
-  var f=e.target.files && e.target.files[0];
-  if(!f || !audioRegId) return;
-  if(!/\.(mp3|m4a|ogg|wav|pdf|png|jpg|jpeg)$/i.test(f.name) || f.size>25*1024*1024){
-    toast("Solo audios (mp3/m4a/ogg/wav), PDF o imágenes (png/jpg) de hasta 25 MB."); return;
+  var files=Array.prototype.slice.call(e.target.files||[]);
+  if(!files.length || !audioRegId) return;
+  var malos=files.filter(function(f){
+    return !/\.(mp3|m4a|ogg|wav|pdf|png|jpg|jpeg)$/i.test(f.name) || f.size>25*1024*1024;
+  });
+  if(malos.length){
+    toast("Solo audios (mp3/m4a/ogg/wav), PDF o imágenes (png/jpg) de hasta 25 MB cada uno."); return;
   }
-  var btn=document.querySelector('[data-audiocambiar="'+audioRegId+'"]');
-  if(btn){ btn.disabled=true; btn.textContent="Subiendo…"; }
-  var fd=new FormData(); fd.append("archivo",f); fd.append("registro_id",audioRegId);
-  // OJO: sin content-type manual — el navegador pone el boundary del multipart
-  postAudio(fd)
+  var regId=audioRegId;
+  var btn=document.querySelector('[data-audiocambiar="'+regId+'"]');
+  if(btn){ btn.disabled=true; }
+  // El backend agrega un adjunto por llamada (tarea_audio es una lista), así que se suben
+  // en serie, una request por archivo, para no pisar el array a medio guardar.
+  var subirUno=function(i){
+    if(i>=files.length) return Promise.resolve();
+    if(btn) btn.textContent="Subiendo "+(i+1)+"/"+files.length+"…";
+    var fd=new FormData(); fd.append("archivo",files[i]); fd.append("registro_id",regId);
+    // OJO: sin content-type manual — el navegador pone el boundary del multipart
+    return postAudio(fd).then(function(){ return subirUno(i+1); });
+  };
+  subirUno(0)
     .then(function(){ return recargar(); })
-    .then(function(){ toast("Adjunto subido"); })
+    .then(function(){ toast(files.length>1 ? files.length+" adjuntos subidos" : "Adjunto subido"); })
     .catch(function(err){
       if(err&&err.auth){ lock("Tu clave ya no es válida."); }
       toast((err&&err.message)||"No se pudo subir");
-      if(btn){ btn.disabled=false; btn.textContent="+ Adjuntar"; }
     })
-    .finally(function(){ audioRegId=null; el("fileAudio").value=""; });
+    .finally(function(){
+      audioRegId=null; el("fileAudio").value="";
+      if(btn){ btn.disabled=false; btn.textContent="+ Adjuntar"; }
+    });
 });
 
 /* ---------- Export ---------- */
