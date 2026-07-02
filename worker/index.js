@@ -1315,6 +1315,11 @@ async function ensureSchema(env){
     await env.DB.prepare(
       "CREATE TABLE IF NOT EXISTS ejercicios (id TEXT PRIMARY KEY, titulo TEXT DEFAULT '', descripcion TEXT DEFAULT '', url TEXT DEFAULT '', curso TEXT DEFAULT 'Todos', fecha TEXT DEFAULT '')"
     ).run();
+    // carpeta: ruta relativa (sin el nombre de archivo) cuando el ejercicio se subió como parte
+    // de una carpeta completa (02-jul-2026). Vacío = subida suelta de un solo archivo (como antes).
+    const infoEjercicios = await env.DB.prepare("PRAGMA table_info(ejercicios)").all();
+    const tieneCarpeta = (infoEjercicios.results || []).some(c => c.name === "carpeta");
+    if (!tieneCarpeta) await env.DB.prepare("ALTER TABLE ejercicios ADD COLUMN carpeta TEXT DEFAULT ''").run();
     // slot_deseado: el horario que el comprador de la Clase de prueba elige ANTES de pagar
     // (baja la fricción del checkout). confirmarCompra lo auto-reserva al confirmar el pago.
     const infoCompras = await env.DB.prepare("PRAGMA table_info(compras)").all();
@@ -2500,6 +2505,42 @@ export default {
             "INSERT INTO ejercicios (id,titulo,descripcion,url,curso,fecha) VALUES (?1,?2,?3,?4,?5,?6)"
           ).bind(crypto.randomUUID(), titulo, descripcion, "/api/recurso/archivo/" + key, curso, hoy()).run();
           return json({ ok: true });
+        }
+
+        /* -------- Biblioteca de ejercicios: subir una carpeta completa (batch) a R2 --------
+           FormData: "archivos" repetido (un File por entrada) + "rutas" repetido en el mismo
+           orden (la webkitRelativePath de cada archivo, ej "Vocalizos/Semana 1/audio.mp3").
+           El título de cada ejercicio sale del nombre de archivo; "carpeta" = la ruta sin el
+           nombre de archivo, para poder agruparlos después en el admin. */
+        if (url.pathname === "/api/admin/ejercicio/carpeta" && request.method === "POST"){
+          const form = await request.formData().catch(() => null);
+          if (!form) return json({ error: "Formulario inválido" }, 400);
+          const archivos = form.getAll("archivos").filter(a => a && typeof a !== "string" && typeof a.arrayBuffer === "function");
+          const rutas = form.getAll("rutas").map(r => String(r || ""));
+          if (!archivos.length) return json({ error: "No llegó ningún archivo" }, 400);
+          if (archivos.length > 200) return json({ error: "Máximo 200 archivos por carpeta" }, 400);
+          const cursos = ["Todos", "Canto", "Piano", "Composición"];
+          const curso = cursos.includes(form.get("curso")) ? form.get("curso") : "Todos";
+          let subidos = 0, saltados = 0;
+          for (let i = 0; i < archivos.length; i++){
+            const archivo = archivos[i];
+            const ruta = rutas[i] || archivo.name;
+            const ext = extArchivo(archivo.name);
+            if (!ext || archivo.size > 25 * 1024 * 1024){ saltados++; continue; }
+            const key = crypto.randomUUID() + "." + ext;
+            const nombreLimpio = nombreArchivoLimpio(archivo.name);
+            const titulo = nombreLimpio.replace(/\.[a-z0-9]+$/i, "");
+            const partes = ruta.split("/").filter(Boolean);
+            const carpeta = partes.slice(0, -1).join("/").slice(0, 200);
+            await env.RECURSOS_R2.put(key, archivo, {
+              httpMetadata: { contentType: MIME_ARCHIVO[ext], contentDisposition: 'inline; filename="' + nombreLimpio + '"' }
+            });
+            await env.DB.prepare(
+              "INSERT INTO ejercicios (id,titulo,descripcion,url,curso,fecha,carpeta) VALUES (?1,?2,?3,?4,?5,?6,?7)"
+            ).bind(crypto.randomUUID(), titulo, "", "/api/recurso/archivo/" + key, curso, hoy(), carpeta).run();
+            subidos++;
+          }
+          return json({ ok: true, subidos, saltados });
         }
 
         /* -------- Biblioteca de ejercicios: borrar uno -------- */
