@@ -512,10 +512,7 @@
       <h2>// Pagos y reservas del portal</h2>
       <div class="cfgrow"><span class="pk">Número Yape / Plin</span><input id="cfg_pago_numero" type="text" placeholder="999 999 999" /></div>
       <div class="cfgrow"><span class="pk">Titular (como sale en Yape)</span><input id="cfg_pago_titular" type="text" placeholder="Nombre Apellido" /></div>
-      <div class="cfgrow"><span class="pk">Link de Calendly</span><input id="cfg_calendly_url" type="text" placeholder="https://calendly.com/tu-usuario/clase" /></div>
       <p class="hint">Hasta que llenes el número, el portal manda a los alumnos a coordinarte el pago por WhatsApp.</p>
-      <div class="cfgrow"><span class="pk">Link del Discord</span><input id="cfg_discord_url" type="text" placeholder="https://discord.gg/..." /></div>
-      <p class="hint" style="margin-top:-4px;">Botón "Entrar al Discord" en el portal.</p>
       <div class="cfgrow"><span class="pk">Google Client ID</span><input id="cfg_google_client_id" type="text" placeholder="xxxxx.apps.googleusercontent.com" /></div>
       <p class="hint" style="margin-top:-4px;">Enciende el botón de Google del portal · termina en .apps.googleusercontent.com</p>
       <div class="cfgrow"><span class="pk">BCP cuenta (Soles)</span><input id="cfg_bcp_cuenta" type="text" placeholder="19100000000000" /></div>
@@ -1095,8 +1092,6 @@ function renderAjustes(){
   }).join("");
   el("cfg_pago_numero").value=(db.config&&db.config.pago_numero)||"";
   el("cfg_pago_titular").value=(db.config&&db.config.pago_titular)||"";
-  el("cfg_calendly_url").value=(db.config&&db.config.calendly_url)||"";
-  el("cfg_discord_url").value=(db.config&&db.config.discord_url)||"";
   el("cfg_google_client_id").value=(db.config&&db.config.google_client_id)||"";
   el("cfg_bcp_cuenta").value=(db.config&&db.config.bcp_cuenta)||"";
   el("cfg_bcp_cci").value=(db.config&&db.config.bcp_cci)||"";
@@ -1794,8 +1789,6 @@ el("btnGuardarAjustes").addEventListener("click",function(){
   });
   var cfg={ pago_numero:el("cfg_pago_numero").value.trim(),
             pago_titular:el("cfg_pago_titular").value.trim(),
-            calendly_url:el("cfg_calendly_url").value.trim(),
-            discord_url:el("cfg_discord_url").value.trim(),
             google_client_id:el("cfg_google_client_id").value.trim(),
             bcp_cuenta:el("cfg_bcp_cuenta").value.trim(),
             bcp_cci:el("cfg_bcp_cci").value.trim(),

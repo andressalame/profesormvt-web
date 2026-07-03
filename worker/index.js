@@ -12,12 +12,12 @@
      POST /api/cuenta/password         (Bearer) {actual, nueva} -> {ok}
      POST /api/registro                ahora acepta ref opcional (código de referido; inválido se ignora)
      GET  /api/me                      ahora incluye: ref_code, credito, referidos{registrados,compraron},
-                                       recursos[], pagos[], clasesHistorico, tieneGoogle, tienePassword, discord_url
+                                       recursos[], pagos[], clasesHistorico, tieneGoogle, tienePassword
      POST /api/comprar                 aplica crédito como descuento (snapshot en compras.descuento)
      POST /api/admin/compra confirmar  + premia S/50 al referidor en la 1ª compra confirmada del referido
                                        + consume el crédito usado por el comprador
      POST /api/admin/recurso           {accion:'crear'|'borrar', ...}
-     POST /api/admin/config            acepta también discord_url y google_client_id
+     POST /api/admin/config            acepta también google_client_id
 */
 "use strict";
 
@@ -61,6 +61,7 @@ const json = (data, status) => new Response(JSON.stringify(data), {
 const enc = new TextEncoder();
 function hex(buf){ return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, "0")).join(""); }
 function randHex(nBytes){ const a = new Uint8Array(nBytes); crypto.getRandomValues(a); return hex(a.buffer); }
+async function sha256Hex(texto){ return hex(await crypto.subtle.digest("SHA-256", enc.encode(texto))); }
 function hoy(){ return new Date().toISOString().slice(0, 10); }
 function safeEq(a, b){
   if (typeof a !== "string" || typeof b !== "string" || a.length !== b.length) return false;
@@ -216,7 +217,7 @@ async function loadPrecios(env){
 }
 async function loadConfig(env){
   const { results } = await env.DB.prepare("SELECT clave, valor FROM config").all();
-  const c = { calendly_url: "", pago_numero: "", pago_titular: "", discord_url: "", google_client_id: "", bcp_cuenta: "", bcp_cci: "", scotia_cuenta: "", scotia_cci: "", crypto_moneda: "", crypto_red: "", crypto_wallet: "",
+  const c = { pago_numero: "", pago_titular: "", google_client_id: "", bcp_cuenta: "", bcp_cci: "", scotia_cuenta: "", scotia_cci: "", crypto_moneda: "", crypto_red: "", crypto_wallet: "",
               profe_nombre: "", profe_foto: "", profe_marca: "",
               gcal_client_id: "", gcal_client_secret: "", gcal_refresh_token: "", gcal_calendar_id: "primary", gcal_nonce: "",
               salud_gcal: "ok", salud_gcal_aviso_utc: "", salud_correo_estado: "ok", salud_correo_aviso_utc: "" };
@@ -344,26 +345,20 @@ async function correoBienvenidaAlumno(env, cu, compra){
   const nombrePaquete = ({ "Paquete 4":"Esencial", "Paquete 8":"Intensivo", "Paquete 12":"Estrella", "Clase suelta":"Clase suelta", "Clase de prueba":"Clase de prueba" })[compra.paquete] || compra.paquete || "";
   const portal = MARCA.dominio + "/alumnos/";
   const wa = "https://wa.me/" + MARCA.whatsapp;
-  const discordLine = cfg.discord_url
-    ? '<li><b>Tu Discord (zona VIP):</b> <a href="' + cfg.discord_url + '">entra aquí</a>, ahí resolvemos dudas y compartimos material entre clases.</li>'
-    : '';
-  const agendaLine = cfg.calendly_url
-    ? '<li><b>Agenda tu primera clase:</b> <a href="' + cfg.calendly_url + '">elige tu horario aquí</a>.</li>'
-    : '<li><b>Agenda tu primera clase:</b> escríbeme por <a href="' + wa + '">WhatsApp</a> y la cuadramos.</li>';
+  const agendaLine = '<li><b>Agenda tu primera clase:</b> escríbeme por <a href="' + wa + '">WhatsApp</a> y la cuadramos.</li>';
   const html =
     '<div style="font-family:Arial,Helvetica,sans-serif;max-width:480px;margin:0 auto;color:#1a1a1a;font-size:15px;line-height:1.6">' +
       '<p>¡Bienvenido' + (nombre ? ' ' + nombre : '') + '! 🎸</p>' +
       '<p>Acabas de dar el paso y me alegra un montón tenerte. Tu paquete <b>' + nombrePaquete + '</b> ya está activo. Acá tienes todo para arrancar:</p>' +
       '<ul style="padding-left:18px">' +
         '<li><b>Tu portal:</b> <a href="' + portal + '">' + portal + '</a>, ahí ves tus clases, tu material y tu avance.</li>' +
-        discordLine + agendaLine +
+        agendaLine +
       '</ul>' +
       '<p>Cualquier cosa me escribes directo. Vamos a hacer que esto suene.</p>' +
       '<p>Un abrazo,<br><b>' + MARCA.profe + '</b><br>' + MARCA.nombre + '</p>' +
     '</div>';
   const text = '¡Bienvenido' + (nombre ? ' ' + nombre : '') + '!\n\nTu paquete ' + nombrePaquete + ' ya está activo. Para arrancar:\n- Tu portal: ' + portal + '\n' +
-    (cfg.discord_url ? '- Discord: ' + cfg.discord_url + '\n' : '') +
-    (cfg.calendly_url ? '- Agenda tu clase: ' + cfg.calendly_url + '\n' : '- Agenda escribiéndome por WhatsApp: ' + wa + '\n') +
+    '- Agenda escribiéndome por WhatsApp: ' + wa + '\n' +
     '\nCualquier cosa me escribes.\n\nUn abrazo,\n' + MARCA.profe + ' - ' + MARCA.nombre;
   return enviarCorreo(env, { to: cu.email, subject: "Ya estás dentro de " + MARCA.nombre + " 🎸", html: html, text: text });
 }
@@ -955,7 +950,7 @@ function onboardingSystemAdmin(){
 
     "AJUSTES — precios y pagos del portal: 'Precios de paquetes (S/)' edita cada precio (Clase de prueba, Clase " +
     "suelta, Paquete 4/8/12). Métodos de pago manuales: Número Yape/Plin/Sip, Titular, cuentas BCP y Scotiabank " +
-    "(cuenta y CCI), datos de cripto (moneda, red, wallet). También: Link de Calendly, Link del Discord, Google " +
+    "(cuenta y CCI), datos de cripto (moneda, red, wallet). También: Google " +
     "Client ID (para el botón 'Ingresar con Google' del portal), plantilla del mensaje de WhatsApp de renovación " +
     "(admite {nombre} y {curso}), y activar avisos push. Todo se guarda con 'Guardar ajustes'.\n\n" +
 
@@ -1569,6 +1564,11 @@ async function ensureSchema(env){
     await env.DB.prepare(
       "CREATE TABLE IF NOT EXISTS onboarding_ia_uso (clave TEXT PRIMARY KEY, mensajes INTEGER DEFAULT 0)"
     ).run();
+    // reset_tokens: reset de contraseña self-service (02-jul-2026). Solo se guarda el hash del
+    // token (nunca el token en claro), con expira a 30 min. Un uso, dedupe por cuenta al pedir uno nuevo.
+    await env.DB.prepare(
+      "CREATE TABLE IF NOT EXISTS reset_tokens (token_hash TEXT PRIMARY KEY, cuenta_id TEXT, expira TEXT, usado INTEGER DEFAULT 0)"
+    ).run();
     _schemaChecked = true;
   } catch (e) { /* otra invocación pudo correrla en paralelo; se reintenta en la próxima request */ }
 }
@@ -1588,6 +1588,81 @@ export default {
       if (url.pathname === "/api/publico" && request.method === "GET"){
         const cfg = await loadConfig(env);
         return json({ google_client_id: cfg.google_client_id || "" });
+      }
+
+      /* ============ RESET DE CONTRASEÑA (self-service, sin auth) ============
+         Reemplaza el "escríbele por WhatsApp al profesor" — necesario para vender el software
+         (Batuta) sin que cada reset dependa de Andrés. Sin enumeración de cuentas: siempre {ok:true}. */
+      if (url.pathname === "/api/password/olvide" && request.method === "POST"){
+        const ip = request.headers.get("CF-Connecting-IP") || "";
+        if (ip && await chatbotPasoTope(env, "pwr:" + ip, 5)){
+          return json({ ok: true });   // no delatar el rate-limit tampoco
+        }
+        const b = await request.json().catch(() => ({}));
+        const email = String(b.email || "").trim().toLowerCase();
+        if (emailOk(email)){
+          const cu = await env.DB.prepare("SELECT * FROM cuentas WHERE email = ?1").bind(email).first();
+          if (cu){
+            if (cu.pass_hash){
+              const token = randHex(32);
+              const tokenHash = await sha256Hex(token);
+              const expira = new Date(Date.now() + 30 * 60000).toISOString();
+              await env.DB.batch([
+                env.DB.prepare("DELETE FROM reset_tokens WHERE cuenta_id = ?1").bind(cu.id),
+                env.DB.prepare("INSERT INTO reset_tokens (token_hash, cuenta_id, expira, usado) VALUES (?1, ?2, ?3, 0)").bind(tokenHash, cu.id, expira)
+              ]);
+              const link = MARCA.dominio + "/alumnos/?reset=" + token;
+              const nombre = ((cu.nombre || "").trim().split(/\s+/)[0]) || "";
+              const html =
+                '<div style="font-family:Arial,Helvetica,sans-serif;max-width:480px;margin:0 auto;color:#1a1a1a;font-size:15px;line-height:1.6">' +
+                  '<p>Hola' + (nombre ? ' ' + nombre : '') + ' 🎸</p>' +
+                  '<p>Pediste restablecer tu contraseña de ' + MARCA.nombre + '. Toca el botón para elegir una nueva.</p>' +
+                  '<p style="text-align:center;margin:26px 0"><a href="' + link + '" style="background:#e8501f;color:#ffffff;text-decoration:none;font-weight:bold;padding:14px 26px;border-radius:6px;display:inline-block">Elegir mi nueva contraseña</a></p>' +
+                  '<p style="font-size:13px;color:#666666">Este enlace expira en 30 minutos. Si no lo pediste, ignora este correo, tu cuenta sigue segura.</p>' +
+                  '<p>Un abrazo,<br><b>' + MARCA.profe + '</b><br>' + MARCA.nombre + '</p>' +
+                '</div>';
+              const text = 'Hola' + (nombre ? ' ' + nombre : '') + '!\n\nPediste restablecer tu contraseña de ' + MARCA.nombre + '. Entra aquí:\n' + link + '\n\nEste enlace expira en 30 minutos. Si no lo pediste, ignora este correo.\n\nUn abrazo,\n' + MARCA.profe + ' - ' + MARCA.nombre;
+              try { await enviarCorreo(env, { to: email, subject: "Restablece tu contraseña", html: html, text: text }); } catch (e) {}
+            } else {
+              const nombre = ((cu.nombre || "").trim().split(/\s+/)[0]) || "";
+              const html =
+                '<div style="font-family:Arial,Helvetica,sans-serif;max-width:480px;margin:0 auto;color:#1a1a1a;font-size:15px;line-height:1.6">' +
+                  '<p>Hola' + (nombre ? ' ' + nombre : '') + ' 🎸</p>' +
+                  '<p>Tu cuenta de ' + MARCA.nombre + ' entra con el botón de Google, así que no tiene contraseña que restablecer.</p>' +
+                  '<p>Entra desde el portal con el mismo botón "Continuar con Google" que usaste la primera vez.</p>' +
+                  '<p>Un abrazo,<br><b>' + MARCA.profe + '</b><br>' + MARCA.nombre + '</p>' +
+                '</div>';
+              const text = 'Hola' + (nombre ? ' ' + nombre : '') + '!\n\nTu cuenta de ' + MARCA.nombre + ' entra con el botón de Google, no tiene contraseña. Entra desde el portal con "Continuar con Google".\n\nUn abrazo,\n' + MARCA.profe + ' - ' + MARCA.nombre;
+              try { await enviarCorreo(env, { to: email, subject: "Tu cuenta entra con Google", html: html, text: text }); } catch (e) {}
+            }
+          }
+        }
+        return json({ ok: true });
+      }
+
+      if (url.pathname === "/api/password/reset" && request.method === "POST"){
+        const b = await request.json().catch(() => ({}));
+        const token = String(b.token || "").trim();
+        const nueva = String(b.nueva || "");
+        if (!/^[a-f0-9]{64}$/.test(token)){
+          return json({ error: "El enlace ya no es válido. Pide uno nuevo." }, 400);
+        }
+        if (nueva.length < 8){
+          return json({ error: "La contraseña necesita mínimo 8 caracteres." }, 400);
+        }
+        const tokenHash = await sha256Hex(token);
+        const rt = await env.DB.prepare("SELECT * FROM reset_tokens WHERE token_hash = ?1").bind(tokenHash).first();
+        if (!rt || rt.usado || new Date(rt.expira).getTime() < Date.now()){
+          return json({ error: "El enlace ya no es válido. Pide uno nuevo." }, 400);
+        }
+        const salt = randHex(16);
+        const hash = await hashPass(nueva, salt);
+        await env.DB.batch([
+          env.DB.prepare("UPDATE cuentas SET pass_hash = ?1, pass_salt = ?2 WHERE id = ?3").bind(hash, salt, rt.cuenta_id),
+          env.DB.prepare("UPDATE reset_tokens SET usado = 1 WHERE token_hash = ?1").bind(tokenHash),
+          env.DB.prepare("DELETE FROM sesiones WHERE cuenta_id = ?1").bind(rt.cuenta_id)
+        ]);
+        return json({ ok: true });
       }
 
       /* ============ ARCHIVO DE RECURSO (PDF / audio servido desde R2) ============ */
@@ -1965,8 +2040,8 @@ export default {
           clasesHistorico,
           proximasClases,
           config: {
-            calendly_url: config.calendly_url, pago_numero: config.pago_numero,
-            pago_titular: config.pago_titular, discord_url: config.discord_url,
+            pago_numero: config.pago_numero,
+            pago_titular: config.pago_titular,
             bcp_cuenta: config.bcp_cuenta, bcp_cci: config.bcp_cci,
             scotia_cuenta: config.scotia_cuenta, scotia_cci: config.scotia_cci,
             crypto_moneda: config.crypto_moneda, crypto_red: config.crypto_red, crypto_wallet: config.crypto_wallet,
@@ -2667,7 +2742,7 @@ export default {
 
         if (url.pathname === "/api/admin/config" && request.method === "POST"){
           const b = await request.json().catch(() => ({}));
-          const claves = ["calendly_url", "pago_numero", "pago_titular", "discord_url", "google_client_id", "bcp_cuenta", "bcp_cci", "scotia_cuenta", "scotia_cci", "crypto_moneda", "crypto_red", "crypto_wallet", "profe_nombre", "profe_marca", "profe_foto", "gcal_client_id", "gcal_client_secret", "gcal_calendar_id"];
+          const claves = ["pago_numero", "pago_titular", "google_client_id", "bcp_cuenta", "bcp_cci", "scotia_cuenta", "scotia_cci", "crypto_moneda", "crypto_red", "crypto_wallet", "profe_nombre", "profe_marca", "profe_foto", "gcal_client_id", "gcal_client_secret", "gcal_calendar_id"];
           const stmts = [];
           for (const k of claves){
             if (k in b){

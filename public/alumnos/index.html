@@ -353,7 +353,26 @@
     <div class="field"><label for="l_pass">Contraseña</label><input id="l_pass" type="password" autocomplete="current-password" /></div>
     <button class="btn full" id="btnLogin">Ingresar</button>
     <div class="err" id="loginErr"></div>
-    <p class="auth-hint">¿Olvidaste tu contraseña? <a id="lnkOlvide" href="#" target="_blank" rel="noopener">Escríbeme por WhatsApp</a> y te la restablezco.</p>
+    <p class="auth-hint">¿Olvidaste tu contraseña? <a id="lnkOlvide" href="#">Recupérala aquí</a>.</p>
+  </div>
+
+  <div id="formOlvide" class="hidden">
+    <div class="field"><label for="o_email">Correo con el que te registraste</label><input id="o_email" type="email" autocomplete="email" /></div>
+    <button class="btn full" id="btnOlvide">Enviarme el enlace</button>
+    <div class="err" id="olvideErr"></div>
+    <p class="auth-hint" id="olvideOk"></p>
+    <p class="auth-hint">¿No te llega? <a id="lnkOlvideWa" href="#" target="_blank" rel="noopener">Escríbele a tu profesor por WhatsApp</a>.</p>
+    <p class="auth-hint"><a href="#" id="lnkVolverLogin">← Volver a ingresar</a></p>
+  </div>
+
+  <div id="formResetPass" class="hidden">
+    <p class="sub">Elige tu nueva contraseña</p>
+    <div class="field"><label for="rp_nueva">Nueva contraseña (mínimo 8 caracteres)</label><input id="rp_nueva" type="password" autocomplete="new-password" /></div>
+    <div class="field"><label for="rp_confirma">Confírmala</label><input id="rp_confirma" type="password" autocomplete="new-password" /></div>
+    <button class="btn full" id="btnResetPass">Guardar mi nueva contraseña</button>
+    <div class="err" id="resetPassErr"></div>
+    <p class="auth-hint hidden" id="resetPassOk">Listo, entra con tu nueva contraseña.</p>
+    <p class="auth-hint hidden" id="resetPassPedirNuevo"><a href="#" id="lnkPedirNuevoEnlace">Pedir un enlace nuevo</a></p>
   </div>
 
   <div id="formReg" class="hidden">
@@ -783,13 +802,89 @@ function api(path, opts){
 /* ---------- AUTH ---------- */
 function setAuthTab(which){
   var login = which === "login";
+  var reg = which === "reg";
   $("tabLogin").classList.toggle("active", login);
-  $("tabReg").classList.toggle("active", !login);
+  $("tabReg").classList.toggle("active", reg);
   $("formLogin").classList.toggle("hidden", !login);
-  $("formReg").classList.toggle("hidden", login);
+  $("formReg").classList.toggle("hidden", !reg);
+  $("formOlvide").classList.add("hidden");
+  $("formResetPass").classList.add("hidden");
 }
 $("tabLogin").addEventListener("click",function(){ setAuthTab("login"); });
 $("tabReg").addEventListener("click",function(){ setAuthTab("reg"); });
+
+/* ---------- OLVIDÉ MI CONTRASEÑA ---------- */
+$("lnkOlvide").addEventListener("click",function(e){
+  e.preventDefault();
+  $("formLogin").classList.add("hidden");
+  $("formReg").classList.add("hidden");
+  $("formResetPass").classList.add("hidden");
+  $("olvideErr").textContent=""; $("olvideOk").textContent="";
+  $("o_email").value = $("l_email").value.trim();
+  show("formOlvide");
+});
+$("lnkVolverLogin").addEventListener("click",function(e){ e.preventDefault(); setAuthTab("login"); });
+$("btnOlvide").addEventListener("click",function(){
+  $("olvideErr").textContent=""; $("olvideOk").textContent="";
+  var email=$("o_email").value.trim();
+  if(!email){ $("olvideErr").textContent="Escribe tu correo."; return; }
+  $("btnOlvide").disabled=true;
+  api("/api/password/olvide",{method:"POST",body:JSON.stringify({email:email})})
+    .then(function(){ $("olvideOk").textContent="Si ese correo tiene cuenta, te acaba de llegar un enlace (revisa spam)."; })
+    .catch(function(){ $("olvideOk").textContent="Si ese correo tiene cuenta, te acaba de llegar un enlace (revisa spam)."; })
+    .finally(function(){ $("btnOlvide").disabled=false; });
+});
+$("o_email").addEventListener("keydown",function(e){ if(e.key==="Enter") $("btnOlvide").click(); });
+
+/* ---------- RESET DE CONTRASEÑA (?reset=TOKEN) ---------- */
+var RESET_TOKEN = "";
+function limpiarQueryReset(){
+  try{
+    var u=new URL(location.href);
+    u.searchParams.delete("reset");
+    history.replaceState({}, "", u.pathname + (u.search?u.search:"") + u.hash);
+  }catch(e){}
+}
+function mostrarFormResetPass(){
+  setPantalla("viewAuth");
+  $("formLogin").classList.add("hidden");
+  $("formReg").classList.add("hidden");
+  $("formOlvide").classList.add("hidden");
+  $("gWrap").classList.add("hidden");
+  $("resetPassErr").textContent="";
+  $("resetPassOk").classList.add("hidden");
+  $("resetPassPedirNuevo").classList.add("hidden");
+  $("rp_nueva").value=""; $("rp_confirma").value="";
+  show("formResetPass");
+}
+$("btnResetPass").addEventListener("click",function(){
+  $("resetPassErr").textContent="";
+  var nueva=$("rp_nueva").value, confirma=$("rp_confirma").value;
+  if(nueva.length<8){ $("resetPassErr").textContent="La contraseña necesita mínimo 8 caracteres."; return; }
+  if(nueva!==confirma){ $("resetPassErr").textContent="Las contraseñas no coinciden."; return; }
+  $("btnResetPass").disabled=true;
+  api("/api/password/reset",{method:"POST",body:JSON.stringify({token:RESET_TOKEN,nueva:nueva})})
+    .then(function(){
+      limpiarQueryReset();
+      $("formResetPass").classList.add("hidden");
+      $("resetPassOk").classList.remove("hidden");
+      setTimeout(function(){ setAuthTab("login"); },1800);
+    })
+    .catch(function(e){
+      $("resetPassErr").textContent = e.message || "El enlace ya no es válido. Pide uno nuevo.";
+      $("resetPassPedirNuevo").classList.remove("hidden");
+    })
+    .finally(function(){ $("btnResetPass").disabled=false; });
+});
+$("lnkPedirNuevoEnlace").addEventListener("click",function(e){
+  e.preventDefault();
+  limpiarQueryReset();
+  setAuthTab("login");
+  $("lnkOlvide").click();
+});
+["rp_nueva","rp_confirma"].forEach(function(id){
+  $(id).addEventListener("keydown",function(e){ if(e.key==="Enter") $("btnResetPass").click(); });
+});
 
 $("btnLogin").addEventListener("click",function(){
   $("loginErr").textContent="";
@@ -1838,7 +1933,7 @@ function aplicarMarca(){
   $("logoSidebar").innerHTML = MARCA.logoHtml + '<span class="dot"></span>';
   $("eyebrowAuth").textContent = "// " + MARCA.nombre.toUpperCase();
   $("eyebrowInicio").textContent = "// " + MARCA.nombre.toUpperCase() + " — PORTAL DE ALUMNO";
-  $("lnkOlvide").href = "https://wa.me/"+MARCA.whatsapp+"?text="+encodeURIComponent("Hola "+MARCA.profe+", olvidé mi contraseña del portal de alumno");
+  $("lnkOlvideWa").href = "https://wa.me/"+MARCA.whatsapp+"?text="+encodeURIComponent("Hola "+MARCA.profe+", olvidé mi contraseña del portal de alumno");
   $("txtMktCheck").textContent = "Quiero recibir novedades, tips y promociones de " + MARCA.nombre + " por correo. (Opcional)";
   $("c_curso").innerHTML = MARCA.cursos.map(function(c){ return "<option>"+esc(c)+"</option>"; }).join("");
   $("txtOnbPaso1").textContent = "Elige " + cursosOrLower() + " (o combínalos).";
@@ -1847,6 +1942,7 @@ function aplicarMarca(){
 }
 
 /* ---------- INIT ---------- */
+try{ RESET_TOKEN = (new URLSearchParams(location.search).get("reset") || "").trim(); }catch(e){}
 (function init(){
   aplicarMarca();
   if(REF_URL) $("r_ref").value = REF_URL;
@@ -1854,6 +1950,7 @@ function aplicarMarca(){
     GOOGLE_CLIENT = (d && d.google_client_id) || "";
     if(GOOGLE_CLIENT) cargarGoogle();
   }).catch(function(){});
+  if(RESET_TOKEN){ mostrarFormResetPass(); return; }
   if(getTok()){ cargarMe(); }
   else { setAuthTab(REF_URL ? "reg" : "login"); setPantalla("viewAuth"); }
 })();
