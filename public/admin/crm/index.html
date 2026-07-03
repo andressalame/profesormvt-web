@@ -767,7 +767,7 @@ function apiPut(){
       setSync("Guardado ✓","ok");
     })
     .catch(function(e){
-      if(e&&e.auth){ lock("Tu clave ya no es válida."); }
+      if(e&&e.auth){ lock("Tu sesión expiró, vuelve a entrar."); }
       setSync("Sin guardar ✗","err");
       throw e; // re-lanzar: los callers deciden el toast (no lo mostramos aquí para no pisar su mensaje)
     });
@@ -828,19 +828,33 @@ function detenerRefresco(){
 function lock(msg){ el("lockErr").textContent=msg||""; el("ovLock").classList.add("open"); el("lockToken").value=""; setTimeout(function(){el("lockToken").focus();},60); }
 function unlock(){ el("ovLock").classList.remove("open"); }
 el("btnLockEnter").addEventListener("click",function(){
-  var t=el("lockToken").value.trim();
-  if(!t){ el("lockErr").textContent="Escribe tu clave."; return; }
-  token=t; el("btnLockEnter").disabled=true;
-  recargar().then(function(){
-    try{ localStorage.setItem(TOKEN_KEY,token); }catch(e){}
-    unlock(); iniciarRefresco();
-  }).catch(function(e){
-    el("lockErr").textContent = (e&&e.auth)?"Clave incorrecta.":"No se pudo conectar con la API.";
-  }).finally(function(){ el("btnLockEnter").disabled=false; });
+  var clave=el("lockToken").value.trim();
+  if(!clave){ el("lockErr").textContent="Escribe tu clave."; return; }
+  el("btnLockEnter").disabled=true;
+  fetch("/api/admin/login",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({clave:clave})})
+    .then(function(r){
+      return r.json().catch(function(){return {};}).then(function(d){
+        if(r.status===429){ throw {msg:"Demasiados intentos, espera una hora."}; }
+        if(!r.ok || !d.token){ throw {msg:d.error||"Clave incorrecta"}; }
+        return d.token;
+      });
+    })
+    .then(function(t){
+      token=t;
+      return recargar().then(function(){
+        try{ localStorage.setItem(TOKEN_KEY,token); }catch(e){}
+        unlock(); iniciarRefresco();
+      });
+    })
+    .catch(function(e){
+      token=null;
+      el("lockErr").textContent = (e&&e.msg) || "No se pudo conectar con la API.";
+    }).finally(function(){ el("btnLockEnter").disabled=false; });
 });
 el("lockToken").addEventListener("keydown",function(e){ if(e.key==="Enter") el("btnLockEnter").click(); });
 el("btnLogoutAdmin").addEventListener("click",function(){
   detenerRefresco();
+  if(token){ fetch("/api/admin/logout",{method:"POST",headers:hdr()}).catch(function(){}); }
   try{ localStorage.removeItem(TOKEN_KEY); }catch(e){}
   token=null; lock("Ingresa tu clave de admin.");
 });
@@ -1149,7 +1163,7 @@ el("perfilFotoInput").addEventListener("change",function(e){
   fetch("/api/admin/perfil/foto",{method:"POST",headers:{"authorization":"Bearer "+token},body:fd})
     .then(function(r){ return r.json().catch(function(){return {};}).then(function(d){ if(r.status===401) throw {auth:true}; if(!r.ok) throw new Error(d.error||("HTTP "+r.status)); return d; }); })
     .then(function(d){ db.config=db.config||{}; db.config.profe_foto=d.url||""; renderPerfil(); toast("Foto actualizada"); })
-    .catch(function(err){ if(err&&err.auth){ lock("Tu clave ya no es válida."); } toast((err&&err.message)||"No se pudo subir"); })
+    .catch(function(err){ if(err&&err.auth){ lock("Tu sesión expiró, vuelve a entrar."); } toast((err&&err.message)||"No se pudo subir"); })
     .finally(function(){ btn.disabled=false; btn.textContent=prev; });
 });
 el("btnPerfilFotoQuitar").addEventListener("click",function(){
@@ -1871,7 +1885,7 @@ el("btnPublicarRec").addEventListener("click",function(){
       .then(function(){ limpiarFormRecurso(); return recargar(); })
       .then(function(){ toast("Archivo publicado"); })
       .catch(function(e){
-        if(e&&e.auth){ lock("Tu clave ya no es válida."); }
+        if(e&&e.auth){ lock("Tu sesión expiró, vuelve a entrar."); }
         toast((e&&e.message)||"No se pudo subir");
       })
       .finally(function(){ btn.disabled=false; btn.textContent=prevTxt; });
@@ -1921,7 +1935,7 @@ el("btnSubirEjercicio").addEventListener("click",function(){
     .then(function(r){ return r.json().catch(function(){return {};}).then(function(d){ if(r.status===401) throw {auth:true}; if(!r.ok) throw new Error(d.error||("HTTP "+r.status)); }); })
     .then(function(){ el("ej_titulo").value=""; el("ej_desc").value=""; el("ej_file").value=""; el("ej_curso").value="Todos"; return recargar(); })
     .then(function(){ toast("Ejercicio guardado en tu biblioteca"); })
-    .catch(function(err){ if(err&&err.auth){ lock("Tu clave ya no es válida."); } toast((err&&err.message)||"No se pudo subir"); })
+    .catch(function(err){ if(err&&err.auth){ lock("Tu sesión expiró, vuelve a entrar."); } toast((err&&err.message)||"No se pudo subir"); })
     .finally(function(){ btn.disabled=false; btn.textContent=prev; });
 });
 el("btnSubirCarpeta").addEventListener("click",function(){
@@ -1947,7 +1961,7 @@ el("btnSubirCarpeta").addEventListener("click",function(){
       el("carpEstado").textContent=msg;
       return recargar().then(function(){ toast(msg); });
     })
-    .catch(function(err){ if(err&&err.auth){ lock("Tu clave ya no es válida."); } el("carpEstado").textContent=""; toast((err&&err.message)||"No se pudo subir la carpeta"); })
+    .catch(function(err){ if(err&&err.auth){ lock("Tu sesión expiró, vuelve a entrar."); } el("carpEstado").textContent=""; toast((err&&err.message)||"No se pudo subir la carpeta"); })
     .finally(function(){ btn.disabled=false; btn.textContent=prev; });
 });
 document.body.addEventListener("click",function(e){
@@ -1983,7 +1997,7 @@ document.body.addEventListener("click",function(e){
       .then(function(){ return recargar(); })
       .then(function(){ toast("Adjunto quitado"); })
       .catch(function(err){
-        if(err&&err.auth){ lock("Tu clave ya no es válida."); }
+        if(err&&err.auth){ lock("Tu sesión expiró, vuelve a entrar."); }
         toast((err&&err.message)||"No se pudo quitar");
       });
   }
@@ -2013,7 +2027,7 @@ el("fileAudio").addEventListener("change",function(e){
     .then(function(){ return recargar(); })
     .then(function(){ toast(files.length>1 ? files.length+" adjuntos subidos" : "Adjunto subido"); })
     .catch(function(err){
-      if(err&&err.auth){ lock("Tu clave ya no es válida."); }
+      if(err&&err.auth){ lock("Tu sesión expiró, vuelve a entrar."); }
       toast((err&&err.message)||"No se pudo subir");
     })
     .finally(function(){
@@ -2137,7 +2151,7 @@ function aplicarMarca(){ aplicarMarcaCursos(); aplicarMarcaTextos(); }
   if(!token){ lock(""); return; }
   setSync("Conectando…","");
   recargar().then(iniciarRefresco).catch(function(e){
-    if(e&&e.auth){ lock("Tu clave ya no es válida."); return; }
+    if(e&&e.auth){ lock("Tu sesión expiró, vuelve a entrar."); return; }
     setSync("Sin conexión ✗","err"); toast("No se pudo conectar con la API");
   });
 })();

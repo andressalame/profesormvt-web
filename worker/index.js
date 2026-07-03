@@ -247,10 +247,31 @@ async function crearSesion(env, cuentaId){
   return token;
 }
 
-/* ---------- chat: auth dual (sesión de alumno O ADMIN_TOKEN) ---------- */
-async function authChat(env, request){
+/* ---------- admin: sesión con expiración (retrocompat con el ADMIN_TOKEN crudo) ----------
+   El navegador del dueño puede seguir mandando el ADMIN_TOKEN maestro tal cual (eterno, como
+   antes) O un token de sesión de 64-hex creado por /api/admin/login (30 días, tabla sesiones
+   con cuenta_id = "__ADMIN__"). cuentaDeSesion() no sirve aquí porque hace JOIN con cuentas
+   y esa fila no existe a propósito: así una sesión de admin nunca puede colarse como alumno. */
+async function esAdminAuth(env, request){
   const auth = request.headers.get("authorization") || "";
-  if (auth.startsWith("Bearer ") && env.ADMIN_TOKEN && safeEq(auth, "Bearer " + env.ADMIN_TOKEN)){
+  if (!auth.startsWith("Bearer ")) return false;
+  if (env.ADMIN_TOKEN && safeEq(auth, "Bearer " + env.ADMIN_TOKEN)) return true;
+  const token = auth.slice(7).trim();
+  if (!/^[a-f0-9]{64}$/.test(token)) return false;
+  const row = await env.DB.prepare(
+    "SELECT expira FROM sesiones WHERE token = ?1 AND cuenta_id = '__ADMIN__'"
+  ).bind(token).first();
+  if (!row) return false;
+  if (new Date(row.expira).getTime() < Date.now()){
+    await env.DB.prepare("DELETE FROM sesiones WHERE token = ?1").bind(token).run();
+    return false;
+  }
+  return true;
+}
+
+/* ---------- chat: auth dual (sesión de alumno O admin) ---------- */
+async function authChat(env, request){
+  if (await esAdminAuth(env, request)){
     return { admin: true };
   }
   const cu = await cuentaDeSesion(env, request);
@@ -2507,10 +2528,36 @@ export default {
         return json({ ok: true, vence: nuevoVence, dias_usados_ciclo: yaUsados + dias, dias_disponibles: PAUSA_MAX_DIAS - (yaUsados + dias) });
       }
 
+      /* ----- login de admin: clave -> sesión con expiración (público, rate-limitado) -----
+         Retrocompat: el gate de abajo sigue aceptando el ADMIN_TOKEN crudo tal cual, así que
+         el dueño no queda bloqueado si nunca pasa por aquí. Este endpoint solo evita que el
+         navegador tenga que guardar el token maestro eterno. */
+      if (url.pathname === "/api/admin/login" && request.method === "POST"){
+        const ip = request.headers.get("CF-Connecting-IP") || "";
+        if (ip && await chatbotPasoTope(env, "adm:" + ip, 10)){
+          return json({ error: "Demasiados intentos, espera una hora." }, 429);
+        }
+        const b = await request.json().catch(() => ({}));
+        if (!env.ADMIN_TOKEN || !safeEq(String(b.clave || ""), env.ADMIN_TOKEN)){
+          return json({ error: "Clave incorrecta" }, 401);
+        }
+        const token = await crearSesion(env, "__ADMIN__");
+        return json({ ok: true, token: token });
+      }
+
       if (url.pathname.startsWith("/api/admin/")){
-        const auth = request.headers.get("authorization") || "";
-        if (!env.ADMIN_TOKEN || !safeEq(auth, "Bearer " + env.ADMIN_TOKEN)){
+        if (!(await esAdminAuth(env, request))){
           return json({ error: "No autorizado" }, 401);
+        }
+
+        /* ----- logout: si el Bearer es un token de sesión (no el ADMIN_TOKEN crudo), la borra ----- */
+        if (url.pathname === "/api/admin/logout" && request.method === "POST"){
+          const auth = request.headers.get("authorization") || "";
+          const token = auth.slice(7).trim();
+          if (!(env.ADMIN_TOKEN && safeEq(auth, "Bearer " + env.ADMIN_TOKEN)) && /^[a-f0-9]{64}$/.test(token)){
+            await env.DB.prepare("DELETE FROM sesiones WHERE token = ?1 AND cuenta_id = '__ADMIN__'").bind(token).run();
+          }
+          return json({ ok: true });
         }
 
         /* ----- Google Calendar: estado / iniciar conexión / desconectar ----- */
