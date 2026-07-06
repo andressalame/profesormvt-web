@@ -817,6 +817,19 @@ function mostrarPaywall(){
   el("ovPaywall").classList.add("open");
   detenerRefresco();
 }
+/* Al volver del checkout de Mercado Pago (back_url trae ?preapproval_id), vincula la
+   suscripción a esta cuenta y limpia la URL. Corre antes de pintar el trial. */
+function vincularSubSiVuelveDeMP(){
+  var q = new URLSearchParams(location.search);
+  var pid = q.get("preapproval_id");
+  if(!pid) return Promise.resolve();
+  return fetch("/app/api/t/vincular-sub",{method:"POST",headers:Object.assign({"content-type":"application/json"},hdr()),body:JSON.stringify({preapproval_id:pid})})
+    .then(function(r){ return r.json().catch(function(){return {};}); })
+    .then(function(d){
+      history.replaceState(null,"",location.pathname);
+      if(d && d.estado==="activo"){ try{ alert("Tu suscripción quedó activa. Bienvenido a Batuta!"); }catch(e){} }
+    }).catch(function(){ history.replaceState(null,"",location.pathname); });
+}
 function cargarTrialInfo(){
   return fetch("/app/api/t/me",{headers:hdr()}).then(function(r){
     if(r.status===401){ irALogin(); return null; }
@@ -2187,7 +2200,7 @@ function aplicarMarca(){ aplicarMarcaCursos(); aplicarMarcaTextos(); }
   try{ token=localStorage.getItem(TOKEN_KEY); }catch(e){}
   if(!token){ irALogin(); return; }
   setSync("Conectando…","");
-  cargarTrialInfo();
+  vincularSubSiVuelveDeMP().then(cargarTrialInfo);
   recargar().then(iniciarRefresco).catch(function(e){
     if(e&&e.auth){ irALogin(); return; }
     if(e&&e.paywall){ return; }

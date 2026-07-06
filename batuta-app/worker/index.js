@@ -34,6 +34,16 @@ const TRIAL_DIAS = 7;
 const PLANES = { profe: 49, academia: 149, xl: 249 };
 const PLAN_NOMBRE = { profe: "Profe", academia: "Academia", xl: "Academia XL" };
 const MP_TRIAL_DIAS = 7;
+/* Planes YA creados en Mercado Pago (preapproval_plan con free_trial de 7 días; la API confirmó
+   first_invoice_offset: 7). El checkout es del PLAN: el pagador se identifica al pagar (así se
+   esquiva el error "payer must be real user" del preapproval directo). Al volver, el panel
+   vincula la suscripción al tenant con /app/api/t/vincular-sub. */
+const MP_PLAN_IDS = {
+  profe: "35ba601b3de344458c0b6960b4929459",
+  academia: "cdf23adca57a40b8b53e6405ddfc274f",
+  xl: "fcb43515dbbd47e4a934e9426c3d7522"
+};
+const MP_CHECKOUT_BASE = "https://www.mercadopago.com.pe/subscriptions/checkout?preapproval_plan_id=";
 
 const json = (data, status) => new Response(JSON.stringify(data), {
   status: status || 200,
@@ -975,17 +985,43 @@ export default {
           return json({ error: "La suscripcion automatica aun no esta disponible. Escribenos por WhatsApp para activar tu plan." }, 501);
         }
 
-        const mp = await crearPreapprovalMP(env, { plan, tenant: t });
-        if (!mp.ok || !mp.data || !mp.data.init_point){
-          console.error("MP preapproval error", mp.status, mp.data);
-          return json({ error: "No se pudo iniciar la suscripcion. Intenta de nuevo o escribenos por WhatsApp." }, 502);
-        }
-
+        // Checkout del PLAN pre-creado en MP (el pagador se identifica al pagar). Guardamos el plan
+        // elegido y marcamos que estamos esperando el checkout; al volver, /vincular-sub cierra el círculo.
+        const planId = MP_PLAN_IDS[plan];
+        if (!planId) return json({ error: "Plan no valido" }, 400);
         await env.DB.prepare(
-          "UPDATE tenants SET plan = ?1, mp_preapproval_id = ?2, mp_sub_status = ?3 WHERE id = ?4"
-        ).bind(plan, mp.data.id || "", mp.data.status || "pending", t.id).run();
+          "UPDATE tenants SET plan = ?1, mp_sub_status = 'checkout_pendiente' WHERE id = ?2"
+        ).bind(plan, t.id).run();
+        return json({ init_point: MP_CHECKOUT_BASE + planId });
+      }
 
-        return json({ init_point: mp.data.init_point });
+      /* Vincula al tenant la suscripción creada en el checkout del plan. El panel llama esto al
+         volver de MP (back_url trae ?preapproval_id=...). Verificamos server-to-server contra MP
+         que el preapproval existe, es de UNO DE NUESTROS PLANES y no está ya vinculado a otro tenant. */
+      if (path === "/app/api/t/vincular-sub" && request.method === "POST"){
+        const t = await tenantDeSesion(env, request);
+        if (!t) return json({ error: "Sesion expirada" }, 401);
+        if (!env.MP_ACCESS_TOKEN) return json({ error: "No disponible" }, 501);
+        const b = await request.json().catch(() => ({}));
+        const pid = String(b.preapproval_id || "").trim();
+        if (!pid || pid.length > 64) return json({ error: "Falta preapproval_id" }, 400);
+
+        const mp = await consultarPreapprovalMP(env, pid);
+        if (!mp.ok || !mp.data) return json({ error: "No se pudo verificar la suscripcion" }, 502);
+        const esNuestro = Object.values(MP_PLAN_IDS).indexOf(String(mp.data.preapproval_plan_id || "")) !== -1;
+        if (!esNuestro) return json({ error: "Suscripcion no reconocida" }, 400);
+
+        const yaDeOtro = await env.DB.prepare(
+          "SELECT id FROM tenants WHERE mp_preapproval_id = ?1 AND id != ?2"
+        ).bind(pid, t.id).first();
+        if (yaDeOtro) return json({ error: "Esa suscripcion ya esta vinculada a otra cuenta" }, 409);
+
+        const st = String(mp.data.status || "");
+        const nuevoEstado = st === "authorized" ? "activo" : t.estado;
+        await env.DB.prepare(
+          "UPDATE tenants SET mp_preapproval_id = ?1, mp_sub_status = ?2, estado = ?3 WHERE id = ?4"
+        ).bind(pid, st, nuevoEstado, t.id).run();
+        return json({ ok: true, estado: nuevoEstado, mp_sub_status: st });
       }
 
       /* ============================================================
@@ -1016,6 +1052,16 @@ export default {
             const externalRef = String(pre.external_reference || "");
             let t = externalRef ? await env.DB.prepare("SELECT * FROM tenants WHERE id = ?1").bind(externalRef).first() : null;
             if (!t) t = await env.DB.prepare("SELECT * FROM tenants WHERE mp_preapproval_id = ?1").bind(resId).first();
+            if (!t){
+              // Fallback: checkout de plan sin vincular todavía (el pagador no volvió al panel).
+              // Solo si el preapproval es de UNO DE NUESTROS planes (verificado contra MP) y el
+              // payer_email coincide exacto con el email de un tenant.
+              const esNuestro = Object.values(MP_PLAN_IDS).indexOf(String(pre.preapproval_plan_id || "")) !== -1;
+              const payerEmail = String(pre.payer_email || "").trim().toLowerCase();
+              if (esNuestro && payerEmail){
+                t = await env.DB.prepare("SELECT * FROM tenants WHERE email = ?1 AND (mp_preapproval_id = '' OR mp_preapproval_id IS NULL)").bind(payerEmail).first();
+              }
+            }
             if (!t){ return new Response("ok", { status: 200 }); }
 
             const status = String(pre.status || "");
