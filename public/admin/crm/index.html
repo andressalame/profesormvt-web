@@ -250,6 +250,9 @@
       </div>
     </div>
     <nav class="nav">
+      <div class="navgroup-items" style="padding:2px 0 4px;">
+        <button class="tab active" data-tab="resumen">Inicio</button>
+      </div>
       <div class="navgroup">
         <button class="navgroup-h" type="button"><span class="ng-ico">👥</span><span class="ng-tx">Alumnos</span><span class="ng-chev">⌄</span></button>
         <div class="navgroup-items">
@@ -260,24 +263,23 @@
         </div>
       </div>
       <div class="navgroup">
-        <button class="navgroup-h" type="button"><span class="ng-ico">💰</span><span class="ng-tx">Dinero &amp; leads</span><span class="ng-chev">⌄</span></button>
+        <button class="navgroup-h" type="button"><span class="ng-ico">💰</span><span class="ng-tx">Cobros</span><span class="ng-chev">⌄</span></button>
         <div class="navgroup-items">
           <button class="tab" data-tab="pagos">Pagos<span class="dot hidden" id="dotPagos">0</span></button>
-          <button class="tab" data-tab="cuentas">Cuentas</button>
-          <button class="tab" data-tab="leads">Leads</button>
+          <button class="tab" data-tab="cuentas">Accesos</button>
+          <button class="tab" data-tab="leads">Interesados</button>
         </div>
       </div>
       <div class="navgroup">
         <button class="navgroup-h" type="button"><span class="ng-ico">🎵</span><span class="ng-tx">Material</span><span class="ng-chev">⌄</span></button>
         <div class="navgroup-items">
-          <button class="tab" data-tab="recursos">Recursos</button>
-          <button class="tab" data-tab="ejercicios">Ejercicios</button>
+          <button class="tab" data-tab="recursos">Para tus alumnos</button>
+          <button class="tab" data-tab="ejercicios">Tu biblioteca</button>
         </div>
       </div>
       <div class="navgroup">
-        <button class="navgroup-h" type="button"><span class="ng-ico">⚙️</span><span class="ng-tx">Mi cuenta</span><span class="ng-chev">⌄</span></button>
+        <button class="navgroup-h" type="button"><span class="ng-ico">⚙️</span><span class="ng-tx">Configuración</span><span class="ng-chev">⌄</span></button>
         <div class="navgroup-items">
-          <button class="tab active" data-tab="resumen">Resumen</button>
           <button class="tab" data-tab="perfil">Perfil</button>
           <button class="tab" data-tab="ajustes">Ajustes</button>
         </div>
@@ -302,12 +304,12 @@
     <header class="topbar">
       <button class="hamb" id="btnMenu" aria-label="Mostrar u ocultar el menú">&#9776;</button>
       <span class="hamb-tx" id="menuTxt">Menú</span>
-      <div class="eyebrow" id="topTitle">// Resumen</div>
+      <div class="eyebrow" id="topTitle">// Inicio</div>
     </header>
     <div class="content">
       <div class="pagehead">
         <div class="eyebrow" id="pageEyebrow">// CRM</div>
-        <h1 id="pageTitle">Resumen</h1>
+        <h1 id="pageTitle">Inicio</h1>
         <hr class="rule" />
       </div>
 
@@ -376,7 +378,7 @@
   </section>
 
   <section class="panel" id="panel-cuentas">
-    <p class="hint">Toda persona que se registra en el portal aparece aquí. Vincula la cuenta a su ficha de alumno para que vea sus clases. "Promos ✓" = aceptó recibir publicidad (usa "CSV emails" arriba).</p>
+    <p class="hint">Toda persona que se registra en el portal aparece aquí como Acceso. Vincula el acceso a su ficha de alumno para que vea sus clases. "Promos ✓" = aceptó recibir publicidad (usa "CSV emails" arriba).</p>
     <div class="tablewrap">
       <table><thead><tr><th>Nombre</th><th>Correo</th><th>WhatsApp</th><th>Promos</th><th>Alumno vinculado</th><th>Creada</th><th></th></tr></thead>
       <tbody id="tbCuentas"></tbody></table>
@@ -407,7 +409,7 @@
       <button class="btn" id="btnPublicarRec">Publicar</button>
     </div>
     <div class="group">
-      <h2>// RECURSOS PUBLICADOS</h2>
+      <h2>// PARA TUS ALUMNOS — PUBLICADO</h2>
       <p class="hint">Lo que publiques aquí aparece en la sección Comunidad del portal del alumno. "Todos" lo ven todos; un curso específico solo lo ven sus alumnos.</p>
       <div class="tablewrap">
         <table><thead><tr><th>Fecha</th><th>Título</th><th>Curso</th><th>Link</th><th>Descripción</th><th></th></tr></thead>
@@ -418,7 +420,7 @@
 
   <section class="panel" id="panel-ejercicios">
     <div class="group">
-      <h2>// Subir ejercicio a mi biblioteca</h2>
+      <h2>// Subir a tu biblioteca</h2>
       <p class="hint">Tu banco privado de ejercicios (audios, PDFs). <strong>No se publican</strong>: los eliges desde el desplegable al registrar una clase para mandárselos a un alumno como tarea.</p>
       <div class="frow">
         <div class="field"><label>Título</label><input id="ej_titulo" type="text" placeholder="Vocalizo de calentamiento (5 min)" /></div>
@@ -439,7 +441,7 @@
       <p class="hint" id="carpEstado"></p>
     </div>
     <div class="group">
-      <h2>// MIS EJERCICIOS</h2>
+      <h2>// TU BIBLIOTECA</h2>
       <div class="filtros">
         <input id="ejBuscar" type="search" placeholder="Buscar ejercicio…" autocomplete="off" />
         <select id="ejFiltroCurso"></select>
@@ -644,7 +646,7 @@
       <p class="hint" style="margin:5px 0 0;">Opcional. Aparece en su portal como "Lo que viene".</p></div>
     <div class="field"><label>Mandar ejercicio de tu biblioteca (tarea)</label>
       <select id="r_ejercicio"><option value="">— Ninguno —</option></select>
-      <p class="hint" style="margin:5px 0 0;">Se adjunta a esta clase como tarea para el alumno. Súbelos en Material → Ejercicios.</p></div>
+      <p class="hint" style="margin:5px 0 0;">Se adjunta a esta clase como tarea para el alumno. Súbelos en Material → Tu biblioteca.</p></div>
     <div class="modal-actions">
       <button class="btn ghost" data-close>Cancelar</button>
       <button class="btn" id="btnGuardarRegistro">Guardar</button>
@@ -1176,7 +1178,7 @@ el("btnPerfilFotoQuitar").addEventListener("click",function(){
 function renderRecursos(){
   var tb=el("tbRecursos");
   var rec=db.recursos||[];
-  if(rec.length===0){ tb.innerHTML='<tr><td colspan="6" class="empty">Aún no has publicado recursos.</td></tr>'; return; }
+  if(rec.length===0){ tb.innerHTML='<tr><td colspan="6" class="empty">Aún no has publicado nada para tus alumnos.</td></tr>'; return; }
   tb.innerHTML=rec.map(function(r){
     var urlCorta=String(r.url||'').replace(/^https?:\/\//,'').slice(0,42);
     var urlRec=String(r.url||'');
@@ -1222,7 +1224,7 @@ function renderEjercicios(){
   var cont=el("ejContador");
   var todos=db.ejercicios||[];
   fillEjFiltroCarpeta();
-  if(todos.length===0){ tb.innerHTML='<tr><td colspan="6" class="empty">Aún no tienes ejercicios. Sube tu primer audio arriba.</td></tr>'; if(cont) cont.textContent=""; return; }
+  if(todos.length===0){ tb.innerHTML='<tr><td colspan="6" class="empty">Tu biblioteca está vacía. Sube tu primer audio arriba.</td></tr>'; if(cont) cont.textContent=""; return; }
   var rows=ejFiltrados();
   if(cont) cont.textContent=rows.length+" / "+todos.length;
   if(rows.length===0){ tb.innerHTML='<tr><td colspan="6" class="empty">Nada coincide con el filtro</td></tr>'; return; }
@@ -1392,7 +1394,7 @@ function abrirGrupoActivo(){
 abrirGrupoActivo();
 
 /* ---------- Tabs / modales ---------- */
-var TITULOS={resumen:"Resumen",alumnos:"Alumnos",registro:"Clases",agenda:"Agenda",pagos:"Pagos",cuentas:"Cuentas",leads:"Leads",recursos:"Recursos",ejercicios:"Ejercicios",ajustes:"Ajustes",perfil:"Perfil",chat:"Chat"};
+var TITULOS={resumen:"Inicio",alumnos:"Alumnos",registro:"Clases",agenda:"Agenda",pagos:"Pagos",cuentas:"Accesos",leads:"Interesados",recursos:"Para tus alumnos",ejercicios:"Tu biblioteca",ajustes:"Ajustes",perfil:"Perfil",chat:"Chat"};
 document.querySelectorAll(".tab").forEach(function(t){
   t.addEventListener("click",function(){
     document.querySelectorAll(".tab").forEach(function(x){x.classList.remove("active");});

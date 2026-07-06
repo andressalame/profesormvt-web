@@ -14,3 +14,7 @@ run_worker_first = ["/app", "/app/*"]
 binding = "DB"
 database_name = "batuta-app"
 database_id = "a9b7c988-1c1e-42d4-8b6c-dc5bc7305987"
+
+[[r2_buckets]]
+binding = "RECURSOS_R2"
+bucket_name = "batuta-app-archivos"

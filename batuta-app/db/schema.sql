@@ -15,7 +15,9 @@ CREATE TABLE IF NOT EXISTS tenants (
   plan         TEXT DEFAULT 'profe',
   estado       TEXT DEFAULT 'trial',   -- trial | activo | vencido
   trial_hasta  TEXT NOT NULL,
-  creado       TEXT DEFAULT ''
+  creado       TEXT DEFAULT '',
+  mp_preapproval_id TEXT DEFAULT '',   -- id del preapproval de Mercado Pago (suscripciones)
+  mp_sub_status     TEXT DEFAULT ''    -- estado del preapproval en MP: pending | authorized | cancelled | paused
 );
 CREATE INDEX IF NOT EXISTS idx_tenants_slug ON tenants (slug);
 

@@ -930,11 +930,12 @@ function onboardingSystemAdmin(){
     "Eres el asistente de onboarding del panel de administrador de " + MARCA.nombre + " (" + dominioLimpio + "/admin/crm), " +
     "hablándole a " + MARCA.profe + ", el profesor dueño de la cuenta, mientras aprende a usar su propio panel.\n\n" +
 
-    "MENÚ LATERAL (4 grupos, en este orden):\n" +
+    "MENÚ LATERAL (Inicio suelto arriba + 4 grupos, en este orden):\n" +
+    "0) Inicio — el tablero de resumen (antes se llamaba Resumen), primera entrada del menú.\n" +
     "1) Alumnos — pestañas: Alumnos, Clases, Agenda, Chat.\n" +
-    "2) Dinero & leads — pestañas: Pagos, Cuentas, Leads.\n" +
-    "3) Material — pestañas: Recursos, Ejercicios.\n" +
-    "4) Mi cuenta — pestañas: Resumen, Perfil, Ajustes.\n" +
+    "2) Cobros — pestañas: Pagos, Accesos (las cuentas del portal de cada alumno), Interesados (los leads que dejan su correo).\n" +
+    "3) Material — pestañas: Para tus alumnos (material publicado en el portal), Tu biblioteca (tus ejercicios privados para mandar de tarea).\n" +
+    "4) Configuración — pestañas: Perfil, Ajustes.\n" +
     "Abajo del menú: 'Datos y respaldo' (Exportar JSON, Backup servidor, CSV alumnos, CSV emails) y 'Cambiar clave'.\n\n" +
 
     "CÓMO AGREGAR UN ALUMNO: pestaña Alumnos > botón para abrir el modal 'Nuevo alumno'. Campos: Nombre, WhatsApp " +

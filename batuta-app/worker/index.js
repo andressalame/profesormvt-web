@@ -29,6 +29,12 @@ const SESION_DIAS = 30;
 const CREDITO_REFERIDO = 50;
 const TRIAL_DIAS = 7;
 
+/* ---------- Suscripciones (Mercado Pago — preapproval) ----------
+   PEN mensual. plan ∈ PLANES; tenants.plan guarda la clave (profe|academia|xl). */
+const PLANES = { profe: 49, academia: 149, xl: 249 };
+const PLAN_NOMBRE = { profe: "Profe", academia: "Academia", xl: "Academia XL" };
+const MP_TRIAL_DIAS = 7;
+
 const json = (data, status) => new Response(JSON.stringify(data), {
   status: status || 200,
   headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" }
@@ -244,6 +250,61 @@ async function enviarCorreo(env, { to, subject, html, text, from }){
     });
     return r.ok;
   } catch (e) { return false; }
+}
+
+/* ---------- Mercado Pago: suscripciones (preapproval). Sin MP_ACCESS_TOKEN -> degrada con gracia. ----------
+   Doc oficial fetcheada (developers.mercadopago.com/es/docs/subscriptions/...):
+   - "subscription-no-associated-plan/pending-payments": suscripcion SIN metodo de pago fijado al crear
+     (el pagador elige tarjeta en el checkout hospedado de MP). Body confirmado por el ejemplo curl de esa pagina:
+     { reason, external_reference, payer_email, auto_recurring:{frequency, frequency_type, end_date,
+     transaction_amount, currency_id}, back_url, status:"pending" }. Este es el flujo correcto aqui: el profesor
+     hace click, MP genera init_point (checkout hospedado) y ahi asocia su tarjeta.
+   - free_trial es un sub-objeto de auto_recurring documentado en el reference de MP para preapproval
+     ({frequency, frequency_type}, mismo patron que el resto de auto_recurring) pero NO aparecio en el ejemplo
+     curl reducido de "pending-payments" que si pude leer completo (ver mensaje final para el detalle). Se
+     incluye igual porque es el nombre oficial del campo; si MP lo rechazara, el catch de abajo devuelve el
+     error tal cual lo manda MP (no rompe el flujo, ver requestMP). */
+async function mpFetch(env, path, options){
+  const r = await fetch("https://api.mercadopago.com" + path, {
+    method: (options && options.method) || "GET",
+    headers: Object.assign({
+      "Authorization": "Bearer " + env.MP_ACCESS_TOKEN,
+      "Content-Type": "application/json"
+    }, (options && options.headers) || {}),
+    body: options && options.body ? JSON.stringify(options.body) : undefined
+  });
+  let data = null;
+  try { data = await r.json(); } catch (e) { data = null; }
+  return { ok: r.ok, status: r.status, data };
+}
+
+async function crearPreapprovalMP(env, { plan, tenant }){
+  const monto = PLANES[plan];
+  const body = {
+    reason: "Batuta " + (PLAN_NOMBRE[plan] || plan),
+    external_reference: tenant.id,
+    payer_email: tenant.email,
+    auto_recurring: {
+      frequency: 1,
+      frequency_type: "months",
+      transaction_amount: monto,
+      currency_id: "PEN",
+      free_trial: { frequency: MP_TRIAL_DIAS, frequency_type: "days" }
+    },
+    back_url: MARCA.dominio + "/app/panel?sub=ok",
+    status: "pending"
+  };
+  return mpFetch(env, "/preapproval", { method: "POST", body });
+}
+
+/* Consulta server-to-server el preapproval por id (usado por el webhook para validar la notificacion) */
+async function consultarPreapprovalMP(env, preapprovalId){
+  return mpFetch(env, "/preapproval/" + encodeURIComponent(preapprovalId), { method: "GET" });
+}
+
+/* Consulta server-to-server un pago recurrente autorizado (topic subscription_authorized_payment) */
+async function consultarAuthorizedPaymentMP(env, paymentId){
+  return mpFetch(env, "/authorized_payments/" + encodeURIComponent(paymentId), { method: "GET" });
 }
 
 /* Correo de bienvenida al alumno cuando se confirma su PRIMERA compra */
@@ -624,7 +685,7 @@ function paginaRegistro(){
     "var d=await r.json();" +
     "if(!r.ok){err.textContent=d.error||'No se pudo crear tu cuenta.'; btn.disabled=false; return;}" +
     "localStorage.setItem('batuta_t', d.token);" +
-    "location.href='/app/panel';" +
+    "location.href='/app/suscribir';" +
     "}catch(ex){err.textContent='Error de conexion. Intenta de nuevo.'; btn.disabled=false;}" +
     "});";
   return paginaBase("Crea tu academia — Batuta", cuerpo, script);
@@ -657,6 +718,58 @@ function paginaLogin(){
     "}catch(ex){err.textContent='Error de conexion. Intenta de nuevo.'; btn.disabled=false;}" +
     "});";
   return paginaBase("Ingresa — Batuta", cuerpo, script);
+}
+
+function paginaSuscribir(){
+  const cuerpo =
+    "<h1>Activa tu plan</h1>" +
+    "<p class=\"sub\">S/0 hoy. Tu primer cobro es al terminar tus 7 dias de prueba. Cancela cuando quieras.</p>" +
+    "<div id=\"planes\">" +
+      "<div class=\"planopt\" data-plan=\"profe\">" +
+        "<div class=\"planopt-t\">Profe</div><div class=\"planopt-p\">S/49<span>/mes</span></div>" +
+      "</div>" +
+      "<div class=\"planopt\" data-plan=\"academia\">" +
+        "<div class=\"planopt-t\">Academia</div><div class=\"planopt-p\">S/149<span>/mes</span></div>" +
+      "</div>" +
+      "<div class=\"planopt\" data-plan=\"xl\">" +
+        "<div class=\"planopt-t\">Academia XL</div><div class=\"planopt-p\">S/249<span>/mes</span></div>" +
+      "</div>" +
+    "</div>" +
+    "<button type=\"button\" id=\"btn\">Activar plan</button>" +
+    "<div class=\"err\" id=\"err\"></div>" +
+    "<div id=\"whaBox\" style=\"display:none;text-align:center;margin-top:14px\">" +
+      "<a href=\"https://wa.me/51989077928\" target=\"_blank\"><button type=\"button\">Escribenos por WhatsApp</button></a>" +
+    "</div>" +
+    "<div class=\"foot\"><a href=\"/app/panel\">Prefiero decidir despues</a></div>" +
+    "<style>" +
+      "#planes{display:flex;flex-direction:column;gap:10px;margin-top:20px}" +
+      ".planopt{border:1px solid #2c303a;border-radius:10px;padding:14px 16px;cursor:pointer;display:flex;justify-content:space-between;align-items:center}" +
+      ".planopt.sel{border-color:var(--acento);background:rgba(232,161,61,0.08)}" +
+      ".planopt-t{font-weight:600}" +
+      ".planopt-p{color:var(--acento);font-weight:600}" +
+      ".planopt-p span{color:var(--muted);font-weight:400;font-size:12px}" +
+    "</style>";
+  const script =
+    "var planSel='profe';" +
+    "var opts=document.querySelectorAll('.planopt');" +
+    "function pintar(){opts.forEach(function(o){o.classList.toggle('sel', o.getAttribute('data-plan')===planSel);});}" +
+    "opts.forEach(function(o){o.addEventListener('click', function(){planSel=o.getAttribute('data-plan'); pintar();});});" +
+    "pintar();" +
+    "var token=localStorage.getItem('batuta_t');" +
+    "if(!token){location.href='/app/login';}" +
+    "document.getElementById('btn').addEventListener('click', async function(e){" +
+    "var err=document.getElementById('err'); err.textContent='';" +
+    "var wha=document.getElementById('whaBox'); wha.style.display='none';" +
+    "var btn=e.target; btn.disabled=true;" +
+    "try{" +
+    "var r=await fetch('/app/api/t/suscribir',{method:'POST',headers:{'content-type':'application/json','authorization':'Bearer '+token},body:JSON.stringify({plan:planSel})});" +
+    "var d=await r.json();" +
+    "if(r.status===501){err.textContent=d.error||'La suscripcion automatica aun no esta disponible.'; wha.style.display='block'; btn.disabled=false; return;}" +
+    "if(!r.ok||!d.init_point){err.textContent=d.error||'No se pudo iniciar la suscripcion.'; btn.disabled=false; return;}" +
+    "location.href=d.init_point;" +
+    "}catch(ex){err.textContent='Error de conexion. Intenta de nuevo.'; btn.disabled=false;}" +
+    "});";
+  return paginaBase("Activa tu plan — Batuta", cuerpo, script);
 }
 
 function paginaLanding(){
@@ -695,6 +808,9 @@ export default {
     if (path === "/app/login" && request.method === "GET"){
       return htmlResponse(paginaLogin());
     }
+    if (path === "/app/suscribir" && request.method === "GET"){
+      return htmlResponse(paginaSuscribir());
+    }
     if (path === "/app/panel" && request.method === "GET"){
       return env.ASSETS ? env.ASSETS.fetch(new Request(new URL("/panel/index.html", url), request)) : json({ error: "No encontrado" }, 404);
     }
@@ -717,7 +833,7 @@ export default {
         }
         if (path === "/app/api/su/tenants" && request.method === "GET"){
           const { results } = await env.DB.prepare(
-            "SELECT id, slug, academia, profe_nombre, email, estado, trial_hasta, creado FROM tenants ORDER BY creado DESC"
+            "SELECT id, slug, academia, profe_nombre, email, estado, trial_hasta, creado, plan, mp_sub_status FROM tenants ORDER BY creado DESC"
           ).all();
           return json({ tenants: results || [] });
         }
@@ -836,8 +952,115 @@ export default {
         return json({
           academia: t.academia, profe_nombre: t.profe_nombre, slug: t.slug,
           estado: t.estado, dias_trial_restantes: t.estado === "trial" ? diasRestantes : null,
-          link_alumnos: MARCA.dominio + "/app/a/" + t.slug
+          link_alumnos: MARCA.dominio + "/app/a/" + t.slug,
+          plan: t.plan || "profe",
+          mp_sub_status: t.mp_sub_status || "",
+          suscrito: t.mp_sub_status === "authorized"
         });
+      }
+
+      /* ============================================================
+         SUSCRIPCION (Mercado Pago) — requiere sesion de tenant.
+         Se resuelve ANTES del trial gate a proposito: un tenant 'vencido'
+         tambien debe poder suscribirse (asi vuelve a 'activo' via webhook).
+         ============================================================ */
+      if (path === "/app/api/t/suscribir" && request.method === "POST"){
+        const t = await tenantDeSesion(env, request);
+        if (!t) return json({ error: "Sesion expirada" }, 401);
+        const b = await request.json().catch(() => ({}));
+        const plan = String(b.plan || "").trim();
+        if (!PLANES[plan]) return json({ error: "Plan no valido" }, 400);
+
+        if (!env.MP_ACCESS_TOKEN){
+          return json({ error: "La suscripcion automatica aun no esta disponible. Escribenos por WhatsApp para activar tu plan." }, 501);
+        }
+
+        const mp = await crearPreapprovalMP(env, { plan, tenant: t });
+        if (!mp.ok || !mp.data || !mp.data.init_point){
+          console.error("MP preapproval error", mp.status, mp.data);
+          return json({ error: "No se pudo iniciar la suscripcion. Intenta de nuevo o escribenos por WhatsApp." }, 502);
+        }
+
+        await env.DB.prepare(
+          "UPDATE tenants SET plan = ?1, mp_preapproval_id = ?2, mp_sub_status = ?3 WHERE id = ?4"
+        ).bind(plan, mp.data.id || "", mp.data.status || "pending", t.id).run();
+
+        return json({ init_point: mp.data.init_point });
+      }
+
+      /* ============================================================
+         WEBHOOK de Mercado Pago (publico, sin sesion). SIEMPRE 200 "ok"
+         salvo error interno (500), para que MP no reintente sin parar.
+         Formato de notificacion confirmado por la doc oficial: llega por
+         query (?topic=&id=) o por body ({type, data:{id}}). Topics:
+         subscription_preapproval (alta/cambio de la suscripcion) y
+         subscription_authorized_payment (cada cobro recurrente).
+         ============================================================ */
+      if (path === "/app/api/mp/webhook" && request.method === "POST"){
+        try {
+          const bodyJson = await request.json().catch(() => ({}));
+          const topic = String(url.searchParams.get("topic") || url.searchParams.get("type") || bodyJson.type || bodyJson.topic || "").trim();
+          const resId = String(url.searchParams.get("id") || (bodyJson.data && bodyJson.data.id) || bodyJson.id || "").trim();
+
+          if (!env.MP_ACCESS_TOKEN || !resId){
+            return new Response("ok", { status: 200 });
+          }
+
+          if (topic === "subscription_preapproval" || topic === "preapproval"){
+            const mp = await consultarPreapprovalMP(env, resId);
+            if (!mp.ok || !mp.data){
+              console.error("MP webhook: no se pudo consultar preapproval", resId, mp.status);
+              return new Response("ok", { status: 200 });
+            }
+            const pre = mp.data;
+            const externalRef = String(pre.external_reference || "");
+            let t = externalRef ? await env.DB.prepare("SELECT * FROM tenants WHERE id = ?1").bind(externalRef).first() : null;
+            if (!t) t = await env.DB.prepare("SELECT * FROM tenants WHERE mp_preapproval_id = ?1").bind(resId).first();
+            if (!t){ return new Response("ok", { status: 200 }); }
+
+            const status = String(pre.status || "");
+            if (status === "authorized"){
+              await env.DB.prepare("UPDATE tenants SET estado = 'activo', mp_sub_status = ?1, mp_preapproval_id = ?2 WHERE id = ?3")
+                .bind(status, resId, t.id).run();
+            } else if (status === "cancelled" || status === "paused"){
+              const vencido = Date.now() > Date.parse(t.trial_hasta);
+              await env.DB.prepare("UPDATE tenants SET mp_sub_status = ?1, mp_preapproval_id = ?2, estado = ?3 WHERE id = ?4")
+                .bind(status, resId, vencido ? "vencido" : t.estado, t.id).run();
+            } else {
+              await env.DB.prepare("UPDATE tenants SET mp_sub_status = ?1, mp_preapproval_id = ?2 WHERE id = ?3")
+                .bind(status, resId, t.id).run();
+            }
+            return new Response("ok", { status: 200 });
+          }
+
+          if (topic === "subscription_authorized_payment"){
+            const mp = await consultarAuthorizedPaymentMP(env, resId);
+            if (!mp.ok || !mp.data){
+              console.error("MP webhook: no se pudo consultar authorized_payment", resId, mp.status);
+              return new Response("ok", { status: 200 });
+            }
+            const pago = mp.data;
+            const preapprovalId = String(pago.preapproval_id || "");
+            const t = preapprovalId ? await env.DB.prepare("SELECT * FROM tenants WHERE mp_preapproval_id = ?1").bind(preapprovalId).first() : null;
+            if (!t){ return new Response("ok", { status: 200 }); }
+
+            const status = String(pago.status || "");
+            if (status === "approved" || status === "processed"){
+              await env.DB.prepare("UPDATE tenants SET estado = 'activo', mp_sub_status = 'authorized' WHERE id = ?1").bind(t.id).run();
+            } else {
+              const vencido = Date.now() > Date.parse(t.trial_hasta);
+              if (vencido){
+                await env.DB.prepare("UPDATE tenants SET estado = 'vencido' WHERE id = ?1").bind(t.id).run();
+              }
+            }
+            return new Response("ok", { status: 200 });
+          }
+
+          return new Response("ok", { status: 200 });
+        } catch (e) {
+          console.error("MP webhook error", e);
+          return json({ error: "Error del servidor" }, 500);
+        }
       }
 
       /* ============================================================
