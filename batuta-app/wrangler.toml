@@ -5,11 +5,12 @@ compatibility_flags = ["nodejs_compat"]
 
 [assets]
 directory = "./public"
-not_found_handling = "404-page"
 binding = "ASSETS"
+html_handling = "none"
+not_found_handling = "none"
 run_worker_first = ["/app", "/app/*"]
 
 [[d1_databases]]
 binding = "DB"
 database_name = "batuta-app"
-database_id = "PENDIENTE"
+database_id = "a9b7c988-1c1e-42d4-8b6c-dc5bc7305987"

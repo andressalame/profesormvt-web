@@ -1712,6 +1712,44 @@ export default {
                         vapid_public: env.VAPID_PUBLIC_KEY || "" });
         }
 
+        /* Guardado masivo del panel (alumnos + registro + precios), scoped al tenant.
+           Mismo contrato que el core (PUT reemplaza esas 3 tablas DEL TENANT), portado con tenant_id. */
+        if (path === "/app/api/admin/data" && request.method === "PUT"){
+          const body = await request.json().catch(() => null);
+          if (!body || !Array.isArray(body.alumnos) || !Array.isArray(body.registro)){
+            return json({ error: "Cuerpo inválido" }, 400);
+          }
+          const stmts = [
+            env.DB.prepare("DELETE FROM registro WHERE tenant_id = ?1").bind(tid),
+            env.DB.prepare("DELETE FROM alumnos WHERE tenant_id = ?1").bind(tid),
+            env.DB.prepare("DELETE FROM precios WHERE tenant_id = ?1").bind(tid)
+          ];
+          for (const a of body.alumnos){
+            stmts.push(env.DB.prepare(
+              "INSERT INTO alumnos (id,tenant_id,codigo,nombre,whatsapp,curso,paquete,fecha,pago,horario,notas,ciclo) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12)"
+            ).bind(
+              a.id, tid, String(a.codigo || "").toUpperCase() || randHex(3).toUpperCase(), a.nombre,
+              a.whatsapp || "", a.curso || "", a.paquete || "",
+              a.fecha || "", a.pago || "", a.horario || "", a.notas || "", a.ciclo || 1
+            ));
+          }
+          for (const r of body.registro){
+            stmts.push(env.DB.prepare(
+              "INSERT INTO registro (id,tenant_id,fecha,alumno_id,curso,estado,trabajo,tarea,ciclo,tarea_audio,plan) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11)"
+            ).bind(
+              r.id, tid, r.fecha || "", r.alumnoId || r.alumno_id,
+              r.curso || "", r.estado || "", r.trabajo || "", r.tarea || "", r.ciclo || 1,
+              r.tarea_audio || "", r.plan || ""
+            ));
+          }
+          const preciosPut = body.precios || {};
+          for (const k of Object.keys(preciosPut)){
+            stmts.push(env.DB.prepare("INSERT INTO precios (tenant_id, paquete, precio) VALUES (?1, ?2, ?3)").bind(tid, k, Number(preciosPut[k]) || 0));
+          }
+          await env.DB.batch(stmts);
+          return json({ ok: true });
+        }
+
         if (path === "/app/api/admin/config" && request.method === "POST"){
           const b = await request.json().catch(() => ({}));
           const claves = ["pago_numero", "pago_titular", "bcp_cuenta", "bcp_cci", "scotia_cuenta", "scotia_cci", "crypto_moneda", "crypto_red", "crypto_wallet", "profe_nombre", "profe_marca", "profe_foto", "whatsapp_profe"];
