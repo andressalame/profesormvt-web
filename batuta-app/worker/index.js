@@ -704,7 +704,7 @@ function paginaRegistro(){
 function paginaLogin(){
   const cuerpo =
     "<h1>Ingresa a Batuta</h1>" +
-    "<p class=\"sub\">Tu panel de gestion.</p>" +
+    "<p class=\"sub\">El panel del profesor o dueno de academia. Eres alumno? Entra por el link de tu academia (batuta.lat/app/a/tu-academia): pideselo a tu profesor.</p>" +
     "<form id=\"f\">" +
       "<label>Email</label><input id=\"email\" type=\"email\" required>" +
       "<label>Contrasena</label><input id=\"pass\" type=\"password\" required>" +
@@ -788,7 +788,9 @@ function paginaLanding(){
     "<p class=\"sub\">El panel para gestionar tu academia de musica.</p>" +
     "<a href=\"/app/registro\"><button type=\"button\">Empezar gratis</button></a>" +
     "<div class=\"foot\">Ya tienes cuenta? <a href=\"/app/login\">Ingresa aqui</a></div>";
-  return paginaBase("Batuta", cuerpo, "");
+  // Si ya tiene sesion de profesor, directo a su panel.
+  const script = "try{ if(localStorage.getItem('batuta_t')){ location.replace('/app/panel'); } }catch(e){}";
+  return paginaBase("Batuta", cuerpo, script);
 }
 
 function htmlResponse(html){
