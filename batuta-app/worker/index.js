@@ -381,6 +381,56 @@ async function correoBienvenidaAlumno(env, tenant, cu, compra){
   return enviarCorreo(env, { to: cu.email, subject: "Ya estas dentro de " + academia, html: html });
 }
 
+/* ---------- Nurture de trial (dia 1 / 3 / 6 + cierre al vencer). Lo dispara scheduled(). ----------
+   Patron probado en MVT (Resend + cron). El paso vive en tenants.nurture_paso:
+   0 = nada enviado · 1 = dia1 · 2 = dia3 · 3 = dia6 · 4 = correo de vencido. */
+function correoNurtureTrial(tenant, etapa){
+  const nombre = ((tenant.profe_nombre || "").trim().split(/\s+/)[0]) || "";
+  const hola = "Hola" + (nombre ? " " + nombre : "") + ".";
+  const panel = MARCA.dominio + "/app/panel";
+  const wa = "https://wa.me/" + MARCA.whatsapp;
+  const wrap = (inner) =>
+    '<div style="font-family:Arial,Helvetica,sans-serif;max-width:480px;margin:0 auto;color:#1a1a1a;font-size:15px;line-height:1.6">' +
+    inner +
+    '<p>Andres, de Batuta. Cualquier duda, <a href="' + wa + '">mi WhatsApp directo</a>.</p></div>';
+  if (etapa === "dia1") return {
+    subject: "Dia 1: deja " + (tenant.academia || "tu academia") + " andando hoy",
+    html: wrap(
+      '<p>' + hola + '</p>' +
+      '<p>Tu academia ya vive en Batuta. Con 3 pasos de hoy, manana ya trabaja sola:</p>' +
+      '<ol style="padding-left:18px">' +
+        '<li><b>Crea tus paquetes o mensualidades</b> con tus precios reales.</li>' +
+        '<li><b>Agrega 2-3 alumnos</b> (con eso ya ves el portal como lo veran ellos).</li>' +
+        '<li><b>Configura tus horarios</b> para que reserven solos.</li>' +
+      '</ol>' +
+      '<p><a href="' + panel + '"><b>Entrar a mi panel</b></a></p>')
+  };
+  if (etapa === "dia3") return {
+    subject: "Mete a tus alumnos (10 minutos, en serio)",
+    html: wrap(
+      '<p>' + hola + '</p>' +
+      '<p>El momento en que Batuta empieza a pagarse sola es cuando tus alumnos entran a SU portal: ven sus clases, su material y sus pagos sin escribirte.</p>' +
+      '<p>Agrega a tus alumnos de siempre y comparteles el link del portal. Los cobros por Yape quedan con constancia y confirmacion en un clic; la tarjeta se confirma sola.</p>' +
+      '<p><a href="' + panel + '"><b>Agregar alumnos ahora</b></a></p>')
+  };
+  if (etapa === "dia6") return {
+    subject: "Tu prueba termina manana",
+    html: wrap(
+      '<p>' + hola + '</p>' +
+      '<p>Manana vence tu semana de prueba de ' + (tenant.academia ? "<b>" + esc(tenant.academia) + "</b>" : "tu academia") + '. Si el panel te sirvio, activar tu plan toma 1 minuto desde el mismo panel (desde US$9.95/mes, cobrado en soles).</p>' +
+      '<p>Y si algo no te cerro, respondeme por WhatsApp y lo vemos: feedback real vale oro por aca.</p>' +
+      '<p><a href="' + panel + '"><b>Activar mi plan</b></a></p>')
+  };
+  return {
+    subject: "Tu panel sigue aca (y tus datos tambien)",
+    html: wrap(
+      '<p>' + hola + '</p>' +
+      '<p>Tu prueba termino, pero no borramos nada: tus alumnos, paquetes y horarios siguen guardados tal cual los dejaste.</p>' +
+      '<p>Cuando quieras retomar, activas tu plan desde el panel y todo vuelve a estar operativo al instante.</p>' +
+      '<p><a href="' + panel + '"><b>Reactivar mi academia</b></a></p>')
+  };
+}
+
 /* ---------- Confirmar una compra (reutilizado por el panel y por el webhook de MP) ---------- */
 async function confirmarCompra(env, tenantId, tenant, compra){
   if (!compra) return { ok: false, error: "Compra no encontrada", status: 404 };
@@ -2570,7 +2620,37 @@ export default {
   },
 
   async scheduled(event, env, ctx){
-    // v0: sin crons. Nada de recordatorios/backups todavia (SPEC).
-    return;
+    /* Nurture de trial (dia 1/3/6) + cierre proactivo del vencido. 1 corrida/dia (cron 14:00 UTC = 9am Lima).
+       Migracion perezosa: la columna se crea sola en la primera corrida (patron MVT). */
+    try { await env.DB.prepare("ALTER TABLE tenants ADD COLUMN nurture_paso INTEGER DEFAULT 0").run(); } catch (e) { /* ya existe */ }
+    const ahora = Date.now();
+    let tenants = [];
+    try {
+      const r = await env.DB.prepare(
+        "SELECT id, slug, academia, profe_nombre, email, estado, trial_hasta, creado, COALESCE(nurture_paso, 0) AS paso FROM tenants WHERE estado = 'trial'"
+      ).all();
+      tenants = r.results || [];
+    } catch (e) { return; }
+    for (const t of tenants){
+      if (!t.email || t.email === "demo@batuta.lat") continue; // la demo no recibe nurture
+      const dias = Math.floor((ahora - (Date.parse(t.creado) || ahora)) / 86400000);
+      const venceMs = Date.parse(t.trial_hasta) || 0;
+      let etapa = null, pasoNuevo = t.paso | 0;
+      if (venceMs && ahora > venceMs){
+        // Mismo criterio que el gate de acceso, pero proactivo: no espera a que el profe entre.
+        try { await env.DB.prepare("UPDATE tenants SET estado = 'vencido' WHERE id = ?1").bind(t.id).run(); } catch (e) {}
+        if ((t.paso | 0) < 4){ etapa = "vencido"; pasoNuevo = 4; }
+      }
+      else if ((t.paso | 0) === 0 && dias >= 1){ etapa = "dia1"; pasoNuevo = 1; }
+      else if ((t.paso | 0) === 1 && dias >= 3){ etapa = "dia3"; pasoNuevo = 2; }
+      else if ((t.paso | 0) === 2 && dias >= 6){ etapa = "dia6"; pasoNuevo = 3; }
+      if (!etapa) continue;
+      const mail = correoNurtureTrial(t, etapa);
+      const ok = await enviarCorreo(env, { to: t.email, subject: mail.subject, html: mail.html });
+      // Solo avanza el paso si el correo salio: si Resend falla, se reintenta manana solo.
+      if (ok){
+        try { await env.DB.prepare("UPDATE tenants SET nurture_paso = ?1 WHERE id = ?2").bind(pasoNuevo, t.id).run(); } catch (e) {}
+      }
+    }
   }
 };
