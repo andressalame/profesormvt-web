@@ -21,6 +21,16 @@ const { fuente = "web" } = Astro.props;
       <h2 class="lf-h">Tu guía está <span class="lf-o">lista</span></h2>
       <p class="lf-p">Te la abrí en otra pestaña. Si no, descárgala aquí.</p>
       <a class="lf-btn lf-btn-link" data-pdf href="/recursos/composicion-primera-cancion.pdf" target="_blank" rel="noopener">Descargar mi guía →</a>
+      <div class="lf-tel-block" data-tel-block>
+        <p class="lf-p lf-tel-p">Prefieres WhatsApp? Deja tu número y te escribo yo :)</p>
+        <form class="lf-form" data-tel-form novalidate>
+          <input type="tel" class="lf-email lf-tel" name="telefono" placeholder="Tu WhatsApp (ej. 989 077 928)" autocomplete="tel" />
+          <button type="submit" class="lf-btn">Enviar →</button>
+        </form>
+        <div class="lf-micro">Opcional. Solo para responderte, cero spam.</div>
+        <div class="lf-err" data-tel-err></div>
+      </div>
+      <div class="lf-micro lf-tel-ok" data-tel-ok hidden>Listo :) Te escribo pronto por WhatsApp.</div>
     </div>
   </div>
 </section>
@@ -41,13 +51,16 @@ const { fuente = "web" } = Astro.props;
   .lf-btn:hover{ transform:translateY(-2px); box-shadow:3px 3px 0 #f3ede0; }
   .lf-btn:disabled{ opacity:.6; transform:none; box-shadow:none; cursor:default; }
   .lf-btn-link{ display:inline-block; text-decoration:none; margin-top:6px; }
+  .lf-tel-block{ margin-top:22px; padding-top:18px; border-top:1px solid #2A2926; }
+  .lf-tel-p{ margin-bottom:12px; }
+  .lf-tel-ok{ margin-top:16px; color:#e8501f; font-size:12px; }
   .lf-micro{ font-family:"JetBrains Mono",monospace; font-size:10.5px; letter-spacing:.04em; color:#8a8276; margin-top:9px; }
   .lf-err{ color:#ff6a35; font-size:13px; margin-top:8px; }
   @media (max-width:520px){ .lf-btn{ width:100%; } }
 </style>
 
 <script>
-  document.querySelectorAll('.lf-form').forEach(function(form){
+  document.querySelectorAll('.lf-form:not([data-tel-form])').forEach(function(form){
     var box = form.closest('.lf-box');
     var view = box.querySelector('[data-view]');
     var ok = box.querySelector('[data-ok]');
@@ -55,6 +68,8 @@ const { fuente = "web" } = Astro.props;
     var pdfEl = box.querySelector('[data-pdf]');
     var btn = form.querySelector('.lf-btn');
     var PDF = '/recursos/composicion-primera-cancion.pdf';
+    var fuente = form.getAttribute('data-fuente') || 'web';
+    var emailEnviado = '';
     form.addEventListener('submit', function(e){
       e.preventDefault();
       errEl.textContent = '';
@@ -63,12 +78,13 @@ const { fuente = "web" } = Astro.props;
       btn.disabled = true; btn.textContent = 'Enviando...';
       fetch('/api/lead', {
         method:'POST', headers:{'content-type':'application/json'},
-        body: JSON.stringify({ email:email, website:hp, marca:'MVT', fuente: form.getAttribute('data-fuente') || 'web', interes:'composicion' })
+        body: JSON.stringify({ email:email, website:hp, marca:'MVT', fuente: fuente, interes:'composicion' })
       })
       .then(function(r){ return r.json(); })
       .then(function(d){
         if(d && d.ok){
           if(window.fbq) fbq('track','Lead');
+          emailEnviado = email;
           if(pdfEl) pdfEl.href = d.pdf || PDF;
           view.hidden = true; ok.hidden = false;
           try { window.open(d.pdf || PDF, '_blank'); } catch(err){}
@@ -79,5 +95,31 @@ const { fuente = "web" } = Astro.props;
       })
       .catch(function(){ errEl.textContent = 'No se pudo enviar. Intenta de nuevo.'; btn.disabled = false; btn.textContent = 'Descargar gratis →'; });
     });
+
+    // Paso 2 (opcional, post-descarga): el lead deja su WhatsApp y Andrés recibe el aviso al toque.
+    var telForm = box.querySelector('[data-tel-form]');
+    if (telForm){
+      var telBlock = box.querySelector('[data-tel-block]');
+      var telOk = box.querySelector('[data-tel-ok]');
+      var telErr = box.querySelector('[data-tel-err]');
+      var telBtn = telForm.querySelector('.lf-btn');
+      telForm.addEventListener('submit', function(e){
+        e.preventDefault();
+        telErr.textContent = '';
+        var tel = telForm.querySelector('.lf-tel').value.replace(/\D/g, '');
+        if (tel.length < 8){ telErr.textContent = 'Ese número se ve incompleto.'; return; }
+        telBtn.disabled = true; telBtn.textContent = 'Enviando...';
+        fetch('/api/lead', {
+          method:'POST', headers:{'content-type':'application/json'},
+          body: JSON.stringify({ email: emailEnviado, telefono: tel, marca:'MVT', fuente: fuente, interes:'composicion' })
+        })
+        .then(function(r){ return r.json(); })
+        .then(function(d){
+          if(d && d.ok){ telBlock.hidden = true; telOk.hidden = false; }
+          else { telErr.textContent = 'No se pudo enviar. Intenta de nuevo.'; telBtn.disabled = false; telBtn.textContent = 'Enviar →'; }
+        })
+        .catch(function(){ telErr.textContent = 'No se pudo enviar. Intenta de nuevo.'; telBtn.disabled = false; telBtn.textContent = 'Enviar →'; });
+      });
+    }
   });
 </script>

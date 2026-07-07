@@ -66,6 +66,10 @@ const description = "Descarga gratis la guía para empezar a componer tu primera
   .wa{display:inline-flex;align-items:center;gap:8px;margin-top:6px;font-size:14px;color:var(--cream);border:1px solid var(--line);border-radius:6px;padding:13px 18px;text-decoration:none;transition:.15s}
   .wa:hover{border-color:var(--accent)}
   .ok{display:none}
+  .telblock{margin-top:26px;padding-top:20px;border-top:1px solid var(--line);width:100%;max-width:420px}
+  .telform{display:flex;flex-direction:column;gap:10px}
+  input[type=tel]{font-family:var(--body);font-size:16px;padding:15px 16px;border-radius:6px;border:1px solid var(--line);background:#0d0b0a;color:var(--cream);width:100%}
+  input[type=tel]:focus{outline:none;border-color:var(--accent)}
   .ok h2{font-family:var(--display);text-transform:uppercase;font-size:clamp(30px,7vw,48px);line-height:1;margin-bottom:10px}
   .ok .o{color:var(--accent)}
   footer{margin:50px 0 30px;border-top:1px solid var(--line);padding-top:16px;font-family:var(--mono);font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);text-align:center}
@@ -113,6 +117,16 @@ const description = "Descarga gratis la guía para empezar a componer tu primera
     <p class="lead" style="margin:0 auto 22px">Te abrí la guía en otra pestaña. Si no se abrió, descárgala con el botón.</p>
     <a class="btn" id="pdfBtn" href="/recursos/composicion-primera-cancion.pdf" target="_blank" rel="noopener">Descargar mi guía →</a>
     <a class="wa" style="margin-top:18px" href="/horarios/">Quiero clases: mira los horarios →</a>
+    <div class="telblock" id="telBlock">
+      <p class="lead" style="margin:0 auto 12px;font-size:15px">Prefieres WhatsApp? Deja tu número y te escribo yo :)</p>
+      <form id="telForm" class="telform">
+        <input type="tel" id="telInput" placeholder="Tu WhatsApp (ej. 989 077 928)" autocomplete="tel" />
+        <button type="submit" class="btn" id="telBtn">Enviar →</button>
+      </form>
+      <div class="micro">Opcional. Solo para responderte, cero spam.</div>
+      <div class="err" id="telErr"></div>
+    </div>
+    <div class="micro" id="telOk" style="display:none;color:var(--accent);margin-top:14px">Listo :) Te escribo pronto por WhatsApp.</div>
   </div>
 
   <footer>ProfesorMVT · Canto · Piano · Composición para adultos · San Isidro y online</footer>
@@ -123,6 +137,7 @@ const description = "Descarga gratis la guía para empezar a componer tu primera
     var form = document.getElementById('leadForm');
     var btn = document.getElementById('leadBtn');
     var err = document.getElementById('leadErr');
+    var emailEnviado = '';
     form.addEventListener('submit', function(e){
       e.preventDefault();
       err.textContent = '';
@@ -137,6 +152,7 @@ const description = "Descarga gratis la guía para empezar a componer tu primera
       .then(function(d){
         if(d && d.ok){
           if(window.fbq) fbq('track','Lead');
+          emailEnviado = email;
           document.getElementById('pdfBtn').href = d.pdf || '/recursos/composicion-primera-cancion.pdf';
           document.getElementById('formView').style.display = 'none';
           document.getElementById('okView').style.display = 'grid';
@@ -150,6 +166,36 @@ const description = "Descarga gratis la guía para empezar a componer tu primera
       .catch(function(){
         err.textContent = 'No se pudo enviar. Revisa tu conexión e intenta de nuevo.';
         btn.disabled = false; btn.textContent = 'Descargar la guía gratis →';
+      });
+    });
+
+    // Paso 2 (opcional, post-descarga): deja su WhatsApp y Andrés recibe el aviso al toque.
+    var telForm = document.getElementById('telForm');
+    var telBtn = document.getElementById('telBtn');
+    var telErr = document.getElementById('telErr');
+    telForm.addEventListener('submit', function(e){
+      e.preventDefault();
+      telErr.textContent = '';
+      var tel = document.getElementById('telInput').value.replace(/\D/g, '');
+      if (tel.length < 8){ telErr.textContent = 'Ese número se ve incompleto.'; return; }
+      telBtn.disabled = true; telBtn.textContent = 'Enviando...';
+      fetch('/api/lead', {
+        method:'POST', headers:{'content-type':'application/json'},
+        body: JSON.stringify({ email: emailEnviado, telefono: tel, marca:'MVT', fuente:'landing-composicion', interes:'composicion' })
+      })
+      .then(function(r){ return r.json(); })
+      .then(function(d){
+        if(d && d.ok){
+          document.getElementById('telBlock').style.display = 'none';
+          document.getElementById('telOk').style.display = 'block';
+        } else {
+          telErr.textContent = 'No se pudo enviar. Intenta de nuevo.';
+          telBtn.disabled = false; telBtn.textContent = 'Enviar →';
+        }
+      })
+      .catch(function(){
+        telErr.textContent = 'No se pudo enviar. Intenta de nuevo.';
+        telBtn.disabled = false; telBtn.textContent = 'Enviar →';
       });
     });
   })();

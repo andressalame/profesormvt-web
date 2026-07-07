@@ -848,6 +848,110 @@ async function procesarNurtureLeads(env){
   return enviados;
 }
 
+/* ============ PUENTE A WHATSAPP (leads fríos) ============
+   El lead que terminó la secuencia de nurture y no compró recibe UN último correo que lo
+   invita a la conversación de WhatsApp — el canal donde MVT cierra de verdad (casi ningún
+   alumno llegó por el funnel online). Corre 1 vez al día en tanda chica (Resend free =
+   100 correos/día compartidos con nurture/renovaciones), dedupea por lead (puente_wa)
+   y arranca APAGADO (config.puente_wa_activo). */
+const PUENTE_WA_DIA = 6;      // días desde la captura antes del puente (el nurture termina el día 3)
+const PUENTE_WA_TANDA = 60;   // tope por corrida diaria: deja aire para el resto de correos del día
+
+function linkWhatsAppLead(){
+  return "https://wa.me/" + MARCA.whatsapp + "?text=" +
+    encodeURIComponent("Hola " + MARCA.profe + "! Vi tu correo, quiero info de las clases 🎸");
+}
+
+/* Correo-puente: corto, personal y honesto ("este es el último"), con botón verde de WhatsApp. */
+async function correoPuenteWhatsApp(env, to){
+  if (!to) return false;
+  const wa = linkWhatsAppLead();
+  const dominioLimpio = MARCA.dominio.replace(/^https?:\/\//, "");
+  const html =
+    '<div style="font-family:Arial,Helvetica,sans-serif;max-width:480px;margin:0 auto;color:#1a1a1a;font-size:15px;line-height:1.6">' +
+      '<p>Hola,</p>' +
+      '<p>Soy ' + MARCA.profe + ', el de la guía <b>"De oyente a autor"</b>. Ya te mandé la info por correo, así que este es el último: mejor hablemos directo.</p>' +
+      '<p>Escríbeme por WhatsApp y cuéntame qué te gustaría lograr (componer, cantar o tocar piano). Te respondo yo, te digo por dónde empezar y qué horarios tengo. Sin vueltas.</p>' +
+      '<p style="text-align:center;margin:26px 0"><a href="' + wa + '" style="background:#25D366;color:#ffffff;text-decoration:none;font-weight:bold;padding:14px 26px;border-radius:6px;display:inline-block">Escribirle a ' + MARCA.profe + ' por WhatsApp</a></p>' +
+      '<p>Y si este no es tu momento, todo bien: la guía es tuya y aquí me tienes cuando quieras :)</p>' +
+      '<p>Un abrazo,<br><b>' + MARCA.profe + '</b><br>' + MARCA.nombre + '</p>' +
+      '<p style="font-size:12px;color:#888888;margin-top:26px">' + dominioLimpio + ' · Canto, piano y composición para adultos</p>' +
+    '</div>';
+  const text = 'Hola,\n\nSoy ' + MARCA.profe + ', el de la guía "De oyente a autor". Ya te mandé la info por correo, así que este es el último: mejor hablemos directo.\n\nEscríbeme por WhatsApp y cuéntame qué te gustaría lograr (componer, cantar o tocar piano). Te respondo yo, te digo por dónde empezar y qué horarios tengo. Sin vueltas.\n\nWhatsApp: ' + wa + '\n\nY si este no es tu momento, todo bien: la guía es tuya y aquí me tienes cuando quieras :)\n\nUn abrazo,\n' + MARCA.profe + ' - ' + MARCA.nombre + '\n' + dominioLimpio;
+  return enviarCorreo(env, { to: to, subject: "Mejor hablemos por WhatsApp :)", html: html, text: text });
+}
+
+/* Resumen a Andrés: a quién se invitó hoy, para reconocer al que escriba. */
+async function avisarPuenteResumen(env, enviados){
+  if (!env.AVISOS || !enviados.length) return;
+  const msg = createMimeMessage();
+  msg.setSender({ name: "Avisos " + MARCA.nombre, addr: MARCA.correoAvisos });
+  msg.setRecipient(MARCA.correoAdmin);
+  msg.setSubject("Puente a WhatsApp: " + enviados.length + " lead(s) invitados a escribirte hoy");
+  msg.addMessage({ contentType: "text/plain", data:
+    "El sistema invitó (por correo) a estos leads fríos a pasarse a WhatsApp. El que te escriba \"Vi tu correo, quiero info de las clases\" viene de aquí:\n\n" +
+    enviados.map(function(e){ return "- " + e; }).join("\n") + "\n" });
+  await env.AVISOS.send(new EmailMessage(MARCA.correoAvisos, MARCA.correoAdmin, msg.asRaw()));
+}
+
+/* Cron del puente: leads de MVT con nurture terminado (paso >= último, sin contar el 99 de
+   excluidos/convertidos), sin puente previo, con más de PUENTE_WA_DIA días de antigüedad.
+   El que ya se volvió cuenta se salta y se marca (puente_wa = 2). */
+async function procesarPuenteWhatsApp(env){
+  const cfg = await loadConfig(env);
+  if (cfg.puente_wa_activo !== "1") return [];   // interruptor de seguridad: APAGADO por defecto
+  const ultimoPaso = NURTURE_PASOS[NURTURE_PASOS.length - 1].paso;
+  const corte = new Date(Date.now() - PUENTE_WA_DIA * 86400000).toISOString().slice(0, 10);
+  const { results: leads } = await env.DB.prepare(
+    "SELECT id, email FROM leads WHERE marca = 'MVT' AND COALESCE(nurture_paso,0) >= ?1 " +
+    "AND COALESCE(nurture_paso,0) != 99 AND COALESCE(puente_wa,0) = 0 AND fecha <= ?2 " +
+    "AND email NOT LIKE '%andressalame%' ORDER BY fecha ASC LIMIT ?3"
+  ).bind(ultimoPaso, corte, PUENTE_WA_TANDA).all();
+  const enviados = []; let fallos = 0;
+  for (const l of (leads || [])){
+    const cuenta = await env.DB.prepare("SELECT id FROM cuentas WHERE LOWER(email) = ?1").bind(String(l.email).toLowerCase()).first();
+    if (cuenta){
+      await env.DB.prepare("UPDATE leads SET puente_wa = 2 WHERE id = ?1").bind(l.id).run();
+      continue;
+    }
+    const ok = await correoPuenteWhatsApp(env, l.email);
+    if (ok){
+      await env.DB.prepare("UPDATE leads SET puente_wa = 1 WHERE id = ?1").bind(l.id).run();
+      enviados.push(l.email);
+    } else { fallos++; }
+  }
+  if (enviados.length){ try { await avisarPuenteResumen(env, enviados); } catch (e) {} }
+  await reportarSaludCorreo(env, fallos, fallos + enviados.length);
+  return enviados;
+}
+
+/* ============ AVISO DE LEAD CON WHATSAPP ============
+   Cuando un lead deja su número (campo opcional post-descarga), Andrés recibe al instante
+   el wa.me listo con un primer mensaje sugerido en su voz. El cierre es humano; esto solo
+   le pone el lead caliente en la mano. */
+function waDigitsLead(tel){
+  const d = String(tel || "").replace(/\D/g, "");
+  return (d.length === 9 && d.charAt(0) === "9") ? "51" + d : d;   // celular Perú sin código → +51
+}
+
+async function avisarLeadConTelefono(env, info){
+  if (!env.AVISOS) return;
+  const d = waDigitsLead(info.telefono);
+  if (!d) return;
+  const msg = createMimeMessage();
+  msg.setSender({ name: "Avisos " + MARCA.nombre, addr: MARCA.correoAvisos });
+  msg.setRecipient(MARCA.correoAdmin);
+  msg.setSubject("🔥 Lead con WhatsApp: " + info.email);
+  msg.addMessage({ contentType: "text/plain", data:
+    "Un lead dejó su WhatsApp al bajar la guía. Escríbele mientras está caliente:\n\n" +
+    "Correo:   " + info.email + "\n" +
+    "WhatsApp: +" + d + " → https://wa.me/" + d + "\n" +
+    "Interés:  " + (info.interes || "-") + " · Fuente: " + (info.fuente || "-") + "\n\n" +
+    "Mensaje sugerido:\n" +
+    "Hola! Soy " + MARCA.profe + ", el de la guía de composición :) Vi que la descargaste. Cuéntame, qué te gustaría lograr: componer, cantar o tocar piano?\n" });
+  await env.AVISOS.send(new EmailMessage(MARCA.correoAvisos, MARCA.correoAdmin, msg.asRaw()));
+}
+
 /* ============ CHATBOT (burbuja flotante con IA) ============
    Reemplaza la burbuja de WhatsApp por un asistente que responde dudas y, si no alcanza,
    pasa el WhatsApp de Andrés. Claude Haiku via /api/chatbot. Arranca con degradación elegante:
@@ -1591,6 +1695,20 @@ async function ensureSchema(env){
     await env.DB.prepare(
       "CREATE TABLE IF NOT EXISTS reset_tokens (token_hash TEXT PRIMARY KEY, cuenta_id TEXT, expira TEXT, usado INTEGER DEFAULT 0)"
     ).run();
+    // telefono: WhatsApp opcional del lead (06-jul-2026). El cierre real de MVT pasa por WhatsApp,
+    // no por correo; si el lead deja su número, Andrés recibe el aviso con el wa.me listo.
+    // puente_wa: dedupe del correo-puente a WhatsApp (0 = pendiente, 1 = enviado, 2 = ya es cuenta).
+    const infoLeads = await env.DB.prepare("PRAGMA table_info(leads)").all();
+    const tieneTelefono = (infoLeads.results || []).some(c => c.name === "telefono");
+    if (!tieneTelefono) await env.DB.prepare("ALTER TABLE leads ADD COLUMN telefono TEXT DEFAULT ''").run();
+    const tienePuente = (infoLeads.results || []).some(c => c.name === "puente_wa");
+    if (!tienePuente) await env.DB.prepare("ALTER TABLE leads ADD COLUMN puente_wa INTEGER DEFAULT 0").run();
+    // v16 (win-back) plegada al auto-migrador: en prod se aplicó por .sql recién el 06-jul-2026,
+    // pero un despliegue fresco (clon Batuta) la necesita igual que las demás.
+    const tieneRecFecha = (infoAlumnos.results || []).some(c => c.name === "recordatorio_fecha");
+    if (!tieneRecFecha) await env.DB.prepare("ALTER TABLE alumnos ADD COLUMN recordatorio_fecha TEXT DEFAULT ''").run();
+    const tieneWinback = (infoAlumnos.results || []).some(c => c.name === "winback_ciclo");
+    if (!tieneWinback) await env.DB.prepare("ALTER TABLE alumnos ADD COLUMN winback_ciclo INTEGER DEFAULT 0").run();
     _schemaChecked = true;
   } catch (e) { /* otra invocación pudo correrla en paralelo; se reintenta en la próxima request */ }
 }
@@ -2271,12 +2389,19 @@ export default {
         const marca = String(b.marca || "MVT").trim().slice(0, 20);
         const fuente = String(b.fuente || "").trim().slice(0, 60);
         const interes = String(b.interes || "composicion").trim().slice(0, 60);
-        const ya = await env.DB.prepare("SELECT id FROM leads WHERE email = ?1 AND marca = ?2").bind(email, marca).first();
+        // WhatsApp opcional (se pide DESPUÉS de entregar la guía, para no frenar la conversión).
+        const telefono = String(b.telefono || "").replace(/[^\d]/g, "").slice(0, 15);
+        const ya = await env.DB.prepare("SELECT id, COALESCE(telefono,'') AS telefono FROM leads WHERE email = ?1 AND marca = ?2").bind(email, marca).first();
         if (!ya){
           await env.DB.prepare(
-            "INSERT INTO leads (id,email,marca,fuente,interes,fecha) VALUES (?1,?2,?3,?4,?5,?6)"
-          ).bind(crypto.randomUUID(), email, marca, fuente, interes, hoy()).run();
+            "INSERT INTO leads (id,email,marca,fuente,interes,fecha,telefono) VALUES (?1,?2,?3,?4,?5,?6,?7)"
+          ).bind(crypto.randomUUID(), email, marca, fuente, interes, hoy(), telefono).run();
           if (marca === "MVT") ctx.waitUntil(correoBienvenidaLead(env, email));
+          if (telefono) ctx.waitUntil(avisarLeadConTelefono(env, { email, telefono, interes, fuente }));
+        } else if (telefono && !ya.telefono){
+          // El lead ya existía (dejó el correo primero) y ahora suma su número: guardar + avisar.
+          await env.DB.prepare("UPDATE leads SET telefono = ?1 WHERE id = ?2").bind(telefono, ya.id).run();
+          ctx.waitUntil(avisarLeadConTelefono(env, { email, telefono, interes, fuente }));
         }
         return json({ ok: true, pdf });
       }
@@ -3130,6 +3255,12 @@ export default {
       ctx.waitUntil(procesarAvisosVencimiento(env).catch(function(){}));
       // Nurture de leads: mismo disparo diario. Apagado por defecto (config.nurture_activo).
       ctx.waitUntil(procesarNurtureLeads(env).catch(function(){}));
+    }
+    // Puente a WhatsApp: 1 vez al día a las 15:00 UTC (≈ 10:00 Lima), una hora después del
+    // bloque de renovaciones/nurture para no pelear por la cuota diaria de Resend.
+    // Apagado por defecto (config.puente_wa_activo).
+    if (new Date().getUTCHours() === 15){
+      ctx.waitUntil(procesarPuenteWhatsApp(env).catch(function(){}));
     }
     // Backup diario: 1 vez al día a las 07:00 UTC (≈ 02:00 Lima, madrugada tranquila).
     if (new Date().getUTCHours() === 7){
