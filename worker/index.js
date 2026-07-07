@@ -136,6 +136,23 @@ async function buscarRefCode(env, ref){
   return fila ? fila.ref_code : null;
 }
 
+/* Bloque de referidos para inyectar en los correos automáticos que ya salen (07-jul-2026).
+   Solo promete lo que el sistema ya paga hoy: S/CREDITO_REFERIDO de CRÉDITO al referidor cuando
+   su amigo compra su primer paquete real, y ese crédito se descuenta solo de su próxima
+   compra/renovación (no es cash). La lógica del crédito vive en confirmarCompra y NO se toca. */
+function bloqueReferido(cuenta){
+  if (!cuenta || !cuenta.ref_code) return { html: "", text: "" };
+  const link = MARCA.dominio + "/alumnos/?ref=" + cuenta.ref_code;
+  const html =
+    '<div style="border-top:1px solid #e5e5e5;margin-top:26px;padding-top:16px">' +
+      '<p style="margin:0 0 6px;font-size:14px"><b>Trae a un amigo y gana S/' + CREDITO_REFERIDO + '</b></p>' +
+      '<p style="margin:0;font-size:13px;color:#555555">Comparte tu link personal. Cuando tu amigo compre su primer paquete, ganas S/' + CREDITO_REFERIDO + ' de crédito que se descuenta solo de tu próxima renovación.</p>' +
+      '<p style="margin:8px 0 0;font-size:13px"><a href="' + link + '" style="color:#e8501f;font-weight:bold">' + link + '</a></p>' +
+    '</div>';
+  const text = '\n\nTrae a un amigo y gana S/' + CREDITO_REFERIDO + ': cuando compre su primer paquete, ganas S/' + CREDITO_REFERIDO + ' de crédito para tu próxima renovación. Tu link: ' + link;
+  return { html: html, text: text };
+}
+
 /* ---------- Google Sign-In: verificación del ID token (JWT RS256) ---------- */
 async function verificarGoogle(env, credential){
   const cfg = await loadConfig(env);
@@ -220,7 +237,12 @@ async function loadConfig(env){
   const c = { pago_numero: "", pago_titular: "", google_client_id: "", bcp_cuenta: "", bcp_cci: "", scotia_cuenta: "", scotia_cci: "", crypto_moneda: "", crypto_red: "", crypto_wallet: "",
               profe_nombre: "", profe_foto: "", profe_marca: "",
               gcal_client_id: "", gcal_client_secret: "", gcal_refresh_token: "", gcal_calendar_id: "primary", gcal_nonce: "",
-              salud_gcal: "ok", salud_gcal_aviso_utc: "", salud_correo_estado: "ok", salud_correo_aviso_utc: "" };
+              salud_gcal: "ok", salud_gcal_aviso_utc: "", salud_correo_estado: "ok", salud_correo_aviso_utc: "",
+              // 4 motores (07-jul-2026): encendidos por defecto; poner '0' en config para apagar.
+              // review_link SIN default: si está vacío, el motor de reseñas no manda nada (no se inventa el link de Google).
+              review_link: "", rescate_activo: "0", resena_activo: "0", nudge_asistencia_activo: "0", referido_nudge_activo: "0" };
+              // Los 4 motores nuevos van APAGADOS por defecto (07-jul): tocan correos de alumnos reales.
+              // Andrés los enciende poniendo el switch en "1" en la tabla config (comandos en la bitácora del loop).
   for (const row of (results || [])) c[row.clave] = row.valor || "";
   return c;
 }
@@ -367,6 +389,7 @@ async function correoBienvenidaAlumno(env, cu, compra){
   const portal = MARCA.dominio + "/alumnos/";
   const wa = "https://wa.me/" + MARCA.whatsapp;
   const agendaLine = '<li><b>Agenda tu primera clase:</b> escríbeme por <a href="' + wa + '">WhatsApp</a> y la cuadramos.</li>';
+  const ref = (cfg.referido_nudge_activo !== "0") ? bloqueReferido(cu) : { html: "", text: "" };
   const html =
     '<div style="font-family:Arial,Helvetica,sans-serif;max-width:480px;margin:0 auto;color:#1a1a1a;font-size:15px;line-height:1.6">' +
       '<p>¡Bienvenido' + (nombre ? ' ' + nombre : '') + '! 🎸</p>' +
@@ -377,10 +400,11 @@ async function correoBienvenidaAlumno(env, cu, compra){
       '</ul>' +
       '<p>Cualquier cosa me escribes directo. Vamos a hacer que esto suene.</p>' +
       '<p>Un abrazo,<br><b>' + MARCA.profe + '</b><br>' + MARCA.nombre + '</p>' +
+      ref.html +
     '</div>';
   const text = '¡Bienvenido' + (nombre ? ' ' + nombre : '') + '!\n\nTu paquete ' + nombrePaquete + ' ya está activo. Para arrancar:\n- Tu portal: ' + portal + '\n' +
     '- Agenda escribiéndome por WhatsApp: ' + wa + '\n' +
-    '\nCualquier cosa me escribes.\n\nUn abrazo,\n' + MARCA.profe + ' - ' + MARCA.nombre;
+    '\nCualquier cosa me escribes.\n\nUn abrazo,\n' + MARCA.profe + ' - ' + MARCA.nombre + ref.text;
   return enviarCorreo(env, { to: cu.email, subject: "Ya estás dentro de " + MARCA.nombre + " 🎸", html: html, text: text });
 }
 
@@ -499,6 +523,9 @@ async function confirmarCompra(env, compra){
   }
 
   if (esPrimera) { try { await correoBienvenidaAlumno(env, cu, compra); } catch (e) {} }
+  // Renovación (no primera compra): agradecer + pasar el link de referidos, 1 vez por ciclo.
+  // Best-effort y fuera del batch: si falla, la confirmación ya quedó aplicada igual.
+  else if (renovado && compra.paquete !== "Clase de prueba") { try { await correoGraciasRenovacion(env, cu, compra); } catch (e) {} }
   try {
     await avisarPushAlumno(env, cu.id, {
       title: "Pago confirmado 🎸",
@@ -600,10 +627,11 @@ async function procesarRenovaciones(env){
    una vez por ciclo (dedupe con aviso_vence_ciclo, mismo patron que recordatorio_ciclo). */
 const VENCE_AVISO_DIAS = 5;
 
-async function correoAvisoVencimiento(env, alumno, to, diasRestantes, restantes){
+async function correoAvisoVencimiento(env, alumno, to, diasRestantes, restantes, refCode){
   if (!to) return false;
   const nombre = ((alumno.nombre || "").trim().split(/\s+/)[0]) || "";
   const portal = MARCA.dominio + "/alumnos/";
+  const ref = bloqueReferido({ ref_code: refCode || "" });
   const html =
     '<div style="font-family:Arial,Helvetica,sans-serif;max-width:480px;margin:0 auto;color:#1a1a1a;font-size:15px;line-height:1.6">' +
       '<p>Hola' + (nombre ? ' ' + nombre : '') + ' 🎸</p>' +
@@ -611,15 +639,17 @@ async function correoAvisoVencimiento(env, alumno, to, diasRestantes, restantes)
       '<p>Reserva tu horario para no perderlas. Si tienes un viaje o algo de salud que te está complicando venir, puedes congelar tu plazo desde el portal.</p>' +
       '<p style="text-align:center;margin:26px 0"><a href="' + portal + '" style="background:#e8501f;color:#ffffff;text-decoration:none;font-weight:bold;padding:14px 26px;border-radius:6px;display:inline-block">Reservar mi clase</a></p>' +
       '<p>Un abrazo,<br><b>' + MARCA.profe + '</b><br>' + MARCA.nombre + '</p>' +
+      ref.html +
     '</div>';
-  const text = 'Hola' + (nombre ? ' ' + nombre : '') + '!\n\nTu paquete vence en ' + diasRestantes + ' día(s) y te quedan ' + restantes + ' clase(s) por usar.\n\nReserva aquí: ' + portal + '\n\nSi tienes un viaje o tema de salud, puedes congelar tu plazo desde el portal.\n\nUn abrazo,\n' + MARCA.profe + ' - ' + MARCA.nombre;
+  const text = 'Hola' + (nombre ? ' ' + nombre : '') + '!\n\nTu paquete vence en ' + diasRestantes + ' día(s) y te quedan ' + restantes + ' clase(s) por usar.\n\nReserva aquí: ' + portal + '\n\nSi tienes un viaje o tema de salud, puedes congelar tu plazo desde el portal.\n\nUn abrazo,\n' + MARCA.profe + ' - ' + MARCA.nombre + ref.text;
   return enviarCorreo(env, { to: to, subject: "Tu paquete vence en " + diasRestantes + " días — te quedan clases", html: html, text: text });
 }
 
 async function procesarAvisosVencimiento(env){
   const precios = await loadPrecios(env);
+  const cfg = await loadConfig(env);
   const { results: alumnos } = await env.DB.prepare(
-    "SELECT a.*, c.email AS _email FROM alumnos a JOIN cuentas c ON c.alumno_id = a.id " +
+    "SELECT a.*, c.email AS _email, c.ref_code AS _ref_code FROM alumnos a JOIN cuentas c ON c.alumno_id = a.id " +
     "WHERE a.pago = 'Pagado' AND c.email IS NOT NULL AND c.email != '' AND COALESCE(a.vence,'') != ''"
   ).all();
   const hoyMs = Date.now();
@@ -637,7 +667,8 @@ async function procesarAvisosVencimiento(env){
     const rUsadas = await reservasUsadasCount(env, a.id, ciclo);
     const c = compute(a, regs || [], precios, rUsadas);
     if (c.restantes < 1) continue;   // ya usó todo, nada que avisar
-    const ok = await correoAvisoVencimiento(env, a, a._email, Math.max(0, diasRestantes), c.restantes);
+    const ok = await correoAvisoVencimiento(env, a, a._email, Math.max(0, diasRestantes), c.restantes,
+      (cfg.referido_nudge_activo !== "0") ? a._ref_code : "");
     if (ok){
       await env.DB.prepare("UPDATE alumnos SET aviso_vence_ciclo = ?1 WHERE id = ?2").bind(ciclo, a.id).run();
       enviados.push({ nombre: a.nombre, email: a._email, diasRestantes, restantes: c.restantes });
@@ -1002,6 +1033,284 @@ async function avisarLeadConTelefono(env, info){
   await env.AVISOS.send(new EmailMessage(MARCA.correoAvisos, MARCA.correoAdmin, msg.asRaw()));
 }
 
+/* ============ RESCATE DE COMPRAS ABANDONADAS (07-jul-2026) ============
+   La compra que quedó 'iniciada' (checkout de tarjeta que nunca pagó) o 'rechazada' hoy muere
+   en silencio. Este motor manda UN correo por compra invitando a retomarla en el portal.
+   EXCLUYE 'pendiente' a propósito: esos YA pagaron por Yape/Plin y esperan la confirmación de
+   Andrés; un "rescate" ahí sería un insulto. Dedupe con compras.rescate_enviado
+   (0 pendiente, 1 enviado, 2 saltada). Encendido por defecto (config.rescate_activo). */
+const NOMBRES_PAQUETE = { "Paquete 4": "Plan Esencial", "Paquete 8": "Plan Intensivo", "Paquete 12": "Plan Estrella", "Clase suelta": "Clase suelta", "Clase de prueba": "Clase de prueba" };
+
+async function correoRescateCompra(env, to, nombreCompleto, paquete){
+  if (!to) return false;
+  const nombre = ((nombreCompleto || "").trim().split(/\s+/)[0]) || "";
+  const portal = MARCA.dominio + "/alumnos/";
+  const wa = "https://wa.me/" + MARCA.whatsapp + "?text=" + encodeURIComponent("Hola " + MARCA.profe + "! Estaba comprando mis clases y el pago no salió. Me ayudas a completarlo?");
+  const nombrePaquete = NOMBRES_PAQUETE[paquete] || paquete || "tu paquete";
+  const html =
+    '<div style="font-family:Arial,Helvetica,sans-serif;max-width:480px;margin:0 auto;color:#1a1a1a;font-size:15px;line-height:1.6">' +
+      '<p>Hola' + (nombre ? ' ' + nombre : '') + ' 🎸</p>' +
+      '<p>Vi que empezaste tu compra de <b>' + nombrePaquete + '</b> y el pago no llegó a completarse. Pasa, y se arregla en un minuto.</p>' +
+      '<p>Tu lugar sigue libre. En tu portal tienes Yape, Plin, transferencia y tarjeta, eliges el que te acomode y quedas listo para tu próxima clase:</p>' +
+      '<p style="text-align:center;margin:26px 0"><a href="' + portal + '" style="background:#e8501f;color:#ffffff;text-decoration:none;font-weight:bold;padding:14px 26px;border-radius:6px;display:inline-block">Completar mi compra</a></p>' +
+      '<p>Y si el pago se te complicó por cualquier cosa, <a href="' + wa + '" style="color:#e8501f;font-weight:bold">escríbeme por WhatsApp</a> y lo resolvemos juntos.</p>' +
+      '<p>Un abrazo,<br><b>' + MARCA.profe + '</b><br>' + MARCA.nombre + '</p>' +
+    '</div>';
+  const text = 'Hola' + (nombre ? ' ' + nombre : '') + '!\n\nVi que empezaste tu compra de ' + nombrePaquete + ' y el pago no llegó a completarse. Pasa, y se arregla en un minuto.\n\nTu lugar sigue libre. En tu portal tienes Yape, Plin, transferencia y tarjeta: ' + portal + '\n\nY si el pago se te complicó, escríbeme por WhatsApp: ' + wa + '\n\nUn abrazo,\n' + MARCA.profe + ' - ' + MARCA.nombre;
+  return enviarCorreo(env, { to: to, subject: "Tu compra quedó a medias, la retomamos en un minuto", html: html, text: text });
+}
+
+async function procesarRescateCompras(env){
+  const cfg = await loadConfig(env);
+  if (cfg.rescate_activo !== "1") return [];   // encendido por defecto; '0' lo apaga
+  // compras.fecha es solo fecha (YYYY-MM-DD): "más de 24h" se traduce a "de ayer o antes",
+  // así ninguna compra iniciada HOY recibe rescate mientras el pago puede estar en vuelo.
+  const hoyStr = hoy();
+  const { results: compras } = await env.DB.prepare(
+    "SELECT co.id, co.cuenta_id, co.paquete, co.estado, co.fecha, c.email AS _email, c.nombre AS _nombre " +
+    "FROM compras co JOIN cuentas c ON c.id = co.cuenta_id " +
+    "WHERE COALESCE(co.rescate_enviado,0) = 0 AND " +
+    "(co.estado = 'rechazada' OR (co.estado = 'iniciada' AND co.fecha < ?1))"
+  ).bind(hoyStr).all();
+  const enviados = []; let fallos = 0;
+  const yaRescatadas = new Set();   // una cuenta con varias compras abandonadas recibe UN solo correo
+  for (const co of (compras || [])){
+    // Sin email en la cuenta: skip silencioso y no volver a escanearla (data vieja sin correo).
+    if (!co._email){
+      await env.DB.prepare("UPDATE compras SET rescate_enviado = 2 WHERE id = ?1").bind(co.id).run();
+      continue;
+    }
+    // Si la cuenta tiene una compra confirmada POSTERIOR (o del mismo día), compró por otra vía: no molestar.
+    const conf = await env.DB.prepare(
+      "SELECT 1 AS ok FROM compras WHERE cuenta_id = ?1 AND estado = 'confirmada' AND fecha >= ?2 LIMIT 1"
+    ).bind(co.cuenta_id, co.fecha || "").first();
+    if (conf){
+      await env.DB.prepare("UPDATE compras SET rescate_enviado = 2 WHERE id = ?1").bind(co.id).run();
+      continue;
+    }
+    if (yaRescatadas.has(co.cuenta_id)){
+      await env.DB.prepare("UPDATE compras SET rescate_enviado = 2 WHERE id = ?1").bind(co.id).run();
+      continue;
+    }
+    const ok = await correoRescateCompra(env, co._email, co._nombre, co.paquete);
+    if (ok){
+      await env.DB.prepare("UPDATE compras SET rescate_enviado = 1 WHERE id = ?1").bind(co.id).run();
+      yaRescatadas.add(co.cuenta_id);
+      enviados.push({ nombre: co._nombre, email: co._email, paquete: co.paquete, estado: co.estado });
+    } else { fallos++; }
+  }
+  if (enviados.length){
+    try {
+      await alertaCorreoAndres(env, "Rescate de compras abandonadas: " + enviados.length + " correo(s) hoy",
+        "El sistema invitó a retomar su compra a:\n\n" +
+        enviados.map(function(e){ return "- " + e.nombre + " (" + e.email + ") · " + e.paquete + " · estaba '" + e.estado + "'"; }).join("\n") +
+        "\n\nSi alguno te escribe por WhatsApp, viene de aquí.\n");
+    } catch (e) {}
+  }
+  await reportarSaludCorreo(env, fallos, fallos + enviados.length);
+  return enviados;
+}
+
+/* ============ RESEÑAS DE GOOGLE CON GATE DE SATISFACCIÓN (07-jul-2026) ============
+   Alumno con 4+ clases 'Asistió' recibe UN correo (una sola vez en la vida, dedupe
+   alumnos.resena_pedida): "del 1 al 5, cómo van tus clases?" con 5 botones de un clic.
+   Nota 4-5 -> redirect al link de reseñas de Google (config.review_link). Nota 1-3 ->
+   página de gracias sobria + alerta inmediata a Andrés (radar de churn). El token es de un
+   solo uso y solo se guarda su hash (mismo patrón que reset_tokens). Si config.review_link
+   está vacío, el motor NO manda nada: el link de Google no se inventa. */
+async function correoPedidoResena(env, to, nombreCompleto, token){
+  if (!to) return false;
+  const nombre = ((nombreCompleto || "").trim().split(/\s+/)[0]) || "";
+  const base = MARCA.dominio + "/api/feedback?token=" + token + "&nota=";
+  const btn = function(n){
+    return '<a href="' + base + n + '" style="display:inline-block;width:44px;height:44px;line-height:44px;margin:0 4px;background:#e8501f;color:#ffffff;text-decoration:none;font-weight:bold;font-size:18px;border-radius:6px;text-align:center">' + n + '</a>';
+  };
+  const html =
+    '<div style="font-family:Arial,Helvetica,sans-serif;max-width:480px;margin:0 auto;color:#1a1a1a;font-size:15px;line-height:1.6">' +
+      '<p>Hola' + (nombre ? ' ' + nombre : '') + ' 🎸</p>' +
+      '<p>Llevas ya varias clases conmigo y quiero saber cómo lo estás viviendo. Del 1 al 5, cómo van tus clases?</p>' +
+      '<p style="text-align:center;margin:26px 0">' + btn(1) + btn(2) + btn(3) + btn(4) + btn(5) + '</p>' +
+      '<p style="font-size:13px;color:#666666;text-align:center">1 = puede mejorar mucho · 5 = excelente</p>' +
+      '<p>Un toque y listo. Tu respuesta me llega directo y me ayuda a que cada clase te sume más.</p>' +
+      '<p>Un abrazo,<br><b>' + MARCA.profe + '</b><br>' + MARCA.nombre + '</p>' +
+    '</div>';
+  const text = 'Hola' + (nombre ? ' ' + nombre : '') + '!\n\nLlevas ya varias clases conmigo y quiero saber cómo lo estás viviendo. Del 1 al 5, cómo van tus clases? Toca tu nota:\n\n' +
+    [1,2,3,4,5].map(function(n){ return n + ' -> ' + base + n; }).join('\n') +
+    '\n\n(1 = puede mejorar mucho, 5 = excelente)\n\nUn abrazo,\n' + MARCA.profe + ' - ' + MARCA.nombre;
+  return enviarCorreo(env, { to: to, subject: "Del 1 al 5, cómo van tus clases?", html: html, text: text });
+}
+
+async function procesarPedidosResena(env){
+  const cfg = await loadConfig(env);
+  if (cfg.resena_activo !== "1") return [];    // encendido por defecto; '0' lo apaga
+  if (!cfg.review_link) return [];             // sin link real de Google no se pide nada
+  const { results: alumnos } = await env.DB.prepare(
+    "SELECT a.id, a.nombre, c.email AS _email FROM alumnos a JOIN cuentas c ON c.alumno_id = a.id " +
+    "WHERE COALESCE(a.resena_pedida,0) = 0 AND c.email IS NOT NULL AND c.email != '' " +
+    "AND (SELECT COUNT(*) FROM registro r WHERE r.alumno_id = a.id AND r.estado = 'Asistió') >= 4"
+  ).all();
+  const enviados = []; let fallos = 0;
+  for (const a of (alumnos || [])){
+    const token = randHex(32);
+    const tokenHash = await sha256Hex(token);
+    await env.DB.batch([
+      env.DB.prepare("DELETE FROM feedback WHERE alumno_id = ?1 AND usado = 0").bind(a.id),
+      env.DB.prepare("INSERT INTO feedback (token_hash, alumno_id, nota, usado, creada) VALUES (?1, ?2, 0, 0, ?3)")
+        .bind(tokenHash, a.id, new Date().toISOString())
+    ]);
+    const ok = await correoPedidoResena(env, a._email, a.nombre, token);
+    if (ok){
+      await env.DB.prepare("UPDATE alumnos SET resena_pedida = 1 WHERE id = ?1").bind(a.id).run();
+      enviados.push({ nombre: a.nombre, email: a._email });
+    } else {
+      // El correo no salió: limpiar el token para que mañana se genere uno fresco.
+      try { await env.DB.prepare("DELETE FROM feedback WHERE token_hash = ?1").bind(tokenHash).run(); } catch (e) {}
+      fallos++;
+    }
+  }
+  if (enviados.length){
+    try {
+      await alertaCorreoAndres(env, "Pedido de reseña enviado a " + enviados.length + " alumno(s)",
+        "El sistema les preguntó (del 1 al 5) cómo van sus clases. Nota 4-5 va directo a Google Reviews; nota 1-3 te llega como radar de churn:\n\n" +
+        enviados.map(function(e){ return "- " + e.nombre + " (" + e.email + ")"; }).join("\n") + "\n");
+    } catch (e) {}
+  }
+  await reportarSaludCorreo(env, fallos, fallos + enviados.length);
+  return enviados;
+}
+
+/* Página HTML mínima para las respuestas del gate de satisfacción (sin assets, sobria). */
+function paginaFeedback(titulo, cuerpo){
+  return new Response(
+    '<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>' + titulo + ' · ' + MARCA.nombre + '</title></head>' +
+    '<body style="font-family:Arial,Helvetica,sans-serif;background:#faf7f2;color:#1a1a1a;margin:0;display:flex;min-height:100vh;align-items:center;justify-content:center">' +
+    '<div style="max-width:420px;padding:32px;text-align:center">' +
+    '<p style="font-size:13px;letter-spacing:2px;color:#e8501f;font-weight:bold">' + MARCA.nombre.toUpperCase() + '</p>' +
+    '<h1 style="font-size:22px;margin:8px 0 12px">' + titulo + '</h1>' +
+    '<p style="font-size:15px;line-height:1.6;color:#444444">' + cuerpo + '</p>' +
+    '</div></body></html>',
+    { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" } }
+  );
+}
+
+/* ============ RADAR DE ASISTENCIA A MITAD DE CICLO (07-jul-2026, solo lunes) ============
+   El alumno activo que va a un ritmo menor a la mitad del que compró (y sin reserva futura)
+   se está enfriando aunque su plata ya esté puesta. UN empujón por ciclo (alumnos.nudge_ciclo),
+   solo si su vence está a más de 7 días (aún puede recuperar el ritmo) y sin pausas en el ciclo
+   (la pausa ya extendió su plazo; el nudge ahí sería injusto). Encendido por defecto
+   (config.nudge_asistencia_activo). */
+const NUDGE_RITMO_SEMANAL = { "Paquete 4": 1, "Paquete 8": 2, "Paquete 12": 3 };   // clases/semana del paquete (4 semanas de ciclo)
+
+async function correoNudgeAsistencia(env, alumno, to, restantes){
+  if (!to) return false;
+  const nombre = ((alumno.nombre || "").trim().split(/\s+/)[0]) || "";
+  const agenda = MARCA.dominio + "/alumnos/#agenda";
+  const frase = restantes === 1 ? "te queda 1 clase" : ("te quedan " + restantes + " clases");
+  const html =
+    '<div style="font-family:Arial,Helvetica,sans-serif;max-width:480px;margin:0 auto;color:#1a1a1a;font-size:15px;line-height:1.6">' +
+      '<p>Hola' + (nombre ? ' ' + nombre : '') + ' 🎸</p>' +
+      '<p>Va la mitad de tu mes y todavía ' + frase + ' por usar. Tu cupo ya está pagado y tu horario te espera.</p>' +
+      '<p>El avance en música se construye con constancia, y la buena noticia es que recuperar el ritmo toma un solo clic:</p>' +
+      '<p style="text-align:center;margin:26px 0"><a href="' + agenda + '" style="background:#e8501f;color:#ffffff;text-decoration:none;font-weight:bold;padding:14px 26px;border-radius:6px;display:inline-block">Reservar mi próxima clase</a></p>' +
+      '<p>Si un viaje o un tema de salud te está complicando venir, también puedes congelar tu plazo desde el portal.</p>' +
+      '<p>Un abrazo,<br><b>' + MARCA.profe + '</b><br>' + MARCA.nombre + '</p>' +
+    '</div>';
+  const text = 'Hola' + (nombre ? ' ' + nombre : '') + '!\n\nVa la mitad de tu mes y todavía ' + frase + ' por usar. Tu cupo ya está pagado y tu horario te espera.\n\nReserva tu próxima clase aquí: ' + agenda + '\n\nSi un viaje o un tema de salud te complica venir, puedes congelar tu plazo desde el portal.\n\nUn abrazo,\n' + MARCA.profe + ' - ' + MARCA.nombre;
+  return enviarCorreo(env, { to: to, subject: (restantes === 1 ? "Te queda 1 clase" : "Te quedan " + restantes + " clases") + " y tu horario te espera 🎸", html: html, text: text });
+}
+
+async function procesarNudgeAsistencia(env){
+  const cfg = await loadConfig(env);
+  if (cfg.nudge_asistencia_activo !== "1") return [];   // encendido por defecto; '0' lo apaga
+  const precios = await loadPrecios(env);
+  const { results: alumnos } = await env.DB.prepare(
+    "SELECT a.*, c.email AS _email FROM alumnos a JOIN cuentas c ON c.alumno_id = a.id " +
+    "WHERE a.pago = 'Pagado' AND c.email IS NOT NULL AND c.email != '' AND COALESCE(a.vence,'') != ''"
+  ).all();
+  const ahora = Date.now();
+  const ahoraIso = new Date(ahora).toISOString();
+  const enviados = []; let fallos = 0;
+  for (const a of (alumnos || [])){
+    const ritmoPaquete = NUDGE_RITMO_SEMANAL[a.paquete];
+    if (!ritmoPaquete) continue;                                   // clases sueltas / prueba: sin ritmo que medir
+    const ciclo = Number(a.ciclo) || 1;
+    if ((Number(a.nudge_ciclo) || 0) >= ciclo) continue;           // máx 1 empujón por ciclo
+    const venceMs = Date.parse(a.vence + "T23:59:59Z");
+    if (!Number.isFinite(venceMs) || venceMs - ahora <= 7 * 86400000) continue;   // cerca de vencer: eso ya lo cubre el aviso de vencimiento
+    const inicioMs = Date.parse((a.fecha || "") + "T00:00:00Z");
+    if (!Number.isFinite(inicioMs)) continue;
+    const semanas = (ahora - inicioMs) / (7 * 86400000);
+    if (semanas < 1) continue;                                     // primera semana del ciclo: aún no hay ritmo que juzgar
+    const { results: regs } = await env.DB.prepare(
+      "SELECT estado FROM registro WHERE alumno_id = ?1 AND COALESCE(ciclo,1) = ?2"
+    ).bind(a.id, ciclo).all();
+    const rUsadas = await reservasUsadasCount(env, a.id, ciclo);
+    const c = compute(a, regs || [], precios, rUsadas);
+    if (c.restantes < 1) continue;                                 // ya usó todo: nada que empujar
+    if ((c.usadas / semanas) >= ritmoPaquete * 0.5) continue;      // ritmo sano (al menos la mitad del contratado)
+    const pausa = await env.DB.prepare(
+      "SELECT 1 AS ok FROM pausas WHERE alumno_id = ?1 AND ciclo = ?2 LIMIT 1"
+    ).bind(a.id, ciclo).first();
+    if (pausa) continue;                                           // pausó este ciclo (viaje/salud): el nudge sería injusto
+    const futura = await env.DB.prepare(
+      "SELECT 1 AS ok FROM reservas WHERE alumno_id = ?1 AND estado = 'reservada' AND inicio_utc > ?2 LIMIT 1"
+    ).bind(a.id, ahoraIso).first();
+    if (futura) continue;                                          // ya tiene clase agendada: va bien
+    const ok = await correoNudgeAsistencia(env, a, a._email, c.restantes);
+    if (ok){
+      await env.DB.prepare("UPDATE alumnos SET nudge_ciclo = ?1 WHERE id = ?2").bind(ciclo, a.id).run();
+      enviados.push({ nombre: a.nombre, email: a._email, paquete: a.paquete, restantes: c.restantes, vence: a.vence });
+    } else { fallos++; }
+  }
+  if (enviados.length){
+    try {
+      await alertaCorreoAndres(env, "Radar de asistencia: " + enviados.length + " alumno(s) con ritmo bajo esta semana",
+        "Estos alumnos van a menos de la mitad del ritmo de su paquete, sin reserva futura, y recibieron el empujón por correo:\n\n" +
+        enviados.map(function(e){ return "- " + e.nombre + " (" + e.email + ") · " + e.paquete + " · le quedan " + e.restantes + " clase(s) · vence " + e.vence; }).join("\n") +
+        "\n\nA los que quieras tocar a mano, un WhatsApp corto cierra mejor.\n");
+    } catch (e) {}
+  }
+  await reportarSaludCorreo(env, fallos, fallos + enviados.length);
+  return enviados;
+}
+
+/* ============ REFERIDOS EN PILOTO AUTOMÁTICO (07-jul-2026) ============
+   Correo dedicado al confirmar una RENOVACIÓN (no primera compra): gracias + su link de
+   referidos. 1 vez por ciclo (alumnos.referido_nudge_ciclo). El bloque compartido
+   (bloqueReferido) también viaja en la bienvenida y el aviso de vencimiento. La lógica del
+   crédito NO se toca: sigue viviendo en confirmarCompra. */
+async function correoGraciasRenovacion(env, cu, compra){
+  if (!cu || !cu.email || !cu.alumno_id) return false;
+  let cfg = {};
+  try { cfg = await loadConfig(env); } catch (e) { cfg = {}; }
+  if (cfg.referido_nudge_activo === "0") return false;   // encendido por defecto; '0' lo apaga
+  const al = await env.DB.prepare("SELECT id, ciclo, referido_nudge_ciclo FROM alumnos WHERE id = ?1").bind(cu.alumno_id).first();
+  if (!al) return false;
+  const ciclo = Number(al.ciclo) || 1;   // ya viene incrementado por la renovación
+  if ((Number(al.referido_nudge_ciclo) || 0) >= ciclo) return false;
+  const ref = bloqueReferido(cu);
+  if (!ref.html) return false;
+  const nombre = ((cu.nombre || "").trim().split(/\s+/)[0]) || "";
+  const nombrePaquete = NOMBRES_PAQUETE[compra.paquete] || compra.paquete || "";
+  const link = MARCA.dominio + "/alumnos/?ref=" + cu.ref_code;
+  const html =
+    '<div style="font-family:Arial,Helvetica,sans-serif;max-width:480px;margin:0 auto;color:#1a1a1a;font-size:15px;line-height:1.6">' +
+      '<p>Hola' + (nombre ? ' ' + nombre : '') + ' 🎸</p>' +
+      '<p>Gracias por seguir un mes más. Tu <b>' + nombrePaquete + '</b> ya está renovado y eso dice mucho de ti: estás entrenando en serio.</p>' +
+      '<p>Y como ya sabes de primera mano cómo funciona esto, te dejo tu link personal. Si un amigo tuyo quiere cantar, tocar o componer, pásaselo: cuando compre su primer paquete, tú ganas <b>S/' + CREDITO_REFERIDO + ' de crédito</b> que se descuenta solo de tu próxima renovación.</p>' +
+      '<p style="text-align:center;margin:26px 0"><a href="' + link + '" style="background:#e8501f;color:#ffffff;text-decoration:none;font-weight:bold;padding:14px 26px;border-radius:6px;display:inline-block">Compartir mi link</a></p>' +
+      '<p style="font-size:13px;color:#666666;text-align:center">' + link + '</p>' +
+      '<p>Nos vemos en clase. A seguir sumando.</p>' +
+      '<p>Un abrazo,<br><b>' + MARCA.profe + '</b><br>' + MARCA.nombre + '</p>' +
+    '</div>';
+  const text = 'Hola' + (nombre ? ' ' + nombre : '') + '!\n\nGracias por seguir un mes más. Tu ' + nombrePaquete + ' ya está renovado y eso dice mucho de ti: estás entrenando en serio.\n\nTe dejo tu link personal de referidos. Si un amigo tuyo quiere cantar, tocar o componer, pásaselo: cuando compre su primer paquete, tú ganas S/' + CREDITO_REFERIDO + ' de crédito que se descuenta solo de tu próxima renovación.\n\nTu link: ' + link + '\n\nNos vemos en clase.\n\nUn abrazo,\n' + MARCA.profe + ' - ' + MARCA.nombre;
+  const ok = await enviarCorreo(env, { to: cu.email, subject: "Gracias por seguir un mes más 🎸 Tu link de referidos", html: html, text: text });
+  if (ok){
+    try { await env.DB.prepare("UPDATE alumnos SET referido_nudge_ciclo = ?1 WHERE id = ?2").bind(ciclo, al.id).run(); } catch (e) {}
+  }
+  return ok;
+}
+
 /* ============ CHATBOT (burbuja flotante con IA) ============
    Reemplaza la burbuja de WhatsApp por un asistente que responde dudas y, si no alcanza,
    pasa el WhatsApp de Andrés. Claude Haiku via /api/chatbot. Arranca con degradación elegante:
@@ -1299,7 +1608,7 @@ async function avisarPushAlumno(env, cuentaId, payload){
 const BACKUP_TABLAS = [
   "alumnos", "registro", "precios", "cuentas", "compras", "recursos",
   "leads", "config", "reservas", "disponibilidad", "sesiones",
-  "push_subs", "chat_mensajes"
+  "push_subs", "chat_mensajes", "pausas", "feedback"
 ];
 const BACKUP_PREFIX = "backups/";
 const BACKUP_RETENCION_DIAS = 30;
@@ -1759,6 +2068,23 @@ async function ensureSchema(env){
     if (!tieneRecFecha) await env.DB.prepare("ALTER TABLE alumnos ADD COLUMN recordatorio_fecha TEXT DEFAULT ''").run();
     const tieneWinback = (infoAlumnos.results || []).some(c => c.name === "winback_ciclo");
     if (!tieneWinback) await env.DB.prepare("ALTER TABLE alumnos ADD COLUMN winback_ciclo INTEGER DEFAULT 0").run();
+    // v19 (07-jul-2026): 4 motores nuevos.
+    // rescate_enviado: dedupe del rescate de compras abandonadas (0 pendiente, 1 enviado, 2 saltada).
+    const tieneRescate = (infoCompras.results || []).some(c => c.name === "rescate_enviado");
+    if (!tieneRescate) await env.DB.prepare("ALTER TABLE compras ADD COLUMN rescate_enviado INTEGER DEFAULT 0").run();
+    // resena_pedida: dedupe del pedido de reseña de Google (una sola vez por alumno, de por vida).
+    const tieneResena = (infoAlumnos.results || []).some(c => c.name === "resena_pedida");
+    if (!tieneResena) await env.DB.prepare("ALTER TABLE alumnos ADD COLUMN resena_pedida INTEGER DEFAULT 0").run();
+    // nudge_ciclo: dedupe del radar de asistencia (máx 1 empujón por ciclo).
+    const tieneNudgeCiclo = (infoAlumnos.results || []).some(c => c.name === "nudge_ciclo");
+    if (!tieneNudgeCiclo) await env.DB.prepare("ALTER TABLE alumnos ADD COLUMN nudge_ciclo INTEGER DEFAULT 0").run();
+    // referido_nudge_ciclo: dedupe del correo de referidos tras renovar (máx 1 por ciclo).
+    const tieneRefNudge = (infoAlumnos.results || []).some(c => c.name === "referido_nudge_ciclo");
+    if (!tieneRefNudge) await env.DB.prepare("ALTER TABLE alumnos ADD COLUMN referido_nudge_ciclo INTEGER DEFAULT 0").run();
+    // feedback: notas del gate de satisfacción (token de un solo uso; solo se guarda su hash, como reset_tokens).
+    await env.DB.prepare(
+      "CREATE TABLE IF NOT EXISTS feedback (token_hash TEXT PRIMARY KEY, alumno_id TEXT NOT NULL, nota INTEGER DEFAULT 0, usado INTEGER DEFAULT 0, creada TEXT DEFAULT '', respondida TEXT DEFAULT '')"
+    ).run();
     _schemaChecked = true;
   } catch (e) { /* otra invocación pudo correrla en paralelo; se reintenta en la próxima request */ }
 }
@@ -1778,6 +2104,50 @@ export default {
       if (url.pathname === "/api/publico" && request.method === "GET"){
         const cfg = await loadConfig(env);
         return json({ google_client_id: cfg.google_client_id || "" });
+      }
+
+      /* ============ GATE DE SATISFACCIÓN (público, un clic desde el correo) ============
+         Nota 4-5 -> redirect al link de reseñas de Google (config.review_link).
+         Nota 1-3 -> página de gracias sobria + alerta inmediata a Andrés (radar de churn).
+         Token de un solo uso: reclamo atómico (usado = 0 -> 1), mismo patrón que confirmarCompra. */
+      if (url.pathname === "/api/feedback" && request.method === "GET"){
+        const token = String(url.searchParams.get("token") || "");
+        const nota = Math.round(Number(url.searchParams.get("nota"))) || 0;
+        if (!/^[a-f0-9]{64}$/.test(token) || nota < 1 || nota > 5){
+          return paginaFeedback("Este enlace no funciona", "Si llegaste aquí desde un correo mío, escríbeme por WhatsApp y lo vemos: +" + MARCA.whatsapp);
+        }
+        const tokenHash = await sha256Hex(token);
+        const fila = await env.DB.prepare("SELECT * FROM feedback WHERE token_hash = ?1").bind(tokenHash).first();
+        if (!fila){
+          return paginaFeedback("Este enlace no funciona", "Si llegaste aquí desde un correo mío, escríbeme por WhatsApp y lo vemos: +" + MARCA.whatsapp);
+        }
+        const upd = await env.DB.prepare(
+          "UPDATE feedback SET usado = 1, nota = ?1, respondida = ?2 WHERE token_hash = ?3 AND usado = 0"
+        ).bind(nota, new Date().toISOString(), tokenHash).run();
+        const cambio = (upd && upd.meta && (upd.meta.changes ?? upd.meta.rows_written)) || 0;
+        if (!cambio){
+          return paginaFeedback("Ya tengo tu respuesta", "Tu opinión ya quedó registrada. Gracias por tomarte el minuto!");
+        }
+        if (nota >= 4){
+          const cfg = await loadConfig(env);
+          if (cfg.review_link){
+            return new Response(null, { status: 302, headers: { "location": cfg.review_link } });
+          }
+          return paginaFeedback("Gracias!", "Me alegra un montón que las clases vayan bien. Nos vemos en la próxima!");
+        }
+        // Nota 1-3: radar de churn — aviso inmediato a Andrés (correo por AVISOS + push).
+        let nombreAlumno = "";
+        try {
+          const al = await env.DB.prepare("SELECT nombre FROM alumnos WHERE id = ?1").bind(fila.alumno_id).first();
+          nombreAlumno = (al && al.nombre) || fila.alumno_id;
+        } catch (e) { nombreAlumno = fila.alumno_id; }
+        const asunto = "Radar de churn: " + nombreAlumno + " puntuó " + nota;
+        const cuerpo = nombreAlumno + " respondió el correo de satisfacción con nota " + nota + " de 5.\n\n" +
+          "No se le pidió reseña de Google (el gate lo frenó). Vale un WhatsApp tuyo hoy para escuchar qué le está faltando.\n\n" +
+          MARCA.dominio + "/admin/crm/";
+        try { await alertaCorreoAndres(env, asunto, cuerpo); } catch (e) {}
+        try { await avisarPush(env, { title: asunto, body: "Tocaría un WhatsApp tuyo hoy. Nota " + nota + " de 5.", url: MARCA.dominio + "/admin/crm/" }); } catch (e) {}
+        return paginaFeedback("Gracias por decírmelo", "Tu respuesta me llega directo y me la tomo en serio. Voy a ajustar lo que haga falta para que cada clase te sume más. Nos vemos en la próxima.");
       }
 
       /* ============ RESET DE CONTRASEÑA (self-service, sin auth) ============
@@ -3292,6 +3662,9 @@ export default {
   },
 
   async scheduled(event, env, ctx){
+    // Migraciones aditivas al día ANTES de que corran los motores: si el cron dispara justo
+    // después de un deploy y ningún fetch corrió aún, las columnas nuevas ya existen igual.
+    try { await ensureSchema(env); } catch (e) {}
     // Recordatorios de clase: cada hora (necesario para el T-2h).
     ctx.waitUntil(procesarRecordatoriosClase(env).catch(function(){}));
     // Salud de Google Calendar: cada hora, alerta 1 vez por incidencia (detección ≤1h).
@@ -3305,6 +3678,17 @@ export default {
       ctx.waitUntil(procesarAvisosVencimiento(env).catch(function(){}));
       // Nurture de leads: mismo disparo diario. Apagado por defecto (config.nurture_activo).
       ctx.waitUntil(procesarNurtureLeads(env).catch(function(){}));
+      // Rescate de compras abandonadas: iniciadas de ayer o antes + rechazadas, 1 correo por compra.
+      // Encendido por defecto (config.rescate_activo = '0' lo apaga).
+      ctx.waitUntil(procesarRescateCompras(env).catch(function(){}));
+      // Pedido de reseña con gate de satisfacción: solo manda si config.review_link tiene el link real.
+      // Encendido por defecto (config.resena_activo = '0' lo apaga).
+      ctx.waitUntil(procesarPedidosResena(env).catch(function(){}));
+      // Radar de asistencia a mitad de ciclo: SOLO los lunes (1 = lunes en getUTCDay).
+      // Encendido por defecto (config.nudge_asistencia_activo = '0' lo apaga).
+      if (new Date().getUTCDay() === 1){
+        ctx.waitUntil(procesarNudgeAsistencia(env).catch(function(){}));
+      }
     }
     // Oferta directa a paquetes (puente a WhatsApp): ventana nocturna 05:00-09:00 UTC
     // (medianoche a 4am Lima), con la cuota diaria de Resend recién reiniciada. Cada corrida
