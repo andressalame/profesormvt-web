@@ -826,7 +826,7 @@ function paginaLogin(){
       "<button type=\"submit\">Ingresar</button>" +
       "<div class=\"err\" id=\"err\"></div>" +
     "</form>" +
-    "<div class=\"foot\">No tienes cuenta? <a href=\"/app/registro\">Crea tu academia</a></div>";
+    "<div class=\"foot\">No tienes cuenta? <a href=\"/app/registro\">Crea tu academia</a> · <a href=\"/app/demo\">Mira la demo</a></div>";
   const script =
     "document.getElementById('f').addEventListener('submit', async function(e){" +
     "e.preventDefault();" +
@@ -903,7 +903,7 @@ function paginaLanding(){
     "<h1>Batuta</h1>" +
     "<p class=\"sub\">El panel para gestionar tu academia.</p>" +
     "<a href=\"/app/registro\"><button type=\"button\">Empezar gratis</button></a>" +
-    "<div class=\"foot\">Ya tienes cuenta? <a href=\"/app/login\">Ingresa aqui</a></div>";
+    "<div class=\"foot\">Ya tienes cuenta? <a href=\"/app/login\">Ingresa aqui</a> · <a href=\"/app/demo\">Mira la demo</a></div>";
   // Si ya tiene sesion de profesor, directo a su panel.
   const script = "try{ if(localStorage.getItem('batuta_t')){ location.replace('/app/panel'); } }catch(e){}";
   return paginaBase("Batuta", cuerpo, script);
@@ -911,6 +911,178 @@ function paginaLanding(){
 
 function htmlResponse(html){
   return new Response(html, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" } });
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   DEMO PÚBLICA (Estudio Sonata): tenant real que se resetea solo.
+   GET /app/demo entra directo con sesión propia; scheduled() lo resetea cada
+   mañana (9am Lima) y también se auto-siembra si está vacío (lazy init).
+   El tenant demo nunca recibe nurture (filtro por email) y queda estado
+   'activo' para no chocar con el trial gate.
+   ═══════════════════════════════════════════════════════════════════════════ */
+const DEMO_EMAIL = "demo@batuta.lat";
+
+async function resetDemo(env){
+  let t = await env.DB.prepare("SELECT * FROM tenants WHERE email = ?1").bind(DEMO_EMAIL).first();
+  if (!t){
+    const id = crypto.randomUUID();
+    const salt = randHex(16);
+    const hash = await hashPass(randHex(24), salt);
+    await env.DB.prepare(
+      "INSERT INTO tenants (id, slug, academia, profe_nombre, email, whatsapp, pass_hash, pass_salt, plan, estado, trial_hasta, creado) " +
+      "VALUES (?1, 'estudio-sonata-demo', 'Estudio Sonata', 'Emilia Vargas', ?2, '51999888777', ?3, ?4, 'academia', 'activo', ?5, ?6)"
+    ).bind(id, DEMO_EMAIL, hash, salt, new Date(Date.now() + 3650 * 86400000).toISOString(), new Date().toISOString()).run();
+    t = await env.DB.prepare("SELECT * FROM tenants WHERE id = ?1").bind(id).first();
+  }
+  const tid = t.id;
+  // Estado canónico siempre (aunque un visitante haya cambiado nombre, plan o contraseña de perfil).
+  await env.DB.prepare(
+    "UPDATE tenants SET academia='Estudio Sonata', profe_nombre='Emilia Vargas', plan='academia', estado='activo', trial_hasta=?2, mp_preapproval_id='', mp_sub_status='' WHERE id = ?1"
+  ).bind(tid, new Date(Date.now() + 3650 * 86400000).toISOString()).run();
+
+  // Borrón total de los datos del tenant demo (las sesiones de visitantes mueren con el reset).
+  const tablas = ["alumnos", "registro", "pausas", "precios", "config", "disponibilidad", "reservas", "grupos", "cuentas", "compras", "recursos", "ejercicios", "chat_mensajes", "push_subs", "leads"];
+  await env.DB.batch(tablas.map(tb => env.DB.prepare("DELETE FROM " + tb + " WHERE tenant_id = ?1").bind(tid)));
+  await env.DB.prepare("DELETE FROM sesiones WHERE cuenta_id = ?1 OR cuenta_id LIKE 'demo-cu-%'").bind("T:" + tid).run();
+
+  // Fechas relativas (Lima = UTC-5) para que la demo siempre se vea viva.
+  const DIA = 86400000, LIMA = 5 * 3600000;
+  const f = (n) => new Date(Date.now() - LIMA - n * DIA).toISOString().slice(0, 10);
+  const limaAt = (dias, hh, mm) => {
+    const hoy = new Date(Date.now() - LIMA);
+    return new Date(Date.UTC(hoy.getUTCFullYear(), hoy.getUTCMonth(), hoy.getUTCDate() + dias, hh, mm, 0) + LIMA);
+  };
+  const ahoraIso = new Date().toISOString();
+
+  const stmts = [];
+  // precios + config
+  for (const k of Object.keys(PRECIOS_DEFAULT)){
+    stmts.push(env.DB.prepare("INSERT INTO precios (tenant_id, paquete, precio) VALUES (?1,?2,?3)").bind(tid, k, PRECIOS_DEFAULT[k]));
+  }
+  const cfg = { profe_nombre: "Profe Emilia", cursos: "Canto, Piano, Guitarra", pago_numero: "999 999 999", pago_titular: "Emilia Vargas", whatsapp_profe: "51999888777" };
+  for (const k of Object.keys(cfg)){
+    stmts.push(env.DB.prepare("INSERT INTO config (tenant_id, clave, valor) VALUES (?1,?2,?3)").bind(tid, k, cfg[k]));
+  }
+  // alumnos (mismos personajes que la réplica de batuta.lat/demo)
+  const alumnos = [
+    ["demo-al-1", "A001", "Fabio Mendoza",  "51987654321", "Canto",    "Paquete 8",  f(30),  "Pagado",    "Jue 18:00", "Le cuesta el pasaje; trabajar twang", 3],
+    ["demo-al-2", "A002", "Natalia Rojas",  "51912345678", "Piano",    "Paquete 4",  f(90),  "Pagado",    "Lun 19:00", "Independencia de manos en progreso", 5],
+    ["demo-al-3", "A003", "Yaritza Campos", "51998877665", "Canto",    "Paquete 12", f(45),  "Pagado",    "Sáb 10:00", "Belting seguro, va muy bien", 2],
+    ["demo-al-4", "A004", "Diego Salas",    "51955443322", "Guitarra", "Paquete 8",  f(50),  "Pagado",    "Mar 17:00", "Cambios de acorde lentos aún", 1],
+    ["demo-al-5", "A005", "Laura Pacheco",  "51966554433", "Piano",    "Paquete 4",  f(120), "Pendiente", "Mié 18:00", "Hablar renovación esta semana", 4]
+  ];
+  for (const a of alumnos){
+    stmts.push(env.DB.prepare(
+      "INSERT INTO alumnos (id,tenant_id,codigo,nombre,whatsapp,curso,paquete,fecha,pago,horario,notas,ciclo) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12)"
+    ).bind(a[0], tid, a[1], a[2], a[3], a[4], a[5], a[6], a[7], a[8], a[9], a[10]));
+  }
+  // registro de clases: el saldo del panel sale de aquí (compute() cuenta por ciclo)
+  const regs = [
+    // Fabio (ciclo 3): 3 asistidas -> 5 de 8
+    [f(8), "demo-al-1", "Canto", "Asistió", "Apoyo respiratorio en frases largas", "Vocalizo 1", "", 3],
+    [f(4), "demo-al-1", "Canto", "Asistió", "Twang en la zona de pasaje", "Vocalizo 2", "", 3],
+    [f(1), "demo-al-1", "Canto", "Asistió", "Cierre cordal en el pasaje", "Vocalizo 3", "Repasar twang", 3],
+    // Natalia (ciclo 5): 2 asistidas -> 2 de 4
+    [f(7), "demo-al-2", "Piano", "Asistió", "Lectura en clave de fa", "Czerny 599 n.º 12", "", 5],
+    [f(1), "demo-al-2", "Piano", "Asistió", "Independencia de manos", "Hanon 1", "Escalas en La menor", 5],
+    // Yaritza (ciclo 2): 3 asistidas + 1 reprogramada (dentro del margen) -> 9 de 12
+    [f(9), "demo-al-3", "Canto", "Asistió", "Calentamiento SOVT", "Pajita 5 min diarios", "", 2],
+    [f(5), "demo-al-3", "Canto", "Asistió", "Mezcla en notas altas", "Repertorio: coro de su canción", "", 2],
+    [f(3), "demo-al-3", "Canto", "Asistió", "Belting con apoyo", "Grabarse el coro", "Belting seguro", 2],
+    [f(2), "demo-al-3", "Canto", "Reprogramó", "", "", "", 2],
+    // Diego (ciclo 1): 6 asistidas + 1 falta -> 1 de 8 (última clase)
+    [f(21), "demo-al-4", "Guitarra", "Asistió", "Acordes abiertos", "Em, Am, D", "", 1],
+    [f(18), "demo-al-4", "Guitarra", "Asistió", "Cambios Em-Am", "Metrónomo 60", "", 1],
+    [f(14), "demo-al-4", "Guitarra", "Asistió", "Rasgueo básico", "Patrón 1", "", 1],
+    [f(11), "demo-al-4", "Guitarra", "Asistió", "Primera canción completa", "Repasarla entera", "", 1],
+    [f(7),  "demo-al-4", "Guitarra", "Asistió", "Cejilla en F", "F con cejilla 10 min", "", 1],
+    [f(4),  "demo-al-4", "Guitarra", "Asistió", "Ritmo con palm mute", "Patrón 2", "", 1],
+    [f(2),  "demo-al-4", "Guitarra", "Falta",   "", "Progresión 1-5-6-4", "Recuperar cambios de acorde", 1],
+    // Laura (ciclo 4): 4 asistidas -> 0 de 4 (renovar hoy)
+    [f(28), "demo-al-5", "Piano", "Asistió", "Repaso general", "", "", 4],
+    [f(21), "demo-al-5", "Piano", "Asistió", "Acordes con inversiones", "Inversiones de C y G", "", 4],
+    [f(14), "demo-al-5", "Piano", "Asistió", "Pedal de resonancia", "Balada con pedal", "", 4],
+    [f(7),  "demo-al-5", "Piano", "Asistió", "Su canción favorita completa", "Pulirla para tocarla en casa", "", 4]
+  ];
+  regs.forEach((r, i) => {
+    stmts.push(env.DB.prepare(
+      "INSERT INTO registro (id,tenant_id,fecha,alumno_id,curso,estado,trabajo,tarea,ciclo,tarea_audio,plan) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,'',?10)"
+    ).bind("demo-rg-" + (i + 1), tid, r[0], r[1], r[2], r[3], r[4], r[5], r[7], r[6]));
+  });
+  // reservas próximas (hoy 18:00 y 19:00 Lima, mañana 17:00, +3 días 10:00)
+  const rvs = [
+    ["demo-rv-1", "demo-al-1", limaAt(0, 18, 0), "Canto", 3],
+    ["demo-rv-2", "demo-al-2", limaAt(0, 19, 0), "Piano", 5],
+    ["demo-rv-3", "demo-al-4", limaAt(1, 17, 0), "Guitarra", 1],
+    ["demo-rv-4", "demo-al-3", limaAt(3, 10, 0), "Canto", 2]
+  ];
+  for (const rv of rvs){
+    const fin = new Date(rv[2].getTime() + 3600000);
+    stmts.push(env.DB.prepare(
+      "INSERT INTO reservas (id,tenant_id,alumno_id,inicio_utc,fin_utc,tipo,serie_id,estado,curso,ciclo,creada) VALUES (?1,?2,?3,?4,?5,'suelta','','reservada',?6,?7,?8)"
+    ).bind(rv[0], tid, rv[1], rv[2].toISOString(), fin.toISOString(), rv[3], rv[4], ahoraIso));
+  }
+  // disponibilidad semanal (1=lun ... 6=sáb)
+  const disp = [[1, "17:00"], [1, "18:00"], [1, "19:00"], [2, "17:00"], [2, "18:00"], [2, "19:00"], [3, "17:00"], [3, "18:00"], [4, "17:00"], [4, "18:00"], [4, "19:00"], [5, "18:00"], [5, "19:00"], [6, "10:00"]];
+  for (const d of disp){
+    stmts.push(env.DB.prepare("INSERT INTO disponibilidad (tenant_id, dia_semana, hora, activo) VALUES (?1,?2,?3,1)").bind(tid, d[0], d[1]));
+  }
+  // cuentas del portal (2 vinculadas, 1 sin vincular, como la réplica)
+  const cuentas = [
+    ["demo-cu-1", "fabio@gmail.com",     "Fabio Mendoza", "51987654321", 1, "demo-al-1", f(117)],
+    ["demo-cu-2", "nat.rojas@gmail.com", "Natalia Rojas", "51912345678", 1, "demo-al-2", f(129)],
+    ["demo-cu-3", "yari.c@gmail.com",    "Yaritza Campos", "51998877665", 0, "demo-al-3", f(45)],
+    ["demo-cu-4", "dsalas@gmail.com",    "Diego Salas", "51955443322", 0, "demo-al-4", f(50)],
+    ["demo-cu-5", "marco.t@gmail.com",   "Marco Túllume", "", 0, null, f(1)]
+  ];
+  for (const c of cuentas){
+    stmts.push(env.DB.prepare(
+      "INSERT INTO cuentas (id,tenant_id,email,nombre,whatsapp,pass_hash,pass_salt,marketing,alumno_id,creada,ref_code,ref_por,credito) VALUES (?1,?2,?3,?4,?5,'x','x',?6,?7,?8,'','',0)"
+    ).bind(c[0], tid, c[1], c[2], c[3], c[4], c[5], c[6]));
+  }
+  // compras: 1 pendiente por confirmar (el gancho del panel) + 3 procesadas
+  const compras = [
+    ["demo-cp-1", "demo-cu-4", "Guitarra", "Paquete 8",  450, "03471825", "pendiente",  f(0), "yape"],
+    ["demo-cp-2", "demo-cu-3", "Canto",    "Paquete 12", 600, "",         "confirmada", f(0), "tarjeta"],
+    ["demo-cp-3", "demo-cu-1", "Canto",    "Paquete 8",  450, "",         "confirmada", f(1), "tarjeta"],
+    ["demo-cp-4", "demo-cu-2", "Piano",    "Paquete 4",  250, "71624098", "confirmada", f(3), "yape"]
+  ];
+  for (const cp of compras){
+    stmts.push(env.DB.prepare(
+      "INSERT INTO compras (id,tenant_id,cuenta_id,curso,paquete,monto,op_numero,estado,fecha,metodo) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10)"
+    ).bind(cp[0], tid, cp[1], cp[2], cp[3], cp[4], cp[5], cp[6], cp[7], cp[8]));
+  }
+  // leads capturados en el portal
+  const leads = [["carla.mv@gmail.com", "Canto", f(0)], ["jsoto94@gmail.com", "Piano", f(1)], ["andrea.qp@gmail.com", "Canto", f(3)]];
+  leads.forEach((l, i) => {
+    stmts.push(env.DB.prepare(
+      "INSERT INTO leads (id,tenant_id,email,marca,fuente,interes,fecha) VALUES (?1,?2,?3,'Batuta','Portal',?4,?5)"
+    ).bind("demo-ld-" + (i + 1), tid, l[0], l[1], l[2]));
+  });
+  // material: publicado para alumnos + biblioteca privada
+  stmts.push(env.DB.prepare("INSERT INTO recursos (id,tenant_id,titulo,descripcion,url,curso,fecha) VALUES ('demo-rc-1',?1,'Guía de respiración diafragmática','PDF con la rutina de 10 minutos','https://batuta.lat/demo','Todos',?2)").bind(tid, f(5)));
+  stmts.push(env.DB.prepare("INSERT INTO recursos (id,tenant_id,titulo,descripcion,url,curso,fecha) VALUES ('demo-rc-2',?1,'Playlist de repertorio del mes','Para elegir tu próxima canción','https://open.spotify.com','Canto',?2)").bind(tid, f(12)));
+  const ejercicios = [
+    ["demo-ej-1", "Vocalizo 3 · quinta ascendente", "Vocalizos / Semana 1", "Canto", f(6)],
+    ["demo-ej-2", "Hanon 1 · manos juntas", "Técnica", "Piano", f(6)],
+    ["demo-ej-3", "Ritmos de rasgueo básicos", "Ritmo", "Guitarra", f(9)],
+    ["demo-ej-4", "Guía de respiración", "Fundamentos", "Todos", f(17)]
+  ];
+  for (const e of ejercicios){
+    stmts.push(env.DB.prepare("INSERT INTO ejercicios (id,tenant_id,titulo,descripcion,url,curso,carpeta,fecha) VALUES (?1,?2,?3,'','',?4,?5,?6)").bind(e[0], tid, e[1], e[3], e[2], e[4]));
+  }
+  // chat: 1 mensaje grupal + hilo privado con Fabio (hilo = id de su cuenta)
+  const chat = [
+    ["demo-ch-1", null,        "Profe Emilia", 1, "Bienvenidos! Acá publico avisos para todos. Lo privado, en tu hilo :)", "grupal",    f(2) + "T15:00:00.000Z"],
+    ["demo-ch-2", "demo-cu-1", "Fabio",        0, "Profe, el vocalizo 3 me cuesta en la parte aguda",                      "demo-cu-1", f(1) + "T16:10:00.000Z"],
+    ["demo-ch-3", null,        "Profe Emilia", 1, "Normal, baja medio tono y sube de a pocos. Lo vemos el jueves",          "demo-cu-1", f(1) + "T16:14:00.000Z"],
+    ["demo-ch-4", "demo-cu-1", "Fabio",        0, "Buenazo, gracias!",                                                      "demo-cu-1", f(1) + "T16:15:00.000Z"]
+  ];
+  for (const m of chat){
+    stmts.push(env.DB.prepare("INSERT INTO chat_mensajes (id,tenant_id,cuenta_id,nombre,es_admin,texto,hilo,fecha) VALUES (?1,?2,?3,?4,?5,?6,?7,?8)").bind(m[0], tid, m[1], m[2], m[3], m[4], m[5], m[6]));
+  }
+  await env.DB.batch(stmts);
+  return tid;
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -938,6 +1110,23 @@ export default {
     }
     if (path === "/app/suscribir" && request.method === "GET"){
       return htmlResponse(paginaSuscribir());
+    }
+    if (path === "/app/demo" && request.method === "GET"){
+      // Demo pública: sesión directa al tenant Estudio Sonata (se resetea cada mañana).
+      const ipDemo = request.headers.get("CF-Connecting-IP") || "";
+      if (ipDemo && await chatbotPasoTope(env, "demo:" + ipDemo, 20)){
+        return htmlResponse(paginaBase("Demo — Batuta", "<h1>Un momento</h1><p class=\"sub\">Demasiadas entradas a la demo desde tu red. Intenta de nuevo en un rato.</p>", ""));
+      }
+      let tDemo = await env.DB.prepare("SELECT * FROM tenants WHERE email = ?1").bind(DEMO_EMAIL).first();
+      const nAl = tDemo ? await env.DB.prepare("SELECT COUNT(*) AS n FROM alumnos WHERE tenant_id = ?1").bind(tDemo.id).first() : null;
+      if (!tDemo || !nAl || !Number(nAl.n)){
+        try { await resetDemo(env); } catch (e) {}
+        tDemo = await env.DB.prepare("SELECT * FROM tenants WHERE email = ?1").bind(DEMO_EMAIL).first();
+      }
+      if (!tDemo) return json({ error: "Demo no disponible" }, 503);
+      const tokenDemo = await crearSesion(env, "T:" + tDemo.id);
+      return htmlResponse(paginaBase("Entrando a la demo — Batuta", "<h1>Entrando…</h1><p class=\"sub\">Abriendo la academia de demostración.</p>",
+        "try{localStorage.setItem('batuta_t','" + tokenDemo + "');}catch(e){};location.replace('/app/panel');"));
     }
     if (path === "/app/panel" && request.method === "GET"){
       return env.ASSETS ? env.ASSETS.fetch(new Request(new URL("/panel/index.html", url), request)) : json({ error: "No encontrado" }, 404);
@@ -987,6 +1176,10 @@ export default {
         const auth = request.headers.get("authorization") || "";
         if (!env.ADMIN_TOKEN || !safeEq(auth, "Bearer " + env.ADMIN_TOKEN)){
           return json({ error: "No autorizado" }, 401);
+        }
+        if (path === "/app/api/su/demo-reset" && request.method === "POST"){
+          const idDemo = await resetDemo(env);
+          return json({ ok: true, tenant_id: idDemo });
         }
         if (path === "/app/api/su/tenants" && request.method === "GET"){
           const { results } = await env.DB.prepare(
@@ -2652,6 +2845,8 @@ export default {
     /* Nurture de trial (dia 1/3/6) + cierre proactivo del vencido. 1 corrida/dia (cron 14:00 UTC = 9am Lima).
        Migracion perezosa: la columna se crea sola en la primera corrida (patron MVT). */
     try { await env.DB.prepare("ALTER TABLE tenants ADD COLUMN nurture_paso INTEGER DEFAULT 0").run(); } catch (e) { /* ya existe */ }
+    // Demo pública: vuelve a su estado canónico cada mañana (lo que los visitantes tocaron, se borra).
+    try { await resetDemo(env); } catch (e) { /* la demo nunca debe tumbar el nurture */ }
     const ahora = Date.now();
     let tenants = [];
     try {
