@@ -55,6 +55,11 @@ const json = (data, status) => new Response(JSON.stringify(data), {
   headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" }
 });
 
+/* Filtro de bots por user-agent para el beacon del embudo (mismo espiritu que el
+   clicks-worker de PerpEdge): solo el conteo humano sirve de denominador del gate de 90 dias.
+   UA vacio tambien cuenta como bot. */
+const BOT_UA = /bot|crawl|spider|slurp|headless|lighthouse|pingdom|uptime|monitor|scan|preview|python|curl|wget|axios|libwww|okhttp|go-http|java\/|scrapy|phantomjs|selenium|puppeteer|playwright|facebookexternalhit|whatsapp|telegrambot|discordbot|embedly|quora link|bitlybot|vkshare|w3c_validator/i;
+
 /* ---------- util ---------- */
 const enc = new TextEncoder();
 function hex(buf){ return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, "0")).join(""); }
@@ -454,14 +459,32 @@ function correoNurtureTrial(tenant, etapa, extras){
   };
 }
 
-/* ---------- Nurture del lead magnet (Excel descargado → trial). Lo dispara scheduled(). ----------
-   Dia 2 = caso de estudio real · dia 5 = la parte que el Excel no hace solo, CTA al registro.
+/* ---------- Nurture del lead magnet (Excel descargado → trial) y del registro abandonado. ----------
+   Lo dispara scheduled(). Dia 2 = caso de estudio real · dia 5 = CTA al registro.
+   Para origen='registro-abandonado' el copy parte de "empezaste a crear tu academia"
+   (decirle "descargaste la plantilla" seria falso para ese lead).
    Copy empoderador, cero autodesprecio. Mudo sin RESEND_API_KEY (degrada con gracia). */
-function correoLeadMagnet(paso){
+function correoLeadMagnet(paso, origen){
   const wrap = (inner) =>
     '<div style="font-family:Arial,Helvetica,sans-serif;max-width:480px;margin:0 auto;color:#1a1a1a;font-size:15px;line-height:1.6">' +
     inner +
     '<p>Andres, de Batuta.</p></div>';
+  if (origen === "registro-abandonado"){
+    if (paso === 1) return {
+      subject: "Tu academia quedo a un paso de existir",
+      html: wrap(
+        '<p>Hola. Hace un par de dias empezaste a crear tu academia en Batuta y algo te interrumpio: tranquilo, tu sitio sigue esperandote.</p>' +
+        '<p>Si prefieres mirar antes de decidir, entra a la <a href="' + MARCA.dominio + '/app/demo"><b>demo en vivo</b></a> sin registrarte: es una academia de muestra con alumnos, cobros y agenda andando.</p>' +
+        '<p>Y si quieres numeros de verdad, publicamos el caso de una academia real corriendo sobre Batuta: <a href="' + MARCA.dominio + '/casos/profesormvt"><b>el caso ProfesorMVT</b></a>.</p>')
+    };
+    return {
+      subject: "Un minuto te separa de tu panel",
+      html: wrap(
+        '<p>Hola. Ultima nota sobre Batuta, y no te escribo mas.</p>' +
+        '<p>Dejaste tu registro a medio camino y lo entiendo: probar un panel nuevo se siente como una decision grande. Por eso la prueba es de 7 dias, con tus alumnos reales y sin tarjeta.</p>' +
+        '<p><a href="' + MARCA.dominio + '/app/registro?f=abandono"><b>Retoma tu registro aqui</b></a> y en 1 minuto tienes tu portal de alumnos con tu marca.</p>')
+    };
+  }
   if (paso === 1) return {
     subject: "Como lo resolvio una academia real (numeros incluidos)",
     html: wrap(
@@ -804,6 +827,13 @@ async function generarSlots(env, tenantId){
    PAGINAS INLINE: /app/registro y /app/login
    ═══════════════════════════════════════════════════════════════════════════ */
 function paginaBase(titulo, cuerpo, script){
+  // Beacon del embudo TOP: 1 hit por pageview de cada pagina inline (registro/login/landing/suscribir/demo).
+  // Denominador del gate de 90 dias. try/catch total: jamas rompe la pagina.
+  const beaconEmbudo =
+    "try{var _bq=new URLSearchParams(location.search),_bf=_bq.get('f')||_bq.get('utm_source')||'';" +
+    "if(!_bf&&document.referrer){var _bu=new URL(document.referrer);if(_bu.host!==location.host)_bf=_bu.host;}" +
+    "navigator.sendBeacon('/app/api/beacon',JSON.stringify({pagina:location.pathname,fuente:_bf}));}catch(e){}";
+  script = beaconEmbudo + (script || "");
   return "<!doctype html><html lang=\"es\"><head><meta charset=\"utf-8\">" +
     "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">" +
     "<title>" + esc(titulo) + "</title>" +
@@ -858,8 +888,22 @@ function paginaRegistro(){
     // Atribución: ?f= del CTA que lo trajo, o el referrer como fallback; sobrevive recargas en sessionStorage.
     "var fuente='';try{var q=new URLSearchParams(location.search).get('f');if(q){fuente=q;}else if(document.referrer){var u=new URL(document.referrer);fuente=(u.host===location.host?'':u.host)+u.pathname;}}catch(e){}" +
     "try{if(fuente){sessionStorage.setItem('batuta_f',fuente);}else{fuente=sessionStorage.getItem('batuta_f')||'';}}catch(e){}" +
+    // Rescate de registros abandonados: email valido tecleado + se va sin terminar el submit
+    // -> sendBeacon lo guarda como lead. regEnviado (flag del submit) evita disparar en el flujo feliz.
+    "var regEnviado=false;var abandonoEmail='';" +
+    "function beaconAbandono(){try{" +
+    "if(regEnviado)return;" +
+    "var em=document.getElementById('email').value.trim().toLowerCase();" +
+    "if(!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(em))return;" +
+    "if(em===abandonoEmail)return;" +
+    "abandonoEmail=em;" +
+    "navigator.sendBeacon('/app/api/registro-abandono',JSON.stringify({email:em,whatsapp:document.getElementById('whatsapp').value.trim(),rubro:document.getElementById('rubro').value,fuente:fuente}));" +
+    "}catch(e){}}" +
+    "document.addEventListener('visibilitychange',function(){if(document.visibilityState==='hidden')beaconAbandono();});" +
+    "window.addEventListener('pagehide',beaconAbandono);" +
     "document.getElementById('f').addEventListener('submit', async function(e){" +
     "e.preventDefault();" +
+    "regEnviado=true;" +
     "var err=document.getElementById('err'); err.textContent='';" +
     "var btn=e.target.querySelector('button'); btn.disabled=true;" +
     "var academia=document.getElementById('academia').value.trim();" +
@@ -870,14 +914,14 @@ function paginaRegistro(){
     "var tam=document.getElementById('tam').value;" +
     "var pass=document.getElementById('pass').value;" +
     "var pass2=document.getElementById('pass2').value;" +
-    "if(pass!==pass2){err.textContent='Las contrasenas no coinciden.'; btn.disabled=false; return;}" +
+    "if(pass!==pass2){err.textContent='Las contrasenas no coinciden.'; btn.disabled=false; regEnviado=false; return;}" +
     "try{" +
     "var r=await fetch('/app/api/t/registro',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({academia:academia,nombre:nombre,email:email,whatsapp:whatsapp,pass:pass,rubro:rubro,tam:tam,fuente:fuente})});" +
     "var d=await r.json();" +
-    "if(!r.ok){err.textContent=d.error||'No se pudo crear tu cuenta.'; btn.disabled=false; return;}" +
+    "if(!r.ok){err.textContent=d.error||'No se pudo crear tu cuenta.'; btn.disabled=false; regEnviado=false; return;}" +
     "localStorage.setItem('batuta_t', d.token);" +
     "location.href='/app/suscribir';" +
-    "}catch(ex){err.textContent='Error de conexion. Intenta de nuevo.'; btn.disabled=false;}" +
+    "}catch(ex){err.textContent='Error de conexion. Intenta de nuevo.'; btn.disabled=false; regEnviado=false;}" +
     "});";
   return paginaBase("Crea tu academia — Batuta", cuerpo, script);
 }
@@ -1235,6 +1279,75 @@ export default {
         return json({ ok: true, enlace: enlace });
       }
 
+      /* ---------- Rescate de registro abandonado (público): lo dispara el sendBeacon de /app/registro.
+           Guarda el lead en lead_magnet con origen='registro-abandonado' (el nurture de scheduled()
+           lo levanta con copy propio) y avisa a Andres al instante. ---------- */
+      if (path === "/app/api/registro-abandono" && request.method === "POST"){
+        try {
+          const ipRa = request.headers.get("CF-Connecting-IP") || "";
+          if (ipRa && await chatbotPasoTope(env, "rab:" + ipRa, 8)) return json({ ok: true });
+          let body = {};
+          try { body = await request.json(); } catch (e) { return json({ error: "JSON invalido" }, 400); }
+          const email = String(body.email || "").trim().toLowerCase().slice(0, 200);
+          if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return json({ error: "Email invalido" }, 400);
+          const whatsapp = String(body.whatsapp || "").replace(/[^\d+]/g, "").slice(0, 20);
+          const rubro = String(body.rubro || "").slice(0, 40);
+          const fuente = String(body.fuente || "").slice(0, 80);
+          // Si ese correo ya es tenant, no fue un abandono real: ni insertar ni avisar.
+          const yaTenant = await env.DB.prepare("SELECT id FROM tenants WHERE email = ?1").bind(email).first();
+          if (yaTenant) return json({ ok: true });
+          try {
+            await env.DB.prepare("CREATE TABLE IF NOT EXISTS lead_magnet (email TEXT PRIMARY KEY, origen TEXT DEFAULT '', fecha TEXT DEFAULT '')").run();
+          } catch (e) {}
+          try { await env.DB.prepare("ALTER TABLE lead_magnet ADD COLUMN whatsapp TEXT DEFAULT ''").run(); } catch (e) { /* ya existe */ }
+          let nuevo = false;
+          try {
+            const ins = await env.DB.prepare(
+              "INSERT OR IGNORE INTO lead_magnet (email, origen, fecha, whatsapp) VALUES (?1, 'registro-abandonado', ?2, ?3)"
+            ).bind(email, new Date().toISOString().slice(0, 10), whatsapp).run();
+            nuevo = !!(ins && ins.meta && (ins.meta.changes ?? ins.meta.rows_written));
+          } catch (e) {}
+          if (nuevo){
+            // Aviso instantaneo (degrada con gracia sin RESEND_API_KEY / AVISOS): el lead caliente es AHORA.
+            ctx.waitUntil(alertaCorreoAndres(env,
+              "Registro abandonado: " + email,
+              "Alguien lleno el registro de Batuta y se fue sin terminar." +
+              "\nEmail: " + email +
+              "\nWhatsApp: " + (whatsapp || "-") +
+              (whatsapp ? "\nEscribele ahora: https://wa.me/" + whatsapp.replace(/\D/g, "") : "") +
+              "\nRubro: " + (rubro || "-") +
+              "\nFuente: " + (fuente || "-") +
+              "\nLe sale solo el nurture de rescate (dia 2 y dia 5) mientras no se registre."));
+          }
+          return json({ ok: true });
+        } catch (e) { return json({ ok: true }); }
+      }
+
+      /* ---------- Beacon del embudo TOP (público): 1 hit por pageview, agregado por dia.
+           Es el denominador del gate de 90 dias. Jamas rompe nada: try/catch total y 204 siempre. ---------- */
+      if (path === "/app/api/beacon" && request.method === "POST"){
+        try {
+          let body = {};
+          try { body = await request.json(); } catch (e) {}
+          const pagina = String((body && body.pagina) || "").slice(0, 80);
+          if (pagina && pagina.startsWith("/")){
+            const fuente = String((body && body.fuente) || "").slice(0, 80);
+            const ua = request.headers.get("user-agent") || "";
+            const esBot = (!ua || BOT_UA.test(ua)) ? 1 : 0;
+            try {
+              await env.DB.prepare(
+                "CREATE TABLE IF NOT EXISTS funnel_hits (dia TEXT, pagina TEXT, fuente TEXT, es_bot INTEGER, n INTEGER, PRIMARY KEY(dia, pagina, fuente, es_bot))"
+              ).run();
+            } catch (e) {}
+            await env.DB.prepare(
+              "INSERT INTO funnel_hits (dia, pagina, fuente, es_bot, n) VALUES (?1, ?2, ?3, ?4, 1) " +
+              "ON CONFLICT(dia, pagina, fuente, es_bot) DO UPDATE SET n = n + 1"
+            ).bind(new Date().toISOString().slice(0, 10), pagina, fuente, esBot).run();
+          }
+        } catch (e) { /* el beacon jamas tumba nada */ }
+        return new Response(null, { status: 204 });
+      }
+
       /* ============================================================
          SUPERADMIN (Andres) — Bearer env.ADMIN_TOKEN. Sin sesion de tenant.
          ============================================================ */
@@ -1302,6 +1415,43 @@ export default {
           if (!pid) return json({ error: "Falta id" }, 400);
           const mp = await mpFetch(env, "/preapproval_plan/" + encodeURIComponent(pid), { method: "GET" });
           return json({ status: mp.status, data: mp.data }, mp.ok ? 200 : 502);
+        }
+        /* Embudo TOP (30 dias): visitas humanas por pagina (funnel_hits, es_bot=0) + registros
+           por fuente (tenants.fuente) = conversion por pagina. Sin tabla aun: todo en cero. */
+        if (path === "/app/api/su/funnel" && request.method === "GET"){
+          const desde = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10);
+          let visitas = [], porFuente = [], registros = [], hitsBots = 0;
+          try {
+            const v = await env.DB.prepare(
+              "SELECT pagina, SUM(n) AS visitas, " +
+              "(SELECT COUNT(*) FROM tenants t WHERE COALESCE(t.fuente, '') = fh.pagina AND t.creado >= ?1) AS registros_desde_aqui " +
+              "FROM funnel_hits fh WHERE es_bot = 0 AND dia >= ?1 GROUP BY pagina ORDER BY visitas DESC"
+            ).bind(desde).all();
+            visitas = v.results || [];
+          } catch (e) { /* funnel_hits aun no existe */ }
+          try {
+            const f = await env.DB.prepare(
+              "SELECT fuente, SUM(n) AS visitas FROM funnel_hits WHERE es_bot = 0 AND dia >= ?1 AND fuente != '' GROUP BY fuente ORDER BY visitas DESC"
+            ).bind(desde).all();
+            porFuente = f.results || [];
+          } catch (e) {}
+          try {
+            const r = await env.DB.prepare(
+              "SELECT COALESCE(fuente, '') AS fuente, COUNT(*) AS registros FROM tenants WHERE creado >= ?1 GROUP BY 1 ORDER BY registros DESC"
+            ).bind(desde).all();
+            registros = r.results || [];
+          } catch (e) {}
+          try {
+            const b = await env.DB.prepare("SELECT SUM(n) AS n FROM funnel_hits WHERE es_bot = 1 AND dia >= ?1").bind(desde).first();
+            hitsBots = Number(b && b.n) || 0;
+          } catch (e) {}
+          return json({
+            desde: desde,
+            visitas_por_pagina: visitas,
+            visitas_por_fuente: porFuente,
+            registros_por_fuente: registros,
+            hits_bots_30d: hitsBots
+          });
         }
         return json({ error: "No encontrado" }, 404);
       }
@@ -3006,14 +3156,15 @@ export default {
     try { await env.DB.prepare("ALTER TABLE lead_magnet ADD COLUMN nurture_paso INTEGER DEFAULT 0").run(); } catch (e) { /* ya existe */ }
     try {
       const { results } = await env.DB.prepare(
-        "SELECT lm.email AS email, lm.fecha AS fecha, COALESCE(lm.nurture_paso, 0) AS paso FROM lead_magnet lm " +
+        "SELECT lm.email AS email, lm.fecha AS fecha, COALESCE(lm.origen, '') AS origen, COALESCE(lm.nurture_paso, 0) AS paso FROM lead_magnet lm " +
         "LEFT JOIN tenants t ON t.email = lm.email WHERE t.id IS NULL AND COALESCE(lm.nurture_paso, 0) < 2 LIMIT 40"
       ).all();
       for (const lm of (results || [])){
         const diasLm = Math.floor((ahora - (Date.parse(lm.fecha) || ahora)) / 86400000);
         let mailLm = null, pasoLm = lm.paso | 0;
-        if (pasoLm === 0 && diasLm >= 2){ mailLm = correoLeadMagnet(1); pasoLm = 1; }
-        else if (pasoLm === 1 && diasLm >= 5){ mailLm = correoLeadMagnet(2); pasoLm = 2; }
+        // El copy se bifurca por origen: 'registro-abandonado' recibe rescate, el resto el flujo del Excel.
+        if (pasoLm === 0 && diasLm >= 2){ mailLm = correoLeadMagnet(1, lm.origen); pasoLm = 1; }
+        else if (pasoLm === 1 && diasLm >= 5){ mailLm = correoLeadMagnet(2, lm.origen); pasoLm = 2; }
         if (!mailLm) continue;
         const okLm = await enviarCorreo(env, { to: lm.email, subject: mailLm.subject, html: mailLm.html });
         // Igual que el nurture de tenants: sin envio real, el paso no avanza (se reintenta al dia siguiente).
