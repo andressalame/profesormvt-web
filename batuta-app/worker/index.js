@@ -843,6 +843,11 @@ function paginaRegistro(){
         "<option value=\"\" disabled selected>Elige tu rubro</option>" +
         "<option>Musica</option><option>Idiomas</option><option>Danza</option><option>Refuerzo escolar</option><option>Ajedrez</option><option>Arte</option><option>Deporte</option><option>Otro</option>" +
       "</select>" +
+      "<label>Cuantos alumnos tienes hoy?</label>" +
+      "<select id=\"tam\" required style=\"width:100%;background:#0F1115;border:1px solid #2c303a;border-radius:8px;padding:11px 12px;color:var(--texto);font-family:inherit;font-size:15px\">" +
+        "<option value=\"\" disabled selected>Elige un rango</option>" +
+        "<option>Recien empiezo</option><option>1-10</option><option>11-30</option><option>31-80</option><option>Mas de 80</option>" +
+      "</select>" +
       "<label>Contrasena</label><input id=\"pass\" type=\"password\" required>" +
       "<label>Repite tu contrasena</label><input id=\"pass2\" type=\"password\" required>" +
       "<button type=\"submit\">Empezar gratis</button>" +
@@ -862,11 +867,12 @@ function paginaRegistro(){
     "var email=document.getElementById('email').value.trim();" +
     "var whatsapp=document.getElementById('whatsapp').value.trim();" +
     "var rubro=document.getElementById('rubro').value;" +
+    "var tam=document.getElementById('tam').value;" +
     "var pass=document.getElementById('pass').value;" +
     "var pass2=document.getElementById('pass2').value;" +
     "if(pass!==pass2){err.textContent='Las contrasenas no coinciden.'; btn.disabled=false; return;}" +
     "try{" +
-    "var r=await fetch('/app/api/t/registro',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({academia:academia,nombre:nombre,email:email,whatsapp:whatsapp,pass:pass,rubro:rubro,fuente:fuente})});" +
+    "var r=await fetch('/app/api/t/registro',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({academia:academia,nombre:nombre,email:email,whatsapp:whatsapp,pass:pass,rubro:rubro,tam:tam,fuente:fuente})});" +
     "var d=await r.json();" +
     "if(!r.ok){err.textContent=d.error||'No se pudo crear tu cuenta.'; btn.disabled=false; return;}" +
     "localStorage.setItem('batuta_t', d.token);" +
@@ -1243,7 +1249,7 @@ export default {
         }
         if (path === "/app/api/su/tenants" && request.method === "GET"){
           const { results } = await env.DB.prepare(
-            "SELECT id, slug, academia, profe_nombre, email, estado, trial_hasta, creado, plan, mp_sub_status, COALESCE(fuente,'') AS fuente, COALESCE(rubro,'') AS rubro FROM tenants ORDER BY creado DESC"
+            "SELECT id, slug, academia, profe_nombre, email, estado, trial_hasta, creado, plan, mp_sub_status, COALESCE(fuente,'') AS fuente, COALESCE(rubro,'') AS rubro, COALESCE(tam_alumnos,'') AS tam_alumnos FROM tenants ORDER BY creado DESC"
           ).all();
           return json({ tenants: results || [] });
         }
@@ -1318,6 +1324,8 @@ export default {
         // 90 días no es evaluable por canal.
         const fuente = String(b.fuente || "").trim().slice(0, 80);
         const rubro = String(b.rubro || "").trim().slice(0, 40);
+        // Tamaño de academia: el dato que valida la tesis per-alumno del plan (peces grandes primero).
+        const tam = String(b.tam || "").trim().slice(0, 20);
 
         if (academia.length < 2) return json({ error: "Escribe el nombre de tu academia." }, 400);
         if (nombre.length < 2) return json({ error: "Escribe tu nombre." }, 400);
@@ -1340,10 +1348,12 @@ export default {
         const id = crypto.randomUUID();
         const trialHasta = new Date(Date.now() + TRIAL_DIAS * 86400000).toISOString();
 
+        // ALTER inline (no solo el perezoso del cron): un registro real entre deploy y tick no puede dar 500.
+        try { await env.DB.prepare("ALTER TABLE tenants ADD COLUMN tam_alumnos TEXT DEFAULT ''").run(); } catch (e) { /* ya existe */ }
         await env.DB.prepare(
-          "INSERT INTO tenants (id,slug,academia,profe_nombre,email,whatsapp,pass_hash,pass_salt,plan,estado,trial_hasta,creado,fuente,rubro) " +
-          "VALUES (?1,?2,?3,?4,?5,?6,?7,?8,'profe','trial',?9,?10,?11,?12)"
-        ).bind(id, slug, academia, nombre, email, whatsapp, hash, salt, trialHasta, new Date().toISOString(), fuente, rubro).run();
+          "INSERT INTO tenants (id,slug,academia,profe_nombre,email,whatsapp,pass_hash,pass_salt,plan,estado,trial_hasta,creado,fuente,rubro,tam_alumnos) " +
+          "VALUES (?1,?2,?3,?4,?5,?6,?7,?8,'profe','trial',?9,?10,?11,?12,?13)"
+        ).bind(id, slug, academia, nombre, email, whatsapp, hash, salt, trialHasta, new Date().toISOString(), fuente, rubro, tam).run();
 
         // precios y config default para el tenant nuevo
         const stmts = [];
@@ -1359,7 +1369,7 @@ export default {
         const token = await crearSesion(env, "T:" + id);
         // Aviso instantáneo: el primer trial ES el evento de validación del plan; que no caiga en silencio.
         ctx.waitUntil(alertaCorreoAndres(env,
-          "TRIAL NUEVO en Batuta: " + academia + (rubro ? " · " + rubro : ""),
+          "TRIAL NUEVO en Batuta: " + academia + (rubro ? " · " + rubro : "") + (tam ? " · " + tam + " alumnos" : ""),
           "Academia: " + academia +
           "\nProfe: " + nombre +
           "\nEmail: " + email +
@@ -1430,6 +1440,7 @@ export default {
         const diasRestantes = Math.max(0, Math.ceil((Date.parse(t.trial_hasta) - Date.now()) / 86400000));
         return json({
           academia: t.academia, profe_nombre: t.profe_nombre, slug: t.slug,
+          demo: t.email === DEMO_EMAIL,
           estado: t.estado, dias_trial_restantes: t.estado === "trial" ? diasRestantes : null,
           link_alumnos: MARCA.dominio + "/app/a/" + t.slug,
           plan: t.plan || "profe",

@@ -946,6 +946,14 @@ function cargarTrialInfo(){
 }
 function pintarTrialBar(d){
   var bar=el("trialBar"); if(!bar) return;
+  if(d && d.demo){
+    // Modo demo: el puente de conversión (la demo no puede ser un callejón sin salida).
+    bar.innerHTML='Estás en la demo de Batuta · <a href="/app/registro?f=demo-panel">Crea tu academia gratis en 2 minutos</a>';
+    bar.classList.add("show");
+    var p1=el("btnPushOn"); if(p1) p1.style.display="none";
+    var p2=el("btnPushTest"); if(p2) p2.style.display="none";
+    return;
+  }
   if(!d || d.estado==="activo"){ bar.classList.remove("show"); bar.innerHTML=""; return; }
   var dias=Math.max(0,Number(d.dias_trial_restantes)||0);
   bar.innerHTML='Prueba gratis: te quedan '+dias+' día'+(dias===1?'':'s')+' · <a href="/app/suscribir" id="btnActivarPlan">Activar mi plan</a>';
