@@ -951,6 +951,35 @@ export default {
     }
 
     try {
+      /* ---------- Lead magnet del blog (público): captura + entrega por correo ---------- */
+      if (path === "/app/api/lead-magnet" && request.method === "POST"){
+        let body = {};
+        try { body = await request.json(); } catch (e) { return json({ error: "JSON invalido" }, 400); }
+        const email = String(body.email || "").trim().toLowerCase().slice(0, 200);
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return json({ error: "Email invalido" }, 400);
+        const origen = String(body.origen || "excel-blog").slice(0, 40);
+        try {
+          await env.DB.prepare("CREATE TABLE IF NOT EXISTS lead_magnet (email TEXT PRIMARY KEY, origen TEXT DEFAULT '', fecha TEXT DEFAULT '')").run();
+        } catch (e) {}
+        try {
+          await env.DB.prepare("INSERT OR IGNORE INTO lead_magnet (email, origen, fecha) VALUES (?1, ?2, ?3)")
+            .bind(email, origen, new Date().toISOString().slice(0, 10)).run();
+        } catch (e) {}
+        const enlace = MARCA.dominio + "/descargas/control-alumnos-batuta.xlsx";
+        await enviarCorreo(env, {
+          to: email,
+          subject: "Tu plantilla de control de alumnos y pagos",
+          html:
+            '<div style="font-family:Arial,Helvetica,sans-serif;max-width:480px;margin:0 auto;color:#1a1a1a;font-size:15px;line-height:1.6">' +
+              '<p>Aca esta tu plantilla: <a href="' + enlace + '"><b>descargar el Excel</b></a>.</p>' +
+              '<p>Tiene 4 hojas: Alumnos, Pagos, Asistencia y un Resumen que se calcula solo (incluida la fila que mas duele: la plata en el aire sin confirmar).</p>' +
+              '<p>Y cuando llenarla a mano te canse, esa es exactamente la parte que <a href="' + MARCA.dominio + '/app/registro">Batuta hace sola</a>: portal de alumnos, cobros y renovaciones automaticas. 7 dias gratis con tus alumnos reales.</p>' +
+              '<p>Andres, de Batuta.</p>' +
+            '</div>',
+        });
+        return json({ ok: true, enlace: enlace });
+      }
+
       /* ============================================================
          SUPERADMIN (Andres) — Bearer env.ADMIN_TOKEN. Sin sesion de tenant.
          ============================================================ */
