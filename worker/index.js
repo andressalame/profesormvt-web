@@ -848,65 +848,93 @@ async function procesarNurtureLeads(env){
   return enviados;
 }
 
-/* ============ PUENTE A WHATSAPP (leads fríos) ============
-   El lead que terminó la secuencia de nurture y no compró recibe UN último correo que lo
-   invita a la conversación de WhatsApp — el canal donde MVT cierra de verdad (casi ningún
-   alumno llegó por el funnel online). Corre 1 vez al día en tanda chica (Resend free =
-   100 correos/día compartidos con nurture/renovaciones), dedupea por lead (puente_wa)
-   y arranca APAGADO (config.puente_wa_activo). */
-const PUENTE_WA_DIA = 6;      // días desde la captura antes del puente (el nurture termina el día 3)
-const PUENTE_WA_TANDA = 60;   // tope por corrida diaria: deja aire para el resto de correos del día
+/* ============ OFERTA DIRECTA A PAQUETES (puente a WhatsApp) ============
+   Todo lead que dejó su correo y no compró recibe UNA oferta concreta: S/50 de descuento en
+   su primer mes de clases, directo a los paquetes y con cierre por WhatsApp — el canal donde
+   MVT cierra de verdad. Sin clase de prueba en este correo (decisión de Andrés, 06-jul-2026).
+   Corre a las 05:00 UTC (medianoche Lima), recién reiniciada la cuota diaria de Resend
+   (100/día del plan free), por eso la tanda puede ser grande sin pisar los correos
+   transaccionales del día. Dedupea por lead (puente_wa). */
+const PUENTE_WA_DIA = 4;        // goteo normal: días desde la captura (el nurture termina el día 3)
+const PUENTE_WA_TANDA = 85;     // tope por corrida: deja ~15 de aire en la cuota diaria de Resend
+const PUENTE_WA_DESCUENTO = 50; // S/ de descuento sobre el primer mes
 
 function linkWhatsAppLead(){
   return "https://wa.me/" + MARCA.whatsapp + "?text=" +
-    encodeURIComponent("Hola " + MARCA.profe + "! Vi tu correo, quiero info de las clases 🎸");
+    encodeURIComponent("Hola " + MARCA.profe + "! Vi tu correo y quiero empezar con el descuento del primer mes 🎸");
 }
 
-/* Correo-puente: corto, personal y honesto ("este es el último"), con botón verde de WhatsApp. */
-async function correoPuenteWhatsApp(env, to){
+/* Correo-oferta: los 2 paquetes mensuales con el precio del primer mes ya descontado y un
+   solo CTA (WhatsApp). El Plan Estrella no va aquí: se ofrece al cierre, como siempre. */
+async function correoPuenteWhatsApp(env, to, precios){
   if (!to) return false;
   const wa = linkWhatsAppLead();
   const dominioLimpio = MARCA.dominio.replace(/^https?:\/\//, "");
+  const p = precios || PRECIOS_DEFAULT;
+  const p4 = p["Paquete 4"] || PRECIOS_DEFAULT["Paquete 4"];
+  const p8 = p["Paquete 8"] || PRECIOS_DEFAULT["Paquete 8"];
+  const d4 = Math.max(0, p4 - PUENTE_WA_DESCUENTO);
+  const d8 = Math.max(0, p8 - PUENTE_WA_DESCUENTO);
   const html =
     '<div style="font-family:Arial,Helvetica,sans-serif;max-width:480px;margin:0 auto;color:#1a1a1a;font-size:15px;line-height:1.6">' +
       '<p>Hola,</p>' +
-      '<p>Soy ' + MARCA.profe + ', el de la guía <b>"De oyente a autor"</b>. Ya te mandé la info por correo, así que este es el último: mejor hablemos directo.</p>' +
-      '<p>Escríbeme por WhatsApp y cuéntame qué te gustaría lograr (componer, cantar o tocar piano). Te respondo yo, te digo por dónde empezar y qué horarios tengo. Sin vueltas.</p>' +
-      '<p style="text-align:center;margin:26px 0"><a href="' + wa + '" style="background:#25D366;color:#ffffff;text-decoration:none;font-weight:bold;padding:14px 26px;border-radius:6px;display:inline-block">Escribirle a ' + MARCA.profe + ' por WhatsApp</a></p>' +
+      '<p>Soy ' + MARCA.profe + ', el de la guía <b>"De oyente a autor"</b>. Voy al grano: quiero que pases de leer la guía a entrenar de verdad, así que tienes <b>S/' + PUENTE_WA_DESCUENTO + ' de descuento en tu primer mes de clases</b> si empiezas este mes.</p>' +
+      '<p>Canto, piano o composición. Siempre 1 a 1, presencial en ' + MARCA.ciudad.split(",")[0] + ' u online en vivo.</p>' +
+      '<ul style="padding-left:18px">' +
+        '<li><b>4 clases al mes:</b> <s style="color:#888888">S/' + p4 + '</s> <b>S/' + d4 + '</b> tu primer mes</li>' +
+        '<li style="margin-top:6px"><b>8 clases al mes:</b> <s style="color:#888888">S/' + p8 + '</s> <b>S/' + d8 + '</b> tu primer mes (el que más eligen mis alumnos)</li>' +
+      '</ul>' +
+      '<p style="text-align:center;margin:26px 0"><a href="' + wa + '" style="background:#25D366;color:#ffffff;text-decoration:none;font-weight:bold;padding:14px 26px;border-radius:6px;display:inline-block">Quiero mi descuento</a></p>' +
+      '<p>Me escribes por WhatsApp, me cuentas qué quieres lograr y cuadramos tu horario. Sin vueltas.</p>' +
       '<p>Y si este no es tu momento, todo bien: la guía es tuya y aquí me tienes cuando quieras :)</p>' +
       '<p>Un abrazo,<br><b>' + MARCA.profe + '</b><br>' + MARCA.nombre + '</p>' +
       '<p style="font-size:12px;color:#888888;margin-top:26px">' + dominioLimpio + ' · Canto, piano y composición para adultos</p>' +
     '</div>';
-  const text = 'Hola,\n\nSoy ' + MARCA.profe + ', el de la guía "De oyente a autor". Ya te mandé la info por correo, así que este es el último: mejor hablemos directo.\n\nEscríbeme por WhatsApp y cuéntame qué te gustaría lograr (componer, cantar o tocar piano). Te respondo yo, te digo por dónde empezar y qué horarios tengo. Sin vueltas.\n\nWhatsApp: ' + wa + '\n\nY si este no es tu momento, todo bien: la guía es tuya y aquí me tienes cuando quieras :)\n\nUn abrazo,\n' + MARCA.profe + ' - ' + MARCA.nombre + '\n' + dominioLimpio;
-  return enviarCorreo(env, { to: to, subject: "Mejor hablemos por WhatsApp :)", html: html, text: text });
+  const text = 'Hola,\n\nSoy ' + MARCA.profe + ', el de la guía "De oyente a autor". Voy al grano: quiero que pases de leer la guía a entrenar de verdad, así que tienes S/' + PUENTE_WA_DESCUENTO + ' de descuento en tu primer mes de clases si empiezas este mes.\n\nCanto, piano o composición. Siempre 1 a 1, presencial en ' + MARCA.ciudad.split(",")[0] + ' u online en vivo.\n\n- 4 clases al mes: S/' + d4 + ' tu primer mes (precio normal S/' + p4 + ')\n- 8 clases al mes: S/' + d8 + ' tu primer mes (precio normal S/' + p8 + ', el que más eligen mis alumnos)\n\nEscríbeme por WhatsApp y cuadramos tu horario: ' + wa + '\n\nY si este no es tu momento, todo bien: la guía es tuya y aquí me tienes cuando quieras :)\n\nUn abrazo,\n' + MARCA.profe + ' - ' + MARCA.nombre + '\n' + dominioLimpio;
+  return enviarCorreo(env, { to: to, subject: "S/" + PUENTE_WA_DESCUENTO + " de descuento en tu primer mes de clases :)", html: html, text: text });
 }
 
-/* Resumen a Andrés: a quién se invitó hoy, para reconocer al que escriba. */
+/* Resumen a Andrés: a quién se le mandó la oferta hoy, para reconocer al que escriba. */
 async function avisarPuenteResumen(env, enviados){
   if (!env.AVISOS || !enviados.length) return;
   const msg = createMimeMessage();
   msg.setSender({ name: "Avisos " + MARCA.nombre, addr: MARCA.correoAvisos });
   msg.setRecipient(MARCA.correoAdmin);
-  msg.setSubject("Puente a WhatsApp: " + enviados.length + " lead(s) invitados a escribirte hoy");
+  msg.setSubject("Oferta directa a paquetes: " + enviados.length + " lead(s) la recibieron hoy");
   msg.addMessage({ contentType: "text/plain", data:
-    "El sistema invitó (por correo) a estos leads fríos a pasarse a WhatsApp. El que te escriba \"Vi tu correo, quiero info de las clases\" viene de aquí:\n\n" +
+    "El sistema les mandó la oferta de S/" + PUENTE_WA_DESCUENTO + " de descuento en el primer mes (directo a paquetes, cierre por WhatsApp). El que te escriba \"quiero empezar con el descuento del primer mes\" viene de aquí:\n\n" +
     enviados.map(function(e){ return "- " + e; }).join("\n") + "\n" });
   await env.AVISOS.send(new EmailMessage(MARCA.correoAvisos, MARCA.correoAdmin, msg.asRaw()));
 }
 
-/* Cron del puente: leads de MVT con nurture terminado (paso >= último, sin contar el 99 de
-   excluidos/convertidos), sin puente previo, con más de PUENTE_WA_DIA días de antigüedad.
-   El que ya se volvió cuenta se salta y se marca (puente_wa = 2). */
+/* Cron de la oferta. Dos modos:
+   - Goteo normal: leads con nurture terminado O PUENTE_WA_DIA+ días de antigüedad (excluye
+     el 99 de convertidos), sin oferta previa. Gateado por config.puente_wa_activo.
+   - Blast (config.puente_blast = '1'): TODOS los leads sin oferta previa, sin importar paso
+     ni fecha, para barrer el backlog completo en tandas nocturnas; cuando ya no queda nadie,
+     el worker apaga el flag solo.
+   En ambos modos, al enviar la oferta se corta el nurture pendiente (paso 0/1 → último) para
+   que al lead no le llegue después un correo de clase de prueba que contradiga el descuento.
+   El que ya se volvió cuenta se salta y se marca (puente_wa = 2). Entre correo y correo se
+   espera ~600ms: el plan free de Resend también limita a 2 requests/segundo. */
 async function procesarPuenteWhatsApp(env){
   const cfg = await loadConfig(env);
-  if (cfg.puente_wa_activo !== "1") return [];   // interruptor de seguridad: APAGADO por defecto
+  const blast = cfg.puente_blast === "1";
+  if (!blast && cfg.puente_wa_activo !== "1") return [];   // interruptor de seguridad: APAGADO por defecto
   const ultimoPaso = NURTURE_PASOS[NURTURE_PASOS.length - 1].paso;
   const corte = new Date(Date.now() - PUENTE_WA_DIA * 86400000).toISOString().slice(0, 10);
-  const { results: leads } = await env.DB.prepare(
-    "SELECT id, email FROM leads WHERE marca = 'MVT' AND COALESCE(nurture_paso,0) >= ?1 " +
-    "AND COALESCE(nurture_paso,0) != 99 AND COALESCE(puente_wa,0) = 0 AND fecha <= ?2 " +
-    "AND email NOT LIKE '%andressalame%' ORDER BY fecha ASC LIMIT ?3"
-  ).bind(ultimoPaso, corte, PUENTE_WA_TANDA).all();
+  const q = blast
+    ? env.DB.prepare(
+        "SELECT id, email FROM leads WHERE marca = 'MVT' AND COALESCE(puente_wa,0) = 0 " +
+        "AND email NOT LIKE '%andressalame%' ORDER BY fecha ASC LIMIT ?1"
+      ).bind(PUENTE_WA_TANDA)
+    : env.DB.prepare(
+        "SELECT id, email FROM leads WHERE marca = 'MVT' AND COALESCE(puente_wa,0) = 0 " +
+        "AND COALESCE(nurture_paso,0) != 99 AND (COALESCE(nurture_paso,0) >= ?1 OR fecha <= ?2) " +
+        "AND email NOT LIKE '%andressalame%' ORDER BY fecha ASC LIMIT ?3"
+      ).bind(ultimoPaso, corte, PUENTE_WA_TANDA);
+  const { results: leads } = await q.all();
+  const precios = await loadPrecios(env);
   const enviados = []; let fallos = 0;
   for (const l of (leads || [])){
     const cuenta = await env.DB.prepare("SELECT id FROM cuentas WHERE LOWER(email) = ?1").bind(String(l.email).toLowerCase()).first();
@@ -914,11 +942,18 @@ async function procesarPuenteWhatsApp(env){
       await env.DB.prepare("UPDATE leads SET puente_wa = 2 WHERE id = ?1").bind(l.id).run();
       continue;
     }
-    const ok = await correoPuenteWhatsApp(env, l.email);
+    const ok = await correoPuenteWhatsApp(env, l.email, precios);
     if (ok){
-      await env.DB.prepare("UPDATE leads SET puente_wa = 1 WHERE id = ?1").bind(l.id).run();
+      await env.DB.prepare(
+        "UPDATE leads SET puente_wa = 1, nurture_paso = CASE WHEN COALESCE(nurture_paso,0) IN (0,1) THEN ?2 ELSE nurture_paso END WHERE id = ?1"
+      ).bind(l.id, ultimoPaso).run();
       enviados.push(l.email);
     } else { fallos++; }
+    await new Promise(function(r){ setTimeout(r, 600); });
+  }
+  // Blast completado: la query trajo menos que una tanda llena → ya no queda backlog.
+  if (blast && (leads || []).length < PUENTE_WA_TANDA){
+    await env.DB.prepare("UPDATE config SET valor = '0' WHERE clave = 'puente_blast'").run();
   }
   if (enviados.length){ try { await avisarPuenteResumen(env, enviados); } catch (e) {} }
   await reportarSaludCorreo(env, fallos, fallos + enviados.length);
@@ -3256,10 +3291,11 @@ export default {
       // Nurture de leads: mismo disparo diario. Apagado por defecto (config.nurture_activo).
       ctx.waitUntil(procesarNurtureLeads(env).catch(function(){}));
     }
-    // Puente a WhatsApp: 1 vez al día a las 15:00 UTC (≈ 10:00 Lima), una hora después del
-    // bloque de renovaciones/nurture para no pelear por la cuota diaria de Resend.
-    // Apagado por defecto (config.puente_wa_activo).
-    if (new Date().getUTCHours() === 15){
+    // Oferta directa a paquetes (puente a WhatsApp): 1 vez al día a las 05:00 UTC (medianoche
+    // Lima), recién reiniciada la cuota diaria de Resend — así las tandas grandes no pelean
+    // con los correos transaccionales del día. Apagado por defecto (config.puente_wa_activo;
+    // el modo blast se dispara aparte con config.puente_blast = '1').
+    if (new Date().getUTCHours() === 5){
       ctx.waitUntil(procesarPuenteWhatsApp(env).catch(function(){}));
     }
     // Backup diario: 1 vez al día a las 07:00 UTC (≈ 02:00 Lima, madrugada tranquila).
