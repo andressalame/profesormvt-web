@@ -856,7 +856,9 @@ async function procesarNurtureLeads(env){
    (100/día del plan free), por eso la tanda puede ser grande sin pisar los correos
    transaccionales del día. Dedupea por lead (puente_wa). */
 const PUENTE_WA_DIA = 4;        // goteo normal: días desde la captura (el nurture termina el día 3)
-const PUENTE_WA_TANDA = 85;     // tope por corrida: deja ~15 de aire en la cuota diaria de Resend
+const PUENTE_WA_TANDA = 25;     // por corrida horaria: corta, para no morir por el límite de duración del cron
+                                // (la noche del 07-jul una corrida de 85 murió a los ~49 correos por wall time)
+const PUENTE_WA_TOPE_DIA = 85;  // tope por día UTC entre todas las corridas: deja aire en la cuota de Resend (100/día free)
 const PUENTE_WA_DESCUENTO = 50; // S/ de descuento sobre el primer mes
 
 function linkWhatsAppLead(){
@@ -921,24 +923,38 @@ async function procesarPuenteWhatsApp(env){
   const cfg = await loadConfig(env);
   const blast = cfg.puente_blast === "1";
   if (!blast && cfg.puente_wa_activo !== "1") return [];   // interruptor de seguridad: APAGADO por defecto
+  // Contador por día UTC ("YYYY-MM-DD:N"): todas las corridas de la ventana nocturna comparten
+  // el tope diario, así ninguna noche pisa la cuota de Resend por muchas horas que corran.
+  const hoy = new Date().toISOString().slice(0, 10);
+  const ct = String(cfg.puente_enviados_hoy || "").split(":");
+  const yaHoy = (ct[0] === hoy) ? (Number(ct[1]) || 0) : 0;
+  const disponible = Math.min(PUENTE_WA_TANDA, PUENTE_WA_TOPE_DIA - yaHoy);
+  if (disponible <= 0) return [];
   const ultimoPaso = NURTURE_PASOS[NURTURE_PASOS.length - 1].paso;
   const corte = new Date(Date.now() - PUENTE_WA_DIA * 86400000).toISOString().slice(0, 10);
   const q = blast
     ? env.DB.prepare(
         "SELECT id, email FROM leads WHERE marca = 'MVT' AND COALESCE(puente_wa,0) = 0 " +
         "AND email NOT LIKE '%andressalame%' ORDER BY fecha ASC LIMIT ?1"
-      ).bind(PUENTE_WA_TANDA)
+      ).bind(disponible)
     : env.DB.prepare(
         "SELECT id, email FROM leads WHERE marca = 'MVT' AND COALESCE(puente_wa,0) = 0 " +
         "AND COALESCE(nurture_paso,0) != 99 AND (COALESCE(nurture_paso,0) >= ?1 OR fecha <= ?2) " +
         "AND email NOT LIKE '%andressalame%' ORDER BY fecha ASC LIMIT ?3"
-      ).bind(ultimoPaso, corte, PUENTE_WA_TANDA);
+      ).bind(ultimoPaso, corte, disponible);
   const { results: leads } = await q.all();
+  // Backlog vacío: el blast terminó; apagar el flag para que quede solo el goteo normal.
+  if (blast && !(leads || []).length){
+    await env.DB.prepare("UPDATE config SET valor = '0' WHERE clave = 'puente_blast'").run();
+    return [];
+  }
   const precios = await loadPrecios(env);
+  // Una sola query por corrida (en vez de una por lead): emails que ya son cuenta.
+  const { results: ctas } = await env.DB.prepare("SELECT LOWER(email) AS e FROM cuentas").all();
+  const yaCuenta = new Set((ctas || []).map(function(c){ return c.e; }));
   const enviados = []; let fallos = 0;
   for (const l of (leads || [])){
-    const cuenta = await env.DB.prepare("SELECT id FROM cuentas WHERE LOWER(email) = ?1").bind(String(l.email).toLowerCase()).first();
-    if (cuenta){
+    if (yaCuenta.has(String(l.email).toLowerCase())){
       await env.DB.prepare("UPDATE leads SET puente_wa = 2 WHERE id = ?1").bind(l.id).run();
       continue;
     }
@@ -948,12 +964,11 @@ async function procesarPuenteWhatsApp(env){
         "UPDATE leads SET puente_wa = 1, nurture_paso = CASE WHEN COALESCE(nurture_paso,0) IN (0,1) THEN ?2 ELSE nurture_paso END WHERE id = ?1"
       ).bind(l.id, ultimoPaso).run();
       enviados.push(l.email);
+      // Contador al día tras CADA envío: si el runtime corta la corrida a mitad, la cuenta no se pierde.
+      await env.DB.prepare("INSERT OR REPLACE INTO config (clave, valor) VALUES ('puente_enviados_hoy', ?1)")
+        .bind(hoy + ":" + (yaHoy + enviados.length)).run();
     } else { fallos++; }
-    await new Promise(function(r){ setTimeout(r, 600); });
-  }
-  // Blast completado: la query trajo menos que una tanda llena → ya no queda backlog.
-  if (blast && (leads || []).length < PUENTE_WA_TANDA){
-    await env.DB.prepare("UPDATE config SET valor = '0' WHERE clave = 'puente_blast'").run();
+    await new Promise(function(r){ setTimeout(r, 250); });   // Resend free también limita a 2 req/s
   }
   if (enviados.length){ try { await avisarPuenteResumen(env, enviados); } catch (e) {} }
   await reportarSaludCorreo(env, fallos, fallos + enviados.length);
@@ -3291,12 +3306,17 @@ export default {
       // Nurture de leads: mismo disparo diario. Apagado por defecto (config.nurture_activo).
       ctx.waitUntil(procesarNurtureLeads(env).catch(function(){}));
     }
-    // Oferta directa a paquetes (puente a WhatsApp): 1 vez al día a las 05:00 UTC (medianoche
-    // Lima), recién reiniciada la cuota diaria de Resend — así las tandas grandes no pelean
-    // con los correos transaccionales del día. Apagado por defecto (config.puente_wa_activo;
-    // el modo blast se dispara aparte con config.puente_blast = '1').
-    if (new Date().getUTCHours() === 5){
-      ctx.waitUntil(procesarPuenteWhatsApp(env).catch(function(){}));
+    // Oferta directa a paquetes (puente a WhatsApp): ventana nocturna 05:00-09:00 UTC
+    // (medianoche a 4am Lima), con la cuota diaria de Resend recién reiniciada. Cada corrida
+    // manda una tanda corta (PUENTE_WA_TANDA) y todas comparten el tope del día
+    // (PUENTE_WA_TOPE_DIA vía config.puente_enviados_hoy) — corridas cortas porque el runtime
+    // corta el waitUntil del cron por duración (~60s). Apagado por defecto
+    // (config.puente_wa_activo; el modo blast se dispara aparte con config.puente_blast = '1').
+    {
+      const h = new Date().getUTCHours();
+      if (h >= 5 && h <= 9){
+        ctx.waitUntil(procesarPuenteWhatsApp(env).catch(function(){}));
+      }
     }
     // Backup diario: 1 vez al día a las 07:00 UTC (≈ 02:00 Lima, madrugada tranquila).
     if (new Date().getUTCHours() === 7){
