@@ -454,6 +454,30 @@ function correoNurtureTrial(tenant, etapa, extras){
   };
 }
 
+/* ---------- Nurture del lead magnet (Excel descargado → trial). Lo dispara scheduled(). ----------
+   Dia 2 = caso de estudio real · dia 5 = la parte que el Excel no hace solo, CTA al registro.
+   Copy empoderador, cero autodesprecio. Mudo sin RESEND_API_KEY (degrada con gracia). */
+function correoLeadMagnet(paso){
+  const wrap = (inner) =>
+    '<div style="font-family:Arial,Helvetica,sans-serif;max-width:480px;margin:0 auto;color:#1a1a1a;font-size:15px;line-height:1.6">' +
+    inner +
+    '<p>Andres, de Batuta.</p></div>';
+  if (paso === 1) return {
+    subject: "Como lo resolvio una academia real (numeros incluidos)",
+    html: wrap(
+      '<p>Hola. Hace unos dias descargaste la plantilla de control de alumnos y pagos: espero que ya este trabajando para ti.</p>' +
+      '<p>Si quieres ver como se ve ese mismo control cuando corre solo, publicamos el caso de una academia real, con sus numeros reales: <a href="' + MARCA.dominio + '/casos/profesormvt"><b>el caso ProfesorMVT</b></a>.</p>' +
+      '<p>Spoiler honesto: el Excel aguanta perfecto hasta que los alumnos crecen y los cobros se vuelven persecucion. Ahi es donde un portal propio cambia el juego.</p>')
+  };
+  return {
+    subject: "La parte que el Excel no hace solo",
+    html: wrap(
+      '<p>Hola. Ultima idea sobre tu plantilla, y no te escribo mas.</p>' +
+      '<p>Hay 3 cosas que ninguna hoja de calculo hara por ti: avisarle al alumno que le quedan 2 clases, cobrarle sin que tu escribas, y dejarle su material en un portal con tu marca.</p>' +
+      '<p>Eso es exactamente lo que Batuta hace solo, con tus alumnos reales, en una prueba de 7 dias sin tarjeta: <a href="' + MARCA.dominio + '/app/registro?f=magnet"><b>crea tu academia aqui</b></a>. Y si prefieres mirar antes, entra a la <a href="' + MARCA.dominio + '/app/demo">demo en vivo</a> sin registrarte.</p>')
+  };
+}
+
 /* ---------- Confirmar una compra (reutilizado por el panel y por el webhook de MP) ---------- */
 async function confirmarCompra(env, tenantId, tenant, compra){
   if (!compra) return { ok: false, error: "Compra no encontrada", status: 404 };
@@ -2966,5 +2990,26 @@ export default {
         try { await env.DB.prepare("UPDATE tenants SET nurture_paso = ?1 WHERE id = ?2").bind(pasoNuevo, t.id).run(); } catch (e) {}
       }
     }
+
+    /* ---------- Nurture del lead magnet (dia 2 y dia 5). Excluye correos que ya son tenants. ---------- */
+    try { await env.DB.prepare("ALTER TABLE lead_magnet ADD COLUMN nurture_paso INTEGER DEFAULT 0").run(); } catch (e) { /* ya existe */ }
+    try {
+      const { results } = await env.DB.prepare(
+        "SELECT lm.email AS email, lm.fecha AS fecha, COALESCE(lm.nurture_paso, 0) AS paso FROM lead_magnet lm " +
+        "LEFT JOIN tenants t ON t.email = lm.email WHERE t.id IS NULL AND COALESCE(lm.nurture_paso, 0) < 2 LIMIT 40"
+      ).all();
+      for (const lm of (results || [])){
+        const diasLm = Math.floor((ahora - (Date.parse(lm.fecha) || ahora)) / 86400000);
+        let mailLm = null, pasoLm = lm.paso | 0;
+        if (pasoLm === 0 && diasLm >= 2){ mailLm = correoLeadMagnet(1); pasoLm = 1; }
+        else if (pasoLm === 1 && diasLm >= 5){ mailLm = correoLeadMagnet(2); pasoLm = 2; }
+        if (!mailLm) continue;
+        const okLm = await enviarCorreo(env, { to: lm.email, subject: mailLm.subject, html: mailLm.html });
+        // Igual que el nurture de tenants: sin envio real, el paso no avanza (se reintenta al dia siguiente).
+        if (okLm){
+          try { await env.DB.prepare("UPDATE lead_magnet SET nurture_paso = ?1 WHERE email = ?2").bind(pasoLm, lm.email).run(); } catch (e) {}
+        }
+      }
+    } catch (e) { /* el lead magnet jamas tumba el nurture de tenants */ }
   }
 };
