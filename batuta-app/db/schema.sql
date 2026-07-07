@@ -17,7 +17,9 @@ CREATE TABLE IF NOT EXISTS tenants (
   trial_hasta  TEXT NOT NULL,
   creado       TEXT DEFAULT '',
   mp_preapproval_id TEXT DEFAULT '',   -- id del preapproval de Mercado Pago (suscripciones)
-  mp_sub_status     TEXT DEFAULT ''    -- estado del preapproval en MP: pending | authorized | cancelled | paused
+  mp_sub_status     TEXT DEFAULT '',   -- estado del preapproval en MP: pending | authorized | cancelled | paused
+  fuente            TEXT DEFAULT '',   -- atribución: ?f= del CTA o referrer (07-jul-2026)
+  rubro             TEXT DEFAULT ''    -- qué enseña: Musica | Idiomas | Danza | Refuerzo escolar | Ajedrez | Arte | Deporte | Otro
 );
 CREATE INDEX IF NOT EXISTS idx_tenants_slug ON tenants (slug);
 

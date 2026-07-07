@@ -612,8 +612,12 @@ async function avisarPushAlumno(env, tenantId, cuentaId, payload){
   return enviarPushA(env, results || [], payload);
 }
 
-/* ---------- avisos internos (AVISOS binding): guard, no rompe si falta ---------- */
+/* ---------- avisos internos a Andrés: Resend primero (enviarCorreo), AVISOS de fallback ---------- */
 async function alertaCorreoAndres(env, asunto, cuerpo){
+  try {
+    const ok = await enviarCorreo(env, { to: "andressalame@gmail.com", subject: asunto, text: cuerpo });
+    if (ok) return;
+  } catch (e) { /* sin RESEND_API_KEY o fallo: cae al binding AVISOS */ }
   if (!env.AVISOS) return;
   try {
     const { EmailMessage } = await import("cloudflare:email");
@@ -787,6 +791,11 @@ function paginaRegistro(){
       "<label>Tu nombre</label><input id=\"nombre\" required>" +
       "<label>Email</label><input id=\"email\" type=\"email\" required>" +
       "<label>WhatsApp</label><input id=\"whatsapp\" placeholder=\"51987654321\" required>" +
+      "<label>Que ensenas?</label>" +
+      "<select id=\"rubro\" required style=\"width:100%;background:#0F1115;border:1px solid #2c303a;border-radius:8px;padding:11px 12px;color:var(--texto);font-family:inherit;font-size:15px\">" +
+        "<option value=\"\" disabled selected>Elige tu rubro</option>" +
+        "<option>Musica</option><option>Idiomas</option><option>Danza</option><option>Refuerzo escolar</option><option>Ajedrez</option><option>Arte</option><option>Deporte</option><option>Otro</option>" +
+      "</select>" +
       "<label>Contrasena</label><input id=\"pass\" type=\"password\" required>" +
       "<label>Repite tu contrasena</label><input id=\"pass2\" type=\"password\" required>" +
       "<button type=\"submit\">Empezar gratis</button>" +
@@ -794,6 +803,9 @@ function paginaRegistro(){
     "</form>" +
     "<div class=\"foot\">Ya tienes cuenta? <a href=\"/app/login\">Ingresa aqui</a></div>";
   const script =
+    // Atribución: ?f= del CTA que lo trajo, o el referrer como fallback; sobrevive recargas en sessionStorage.
+    "var fuente='';try{var q=new URLSearchParams(location.search).get('f');if(q){fuente=q;}else if(document.referrer){var u=new URL(document.referrer);fuente=(u.host===location.host?'':u.host)+u.pathname;}}catch(e){}" +
+    "try{if(fuente){sessionStorage.setItem('batuta_f',fuente);}else{fuente=sessionStorage.getItem('batuta_f')||'';}}catch(e){}" +
     "document.getElementById('f').addEventListener('submit', async function(e){" +
     "e.preventDefault();" +
     "var err=document.getElementById('err'); err.textContent='';" +
@@ -802,11 +814,12 @@ function paginaRegistro(){
     "var nombre=document.getElementById('nombre').value.trim();" +
     "var email=document.getElementById('email').value.trim();" +
     "var whatsapp=document.getElementById('whatsapp').value.trim();" +
+    "var rubro=document.getElementById('rubro').value;" +
     "var pass=document.getElementById('pass').value;" +
     "var pass2=document.getElementById('pass2').value;" +
     "if(pass!==pass2){err.textContent='Las contrasenas no coinciden.'; btn.disabled=false; return;}" +
     "try{" +
-    "var r=await fetch('/app/api/t/registro',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({academia:academia,nombre:nombre,email:email,whatsapp:whatsapp,pass:pass})});" +
+    "var r=await fetch('/app/api/t/registro',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({academia:academia,nombre:nombre,email:email,whatsapp:whatsapp,pass:pass,rubro:rubro,fuente:fuente})});" +
     "var d=await r.json();" +
     "if(!r.ok){err.textContent=d.error||'No se pudo crear tu cuenta.'; btn.disabled=false; return;}" +
     "localStorage.setItem('batuta_t', d.token);" +
@@ -1162,7 +1175,7 @@ export default {
             '<div style="font-family:Arial,Helvetica,sans-serif;max-width:480px;margin:0 auto;color:#1a1a1a;font-size:15px;line-height:1.6">' +
               '<p>Aca esta tu plantilla: <a href="' + enlace + '"><b>descargar el Excel</b></a>.</p>' +
               '<p>Tiene 4 hojas: Alumnos, Pagos, Asistencia y un Resumen que se calcula solo (incluida la fila que mas duele: la plata en el aire sin confirmar).</p>' +
-              '<p>Y cuando llenarla a mano te canse, esa es exactamente la parte que <a href="' + MARCA.dominio + '/app/registro">Batuta hace sola</a>: portal de alumnos, cobros y renovaciones automaticas. 7 dias gratis con tus alumnos reales.</p>' +
+              '<p>Y cuando llenarla a mano te canse, esa es exactamente la parte que <a href="' + MARCA.dominio + '/app/registro?f=magnet-correo">Batuta hace sola</a>: portal de alumnos, cobros y renovaciones automaticas. 7 dias gratis con tus alumnos reales.</p>' +
               '<p>Andres, de Batuta.</p>' +
             '</div>',
         });
@@ -1183,7 +1196,7 @@ export default {
         }
         if (path === "/app/api/su/tenants" && request.method === "GET"){
           const { results } = await env.DB.prepare(
-            "SELECT id, slug, academia, profe_nombre, email, estado, trial_hasta, creado, plan, mp_sub_status FROM tenants ORDER BY creado DESC"
+            "SELECT id, slug, academia, profe_nombre, email, estado, trial_hasta, creado, plan, mp_sub_status, COALESCE(fuente,'') AS fuente, COALESCE(rubro,'') AS rubro FROM tenants ORDER BY creado DESC"
           ).all();
           return json({ tenants: results || [] });
         }
@@ -1254,6 +1267,10 @@ export default {
         const email = String(b.email || "").trim().toLowerCase();
         const whatsapp = String(b.whatsapp || "").trim();
         const pass = String(b.pass || "");
+        // Atribución: de dónde llegó (?f= o referrer) y qué enseña. Sin esto el gate de
+        // 90 días no es evaluable por canal.
+        const fuente = String(b.fuente || "").trim().slice(0, 80);
+        const rubro = String(b.rubro || "").trim().slice(0, 40);
 
         if (academia.length < 2) return json({ error: "Escribe el nombre de tu academia." }, 400);
         if (nombre.length < 2) return json({ error: "Escribe tu nombre." }, 400);
@@ -1277,9 +1294,9 @@ export default {
         const trialHasta = new Date(Date.now() + TRIAL_DIAS * 86400000).toISOString();
 
         await env.DB.prepare(
-          "INSERT INTO tenants (id,slug,academia,profe_nombre,email,whatsapp,pass_hash,pass_salt,plan,estado,trial_hasta,creado) " +
-          "VALUES (?1,?2,?3,?4,?5,?6,?7,?8,'profe','trial',?9,?10)"
-        ).bind(id, slug, academia, nombre, email, whatsapp, hash, salt, trialHasta, new Date().toISOString()).run();
+          "INSERT INTO tenants (id,slug,academia,profe_nombre,email,whatsapp,pass_hash,pass_salt,plan,estado,trial_hasta,creado,fuente,rubro) " +
+          "VALUES (?1,?2,?3,?4,?5,?6,?7,?8,'profe','trial',?9,?10,?11,?12)"
+        ).bind(id, slug, academia, nombre, email, whatsapp, hash, salt, trialHasta, new Date().toISOString(), fuente, rubro).run();
 
         // precios y config default para el tenant nuevo
         const stmts = [];
@@ -1290,6 +1307,17 @@ export default {
         await env.DB.batch(stmts);
 
         const token = await crearSesion(env, "T:" + id);
+        // Aviso instantáneo: el primer trial ES el evento de validación del plan; que no caiga en silencio.
+        ctx.waitUntil(alertaCorreoAndres(env,
+          "TRIAL NUEVO en Batuta: " + academia + (rubro ? " · " + rubro : ""),
+          "Academia: " + academia +
+          "\nProfe: " + nombre +
+          "\nEmail: " + email +
+          "\nWhatsApp: " + (whatsapp || "-") +
+          (whatsapp ? "\nEscríbele ahora: https://wa.me/" + whatsapp.replace(/\D/g, "") : "") +
+          "\nRubro: " + (rubro || "-") +
+          "\nFuente: " + (fuente || "-") +
+          "\nSlug: " + slug));
         return json({ ok: true, token, slug });
       }
 
@@ -1440,6 +1468,9 @@ export default {
             if (status === "authorized"){
               await env.DB.prepare("UPDATE tenants SET estado = 'activo', mp_sub_status = ?1, mp_preapproval_id = ?2 WHERE id = ?3")
                 .bind(status, resId, t.id).run();
+              ctx.waitUntil(alertaCorreoAndres(env,
+                "SUSCRIPCIÓN MP AUTORIZADA: " + t.academia,
+                "El tenant " + t.academia + " (" + t.email + ") autorizó su suscripción.\nPlan: " + (t.plan || "?") + "\nPreapproval: " + resId));
             } else if (status === "cancelled" || status === "paused"){
               const vencido = Date.now() > Date.parse(t.trial_hasta);
               await env.DB.prepare("UPDATE tenants SET mp_sub_status = ?1, mp_preapproval_id = ?2, estado = ?3 WHERE id = ?4")
@@ -2863,7 +2894,10 @@ export default {
       if (venceMs && ahora > venceMs){
         // Mismo criterio que el gate de acceso, pero proactivo: no espera a que el profe entre.
         try { await env.DB.prepare("UPDATE tenants SET estado = 'vencido' WHERE id = ?1").bind(t.id).run(); } catch (e) {}
-        if ((t.paso | 0) < 4){ etapa = "vencido"; pasoNuevo = 4; }
+        if ((t.paso | 0) < 4){
+          etapa = "vencido"; pasoNuevo = 4;
+          try { await alertaCorreoAndres(env, "Trial vencido sin convertir: " + t.academia, "Tenant: " + t.academia + " (" + t.email + ")\nVenció: " + t.trial_hasta + "\nLe salió el correo de cierre con el link de suscripción."); } catch (e) {}
+        }
       }
       else if ((t.paso | 0) === 0 && dias >= 1){ etapa = "dia1"; pasoNuevo = 1; }
       else if ((t.paso | 0) === 1 && dias >= 3){ etapa = "dia3"; pasoNuevo = 2; }
