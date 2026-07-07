@@ -329,6 +329,13 @@
       </div>
 
   <section class="panel active" id="panel-resumen">
+    <div class="group" id="grpActivacion" style="display:none;">
+      <h2>// Pon tu academia a andar</h2>
+      <div class="card" style="max-width:560px;">
+        <div class="hint" style="margin-bottom:10px;">4 pasos y tu academia trabaja sola. Se marcan solos con tus datos reales.</div>
+        <div id="actPasos"></div>
+      </div>
+    </div>
     <div class="group">
       <h2>// Comparte con tus alumnos</h2>
       <div class="card" style="max-width:560px;">
@@ -2515,12 +2522,48 @@ function aplicarMarcaTextos(){
 function aplicarMarca(){ aplicarMarcaCursos(); aplicarMarcaTextos(); }
 
 /* ---------- Init ---------- */
+/* ---------- Checklist de activación (guía al trial a su momento aha; se oculta al completar) ---------- */
+function cargarActivacion(){
+  fetch("/app/api/t/activacion",{headers:hdr()}).then(function(r){
+    if(!r.ok) throw new Error("HTTP "+r.status);
+    return r.json();
+  }).then(function(d){
+    var p=(d&&d.pasos)||{};
+    var defs=[
+      ["precios","Pon tus paquetes y precios reales","ajustes"],
+      ["alumnos","Agrega tu primer alumno","alumnos"],
+      ["disponibilidad","Marca tu disponibilidad semanal","agenda"],
+      ["cobro","Registra o recibe tu primer cobro","pagos"]
+    ];
+    if(!defs.some(function(x){ return !p[x[0]]; })) return; // 4/4: el card no aparece
+    var box=el("actPasos"); if(!box) return;
+    box.innerHTML="";
+    defs.forEach(function(x){
+      var ok=!!p[x[0]];
+      var row=document.createElement("div");
+      row.style.cssText="display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--line);";
+      row.innerHTML="<span style='font-size:15px;color:"+(ok?"var(--green)":"var(--muted)")+"'>"+(ok?"✓":"○")+"</span>"+
+        "<span style='flex:1;"+(ok?"opacity:.55;text-decoration:line-through;":"")+"'>"+x[1]+"</span>"+
+        (ok?"":"<button class='btn ghost sm' data-acttab='"+x[2]+"'>Ir</button>");
+      box.appendChild(row);
+    });
+    Array.prototype.forEach.call(box.querySelectorAll("[data-acttab]"),function(b){
+      b.addEventListener("click",function(){
+        var t=document.querySelector('.tab[data-tab="'+b.getAttribute("data-acttab")+'"]');
+        if(t) t.click();
+      });
+    });
+    var g=el("grpActivacion"); if(g) g.style.display="";
+  }).catch(function(e){ /* el checklist es opcional: jamás rompe el panel */ });
+}
+
 (function init(){
   aplicarMarca();
   try{ token=localStorage.getItem(TOKEN_KEY); }catch(e){}
   if(!token){ irALogin(); return; }
   setSync("Conectando…","");
   vincularSubSiVuelveDeMP().then(cargarTrialInfo);
+  cargarActivacion();
   recargar().then(iniciarRefresco).catch(function(e){
     if(e&&e.auth){ irALogin(); return; }
     if(e&&e.paywall){ return; }

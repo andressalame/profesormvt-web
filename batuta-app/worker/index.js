@@ -195,6 +195,18 @@ const BRAND_FONTS = ["Anton", "Bebas Neue", "Bricolage Grotesque", "Playfair Dis
 
 /* Cursos del tenant: editables en Ajustes (config.cursos, separados por comas). Sin configurar → default. */
 const CURSOS_DEFAULT = ["Canto", "Piano", "Guitarra"];
+
+/* Plantillas de onboarding por rubro: cursos sugeridos al registrarse (el trial no arranca
+   vacío). Son solo defaults editables en Ajustes; el rubro sale del select del registro. */
+const CURSOS_POR_RUBRO = {
+  "Musica": "Canto, Piano, Guitarra",
+  "Idiomas": "Inglés, Portugués, Francés",
+  "Danza": "Ballet, Danza urbana, Salsa",
+  "Refuerzo escolar": "Matemática, Comunicación, Ciencias",
+  "Ajedrez": "Ajedrez principiantes, Ajedrez intermedio, Preparación de torneos",
+  "Arte": "Dibujo, Pintura, Acuarela",
+  "Deporte": "Entrenamiento 1 a 1, Entrenamiento grupal",
+};
 function cursosDeCfg(cfg){
   const arr = String((cfg && cfg.cursos) || "").split(",").map(s => s.trim()).filter(Boolean);
   return arr.length ? arr : CURSOS_DEFAULT;
@@ -384,7 +396,7 @@ async function correoBienvenidaAlumno(env, tenant, cu, compra){
 /* ---------- Nurture de trial (dia 1 / 3 / 6 + cierre al vencer). Lo dispara scheduled(). ----------
    Patron probado en MVT (Resend + cron). El paso vive en tenants.nurture_paso:
    0 = nada enviado · 1 = dia1 · 2 = dia3 · 3 = dia6 · 4 = correo de vencido. */
-function correoNurtureTrial(tenant, etapa){
+function correoNurtureTrial(tenant, etapa, extras){
   const nombre = ((tenant.profe_nombre || "").trim().split(/\s+/)[0]) || "";
   const hola = "Hola" + (nombre ? " " + nombre : "") + ".";
   const panel = MARCA.dominio + "/app/panel";
@@ -405,14 +417,25 @@ function correoNurtureTrial(tenant, etapa){
       '</ol>' +
       '<p><a href="' + panel + '"><b>Entrar a mi panel</b></a></p>')
   };
-  if (etapa === "dia3") return {
-    subject: "Mete a tus alumnos (10 minutos, en serio)",
-    html: wrap(
-      '<p>' + hola + '</p>' +
-      '<p>El momento en que Batuta empieza a pagarse sola es cuando tus alumnos entran a SU portal: ven sus clases, su material y sus pagos sin escribirte.</p>' +
-      '<p>Agrega a tus alumnos de siempre y comparteles el link del portal. Los cobros por Yape quedan con constancia y confirmacion en un clic; la tarjeta se confirma sola.</p>' +
-      '<p><a href="' + panel + '"><b>Agregar alumnos ahora</b></a></p>')
-  };
+  if (etapa === "dia3"){
+    // Bifurcación por comportamiento: con alumnos ya cargados, el siguiente paso es el cobro.
+    if (extras && extras.tieneAlumnos) return {
+      subject: "Tus alumnos ya estan: ahora el primer cobro",
+      html: wrap(
+        '<p>' + hola + '</p>' +
+        '<p>Vi que ya cargaste alumnos: buen ritmo. El siguiente paso es el que se siente: <b>comparteles el link de tu portal</b> para que entren, y registra tu primer cobro.</p>' +
+        '<p>Los pagos por Yape llegan con numero de operacion y los confirmas en un clic; la tarjeta se confirma sola. Desde ese momento, las renovaciones dejan de perseguirse por WhatsApp.</p>' +
+        '<p><a href="' + panel + '"><b>Ir a mi panel</b></a></p>')
+    };
+    return {
+      subject: "Mete a tus alumnos (10 minutos, en serio)",
+      html: wrap(
+        '<p>' + hola + '</p>' +
+        '<p>El momento en que Batuta empieza a pagarse sola es cuando tus alumnos entran a SU portal: ven sus clases, su material y sus pagos sin escribirte.</p>' +
+        '<p>Agrega a tus alumnos de siempre y comparteles el link del portal. Los cobros por Yape quedan con constancia y confirmacion en un clic; la tarjeta se confirma sola.</p>' +
+        '<p><a href="' + panel + '"><b>Agregar alumnos ahora</b></a></p>')
+    };
+  }
   if (etapa === "dia6") return {
     subject: "Tu prueba termina manana",
     html: wrap(
@@ -1304,6 +1327,9 @@ export default {
           stmts.push(env.DB.prepare("INSERT INTO precios (tenant_id, paquete, precio) VALUES (?1,?2,?3)").bind(id, k, PRECIOS_DEFAULT[k]));
         }
         stmts.push(env.DB.prepare("INSERT INTO config (tenant_id, clave, valor) VALUES (?1,'profe_nombre',?2)").bind(id, nombre));
+        if (CURSOS_POR_RUBRO[rubro]){
+          stmts.push(env.DB.prepare("INSERT INTO config (tenant_id, clave, valor) VALUES (?1,'cursos',?2)").bind(id, CURSOS_POR_RUBRO[rubro]));
+        }
         await env.DB.batch(stmts);
 
         const token = await crearSesion(env, "T:" + id);
@@ -1341,6 +1367,29 @@ export default {
         }
         const token = await crearSesion(env, "T:" + t.id);
         return json({ ok: true, token, slug: t.slug });
+      }
+
+      if (path === "/app/api/t/activacion" && request.method === "GET"){
+        // Checklist de activación: estado derivado de los datos reales, sin migración.
+        const t = await tenantDeSesion(env, request);
+        if (!t) return json({ error: "Sesion expirada" }, 401);
+        const [nAl, nDisp, nComp, precios] = await Promise.all([
+          env.DB.prepare("SELECT COUNT(*) AS n FROM alumnos WHERE tenant_id = ?1").bind(t.id).first(),
+          env.DB.prepare("SELECT COUNT(*) AS n FROM disponibilidad WHERE tenant_id = ?1 AND activo = 1").bind(t.id).first(),
+          env.DB.prepare("SELECT COUNT(*) AS n FROM compras WHERE tenant_id = ?1").bind(t.id).first(),
+          loadPrecios(env, t.id),
+        ]);
+        // La demo se siembra con los precios default a propósito: para ella el paso cuenta como hecho
+        // (el visitante no debe ver la academia de muestra "incompleta").
+        const preciosPropios = t.email === DEMO_EMAIL || Object.keys(PRECIOS_DEFAULT).some((k) => Number(precios[k]) !== PRECIOS_DEFAULT[k]);
+        return json({
+          pasos: {
+            precios: preciosPropios,
+            alumnos: Number(nAl && nAl.n) > 0,
+            disponibilidad: Number(nDisp && nDisp.n) > 0,
+            cobro: Number(nComp && nComp.n) > 0,
+          },
+        });
       }
 
       if (path === "/app/api/t/logout" && request.method === "POST"){
@@ -2903,7 +2952,14 @@ export default {
       else if ((t.paso | 0) === 1 && dias >= 3){ etapa = "dia3"; pasoNuevo = 2; }
       else if ((t.paso | 0) === 2 && dias >= 6){ etapa = "dia6"; pasoNuevo = 3; }
       if (!etapa) continue;
-      const mail = correoNurtureTrial(t, etapa);
+      let extras = null;
+      if (etapa === "dia3"){
+        try {
+          const nAl = await env.DB.prepare("SELECT COUNT(*) AS n FROM alumnos WHERE tenant_id = ?1").bind(t.id).first();
+          extras = { tieneAlumnos: Number(nAl && nAl.n) > 0 };
+        } catch (e) {}
+      }
+      const mail = correoNurtureTrial(t, etapa, extras);
       const ok = await enviarCorreo(env, { to: t.email, subject: mail.subject, html: mail.html });
       // Solo avanza el paso si el correo salio: si Resend falla, se reintenta manana solo.
       if (ok){
