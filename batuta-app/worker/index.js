@@ -30,8 +30,11 @@ const CREDITO_REFERIDO = 50;
 const TRIAL_DIAS = 7;
 
 /* ---------- Suscripciones (Mercado Pago — preapproval) ----------
-   PEN mensual. plan ∈ PLANES; tenants.plan guarda la clave (profe|academia|xl). */
-const PLANES = { profe: 49, academia: 149, xl: 249 };
+   PEN mensual. plan ∈ PLANES; tenants.plan guarda la clave (profe|academia|xl).
+   Los precios se POSICIONAN en USD (9.95 / 24.95 / 49.95) pero se COBRAN en PEN:
+   MP Peru rechaza USD ("Cannot operate with currency id USD in MPE", verificado 06-jul-2026). */
+const PLANES = { profe: 34, academia: 85, xl: 170 };
+const PLANES_USD = { profe: "9.95", academia: "24.95", xl: "49.95" };
 const PLAN_NOMBRE = { profe: "Profe", academia: "Academia", xl: "Academia XL" };
 const MP_TRIAL_DIAS = 7;
 /* Planes YA creados en Mercado Pago (preapproval_plan con free_trial de 7 días; la API confirmó
@@ -39,10 +42,12 @@ const MP_TRIAL_DIAS = 7;
    esquiva el error "payer must be real user" del preapproval directo). Al volver, el panel
    vincula la suscripción al tenant con /app/api/t/vincular-sub. */
 const MP_PLAN_IDS = {
-  profe: "35ba601b3de344458c0b6960b4929459",
-  academia: "cdf23adca57a40b8b53e6405ddfc274f",
-  xl: "fcb43515dbbd47e4a934e9426c3d7522"
+  profe: "ae98cb29a7b94853a2388c3d3ebc8874",
+  academia: "6af72fcd1e2f4ca497be3f2b4adca7a9",
+  xl: "7d4d75ea227b4dce860a480b404bf96f"
 };
+/* Planes viejos (49/149/249, 06-jul mañana), por si hay que consultarlos:
+   profe=35ba601b3de344458c0b6960b4929459 · academia=cdf23adca57a40b8b53e6405ddfc274f · xl=fcb43515dbbd47e4a934e9426c3d7522 */
 const MP_CHECKOUT_BASE = "https://www.mercadopago.com.pe/subscriptions/checkout?preapproval_plan_id=";
 
 const json = (data, status) => new Response(JSON.stringify(data), {
@@ -178,9 +183,21 @@ async function loadConfig(env, tenantId){
   const c = { pago_numero: "", pago_titular: "", bcp_cuenta: "", bcp_cci: "", scotia_cuenta: "", scotia_cci: "",
               crypto_moneda: "", crypto_red: "", crypto_wallet: "",
               profe_nombre: "", profe_foto: "", profe_marca: "", whatsapp_profe: "",
-              winback_activo: "", nurture_activo: "" };
+              winback_activo: "", nurture_activo: "", cursos: "",
+              brand_color: "", brand_font: "", brand_logo: "", agenda_cupo: "" };
   for (const row of (results || [])) c[row.clave] = row.valor || "";
   return c;
+}
+
+/* Branding por tenant: 5 fuentes de titulares permitidas (Google Fonts) + color de acento.
+   Se aplican al panel del profe y al portal de sus alumnos. */
+const BRAND_FONTS = ["Anton", "Bebas Neue", "Bricolage Grotesque", "Playfair Display", "Space Grotesk"];
+
+/* Cursos del tenant: editables en Ajustes (config.cursos, separados por comas). Sin configurar → default. */
+const CURSOS_DEFAULT = ["Canto", "Piano", "Guitarra"];
+function cursosDeCfg(cfg){
+  const arr = String((cfg && cfg.cursos) || "").split(",").map(s => s.trim()).filter(Boolean);
+  return arr.length ? arr : CURSOS_DEFAULT;
 }
 
 /* ---------- sesiones: helper genérico (compartido tenant + alumno) ---------- */
@@ -312,6 +329,32 @@ async function consultarPreapprovalMP(env, preapprovalId){
   return mpFetch(env, "/preapproval/" + encodeURIComponent(preapprovalId), { method: "GET" });
 }
 
+/* Valida la firma x-signature de las notificaciones de MP (clave secreta del panel de Webhooks).
+   Manifest oficial: "id:[data.id];request-id:[x-request-id];ts:[ts];" (secciones ausentes se omiten;
+   data.id va en minusculas). v1 = HMAC-SHA256(secret, manifest) en hex. Sin MP_WEBHOOK_SECRET
+   configurado se acepta todo (comportamiento anterior: la verificacion server-to-server queda igual). */
+async function validarFirmaMP(env, request, url){
+  if (!env.MP_WEBHOOK_SECRET) return true;
+  const xSig = request.headers.get("x-signature") || "";
+  const xReqId = request.headers.get("x-request-id") || "";
+  let ts = "", v1 = "";
+  for (const parte of xSig.split(",")){
+    const i = parte.indexOf("=");
+    if (i === -1) continue;
+    const k = parte.slice(0, i).trim(), v = parte.slice(i + 1).trim();
+    if (k === "ts") ts = v; else if (k === "v1") v1 = v;
+  }
+  if (!ts || !v1) return false;
+  const dataId = String(url.searchParams.get("data.id") || "").toLowerCase();
+  let manifest = "";
+  if (dataId) manifest += "id:" + dataId + ";";
+  if (xReqId) manifest += "request-id:" + xReqId + ";";
+  manifest += "ts:" + ts + ";";
+  const key = await crypto.subtle.importKey("raw", enc.encode(env.MP_WEBHOOK_SECRET), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  const mac = hex(await crypto.subtle.sign("HMAC", key, enc.encode(manifest)));
+  return safeEq(mac, v1);
+}
+
 /* Consulta server-to-server un pago recurrente autorizado (topic subscription_authorized_payment) */
 async function consultarAuthorizedPaymentMP(env, paymentId){
   return mpFetch(env, "/authorized_payments/" + encodeURIComponent(paymentId), { method: "GET" });
@@ -375,9 +418,10 @@ async function confirmarCompra(env, tenantId, tenant, compra){
   if (!renovado){
     const nuevoId = crypto.randomUUID();
     alumnoIdNuevo = nuevoId;
+    const cursoNuevo = compra.curso || cursosDeCfg(await loadConfig(env, tenantId))[0];
     stmts.push(env.DB.prepare(
       "INSERT INTO alumnos (id,tenant_id,codigo,nombre,whatsapp,curso,paquete,fecha,pago,horario,notas,ciclo,vence) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,'Pagado','','Creado por compra web',1,?9)"
-    ).bind(nuevoId, tenantId, randHex(3).toUpperCase(), cu.nombre, cu.whatsapp || "", compra.curso || "Canto", compra.paquete, hoy(), vence));
+    ).bind(nuevoId, tenantId, randHex(3).toUpperCase(), cu.nombre, cu.whatsapp || "", cursoNuevo, compra.paquete, hoy(), vence));
     stmts.push(env.DB.prepare("UPDATE cuentas SET alumno_id = ?1 WHERE id = ?2 AND tenant_id = ?3").bind(nuevoId, cu.id, tenantId));
   }
 
@@ -588,6 +632,21 @@ async function horarioFijoDerivado(env, tenantId, alumnoId){
     .map(e => e[0]);
 }
 
+/* Cupo por horario (clases grupales): cuantos alumnos aceptan reservar el MISMO slot.
+   config.agenda_cupo (1-20, default 1 = individual). Un "bloqueo" cierra el slot completo. */
+function cupoDeCfg(cfg){
+  const c = parseInt(cfg && cfg.agenda_cupo, 10);
+  return (Number.isFinite(c) && c >= 1 && c <= 20) ? c : 1;
+}
+async function ocupacionSlot(env, tenantId, iso){
+  const { results } = await env.DB.prepare(
+    "SELECT tipo, COUNT(*) AS n FROM reservas WHERE tenant_id = ?1 AND inicio_utc = ?2 AND estado IN ('reservada','completada') GROUP BY tipo"
+  ).bind(tenantId, iso).all();
+  let n = 0, bloqueado = false;
+  for (const r of (results || [])){ n += Number(r.n) || 0; if (r.tipo === "bloqueo") bloqueado = true; }
+  return { n, bloqueado };
+}
+
 async function slotValido(env, tenantId, iso, opts){
   const t = Date.parse(iso);
   if (!Number.isFinite(t)) return false;
@@ -613,9 +672,15 @@ async function generarSlots(env, tenantId){
   const now = Date.now();
   const hastaMs = now + HORIZONTE_SEMANAS * 7 * 86400000;
   const { results: tomadas } = await env.DB.prepare(
-    "SELECT inicio_utc FROM reservas WHERE tenant_id = ?1 AND estado IN ('reservada','completada') AND inicio_utc >= ?2 AND inicio_utc <= ?3"
+    "SELECT inicio_utc, tipo FROM reservas WHERE tenant_id = ?1 AND estado IN ('reservada','completada') AND inicio_utc >= ?2 AND inicio_utc <= ?3"
   ).bind(tenantId, new Date(now).toISOString(), new Date(hastaMs).toISOString()).all();
-  const ocupados = new Set((tomadas || []).map(r => r.inicio_utc));
+  const conteo = new Map(); const bloqueados = new Set();
+  for (const r of (tomadas || [])){
+    conteo.set(r.inicio_utc, (conteo.get(r.inicio_utc) || 0) + 1);
+    if (r.tipo === "bloqueo") bloqueados.add(r.inicio_utc);
+  }
+  const cupo = cupoDeCfg(await loadConfig(env, tenantId));
+  const lleno = iso => bloqueados.has(iso) || (conteo.get(iso) || 0) >= cupo;
 
   const p0 = limaParts(new Date(now));
   const medianocheHoy = limaToUtc(p0.y, p0.m, p0.d, "00:00").getTime();
@@ -627,7 +692,7 @@ async function generarSlots(env, tenantId){
       const ms = limaToUtc(p.y, p.m, p.d, h).getTime();
       if (ms <= now + ANTICIPACION_MIN_H * 3600000 || ms > hastaMs) continue;
       const iso = new Date(ms).toISOString();
-      if (!ocupados.has(iso)) slots.push(iso);
+      if (!lleno(iso)) slots.push(iso);
     }
   }
   slots.sort();
@@ -736,15 +801,16 @@ function paginaSuscribir(){
     "<p class=\"sub\">S/0 hoy. Tu primer cobro es al terminar tus 7 dias de prueba. Cancela cuando quieras.</p>" +
     "<div id=\"planes\">" +
       "<div class=\"planopt\" data-plan=\"profe\">" +
-        "<div class=\"planopt-t\">Profe</div><div class=\"planopt-p\">S/49<span>/mes</span></div>" +
+        "<div class=\"planopt-t\">Profe</div><div class=\"planopt-p\">US$9.95<span>/mes · se cobra S/34</span></div>" +
       "</div>" +
       "<div class=\"planopt\" data-plan=\"academia\">" +
-        "<div class=\"planopt-t\">Academia</div><div class=\"planopt-p\">S/149<span>/mes</span></div>" +
+        "<div class=\"planopt-t\">Academia</div><div class=\"planopt-p\">US$24.95<span>/mes · se cobra S/85</span></div>" +
       "</div>" +
       "<div class=\"planopt\" data-plan=\"xl\">" +
-        "<div class=\"planopt-t\">Academia XL</div><div class=\"planopt-p\">S/249<span>/mes</span></div>" +
+        "<div class=\"planopt-t\">Academia XL</div><div class=\"planopt-p\">US$49.95<span>/mes · se cobra S/170</span></div>" +
       "</div>" +
     "</div>" +
+    "<p class=\"sub\" style=\"margin:14px 0 0;font-size:12px\">El cobro es en soles peruanos via Mercado Pago. Con tarjeta de otro pais, tu banco convierte al equivalente en tu moneda.</p>" +
     "<button type=\"button\" id=\"btn\">Activar plan</button>" +
     "<div class=\"err\" id=\"err\"></div>" +
     "<div id=\"whaBox\" style=\"display:none;text-align:center;margin-top:14px\">" +
@@ -785,7 +851,7 @@ function paginaSuscribir(){
 function paginaLanding(){
   const cuerpo =
     "<h1>Batuta</h1>" +
-    "<p class=\"sub\">El panel para gestionar tu academia de musica.</p>" +
+    "<p class=\"sub\">El panel para gestionar tu academia.</p>" +
     "<a href=\"/app/registro\"><button type=\"button\">Empezar gratis</button></a>" +
     "<div class=\"foot\">Ya tienes cuenta? <a href=\"/app/login\">Ingresa aqui</a></div>";
   // Si ya tiene sesion de profesor, directo a su panel.
@@ -870,6 +936,34 @@ export default {
             return json({ ok: true });
           }
           return json({ error: "Accion no valida" }, 400);
+        }
+        /* Crea un preapproval_plan en MP desde el worker (el token vive como secreto; asi no
+           hace falta sacarlo para operar planes). Body: { reason, transaction_amount, currency_id? }. */
+        if (path === "/app/api/su/mp-plan" && request.method === "POST"){
+          if (!env.MP_ACCESS_TOKEN) return json({ error: "Sin MP_ACCESS_TOKEN" }, 501);
+          const b = await request.json().catch(() => ({}));
+          const reason = String(b.reason || "").trim();
+          const monto = Number(b.transaction_amount);
+          const currency = String(b.currency_id || "PEN").trim();
+          if (!reason || !(monto > 0)) return json({ error: "Faltan reason/transaction_amount" }, 400);
+          const mp = await mpFetch(env, "/preapproval_plan", { method: "POST", body: {
+            reason,
+            auto_recurring: {
+              frequency: 1, frequency_type: "months",
+              transaction_amount: monto, currency_id: currency,
+              free_trial: { frequency: MP_TRIAL_DIAS, frequency_type: "days" }
+            },
+            back_url: MARCA.dominio + "/app/panel?sub=ok"
+          }});
+          return json({ status: mp.status, data: mp.data }, mp.ok ? 200 : 502);
+        }
+        /* Consulta un preapproval_plan por id (verificacion) */
+        if (path === "/app/api/su/mp-plan" && request.method === "GET"){
+          if (!env.MP_ACCESS_TOKEN) return json({ error: "Sin MP_ACCESS_TOKEN" }, 501);
+          const pid = String(url.searchParams.get("id") || "").trim();
+          if (!pid) return json({ error: "Falta id" }, 400);
+          const mp = await mpFetch(env, "/preapproval_plan/" + encodeURIComponent(pid), { method: "GET" });
+          return json({ status: mp.status, data: mp.data }, mp.ok ? 200 : 502);
         }
         return json({ error: "No encontrado" }, 404);
       }
@@ -1036,6 +1130,10 @@ export default {
          ============================================================ */
       if (path === "/app/api/mp/webhook" && request.method === "POST"){
         try {
+          if (!(await validarFirmaMP(env, request, url))){
+            console.error("MP webhook: firma x-signature invalida o ausente");
+            return json({ error: "Firma invalida" }, 401);
+          }
           const bodyJson = await request.json().catch(() => ({}));
           const topic = String(url.searchParams.get("topic") || url.searchParams.get("type") || bodyJson.type || bodyJson.topic || "").trim();
           const resId = String(url.searchParams.get("id") || (bodyJson.data && bodyJson.data.id) || bodyJson.id || "").trim();
@@ -1123,6 +1221,8 @@ export default {
         const cfg = await loadConfig(env, t.id);
         return json({
           academia: t.academia, whatsapp: t.whatsapp || "", precios,
+          cursos: cursosDeCfg(cfg),
+          marca: { color: cfg.brand_color || "", font: cfg.brand_font || "", logo: cfg.brand_logo || "" },
           pago: {
             pago_numero: cfg.pago_numero, pago_titular: cfg.pago_titular,
             bcp_cuenta: cfg.bcp_cuenta, bcp_cci: cfg.bcp_cci,
@@ -1204,9 +1304,12 @@ export default {
         const m = key.match(/^[a-f0-9-]{36}\.(pdf|mp3|m4a|ogg|wav|png|jpg|jpeg)$/);
         if (!m) return json({ error: "Archivo no encontrado" }, 404);
         const rutaRelativa = "/app/api/recurso/archivo/" + key;
-        const enRecursos = await env.DB.prepare("SELECT tenant_id FROM recursos WHERE url = ?1").bind(rutaRelativa).first();
-        const enEjercicios = enRecursos ? null : await env.DB.prepare("SELECT tenant_id FROM ejercicios WHERE url = ?1").bind(rutaRelativa).first();
-        if (!enRecursos && !enEjercicios) return json({ error: "Archivo no encontrado" }, 404);
+        let hallado = await env.DB.prepare("SELECT tenant_id FROM recursos WHERE url = ?1").bind(rutaRelativa).first();
+        if (!hallado) hallado = await env.DB.prepare("SELECT tenant_id FROM ejercicios WHERE url = ?1").bind(rutaRelativa).first();
+        /* foto de perfil y logo de marca viven en config; adjuntos de clases en registro.tarea_audio (JSON) */
+        if (!hallado) hallado = await env.DB.prepare("SELECT tenant_id FROM config WHERE clave IN ('profe_foto','brand_logo') AND valor = ?1").bind(rutaRelativa).first();
+        if (!hallado) hallado = await env.DB.prepare("SELECT tenant_id FROM registro WHERE tarea_audio LIKE ?1 LIMIT 1").bind("%" + rutaRelativa + "%").first();
+        if (!hallado) return json({ error: "Archivo no encontrado" }, 404);
         const obj = await env.RECURSOS_R2.get(key);
         if (!obj) return json({ error: "Archivo no encontrado" }, 404);
         const ct = (obj.httpMetadata && obj.httpMetadata.contentType) || MIME_ARCHIVO[m[1]] || "application/octet-stream";
@@ -1598,7 +1701,12 @@ export default {
         const tid = cu.tenant_id;
         const b = await request.json().catch(() => ({}));
         const paquete = String(b.paquete || "");
-        const curso = String(b.curso || "").trim() || "Canto";
+        const cursosT = cursosDeCfg(await loadConfig(env, tid));
+        const cursoPedido = String(b.curso || "").trim();
+        // acepta combinaciones ("Canto, Piano"): cada parte debe ser un curso del tenant
+        const partesCurso = cursoPedido.split(",").map(s => s.trim()).filter(Boolean);
+        const curso = (partesCurso.length && partesCurso.every(c => cursosT.indexOf(c) !== -1))
+          ? partesCurso.join(", ") : cursosT[0];
         const op = String(b.op_numero || "").trim().slice(0, 40);
         const metodo = String(b.metodo || "").trim().slice(0, 40);
         const comprobante = typeof b.comprobante === "string" ? b.comprobante : "";
@@ -1773,14 +1881,27 @@ export default {
         const nowIso = new Date().toISOString();
         const startMs = Date.parse(iso);
 
+        const cupoT = cupoDeCfg(await loadConfig(env, tid));
+        /* el mismo alumno no puede reservar dos veces el mismo slot (con cupo > 1 el conteo solo no lo impide) */
+        const yaMia = await env.DB.prepare(
+          "SELECT 1 AS ok FROM reservas WHERE tenant_id = ?1 AND inicio_utc = ?2 AND alumno_id = ?3 AND estado IN ('reservada','completada')"
+        ).bind(tid, iso, alumno.id).first();
+        if (yaMia) return json({ error: "Ya tienes una reserva en ese horario." }, 409);
+
         if (tipo === "suelta"){
+          const oc = await ocupacionSlot(env, tid, iso);
+          if (oc.bloqueado || oc.n >= cupoT) return json({ error: "Ese horario ya se lleno. Elige otro." }, 409);
           const fin = new Date(startMs + CLASE_MIN * 60000).toISOString();
           const rid = crypto.randomUUID();
-          try {
-            await env.DB.prepare(
-              "INSERT INTO reservas (id,tenant_id,alumno_id,inicio_utc,fin_utc,tipo,serie_id,estado,curso,ciclo,creada) VALUES (?1,?2,?3,?4,?5,'suelta','','reservada',?6,?7,?8)"
-            ).bind(rid, tid, alumno.id, iso, fin, alumno.curso || "", ciclo, nowIso).run();
-          } catch (e){ return json({ error: "Justo tomaron ese horario. Elige otro." }, 409); }
+          await env.DB.prepare(
+            "INSERT INTO reservas (id,tenant_id,alumno_id,inicio_utc,fin_utc,tipo,serie_id,estado,curso,ciclo,creada) VALUES (?1,?2,?3,?4,?5,'suelta','','reservada',?6,?7,?8)"
+          ).bind(rid, tid, alumno.id, iso, fin, alumno.curso || "", ciclo, nowIso).run();
+          /* re-verificacion optimista: si una carrera paso el cupo, se deshace esta reserva */
+          const oc2 = await ocupacionSlot(env, tid, iso);
+          if (oc2.bloqueado || oc2.n > cupoT){
+            await env.DB.prepare("DELETE FROM reservas WHERE id = ?1 AND tenant_id = ?2").bind(rid, tid).run();
+            return json({ error: "Justo se lleno ese horario. Elige otro." }, 409);
+          }
           return json({ ok: true, reservadas: 1, tipo: "suelta" });
         }
 
@@ -1792,14 +1913,23 @@ export default {
           const t = startMs + i * 7 * 86400000;
           const isoT = new Date(t).toISOString();
           if (!(await slotValido(env, tid, isoT, { ignorarHorizonte: true }))){ saltadas.push(isoT); continue; }
+          const ocF = await ocupacionSlot(env, tid, isoT);
+          if (ocF.bloqueado || ocF.n >= cupoT){ saltadas.push(isoT); continue; }
+          const miaF = await env.DB.prepare(
+            "SELECT 1 AS ok FROM reservas WHERE tenant_id = ?1 AND inicio_utc = ?2 AND alumno_id = ?3 AND estado IN ('reservada','completada')"
+          ).bind(tid, isoT, alumno.id).first();
+          if (miaF){ saltadas.push(isoT); continue; }
           const finT = new Date(t + CLASE_MIN * 60000).toISOString();
           const rid = crypto.randomUUID();
-          try {
-            await env.DB.prepare(
-              "INSERT INTO reservas (id,tenant_id,alumno_id,inicio_utc,fin_utc,tipo,serie_id,estado,curso,ciclo,creada) VALUES (?1,?2,?3,?4,?5,'fija',?6,'reservada',?7,?8,?9)"
-            ).bind(rid, tid, alumno.id, isoT, finT, serie, alumno.curso || "", ciclo, nowIso).run();
-            creadas++;
-          } catch (e){ saltadas.push(isoT); continue; }
+          await env.DB.prepare(
+            "INSERT INTO reservas (id,tenant_id,alumno_id,inicio_utc,fin_utc,tipo,serie_id,estado,curso,ciclo,creada) VALUES (?1,?2,?3,?4,?5,'fija',?6,'reservada',?7,?8,?9)"
+          ).bind(rid, tid, alumno.id, isoT, finT, serie, alumno.curso || "", ciclo, nowIso).run();
+          const ocF2 = await ocupacionSlot(env, tid, isoT);
+          if (ocF2.bloqueado || ocF2.n > cupoT){
+            await env.DB.prepare("DELETE FROM reservas WHERE id = ?1 AND tenant_id = ?2").bind(rid, tid).run();
+            saltadas.push(isoT); continue;
+          }
+          creadas++;
         }
         if (creadas === 0) return json({ error: "No pude apartar el horario fijo (sin cupos esas semanas o sin clases en tu paquete)." }, 409);
         return json({ ok: true, reservadas: creadas, tipo: "fija", saltadas });
@@ -1907,15 +2037,27 @@ export default {
           const horizonMs = Date.now() + HORIZONTE_SEMANAS * 7 * 86400000;
           const nowIso = new Date().toISOString();
           let creadas = 0;
+          const cupoB = cupoDeCfg(await loadConfig(env, tid));
           for (let tms = t0; tms <= horizonMs; tms += 7 * 86400000){
             const isoT = new Date(tms).toISOString();
             const finT = new Date(tms + CLASE_MIN * 60000).toISOString();
-            try {
+            const oc = await ocupacionSlot(env, tid, isoT);
+            /* bloqueo: 1 por slot basta. Con alumno: respeta el cupo y evita duplicar al mismo alumno. */
+            let cabe;
+            if (!alumnoId){
+              cabe = !oc.bloqueado;
+            } else {
+              const yaEl = await env.DB.prepare(
+                "SELECT 1 AS ok FROM reservas WHERE tenant_id = ?1 AND inicio_utc = ?2 AND alumno_id = ?3 AND estado IN ('reservada','completada')"
+              ).bind(tid, isoT, alumnoId).first();
+              cabe = !oc.bloqueado && oc.n < cupoB && !yaEl;
+            }
+            if (cabe){
               await env.DB.prepare(
                 "INSERT INTO reservas (id,tenant_id,alumno_id,inicio_utc,fin_utc,tipo,serie_id,estado,curso,nota,ciclo,creada) VALUES (?1,?2,?3,?4,?5,?6,?7,'reservada',?8,?9,?10,?11)"
               ).bind(crypto.randomUUID(), tid, alumnoId, isoT, finT, tipo, serie, curso, nota, ciclo, nowIso).run();
               creadas++;
-            } catch (e){ /* ese instante ya estaba ocupado */ }
+            }
             if (!fija) break;
           }
           return json({ ok: creadas > 0, creadas });
@@ -1979,8 +2121,45 @@ export default {
           const leads    = (await env.DB.prepare("SELECT id,email,marca,fuente,interes,fecha FROM leads WHERE tenant_id = ?1 ORDER BY fecha DESC, rowid DESC LIMIT 1000").bind(tid).all()).results || [];
           const precios  = await loadPrecios(env, tid);
           const config   = await loadConfig(env, tid);
-          return json({ alumnos, registro, precios, cuentas, compras, recursos, ejercicios, leads, config,
+          const grupos   = ((await env.DB.prepare("SELECT * FROM grupos WHERE tenant_id = ?1 ORDER BY creado DESC, rowid DESC").bind(tid).all()).results || [])
+            .map(g => { let m = []; try { m = JSON.parse(g.miembros || "[]"); } catch (e) {} return Object.assign({}, g, { miembros: Array.isArray(m) ? m : [] }); });
+          return json({ alumnos, registro, precios, cuentas, compras, recursos, ejercicios, leads, config, grupos,
                         vapid_public: env.VAPID_PUBLIC_KEY || "" });
+        }
+
+        /* -------- Grupos (clases grupales con miembros) -------- */
+        if (path === "/app/api/admin/grupo" && request.method === "POST"){
+          const b = await request.json().catch(() => ({}));
+          const accion = String(b.accion || "");
+          if (accion === "borrar"){
+            await env.DB.prepare("DELETE FROM grupos WHERE id = ?1 AND tenant_id = ?2").bind(String(b.id || ""), tid).run();
+            return json({ ok: true });
+          }
+          if (accion !== "crear" && accion !== "editar") return json({ error: "Accion no valida" }, 400);
+          const nombre = String(b.nombre || "").trim().slice(0, 60);
+          if (nombre.length < 2) return json({ error: "Ponle un nombre al grupo." }, 400);
+          const curso = String(b.curso || "").trim().slice(0, 40);
+          const horario = String(b.horario || "").trim().slice(0, 80);
+          /* miembros: solo ids de alumnos reales de ESTE tenant */
+          const pedidos = Array.isArray(b.miembros) ? b.miembros.map(x => String(x)).slice(0, 100) : [];
+          let miembros = [];
+          if (pedidos.length){
+            const { results: als } = await env.DB.prepare("SELECT id FROM alumnos WHERE tenant_id = ?1").bind(tid).all();
+            const validos = new Set((als || []).map(a => a.id));
+            miembros = pedidos.filter((x, i, a) => validos.has(x) && a.indexOf(x) === i);
+          }
+          if (accion === "crear"){
+            await env.DB.prepare(
+              "INSERT INTO grupos (id,tenant_id,nombre,curso,horario,miembros,creado) VALUES (?1,?2,?3,?4,?5,?6,?7)"
+            ).bind(crypto.randomUUID(), tid, nombre, curso, horario, JSON.stringify(miembros), hoy()).run();
+          } else {
+            const r = await env.DB.prepare(
+              "UPDATE grupos SET nombre = ?1, curso = ?2, horario = ?3, miembros = ?4 WHERE id = ?5 AND tenant_id = ?6"
+            ).bind(nombre, curso, horario, JSON.stringify(miembros), String(b.id || ""), tid).run();
+            const filas = (r && r.meta && (r.meta.changes ?? r.meta.rows_written)) || 0;
+            if (!filas) return json({ error: "Grupo no encontrado" }, 404);
+          }
+          return json({ ok: true });
         }
 
         /* Guardado masivo del panel (alumnos + registro + precios), scoped al tenant.
@@ -2023,13 +2202,24 @@ export default {
 
         if (path === "/app/api/admin/config" && request.method === "POST"){
           const b = await request.json().catch(() => ({}));
-          const claves = ["pago_numero", "pago_titular", "bcp_cuenta", "bcp_cci", "scotia_cuenta", "scotia_cci", "crypto_moneda", "crypto_red", "crypto_wallet", "profe_nombre", "profe_marca", "profe_foto", "whatsapp_profe"];
+          const claves = ["pago_numero", "pago_titular", "bcp_cuenta", "bcp_cci", "scotia_cuenta", "scotia_cci", "crypto_moneda", "crypto_red", "crypto_wallet", "profe_nombre", "profe_marca", "profe_foto", "whatsapp_profe", "cursos", "brand_color", "brand_font", "agenda_cupo"];
           const stmts = [];
           for (const k of claves){
             if (k in b){
+              let valor = String(b[k] || "").trim();
+              if (k === "cursos"){
+                valor = valor.split(",").map(s => s.trim().slice(0, 40)).filter(Boolean)
+                  .filter((c, i, a) => a.indexOf(c) === i).slice(0, 15).join(", ");
+              }
+              if (k === "brand_color" && valor && !/^#[0-9a-fA-F]{6}$/.test(valor)) valor = "";
+              if (k === "brand_font" && valor && BRAND_FONTS.indexOf(valor) === -1) valor = "";
+              if (k === "agenda_cupo"){
+                const nc = parseInt(valor, 10);
+                valor = (Number.isFinite(nc) && nc >= 1 && nc <= 20) ? String(nc) : "";
+              }
               stmts.push(env.DB.prepare(
                 "INSERT INTO config (tenant_id, clave, valor) VALUES (?1, ?2, ?3) ON CONFLICT(tenant_id, clave) DO UPDATE SET valor = ?3"
-              ).bind(tid, k, String(b[k] || "").trim()));
+              ).bind(tid, k, valor));
             }
           }
           if (stmts.length) await env.DB.batch(stmts);
@@ -2043,7 +2233,7 @@ export default {
             const titulo = String(b.titulo || "").trim();
             const urlR = String(b.url || "").trim();
             const descripcion = String(b.descripcion || "").trim().slice(0, 300);
-            const cursos = ["Todos", "Canto", "Piano", "Composición"];
+            const cursos = ["Todos"].concat(cursosDeCfg(await loadConfig(env, tid)));
             const curso = cursos.includes(b.curso) ? b.curso : "Todos";
             if (titulo.length < 2) return json({ error: "Ponle un titulo al recurso." }, 400);
             if (!/^https?:\/\//i.test(urlR)) return json({ error: "El link debe empezar con http:// o https://" }, 400);
@@ -2073,7 +2263,7 @@ export default {
           const archivo = form.get("archivo");
           const titulo = String(form.get("titulo") || "").trim();
           const descripcion = String(form.get("descripcion") || "").trim().slice(0, 300);
-          const cursos = ["Todos", "Canto", "Piano", "Composición"];
+          const cursos = ["Todos"].concat(cursosDeCfg(await loadConfig(env, tid)));
           const curso = cursos.includes(form.get("curso")) ? form.get("curso") : "Todos";
           if (titulo.length < 2) return json({ error: "Ponle un titulo al recurso." }, 400);
 
@@ -2120,13 +2310,51 @@ export default {
           return json({ ok: true, url: fotoUrl });
         }
 
+        /* Logo de la academia (branding del portal): mismo patron que la foto de perfil. Con valor vacio, lo quita. */
+        if (path === "/app/api/admin/marca/logo" && request.method === "POST"){
+          if (!env.RECURSOS_R2) return json({ error: "No disponible en el trial." }, 501);
+          const cfgPrev = await loadConfig(env, tid);
+          const borrarPrevio = async () => {
+            if (cfgPrev.brand_logo && cfgPrev.brand_logo.startsWith("/app/api/recurso/archivo/")){
+              const oldKey = cfgPrev.brand_logo.slice("/app/api/recurso/archivo/".length);
+              try { await env.RECURSOS_R2.delete(oldKey); } catch (e) {}
+            }
+          };
+          const ct = request.headers.get("content-type") || "";
+          if (ct.indexOf("application/json") !== -1){
+            await borrarPrevio();
+            await env.DB.prepare(
+              "INSERT INTO config (tenant_id, clave, valor) VALUES (?1, 'brand_logo', '') ON CONFLICT(tenant_id, clave) DO UPDATE SET valor = ''"
+            ).bind(tid).run();
+            return json({ ok: true, url: "" });
+          }
+          const form = await request.formData().catch(() => null);
+          if (!form) return json({ error: "Formulario invalido" }, 400);
+          const archivo = form.get("archivo");
+          const esArchivo = archivo && typeof archivo !== "string" && typeof archivo.arrayBuffer === "function";
+          const ext = esArchivo ? extArchivo(archivo.name) : null;
+          if (!ext || !/^(png|jpg|jpeg)$/.test(ext) || archivo.size > 8 * 1024 * 1024){
+            return json({ error: "Solo imagenes (png/jpg) de hasta 8 MB." }, 400);
+          }
+          const key = crypto.randomUUID() + "." + ext;
+          await env.RECURSOS_R2.put(key, archivo, {
+            httpMetadata: { contentType: MIME_ARCHIVO[ext], contentDisposition: "inline" }
+          });
+          await borrarPrevio();
+          const logoUrl = "/app/api/recurso/archivo/" + key;
+          await env.DB.prepare(
+            "INSERT INTO config (tenant_id, clave, valor) VALUES (?1, 'brand_logo', ?2) ON CONFLICT(tenant_id, clave) DO UPDATE SET valor = ?2"
+          ).bind(tid, logoUrl).run();
+          return json({ ok: true, url: logoUrl });
+        }
+
         if (path === "/app/api/admin/ejercicio/archivo" && request.method === "POST"){
           if (!env.RECURSOS_R2) return json({ error: "No disponible en el trial." }, 501);
           const form = await request.formData().catch(() => null);
           if (!form) return json({ error: "Formulario invalido" }, 400);
           const archivo = form.get("archivo");
           const titulo = String(form.get("titulo") || "").trim();
-          const cursos = ["Todos", "Canto", "Piano", "Composición"];
+          const cursos = ["Todos"].concat(cursosDeCfg(await loadConfig(env, tid)));
           const curso = cursos.includes(form.get("curso")) ? form.get("curso") : "Todos";
           const descripcion = String(form.get("descripcion") || "").trim().slice(0, 300);
           if (titulo.length < 2) return json({ error: "Ponle un titulo al ejercicio." }, 400);
@@ -2154,7 +2382,7 @@ export default {
           const rutas = form.getAll("rutas").map(r => String(r || ""));
           if (!archivos.length) return json({ error: "No llego ningun archivo" }, 400);
           if (archivos.length > 200) return json({ error: "Maximo 200 archivos por carpeta" }, 400);
-          const cursos = ["Todos", "Canto", "Piano", "Composición"];
+          const cursos = ["Todos"].concat(cursosDeCfg(await loadConfig(env, tid)));
           const curso = cursos.includes(form.get("curso")) ? form.get("curso") : "Todos";
           let subidos = 0, saltados = 0;
           for (let i = 0; i < archivos.length; i++){

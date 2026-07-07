@@ -132,8 +132,20 @@ CREATE TABLE IF NOT EXISTS reservas (
 CREATE INDEX IF NOT EXISTS idx_reservas_inicio ON reservas (tenant_id, inicio_utc);
 CREATE INDEX IF NOT EXISTS idx_reservas_alumno ON reservas (tenant_id, alumno_id);
 CREATE INDEX IF NOT EXISTS idx_reservas_estado ON reservas (tenant_id, estado);
-CREATE UNIQUE INDEX IF NOT EXISTS idx_reservas_slot_unico
-  ON reservas (tenant_id, inicio_utc) WHERE estado IN ('reservada','completada');
+-- (06-jul-2026) idx_reservas_slot_unico ELIMINADO: el cupo por horario (config agenda_cupo)
+-- permite N reservas en el mismo slot; la ocupacion se valida por conteo en el worker.
+
+-- ============ GRUPOS (clases grupales con lista de miembros) ============
+CREATE TABLE IF NOT EXISTS grupos (
+  id        TEXT PRIMARY KEY,
+  tenant_id TEXT NOT NULL,
+  nombre    TEXT NOT NULL,
+  curso     TEXT DEFAULT '',
+  horario   TEXT DEFAULT '',
+  miembros  TEXT DEFAULT '[]',
+  creado    TEXT DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS idx_grupos_tenant ON grupos (tenant_id);
 
 -- ============ CUENTAS DE ALUMNO (portal) ============
 CREATE TABLE IF NOT EXISTS cuentas (

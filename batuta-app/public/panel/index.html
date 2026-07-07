@@ -235,6 +235,13 @@
   .oia-send:disabled{opacity:.5;cursor:default;}
   .oia-tope{padding:8px 10px;font-family:var(--mono);font-size:10.5px;color:var(--muted);border-top:1px solid var(--line);text-align:center;}
   /* ---------- Banner de trial + paywall ---------- */
+  /* ---------- Reportes: barras de ingresos por mes ---------- */
+  .repbars{display:flex;align-items:flex-end;gap:10px;height:170px;padding:10px 4px 0;max-width:640px;margin-bottom:16px;}
+  .repbar{flex:1;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;gap:6px;height:100%;min-width:0;}
+  .repbar i{display:block;width:100%;background:var(--accent);border-radius:2px 2px 0 0;opacity:.9;}
+  .repbar:last-child i{background:#3ea66a;}
+  .repbar .bl{font-family:var(--mono);font-size:9px;color:var(--muted);text-transform:uppercase;white-space:nowrap;}
+  .repbar .bv{font-family:var(--mono);font-size:9.5px;color:var(--cream);white-space:nowrap;}
   .trialbar{display:none;align-items:center;justify-content:center;gap:12px;flex-wrap:wrap;background:var(--accent);color:var(--bg);font-family:var(--mono);font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;padding:9px 16px;text-align:center;}
   .trialbar.show{display:flex;}
   .trialbar a,.trialbar button{color:var(--bg);text-decoration:underline;background:none;border:0;font:inherit;cursor:pointer;padding:0;}
@@ -263,6 +270,7 @@
         <button class="navgroup-h" type="button"><span class="ng-ico">👥</span><span class="ng-tx">Alumnos</span><span class="ng-chev">⌄</span></button>
         <div class="navgroup-items">
           <button class="tab" data-tab="alumnos">Alumnos</button>
+          <button class="tab" data-tab="grupos">Grupos</button>
           <button class="tab" data-tab="registro">Clases</button>
           <button class="tab" data-tab="agenda">Agenda</button>
           <button class="tab" data-tab="chat">Chat</button>
@@ -272,6 +280,7 @@
         <button class="navgroup-h" type="button"><span class="ng-ico">💰</span><span class="ng-tx">Cobros</span><span class="ng-chev">⌄</span></button>
         <div class="navgroup-items">
           <button class="tab" data-tab="pagos">Pagos<span class="dot hidden" id="dotPagos">0</span></button>
+          <button class="tab" data-tab="reportes">Reportes</button>
           <button class="tab" data-tab="cuentas">Accesos</button>
           <button class="tab" data-tab="leads">Interesados</button>
         </div>
@@ -350,6 +359,17 @@
     </div>
   </section>
 
+  <section class="panel" id="panel-grupos">
+    <div style="margin-bottom:10px;"><button class="btn" id="btnNuevoGrupo">+ Nuevo grupo</button></div>
+    <p class="hint" style="margin-bottom:16px;">Un grupo = un nombre, sus alumnos y su horario. Con "Registrar clase" pasas asistencia de todo el grupo en un clic (cada alumno consume 1 clase de su propio paquete). Para que varios alumnos reserven el mismo horario desde el portal, sube el "Cupo por horario" en Ajustes.</p>
+    <div class="tablewrap">
+      <table id="tablaGrupos">
+        <thead><tr><th>Grupo</th><th>Curso</th><th>Horario</th><th>Alumnos</th><th></th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
+
   <section class="panel" id="panel-registro">
     <div style="margin-bottom:14px;"><button class="btn" id="btnNuevoRegistro">+ Registrar clase</button></div>
     <input type="file" id="fileAudio" accept="audio/*,application/pdf,image/png,image/jpeg" style="display:none" multiple />
@@ -389,6 +409,26 @@
       <div class="tablewrap">
         <table><thead><tr><th>Fecha</th><th>Quién</th><th>Paquete</th><th>Monto</th><th>Estado</th></tr></thead>
         <tbody id="tbProcesadas"></tbody></table>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel" id="panel-reportes">
+    <div class="group">
+      <h2>// Ingresos cobrados por mes</h2>
+      <p class="hint">Compras confirmadas (portal + las que confirmas a mano), agrupadas por mes. Histórico completo.</p>
+      <div class="repbars" id="repIngresosBars"></div>
+      <div class="tablewrap">
+        <table><thead><tr><th>Mes</th><th>Compras</th><th>Cobrado</th></tr></thead>
+        <tbody id="tbRepIngresos"></tbody></table>
+      </div>
+    </div>
+    <div class="group">
+      <h2>// Asistencia por mes</h2>
+      <p class="hint">Dictadas vs faltas de todas las clases registradas. Asistencia = dictadas / (dictadas + faltas).</p>
+      <div class="tablewrap">
+        <table><thead><tr><th>Mes</th><th>Dictadas</th><th>Faltas</th><th>Reprogramadas</th><th>Asistencia</th></tr></thead>
+        <tbody id="tbRepAsistencia"></tbody></table>
       </div>
     </div>
   </section>
@@ -439,7 +479,7 @@
       <h2>// Subir a tu biblioteca</h2>
       <p class="hint">Tu banco privado de ejercicios (audios, PDFs). <strong>No se publican</strong>: los eliges desde el desplegable al registrar una clase para mandárselos a un alumno como tarea.</p>
       <div class="frow">
-        <div class="field"><label>Título</label><input id="ej_titulo" type="text" placeholder="Vocalizo de calentamiento (5 min)" /></div>
+        <div class="field"><label>Título</label><input id="ej_titulo" type="text" placeholder="Ejercicio de calentamiento (5 min)" /></div>
         <div class="field"><label>Curso</label><select id="ej_curso"></select></div>
       </div>
       <div class="field"><label>Archivo: audio, PDF o imagen (máx. 25 MB)</label><input id="ej_file" type="file" accept="audio/*,application/pdf,image/png,image/jpeg" /></div>
@@ -522,6 +562,32 @@
 
   <section class="panel" id="panel-ajustes">
     <div class="group">
+      <h2>// Tu marca</h2>
+      <p class="hint">Tu logo, tu color y tu tipografía. Se aplican a este panel y al portal de tus alumnos, para que se sienta TU academia.</p>
+      <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:12px;">
+        <img id="brandLogoPrev" alt="Logo" style="max-height:44px;max-width:180px;display:none;background:var(--panel2);border:1px solid var(--line);border-radius:3px;padding:6px;" />
+        <input type="file" id="brandLogoInput" accept="image/png,image/jpeg" style="display:none" />
+        <button class="btn ghost sm" id="btnBrandLogo">Subir / cambiar logo</button>
+        <button class="btn ghost sm" id="btnBrandLogoQuitar">Quitar logo</button>
+      </div>
+      <div class="cfgrow"><span class="pk">Color de acento</span><input id="cfg_brand_color" type="color" value="#E8A13D" style="flex:0 0 64px;min-width:64px;height:34px;padding:2px;cursor:pointer;" /><button class="btn ghost sm" id="btnBrandColorReset" style="flex:0 0 auto;">Volver al ámbar</button></div>
+      <div class="cfgrow"><span class="pk">Tipografía de titulares</span>
+        <select id="cfg_brand_font">
+          <option value="">Anton (la estándar)</option>
+          <option>Bebas Neue</option>
+          <option>Bricolage Grotesque</option>
+          <option>Playfair Display</option>
+          <option>Space Grotesk</option>
+        </select>
+      </div>
+      <p class="hint">El color y la tipografía se guardan con "Guardar ajustes". El logo se sube al instante y aparece en el portal de tus alumnos.</p>
+    </div>
+    <div class="group">
+      <h2>// Cursos que enseñas</h2>
+      <p class="hint">Escríbelos separados por comas y de CUALQUIER materia (ej: Canto, Piano, Inglés, Matemática, Ajedrez). Se usan en el portal de compra de tus alumnos, sus fichas, el registro de clases y tu material.</p>
+      <div class="cfgrow"><span class="pk">Cursos</span><input id="cfg_cursos" type="text" placeholder="Canto, Piano, Guitarra" /></div>
+    </div>
+    <div class="group">
       <h2>// Precios de paquetes (S/)</h2>
       <p class="hint">El monto de compra del portal y de cada alumno sale de aquí.</p>
       <div id="preciosBox"></div>
@@ -531,6 +597,8 @@
       <div class="cfgrow"><span class="pk">Número Yape / Plin</span><input id="cfg_pago_numero" type="text" placeholder="999 999 999" /></div>
       <div class="cfgrow"><span class="pk">Titular (como sale en Yape)</span><input id="cfg_pago_titular" type="text" placeholder="Nombre Apellido" /></div>
       <p class="hint">Hasta que llenes el número, el portal manda a los alumnos a coordinarte el pago por WhatsApp.</p>
+      <div class="cfgrow"><span class="pk">Cupo por horario</span><input id="cfg_agenda_cupo" type="number" min="1" max="20" placeholder="1" /></div>
+      <p class="hint" style="margin-top:-4px;">1 = clases individuales. Súbelo para clases grupales: ese número de alumnos podrá reservar el MISMO horario desde el portal.</p>
       <div class="cfgrow"><span class="pk">Google Client ID</span><input id="cfg_google_client_id" type="text" placeholder="xxxxx.apps.googleusercontent.com" disabled /></div>
       <p class="hint" style="margin-top:-4px;">Se conecta al activar tu plan · enciende el botón de Google del portal de tus alumnos.</p>
       <div class="cfgrow"><span class="pk">BCP cuenta (Soles)</span><input id="cfg_bcp_cuenta" type="text" placeholder="19100000000000" /></div>
@@ -596,9 +664,9 @@
     <h3>Tu semana de <em>prueba terminó</em></h3>
     <div class="mlab">// Activa tu plan para seguir usando Batuta</div>
     <div class="frow" style="grid-template-columns:1fr;gap:10px;">
-      <div class="card" style="padding:14px 16px;"><strong>Profe</strong> — S/49/mes</div>
-      <div class="card" style="padding:14px 16px;"><strong>Academia</strong> — S/149/mes</div>
-      <div class="card" style="padding:14px 16px;"><strong>Academia XL</strong> — S/249/mes</div>
+      <div class="card" style="padding:14px 16px;"><strong>Profe</strong> — US$9.95/mes (se cobra S/34)</div>
+      <div class="card" style="padding:14px 16px;"><strong>Academia</strong> — US$24.95/mes (se cobra S/85)</div>
+      <div class="card" style="padding:14px 16px;"><strong>Academia XL</strong> — US$49.95/mes (se cobra S/170)</div>
     </div>
     <div class="modal-actions">
       <a class="btn" href="/app/suscribir">Activar mi plan</a>
@@ -638,6 +706,28 @@
   </div>
 </div>
 
+<!-- Modal grupo -->
+<div class="overlay" id="ovGrupo">
+  <div class="modal">
+    <h3 id="grupoTitulo">Nuevo <em>grupo</em></h3>
+    <div class="mlab">// Nombre, curso, horario y miembros</div>
+    <input type="hidden" id="g_id" />
+    <div class="frow">
+      <div class="field"><label>Nombre del grupo</label><input id="g_nombre" type="text" placeholder="Coro juvenil / Guitarra sábados" /></div>
+      <div class="field"><label>Curso</label><select id="g_curso"></select></div>
+    </div>
+    <div class="field"><label>Horario (referencial)</label><input id="g_horario" type="text" placeholder="Sábados 10:00" />
+      <p class="hint" style="margin:5px 0 0;">Solo informativo. Para apartar el horario real usa Agenda → Bloquear o sembrar.</p></div>
+    <div class="field"><label>Alumnos del grupo</label>
+      <div id="g_miembros" style="display:flex;flex-wrap:wrap;gap:10px;padding:4px 0;max-height:150px;overflow-y:auto;"></div></div>
+    <div class="err" id="gErr"></div>
+    <div class="modal-actions">
+      <button class="btn ghost" data-close>Cancelar</button>
+      <button class="btn" id="btnGuardarGrupo">Guardar grupo</button>
+    </div>
+  </div>
+</div>
+
 <!-- Modal registro -->
 <div class="overlay" id="ovRegistro">
   <div class="modal">
@@ -653,6 +743,9 @@
       <div class="field"><label>Curso de esta clase</label><select id="r_curso"></select></div>
     </div>
     <p class="hint">Asistió y Falta consumen 1 clase. Reprogramar dentro del límite no consume; pasarse del límite cuenta como falta.</p>
+    <div class="field" id="r_grupal_wrap"><label>Clase grupal (opcional): también estuvieron</label>
+      <div id="r_grupales" style="display:flex;flex-wrap:wrap;gap:10px;padding:4px 0;max-height:96px;overflow-y:auto;"></div>
+      <p class="hint" style="margin:4px 0 0;">Marca a los demás alumnos de esa clase: se registra la misma clase para cada uno (mismo estado, trabajo y tarea) y cada quien consume 1 clase de su propio paquete.</p></div>
     <div class="field"><label>¿Qué se trabajó?</label><input id="r_trabajo" type="text" /></div>
     <div class="field"><label>Tarea asignada</label><input id="r_tarea" type="text" /></div>
     <div class="field"><label>¿Qué haremos la próxima clase?</label><input id="r_plan" type="text" placeholder="El plan de la siguiente sesión — el alumno también lo ve" />
@@ -736,7 +829,7 @@ var TENANT_SLUG = "";
 var TENANT_ESTADO = "trial";
 var WA_ACTIVAR = "51989077928";
 
-var db = { alumnos:[], registro:[], precios:Object.assign({},PRECIOS_DEFAULT), cuentas:[], compras:[], recursos:[], ejercicios:[], config:{} };
+var db = { alumnos:[], registro:[], precios:Object.assign({},PRECIOS_DEFAULT), cuentas:[], compras:[], recursos:[], ejercicios:[], grupos:[], config:{} };
 var token = null;
 var cuentaModo = null;
 var refreshInterval = null;
@@ -805,7 +898,7 @@ function apiPost(path, body){
 function recargar(){
   return apiGet().then(function(d){
     db=d; if(!db.precios) db.precios=Object.assign({},PRECIOS_DEFAULT);
-    db.cuentas=db.cuentas||[]; db.compras=db.compras||[]; db.recursos=db.recursos||[]; db.ejercicios=db.ejercicios||[]; db.leads=db.leads||[]; db.config=db.config||{};
+    db.cuentas=db.cuentas||[]; db.compras=db.compras||[]; db.recursos=db.recursos||[]; db.ejercicios=db.ejercicios||[]; db.leads=db.leads||[]; db.grupos=db.grupos||[]; db.config=db.config||{};
     renderAll(); setSync("Conectado ✓","ok");
   });
 }
@@ -873,7 +966,7 @@ function hayModalAbierto(){ return !!document.querySelector(".overlay.open"); }
 /* Re-render del refresco silencioso: pinta las tablas pero NO toca el formulario de Ajustes,
    para no borrar credenciales (Client ID / Secret) que aún no guardaste. */
 function renderSilencioso(){
-  renderResumen(); renderAlumnos(); renderRegistro(); renderPagos();
+  renderResumen(); renderAlumnos(); renderGrupos(); renderRegistro(); renderPagos(); renderReportes();
   renderCuentas(); renderLeads(); renderRecursos(); renderEjercicios(); fillSelects();
   aplicarPerfilSidebar();   // solo la cabecera del menú (lectura); NO toca el form de Perfil
 }
@@ -884,7 +977,7 @@ function refrescoSilencioso(){
     var nuevoPend = (d.compras||[]).filter(function(c){ return c.estado==="pendiente"; }).length;
     var aumento = nuevoPend > prevPendientes;
     db=d; if(!db.precios) db.precios=Object.assign({},PRECIOS_DEFAULT);
-    db.cuentas=db.cuentas||[]; db.compras=db.compras||[]; db.recursos=db.recursos||[]; db.ejercicios=db.ejercicios||[]; db.leads=db.leads||[]; db.config=db.config||{};
+    db.cuentas=db.cuentas||[]; db.compras=db.compras||[]; db.recursos=db.recursos||[]; db.ejercicios=db.ejercicios||[]; db.leads=db.leads||[]; db.grupos=db.grupos||[]; db.config=db.config||{};
     prevPendientes = nuevoPend;
     // si hay un modal abierto (registrar clase, editar alumno, etc.) NO repintamos: perderías lo que estás escribiendo/eligiendo
     if(!hayModalAbierto()) renderSilencioso();
@@ -1154,8 +1247,14 @@ function renderAjustes(){
   el("preciosBox").innerHTML=Object.keys(PAQUETES).map(function(p){
     return '<div class="cfgrow"><span class="pk">'+p+'</span><input type="number" min="0" data-precio="'+p+'" value="'+(db.precios[p]||0)+'" /></div>';
   }).join("");
+  if(el("cfg_cursos")) el("cfg_cursos").value=(db.config&&db.config.cursos)||MARCA.cursos.join(", ");
+  if(el("cfg_brand_color")) el("cfg_brand_color").value=(db.config&&db.config.brand_color)||"#E8A13D";
+  if(el("cfg_brand_font")) el("cfg_brand_font").value=(db.config&&db.config.brand_font)||"";
+  var blp=el("brandLogoPrev");
+  if(blp){ var lg=(db.config&&db.config.brand_logo)||""; if(lg){ blp.src=lg; blp.style.display="block"; } else { blp.style.display="none"; } }
   el("cfg_pago_numero").value=(db.config&&db.config.pago_numero)||"";
   el("cfg_pago_titular").value=(db.config&&db.config.pago_titular)||"";
+  if(el("cfg_agenda_cupo")) el("cfg_agenda_cupo").value=(db.config&&db.config.agenda_cupo)||"";
   el("cfg_google_client_id").value=(db.config&&db.config.google_client_id)||"";
   el("cfg_bcp_cuenta").value=(db.config&&db.config.bcp_cuenta)||"";
   el("cfg_bcp_cci").value=(db.config&&db.config.bcp_cci)||"";
@@ -1314,7 +1413,57 @@ function renderLeads(){
     return '<tr><td>'+esc(l.fecha||'')+'</td><td>'+esc(l.email||'')+'</td><td>'+esc(l.fuente||'')+'</td><td>'+esc(l.interes||'')+'</td></tr>';
   }).join("");
 }
-function renderAll(){ renderResumen(); renderAlumnos(); renderRegistro(); renderPagos(); renderCuentas(); renderLeads(); renderRecursos(); renderEjercicios(); renderAjustes(); renderPerfil(); fillSelects(); }
+/* ---------- Reportes por mes (ingresos + asistencia), calculados del histórico ya cargado ---------- */
+function mesLabel(ym){
+  var meses=["ene","feb","mar","abr","may","jun","jul","ago","sep","oct","nov","dic"];
+  var p=ym.split("-"); var m=parseInt(p[1],10);
+  return (meses[m-1]||ym)+" "+p[0];
+}
+function renderReportes(){
+  var ing={};
+  (db.compras||[]).forEach(function(c){
+    if(c.estado!=="confirmada") return;
+    var ym=(c.fecha||"").slice(0,7); if(!/^\d{4}-\d{2}$/.test(ym)) return;
+    if(!ing[ym]) ing[ym]={n:0,total:0};
+    ing[ym].n++; ing[ym].total+=Number(c.monto)||0;
+  });
+  var meses=Object.keys(ing).sort();
+  var barsBox=el("repIngresosBars");
+  if(barsBox){
+    var ult=meses.slice(-12);
+    var max=ult.reduce(function(m,k){return Math.max(m,ing[k].total);},0)||1;
+    barsBox.innerHTML = ult.length ? ult.map(function(k){
+      var h=Math.max(4,Math.round(ing[k].total/max*100));
+      return '<div class="repbar"><span class="bv">S/ '+Math.round(ing[k].total).toLocaleString("es-PE")+'</span><i style="height:'+h+'%"></i><span class="bl">'+mesLabel(k)+'</span></div>';
+    }).join("") : '<div class="empty" style="align-self:center;width:100%;">Sin cobros confirmados todavía</div>';
+  }
+  var tb=el("tbRepIngresos");
+  if(tb){
+    tb.innerHTML = meses.length ? meses.slice().reverse().map(function(k){
+      return '<tr><td>'+mesLabel(k)+'</td><td>'+ing[k].n+'</td><td class="big">S/ '+Math.round(ing[k].total).toLocaleString("es-PE")+'</td></tr>';
+    }).join("") : '<tr><td colspan="3" class="empty">Sin cobros confirmados todavía</td></tr>';
+  }
+  var asi={};
+  (db.registro||[]).forEach(function(r){
+    var ym=(r.fecha||"").slice(0,7); if(!/^\d{4}-\d{2}$/.test(ym)) return;
+    if(!asi[ym]) asi[ym]={a:0,f:0,r:0};
+    if(r.estado==="Asistió") asi[ym].a++;
+    else if(r.estado==="Falta") asi[ym].f++;
+    else if(r.estado==="Reprogramó") asi[ym].r++;
+  });
+  var meses2=Object.keys(asi).sort().reverse();
+  var tb2=el("tbRepAsistencia");
+  if(tb2){
+    tb2.innerHTML = meses2.length ? meses2.map(function(k){
+      var d=asi[k]; var tot=d.a+d.f;
+      var pct=tot?Math.round(d.a/tot*100):0;
+      var cls=pct>=90?"green":(pct>=75?"amber":"red");
+      return '<tr><td>'+mesLabel(k)+'</td><td>'+d.a+'</td><td>'+d.f+'</td><td>'+d.r+'</td><td><span class="pill '+cls+'">'+(tot? pct+'%':'—')+'</span></td></tr>';
+    }).join("") : '<tr><td colspan="5" class="empty">Sin clases registradas todavía</td></tr>';
+  }
+}
+
+function renderAll(){ aplicarBrandTenant(); aplicarMarcaCursos(); renderResumen(); renderAlumnos(); renderGrupos(); renderRegistro(); renderPagos(); renderReportes(); renderCuentas(); renderLeads(); renderRecursos(); renderEjercicios(); renderAjustes(); renderPerfil(); fillSelects(); }
 
 /* ---------- AGENDA (admin) ---------- */
 var AG_DISP = [], AG_RESERVAS = [];
@@ -1442,7 +1591,7 @@ function abrirGrupoActivo(){
 abrirGrupoActivo();
 
 /* ---------- Tabs / modales ---------- */
-var TITULOS={resumen:"Inicio",alumnos:"Alumnos",registro:"Clases",agenda:"Agenda",pagos:"Pagos",cuentas:"Accesos",leads:"Interesados",recursos:"Para tus alumnos",ejercicios:"Tu biblioteca",ajustes:"Ajustes",perfil:"Perfil",chat:"Chat"};
+var TITULOS={resumen:"Inicio",alumnos:"Alumnos",grupos:"Grupos",registro:"Clases",agenda:"Agenda",pagos:"Pagos",reportes:"Reportes",cuentas:"Accesos",leads:"Interesados",recursos:"Para tus alumnos",ejercicios:"Tu biblioteca",ajustes:"Ajustes",perfil:"Perfil",chat:"Chat"};
 document.querySelectorAll(".tab").forEach(function(t){
   t.addEventListener("click",function(){
     document.querySelectorAll(".tab").forEach(function(x){x.classList.remove("active");});
@@ -1562,6 +1711,7 @@ document.body.addEventListener("click",function(e){
     el("r_tarea").value=rg.tarea||"";
     el("r_plan").value=rg.plan||"";
     el("r_ejercicio").value="";
+    var gwEd=el("r_grupal_wrap"); if(gwEd) gwEd.style.display="none";
     syncCurso();
     if(rg.curso){   // conservar el curso original de la clase aunque el alumno ya no lo lleve
       var rs=el("r_curso");
@@ -1595,7 +1745,7 @@ function syncCurso(){
   sel.value=cursos[0];
   fillEjercicioSelect(cursos[0]);
 }
-el("r_alumno").addEventListener("change",syncCurso);
+el("r_alumno").addEventListener("change",function(){ syncCurso(); if(!el("r_id").value) fillGrupales(); });
 el("r_curso").addEventListener("change",function(){ fillEjercicioSelect(el("r_curso").value); });
 /* ---------- Filtros de Clases ---------- */
 ["regBuscar","regFiltroAlumno","regFiltroEstado"].forEach(function(id){
@@ -1606,6 +1756,102 @@ el("r_curso").addEventListener("change",function(){ fillEjercicioSelect(el("r_cu
 el("regLimpiar").addEventListener("click",function(){
   el("regBuscar").value=""; el("regFiltroAlumno").value=""; el("regFiltroEstado").value=""; renderRegistro();
 });
+/* ---------- Grupos (clases grupales con miembros) ---------- */
+function renderGrupos(){
+  var tw=el("tablaGrupos"); if(!tw) return;
+  var tb=tw.querySelector("tbody");
+  var gs=db.grupos||[];
+  if(!gs.length){ tb.innerHTML='<tr><td colspan="5" class="empty">Sin grupos todavía. Crea el primero.</td></tr>'; return; }
+  tb.innerHTML=gs.map(function(g){
+    var nombres=(g.miembros||[]).map(function(id){ var a=db.alumnos.find(function(x){return x.id===id;}); return a?a.nombre:null; }).filter(Boolean);
+    return '<tr>'+
+      '<td class="name">'+esc(g.nombre)+'</td>'+
+      '<td>'+esc(g.curso||"—")+'</td>'+
+      '<td>'+esc(g.horario||"—")+'</td>'+
+      '<td class="notes">'+(nombres.length?esc(nombres.join(", ")):'<span class="mini">Sin alumnos</span>')+' <span class="mini">('+nombres.length+')</span></td>'+
+      '<td><div class="rowact">'+
+        '<button class="btn sm" data-gclase="'+g.id+'"'+(nombres.length?'':' disabled')+'>Registrar clase</button>'+
+        '<button class="btn ghost sm" data-geditar="'+g.id+'">Editar</button>'+
+        '<button class="btn no sm" data-gborrar="'+g.id+'">Borrar</button>'+
+      '</div></td>'+
+    '</tr>';
+  }).join("");
+}
+function abrirGrupo(g){
+  el("grupoTitulo").innerHTML = g ? 'Editar <em>grupo</em>' : 'Nuevo <em>grupo</em>';
+  el("g_id").value = g ? g.id : "";
+  el("g_nombre").value = g ? (g.nombre||"") : "";
+  el("g_horario").value = g ? (g.horario||"") : "";
+  el("gErr").textContent="";
+  var cursos=cursosActivos();
+  el("g_curso").innerHTML=cursos.map(function(c){return '<option value="'+esc(c)+'">'+esc(c)+'</option>';}).join("");
+  if(g && g.curso){
+    var gc=el("g_curso");
+    if(![].slice.call(gc.options).some(function(o){return o.value===g.curso;})) gc.insertAdjacentHTML("beforeend",'<option value="'+esc(g.curso)+'">'+esc(g.curso)+'</option>');
+    gc.value=g.curso;
+  }
+  var mset={}; (g?(g.miembros||[]):[]).forEach(function(id){ mset[id]=true; });
+  el("g_miembros").innerHTML=db.alumnos.map(function(a){
+    return '<label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-family:var(--body);font-size:13px;"><input type="checkbox" data-gm="'+esc(a.id)+'"'+(mset[a.id]?' checked':'')+' style="width:auto;"> '+esc(a.nombre)+'</label>';
+  }).join("") || '<span class="mini">Agrega alumnos primero.</span>';
+  openOv("ovGrupo");
+}
+if(el("btnNuevoGrupo")) el("btnNuevoGrupo").addEventListener("click",function(){
+  if(db.alumnos.length===0){ toast("Agrega un alumno primero"); return; }
+  abrirGrupo(null);
+});
+if(el("btnGuardarGrupo")) el("btnGuardarGrupo").addEventListener("click",function(){
+  var id=el("g_id").value;
+  var body={ accion:id?"editar":"crear", id:id,
+    nombre:el("g_nombre").value.trim(), curso:el("g_curso").value, horario:el("g_horario").value.trim(),
+    miembros:[].slice.call(document.querySelectorAll('#g_miembros input[data-gm]:checked')).map(function(c){return c.dataset.gm;}) };
+  if(body.nombre.length<2){ el("gErr").textContent="Ponle un nombre al grupo."; return; }
+  var btn=el("btnGuardarGrupo"); btn.disabled=true;
+  apiPost("/app/api/admin/grupo",body)
+    .then(function(){ closeOv("ovGrupo"); toast(id?"Grupo actualizado ✓":"Grupo creado ✓"); return recargar(); })
+    .catch(function(e){ el("gErr").textContent=e.message||"No se pudo guardar"; })
+    .finally(function(){ btn.disabled=false; });
+});
+function registrarClaseGrupo(g){
+  var ids=(g.miembros||[]).filter(function(id){ return db.alumnos.some(function(a){return a.id===id;}); });
+  if(!ids.length){ toast("Ese grupo no tiene alumnos"); return; }
+  fillSelects();
+  el("regTitulo").innerHTML='Registrar <em>clase</em> · '+esc(g.nombre);
+  el("r_id").value="";
+  el("r_fecha").value=new Date().toISOString().slice(0,10);
+  el("r_estado").value="Asistió"; el("r_trabajo").value=""; el("r_tarea").value=""; el("r_plan").value=""; el("r_ejercicio").value="";
+  var gw=el("r_grupal_wrap"); if(gw) gw.style.display="";
+  el("r_alumno").value=ids[0];
+  fillGrupales();
+  ids.slice(1).forEach(function(id){ var c=document.querySelector('#r_grupales input[data-grupal="'+id+'"]'); if(c) c.checked=true; });
+  syncCurso();
+  if(g.curso){
+    var rs=el("r_curso");
+    if(![].slice.call(rs.options).some(function(o){return o.value===g.curso;})) rs.insertAdjacentHTML("beforeend",'<option value="'+esc(g.curso)+'">'+esc(g.curso)+'</option>');
+    rs.value=g.curso; fillEjercicioSelect(g.curso);
+  }
+  openOv("ovRegistro");
+}
+if(el("tablaGrupos")) el("tablaGrupos").addEventListener("click",function(e){
+  var b=e.target.closest("button"); if(!b) return;
+  if(b.dataset.geditar){ var g=(db.grupos||[]).find(function(x){return x.id===b.dataset.geditar;}); if(g) abrirGrupo(g); }
+  if(b.dataset.gborrar){ var g2=(db.grupos||[]).find(function(x){return x.id===b.dataset.gborrar;});
+    if(g2 && confirm('¿Borrar el grupo "'+g2.nombre+'"? (Los alumnos y sus clases no se tocan.)')){
+      apiPost("/app/api/admin/grupo",{accion:"borrar",id:g2.id})
+        .then(function(){ toast("Grupo borrado"); return recargar(); })
+        .catch(function(err){ toast(err.message||"No se pudo borrar"); });
+    }
+  }
+  if(b.dataset.gclase){ var g3=(db.grupos||[]).find(function(x){return x.id===b.dataset.gclase;}); if(g3) registrarClaseGrupo(g3); }
+});
+
+function fillGrupales(){
+  var box=el("r_grupales"); if(!box) return;
+  var main=el("r_alumno").value;
+  box.innerHTML=db.alumnos.filter(function(a){return a.id!==main;}).map(function(a){
+    return '<label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-family:var(--body);font-size:13px;"><input type="checkbox" data-grupal="'+esc(a.id)+'" style="width:auto;"> '+esc(a.nombre)+'</label>';
+  }).join("") || '<span class="mini">No hay más alumnos todavía.</span>';
+}
 el("btnNuevoRegistro").addEventListener("click",function(){
   if(db.alumnos.length===0){ toast("Agrega un alumno primero"); return; }
   fillSelects();
@@ -1613,6 +1859,8 @@ el("btnNuevoRegistro").addEventListener("click",function(){
   el("r_id").value="";
   el("r_fecha").value=new Date().toISOString().slice(0,10);
   el("r_estado").value="Asistió"; el("r_trabajo").value=""; el("r_tarea").value=""; el("r_plan").value=""; el("r_ejercicio").value="";
+  var gw=el("r_grupal_wrap"); if(gw) gw.style.display="";
+  fillGrupales();
   syncCurso(); openOv("ovRegistro");
 });
 el("btnGuardarRegistro").addEventListener("click",function(){
@@ -1634,14 +1882,24 @@ el("btnGuardarRegistro").addEventListener("click",function(){
       campos.tarea_audio=JSON.stringify(lista);
     }
   }
+  var nRegistrados=1;
   if(editId){
     // editar: conservamos lo que el modal no toca (adjuntos, ciclo)
     db.registro=db.registro.map(function(x){ return x.id===editId ? Object.assign({},x,campos) : x; });
   } else {
     db.registro.push(Object.assign({ id:uid(), ciclo:(a&&a.ciclo)||1 }, campos));
+    // clase grupal: la misma clase para cada alumno marcado, cada uno con su propio ciclo
+    [].slice.call(document.querySelectorAll('#r_grupales input[data-grupal]:checked')).forEach(function(c){
+      var idAl=c.dataset.grupal;
+      if(idAl===alumnoId) return;
+      var al=db.alumnos.find(function(x){return x.id===idAl;});
+      if(!al) return;
+      db.registro.push(Object.assign({}, campos, { id:uid(), ciclo:al.ciclo||1, alumnoId:idAl, alumno_id:idAl }));
+      nRegistrados++;
+    });
   }
   var btnReg=el("btnGuardarRegistro"); btnReg.disabled=true;
-  apiPut().then(function(){ renderAll(); closeOv("ovRegistro"); toast(editId?"Clase actualizada ✓":"Clase registrada"); })
+  apiPut().then(function(){ renderAll(); closeOv("ovRegistro"); toast(editId?"Clase actualizada ✓":(nRegistrados>1?"Clase grupal registrada para "+nRegistrados+" alumnos ✓":"Clase registrada")); })
     .catch(function(){ toast("No se pudo guardar. Revisa tu conexión e intenta de nuevo."); })
     .finally(function(){ btnReg.disabled=false; });
 });
@@ -1851,7 +2109,11 @@ el("btnGuardarAjustes").addEventListener("click",function(){
   document.querySelectorAll("[data-precio]").forEach(function(inp){
     db.precios[inp.dataset.precio]=Number(inp.value)||0;
   });
-  var cfg={ pago_numero:el("cfg_pago_numero").value.trim(),
+  var cfg={ cursos:el("cfg_cursos").value.trim(),
+            brand_color:(el("cfg_brand_color")?el("cfg_brand_color").value.trim():""),
+            brand_font:(el("cfg_brand_font")?el("cfg_brand_font").value:""),
+            agenda_cupo:(el("cfg_agenda_cupo")?el("cfg_agenda_cupo").value.trim():""),
+            pago_numero:el("cfg_pago_numero").value.trim(),
             pago_titular:el("cfg_pago_titular").value.trim(),
             google_client_id:el("cfg_google_client_id").value.trim(),
             bcp_cuenta:el("cfg_bcp_cuenta").value.trim(),
@@ -2164,21 +2426,79 @@ el("btnPushTest").addEventListener("click",function(){
     .catch(function(e){ toast((e&&e.message)||"No se pudo enviar"); });
 });
 
+/* ---------- Branding del tenant (logo + color + tipografía, editables en Ajustes) ---------- */
+var BRAND_FONT_LINKS={
+  "Bebas Neue":"family=Bebas+Neue",
+  "Bricolage Grotesque":"family=Bricolage+Grotesque:wght@700",
+  "Playfair Display":"family=Playfair+Display:wght@700",
+  "Space Grotesk":"family=Space+Grotesk:wght@700"
+};
+var brandAplicado=null;
+function aplicarBrandTenant(){
+  var c=db.config||{};
+  var firma=(c.brand_color||"")+"|"+(c.brand_font||"");
+  if(firma===brandAplicado) return;
+  brandAplicado=firma;
+  var root=document.documentElement;
+  if(c.brand_color && /^#[0-9a-fA-F]{6}$/.test(c.brand_color)){ root.style.setProperty("--accent",c.brand_color); }
+  else { root.style.removeProperty("--accent"); }
+  if(c.brand_font && BRAND_FONT_LINKS[c.brand_font]){
+    var link=document.getElementById("brandFontCss");
+    if(!link){ link=document.createElement("link"); link.id="brandFontCss"; link.rel="stylesheet"; document.head.appendChild(link); }
+    link.href="https://fonts.googleapis.com/css2?"+BRAND_FONT_LINKS[c.brand_font]+"&display=swap";
+    root.style.setProperty("--display","'"+c.brand_font+"',Impact,sans-serif");
+  } else {
+    root.style.removeProperty("--display");
+  }
+}
+if(el("btnBrandLogo")) el("btnBrandLogo").addEventListener("click",function(){ el("brandLogoInput").value=""; el("brandLogoInput").click(); });
+if(el("brandLogoInput")) el("brandLogoInput").addEventListener("change",function(){
+  var f=this.files&&this.files[0]; if(!f) return;
+  var fd=new FormData(); fd.append("archivo",f);
+  fetch("/app/api/admin/marca/logo",{method:"POST",headers:{"authorization":"Bearer "+token},body:fd})
+    .then(function(r){return r.json();}).then(function(d){
+      if(d.error){ toast(d.error); return; }
+      db.config=db.config||{}; db.config.brand_logo=d.url||""; renderAjustes(); toast("Logo subido ✓");
+    }).catch(function(){ toast("No se pudo subir el logo"); });
+});
+if(el("btnBrandLogoQuitar")) el("btnBrandLogoQuitar").addEventListener("click",function(){
+  fetch("/app/api/admin/marca/logo",{method:"POST",headers:{"authorization":"Bearer "+token,"content-type":"application/json"},body:"{}"})
+    .then(function(r){return r.json();}).then(function(){ db.config=db.config||{}; db.config.brand_logo=""; renderAjustes(); toast("Logo quitado"); })
+    .catch(function(){ toast("No se pudo quitar el logo"); });
+});
+if(el("btnBrandColorReset")) el("btnBrandColorReset").addEventListener("click",function(){ el("cfg_brand_color").value="#E8A13D"; });
+
 /* ---------- Aplicar MARCA (white-label) al cargar ---------- */
+/* Cursos vigentes: los que el profesor configuró en Ajustes; sin configurar → los del bloque MARCA. */
+function cursosActivos(){
+  var raw=(db.config&&db.config.cursos)||"";
+  var arr=raw.split(",").map(function(s){return s.trim();}).filter(Boolean);
+  return arr.length?arr:MARCA.cursos;
+}
 function aplicarMarcaCursos(){
-  var opts=MARCA.cursos.map(function(c){return '<option value="'+esc(c)+'">'+esc(c)+'</option>';}).join("");
+  var cursos=cursosActivos();
+  var opts=cursos.map(function(c){return '<option value="'+esc(c)+'">'+esc(c)+'</option>';}).join("");
   var optsConTodos='<option value="Todos">Todos</option>'+opts;
   ["rec_curso","ej_curso","carp_curso"].forEach(function(id){
-    var sel=el(id); if(sel) sel.innerHTML=optsConTodos;
+    var sel=el(id); if(!sel) return;
+    var prev=sel.value;
+    sel.innerHTML=optsConTodos;
+    if(prev) sel.value=prev;
+    if(!sel.value) sel.selectedIndex=0;
   });
   var fc=el("ejFiltroCurso");
   if(fc){
+    var prevF=fc.value;
     fc.innerHTML='<option value="">Todos los cursos</option><option value="Todos">Todos (general)</option>'+opts;
+    if(prevF) fc.value=prevF;
+    if(!fc.value) fc.selectedIndex=0;
   }
   var box=el("a_cursos");
   if(box){
-    box.innerHTML=MARCA.cursos.map(function(c){
-      return '<label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-family:var(--body);"><input type="checkbox" value="'+esc(c)+'" style="width:auto;"> '+esc(c)+'</label>';
+    var marcados=[].slice.call(box.querySelectorAll("input:checked")).map(function(c){return c.value;});
+    box.innerHTML=cursos.map(function(c){
+      var ck=marcados.indexOf(c)!==-1?" checked":"";
+      return '<label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-family:var(--body);"><input type="checkbox" value="'+esc(c)+'"'+ck+' style="width:auto;"> '+esc(c)+'</label>';
     }).join("");
   }
 }

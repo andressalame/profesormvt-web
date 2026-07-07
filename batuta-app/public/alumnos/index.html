@@ -1201,7 +1201,7 @@ function renderReferidos(){
   $("rCode").textContent = code;
   $("rReg").textContent = (ME.referidos && ME.referidos.registrados) || 0;
   $("rCom").textContent = (ME.referidos && ME.referidos.compraron) || 0;
-  var msg = "¡Aprende "+MARCA.rubro+" conmigo en "+MARCA.nombre+"! Usa mi código "+code+
+  var msg = "¡Aprende conmigo en "+MARCA.nombre+"! Usa mi código "+code+
     " al registrarte: "+location.origin+"/app/a/"+SLUG+"?ref="+code;
   $("btnWaRef").href = "https://wa.me/?text="+encodeURIComponent(msg);
 }
@@ -1832,6 +1832,28 @@ function obtenerSlug(){
       document.title = "Portal de alumno · " + MARCA.nombre;
       $("eyebrowAuth").textContent = "// " + MARCA.nombre.toUpperCase();
       $("eyebrowInicio").textContent = "// " + MARCA.nombre.toUpperCase() + " — PORTAL DE ALUMNO";
+      /* cursos del tenant (editables en el panel del profe): repinta el select de compra y el texto del tour */
+      if(Array.isArray(d.cursos) && d.cursos.length){
+        MARCA.cursos = d.cursos;
+        $("c_curso").innerHTML = MARCA.cursos.map(function(c){ return "<option>"+esc(c)+"</option>"; }).join("");
+        $("txtOnbPaso1").textContent = "Elige " + cursosOrLower() + " (o combínalos).";
+      }
+      /* branding del tenant (logo + color + tipografía, editables en Ajustes del panel del profe) */
+      if(d.marca){
+        var root = document.documentElement;
+        if(d.marca.color && /^#[0-9a-fA-F]{6}$/.test(d.marca.color)){ root.style.setProperty("--accent", d.marca.color); }
+        var fontLinks = { "Bebas Neue":"family=Bebas+Neue", "Bricolage Grotesque":"family=Bricolage+Grotesque:wght@700",
+                          "Playfair Display":"family=Playfair+Display:wght@700", "Space Grotesk":"family=Space+Grotesk:wght@700" };
+        if(d.marca.font && fontLinks[d.marca.font]){
+          var fl = document.createElement("link"); fl.rel = "stylesheet";
+          fl.href = "https://fonts.googleapis.com/css2?" + fontLinks[d.marca.font] + "&display=swap";
+          document.head.appendChild(fl);
+          root.style.setProperty("--display", "'" + d.marca.font + "',Impact,sans-serif");
+        }
+        if(d.marca.logo && d.marca.logo.indexOf("/app/api/recurso/archivo/") === 0){
+          $("logoSidebar").innerHTML = '<img src="' + esc(d.marca.logo) + '" alt="' + esc(MARCA.nombre) + '" style="max-height:34px;max-width:150px;display:block;" />';
+        }
+      }
     }).catch(function(){});
   }
   if(getTok()){ cargarMe(); }
