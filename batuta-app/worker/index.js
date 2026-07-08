@@ -799,7 +799,7 @@ async function llamarClaudeOnboarding(env, system, mensajes){
           "anthropic-version": "2023-06-01",
           "content-type": "application/json"
         },
-        body: JSON.stringify({ model: "claude-haiku-4-5-20251001", max_tokens: 400, system: system, messages: mensajes })
+        body: JSON.stringify({ model: "claude-haiku-4-5-20251001", max_tokens: 280, system: system, messages: mensajes })
       });
       if (resp.ok){
         const data = await resp.json().catch(() => null);
@@ -814,7 +814,7 @@ async function llamarClaudeOnboarding(env, system, mensajes){
     try {
       const r = await env.AI.run("@cf/meta/llama-3.3-70b-instruct-fp8-fast", {
         messages: [{ role: "system", content: system }].concat(mensajes),
-        max_tokens: 400
+        max_tokens: 280
       });
       const t = (r && (r.response || "")).trim();
       if (t) return sanearRespuestaIA(t);
@@ -2112,6 +2112,37 @@ export default {
          Se resuelve ANTES del trial gate a proposito: un tenant 'vencido'
          tambien debe poder suscribirse (asi vuelve a 'activo' via webhook).
          ============================================================ */
+      /* Cambio de plan SELF-SERVE (Profe <-> Academia <-> XL), pedido de Andrés 08-jul.
+         Con suscripción viva: PUT del MONTO en el preapproval existente (MP lo permite;
+         el profe NO vuelve a meter tarjeta; aplica desde el siguiente cobro).
+         Sin suscripción aún (trial/vencido): solo se apunta tenants.plan y el checkout
+         que haga después ya sale con el plan nuevo. Si MP rechaza el PUT -> WhatsApp. */
+      if (path === "/app/api/t/cambiar-plan" && request.method === "POST"){
+        const t = await tenantDeSesion(env, request);
+        if (!t) return json({ error: "Sesion expirada" }, 401);
+        if (t.email === DEMO_EMAIL) return json({ error: "En la demo no se cambia de plan." }, 400);
+        const b = await request.json().catch(() => ({}));
+        const plan = String(b.plan || "").trim();
+        if (!PLANES[plan]) return json({ error: "Plan no valido" }, 400);
+        if (plan === (t.plan || "profe")) return json({ error: "Ya estas en el plan " + PLAN_NOMBRE[plan] + "." }, 400);
+
+        if (!t.mp_preapproval_id){
+          await env.DB.prepare("UPDATE tenants SET plan = ?1 WHERE id = ?2").bind(plan, t.id).run();
+          return json({ ok: true, modo: "pre-checkout", plan, nombre: PLAN_NOMBRE[plan] });
+        }
+        if (!env.MP_ACCESS_TOKEN) return json({ error: "No disponible ahora. Escribenos por WhatsApp y lo cambiamos hoy." }, 501);
+
+        const mp = await mpFetch(env, "/preapproval/" + encodeURIComponent(t.mp_preapproval_id), {
+          method: "PUT",
+          body: { auto_recurring: { transaction_amount: PLANES[plan], currency_id: "PEN" }, reason: "Batuta · Plan " + PLAN_NOMBRE[plan] }
+        });
+        if (!mp.ok){
+          return json({ error: "Mercado Pago no acepto el cambio automatico. Escribenos por WhatsApp y lo cambiamos hoy mismo, sin costo." }, 502);
+        }
+        await env.DB.prepare("UPDATE tenants SET plan = ?1 WHERE id = ?2").bind(plan, t.id).run();
+        return json({ ok: true, modo: "actualizado", plan, nombre: PLAN_NOMBRE[plan], monto: PLANES[plan] });
+      }
+
       if (path === "/app/api/t/suscribir" && request.method === "POST"){
         const t = await tenantDeSesion(env, request);
         if (!t) return json({ error: "Sesion expirada" }, 401);
@@ -3052,21 +3083,35 @@ export default {
         let historial = Array.isArray(b.historial) ? b.historial : [];
         historial = historial
           .filter(function(m){ return m && (m.role === "user" || m.role === "assistant") && typeof m.content === "string"; })
-          .map(function(m){ return { role: m.role, content: m.content.slice(0, 600) }; })
-          .slice(-8);
+          .map(function(m){ return { role: m.role, content: m.content.slice(0, 500) }; })
+          .slice(-6); // 3 turnos bastan de contexto; menos historial = menos tokens por mensaje
         const mensajes = historial.concat([{ role: "user", content: texto }]);
 
         const system = who.admin
-          ? ("Eres el asistente de onboarding del panel de Batuta (SaaS de gestion para academias y profesores particulares). Guias al PROFESOR/DUENO por su panel. Responde corto (maximo 4 frases), en espanol claro, sin em dash. No uses signos de apertura invertidos (nada de ¿ ni ¡); usa solo los de cierre. Como funciona el panel, para que respondas con pasos reales:\n" +
-            "- Menu izquierdo agrupado en: Personas (Alumnos, Grupos, Accesos al portal, Interesados), Clases (Registro de clases, Agenda, Chat), Cobros (Pagos, Reportes), Material (Para tus alumnos, Tu biblioteca), Configuracion (Perfil, Ajustes).\n" +
-            "- Agregar un alumno: pestana Personas > Alumnos > boton '+ Nuevo alumno'. Ahi pones nombre, curso, su paquete de clases y su horario. Tus paquetes y precios los defines en Configuracion > Ajustes.\n" +
-            "- Registrar una clase dictada: Clases > Registro de clases > '+ Registrar clase': eliges alumno, estado (Asistio/Falta/Reprogramo), que se trabajo y la tarea (puedes adjuntar audio o PDF de Tu biblioteca). El saldo de clases del alumno se descuenta solo.\n" +
-            "- Cobros: en Configuracion > Ajustes pones tu numero de Yape/Plin y tus cuentas para transferencia. Tus alumnos pagan por Yape, Plin o transferencia y suben su constancia al portal; los pagos llegan a Cobros > Pagos con numero de operacion y los confirmas en 1 clic.\n" +
-            "- Compartir el portal con tus alumnos: en Inicio esta tu link (batuta.lat/app/a/tu-academia); tus alumnos se registran ahi y ven sus clases, material y pagos.\n" +
-            "- Agenda: en Configuracion marcas tu disponibilidad semanal y tus alumnos reservan solos dentro de eso.\n" +
-            "- Precios y paquetes: Configuracion > Ajustes. Marca (color, logo, tipografia) y cursos tambien ahi.\n" +
-            "Si no sabes algo, ofrece el WhatsApp de soporte. NUNCA inventes funciones que no existan ni prometas resultados.")
-          : "Eres el asistente del portal del alumno de Batuta. Respondes corto (maximo 4 frases), en espanol, sin em dash. No uses signos de apertura invertidos (nada de ¿ ni ¡); usa solo los de cierre. Ayudas al alumno a ver sus clases, reservar en la agenda, ver su material y pagar su paquete. Si es algo de su profesor, sugiere escribirle por el chat del portal.";
+          ? ("Eres el asistente del panel de Batuta (SaaS de gestion para academias y profesores particulares de cualquier materia). Guias al PROFESOR/DUENO por su panel.\n" +
+            "ESTILO (estricto): espanol claro de tu a tu, maximo 3 frases, SIEMPRE con el paso concreto (pestana > boton). Sin em dash. Sin signos de apertura invertidos (nada de ¿ ni ¡). Sin saludos ni relleno: directo a la respuesta. Si la pregunta es amplia, da el primer paso y ofrece seguir.\n" +
+            "EL PANEL (menu izquierdo): Inicio (resumen + tu link de alumnos) · Personas (Alumnos, Grupos, Accesos al portal, Interesados) · Clases (Registro de clases, Agenda, Chat) · Cobros (Pagos, Reportes) · Material (Para tus alumnos, Tu biblioteca) · Configuracion (Perfil, Ajustes).\n" +
+            "COMO SE HACE:\n" +
+            "- Nuevo alumno: Personas > Alumnos > '+ Nuevo alumno' (nombre, curso, paquete, horario).\n" +
+            "- Precios/paquetes, cursos y marca (logo, color, tipografia): Configuracion > Ajustes.\n" +
+            "- Registrar clase dictada: Clases > Registro de clases > '+ Registrar clase' (asistio/falta/reprogramo, que se trabajo, tarea con audio o PDF de Tu biblioteca). El saldo del alumno se descuenta solo.\n" +
+            "- Cobros: pones tu numero de Yape/Plin y cuentas en Configuracion > Ajustes; el alumno paga y sube su constancia; confirmas en 1 clic en Cobros > Pagos.\n" +
+            "- Tarjeta: en Ajustes > 'Pago con tarjeta (Mercado Pago)' conectas TU cuenta de MP; tus alumnos pagan con tarjeta y se confirma solo (la plata cae en tu MP).\n" +
+            "- Tu link de alumnos: en Inicio (batuta.lat/app/a/tu-academia); ahi se registran y ven clases, material y pagos.\n" +
+            "- Agenda: marcas tu disponibilidad semanal en Configuracion y los alumnos reservan solos.\n" +
+            "- App + avisos: el panel se instala como app ('Agregar a pantalla de inicio' en el celular) y en Ajustes > 'Avisos en tu telefono' activas notificaciones de pagos y reservas.\n" +
+            "- Cambiar de plan (Profe/Academia/Academia XL): Configuracion > Perfil > seccion 'Tu plan' > boton del plan que quieras. Sin penalidad; con suscripcion activa no vuelves a poner tarjeta y rige desde el siguiente cobro. Si algo falla, WhatsApp de soporte.\n" +
+            "NUNCA inventes funciones ni prometas resultados. Si no sabes, dilo y ofrece el WhatsApp de soporte.")
+          : ("Eres el asistente del portal del alumno de Batuta.\n" +
+            "ESTILO (estricto): espanol claro de tu a tu, maximo 3 frases, con el paso concreto. Sin em dash. Sin signos de apertura invertidos (nada de ¿ ni ¡). Directo, sin saludos de relleno.\n" +
+            "EL PORTAL (menu): Inicio · Mis clases (historial y saldo) · Agenda (reservar) · Recursos (material del profe) · Comprar (paquetes) · Referidos · Mi cuenta.\n" +
+            "COMO SE HACE:\n" +
+            "- Reservar clase: Agenda > eliges horario libre (fijo semanal o clase suelta).\n" +
+            "- Comprar o renovar: Comprar > eliges paquete > pagas por Yape/Plin/transferencia y subes tu captura (tu profe confirma), o con tarjeta si tu profe la activo (se confirma sola).\n" +
+            "- Tu material y tareas: Recursos. Tu saldo de clases: Mis clases.\n" +
+            "- Hablar con tu profe: el chat del portal. Cambios de horario o precios: eso lo decide tu profe, escribele.\n" +
+            "- App + avisos: el portal se instala como app ('Agregar a pantalla de inicio') y en Mi cuenta activas los avisos.\n" +
+            "Si la duda es del profe (precios, horarios, clases), deriva al chat del portal. NUNCA inventes funciones.");
         const reply = await llamarClaudeOnboarding(env, system, mensajes);
         if (!reply) return json({ error: "El asistente no esta disponible ahora mismo." }, 502);
         return json({ reply: reply, restantes: cont.restantes });

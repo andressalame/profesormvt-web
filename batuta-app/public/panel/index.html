@@ -268,8 +268,10 @@
       </div>
     </div>
     <nav class="nav">
-      <div class="navgroup-items" style="padding:2px 0 4px;">
-        <button class="tab active" data-tab="resumen">Inicio</button>
+      <!-- Inicio va SUELTO (sin .navgroup): ese wrapper viejo usaba .navgroup-items,
+           que es display:none por defecto -> el botón era invisible. Bug cazado por Andrés. -->
+      <div style="display:block;padding:2px 0 4px;">
+        <button class="tab active" data-tab="resumen" style="display:flex;align-items:center;gap:8px;"><svg viewBox="0 0 24 24" style="width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:2;flex:0 0 auto;"><path d="M3 11l9-8 9 8"/><path d="M5 9.5V21h14V9.5"/></svg>Inicio</button>
       </div>
       <div class="navgroup" data-tour="personas">
         <button class="navgroup-h" type="button"><span class="ng-ico"><svg viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span><span class="ng-tx">Personas</span><span class="ng-chev"><svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg></span></button>
@@ -574,6 +576,16 @@
       <div class="cfgrow"><span class="pk">Nombre de la academia</span><input id="cfg_profe_marca" type="text" placeholder="" /></div>
       <p class="hint" style="margin-top:-2px;" id="hintProfeMarca">Si lo dejas vacío, se usa el nombre de la academia.</p>
       <button class="btn" id="btnGuardarPerfil" style="margin-top:8px;">Guardar perfil</button>
+    </div>
+    <div class="group">
+      <h2>// Tu plan</h2>
+      <p class="hint">Sube o baja de plan cuando quieras, sin penalidad. Si ya tienes tu suscripción activa, el cambio se aplica solo (no vuelves a poner tu tarjeta) y rige desde tu siguiente cobro mensual.</p>
+      <div class="rowact" style="margin-top:8px;flex-wrap:wrap;">
+        <span class="pill gray" id="planActual">—</span>
+        <button class="btn ghost sm" data-plan="profe" id="btnPlanProfe">Profe · US$9.95 (S/34)</button>
+        <button class="btn ghost sm" data-plan="academia" id="btnPlanAcademia">Academia · US$24.95 (S/85)</button>
+        <button class="btn ghost sm" data-plan="xl" id="btnPlanXl">Academia XL · US$49.95 (S/170)</button>
+      </div>
     </div>
   </section>
 
@@ -1339,6 +1351,7 @@ function aplicarPerfilSidebar(){
   }
 }
 function renderPerfil(){
+  if(!PLAN_CARGADO){ PLAN_CARGADO=true; try{ refrescarPlan(); }catch(e){} }
   var c=db.config||{};
   if(el("cfg_profe_nombre")) el("cfg_profe_nombre").value=c.profe_nombre||"";
   if(el("cfg_profe_marca")) el("cfg_profe_marca").value=c.profe_marca||"";
@@ -2511,6 +2524,34 @@ var _bMpD=el("btnMpDesconectar"); if(_bMpD) _bMpD.addEventListener("click",funct
   apiPost('/app/api/admin/mp/desconectar',{}).then(function(){ toast("Mercado Pago desconectado"); refrescarMpEstado(); })
     .catch(function(e){ toast((e&&e.message)||"No se pudo desconectar"); });
 });
+/* ---------- Cambio de plan (Perfil > Tu plan) ---------- */
+var PLAN_NOMBRES={profe:"Profe",academia:"Academia",xl:"Academia XL"};
+var PLAN_CARGADO=false;
+function refrescarPlan(){
+  var pill=el("planActual"); if(!pill) return;
+  fetch('/app/api/t/me',{headers:hdr()}).then(function(r){return r.json().catch(function(){return {};});}).then(function(d){
+    if(!d || d.error) return;
+    var p=d.plan||"profe";
+    pill.className="pill green"; pill.textContent="Tu plan: "+(PLAN_NOMBRES[p]||p)+(d.suscrito?" · suscripción activa":" · en prueba");
+    ["profe","academia","xl"].forEach(function(k){
+      var b=document.querySelector('[data-plan="'+k+'"]'); if(!b) return;
+      b.disabled=(k===p);
+      b.style.opacity=(k===p)?".45":"";
+    });
+  }).catch(function(){});
+}
+document.querySelectorAll("[data-plan]").forEach(function(b){
+  b.addEventListener("click",function(){
+    var plan=b.dataset.plan, nombre=PLAN_NOMBRES[plan]||plan;
+    if(!confirm("Cambiar al plan "+nombre+"? Si tienes suscripción activa, el nuevo monto rige desde tu siguiente cobro. Sin penalidad.")) return;
+    b.disabled=true;
+    apiPost('/app/api/t/cambiar-plan',{plan:plan}).then(function(d){
+      toast(d.modo==="actualizado" ? ("Listo: plan "+nombre+" desde tu siguiente cobro") : ("Plan "+nombre+" elegido: se aplica al activar tu suscripción"));
+      refrescarPlan();
+    }).catch(function(e){ toast((e&&e.message)||"No se pudo cambiar el plan"); b.disabled=false; });
+  });
+});
+
 /* Toast al volver del OAuth de MP (?mp=ok|error|cancelado) */
 try {
   var _mpQ = new URLSearchParams(location.search).get("mp");
