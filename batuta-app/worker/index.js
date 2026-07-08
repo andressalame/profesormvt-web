@@ -465,7 +465,10 @@ async function consultarAuthorizedPaymentMP(env, paymentId){
 async function correoBienvenidaAlumno(env, tenant, cu, compra){
   if (!cu || !cu.email) return false;
   const nombre = ((cu.nombre || "").trim().split(/\s+/)[0]) || "";
-  const nombrePaquete = ({ "Paquete 4":"Esencial", "Paquete 8":"Intensivo", "Paquete 12":"Estrella", "Clase suelta":"Clase suelta", "Clase de prueba":"Clase de prueba" })[compra.paquete] || compra.paquete || "";
+  // Sin traducción a nombres MVT: el correo muestra el MISMO nombre de paquete que el alumno ve
+  // en su portal (los defaults genéricos "Paquete N" sirven a cualquier rubro; si el profe los
+  // renombró, respeta su nombre). Antes traducía a Esencial/Intensivo/Estrella y chocaba con el portal.
+  const nombrePaquete = compra.paquete || "";
   const portal = MARCA.dominio + "/app/a/" + tenant.slug;
   const wa = "https://wa.me/" + (tenant.whatsapp || MARCA.whatsapp);
   const academia = tenant.academia || MARCA.nombre;
@@ -2677,7 +2680,7 @@ export default {
         const system = who.admin
           ? ("Eres el asistente de onboarding del panel de Batuta (SaaS de gestion para academias y profesores particulares). Guias al PROFESOR/DUENO por su panel. Responde corto (maximo 4 frases), en espanol claro, sin em dash, signos ! y ? solo al cierre. Como funciona el panel, para que respondas con pasos reales:\n" +
             "- Menu izquierdo agrupado en: Personas (Alumnos, Grupos, Accesos al portal, Interesados), Clases (Registro de clases, Agenda, Chat), Cobros (Pagos, Reportes), Material (Para tus alumnos, Tu biblioteca), Configuracion (Perfil, Ajustes).\n" +
-            "- Agregar un alumno: pestana Personas > Alumnos > boton '+ Nuevo alumno'. Ahi pones nombre, curso, paquete (Esencial 4 clases, Intensivo 8, Estrella 12) y su horario.\n" +
+            "- Agregar un alumno: pestana Personas > Alumnos > boton '+ Nuevo alumno'. Ahi pones nombre, curso, su paquete de clases y su horario. Tus paquetes y precios los defines en Configuracion > Ajustes.\n" +
             "- Registrar una clase dictada: Clases > Registro de clases > '+ Registrar clase': eliges alumno, estado (Asistio/Falta/Reprogramo), que se trabajo y la tarea (puedes adjuntar audio o PDF de Tu biblioteca). El saldo de clases del alumno se descuenta solo.\n" +
             "- Cobros: en Configuracion > Ajustes pones tu numero de Yape/Plin y tus cuentas para transferencia. Tus alumnos pagan por Yape, Plin o transferencia y suben su constancia al portal; los pagos llegan a Cobros > Pagos con numero de operacion y los confirmas en 1 clic.\n" +
             "- Compartir el portal con tus alumnos: en Inicio esta tu link (batuta.lat/app/a/tu-academia); tus alumnos se registran ahi y ven sus clases, material y pagos.\n" +
