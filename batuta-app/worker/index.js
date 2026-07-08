@@ -698,10 +698,10 @@ async function responderChatbot(env, tenant, mensajes){
   if (!env.AI) return fallback;
   try {
     const resp = await env.AI.run("@cf/meta/llama-3.3-70b-instruct-fp8-fast", {
-      messages: [{ role: "system", content: "Eres el asistente virtual de " + (tenant ? tenant.academia : MARCA.nombre) + ". Responde corto, en espanol, sin prometer resultados garantizados. Signos ! y ? solo al cierre. Si no sabes algo, ofrece el WhatsApp: " + wa }].concat(mensajes),
+      messages: [{ role: "system", content: "Eres el asistente virtual de " + (tenant ? tenant.academia : MARCA.nombre) + ". Responde corto, en espanol, sin prometer resultados garantizados. No uses signos de apertura invertidos (nada de ¿ ni ¡); usa solo los de cierre. Si no sabes algo, ofrece el WhatsApp: " + wa }].concat(mensajes),
       max_tokens: 400
     });
-    const texto = (resp && (resp.response || "")).trim();
+    const texto = sanearRespuestaIA((resp && (resp.response || "")).trim());
     return texto || fallback;
   } catch (e) { return fallback; }
 }
@@ -731,6 +731,19 @@ async function chatbotPasoTope(env, ip, limite){
 /* Onboarding IA: Claude (Anthropic) si hay key; si no, cae al binding AI de Cloudflare
    (Workers AI, Llama, gratis dentro del free tier). Así el asistente vive aunque no haya
    ANTHROPIC_API_KEY. Devuelve null solo si ninguna vía responde (el handler degrada con gracia). */
+// Sanea la salida de la IA al estilo de marca: sin signos de apertura invertidos
+// (¿ ¡). Llama a veces malinterpreta "signos solo al cierre" y pega un "¿?" al
+// final; esto lo elimina y limpia espacios sueltos antes de la puntuacion.
+function sanearRespuestaIA(t){
+  if (!t) return t;
+  return String(t)
+    .replace(/¿\s*\?/g, "")        // "¿?" espurio -> nada
+    .replace(/¡\s*!/g, "")          // "¡!" espurio -> nada
+    .replace(/[¿¡]/g, "")           // sin signos de apertura (estilo de marca)
+    .replace(/\s+([?!.,;:])/g, "$1") // espacio antes de puntuacion -> pegado
+    .replace(/\s{2,}/g, " ")
+    .trim();
+}
 async function llamarClaudeOnboarding(env, system, mensajes){
   if (env.ANTHROPIC_API_KEY){
     try {
@@ -747,7 +760,7 @@ async function llamarClaudeOnboarding(env, system, mensajes){
         const data = await resp.json().catch(() => null);
         const bloque = data && Array.isArray(data.content) ? data.content.find(c => c.type === "text") : null;
         const t = bloque ? String(bloque.text || "").trim() : "";
-        if (t) return t;
+        if (t) return sanearRespuestaIA(t);
       }
     } catch (e) { /* cae al binding AI */ }
   }
@@ -759,7 +772,7 @@ async function llamarClaudeOnboarding(env, system, mensajes){
         max_tokens: 400
       });
       const t = (r && (r.response || "")).trim();
-      if (t) return t;
+      if (t) return sanearRespuestaIA(t);
     } catch (e) { /* sin IA disponible */ }
   }
   return null;
@@ -2678,7 +2691,7 @@ export default {
         const mensajes = historial.concat([{ role: "user", content: texto }]);
 
         const system = who.admin
-          ? ("Eres el asistente de onboarding del panel de Batuta (SaaS de gestion para academias y profesores particulares). Guias al PROFESOR/DUENO por su panel. Responde corto (maximo 4 frases), en espanol claro, sin em dash, signos ! y ? solo al cierre. Como funciona el panel, para que respondas con pasos reales:\n" +
+          ? ("Eres el asistente de onboarding del panel de Batuta (SaaS de gestion para academias y profesores particulares). Guias al PROFESOR/DUENO por su panel. Responde corto (maximo 4 frases), en espanol claro, sin em dash. No uses signos de apertura invertidos (nada de ¿ ni ¡); usa solo los de cierre. Como funciona el panel, para que respondas con pasos reales:\n" +
             "- Menu izquierdo agrupado en: Personas (Alumnos, Grupos, Accesos al portal, Interesados), Clases (Registro de clases, Agenda, Chat), Cobros (Pagos, Reportes), Material (Para tus alumnos, Tu biblioteca), Configuracion (Perfil, Ajustes).\n" +
             "- Agregar un alumno: pestana Personas > Alumnos > boton '+ Nuevo alumno'. Ahi pones nombre, curso, su paquete de clases y su horario. Tus paquetes y precios los defines en Configuracion > Ajustes.\n" +
             "- Registrar una clase dictada: Clases > Registro de clases > '+ Registrar clase': eliges alumno, estado (Asistio/Falta/Reprogramo), que se trabajo y la tarea (puedes adjuntar audio o PDF de Tu biblioteca). El saldo de clases del alumno se descuenta solo.\n" +
@@ -2687,7 +2700,7 @@ export default {
             "- Agenda: en Configuracion marcas tu disponibilidad semanal y tus alumnos reservan solos dentro de eso.\n" +
             "- Precios y paquetes: Configuracion > Ajustes. Marca (color, logo, tipografia) y cursos tambien ahi.\n" +
             "Si no sabes algo, ofrece el WhatsApp de soporte. NUNCA inventes funciones que no existan ni prometas resultados.")
-          : "Eres el asistente del portal del alumno de Batuta. Respondes corto (maximo 4 frases), en espanol, sin em dash, signos ! y ? solo al cierre. Ayudas al alumno a ver sus clases, reservar en la agenda, ver su material y pagar su paquete. Si es algo de su profesor, sugiere escribirle por el chat del portal.";
+          : "Eres el asistente del portal del alumno de Batuta. Respondes corto (maximo 4 frases), en espanol, sin em dash. No uses signos de apertura invertidos (nada de ¿ ni ¡); usa solo los de cierre. Ayudas al alumno a ver sus clases, reservar en la agenda, ver su material y pagar su paquete. Si es algo de su profesor, sugiere escribirle por el chat del portal.";
         const reply = await llamarClaudeOnboarding(env, system, mensajes);
         if (!reply) return json({ error: "El asistente no esta disponible ahora mismo." }, 502);
         return json({ reply: reply, restantes: cont.restantes });
