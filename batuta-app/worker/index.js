@@ -643,27 +643,41 @@ async function chatbotPasoTope(env, ip, limite){
   } catch (e) { return false; }
 }
 
-/* Onboarding IA: sin ANTHROPIC_API_KEY -> 501, guardado por PENDIENTES.md */
+/* Onboarding IA: Claude (Anthropic) si hay key; si no, cae al binding AI de Cloudflare
+   (Workers AI, Llama, gratis dentro del free tier). Así el asistente vive aunque no haya
+   ANTHROPIC_API_KEY. Devuelve null solo si ninguna vía responde (el handler degrada con gracia). */
 async function llamarClaudeOnboarding(env, system, mensajes){
-  if (!env.ANTHROPIC_API_KEY) return null;
-  const resp = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: {
-      "x-api-key": env.ANTHROPIC_API_KEY,
-      "anthropic-version": "2023-06-01",
-      "content-type": "application/json"
-    },
-    body: JSON.stringify({
-      model: "claude-haiku-4-5-20251001",
-      max_tokens: 400,
-      system: system,
-      messages: mensajes
-    })
-  });
-  if (!resp.ok) return null;
-  const data = await resp.json().catch(() => null);
-  const bloque = data && Array.isArray(data.content) ? data.content.find(c => c.type === "text") : null;
-  return bloque ? String(bloque.text || "").trim() : null;
+  if (env.ANTHROPIC_API_KEY){
+    try {
+      const resp = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: {
+          "x-api-key": env.ANTHROPIC_API_KEY,
+          "anthropic-version": "2023-06-01",
+          "content-type": "application/json"
+        },
+        body: JSON.stringify({ model: "claude-haiku-4-5-20251001", max_tokens: 400, system: system, messages: mensajes })
+      });
+      if (resp.ok){
+        const data = await resp.json().catch(() => null);
+        const bloque = data && Array.isArray(data.content) ? data.content.find(c => c.type === "text") : null;
+        const t = bloque ? String(bloque.text || "").trim() : "";
+        if (t) return t;
+      }
+    } catch (e) { /* cae al binding AI */ }
+  }
+  // Fallback gratis: Workers AI (Llama). El binding AI se habilita en wrangler.toml.
+  if (env.AI){
+    try {
+      const r = await env.AI.run("@cf/meta/llama-3.3-70b-instruct-fp8-fast", {
+        messages: [{ role: "system", content: system }].concat(mensajes),
+        max_tokens: 400
+      });
+      const t = (r && (r.response || "")).trim();
+      if (t) return t;
+    } catch (e) { /* sin IA disponible */ }
+  }
+  return null;
 }
 const ONBOARDING_LIMITE_ADMIN = 25;
 const ONBOARDING_LIMITE_ALUMNO = 10;
@@ -2391,7 +2405,9 @@ export default {
       }
 
       if (path === "/app/api/onboarding-ia" && request.method === "POST"){
-        if (!env.ANTHROPIC_API_KEY) return json({ error: "No disponible en el trial." }, 501);
+        // Antes exigía ANTHROPIC_API_KEY (501). Ahora el asistente vive con Workers AI (Llama)
+        // como fallback gratis; solo 503 si ninguna vía de IA está disponible.
+        if (!env.ANTHROPIC_API_KEY && !env.AI) return json({ error: "El asistente no esta disponible ahora." }, 503);
         const who = await authChat(env, request);
         if (!who) return json({ error: "Sesion expirada" }, 401);
 
@@ -2418,7 +2434,17 @@ export default {
           .slice(-8);
         const mensajes = historial.concat([{ role: "user", content: texto }]);
 
-        const system = "Eres el asistente de onboarding de Batuta. Responde corto (maximo 4 frases), espanol, sin em dash, signos ! y ? solo al cierre.";
+        const system = who.admin
+          ? ("Eres el asistente de onboarding del panel de Batuta (SaaS de gestion para academias y profesores particulares). Guias al PROFESOR/DUENO por su panel. Responde corto (maximo 4 frases), en espanol claro, sin em dash, signos ! y ? solo al cierre. Como funciona el panel, para que respondas con pasos reales:\n" +
+            "- Menu izquierdo agrupado en: Personas (Alumnos, Grupos, Accesos al portal, Interesados), Clases (Registro de clases, Agenda, Chat), Cobros (Pagos, Reportes), Material (Para tus alumnos, Tu biblioteca), Configuracion (Perfil, Ajustes).\n" +
+            "- Agregar un alumno: pestana Personas > Alumnos > boton '+ Nuevo alumno'. Ahi pones nombre, curso, paquete (Esencial 4 clases, Intensivo 8, Estrella 12) y su horario.\n" +
+            "- Registrar una clase dictada: Clases > Registro de clases > '+ Registrar clase': eliges alumno, estado (Asistio/Falta/Reprogramo), que se trabajo y la tarea (puedes adjuntar audio o PDF de Tu biblioteca). El saldo de clases del alumno se descuenta solo.\n" +
+            "- Cobros: en Configuracion > Ajustes pones tu numero de Yape/Plin y conectas Mercado Pago para tarjeta. Los pagos por Yape llegan a Cobros > Pagos con numero de operacion y los confirmas en 1 clic; la tarjeta se confirma sola.\n" +
+            "- Compartir el portal con tus alumnos: en Inicio esta tu link (batuta.lat/app/a/tu-academia); tus alumnos se registran ahi y ven sus clases, material y pagos.\n" +
+            "- Agenda: en Configuracion marcas tu disponibilidad semanal y tus alumnos reservan solos dentro de eso.\n" +
+            "- Precios y paquetes: Configuracion > Ajustes. Marca (color, logo, tipografia) y cursos tambien ahi.\n" +
+            "Si no sabes algo, ofrece el WhatsApp de soporte. NUNCA inventes funciones que no existan ni prometas resultados.")
+          : "Eres el asistente del portal del alumno de Batuta. Respondes corto (maximo 4 frases), en espanol, sin em dash, signos ! y ? solo al cierre. Ayudas al alumno a ver sus clases, reservar en la agenda, ver su material y pagar su paquete. Si es algo de su profesor, sugiere escribirle por el chat del portal.";
         const reply = await llamarClaudeOnboarding(env, system, mensajes);
         if (!reply) return json({ error: "El asistente no esta disponible ahora mismo." }, 502);
         return json({ reply: reply, restantes: cont.restantes });

@@ -19,6 +19,10 @@ database_id = "a9b7c988-1c1e-42d4-8b6c-dc5bc7305987"
 binding = "RECURSOS_R2"
 bucket_name = "batuta-app-archivos"
 
+# Workers AI (Llama): asistente de onboarding gratis (fallback si no hay ANTHROPIC_API_KEY).
+[ai]
+binding = "AI"
+
 # Nurture de trial (dia 1/3/6 + cierre del vencido): 1 corrida diaria, 14:00 UTC = 9am Lima.
 [triggers]
 crons = ["0 14 * * *"]
