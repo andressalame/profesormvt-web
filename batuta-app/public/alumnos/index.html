@@ -764,7 +764,12 @@ function api(path, opts){
   if(opts.body && !opts.headers["content-type"]) opts.headers["content-type"] = "application/json";
   return fetch(path, opts).then(function(res){
     return res.json().catch(function(){ return {}; }).then(function(data){
-      if(!res.ok){ var e = new Error(data.error || "Error"); e.status = res.status; e.data = data; throw e; }
+      if(!res.ok){
+        // Traduce códigos crudos a mensaje humano (el alumno nunca debe leer "trial_vencido").
+        var msg = data.error || "Error";
+        if(msg === "trial_vencido" || res.status === 402){ msg = "Esta academia está inactiva por ahora. Escríbele a tu profesor para que la reactive."; }
+        var e = new Error(msg); e.status = res.status; e.data = data; e.code = data.error; throw e;
+      }
       return data;
     });
   });
@@ -1001,7 +1006,7 @@ function abrirCompra(pk){
   actualizaMonto();
   COMPRA_SLOT = null; COMPRA_SLOTS_CACHE = null;
   actualizaSlotWrap();
-  $("c_metodo").value = "Tarjeta (Mercado Pago)";
+  $("c_metodo").value = "Yape/Plin/Sip";
   renderPaybox();
   $("c_op").value=""; if($("c_screenshot")) $("c_screenshot").value=""; $("compraErr").textContent=""; $("wizErr1").textContent=""; $("wizErr2").textContent="";
   actualizaBtnP1();
@@ -1700,6 +1705,13 @@ function cargarMe(){
     } catch(e){}
     if(!tourVisto()) setTimeout(function(){ try{ startTour(); }catch(e){} }, 800);
   }).catch(function(e){
+    // Academia inactiva (trial vencido): NO cerrar sesión en loop; mostrar el motivo real.
+    if(e.status===402 || e.code==="trial_vencido"){
+      setPantalla("viewAuth");
+      setAuthTab(REF_URL ? "reg" : "login");
+      $("loginErr").textContent = "Esta academia está inactiva por ahora. Escríbele a tu profesor para que la reactive.";
+      return;
+    }
     setTok(null); ME=null;
     setAuthTab(REF_URL ? "reg" : "login");
     setPantalla("viewAuth");

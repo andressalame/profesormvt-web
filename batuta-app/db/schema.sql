@@ -40,7 +40,9 @@ CREATE TABLE IF NOT EXISTS tenants (
   mp_preapproval_id TEXT DEFAULT '',   -- id del preapproval de Mercado Pago (suscripciones)
   mp_sub_status     TEXT DEFAULT '',   -- estado del preapproval en MP: pending | authorized | cancelled | paused
   fuente            TEXT DEFAULT '',   -- atribución: ?f= del CTA o referrer (07-jul-2026)
-  rubro             TEXT DEFAULT ''    -- qué enseña: Musica | Idiomas | Danza | Refuerzo escolar | Ajedrez | Arte | Deporte | Otro
+  rubro             TEXT DEFAULT '',   -- qué enseña: Musica | Idiomas | Danza | Refuerzo escolar | Ajedrez | Arte | Deporte | Otro
+  tam_alumnos       TEXT DEFAULT '',   -- tamaño declarado al registrarse (tesis per-alumno)
+  google_id         TEXT DEFAULT ''    -- login con Google (07-jul-2026)
 );
 CREATE INDEX IF NOT EXISTS idx_tenants_slug ON tenants (slug);
 

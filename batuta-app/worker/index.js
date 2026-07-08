@@ -156,6 +156,13 @@ async function googleIntercambiar(env, code){
 async function ensureGoogleSchema(env){
   try { await env.DB.prepare("ALTER TABLE tenants ADD COLUMN google_id TEXT DEFAULT ''").run(); } catch (e) { /* ya existe */ }
 }
+/* Columnas de tenants agregadas por ALTER perezoso (fuente/rubro/tam_alumnos/google_id):
+   asegurarlas para que su/tenants no dé 500 en una D1 recién reconstruida desde schema.sql. */
+async function ensureTenantsSchema(env){
+  for (const col of ["fuente", "rubro", "tam_alumnos", "google_id"]){
+    try { await env.DB.prepare("ALTER TABLE tenants ADD COLUMN " + col + " TEXT DEFAULT ''").run(); } catch (e) { /* ya existe */ }
+  }
+}
 function esc(s){
   return String(s == null ? "" : s)
     .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
@@ -506,7 +513,7 @@ function correoNurtureTrial(tenant, etapa, extras){
       html: wrap(
         '<p>' + hola + '</p>' +
         '<p>Vi que ya cargaste alumnos: buen ritmo. El siguiente paso es el que se siente: <b>comparteles el link de tu portal</b> para que entren, y registra tu primer cobro.</p>' +
-        '<p>Los pagos por Yape llegan con numero de operacion y los confirmas en un clic; la tarjeta se confirma sola. Desde ese momento, las renovaciones dejan de perseguirse por WhatsApp.</p>' +
+        '<p>Los pagos por Yape, Plin o transferencia llegan con su numero de operacion y los confirmas en un clic. Desde ese momento, las renovaciones dejan de perseguirse por WhatsApp.</p>' +
         '<p><a href="' + panel + '"><b>Ir a mi panel</b></a></p>')
     };
     return {
@@ -514,7 +521,7 @@ function correoNurtureTrial(tenant, etapa, extras){
       html: wrap(
         '<p>' + hola + '</p>' +
         '<p>El momento en que Batuta empieza a pagarse sola es cuando tus alumnos entran a SU portal: ven sus clases, su material y sus pagos sin escribirte.</p>' +
-        '<p>Agrega a tus alumnos de siempre y comparteles el link del portal. Los cobros por Yape quedan con constancia y confirmacion en un clic; la tarjeta se confirma sola.</p>' +
+        '<p>Agrega a tus alumnos de siempre y comparteles el link del portal. Los cobros por Yape, Plin o transferencia quedan con constancia y los confirmas en un clic.</p>' +
         '<p><a href="' + panel + '"><b>Agregar alumnos ahora</b></a></p>')
     };
   }
@@ -1576,6 +1583,7 @@ export default {
           return json({ profesores: results || [] });
         }
         if (path === "/app/api/su/tenants" && request.method === "GET"){
+          await ensureTenantsSchema(env);
           const { results } = await env.DB.prepare(
             "SELECT id, slug, academia, profe_nombre, email, estado, trial_hasta, creado, plan, mp_sub_status, COALESCE(fuente,'') AS fuente, COALESCE(rubro,'') AS rubro, COALESCE(tam_alumnos,'') AS tam_alumnos FROM tenants ORDER BY creado DESC"
           ).all();
@@ -2671,7 +2679,7 @@ export default {
             "- Menu izquierdo agrupado en: Personas (Alumnos, Grupos, Accesos al portal, Interesados), Clases (Registro de clases, Agenda, Chat), Cobros (Pagos, Reportes), Material (Para tus alumnos, Tu biblioteca), Configuracion (Perfil, Ajustes).\n" +
             "- Agregar un alumno: pestana Personas > Alumnos > boton '+ Nuevo alumno'. Ahi pones nombre, curso, paquete (Esencial 4 clases, Intensivo 8, Estrella 12) y su horario.\n" +
             "- Registrar una clase dictada: Clases > Registro de clases > '+ Registrar clase': eliges alumno, estado (Asistio/Falta/Reprogramo), que se trabajo y la tarea (puedes adjuntar audio o PDF de Tu biblioteca). El saldo de clases del alumno se descuenta solo.\n" +
-            "- Cobros: en Configuracion > Ajustes pones tu numero de Yape/Plin y conectas Mercado Pago para tarjeta. Los pagos por Yape llegan a Cobros > Pagos con numero de operacion y los confirmas en 1 clic; la tarjeta se confirma sola.\n" +
+            "- Cobros: en Configuracion > Ajustes pones tu numero de Yape/Plin y tus cuentas para transferencia. Tus alumnos pagan por Yape, Plin o transferencia y suben su constancia al portal; los pagos llegan a Cobros > Pagos con numero de operacion y los confirmas en 1 clic.\n" +
             "- Compartir el portal con tus alumnos: en Inicio esta tu link (batuta.lat/app/a/tu-academia); tus alumnos se registran ahi y ven sus clases, material y pagos.\n" +
             "- Agenda: en Configuracion marcas tu disponibilidad semanal y tus alumnos reservan solos dentro de eso.\n" +
             "- Precios y paquetes: Configuracion > Ajustes. Marca (color, logo, tipografia) y cursos tambien ahi.\n" +
