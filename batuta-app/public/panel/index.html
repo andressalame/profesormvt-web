@@ -906,7 +906,10 @@ function recargar(){
   return apiGet().then(function(d){
     db=d; if(!db.precios) db.precios=Object.assign({},PRECIOS_DEFAULT);
     db.cuentas=db.cuentas||[]; db.compras=db.compras||[]; db.recursos=db.recursos||[]; db.ejercicios=db.ejercicios||[]; db.leads=db.leads||[]; db.grupos=db.grupos||[]; db.config=db.config||{};
-    renderAll(); setSync("Conectado ✓","ok");
+    // El slug también llega por admin/data (path que SIEMPRE corre): así el link de alumnos no
+    // depende de la carrera con /app/api/t/me y nunca queda vacío.
+    if(d && d.slug){ TENANT_SLUG = d.slug; }
+    renderAll(); pintarLinkAlumnos(); setSync("Conectado ✓","ok");
   });
 }
 
@@ -960,9 +963,14 @@ function pintarTrialBar(d){
   bar.classList.add("show");
 }
 function pintarLinkAlumnos(){
-  if(!TENANT_SLUG) return;
+  var box=el("linkAlumnosBox");
+  if(!TENANT_SLUG){
+    // Nunca dejar el input mudo: si el slug aún no cargó, mostrar un aviso claro en vez de vacío.
+    if(box && !box.value){ box.value="Cargando tu link..."; }
+    return;
+  }
   var link = location.origin + "/app/a/" + TENANT_SLUG;
-  var box=el("linkAlumnosBox"); if(box) box.value=link;
+  if(box) box.value=link;
   var ft=el("ftLinkAlumnos"); if(ft) ft.textContent=link;
 }
 var _btnCopiarLinkAlumnos = el("btnCopiarLinkAlumnos");

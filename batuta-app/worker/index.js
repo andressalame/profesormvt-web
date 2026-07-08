@@ -1250,6 +1250,16 @@ export default {
     }
 
     try {
+      /* ---------- País del visitante (para precio en moneda local). Público, sin datos personales. ----------
+         El tráfico llega por el proxy de Vercel: el país real viene en x-vercel-ip-country;
+         CF-IPCountry queda de fallback. */
+      if (path === "/app/api/geo" && request.method === "GET"){
+        const pais = request.headers.get("x-vercel-ip-country") || request.headers.get("CF-IPCountry") || "";
+        return new Response(JSON.stringify({ pais }), {
+          headers: { "content-type": "application/json", "cache-control": "no-store", "access-control-allow-origin": "*" },
+        });
+      }
+
       /* ---------- Lead magnet del blog (público): captura + entrega por correo ---------- */
       if (path === "/app/api/lead-magnet" && request.method === "POST"){
         let body = {};
@@ -2661,6 +2671,7 @@ export default {
           const grupos   = ((await env.DB.prepare("SELECT * FROM grupos WHERE tenant_id = ?1 ORDER BY creado DESC, rowid DESC").bind(tid).all()).results || [])
             .map(g => { let m = []; try { m = JSON.parse(g.miembros || "[]"); } catch (e) {} return Object.assign({}, g, { miembros: Array.isArray(m) ? m : [] }); });
           return json({ alumnos, registro, precios, cuentas, compras, recursos, ejercicios, leads, config, grupos,
+                        slug: t.slug, academia: t.academia, estado: t.estado, demo: t.email === DEMO_EMAIL,
                         vapid_public: env.VAPID_PUBLIC_KEY || "" });
         }
 
