@@ -2580,13 +2580,16 @@ function cargarActivacion(){
   }).catch(function(e){ /* el checklist es opcional: jamás rompe el panel */ });
 }
 
-(function init(){
-  aplicarMarca();
+function batutaInit(){
+  if(window.__initRan) return; window.__initRan=true;
+  // El token se lee PRIMERO: nada (ni la marca) puede impedir que el panel se autentique.
   try{ token=localStorage.getItem(TOKEN_KEY); }catch(e){}
   if(!token){ irALogin(); return; }
+  // La marca es cosmetica: si lanza, jamas debe tumbar el arranque del panel.
+  try{ aplicarMarca(); }catch(e){ try{ window.__marcaErr=(e&&e.message)||String(e); }catch(_){} }
   setSync("Conectando…","");
-  vincularSubSiVuelveDeMP().then(cargarTrialInfo);
-  cargarActivacion();
+  try{ vincularSubSiVuelveDeMP().then(cargarTrialInfo); }catch(e){}
+  try{ cargarActivacion(); }catch(e){}
   recargar().then(iniciarRefresco).then(function(){
     // Tour de bienvenida: 1 vez, salvo en la demo (el visitante de la demo no lo necesita).
     try{ if(!(db && db.demo) && typeof window.lanzarTourBienvenida==="function") window.lanzarTourBienvenida(false); }catch(e){}
@@ -2595,6 +2598,21 @@ function cargarActivacion(){
     if(e&&e.paywall){ return; }
     setSync("Sin conexión ✗","err"); toast("No se pudo conectar con la API");
   });
+}
+// batutaInit es global (function decl -> window.batutaInit). El arranque real vive en un
+// <script> SEPARADO abajo, para que corra aunque algo en el top-level de ESTE script lance
+// (p.ej. una extension del navegador que inyecta y rompe la ejecucion antes del final).
+window.batutaInit = batutaInit;
+</script>
+
+<!-- Arranque del panel: script independiente. Si el script grande de arriba se corta por
+     un error de top-level (extensiones, etc.), este bloque IGUAL ejecuta y el panel vive. -->
+<script>
+(function(){
+  function run(){ try{ if(typeof window.batutaInit==="function") window.batutaInit(); }catch(e){ try{ window.__initErr=(e&&e.message)||String(e); }catch(_){} } }
+  if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded", run); }
+  else { run(); }
+  window.addEventListener("load", run);
 })();
 </script>
 
