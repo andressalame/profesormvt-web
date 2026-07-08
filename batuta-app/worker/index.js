@@ -81,6 +81,81 @@ async function hashPass(password, saltHex){
   return hex(bits);
 }
 function emailOk(e){ return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(e); }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   LOGIN CON GOOGLE (OAuth 2.0). Degrada con gracia: sin GOOGLE_CLIENT_ID/SECRET
+   el boton no aparece y los endpoints responden "no configurado". Andres crea el
+   OAuth app en console.cloud.google.com y carga los 2 secrets con wrangler.
+   El `state` va firmado con HMAC(ADMIN_TOKEN) para prevenir CSRF/tampering.
+   ═══════════════════════════════════════════════════════════════════════════ */
+const GOOGLE_REDIRECT_URI = "https://batuta.lat/app/api/auth/google/callback";
+function googleConfigurado(env){ return !!(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET && env.ADMIN_TOKEN); }
+function b64url(buf){
+  const b = btoa(String.fromCharCode.apply(null, new Uint8Array(buf)));
+  return b.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+function b64urlToStr(s){
+  s = s.replace(/-/g, "+").replace(/_/g, "/"); while (s.length % 4) s += "=";
+  return atob(s);
+}
+async function hmacState(env, payloadStr){
+  const key = await crypto.subtle.importKey("raw", enc.encode(env.ADMIN_TOKEN), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  const sig = await crypto.subtle.sign("HMAC", key, enc.encode(payloadStr));
+  return b64url(sig);
+}
+async function firmarState(env, obj){
+  const payload = b64url(enc.encode(JSON.stringify(obj)));
+  const sig = await hmacState(env, payload);
+  return payload + "." + sig;
+}
+async function verificarState(env, state){
+  if (!state || state.indexOf(".") === -1) return null;
+  const [payload, sig] = state.split(".");
+  const esperado = await hmacState(env, payload);
+  if (!safeEq(sig, esperado)) return null;
+  try {
+    const obj = JSON.parse(b64urlToStr(payload));
+    if (!obj.exp || Date.now() > obj.exp) return null;
+    return obj;
+  } catch (e) { return null; }
+}
+function googleAuthUrl(env, state){
+  const p = new URLSearchParams({
+    client_id: env.GOOGLE_CLIENT_ID,
+    redirect_uri: GOOGLE_REDIRECT_URI,
+    response_type: "code",
+    scope: "openid email profile",
+    state: state,
+    prompt: "select_account",
+    access_type: "online"
+  });
+  return "https://accounts.google.com/o/oauth2/v2/auth?" + p.toString();
+}
+/* Intercambia el code por el id_token y devuelve {email, email_verified, name}. */
+async function googleIntercambiar(env, code){
+  const r = await fetch("https://oauth2.googleapis.com/token", {
+    method: "POST",
+    headers: { "content-type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      code, client_id: env.GOOGLE_CLIENT_ID, client_secret: env.GOOGLE_CLIENT_SECRET,
+      redirect_uri: GOOGLE_REDIRECT_URI, grant_type: "authorization_code"
+    })
+  });
+  if (!r.ok) return null;
+  const data = await r.json().catch(() => null);
+  if (!data || !data.id_token) return null;
+  // El id_token es un JWT; el payload viene directo de Google (server-to-server con nuestro secret).
+  const partes = data.id_token.split(".");
+  if (partes.length !== 3) return null;
+  try {
+    const claims = JSON.parse(b64urlToStr(partes[1]));
+    if (!claims.email) return null;
+    return { email: String(claims.email).toLowerCase(), email_verified: claims.email_verified !== false, name: claims.name || "" };
+  } catch (e) { return null; }
+}
+async function ensureGoogleSchema(env){
+  try { await env.DB.prepare("ALTER TABLE tenants ADD COLUMN google_id TEXT DEFAULT ''").run(); } catch (e) { /* ya existe */ }
+}
 function esc(s){
   return String(s == null ? "" : s)
     .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
@@ -880,14 +955,16 @@ function paginaBase(titulo, cuerpo, script){
     ".err{color:#e8604f;font-size:13px;margin-top:12px;min-height:16px}" +
     ".foot{text-align:center;margin-top:18px;font-size:13px;color:var(--muted)}" +
     ".foot a{color:var(--acento);text-decoration:none}" +
+    GOOGLE_BTN_CSS +
     "</style></head><body><div class=\"card\">" + cuerpo + "</div><script>" + script + "</script></body></html>";
 }
 
-function paginaRegistro(){
+function paginaRegistro(googleOn){
   const cuerpo =
     "<div class=\"pill\">7 dias gratis, sin tarjeta</div>" +
     "<h1>Crea tu academia en Batuta</h1>" +
     "<p class=\"sub\">Tu panel de gestion listo en un minuto.</p>" +
+    (googleOn ? botonGoogle("profesor", "", "Registrarme con Google") + "<div class=\"gsep\">o con tu correo</div>" : "") +
     "<form id=\"f\">" +
       "<label>Nombre de tu academia</label><input id=\"academia\" required>" +
       "<label>Tu nombre</label><input id=\"nombre\" required>" +
@@ -951,7 +1028,17 @@ function paginaRegistro(){
   return paginaBase("Crea tu academia — Batuta", cuerpo, script);
 }
 
-function paginaLogin(){
+const GOOGLE_BTN_CSS =
+  ".gbtn{display:flex;align-items:center;justify-content:center;gap:10px;width:100%;margin-top:14px;background:#fff;color:#1f1f1f;border:1px solid #dadce0;border-radius:8px;padding:11px;font-weight:600;font-size:14px;cursor:pointer;text-decoration:none;font-family:inherit}" +
+  ".gbtn:hover{background:#f8f9fa}" +
+  ".gsep{display:flex;align-items:center;gap:10px;color:var(--muted);font-size:12px;margin:18px 0 4px}" +
+  ".gsep::before,.gsep::after{content:'';flex:1;height:1px;background:#2c303a}";
+const GOOGLE_SVG = "<svg width=\"18\" height=\"18\" viewBox=\"0 0 48 48\"><path fill=\"#EA4335\" d=\"M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z\"/><path fill=\"#4285F4\" d=\"M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z\"/><path fill=\"#FBBC05\" d=\"M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z\"/><path fill=\"#34A853\" d=\"M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z\"/></svg>";
+function botonGoogle(intent, slug, texto){
+  const q = intent === "alumno" ? "?intent=alumno&slug=" + encodeURIComponent(slug || "") : "?intent=profesor";
+  return "<div class=\"gsep\">o</div><a class=\"gbtn\" href=\"/app/api/auth/google/start" + q + "\">" + GOOGLE_SVG + esc(texto) + "</a>";
+}
+function paginaLogin(googleOn){
   const cuerpo =
     "<h1>Ingresa a Batuta</h1>" +
     "<p class=\"sub\">El panel del profesor o dueno de academia. Eres alumno? Entra por el link de tu academia (batuta.lat/app/a/tu-academia): pideselo a tu profesor.</p>" +
@@ -961,6 +1048,7 @@ function paginaLogin(){
       "<button type=\"submit\">Ingresar</button>" +
       "<div class=\"err\" id=\"err\"></div>" +
     "</form>" +
+    (googleOn ? botonGoogle("profesor", "", "Continuar con Google") : "") +
     "<div class=\"foot\">No tienes cuenta? <a href=\"/app/registro\">Crea tu academia</a> · <a href=\"/app/demo\">Mira la demo</a></div>";
   const script =
     "document.getElementById('f').addEventListener('submit', async function(e){" +
@@ -1312,10 +1400,10 @@ export default {
       return htmlResponse(paginaLanding());
     }
     if (path === "/app/registro" && request.method === "GET"){
-      return htmlResponse(paginaRegistro());
+      return htmlResponse(paginaRegistro(googleConfigurado(env)));
     }
     if (path === "/app/login" && request.method === "GET"){
-      return htmlResponse(paginaLogin());
+      return htmlResponse(paginaLogin(googleConfigurado(env)));
     }
     if (path === "/app/suscribir" && request.method === "GET"){
       return htmlResponse(paginaSuscribir());
@@ -1586,6 +1674,79 @@ export default {
       /* ============================================================
          REGISTRO / LOGIN / LOGOUT / ME de TENANT (profesor)
          ============================================================ */
+      /* ---------- Login con Google: inicio del flujo OAuth ---------- */
+      if (path === "/app/api/auth/google/start" && request.method === "GET"){
+        if (!googleConfigurado(env)) return json({ error: "Login con Google no configurado." }, 501);
+        const intent = url.searchParams.get("intent") === "alumno" ? "alumno" : "profesor";
+        const slug = String(url.searchParams.get("slug") || "").trim().slice(0, 60);
+        if (intent === "alumno" && !slug) return json({ error: "Falta la academia." }, 400);
+        const state = await firmarState(env, { intent, slug, exp: Date.now() + 10 * 60 * 1000, n: randHex(8) });
+        return new Response(null, { status: 302, headers: { location: googleAuthUrl(env, state), "cache-control": "no-store" } });
+      }
+      /* ---------- Login con Google: callback ---------- */
+      if (path === "/app/api/auth/google/callback" && request.method === "GET"){
+        if (!googleConfigurado(env)) return json({ error: "Login con Google no configurado." }, 501);
+        const paginaError = function(msg, volver){
+          return htmlResponse(paginaBase("Google — Batuta", "<h1>No se pudo entrar</h1><p class=\"sub\">" + esc(msg) + "</p><div class=\"foot\"><a href=\"" + volver + "\">Volver</a></div>", ""));
+        };
+        const st = await verificarState(env, url.searchParams.get("state") || "");
+        if (!st) return paginaError("El enlace de acceso venció o no es válido. Intenta de nuevo.", "/app/login");
+        const code = url.searchParams.get("code") || "";
+        if (!code) return paginaError("Google no devolvió el permiso. Intenta de nuevo.", "/app/login");
+        const perfil = await googleIntercambiar(env, code);
+        if (!perfil || !perfil.email) return paginaError("No pudimos leer tu cuenta de Google.", "/app/login");
+        if (!perfil.email_verified) return paginaError("Tu correo de Google no está verificado.", "/app/login");
+        const irCon = function(token, destino){
+          return htmlResponse(paginaBase("Entrando — Batuta", "<h1>Entrando…</h1><p class=\"sub\">Un momento.</p>",
+            "try{localStorage.setItem('batuta_t','" + token + "');}catch(e){};location.replace('" + destino + "');"));
+        };
+        await ensureGoogleSchema(env);
+        if (st.intent === "profesor"){
+          // ¿Ya existe un tenant con ese email? -> login. Si no -> registro con Google.
+          let t = await env.DB.prepare("SELECT * FROM tenants WHERE email = ?1").bind(perfil.email).first();
+          if (!t){
+            const id = crypto.randomUUID();
+            const nombre = (perfil.name || perfil.email.split("@")[0]).slice(0, 60);
+            let slug = "";
+            for (let i = 0; i < 6; i++){ const c = slugify(nombre || "academia") + "-" + randHex(2); const ya = await env.DB.prepare("SELECT id FROM tenants WHERE slug = ?1").bind(c).first(); if (!ya){ slug = c; break; } }
+            if (!slug) slug = "academia-" + randHex(4);
+            const salt = randHex(16); const hash = await hashPass(randHex(24), salt); // pass aleatoria: entra por Google
+            const trialHasta = new Date(Date.now() + TRIAL_DIAS * 86400000).toISOString();
+            await env.DB.prepare(
+              "INSERT INTO tenants (id,slug,academia,profe_nombre,email,whatsapp,pass_hash,pass_salt,plan,estado,trial_hasta,creado,fuente,google_id) " +
+              "VALUES (?1,?2,?3,?4,?5,'',?6,?7,'profe','trial',?8,?9,'google','g')"
+            ).bind(id, slug, nombre, nombre, perfil.email, hash, salt, trialHasta, new Date().toISOString()).run();
+            const stmts = [];
+            for (const k of Object.keys(PRECIOS_DEFAULT)) stmts.push(env.DB.prepare("INSERT INTO precios (tenant_id, paquete, precio) VALUES (?1,?2,?3)").bind(id, k, PRECIOS_DEFAULT[k]));
+            stmts.push(env.DB.prepare("INSERT INTO config (tenant_id, clave, valor) VALUES (?1,'profe_nombre',?2)").bind(id, nombre));
+            try { await env.DB.batch(stmts); } catch (e) {}
+            ctx.waitUntil(alertaCorreoAndres(env, "TRIAL NUEVO en Batuta (Google): " + nombre, "Academia: " + nombre + "\nEmail: " + perfil.email + "\nEntró con Google.\nSlug: " + slug));
+            const token = await crearSesion(env, "T:" + id);
+            return irCon(token, "/app/suscribir");
+          }
+          const token = await crearSesion(env, "T:" + t.id);
+          return irCon(token, "/app/panel");
+        } else {
+          // Alumno: dentro de la academia del slug.
+          const t = await env.DB.prepare("SELECT * FROM tenants WHERE slug = ?1").bind(st.slug).first();
+          if (!t) return paginaError("Academia no encontrada.", "/app/login");
+          if (t.estado === "vencido") return paginaError("Esta academia no está activa ahora.", "/app/login");
+          let cu = await env.DB.prepare("SELECT * FROM cuentas WHERE tenant_id = ?1 AND email = ?2").bind(t.id, perfil.email).first();
+          if (!cu){
+            const id = crypto.randomUUID();
+            const nombre = (perfil.name || perfil.email.split("@")[0]).slice(0, 80);
+            const salt = randHex(16); const hash = await hashPass(randHex(24), salt);
+            const refCode = await genRefCode(env, t.id);
+            await env.DB.prepare(
+              "INSERT INTO cuentas (id,tenant_id,email,nombre,whatsapp,pass_hash,pass_salt,marketing,alumno_id,creada,ref_code,ref_por,credito,google_id) VALUES (?1,?2,?3,?4,'',?5,?6,0,NULL,?7,?8,'',0,'g')"
+            ).bind(id, t.id, perfil.email, nombre, hash, salt, hoy(), refCode).run();
+            cu = { id };
+          }
+          const token = await crearSesion(env, cu.id);
+          return irCon(token, "/app/a/" + t.slug);
+        }
+      }
+
       if (path === "/app/api/t/registro" && request.method === "POST"){
         const ip = clientIp(request);
         if (ip && await chatbotPasoTope(env, "treg:" + ip, 5)){
