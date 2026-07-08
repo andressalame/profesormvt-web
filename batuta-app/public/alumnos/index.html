@@ -1034,6 +1034,39 @@ function ensureOpcionTarjeta(){
     if(sel.value==="Tarjeta (Mercado Pago)") sel.value="Yape/Plin/Sip";
   }
 }
+/* Muestra SOLO los métodos que el profe configuró (Yape/Plin no existe fuera de
+   Perú: si el profe no puso su número, la opción no aparece; igual con bancos y
+   crypto). Si no configuró NINGUNO y tampoco hay tarjeta, cae al aviso de
+   coordinar por WhatsApp. La señal es la config del profe, no el país del alumno. */
+function ajustarMetodosPago(){
+  var cf=(ME&&ME.config)||{};
+  var sel=$("c_metodo"); if(!sel) return [];
+  var disponibles=[];
+  function setOp(val,on){
+    var op=sel.querySelector('option[value="'+val+'"]');
+    if(!op) return;
+    op.disabled=!on; op.hidden=!on;
+    if(on) disponibles.push(val);
+  }
+  setOp("Yape/Plin/Sip", !!cf.pago_numero);
+  setOp("Transferencia BCP", !!cf.bcp_cuenta);
+  setOp("Transferencia Scotiabank", !!cf.scotia_cuenta);
+  setOp("Crypto USDT", !!cf.crypto_wallet);
+  var opT=sel.querySelector('option[value="Tarjeta (Mercado Pago)"]');
+  if(opT) disponibles.unshift("Tarjeta (Mercado Pago)");
+  var mf=sel.closest(".field");
+  if(!disponibles.length){
+    if(mf) mf.style.display="none";
+    hide("payboxOk"); show("payboxNo");
+    var opF=$("c_op")&&$("c_op").closest(".field"); if(opF) opF.style.display="none";
+    var ssF=$("c_screenshot")&&$("c_screenshot").closest(".field"); if(ssF) ssF.style.display="none";
+    if($("btnYaPague")) $("btnYaPague").style.display="none";
+  } else {
+    if(mf) mf.style.display="";
+    if(disponibles.indexOf(sel.value)===-1) sel.value=disponibles[0];
+  }
+  return disponibles;
+}
 function abrirCompra(pk){
   ensureOpcionTarjeta();
   if(!ME) return;
@@ -1045,8 +1078,8 @@ function abrirCompra(pk){
   actualizaMonto();
   COMPRA_SLOT = null; COMPRA_SLOTS_CACHE = null;
   actualizaSlotWrap();
-  $("c_metodo").value = "Yape/Plin/Sip";
-  renderPaybox();
+  var mets = ajustarMetodosPago();  // filtra por lo que el profe configuró y elige el primero disponible
+  if(mets.length) renderPaybox();
   $("c_op").value=""; if($("c_screenshot")) $("c_screenshot").value=""; $("compraErr").textContent=""; $("wizErr1").textContent=""; $("wizErr2").textContent="";
   actualizaBtnP1();
   show("compraPaso1"); hide("compraPaso2");
