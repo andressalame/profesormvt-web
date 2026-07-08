@@ -268,7 +268,7 @@
       <div class="navgroup-items" style="padding:2px 0 4px;">
         <button class="tab active" data-tab="resumen">Inicio</button>
       </div>
-      <div class="navgroup">
+      <div class="navgroup" data-tour="personas">
         <button class="navgroup-h" type="button"><span class="ng-ico"><svg viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span><span class="ng-tx">Personas</span><span class="ng-chev"><svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg></span></button>
         <div class="navgroup-items">
           <button class="tab" data-tab="alumnos">Alumnos</button>
@@ -285,7 +285,7 @@
           <button class="tab" data-tab="chat">Chat</button>
         </div>
       </div>
-      <div class="navgroup">
+      <div class="navgroup" data-tour="cobros">
         <button class="navgroup-h" type="button"><span class="ng-ico"><svg viewBox="0 0 24 24"><rect x="2" y="5" width="20" height="14" rx="2"/><circle cx="12" cy="12" r="3"/><line x1="6" y1="12" x2="6.01" y2="12"/><line x1="18" y1="12" x2="18.01" y2="12"/></svg></span><span class="ng-tx">Cobros</span><span class="ng-chev"><svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg></span></button>
         <div class="navgroup-items">
           <button class="tab" data-tab="pagos">Pagos<span class="dot hidden" id="dotPagos">0</span></button>
@@ -343,7 +343,7 @@
         <div id="actPasos"></div>
       </div>
     </div>
-    <div class="group">
+    <div class="group" data-tour="link-alumnos">
       <h2>// Comparte con tus alumnos</h2>
       <div class="card" style="max-width:560px;">
         <div class="hint" style="margin-bottom:8px;">Este es el link de tu portal de alumnos. Compártelo para que se registren.</div>
@@ -2735,9 +2735,9 @@ window.batutaInit = batutaInit;
   // Pasos: cada uno apunta a un selector real del panel (o null = centrado).
   var PASOS=[
     {sel:null, t:"Bienvenido a tu academia", b:"Este es tu panel. En 4 pasos rapidos te muestro lo esencial para que arranque hoy. Toma 30 segundos."},
-    {sel:'.nav .navgroup:first-of-type', t:"Todo empieza en Personas", b:"Aca agregas a tus alumnos, los agrupas y ves quien se registro en tu portal. Tu primer paso es meter a un alumno de siempre."},
-    {sel:'#grpActivacion, #panel-resumen .group:nth-of-type(2)', t:"Tu link para alumnos", b:"Comparte este link con tus alumnos: se registran solos y ven sus clases, material y pagos, sin que les escribas."},
-    {sel:'.nav .navgroup:nth-of-type(3)', t:"Cobros sin perseguir a nadie", b:"En Cobros confirmas los pagos por Yape en un clic y la tarjeta se confirma sola. En Configuracion pones tu numero de Yape y conectas Mercado Pago."},
+    {sel:'[data-tour="personas"]', t:"Todo empieza en Personas", b:"Aca agregas a tus alumnos, los agrupas y ves quien se registro en tu portal. Tu primer paso es meter a un alumno de siempre."},
+    {sel:'[data-tour="link-alumnos"]', t:"Tu link para alumnos", b:"Comparte este link con tus alumnos: se registran solos y ven sus clases, material y pagos, sin que les escribas."},
+    {sel:'[data-tour="cobros"]', t:"Cobros sin perseguir a nadie", b:"En Cobros confirmas los pagos por Yape en un clic y la tarjeta se confirma sola. En Configuracion pones tu numero de Yape y conectas Mercado Pago."},
     {sel:'#oiaFab', t:"Tu guia siempre a la mano", b:"Si te trabas en algo, este boton abre un asistente que responde como hacer cualquier cosa del panel. Listo, ya puedes empezar!"}
   ];
   var i=0;
@@ -2746,8 +2746,11 @@ window.batutaInit = batutaInit;
     for(var d=0;d<elDots.children.length;d++){ elDots.children[d].classList.toggle("on",d===i); }
     elTitle.textContent=p.t; elBody.textContent=p.b;
     btnNext.textContent=(i===PASOS.length-1)?"Empezar":"Siguiente";
-    if(target && target.offsetParent!==null){
-      var r=target.getBoundingClientRect();
+    // Visible = tiene caja real. offsetParent falla con position:fixed (el boton del asistente),
+    // asi que medimos el rect: sirve tanto para elementos normales como fixed.
+    var rc = target? target.getBoundingClientRect() : null;
+    if(target && rc && rc.width>0 && rc.height>0){
+      var r=rc;
       ring.style.display="block";
       ring.style.top=(r.top-6)+"px"; ring.style.left=(r.left-6)+"px";
       ring.style.width=(r.width+12)+"px"; ring.style.height=(r.height+12)+"px";
