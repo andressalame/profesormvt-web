@@ -1607,6 +1607,87 @@ export default {
     if (path === "/app/panel" && request.method === "GET"){
       return env.ASSETS ? assetConSeguridad(await env.ASSETS.fetch(new Request(new URL("/panel/index.html", url), request))) : json({ error: "No encontrado" }, 404);
     }
+    /* ----- LINK DE COBRO del profe: página pública de pago SIN registro previo.
+       El alumno paga primero y su cuenta se crea sola (registro después, por
+       correo con link para poner su contraseña). Pedido de Andrés 08-jul. ----- */
+    if (/^\/app\/a\/[^/]+\/pagar$/.test(path) && request.method === "GET"){
+      const slugP = decodeURIComponent(path.split("/")[3] || "");
+      const tP = await env.DB.prepare("SELECT id, academia, slug, estado, mp_access_token, mp_expires_at FROM tenants WHERE slug = ?1").bind(slugP).first();
+      if (!tP) return htmlResponse(paginaBase("Academia no encontrada — Batuta", "<h1>No encontramos esa academia</h1><p class=\"sub\">Revisa el link con tu profesor.</p>", ""));
+      if (tP.estado === "vencido") return htmlResponse(paginaBase("No disponible — Batuta", "<h1>Pagos en pausa</h1><p class=\"sub\">Esta academia está inactiva por ahora. Escríbele a tu profesor.</p>", ""));
+      const cfgP = await loadConfig(env, tP.id);
+      const preciosP = await loadPrecios(env, tP.id);
+      const paquetesOk = Object.keys(PAQUETES).filter(pk => (preciosP[pk] || 0) > 0);
+      const preSel = String(url.searchParams.get("p") || "");
+      const mpOnP = !!(tP.mp_access_token) && (!(Number(tP.mp_expires_at) || 0) || Number(tP.mp_expires_at) > Date.now());
+      const metodos = [];
+      if (mpOnP) metodos.push({ v: "Tarjeta (Mercado Pago)", t: "Tarjeta (se confirma sola)" });
+      if (cfgP.pago_numero) metodos.push({ v: "Yape/Plin/Sip", t: "Yape / Plin / Sip" });
+      if (cfgP.bcp_cuenta) metodos.push({ v: "Transferencia BCP", t: "Transferencia BCP" });
+      if (cfgP.scotia_cuenta) metodos.push({ v: "Transferencia Scotiabank", t: "Transferencia Scotiabank" });
+      if (cfgP.crypto_wallet) metodos.push({ v: "Crypto USDT", t: "Crypto (" + (cfgP.crypto_moneda || "USDT") + ")" });
+      if (!paquetesOk.length || !metodos.length){
+        return htmlResponse(paginaBase("Pagos — " + esc(tP.academia), "<h1>" + esc(tP.academia) + "</h1><p class=\"sub\">Tu profesor aún no configuró los pagos por aquí. Escríbele y lo coordinan directo.</p>", ""));
+      }
+      const infoPago = {
+        yape: { numero: cfgP.pago_numero || "", titular: cfgP.pago_titular || "" },
+        bcp: { cuenta: cfgP.bcp_cuenta || "", cci: cfgP.bcp_cci || "" },
+        scotia: { cuenta: cfgP.scotia_cuenta || "", cci: cfgP.scotia_cci || "" },
+        crypto: { moneda: cfgP.crypto_moneda || "USDT", red: cfgP.crypto_red || "", wallet: cfgP.crypto_wallet || "" }
+      };
+      const cuerpoP =
+        "<h1>" + esc(tP.academia) + "</h1>" +
+        "<p class=\"sub\">Elige tu paquete, paga y listo: tu cuenta se crea sola y te llega un correo para entrar a tu portal.</p>" +
+        "<form id=\"fp\">" +
+          "<label>Paquete</label><select id=\"pq\">" +
+            paquetesOk.map(pk => "<option value=\"" + esc(pk) + "\"" + (pk === preSel ? " selected" : "") + ">" + esc(pk) + " — S/ " + (preciosP[pk] || 0) + "</option>").join("") +
+          "</select>" +
+          "<label>Tu nombre</label><input id=\"nm\" type=\"text\" required maxlength=\"80\">" +
+          "<label>Tu correo</label><input id=\"em\" type=\"email\" required maxlength=\"120\">" +
+          "<label>Tu WhatsApp (opcional)</label><input id=\"wa\" type=\"tel\" maxlength=\"20\">" +
+          "<label>Método de pago</label><select id=\"mt\">" +
+            metodos.map(m => "<option value=\"" + esc(m.v) + "\">" + esc(m.t) + "</option>").join("") +
+          "</select>" +
+          "<div id=\"pinfo\" class=\"sub\" style=\"margin:10px 0;white-space:pre-line\"></div>" +
+          "<div id=\"manualbox\">" +
+            "<label>N° de operación (opcional, confirma más rápido)</label><input id=\"op\" type=\"text\" maxlength=\"40\">" +
+            "<label>Captura del pago (recomendado)</label><input id=\"cap\" type=\"file\" accept=\"image/*\">" +
+          "</div>" +
+          "<button type=\"submit\" id=\"btnp\">Registrar mi pago</button>" +
+          "<div class=\"err\" id=\"errp\"></div>" +
+        "</form>" +
+        "<div id=\"okp\" style=\"display:none\"><h1>Listo 🎉</h1><p class=\"sub\" id=\"okmsg\"></p></div>" +
+        "<div class=\"foot\">Ya tienes cuenta? <a href=\"/app/a/" + esc(tP.slug) + "\">Entra a tu portal</a></div>";
+      const scriptP =
+        "var INFO=" + JSON.stringify(infoPago) + ";var SLUGP=" + JSON.stringify(tP.slug) + ";" +
+        "var mt=document.getElementById('mt'),pinfo=document.getElementById('pinfo'),manual=document.getElementById('manualbox'),btn=document.getElementById('btnp');" +
+        "function pintaInfo(){var v=mt.value,t='';" +
+        "if(v==='Tarjeta (Mercado Pago)'){t='Te llevamos al checkout de Mercado Pago. Al aprobar, tu paquete se activa solo.';manual.style.display='none';btn.textContent='Pagar con tarjeta \\u2192';}" +
+        "else{manual.style.display='';btn.textContent='Registrar mi pago';" +
+        "if(v==='Yape/Plin/Sip'){t='Yapea o Plinea a: '+INFO.yape.numero+(INFO.yape.titular?('\\nA nombre de: '+INFO.yape.titular):'');}" +
+        "else if(v==='Transferencia BCP'){t='BCP Soles: '+INFO.bcp.cuenta+(INFO.bcp.cci?('\\nCCI: '+INFO.bcp.cci):'');}" +
+        "else if(v==='Transferencia Scotiabank'){t='Scotiabank Soles: '+INFO.scotia.cuenta+(INFO.scotia.cci?('\\nCCI: '+INFO.scotia.cci):'');}" +
+        "else if(v==='Crypto USDT'){t=INFO.crypto.moneda+' por '+INFO.crypto.red+':\\n'+INFO.crypto.wallet;}}" +
+        "pinfo.textContent=t;}" +
+        "mt.addEventListener('change',pintaInfo);pintaInfo();" +
+        "function leerCap(){return new Promise(function(res){var f=document.getElementById('cap').files[0];if(!f)return res('');var r=new FileReader();r.onload=function(){res(String(r.result||''));};r.onerror=function(){res('');};r.readAsDataURL(f);});}" +
+        "document.getElementById('fp').addEventListener('submit',async function(e){" +
+        "e.preventDefault();var err=document.getElementById('errp');err.textContent='';btn.disabled=true;" +
+        "try{var cap=await leerCap();" +
+        "var r=await fetch('/app/api/pagar-directo',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({" +
+        "slug:SLUGP,paquete:document.getElementById('pq').value,nombre:document.getElementById('nm').value.trim()," +
+        "email:document.getElementById('em').value.trim(),whatsapp:document.getElementById('wa').value.trim()," +
+        "metodo:mt.value,op_numero:document.getElementById('op')?document.getElementById('op').value.trim():'',comprobante:cap})});" +
+        "var d=await r.json();" +
+        "if(!r.ok){err.textContent=d.error||'No se pudo registrar. Intenta de nuevo.';btn.disabled=false;return;}" +
+        "if(d.init_point){location.href=d.init_point;return;}" +
+        "document.getElementById('fp').style.display='none';" +
+        "document.querySelector('h1').style.display='none';document.querySelector('.sub').style.display='none';" +
+        "document.getElementById('okp').style.display='block';" +
+        "document.getElementById('okmsg').textContent=d.mensaje||'Tu pago quedó registrado. Revisa tu correo para entrar a tu portal.';" +
+        "}catch(ex){err.textContent='Error de conexión. Intenta de nuevo.';btn.disabled=false;}});";
+      return htmlResponse(paginaBase("Paga tus clases — " + esc(tP.academia), cuerpoP, scriptP));
+    }
     if (path.startsWith("/app/a/") && request.method === "GET"){
       return env.ASSETS ? assetConSeguridad(await env.ASSETS.fetch(new Request(new URL("/alumnos/index.html", url), request))) : json({ error: "No encontrado" }, 404);
     }
@@ -2777,6 +2858,153 @@ export default {
             mp_tarjeta: !!(await env.DB.prepare("SELECT mp_access_token FROM tenants WHERE id = ?1").bind(tid).first().then(r => r && r.mp_access_token).catch(() => false))
           }
         });
+      }
+
+      /* ============================================================
+         PAGO DIRECTO por link de cobro (SIN registro previo).
+         Crea la cuenta del alumno sola (pago primero, registro después:
+         le llega un correo con link para poner su contraseña). 08-jul.
+         ============================================================ */
+      if (path === "/app/api/pagar-directo" && request.method === "POST"){
+        const ipPd = clientIp(request);
+        if (ipPd && await chatbotPasoTope(env, "pd:" + ipPd, 8)){
+          return json({ error: "Demasiados intentos. Espera un rato." }, 429);
+        }
+        const b = await request.json().catch(() => ({}));
+        const slug = String(b.slug || "").trim();
+        const t = slug ? await env.DB.prepare("SELECT * FROM tenants WHERE slug = ?1").bind(slug).first() : null;
+        if (!t) return json({ error: "Academia no encontrada" }, 404);
+        if (t.estado === "vencido") return json({ error: "Esta academia está inactiva por ahora. Escríbele a tu profesor." }, 402);
+
+        const paquete = String(b.paquete || "");
+        if (!(paquete in PAQUETES)) return json({ error: "Paquete no valido." }, 400);
+        const nombre = String(b.nombre || "").trim();
+        const email = String(b.email || "").trim().toLowerCase();
+        const whatsapp = String(b.whatsapp || "").trim().slice(0, 20);
+        const metodo = String(b.metodo || "").trim().slice(0, 40);
+        if (nombre.length < 2) return json({ error: "Escribe tu nombre." }, 400);
+        if (!emailOk(email)) return json({ error: "Ese correo no parece valido." }, 400);
+
+        // Cuenta: reusa por correo o crea una nueva con contraseña aleatoria
+        // (el alumno la define después con el link del correo).
+        let cu = await env.DB.prepare("SELECT * FROM cuentas WHERE tenant_id = ?1 AND email = ?2").bind(t.id, email).first();
+        let esNueva = false;
+        if (!cu){
+          esNueva = true;
+          const salt = randHex(16);
+          const hash = await hashPass(randHex(24), salt);
+          const idCu = crypto.randomUUID();
+          const refCode = await genRefCode(env, t.id);
+          await env.DB.prepare(
+            "INSERT INTO cuentas (id,tenant_id,email,nombre,whatsapp,pass_hash,pass_salt,marketing,alumno_id,creada,ref_code,ref_por,credito) VALUES (?1,?2,?3,?4,?5,?6,?7,0,NULL,?8,?9,'',0)"
+          ).bind(idCu, t.id, email, nombre, whatsapp, hash, salt, hoy(), refCode).run();
+          cu = await env.DB.prepare("SELECT * FROM cuentas WHERE id = ?1").bind(idCu).first();
+        }
+
+        const yaPend = await env.DB.prepare(
+          "SELECT id FROM compras WHERE tenant_id = ?1 AND cuenta_id = ?2 AND estado = 'pendiente'"
+        ).bind(t.id, cu.id).first();
+        if (yaPend) return json({ error: "Ya tienes un pago en verificación con este correo. Entra a tu portal para verlo." }, 409);
+
+        const precios = await loadPrecios(env, t.id);
+        const precio = precios[paquete] || 0;
+        const credito = Number(cu.credito) || 0;
+        const descuento = Math.min(credito, precio);
+        const monto = Math.max(0, precio - descuento);
+        if (!(monto > 0)) return json({ error: "Ese paquete no está disponible. Escríbele a tu profesor." }, 400);
+
+        const cursoDef = cursosDeCfg(await loadConfig(env, t.id))[0];
+
+        // Correo de acceso (best effort): cuenta nueva -> link para crear contraseña (24h);
+        // cuenta existente -> recordatorio de entrar al portal.
+        async function correoAcceso(){
+          try {
+            const portal = MARCA.dominio + "/app/a/" + t.slug;
+            if (esNueva){
+              const token = randHex(32);
+              const tokenHash = await sha256Hex(token);
+              const expira = new Date(Date.now() + 24 * 3600000).toISOString();
+              await env.DB.batch([
+                env.DB.prepare("DELETE FROM reset_tokens WHERE tenant_id = ?1 AND cuenta_id = ?2").bind(t.id, cu.id),
+                env.DB.prepare("INSERT INTO reset_tokens (token_hash, tenant_id, cuenta_id, expira, usado) VALUES (?1, ?2, ?3, ?4, 0)").bind(tokenHash, t.id, cu.id, expira)
+              ]);
+              await enviarCorreo(env, {
+                to: email,
+                subject: "Tu acceso a " + (t.academia || "tu academia"),
+                text: "Hola " + nombre + ". Tu pago quedó registrado en " + (t.academia || "tu academia") + ".\n\nCrea tu contraseña aquí para entrar a tu portal (clases, material y pagos):\n" + MARCA.dominio + "/app/a/" + t.slug + "?reset=" + token + "\n\nEl link vence en 24 horas. Si vence, en el portal puedes pedir otro con 'Olvidé mi contraseña'."
+              });
+            } else {
+              await enviarCorreo(env, {
+                to: email,
+                subject: "Pago registrado — " + (t.academia || "tu academia"),
+                text: "Hola " + nombre + ". Registramos tu pago en " + (t.academia || "tu academia") + ". Míralo en tu portal: " + portal
+              });
+            }
+          } catch (e) { /* sin correo no se rompe el pago */ }
+        }
+
+        // ---- Tarjeta: compra 'iniciada' + checkout de MP a nombre del profe ----
+        if (metodo === "Tarjeta (Mercado Pago)"){
+          const tk = await mpTokenProfe(env, t);
+          if (!tk) return json({ error: "Tu profesor aún no activó el pago con tarjeta. Elige otro método." }, 400);
+          await env.DB.prepare(
+            "DELETE FROM compras WHERE tenant_id = ?1 AND cuenta_id = ?2 AND estado = 'iniciada' AND metodo = 'Tarjeta (Mercado Pago)'"
+          ).bind(t.id, cu.id).run();
+          const compraId = crypto.randomUUID();
+          await env.DB.prepare(
+            "INSERT INTO compras (id,tenant_id,cuenta_id,curso,paquete,monto,descuento,op_numero,estado,fecha,metodo,comprobante,slot_deseado) VALUES (?1,?2,?3,?4,?5,?6,?7,'','iniciada',?8,'Tarjeta (Mercado Pago)','','')"
+          ).bind(compraId, t.id, cu.id, cursoDef, paquete, monto, descuento, hoy()).run();
+          let pref = null;
+          try {
+            const pr = await fetch("https://api.mercadopago.com/checkout/preferences", {
+              method: "POST",
+              headers: { Authorization: "Bearer " + tk, "content-type": "application/json" },
+              body: JSON.stringify({
+                items: [{ title: paquete + " · " + (t.academia || "clases"), quantity: 1, unit_price: monto, currency_id: "PEN" }],
+                external_reference: "btc:" + compraId,
+                notification_url: MARCA.dominio + "/app/api/mp/webhook-alumno?t=" + encodeURIComponent(t.id),
+                back_urls: {
+                  success: MARCA.dominio + "/app/a/" + t.slug + "?pago=ok",
+                  failure: MARCA.dominio + "/app/a/" + t.slug + "?pago=error",
+                  pending: MARCA.dominio + "/app/a/" + t.slug + "?pago=pendiente"
+                },
+                auto_return: "approved",
+                statement_descriptor: String(t.academia || "BATUTA").slice(0, 22),
+                metadata: { batuta_tenant: t.id, batuta_compra: compraId }
+              })
+            });
+            pref = await pr.json().catch(() => null);
+            if (!pr.ok) pref = null;
+          } catch (e) { pref = null; }
+          if (!pref || !pref.init_point){
+            await env.DB.prepare("DELETE FROM compras WHERE id = ?1 AND tenant_id = ?2 AND estado = 'iniciada'").bind(compraId, t.id).run();
+            return json({ error: "No se pudo iniciar el pago con tarjeta. Elige otro método." }, 502);
+          }
+          await correoAcceso();
+          return json({ init_point: pref.init_point });
+        }
+
+        // ---- Métodos manuales: compra 'pendiente' con captura opcional ----
+        const comprobante = typeof b.comprobante === "string" ? b.comprobante : "";
+        let comprobanteKey = "";
+        if (comprobante && env.RECURSOS_R2){
+          try {
+            const b64 = comprobante.indexOf(",") >= 0 ? comprobante.slice(comprobante.indexOf(",") + 1) : comprobante;
+            const bytes = Uint8Array.from(atob(b64), ch => ch.charCodeAt(0));
+            if (bytes.length > 0 && bytes.length <= 5000000){
+              comprobanteKey = crypto.randomUUID() + ".jpg";
+              await env.RECURSOS_R2.put(comprobanteKey, bytes, { httpMetadata: { contentType: "image/jpeg" } });
+            }
+          } catch (e) { comprobanteKey = ""; }
+        }
+        await env.DB.prepare(
+          "INSERT INTO compras (id,tenant_id,cuenta_id,curso,paquete,monto,descuento,op_numero,estado,fecha,metodo,comprobante,slot_deseado) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,'pendiente',?9,?10,?11,'')"
+        ).bind(crypto.randomUUID(), t.id, cu.id, cursoDef, paquete, monto, descuento, String(b.op_numero || "").trim().slice(0, 40), hoy(), metodo, comprobanteKey).run();
+        try { await avisarPush(env, t.id, { title: "Pago por confirmar", paquete, monto }); } catch (e) {}
+        await correoAcceso();
+        return json({ ok: true, mensaje: esNueva
+          ? "Tu pago quedó registrado. Revisa tu correo (" + email + "): te mandamos el link para crear tu contraseña y entrar a tu portal."
+          : "Tu pago quedó registrado. Tu profesor lo confirma y lo verás en tu portal." });
       }
 
       /* ============================================================

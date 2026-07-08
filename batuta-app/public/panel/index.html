@@ -356,6 +356,8 @@
           <input id="linkAlumnosBox" type="text" readonly style="flex:1;font-family:var(--mono);font-size:12.5px;" />
           <button class="btn ghost sm" id="btnCopiarLinkAlumnos" style="flex:0 0 auto;">Copiar</button>
         </div>
+        <div class="hint" style="margin:14px 0 6px;">O manda un <b>link de cobro directo</b> por WhatsApp: el alumno paga sin registrarse y su cuenta se crea sola.</div>
+        <div id="linksCobro" style="display:flex;gap:8px;flex-wrap:wrap;"></div>
       </div>
     </div>
     <div class="group"><h2>// Hoy</h2><div class="grid cards" id="resHoy"></div></div>
@@ -1012,6 +1014,25 @@ function pintarLinkAlumnos(){
   var link = location.origin + "/app/a/" + TENANT_SLUG;
   if(box) box.value=link;
   var ft=el("ftLinkAlumnos"); if(ft) ft.textContent=link;
+  // Chips de link de cobro directo por paquete (pago sin registro previo)
+  try{
+    var cont=el("linksCobro");
+    if(cont && db && db.precios){
+      var pks=Object.keys(PAQUETES).filter(function(pk){ return (db.precios[pk]||0)>0; });
+      cont.innerHTML = pks.length ? "" : '<span class="hint">Pon tus precios en Ajustes y aquí salen los links.</span>';
+      pks.forEach(function(pk){
+        var b=document.createElement("button");
+        b.className="btn ghost sm"; b.type="button";
+        b.textContent="Copiar: "+pk+" (S/ "+db.precios[pk]+")";
+        b.addEventListener("click",function(){
+          var u=link+"/pagar?p="+encodeURIComponent(pk);
+          if(navigator.clipboard&&navigator.clipboard.writeText){ navigator.clipboard.writeText(u).then(function(){ toast("Link de cobro copiado"); }); }
+          else { prompt("Copia el link:", u); }
+        });
+        cont.appendChild(b);
+      });
+    }
+  }catch(e){}
 }
 var _btnCopiarLinkAlumnos = el("btnCopiarLinkAlumnos");
 if(_btnCopiarLinkAlumnos) _btnCopiarLinkAlumnos.addEventListener("click",function(){
