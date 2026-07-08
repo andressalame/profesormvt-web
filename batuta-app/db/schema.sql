@@ -2,6 +2,27 @@
 -- Consolidado a partir de las tablas reales que usa el core de MVT (worker/index.js + db/schema*.sql),
 -- con tenant_id agregado desde el día 1. Ver batuta-app/SPEC.md.
 
+-- ============ PROFESORES (multi-profesor Fase 0, 07-jul-2026) ============
+-- 1 dueño + N profesores por tenant (academia). Se crea/pobla vía su/migrar-profesores.
+-- Las columnas profesor_id (nullable) se agregan por ALTER idempotente en ensureMultiprofesorSchema
+-- a: alumnos, reservas, disponibilidad, grupos, compras. Mientras sean NULL, todo corre por tenant_id.
+CREATE TABLE IF NOT EXISTS profesores (
+  id           TEXT PRIMARY KEY,
+  tenant_id    TEXT NOT NULL,
+  nombre       TEXT NOT NULL,
+  email        TEXT NOT NULL,
+  whatsapp     TEXT DEFAULT '',
+  foto         TEXT DEFAULT '',
+  pass_hash    TEXT DEFAULT '',
+  pass_salt    TEXT DEFAULT '',
+  rol          TEXT DEFAULT 'profesor',   -- dueno | profesor
+  estado       TEXT DEFAULT 'activo',     -- activo | invitado | suspendido
+  invite_token TEXT DEFAULT '',
+  creado       TEXT DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS idx_profesores_tenant ON profesores (tenant_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_profesores_email ON profesores (tenant_id, email);
+
 -- ============ TENANTS (una fila = una academia/profesor) ============
 CREATE TABLE IF NOT EXISTS tenants (
   id           TEXT PRIMARY KEY,

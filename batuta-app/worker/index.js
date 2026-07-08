@@ -1073,6 +1073,64 @@ async function assetConSeguridad(resp){
    ═══════════════════════════════════════════════════════════════════════════ */
 const DEMO_EMAIL = "demo@batuta.lat";
 
+/* ═══════════════════════════════════════════════════════════════════════════
+   MULTI-PROFESOR — Fase 0: migración ADDITIVA (07-jul-2026).
+   Crea la tabla `profesores` y las columnas `profesor_id` (nullable, default NULL).
+   NO cambia ningún endpoint: mientras profesor_id sea NULL en todas las filas,
+   toda query sigue funcionando por tenant_id como hoy. Es invisible y compatible
+   hacia atrás por construcción. El backfill (migrarProfesores) puebla profesor_id
+   con el dueño de cada tenant; la activación real del multi-profesor es una fase
+   posterior que re-scopea los endpoints. Diseño: "Batuta - diseño multi-profesor".
+   ═══════════════════════════════════════════════════════════════════════════ */
+async function ensureMultiprofesorSchema(env){
+  // Tabla de profesores: 1 dueño + N profesores por tenant (academia).
+  try {
+    await env.DB.prepare(
+      "CREATE TABLE IF NOT EXISTS profesores (" +
+      "id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, nombre TEXT NOT NULL, email TEXT NOT NULL, " +
+      "whatsapp TEXT DEFAULT '', foto TEXT DEFAULT '', pass_hash TEXT DEFAULT '', pass_salt TEXT DEFAULT '', " +
+      "rol TEXT DEFAULT 'profesor', estado TEXT DEFAULT 'activo', invite_token TEXT DEFAULT '', creado TEXT DEFAULT '')"
+    ).run();
+  } catch (e) {}
+  try { await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_profesores_tenant ON profesores (tenant_id)").run(); } catch (e) {}
+  try { await env.DB.prepare("CREATE UNIQUE INDEX IF NOT EXISTS idx_profesores_email ON profesores (tenant_id, email)").run(); } catch (e) {}
+  // Columnas profesor_id (nullable) en las tablas que se scopean por profesor.
+  for (const tabla of ["alumnos", "reservas", "disponibilidad", "grupos", "compras"]){
+    try { await env.DB.prepare("ALTER TABLE " + tabla + " ADD COLUMN profesor_id TEXT DEFAULT NULL").run(); } catch (e) { /* ya existe */ }
+  }
+}
+
+/* Backfill idempotente: por cada tenant sin dueño, crea 1 profesor rol='dueno' copiando
+   los datos del tenant, y setea profesor_id = duenoId en sus filas huérfanas (profesor_id NULL).
+   Correr por el superadmin (su/migrar-profesores). Seguro de correr múltiples veces. */
+async function migrarProfesores(env){
+  await ensureMultiprofesorSchema(env);
+  const { results: tenants } = await env.DB.prepare("SELECT id, profe_nombre, email, whatsapp, pass_hash, pass_salt FROM tenants").all();
+  let duenosCreados = 0, filasAtadas = 0;
+  for (const t of (tenants || [])){
+    let dueno = await env.DB.prepare("SELECT id FROM profesores WHERE tenant_id = ?1 AND rol = 'dueno'").bind(t.id).first();
+    if (!dueno){
+      const pid = crypto.randomUUID();
+      try {
+        await env.DB.prepare(
+          "INSERT INTO profesores (id, tenant_id, nombre, email, whatsapp, pass_hash, pass_salt, rol, estado, creado) " +
+          "VALUES (?1,?2,?3,?4,?5,?6,?7,'dueno','activo',?8)"
+        ).bind(pid, t.id, t.profe_nombre || "Dueño", t.email, t.whatsapp || "", t.pass_hash || "", t.pass_salt || "", new Date().toISOString()).run();
+        dueno = { id: pid };
+        duenosCreados++;
+      } catch (e) { continue; }
+    }
+    // Atar las filas huérfanas (profesor_id NULL) de este tenant al dueño.
+    for (const tabla of ["alumnos", "reservas", "disponibilidad", "grupos", "compras"]){
+      try {
+        const r = await env.DB.prepare("UPDATE " + tabla + " SET profesor_id = ?1 WHERE tenant_id = ?2 AND profesor_id IS NULL").bind(dueno.id, t.id).run();
+        filasAtadas += (r.meta && r.meta.changes) || 0;
+      } catch (e) {}
+    }
+  }
+  return { tenants: (tenants || []).length, duenosCreados, filasAtadas };
+}
+
 async function resetDemo(env){
   let t = await env.DB.prepare("SELECT * FROM tenants WHERE email = ?1").bind(DEMO_EMAIL).first();
   if (!t){
@@ -1416,6 +1474,18 @@ export default {
         if (path === "/app/api/su/demo-reset" && request.method === "POST"){
           const idDemo = await resetDemo(env);
           return json({ ok: true, tenant_id: idDemo });
+        }
+        // Multi-profesor Fase 0: migración additiva + backfill. Idempotente. No cambia el panel.
+        if (path === "/app/api/su/migrar-profesores" && request.method === "POST"){
+          const r = await migrarProfesores(env);
+          return json({ ok: true, resultado: r });
+        }
+        if (path === "/app/api/su/profesores" && request.method === "GET"){
+          await ensureMultiprofesorSchema(env);
+          const { results } = await env.DB.prepare(
+            "SELECT p.id, p.tenant_id, t.academia, p.nombre, p.email, p.rol, p.estado FROM profesores p LEFT JOIN tenants t ON t.id = p.tenant_id ORDER BY p.tenant_id, p.rol DESC"
+          ).all();
+          return json({ profesores: results || [] });
         }
         if (path === "/app/api/su/tenants" && request.method === "GET"){
           const { results } = await env.DB.prepare(
@@ -1921,7 +1991,8 @@ export default {
           headers: {
             "content-type": ct,
             "content-disposition": (obj.httpMetadata && obj.httpMetadata.contentDisposition) || "inline",
-            "cache-control": "public, max-age=3600"
+            "cache-control": "public, max-age=3600",
+            "x-content-type-options": "nosniff"
           }
         });
       }
