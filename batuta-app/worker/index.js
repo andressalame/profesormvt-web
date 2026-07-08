@@ -475,7 +475,7 @@ async function correoBienvenidaAlumno(env, tenant, cu, compra){
   const html =
     '<div style="font-family:Arial,Helvetica,sans-serif;max-width:480px;margin:0 auto;color:#1a1a1a;font-size:15px;line-height:1.6">' +
       '<p>Bienvenido' + (nombre ? ' ' + nombre : '') + '.</p>' +
-      '<p>Tu paquete <b>' + esc(nombrePaquete) + '</b> ya esta activo en ' + esc(academia) + '. Para arrancar:</p>' +
+      '<p>Tu <b>' + esc(nombrePaquete) + '</b> ya esta activo en ' + esc(academia) + '. Para arrancar:</p>' +
       '<ul style="padding-left:18px">' +
         '<li><b>Tu portal:</b> <a href="' + portal + '">' + portal + '</a>, ahi ves tus clases, tu material y tu avance.</li>' +
         '<li><b>Agenda tu primera clase:</b> escribe por <a href="' + wa + '">WhatsApp</a>.</li>' +

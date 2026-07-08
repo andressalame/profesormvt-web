@@ -2432,7 +2432,7 @@ function refrescarPushEstado(){
     }).catch(function(){});
 }
 
-el("btnPushOn").addEventListener("click",function(){
+var _btnPushOn=el("btnPushOn"); if(_btnPushOn) _btnPushOn.addEventListener("click",function(){
   if(!('serviceWorker' in navigator) || !('PushManager' in window)){ toast("Este navegador no soporta push"); return; }
   if(!db.vapid_public){ toast("Falta la clave VAPID — recarga e intenta de nuevo"); return; }
   navigator.serviceWorker.register('/admin/crm/sw.js').then(function(reg){
@@ -2450,7 +2450,7 @@ el("btnPushOn").addEventListener("click",function(){
   }).catch(function(e){ toast("No se pudo activar: "+((e&&e.message)||"error")); });
 });
 
-el("btnPushTest").addEventListener("click",function(){
+var _btnPushTest=el("btnPushTest"); if(_btnPushTest) _btnPushTest.addEventListener("click",function(){
   apiPost('/app/api/admin/push/probar', {})
     .then(function(d){ toast("Push enviado a "+((d&&d.enviados)||0)+" dispositivos"); })
     .catch(function(e){ toast((e&&e.message)||"No se pudo enviar"); });

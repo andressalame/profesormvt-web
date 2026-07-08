@@ -541,6 +541,7 @@
     <!-- ===== RECURSOS ===== -->
     <section class="view" id="v-recursos">
       <div class="eyebrow">// RECURSOS</div>
+      <h1>Tu <em>material</em></h1>
       <hr class="rule" />
       <div id="recList"></div>
       <div class="empty hidden" id="recVacio">Pronto subiré material aquí — atento al chat.</div>
@@ -948,7 +949,7 @@ function renderComprar(){
     show("bPendC");
   } else hide("bPendC");
 
-  $("tiers").innerHTML = TIERS.filter(function(t){ return ME.precios && (t.pk in ME.precios) && (!t.primera || !ME.alumno); }).map(function(t){
+  var tiersHtml = TIERS.filter(function(t){ return ME.precios && (t.pk in ME.precios) && (!t.primera || !ME.alumno); }).map(function(t){
     var c = calc(t.pk);
     var precioHtml = c.desc>0
       ? '<span class="strike">S/ '+c.precio+'</span><span class="cur">S/</span>'+c.final
@@ -963,6 +964,10 @@ function renderComprar(){
       '<button class="btn" data-comprar="'+t.pk+'"'+(ME.compraPendiente?' disabled':'')+'>Comprar →</button>'+
     '</div>';
   }).join("");
+  // Estado vacío: si el profe aún no publicó precios, el alumno vería una caja en blanco.
+  // Le explicamos qué pasa y a quién escribir, en vez de dejarlo perdido.
+  $("tiers").innerHTML = tiersHtml || '<div class="empty" style="grid-column:1/-1;text-align:center;padding:32px 16px;opacity:.85">'+
+    'Tu profesor todavía no publicó los paquetes de clases aquí.<br>Escríbele y los coordinan directo.</div>';
 }
 $("tiers").addEventListener("click",function(e){
   var b=e.target.closest("[data-comprar]");
@@ -1260,6 +1265,12 @@ function renderCuenta(){
         '<td>'+monto+'</td><td><span class="pill '+pc+'">'+esc(p.estado||"")+'</span></td></tr>';
     }).join("");
   } else hide("ctaPagos");
+
+  // Avisos push: el card nace oculto; se muestra solo si el navegador soporta push
+  // Y la academia tiene la clave VAPID configurada. Sin esto, la opcion nunca aparecia.
+  var vapidOk = !!(ME && ME.config && ME.config.vapid_public);
+  if(pushSoportado() && vapidOk){ show("ctaAvisosCard"); renderAvisos(); }
+  else hide("ctaAvisosCard");
 }
 
 /* ---------- AVISOS PUSH (alumno) ---------- */
@@ -1546,7 +1557,9 @@ function cargarSlots(){
     AG_SLOTS = (d && d.slots) || [];
     pintarSlots();
   }).catch(function(){
-    $("agSlots").innerHTML = '<p class="note" style="margin:0">No pude cargar los horarios. Reintenta.</p>';
+    $("agSlots").innerHTML = '<p class="note" style="margin:0 0 8px">No pude cargar los horarios.</p>'+
+      '<button class="btn ghost" id="agReintentar" type="button">Reintentar</button>';
+    var rb=$("agReintentar"); if(rb) rb.onclick=cargarSlots;
   }).finally(function(){ AG_CARGANDO=false; });
 }
 
