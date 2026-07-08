@@ -2742,10 +2742,8 @@ export default {
             scotia_cuenta: config.scotia_cuenta, scotia_cci: config.scotia_cci,
             crypto_moneda: config.crypto_moneda, crypto_red: config.crypto_red, crypto_wallet: config.crypto_wallet,
             vapid_public: env.VAPID_PUBLIC_KEY || "",
-            // Tarjeta del alumno: solo si el marketplace esta configurado Y el profe conecto su MP
-            mp_tarjeta: mpMarketplaceOn(env)
-              ? !!(await env.DB.prepare("SELECT mp_access_token FROM tenants WHERE id = ?1").bind(tid).first().then(r => r && r.mp_access_token).catch(() => false))
-              : false
+            // Tarjeta del alumno: si el profe conecto su cuenta de MP (el APP_SECRET solo hace falta para el OAuth)
+            mp_tarjeta: !!(await env.DB.prepare("SELECT mp_access_token FROM tenants WHERE id = ?1").bind(tid).first().then(r => r && r.mp_access_token).catch(() => false))
           }
         });
       }
@@ -2870,9 +2868,10 @@ export default {
         return Response.redirect(MARCA.dominio + "/app/panel?mp=ok", 302);
       }
 
-      // El ALUMNO inicia el pago con tarjeta: compra 'iniciada' + preferencia a nombre del PROFE
+      // El ALUMNO inicia el pago con tarjeta: compra 'iniciada' + preferencia a nombre del PROFE.
+      // OJO: aqui NO se exige mpMarketplaceOn (el APP_SECRET es solo para el OAuth);
+      // basta con que el profe tenga su token conectado.
       if (path === "/app/api/mp/crear-alumno" && request.method === "POST"){
-        if (!mpMarketplaceOn(env)) return json({ error: "El pago con tarjeta no esta disponible por ahora. Paga por Yape/Plin." }, 501);
         const cu = await cuentaDeSesion(env, request);
         if (!cu) return json({ error: "Sesion expirada" }, 401);
         const tid = cu.tenant_id;
