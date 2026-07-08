@@ -711,7 +711,7 @@ var REF_URL = "";
 try{ REF_URL = (new URLSearchParams(location.search).get("ref") || "").trim().toUpperCase(); }catch(e){}
 
 function $(id){ return document.getElementById(id); }
-function esc(s){ return String(s==null?"":s).replace(/[&<>"]/g,function(m){return {"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[m];}); }
+function esc(s){ return String(s==null?"":s).replace(/[&<>"']/g,function(m){return {"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[m];}); }
 function show(id){ $(id).classList.remove("hidden"); }
 function hide(id){ $(id).classList.add("hidden"); }
 function getTok(){ try{ return localStorage.getItem(KEY); }catch(e){ return null; } }

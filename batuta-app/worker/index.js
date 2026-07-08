@@ -351,7 +351,9 @@ async function consultarPreapprovalMP(env, preapprovalId){
    data.id va en minusculas). v1 = HMAC-SHA256(secret, manifest) en hex. Sin MP_WEBHOOK_SECRET
    configurado se acepta todo (comportamiento anterior: la verificacion server-to-server queda igual). */
 async function validarFirmaMP(env, request, url){
-  if (!env.MP_WEBHOOK_SECRET) return true;
+  // Fail-CLOSED: sin secreto configurado NO se acepta el webhook (antes era fail-open).
+  // El secreto MP_WEBHOOK_SECRET está cargado en prod; esto solo endurece el borde.
+  if (!env.MP_WEBHOOK_SECRET) return false;
   const xSig = request.headers.get("x-signature") || "";
   const xReqId = request.headers.get("x-request-id") || "";
   let ts = "", v1 = "";
@@ -617,6 +619,15 @@ async function responderChatbot(env, tenant, mensajes){
     const texto = (resp && (resp.response || "")).trim();
     return texto || fallback;
   } catch (e) { return fallback; }
+}
+
+/* IP REAL del cliente. El tráfico llega por el proxy de Vercel, así que CF-Connecting-IP
+   es la IP de egress compartida de Vercel (el rate-limit por esa clave sería global e inútil).
+   La IP real del visitante viaja en x-forwarded-for (primer valor) / x-real-ip. (07-jul-2026) */
+function clientIp(request){
+  const xff = request.headers.get("x-forwarded-for") || "";
+  if (xff){ const first = xff.split(",")[0].trim(); if (first) return first; }
+  return request.headers.get("x-real-ip") || request.headers.get("cf-connecting-ip") || "";
 }
 
 async function chatbotPasoTope(env, ip, limite){
@@ -1019,8 +1030,24 @@ function paginaLanding(){
   return paginaBase("Batuta", cuerpo, script);
 }
 
+/* Headers de seguridad para todo lo que sirve HTML (páginas inline + panel/portal como assets):
+   anti-clickjacking (el panel dentro de un iframe ajeno = robo de sesión por UI), anti-sniff,
+   referrer discreto y HSTS. CSP permisiva con los estilos/scripts inline que el panel ya usa. */
+const SEC_HEADERS = {
+  "x-frame-options": "SAMEORIGIN",
+  "x-content-type-options": "nosniff",
+  "referrer-policy": "strict-origin-when-cross-origin",
+  "strict-transport-security": "max-age=31536000; includeSubDomains",
+  "content-security-policy": "frame-ancestors 'self'",
+};
 function htmlResponse(html){
-  return new Response(html, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" } });
+  return new Response(html, { headers: Object.assign({ "content-type": "text/html; charset=utf-8", "cache-control": "no-store" }, SEC_HEADERS) });
+}
+/* Envuelve una respuesta de asset (panel/portal) para inyectar los headers de seguridad. */
+async function assetConSeguridad(resp){
+  const h = new Headers(resp.headers);
+  for (const [k, v] of Object.entries(SEC_HEADERS)) h.set(k, v);
+  return new Response(resp.body, { status: resp.status, statusText: resp.statusText, headers: h });
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -1223,7 +1250,7 @@ export default {
     }
     if (path === "/app/demo" && request.method === "GET"){
       // Demo pública: sesión directa al tenant Estudio Sonata (se resetea cada mañana).
-      const ipDemo = request.headers.get("CF-Connecting-IP") || "";
+      const ipDemo = clientIp(request);
       if (ipDemo && await chatbotPasoTope(env, "demo:" + ipDemo, 20)){
         return htmlResponse(paginaBase("Demo — Batuta", "<h1>Un momento</h1><p class=\"sub\">Demasiadas entradas a la demo desde tu red. Intenta de nuevo en un rato.</p>", ""));
       }
@@ -1239,10 +1266,10 @@ export default {
         "try{localStorage.setItem('batuta_t','" + tokenDemo + "');}catch(e){};location.replace('/app/panel');"));
     }
     if (path === "/app/panel" && request.method === "GET"){
-      return env.ASSETS ? env.ASSETS.fetch(new Request(new URL("/panel/index.html", url), request)) : json({ error: "No encontrado" }, 404);
+      return env.ASSETS ? assetConSeguridad(await env.ASSETS.fetch(new Request(new URL("/panel/index.html", url), request))) : json({ error: "No encontrado" }, 404);
     }
     if (path.startsWith("/app/a/") && request.method === "GET"){
-      return env.ASSETS ? env.ASSETS.fetch(new Request(new URL("/alumnos/index.html", url), request)) : json({ error: "No encontrado" }, 404);
+      return env.ASSETS ? assetConSeguridad(await env.ASSETS.fetch(new Request(new URL("/alumnos/index.html", url), request))) : json({ error: "No encontrado" }, 404);
     }
 
     if (!path.startsWith("/app/api/")){
@@ -1266,6 +1293,12 @@ export default {
         try { body = await request.json(); } catch (e) { return json({ error: "JSON invalido" }, 400); }
         const email = String(body.email || "").trim().toLowerCase().slice(0, 200);
         if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return json({ error: "Email invalido" }, 400);
+        // Rate-limit: este endpoint dispara un correo Resend real → sin tope es un vector de spam
+        // que quema la cuota. 10/hora por IP; degrada abierto solo si no hay IP (no rompe la captura).
+        const ipLm = clientIp(request);
+        if (ipLm && await chatbotPasoTope(env, "lm:" + ipLm, 10)){
+          return json({ error: "Demasiadas solicitudes. Intenta en un rato." }, 429);
+        }
         const origen = String(body.origen || "excel-blog").slice(0, 40);
         try {
           await env.DB.prepare("CREATE TABLE IF NOT EXISTS lead_magnet (email TEXT PRIMARY KEY, origen TEXT DEFAULT '', fecha TEXT DEFAULT '')").run();
@@ -1294,7 +1327,7 @@ export default {
            lo levanta con copy propio) y avisa a Andres al instante. ---------- */
       if (path === "/app/api/registro-abandono" && request.method === "POST"){
         try {
-          const ipRa = request.headers.get("CF-Connecting-IP") || "";
+          const ipRa = clientIp(request);
           if (ipRa && await chatbotPasoTope(env, "rab:" + ipRa, 8)) return json({ ok: true });
           let body = {};
           try { body = await request.json(); } catch (e) { return json({ error: "JSON invalido" }, 400); }
@@ -1470,7 +1503,7 @@ export default {
          REGISTRO / LOGIN / LOGOUT / ME de TENANT (profesor)
          ============================================================ */
       if (path === "/app/api/t/registro" && request.method === "POST"){
-        const ip = request.headers.get("CF-Connecting-IP") || "";
+        const ip = clientIp(request);
         if (ip && await chatbotPasoTope(env, "treg:" + ip, 5)){
           return json({ error: "Demasiados intentos. Espera un rato." }, 429);
         }
@@ -1542,7 +1575,7 @@ export default {
       }
 
       if (path === "/app/api/t/login" && request.method === "POST"){
-        const ip = request.headers.get("CF-Connecting-IP") || "";
+        const ip = clientIp(request);
         if (ip && await chatbotPasoTope(env, "tlog:" + ip, 10)){
           return json({ error: "Demasiados intentos. Espera un rato." }, 429);
         }
@@ -1561,6 +1594,16 @@ export default {
         }
         const token = await crearSesion(env, "T:" + t.id);
         return json({ ok: true, token, slug: t.slug });
+      }
+
+      // El panel del profesor llama a /app/api/admin/logout: invalida la sesión server-side
+      // (antes ese endpoint no existía y la sesión quedaba viva pese al "cerrar sesión").
+      if (path === "/app/api/admin/logout" && request.method === "POST"){
+        const auth = request.headers.get("authorization") || "";
+        if (auth.startsWith("Bearer ")){
+          try { await env.DB.prepare("DELETE FROM sesiones WHERE token = ?1").bind(auth.slice(7).trim()).run(); } catch (e) {}
+        }
+        return json({ ok: true });
       }
 
       if (path === "/app/api/t/activacion" && request.method === "GET"){
@@ -1794,7 +1837,7 @@ export default {
          salvo que RESEND este configurado (degradacion con gracia).
          ============================================================ */
       if (path === "/app/api/password/olvide" && request.method === "POST"){
-        const ip = request.headers.get("CF-Connecting-IP") || "";
+        const ip = clientIp(request);
         if (ip && await chatbotPasoTope(env, "pwr:" + ip, 5)){
           return json({ ok: true });
         }
@@ -1905,6 +1948,10 @@ export default {
          REGISTRO / LOGIN / LOGOUT de ALUMNO (via slug o sesion)
          ============================================================ */
       if (path === "/app/api/registro" && request.method === "POST"){
+        const ipReg = clientIp(request);
+        if (ipReg && await chatbotPasoTope(env, "areg:" + ipReg, 10)){
+          return json({ error: "Demasiados intentos. Espera un rato." }, 429);
+        }
         const b = await request.json().catch(() => ({}));
         const slug = String(b.slug || url.searchParams.get("slug") || "").trim();
         const t = await env.DB.prepare("SELECT * FROM tenants WHERE slug = ?1").bind(slug).first();
@@ -1939,6 +1986,10 @@ export default {
       }
 
       if (path === "/app/api/login" && request.method === "POST"){
+        const ipLog = clientIp(request);
+        if (ipLog && await chatbotPasoTope(env, "alog:" + ipLog, 10)){
+          return json({ error: "Demasiados intentos. Espera un rato." }, 429);
+        }
         const b = await request.json().catch(() => ({}));
         const slug = String(b.slug || url.searchParams.get("slug") || "").trim();
         const t = await env.DB.prepare("SELECT * FROM tenants WHERE slug = ?1").bind(slug).first();
@@ -2344,7 +2395,7 @@ export default {
         const who = await authChat(env, request);
         if (!who) return json({ error: "Sesion expirada" }, 401);
 
-        const ipOia = request.headers.get("CF-Connecting-IP") || "";
+        const ipOia = clientIp(request);
         if (ipOia && await chatbotPasoTope(env, "oia:" + ipOia, 30)){
           return json({ error: "Demasiados mensajes desde tu conexion. Intenta en un rato." }, 429);
         }
@@ -2385,7 +2436,7 @@ export default {
         if (!mensajes.length || mensajes[mensajes.length - 1].role !== "user"){
           return json({ error: "Mensaje vacio." }, 400);
         }
-        const ip = request.headers.get("CF-Connecting-IP") || "";
+        const ip = clientIp(request);
         if (await chatbotPasoTope(env, ip)){
           return json({ reply: "Recibiste varias respuestas seguidas. Escribele directo a tu profesor por WhatsApp." });
         }
