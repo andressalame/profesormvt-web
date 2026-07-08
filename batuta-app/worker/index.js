@@ -163,6 +163,51 @@ async function ensureTenantsSchema(env){
     try { await env.DB.prepare("ALTER TABLE tenants ADD COLUMN " + col + " TEXT DEFAULT ''").run(); } catch (e) { /* ya existe */ }
   }
 }
+
+/* ---------- Mercado Pago del PROFE (marketplace OAuth) ----------
+   La plata del alumno cae DIRECTO en la cuenta de Mercado Pago de cada profe;
+   Batuta nunca la toca (no hay agregación de pagos, no hay tema SUNAT).
+   Cada profe conecta SU cuenta MP con un clic (OAuth) desde su panel.
+   Requiere MP_APP_ID + MP_APP_SECRET (la app de Andrés en el panel de
+   developers de MP, con redirect /app/api/mp/oauth/callback).
+   Sin esos secrets -> todo degrada con gracia (el botón no aparece). */
+const MP_OAUTH_REDIRECT = "https://batuta.lat/app/api/mp/oauth/callback";
+function mpMarketplaceOn(env){ return !!(env.MP_APP_ID && env.MP_APP_SECRET && env.ADMIN_TOKEN); }
+async function ensureMpProfeSchema(env){
+  for (const col of ["mp_access_token", "mp_refresh_token", "mp_user_id", "mp_public_key"]){
+    try { await env.DB.prepare("ALTER TABLE tenants ADD COLUMN " + col + " TEXT DEFAULT ''").run(); } catch (e) { /* ya existe */ }
+  }
+  try { await env.DB.prepare("ALTER TABLE tenants ADD COLUMN mp_expires_at INTEGER DEFAULT 0").run(); } catch (e) { /* ya existe */ }
+}
+async function mpOauthToken(env, params){
+  try {
+    const r = await fetch("https://api.mercadopago.com/oauth/token", {
+      method: "POST",
+      headers: { "content-type": "application/json", accept: "application/json" },
+      body: JSON.stringify(Object.assign({ client_id: env.MP_APP_ID, client_secret: env.MP_APP_SECRET }, params))
+    });
+    const data = await r.json().catch(() => null);
+    if (!r.ok || !data || !data.access_token) return null;
+    return data;
+  } catch (e) { return null; }
+}
+async function mpGuardarTokens(env, tenantId, data){
+  const exp = Date.now() + (Number(data.expires_in) || 15552000) * 1000; // default ~6 meses
+  await env.DB.prepare(
+    "UPDATE tenants SET mp_access_token = ?1, mp_refresh_token = ?2, mp_user_id = ?3, mp_public_key = ?4, mp_expires_at = ?5 WHERE id = ?6"
+  ).bind(data.access_token, data.refresh_token || "", String(data.user_id || ""), data.public_key || "", exp, tenantId).run();
+}
+/* Access token vigente del profe; refresca solo si vence en <15 dias. */
+async function mpTokenProfe(env, tenant){
+  if (!tenant || !tenant.mp_access_token) return null;
+  const exp = Number(tenant.mp_expires_at) || 0;
+  if (exp && exp - Date.now() < 15 * 86400000 && tenant.mp_refresh_token && mpMarketplaceOn(env)){
+    const data = await mpOauthToken(env, { grant_type: "refresh_token", refresh_token: tenant.mp_refresh_token });
+    if (data){ await mpGuardarTokens(env, tenant.id, data); return data.access_token; }
+  }
+  if (exp && exp < Date.now()) return null; // vencido y sin refresh posible
+  return tenant.mp_access_token;
+}
 function esc(s){
   return String(s == null ? "" : s)
     .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
@@ -2555,7 +2600,11 @@ export default {
             bcp_cuenta: config.bcp_cuenta, bcp_cci: config.bcp_cci,
             scotia_cuenta: config.scotia_cuenta, scotia_cci: config.scotia_cci,
             crypto_moneda: config.crypto_moneda, crypto_red: config.crypto_red, crypto_wallet: config.crypto_wallet,
-            vapid_public: env.VAPID_PUBLIC_KEY || ""
+            vapid_public: env.VAPID_PUBLIC_KEY || "",
+            // Tarjeta del alumno: solo si el marketplace esta configurado Y el profe conecto su MP
+            mp_tarjeta: mpMarketplaceOn(env)
+              ? !!(await env.DB.prepare("SELECT mp_access_token FROM tenants WHERE id = ?1").bind(tid).first().then(r => r && r.mp_access_token).catch(() => false))
+              : false
           }
         });
       }
@@ -2621,7 +2670,184 @@ export default {
         return json({ ok: true, monto, descuento });
       }
 
-      /* ----- Mercado Pago: apagado en v0, responde 501 ----- */
+      /* ============================================================
+         TARJETA DEL ALUMNO (marketplace Mercado Pago del PROFE)
+         La plata cae directo en la cuenta MP del profe. (08-jul-2026)
+         ============================================================ */
+
+      // El profe consulta su estado de conexion MP (panel > Ajustes)
+      if (path === "/app/api/admin/mp/estado" && request.method === "GET"){
+        const t = await tenantDeSesion(env, request);
+        if (!t) return json({ error: "Sesion expirada" }, 401);
+        await ensureMpProfeSchema(env);
+        const row = await env.DB.prepare("SELECT mp_access_token, mp_user_id FROM tenants WHERE id = ?1").bind(t.id).first();
+        return json({
+          disponible: mpMarketplaceOn(env),
+          conectado: !!(row && row.mp_access_token),
+          mp_user_id: (row && row.mp_user_id) || ""
+        });
+      }
+
+      // El profe inicia la conexion de SU cuenta MP (OAuth)
+      if (path === "/app/api/admin/mp/conectar" && request.method === "POST"){
+        if (!mpMarketplaceOn(env)) return json({ error: "El pago con tarjeta aun no esta configurado en Batuta. Pronto." }, 501);
+        const t = await tenantDeSesion(env, request);
+        if (!t) return json({ error: "Sesion expirada" }, 401);
+        await ensureMpProfeSchema(env);
+        const state = await firmarState(env, { k: "mpoauth", t: t.id, exp: Date.now() + 30 * 60000 });
+        const u = "https://auth.mercadopago.com.pe/authorization?" + new URLSearchParams({
+          client_id: env.MP_APP_ID, response_type: "code", platform_id: "mp",
+          state, redirect_uri: MP_OAUTH_REDIRECT
+        }).toString();
+        return json({ url: u });
+      }
+
+      // El profe desconecta su cuenta MP
+      if (path === "/app/api/admin/mp/desconectar" && request.method === "POST"){
+        const t = await tenantDeSesion(env, request);
+        if (!t) return json({ error: "Sesion expirada" }, 401);
+        await ensureMpProfeSchema(env);
+        await env.DB.prepare(
+          "UPDATE tenants SET mp_access_token = '', mp_refresh_token = '', mp_user_id = '', mp_public_key = '', mp_expires_at = 0 WHERE id = ?1"
+        ).bind(t.id).run();
+        return json({ ok: true });
+      }
+
+      // Callback del OAuth de MP (viene de Mercado Pago con ?code&state)
+      if (path === "/app/api/mp/oauth/callback" && request.method === "GET"){
+        if (!mpMarketplaceOn(env)) return json({ error: "No disponible." }, 501);
+        const st = await verificarState(env, url.searchParams.get("state") || "");
+        if (!st || st.k !== "mpoauth" || !st.t){
+          return Response.redirect(MARCA.dominio + "/app/panel?mp=error", 302);
+        }
+        const code = url.searchParams.get("code") || "";
+        if (!code) return Response.redirect(MARCA.dominio + "/app/panel?mp=cancelado", 302);
+        await ensureMpProfeSchema(env);
+        const data = await mpOauthToken(env, { grant_type: "authorization_code", code, redirect_uri: MP_OAUTH_REDIRECT });
+        if (!data) return Response.redirect(MARCA.dominio + "/app/panel?mp=error", 302);
+        await mpGuardarTokens(env, st.t, data);
+        return Response.redirect(MARCA.dominio + "/app/panel?mp=ok", 302);
+      }
+
+      // El ALUMNO inicia el pago con tarjeta: compra 'iniciada' + preferencia a nombre del PROFE
+      if (path === "/app/api/mp/crear-alumno" && request.method === "POST"){
+        if (!mpMarketplaceOn(env)) return json({ error: "El pago con tarjeta no esta disponible por ahora. Paga por Yape/Plin." }, 501);
+        const cu = await cuentaDeSesion(env, request);
+        if (!cu) return json({ error: "Sesion expirada" }, 401);
+        const tid = cu.tenant_id;
+        const t = await env.DB.prepare("SELECT * FROM tenants WHERE id = ?1").bind(tid).first();
+        const tk = t ? await mpTokenProfe(env, t) : null;
+        if (!tk) return json({ error: "Tu profesor aun no activo el pago con tarjeta. Paga por Yape/Plin o escribele." }, 400);
+
+        const b = await request.json().catch(() => ({}));
+        const paquete = String(b.paquete || "");
+        if (!(paquete in PAQUETES)) return json({ error: "Paquete no valido." }, 400);
+        if (paquete === "Clase de prueba" && cu.alumno_id) return json({ error: "La clase de prueba es solo para tu primera clase." }, 400);
+        const cursosT = cursosDeCfg(await loadConfig(env, tid));
+        const cursoPedido = String(b.curso || "").trim();
+        const partesCurso = cursoPedido.split(",").map(s => s.trim()).filter(Boolean);
+        const curso = (partesCurso.length && partesCurso.every(c => cursosT.indexOf(c) !== -1))
+          ? partesCurso.join(", ") : cursosT[0];
+
+        const ya = await env.DB.prepare(
+          "SELECT id FROM compras WHERE tenant_id = ?1 AND cuenta_id = ?2 AND estado = 'pendiente'"
+        ).bind(tid, cu.id).first();
+        if (ya) return json({ error: "Ya tienes un pago en verificacion. Te confirmo apenas lo vea." }, 409);
+
+        // Clase de prueba: valida el horario deseado (paridad con /comprar)
+        let slotDeseado = "";
+        if (paquete === "Clase de prueba" && b.slot_deseado){
+          const iso = String(b.slot_deseado);
+          if (!(await slotValido(env, tid, iso))) return json({ error: "Ese horario ya no esta disponible. Elige otro." }, 400);
+          slotDeseado = iso;
+        }
+
+        // Precio SIEMPRE del servidor (nunca del cliente)
+        const precios = await loadPrecios(env, tid);
+        const precio = precios[paquete] || 0;
+        const credito = Number(cu.credito) || 0;
+        const descuento = Math.min(credito, precio);
+        const monto = Math.max(0, precio - descuento);
+        if (!(monto > 0)) return json({ error: "Ese paquete no esta disponible para tarjeta. Escribele a tu profesor." }, 400);
+
+        // Limpia intentos de tarjeta abandonados de esta cuenta y crea la compra 'iniciada'
+        await env.DB.prepare(
+          "DELETE FROM compras WHERE tenant_id = ?1 AND cuenta_id = ?2 AND estado = 'iniciada' AND metodo = 'Tarjeta (Mercado Pago)'"
+        ).bind(tid, cu.id).run();
+        const compraId = crypto.randomUUID();
+        await env.DB.prepare(
+          "INSERT INTO compras (id,tenant_id,cuenta_id,curso,paquete,monto,descuento,op_numero,estado,fecha,metodo,comprobante,slot_deseado) VALUES (?1,?2,?3,?4,?5,?6,?7,'','iniciada',?8,'Tarjeta (Mercado Pago)','',?9)"
+        ).bind(compraId, tid, cu.id, curso, paquete, monto, descuento, hoy(), slotDeseado).run();
+
+        // Preferencia con el token del PROFE: la plata cae en SU cuenta de MP
+        let pref = null;
+        try {
+          const pr = await fetch("https://api.mercadopago.com/checkout/preferences", {
+            method: "POST",
+            headers: { Authorization: "Bearer " + tk, "content-type": "application/json" },
+            body: JSON.stringify({
+              items: [{ title: paquete + " · " + (t.academia || "clases"), quantity: 1, unit_price: monto, currency_id: "PEN" }],
+              external_reference: "btc:" + compraId,
+              notification_url: MARCA.dominio + "/app/api/mp/webhook-alumno?t=" + encodeURIComponent(tid),
+              back_urls: {
+                success: MARCA.dominio + "/app/a/" + t.slug + "?pago=ok",
+                failure: MARCA.dominio + "/app/a/" + t.slug + "?pago=error",
+                pending: MARCA.dominio + "/app/a/" + t.slug + "?pago=pendiente"
+              },
+              auto_return: "approved",
+              statement_descriptor: String(t.academia || "BATUTA").slice(0, 22),
+              metadata: { batuta_tenant: tid, batuta_compra: compraId }
+            })
+          });
+          pref = await pr.json().catch(() => null);
+          if (!pr.ok) pref = null;
+        } catch (e) { pref = null; }
+
+        if (!pref || !pref.init_point){
+          await env.DB.prepare("DELETE FROM compras WHERE id = ?1 AND tenant_id = ?2 AND estado = 'iniciada'").bind(compraId, tid).run();
+          return json({ error: "No se pudo iniciar el pago con tarjeta. Intenta de nuevo o paga por Yape/Plin." }, 502);
+        }
+        return json({ init_point: pref.init_point, monto, descuento });
+      }
+
+      // Webhook de pagos del alumno (notification_url lleva ?t=tenant). SIEMPRE 200 (MP reintenta si no).
+      if (path === "/app/api/mp/webhook-alumno" && request.method === "POST"){
+        try {
+          const tid = url.searchParams.get("t") || "";
+          const body = await request.json().catch(() => ({}));
+          const paymentId = String((body && body.data && body.data.id) || url.searchParams.get("data.id") || url.searchParams.get("id") || "");
+          const tipo = String((body && (body.type || body.topic)) || url.searchParams.get("type") || url.searchParams.get("topic") || "");
+          if (!tid || !paymentId || (tipo && tipo !== "payment")) return json({ ok: true });
+
+          const t = await env.DB.prepare("SELECT * FROM tenants WHERE id = ?1").bind(tid).first();
+          if (!t || !t.mp_access_token) return json({ ok: true });
+          const tk = await mpTokenProfe(env, t);
+          if (!tk) return json({ ok: true });
+
+          // La verdad del pago se consulta a MP con el token del profe (no confiamos en el body)
+          const pr = await fetch("https://api.mercadopago.com/v1/payments/" + encodeURIComponent(paymentId), {
+            headers: { Authorization: "Bearer " + tk }
+          });
+          const pago = await pr.json().catch(() => null);
+          if (!pr.ok || !pago || pago.status !== "approved") return json({ ok: true });
+
+          const ref = String(pago.external_reference || "");
+          if (!ref.startsWith("btc:")) return json({ ok: true });
+          const compraId = ref.slice(4);
+          const compra = await env.DB.prepare("SELECT * FROM compras WHERE id = ?1 AND tenant_id = ?2").bind(compraId, tid).first();
+          if (!compra) return json({ ok: true });
+          // El monto aprobado debe cubrir el de la compra
+          if ((Number(pago.transaction_amount) || 0) + 0.01 < (Number(compra.monto) || 0)) return json({ ok: true });
+
+          const r = await confirmarCompra(env, tid, t, compra); // idempotente (claim con UPDATE)
+          if (r && r.ok){
+            try { await avisarPush(env, tid, { title: "Pago con tarjeta confirmado", paquete: compra.paquete, monto: compra.monto }); } catch (e) {}
+          }
+        } catch (e) { /* nunca romper el 200 hacia MP */ }
+        return json({ ok: true });
+      }
+
+      /* ----- Otras rutas /app/api/mp/* siguen apagadas ----- */
       if (path.startsWith("/app/api/mp/")){
         return json({ error: "El pago con tarjeta no esta disponible en el trial." }, 501);
       }

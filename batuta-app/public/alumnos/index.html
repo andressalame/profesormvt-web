@@ -1001,7 +1001,38 @@ function irAWizPaso(p){
   pintarWizDots();
 }
 
+/* Toast al volver del checkout de Mercado Pago (?pago=ok|error|pendiente) */
+try {
+  var _pagoQ = new URLSearchParams(location.search).get("pago");
+  if(_pagoQ){
+    setTimeout(function(){
+      try {
+        if(_pagoQ==="ok") toast("Pago recibido: tu paquete se activa en unos segundos 🎉");
+        else if(_pagoQ==="pendiente") toast("Tu pago quedó en proceso; se confirma solo apenas apruebe.");
+        else toast("El pago no se completó. Puedes intentar de nuevo o pagar por Yape.");
+      } catch(e){}
+    }, 800);
+    try { history.replaceState(null, "", location.pathname); } catch(e){}
+  }
+} catch(e){}
+
+/* Opción "Tarjeta" en el select SOLO si el profe conectó su Mercado Pago
+   (ME.config.mp_tarjeta). Se agrega/quita dinámicamente al abrir el modal. */
+function ensureOpcionTarjeta(){
+  var sel=$("c_metodo"); if(!sel) return;
+  var existente=sel.querySelector('option[value="Tarjeta (Mercado Pago)"]');
+  var on=!!(ME && ME.config && ME.config.mp_tarjeta);
+  if(on && !existente){
+    var og=document.createElement("optgroup"); og.label="Pago automático"; og.id="ogTarjeta";
+    var op=document.createElement("option"); op.value="Tarjeta (Mercado Pago)"; op.textContent="Tarjeta (se confirma sola)";
+    og.appendChild(op); sel.insertBefore(og, sel.firstChild);
+  } else if(!on && existente){
+    var g=existente.closest("optgroup"); (g||existente).remove();
+    if(sel.value==="Tarjeta (Mercado Pago)") sel.value="Yape/Plin/Sip";
+  }
+}
 function abrirCompra(pk){
+  ensureOpcionTarjeta();
   if(!ME) return;
   if(ME.compraPendiente){ toast("Ya tienes un pago en verificación"); return; }
   $("c_paquete").innerHTML = TIERS.filter(function(t){ return ME.precios && (t.pk in ME.precios) && (!t.primera || !ME.alumno); })
@@ -1144,7 +1175,7 @@ function pagarConTarjeta(){
   var paquete=$("c_paquete").value, curso=$("c_curso").value;
   if(!paquete){ irAWizPaso(1); $("wizErr1").textContent="Elige un paquete."; if(btn){ btn.disabled=false; btn.textContent=txtOrig; } return; }
   if(paquete==="Clase de prueba" && !COMPRA_SLOT){ irAWizPaso(2); $("wizErr2").textContent="Elige un horario para tu clase de prueba."; if(btn){ btn.disabled=false; btn.textContent=txtOrig; } return; }
-  api("/app/api/mp/crear",{method:"POST",body:JSON.stringify({paquete:paquete,curso:curso,slot_deseado:(paquete==="Clase de prueba"?COMPRA_SLOT:"")})})
+  api("/app/api/mp/crear-alumno",{method:"POST",body:JSON.stringify({paquete:paquete,curso:curso,slot_deseado:(paquete==="Clase de prueba"?COMPRA_SLOT:"")})})
     .then(function(r){
       if(r && r.init_point){ window.location.href = r.init_point; }
       else { throw new Error((r && r.error) || "No se pudo iniciar el pago."); }

@@ -625,6 +625,15 @@
       <p class="hint" style="margin-top:-4px;">Salen en el portal como métodos de pago al comprar.</p>
     </div>
     <div class="group">
+      <h2>// Pago con tarjeta (Mercado Pago)</h2>
+      <p class="hint">Conecta TU cuenta de Mercado Pago y tus alumnos podrán pagarte con tarjeta desde el portal: el dinero cae directo en tu cuenta de MP y el paquete se activa solo al confirmarse el pago. Si no tienes cuenta de Mercado Pago, créala gratis en mercadopago.com.pe y vuelve aquí.</p>
+      <div class="rowact" style="margin-top:8px;">
+        <span class="pill gray" id="mpEstado">—</span>
+        <button class="btn ghost" id="btnMpConectar">Conectar Mercado Pago</button>
+        <button class="btn ghost" id="btnMpDesconectar" style="display:none;">Desconectar</button>
+      </div>
+    </div>
+    <div class="group">
       <h2>// Mensajes de WhatsApp</h2>
       <p class="hint">Plantilla que se usa cuando le das clic a "Enviar mensaje" en la tabla de Alumnos. Usa <code>{nombre}</code> y <code>{curso}</code> — se reemplazan solos. Si lo dejas vacío, se usa el mensaje por defecto.</p>
       <div class="field"><label>Mensaje de renovación</label><textarea id="cfg_msg_renovacion" style="min-height:110px;" placeholder="Hola {nombre}, ¡qué tal! Vamos cerrando tu paquete de {curso}…"></textarea></div>
@@ -1277,6 +1286,7 @@ function renderAjustes(){
   el("preciosBox").innerHTML=Object.keys(PAQUETES).map(function(p){
     return '<div class="cfgrow"><span class="pk">'+p+'</span><input type="number" min="0" data-precio="'+p+'" value="'+(db.precios[p]||0)+'" /></div>';
   }).join("");
+  if(!MP_ESTADO_CARGADO){ MP_ESTADO_CARGADO=true; try{ refrescarMpEstado(); }catch(e){} }
   if(el("cfg_cursos")) el("cfg_cursos").value=(db.config&&db.config.cursos)||MARCA.cursos.join(", ");
   if(el("cfg_brand_color")) el("cfg_brand_color").value=(db.config&&db.config.brand_color)||"#E8A13D";
   if(el("cfg_brand_font")) el("cfg_brand_font").value=(db.config&&db.config.brand_font)||"";
@@ -2455,6 +2465,52 @@ var _btnPushTest=el("btnPushTest"); if(_btnPushTest) _btnPushTest.addEventListen
     .then(function(d){ toast("Push enviado a "+((d&&d.enviados)||0)+" dispositivos"); })
     .catch(function(e){ toast((e&&e.message)||"No se pudo enviar"); });
 });
+
+/* ---------- Mercado Pago del profe (tarjeta del alumno) ---------- */
+var MP_ESTADO_CARGADO=false;
+function refrescarMpEstado(){
+  var pill=el("mpEstado"), bC=el("btnMpConectar"), bD=el("btnMpDesconectar");
+  if(!pill||!bC||!bD) return;
+  fetch('/app/api/admin/mp/estado',{headers:hdr()}).then(function(r){return r.json().catch(function(){return {};});}).then(function(d){
+    if(!d || d.error){ pill.textContent="—"; return; }
+    if(!d.disponible){
+      pill.className="pill gray"; pill.textContent="— pronto —";
+      bC.disabled=true; bD.style.display="none";
+      return;
+    }
+    if(d.conectado){
+      pill.className="pill green"; pill.textContent="Conectado ✓"+(d.mp_user_id?(" · MP "+d.mp_user_id):"");
+      bC.style.display="none"; bD.style.display="";
+    } else {
+      pill.className="pill gray"; pill.textContent="No conectado";
+      bC.style.display=""; bC.disabled=false; bD.style.display="none";
+    }
+  }).catch(function(){ if(pill) pill.textContent="—"; });
+}
+var _bMpC=el("btnMpConectar"); if(_bMpC) _bMpC.addEventListener("click",function(){
+  _bMpC.disabled=true;
+  apiPost('/app/api/admin/mp/conectar',{}).then(function(d){
+    if(d && d.url){ location.href=d.url; return; }
+    toast("No se pudo iniciar la conexion"); _bMpC.disabled=false;
+  }).catch(function(e){ toast((e&&e.message)||"No se pudo iniciar la conexion"); _bMpC.disabled=false; });
+});
+var _bMpD=el("btnMpDesconectar"); if(_bMpD) _bMpD.addEventListener("click",function(){
+  if(!confirm("Tus alumnos ya no podran pagarte con tarjeta hasta que vuelvas a conectar. Desconectar?")) return;
+  apiPost('/app/api/admin/mp/desconectar',{}).then(function(){ toast("Mercado Pago desconectado"); refrescarMpEstado(); })
+    .catch(function(e){ toast((e&&e.message)||"No se pudo desconectar"); });
+});
+/* Toast al volver del OAuth de MP (?mp=ok|error|cancelado) */
+try {
+  var _mpQ = new URLSearchParams(location.search).get("mp");
+  if(_mpQ){
+    setTimeout(function(){
+      if(_mpQ==="ok") toast("Mercado Pago conectado: tus alumnos ya pueden pagar con tarjeta");
+      else if(_mpQ==="cancelado") toast("Conexion con Mercado Pago cancelada");
+      else toast("No se pudo conectar Mercado Pago. Intenta de nuevo");
+    }, 600);
+    try { history.replaceState(null, "", location.pathname); } catch(e){}
+  }
+} catch(e){}
 
 /* ---------- Branding del tenant (logo + color + tipografía, editables en Ajustes) ---------- */
 var BRAND_FONT_LINKS={
