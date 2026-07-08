@@ -1818,10 +1818,11 @@ function obtenerSlug(){
 }
 
 /* ---------- INIT ---------- */
-(function init(){
-  SLUG = obtenerSlug();
-  aplicarMarca();
-  if(REF_URL) $("r_ref").value = REF_URL;
+function initAlumno(){
+  if(window.__initAlumnoRan) return; window.__initAlumnoRan=true;
+  try{ SLUG = obtenerSlug(); }catch(e){}
+  try{ aplicarMarca(); }catch(e){}
+  try{ if(REF_URL) $("r_ref").value = REF_URL; }catch(e){}
   if(SLUG){
     fetch("/app/api/publico?slug="+encodeURIComponent(SLUG)).then(function(r){ return r.json(); }).then(function(d){
       if(!d || d.error) return;
@@ -1856,8 +1857,21 @@ function obtenerSlug(){
       }
     }).catch(function(){});
   }
-  if(getTok()){ cargarMe(); }
-  else { setAuthTab(REF_URL ? "reg" : "login"); setPantalla("viewAuth"); }
+  try{
+    if(getTok()){ cargarMe(); }
+    else { setAuthTab(REF_URL ? "reg" : "login"); setPantalla("viewAuth"); }
+  }catch(e){ try{ setPantalla("viewAuth"); }catch(_){} }
+}
+window.initAlumno = initAlumno;
+</script>
+<!-- Arranque del portal del alumno: script separado, robusto frente a errores de top-level
+     del script grande (extensiones del navegador). Mismo patrón que el panel del profesor. -->
+<script>
+(function(){
+  function run(){ try{ if(typeof window.initAlumno==="function") window.initAlumno(); }catch(e){} }
+  if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded", run); }
+  else { run(); }
+  window.addEventListener("load", run);
 })();
 </script>
 
