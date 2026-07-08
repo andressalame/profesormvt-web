@@ -2587,7 +2587,10 @@ function cargarActivacion(){
   setSync("Conectando…","");
   vincularSubSiVuelveDeMP().then(cargarTrialInfo);
   cargarActivacion();
-  recargar().then(iniciarRefresco).catch(function(e){
+  recargar().then(iniciarRefresco).then(function(){
+    // Tour de bienvenida: 1 vez, salvo en la demo (el visitante de la demo no lo necesita).
+    try{ if(!(db && db.demo) && typeof window.lanzarTourBienvenida==="function") window.lanzarTourBienvenida(false); }catch(e){}
+  }).catch(function(e){
     if(e&&e.auth){ irALogin(); return; }
     if(e&&e.paywall){ return; }
     setSync("Sin conexión ✗","err"); toast("No se pudo conectar con la API");
@@ -2669,6 +2672,89 @@ function cargarActivacion(){
       .catch(function(err){ typing(false); pintar("bot",(err&&err.message)||"Algo falló, intenta de nuevo."); })
       .then(function(){ ocupado=false; });
   });
+})();
+</script>
+
+<!-- Tour guiado de bienvenida (coach-marks estilo onboarding): corre 1 vez para el profe nuevo. -->
+<style>
+  .tour-veil{position:fixed;inset:0;z-index:9000;background:rgba(8,9,12,.72);backdrop-filter:blur(1px);display:none;}
+  .tour-veil.on{display:block;animation:tourFade .25s ease both;}
+  @keyframes tourFade{from{opacity:0}to{opacity:1}}
+  .tour-ring{position:absolute;border:2px solid var(--accent);border-radius:8px;box-shadow:0 0 0 4px rgba(232,161,61,.25),0 0 0 9999px rgba(8,9,12,.68);transition:all .3s cubic-bezier(.4,0,.2,1);pointer-events:none;}
+  .tour-pop{position:absolute;z-index:9001;max-width:300px;background:var(--panel,#141210);border:1px solid var(--accent);border-radius:12px;padding:16px 18px;box-shadow:0 18px 50px rgba(0,0,0,.5);color:var(--cream,#f3ede0);transition:all .3s cubic-bezier(.4,0,.2,1);}
+  .tour-pop h4{margin:0 0 6px;font-family:var(--display,'Bricolage Grotesque',sans-serif);font-size:16px;color:var(--cream,#f3ede0);}
+  .tour-pop p{margin:0 0 14px;font-size:13.5px;line-height:1.55;color:var(--muted,#a9a295);}
+  .tour-row{display:flex;align-items:center;justify-content:space-between;gap:10px;}
+  .tour-dots{display:flex;gap:6px;}
+  .tour-dot{width:6px;height:6px;border-radius:50%;background:var(--line,#3a352e);}
+  .tour-dot.on{background:var(--accent);}
+  .tour-btns{display:flex;gap:8px;}
+  .tour-skip{background:none;border:0;color:var(--muted,#a9a295);font-size:12.5px;cursor:pointer;padding:6px 4px;}
+  .tour-skip:hover{color:var(--cream,#f3ede0);}
+  .tour-next{background:var(--accent);color:#0F1115;border:0;border-radius:7px;padding:7px 15px;font-weight:700;font-size:13px;cursor:pointer;font-family:inherit;}
+  .tour-next:hover{filter:brightness(1.08);}
+</style>
+<div class="tour-veil" id="tourVeil">
+  <div class="tour-ring" id="tourRing"></div>
+  <div class="tour-pop" id="tourPop">
+    <h4 id="tourTitle"></h4>
+    <p id="tourBody"></p>
+    <div class="tour-row">
+      <div class="tour-dots" id="tourDots"></div>
+      <div class="tour-btns">
+        <button class="tour-skip" id="tourSkip">Saltar</button>
+        <button class="tour-next" id="tourNext">Siguiente</button>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+(function(){
+  var SEEN="batuta_tour_v1";
+  var veil=document.getElementById("tourVeil"), ring=document.getElementById("tourRing"), pop=document.getElementById("tourPop");
+  var elTitle=document.getElementById("tourTitle"), elBody=document.getElementById("tourBody"), elDots=document.getElementById("tourDots");
+  var btnNext=document.getElementById("tourNext"), btnSkip=document.getElementById("tourSkip");
+  // Pasos: cada uno apunta a un selector real del panel (o null = centrado).
+  var PASOS=[
+    {sel:null, t:"Bienvenido a tu academia", b:"Este es tu panel. En 4 pasos rapidos te muestro lo esencial para que arranque hoy. Toma 30 segundos."},
+    {sel:'.nav .navgroup:first-of-type', t:"Todo empieza en Personas", b:"Aca agregas a tus alumnos, los agrupas y ves quien se registro en tu portal. Tu primer paso es meter a un alumno de siempre."},
+    {sel:'#grpActivacion, #panel-resumen .group:nth-of-type(2)', t:"Tu link para alumnos", b:"Comparte este link con tus alumnos: se registran solos y ven sus clases, material y pagos, sin que les escribas."},
+    {sel:'.nav .navgroup:nth-of-type(3)', t:"Cobros sin perseguir a nadie", b:"En Cobros confirmas los pagos por Yape en un clic y la tarjeta se confirma sola. En Configuracion pones tu numero de Yape y conectas Mercado Pago."},
+    {sel:'#oiaFab', t:"Tu guia siempre a la mano", b:"Si te trabas en algo, este boton abre un asistente que responde como hacer cualquier cosa del panel. Listo, ya puedes empezar!"}
+  ];
+  var i=0;
+  function pos(){
+    var p=PASOS[i], target=p.sel?document.querySelector(p.sel):null;
+    for(var d=0;d<elDots.children.length;d++){ elDots.children[d].classList.toggle("on",d===i); }
+    elTitle.textContent=p.t; elBody.textContent=p.b;
+    btnNext.textContent=(i===PASOS.length-1)?"Empezar":"Siguiente";
+    if(target && target.offsetParent!==null){
+      var r=target.getBoundingClientRect();
+      ring.style.display="block";
+      ring.style.top=(r.top-6)+"px"; ring.style.left=(r.left-6)+"px";
+      ring.style.width=(r.width+12)+"px"; ring.style.height=(r.height+12)+"px";
+      // Popup: debajo si hay espacio, si no encima; a la derecha del elemento de la barra.
+      var below=r.bottom+14, right=r.right+14;
+      if(r.left<300){ pop.style.left=Math.min(right, window.innerWidth-320)+"px"; pop.style.top=Math.max(14,r.top)+"px"; }
+      else { pop.style.left=Math.max(14,Math.min(r.left, window.innerWidth-320))+"px"; pop.style.top=(below+180>window.innerHeight? (r.top-190):below)+"px"; }
+    } else {
+      ring.style.display="none";
+      pop.style.left="50%"; pop.style.top="50%"; pop.style.transform="translate(-50%,-50%)"; return;
+    }
+    pop.style.transform="none";
+  }
+  function abrir(){ veil.classList.add("on"); i=0; pos(); }
+  function cerrar(){ veil.classList.remove("on"); try{localStorage.setItem(SEEN,"1");}catch(e){} }
+  PASOS.forEach(function(){ var d=document.createElement("span"); d.className="tour-dot"; elDots.appendChild(d); });
+  btnNext.addEventListener("click",function(){ if(i<PASOS.length-1){ i++; pos(); } else { cerrar(); } });
+  btnSkip.addEventListener("click",cerrar);
+  window.addEventListener("resize",function(){ if(veil.classList.contains("on")) pos(); });
+  // Auto-lanzar: solo profe en trial que no lo vio, tras cargar el panel.
+  window.lanzarTourBienvenida=function(force){
+    try{ if(!force && localStorage.getItem(SEEN)) return; }catch(e){}
+    if(typeof TENANT_ESTADO!=="undefined" && TENANT_ESTADO==="activo" && !force) { /* activo puede verlo igual la 1a vez */ }
+    setTimeout(abrir, force?0:1400);
+  };
 })();
 </script>
 </body>
