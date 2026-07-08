@@ -835,10 +835,91 @@ async function onboardingContar(env, clave, limite){
 }
 
 /* ---------- Web Push (VAPID): sin claves -> no-op ---------- */
+/* ---------- Web Push REAL (VAPID ES256 + RFC 8291 aes128gcm), solo crypto.subtle ---------- */
+function b64uToBytes(s){
+  s = s.replace(/-/g, "+").replace(/_/g, "/"); while (s.length % 4) s += "=";
+  const bin = atob(s); const a = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) a[i] = bin.charCodeAt(i);
+  return a;
+}
+function bytesToB64u(bytes){
+  const a = new Uint8Array(bytes); let bin = "";
+  for (let i = 0; i < a.length; i++) bin += String.fromCharCode(a[i]);
+  return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+let VAPID_KEY_CACHE = null;
+async function vapidPrivateKey(env){
+  if (VAPID_KEY_CACHE) return VAPID_KEY_CACHE;
+  const jwk = JSON.parse(env.VAPID_PRIVATE_KEY); // JWK {kty:EC, crv:P-256, d, x, y}
+  VAPID_KEY_CACHE = await crypto.subtle.importKey("jwk", jwk, { name: "ECDSA", namedCurve: "P-256" }, false, ["sign"]);
+  return VAPID_KEY_CACHE;
+}
+async function vapidJwt(env, audience){
+  const header = bytesToB64u(enc.encode(JSON.stringify({ typ: "JWT", alg: "ES256" })));
+  const payload = bytesToB64u(enc.encode(JSON.stringify({
+    aud: audience, exp: Math.floor(Date.now() / 1000) + 12 * 3600, sub: MARCA.vapidSubject
+  })));
+  const si = header + "." + payload;
+  const key = await vapidPrivateKey(env);
+  const sig = await crypto.subtle.sign({ name: "ECDSA", hash: "SHA-256" }, key, enc.encode(si));
+  return si + "." + bytesToB64u(sig); // firma raw r||s: exactamente lo que pide JWS ES256
+}
+async function hkdfBits(salt, ikm, info, len){
+  const key = await crypto.subtle.importKey("raw", ikm, "HKDF", false, ["deriveBits"]);
+  return new Uint8Array(await crypto.subtle.deriveBits({ name: "HKDF", hash: "SHA-256", salt, info }, key, len * 8));
+}
+/* Cifra y envía el payload a UNA suscripción (RFC 8291). Devuelve el status HTTP. */
+async function pushAUno(env, sub, payloadStr){
+  const uaPub = b64uToBytes(sub.p256dh);   // punto P-256 sin comprimir (65 bytes)
+  const auth = b64uToBytes(sub.auth);      // secreto auth (16 bytes)
+  const asKeys = await crypto.subtle.generateKey({ name: "ECDH", namedCurve: "P-256" }, true, ["deriveBits"]);
+  const asPub = new Uint8Array(await crypto.subtle.exportKey("raw", asKeys.publicKey));
+  const uaKey = await crypto.subtle.importKey("raw", uaPub, { name: "ECDH", namedCurve: "P-256" }, false, []);
+  const ecdh = new Uint8Array(await crypto.subtle.deriveBits({ name: "ECDH", public: uaKey }, asKeys.privateKey, 256));
+  const infoIkm = new Uint8Array(14 + uaPub.length + asPub.length);
+  infoIkm.set(enc.encode("WebPush: info\0"), 0); infoIkm.set(uaPub, 14); infoIkm.set(asPub, 14 + uaPub.length);
+  const ikm = await hkdfBits(auth, ecdh, infoIkm, 32);
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const cek = await hkdfBits(salt, ikm, enc.encode("Content-Encoding: aes128gcm\0"), 16);
+  const nonce = await hkdfBits(salt, ikm, enc.encode("Content-Encoding: nonce\0"), 12);
+  const plainBytes = enc.encode(payloadStr);
+  const plain = new Uint8Array(plainBytes.length + 1);
+  plain.set(plainBytes, 0); plain[plainBytes.length] = 2; // delimitador de último registro
+  const aesKey = await crypto.subtle.importKey("raw", cek, "AES-GCM", false, ["encrypt"]);
+  const cipher = new Uint8Array(await crypto.subtle.encrypt({ name: "AES-GCM", iv: nonce }, aesKey, plain));
+  // header aes128gcm: salt(16) | rs(4) | idlen(1) | keyid(65) | ciphertext
+  const body = new Uint8Array(21 + asPub.length + cipher.length);
+  body.set(salt, 0);
+  new DataView(body.buffer).setUint32(16, 4096);
+  body[20] = asPub.length;
+  body.set(asPub, 21);
+  body.set(cipher, 21 + asPub.length);
+  const jwt = await vapidJwt(env, new URL(sub.endpoint).origin);
+  const r = await fetch(sub.endpoint, {
+    method: "POST",
+    headers: {
+      "TTL": "86400", "Urgency": "normal",
+      "Content-Encoding": "aes128gcm", "Content-Type": "application/octet-stream",
+      "Authorization": "vapid t=" + jwt + ", k=" + env.VAPID_PUBLIC_KEY
+    },
+    body
+  });
+  return r.status;
+}
 async function enviarPushA(env, subs, payload){
   if (!env.VAPID_PUBLIC_KEY || !env.VAPID_PRIVATE_KEY || !subs || !subs.length) return 0;
-  // v0: sin la dependencia @block65/webcrypto-web-push (no forzamos ese binding). No-op con gracia.
-  return 0;
+  const payloadStr = JSON.stringify(payload || {});
+  let ok = 0;
+  for (const s of subs){
+    try {
+      const st = await pushAUno(env, s, payloadStr);
+      if (st === 404 || st === 410){
+        // suscripción muerta: se limpia sola
+        try { await env.DB.prepare("DELETE FROM push_subs WHERE endpoint = ?1").bind(s.endpoint).run(); } catch (e) {}
+      } else if (st >= 200 && st < 300) ok++;
+    } catch (e) { /* seguir con las demás suscripciones */ }
+  }
+  return ok;
 }
 async function avisarPush(env, tenantId, info){
   const { results } = await env.DB.prepare("SELECT * FROM push_subs WHERE tenant_id = ?1 AND cuenta_id IS NULL").bind(tenantId).all();
@@ -849,6 +930,36 @@ async function avisarPushAlumno(env, tenantId, cuentaId, payload){
   const { results } = await env.DB.prepare("SELECT * FROM push_subs WHERE tenant_id = ?1 AND cuenta_id = ?2").bind(tenantId, cuentaId).all();
   return enviarPushA(env, results || [], payload);
 }
+
+/* ---------- PWA: service workers servidos por el worker ----------
+   El panel vive en /app/panel y el portal en /app/a/<slug> (rutas del worker),
+   así que los SW también se sirven desde /app/... para que su scope los cubra:
+   sw-panel scope /app/panel · sw-alumno scope /app/a/ (sin chocar entre sí). */
+function swFuente(fallbackUrl){
+  return "self.addEventListener('install',function(e){self.skipWaiting();});\n" +
+    "self.addEventListener('activate',function(e){e.waitUntil(self.clients.claim());});\n" +
+    "self.addEventListener('push',function(e){\n" +
+    "  var d={};try{d=e.data?e.data.json():{};}catch(err){try{d={body:e.data.text()};}catch(e2){}}\n" +
+    "  var title=d.title||'Batuta';\n" +
+    "  var body=d.body||(d.paquete?(d.paquete+(d.monto?' · S/ '+d.monto:'')):'');\n" +
+    "  var url=d.url||'" + fallbackUrl + "';\n" +
+    "  e.waitUntil(self.registration.showNotification(title,{body:body,icon:'/icons/batuta-192.png',badge:'/icons/batuta-192.png',data:{url:url}}));\n" +
+    "});\n" +
+    "self.addEventListener('notificationclick',function(e){\n" +
+    "  e.notification.close();\n" +
+    "  var url=(e.notification.data&&e.notification.data.url)||'" + fallbackUrl + "';\n" +
+    "  e.waitUntil(clients.matchAll({type:'window',includeUncontrolled:true}).then(function(ws){\n" +
+    "    for(var i=0;i<ws.length;i++){ if(ws[i].url.indexOf(url)!==-1 && 'focus' in ws[i]) return ws[i].focus(); }\n" +
+    "    if(clients.openWindow) return clients.openWindow(url);\n" +
+    "  }));\n" +
+    "});\n" +
+    "self.addEventListener('fetch',function(){});\n";
+}
+const ICONOS_PWA = [
+  { src: "/icons/batuta-192.png", sizes: "192x192", type: "image/png" },
+  { src: "/icons/batuta-512.png", sizes: "512x512", type: "image/png" },
+  { src: "/icons/batuta-512.png", sizes: "512x512", type: "image/png", purpose: "maskable" }
+];
 
 /* ---------- avisos internos a Andrés: Resend primero (enviarCorreo), AVISOS de fallback ---------- */
 async function alertaCorreoAndres(env, asunto, cuerpo){
@@ -1498,6 +1609,36 @@ export default {
     }
     if (path.startsWith("/app/a/") && request.method === "GET"){
       return env.ASSETS ? assetConSeguridad(await env.ASSETS.fetch(new Request(new URL("/alumnos/index.html", url), request))) : json({ error: "No encontrado" }, 404);
+    }
+    /* ----- PWA: service workers + manifests ----- */
+    if (path === "/app/sw-panel.js" && request.method === "GET"){
+      return new Response(swFuente("/app/panel"), { headers: { "content-type": "application/javascript; charset=utf-8", "cache-control": "no-cache" } });
+    }
+    if (path === "/app/sw-alumno.js" && request.method === "GET"){
+      return new Response(swFuente("/app"), { headers: { "content-type": "application/javascript; charset=utf-8", "cache-control": "no-cache" } });
+    }
+    if (path === "/app/manifest-panel.json" && request.method === "GET"){
+      return new Response(JSON.stringify({
+        name: "Batuta · Panel", short_name: "Batuta",
+        start_url: "/app/panel", scope: "/app/", display: "standalone",
+        background_color: "#12100e", theme_color: "#12100e",
+        icons: ICONOS_PWA
+      }), { headers: { "content-type": "application/manifest+json", "cache-control": "public, max-age=3600" } });
+    }
+    if (path === "/app/api/manifest-alumno" && request.method === "GET"){
+      const slugM = String(url.searchParams.get("slug") || "").trim().slice(0, 80);
+      const tM = slugM ? await env.DB.prepare("SELECT id, academia, slug FROM tenants WHERE slug = ?1").bind(slugM).first() : null;
+      let colorM = "#E8A13D";
+      if (tM){
+        try { const cfgM = await loadConfig(env, tM.id); if (cfgM && cfgM.brand_color) colorM = cfgM.brand_color; } catch (e) {}
+      }
+      const nombreM = (tM && tM.academia) || "Batuta";
+      return new Response(JSON.stringify({
+        name: nombreM, short_name: nombreM.slice(0, 12),
+        start_url: tM ? ("/app/a/" + tM.slug) : "/app", scope: "/app/a/", display: "standalone",
+        background_color: "#12100e", theme_color: colorM,
+        icons: ICONOS_PWA
+      }), { headers: { "content-type": "application/manifest+json", "cache-control": "public, max-age=600" } });
     }
 
     if (!path.startsWith("/app/api/")){

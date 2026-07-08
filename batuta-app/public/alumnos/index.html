@@ -6,9 +6,12 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <meta name="robots" content="noindex, nofollow" />
 <title>Portal de alumno · Batuta</title>
-<link rel="manifest" href="/alumnos/manifest.webmanifest">
-<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<!-- El manifest se inyecta por JS con el slug de la academia (nombre y color de SU marca) -->
+<link rel="apple-touch-icon" href="/icons/batuta-180.png">
+<meta name="theme-color" content="#12100e">
+<meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Batuta">
 <meta name="theme-color" content="#E8A13D">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -1314,7 +1317,7 @@ function mostrarAvisos(activos){
 function renderAvisos(){
   if(!pushSoportado()){ hide("btnAvisosOn"); hide("btnAvisosOff"); show("avisosNoSop"); return; }
   hide("avisosNoSop");
-  navigator.serviceWorker.getRegistration('/alumnos/sw.js').then(function(reg){
+  navigator.serviceWorker.getRegistration('/app/a/').then(function(reg){
     if(!reg) return mostrarAvisos(false);
     return reg.pushManager.getSubscription().then(function(sub){ mostrarAvisos(!!sub); });
   }).catch(function(){ mostrarAvisos(false); });
@@ -1324,7 +1327,7 @@ function avisosOn(){
   var vapid = (ME && ME.config && ME.config.vapid_public) || "";
   if(!vapid){ toast("Avisos no disponibles por ahora"); return; }
   $("btnAvisosOn").disabled=true;
-  navigator.serviceWorker.register('/alumnos/sw.js').then(function(reg){
+  navigator.serviceWorker.register('/app/sw-alumno.js',{scope:'/app/a/'}).then(function(reg){
     return Notification.requestPermission().then(function(perm){
       if(perm!=='granted'){ toast("Permiso denegado"); return; }
       return reg.pushManager.subscribe({ userVisibleOnly:true, applicationServerKey: urlB64(vapid) })
@@ -1336,7 +1339,7 @@ function avisosOn(){
 }
 function avisosOff(){
   $("btnAvisosOff").disabled=true;
-  navigator.serviceWorker.getRegistration('/alumnos/sw.js').then(function(reg){
+  navigator.serviceWorker.getRegistration('/app/a/').then(function(reg){
     if(!reg) return;
     return reg.pushManager.getSubscription().then(function(sub){
       if(!sub) return;
@@ -1877,6 +1880,16 @@ function obtenerSlug(){
 function initAlumno(){
   if(window.__initAlumnoRan) return; window.__initAlumnoRan=true;
   try{ SLUG = obtenerSlug(); }catch(e){}
+  // PWA: manifest dinamico con el nombre y color de ESTA academia + service worker
+  // (habilita "Agregar a pantalla de inicio" como app y recibir push)
+  try{
+    if(SLUG){
+      var _mfl=document.createElement('link'); _mfl.rel='manifest';
+      _mfl.href='/app/api/manifest-alumno?slug='+encodeURIComponent(SLUG);
+      document.head.appendChild(_mfl);
+    }
+    if('serviceWorker' in navigator) navigator.serviceWorker.register('/app/sw-alumno.js',{scope:'/app/a/'}).catch(function(){});
+  }catch(e){}
   try{ aplicarMarca(); }catch(e){}
   try{ if(REF_URL) $("r_ref").value = REF_URL; }catch(e){}
   if(SLUG){

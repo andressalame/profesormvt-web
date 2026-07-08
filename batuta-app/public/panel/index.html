@@ -6,9 +6,12 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <meta name="robots" content="noindex, nofollow" />
 <title>Batuta · Panel</title>
-<link rel="manifest" href="/panel/manifest.webmanifest">
-<link rel="apple-touch-icon" href="/panel/icon-192.png">
+<link rel="manifest" href="/app/manifest-panel.json">
+<link rel="apple-touch-icon" href="/icons/batuta-180.png">
+<meta name="theme-color" content="#12100e">
+<meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Batuta">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -623,6 +626,15 @@
       <div class="cfgrow"><span class="pk">Crypto red</span><input id="cfg_crypto_red" type="text" placeholder="Tron (TRC20)" /></div>
       <div class="cfgrow"><span class="pk">Crypto wallet</span><input id="cfg_crypto_wallet" type="text" placeholder="T..." /></div>
       <p class="hint" style="margin-top:-4px;">Salen en el portal como métodos de pago al comprar.</p>
+    </div>
+    <div class="group">
+      <h2>// Avisos en tu teléfono (app + push)</h2>
+      <p class="hint">Instala el panel como app: en tu celular abre batuta.lat/app/panel y elige "Agregar a pantalla de inicio" (en iPhone: botón Compartir → Agregar a inicio). Luego activa los avisos aquí y te llega una notificación con cada pago por confirmar y cada reserva nueva.</p>
+      <div class="rowact" style="margin-top:8px;">
+        <span class="pill gray" id="pushEstado">—</span>
+        <button class="btn ghost" id="btnPushOn">Activar avisos en este dispositivo</button>
+        <button class="btn ghost" id="btnPushTest">Probar aviso</button>
+      </div>
     </div>
     <div class="group">
       <h2>// Pago con tarjeta (Mercado Pago)</h2>
@@ -1286,7 +1298,7 @@ function renderAjustes(){
   el("preciosBox").innerHTML=Object.keys(PAQUETES).map(function(p){
     return '<div class="cfgrow"><span class="pk">'+p+'</span><input type="number" min="0" data-precio="'+p+'" value="'+(db.precios[p]||0)+'" /></div>';
   }).join("");
-  if(!MP_ESTADO_CARGADO){ MP_ESTADO_CARGADO=true; try{ refrescarMpEstado(); }catch(e){} }
+  if(!MP_ESTADO_CARGADO){ MP_ESTADO_CARGADO=true; try{ refrescarMpEstado(); }catch(e){} try{ refrescarPushEstado(); }catch(e){} }
   if(el("cfg_cursos")) el("cfg_cursos").value=(db.config&&db.config.cursos)||MARCA.cursos.join(", ");
   if(el("cfg_brand_color")) el("cfg_brand_color").value=(db.config&&db.config.brand_color)||"#E8A13D";
   if(el("cfg_brand_font")) el("cfg_brand_font").value=(db.config&&db.config.brand_font)||"";
@@ -2445,7 +2457,7 @@ function refrescarPushEstado(){
 var _btnPushOn=el("btnPushOn"); if(_btnPushOn) _btnPushOn.addEventListener("click",function(){
   if(!('serviceWorker' in navigator) || !('PushManager' in window)){ toast("Este navegador no soporta push"); return; }
   if(!db.vapid_public){ toast("Falta la clave VAPID — recarga e intenta de nuevo"); return; }
-  navigator.serviceWorker.register('/admin/crm/sw.js').then(function(reg){
+  navigator.serviceWorker.register('/app/sw-panel.js', { scope: '/app/panel' }).then(function(reg){
     return Notification.requestPermission().then(function(perm){
       if(perm!=='granted'){ toast("Permiso denegado"); return; }
       return reg.pushManager.subscribe({ userVisibleOnly:true, applicationServerKey: urlB64(db.vapid_public) })
@@ -2646,6 +2658,8 @@ function batutaInit(){
   setSync("Conectando…","");
   try{ vincularSubSiVuelveDeMP().then(cargarTrialInfo); }catch(e){}
   try{ cargarActivacion(); }catch(e){}
+  // PWA: registra el service worker al arranque (habilita instalar como app + recibir push)
+  try{ if('serviceWorker' in navigator) navigator.serviceWorker.register('/app/sw-panel.js',{scope:'/app/panel'}).catch(function(){}); }catch(e){}
   recargar().then(iniciarRefresco).then(function(){
     // Tour de bienvenida: 1 vez, salvo en la demo (el visitante de la demo no lo necesita).
     try{ if(!(db && db.demo) && typeof window.lanzarTourBienvenida==="function") window.lanzarTourBienvenida(false); }catch(e){}
