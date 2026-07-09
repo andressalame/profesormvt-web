@@ -1016,35 +1016,48 @@ function waDigitsLead(tel){
 }
 
 async function avisarLeadConTelefono(env, info){
-  if (!env.AVISOS) return;
   const d = waDigitsLead(info.telefono);
   if (!d) return;
   const nombre = (info.nombre || "").trim();
   const hola = nombre ? ("Hola " + nombre + "!") : "Hola!";
-  const msg = createMimeMessage();
-  msg.setSender({ name: "Avisos " + MARCA.nombre, addr: MARCA.correoAvisos });
-  msg.setRecipient(MARCA.correoAdmin);
+  let subject, text;
   if (info.esPrueba){
     // Embudo phone-first: quiere una clase de prueba. Máxima urgencia de contacto.
-    msg.setSubject("🔥🔥 Clase de prueba: " + (nombre || d));
-    msg.addMessage({ contentType: "text/plain", data:
+    subject = "🔥🔥 Clase de prueba: " + (nombre || d);
+    text =
       (nombre ? nombre : "Alguien") + " pidió una clase de prueba. Escríbele YA, mientras está caliente:\n\n" +
       "Nombre:   " + (nombre || "-") + "\n" +
       "WhatsApp: +" + d + " → https://wa.me/" + d + "\n" +
       "Quiere:   " + (info.interes || "-") + " · Fuente: " + (info.fuente || "-") + "\n\n" +
       "Mensaje sugerido:\n" +
-      hola + " Soy " + MARCA.profe + " de ProfesorMVT :) Vi que quieres una clase de prueba de " + (info.interes || "canto") + ". Cuándo te queda mejor esta semana? Te hago el diagnóstico de tu voz y salimos con un plan claro.\n" });
+      hola + " Soy " + MARCA.profe + " de ProfesorMVT :) Vi que quieres una clase de prueba de " + (info.interes || "canto") + ". Cuándo te queda mejor esta semana? Te hago el diagnóstico de tu voz y salimos con un plan claro.\n";
   } else {
-    msg.setSubject("🔥 Lead con WhatsApp: " + info.email);
-    msg.addMessage({ contentType: "text/plain", data:
+    subject = "🔥 Lead con WhatsApp: " + info.email;
+    text =
       "Un lead dejó su WhatsApp al bajar la guía. Escríbele mientras está caliente:\n\n" +
       "Correo:   " + info.email + "\n" +
       "WhatsApp: +" + d + " → https://wa.me/" + d + "\n" +
       "Interés:  " + (info.interes || "-") + " · Fuente: " + (info.fuente || "-") + "\n\n" +
       "Mensaje sugerido:\n" +
-      "Hola! Soy " + MARCA.profe + ", el de la guía de composición :) Vi que la descargaste. Cuéntame, qué te gustaría lograr: componer, cantar o tocar piano?\n" });
+      "Hola! Soy " + MARCA.profe + ", el de la guía de composición :) Vi que la descargaste. Cuéntame, qué te gustaría lograr: componer, cantar o tocar piano?\n";
   }
-  await env.AVISOS.send(new EmailMessage(MARCA.correoAvisos, MARCA.correoAdmin, msg.asRaw()));
+  // Con ads corriendo, este aviso NO se puede perder. Canal 1: Cloudflare Email Routing
+  // (AVISOS). Canal 2 (fallback): Resend, que ya está verificado y manda el nurture.
+  let enviado = false;
+  if (env.AVISOS){
+    try {
+      const msg = createMimeMessage();
+      msg.setSender({ name: "Avisos " + MARCA.nombre, addr: MARCA.correoAvisos });
+      msg.setRecipient(MARCA.correoAdmin);
+      msg.setSubject(subject);
+      msg.addMessage({ contentType: "text/plain", data: text });
+      await env.AVISOS.send(new EmailMessage(MARCA.correoAvisos, MARCA.correoAdmin, msg.asRaw()));
+      enviado = true;
+    } catch (e) { enviado = false; }
+  }
+  if (!enviado){
+    await enviarCorreo(env, { to: MARCA.correoAdmin, subject: subject, text: text, from: { name: "Avisos " + MARCA.nombre, email: MARCA.correoAvisos } });
+  }
 }
 
 /* ============ RESCATE DE COMPRAS ABANDONADAS (07-jul-2026) ============
@@ -2850,6 +2863,50 @@ export default {
           ctx.waitUntil(avisarLeadConTelefono(env, { email, telefono, interes, fuente, nombre, esPrueba }));
         }
         return json({ ok: true, pdf });
+      }
+
+      /* ============ Rescate de los leads viejos de la guía → embudo de clase de prueba ============
+         Los que bajaron la guía de composición (interes=composicion) nunca convirtieron: imán de bajo
+         intento, sin teléfono. Este endpoint les manda UN correo que los pivotea a la clase de prueba
+         (S/50, diagnóstico, cierre por WhatsApp). En tandas (default 25) para no reventar subrequests ni
+         quemar la reputación de envío; deduplicado con nurture_paso=50. Admin-only. `dry:true` = simular. */
+      if (url.pathname === "/api/su/rescate-composicion" && request.method === "POST"){
+        if (!(await esAdminAuth(env, request))) return json({ error: "No autorizado" }, 401);
+        const b = await request.json().catch(() => ({}));
+        const limite = Math.min(Math.max(parseInt(b.limite, 10) || 25, 1), 40);
+        const dry = b.dry === true;
+        const rows = await env.DB.prepare(
+          "SELECT id, email, COALESCE(nombre,'') AS nombre FROM leads " +
+          "WHERE marca='MVT' AND interes='composicion' AND COALESCE(nurture_paso,0) != 50 " +
+          "AND email LIKE '%@%' AND email NOT LIKE 'wa-%@wa.mvt' " +
+          "ORDER BY fecha ASC LIMIT ?1"
+        ).bind(limite).all();
+        const lista = (rows && rows.results) || [];
+        const restantesRow = await env.DB.prepare(
+          "SELECT COUNT(*) c FROM leads WHERE marca='MVT' AND interes='composicion' AND COALESCE(nurture_paso,0) != 50 AND email LIKE '%@%' AND email NOT LIKE 'wa-%@wa.mvt'"
+        ).first();
+        if (dry) return json({ ok: true, dry: true, en_esta_tanda: lista.length, pendientes_total: restantesRow ? restantesRow.c : 0, muestra: lista.slice(0, 3).map(function(r){ return r.email; }) });
+        let enviados = 0;
+        const prueba = MARCA.dominio + "/prueba";
+        for (const r of lista){
+          const nom = (r.nombre || "").trim();
+          const hola = nom ? ("Hola " + nom + ",") : "Hola,";
+          const html =
+            '<div style="font-family:Arial,Helvetica,sans-serif;max-width:480px;margin:0 auto;color:#1a1a1a;font-size:15px;line-height:1.6">' +
+              '<p>' + hola + '</p>' +
+              '<p>Hace unas semanas te bajaste mi guía de composición. Espero que te haya servido para arrancar tus canciones.</p>' +
+              '<p>Te escribo por algo puntual: si además te pica <b>aprender a cantar bien de verdad</b> (o tocar piano), tengo una clase de prueba con diagnóstico de tu voz. En 45 minutos sabes exactamente qué entrenar, con un plan claro.</p>' +
+              '<p>No es cuestión de talento ni de edad: cantar bien es coordinación, y se entrena. Varios de mis alumnos empezaron creyendo que ya era tarde.</p>' +
+              '<p style="text-align:center;margin:26px 0"><a href="' + prueba + '" style="background:#e8501f;color:#ffffff;text-decoration:none;font-weight:bold;padding:14px 26px;border-radius:6px;display:inline-block">Reservar mi clase de prueba</a></p>' +
+              '<p>O respóndeme este correo con tu WhatsApp y coordinamos directo. La clase de prueba cuesta S/50 e incluye tu diagnóstico.</p>' +
+              '<p>Un abrazo,<br><b>' + MARCA.profe + '</b><br>' + MARCA.nombre + '</p>' +
+              '<p style="font-size:12px;color:#888888;margin-top:26px">' + MARCA.dominio.replace(/^https?:\/\//, "") + ' · Canto, piano y composición para adultos</p>' +
+            '</div>';
+          const text = hola + '\n\nHace unas semanas te bajaste mi guía de composición. Si además te pica aprender a cantar bien de verdad (o tocar piano), tengo una clase de prueba con diagnóstico de tu voz: en 45 min sabes qué entrenar, con un plan claro.\n\nNo es talento ni edad: cantar bien es coordinación, y se entrena.\n\nReserva tu clase de prueba: ' + prueba + '\nO respóndeme con tu WhatsApp y coordinamos. Cuesta S/50 e incluye tu diagnóstico.\n\nUn abrazo,\n' + MARCA.profe + ' - ' + MARCA.nombre;
+          const ok = await enviarCorreo(env, { to: r.email, subject: "Componer está bueno. Cantar bien lo cambia todo :)", html: html, text: text });
+          if (ok){ enviados++; await env.DB.prepare("UPDATE leads SET nurture_paso=50 WHERE id=?1").bind(r.id).run(); }
+        }
+        return json({ ok: true, enviados: enviados, pendientes_total: (restantesRow ? restantesRow.c : 0) - enviados });
       }
 
       /* ============ IA de onboarding del panel (admin o alumno logueado) ============ */
