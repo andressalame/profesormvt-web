@@ -181,6 +181,14 @@ const WA = '51989077928';
       });
     }
   } catch (e) {}
+  // Atribución de origen: ?f= o utm_source del link (ej. bio de IG /prueba?f=ig-bio),
+  // con fallback a 'landing-prueba'. Permite medir qué canal trae los leads que convierten.
+  var _fuente = 'landing-prueba';
+  try {
+    var _qs = new URLSearchParams(location.search);
+    var _f = _qs.get('f') || _qs.get('utm_source');
+    if (_f) _fuente = _f.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 60) || 'landing-prueba';
+  } catch (e) {}
   document.querySelectorAll('[data-form]').forEach(function(form){
     var card = form.closest('.pr-formcard');
     var okEl = card.querySelector('[data-ok]');
@@ -199,7 +207,7 @@ const WA = '51989077928';
       btn.disabled = true; btn.textContent = 'Enviando...';
       fetch('/api/lead', {
         method:'POST', headers:{'content-type':'application/json'},
-        body: JSON.stringify({ nombre:nombre, telefono:tel, interes:interes, website:hp, marca:'MVT', fuente:'landing-prueba', modo:'prueba' })
+        body: JSON.stringify({ nombre:nombre, telefono:tel, interes:interes, website:hp, marca:'MVT', fuente:_fuente, modo:'prueba' })
       })
       .then(function(r){ return r.json(); })
       .then(function(d){
