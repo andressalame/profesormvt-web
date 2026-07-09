@@ -63,8 +63,9 @@ const localBusinessSchema = {
   <link rel="canonical" href={canonicalURL} />
   <meta name="robots" content="index, follow" />
 
-  <!-- Meta Pixel Code -->
-  <script>
+  <!-- Meta Pixel Code (is:inline: Astro NO debe empaquetar/diferir el pixel, o no
+       trackea confiable; debe ir inline en el head como en la home standalone) -->
+  <script is:inline>
     !function(f,b,e,v,n,t,s)
     {if(f.fbq)return;n=f.fbq=function(){n.callMethod?
     n.callMethod.apply(n,arguments):n.queue.push(arguments)};
