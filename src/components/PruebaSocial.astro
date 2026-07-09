@@ -1,0 +1,53 @@
+---
+// Bloque reusable de prueba social (rating de Google + 1 testimonio real por curso).
+// Los testimonios son los mismos ya publicados en el home (verificados por Andrés).
+// El rating 5.0 es el de Google; link a la ficha real. Sin fijar conteo (vive en el home).
+const { curso = "canto" } = Astro.props;
+
+const TESTIMONIOS = {
+  canto: { cita: "Por fin entendí qué hacía mal con mi voz. En un mes mi agudo cambió por completo.", quien: "María José", meta: "Canto" },
+  piano: { cita: "Llegué tocando dos canciones de memoria. Hoy leo, acompaño y entiendo lo que toco.", quien: "Diego", meta: "Piano" },
+  composicion: { cita: "Andrés no te llena de teoría. Te hace componer desde la primera clase.", quien: "Lucía", meta: "Composición" },
+};
+const t = TESTIMONIOS[curso] || TESTIMONIOS.canto;
+---
+<section class="ps">
+  <div class="ps-wrap">
+    <div class="ps-rating">
+      <span class="ps-stars" aria-label="5 de 5 estrellas">★★★★★</span>
+      <p class="ps-line"><b>5.0</b> en Google · opiniones verificadas</p>
+      <a class="ps-link" href="https://g.page/r/CevbO7ON9f4CEAE/review" target="_blank" rel="noopener noreferrer">Ver las reseñas →</a>
+    </div>
+    <blockquote class="ps-testi">
+      <span class="ps-verif">Verificado</span>
+      <p>“{t.cita}”</p>
+      <footer><span class="ps-name">{t.quien}</span> · <span class="ps-meta">{t.meta}</span></footer>
+    </blockquote>
+  </div>
+</section>
+
+<style>
+  .ps { padding: 40px 18px; display: flex; justify-content: center; }
+  .ps-wrap {
+    width: 100%; max-width: 720px; display: grid; gap: 22px;
+    grid-template-columns: 1fr 1.3fr; align-items: center;
+  }
+  .ps-stars { color: #e8a13d; font-size: 22px; letter-spacing: 2px; }
+  .ps-line { font-family: "Space Grotesk", system-ui, sans-serif; color: #cfc7b6; font-size: 15px; margin: 8px 0 6px; }
+  .ps-line b { color: #f3ede0; font-size: 18px; }
+  .ps-link { font-family: "JetBrains Mono", monospace; font-size: 12.5px; letter-spacing: .04em; color: #e8501f; text-decoration: none; }
+  .ps-link:hover { text-decoration: underline; }
+  .ps-testi {
+    margin: 0; background: #15110f; border: 1px solid #2A2926; border-left: 3px solid #e8501f;
+    border-radius: 10px; padding: 20px 22px;
+  }
+  .ps-verif { font-family: "JetBrains Mono", monospace; text-transform: uppercase; letter-spacing: .12em; font-size: 10px; color: #8a8276; }
+  .ps-testi p { font-family: "Space Grotesk", system-ui, sans-serif; font-size: 16px; line-height: 1.5; color: #f3ede0; margin: 8px 0 12px; }
+  .ps-testi footer { font-family: "Space Grotesk", system-ui, sans-serif; font-size: 13.5px; color: #cfc7b6; }
+  .ps-name { color: #f3ede0; font-weight: 500; }
+  .ps-meta { color: #8a8276; }
+  @media (max-width: 640px) {
+    .ps-wrap { grid-template-columns: 1fr; gap: 18px; text-align: center; }
+    .ps-testi { text-align: left; }
+  }
+</style>
