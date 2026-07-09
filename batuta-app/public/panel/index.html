@@ -358,6 +358,12 @@
         </div>
         <div class="hint" style="margin:14px 0 6px;">O manda un <b>link de cobro directo</b> por WhatsApp: el alumno paga sin registrarse y su cuenta se crea sola.</div>
         <div id="linksCobro" style="display:flex;gap:8px;flex-wrap:wrap;"></div>
+        <div class="hint" style="margin:14px 0 6px;">Y esta es <b>tu página web pública</b> (se genera sola con tus cursos y precios): ponla en tu bio de Instagram o compártela en redes.</div>
+        <div class="cfgrow" style="max-width:100%;">
+          <input id="linkPublicaBox" type="text" readonly style="flex:1;font-family:var(--mono);font-size:12.5px;" />
+          <button class="btn ghost sm" id="btnCopiarLinkPublica" style="flex:0 0 auto;">Copiar</button>
+          <a class="btn ghost sm" id="btnVerPublica" href="#" target="_blank" rel="noopener" style="flex:0 0 auto;">Ver</a>
+        </div>
       </div>
     </div>
     <div class="group"><h2>// Hoy</h2><div class="grid cards" id="resHoy"></div></div>
@@ -989,11 +995,22 @@ function cargarTrialInfo(){
     pintarLinkAlumnos();
   }).catch(function(){});
 }
+// A/B de la demo: brazo sticky por navegador. "tour" ve el tour de plata, "bar" solo la barra.
+// La atribución va por BRAZO (todo CTA del brazo tour lleva f=demo-tour), para medir si el
+// tour sube la conversión y no solo dónde se hizo clic.
+function demoArm(){
+  try{
+    var a=localStorage.getItem("batuta_demo_arm");
+    if(a!=="tour"&&a!=="bar"){ a=(Math.random()<0.5?"tour":"bar"); localStorage.setItem("batuta_demo_arm",a); }
+    return a;
+  }catch(e){ return "bar"; }
+}
 function pintarTrialBar(d){
   var bar=el("trialBar"); if(!bar) return;
   if(d && d.demo){
     // Modo demo: el puente de conversión (la demo no puede ser un callejón sin salida).
-    bar.innerHTML='Estás en la demo de Batuta · <a href="/app/registro?f=demo-panel">Crea tu academia gratis en 2 minutos</a>';
+    var f=(demoArm()==="tour")?"demo-tour":"demo-panel";
+    bar.innerHTML='Estás en la demo de Batuta · <a href="/app/registro?f='+f+'">Crea tu academia gratis en 2 minutos</a>';
     bar.classList.add("show");
     var p1=el("btnPushOn"); if(p1) p1.style.display="none";
     var p2=el("btnPushTest"); if(p2) p2.style.display="none";
@@ -1014,6 +1031,10 @@ function pintarLinkAlumnos(){
   var link = location.origin + "/app/a/" + TENANT_SLUG;
   if(box) box.value=link;
   var ft=el("ftLinkAlumnos"); if(ft) ft.textContent=link;
+  // Página pública de la academia (URL canónica en batuta.lat, no en workers.dev)
+  var linkPub = "https://batuta.lat/a/" + TENANT_SLUG;
+  var boxPub = el("linkPublicaBox"); if(boxPub) boxPub.value = linkPub;
+  var verPub = el("btnVerPublica"); if(verPub) verPub.href = linkPub;
   // Chips de link de cobro directo por paquete (pago sin registro previo)
   try{
     var cont=el("linksCobro");
@@ -1039,6 +1060,13 @@ if(_btnCopiarLinkAlumnos) _btnCopiarLinkAlumnos.addEventListener("click",functio
   var box=el("linkAlumnosBox"); if(!box || !box.value) return;
   if(navigator.clipboard && navigator.clipboard.writeText){
     navigator.clipboard.writeText(box.value).then(function(){ toast("Link copiado"); }).catch(function(){ box.select(); });
+  } else { box.select(); }
+});
+var _btnCopiarLinkPublica = el("btnCopiarLinkPublica");
+if(_btnCopiarLinkPublica) _btnCopiarLinkPublica.addEventListener("click",function(){
+  var box=el("linkPublicaBox"); if(!box || !box.value) return;
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(box.value).then(function(){ toast("Link de tu página copiado"); }).catch(function(){ box.select(); });
   } else { box.select(); }
 });
 
@@ -2723,8 +2751,12 @@ function batutaInit(){
   // PWA: registra el service worker al arranque (habilita instalar como app + recibir push)
   try{ if('serviceWorker' in navigator) navigator.serviceWorker.register('/app/sw-panel.js',{scope:'/app/panel'}).catch(function(){}); }catch(e){}
   recargar().then(iniciarRefresco).then(function(){
-    // Tour de bienvenida: 1 vez, salvo en la demo (el visitante de la demo no lo necesita).
-    try{ if(!(db && db.demo) && typeof window.lanzarTourBienvenida==="function") window.lanzarTourBienvenida(false); }catch(e){}
+    // Tour de bienvenida: 1 vez, salvo en la demo. En la demo, el brazo "tour" del A/B
+    // ve el tour de los momentos de plata (f=demo-tour); el brazo "bar" solo la barra (f=demo-panel).
+    try{
+      if(db && db.demo){ if(typeof window.lanzarTourDemo==="function" && demoArm()==="tour") window.lanzarTourDemo(); }
+      else if(typeof window.lanzarTourBienvenida==="function") window.lanzarTourBienvenida(false);
+    }catch(e){}
   }).catch(function(e){
     if(e&&e.auth){ irALogin(); return; }
     if(e&&e.paywall){ return; }
@@ -2865,19 +2897,29 @@ window.batutaInit = batutaInit;
   var elTitle=document.getElementById("tourTitle"), elBody=document.getElementById("tourBody"), elDots=document.getElementById("tourDots");
   var btnNext=document.getElementById("tourNext"), btnSkip=document.getElementById("tourSkip");
   // Pasos: cada uno apunta a un selector real del panel (o null = centrado).
-  var PASOS=[
+  var PASOS_BIENVENIDA=[
     {sel:null, t:"Bienvenido a tu academia", b:"Este es tu panel. En 4 pasos rapidos te muestro lo esencial para que arranque hoy. Toma 30 segundos."},
     {sel:'[data-tour="personas"]', t:"Todo empieza en Personas", b:"Aca agregas a tus alumnos, los agrupas y ves quien se registro en tu portal. Tu primer paso es meter a un alumno de siempre."},
     {sel:'[data-tour="link-alumnos"]', t:"Tu link para alumnos", b:"Comparte este link con tus alumnos: se registran solos y ven sus clases, material y pagos, sin que les escribas."},
     {sel:'[data-tour="cobros"]', t:"Cobros sin perseguir a nadie", b:"En Cobros confirmas los pagos por Yape en un clic y la tarjeta se confirma sola. En Configuracion pones tu numero de Yape y conectas Mercado Pago."},
     {sel:'#oiaFab', t:"Tu guia siempre a la mano", b:"Si te trabas en algo, este boton abre un asistente que responde como hacer cualquier cosa del panel. Listo, ya puedes empezar!"}
   ];
+  // Tour de la demo: los momentos de plata. El ultimo paso lleva CTA al registro con f=demo-tour
+  // (brazo "tour" del A/B contra la barra f=demo-panel).
+  var PASOS_DEMO=[
+    {sel:null, t:"Mira donde esta la plata", b:"Estudio Sonata es una academia de ejemplo, pero el sistema es el de verdad. En 30 segundos te muestro los 3 momentos en los que Batuta cobra por ti."},
+    {sel:'[data-tour="cobros"]', t:"Un pago esperando tu clic", b:"Diego ya envio su pago por Yape. Entras a Cobros, le das Confirmar y su paquete se activa solo. Con tarjeta ni eso: se confirma sola."},
+    {sel:'#linksCobro', t:"El link de cobro directo", b:"Copias el link de un paquete, lo pegas en WhatsApp y tu alumno paga sin registrarse: su cuenta se crea sola al pagar."},
+    {sel:'[data-tour="personas"]', t:"Nadie se cae en silencio", b:"Laura termino su paquete y el panel te la marca para renovarla a tiempo. Retener sin Excel y sin memoria."},
+    {sel:null, t:"Esto mismo, con tu academia", b:"7 dias gratis con tus alumnos reales, sin tarjeta. Tu panel queda igual que este, con tu marca y tu link.", cta:"/app/registro?f=demo-tour", ctaLabel:"Crear mi academia gratis"}
+  ];
+  var PASOS=PASOS_BIENVENIDA, SEEN_ACTUAL=SEEN;
   var i=0;
   function pos(){
     var p=PASOS[i], target=p.sel?document.querySelector(p.sel):null;
     for(var d=0;d<elDots.children.length;d++){ elDots.children[d].classList.toggle("on",d===i); }
     elTitle.textContent=p.t; elBody.textContent=p.b;
-    btnNext.textContent=(i===PASOS.length-1)?"Empezar":"Siguiente";
+    btnNext.textContent=(i===PASOS.length-1)?(p.ctaLabel||"Empezar"):"Siguiente";
     // Visible = tiene caja real. offsetParent falla con position:fixed (el boton del asistente),
     // asi que medimos el rect: sirve tanto para elementos normales como fixed.
     var rc = target? target.getBoundingClientRect() : null;
@@ -2897,16 +2939,32 @@ window.batutaInit = batutaInit;
     pop.style.transform="none";
   }
   function abrir(){ veil.classList.add("on"); i=0; pos(); }
-  function cerrar(){ veil.classList.remove("on"); try{localStorage.setItem(SEEN,"1");}catch(e){} }
-  PASOS.forEach(function(){ var d=document.createElement("span"); d.className="tour-dot"; elDots.appendChild(d); });
-  btnNext.addEventListener("click",function(){ if(i<PASOS.length-1){ i++; pos(); } else { cerrar(); } });
+  function cerrar(){ veil.classList.remove("on"); try{localStorage.setItem(SEEN_ACTUAL,"1");}catch(e){} }
+  function armarDots(){
+    elDots.innerHTML="";
+    PASOS.forEach(function(){ var d=document.createElement("span"); d.className="tour-dot"; elDots.appendChild(d); });
+  }
+  armarDots();
+  btnNext.addEventListener("click",function(){
+    if(i<PASOS.length-1){ i++; pos(); return; }
+    var p=PASOS[i];
+    if(p && p.cta){ cerrar(); location.href=p.cta; return; }
+    cerrar();
+  });
   btnSkip.addEventListener("click",cerrar);
   window.addEventListener("resize",function(){ if(veil.classList.contains("on")) pos(); });
   // Auto-lanzar: solo profe en trial que no lo vio, tras cargar el panel.
   window.lanzarTourBienvenida=function(force){
+    PASOS=PASOS_BIENVENIDA; SEEN_ACTUAL=SEEN; armarDots();
     try{ if(!force && localStorage.getItem(SEEN)) return; }catch(e){}
     if(typeof TENANT_ESTADO!=="undefined" && TENANT_ESTADO==="activo" && !force) { /* activo puede verlo igual la 1a vez */ }
     setTimeout(abrir, force?0:1400);
+  };
+  // Tour de plata de la demo: 1 vez por navegador, solo el brazo "tour" del A/B.
+  window.lanzarTourDemo=function(force){
+    PASOS=PASOS_DEMO; SEEN_ACTUAL="batuta_tour_demo_v1"; armarDots();
+    try{ if(!force && localStorage.getItem(SEEN_ACTUAL)) return; }catch(e){}
+    setTimeout(abrir, force?0:1600);
   };
 })();
 </script>
