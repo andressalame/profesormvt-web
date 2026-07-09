@@ -1,0 +1,226 @@
+---
+// Matriz distrito × curso (SEO local): 18 páginas generadas de una sola plantilla.
+// Honestidad geográfica: la sede presencial ES San Isidro; cada distrito lleva su
+// nota real de cercanía y el ángulo online. Voz de la casa: positiva y empoderadora,
+// nunca menospreciar al alumno. Piano SIN "método Faber" (regla permanente).
+import Layout from '../layouts/Layout.astro';
+import LeadForm from '../components/LeadForm.astro';
+
+export function getStaticPaths() {
+  const DISTRITOS = [
+    { slug: 'miraflores', nombre: 'Miraflores', nota: 'San Isidro está al lado: unos 10 minutos desde el centro de Miraflores' },
+    { slug: 'surco', nombre: 'Santiago de Surco', nota: 'San Isidro queda a 15-20 minutos por Javier Prado o Angamos' },
+    { slug: 'san-borja', nombre: 'San Borja', nota: 'San Isidro queda a 10-15 minutos por Javier Prado' },
+    { slug: 'la-molina', nombre: 'La Molina', nota: 'San Isidro queda a 20-30 minutos; muchos alumnos de La Molina eligen la clase online y vienen presencial cuando pueden' },
+    { slug: 'barranco', nombre: 'Barranco', nota: 'San Isidro queda a 15-20 minutos subiendo por la Costa Verde' },
+    { slug: 'jesus-maria', nombre: 'Jesús María', nota: 'San Isidro está cruzando la Av. Salaverry: unos 10 minutos' },
+  ];
+  const CURSOS = {
+    canto: {
+      nombre: 'canto',
+      titulo: (d) => `Clases de canto en ${d} para adultos`,
+      em: 'cantar bien de verdad',
+      lead: 'Si te quiebras en las notas altas, te quedas sin aire o crees que "no naciste para cantar", no es tu oído ni tu talento. Es coordinación muscular, y se entrena a cualquier edad. Técnica vocal real, uno a uno, hasta que tu voz responda.',
+      angleH2: 'Probablemente no cantas mal. Te enseñaron mal.',
+      angleP: 'A la mayoría le dijeron que cantar es "echarle ganas" y empujar desde la barriga. Por eso terminas gritando y las notas altas se sienten como una pared. Cantar bien es un gesto físico preciso que se coordina y se entrena. No es un don: es una habilidad.',
+      cards: [
+        { h: 'Dejar de quebrarte', p: 'El "gallo" al subir no es mala suerte: es cierre cordal soltándose donde no debe. Lo entrenamos hasta que pases de pecho a cabeza sin que se note el salto.' },
+        { h: 'Dejar de forzar', p: 'Si terminas afónico o con la garganta apretada, estás cantando con los músculos equivocados. Aprendes a soltar la tensión y dejar que el aire haga el trabajo.' },
+        { h: 'Llegar a las notas altas', p: 'El agudo no se alcanza empujando: se alcanza coordinando. Ese rango que hoy sientes imposible se vuelve territorio conocido.' },
+      ],
+      pagLima: '/clases-canto-lima/',
+      pagLimaLabel: 'la página completa de clases de canto en Lima',
+    },
+    piano: {
+      nombre: 'piano',
+      titulo: (d) => `Clases de piano en ${d} para adultos`,
+      em: 'tocar lo que te gusta',
+      lead: 'Nada de años de solfeo antes de tocar tu primera canción. Técnica de dedos real y las canciones que tú eliges, desde el inicio. Para adultos que empiezan de cero o retoman después de años.',
+      angleH2: 'El piano no necesita que "empieces de niño".',
+      angleP: 'El adulto aprende distinto y eso es una ventaja: entiendes lo que practicas y vas directo a lo que quieres tocar. Con técnica de dedos bien construida y repertorio tuyo, el progreso se escucha en semanas, no en años.',
+      cards: [
+        { h: 'Técnica de dedos', p: 'Independencia, fuerza y precisión construidas con ejercicios puntuales. La base que hace que todo lo demás suene limpio.' },
+        { h: 'Tus canciones', p: 'El repertorio lo eliges tú. La técnica entra en la música que te gusta, no en un temario genérico que no te dice nada.' },
+        { h: 'Leer lo necesario', p: 'Lectura y teoría al servicio de tocar, no al revés. Aprendes lo que usas, cuando lo necesitas usar.' },
+      ],
+      pagLima: '/clases-piano-lima/',
+      pagLimaLabel: 'la página completa de clases de piano en Lima',
+    },
+    composicion: {
+      nombre: 'composición',
+      titulo: (d) => `Clases de composición en ${d}`,
+      em: 'escribir tus canciones',
+      lead: 'Tienes ideas, melodías sueltas o letras a medias y no sabes cómo convertirlas en canciones terminadas. Eso tiene método: armonía, estructura y letra trabajadas sobre TU música, uno a uno.',
+      angleH2: 'Componer no es esperar a la inspiración.',
+      angleP: 'Las canciones no se terminan solas: se construyen. Cuando entiendes cómo funcionan la armonía y la estructura, la inspiración deja de ser un accidente y pasa a ser una herramienta que usas cuando quieres.',
+      cards: [
+        { h: 'Armonía aplicada', p: 'Los acordes que hacen que tu canción suene como la escuchas en tu cabeza. Teoría directo sobre tu música, sin abstracciones eternas.' },
+        { h: 'Estructura y letra', p: 'Verso, coro, puente: cómo se arma una canción que sostiene la atención, y cómo la letra encuentra su lugar en la música.' },
+        { h: 'Terminar canciones', p: 'El objetivo no es acumular ideas sueltas: es que salgas con canciones completas, tuyas, que puedas mostrar.' },
+      ],
+      pagLima: '/clases-composicion-lima/',
+      pagLimaLabel: 'la página completa de clases de composición en Lima',
+    },
+  };
+  const paths = [];
+  for (const d of DISTRITOS) {
+    for (const key of Object.keys(CURSOS)) {
+      paths.push({
+        params: { slug: `clases-de-${key}-en-${d.slug}` },
+        props: { distrito: d, curso: CURSOS[key], cursoKey: key },
+      });
+    }
+  }
+  return paths;
+}
+
+const { distrito, curso, cursoKey } = Astro.props;
+const titleSEO = `Clases de ${curso.nombre} en ${distrito.nombre} | Adultos, 1 a 1 (San Isidro y online) | ProfesorMVT`;
+const descSEO = `Clases de ${curso.nombre} 1 a 1 para adultos de ${distrito.nombre}: presencial en San Isidro u online. Clase de prueba con diagnóstico, S/50.`;
+const activeNav = cursoKey === 'composicion' ? 'composicion' : cursoKey;
+---
+
+<Layout title={titleSEO} description={descSEO} activeNav={activeNav}>
+  <main class="cc">
+    <section class="cc-hero">
+      <div class="container-narrow">
+        <p class="label">{curso.nombre} · {distrito.nombre} · presencial en San Isidro y online</p>
+        <h1>{curso.titulo(distrito.nombre)} que quieren <em>{curso.em}</em></h1>
+        <p class="lead">{curso.lead}</p>
+        <div class="cc-cta">
+          <a href="/horarios/" class="btn-cta">Ver horarios disponibles →</a>
+          <a href="/alumnos/" class="btn-ghost">Crear mi cuenta</a>
+        </div>
+        <p class="note">Clase de prueba con diagnóstico por S/50. Desde {distrito.nombre}: {distrito.nota}. Y si prefieres, la clase completa funciona online.</p>
+      </div>
+    </section>
+
+    <section class="cc-angle">
+      <div class="container-narrow">
+        <h2>{curso.angleH2}</h2>
+        <p class="lead">{curso.angleP}</p>
+      </div>
+    </section>
+
+    <section class="cc-que">
+      <div class="container">
+        <div class="cc-que-head">
+          <h2>Qué entrenamos en tus clases</h2>
+          <p class="note">Uno a uno, con plan propio. Vas a sentir el cambio, no solo entenderlo.</p>
+        </div>
+        <div class="grid3">
+          {curso.cards.map((c) => (
+            <article class="card">
+              <h3>{c.h}</h3>
+              <p>{c.p}</p>
+            </article>
+          ))}
+        </div>
+      </div>
+    </section>
+
+    <section class="cc-faq">
+      <div class="container-narrow">
+        <h2>Preguntas de alumnos de {distrito.nombre}</h2>
+        <div class="faq">
+          <details>
+            <summary>Las clases son en {distrito.nombre}?</summary>
+            <p>La sede presencial está en San Isidro. {distrito.nota}. Y la clase online funciona igual de bien: mismo profesor, mismo método, sin traslado.</p>
+          </details>
+          <details>
+            <summary>Nunca he tomado clases de {curso.nombre}. Puedo empezar de cero?</summary>
+            <p>Sí, y es lo más común. La primera clase incluye un diagnóstico: escucho dónde estás hoy y armo el plan desde ahí. Empezar de adulto no es una desventaja: entiendes lo que practicas.</p>
+          </details>
+          <details>
+            <summary>Cuánto cuesta y cómo empiezo?</summary>
+            <p>La clase de prueba con diagnóstico cuesta S/50 y no te compromete a nada. Revisa los <a href="/horarios/">horarios disponibles</a> y elige el que te acomode.</p>
+          </details>
+        </div>
+        <p class="note" style="text-align:center; margin-top:18px;">
+          Quieres el detalle completo del curso? Mira <a href={curso.pagLima}>{curso.pagLimaLabel}</a>.
+        </p>
+      </div>
+    </section>
+
+    <LeadForm fuente={`landing-${cursoKey}-${distrito.slug}`} />
+  </main>
+</Layout>
+
+<style>
+  .cc { position: relative; z-index: 2; }
+  .label {
+    font-family: 'JetBrains Mono', monospace; text-transform: uppercase;
+    letter-spacing: .2em; font-size: 12px; color: var(--color-ember);
+    font-weight: 700; margin: 0;
+  }
+  .note { color: var(--color-text-mute); font-size: 14px; margin: 14px 0 0; }
+  .note a { color: var(--color-ember); }
+
+  .cc-hero { padding: 80px 0 40px; text-align: center; }
+  .cc-hero h1 {
+    font-size: clamp(32px, 5vw, 54px); line-height: 1.05; margin: 16px 0 0;
+    max-width: 880px; margin-left: auto; margin-right: auto;
+  }
+  .cc-hero h1 em { color: var(--color-ember); font-style: normal; }
+  .cc-hero .lead {
+    max-width: 660px; margin: 22px auto 0;
+    font-size: 19px; color: var(--color-bone-mute); line-height: 1.6;
+  }
+  .cc-cta { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; margin-top: 30px; }
+  .btn-cta {
+    display: inline-block; background: var(--color-ember);
+    color: var(--color-bone) !important; font-weight: 600;
+    padding: 15px 30px; border-radius: 6px; font-size: 16px;
+    transition: background .2s;
+  }
+  .btn-cta:hover { background: var(--wine-deep); }
+  .btn-ghost {
+    display: inline-block; border: 1px solid var(--hairline-strong);
+    color: var(--color-bone) !important; font-weight: 600;
+    padding: 15px 30px; border-radius: 6px; font-size: 16px;
+    transition: border-color .15s, color .15s;
+  }
+  .btn-ghost:hover { border-color: var(--color-ember); color: var(--color-ember) !important; }
+
+  .cc-angle { padding: 30px 0; text-align: center; }
+  .cc-angle h2 { font-size: clamp(28px, 4vw, 42px); max-width: 720px; margin: 0 auto; }
+  .cc-angle .lead {
+    max-width: 660px; margin: 20px auto 0;
+    font-size: 18px; color: var(--color-bone-mute); line-height: 1.65;
+  }
+
+  .cc-que { padding: 50px 0 30px; }
+  .cc-que-head { text-align: center; margin-bottom: 26px; }
+  .cc-que-head h2 { font-size: clamp(28px, 4vw, 40px); }
+  .grid3 {
+    display: grid; grid-template-columns: repeat(3, 1fr);
+    gap: 18px; max-width: 1000px; margin: 0 auto;
+  }
+  .card {
+    background: var(--color-ink-soft);
+    border: 1px solid var(--color-line);
+    border-radius: 12px; padding: 26px 24px;
+  }
+  .card h3 { font-size: 20px; margin: 0 0 8px; color: var(--color-ember); }
+  .card p { color: var(--color-bone-mute); font-size: 15px; margin: 0; line-height: 1.55; }
+
+  .cc-faq { padding: 50px 0 30px; }
+  .cc-faq h2 { font-size: clamp(26px, 4vw, 38px); text-align: center; margin-bottom: 26px; }
+  .faq { max-width: 720px; margin: 0 auto; display: grid; gap: 12px; }
+  .faq details {
+    background: var(--color-ink-soft);
+    border: 1px solid var(--color-line);
+    border-radius: 10px; padding: 0 20px;
+  }
+  .faq summary {
+    cursor: pointer; list-style: none; font-weight: 600;
+    padding: 16px 0; color: var(--color-bone); font-size: 16px;
+  }
+  .faq summary::-webkit-details-marker { display: none; }
+  .faq details p { color: var(--color-bone-mute); font-size: 15px; line-height: 1.6; padding-bottom: 16px; margin: 0; }
+  .faq details p a { color: var(--color-ember); }
+
+  @media (max-width: 860px) {
+    .grid3 { grid-template-columns: 1fr; max-width: 520px; }
+  }
+</style>
