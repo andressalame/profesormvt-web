@@ -89,7 +89,7 @@ const activeNav = cursoKey === 'composicion' ? 'composicion' : cursoKey;
         <h1>{curso.titulo(distrito.nombre)} que quieren <em>{curso.em}</em></h1>
         <p class="lead">{curso.lead}</p>
         <div class="cc-cta">
-          <a href="/horarios/" class="btn-cta">Ver horarios disponibles →</a>
+          <a href={`/prueba/?curso=${cursoKey}&f=landing-${cursoKey}-${distrito.slug}`} class="btn-cta">Reservar mi clase de prueba →</a>
           <a href="/alumnos/" class="btn-ghost">Crear mi cuenta</a>
         </div>
         <p class="note">Clase de prueba con diagnóstico por S/50. Desde {distrito.nombre}: {distrito.nota}. Y si prefieres, la clase completa funciona online.</p>
