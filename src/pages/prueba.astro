@@ -172,6 +172,15 @@ const WA = '51989077928';
 </style>
 
 <script define:vars={{ WA }}>
+  // Pre-selecciona el curso si viene por ?curso= (desde las landings de canto/piano/composición).
+  try {
+    var _curso = new URLSearchParams(location.search).get('curso');
+    if (_curso) {
+      document.querySelectorAll('select[name=interes]').forEach(function(sel){
+        if ([].some.call(sel.options, function(o){ return o.value === _curso; })) sel.value = _curso;
+      });
+    }
+  } catch (e) {}
   document.querySelectorAll('[data-form]').forEach(function(form){
     var card = form.closest('.pr-formcard');
     var okEl = card.querySelector('[data-ok]');
