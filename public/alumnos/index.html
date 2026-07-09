@@ -637,6 +637,7 @@
       <h3>Comprar <em>paquete</em></h3>
       <div class="mlab" id="wizMlab">// Paso 1 de 3</div>
       <div class="wiz-dots" id="wizDots" style="display:flex;gap:6px;margin:-6px 0 16px;"></div>
+      <div class="note hidden" id="c_yapeNote" style="margin:0 0 14px;padding:10px 12px;border:1px solid rgba(232,80,31,.45);border-radius:8px;"></div>
 
       <!-- Paso W1: Tu paquete -->
       <div id="wizP1">
@@ -1128,6 +1129,7 @@ function abrirCompra(pk){
   $("c_metodo").value = "Tarjeta (Mercado Pago)";
   renderPaybox();
   $("c_op").value=""; if($("c_screenshot")) $("c_screenshot").value=""; $("compraErr").textContent=""; $("wizErr1").textContent=""; $("wizErr2").textContent="";
+  hide("c_yapeNote");
   actualizaBtnP1();
   show("compraPaso1"); hide("compraPaso2");
   irAWizPaso(1);
@@ -1798,8 +1800,46 @@ function manejarRetornoPago(){
   } else if(pago === "pendiente"){
     toast("Tu pago está en proceso. Apenas se apruebe, activo tu paquete.");
   } else if(pago === "error"){
-    toast("El pago no se completó. Puedes intentarlo de nuevo.");
+    toast("El pago con tarjeta no se completó. Te dejo listo el Yape, toma 1 minuto.");
+    var pIni = ultimaIniciadaReciente();
+    marcarYapeFallbackVisto(pIni);
+    setTimeout(function(){ ofrecerYapeFallback(pIni ? pIni.paquete : null); }, 600);
   }
+}
+
+/* ---------- Fallback a Yape cuando la tarjeta no cierra ----------
+   Dato duro (jul-2026): todas las compras confirmadas reales entraron por Yape;
+   los intentos con tarjeta llegan al checkout de MP y ahí se quedan. Si alguien
+   vuelve de MP sin pagar (?pago=error) o carga el portal con una compra de
+   tarjeta "iniciada" de las últimas 48h, se le abre el modal de compra con
+   Yape preseleccionado para atraparlo en el momento. */
+function ultimaIniciadaReciente(){
+  var p = (ME && ME.pagos && ME.pagos[0]) || null;   // la más reciente; si luego pagó por otro método, esa ya no es "iniciada"
+  if(!p || p.estado !== "iniciada" || !p.fecha) return null;
+  var f = new Date(p.fecha + "T12:00:00");           // la fecha viene sin hora; mediodía esquiva líos de zona horaria
+  if(isNaN(f.getTime())) return null;
+  return (Date.now() - f.getTime() <= 48*3600*1000) ? p : null;
+}
+function marcarYapeFallbackVisto(p){
+  if(!p) return;
+  try{ localStorage.setItem("yapeFallback:"+(((ME||{}).cuenta||{}).email||"")+":"+p.fecha, "1"); }catch(e){}
+}
+function ofrecerYapeFallback(pk){
+  if(!ME || ME.compraPendiente) return;
+  try{
+    abrirCompra(pk || null);
+    $("c_metodo").value = "Yape/Plin/Sip";
+    renderPaybox();
+    $("c_yapeNote").textContent = "La tarjeta a veces se pone terca; no pasa nada. Yapea nomás: elige tu paquete, dale Siguiente y te aparece mi número. Lo activo apenas me llegue, casi siempre en minutos.";
+    show("c_yapeNote");
+  }catch(e){}
+}
+function nudgeYapeSiAbandonoTarjeta(){
+  var p = ultimaIniciadaReciente();
+  if(!p) return;
+  try{ if(localStorage.getItem("yapeFallback:"+(((ME||{}).cuenta||{}).email||"")+":"+p.fecha)) return; }catch(e){}
+  marcarYapeFallbackVisto(p);
+  ofrecerYapeFallback(p.paquete);
 }
 function cargarMe(){
   setPantalla("viewLoading");
@@ -1815,7 +1855,10 @@ function cargarMe(){
     manejarRetornoPago();
     // Nudge a reservar al cargar el portal (cubre el caso Yape ya confirmado por el profe).
     // Si venimos de retorno de tarjeta, manejarRetornoPago() ya se encarga del empuje.
-    if(!vinoDeRetornoTarjeta) empujarAReservar();
+    if(!vinoDeRetornoTarjeta){
+      empujarAReservar();
+      nudgeYapeSiAbandonoTarjeta();   // tarjeta abandonada en MP hace <48h → ofrecer Yape (1 vez por intento)
+    }
     // Onboarding: boton "ver el tour" en Mi cuenta + disparo automatico la primera vez.
     try {
       var vc = $("v-cuenta");
