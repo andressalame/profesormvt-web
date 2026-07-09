@@ -252,6 +252,9 @@
   .trialbar a,.trialbar button{color:var(--bg);text-decoration:underline;background:none;border:0;font:inherit;cursor:pointer;padding:0;}
   #ovPaywall{z-index:200;}
   #ovPaywall .modal{border-color:var(--accent);}
+  /* multi-profesor: lo que solo ve el dueno se esconde para el rol profesor */
+  body.rol-profesor .solo-dueno{display:none !important;}
+  .pill.profe{background:rgba(232,161,61,.14);color:var(--accent);font-size:10px;padding:2px 7px;border-radius:10px;margin-left:6px;}
 </style>
 </head>
 <body>
@@ -278,8 +281,9 @@
         <div class="navgroup-items">
           <button class="tab" data-tab="alumnos">Alumnos</button>
           <button class="tab" data-tab="grupos">Grupos</button>
+          <button class="tab solo-dueno" data-tab="profesores">Profesores</button>
           <button class="tab" data-tab="cuentas">Accesos al portal</button>
-          <button class="tab" data-tab="leads">Interesados</button>
+          <button class="tab solo-dueno" data-tab="leads">Interesados</button>
         </div>
       </div>
       <div class="navgroup">
@@ -307,15 +311,15 @@
       <div class="navgroup">
         <button class="navgroup-h" type="button"><span class="ng-ico"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></span><span class="ng-tx">Configuración</span><span class="ng-chev"><svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg></span></button>
         <div class="navgroup-items">
-          <button class="tab" data-tab="perfil">Perfil</button>
-          <button class="tab" data-tab="ajustes">Ajustes</button>
+          <button class="tab solo-dueno" data-tab="perfil">Perfil</button>
+          <button class="tab solo-dueno" data-tab="ajustes">Ajustes</button>
           <button class="tab" data-tab="feedback">Ideas y errores</button>
         </div>
       </div>
     </nav>
     <div class="sb-tools">
       <span class="syncdot" id="syncdot">—</span>
-      <details>
+      <details class="solo-dueno">
         <summary>Datos y respaldo</summary>
         <div class="sb-toolsbox">
           <button class="btn ghost sm" id="btnExport">Exportar JSON</button>
@@ -393,6 +397,20 @@
     <div class="tablewrap">
       <table id="tablaGrupos">
         <thead><tr><th>Grupo</th><th>Curso</th><th>Horario</th><th>Alumnos</th><th></th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="panel" id="panel-profesores">
+    <div style="display:flex;align-items:center;gap:14px;margin-bottom:10px;flex-wrap:wrap;">
+      <button class="btn" id="btnInvitarProfe">+ Invitar profesor</button>
+      <span class="hint" id="profeAsientos"></span>
+    </div>
+    <p class="hint" style="margin-bottom:16px;">Cada profesor entra con su propio correo y contraseña, y ve SOLO sus alumnos, su agenda y sus horarios. Tú lo ves todo. Los pagos, precios y la marca siguen siendo tuyos.</p>
+    <div class="tablewrap">
+      <table id="tablaProfes">
+        <thead><tr><th>Profesor</th><th>Correo</th><th>Alumnos</th><th>Estado</th><th></th></tr></thead>
         <tbody></tbody>
       </table>
     </div>
@@ -666,6 +684,10 @@
       <p class="hint">Hasta que llenes el número, el portal manda a los alumnos a coordinarte el pago por WhatsApp.</p>
       <div class="cfgrow"><span class="pk">Cupo por horario</span><input id="cfg_agenda_cupo" type="number" min="1" max="20" placeholder="1" /></div>
       <p class="hint" style="margin-top:-4px;">1 = clases individuales. Súbelo para clases grupales: ese número de alumnos podrá reservar el MISMO horario desde el portal.</p>
+      <div class="cfgrow"><span class="pk">Recordatorio de clase (24h y 1h)</span><select id="cfg_recordatorios_clase"><option value="">Activado</option><option value="off">Apagado</option></select></div>
+      <p class="hint" style="margin-top:-4px;">Correo automático al alumno 24 horas y 1 hora antes de su reserva. Menos faltas sin que muevas un dedo.</p>
+      <div class="cfgrow"><span class="pk">Recordatorio de renovación</span><select id="cfg_recordatorio_renovacion"><option value="">Activado</option><option value="off">Apagado</option></select></div>
+      <p class="hint" style="margin-top:-4px;">Correo automático cuando el paquete del alumno está por vencer (o venció), con link para renovar desde su portal.</p>
       <div class="cfgrow"><span class="pk">Google Client ID</span><input id="cfg_google_client_id" type="text" placeholder="xxxxx.apps.googleusercontent.com" disabled /></div>
       <p class="hint" style="margin-top:-4px;">Se conecta al activar tu plan · enciende el botón de Google del portal de tus alumnos.</p>
       <div class="cfgrow"><span class="pk">BCP cuenta (Soles)</span><input id="cfg_bcp_cuenta" type="text" placeholder="19100000000000" /></div>
@@ -767,6 +789,24 @@
   </div>
 </div>
 
+<!-- Modal invitar profesor (multi-profesor) -->
+<div class="overlay" id="ovProfe">
+  <div class="modal">
+    <h3>Invitar <em>profesor</em></h3>
+    <div class="mlab">// Le llega un correo con el link para crear su contraseña</div>
+    <div class="frow">
+      <div class="field"><label>Nombre</label><input id="pf_nombre" type="text" placeholder="Ana Torres" /></div>
+      <div class="field"><label>Correo</label><input id="pf_email" type="email" placeholder="ana@correo.com" /></div>
+    </div>
+    <div class="field"><label>WhatsApp (opcional)</label><input id="pf_whatsapp" type="text" placeholder="51..." /></div>
+    <div class="err" id="pfErr" style="color:#e8604f;font-size:13px;min-height:16px;"></div>
+    <div class="modal-actions">
+      <button class="btn ghost" data-close>Cancelar</button>
+      <button class="btn" id="btnGuardarProfe">Enviar invitación</button>
+    </div>
+  </div>
+</div>
+
 <!-- Modal alumno -->
 <div class="overlay" id="ovAlumno">
   <div class="modal">
@@ -788,6 +828,8 @@
       <div class="field"><label>Fecha de compra</label><input id="a_fecha" type="date" /></div>
       <div class="field"><label>Estado de pago</label><select id="a_pago"><option>Pagado</option><option>Pendiente</option></select></div>
     </div>
+    <div class="field" id="a_profe_wrap" style="display:none;"><label>Profesor asignado</label><select id="a_profe"></select>
+      <p class="hint" style="margin:5px 0 0;">El alumno reserva en la agenda de SU profesor, y ese profesor lo ve en su panel.</p></div>
     <div class="field"><label>Nota de horario (manual, opcional)</label><input id="a_horario" type="text" placeholder="Solo si no usa la agenda. Ej: Martes 18:00" />
       <p class="hint" id="a_horario_derivado" style="margin:4px 0 0;"></p></div>
     <div class="field"><label>Notas</label><textarea id="a_notas"></textarea></div>
@@ -994,14 +1036,44 @@ function recargar(){
     // El slug también llega por admin/data (path que SIEMPRE corre): así el link de alumnos no
     // depende de la carrera con /app/api/t/me y nunca queda vacío.
     if(d && d.slug){ TENANT_SLUG = d.slug; }
+    ROL=d.rol||"dueno"; PROFE_ID=d.profe_id||""; EQUIPO=d.equipo||[];
+    aplicarRol();
     renderAll(); pintarLinkAlumnos(); setSync("Conectado ✓","ok");
   });
+}
+/* ---------- Multi-profesor: rol del actor y vistas por rol ---------- */
+var ROL="dueno", PROFE_ID="", EQUIPO=[];
+function esEquipoMulti(){ return EQUIPO && EQUIPO.filter(function(p){return p.estado!=="suspendido";}).length>1; }
+function nombreProfe(pid){
+  var p=(EQUIPO||[]).find(function(x){return x.id===pid;});
+  return p?p.nombre:"";
+}
+function aplicarRol(){
+  document.body.classList.toggle("rol-profesor", ROL==="profesor");
+  /* si un profesor quedo parado en un tab de dueno, lo devolvemos a Inicio */
+  if(ROL==="profesor"){
+    var act=document.querySelector(".tab.active");
+    if(act && act.classList.contains("solo-dueno")){
+      var home=document.querySelector('.tab[data-tab="resumen"]'); if(home) home.click();
+    }
+  }
 }
 
 /* ---------- Trial / paywall ---------- */
 function mostrarPaywall(){
   var wa = "https://wa.me/"+WA_ACTIVAR+"?text="+encodeURIComponent("Hola Andrés, quiero activar mi plan de Batuta (academia: "+TENANT_SLUG+")");
   var btn=el("btnPaywallWa"); if(btn) btn.href=wa;
+  /* multi-profesor: el plan lo paga el dueño; al profesor se le dice a quién acudir */
+  if(ROL==="profesor"){
+    var m=el("ovPaywall").querySelector(".modal");
+    if(m && !el("pwProfeMsg")){
+      var av=m.querySelector(".modal-actions"); if(av) av.style.display="none";
+      var cards=m.querySelectorAll(".frow .card"); [].slice.call(cards).forEach(function(c){ c.style.display="none"; });
+      var p=document.createElement("p"); p.id="pwProfeMsg"; p.className="hint";
+      p.textContent="El plan de la academia lo maneja el dueño. Avísale para que lo reactive y recuperas tu panel.";
+      var h=m.querySelector(".mlab"); if(h) h.insertAdjacentElement("afterend", p);
+    }
+  }
   el("ovPaywall").classList.add("open");
   detenerRefresco();
 }
@@ -1234,8 +1306,9 @@ function renderAlumnos(){
     var cu=cuentaDeAlumno(a.id);
     var renovBtn=(c.clase!=="green")?'<button class="btn sm" data-renovar="'+a.id+'">Enviar mensaje</button>':'';
     var pago=a.pago==="Pagado"?'<span class="pill pago-ok">Pagado</span>':'<span class="pill pago-pend">Pendiente</span>';
+    var pillPf=(ROL==="dueno"&&esEquipoMulti()&&a.profesor_id)?'<span class="pill profe">'+esc((nombreProfe(a.profesor_id)||"?").split(" ")[0])+'</span>':'';
     return '<tr>'+
-      '<td class="name">'+esc(a.nombre)+'<br><span class="mini">'+esc(a.whatsapp||'')+'</span></td>'+
+      '<td class="name">'+esc(a.nombre)+pillPf+'<br><span class="mini">'+esc(a.whatsapp||'')+'</span></td>'+
       '<td>'+(cu?'<span class="mini">'+esc(cu.email)+'</span>':'<span class="pill gray">Sin cuenta</span>')+'</td>'+
       '<td>'+esc(a.curso)+'</td>'+
       '<td>'+esc(a.paquete)+'<br><span class="mini">S/ '+c.monto+' · ciclo '+(a.ciclo||1)+'</span></td>'+
@@ -1405,6 +1478,8 @@ function renderAjustes(){
   el("cfg_pago_numero").value=(db.config&&db.config.pago_numero)||"";
   el("cfg_pago_titular").value=(db.config&&db.config.pago_titular)||"";
   if(el("cfg_agenda_cupo")) el("cfg_agenda_cupo").value=(db.config&&db.config.agenda_cupo)||"";
+  if(el("cfg_recordatorios_clase")) el("cfg_recordatorios_clase").value=(db.config&&db.config.recordatorios_clase)||"";
+  if(el("cfg_recordatorio_renovacion")) el("cfg_recordatorio_renovacion").value=(db.config&&db.config.recordatorio_renovacion)||"";
   el("cfg_google_client_id").value=(db.config&&db.config.google_client_id)||"";
   el("cfg_bcp_cuenta").value=(db.config&&db.config.bcp_cuenta)||"";
   el("cfg_bcp_cci").value=(db.config&&db.config.bcp_cci)||"";
@@ -1647,7 +1722,12 @@ function cargarAgenda(){
   }).catch(function(){ toast("No pude cargar la agenda"); });
 }
 function renderAgendaAdmin(){
-  var html = '<table class="dispt"><thead><tr><th></th>'+AG_DOW.map(function(d){return '<th>'+d.n+'</th>';}).join("")+'</tr></thead><tbody>';
+  /* aviso de disponibilidad vacia: sin horarios marcados, los alumnos NO ven slots */
+  var html = "";
+  if(!(AG_DISP||[]).some(function(r){return r.activo;})){
+    html += '<div class="card" style="padding:12px 14px;margin:0 0 12px;border-color:var(--accent);"><strong>Tus alumnos aún no ven horarios.</strong> Marca abajo los días y horas en que dictas, y guarda: recién ahí podrán reservar desde su portal.</div>';
+  }
+  html += '<table class="dispt"><thead><tr><th></th>'+AG_DOW.map(function(d){return '<th>'+d.n+'</th>';}).join("")+'</tr></thead><tbody>';
   AG_HORAS.forEach(function(h){
     html += '<tr><td style="font-weight:600;font-family:var(--mono);font-size:12px;">'+h+'</td>'+AG_DOW.map(function(d){
       var on = dispActiva(d.d,h);
@@ -1785,8 +1865,71 @@ if(el("btnPwFb")) el("btnPwFb").addEventListener("click",function(){
     .finally(function(){ btn.disabled=false; });
 });
 
+/* ---------- Profesores del equipo (multi-profesor, solo dueño) ---------- */
+function cargarProfesores(){
+  fetch("/app/api/admin/profesores",{headers:hdr()}).then(function(r){return r.json();}).then(function(d){
+    if(d.error){ toast(d.error); return; }
+    var st=el("profeAsientos");
+    if(st && d.asientos) st.textContent="Asientos: "+d.asientos.usados+" de "+d.asientos.max+" (plan "+(d.plan||"profe")+")";
+    var tb=el("tablaProfes")?el("tablaProfes").querySelector("tbody"):null; if(!tb) return;
+    var ps=d.profesores||[];
+    tb.innerHTML=ps.map(function(p){
+      var ESTS={activo:'<span class="pill pago-ok">Activo</span>',invitado:'<span class="pill gray">Invitado</span>',suspendido:'<span class="pill pago-pend">Suspendido</span>'};
+      var acts=[];
+      if(p.rol!=="dueno"){
+        if(p.estado==="invitado"){
+          acts.push('<button class="btn ghost sm" data-pfcopiar="'+esc(p.invite_link||'')+'">Copiar link</button>');
+          acts.push('<button class="btn ghost sm" data-pfreenviar="'+p.id+'">Reenviar correo</button>');
+          acts.push('<button class="btn ghost sm" data-pfborrar="'+p.id+'">×</button>');
+        } else if(p.estado==="suspendido"){
+          acts.push('<button class="btn ghost sm" data-pfreactivar="'+p.id+'">Reactivar</button>');
+        } else {
+          acts.push('<button class="btn ghost sm" data-pfsuspender="'+p.id+'">Suspender</button>');
+        }
+      }
+      return '<tr>'+
+        '<td class="name">'+esc(p.nombre)+(p.rol==="dueno"?' <span class="pill profe">Dueño</span>':'')+'</td>'+
+        '<td><span class="mini">'+esc(p.email)+'</span></td>'+
+        '<td>'+(p.n_alumnos||0)+'</td>'+
+        '<td>'+(ESTS[p.estado]||esc(p.estado))+'</td>'+
+        '<td><div class="rowact">'+acts.join("")+'</div></td>'+
+      '</tr>';
+    }).join("") || '<tr><td colspan="5" class="empty">Solo tú por ahora. Invita a tu primer profesor.</td></tr>';
+  }).catch(function(){ toast("No pude cargar los profesores."); });
+}
+if(el("btnInvitarProfe")) el("btnInvitarProfe").addEventListener("click",function(){
+  el("pf_nombre").value=""; el("pf_email").value=""; el("pf_whatsapp").value=""; el("pfErr").textContent="";
+  openOv("ovProfe");
+});
+if(el("btnGuardarProfe")) el("btnGuardarProfe").addEventListener("click",function(){
+  var nombre=el("pf_nombre").value.trim(), email=el("pf_email").value.trim();
+  el("pfErr").textContent="";
+  if(nombre.length<2){ el("pfErr").textContent="Escribe el nombre."; return; }
+  if(!email){ el("pfErr").textContent="Escribe el correo."; return; }
+  var btn=el("btnGuardarProfe"); btn.disabled=true;
+  apiPost("/app/api/admin/profesores",{accion:"invitar",nombre:nombre,email:email,whatsapp:el("pf_whatsapp").value.trim()})
+    .then(function(d){
+      closeOv("ovProfe");
+      toast(d.correo_enviado?"Invitación enviada por correo ✓":"Invitación creada ✓ (copia el link y mándaselo)",3400);
+      cargarProfesores(); recargar();
+    })
+    .catch(function(e){ el("pfErr").textContent=(e&&e.message)||"No se pudo invitar."; })
+    .finally(function(){ btn.disabled=false; });
+});
+document.body.addEventListener("click",function(e){
+  var cp=e.target.closest("[data-pfcopiar]"), rv=e.target.closest("[data-pfreenviar]"),
+      su=e.target.closest("[data-pfsuspender]"), ra=e.target.closest("[data-pfreactivar]"),
+      bo=e.target.closest("[data-pfborrar]");
+  var acc=function(body,msg){ apiPost("/app/api/admin/profesores",body).then(function(){ toast(msg); cargarProfesores(); recargar(); }).catch(function(err){ toast((err&&err.message)||"No se pudo"); }); };
+  if(cp){ var lk=cp.dataset.pfcopiar||""; if(lk){ navigator.clipboard&&navigator.clipboard.writeText(lk); toast("Link copiado ✓ Mándaselo por WhatsApp"); } return; }
+  if(rv){ acc({accion:"reenviar",id:rv.dataset.pfreenviar},"Invitación reenviada ✓"); return; }
+  if(su){ if(confirm("¿Suspender a este profesor? No podrá entrar, pero sus alumnos e historial se conservan.")) acc({accion:"suspender",id:su.dataset.pfsuspender},"Profesor suspendido"); return; }
+  if(ra){ acc({accion:"reactivar",id:ra.dataset.pfreactivar},"Profesor reactivado ✓"); return; }
+  if(bo){ if(confirm("¿Borrar esta invitación?")) acc({accion:"borrar",id:bo.dataset.pfborrar},"Invitación borrada"); return; }
+});
+
 /* ---------- Tabs / modales ---------- */
-var TITULOS={resumen:"Inicio",alumnos:"Alumnos",grupos:"Grupos",registro:"Clases",agenda:"Agenda",pagos:"Pagos",reportes:"Reportes",cuentas:"Accesos",leads:"Interesados",recursos:"Para tus alumnos",ejercicios:"Tu biblioteca",ajustes:"Ajustes",perfil:"Perfil",chat:"Chat",feedback:"Ideas y errores"};
+var TITULOS={resumen:"Inicio",alumnos:"Alumnos",grupos:"Grupos",profesores:"Profesores",registro:"Clases",agenda:"Agenda",pagos:"Pagos",reportes:"Reportes",cuentas:"Accesos",leads:"Interesados",recursos:"Para tus alumnos",ejercicios:"Tu biblioteca",ajustes:"Ajustes",perfil:"Perfil",chat:"Chat",feedback:"Ideas y errores"};
 document.querySelectorAll(".tab").forEach(function(t){
   t.addEventListener("click",function(){
     document.querySelectorAll(".tab").forEach(function(x){x.classList.remove("active");});
@@ -1804,6 +1947,7 @@ document.querySelectorAll(".tab").forEach(function(t){
     if(t.dataset.tab==="agenda") cargarAgenda();
     if(t.dataset.tab==="perfil") renderPerfil();
     if(t.dataset.tab==="feedback") cargarFeedback();
+    if(t.dataset.tab==="profesores") cargarProfesores();
     cerrarDrawer();
   });
 });
@@ -1826,6 +1970,19 @@ function setCursosAlumno(str){
   var set=cursosDe(str);
   [].slice.call(box.querySelectorAll("input")).forEach(function(c){ c.checked=set.indexOf(c.value)>=0; });
 }
+/* multi-profesor: el dueño asigna profesor al alumno (con 1 solo profe el campo se esconde) */
+function fillProfeSelect(valor){
+  var wrap=el("a_profe_wrap"), sel=el("a_profe");
+  if(!wrap||!sel) return;
+  var activos=(EQUIPO||[]).filter(function(p){return p.estado!=="suspendido";});
+  if(ROL!=="dueno" || activos.length<2){ wrap.style.display="none"; sel.innerHTML=""; return; }
+  wrap.style.display="";
+  sel.innerHTML=activos.map(function(p){
+    return '<option value="'+esc(p.id)+'">'+esc(p.nombre)+(p.rol==="dueno"?" (tú)":"")+'</option>';
+  }).join("");
+  sel.value=valor||PROFE_ID||activos[0].id;
+  if(!sel.value) sel.selectedIndex=0;
+}
 el("btnNuevoAlumno").addEventListener("click",function(){
   el("alumnoTitulo").innerHTML='Nuevo <em>alumno</em>';
   el("a_id").value=""; el("a_codigo").value=""; el("a_ciclo").value="1";
@@ -1833,17 +1990,21 @@ el("btnNuevoAlumno").addEventListener("click",function(){
   setCursosAlumno(MARCA.cursoDefault); fillSelects(); el("a_paquete").value="Paquete 4";
   el("a_fecha").value=new Date().toISOString().slice(0,10); el("a_pago").value="Pagado";
   el("a_horario").value=""; el("a_notas").value=""; el("a_horario_derivado").textContent="";
+  fillProfeSelect("");
   openOv("ovAlumno");
 });
 el("btnGuardarAlumno").addEventListener("click",function(){
   var nombre=el("a_nombre").value.trim();
   if(!nombre){ toast("Ponle nombre al alumno"); return; }
   var id=el("a_id").value;
+  var prev=id?db.alumnos.find(function(a){return a.id===id;}):null;
+  var wrapPf=el("a_profe_wrap");
+  var profeSel=(wrapPf&&wrapPf.style.display!=="none")?el("a_profe").value:((prev&&prev.profesor_id)||"");
   var obj={ id:id||uid(), codigo:el("a_codigo").value||uid().slice(-6).toUpperCase(),
     ciclo:Number(el("a_ciclo").value)||1,
     nombre:nombre, whatsapp:el("a_whatsapp").value.trim(), curso:getCursosAlumno()||MARCA.cursoDefault,
     paquete:el("a_paquete").value, fecha:el("a_fecha").value, pago:el("a_pago").value,
-    horario:el("a_horario").value.trim(), notas:el("a_notas").value.trim() };
+    horario:el("a_horario").value.trim(), notas:el("a_notas").value.trim(), profesor_id:profeSel||undefined };
   if(id){ db.alumnos=db.alumnos.map(function(a){return a.id===id?obj:a;}); }
   else{ db.alumnos.push(obj); }
   var btn=el("btnGuardarAlumno"); btn.disabled=true;
@@ -1878,6 +2039,7 @@ document.body.addEventListener("click",function(e){
     setCursosAlumno(a.curso); el("a_paquete").value=a.paquete; el("a_fecha").value=a.fecha||"";
     el("a_pago").value=a.pago; el("a_horario").value=a.horario||""; el("a_notas").value=a.notas||"";
     el("a_horario_derivado").textContent=(a.horarioFijo&&a.horarioFijo.length)?("Agenda: "+a.horarioFijo.join(" · ")):"Sin horario fijo en la agenda";
+    fillProfeSelect(a.profesor_id||"");
     openOv("ovAlumno");
   }
   if(dl){ var al=db.alumnos.find(function(x){return x.id===dl.dataset.del;});
@@ -2309,6 +2471,8 @@ el("btnGuardarAjustes").addEventListener("click",function(){
             brand_color:(el("cfg_brand_color")?el("cfg_brand_color").value.trim():""),
             brand_font:(el("cfg_brand_font")?el("cfg_brand_font").value:""),
             agenda_cupo:(el("cfg_agenda_cupo")?el("cfg_agenda_cupo").value.trim():""),
+            recordatorios_clase:(el("cfg_recordatorios_clase")?el("cfg_recordatorios_clase").value:""),
+            recordatorio_renovacion:(el("cfg_recordatorio_renovacion")?el("cfg_recordatorio_renovacion").value:""),
             pago_numero:el("cfg_pago_numero").value.trim(),
             pago_titular:el("cfg_pago_titular").value.trim(),
             google_client_id:el("cfg_google_client_id").value.trim(),

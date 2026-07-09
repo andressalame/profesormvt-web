@@ -23,6 +23,8 @@ bucket_name = "batuta-app-archivos"
 [ai]
 binding = "AI"
 
-# Nurture de trial (dia 1/3/6 + cierre del vencido): 1 corrida diaria, 14:00 UTC = 9am Lima.
+# UN solo cron (limite de 5 por cuenta en el plan free): corre cada 15 min.
+# - Cada corrida: recordatorios de clase a alumnos (24h y 1h antes de su reserva).
+# - La corrida de las 14:00 UTC (9am Lima): ademas nurture de trial + renovaciones + reset demo.
 [triggers]
-crons = ["0 14 * * *"]
+crons = ["*/15 * * * *"]

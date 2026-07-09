@@ -850,6 +850,15 @@ window.addEventListener("hashchange", renderActive);
 /* ---------- VISTA: INICIO ---------- */
 function renderInicio(){
   $("iHola").innerHTML = 'Hola, <em>'+esc((ME.cuenta.nombre||"").split(" ")[0])+'</em>';
+  /* multi-profesor: "vas con [profe]" bajo el saludo */
+  var hp=$("iProfe");
+  if(!hp){
+    hp=document.createElement("p"); hp.id="iProfe";
+    hp.style.cssText="margin:2px 0 0;font-size:13px;color:var(--muted,#8a8276);";
+    $("iHola").insertAdjacentElement("afterend", hp);
+  }
+  if(ME.profesor && ME.profesor.nombre){ hp.textContent="Tu profesor: "+ME.profesor.nombre; hp.style.display=""; }
+  else hp.style.display="none";
   if(ME.compraPendiente){
     $("iPend").innerHTML = '<strong>// PAGO EN VERIFICACIÓN</strong><br>Tu pago de '+esc(ME.compraPendiente.paquete)+
       ' está en verificación — te confirmo apenas lo vea.';
@@ -1098,9 +1107,20 @@ function actualizaSlotWrap(){
   var esPrueba = esPruebaSel();
   if(esPrueba && !COMPRA_SLOTS_CACHE) cargarSlotsCompra();
 }
+/* multi-profesor: si la academia tiene 2+ profes, el visitante elige con quien quiere su prueba */
+var PROFES_PUB = [], COMPRA_PROFE = "";
+function selectorProfePrueba(){
+  if(!PROFES_PUB || PROFES_PUB.length<2) return "";
+  return '<div style="margin:0 0 10px;"><label style="display:block;font-size:12px;margin:0 0 4px;">Con qué profesor</label>'+
+    '<select id="c_profe" style="width:100%;">'+PROFES_PUB.map(function(p,i){
+      return '<option value="'+esc(p.id)+'"'+((COMPRA_PROFE?COMPRA_PROFE===p.id:i===0)?" selected":"")+'>'+esc(p.nombre)+'</option>';
+    }).join("")+'</select></div>';
+}
 function cargarSlotsCompra(){
   $("c_slots").innerHTML = '<p class="note" style="margin:0">Cargando horarios…</p>';
-  api("/app/api/agenda/slots-publicos?slug="+encodeURIComponent(SLUG)).then(function(d){
+  if(PROFES_PUB.length>1 && !COMPRA_PROFE) COMPRA_PROFE = PROFES_PUB[0].id;
+  var q = COMPRA_PROFE ? "&profe="+encodeURIComponent(COMPRA_PROFE) : "";
+  api("/app/api/agenda/slots-publicos?slug="+encodeURIComponent(SLUG)+q).then(function(d){
     COMPRA_SLOTS_CACHE = (d && d.slots) || [];
     pintarSlotsCompra();
   }).catch(function(){
@@ -1111,7 +1131,7 @@ function cargarSlotsCompra(){
 function pintarSlotsCompra(){
   var slots = COMPRA_SLOTS_CACHE || [];
   if(!slots.length){
-    $("c_slots").innerHTML = '<p class="note" style="margin:0">No hay horarios libres por ahora. Puedes pagar igual y lo coordinamos después.</p>';
+    $("c_slots").innerHTML = selectorProfePrueba() + '<p class="note" style="margin:0">No hay horarios libres por ahora. Puedes pagar igual y lo coordinamos después.</p>';
     return;
   }
   var mapa = {}, orden = [];
@@ -1120,7 +1140,7 @@ function pintarSlotsCompra(){
     if(!mapa[k]){ mapa[k]=[]; orden.push(k); }
     mapa[k].push(iso);
   });
-  $("c_slots").innerHTML = orden.slice(0,6).map(function(k){
+  $("c_slots").innerHTML = selectorProfePrueba() + orden.slice(0,6).map(function(k){
     var diaSlots = mapa[k];
     var titulo = fmtFechaLocal(diaSlots[0]);
     var botones = diaSlots.map(function(iso){
@@ -1136,6 +1156,14 @@ $("c_slots").addEventListener("click", function(e){
   COMPRA_SLOT = b.dataset.cslot;
   $("wizErr2").textContent = "";
   pintarSlotsCompra();
+});
+/* cambiar de profe en la prueba recarga SUS horarios */
+$("c_slots").addEventListener("change", function(e){
+  if(e.target && e.target.id==="c_profe"){
+    COMPRA_PROFE = e.target.value;
+    COMPRA_SLOT = null; COMPRA_SLOTS_CACHE = null;
+    cargarSlotsCompra();
+  }
 });
 function actualizaMonto(){
   var c = calc($("c_paquete").value);
@@ -1233,7 +1261,7 @@ $("btnYaPague").addEventListener("click",function(){
   var c = calc(paquete);
   var f = ($("c_screenshot") && $("c_screenshot").files) ? $("c_screenshot").files[0] : null;
   comprimirImg(f).then(function(comprobante){
-    return api("/app/api/comprar",{method:"POST",body:JSON.stringify({paquete:paquete,curso:curso,op_numero:op,metodo:metodo,comprobante:comprobante,slot_deseado:(paquete==="Clase de prueba"?COMPRA_SLOT:"")})});
+    return api("/app/api/comprar",{method:"POST",body:JSON.stringify({paquete:paquete,curso:curso,op_numero:op,metodo:metodo,comprobante:comprobante,slot_deseado:(paquete==="Clase de prueba"?COMPRA_SLOT:""),profe:(paquete==="Clase de prueba"?COMPRA_PROFE:"")})});
   })
     .then(function(){
       if(WA_PROFE){
@@ -1935,6 +1963,8 @@ function initAlumno(){
       document.title = "Portal de alumno · " + MARCA.nombre;
       $("eyebrowAuth").textContent = "// " + MARCA.nombre.toUpperCase();
       $("eyebrowInicio").textContent = "// " + MARCA.nombre.toUpperCase() + " — PORTAL DE ALUMNO";
+      /* multi-profesor: lista publica para elegir profe en la clase de prueba */
+      if(Array.isArray(d.profesores)) PROFES_PUB = d.profesores;
       /* cursos del tenant (editables en el panel del profe): repinta el select de compra y el texto del tour */
       if(Array.isArray(d.cursos) && d.cursos.length){
         MARCA.cursos = d.cursos;

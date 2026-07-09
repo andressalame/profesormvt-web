@@ -358,15 +358,55 @@ async function filaSesion(env, request){
   }
   return row;
 }
-/* Sesion de PROFESOR (tenant): cuenta_id = 'T:' + tenant_id, mismo patron que __ADMIN__ del core. */
-async function tenantDeSesion(env, request){
+/* ---------- Multi-profesor: actor del panel (09-jul-2026) ----------
+   Sesiones: 'P:'+profesores.id = profesor concreto (dueno o staff), lo que emiten los
+   logins nuevos. 'T:'+tenants.id = legacy, se resuelve al DUENO del tenant (las sesiones
+   vivas de antes siguen funcionando como sesion del dueno). Regla permanente:
+   profesor_id NULL (o '' en disponibilidad) = "del dueno", nunca "de todos". */
+const MAX_PROFES = { profe: 1, academia: 5, xl: 20 };
+
+async function duenoDeTenant(env, tenantId){
+  return env.DB.prepare("SELECT * FROM profesores WHERE tenant_id = ?1 AND rol = 'dueno'").bind(tenantId).first();
+}
+/* Garantiza que el tenant tenga su fila de dueno en `profesores` (tenants nuevos o
+   anteriores al backfill). Idempotente y barato: 1 SELECT en el camino feliz. */
+async function asegurarDueno(env, t){
+  let d = await duenoDeTenant(env, t.id).catch(() => null);
+  if (d) return d;
+  await ensureMultiprofesorSchema(env);
+  try {
+    await env.DB.prepare(
+      "INSERT INTO profesores (id, tenant_id, nombre, email, whatsapp, pass_hash, pass_salt, rol, estado, creado) VALUES (?1,?2,?3,?4,?5,?6,?7,'dueno','activo',?8)"
+    ).bind(crypto.randomUUID(), t.id, t.profe_nombre || t.academia || "", t.email || "", t.whatsapp || "", t.pass_hash || "", t.pass_salt || "", new Date().toISOString()).run();
+  } catch (e) { /* carrera: otro request lo creo */ }
+  return duenoDeTenant(env, t.id).catch(() => null);
+}
+async function actorDeSesion(env, request){
   const s = await filaSesion(env, request);
-  if (!s || !String(s.cuenta_id).startsWith("T:")) return null;
-  const tenantId = s.cuenta_id.slice(2);
-  const t = await env.DB.prepare("SELECT * FROM tenants WHERE id = ?1").bind(tenantId).first();
-  if (!t) return null;
-  t._token = s.token;
-  return t;
+  if (!s) return null;
+  const cid = String(s.cuenta_id);
+  if (cid.startsWith("P:")){
+    const profe = await env.DB.prepare("SELECT * FROM profesores WHERE id = ?1").bind(cid.slice(2)).first().catch(() => null);
+    if (!profe || profe.estado === "suspendido") return null;
+    const tenant = await env.DB.prepare("SELECT * FROM tenants WHERE id = ?1").bind(profe.tenant_id).first();
+    if (!tenant) return null;
+    tenant._token = s.token;
+    return { tenant, profesor: profe, esDueno: profe.rol === "dueno", token: s.token };
+  }
+  if (cid.startsWith("T:")){
+    const tenant = await env.DB.prepare("SELECT * FROM tenants WHERE id = ?1").bind(cid.slice(2)).first();
+    if (!tenant) return null;
+    tenant._token = s.token;
+    const dueno = await asegurarDueno(env, tenant);
+    return { tenant, profesor: dueno || null, esDueno: true, token: s.token };
+  }
+  return null;
+}
+/* Wrapper legacy: los sitios que solo necesitan el tenant siguen llamando esto.
+   OBLIGATORIO que entienda 'P:' (el trial gate resuelve el actor con esta funcion). */
+async function tenantDeSesion(env, request){
+  const a = await actorDeSesion(env, request);
+  return a ? a.tenant : null;
 }
 /* Sesion de ALUMNO: cuenta normal en `cuentas`, scoped por su propio tenant_id. */
 async function cuentaDeSesion(env, request){
@@ -387,10 +427,29 @@ async function crearSesion(env, cuentaId){
 
 /* ---------- chat: auth dual (sesion de alumno O tenant/profesor) ---------- */
 async function authChat(env, request){
-  const t = await tenantDeSesion(env, request);
-  if (t) return { admin: true, tenant: t };
+  const a = await actorDeSesion(env, request);
+  if (a) return { admin: true, tenant: a.tenant, profesor: a.profesor, esDueno: a.esDueno };
   const cu = await cuentaDeSesion(env, request);
   return cu ? { admin: false, cu, tenant: null } : null;
+}
+/* Set de alumno_ids del profesor (para scopear hilos de chat, cuentas, compras). */
+async function alumnosDeProfe(env, tenantId, profeId){
+  const { results } = await env.DB.prepare(
+    "SELECT id FROM alumnos WHERE tenant_id = ?1 AND profesor_id = ?2"
+  ).bind(tenantId, profeId).all();
+  return new Set((results || []).map(r => r.id));
+}
+/* El profesor de un alumno (para la agenda del portal): alumno.profesor_id o el dueno. */
+async function profeDeAlumno(env, tenantId, alumno){
+  if (alumno && alumno.profesor_id){
+    const p = await env.DB.prepare(
+      "SELECT id, rol, nombre, foto FROM profesores WHERE id = ?1 AND tenant_id = ?2"
+    ).bind(alumno.profesor_id, tenantId).first().catch(() => null);
+    if (p) return { id: p.id, esDueno: p.rol === "dueno", nombre: p.nombre || "", foto: p.foto || "" };
+  }
+  const d = await duenoDeTenant(env, tenantId).catch(() => null);
+  return d ? { id: d.id, esDueno: true, nombre: d.nombre || "", foto: d.foto || "" }
+           : { id: "", esDueno: true, nombre: "", foto: "" };
 }
 function limpiarTextoChat(t){
   let out = "";
@@ -671,11 +730,28 @@ async function confirmarCompra(env, tenantId, tenant, compra){
     const nuevoId = crypto.randomUUID();
     alumnoIdNuevo = nuevoId;
     const cursoNuevo = compra.curso || cursosDeCfg(await loadConfig(env, tenantId))[0];
+    /* multi-profesor: el alumno nuevo nace asignado al profe atribuido en la compra, o al dueno */
+    let profeNuevo = compra.profesor_id || null;
+    if (!profeNuevo){
+      const dN = await duenoDeTenant(env, tenantId).catch(() => null);
+      profeNuevo = dN ? dN.id : null;
+    }
     stmts.push(env.DB.prepare(
-      "INSERT INTO alumnos (id,tenant_id,codigo,nombre,whatsapp,curso,paquete,fecha,pago,horario,notas,ciclo,vence) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,'Pagado','','Creado por compra web',1,?9)"
-    ).bind(nuevoId, tenantId, randHex(3).toUpperCase(), cu.nombre, cu.whatsapp || "", cursoNuevo, compra.paquete, hoy(), vence));
+      "INSERT INTO alumnos (id,tenant_id,codigo,nombre,whatsapp,curso,paquete,fecha,pago,horario,notas,ciclo,vence,profesor_id) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,'Pagado','','Creado por compra web',1,?9,?10)"
+    ).bind(nuevoId, tenantId, randHex(3).toUpperCase(), cu.nombre, cu.whatsapp || "", cursoNuevo, compra.paquete, hoy(), vence, profeNuevo));
     stmts.push(env.DB.prepare("UPDATE cuentas SET alumno_id = ?1 WHERE id = ?2 AND tenant_id = ?3").bind(nuevoId, cu.id, tenantId));
   }
+  /* atribucion del ingreso al profesor del alumno (reporte "ingresos por profe" del dueno) */
+  try {
+    let profAtrib = compra.profesor_id || null;
+    if (!profAtrib && cu.alumno_id){
+      const alA = await env.DB.prepare("SELECT profesor_id FROM alumnos WHERE id = ?1 AND tenant_id = ?2").bind(cu.alumno_id, tenantId).first();
+      profAtrib = (alA && alA.profesor_id) || null;
+    }
+    if (profAtrib){
+      stmts.push(env.DB.prepare("UPDATE compras SET profesor_id = ?1 WHERE id = ?2 AND tenant_id = ?3").bind(profAtrib, compra.id, tenantId));
+    }
+  } catch (e) {}
 
   const previas = await env.DB.prepare(
     "SELECT COUNT(*) AS n FROM compras WHERE tenant_id = ?1 AND cuenta_id = ?2 AND estado = 'confirmada'"
@@ -1041,16 +1117,24 @@ function cupoDeCfg(cfg){
   const c = parseInt(cfg && cfg.agenda_cupo, 10);
   return (Number.isFinite(c) && c >= 1 && c <= 20) ? c : 1;
 }
-async function ocupacionSlot(env, tenantId, iso){
+/* Ocupacion de un slot EN LA AGENDA DE UN PROFESOR (multi-profesor: dos profes pueden
+   dictar a la misma hora sin chocar). prof = {id, esDueno}; las reservas legacy con
+   profesor_id NULL cuentan como del dueno. */
+async function ocupacionSlot(env, tenantId, iso, prof){
+  const pid = prof && prof.id ? prof.id : "";
+  const esD = !!(prof && prof.esDueno);
   const { results } = await env.DB.prepare(
-    "SELECT tipo, COUNT(*) AS n FROM reservas WHERE tenant_id = ?1 AND inicio_utc = ?2 AND estado IN ('reservada','completada') GROUP BY tipo"
-  ).bind(tenantId, iso).all();
+    "SELECT tipo, COUNT(*) AS n FROM reservas WHERE tenant_id = ?1 AND inicio_utc = ?2 AND estado IN ('reservada','completada') " +
+    "AND (profesor_id = ?3 OR (?4 = 1 AND profesor_id IS NULL)) GROUP BY tipo"
+  ).bind(tenantId, iso, pid, esD ? 1 : 0).all();
   let n = 0, bloqueado = false;
   for (const r of (results || [])){ n += Number(r.n) || 0; if (r.tipo === "bloqueo") bloqueado = true; }
   return { n, bloqueado };
 }
 
-async function slotValido(env, tenantId, iso, opts){
+/* prof = {id, esDueno}: la disponibilidad es POR profesor. Filas legacy con profesor_id
+   NULL o '' cuentan como del dueno (regla de compatibilidad permanente). */
+async function slotValido(env, tenantId, iso, opts, prof){
   const t = Date.parse(iso);
   if (!Number.isFinite(t)) return false;
   const now = Date.now();
@@ -1058,25 +1142,32 @@ async function slotValido(env, tenantId, iso, opts){
   if (!(opts && opts.ignorarHorizonte) && t > now + HORIZONTE_SEMANAS * 7 * 86400000) return false;
   const p = limaParts(new Date(t));
   if (p.min !== 0) return false;
+  const pid = prof && prof.id ? prof.id : "";
+  const esD = !!(prof && prof.esDueno);
   const row = await env.DB.prepare(
-    "SELECT 1 AS ok FROM disponibilidad WHERE tenant_id = ?1 AND dia_semana = ?2 AND hora = ?3 AND activo = 1"
-  ).bind(tenantId, p.dow, hhmm(p)).first();
+    "SELECT 1 AS ok FROM disponibilidad WHERE tenant_id = ?1 AND dia_semana = ?2 AND hora = ?3 AND activo = 1 " +
+    "AND (profesor_id = ?4 OR (?5 = 1 AND (profesor_id IS NULL OR profesor_id = '')))"
+  ).bind(tenantId, p.dow, hhmm(p), pid, esD ? 1 : 0).first();
   if (!row) return false;
   return true;
 }
 
-async function generarSlots(env, tenantId){
+async function generarSlots(env, tenantId, prof){
+  const pid = prof && prof.id ? prof.id : "";
+  const esD = !!(prof && prof.esDueno);
   const { results: disp } = await env.DB.prepare(
-    "SELECT dia_semana, hora FROM disponibilidad WHERE tenant_id = ?1 AND activo = 1"
-  ).bind(tenantId).all();
+    "SELECT dia_semana, hora FROM disponibilidad WHERE tenant_id = ?1 AND activo = 1 " +
+    "AND (profesor_id = ?2 OR (?3 = 1 AND (profesor_id IS NULL OR profesor_id = '')))"
+  ).bind(tenantId, pid, esD ? 1 : 0).all();
   const porDia = {};
   for (const r of (disp || [])){ (porDia[r.dia_semana] = porDia[r.dia_semana] || []).push(r.hora); }
 
   const now = Date.now();
   const hastaMs = now + HORIZONTE_SEMANAS * 7 * 86400000;
   const { results: tomadas } = await env.DB.prepare(
-    "SELECT inicio_utc, tipo FROM reservas WHERE tenant_id = ?1 AND estado IN ('reservada','completada') AND inicio_utc >= ?2 AND inicio_utc <= ?3"
-  ).bind(tenantId, new Date(now).toISOString(), new Date(hastaMs).toISOString()).all();
+    "SELECT inicio_utc, tipo FROM reservas WHERE tenant_id = ?1 AND estado IN ('reservada','completada') AND inicio_utc >= ?2 AND inicio_utc <= ?3 " +
+    "AND (profesor_id = ?4 OR (?5 = 1 AND profesor_id IS NULL))"
+  ).bind(tenantId, new Date(now).toISOString(), new Date(hastaMs).toISOString(), pid, esD ? 1 : 0).all();
   const conteo = new Map(); const bloqueados = new Set();
   for (const r of (tomadas || [])){
     conteo.set(r.inicio_utc, (conteo.get(r.inicio_utc) || 0) + 1);
@@ -1387,10 +1478,10 @@ async function migrarProfesores(env){
         duenosCreados++;
       } catch (e) { continue; }
     }
-    // Atar las filas huérfanas (profesor_id NULL) de este tenant al dueño.
+    // Atar las filas huérfanas (profesor_id NULL, o '' en disponibilidad v2) de este tenant al dueño.
     for (const tabla of ["alumnos", "reservas", "disponibilidad", "grupos", "compras"]){
       try {
-        const r = await env.DB.prepare("UPDATE " + tabla + " SET profesor_id = ?1 WHERE tenant_id = ?2 AND profesor_id IS NULL").bind(dueno.id, t.id).run();
+        const r = await env.DB.prepare("UPDATE " + tabla + " SET profesor_id = ?1 WHERE tenant_id = ?2 AND (profesor_id IS NULL OR profesor_id = '')").bind(dueno.id, t.id).run();
         filasAtadas += (r.meta && r.meta.changes) || 0;
       } catch (e) {}
     }
@@ -1415,6 +1506,110 @@ async function ensureFeedbackSchema(env){
     ).run();
   } catch (e) {}
   try { await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_feedback_tenant ON feedback (tenant_id, mes)").run(); } catch (e) {}
+}
+
+/* ---------- Recordatorios automaticos a alumnos (09-jul-2026) ----------
+   Atacan ASISTENCIA y RETENCION, el problema real (no el precio):
+   - recordatoriosDeClase: cron cada 15 min; correo 24h y 1h antes de la reserva
+     (columnas aviso_24 / aviso_1h; se marcan solo si el correo salio).
+   - recordatorioRenovacion: cron diario; correo cuando el paquete vence en <=3 dias
+     o vencio hace poco (1 por ciclo via aviso_vence_ciclo).
+   Toggles por tenant en config: recordatorios_clase / recordatorio_renovacion
+   ('' = ACTIVADO por defecto — es lo que Batuta promete —, 'off' = apagado).
+   La demo y los tenants vencidos jamas mandan. Sin RESEND_API_KEY degrada mudo. */
+function fmtLima(iso){
+  const p = limaParts(new Date(Date.parse(iso)));
+  return DIAS_FIJO[p.dow] + " " + String(p.d).padStart(2, "0") + "/" + String(p.m).padStart(2, "0") + " a las " + hhmm(p) + " (hora de Lima)";
+}
+async function toggleTenantOn(env, cache, tenantId, clave){
+  const k = tenantId + ":" + clave;
+  if (cache.has(k)) return cache.get(k);
+  let on = true;
+  try {
+    const row = await env.DB.prepare("SELECT valor FROM config WHERE tenant_id = ?1 AND clave = ?2").bind(tenantId, clave).first();
+    on = !(row && String(row.valor) === "off");
+  } catch (e) {}
+  cache.set(k, on);
+  return on;
+}
+async function recordatoriosDeClase(env){
+  if (!env.RESEND_API_KEY) return 0;
+  const now = Date.now();
+  const hasta = new Date(now + 25 * 3600000).toISOString();
+  const desde = new Date(now).toISOString();
+  const { results } = await env.DB.prepare(
+    "SELECT r.id, r.tenant_id, r.inicio_utc, r.curso, COALESCE(r.aviso_24,0) AS aviso_24, COALESCE(r.aviso_1h,0) AS aviso_1h, " +
+    "t.academia, t.slug, c.email AS alumno_email, c.nombre AS alumno_nombre, p.nombre AS profe_nombre " +
+    "FROM reservas r " +
+    "JOIN tenants t ON t.id = r.tenant_id AND t.estado != 'vencido' AND t.email != ?3 " +
+    "JOIN cuentas c ON c.alumno_id = r.alumno_id AND c.tenant_id = r.tenant_id " +
+    "LEFT JOIN profesores p ON p.id = r.profesor_id " +
+    "WHERE r.estado = 'reservada' AND r.alumno_id IS NOT NULL AND r.inicio_utc > ?1 AND r.inicio_utc <= ?2 " +
+    "AND (COALESCE(r.aviso_24,0) = 0 OR COALESCE(r.aviso_1h,0) = 0) LIMIT 200"
+  ).bind(desde, hasta, DEMO_EMAIL).all();
+  const cache = new Map();
+  let enviados = 0;
+  for (const r of (results || [])){
+    if (enviados >= 40) break; // tope por corrida (rate de Resend); la siguiente corrida sigue
+    if (!r.alumno_email) continue;
+    if (!(await toggleTenantOn(env, cache, r.tenant_id, "recordatorios_clase"))) continue;
+    const dif = Date.parse(r.inicio_utc) - now;
+    const linkPortal = MARCA.dominio + "/app/a/" + (r.slug || "");
+    const conProfe = r.profe_nombre ? (" con " + r.profe_nombre) : "";
+    let cual = null;
+    if (dif <= 3600000 && dif > 900000 && !r.aviso_1h) cual = "1h";
+    else if (dif <= 24 * 3600000 && dif > 22 * 3600000 && !r.aviso_24) cual = "24h";
+    if (!cual) continue;
+    const nombreCorto = (r.alumno_nombre || "").split(" ")[0] || "Hola";
+    const mail = cual === "1h"
+      ? { subject: "Tu clase" + (r.curso ? " de " + r.curso : "") + " es en 1 hora",
+          html: "<p>" + esc(nombreCorto) + ", tu clase" + esc(r.curso ? " de " + r.curso : "") + esc(conProfe) + " en <b>" + esc(r.academia || "") + "</b> empieza en 1 hora: <b>" + esc(fmtLima(r.inicio_utc)) + "</b>.</p><p><a href=\"" + linkPortal + "\">Ver mi portal</a></p>" }
+      : { subject: "Manana tienes clase" + (r.curso ? " de " + r.curso : "") + " · " + fmtLima(r.inicio_utc).split(" a las ")[1].replace(" (hora de Lima)", ""),
+          html: "<p>" + esc(nombreCorto) + ", te esperamos manana en tu clase" + esc(r.curso ? " de " + r.curso : "") + esc(conProfe) + " de <b>" + esc(r.academia || "") + "</b>: <b>" + esc(fmtLima(r.inicio_utc)) + "</b>.</p><p>Si no llegas, entra a tu portal y reprograma con anticipacion para no perder la clase.</p><p><a href=\"" + linkPortal + "\">Ver o reprogramar</a></p>" };
+    let ok = false;
+    try { ok = await enviarCorreo(env, { to: r.alumno_email, subject: mail.subject, html: mail.html }); } catch (e) {}
+    if (ok){
+      enviados++;
+      const set = cual === "1h" ? "aviso_1h = 1, aviso_24 = 1" : "aviso_24 = 1";
+      try { await env.DB.prepare("UPDATE reservas SET " + set + " WHERE id = ?1 AND tenant_id = ?2").bind(r.id, r.tenant_id).run(); } catch (e) {}
+    }
+  }
+  return enviados;
+}
+async function recordatorioRenovacion(env){
+  if (!env.RESEND_API_KEY) return 0;
+  const { results } = await env.DB.prepare(
+    "SELECT a.id, a.tenant_id, a.nombre, a.vence, COALESCE(a.ciclo,1) AS ciclo, a.paquete, a.curso, COALESCE(a.aviso_vence_ciclo,0) AS avisado, " +
+    "t.academia, t.slug, c.email AS alumno_email " +
+    "FROM alumnos a " +
+    "JOIN tenants t ON t.id = a.tenant_id AND t.estado != 'vencido' AND t.email != ?1 " +
+    "JOIN cuentas c ON c.alumno_id = a.id AND c.tenant_id = a.tenant_id " +
+    "WHERE a.vence IS NOT NULL AND a.vence != '' " +
+    "AND date(a.vence) <= date('now', '+3 days') AND date(a.vence) >= date('now', '-3 days') " +
+    "AND COALESCE(a.aviso_vence_ciclo,0) < COALESCE(a.ciclo,1) LIMIT 100"
+  ).bind(DEMO_EMAIL).all();
+  const cache = new Map();
+  let enviados = 0;
+  for (const a of (results || [])){
+    if (enviados >= 40) break;
+    if (!a.alumno_email) continue;
+    if (!(await toggleTenantOn(env, cache, a.tenant_id, "recordatorio_renovacion"))) continue;
+    const linkPortal = MARCA.dominio + "/app/a/" + (a.slug || "");
+    const yaVencio = Date.parse(a.vence) < Date.now();
+    const nombreCorto = (a.nombre || "").split(" ")[0] || "Hola";
+    const mail = yaVencio
+      ? { subject: "Tu paquete en " + (a.academia || "tu academia") + " vencio: renuevalo y sigue",
+          html: "<p>" + esc(nombreCorto) + ", tu " + esc(a.paquete || "paquete") + esc(a.curso ? " de " + a.curso : "") + " en <b>" + esc(a.academia || "") + "</b> vencio el " + esc(a.vence) + ".</p><p>Renueva desde tu portal en 1 minuto y no pierdas tu horario ni tu avance.</p><p><a href=\"" + linkPortal + "\"><b>Renovar ahora</b></a></p>" }
+      : { subject: "Tu paquete vence el " + a.vence + " · renueva y asegura tu horario",
+          html: "<p>" + esc(nombreCorto) + ", tu " + esc(a.paquete || "paquete") + esc(a.curso ? " de " + a.curso : "") + " en <b>" + esc(a.academia || "") + "</b> vence el <b>" + esc(a.vence) + "</b>.</p><p>Renueva desde tu portal en 1 minuto y tu horario queda asegurado.</p><p><a href=\"" + linkPortal + "\"><b>Renovar ahora</b></a></p>" };
+    let ok = false;
+    try { ok = await enviarCorreo(env, { to: a.alumno_email, subject: mail.subject, html: mail.html }); } catch (e) {}
+    if (ok){
+      enviados++;
+      try { await env.DB.prepare("UPDATE alumnos SET aviso_vence_ciclo = ?1 WHERE id = ?2 AND tenant_id = ?3").bind(a.ciclo, a.id, a.tenant_id).run(); } catch (e) {}
+    }
+  }
+  return enviados;
 }
 
 async function resetDemo(env){
@@ -1626,6 +1821,42 @@ export default {
     }
     if (path === "/app/panel" && request.method === "GET"){
       return env.ASSETS ? assetConSeguridad(await env.ASSETS.fetch(new Request(new URL("/panel/index.html", url), request))) : json({ error: "No encontrado" }, 404);
+    }
+    /* Invitacion de profesor (multi-profesor): pone su contrasena y entra a su sub-panel. */
+    if (path === "/app/p/activar" && request.method === "GET"){
+      const tk = String(url.searchParams.get("token") || "").trim();
+      let invit = null;
+      if (/^[0-9a-f]{16,64}$/.test(tk)){
+        try {
+          invit = await env.DB.prepare(
+            "SELECT p.nombre, p.estado, t.academia FROM profesores p LEFT JOIN tenants t ON t.id = p.tenant_id WHERE p.invite_token = ?1"
+          ).bind(tk).first();
+        } catch (e) {}
+      }
+      if (!invit || invit.estado !== "invitado"){
+        return htmlResponse(paginaBase("Invitacion — Batuta",
+          "<h1>Invitacion no valida</h1><p class=\"sub\">Este link ya se uso o vencio. Pidele al dueno de la academia que te reenvie la invitacion desde su panel.</p>", ""));
+      }
+      const cuerpoInv =
+        "<span class=\"pill\">" + esc(invit.academia || "Tu academia") + "</span>" +
+        "<h1>Hola, " + esc((invit.nombre || "profe").split(" ")[0]) + "</h1>" +
+        "<p class=\"sub\">Crea tu contrasena para entrar a tu panel de profesor.</p>" +
+        "<label>Contrasena nueva (minimo 8)</label><input id=\"p1\" type=\"password\" autocomplete=\"new-password\" />" +
+        "<label>Repitela</label><input id=\"p2\" type=\"password\" autocomplete=\"new-password\" />" +
+        "<button id=\"go\">Activar mi cuenta</button><div class=\"err\" id=\"err\"></div>";
+      const scriptInv =
+        "document.getElementById('go').addEventListener('click',function(){" +
+        "var p1=document.getElementById('p1').value,p2=document.getElementById('p2').value,err=document.getElementById('err');err.textContent='';" +
+        "if(p1.length<8){err.textContent='La contrasena necesita minimo 8 caracteres.';return;}" +
+        "if(p1!==p2){err.textContent='Las contrasenas no coinciden.';return;}" +
+        "var btn=document.getElementById('go');btn.disabled=true;" +
+        "fetch('/app/api/p/activar',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({token:'" + tk + "',pass:p1})})" +
+        ".then(function(r){return r.json();}).then(function(d){" +
+        "if(d.token){try{localStorage.setItem('batuta_t',d.token);}catch(e){};location.replace('/app/panel');}" +
+        "else{err.textContent=d.error||'No se pudo activar.';btn.disabled=false;}" +
+        "}).catch(function(){err.textContent='Error de red. Intenta de nuevo.';btn.disabled=false;});" +
+        "});";
+      return htmlResponse(paginaBase("Activa tu cuenta — Batuta", cuerpoInv, scriptInv));
     }
     /* ----- LINK DE COBRO del profe: página pública de pago SIN registro previo.
        El alumno paga primero y su cuenta se crea sola (registro después, por
@@ -1941,6 +2172,38 @@ export default {
           const idDemo = await resetDemo(env);
           return json({ ok: true, tenant_id: idDemo });
         }
+        /* Multi-profesor: migra la PK de `disponibilidad` a (tenant, profesor, dia, hora)
+           para que dos profesores puedan dictar el mismo horario. Idempotente: si la tabla
+           legacy ya existe, no-op. La tabla vieja NO se borra: queda como respaldo
+           `disponibilidad_legacy_v1` (patron de la casa: migraciones D1 desde el worker). */
+        if (path === "/app/api/su/migrar-disponibilidad" && request.method === "POST"){
+          const yaMigrado = await env.DB.prepare(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='disponibilidad_legacy_v1'"
+          ).first().catch(() => null);
+          if (yaMigrado) return json({ ok: true, ya_migrado: true });
+          await ensureMultiprofesorSchema(env);
+          await env.DB.prepare(
+            "CREATE TABLE IF NOT EXISTS disponibilidad_v2 (tenant_id TEXT NOT NULL, profesor_id TEXT NOT NULL DEFAULT '', dia_semana INTEGER NOT NULL, hora TEXT NOT NULL, activo INTEGER DEFAULT 1, PRIMARY KEY (tenant_id, profesor_id, dia_semana, hora))"
+          ).run();
+          await env.DB.prepare(
+            "INSERT OR IGNORE INTO disponibilidad_v2 (tenant_id, profesor_id, dia_semana, hora, activo) " +
+            "SELECT d.tenant_id, COALESCE(NULLIF(d.profesor_id,''), p.id, ''), d.dia_semana, d.hora, d.activo " +
+            "FROM disponibilidad d LEFT JOIN profesores p ON p.tenant_id = d.tenant_id AND p.rol = 'dueno'"
+          ).run();
+          await env.DB.prepare("ALTER TABLE disponibilidad RENAME TO disponibilidad_legacy_v1").run();
+          await env.DB.prepare("ALTER TABLE disponibilidad_v2 RENAME TO disponibilidad").run();
+          try { await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_disponibilidad_tenant ON disponibilidad (tenant_id)").run(); } catch (e) {}
+          const nNew = await env.DB.prepare("SELECT COUNT(*) AS n FROM disponibilidad").first();
+          return json({ ok: true, filas: Number(nNew && nNew.n) || 0 });
+        }
+
+        /* Dispara a demanda los recordatorios (clase + renovacion) sin esperar el cron. */
+        if (path === "/app/api/su/correr-recordatorios" && request.method === "POST"){
+          const nClase = await recordatoriosDeClase(env).catch(e => "error: " + (e && e.message));
+          const nRenov = await recordatorioRenovacion(env).catch(e => "error: " + (e && e.message));
+          return json({ ok: true, clase_enviados: nClase, renovacion_enviados: nRenov });
+        }
+
         // Multi-profesor Fase 0: migración additiva + backfill. Idempotente. No cambia el panel.
         if (path === "/app/api/su/migrar-profesores" && request.method === "POST"){
           const r = await migrarProfesores(env);
@@ -2225,17 +2488,68 @@ export default {
         const email = String(b.email || "").trim().toLowerCase();
         const pass = String(b.pass || "");
         const t = emailOk(email) ? await env.DB.prepare("SELECT * FROM tenants WHERE email = ?1").bind(email).first() : null;
-        if (!t){
-          await new Promise(r => setTimeout(r, 350));
-          return json({ error: "Correo o contrasena incorrectos." }, 401);
+        if (t){
+          // Dueno de academia: valida contra tenants (fuente de verdad de SU contrasena)
+          // y emite sesion P: del dueno (T: legacy sigue aceptado en actorDeSesion).
+          const hash = await hashPass(pass, t.pass_salt);
+          if (!safeEq(hash, t.pass_hash)){
+            await new Promise(r => setTimeout(r, 350));
+            return json({ error: "Correo o contrasena incorrectos." }, 401);
+          }
+          const dueno = await asegurarDueno(env, t);
+          const token = await crearSesion(env, dueno ? "P:" + dueno.id : "T:" + t.id);
+          return json({ ok: true, token, slug: t.slug });
         }
-        const hash = await hashPass(pass, t.pass_salt);
-        if (!safeEq(hash, t.pass_hash)){
-          await new Promise(r => setTimeout(r, 350));
-          return json({ error: "Correo o contrasena incorrectos." }, 401);
+        // Profesor invitado (multi-profesor): valida contra `profesores`.
+        if (emailOk(email)){
+          await ensureMultiprofesorSchema(env);
+          const { results: matches } = await env.DB.prepare(
+            "SELECT * FROM profesores WHERE email = ?1 AND rol != 'dueno' AND estado = 'activo'"
+          ).bind(email).all();
+          let candidatos = (matches || []);
+          if (candidatos.length > 1 && b.slug){
+            const tSlug = await env.DB.prepare("SELECT id FROM tenants WHERE slug = ?1").bind(String(b.slug).trim()).first();
+            if (tSlug) candidatos = candidatos.filter(p => p.tenant_id === tSlug.id);
+          }
+          for (const p of candidatos){
+            if (!p.pass_hash) continue;
+            const hp = await hashPass(pass, p.pass_salt);
+            if (safeEq(hp, p.pass_hash)){
+              const tp = await env.DB.prepare("SELECT slug, estado FROM tenants WHERE id = ?1").bind(p.tenant_id).first();
+              if (!tp) continue;
+              const token = await crearSesion(env, "P:" + p.id);
+              return json({ ok: true, token, slug: tp.slug });
+            }
+          }
         }
-        const token = await crearSesion(env, "T:" + t.id);
-        return json({ ok: true, token, slug: t.slug });
+        await new Promise(r => setTimeout(r, 350));
+        return json({ error: "Correo o contrasena incorrectos." }, 401);
+      }
+
+      /* Activacion de profesor invitado: canjea el invite_token por contrasena + sesion P:. */
+      if (path === "/app/api/p/activar" && request.method === "POST"){
+        const ipAct = clientIp(request);
+        if (ipAct && await chatbotPasoTope(env, "pact:" + ipAct, 10)){
+          return json({ error: "Demasiados intentos. Espera un rato." }, 429);
+        }
+        const b = await request.json().catch(() => ({}));
+        const tk = String(b.token || "").trim();
+        const pass = String(b.pass || "");
+        if (!/^[0-9a-f]{16,64}$/.test(tk)) return json({ error: "Invitacion no valida." }, 400);
+        if (pass.length < 8) return json({ error: "La contrasena necesita minimo 8 caracteres." }, 400);
+        await ensureMultiprofesorSchema(env);
+        const p = await env.DB.prepare("SELECT * FROM profesores WHERE invite_token = ?1").bind(tk).first();
+        if (!p || p.estado !== "invitado") return json({ error: "Este link ya se uso o vencio. Pide que te reenvien la invitacion." }, 400);
+        const salt = randHex(16);
+        const hash = await hashPass(pass, salt);
+        await env.DB.prepare(
+          "UPDATE profesores SET pass_hash = ?1, pass_salt = ?2, estado = 'activo', invite_token = '' WHERE id = ?3"
+        ).bind(hash, salt, p.id).run();
+        const token = await crearSesion(env, "P:" + p.id);
+        const tp = await env.DB.prepare("SELECT slug, academia FROM tenants WHERE id = ?1").bind(p.tenant_id).first();
+        ctx.waitUntil(alertaCorreoAndres(env, "Profesor activado en Batuta: " + (tp ? tp.academia : ""),
+          "El profesor " + p.nombre + " (" + p.email + ") activo su cuenta en la academia " + (tp ? tp.academia : p.tenant_id) + "."));
+        return json({ ok: true, token, slug: tp ? tp.slug : "" });
       }
 
       // El panel del profesor llama a /app/api/admin/logout: invalida la sesión server-side
@@ -2280,9 +2594,16 @@ export default {
       }
 
       if (path === "/app/api/t/me" && request.method === "GET"){
-        const t = await tenantDeSesion(env, request);
-        if (!t) return json({ error: "Sesion expirada" }, 401);
+        const actorMe = await actorDeSesion(env, request);
+        if (!actorMe) return json({ error: "Sesion expirada" }, 401);
+        const t = actorMe.tenant;
         const diasRestantes = Math.max(0, Math.ceil((Date.parse(t.trial_hasta) - Date.now()) / 86400000));
+        // Asientos de profesor del plan (suspendidos no ocupan asiento).
+        let asientos = null;
+        try {
+          const nP = await env.DB.prepare("SELECT COUNT(*) AS n FROM profesores WHERE tenant_id = ?1 AND estado != 'suspendido'").bind(t.id).first();
+          asientos = { usados: Number(nP && nP.n) || 1, max: MAX_PROFES[t.plan || "profe"] || 1 };
+        } catch (e) {}
         return json({
           academia: t.academia, profe_nombre: t.profe_nombre, slug: t.slug,
           demo: t.email === DEMO_EMAIL,
@@ -2290,7 +2611,10 @@ export default {
           link_alumnos: MARCA.dominio + "/app/a/" + t.slug,
           plan: t.plan || "profe",
           mp_sub_status: t.mp_sub_status || "",
-          suscrito: t.mp_sub_status === "authorized"
+          suscrito: t.mp_sub_status === "authorized",
+          rol: actorMe.esDueno ? "dueno" : "profesor",
+          profesor: actorMe.profesor ? { id: actorMe.profesor.id, nombre: actorMe.profesor.nombre } : null,
+          asientos
         });
       }
 
@@ -2305,8 +2629,10 @@ export default {
          Sin suscripción aún (trial/vencido): solo se apunta tenants.plan y el checkout
          que haga después ya sale con el plan nuevo. Si MP rechaza el PUT -> WhatsApp. */
       if (path === "/app/api/t/cambiar-plan" && request.method === "POST"){
-        const t = await tenantDeSesion(env, request);
-        if (!t) return json({ error: "Sesion expirada" }, 401);
+        const actorCp = await actorDeSesion(env, request);
+        if (!actorCp) return json({ error: "Sesion expirada" }, 401);
+        if (!actorCp.esDueno) return json({ error: "El plan lo maneja el dueno de la academia." }, 403);
+        const t = actorCp.tenant;
         if (t.email === DEMO_EMAIL) return json({ error: "En la demo no se cambia de plan." }, 400);
         const b = await request.json().catch(() => ({}));
         const plan = String(b.plan || "").trim();
@@ -2331,8 +2657,10 @@ export default {
       }
 
       if (path === "/app/api/t/suscribir" && request.method === "POST"){
-        const t = await tenantDeSesion(env, request);
-        if (!t) return json({ error: "Sesion expirada" }, 401);
+        const actorSub = await actorDeSesion(env, request);
+        if (!actorSub) return json({ error: "Sesion expirada" }, 401);
+        if (!actorSub.esDueno) return json({ error: "La suscripcion la maneja el dueno de la academia." }, 403);
+        const t = actorSub.tenant;
         const b = await request.json().catch(() => ({}));
         const plan = String(b.plan || "").trim();
         if (!PLANES[plan]) return json({ error: "Plan no valido" }, 400);
@@ -2355,8 +2683,10 @@ export default {
          volver de MP (back_url trae ?preapproval_id=...). Verificamos server-to-server contra MP
          que el preapproval existe, es de UNO DE NUESTROS PLANES y no está ya vinculado a otro tenant. */
       if (path === "/app/api/t/vincular-sub" && request.method === "POST"){
-        const t = await tenantDeSesion(env, request);
-        if (!t) return json({ error: "Sesion expirada" }, 401);
+        const actorVs = await actorDeSesion(env, request);
+        if (!actorVs) return json({ error: "Sesion expirada" }, 401);
+        if (!actorVs.esDueno) return json({ error: "La suscripcion la maneja el dueno de la academia." }, 403);
+        const t = actorVs.tenant;
         if (!env.MP_ACCESS_TOKEN) return json({ error: "No disponible" }, 501);
         const b = await request.json().catch(() => ({}));
         const pid = String(b.preapproval_id || "").trim();
@@ -2482,8 +2812,18 @@ export default {
         if (!t) return json({ error: "Academia no encontrada" }, 404);
         const precios = await loadPrecios(env, t.id);
         const cfg = await loadConfig(env, t.id);
+        // Multi-profesor: lista publica (id, nombre, foto) para elegir profe al reservar
+        // la prueba. Academia de 1 profesor -> lista de 1 y el front salta ese paso.
+        let profesoresPub = [];
+        try {
+          const { results: profs } = await env.DB.prepare(
+            "SELECT id, nombre, foto, rol FROM profesores WHERE tenant_id = ?1 AND estado = 'activo' ORDER BY CASE rol WHEN 'dueno' THEN 0 ELSE 1 END, nombre"
+          ).bind(t.id).all();
+          profesoresPub = (profs || []).map(p => ({ id: p.id, nombre: p.nombre || "", foto: p.foto || "" }));
+        } catch (e) {}
         return json({
           academia: t.academia, whatsapp: t.whatsapp || "", precios,
+          profesores: profesoresPub,
           cursos: cursosDeCfg(cfg),
           marca: { color: cfg.brand_color || "", font: cfg.brand_font || "", logo: cfg.brand_logo || "" },
           pago: {
@@ -2499,7 +2839,18 @@ export default {
         const slug = String(url.searchParams.get("slug") || "").trim();
         const t = slug ? await env.DB.prepare("SELECT id FROM tenants WHERE slug = ?1").bind(slug).first() : null;
         if (!t) return json({ error: "Academia no encontrada" }, 404);
-        const slots = await generarSlots(env, t.id);
+        // ?profe=<id> (opcional): slots de ESE profesor; default el dueno (academias de 1 = igual que siempre).
+        let profPub = null;
+        const profeQ = String(url.searchParams.get("profe") || "").trim();
+        if (profeQ){
+          const p = await env.DB.prepare("SELECT id, rol, estado FROM profesores WHERE id = ?1 AND tenant_id = ?2").bind(profeQ, t.id).first().catch(() => null);
+          if (!p || p.estado !== "activo") return json({ error: "Profesor no encontrado" }, 404);
+          profPub = { id: p.id, esDueno: p.rol === "dueno" };
+        } else {
+          const d = await duenoDeTenant(env, t.id).catch(() => null);
+          profPub = d ? { id: d.id, esDueno: true } : { id: "", esDueno: true };
+        }
+        const slots = await generarSlots(env, t.id, profPub);
         return json({ slots });
       }
 
@@ -2769,8 +3120,14 @@ export default {
           hilo = String(url.searchParams.get("cuenta") || "").trim();
           if (!/^[0-9a-fA-F-]{8,64}$/.test(hilo)) return json({ error: "Conversacion no valida" }, 400);
           if (hilo === "grupal") return json({ error: "Usa /app/api/chat para el grupal" }, 400);
-          const dest = await env.DB.prepare("SELECT id FROM cuentas WHERE id = ?1 AND tenant_id = ?2").bind(hilo, tid).first();
+          const dest = await env.DB.prepare("SELECT id, alumno_id FROM cuentas WHERE id = ?1 AND tenant_id = ?2").bind(hilo, tid).first();
           if (!dest) return json({ error: "Esa cuenta no existe" }, 404);
+          /* multi-profesor: el hilo privado es alumno <-> SU profesor; un profesor no lee hilos ajenos */
+          if (!who.esDueno){
+            const pidChat = who.profesor ? who.profesor.id : "";
+            const alChat = dest.alumno_id ? await env.DB.prepare("SELECT profesor_id FROM alumnos WHERE id = ?1 AND tenant_id = ?2").bind(dest.alumno_id, tid).first() : null;
+            if (!alChat || alChat.profesor_id !== pidChat) return json({ error: "Ese alumno no esta asignado a ti." }, 403);
+          }
         } else {
           if (!who.cu.alumno_id) return json({ mensajes: [], max: 0 });
           hilo = who.cu.id;
@@ -2809,8 +3166,14 @@ export default {
         if (who.admin){
           hilo = String(b.cuenta || "").trim();
           if (!/^[0-9a-fA-F-]{8,64}$/.test(hilo)) return json({ error: "Conversacion no valida" }, 400);
-          const dest = await env.DB.prepare("SELECT id FROM cuentas WHERE id = ?1 AND tenant_id = ?2").bind(hilo, tid).first();
+          const dest = await env.DB.prepare("SELECT id, alumno_id FROM cuentas WHERE id = ?1 AND tenant_id = ?2").bind(hilo, tid).first();
           if (!dest) return json({ error: "Esa cuenta no existe" }, 404);
+          /* multi-profesor: el hilo privado es alumno <-> SU profesor; un profesor no lee hilos ajenos */
+          if (!who.esDueno){
+            const pidChat = who.profesor ? who.profesor.id : "";
+            const alChat = dest.alumno_id ? await env.DB.prepare("SELECT profesor_id FROM alumnos WHERE id = ?1 AND tenant_id = ?2").bind(dest.alumno_id, tid).first() : null;
+            if (!alChat || alChat.profesor_id !== pidChat) return json({ error: "Ese alumno no esta asignado a ti." }, 403);
+          }
           nombre = who.tenant.profe_nombre || "Profesor"; esAdmin = 1; cuentaId = null;
         } else {
           if (!who.cu.alumno_id) return json({ error: "El chat con el profesor se abre cuando activas tu primer paquete." }, 403);
@@ -2932,8 +3295,15 @@ export default {
           "SELECT fecha, curso, paquete, monto, COALESCE(descuento,0) AS descuento, estado FROM compras WHERE tenant_id = ?1 AND cuenta_id = ?2 ORDER BY fecha DESC, rowid DESC LIMIT 20"
         ).bind(tid, cu.id).all()).results || [];
 
+        // Multi-profesor: el alumno ve con que profesor va ("Tu profesor: Ana").
+        let miProfe = null;
+        if (alumno){
+          const pAl = await profeDeAlumno(env, tid, alumno);
+          if (pAl && pAl.nombre) miProfe = { nombre: pAl.nombre, foto: pAl.foto || "" };
+        }
         return json({
           cuenta: { nombre: cu.nombre, email: cu.email, whatsapp: cu.whatsapp || "" },
+          profesor: miProfe,
           estado: estadoAlumno(computed),
           alumno: (alumno && computed) ? {
             curso: alumno.curso || "", paquete: alumno.paquete || "",
@@ -3167,9 +3537,21 @@ export default {
           } catch (e) { comprobanteKey = ""; }
         }
 
+        /* multi-profesor: si el visitante eligio profe para su prueba, la compra queda atribuida
+           (al confirmar, el alumno nuevo nace asignado a ese profesor). */
+        let profeCompra = null;
+        const profePedido = String(b.profe || "").trim();
+        if (profePedido){
+          const pC = await env.DB.prepare("SELECT id FROM profesores WHERE id = ?1 AND tenant_id = ?2 AND estado = 'activo'").bind(profePedido, tid).first().catch(() => null);
+          if (pC) profeCompra = pC.id;
+        }
+        if (!profeCompra && cu.alumno_id){
+          const alPc = await env.DB.prepare("SELECT profesor_id FROM alumnos WHERE id = ?1 AND tenant_id = ?2").bind(cu.alumno_id, tid).first();
+          profeCompra = (alPc && alPc.profesor_id) || null;
+        }
         await env.DB.prepare(
-          "INSERT INTO compras (id,tenant_id,cuenta_id,curso,paquete,monto,descuento,op_numero,estado,fecha,metodo,comprobante,slot_deseado) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,'pendiente',?9,?10,?11,?12)"
-        ).bind(crypto.randomUUID(), tid, cu.id, curso, paquete, monto, descuento, op, hoy(), metodo, comprobanteKey, slotDeseado).run();
+          "INSERT INTO compras (id,tenant_id,cuenta_id,curso,paquete,monto,descuento,op_numero,estado,fecha,metodo,comprobante,slot_deseado,profesor_id) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,'pendiente',?9,?10,?11,?12,?13)"
+        ).bind(crypto.randomUUID(), tid, cu.id, curso, paquete, monto, descuento, op, hoy(), metodo, comprobanteKey, slotDeseado, profeCompra).run();
 
         try { await avisarPush(env, tid, { title: "Pago por confirmar", paquete, monto }); } catch (e) {}
 
@@ -3197,8 +3579,10 @@ export default {
       // El profe inicia la conexion de SU cuenta MP (OAuth)
       if (path === "/app/api/admin/mp/conectar" && request.method === "POST"){
         if (!mpMarketplaceOn(env)) return json({ error: "El pago con tarjeta aun no esta configurado en Batuta. Pronto." }, 501);
-        const t = await tenantDeSesion(env, request);
-        if (!t) return json({ error: "Sesion expirada" }, 401);
+        const actorMpC = await actorDeSesion(env, request);
+        if (!actorMpC) return json({ error: "Sesion expirada" }, 401);
+        if (!actorMpC.esDueno) return json({ error: "Los cobros los configura el dueno de la academia." }, 403);
+        const t = actorMpC.tenant;
         await ensureMpProfeSchema(env);
         const state = await firmarState(env, { k: "mpoauth", t: t.id, exp: Date.now() + 30 * 60000 });
         const u = "https://auth.mercadopago.com.pe/authorization?" + new URLSearchParams({
@@ -3210,8 +3594,10 @@ export default {
 
       // El profe desconecta su cuenta MP
       if (path === "/app/api/admin/mp/desconectar" && request.method === "POST"){
-        const t = await tenantDeSesion(env, request);
-        if (!t) return json({ error: "Sesion expirada" }, 401);
+        const actorMpD = await actorDeSesion(env, request);
+        if (!actorMpD) return json({ error: "Sesion expirada" }, 401);
+        if (!actorMpD.esDueno) return json({ error: "Los cobros los configura el dueno de la academia." }, 403);
+        const t = actorMpD.tenant;
         await ensureMpProfeSchema(env);
         await env.DB.prepare(
           "UPDATE tenants SET mp_access_token = '', mp_refresh_token = '', mp_user_id = '', mp_public_key = '', mp_expires_at = 0 WHERE id = ?1"
@@ -3479,7 +3865,10 @@ export default {
       if (path === "/app/api/agenda/slots" && request.method === "GET"){
         const cu = await cuentaDeSesion(env, request);
         if (!cu) return json({ error: "Sesion expirada" }, 401);
-        const slots = await generarSlots(env, cu.tenant_id);
+        // El alumno ve la agenda de SU profesor (multi-profesor); sin ficha aun -> la del dueno.
+        const alS = cu.alumno_id ? await env.DB.prepare("SELECT profesor_id FROM alumnos WHERE id = ?1 AND tenant_id = ?2").bind(cu.alumno_id, cu.tenant_id).first() : null;
+        const profS = await profeDeAlumno(env, cu.tenant_id, alS);
+        const slots = await generarSlots(env, cu.tenant_id, profS);
         return json({ slots });
       }
 
@@ -3492,10 +3881,12 @@ export default {
         const b = await request.json().catch(() => ({}));
         const tipo = b.tipo === "fija" ? "fija" : "suelta";
         const iso = String(b.inicio_utc || "");
-        if (!(await slotValido(env, tid, iso))) return json({ error: "Ese horario ya no esta disponible. Elige otro." }, 400);
 
         const alumno = await env.DB.prepare("SELECT * FROM alumnos WHERE id = ?1 AND tenant_id = ?2").bind(cu.alumno_id, tid).first();
         if (!alumno) return json({ error: "No encuentro tu ficha de alumno." }, 400);
+        // La reserva vive en la agenda del profesor del alumno (multi-profesor).
+        const profR = await profeDeAlumno(env, tid, alumno);
+        if (!(await slotValido(env, tid, iso, null, profR))) return json({ error: "Ese horario ya no esta disponible. Elige otro." }, 400);
         const precios = await loadPrecios(env, tid);
         const ciclo = Number(alumno.ciclo) || 1;
         const { results: regs } = await env.DB.prepare(
@@ -3516,15 +3907,15 @@ export default {
         if (yaMia) return json({ error: "Ya tienes una reserva en ese horario." }, 409);
 
         if (tipo === "suelta"){
-          const oc = await ocupacionSlot(env, tid, iso);
+          const oc = await ocupacionSlot(env, tid, iso, profR);
           if (oc.bloqueado || oc.n >= cupoT) return json({ error: "Ese horario ya se lleno. Elige otro." }, 409);
           const fin = new Date(startMs + CLASE_MIN * 60000).toISOString();
           const rid = crypto.randomUUID();
           await env.DB.prepare(
-            "INSERT INTO reservas (id,tenant_id,alumno_id,inicio_utc,fin_utc,tipo,serie_id,estado,curso,ciclo,creada) VALUES (?1,?2,?3,?4,?5,'suelta','','reservada',?6,?7,?8)"
-          ).bind(rid, tid, alumno.id, iso, fin, alumno.curso || "", ciclo, nowIso).run();
+            "INSERT INTO reservas (id,tenant_id,alumno_id,inicio_utc,fin_utc,tipo,serie_id,estado,curso,ciclo,creada,profesor_id) VALUES (?1,?2,?3,?4,?5,'suelta','','reservada',?6,?7,?8,?9)"
+          ).bind(rid, tid, alumno.id, iso, fin, alumno.curso || "", ciclo, nowIso, profR.id || null).run();
           /* re-verificacion optimista: si una carrera paso el cupo, se deshace esta reserva */
-          const oc2 = await ocupacionSlot(env, tid, iso);
+          const oc2 = await ocupacionSlot(env, tid, iso, profR);
           if (oc2.bloqueado || oc2.n > cupoT){
             await env.DB.prepare("DELETE FROM reservas WHERE id = ?1 AND tenant_id = ?2").bind(rid, tid).run();
             return json({ error: "Justo se lleno ese horario. Elige otro." }, 409);
@@ -3539,8 +3930,8 @@ export default {
         for (let i = 0; i < SERIE_SEMANAS && creadas < objetivo; i++){
           const t = startMs + i * 7 * 86400000;
           const isoT = new Date(t).toISOString();
-          if (!(await slotValido(env, tid, isoT, { ignorarHorizonte: true }))){ saltadas.push(isoT); continue; }
-          const ocF = await ocupacionSlot(env, tid, isoT);
+          if (!(await slotValido(env, tid, isoT, { ignorarHorizonte: true }, profR))){ saltadas.push(isoT); continue; }
+          const ocF = await ocupacionSlot(env, tid, isoT, profR);
           if (ocF.bloqueado || ocF.n >= cupoT){ saltadas.push(isoT); continue; }
           const miaF = await env.DB.prepare(
             "SELECT 1 AS ok FROM reservas WHERE tenant_id = ?1 AND inicio_utc = ?2 AND alumno_id = ?3 AND estado IN ('reservada','completada')"
@@ -3549,9 +3940,9 @@ export default {
           const finT = new Date(t + CLASE_MIN * 60000).toISOString();
           const rid = crypto.randomUUID();
           await env.DB.prepare(
-            "INSERT INTO reservas (id,tenant_id,alumno_id,inicio_utc,fin_utc,tipo,serie_id,estado,curso,ciclo,creada) VALUES (?1,?2,?3,?4,?5,'fija',?6,'reservada',?7,?8,?9)"
-          ).bind(rid, tid, alumno.id, isoT, finT, serie, alumno.curso || "", ciclo, nowIso).run();
-          const ocF2 = await ocupacionSlot(env, tid, isoT);
+            "INSERT INTO reservas (id,tenant_id,alumno_id,inicio_utc,fin_utc,tipo,serie_id,estado,curso,ciclo,creada,profesor_id) VALUES (?1,?2,?3,?4,?5,'fija',?6,'reservada',?7,?8,?9,?10)"
+          ).bind(rid, tid, alumno.id, isoT, finT, serie, alumno.curso || "", ciclo, nowIso, profR.id || null).run();
+          const ocF2 = await ocupacionSlot(env, tid, isoT, profR);
           if (ocF2.bloqueado || ocF2.n > cupoT){
             await env.DB.prepare("DELETE FROM reservas WHERE id = ?1 AND tenant_id = ?2").bind(rid, tid).run();
             saltadas.push(isoT); continue;
@@ -3612,9 +4003,26 @@ export default {
          ARBOL ADMIN (ex /api/admin/*, ahora /app/api/admin/*) — sesion de TENANT
          ============================================================ */
       if (path.startsWith("/app/api/admin/")){
-        const t = await tenantDeSesion(env, request);
-        if (!t) return json({ error: "No autorizado" }, 401);
+        const actor = await actorDeSesion(env, request);
+        if (!actor) return json({ error: "No autorizado" }, 401);
+        const t = actor.tenant;
         const tid = t.id;
+        /* Multi-profesor: el DUENO ve toda la academia (el filtro por profe es client-side);
+           un PROFESOR queda scoped server-side a SUS filas (profesor_id = el suyo).
+           Regla: profesor_id NULL = del dueno; un profesor jamas ve filas NULL. */
+        const esDueno = actor.esDueno;
+        const profeActor = actor.profesor || null;
+        const profeActorId = profeActor ? profeActor.id : null;
+        /* Profesor objetivo de un write de agenda/disponibilidad: el dueno puede operar
+           la agenda de cualquiera de SUS profesores (?profe= o body.profe); un profesor, solo la suya. */
+        const resolverProfeTarget = async (pedido) => {
+          if (!esDueno) return profeActor ? { id: profeActor.id, esDueno: false } : null;
+          const pid = String(pedido || "").trim();
+          if (!pid || pid === profeActorId) return { id: profeActorId || "", esDueno: true };
+          const p = await env.DB.prepare("SELECT id, rol, estado FROM profesores WHERE id = ?1 AND tenant_id = ?2").bind(pid, tid).first().catch(() => null);
+          if (!p || p.estado === "suspendido") return null;
+          return { id: p.id, esDueno: p.rol === "dueno" };
+        };
 
         /* -------- Feedback con premio (+7 dias el primer aporte del mes) -------- */
         if (path === "/app/api/admin/feedback" && request.method === "GET"){
@@ -3673,21 +4081,154 @@ export default {
           return json({ ok: true, premiado: premia, trial_hasta: trialHastaNueva });
         }
 
+        /* -------- Profesores del equipo (multi-profesor, SOLO dueno) -------- */
+        if (path === "/app/api/admin/profesores" && request.method === "GET"){
+          if (!esDueno) return json({ error: "Solo el dueno gestiona profesores." }, 403);
+          await ensureMultiprofesorSchema(env);
+          const { results: profs } = await env.DB.prepare(
+            "SELECT p.id, p.nombre, p.email, p.whatsapp, p.rol, p.estado, p.invite_token, p.creado, " +
+            "(SELECT COUNT(*) FROM alumnos a WHERE a.tenant_id = p.tenant_id AND a.profesor_id = p.id) AS n_alumnos " +
+            "FROM profesores p WHERE p.tenant_id = ?1 ORDER BY CASE p.rol WHEN 'dueno' THEN 0 ELSE 1 END, p.nombre"
+          ).bind(tid).all();
+          const lista = (profs || []).map(p => ({
+            id: p.id, nombre: p.nombre, email: p.email, whatsapp: p.whatsapp || "", rol: p.rol, estado: p.estado,
+            n_alumnos: Number(p.n_alumnos) || 0,
+            invite_link: (p.estado === "invitado" && p.invite_token) ? (MARCA.dominio + "/app/p/activar?token=" + p.invite_token) : ""
+          }));
+          const maxA = MAX_PROFES[t.plan || "profe"] || 1;
+          const usados = lista.filter(p => p.estado !== "suspendido").length;
+          return json({ profesores: lista, asientos: { usados, max: maxA }, plan: t.plan || "profe" });
+        }
+        if (path === "/app/api/admin/profesores" && request.method === "POST"){
+          if (!esDueno) return json({ error: "Solo el dueno gestiona profesores." }, 403);
+          await ensureMultiprofesorSchema(env);
+          const b = await request.json().catch(() => ({}));
+          const accion = String(b.accion || "");
+
+          if (accion === "invitar" || accion === "crear"){
+            const nombreP = String(b.nombre || "").trim().slice(0, 60);
+            const emailP = String(b.email || "").trim().toLowerCase();
+            if (nombreP.length < 2) return json({ error: "Escribe el nombre del profesor." }, 400);
+            if (!emailOk(emailP)) return json({ error: "Ese correo no parece valido." }, 400);
+            /* candado de asientos: lo que de verdad vende Academia/XL */
+            const maxA = MAX_PROFES[t.plan || "profe"] || 1;
+            const nAct = await env.DB.prepare("SELECT COUNT(*) AS n FROM profesores WHERE tenant_id = ?1 AND estado != 'suspendido'").bind(tid).first();
+            if ((Number(nAct && nAct.n) || 0) >= maxA){
+              return json({ error: "Tu plan " + (PLAN_NOMBRE[t.plan || "profe"] || "Profe") + " permite " + maxA + " profesor" + (maxA === 1 ? "" : "es") + ". Sube de plan en Perfil para agregar mas.", upgrade: true }, 402);
+            }
+            const ya = await env.DB.prepare("SELECT id FROM profesores WHERE tenant_id = ?1 AND email = ?2").bind(tid, emailP).first();
+            if (ya) return json({ error: "Ya hay un profesor con ese correo en tu academia." }, 409);
+            const inviteToken = randHex(24);
+            const pidNuevo = crypto.randomUUID();
+            await env.DB.prepare(
+              "INSERT INTO profesores (id, tenant_id, nombre, email, whatsapp, pass_hash, pass_salt, rol, estado, invite_token, creado) VALUES (?1,?2,?3,?4,?5,'','','profesor','invitado',?6,?7)"
+            ).bind(pidNuevo, tid, nombreP, emailP, String(b.whatsapp || "").trim().slice(0, 20), inviteToken, new Date().toISOString()).run();
+            const link = MARCA.dominio + "/app/p/activar?token=" + inviteToken;
+            let correoEnviado = false;
+            try {
+              correoEnviado = await enviarCorreo(env, {
+                to: emailP,
+                subject: nombreP.split(" ")[0] + ", te invitaron a " + (t.academia || "una academia") + " en Batuta",
+                html: "<p>Hola " + esc(nombreP) + ",</p><p><b>" + esc(t.profe_nombre || t.academia || "El dueno") + "</b> te invito como profesor de <b>" + esc(t.academia || "su academia") + "</b> en Batuta (el panel donde veras tus alumnos, tu agenda y tus clases).</p>" +
+                  "<p><a href=\"" + link + "\"><b>Acepta la invitacion y crea tu contrasena aqui</b></a></p>" +
+                  "<p style=\"color:#888;font-size:13px\">Si no esperabas este correo, ignoralo.</p>"
+              });
+            } catch (e) {}
+            return json({ ok: true, id: pidNuevo, invite_link: link, correo_enviado: !!correoEnviado });
+          }
+
+          const pid = String(b.id || "");
+          const pRow = await env.DB.prepare("SELECT * FROM profesores WHERE id = ?1 AND tenant_id = ?2").bind(pid, tid).first();
+          if (!pRow) return json({ error: "Profesor no encontrado" }, 404);
+          if (pRow.rol === "dueno") return json({ error: "El dueno no se toca desde aqui." }, 400);
+
+          if (accion === "suspender" || accion === "reactivar"){
+            if (accion === "reactivar"){
+              const maxA = MAX_PROFES[t.plan || "profe"] || 1;
+              const nAct = await env.DB.prepare("SELECT COUNT(*) AS n FROM profesores WHERE tenant_id = ?1 AND estado != 'suspendido'").bind(tid).first();
+              if ((Number(nAct && nAct.n) || 0) >= maxA) return json({ error: "Tu plan no tiene asientos libres para reactivarlo. Sube de plan." , upgrade: true }, 402);
+            }
+            const nuevoEst = accion === "suspender" ? "suspendido" : (pRow.pass_hash ? "activo" : "invitado");
+            await env.DB.batch([
+              env.DB.prepare("UPDATE profesores SET estado = ?1 WHERE id = ?2 AND tenant_id = ?3").bind(nuevoEst, pid, tid),
+              env.DB.prepare("DELETE FROM sesiones WHERE cuenta_id = ?1").bind("P:" + pid)
+            ]);
+            return json({ ok: true, estado: nuevoEst });
+          }
+          if (accion === "reenviar"){
+            if (pRow.estado !== "invitado" || !pRow.invite_token) return json({ error: "Ese profesor ya activo su cuenta." }, 400);
+            const link = MARCA.dominio + "/app/p/activar?token=" + pRow.invite_token;
+            let correoEnviado = false;
+            try {
+              correoEnviado = await enviarCorreo(env, {
+                to: pRow.email,
+                subject: "Tu invitacion a " + (t.academia || "una academia") + " en Batuta",
+                html: "<p>Hola " + esc(pRow.nombre) + ", te reenviamos tu invitacion a <b>" + esc(t.academia || "la academia") + "</b>.</p><p><a href=\"" + link + "\"><b>Acepta y crea tu contrasena aqui</b></a></p>"
+              });
+            } catch (e) {}
+            return json({ ok: true, invite_link: link, correo_enviado: !!correoEnviado });
+          }
+          if (accion === "borrar"){
+            /* solo invitados sin datos: un profesor con alumnos se SUSPENDE (su historial no se borra) */
+            const nAl = await env.DB.prepare("SELECT COUNT(*) AS n FROM alumnos WHERE tenant_id = ?1 AND profesor_id = ?2").bind(tid, pid).first();
+            if ((Number(nAl && nAl.n) || 0) > 0) return json({ error: "Ese profesor tiene alumnos asignados: suspendelo, o reasigna sus alumnos primero." }, 409);
+            await env.DB.batch([
+              env.DB.prepare("DELETE FROM sesiones WHERE cuenta_id = ?1").bind("P:" + pid),
+              env.DB.prepare("DELETE FROM disponibilidad WHERE tenant_id = ?1 AND profesor_id = ?2").bind(tid, pid),
+              env.DB.prepare("DELETE FROM profesores WHERE id = ?1 AND tenant_id = ?2").bind(pid, tid)
+            ]);
+            return json({ ok: true });
+          }
+          if (accion === "editar"){
+            const nombreE = String(b.nombre || pRow.nombre).trim().slice(0, 60);
+            if (nombreE.length < 2) return json({ error: "Nombre muy corto." }, 400);
+            await env.DB.prepare("UPDATE profesores SET nombre = ?1, whatsapp = ?2 WHERE id = ?3 AND tenant_id = ?4")
+              .bind(nombreE, String(b.whatsapp || pRow.whatsapp || "").trim().slice(0, 20), pid, tid).run();
+            return json({ ok: true });
+          }
+          return json({ error: "Accion no valida" }, 400);
+        }
+        /* Reasignar un alumno a otro profesor (SOLO dueno) */
+        if (path === "/app/api/admin/alumno/asignar" && request.method === "POST"){
+          if (!esDueno) return json({ error: "Solo el dueno reasigna alumnos." }, 403);
+          const b = await request.json().catch(() => ({}));
+          const alumnoId = String(b.alumno_id || "");
+          const profeId = String(b.profe || "");
+          const pDest = await env.DB.prepare("SELECT id, estado FROM profesores WHERE id = ?1 AND tenant_id = ?2").bind(profeId, tid).first();
+          if (!pDest || pDest.estado === "suspendido") return json({ error: "Profesor no encontrado" }, 404);
+          const r = await env.DB.prepare("UPDATE alumnos SET profesor_id = ?1 WHERE id = ?2 AND tenant_id = ?3").bind(profeId, alumnoId, tid).run();
+          if (!((r && r.meta && (r.meta.changes ?? r.meta.rows_written)) || 0)) return json({ error: "Alumno no encontrado" }, 404);
+          /* sus reservas futuras se mueven a la agenda del nuevo profe */
+          await env.DB.prepare(
+            "UPDATE reservas SET profesor_id = ?1 WHERE tenant_id = ?2 AND alumno_id = ?3 AND estado = 'reservada' AND inicio_utc >= ?4"
+          ).bind(profeId, tid, alumnoId, new Date().toISOString()).run();
+          return json({ ok: true });
+        }
+
         if (path === "/app/api/admin/disponibilidad" && request.method === "GET"){
+          const target = await resolverProfeTarget(url.searchParams.get("profe"));
+          if (!target) return json({ error: "Profesor no encontrado" }, 404);
           const rows = (await env.DB.prepare(
-            "SELECT dia_semana, hora, activo FROM disponibilidad WHERE tenant_id = ?1 ORDER BY dia_semana, hora"
-          ).bind(tid).all()).results || [];
+            "SELECT dia_semana, hora, activo FROM disponibilidad WHERE tenant_id = ?1 " +
+            "AND (profesor_id = ?2 OR (?3 = 1 AND (profesor_id IS NULL OR profesor_id = ''))) ORDER BY dia_semana, hora"
+          ).bind(tid, target.id, target.esDueno ? 1 : 0).all()).results || [];
           return json({ disponibilidad: rows });
         }
         if (path === "/app/api/admin/disponibilidad" && request.method === "POST"){
           const b = await request.json().catch(() => ({}));
+          const target = await resolverProfeTarget(b.profe);
+          if (!target) return json({ error: "Profesor no encontrado" }, 404);
           const activos = Array.isArray(b.activos) ? b.activos : [];
-          const stmts = [ env.DB.prepare("DELETE FROM disponibilidad WHERE tenant_id = ?1").bind(tid) ];
+          /* BLINDADO multi-profesor: el DELETE va scoped al profesor objetivo, nunca
+             al tenant entero (antes un profesor podia borrar los horarios de todos). */
+          const stmts = [ env.DB.prepare(
+            "DELETE FROM disponibilidad WHERE tenant_id = ?1 AND (profesor_id = ?2 OR (?3 = 1 AND (profesor_id IS NULL OR profesor_id = '')))"
+          ).bind(tid, target.id, target.esDueno ? 1 : 0) ];
           for (const s of activos){
             const dia = Number(s.dia_semana);
             const h = String(s.hora || "");
             if (dia >= 0 && dia <= 6 && /^\d{2}:\d{2}$/.test(h)){
-              stmts.push(env.DB.prepare("INSERT OR IGNORE INTO disponibilidad (tenant_id,dia_semana,hora,activo) VALUES (?1,?2,?3,1)").bind(tid, dia, h));
+              stmts.push(env.DB.prepare("INSERT OR IGNORE INTO disponibilidad (tenant_id,profesor_id,dia_semana,hora,activo) VALUES (?1,?2,?3,?4,1)").bind(tid, target.id, dia, h));
             }
           }
           await env.DB.batch(stmts);
@@ -3696,11 +4237,12 @@ export default {
 
         if (path === "/app/api/admin/agenda" && request.method === "GET"){
           const desde = new Date(Date.now() - 7 * 86400000).toISOString();
+          // Profesor: solo SU agenda. Dueno: toda la academia (profesor_id viaja para pintar/filtrar).
           const rows = (await env.DB.prepare(
-            "SELECT r.id, r.alumno_id, r.inicio_utc, r.fin_utc, r.tipo, r.serie_id, r.estado, r.curso, r.nota, a.nombre AS alumno_nombre " +
+            "SELECT r.id, r.alumno_id, r.profesor_id, r.inicio_utc, r.fin_utc, r.tipo, r.serie_id, r.estado, r.curso, r.nota, a.nombre AS alumno_nombre " +
             "FROM reservas r LEFT JOIN alumnos a ON a.id = r.alumno_id AND a.tenant_id = r.tenant_id " +
-            "WHERE r.tenant_id = ?1 AND r.inicio_utc >= ?2 ORDER BY r.inicio_utc ASC"
-          ).bind(tid, desde).all()).results || [];
+            "WHERE r.tenant_id = ?1 AND r.inicio_utc >= ?2 AND (?3 = 1 OR r.profesor_id = ?4) ORDER BY r.inicio_utc ASC"
+          ).bind(tid, desde, esDueno ? 1 : 0, profeActorId || "").all()).results || [];
           return json({ reservas: rows });
         }
 
@@ -3712,9 +4254,16 @@ export default {
           const nota = String(b.nota || "").slice(0, 200);
           const fija = !!b.fija;
           let curso = "", ciclo = 1;
+          let targetB = await resolverProfeTarget(b.profe);
+          if (!targetB) return json({ error: "Profesor no encontrado" }, 404);
           if (alumnoId){
-            const al = await env.DB.prepare("SELECT curso, ciclo FROM alumnos WHERE id = ?1 AND tenant_id = ?2").bind(alumnoId, tid).first();
-            if (al){ curso = al.curso || ""; ciclo = Number(al.ciclo) || 1; }
+            const al = await env.DB.prepare("SELECT curso, ciclo, profesor_id FROM alumnos WHERE id = ?1 AND tenant_id = ?2").bind(alumnoId, tid).first();
+            if (!al) return json({ error: "Alumno no encontrado" }, 404);
+            /* un profesor solo agenda a SUS alumnos; la reserva cae en la agenda del profe del alumno */
+            if (!esDueno && al.profesor_id !== profeActorId) return json({ error: "Ese alumno no esta asignado a ti." }, 403);
+            const profAl = await profeDeAlumno(env, tid, al);
+            targetB = { id: profAl.id, esDueno: profAl.esDueno };
+            curso = al.curso || ""; ciclo = Number(al.ciclo) || 1;
           }
           const tipo = alumnoId ? (fija ? "fija" : "suelta") : "bloqueo";
           const serie = fija ? crypto.randomUUID() : "";
@@ -3725,7 +4274,7 @@ export default {
           for (let tms = t0; tms <= horizonMs; tms += 7 * 86400000){
             const isoT = new Date(tms).toISOString();
             const finT = new Date(tms + CLASE_MIN * 60000).toISOString();
-            const oc = await ocupacionSlot(env, tid, isoT);
+            const oc = await ocupacionSlot(env, tid, isoT, targetB);
             /* bloqueo: 1 por slot basta. Con alumno: respeta el cupo y evita duplicar al mismo alumno. */
             let cabe;
             if (!alumnoId){
@@ -3738,8 +4287,8 @@ export default {
             }
             if (cabe){
               await env.DB.prepare(
-                "INSERT INTO reservas (id,tenant_id,alumno_id,inicio_utc,fin_utc,tipo,serie_id,estado,curso,nota,ciclo,creada) VALUES (?1,?2,?3,?4,?5,?6,?7,'reservada',?8,?9,?10,?11)"
-              ).bind(crypto.randomUUID(), tid, alumnoId, isoT, finT, tipo, serie, curso, nota, ciclo, nowIso).run();
+                "INSERT INTO reservas (id,tenant_id,alumno_id,inicio_utc,fin_utc,tipo,serie_id,estado,curso,nota,ciclo,creada,profesor_id) VALUES (?1,?2,?3,?4,?5,?6,?7,'reservada',?8,?9,?10,?11,?12)"
+              ).bind(crypto.randomUUID(), tid, alumnoId, isoT, finT, tipo, serie, curso, nota, ciclo, nowIso, targetB.id || null).run();
               creadas++;
             }
             if (!fija) break;
@@ -3752,7 +4301,12 @@ export default {
           const id = String(b.id || "");
           const nuevo = String(b.estado || "");
           if (!["completada", "falta", "cancelada"].includes(nuevo)) return json({ error: "Estado invalido" }, 400);
-          await env.DB.prepare("UPDATE reservas SET estado = ?1 WHERE id = ?2 AND tenant_id = ?3").bind(nuevo, id, tid).run();
+          /* un profesor solo marca clases de SU agenda */
+          const r = await env.DB.prepare(
+            "UPDATE reservas SET estado = ?1 WHERE id = ?2 AND tenant_id = ?3 AND (?4 = 1 OR profesor_id = ?5)"
+          ).bind(nuevo, id, tid, esDueno ? 1 : 0, profeActorId || "").run();
+          const cambiadas = (r && r.meta && (r.meta.changes ?? r.meta.rows_written)) || 0;
+          if (!cambiadas) return json({ error: "Esa clase no esta en tu agenda." }, 404);
           return json({ ok: true });
         }
 
@@ -3777,7 +4331,12 @@ export default {
         }
 
         if (path === "/app/api/admin/data" && request.method === "GET"){
-          const alumnos  = (await env.DB.prepare("SELECT * FROM alumnos WHERE tenant_id = ?1 ORDER BY nombre").bind(tid).all()).results || [];
+          /* Profesor: SOLO sus filas (alumnos/registro/cuentas/compras/grupos suyos).
+             Dueno: toda la academia; el filtro por profe del panel es client-side. */
+          const alumnos  = (await env.DB.prepare(
+            "SELECT * FROM alumnos WHERE tenant_id = ?1 AND (?2 = 1 OR profesor_id = ?3) ORDER BY nombre"
+          ).bind(tid, esDueno ? 1 : 0, profeActorId || "").all()).results || [];
+          const idsScope = new Set(alumnos.map(a => a.id));
           const { results: fijasRows } = await env.DB.prepare(
             "SELECT alumno_id, serie_id, id, inicio_utc FROM reservas " +
             "WHERE tenant_id = ?1 AND tipo='fija' AND estado='reservada' AND inicio_utc >= ?2 ORDER BY inicio_utc ASC"
@@ -3795,20 +4354,36 @@ export default {
             if (fijasPorAlumno[aid].indexOf(label) === -1) fijasPorAlumno[aid].push(label);
           }
           for (const a of alumnos){ a.horarioFijo = fijasPorAlumno[a.id] || []; }
-          const registro = (await env.DB.prepare("SELECT * FROM registro WHERE tenant_id = ?1 ORDER BY fecha DESC, id DESC").bind(tid).all()).results || [];
-          const cuentas  = (await env.DB.prepare(
+          const registroAll = (await env.DB.prepare("SELECT * FROM registro WHERE tenant_id = ?1 ORDER BY fecha DESC, id DESC").bind(tid).all()).results || [];
+          const registro = esDueno ? registroAll : registroAll.filter(r => idsScope.has(r.alumno_id));
+          const cuentasAll = (await env.DB.prepare(
             "SELECT id,email,nombre,whatsapp,marketing,alumno_id,creada,ref_code,ref_por,credito FROM cuentas WHERE tenant_id = ?1 ORDER BY creada DESC"
           ).bind(tid).all()).results || [];
-          const compras  = (await env.DB.prepare("SELECT * FROM compras WHERE tenant_id = ?1 AND estado != 'iniciada' ORDER BY CASE estado WHEN 'pendiente' THEN 0 ELSE 1 END, fecha DESC").bind(tid).all()).results || [];
+          const cuentas = esDueno ? cuentasAll : cuentasAll.filter(c => c.alumno_id && idsScope.has(c.alumno_id));
+          const idsCuentasScope = new Set(cuentas.map(c => c.id));
+          const comprasAll = (await env.DB.prepare("SELECT * FROM compras WHERE tenant_id = ?1 AND estado != 'iniciada' ORDER BY CASE estado WHEN 'pendiente' THEN 0 ELSE 1 END, fecha DESC").bind(tid).all()).results || [];
+          const compras = esDueno ? comprasAll : comprasAll.filter(c => c.profesor_id === profeActorId || idsCuentasScope.has(c.cuenta_id));
           const recursos = (await env.DB.prepare("SELECT * FROM recursos WHERE tenant_id = ?1 ORDER BY fecha DESC, rowid DESC").bind(tid).all()).results || [];
           const ejercicios = (await env.DB.prepare("SELECT * FROM ejercicios WHERE tenant_id = ?1 ORDER BY fecha DESC, rowid DESC").bind(tid).all()).results || [];
-          const leads    = (await env.DB.prepare("SELECT id,email,marca,fuente,interes,fecha FROM leads WHERE tenant_id = ?1 ORDER BY fecha DESC, rowid DESC LIMIT 1000").bind(tid).all()).results || [];
+          /* leads (interesados del marketing) son de la academia: solo el dueno */
+          const leads = esDueno ? ((await env.DB.prepare("SELECT id,email,marca,fuente,interes,fecha FROM leads WHERE tenant_id = ?1 ORDER BY fecha DESC, rowid DESC LIMIT 1000").bind(tid).all()).results || []) : [];
           const precios  = await loadPrecios(env, tid);
           const config   = await loadConfig(env, tid);
-          const grupos   = ((await env.DB.prepare("SELECT * FROM grupos WHERE tenant_id = ?1 ORDER BY creado DESC, rowid DESC").bind(tid).all()).results || [])
+          const grupos   = ((await env.DB.prepare(
+            "SELECT * FROM grupos WHERE tenant_id = ?1 AND (?2 = 1 OR profesor_id = ?3) ORDER BY creado DESC, rowid DESC"
+          ).bind(tid, esDueno ? 1 : 0, profeActorId || "").all()).results || [])
             .map(g => { let m = []; try { m = JSON.parse(g.miembros || "[]"); } catch (e) {} return Object.assign({}, g, { miembros: Array.isArray(m) ? m : [] }); });
+          /* equipo: al dueno le sirve para asignar; al profesor, para pintar nombres */
+          let equipo = [];
+          try {
+            const { results: eqRows } = await env.DB.prepare(
+              "SELECT id, nombre, email, rol, estado, foto FROM profesores WHERE tenant_id = ?1 ORDER BY CASE rol WHEN 'dueno' THEN 0 ELSE 1 END, nombre"
+            ).bind(tid).all();
+            equipo = eqRows || [];
+          } catch (e) {}
           return json({ alumnos, registro, precios, cuentas, compras, recursos, ejercicios, leads, config, grupos,
                         slug: t.slug, academia: t.academia, estado: t.estado, demo: t.email === DEMO_EMAIL,
+                        rol: esDueno ? "dueno" : "profesor", profe_id: profeActorId || "", equipo,
                         vapid_public: env.VAPID_PUBLIC_KEY || "" });
         }
 
@@ -3817,7 +4392,9 @@ export default {
           const b = await request.json().catch(() => ({}));
           const accion = String(b.accion || "");
           if (accion === "borrar"){
-            await env.DB.prepare("DELETE FROM grupos WHERE id = ?1 AND tenant_id = ?2").bind(String(b.id || ""), tid).run();
+            await env.DB.prepare(
+              "DELETE FROM grupos WHERE id = ?1 AND tenant_id = ?2 AND (?3 = 1 OR profesor_id = ?4)"
+            ).bind(String(b.id || ""), tid, esDueno ? 1 : 0, profeActorId || "").run();
             return json({ ok: true });
           }
           if (accion !== "crear" && accion !== "editar") return json({ error: "Accion no valida" }, 400);
@@ -3825,69 +4402,112 @@ export default {
           if (nombre.length < 2) return json({ error: "Ponle un nombre al grupo." }, 400);
           const curso = String(b.curso || "").trim().slice(0, 40);
           const horario = String(b.horario || "").trim().slice(0, 80);
-          /* miembros: solo ids de alumnos reales de ESTE tenant */
+          /* miembros: solo ids de alumnos reales de ESTE tenant (y del scope del profesor) */
           const pedidos = Array.isArray(b.miembros) ? b.miembros.map(x => String(x)).slice(0, 100) : [];
           let miembros = [];
           if (pedidos.length){
-            const { results: als } = await env.DB.prepare("SELECT id FROM alumnos WHERE tenant_id = ?1").bind(tid).all();
+            const { results: als } = await env.DB.prepare(
+              "SELECT id FROM alumnos WHERE tenant_id = ?1 AND (?2 = 1 OR profesor_id = ?3)"
+            ).bind(tid, esDueno ? 1 : 0, profeActorId || "").all();
             const validos = new Set((als || []).map(a => a.id));
             miembros = pedidos.filter((x, i, a) => validos.has(x) && a.indexOf(x) === i);
           }
           if (accion === "crear"){
             await env.DB.prepare(
-              "INSERT INTO grupos (id,tenant_id,nombre,curso,horario,miembros,creado) VALUES (?1,?2,?3,?4,?5,?6,?7)"
-            ).bind(crypto.randomUUID(), tid, nombre, curso, horario, JSON.stringify(miembros), hoy()).run();
+              "INSERT INTO grupos (id,tenant_id,nombre,curso,horario,miembros,creado,profesor_id) VALUES (?1,?2,?3,?4,?5,?6,?7,?8)"
+            ).bind(crypto.randomUUID(), tid, nombre, curso, horario, JSON.stringify(miembros), hoy(), profeActorId || null).run();
           } else {
             const r = await env.DB.prepare(
-              "UPDATE grupos SET nombre = ?1, curso = ?2, horario = ?3, miembros = ?4 WHERE id = ?5 AND tenant_id = ?6"
-            ).bind(nombre, curso, horario, JSON.stringify(miembros), String(b.id || ""), tid).run();
+              "UPDATE grupos SET nombre = ?1, curso = ?2, horario = ?3, miembros = ?4 WHERE id = ?5 AND tenant_id = ?6 AND (?7 = 1 OR profesor_id = ?8)"
+            ).bind(nombre, curso, horario, JSON.stringify(miembros), String(b.id || ""), tid, esDueno ? 1 : 0, profeActorId || "").run();
             const filas = (r && r.meta && (r.meta.changes ?? r.meta.rows_written)) || 0;
             if (!filas) return json({ error: "Grupo no encontrado" }, 404);
           }
           return json({ ok: true });
         }
 
-        /* Guardado masivo del panel (alumnos + registro + precios), scoped al tenant.
-           Mismo contrato que el core (PUT reemplaza esas 3 tablas DEL TENANT), portado con tenant_id. */
+        /* Guardado masivo del panel (alumnos + registro + precios) por snapshot.
+           BLINDADO multi-profesor (el "riesgo #1" del diseño): cuando guarda un PROFESOR,
+           el DELETE y el re-insert quedan scoped a SUS filas (jamas borra a sus colegas)
+           y los precios (de academia) ni se tocan. Ademas se preservan server-side las
+           columnas que el cliente no maneja (vence, contadores de avisos, profesor_id):
+           antes el PUT las reseteaba en cada guardado. */
         if (path === "/app/api/admin/data" && request.method === "PUT"){
           const body = await request.json().catch(() => null);
           if (!body || !Array.isArray(body.alumnos) || !Array.isArray(body.registro)){
             return json({ error: "Cuerpo inválido" }, 400);
           }
-          const stmts = [
-            env.DB.prepare("DELETE FROM registro WHERE tenant_id = ?1").bind(tid),
-            env.DB.prepare("DELETE FROM alumnos WHERE tenant_id = ?1").bind(tid),
-            env.DB.prepare("DELETE FROM precios WHERE tenant_id = ?1").bind(tid)
-          ];
-          for (const a of body.alumnos){
+          const { results: prevRows } = await env.DB.prepare(
+            "SELECT id, vence, aviso_vence_ciclo, recordatorio_fecha, recordatorio_ciclo, winback_ciclo, profesor_id FROM alumnos WHERE tenant_id = ?1 AND (?2 = 1 OR profesor_id = ?3)"
+          ).bind(tid, esDueno ? 1 : 0, profeActorId || "").all();
+          const prev = new Map((prevRows || []).map(r => [r.id, r]));
+          let profesValidos = new Set();
+          try {
+            const { results: pv } = await env.DB.prepare("SELECT id FROM profesores WHERE tenant_id = ?1").bind(tid).all();
+            profesValidos = new Set((pv || []).map(p => p.id));
+          } catch (e) {}
+
+          const stmts = [];
+          if (esDueno){
+            stmts.push(env.DB.prepare("DELETE FROM registro WHERE tenant_id = ?1").bind(tid));
+            stmts.push(env.DB.prepare("DELETE FROM alumnos WHERE tenant_id = ?1").bind(tid));
+            stmts.push(env.DB.prepare("DELETE FROM precios WHERE tenant_id = ?1").bind(tid));
+          } else {
+            /* orden importa: registro del scope primero (usa la subquery sobre alumnos) */
             stmts.push(env.DB.prepare(
-              "INSERT INTO alumnos (id,tenant_id,codigo,nombre,whatsapp,curso,paquete,fecha,pago,horario,notas,ciclo) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12)"
+              "DELETE FROM registro WHERE tenant_id = ?1 AND alumno_id IN (SELECT id FROM alumnos WHERE tenant_id = ?1 AND profesor_id = ?2)"
+            ).bind(tid, profeActorId || ""));
+            stmts.push(env.DB.prepare("DELETE FROM alumnos WHERE tenant_id = ?1 AND profesor_id = ?2").bind(tid, profeActorId || ""));
+          }
+          const idsSnapshot = new Set();
+          for (const a of body.alumnos){
+            const pr = prev.get(a.id);
+            /* profesor: todo lo suyo; dueno: respeta la asignacion del payload si es valida,
+               si no la previa, y para alumnos nuevos el dueno mismo. */
+            let pidAl;
+            if (!esDueno) pidAl = profeActorId;
+            else if (a.profesor_id && profesValidos.has(String(a.profesor_id))) pidAl = String(a.profesor_id);
+            else if (pr && pr.profesor_id) pidAl = pr.profesor_id;
+            else pidAl = profeActorId; /* dueno */
+            idsSnapshot.add(a.id);
+            stmts.push(env.DB.prepare(
+              "INSERT INTO alumnos (id,tenant_id,codigo,nombre,whatsapp,curso,paquete,fecha,pago,horario,notas,ciclo,vence,aviso_vence_ciclo,recordatorio_fecha,recordatorio_ciclo,winback_ciclo,profesor_id) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18)"
             ).bind(
               a.id, tid, String(a.codigo || "").toUpperCase() || randHex(3).toUpperCase(), a.nombre,
               a.whatsapp || "", a.curso || "", a.paquete || "",
-              a.fecha || "", a.pago || "", a.horario || "", a.notas || "", a.ciclo || 1
+              a.fecha || "", a.pago || "", a.horario || "", a.notas || "", a.ciclo || 1,
+              (pr && pr.vence) || "", (pr && pr.aviso_vence_ciclo) || 0,
+              (pr && pr.recordatorio_fecha) || "", (pr && pr.recordatorio_ciclo) || 0,
+              (pr && pr.winback_ciclo) || 0, pidAl || null
             ));
           }
           for (const r of body.registro){
+            const aid = r.alumnoId || r.alumno_id;
+            /* profesor: solo registro de alumnos de su snapshot (no puede tocar clases ajenas) */
+            if (!esDueno && !idsSnapshot.has(aid)) continue;
             stmts.push(env.DB.prepare(
               "INSERT INTO registro (id,tenant_id,fecha,alumno_id,curso,estado,trabajo,tarea,ciclo,tarea_audio,plan) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11)"
             ).bind(
-              r.id, tid, r.fecha || "", r.alumnoId || r.alumno_id,
+              r.id, tid, r.fecha || "", aid,
               r.curso || "", r.estado || "", r.trabajo || "", r.tarea || "", r.ciclo || 1,
               r.tarea_audio || "", r.plan || ""
             ));
           }
-          const preciosPut = body.precios || {};
-          for (const k of Object.keys(preciosPut)){
-            stmts.push(env.DB.prepare("INSERT INTO precios (tenant_id, paquete, precio) VALUES (?1, ?2, ?3)").bind(tid, k, Number(preciosPut[k]) || 0));
+          if (esDueno){
+            const preciosPut = body.precios || {};
+            for (const k of Object.keys(preciosPut)){
+              stmts.push(env.DB.prepare("INSERT INTO precios (tenant_id, paquete, precio) VALUES (?1, ?2, ?3)").bind(tid, k, Number(preciosPut[k]) || 0));
+            }
           }
           await env.DB.batch(stmts);
           return json({ ok: true });
         }
 
         if (path === "/app/api/admin/config" && request.method === "POST"){
+          /* config del tenant (cobros, marca, cupo, cursos): SOLO el dueno */
+          if (!esDueno) return json({ error: "Los ajustes de la academia los maneja el dueno." }, 403);
           const b = await request.json().catch(() => ({}));
-          const claves = ["pago_numero", "pago_titular", "bcp_cuenta", "bcp_cci", "scotia_cuenta", "scotia_cci", "crypto_moneda", "crypto_red", "crypto_wallet", "profe_nombre", "profe_marca", "profe_foto", "whatsapp_profe", "cursos", "brand_color", "brand_font", "agenda_cupo"];
+          const claves = ["pago_numero", "pago_titular", "bcp_cuenta", "bcp_cci", "scotia_cuenta", "scotia_cci", "crypto_moneda", "crypto_red", "crypto_wallet", "profe_nombre", "profe_marca", "profe_foto", "whatsapp_profe", "cursos", "brand_color", "brand_font", "agenda_cupo", "recordatorios_clase", "recordatorio_renovacion"];
           const stmts = [];
           for (const k of claves){
             if (k in b){
@@ -3997,6 +4617,7 @@ export default {
 
         /* Logo de la academia (branding del portal): mismo patron que la foto de perfil. Con valor vacio, lo quita. */
         if (path === "/app/api/admin/marca/logo" && request.method === "POST"){
+          if (!esDueno) return json({ error: "La marca de la academia la maneja el dueno." }, 403);
           if (!env.RECURSOS_R2) return json({ error: "No disponible en el trial." }, 501);
           const cfgPrev = await loadConfig(env, tid);
           const borrarPrevio = async () => {
@@ -4115,8 +4736,12 @@ export default {
           const form = await request.formData().catch(() => null);
           if (!form) return json({ error: "Formulario invalido" }, 400);
           const registroId = String(form.get("registro_id") || "");
-          const reg = await env.DB.prepare("SELECT id, COALESCE(tarea_audio,'') AS tarea_audio FROM registro WHERE id = ?1 AND tenant_id = ?2").bind(registroId, tid).first();
+          const reg = await env.DB.prepare("SELECT id, alumno_id, COALESCE(tarea_audio,'') AS tarea_audio FROM registro WHERE id = ?1 AND tenant_id = ?2").bind(registroId, tid).first();
           if (!reg) return json({ error: "Registro no encontrado" }, 404);
+          if (!esDueno){
+            const alReg = reg.alumno_id ? await env.DB.prepare("SELECT profesor_id FROM alumnos WHERE id = ?1 AND tenant_id = ?2").bind(reg.alumno_id, tid).first() : null;
+            if (!alReg || alReg.profesor_id !== profeActorId) return json({ error: "Esa clase no es de un alumno tuyo." }, 403);
+          }
 
           const lista = parseAudios(reg.tarea_audio);
           const guardarLista = async (l) => {
@@ -4159,12 +4784,14 @@ export default {
 
         /* -------- Chat: borrar mensaje / listar hilos -------- */
         if (path === "/app/api/admin/chat/borrar" && request.method === "POST"){
+          if (!esDueno) return json({ error: "Solo el dueno modera el chat." }, 403);
           const b = await request.json().catch(() => ({}));
           await env.DB.prepare("DELETE FROM chat_mensajes WHERE id = ?1 AND tenant_id = ?2").bind(String(b.id || ""), tid).run();
           return json({ ok: true });
         }
 
         if (path === "/app/api/admin/chat/hilos" && request.method === "GET"){
+          /* profesor: solo hilos de SUS alumnos (el hilo privado es alumno <-> su profe) */
           const { results } = await env.DB.prepare(
             "SELECT m.hilo AS cuenta_id, c.nombre AS nombre, c.email AS email, cnt.n AS total, " +
             "       m.texto AS ultimo_texto, m.es_admin AS ultimo_admin, m.fecha AS ultima_fecha " +
@@ -4172,8 +4799,10 @@ export default {
             "JOIN cuentas c ON c.id = m.hilo AND c.tenant_id = m.tenant_id " +
             "JOIN (SELECT hilo, MAX(rowid) AS mx, COUNT(*) AS n FROM chat_mensajes WHERE tenant_id = ?1 AND hilo <> 'grupal' GROUP BY hilo) cnt " +
             "     ON cnt.hilo = m.hilo AND cnt.mx = m.rowid " +
-            "WHERE m.tenant_id = ?1 AND m.hilo <> 'grupal' ORDER BY m.rowid DESC"
-          ).bind(tid).all();
+            "WHERE m.tenant_id = ?1 AND m.hilo <> 'grupal' " +
+            "AND (?2 = 1 OR c.alumno_id IN (SELECT id FROM alumnos WHERE tenant_id = ?1 AND profesor_id = ?3)) " +
+            "ORDER BY m.rowid DESC"
+          ).bind(tid, esDueno ? 1 : 0, profeActorId || "").all();
           return json({ hilos: results || [] });
         }
 
@@ -4181,6 +4810,10 @@ export default {
           const b = await request.json().catch(() => ({}));
           const alumnoId = String(b.alumno_id || "");
           if (!alumnoId) return json({ error: "Falta alumno_id" }, 400);
+          if (!esDueno){
+            const alT = await env.DB.prepare("SELECT profesor_id FROM alumnos WHERE id = ?1 AND tenant_id = ?2").bind(alumnoId, tid).first();
+            if (!alT || alT.profesor_id !== profeActorId) return json({ error: "Ese alumno no esta asignado a ti." }, 403);
+          }
           const cuenta = await env.DB.prepare("SELECT id FROM cuentas WHERE alumno_id = ?1 AND tenant_id = ?2").bind(alumnoId, tid).first();
           if (!cuenta) return json({ ok: true, enviados: 0 });
           const enviados = await avisarPushAlumno(env, tid, cuenta.id, {
@@ -4196,6 +4829,18 @@ export default {
           const compra = await env.DB.prepare("SELECT * FROM compras WHERE id = ?1 AND tenant_id = ?2").bind(String(b.id || ""), tid).first();
           if (!compra) return json({ error: "Compra no encontrada" }, 404);
           if (compra.estado !== "pendiente") return json({ error: "Esa compra ya fue procesada" }, 409);
+          /* profesor: solo compras suyas o de cuentas de SUS alumnos; las de cuentas nuevas (sin alumno) las maneja el dueno */
+          if (!esDueno){
+            let esMia = compra.profesor_id === profeActorId;
+            if (!esMia && compra.cuenta_id){
+              const cuC = await env.DB.prepare("SELECT alumno_id FROM cuentas WHERE id = ?1 AND tenant_id = ?2").bind(compra.cuenta_id, tid).first();
+              if (cuC && cuC.alumno_id){
+                const alC = await env.DB.prepare("SELECT profesor_id FROM alumnos WHERE id = ?1 AND tenant_id = ?2").bind(cuC.alumno_id, tid).first();
+                esMia = !!(alC && alC.profesor_id === profeActorId);
+              }
+            }
+            if (!esMia) return json({ error: "Ese pago no es de un alumno tuyo." }, 403);
+          }
 
           if (b.accion === "rechazar"){
             await env.DB.prepare("UPDATE compras SET estado = 'rechazada' WHERE id = ?1 AND tenant_id = ?2").bind(compra.id, tid).run();
@@ -4212,12 +4857,18 @@ export default {
           const b = await request.json().catch(() => ({}));
           const cu = await env.DB.prepare("SELECT * FROM cuentas WHERE id = ?1 AND tenant_id = ?2").bind(String(b.id || ""), tid).first();
           if (!cu) return json({ error: "Cuenta no encontrada" }, 404);
+          /* profesor: solo cuentas vinculadas a SUS alumnos (las sueltas las maneja el dueno) */
+          if (!esDueno){
+            const alCu = cu.alumno_id ? await env.DB.prepare("SELECT profesor_id FROM alumnos WHERE id = ?1 AND tenant_id = ?2").bind(cu.alumno_id, tid).first() : null;
+            if (!alCu || alCu.profesor_id !== profeActorId) return json({ error: "Esa cuenta no es de un alumno tuyo." }, 403);
+          }
 
           if (b.accion === "vincular"){
             const alumnoId = b.alumno_id ? String(b.alumno_id) : null;
             if (alumnoId){
-              const al = await env.DB.prepare("SELECT id FROM alumnos WHERE id = ?1 AND tenant_id = ?2").bind(alumnoId, tid).first();
+              const al = await env.DB.prepare("SELECT id, profesor_id FROM alumnos WHERE id = ?1 AND tenant_id = ?2").bind(alumnoId, tid).first();
               if (!al) return json({ error: "Alumno no encontrado" }, 404);
+              if (!esDueno && al.profesor_id !== profeActorId) return json({ error: "Ese alumno no esta asignado a ti." }, 403);
             }
             await env.DB.prepare("UPDATE cuentas SET alumno_id = ?1 WHERE id = ?2 AND tenant_id = ?3").bind(alumnoId, cu.id, tid).run();
             return json({ ok: true });
@@ -4255,6 +4906,14 @@ export default {
   },
 
   async scheduled(event, env, ctx){
+    // UN solo cron (cada 15 min): recordatorios de clase SIEMPRE; el trabajo diario
+    // (nurture, renovaciones, demo) solo en la corrida de las 14:00 UTC (9am Lima).
+    // Asi Batuta usa 1 cron y no pisa el limite de 5 por cuenta del plan free.
+    try { await recordatoriosDeClase(env); } catch (e) { console.error("recordatorios clase", e); }
+    const dSched = new Date((event && event.scheduledTime) || Date.now());
+    if (!(dSched.getUTCHours() === 14 && dSched.getUTCMinutes() === 0)) return;
+    /* ---- desde aqui: SOLO la corrida diaria de las 9am Lima ---- */
+    try { await recordatorioRenovacion(env); } catch (e) { console.error("recordatorio renovacion", e); }
     /* Nurture de trial (dia 1/3/6) + cierre proactivo del vencido. 1 corrida/dia (cron 14:00 UTC = 9am Lima).
        Migracion perezosa: la columna se crea sola en la primera corrida (patron MVT). */
     try { await env.DB.prepare("ALTER TABLE tenants ADD COLUMN nurture_paso INTEGER DEFAULT 0").run(); } catch (e) { /* ya existe */ }

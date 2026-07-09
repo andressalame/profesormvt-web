@@ -128,13 +128,18 @@ CREATE TABLE IF NOT EXISTS config (
 );
 
 -- ============ AGENDA ============
+-- v2 multi-profesor (09-jul-2026): la disponibilidad es POR PROFESOR (PK incluye profesor_id,
+-- NOT NULL DEFAULT '' para no meter NULLs a la PK; '' se trata como "del dueno").
+-- En prod se migro via su/migrar-disponibilidad; la tabla vieja quedo como disponibilidad_legacy_v1.
 CREATE TABLE IF NOT EXISTS disponibilidad (
-  tenant_id  TEXT NOT NULL,
-  dia_semana INTEGER NOT NULL,
-  hora       TEXT NOT NULL,
-  activo     INTEGER DEFAULT 1,
-  PRIMARY KEY (tenant_id, dia_semana, hora)
+  tenant_id   TEXT NOT NULL,
+  profesor_id TEXT NOT NULL DEFAULT '',
+  dia_semana  INTEGER NOT NULL,
+  hora        TEXT NOT NULL,
+  activo      INTEGER DEFAULT 1,
+  PRIMARY KEY (tenant_id, profesor_id, dia_semana, hora)
 );
+CREATE INDEX IF NOT EXISTS idx_disponibilidad_tenant ON disponibilidad (tenant_id);
 
 CREATE TABLE IF NOT EXISTS reservas (
   id            TEXT PRIMARY KEY,
