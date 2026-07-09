@@ -1020,26 +1020,38 @@ async function avisarLeadConTelefono(env, info){
   if (!d) return;
   const nombre = (info.nombre || "").trim();
   const hola = nombre ? ("Hola " + nombre + "!") : "Hola!";
-  let subject, text;
+  // SEMI-AUTOMÁTICO (09-jul): el aviso trae un link wa.me con el mensaje de cierre YA
+  // escrito (Script Maestro, voz de Andrés, personalizado por curso). Andrés hace 1 clic,
+  // WhatsApp abre con el mensaje hacia el lead, revisa y envía. Sin bots no oficiales
+  // (riesgo de ban del número); respuesta experta e instantánea sin escribir.
+  const curso = (info.interes || "canto");
+  const diag = curso === "piano" ? "Te hago un diagnóstico de dónde estás y salimos con un plan claro."
+             : curso === "composicion" ? "Vemos en qué punto estás y armamos un plan claro."
+             : "Te hago el diagnóstico de tu voz y salimos con un plan claro.";
+  let subject, text, msgLead;
   if (info.esPrueba){
     // Embudo phone-first: quiere una clase de prueba. Máxima urgencia de contacto.
     subject = "🔥🔥 Clase de prueba: " + (nombre || d);
+    msgLead = hola + " Soy " + MARCA.profe + " de ProfesorMVT :) Vi que quieres tu clase de prueba de " + curso + ". Para coordinarla, qué días y horas te quedan mejor esta semana? " + diag;
+    const waCierre = "https://wa.me/" + d + "?text=" + encodeURIComponent(msgLead);
     text =
-      (nombre ? nombre : "Alguien") + " pidió una clase de prueba. Escríbele YA, mientras está caliente:\n\n" +
+      (nombre ? nombre : "Alguien") + " pidió una clase de prueba. Respóndele YA, mientras está caliente:\n\n" +
       "Nombre:   " + (nombre || "-") + "\n" +
-      "WhatsApp: +" + d + " → https://wa.me/" + d + "\n" +
-      "Quiere:   " + (info.interes || "-") + " · Fuente: " + (info.fuente || "-") + "\n\n" +
-      "Mensaje sugerido:\n" +
-      hola + " Soy " + MARCA.profe + " de ProfesorMVT :) Vi que quieres una clase de prueba de " + (info.interes || "canto") + ". Cuándo te queda mejor esta semana? Te hago el diagnóstico de tu voz y salimos con un plan claro.\n";
+      "Quiere:   " + curso + " · Fuente: " + (info.fuente || "-") + "\n\n" +
+      "👉 RESPONDER CON 1 CLIC (abre tu WhatsApp con el mensaje de cierre ya escrito; solo revisa y dale enviar):\n" +
+      waCierre + "\n\n" +
+      "Se enviará: \"" + msgLead + "\"\n";
   } else {
     subject = "🔥 Lead con WhatsApp: " + info.email;
+    msgLead = "Hola! Soy " + MARCA.profe + " de ProfesorMVT :) Vi que descargaste la guía. Cuéntame, qué te gustaría lograr con la música: cantar, tocar piano o componer? Si quieres, te armo una clase de prueba con diagnóstico.";
+    const waCierre = "https://wa.me/" + d + "?text=" + encodeURIComponent(msgLead);
     text =
-      "Un lead dejó su WhatsApp al bajar la guía. Escríbele mientras está caliente:\n\n" +
+      "Un lead dejó su WhatsApp al bajar la guía. Respóndele mientras está caliente:\n\n" +
       "Correo:   " + info.email + "\n" +
-      "WhatsApp: +" + d + " → https://wa.me/" + d + "\n" +
       "Interés:  " + (info.interes || "-") + " · Fuente: " + (info.fuente || "-") + "\n\n" +
-      "Mensaje sugerido:\n" +
-      "Hola! Soy " + MARCA.profe + ", el de la guía de composición :) Vi que la descargaste. Cuéntame, qué te gustaría lograr: componer, cantar o tocar piano?\n";
+      "👉 RESPONDER CON 1 CLIC (abre tu WhatsApp con el mensaje ya escrito):\n" +
+      waCierre + "\n\n" +
+      "Se enviará: \"" + msgLead + "\"\n";
   }
   // Con ads corriendo, este aviso NO se puede perder. Canal 1: Cloudflare Email Routing
   // (AVISOS). Canal 2 (fallback): Resend, que ya está verificado y manda el nurture.
