@@ -1,29 +1,28 @@
 ---
 import Layout from '../layouts/Layout.astro';
-import LeadForm from '../components/LeadForm.astro';
 ---
 
 <Layout
-  title="Clases de composición musical en Lima | ProfesorMVT"
-  description="Clases de composición de canciones para adultos en Lima (San Isidro) y online. Pasa de oyente a autor: escribe tu primera canción con Hook Theory, estructura y letra. Clase de prueba S/50."
+  title="Clases de composición musical online 1 a 1 (en español) | ProfesorMVT"
+  description="Clases de composición de canciones online en vivo para adultos. Pasa de oyente a autor: escribe tu primera canción con Hook Theory, estructura y letra, 1 a 1 por videollamada desde donde estés. Clase de prueba S/50."
   activeNav="composicion"
 >
   <main class="comp">
     <!-- ===== HERO ===== -->
     <section class="comp-hero">
       <div class="container-narrow">
-        <p class="label">Composición · Lima · San Isidro y online</p>
-        <h1>Clases de composición musical en Lima: <em>de oyente a autor</em></h1>
+        <p class="label">Composición · Online en vivo · 1 a 1</p>
+        <h1>Clases de composición musical online: <em>de oyente a autor</em></h1>
         <p class="lead">
           Llevas años escuchando canciones que te mueven. Es hora de escribir las tuyas.
           Te enseño a componer paso a paso, con herramientas reales que usan los hits,
           para que salgas de la primera clase con una idea propia ya empezada.
         </p>
         <div class="hero-cta">
-          <a href="/horarios/" class="btn-cta">Ver horarios disponibles →</a>
+          <a href="/prueba/?curso=composicion" class="btn-cta">Reservar mi clase de prueba →</a>
           <a href="/alumnos/" class="btn-ghost">Crear mi cuenta</a>
         </div>
-        <p class="note hero-note">Clase de prueba con diagnóstico: S/50. Presencial en San Isidro u online, tú eliges.</p>
+        <p class="note hero-note">Clase de prueba con diagnóstico: S/50, en vivo online desde donde estés.</p>
       </div>
     </section>
 
@@ -190,8 +189,8 @@ import LeadForm from '../components/LeadForm.astro';
             <p>Ayuda, pero no es obligatorio. Si tocas algo de piano o guitarra, lo aprovechamos. Si no, podemos componer igual y, si quieres, sumar instrumento en paralelo.</p>
           </details>
           <details>
-            <summary>Las clases son presenciales u online?</summary>
-            <p>Las dos. Presencial en San Isidro (Lima) u online por videollamada, como te quede mejor. La calidad de la clase es la misma. Si estás fuera de Lima, mira las <a href="/clases-composicion-online/">clases de composición online</a>.</p>
+            <summary>Las clases online funcionan igual que las presenciales?</summary>
+            <p>Sí. Componer se presta perfecto a la videollamada: compartimos pantalla, trabajamos tu idea en vivo y sales con avances concretos. Solo necesitas internet estable, desde cualquier ciudad o país.</p>
           </details>
           <details>
             <summary>Voy a salir con una canción terminada?</summary>
@@ -205,16 +204,13 @@ import LeadForm from '../components/LeadForm.astro';
       </div>
     </section>
 
-    <!-- ===== LEAD MAGNET ===== -->
-    <LeadForm fuente="landing-composicion-lima" />
-
     <!-- ===== CIERRE ===== -->
     <section class="comp-fin">
       <div class="container-narrow">
         <h2>Tu primera canción empieza esta semana</h2>
         <p class="lead">Reserva tu clase de prueba y escribe lo que llevas años escuchando en otros.</p>
         <div class="fin-cta">
-          <a href="/horarios/" class="btn-cta">Ver horarios disponibles →</a>
+          <a href="/prueba/?curso=composicion" class="btn-cta">Reservar mi clase de prueba →</a>
           <a href="/alumnos/" class="btn-ghost">Crear mi cuenta</a>
         </div>
       </div>
