@@ -1655,8 +1655,8 @@ export default {
         ".grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin:26px 0 4px}" +
         ".paq{background:#161920;border:1px solid #262a33;border-radius:14px;padding:18px}" +
         ".paq b{display:block;font-size:15px;margin-bottom:4px}" +
-        ".paq .pr{font-family:'Bricolage Grotesque',sans-serif;font-size:24px;color:var(--acento)}" +
-        ".paq .cl{color:var(--muted);font-size:13px;margin-top:2px}" +
+        ".paq .pr{display:block;font-family:'Bricolage Grotesque',sans-serif;font-size:24px;color:var(--acento);line-height:1.1;margin-top:6px}" +
+        ".paq .cl{display:block;color:var(--muted);font-size:13px;margin-top:4px}" +
         ".paq a{display:inline-block;margin-top:10px;color:var(--acento);font-size:14px;text-decoration:none}" +
         ".foot{margin-top:40px;padding-top:18px;border-top:1px solid #1d212a;font-size:13px;color:var(--muted)}" +
         ".foot a{color:var(--acento);text-decoration:none}</style></head><body><div class=\"wrap\">" +
