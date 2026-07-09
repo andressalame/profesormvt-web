@@ -1,0 +1,212 @@
+---
+import Layout from '../layouts/Layout.astro';
+
+// Embudo phone-first de alto intento: la landing a la que apuntar los anuncios.
+// El "premio" es una clase de prueba con diagnóstico (S/50), no un PDF gratis.
+// Captura NOMBRE + WHATSAPP (obligatorio) y cierra por WhatsApp, el canal real.
+const WA = '51989077928';
+---
+
+<Layout
+  title="Clase de prueba de canto en Lima | Diagnóstico de tu voz (S/50) | ProfesorMVT"
+  description="Reserva una clase de prueba con diagnóstico de tu voz. Nunca es tarde para aprender a cantar bien. Presencial en San Isidro u online. Déjanos tu WhatsApp y coordinamos hoy."
+  activeNav="prueba"
+>
+  <main class="pr">
+    <!-- HERO + FORM -->
+    <section class="pr-hero">
+      <div class="pr-wrap">
+        <p class="pr-eyebrow">Canto · Piano · Composición · Lima y online</p>
+        <h1>Nunca es tarde para <em>aprender a cantar bien.</em></h1>
+        <p class="pr-lead">
+          Reserva una clase de prueba con diagnóstico de tu voz. En 45 minutos sabes exactamente
+          qué entrenar, con un plan claro. Presencial en San Isidro u online.
+        </p>
+
+        <div class="pr-formcard">
+          <form class="pr-form" data-form novalidate>
+            <input type="text" class="pr-hp" name="website" tabindex="-1" autocomplete="off" aria-hidden="true" />
+            <label>Tu nombre
+              <input type="text" name="nombre" placeholder="Cómo te llamas" required autocomplete="name" />
+            </label>
+            <label>Tu WhatsApp
+              <input type="tel" name="telefono" placeholder="Ej. 989 077 928" required autocomplete="tel" inputmode="tel" />
+            </label>
+            <label>¿Qué quieres aprender?
+              <select name="interes" required>
+                <option value="canto">Canto</option>
+                <option value="piano">Piano</option>
+                <option value="composicion">Composición</option>
+              </select>
+            </label>
+            <button type="submit" class="pr-btn">Reservar mi clase de prueba →</button>
+            <div class="pr-micro">Te escribimos por WhatsApp hoy mismo para coordinar. Clase de prueba con diagnóstico, S/50.</div>
+            <div class="pr-err" data-err></div>
+          </form>
+          <div class="pr-ok" data-ok hidden>
+            <h3>Listo :)</h3>
+            <p>Te acabamos de abrir WhatsApp para que nos escribas, o te contactamos nosotros hoy mismo para coordinar tu clase de prueba.</p>
+            <a class="pr-btn pr-btn-link" data-walink href={`https://wa.me/${WA}`} target="_blank" rel="noopener">Abrir WhatsApp →</a>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- PRUEBA SOCIAL -->
+    <section class="pr-social">
+      <div class="pr-wrap">
+        <div class="pr-stars">★★★★★</div>
+        <p class="pr-social-t">5.0 en Google · reseñas reales de alumnos</p>
+        <p class="pr-social-p">
+          Adultos que creían que ya era tarde y hoy cantan las canciones que les gustan.
+          El método es coordinación, no talento: se entrena a cualquier edad.
+        </p>
+        <a class="pr-social-link" href="https://g.page/r/CevbO7ON9f4CEAE/review" target="_blank" rel="noopener">Ver reseñas en Google →</a>
+      </div>
+    </section>
+
+    <!-- QUÉ PASA EN LA PRUEBA -->
+    <section class="pr-como">
+      <div class="pr-wrap">
+        <h2>Qué pasa en tu clase de prueba</h2>
+        <div class="pr-steps">
+          <article class="pr-step">
+            <span class="pr-num">1</span>
+            <h3>Diagnóstico de tu voz</h3>
+            <p>Escucho qué hace tu voz hoy: dónde te quiebras, dónde fuerzas, hasta dónde llegas. Sin juzgar, para saber de dónde partimos.</p>
+          </article>
+          <article class="pr-step">
+            <span class="pr-num">2</span>
+            <h3>Tu plan, claro</h3>
+            <p>Salimos con un plan concreto para tu voz: qué entrenar y en qué orden. Nada de temario genérico.</p>
+          </article>
+          <article class="pr-step">
+            <span class="pr-num">3</span>
+            <h3>Lo sientes tú mismo</h3>
+            <p>Pruebas cómo se siente cantar coordinado, no forzado. En una clase ya notas la diferencia.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <!-- CIERRE (form repetido) -->
+    <section class="pr-cierre">
+      <div class="pr-wrap">
+        <h2>Empieza hoy. <em>Nunca es tarde.</em></h2>
+        <div class="pr-formcard">
+          <form class="pr-form" data-form novalidate>
+            <input type="text" class="pr-hp" name="website" tabindex="-1" autocomplete="off" aria-hidden="true" />
+            <label>Tu nombre
+              <input type="text" name="nombre" placeholder="Cómo te llamas" required autocomplete="name" />
+            </label>
+            <label>Tu WhatsApp
+              <input type="tel" name="telefono" placeholder="Ej. 989 077 928" required autocomplete="tel" inputmode="tel" />
+            </label>
+            <label>¿Qué quieres aprender?
+              <select name="interes" required>
+                <option value="canto">Canto</option>
+                <option value="piano">Piano</option>
+                <option value="composicion">Composición</option>
+              </select>
+            </label>
+            <button type="submit" class="pr-btn">Reservar mi clase de prueba →</button>
+            <div class="pr-micro">Te escribimos por WhatsApp hoy mismo. Clase de prueba con diagnóstico, S/50.</div>
+            <div class="pr-err" data-err></div>
+          </form>
+          <div class="pr-ok" data-ok hidden>
+            <h3>Listo :)</h3>
+            <p>Te abrimos WhatsApp para que nos escribas, o te contactamos hoy mismo.</p>
+            <a class="pr-btn pr-btn-link" data-walink href={`https://wa.me/${WA}`} target="_blank" rel="noopener">Abrir WhatsApp →</a>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+</Layout>
+
+<style>
+  .pr { position:relative; z-index:2; }
+  .pr-wrap { width:100%; max-width:760px; margin:0 auto; padding:0 20px; }
+  .pr-eyebrow { font-family:"JetBrains Mono",monospace; text-transform:uppercase; letter-spacing:.2em; font-size:12px; color:var(--orange,#e8501f); font-weight:700; margin:0; }
+
+  .pr-hero { padding:70px 0 40px; text-align:center; }
+  .pr-hero h1 { font-family:"Anton",Impact,sans-serif; text-transform:uppercase; font-size:clamp(34px,6vw,60px); line-height:1.02; color:var(--cream,#f3ede0); margin:14px 0 0; }
+  .pr-hero h1 em { color:var(--orange,#e8501f); font-style:normal; }
+  .pr-lead { font-family:"Space Grotesk",system-ui,sans-serif; font-size:18px; line-height:1.6; color:var(--cream-mute,#cfc7b6); max-width:56ch; margin:20px auto 0; }
+
+  .pr-formcard { background:#15110f; border:1px solid #2A2926; border-radius:14px; padding:clamp(22px,3.5vw,30px); margin:32px auto 0; max-width:520px; text-align:left; }
+  .pr-form { display:flex; flex-direction:column; gap:14px; }
+  .pr-form label { font-family:"JetBrains Mono",monospace; text-transform:uppercase; letter-spacing:.08em; font-size:11px; color:#8a8276; display:flex; flex-direction:column; gap:7px; }
+  .pr-form input, .pr-form select { font-family:"Space Grotesk",system-ui,sans-serif; font-size:16px; padding:14px 15px; border-radius:7px; border:1px solid #2A2926; background:#0d0b0a; color:#f3ede0; }
+  .pr-form input::placeholder { color:#6f6a60; }
+  .pr-form input:focus, .pr-form select:focus { outline:none; border-color:var(--orange,#e8501f); }
+  .pr-hp { position:absolute; left:-9999px; width:0; height:0; opacity:0; }
+  .pr-btn { font-family:"JetBrains Mono",monospace; text-transform:uppercase; letter-spacing:.06em; font-size:14px; font-weight:700; padding:16px 20px; border-radius:7px; border:2px solid var(--orange,#e8501f); background:var(--orange,#e8501f); color:#160a04; cursor:pointer; transition:.15s; margin-top:4px; }
+  .pr-btn:hover { transform:translateY(-2px); box-shadow:3px 3px 0 #f3ede0; }
+  .pr-btn:disabled { opacity:.6; transform:none; box-shadow:none; cursor:default; }
+  .pr-btn-link { display:inline-block; text-decoration:none; text-align:center; }
+  .pr-micro { font-family:"JetBrains Mono",monospace; font-size:10.5px; letter-spacing:.04em; color:#8a8276; line-height:1.5; }
+  .pr-err { color:#ff6a35; font-size:13px; }
+  .pr-ok h3 { font-family:"Anton",Impact,sans-serif; text-transform:uppercase; font-size:28px; color:var(--orange,#e8501f); margin:0 0 8px; }
+  .pr-ok p { font-family:"Space Grotesk",system-ui,sans-serif; font-size:15px; color:#cfc7b6; margin:0 0 16px; line-height:1.55; }
+
+  .pr-social { padding:20px 0 10px; text-align:center; }
+  .pr-stars { color:#ffb547; font-size:26px; letter-spacing:3px; }
+  .pr-social-t { font-family:"JetBrains Mono",monospace; font-size:12px; letter-spacing:.1em; color:#cfc7b6; text-transform:uppercase; margin:8px 0 0; }
+  .pr-social-p { font-family:"Space Grotesk",system-ui,sans-serif; font-size:16px; color:var(--cream-mute,#cfc7b6); max-width:52ch; margin:14px auto 0; line-height:1.6; }
+  .pr-social-link { display:inline-block; margin-top:12px; color:var(--orange,#e8501f); font-family:"JetBrains Mono",monospace; font-size:12px; text-transform:uppercase; letter-spacing:.06em; text-decoration:none; }
+
+  .pr-como { padding:44px 0 20px; }
+  .pr-como h2 { font-family:"Anton",Impact,sans-serif; text-transform:uppercase; font-size:clamp(26px,4.5vw,38px); text-align:center; color:var(--cream,#f3ede0); margin:0 0 26px; }
+  .pr-steps { display:grid; grid-template-columns:repeat(3,1fr); gap:16px; }
+  .pr-step { background:#15110f; border:1px solid #2A2926; border-radius:12px; padding:24px 20px; }
+  .pr-num { font-family:"Anton",Impact,sans-serif; font-size:22px; color:var(--orange,#e8501f); }
+  .pr-step h3 { font-family:"Space Grotesk",system-ui,sans-serif; font-weight:700; font-size:17px; color:var(--cream,#f3ede0); margin:8px 0 8px; }
+  .pr-step p { font-family:"Space Grotesk",system-ui,sans-serif; font-size:14px; color:#cfc7b6; line-height:1.55; margin:0; }
+
+  .pr-cierre { padding:40px 0 70px; text-align:center; }
+  .pr-cierre h2 { font-family:"Anton",Impact,sans-serif; text-transform:uppercase; font-size:clamp(26px,4.5vw,40px); color:var(--cream,#f3ede0); margin:0; }
+  .pr-cierre h2 em { color:var(--orange,#e8501f); font-style:normal; }
+
+  @media (max-width:640px){ .pr-steps { grid-template-columns:1fr; max-width:420px; margin:0 auto; } }
+</style>
+
+<script define:vars={{ WA }}>
+  document.querySelectorAll('[data-form]').forEach(function(form){
+    var card = form.closest('.pr-formcard');
+    var okEl = card.querySelector('[data-ok]');
+    var errEl = form.querySelector('[data-err]');
+    var waLink = card.querySelector('[data-walink]');
+    var btn = form.querySelector('.pr-btn');
+    form.addEventListener('submit', function(e){
+      e.preventDefault();
+      errEl.textContent = '';
+      var nombre = form.querySelector('input[name=nombre]').value.trim();
+      var tel = form.querySelector('input[name=telefono]').value.replace(/\D/g, '');
+      var interes = form.querySelector('select[name=interes]').value;
+      var hp = form.querySelector('input[name=website]').value;
+      if (nombre.length < 2){ errEl.textContent = 'Déjame tu nombre :)'; return; }
+      if (tel.length < 8){ errEl.textContent = 'Ese WhatsApp se ve incompleto.'; return; }
+      btn.disabled = true; btn.textContent = 'Enviando...';
+      fetch('/api/lead', {
+        method:'POST', headers:{'content-type':'application/json'},
+        body: JSON.stringify({ nombre:nombre, telefono:tel, interes:interes, website:hp, marca:'MVT', fuente:'landing-prueba', modo:'prueba' })
+      })
+      .then(function(r){ return r.json(); })
+      .then(function(d){
+        if(d && d.ok){
+          if(window.fbq) fbq('track','Lead');
+          var digits = tel.length >= 9 ? (tel.length === 9 ? '51'+tel : tel) : tel;
+          var msg = encodeURIComponent('Hola! Soy ' + nombre + ', quiero reservar mi clase de prueba de ' + interes + ' :)');
+          if (waLink) waLink.href = 'https://wa.me/' + WA + '?text=' + msg;
+          form.hidden = true; okEl.hidden = false;
+          try { window.open('https://wa.me/' + WA + '?text=' + msg, '_blank'); } catch(err){}
+        } else {
+          errEl.textContent = (d && d.error) || 'Algo salió mal. Intenta de nuevo.';
+          btn.disabled = false; btn.textContent = 'Reservar mi clase de prueba →';
+        }
+      })
+      .catch(function(){ errEl.textContent = 'No se pudo enviar. Intenta de nuevo.'; btn.disabled = false; btn.textContent = 'Reservar mi clase de prueba →'; });
+    });
+  });
+</script>

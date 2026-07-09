@@ -1019,17 +1019,31 @@ async function avisarLeadConTelefono(env, info){
   if (!env.AVISOS) return;
   const d = waDigitsLead(info.telefono);
   if (!d) return;
+  const nombre = (info.nombre || "").trim();
+  const hola = nombre ? ("Hola " + nombre + "!") : "Hola!";
   const msg = createMimeMessage();
   msg.setSender({ name: "Avisos " + MARCA.nombre, addr: MARCA.correoAvisos });
   msg.setRecipient(MARCA.correoAdmin);
-  msg.setSubject("🔥 Lead con WhatsApp: " + info.email);
-  msg.addMessage({ contentType: "text/plain", data:
-    "Un lead dejó su WhatsApp al bajar la guía. Escríbele mientras está caliente:\n\n" +
-    "Correo:   " + info.email + "\n" +
-    "WhatsApp: +" + d + " → https://wa.me/" + d + "\n" +
-    "Interés:  " + (info.interes || "-") + " · Fuente: " + (info.fuente || "-") + "\n\n" +
-    "Mensaje sugerido:\n" +
-    "Hola! Soy " + MARCA.profe + ", el de la guía de composición :) Vi que la descargaste. Cuéntame, qué te gustaría lograr: componer, cantar o tocar piano?\n" });
+  if (info.esPrueba){
+    // Embudo phone-first: quiere una clase de prueba. Máxima urgencia de contacto.
+    msg.setSubject("🔥🔥 Clase de prueba: " + (nombre || d));
+    msg.addMessage({ contentType: "text/plain", data:
+      (nombre ? nombre : "Alguien") + " pidió una clase de prueba. Escríbele YA, mientras está caliente:\n\n" +
+      "Nombre:   " + (nombre || "-") + "\n" +
+      "WhatsApp: +" + d + " → https://wa.me/" + d + "\n" +
+      "Quiere:   " + (info.interes || "-") + " · Fuente: " + (info.fuente || "-") + "\n\n" +
+      "Mensaje sugerido:\n" +
+      hola + " Soy " + MARCA.profe + " de ProfesorMVT :) Vi que quieres una clase de prueba de " + (info.interes || "canto") + ". Cuándo te queda mejor esta semana? Te hago el diagnóstico de tu voz y salimos con un plan claro.\n" });
+  } else {
+    msg.setSubject("🔥 Lead con WhatsApp: " + info.email);
+    msg.addMessage({ contentType: "text/plain", data:
+      "Un lead dejó su WhatsApp al bajar la guía. Escríbele mientras está caliente:\n\n" +
+      "Correo:   " + info.email + "\n" +
+      "WhatsApp: +" + d + " → https://wa.me/" + d + "\n" +
+      "Interés:  " + (info.interes || "-") + " · Fuente: " + (info.fuente || "-") + "\n\n" +
+      "Mensaje sugerido:\n" +
+      "Hola! Soy " + MARCA.profe + ", el de la guía de composición :) Vi que la descargaste. Cuéntame, qué te gustaría lograr: componer, cantar o tocar piano?\n" });
+  }
   await env.AVISOS.send(new EmailMessage(MARCA.correoAvisos, MARCA.correoAdmin, msg.asRaw()));
 }
 
@@ -2804,24 +2818,36 @@ export default {
         const b = await request.json().catch(() => ({}));
         const pdf = MARCA.leadMagnetPdf;
         if (b.website) return json({ ok: true, pdf });   // honeypot: lo lleno un bot, se descarta en silencio
-        const email = String(b.email || "").trim().toLowerCase().slice(0, 120);
-        if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return json({ error: "Correo no valido." }, 400);
         const marca = String(b.marca || "MVT").trim().slice(0, 20);
         const fuente = String(b.fuente || "").trim().slice(0, 60);
         const interes = String(b.interes || "composicion").trim().slice(0, 60);
-        // WhatsApp opcional (se pide DESPUÉS de entregar la guía, para no frenar la conversión).
         const telefono = String(b.telefono || "").replace(/[^\d]/g, "").slice(0, 15);
+        const nombre = String(b.nombre || "").trim().slice(0, 80);
+        // Embudo phone-first (landing de clase de prueba): el dato principal es el WhatsApp,
+        // el correo es opcional. Se filtra por intención (quien deja su número para agendar
+        // una prueba sí considera pagar) y NO se le manda el PDF de composición.
+        const esPrueba = fuente.startsWith("landing-prueba") || b.modo === "prueba";
+        let email = String(b.email || "").trim().toLowerCase().slice(0, 120);
+        const emailValido = /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email);
+        if (esPrueba){
+          if (telefono.length < 8) return json({ error: "Deja un WhatsApp válido." }, 400);
+          // clave de dedup: el correo si lo dio, si no un sintético por número.
+          if (!emailValido) email = "wa-" + telefono + "@wa.mvt";
+        } else {
+          if (!emailValido) return json({ error: "Correo no valido." }, 400);
+        }
         const ya = await env.DB.prepare("SELECT id, COALESCE(telefono,'') AS telefono FROM leads WHERE email = ?1 AND marca = ?2").bind(email, marca).first();
         if (!ya){
           await env.DB.prepare(
-            "INSERT INTO leads (id,email,marca,fuente,interes,fecha,telefono) VALUES (?1,?2,?3,?4,?5,?6,?7)"
-          ).bind(crypto.randomUUID(), email, marca, fuente, interes, hoy(), telefono).run();
-          if (marca === "MVT") ctx.waitUntil(correoBienvenidaLead(env, email));
-          if (telefono) ctx.waitUntil(avisarLeadConTelefono(env, { email, telefono, interes, fuente }));
+            "INSERT INTO leads (id,email,marca,fuente,interes,fecha,telefono,nombre) VALUES (?1,?2,?3,?4,?5,?6,?7,?8)"
+          ).bind(crypto.randomUUID(), email, marca, fuente, interes, hoy(), telefono, nombre).run();
+          // PDF de bienvenida SOLO al embudo de la guía; el de prueba se cierra por WhatsApp.
+          if (marca === "MVT" && !esPrueba) ctx.waitUntil(correoBienvenidaLead(env, email));
+          if (telefono) ctx.waitUntil(avisarLeadConTelefono(env, { email, telefono, interes, fuente, nombre, esPrueba }));
         } else if (telefono && !ya.telefono){
           // El lead ya existía (dejó el correo primero) y ahora suma su número: guardar + avisar.
-          await env.DB.prepare("UPDATE leads SET telefono = ?1 WHERE id = ?2").bind(telefono, ya.id).run();
-          ctx.waitUntil(avisarLeadConTelefono(env, { email, telefono, interes, fuente }));
+          await env.DB.prepare("UPDATE leads SET telefono = ?1, nombre = COALESCE(NULLIF(nombre,''), ?2) WHERE id = ?3").bind(telefono, nombre, ya.id).run();
+          ctx.waitUntil(avisarLeadConTelefono(env, { email, telefono, interes, fuente, nombre, esPrueba }));
         }
         return json({ ok: true, pdf });
       }
