@@ -1,7 +1,6 @@
 ---
 import Layout from '../layouts/Layout.astro';
 import PruebaSocial from '../components/PruebaSocial.astro';
-import LeadForm from '../components/LeadForm.astro';
 ---
 
 <Layout
@@ -22,7 +21,7 @@ import LeadForm from '../components/LeadForm.astro';
           sostenerla. Clases 1 a 1, hechas a tu ritmo.
         </p>
         <div class="hero-cta">
-          <a href="/horarios/" class="btn-cta">Ver horarios disponibles →</a>
+          <a href="/prueba/?curso=piano&f=landing-piano-lima" class="btn-cta">Reservar mi clase de prueba →</a>
           <a href="/alumnos/" class="btn-ghost">Crear mi cuenta</a>
         </div>
       </div>
@@ -147,7 +146,7 @@ import LeadForm from '../components/LeadForm.astro';
             <h3>Clase de prueba</h3>
             <p class="plan-precio">S/50</p>
             <p class="plan-desc">Una clase 1 a 1 con diagnóstico de tu nivel y de tus manos. Sales sabiendo exactamente qué tienes que trabajar y tocando algo nuevo.</p>
-            <a href="/horarios/" class="btn-cta plan-cta">Ver horarios →</a>
+            <a href="/prueba/?curso=piano&f=landing-piano-lima" class="btn-cta plan-cta">Reservar mi prueba →</a>
           </div>
           <div class="plan">
             <h3>Esencial</h3>
@@ -200,9 +199,6 @@ import LeadForm from '../components/LeadForm.astro';
       </div>
     </section>
 
-    <!-- ===== LEAD FORM ===== -->
-    <LeadForm fuente="landing-piano-lima" />
-
     <PruebaSocial curso="piano" />
 
     <!-- ===== CIERRE ===== -->
@@ -211,7 +207,7 @@ import LeadForm from '../components/LeadForm.astro';
         <h2>Empieza por una clase de prueba</h2>
         <p class="lead">Mira los horarios libres, elige el tuyo y reserva. En un minuto estás dentro.</p>
         <div class="fin-cta">
-          <a href="/horarios/" class="btn-cta">Ver horarios disponibles →</a>
+          <a href="/prueba/?curso=piano&f=landing-piano-lima" class="btn-cta">Reservar mi clase de prueba →</a>
           <a href="/alumnos/" class="btn-ghost">Crear mi cuenta</a>
         </div>
       </div>

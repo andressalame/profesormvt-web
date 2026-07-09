@@ -4,7 +4,6 @@
 // nota real de cercanía y el ángulo online. Voz de la casa: positiva y empoderadora,
 // nunca menospreciar al alumno. Piano SIN "método Faber" (regla permanente).
 import Layout from '../layouts/Layout.astro';
-import LeadForm from '../components/LeadForm.astro';
 import PruebaSocial from '../components/PruebaSocial.astro';
 
 export function getStaticPaths() {
@@ -134,7 +133,7 @@ const activeNav = cursoKey === 'composicion' ? 'composicion' : cursoKey;
           </details>
           <details>
             <summary>Cuánto cuesta y cómo empiezo?</summary>
-            <p>La clase de prueba con diagnóstico cuesta S/50 y no te compromete a nada. Revisa los <a href="/horarios/">horarios disponibles</a> y elige el que te acomode.</p>
+            <p>La clase de prueba con diagnóstico cuesta S/50 y no te compromete a nada. <a href={`/prueba/?curso=${cursoKey}&f=landing-${cursoKey}-${distrito.slug}`}>Resérvala aquí</a> y elige el horario que te acomode.</p>
           </details>
         </div>
         <p class="note" style="text-align:center; margin-top:18px;">
@@ -145,7 +144,16 @@ const activeNav = cursoKey === 'composicion' ? 'composicion' : cursoKey;
 
     <PruebaSocial curso={cursoKey} />
 
-    <LeadForm fuente={`landing-${cursoKey}-${distrito.slug}`} />
+    <section class="cc-hero" style="text-align:center;">
+      <div class="container-narrow">
+        <h2>Empieza tu {curso.nombre} desde {distrito.nombre}</h2>
+        <p class="lead">Reserva tu clase de prueba con diagnóstico por S/50. Sin compromiso: sales sabiendo exactamente qué trabajar, y decides con la oreja.</p>
+        <div class="cc-cta" style="justify-content:center;">
+          <a href={`/prueba/?curso=${cursoKey}&f=landing-${cursoKey}-${distrito.slug}`} class="btn-cta">Reservar mi clase de prueba →</a>
+          <a href="/alumnos/" class="btn-ghost">Crear mi cuenta</a>
+        </div>
+      </div>
+    </section>
   </main>
 </Layout>
 
