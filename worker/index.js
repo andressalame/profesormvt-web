@@ -1025,7 +1025,9 @@ async function avisarLeadConTelefono(env, info){
   // WhatsApp abre con el mensaje hacia el lead, revisa y envía. Sin bots no oficiales
   // (riesgo de ban del número); respuesta experta e instantánea sin escribir.
   const curso = (info.interes || "canto");
-  const diag = curso === "piano" ? "Te hago un diagnóstico de dónde estás y salimos con un plan claro."
+  const multiple = curso.indexOf(" ") >= 0;   // "canto y piano", "canto, piano y composición", etc.
+  const diag = multiple ? "Vemos en qué punto estás en cada uno y armamos un plan claro."
+             : curso === "piano" ? "Te hago un diagnóstico de dónde estás y salimos con un plan claro."
              : curso === "composicion" ? "Vemos en qué punto estás y armamos un plan claro."
              : "Te hago el diagnóstico de tu voz y salimos con un plan claro.";
   let subject, text, msgLead;
