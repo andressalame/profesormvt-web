@@ -1610,6 +1610,74 @@ export default {
     /* ----- LINK DE COBRO del profe: página pública de pago SIN registro previo.
        El alumno paga primero y su cuenta se crea sola (registro después, por
        correo con link para poner su contraseña). Pedido de Andrés 08-jul. ----- */
+    // Pagina publica de la academia (batuta.lat/a/{slug} via rewrite de Vercel).
+    // Solo datos ya publicos por diseno: nombre, cursos, paquetes con precio y WhatsApp de contacto.
+    if (/^\/app\/a\/[^/]+\/web$/.test(path) && request.method === "GET"){
+      const slugW = decodeURIComponent(path.split("/")[3] || "");
+      const tW = await env.DB.prepare("SELECT id, academia, slug, estado, rubro, mp_access_token, mp_expires_at FROM tenants WHERE slug = ?1").bind(slugW).first();
+      if (!tW) return htmlResponse(paginaBase("Academia no encontrada — Batuta", "<h1>No encontramos esa academia</h1><p class=\"sub\">Revisa el link.</p>", ""));
+      if (tW.estado === "vencido") return htmlResponse(paginaBase("Página en pausa — Batuta", "<h1>Página en pausa</h1><p class=\"sub\">Esta academia está inactiva por ahora.</p>", ""));
+      const cfgW = await loadConfig(env, tW.id);
+      const preciosW = await loadPrecios(env, tW.id);
+      const mpOnW = !!(tW.mp_access_token) && (!(Number(tW.mp_expires_at) || 0) || Number(tW.mp_expires_at) > Date.now());
+      const cobroOnW = !!(mpOnW || cfgW.pago_numero || cfgW.bcp_cuenta || cfgW.scotia_cuenta || cfgW.crypto_wallet);
+      const paquetesW = Object.keys(PAQUETES).filter(pk => (preciosW[pk] || 0) > 0 && pk !== "Clase de prueba");
+      const pruebaOnW = (preciosW["Clase de prueba"] || 0) > 0;
+      const cursosW = String(cfgW.cursos || "").split(",").map(s => s.trim()).filter(Boolean);
+      const waW = String(cfgW.whatsapp_profe || "").replace(/[^0-9]/g, "");
+      const colorW = /^#[0-9a-fA-F]{6}$/.test(String(cfgW.brand_color || "")) ? cfgW.brand_color : "#E8A13D";
+      const logoW = String(cfgW.brand_logo || "");
+      const descW = cursosW.length ? ("Clases de " + cursosW.join(", ") + ". Reserva y paga online.") : "Reserva y paga tus clases online.";
+      const waMsgW = encodeURIComponent("Hola! Vi la página de " + tW.academia + " y quiero más información :)");
+      const beaconW =
+        "try{var _bq=new URLSearchParams(location.search),_bf=_bq.get('f')||_bq.get('utm_source')||'';" +
+        "if(!_bf&&document.referrer){var _bu=new URL(document.referrer);if(_bu.host!==location.host)_bf=_bu.host;}" +
+        "navigator.sendBeacon('/app/api/beacon',JSON.stringify({pagina:'/a/'+" + JSON.stringify(tW.slug) + ",fuente:_bf}));}catch(e){}";
+      const htmlW = "<!doctype html><html lang=\"es\"><head><meta charset=\"utf-8\">" +
+        "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">" +
+        "<title>" + esc(tW.academia) + " · Reserva y paga online</title>" +
+        "<meta name=\"description\" content=\"" + esc(descW) + "\">" +
+        "<meta property=\"og:title\" content=\"" + esc(tW.academia) + "\">" +
+        "<meta property=\"og:description\" content=\"" + esc(descW) + "\">" +
+        (logoW ? "<meta property=\"og:image\" content=\"https://batuta.lat" + esc(logoW) + "\">" : "") +
+        "<link rel=\"preconnect\" href=\"https://fonts.googleapis.com\">" +
+        "<link href=\"https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;700;800&family=Space+Grotesk:wght@400;500;600&display=swap\" rel=\"stylesheet\">" +
+        "<style>:root{--bg:#0F1115;--acento:" + colorW + ";--texto:#F3EDE0;--muted:#8a8276}" +
+        "*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--texto);font-family:'Space Grotesk',system-ui,sans-serif}" +
+        ".wrap{max-width:680px;margin:0 auto;padding:48px 20px 32px}" +
+        "h1{font-family:'Bricolage Grotesque',sans-serif;font-size:clamp(28px,6vw,40px);margin:12px 0 8px}" +
+        ".logo{width:72px;height:72px;border-radius:16px;object-fit:cover;border:1px solid #262a33}" +
+        ".sub{color:var(--muted);font-size:15px;margin:0 0 8px}" +
+        ".chips{display:flex;flex-wrap:wrap;gap:8px;margin:14px 0 6px}" +
+        ".chip{background:rgba(255,255,255,0.06);border:1px solid #262a33;font-size:13px;padding:5px 12px;border-radius:20px}" +
+        ".cta{display:inline-block;background:var(--acento);color:#0F1115;border-radius:10px;padding:13px 22px;font-weight:600;font-size:15px;text-decoration:none;margin:18px 12px 0 0}" +
+        ".cta.sec{background:transparent;color:var(--texto);border:1px solid #2c303a}" +
+        ".grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin:26px 0 4px}" +
+        ".paq{background:#161920;border:1px solid #262a33;border-radius:14px;padding:18px}" +
+        ".paq b{display:block;font-size:15px;margin-bottom:4px}" +
+        ".paq .pr{font-family:'Bricolage Grotesque',sans-serif;font-size:24px;color:var(--acento)}" +
+        ".paq .cl{color:var(--muted);font-size:13px;margin-top:2px}" +
+        ".paq a{display:inline-block;margin-top:10px;color:var(--acento);font-size:14px;text-decoration:none}" +
+        ".foot{margin-top:40px;padding-top:18px;border-top:1px solid #1d212a;font-size:13px;color:var(--muted)}" +
+        ".foot a{color:var(--acento);text-decoration:none}</style></head><body><div class=\"wrap\">" +
+        (logoW ? "<img class=\"logo\" src=\"" + esc(logoW) + "\" alt=\"\">" : "") +
+        "<h1>" + esc(tW.academia) + "</h1>" +
+        (cfgW.profe_nombre ? "<p class=\"sub\">Con " + esc(cfgW.profe_nombre) + (tW.rubro ? " · " + esc(tW.rubro) : "") + "</p>" : (tW.rubro ? "<p class=\"sub\">" + esc(tW.rubro) + "</p>" : "")) +
+        (cursosW.length ? "<div class=\"chips\">" + cursosW.map(c => "<span class=\"chip\">" + esc(c) + "</span>").join("") + "</div>" : "") +
+        (waW ? "<a class=\"cta\" href=\"https://wa.me/" + esc(waW) + "?text=" + waMsgW + "\">Escríbeme por WhatsApp</a>" : "") +
+        (pruebaOnW && cobroOnW ? "<a class=\"cta sec\" href=\"/app/a/" + esc(tW.slug) + "/pagar?p=" + encodeURIComponent("Clase de prueba") + "\">Clase de prueba · S/ " + (preciosW["Clase de prueba"] || 0) + "</a>" : "") +
+        (paquetesW.length && cobroOnW ?
+          "<div class=\"grid\">" + paquetesW.map(pk =>
+            "<div class=\"paq\"><b>" + esc(pk) + "</b><span class=\"pr\">S/ " + (preciosW[pk] || 0) + "</span>" +
+            "<span class=\"cl\">" + PAQUETES[pk].clases + (PAQUETES[pk].clases === 1 ? " clase" : " clases") + "</span>" +
+            "<a href=\"/app/a/" + esc(tW.slug) + "/pagar?p=" + encodeURIComponent(pk) + "\">Comprar →</a></div>").join("") + "</div>"
+          : "") +
+        "<p class=\"sub\" style=\"margin-top:20px\">Ya eres alumno? <a href=\"/app/a/" + esc(tW.slug) + "\" style=\"color:var(--acento);text-decoration:none\">Entra a tu portal</a></p>" +
+        "<div class=\"foot\">Esta página se genera sola con <a href=\"https://batuta.lat/?f=pagina-academia\">Batuta</a> · Crea la tuya gratis</div>" +
+        "</div><script>" + beaconW + "</script></body></html>";
+      return htmlResponse(htmlW);
+    }
+
     if (/^\/app\/a\/[^/]+\/pagar$/.test(path) && request.method === "GET"){
       const slugP = decodeURIComponent(path.split("/")[3] || "");
       const tP = await env.DB.prepare("SELECT id, academia, slug, estado, mp_access_token, mp_expires_at FROM tenants WHERE slug = ?1").bind(slugP).first();
