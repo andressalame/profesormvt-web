@@ -1,7 +1,6 @@
 ---
 // Home oficial · ProfesorMVT — rediseño punk (reemplaza la versión anterior)
 // Página standalone (sin Layout) para controlar 100% el diseño, conservando Meta Pixel + SEO.
-import LeadForm from '../components/LeadForm.astro';
 import Nav from '../components/Nav.astro';
 import ChatbotFloat from '../components/ChatbotFloat.astro';
 const title = "Profesor MVT · Canto, piano y composición para adultos en Lima";
@@ -560,7 +559,7 @@ footer .fcol a:hover{color:var(--orange2)}
     <p class="sub reveal-up">Clases 1 a 1, 100% personalizadas a ti.</p>
     <p class="lead reveal-up">Canto, piano y composición con método real, no academia genérica. Te enseña alguien que compuso más de 200 canciones y vivió de la música, no un profesor de manual.</p>
     <div class="hero-cta reveal-up">
-      <a class="btn btn-primary btn-lg" href="/alumnos/">Crear mi cuenta <span class="arr">→</span></a>
+      <a class="btn btn-primary btn-lg" href="/prueba/?f=home">Reservar mi clase de prueba <span class="arr">→</span></a>
       <a class="btn btn-ghost btn-lg" href="#precios">Ver paquetes</a>
     </div>
     <div class="scroll-cue mono reveal-up"><span>Desliza para empezar</span><span class="bar"></span></div>
@@ -912,16 +911,14 @@ footer .fcol a:hover{color:var(--orange2)}
   </div>
 </section>
 
-<LeadForm fuente="home" />
-
 <!-- 13 · CTA FINAL -->
 <section class="cta screen stage" data-bg="#2a1206" data-glow=".55">
   <div class="spot"></div>
   <div class="wrap">
     <span class="eyebrow reveal-up" style="display:inline-flex">Empieza hoy</span>
-    <h2 class="display h2 reveal-title">Crea tu cuenta y empieza.</h2>
-    <p class="sub reveal-up">Tu primera clase puede ser esta semana.</p>
-    <a class="btn btn-primary btn-lg reveal-up" href="/alumnos/">Crear mi cuenta <span class="arr">→</span></a>
+    <h2 class="display h2 reveal-title">Reserva tu clase de prueba.</h2>
+    <p class="sub reveal-up">Un diagnóstico de tu voz y un plan claro. Tu primera clase puede ser esta semana.</p>
+    <a class="btn btn-primary btn-lg reveal-up" href="/prueba/?f=home">Reservar mi clase de prueba <span class="arr">→</span></a>
     <div class="mono reveal-up">San Isidro · Online en vivo</div>
   </div>
 </section>
