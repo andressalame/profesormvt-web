@@ -309,6 +309,7 @@
         <div class="navgroup-items">
           <button class="tab" data-tab="perfil">Perfil</button>
           <button class="tab" data-tab="ajustes">Ajustes</button>
+          <button class="tab" data-tab="feedback">Ideas y errores</button>
         </div>
       </div>
     </nav>
@@ -392,6 +393,35 @@
     <div class="tablewrap">
       <table id="tablaGrupos">
         <thead><tr><th>Grupo</th><th>Curso</th><th>Horario</th><th>Alumnos</th><th></th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="panel" id="panel-feedback">
+    <div class="card" style="padding:14px 16px;margin-bottom:16px;">
+      <strong>Tu primer aporte de cada mes te regala 7 días de acceso.</strong>
+      <p class="hint" id="fbPremioEstado" style="margin:6px 0 0;">Cargando…</p>
+    </div>
+    <div class="frow">
+      <div class="field"><label>Tipo</label>
+        <select id="fb_tipo">
+          <option value="idea">Quiero una función o una mejora</option>
+          <option value="error">Encontré un error</option>
+        </select>
+      </div>
+    </div>
+    <div class="field"><label>Cuéntanos</label>
+      <textarea id="fb_texto" rows="5" placeholder="Mientras más detalle, mejor. Si es un error: qué hiciste, qué esperabas y qué pasó. Si es una función: para qué la usarías."></textarea>
+    </div>
+    <div style="display:flex;align-items:center;gap:12px;">
+      <button class="btn" id="btnEnviarFb">Enviar</button>
+      <span class="hint" id="fbErr"></span>
+    </div>
+    <h3 style="margin-top:26px;">Tus aportes</h3>
+    <div class="tablewrap">
+      <table id="tablaFb">
+        <thead><tr><th>Fecha</th><th>Tipo</th><th>Aporte</th><th>Premio</th><th>Estado</th></tr></thead>
         <tbody></tbody>
       </table>
     </div>
@@ -726,6 +756,13 @@
     <div class="modal-actions">
       <a class="btn" href="/app/suscribir">Activar mi plan</a>
       <a class="btn ghost" id="btnPaywallWa" target="_blank" rel="noopener">Activar por WhatsApp</a>
+    </div>
+    <div class="mlab" style="margin-top:18px;">// O gana 7 días más de prueba</div>
+    <p class="hint" style="margin:6px 0 8px;">Cuéntanos qué te faltó, qué mejorarías o qué error viste, y tu primer aporte del mes te regala 7 días más para seguir probando.</p>
+    <div class="field"><textarea id="pw_fb" rows="3" placeholder="Ej: me faltó poder cobrar en dólares, o el botón X no me funcionó."></textarea></div>
+    <div style="display:flex;align-items:center;gap:12px;">
+      <button class="btn ghost" id="btnPwFb">Enviar y ganar 7 días</button>
+      <span class="hint" id="pwFbMsg"></span>
     </div>
   </div>
 </div>
@@ -1704,8 +1741,52 @@ function abrirGrupoActivo(){
 }
 abrirGrupoActivo();
 
+/* ---------- Feedback con premio (+7 días el primer aporte del mes) ---------- */
+function cargarFeedback(){
+  fetch("/app/api/admin/feedback",{headers:hdr()}).then(function(r){return r.json();}).then(function(d){
+    var est=el("fbPremioEstado");
+    if(est) est.textContent = d.premio_disponible
+      ? "Este mes tu premio está disponible: el próximo aporte que mandes suma 7 días a tu cuenta."
+      : "Ya ganaste tus 7 días de este mes. Puedes seguir mandando aportes; el premio vuelve el próximo mes.";
+    var tabla=el("tablaFb"); var tb=tabla?tabla.querySelector("tbody"):null; if(!tb) return;
+    var items=d.items||[];
+    if(!items.length){ tb.innerHTML='<tr><td colspan="5" class="empty">Todavía no mandas ninguno. El primero del mes te da 7 días gratis.</td></tr>'; return; }
+    var ESTADOS={nuevo:"Recibido",visto:"En revisión",hecho:"Hecho ✓"};
+    tb.innerHTML=items.map(function(f){
+      return "<tr><td>"+esc((f.fecha||"").slice(0,10))+"</td><td>"+(f.tipo==="error"?"Error":"Idea")+"</td><td style=\"max-width:420px;white-space:normal;\">"+esc(f.texto||"")+"</td><td>"+(f.premiado?"+7 días ✓":"—")+"</td><td>"+(ESTADOS[f.estado]||"Recibido")+"</td></tr>";
+    }).join("");
+  }).catch(function(){ var est=el("fbPremioEstado"); if(est) est.textContent="No pude cargar tus aportes. Recarga la página."; });
+}
+if(el("btnEnviarFb")) el("btnEnviarFb").addEventListener("click",function(){
+  var texto=(el("fb_texto").value||"").trim();
+  el("fbErr").textContent="";
+  if(texto.length<20){ el("fbErr").textContent="Cuéntanos un poco más (mínimo 20 caracteres)."; return; }
+  var btn=el("btnEnviarFb"); btn.disabled=true;
+  apiPost("/app/api/admin/feedback",{tipo:el("fb_tipo").value,texto:texto})
+    .then(function(d){
+      el("fb_texto").value="";
+      toast(d.premiado?"Gracias! Sumaste 7 días de acceso ✓":"Gracias! Aporte recibido ✓",3200);
+      cargarFeedback();
+    })
+    .catch(function(e){ if(!e||(!e.auth&&!e.paywall)) el("fbErr").textContent=(e&&e.message)||"No se pudo enviar. Intenta de nuevo."; })
+    .finally(function(){ btn.disabled=false; });
+});
+if(el("btnPwFb")) el("btnPwFb").addEventListener("click",function(){
+  var texto=(el("pw_fb").value||"").trim();
+  var msg=el("pwFbMsg"); msg.textContent="";
+  if(texto.length<20){ msg.textContent="Cuéntanos un poco más (mínimo 20 caracteres)."; return; }
+  var btn=el("btnPwFb"); btn.disabled=true;
+  apiPost("/app/api/admin/feedback",{tipo:"idea",texto:texto})
+    .then(function(d){
+      if(d.premiado){ msg.textContent="Listo! Ganaste 7 días más. Cargando tu panel…"; setTimeout(function(){ location.reload(); },900); }
+      else { msg.textContent="Gracias! Este mes ya usaste tu premio; tu aporte igual quedó registrado."; }
+    })
+    .catch(function(e){ msg.textContent=(e&&e.message)||"No se pudo enviar. Intenta de nuevo."; })
+    .finally(function(){ btn.disabled=false; });
+});
+
 /* ---------- Tabs / modales ---------- */
-var TITULOS={resumen:"Inicio",alumnos:"Alumnos",grupos:"Grupos",registro:"Clases",agenda:"Agenda",pagos:"Pagos",reportes:"Reportes",cuentas:"Accesos",leads:"Interesados",recursos:"Para tus alumnos",ejercicios:"Tu biblioteca",ajustes:"Ajustes",perfil:"Perfil",chat:"Chat"};
+var TITULOS={resumen:"Inicio",alumnos:"Alumnos",grupos:"Grupos",registro:"Clases",agenda:"Agenda",pagos:"Pagos",reportes:"Reportes",cuentas:"Accesos",leads:"Interesados",recursos:"Para tus alumnos",ejercicios:"Tu biblioteca",ajustes:"Ajustes",perfil:"Perfil",chat:"Chat",feedback:"Ideas y errores"};
 document.querySelectorAll(".tab").forEach(function(t){
   t.addEventListener("click",function(){
     document.querySelectorAll(".tab").forEach(function(x){x.classList.remove("active");});
@@ -1722,6 +1803,7 @@ document.querySelectorAll(".tab").forEach(function(t){
     if(el("topTitle")) el("topTitle").textContent="// "+ti;
     if(t.dataset.tab==="agenda") cargarAgenda();
     if(t.dataset.tab==="perfil") renderPerfil();
+    if(t.dataset.tab==="feedback") cargarFeedback();
     cerrarDrawer();
   });
 });

@@ -280,6 +280,21 @@ CREATE TABLE IF NOT EXISTS leads (
 CREATE INDEX IF NOT EXISTS idx_leads_email ON leads (tenant_id, email);
 CREATE INDEX IF NOT EXISTS idx_leads_fecha ON leads (tenant_id, fecha);
 
+-- ============ FEEDBACK con premio (09-jul-2026) ============
+-- Aportes del profesor (error | idea). El primer aporte de cada mes calendario
+-- premia +7 dias de acceso (trial_hasta); ver ensureFeedbackSchema + admin/feedback en el worker.
+CREATE TABLE IF NOT EXISTS feedback (
+  id        TEXT PRIMARY KEY,
+  tenant_id TEXT NOT NULL,
+  tipo      TEXT DEFAULT 'idea',   -- error | idea
+  texto     TEXT NOT NULL,
+  premiado  INTEGER DEFAULT 0,     -- 1 = este aporte otorgo los +7 dias del mes
+  mes       TEXT DEFAULT '',       -- YYYY-MM del envio (corte del premio mensual)
+  estado    TEXT DEFAULT 'nuevo',  -- nuevo | visto | hecho (lo mueve el superadmin)
+  fecha     TEXT DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS idx_feedback_tenant ON feedback (tenant_id, mes);
+
 -- ============ IA de onboarding (apagada en v0 sin ANTHROPIC_API_KEY, tabla queda lista) ============
 CREATE TABLE IF NOT EXISTS onboarding_ia_uso (
   clave    TEXT PRIMARY KEY,

@@ -1398,7 +1398,27 @@ async function migrarProfesores(env){
   return { tenants: (tenants || []).length, duenosCreados, filasAtadas };
 }
 
+/* ---------- Feedback con premio (09-jul-2026) ----------
+   El profesor reporta un error o pide una funcion desde su panel (o desde el paywall si
+   ya vencio). El PRIMER aporte de cada mes calendario le regala 7 dias de acceso:
+   - trial:   trial_hasta += 7 dias (mismo criterio que su/tenant extender7).
+   - vencido: vuelve a 'trial' con 7 dias desde hoy (via de re-enganche).
+   - activo:  trial_hasta += 7 dias como colchon (el webhook de MP respeta trial_hasta
+     futura al cancelar/pausar, asi que esos dias se hacen efectivos si deja de pagar).
+   Tope anti-spam: 10 aportes/tenant/mes + rate limit por IP. Todo aporte avisa a Andres. */
+async function ensureFeedbackSchema(env){
+  try {
+    await env.DB.prepare(
+      "CREATE TABLE IF NOT EXISTS feedback (" +
+      "id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, tipo TEXT DEFAULT 'idea', texto TEXT NOT NULL, " +
+      "premiado INTEGER DEFAULT 0, mes TEXT DEFAULT '', estado TEXT DEFAULT 'nuevo', fecha TEXT DEFAULT '')"
+    ).run();
+  } catch (e) {}
+  try { await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_feedback_tenant ON feedback (tenant_id, mes)").run(); } catch (e) {}
+}
+
 async function resetDemo(env){
+  await ensureFeedbackSchema(env); // la lista de tablas de abajo la incluye; que exista antes del batch
   let t = await env.DB.prepare("SELECT * FROM tenants WHERE email = ?1").bind(DEMO_EMAIL).first();
   if (!t){
     const id = crypto.randomUUID();
@@ -1417,7 +1437,7 @@ async function resetDemo(env){
   ).bind(tid, new Date(Date.now() + 3650 * 86400000).toISOString()).run();
 
   // Borrón total de los datos del tenant demo (las sesiones de visitantes mueren con el reset).
-  const tablas = ["alumnos", "registro", "pausas", "precios", "config", "disponibilidad", "reservas", "grupos", "cuentas", "compras", "recursos", "ejercicios", "chat_mensajes", "push_subs", "leads"];
+  const tablas = ["alumnos", "registro", "pausas", "precios", "config", "disponibilidad", "reservas", "grupos", "cuentas", "compras", "recursos", "ejercicios", "chat_mensajes", "push_subs", "leads", "feedback"];
   await env.DB.batch(tablas.map(tb => env.DB.prepare("DELETE FROM " + tb + " WHERE tenant_id = ?1").bind(tid)));
   await env.DB.prepare("DELETE FROM sesiones WHERE cuenta_id = ?1 OR cuenta_id LIKE 'demo-cu-%'").bind("T:" + tid).run();
 
@@ -1926,6 +1946,24 @@ export default {
           const r = await migrarProfesores(env);
           return json({ ok: true, resultado: r });
         }
+        // Feedback de tenants: listar todo / marcar estado (nuevo | visto | hecho).
+        if (path === "/app/api/su/feedback" && request.method === "GET"){
+          await ensureFeedbackSchema(env);
+          const { results } = await env.DB.prepare(
+            "SELECT f.id, f.tenant_id, t.academia, t.email, t.estado AS tenant_estado, f.tipo, f.texto, f.premiado, f.estado, f.mes, f.fecha " +
+            "FROM feedback f LEFT JOIN tenants t ON t.id = f.tenant_id ORDER BY f.fecha DESC LIMIT 200"
+          ).all();
+          return json({ feedback: results || [] });
+        }
+        if (path === "/app/api/su/feedback" && request.method === "POST"){
+          await ensureFeedbackSchema(env);
+          const b = await request.json().catch(() => ({}));
+          const est = ["nuevo", "visto", "hecho"].indexOf(String(b.estado || "")) !== -1 ? String(b.estado) : "";
+          if (!b.id || !est) return json({ error: "Manda id y estado (nuevo | visto | hecho)" }, 400);
+          await env.DB.prepare("UPDATE feedback SET estado = ?1 WHERE id = ?2").bind(est, String(b.id)).run();
+          return json({ ok: true });
+        }
+
         if (path === "/app/api/su/profesores" && request.method === "GET"){
           await ensureMultiprofesorSchema(env);
           const { results } = await env.DB.prepare(
@@ -2575,7 +2613,9 @@ export default {
           await env.DB.prepare("UPDATE tenants SET estado = 'vencido' WHERE id = ?1").bind(tenantActor.id).run();
           tenantActor.estado = "vencido";
         }
-        if (tenantActor.estado === "vencido"){
+        // El feedback pasa aunque el trial este vencido: es la via de re-enganche
+        // (+7 dias por el primer aporte del mes, ver endpoints admin/feedback).
+        if (tenantActor.estado === "vencido" && path !== "/app/api/admin/feedback"){
           return json({ error: "trial_vencido" }, 402);
         }
       }
@@ -3575,6 +3615,63 @@ export default {
         const t = await tenantDeSesion(env, request);
         if (!t) return json({ error: "No autorizado" }, 401);
         const tid = t.id;
+
+        /* -------- Feedback con premio (+7 dias el primer aporte del mes) -------- */
+        if (path === "/app/api/admin/feedback" && request.method === "GET"){
+          await ensureFeedbackSchema(env);
+          const mesFb = hoy().slice(0, 7);
+          const usado = await env.DB.prepare(
+            "SELECT COUNT(*) AS n FROM feedback WHERE tenant_id = ?1 AND premiado = 1 AND mes = ?2"
+          ).bind(tid, mesFb).first();
+          const { results } = await env.DB.prepare(
+            "SELECT id, tipo, texto, premiado, estado, fecha FROM feedback WHERE tenant_id = ?1 ORDER BY fecha DESC LIMIT 20"
+          ).bind(tid).all();
+          return json({ premio_disponible: !(usado && Number(usado.n) > 0), items: results || [] });
+        }
+        if (path === "/app/api/admin/feedback" && request.method === "POST"){
+          const ipFb = clientIp(request);
+          if (ipFb && await chatbotPasoTope(env, "fb:" + ipFb, 5)){
+            return json({ error: "Demasiados envios seguidos. Espera un rato." }, 429);
+          }
+          const b = await request.json().catch(() => ({}));
+          const tipoFb = b.tipo === "error" ? "error" : "idea";
+          const textoFb = String(b.texto || "").trim();
+          if (textoFb.length < 20) return json({ error: "Cuentanos un poco mas (minimo 20 caracteres) para poder trabajarlo." }, 400);
+          if (textoFb.length > 1500) return json({ error: "Maximo 1500 caracteres. Si necesitas mas espacio, mandalo en dos aportes." }, 400);
+          await ensureFeedbackSchema(env);
+          const mesFb = hoy().slice(0, 7);
+          const nMes = await env.DB.prepare(
+            "SELECT COUNT(*) AS n FROM feedback WHERE tenant_id = ?1 AND mes = ?2"
+          ).bind(tid, mesFb).first();
+          if (nMes && Number(nMes.n) >= 10){
+            return json({ error: "Ya recibimos varios aportes tuyos este mes, gracias! El proximo mes puedes mandar mas." }, 429);
+          }
+          const yaPremiado = await env.DB.prepare(
+            "SELECT COUNT(*) AS n FROM feedback WHERE tenant_id = ?1 AND premiado = 1 AND mes = ?2"
+          ).bind(tid, mesFb).first();
+          const premia = !(yaPremiado && Number(yaPremiado.n) > 0);
+          let trialHastaNueva = "";
+          if (premia){
+            // Mismo criterio que su/tenant extender7. El activo conserva su estado
+            // (los 7 dias le quedan de colchon en trial_hasta si algun dia cancela).
+            const base = t.estado === "vencido" ? Date.now() : Math.max(Date.now(), Date.parse(t.trial_hasta) || Date.now());
+            trialHastaNueva = new Date(base + 7 * 86400000).toISOString();
+            await env.DB.prepare(
+              "UPDATE tenants SET trial_hasta = ?1, estado = CASE WHEN estado = 'activo' THEN 'activo' ELSE 'trial' END WHERE id = ?2"
+            ).bind(trialHastaNueva, tid).run();
+          }
+          await env.DB.prepare(
+            "INSERT INTO feedback (id, tenant_id, tipo, texto, premiado, mes, estado, fecha) VALUES (?1,?2,?3,?4,?5,?6,'nuevo',?7)"
+          ).bind(crypto.randomUUID(), tid, tipoFb, textoFb, premia ? 1 : 0, mesFb, new Date().toISOString()).run();
+          ctx.waitUntil(alertaCorreoAndres(env,
+            "FEEDBACK Batuta (" + tipoFb + "): " + (t.academia || t.slug || ""),
+            "Academia: " + (t.academia || "") + " (" + (t.email || "") + ")\n" +
+            "Estado: " + t.estado + " · Plan: " + (t.plan || "") + "\n" +
+            "Tipo: " + tipoFb + "\n" +
+            "Premiado: " + (premia ? "si (+7 dias, hasta " + trialHastaNueva.slice(0, 10) + ")" : "no (ya uso el del mes)") + "\n\n" +
+            textoFb));
+          return json({ ok: true, premiado: premia, trial_hasta: trialHastaNueva });
+        }
 
         if (path === "/app/api/admin/disponibilidad" && request.method === "GET"){
           const rows = (await env.DB.prepare(
