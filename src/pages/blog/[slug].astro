@@ -1,6 +1,5 @@
 ---
 import Layout from '../../layouts/Layout.astro';
-import LeadForm from '../../components/LeadForm.astro';
 import { getCollection } from 'astro:content';
 import '../../styles/blog-post.css';
 
@@ -82,8 +81,6 @@ const postURL = new URL(`/blog/${post.slug}/`, Astro.site).href;
       <a href="/prueba/?f=blog" style="display:inline-block;font-family:'JetBrains Mono',monospace;text-transform:uppercase;letter-spacing:.06em;font-size:13px;font-weight:700;padding:13px 22px;border-radius:6px;background:#e8501f;color:#160a04;text-decoration:none;">Reservar mi clase de prueba →</a>
     </aside>
 
-    <LeadForm fuente="blog" />
-
     <footer class="post-footer">
       <div class="post-author">
         <img class="author-avatar" src="/andres-avatar.jpg" alt="Andrés Salame" width="48" height="48" loading="lazy" />
@@ -92,7 +89,7 @@ const postURL = new URL(`/blog/${post.slug}/`, Astro.site).href;
           <div class="author-role">Profesor de canto, piano y composición</div>
         </div>
       </div>
-      <a href="/horarios/" class="post-cta">
+      <a href="/prueba/?f=blog" class="post-cta">
         Reserva tu clase de prueba →
       </a>
     </footer>
