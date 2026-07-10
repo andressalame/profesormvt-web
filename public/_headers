@@ -1,0 +1,8 @@
+# Headers de seguridad (portado de Batuta 07-jul): anti-clickjacking (el panel dentro de un
+# iframe ajeno = robo de sesión por UI), anti-sniff y referrer discreto. Los sirve la capa de
+# assets de Cloudflare Workers (el worker solo corre en /api/*).
+/*
+  X-Frame-Options: SAMEORIGIN
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  Content-Security-Policy: frame-ancestors 'self'

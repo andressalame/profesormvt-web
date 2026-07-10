@@ -2503,6 +2503,43 @@ export default {
           return json({ ok: true, clase_enviados: nClase, renovacion_enviados: nRenov });
         }
 
+        /* WhatsApp Cloud API (Fase B): diagnostico del token + numeros de la WABA de Batuta
+           y que tenants tienen numero conectado. Si el token expiro, Meta responde 401 aqui. */
+        if (path === "/app/api/su/wa-status" && request.method === "GET"){
+          if (!env.WHATSAPP_TOKEN) return json({ ok: false, error: "Sin WHATSAPP_TOKEN cargado" }, 501);
+          const WABA_ID = "1532220315245141";
+          try {
+            const r = await fetch("https://graph.facebook.com/v21.0/" + WABA_ID + "/phone_numbers?fields=id,display_phone_number,verified_name,quality_rating,platform_type", {
+              headers: { "Authorization": "Bearer " + env.WHATSAPP_TOKEN }
+            });
+            const data = await r.json().catch(() => ({}));
+            if (!r.ok) return json({ ok: false, status: r.status, meta: (data && data.error) || null }, 502);
+            const { results } = await env.DB.prepare(
+              "SELECT c.tenant_id, c.valor AS phone_id, t.academia, t.estado, " +
+              "(SELECT valor FROM config WHERE tenant_id = c.tenant_id AND clave = 'wa_enabled') AS enabled " +
+              "FROM config c LEFT JOIN tenants t ON t.id = c.tenant_id WHERE c.clave = 'wa_phone_id' AND c.valor != ''"
+            ).all().catch(() => ({ results: [] }));
+            return json({ ok: true, numeros: (data && data.data) || [], tenants_conectados: results || [] });
+          } catch (e) { return json({ ok: false, error: String(e && e.message) }, 502); }
+        }
+        /* Envio de prueba con respuesta cruda de Meta (para diagnosticar sin adivinar). */
+        if (path === "/app/api/su/wa-test" && request.method === "POST"){
+          if (!env.WHATSAPP_TOKEN) return json({ ok: false, error: "Sin WHATSAPP_TOKEN cargado" }, 501);
+          const b = await request.json().catch(() => ({}));
+          const phoneId = String(b.phone_id || "").replace(/\D/g, "");
+          const to = String(b.to || "").replace(/\D/g, "");
+          const texto = String(b.texto || "Prueba de Batuta: el envio de WhatsApp funciona ✅").slice(0, 1000);
+          if (!phoneId || !to) return json({ error: "Manda phone_id y to (solo digitos, con codigo de pais)" }, 400);
+          try {
+            const r = await fetch("https://graph.facebook.com/v21.0/" + phoneId + "/messages", {
+              method: "POST",
+              headers: { "Authorization": "Bearer " + env.WHATSAPP_TOKEN, "Content-Type": "application/json" },
+              body: JSON.stringify({ messaging_product: "whatsapp", to: to, type: "text", text: { body: texto } })
+            });
+            const data = await r.json().catch(() => ({}));
+            return json({ ok: r.ok, status: r.status, meta: data }, r.ok ? 200 : 502);
+          } catch (e) { return json({ ok: false, error: String(e && e.message) }, 502); }
+        }
         // Multi-profesor Fase 0: migración additiva + backfill. Idempotente. No cambia el panel.
         if (path === "/app/api/su/migrar-profesores" && request.method === "POST"){
           const r = await migrarProfesores(env);

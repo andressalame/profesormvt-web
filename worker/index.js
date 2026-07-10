@@ -1385,6 +1385,19 @@ function chatbotSystem(cfg, precios){
   );
 }
 
+/* Saneador de salida de la IA (portado de Batuta 08-jul): Llama a veces pega "¿?" espurios o
+   signos de apertura pese al prompt. Limpia el estilo sin tocar el contenido. */
+function sanearRespuestaIA(t){
+  if (!t) return t;
+  return String(t)
+    .replace(/¿\s*\?/g, "")          // "¿?" espurio -> nada
+    .replace(/¡\s*!/g, "")           // "¡!" espurio -> nada
+    .replace(/[¿¡]/g, "")            // sin signos de apertura (estilo de marca)
+    .replace(/\s+([?!.,;:])/g, "$1") // espacio antes de puntuación -> pegado
+    .replace(/\s{2,}/g, " ")
+    .trim();
+}
+
 /* Llama al chatbot con la historia y devuelve la respuesta. Degrada con el WhatsApp.
    Usa Workers AI (Llama) de Cloudflare: gratis para el volumen de MVT, sin API key ni saldo.
    El día que haya presupuesto, se cambia a Claude Haiku para mejor español/guardrails. */
@@ -1398,7 +1411,7 @@ async function responderChatbot(env, mensajes){
       messages: [{ role: "system", content: chatbotSystem(cfg, precios) }].concat(mensajes),
       max_tokens: 400
     });
-    const texto = (resp && (resp.response || "")).trim();
+    const texto = sanearRespuestaIA((resp && (resp.response || "")).trim());
     return texto || fallback;
   } catch (e) { return fallback; }
 }
@@ -1581,7 +1594,7 @@ async function llamarClaudeOnboarding(env, system, mensajes){
   if (!resp.ok) return null;
   const data = await resp.json().catch(() => null);
   const bloque = data && Array.isArray(data.content) ? data.content.find(c => c.type === "text") : null;
-  return bloque ? String(bloque.text || "").trim() : null;
+  return bloque ? sanearRespuestaIA(String(bloque.text || "").trim()) : null;
 }
 /* clave = "admin:andres" o "alumno:<cuenta_id>". Incrementa y devuelve {usados, restantes}.
    Si ya estaba en el tope, NO vuelve a incrementar (para no seguir descontando de un contador ya frenado). */
@@ -2410,6 +2423,11 @@ export default {
 
       /* ============ REGISTRO (ahora acepta ref opcional) ============ */
       if (url.pathname === "/api/registro" && request.method === "POST"){
+        // Rate-limit por IP (portado de Batuta): frena registro masivo automatizado.
+        const ipReg = request.headers.get("CF-Connecting-IP") || "";
+        if (ipReg && await chatbotPasoTope(env, "reg:" + ipReg, 5)){
+          return json({ error: "Demasiados intentos. Espera un momento e inténtalo de nuevo." }, 429);
+        }
         const b = await request.json().catch(() => ({}));
         const nombre = String(b.nombre || "").trim();
         const email = String(b.email || "").trim().toLowerCase();
@@ -2440,6 +2458,11 @@ export default {
 
       /* ============ LOGIN con contraseña ============ */
       if (url.pathname === "/api/login" && request.method === "POST"){
+        // Rate-limit por IP (portado de Batuta): frena fuerza bruta de contraseñas.
+        const ipLog = request.headers.get("CF-Connecting-IP") || "";
+        if (ipLog && await chatbotPasoTope(env, "log:" + ipLog, 12)){
+          return json({ error: "Demasiados intentos. Espera un momento e inténtalo de nuevo." }, 429);
+        }
         const b = await request.json().catch(() => ({}));
         const email = String(b.email || "").trim().toLowerCase();
         const password = String(b.password || "");
@@ -2649,6 +2672,171 @@ export default {
             vapid_public: env.VAPID_PUBLIC_KEY || ""
           }
         });
+      }
+
+      /* ============ LINK DE COBRO (portado de Batuta 08-jul): pago SIN registro previo ============
+         GET /api/pagar-info alimenta la página pública /pagar (paquetes, precios y métodos).
+         POST /api/pagar-directo registra el pago de un desconocido: crea/reusa su cuenta por correo
+         y le manda el link para poner su contraseña (24h). El profe manda /pagar?p=Paquete%204 por
+         WhatsApp y el lead paga sin pasar por el registro. */
+      if (url.pathname === "/api/pagar-info" && request.method === "GET"){
+        const cfgPd = await loadConfig(env).catch(() => ({}));
+        const preciosPd = await loadPrecios(env).catch(() => PRECIOS_DEFAULT);
+        const metodos = [];
+        if (env.MP_ACCESS_TOKEN) metodos.push({ v: "Tarjeta (Mercado Pago)", t: "Tarjeta (se confirma sola)" });
+        if (cfgPd.pago_numero) metodos.push({ v: "Yape/Plin/Sip", t: "Yape / Plin / Sip" });
+        if (cfgPd.bcp_cuenta) metodos.push({ v: "Transferencia BCP", t: "Transferencia BCP" });
+        if (cfgPd.scotia_cuenta) metodos.push({ v: "Transferencia Scotiabank", t: "Transferencia Scotiabank" });
+        if (cfgPd.crypto_wallet) metodos.push({ v: "Crypto USDT", t: "Crypto (" + (cfgPd.crypto_moneda || "USDT") + ")" });
+        return json({
+          paquetes: Object.keys(PAQUETES).filter(pk => (preciosPd[pk] || 0) > 0).map(pk => ({ k: pk, precio: preciosPd[pk] || 0 })),
+          metodos,
+          infoPago: {
+            yape: { numero: cfgPd.pago_numero || "", titular: cfgPd.pago_titular || "" },
+            bcp: { cuenta: cfgPd.bcp_cuenta || "", cci: cfgPd.bcp_cci || "" },
+            scotia: { cuenta: cfgPd.scotia_cuenta || "", cci: cfgPd.scotia_cci || "" },
+            crypto: { moneda: cfgPd.crypto_moneda || "USDT", red: cfgPd.crypto_red || "", wallet: cfgPd.crypto_wallet || "" }
+          }
+        });
+      }
+
+      if (url.pathname === "/api/pagar-directo" && request.method === "POST"){
+        const ipPd = request.headers.get("CF-Connecting-IP") || "";
+        if (ipPd && await chatbotPasoTope(env, "pd:" + ipPd, 8)){
+          return json({ error: "Demasiados intentos. Espera un rato." }, 429);
+        }
+        const b = await request.json().catch(() => ({}));
+        const paquete = String(b.paquete || "");
+        if (!(paquete in PAQUETES)) return json({ error: "Paquete no válido." }, 400);
+        const nombre = String(b.nombre || "").trim();
+        const email = String(b.email || "").trim().toLowerCase();
+        const whatsapp = String(b.whatsapp || "").trim().slice(0, 20);
+        const metodo = String(b.metodo || "").trim().slice(0, 40);
+        const CURSOS_PD = ["Canto", "Piano", "Composición"];
+        const cursoPd = CURSOS_PD.indexOf(String(b.curso || "").trim()) >= 0 ? String(b.curso).trim() : "Canto";
+        if (nombre.length < 2) return json({ error: "Escribe tu nombre." }, 400);
+        if (!emailOk(email)) return json({ error: "Ese correo no parece válido." }, 400);
+
+        // Cuenta: reusa por correo o crea una nueva con contraseña aleatoria
+        // (el alumno la define después con el link del correo).
+        let cu = await env.DB.prepare("SELECT * FROM cuentas WHERE email = ?1").bind(email).first();
+        let esNueva = false;
+        if (!cu){
+          esNueva = true;
+          const salt = randHex(16);
+          const hash = await hashPass(randHex(24), salt);
+          const idCu = crypto.randomUUID();
+          const refCode = await genRefCode(env);
+          await env.DB.prepare(
+            "INSERT INTO cuentas (id,email,nombre,whatsapp,pass_hash,pass_salt,marketing,alumno_id,creada,ref_code,ref_por,credito) VALUES (?1,?2,?3,?4,?5,?6,0,NULL,?7,?8,'',0)"
+          ).bind(idCu, email, nombre, whatsapp, hash, salt, hoy(), refCode).run();
+          cu = await env.DB.prepare("SELECT * FROM cuentas WHERE id = ?1").bind(idCu).first();
+        }
+        // La clase de prueba es solo para la primera clase (mismo guard del portal).
+        if (paquete === "Clase de prueba" && cu.alumno_id) return json({ error: "La clase de prueba es solo para tu primera clase. Elige un paquete para seguir." }, 400);
+
+        const yaPend = await env.DB.prepare(
+          "SELECT id FROM compras WHERE cuenta_id = ?1 AND estado = 'pendiente'"
+        ).bind(cu.id).first();
+        if (yaPend) return json({ error: "Ya tienes un pago en verificación con este correo. Entra a tu portal para verlo." }, 409);
+
+        const preciosPd2 = await loadPrecios(env);
+        const precioPd = preciosPd2[paquete] || 0;
+        const creditoPd = Number(cu.credito) || 0;
+        const descuentoPd = Math.min(creditoPd, precioPd);
+        const montoPd = Math.max(0, precioPd - descuentoPd);
+        if (!(precioPd > 0)) return json({ error: "Ese paquete no está disponible. Escríbeme por WhatsApp." }, 400);
+
+        // Correo de acceso (best effort): cuenta nueva -> link para crear contraseña (24h);
+        // cuenta existente -> recordatorio de entrar al portal.
+        const correoAcceso = async () => {
+          try {
+            if (esNueva){
+              const tokenPd = randHex(32);
+              const tokenHashPd = await sha256Hex(tokenPd);
+              const expiraPd = new Date(Date.now() + 24 * 3600000).toISOString();
+              await env.DB.batch([
+                env.DB.prepare("DELETE FROM reset_tokens WHERE cuenta_id = ?1").bind(cu.id),
+                env.DB.prepare("INSERT INTO reset_tokens (token_hash, cuenta_id, expira, usado) VALUES (?1, ?2, ?3, 0)").bind(tokenHashPd, cu.id, expiraPd)
+              ]);
+              await enviarCorreo(env, {
+                to: email,
+                subject: "Tu acceso a " + MARCA.nombre,
+                text: "Hola " + nombre + ". Tu pago quedó registrado en " + MARCA.nombre + ".\n\nCrea tu contraseña aquí para entrar a tu portal (clases, tareas y pagos):\n" + MARCA.dominio + "/alumnos/?reset=" + tokenPd + "\n\nEl link vence en 24 horas. Si vence, en el portal puedes pedir otro con 'Olvidé mi contraseña'."
+              });
+            } else {
+              await enviarCorreo(env, {
+                to: email,
+                subject: "Pago registrado — " + MARCA.nombre,
+                text: "Hola " + nombre + ". Registramos tu pago en " + MARCA.nombre + ". Míralo en tu portal: " + MARCA.dominio + "/alumnos/"
+              });
+            }
+          } catch (e) { /* sin correo no se rompe el pago */ }
+        };
+
+        // ---- Tarjeta: compra 'iniciada' + checkout de Mercado Pago (mismo webhook de siempre) ----
+        if (metodo === "Tarjeta (Mercado Pago)"){
+          if (!env.MP_ACCESS_TOKEN) return json({ error: "El pago con tarjeta no está disponible por ahora. Elige otro método." }, 503);
+          if (montoPd < 1) return json({ error: "Tu crédito cubre el paquete completo. Escríbeme por WhatsApp para activarlo." }, 400);
+          await env.DB.prepare("DELETE FROM compras WHERE cuenta_id = ?1 AND estado = 'iniciada'").bind(cu.id).run();
+          const compraIdPd = crypto.randomUUID();
+          await env.DB.prepare(
+            "INSERT INTO compras (id,cuenta_id,curso,paquete,monto,descuento,op_numero,estado,fecha,metodo,comprobante,slot_deseado) VALUES (?1,?2,?3,?4,?5,?6,'','iniciada',?7,'Tarjeta (Mercado Pago)','','')"
+          ).bind(compraIdPd, cu.id, cursoPd, paquete, montoPd, descuentoPd, hoy()).run();
+          const nombrePaquetePd = ({ "Paquete 4":"Plan Esencial", "Paquete 8":"Plan Intensivo", "Paquete 12":"Plan Estrella", "Clase suelta":"Clase suelta", "Clase de prueba":"Clase de prueba" })[paquete] || paquete;
+          let mpDataPd = {};
+          try {
+            const mpResPd = await fetch("https://api.mercadopago.com/checkout/preferences", {
+              method: "POST",
+              headers: { "Authorization": "Bearer " + env.MP_ACCESS_TOKEN, "Content-Type": "application/json" },
+              body: JSON.stringify({
+                items: [{ title: nombrePaquetePd + " - " + MARCA.nombre + " (" + cursoPd + ")", quantity: 1, unit_price: montoPd, currency_id: "PEN" }],
+                external_reference: compraIdPd,
+                notification_url: MARCA.dominio + "/api/mp/webhook",
+                back_urls: {
+                  success: MARCA.dominio + "/alumnos/?pago=ok",
+                  pending: MARCA.dominio + "/alumnos/?pago=pendiente",
+                  failure: MARCA.dominio + "/alumnos/?pago=error"
+                },
+                auto_return: "approved",
+                payer: { name: nombre, email: email },
+                statement_descriptor: MARCA.statementDescriptor
+              })
+            });
+            if (mpResPd.ok) mpDataPd = await mpResPd.json().catch(() => ({}));
+          } catch (e) { mpDataPd = {}; }
+          if (!mpDataPd.init_point){
+            await env.DB.prepare("DELETE FROM compras WHERE id = ?1 AND estado = 'iniciada'").bind(compraIdPd).run();
+            return json({ error: "No se pudo iniciar el pago con tarjeta. Elige otro método." }, 502);
+          }
+          await correoAcceso();
+          return json({ init_point: mpDataPd.init_point });
+        }
+
+        // ---- Métodos manuales: compra 'pendiente' con captura opcional ----
+        const comprobantePd = typeof b.comprobante === "string" ? b.comprobante : "";
+        let comprobanteKeyPd = "";
+        if (comprobantePd && env.RECURSOS_R2){
+          try {
+            const b64Pd = comprobantePd.indexOf(",") >= 0 ? comprobantePd.slice(comprobantePd.indexOf(",") + 1) : comprobantePd;
+            const bytesPd = Uint8Array.from(atob(b64Pd), ch => ch.charCodeAt(0));
+            if (bytesPd.length > 0 && bytesPd.length <= 5000000){
+              comprobanteKeyPd = crypto.randomUUID() + ".jpg";
+              await env.RECURSOS_R2.put(comprobanteKeyPd, bytesPd, { httpMetadata: { contentType: "image/jpeg" } });
+            }
+          } catch (e) { comprobanteKeyPd = ""; }
+        }
+        await env.DB.prepare(
+          "INSERT INTO compras (id,cuenta_id,curso,paquete,monto,descuento,op_numero,estado,fecha,metodo,comprobante,slot_deseado) VALUES (?1,?2,?3,?4,?5,?6,?7,'pendiente',?8,?9,?10,'')"
+        ).bind(crypto.randomUUID(), cu.id, cursoPd, paquete, montoPd, descuentoPd, String(b.op_numero || "").trim().slice(0, 40), hoy(), metodo, comprobanteKeyPd).run();
+        const comprobanteUrlPd = comprobanteKeyPd ? (MARCA.dominio + "/api/recurso/archivo/" + comprobanteKeyPd) : "";
+        const infoPd = { nombre, email, curso: cursoPd, paquete, monto: montoPd, op: String(b.op_numero || "").trim().slice(0, 40), metodo, comprobanteUrl: comprobanteUrlPd };
+        try { await avisarCompra(env, infoPd); } catch (e) {}
+        try { await avisarPush(env, infoPd); } catch (e) {}
+        await correoAcceso();
+        return json({ ok: true, mensaje: esNueva
+          ? "Tu pago quedó registrado. Revisa tu correo (" + email + "): te mandamos el link para crear tu contraseña y entrar a tu portal."
+          : "Tu pago quedó registrado. Te lo confirmo apenas lo vea y lo verás en tu portal." });
       }
 
       /* ============ COMPRAR (declarar pago; el crédito se aplica como descuento) ============ */

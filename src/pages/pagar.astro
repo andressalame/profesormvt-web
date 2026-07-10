@@ -1,0 +1,159 @@
+---
+import Layout from '../layouts/Layout.astro';
+---
+
+<Layout
+  title="Paga tus clases | ProfesorMVT"
+  description="Paga tu paquete de clases de canto, piano o composición en un minuto. Tu cuenta del portal se crea sola con tu pago."
+>
+  <main class="pagar">
+    <section class="pg-hero">
+      <div class="container-narrow">
+        <p class="label">Pago directo</p>
+        <h1>Paga tus clases <em>en un minuto</em></h1>
+        <p class="lead">
+          Elige tu paquete, paga y listo: tu cuenta del portal se crea sola y te llega
+          un correo para ponerle tu contraseña. Sin registro previo.
+        </p>
+      </div>
+    </section>
+
+    <section class="pg-form">
+      <div class="container-narrow">
+        <form id="fp" class="pg-card">
+          <label for="pq">Paquete</label>
+          <select id="pq"></select>
+          <label for="cs">Curso</label>
+          <select id="cs">
+            <option>Canto</option>
+            <option>Piano</option>
+            <option>Composición</option>
+          </select>
+          <label for="nm">Tu nombre</label>
+          <input id="nm" type="text" required maxlength="80" autocomplete="name" />
+          <label for="em">Tu correo</label>
+          <input id="em" type="email" required maxlength="120" autocomplete="email" />
+          <label for="wa">Tu WhatsApp (opcional)</label>
+          <input id="wa" type="tel" maxlength="20" autocomplete="tel" />
+          <label for="mt">Método de pago</label>
+          <select id="mt"></select>
+          <div id="pinfo" class="pg-info"></div>
+          <div id="manualbox">
+            <label for="op">N° de operación (opcional, confirma más rápido)</label>
+            <input id="op" type="text" maxlength="40" />
+            <label for="cap">Captura del pago (recomendado)</label>
+            <input id="cap" type="file" accept="image/*" />
+          </div>
+          <button type="submit" id="btnp" class="btn-cta">Registrar mi pago</button>
+          <div class="pg-err" id="errp"></div>
+        </form>
+        <div id="okp" class="pg-card pg-ok" style="display:none">
+          <h2>Listo 🎉</h2>
+          <p id="okmsg"></p>
+        </div>
+        <p class="note pg-foot">Ya tienes cuenta? <a href="/alumnos/">Entra a tu portal</a></p>
+      </div>
+    </section>
+  </main>
+</Layout>
+
+<style>
+  .pagar{background:var(--negro,#0d0b0a);color:var(--crema,#EBE5D6);}
+  .pg-hero{padding:72px 0 28px;}
+  .pg-hero .label{font-family:var(--mono,'JetBrains Mono',monospace);text-transform:uppercase;letter-spacing:.14em;font-size:.72rem;color:var(--naranja,#e8501f);margin-bottom:10px;}
+  .pg-hero h1{font-family:var(--display,'Anton',sans-serif);font-size:clamp(2rem,6vw,3.2rem);line-height:1.02;text-transform:uppercase;}
+  .pg-hero h1 em{color:var(--naranja,#e8501f);font-style:normal;}
+  .pg-hero .lead{margin-top:14px;max-width:520px;opacity:.85;}
+  .pg-form{padding:12px 0 84px;}
+  .pg-card{background:rgba(255,255,255,.035);border:1px solid rgba(235,229,214,.14);border-radius:6px;padding:26px 22px;max-width:520px;}
+  .pg-card label{display:block;font-family:var(--mono,'JetBrains Mono',monospace);font-size:.7rem;text-transform:uppercase;letter-spacing:.12em;opacity:.75;margin:16px 0 6px;}
+  .pg-card label:first-child{margin-top:0;}
+  .pg-card input,.pg-card select{width:100%;background:#151210;border:1px solid rgba(235,229,214,.2);border-radius:4px;color:inherit;padding:11px 12px;font:inherit;}
+  .pg-card input:focus,.pg-card select:focus{outline:none;border-color:var(--naranja,#e8501f);}
+  .pg-info{margin:12px 0 2px;white-space:pre-line;font-size:.9rem;color:var(--naranja,#e8501f);}
+  .pg-card .btn-cta{margin-top:20px;width:100%;cursor:pointer;border:none;}
+  .pg-err{color:#ff6b4a;font-size:.9rem;margin-top:10px;min-height:1.2em;}
+  .pg-ok h2{font-family:var(--display,'Anton',sans-serif);text-transform:uppercase;font-size:1.6rem;margin-bottom:8px;}
+  .pg-foot{margin-top:18px;}
+  .pg-foot a{color:var(--naranja,#e8501f);}
+</style>
+
+<script>
+(function(){
+  var INFO=null, pq=document.getElementById('pq'), cs=document.getElementById('cs'),
+      mt=document.getElementById('mt'), pinfo=document.getElementById('pinfo'),
+      manual=document.getElementById('manualbox'), btn=document.getElementById('btnp'),
+      form=document.getElementById('fp'), err=document.getElementById('errp');
+  var preSel="";
+  try{ preSel=new URLSearchParams(location.search).get('p')||""; }catch(e){}
+
+  fetch('/api/pagar-info').then(function(r){ return r.json(); }).then(function(d){
+    if(!d || !d.paquetes || !d.paquetes.length || !d.metodos || !d.metodos.length){
+      form.innerHTML='<p>Los pagos por aquí no están disponibles ahora. Escríbeme por WhatsApp y lo coordinamos directo.</p>';
+      return;
+    }
+    INFO=d.infoPago;
+    pq.innerHTML=d.paquetes.map(function(p){
+      return '<option value="'+p.k+'"'+(p.k===preSel?' selected':'')+'>'+p.k+' — S/ '+p.precio+'</option>';
+    }).join('');
+    mt.innerHTML=d.metodos.map(function(m){ return '<option value="'+m.v+'">'+m.t+'</option>'; }).join('');
+    pintaInfo();
+  }).catch(function(){
+    form.innerHTML='<p>No se pudo cargar la información de pago. Recarga la página o escríbeme por WhatsApp.</p>';
+  });
+
+  function pintaInfo(){
+    if(!INFO) return;
+    var v=mt.value, t='';
+    if(v==='Tarjeta (Mercado Pago)'){
+      t='Te llevamos al checkout de Mercado Pago. Al aprobar, tu paquete se activa solo.';
+      manual.style.display='none'; btn.textContent='Pagar con tarjeta →';
+    } else {
+      manual.style.display=''; btn.textContent='Registrar mi pago';
+      if(v==='Yape/Plin/Sip'){ t='Yapea o Plinea a: '+INFO.yape.numero+(INFO.yape.titular?('\nA nombre de: '+INFO.yape.titular):''); }
+      else if(v==='Transferencia BCP'){ t='BCP Soles: '+INFO.bcp.cuenta+(INFO.bcp.cci?('\nCCI: '+INFO.bcp.cci):''); }
+      else if(v==='Transferencia Scotiabank'){ t='Scotiabank Soles: '+INFO.scotia.cuenta+(INFO.scotia.cci?('\nCCI: '+INFO.scotia.cci):''); }
+      else if(v==='Crypto USDT'){ t=INFO.crypto.moneda+' por '+INFO.crypto.red+':\n'+INFO.crypto.wallet; }
+    }
+    pinfo.textContent=t;
+  }
+  mt.addEventListener('change', pintaInfo);
+
+  function leerCap(){
+    return new Promise(function(res){
+      var f=document.getElementById('cap').files[0];
+      if(!f) return res('');
+      var r=new FileReader();
+      r.onload=function(){ res(String(r.result||'')); };
+      r.onerror=function(){ res(''); };
+      r.readAsDataURL(f);
+    });
+  }
+
+  form.addEventListener('submit', async function(e){
+    e.preventDefault();
+    err.textContent=''; btn.disabled=true;
+    try{
+      var cap=await leerCap();
+      var r=await fetch('/api/pagar-directo',{
+        method:'POST', headers:{'content-type':'application/json'},
+        body:JSON.stringify({
+          paquete:pq.value, curso:cs.value,
+          nombre:document.getElementById('nm').value.trim(),
+          email:document.getElementById('em').value.trim(),
+          whatsapp:document.getElementById('wa').value.trim(),
+          metodo:mt.value,
+          op_numero:document.getElementById('op')?document.getElementById('op').value.trim():'',
+          comprobante:cap
+        })
+      });
+      var d=await r.json();
+      if(!r.ok){ err.textContent=d.error||'No se pudo registrar. Intenta de nuevo.'; btn.disabled=false; return; }
+      if(d.init_point){ location.href=d.init_point; return; }
+      form.style.display='none';
+      document.getElementById('okp').style.display='block';
+      document.getElementById('okmsg').textContent=d.mensaje||'Tu pago quedó registrado. Revisa tu correo para entrar a tu portal.';
+    }catch(ex){ err.textContent='Error de conexión. Intenta de nuevo.'; btn.disabled=false; }
+  });
+})();
+</script>

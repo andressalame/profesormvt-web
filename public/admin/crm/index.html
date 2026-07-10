@@ -155,9 +155,11 @@
   .navgroup-h{display:flex;align-items:center;gap:9px;width:100%;background:transparent;border:1px solid transparent;border-radius:3px;padding:9px 11px;cursor:pointer;font-family:var(--mono);text-transform:uppercase;letter-spacing:.1em;font-size:10.5px;color:var(--muted);font-weight:700;transition:color .12s,background .12s;}
   .navgroup-h::before{content:none;}
   .navgroup-h:hover{color:var(--cream);background:var(--panel2);}
-  .navgroup-h .ng-ico{flex:0 0 18px;text-align:center;font-size:14px;}
+  .navgroup-h .ng-ico{flex:0 0 18px;display:inline-flex;align-items:center;justify-content:center;}
+  .navgroup-h .ng-ico svg{width:16px;height:16px;stroke:currentColor;stroke-width:1.8;fill:none;stroke-linecap:round;stroke-linejoin:round;}
   .navgroup-h .ng-tx{flex:1;text-align:left;}
-  .navgroup-h .ng-chev{flex:0 0 auto;font-size:11px;opacity:.6;transition:transform .18s;}
+  .navgroup-h .ng-chev{flex:0 0 auto;display:inline-flex;opacity:.55;transition:transform .18s;}
+  .navgroup-h .ng-chev svg{width:12px;height:12px;stroke:currentColor;stroke-width:2;fill:none;stroke-linecap:round;stroke-linejoin:round;}
   .navgroup.open>.navgroup-h{color:var(--accent);}
   .navgroup.open>.navgroup-h .ng-chev{transform:rotate(180deg);opacity:1;}
   .navgroup-items{display:none;padding:2px 0 4px;}
@@ -250,11 +252,13 @@
       </div>
     </div>
     <nav class="nav">
-      <div class="navgroup-items" style="padding:2px 0 4px;">
-        <button class="tab active" data-tab="resumen">Inicio</button>
+      <!-- Inicio va SUELTO (sin .navgroup): ese wrapper viejo usaba .navgroup-items,
+           que es display:none por defecto -> el botón era invisible. Mismo bug cazado en Batuta. -->
+      <div style="display:block;padding:2px 0 4px;">
+        <button class="tab active" data-tab="resumen" style="display:flex;align-items:center;gap:8px;"><svg viewBox="0 0 24 24" style="width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:2;flex:0 0 auto;"><path d="M3 11l9-8 9 8"/><path d="M5 9.5V21h14V9.5"/></svg>Inicio</button>
       </div>
       <div class="navgroup">
-        <button class="navgroup-h" type="button"><span class="ng-ico">👥</span><span class="ng-tx">Alumnos</span><span class="ng-chev">⌄</span></button>
+        <button class="navgroup-h" type="button"><span class="ng-ico"><svg viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span><span class="ng-tx">Alumnos</span><span class="ng-chev"><svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg></span></button>
         <div class="navgroup-items">
           <button class="tab" data-tab="alumnos">Alumnos</button>
           <button class="tab" data-tab="registro">Clases</button>
@@ -263,7 +267,7 @@
         </div>
       </div>
       <div class="navgroup">
-        <button class="navgroup-h" type="button"><span class="ng-ico">💰</span><span class="ng-tx">Cobros</span><span class="ng-chev">⌄</span></button>
+        <button class="navgroup-h" type="button"><span class="ng-ico"><svg viewBox="0 0 24 24"><rect x="2" y="5" width="20" height="14" rx="2"/><circle cx="12" cy="12" r="3"/><line x1="6" y1="12" x2="6.01" y2="12"/><line x1="18" y1="12" x2="18.01" y2="12"/></svg></span><span class="ng-tx">Cobros</span><span class="ng-chev"><svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg></span></button>
         <div class="navgroup-items">
           <button class="tab" data-tab="pagos">Pagos<span class="dot hidden" id="dotPagos">0</span></button>
           <button class="tab" data-tab="cuentas">Accesos</button>
@@ -271,14 +275,14 @@
         </div>
       </div>
       <div class="navgroup">
-        <button class="navgroup-h" type="button"><span class="ng-ico">🎵</span><span class="ng-tx">Material</span><span class="ng-chev">⌄</span></button>
+        <button class="navgroup-h" type="button"><span class="ng-ico"><svg viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg></span><span class="ng-tx">Material</span><span class="ng-chev"><svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg></span></button>
         <div class="navgroup-items">
           <button class="tab" data-tab="recursos">Para tus alumnos</button>
           <button class="tab" data-tab="ejercicios">Tu biblioteca</button>
         </div>
       </div>
       <div class="navgroup">
-        <button class="navgroup-h" type="button"><span class="ng-ico">⚙️</span><span class="ng-tx">Configuración</span><span class="ng-chev">⌄</span></button>
+        <button class="navgroup-h" type="button"><span class="ng-ico"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></span><span class="ng-tx">Configuración</span><span class="ng-chev"><svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg></span></button>
         <div class="navgroup-items">
           <button class="tab" data-tab="perfil">Perfil</button>
           <button class="tab" data-tab="ajustes">Ajustes</button>
@@ -2147,8 +2151,10 @@ function aplicarMarcaTextos(){
 function aplicarMarca(){ aplicarMarcaCursos(); aplicarMarcaTextos(); }
 
 /* ---------- Init ---------- */
-(function init(){
-  aplicarMarca();
+function mvtInit(){
+  if(window.__initRan) return; window.__initRan=true;
+  // La marca es cosmética (y viste también el candado): si lanza, jamás debe tumbar el arranque.
+  try{ aplicarMarca(); }catch(e){ try{ window.__marcaErr=(e&&e.message)||String(e); }catch(_){} }
   try{ token=localStorage.getItem(TOKEN_KEY); }catch(e){}
   if(!token){ lock(""); return; }
   setSync("Conectando…","");
@@ -2156,6 +2162,21 @@ function aplicarMarca(){ aplicarMarcaCursos(); aplicarMarcaTextos(); }
     if(e&&e.auth){ lock("Tu sesión expiró, vuelve a entrar."); return; }
     setSync("Sin conexión ✗","err"); toast("No se pudo conectar con la API");
   });
+}
+// mvtInit es global (function decl -> window.mvtInit). El arranque real vive en un
+// <script> SEPARADO abajo, para que corra aunque algo en el top-level de ESTE script lance
+// (p.ej. una extensión del navegador que inyecta y rompe la ejecución antes del final).
+window.mvtInit = mvtInit;
+</script>
+
+<!-- Arranque del panel: script independiente. Si el script grande de arriba se corta por
+     un error de top-level (extensiones de wallet, etc.), este bloque IGUAL ejecuta y el panel vive. -->
+<script>
+(function(){
+  function run(){ try{ if(typeof window.mvtInit==="function") window.mvtInit(); }catch(e){ try{ window.__initErr=(e&&e.message)||String(e); }catch(_){} } }
+  if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded", run); }
+  else { run(); }
+  window.addEventListener("load", run);
 })();
 </script>
 

@@ -759,6 +759,12 @@
       <div class="cfgrow"><span class="pk">Próximo número (opcional)</span><input id="cfg_fact_proximo_numero" type="number" min="1" placeholder="Solo si ya emitiste boletas fuera de Batuta" /></div>
     </div>
     <div class="group">
+      <h2>// WhatsApp de tu academia (respuesta automática)</h2>
+      <p class="hint">Conecta el WhatsApp de tu academia y cada persona que te escriba entra sola a <b>Interesados</b> (tu CRM) y recibe una respuesta de bienvenida al instante, a cualquier hora. Tú cierras la venta desde el panel.<br><br><b>La conexión la hacemos nosotros:</b> escríbenos por WhatsApp y en 1-2 días dejamos tu número conectado. Cuando esté listo te pasamos el ID que va aquí abajo.</p>
+      <div class="cfgrow"><span class="pk">Respuesta automática</span><select id="cfg_wa_enabled"><option value="">Apagada</option><option value="on">Encendida</option></select></div>
+      <div class="cfgrow"><span class="pk">ID del número (te lo damos nosotros)</span><input id="cfg_wa_phone_id" type="text" inputmode="numeric" placeholder="Ej. 1149379364933769" /></div>
+    </div>
+    <div class="group">
       <h2>// Avisos en tu teléfono (app + push)</h2>
       <p class="hint">Instala el panel como app: en tu celular abre batuta.lat/app/panel y elige "Agregar a pantalla de inicio" (en iPhone: botón Compartir → Agregar a inicio). Luego activa los avisos aquí y te llega una notificación con cada pago por confirmar y cada reserva nueva.</p>
       <div class="rowact" style="margin-top:8px;">
@@ -1637,6 +1643,8 @@ function renderAjustes(){
   if(el("cfg_fact_serie_boleta")) el("cfg_fact_serie_boleta").value=(db.config&&db.config.fact_serie_boleta)||"";
   if(el("cfg_fact_igv")) el("cfg_fact_igv").value=(db.config&&db.config.fact_igv)||"";
   if(el("cfg_fact_proximo_numero")) el("cfg_fact_proximo_numero").value=(db.config&&db.config.fact_proximo_numero)||"";
+  if(el("cfg_wa_enabled")) el("cfg_wa_enabled").value=(db.config&&db.config.wa_enabled)||"";
+  if(el("cfg_wa_phone_id")) el("cfg_wa_phone_id").value=(db.config&&db.config.wa_phone_id)||"";
   el("cfg_google_client_id").value=(db.config&&db.config.google_client_id)||"";
   el("cfg_bcp_cuenta").value=(db.config&&db.config.bcp_cuenta)||"";
   el("cfg_bcp_cci").value=(db.config&&db.config.bcp_cci)||"";
@@ -2889,6 +2897,8 @@ el("btnGuardarAjustes").addEventListener("click",function(){
             fact_serie_boleta:(el("cfg_fact_serie_boleta")?el("cfg_fact_serie_boleta").value.trim():""),
             fact_igv:(el("cfg_fact_igv")?el("cfg_fact_igv").value:""),
             fact_proximo_numero:(el("cfg_fact_proximo_numero")?el("cfg_fact_proximo_numero").value.trim():""),
+            wa_enabled:(el("cfg_wa_enabled")?el("cfg_wa_enabled").value:""),
+            wa_phone_id:(el("cfg_wa_phone_id")?el("cfg_wa_phone_id").value.trim():""),
             pago_numero:el("cfg_pago_numero").value.trim(),
             pago_titular:el("cfg_pago_titular").value.trim(),
             google_client_id:el("cfg_google_client_id").value.trim(),

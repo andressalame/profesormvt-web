@@ -741,7 +741,7 @@ var REF_URL = "";
 try{ REF_URL = (new URLSearchParams(location.search).get("ref") || "").trim().toUpperCase(); }catch(e){}
 
 function $(id){ return document.getElementById(id); }
-function esc(s){ return String(s==null?"":s).replace(/[&<>"]/g,function(m){return {"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[m];}); }
+function esc(s){ return String(s==null?"":s).replace(/[&<>"']/g,function(m){return {"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[m];}); }
 function show(id){ $(id).classList.remove("hidden"); }
 function hide(id){ $(id).classList.add("hidden"); }
 function getTok(){ try{ return localStorage.getItem(KEY); }catch(e){ return null; } }
@@ -1986,9 +1986,11 @@ function aplicarMarca(){
 
 /* ---------- INIT ---------- */
 try{ RESET_TOKEN = (new URLSearchParams(location.search).get("reset") || "").trim(); }catch(e){}
-(function init(){
-  aplicarMarca();
-  if(REF_URL) $("r_ref").value = REF_URL;
+function initAlumno(){
+  if(window.__initAlumnoRan) return; window.__initAlumnoRan=true;
+  // La marca es cosmética: si lanza, jamás debe tumbar el arranque del portal.
+  try{ aplicarMarca(); }catch(e){ try{ window.__marcaErr=(e&&e.message)||String(e); }catch(_){} }
+  try{ if(REF_URL) $("r_ref").value = REF_URL; }catch(e){}
   fetch("/api/publico").then(function(r){ return r.json(); }).then(function(d){
     GOOGLE_CLIENT = (d && d.google_client_id) || "";
     if(GOOGLE_CLIENT) cargarGoogle();
@@ -1996,6 +1998,19 @@ try{ RESET_TOKEN = (new URLSearchParams(location.search).get("reset") || "").tri
   if(RESET_TOKEN){ mostrarFormResetPass(); return; }
   if(getTok()){ cargarMe(); }
   else { setAuthTab(REF_URL ? "reg" : "login"); setPantalla("viewAuth"); }
+}
+// initAlumno es global. El arranque real vive en un <script> SEPARADO abajo, para que corra
+// aunque algo en el top-level de ESTE script lance (extensiones de wallet, etc.).
+window.initAlumno = initAlumno;
+</script>
+
+<!-- Arranque del portal del alumno: script separado, robusto frente a errores de top-level -->
+<script>
+(function(){
+  function run(){ try{ if(typeof window.initAlumno==="function") window.initAlumno(); }catch(e){ try{ window.__initErr=(e&&e.message)||String(e); }catch(_){} } }
+  if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded", run); }
+  else { run(); }
+  window.addEventListener("load", run);
 })();
 </script>
 
