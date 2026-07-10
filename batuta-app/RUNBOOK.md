@@ -164,3 +164,9 @@
 - Verificado E2E en su CRM real (sesion de Andres): pegar lista persiste, grupo con miembros persiste, pre-marcado del registro grupal OK, /r/ OK. Data de prueba borrada (cuenta quedo en 0).
 - Lecciones del E2E: (1) el estado optimista del panel puede enganar — verificar SIEMPRE con recarga dura tras guardar; (2) al automatizar el modal de grupo, esperar a que abrirGrupo() pinte los checkboxes antes de marcarlos (la primera corrida guardo miembros=[] por esa carrera del test, no del codigo).
 - El CRM de Nicole vive en nicole-crm-worker.nicoleolavarria.workers.dev/admin/crm/ (el dominio .com es solo el sitio Vercel).
+
+## Fix: el tour esperaba al login (10-jul-2026, tarde-4)
+- Bug reportado por Andres: en MVT/Nicole el tour salia SOBRE el candado (el lock es overlay en la misma pagina, no pagina aparte como Batuta; la condicion vieja db.alumnos&&linksCobro pasaba siempre porque db arranca con defaults).
+- Fix en ambos paneles: el auto-lanzado exige window.__crmData (solo se pone true dentro del .then del GET autenticado; el 401 va al catch->lock) + candado #ovLock cerrado. Sin login es imposible por construccion.
+- Clave localStorage v1 -> crm_tour_v2: quienes lo vieron sobre el candado lo ven de nuevo, ya adentro.
+- Deployado a ambos (MVT via Action, Nicole via wrangler+token local). Verificado E2E el caso con sesion; el caso sin sesion quedo verificado estaticamente (la simulacion dinamica desde una pestana CON sesion es imposible sin tocar el token, y el primer intento dio falso negativo por carrera del test).

@@ -734,6 +734,9 @@
       <p class="hint">Hasta que llenes el número, el portal manda a los alumnos a coordinarte el pago por WhatsApp.</p>
       <div class="cfgrow"><span class="pk">Cupo por horario</span><input id="cfg_agenda_cupo" type="number" min="1" max="20" placeholder="1" /></div>
       <p class="hint" style="margin-top:-4px;">1 = clases individuales. Súbelo para clases grupales: ese número de alumnos podrá reservar el MISMO horario desde el portal.</p>
+      <div class="cfgrow"><span class="pk">¿El alumno reprograma solo?</span><select id="cfg_reprog_activo"><option value="">Sí, desde su portal</option><option value="0">No, solo a través del profesor</option></select></div>
+      <div class="cfgrow"><span class="pk">Horas mínimas para reprogramar</span><input id="cfg_reprog_min_h" type="number" min="1" max="72" placeholder="4" /></div>
+      <p class="hint" style="margin-top:-4px;">Con esa anticipación o más, reprogramar libera el horario sin consumir la clase; con menos ya no se puede. Vacío = 4 horas.</p>
       <div class="cfgrow"><span class="pk">Recordatorio de clase (24h y 1h)</span><select id="cfg_recordatorios_clase"><option value="">Activado</option><option value="off">Apagado</option></select></div>
       <p class="hint" style="margin-top:-4px;">Correo automático al alumno 24 horas y 1 hora antes de su reserva. Menos faltas sin que muevas un dedo.</p>
       <div class="cfgrow"><span class="pk">Recordatorio de renovación</span><select id="cfg_recordatorio_renovacion"><option value="">Activado</option><option value="off">Apagado</option></select></div>
@@ -1668,6 +1671,8 @@ function renderAjustes(){
   el("cfg_pago_titular").value=(db.config&&db.config.pago_titular)||"";
   if(el("cfg_agenda_cupo")) el("cfg_agenda_cupo").value=(db.config&&db.config.agenda_cupo)||"";
   if(el("cfg_recordatorios_clase")) el("cfg_recordatorios_clase").value=(db.config&&db.config.recordatorios_clase)||"";
+  if(el("cfg_reprog_activo")) el("cfg_reprog_activo").value=(db.config&&db.config.reprog_activo)||"";
+  if(el("cfg_reprog_min_h")) el("cfg_reprog_min_h").value=(db.config&&db.config.reprog_min_h)||"";
   if(el("cfg_recordatorio_renovacion")) el("cfg_recordatorio_renovacion").value=(db.config&&db.config.recordatorio_renovacion)||"";
   if(el("cfg_nubefact_ruta")) el("cfg_nubefact_ruta").value=(db.config&&db.config.nubefact_ruta)||"";
   if(el("cfg_nubefact_token")) el("cfg_nubefact_token").value=(db.config&&db.config.nubefact_token)||"";
@@ -2937,6 +2942,8 @@ el("btnGuardarAjustes").addEventListener("click",function(){
             brand_font:(el("cfg_brand_font")?el("cfg_brand_font").value:""),
             agenda_cupo:(el("cfg_agenda_cupo")?el("cfg_agenda_cupo").value.trim():""),
             recordatorios_clase:(el("cfg_recordatorios_clase")?el("cfg_recordatorios_clase").value:""),
+            reprog_activo:(el("cfg_reprog_activo")?el("cfg_reprog_activo").value:""),
+            reprog_min_h:(el("cfg_reprog_min_h")?el("cfg_reprog_min_h").value.trim():""),
             recordatorio_renovacion:(el("cfg_recordatorio_renovacion")?el("cfg_recordatorio_renovacion").value:""),
             nubefact_ruta:(el("cfg_nubefact_ruta")?el("cfg_nubefact_ruta").value.trim():""),
             nubefact_token:(el("cfg_nubefact_token")?el("cfg_nubefact_token").value.trim():""),

@@ -1597,7 +1597,9 @@ $("btnSalirSide").addEventListener("click", salir);
 
 /* ---------- VISTA: AGENDA ---------- */
 var AG_SLOTS = [];
-var AG_CANCELA_MIN_H = 4; // debe calzar con CANCELA_MIN_H del worker
+var AG_CANCELA_MIN_H = 4; // fallback: el valor real llega en /api/me (lo configura tu profesor)
+var AG_REPROG_ON = true;
+function agSyncReprog(){ try{ if(ME&&ME.reprog){ AG_REPROG_ON=(ME.reprog.activo!==false); var h=Number(ME.reprog.min_h); if(h>=1&&h<=72) AG_CANCELA_MIN_H=h; } }catch(e){} }
 var AG_TIPO = "fija"; // horario fijo semanal = default (02-jul-2026): mantiene el ritmo consistente. Clase suelta sigue disponible como 2da opción.
 var AG_CARGANDO = false;
 var AG_DIA = "";
@@ -1663,16 +1665,18 @@ function renderAgenda(){
   } else {
     $("agProx").innerHTML = prox.map(function(r){
       var badge = '<span class="rtag">'+(r.tipo==="fija"?"FIJA":"SUELTA")+'</span>';
+      agSyncReprog();
       var horas = (Date.parse(r.inicio_utc) - Date.now()) / 3600000;
       var puede = horas >= AG_CANCELA_MIN_H;
-      var boton = puede
+      var boton = !AG_REPROG_ON ? ''
+        : (puede
         ? '<button class="btn ghost sm" data-cancelar="'+esc(r.id)+'">Reprogramar</button>'
-        : '<button class="btn ghost sm" disabled title="Falta menos de '+AG_CANCELA_MIN_H+'h, ya no se puede reprogramar">Reprogramar</button>';
+        : '<button class="btn ghost sm" disabled title="Falta menos de '+AG_CANCELA_MIN_H+'h, ya no se puede reprogramar">Reprogramar</button>');
       return '<div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--line);">'+
         '<div style="flex:1;min-width:0;">'+
           '<div style="font-weight:600;text-transform:capitalize;">'+esc(fmtFechaLocal(r.inicio_utc))+'</div>'+
           '<div class="note" style="margin:0;">'+esc(fmtHoraLocal(r.inicio_utc))+' '+badge+
-            (puede?'':' · <span style="color:var(--amber)">ya no se puede reprogramar, si no asistes cuenta como falta</span>')+
+            ((AG_REPROG_ON&&!puede)?' · <span style="color:var(--amber)">ya no se puede reprogramar, si no asistes cuenta como falta</span>':'')+
           '</div>'+
         '</div>'+
         boton+

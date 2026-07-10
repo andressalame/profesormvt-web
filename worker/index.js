@@ -1791,7 +1791,16 @@ const CLASE_MIN = 60;             // duración de la clase
 const HORIZONTE_SEMANAS = 4;      // hasta cuándo se puede reservar adelante
 const SERIE_SEMANAS = 4;          // una reserva fija aparta las próximas 4 semanas ("de 4 en 4")
 const ANTICIPACION_MIN_H = 12;    // no se puede reservar con menos de 12h de anticipación
-const CANCELA_MIN_H = 4;          // reprogramar/cancelar con >=4h no consume la clase (02-jul-2026: bajado de 6h)
+const CANCELA_MIN_H = 4;          // default; el profesor puede cambiarlo en Ajustes (reprog_min_h)
+/* Reprogramación configurable por el profesor (10-jul-2026):
+   reprog_activo '' = ON (default) | '0' = el alumno no reprograma solo.
+   reprog_min_h  horas mínimas 1-72; vacío/invalido = CANCELA_MIN_H. */
+function reprogCfg(cfg){
+  const off = String((cfg && cfg.reprog_activo) || "") === "0";
+  const h = parseInt(cfg && cfg.reprog_min_h, 10);
+  return { activo: !off, minH: (Number.isFinite(h) && h >= 1 && h <= 72) ? h : CANCELA_MIN_H };
+}
+
 const PAUSA_MAX_DIAS = 14;        // tope de días de pausa (viaje/salud) por ciclo, auto-servicio
 
 // Componentes de fecha/hora en zona Lima a partir de un instante UTC.
@@ -2740,6 +2749,7 @@ export default {
           pagos,
           clasesHistorico,
           proximasClases,
+          reprog: (function(){ const rc = reprogCfg(config); return { activo: rc.activo, min_h: rc.minH }; })(),
           config: {
             pago_numero: config.pago_numero,
             pago_titular: config.pago_titular,
@@ -3501,9 +3511,13 @@ export default {
         const r = await env.DB.prepare("SELECT * FROM reservas WHERE id = ?1").bind(String(b.id || "")).first();
         if (!r || r.alumno_id !== cu.alumno_id) return json({ error: "No encuentro esa clase." }, 404);
         if (r.estado !== "reservada") return json({ error: "Esa clase ya no se puede cancelar." }, 400);
+        const rcfg = reprogCfg(await loadConfig(env).catch(() => ({})));
+        if (!rcfg.activo){
+          return json({ error: "Tu profesor gestiona los cambios de horario directamente. Escríbele para reprogramar esta clase." }, 403);
+        }
         const horas = (Date.parse(r.inicio_utc) - Date.now()) / 3600000;
-        if (horas < CANCELA_MIN_H){
-          return json({ error: "Ya no se puede reprogramar: falta menos de " + CANCELA_MIN_H + " horas para tu clase. Si no puedes asistir, escríbele a tu profesor; de lo contrario, cuenta como clase usada." }, 400);
+        if (horas < rcfg.minH){
+          return json({ error: "Ya no se puede reprogramar: falta menos de " + rcfg.minH + " horas para tu clase. Si no puedes asistir, escríbele a tu profesor; de lo contrario, cuenta como clase usada." }, 400);
         }
         await env.DB.prepare("UPDATE reservas SET estado = 'cancelada' WHERE id = ?1").bind(r.id).run();
         if (r.gcal_event_id) await gcalBorrarEvento(env, r.gcal_event_id);
@@ -3852,7 +3866,7 @@ export default {
 
         if (url.pathname === "/api/admin/config" && request.method === "POST"){
           const b = await request.json().catch(() => ({}));
-          const claves = ["pago_numero", "pago_titular", "google_client_id", "bcp_cuenta", "bcp_cci", "scotia_cuenta", "scotia_cci", "crypto_moneda", "crypto_red", "crypto_wallet", "profe_nombre", "profe_marca", "profe_foto", "gcal_client_id", "gcal_client_secret", "gcal_calendar_id"];
+          const claves = ["pago_numero", "pago_titular", "google_client_id", "bcp_cuenta", "bcp_cci", "scotia_cuenta", "scotia_cci", "crypto_moneda", "crypto_red", "crypto_wallet", "profe_nombre", "profe_marca", "profe_foto", "gcal_client_id", "gcal_client_secret", "gcal_calendar_id", "reprog_activo", "reprog_min_h"];
           const stmts = [];
           for (const k of claves){
             if (k in b){

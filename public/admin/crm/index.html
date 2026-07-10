@@ -554,6 +554,12 @@
       <p class="hint" style="margin-top:-4px;">Salen en el portal como métodos de pago al comprar.</p>
     </div>
     <div class="group">
+      <h2>// Reprogramaciones del alumno</h2>
+      <div class="cfgrow"><span class="pk">¿El alumno reprograma solo?</span><select id="cfg_reprog_activo"><option value="">Sí, desde su portal</option><option value="0">No, solo a través de mí</option></select></div>
+      <div class="cfgrow"><span class="pk">Horas mínimas de anticipación</span><input id="cfg_reprog_min_h" type="number" min="1" max="72" placeholder="4" /></div>
+      <p class="hint" style="margin-top:-4px;">Con esa anticipación o más, reprogramar libera el horario sin consumir la clase; con menos ya no se puede y una inasistencia cuenta como falta. Vacío = 4 horas.</p>
+    </div>
+    <div class="group">
       <h2>// Mensajes de WhatsApp</h2>
       <p class="hint">Plantilla que se usa cuando le das clic a "Enviar mensaje" en la tabla de Alumnos. Usa <code>{nombre}</code> y <code>{curso}</code> — se reemplazan solos. Si lo dejas vacío, se usa el mensaje por defecto.</p>
       <div class="field"><label>Mensaje de renovación</label><textarea id="cfg_msg_renovacion" style="min-height:110px;" placeholder="Hola {nombre}, ¡qué tal! Vamos cerrando tu paquete de {curso}…"></textarea></div>
@@ -1189,6 +1195,8 @@ function renderAjustes(){
     return '<div class="cfgrow"><span class="pk">'+p+'</span><input type="number" min="0" data-precio="'+p+'" value="'+(db.precios[p]||0)+'" /></div>';
   }).join("");
   el("cfg_pago_numero").value=(db.config&&db.config.pago_numero)||"";
+  if(el("cfg_reprog_activo")) el("cfg_reprog_activo").value=(db.config&&db.config.reprog_activo)||"";
+  if(el("cfg_reprog_min_h")) el("cfg_reprog_min_h").value=(db.config&&db.config.reprog_min_h)||"";
   el("cfg_pago_titular").value=(db.config&&db.config.pago_titular)||"";
   el("cfg_google_client_id").value=(db.config&&db.config.google_client_id)||"";
   el("cfg_bcp_cuenta").value=(db.config&&db.config.bcp_cuenta)||"";
@@ -2010,6 +2018,8 @@ el("btnGuardarAjustes").addEventListener("click",function(){
   });
   var cfg={ pago_numero:el("cfg_pago_numero").value.trim(),
             pago_titular:el("cfg_pago_titular").value.trim(),
+            reprog_activo:(el("cfg_reprog_activo")?el("cfg_reprog_activo").value:""),
+            reprog_min_h:(el("cfg_reprog_min_h")?el("cfg_reprog_min_h").value.trim():""),
             google_client_id:el("cfg_google_client_id").value.trim(),
             bcp_cuenta:el("cfg_bcp_cuenta").value.trim(),
             bcp_cci:el("cfg_bcp_cci").value.trim(),

@@ -1086,7 +1086,16 @@ const CLASE_MIN = 60;
 const HORIZONTE_SEMANAS = 4;
 const SERIE_SEMANAS = 4;
 const ANTICIPACION_MIN_H = 12;
-const CANCELA_MIN_H = 4;
+const CANCELA_MIN_H = 4; /* default; cada academia puede cambiarlo en Ajustes (reprog_min_h) */
+/* Reprogramación configurable por el profesor (10-jul-2026):
+   reprog_activo '' = ON (default) | '0' = el alumno no reprograma solo.
+   reprog_min_h  horas mínimas 1-72; vacío/invalido = CANCELA_MIN_H. */
+function reprogCfg(cfg){
+  const off = String((cfg && cfg.reprog_activo) || "") === "0";
+  const h = parseInt(cfg && cfg.reprog_min_h, 10);
+  return { activo: !off, minH: (Number.isFinite(h) && h >= 1 && h <= 72) ? h : CANCELA_MIN_H };
+}
+
 const PAUSA_MAX_DIAS = 14;
 
 function limaParts(d){
@@ -3728,6 +3737,7 @@ export default {
           pagos,
           clasesHistorico,
           proximasClases,
+          reprog: (function(){ const rc = reprogCfg(config); return { activo: rc.activo, min_h: rc.minH }; })(),
           config: {
             pago_numero: config.pago_numero, pago_titular: config.pago_titular,
             bcp_cuenta: config.bcp_cuenta, bcp_cci: config.bcp_cci,
@@ -4365,9 +4375,13 @@ export default {
         const r = await env.DB.prepare("SELECT * FROM reservas WHERE id = ?1 AND tenant_id = ?2").bind(String(b.id || ""), tid).first();
         if (!r || r.alumno_id !== cu.alumno_id) return json({ error: "No encuentro esa clase." }, 404);
         if (r.estado !== "reservada") return json({ error: "Esa clase ya no se puede cancelar." }, 400);
+        const rcfgB = reprogCfg(await loadConfig(env, tid).catch(() => ({})));
+        if (!rcfgB.activo){
+          return json({ error: "Tu profesor gestiona los cambios de horario directamente. Escribele para reprogramar esta clase." }, 403);
+        }
         const horas = (Date.parse(r.inicio_utc) - Date.now()) / 3600000;
-        if (horas < CANCELA_MIN_H){
-          return json({ error: "Ya no se puede reprogramar: falta menos de " + CANCELA_MIN_H + " horas para tu clase." }, 400);
+        if (horas < rcfgB.minH){
+          return json({ error: "Ya no se puede reprogramar: falta menos de " + rcfgB.minH + " horas para tu clase." }, 400);
         }
         await env.DB.prepare("UPDATE reservas SET estado = 'cancelada' WHERE id = ?1 AND tenant_id = ?2").bind(r.id, tid).run();
         return json({ ok: true, mensaje: "Listo, libere tu horario. Elige tu nuevo horario abajo." });
@@ -5191,7 +5205,7 @@ export default {
           /* config del tenant (cobros, marca, cupo, cursos): SOLO el dueno */
           if (!esDueno) return json({ error: "Los ajustes de la academia los maneja el dueno." }, 403);
           const b = await request.json().catch(() => ({}));
-          const claves = ["pago_numero", "pago_titular", "bcp_cuenta", "bcp_cci", "scotia_cuenta", "scotia_cci", "crypto_moneda", "crypto_red", "crypto_wallet", "profe_nombre", "profe_marca", "profe_foto", "whatsapp_profe", "cursos", "brand_color", "brand_font", "agenda_cupo", "recordatorios_clase", "recordatorio_renovacion", "nubefact_ruta", "nubefact_token", "fact_serie_boleta", "fact_igv", "fact_proximo_numero", "wa_phone_id", "wa_enabled"];
+          const claves = ["pago_numero", "pago_titular", "bcp_cuenta", "bcp_cci", "scotia_cuenta", "scotia_cci", "crypto_moneda", "crypto_red", "crypto_wallet", "profe_nombre", "profe_marca", "profe_foto", "whatsapp_profe", "cursos", "brand_color", "brand_font", "agenda_cupo", "recordatorios_clase", "recordatorio_renovacion", "nubefact_ruta", "nubefact_token", "fact_serie_boleta", "fact_igv", "fact_proximo_numero", "wa_phone_id", "wa_enabled", "reprog_activo", "reprog_min_h"];
           const stmts = [];
           for (const k of claves){
             if (k in b){
@@ -5205,6 +5219,11 @@ export default {
               if (k === "agenda_cupo"){
                 const nc = parseInt(valor, 10);
                 valor = (Number.isFinite(nc) && nc >= 1 && nc <= 20) ? String(nc) : "";
+              }
+              if (k === "reprog_activo" && valor && valor !== "0") valor = "";
+              if (k === "reprog_min_h" && valor){
+                const nh = parseInt(valor, 10);
+                valor = (Number.isFinite(nh) && nh >= 1 && nh <= 72) ? String(nh) : "";
               }
               /* facturacion SUNAT: solo la URL real de Nubefact, serie B### y valores sanos */
               if (k === "nubefact_ruta" && valor){
