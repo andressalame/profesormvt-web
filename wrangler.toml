@@ -19,7 +19,7 @@ WA_PHONE_ID = "1175919422274911"
 directory = "./dist"
 not_found_handling = "404-page"
 binding = "ASSETS"
-run_worker_first = ["/api/*"]
+run_worker_first = ["/api/*", "/r/*"]
 
 [[d1_databases]]
 binding = "DB"
