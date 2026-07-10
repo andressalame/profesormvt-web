@@ -114,3 +114,11 @@
   curl -X POST https://batuta.lat/app/api/su/tenant -H "Authorization: Bearer $(cat .admin-token.local)" -H "content-type: application/json" -d '{"id":"<tenant_id>","accion":"fundador"}'
 - Deja estado='trial' con trial_hasta a 1 año, salta el nurture (nurture_paso=9) y marca config fundador='on'.
 - El <tenant_id> lo sacas de: curl -s https://batuta.lat/app/api/su/tenants -H "Authorization: Bearer $(cat .admin-token.local)"
+
+## WhatsApp Cloud API — estado 11-jul-2026 (Fase A, numero de prueba)
+- App Meta "Batuta" id 2913551592328289 · WABA 1532220315245141 · numero de prueba +1 (555) 155-3825, phone_number_id 1149379364933769.
+- Secrets cargados: WHATSAPP_TOKEN (⚠️ TEMPORAL, dura 24h: regenerar en Meta > WhatsApp > Paso 1 y re-put si expira) y WHATSAPP_VERIFY_TOKEN (copia en batuta-app/.wa-verify-token.local).
+- Webhook: https://batuta.lat/app/api/wa/webhook verificado (challenge OK), app suscrita al WABA por API (subscribed_apps success). El "Verificar y guardar" de la pantalla de Meta quedo clickeado pero sin confirmar visual (Chrome se cayo): si el E2E no entrega webhooks, re-abrir Configurar webhooks y verificar de nuevo + suscribir campo "messages".
+- Demo conectada: config wa_phone_id + wa_enabled=on (se borra con el reset diario de la demo; re-setear para probar otro dia).
+- PENDIENTE Andres: agregar su celular (+51 989 077 928) como destinatario permitido del numero de prueba (Meta > WhatsApp > Paso 1 > Destinatario > Agregar numero > le llega codigo por WhatsApp). Luego: reenviar hello_world, responder al chat, y verificar lead en pipeline demo + auto-respuesta.
+- Fase B (produccion): verificar negocio batuta.lat en Business Manager + token permanente (System User) + numero real.
