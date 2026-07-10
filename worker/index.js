@@ -1035,7 +1035,7 @@ async function avisarLeadConTelefono(env, info){
   if (info.esPrueba){
     // Embudo phone-first: quiere una clase de prueba. Máxima urgencia de contacto.
     subject = "🔥🔥 Clase de prueba: " + (nombre || d);
-    msgLead = hola + " Soy " + MARCA.profe + " de ProfesorMVT :) Vi que quieres tu clase de prueba de " + curso + ". Para coordinarla, qué días y horas te quedan mejor esta semana? " + diag;
+    msgLead = hola + " Soy " + MARCA.profe + " de ProfesorMVT :) Vi que quieres tu clase de prueba de " + curso + ". " + diag + " Elige tu horario y reserva acá: " + MARCA.dominio + "/horarios";
     const waCierre = "https://wa.me/" + d + "?text=" + encodeURIComponent(msgLead);
     text =
       (nombre ? nombre : "Alguien") + " pidió una clase de prueba. Respóndele YA, mientras está caliente:\n\n" +
