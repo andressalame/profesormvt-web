@@ -3033,7 +3033,10 @@ export default {
          Solo lectura: los mismos slots libres del portal, sin datos de nadie. */
       if (url.pathname === "/api/agenda/slots-publicos" && request.method === "GET"){
         const slots = await generarSlots(env);
-        return json({ slots });
+        const r = json({ slots });
+        // Vitrina también embebida en academiakanta.com (segunda marca): solo lectura, sin datos personales
+        r.headers.set("Access-Control-Allow-Origin", "*");
+        return r;
       }
 
       if (url.pathname === "/api/agenda/slots" && request.method === "GET"){
