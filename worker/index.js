@@ -385,7 +385,7 @@ async function correoBienvenidaAlumno(env, cu, compra){
   let cfg = {};
   try { cfg = await loadConfig(env); } catch (e) { cfg = {}; }
   const nombre = ((cu.nombre || "").trim().split(/\s+/)[0]) || "";
-  const nombrePaquete = ({ "Paquete 4":"Esencial", "Paquete 8":"Intensivo", "Paquete 12":"Estrella", "Clase suelta":"Clase suelta", "Clase de prueba":"Clase de prueba" })[compra.paquete] || compra.paquete || "";
+  const nombrePaquete = NOMBRES_PAQUETE[compra.paquete] || compra.paquete || "";  /* unificado: un solo diccionario para TODOS los correos */
   const portal = MARCA.dominio + "/alumnos/";
   const wa = "https://wa.me/" + MARCA.whatsapp;
   const agendaLine = '<li><b>Agenda tu primera clase:</b> escríbeme por <a href="' + wa + '">WhatsApp</a> y la cuadramos.</li>';
@@ -1097,6 +1097,51 @@ async function enviarWhatsApp(env, phoneId, to, text){
    Andrés; un "rescate" ahí sería un insulto. Dedupe con compras.rescate_enviado
    (0 pendiente, 1 enviado, 2 saltada). Encendido por defecto (config.rescate_activo). */
 const NOMBRES_PAQUETE = { "Paquete 4": "Plan Esencial", "Paquete 8": "Plan Intensivo", "Paquete 12": "Plan Estrella", "Clase suelta": "Clase suelta", "Clase de prueba": "Clase de prueba" };
+
+/* ---------- Recibo de pago imprimible (portado de Batuta; universal, no fiscal) ---------- */
+const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (m) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[m]));
+const RECIBO_COLOR = "#e8501f";
+const htmlRecibo = (h) => new Response(h, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" } });
+function reciboHTML(d){
+  const css =
+    "*{box-sizing:border-box;margin:0;padding:0}" +
+    "body{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:#f4f1ea;color:#1c1813;padding:24px;line-height:1.5}" +
+    ".r{max-width:520px;margin:24px auto;background:#fff;border-radius:16px;overflow:hidden;box-shadow:0 14px 44px rgba(0,0,0,.10)}" +
+    ".rh{padding:26px 28px;color:#fff;display:flex;align-items:center;gap:14px}" +
+    ".rh .nm{font-size:1.25rem;font-weight:700}" +
+    ".rb{padding:24px 28px}" +
+    ".tag{display:inline-block;font-size:.7rem;letter-spacing:.12em;text-transform:uppercase;color:#8a8172;font-weight:700;margin-bottom:4px}" +
+    ".amt{font-size:2.2rem;font-weight:800;margin:2px 0 18px}" +
+    ".row{display:flex;justify-content:space-between;gap:12px;padding:11px 0;border-top:1px solid #eee;font-size:.95rem}" +
+    ".row .k{color:#8a8172}" +
+    ".row .v{font-weight:600;text-align:right}" +
+    ".note{margin-top:20px;padding:12px 14px;background:#faf7f0;border-radius:9px;font-size:.8rem;color:#8a8172}" +
+    ".btns{max-width:520px;margin:0 auto 20px;display:flex;gap:10px;justify-content:center}" +
+    ".btns button{font:inherit;font-size:.9rem;font-weight:600;padding:11px 20px;border-radius:8px;border:1px solid #d8d2c6;background:#fff;color:#1c1813;cursor:pointer}" +
+    "@media print{body{background:#fff;padding:0}.btns{display:none}.r{box-shadow:none;margin:0}}";
+  if (!d){
+    return "<!doctype html><html lang=\"es\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>Recibo</title><style>" + css + "</style></head><body>" +
+      "<div class=\"r\"><div class=\"rb\"><span class=\"tag\">" + MARCA.nombre + "</span><h1 style=\"font-size:1.3rem;margin-top:6px\">Recibo no disponible</h1><p style=\"margin-top:8px;color:#8a8172\">Este enlace no corresponde a un pago confirmado, o el pago aun no fue verificado.</p></div></div></body></html>";
+  }
+  const metodoRow = d.metodo ? "<div class=\"row\"><span class=\"k\">Metodo</span><span class=\"v\">" + esc(d.metodo) + "</span></div>" : "";
+  const waRow = d.whatsapp ? "<div class=\"row\"><span class=\"k\">Contacto</span><span class=\"v\">" + esc(d.whatsapp) + "</span></div>" : "";
+  return "<!doctype html><html lang=\"es\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">" +
+    "<title>Recibo " + esc(d.numero) + " - " + esc(d.negocio) + "</title><style>" + css + "</style></head><body>" +
+    "<div class=\"r\">" +
+      "<div class=\"rh\" style=\"background:" + RECIBO_COLOR + "\"><span class=\"nm\">" + esc(d.negocio) + "</span></div>" +
+      "<div class=\"rb\">" +
+        "<span class=\"tag\">Recibo de pago Nro " + esc(d.numero) + "</span>" +
+        "<div class=\"amt\">S/ " + d.monto.toFixed(2) + "</div>" +
+        "<div class=\"row\"><span class=\"k\">Cliente</span><span class=\"v\">" + esc(d.cliente) + "</span></div>" +
+        "<div class=\"row\"><span class=\"k\">Concepto</span><span class=\"v\">" + esc(d.concepto) + "</span></div>" +
+        "<div class=\"row\"><span class=\"k\">Fecha</span><span class=\"v\">" + esc(d.fecha) + "</span></div>" +
+        metodoRow + waRow +
+        "<div class=\"note\">Comprobante de pago emitido por " + esc(d.negocio) + ". No es un documento tributario oficial.</div>" +
+      "</div>" +
+    "</div>" +
+    "<div class=\"btns\"><button onclick=\"window.print()\">Descargar / imprimir</button></div>" +
+    "</body></html>";
+}
 
 async function correoRescateCompra(env, to, nombreCompleto, paquete){
   if (!to) return false;
@@ -2708,6 +2753,27 @@ export default {
          POST /api/pagar-directo registra el pago de un desconocido: crea/reusa su cuenta por correo
          y le manda el link para poner su contraseña (24h). El profe manda /pagar?p=Paquete%204 por
          WhatsApp y el lead paga sin pasar por el registro. */
+      /* Recibo universal imprimible: publico, id de compra inadivinable (UUID), solo confirmadas. */
+      if (url.pathname.startsWith("/r/") && request.method === "GET"){
+        const cidR = decodeURIComponent(url.pathname.slice(3));
+        const compraR = /^[0-9a-zA-Z_-]{6,40}$/.test(cidR)
+          ? await env.DB.prepare("SELECT * FROM compras WHERE id = ?1").bind(cidR).first().catch(() => null) : null;
+        if (!compraR || compraR.estado !== "confirmada") return htmlRecibo(reciboHTML(null));
+        let clienteR = "";
+        if (compraR.cuenta_id){
+          const cuR = await env.DB.prepare("SELECT nombre FROM cuentas WHERE id = ?1").bind(compraR.cuenta_id).first().catch(() => null);
+          clienteR = (cuR && cuR.nombre) || "";
+        }
+        const numR = String(compraR.id).replace(/-/g, "").slice(0, 8).toUpperCase();
+        return htmlRecibo(reciboHTML({
+          negocio: MARCA.nombre,
+          cliente: clienteR || "Cliente",
+          concepto: (NOMBRES_PAQUETE[compraR.paquete] || compraR.paquete || "Servicio educativo") + (compraR.curso ? " \u00b7 " + compraR.curso : ""),
+          monto: Math.round((Number(compraR.monto) || 0) * 100) / 100,
+          metodo: compraR.metodo || "", fecha: compraR.fecha || "",
+          numero: numR, whatsapp: MARCA.whatsapp || ""
+        }));
+      }
       if (url.pathname === "/api/pagar-info" && request.method === "GET"){
         const cfgPd = await loadConfig(env).catch(() => ({}));
         const preciosPd = await loadPrecios(env).catch(() => PRECIOS_DEFAULT);
@@ -2812,7 +2878,7 @@ export default {
           await env.DB.prepare(
             "INSERT INTO compras (id,cuenta_id,curso,paquete,monto,descuento,op_numero,estado,fecha,metodo,comprobante,slot_deseado) VALUES (?1,?2,?3,?4,?5,?6,'','iniciada',?7,'Tarjeta (Mercado Pago)','','')"
           ).bind(compraIdPd, cu.id, cursoPd, paquete, montoPd, descuentoPd, hoy()).run();
-          const nombrePaquetePd = ({ "Paquete 4":"Plan Esencial", "Paquete 8":"Plan Intensivo", "Paquete 12":"Plan Estrella", "Clase suelta":"Clase suelta", "Clase de prueba":"Clase de prueba" })[paquete] || paquete;
+          const nombrePaquetePd = NOMBRES_PAQUETE[paquete] || paquete;
           let mpDataPd = {};
           try {
             const mpResPd = await fetch("https://api.mercadopago.com/checkout/preferences", {
@@ -2964,7 +3030,7 @@ export default {
           "INSERT INTO compras (id,cuenta_id,curso,paquete,monto,descuento,op_numero,estado,fecha,metodo,comprobante,slot_deseado) VALUES (?1,?2,?3,?4,?5,?6,'','iniciada',?7,?8,'',?9)"
         ).bind(compraId, cu.id, curso, paquete, monto, descuento, hoy(), "Tarjeta (Mercado Pago)", slotDeseado).run();
 
-        const nombrePaquete = ({ "Paquete 4":"Plan Esencial", "Paquete 8":"Plan Intensivo", "Paquete 12":"Plan Estrella", "Clase suelta":"Clase suelta", "Clase de prueba":"Clase de prueba" })[paquete] || paquete;
+        const nombrePaquete = NOMBRES_PAQUETE[paquete] || paquete;
         const pref = {
           items: [{ title: nombrePaquete + " - " + MARCA.nombre + " (" + curso + ")", quantity: 1, unit_price: monto, currency_id: "PEN" }],
           external_reference: compraId,

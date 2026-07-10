@@ -650,7 +650,7 @@ function correoNurtureTrial(tenant, etapa, extras){
       html: wrap(
         '<p>' + hola + '</p>' +
         '<p>El momento en que Batuta empieza a pagarse sola es cuando tus alumnos entran a SU portal: ven sus clases, su material y sus pagos sin escribirte.</p>' +
-        '<p>Agrega a tus alumnos de siempre y comparteles el link del portal. Los cobros por Yape, Plin o transferencia quedan con constancia y los confirmas en un clic.</p>' +
+        '<p>Trae a tus alumnos de siempre en un clic: en Personas &gt; Alumnos esta el boton <b>Importar CSV</b> (subes tu Excel o pegas tu lista tal cual, un alumno por linea). Luego comparteles el link del portal. Los cobros por Yape, Plin o transferencia quedan con constancia y los confirmas en un clic.</p>' +
         '<p><a href="' + panel + '"><b>Agregar alumnos ahora</b></a></p>')
     };
   }
@@ -4216,7 +4216,8 @@ export default {
             "ESTILO (estricto): espanol claro de tu a tu, maximo 3 frases, SIEMPRE con el paso concreto (pestana > boton). Sin em dash. Sin signos de apertura invertidos (nada de ¿ ni ¡). Sin saludos ni relleno: directo a la respuesta. Si la pregunta es amplia, da el primer paso y ofrece seguir.\n" +
             "EL PANEL (menu izquierdo): Inicio (resumen + tu link de alumnos) · Personas (Alumnos, Grupos, Accesos al portal, Interesados) · Clases (Registro de clases, Agenda, Chat) · Cobros (Pagos, Reportes) · Material (Para tus alumnos, Tu biblioteca) · Configuracion (Perfil, Ajustes).\n" +
             "COMO SE HACE:\n" +
-            "- Nuevo alumno: Personas > Alumnos > '+ Nuevo alumno' (nombre, curso, paquete, horario).\n" +
+            "- Nuevo alumno: Personas > Alumnos > '+ Nuevo alumno' (nombre, curso, paquete, horario). Para varios seguidos, boton 'Guardar y agregar otro'.\n" +
+            "- Traer tus alumnos de antes (Excel o lista): Personas > Alumnos > 'Importar CSV'. Puedes descargar la plantilla y subir el archivo, o pegar tu lista tal cual (un alumno por linea). Ves una previsualizacion antes de confirmar y los repetidos se omiten solos.\n" +
             "- Precios/paquetes, cursos y marca (logo, color, tipografia): Configuracion > Ajustes.\n" +
             "- Registrar clase dictada: Clases > Registro de clases > '+ Registrar clase' (asistio/falta/reprogramo, que se trabajo, tarea con audio o PDF de Tu biblioteca). El saldo del alumno se descuenta solo.\n" +
             "- Cobros: pones tu numero de Yape/Plin y cuentas en Configuracion > Ajustes; el alumno paga y sube su constancia; confirmas en 1 clic en Cobros > Pagos.\n" +

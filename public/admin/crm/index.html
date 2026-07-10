@@ -258,7 +258,7 @@
         <button class="tab active" data-tab="resumen" style="display:flex;align-items:center;gap:8px;"><svg viewBox="0 0 24 24" style="width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:2;flex:0 0 auto;"><path d="M3 11l9-8 9 8"/><path d="M5 9.5V21h14V9.5"/></svg>Inicio</button>
       </div>
       <div class="navgroup">
-        <button class="navgroup-h" type="button"><span class="ng-ico"><svg viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span><span class="ng-tx">Alumnos</span><span class="ng-chev"><svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg></span></button>
+        <button class="navgroup-h" type="button" data-tour="personas"><span class="ng-ico"><svg viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span><span class="ng-tx">Alumnos</span><span class="ng-chev"><svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg></span></button>
         <div class="navgroup-items">
           <button class="tab" data-tab="alumnos">Alumnos</button>
           <button class="tab" data-tab="registro">Clases</button>
@@ -267,7 +267,7 @@
         </div>
       </div>
       <div class="navgroup">
-        <button class="navgroup-h" type="button"><span class="ng-ico"><svg viewBox="0 0 24 24"><rect x="2" y="5" width="20" height="14" rx="2"/><circle cx="12" cy="12" r="3"/><line x1="6" y1="12" x2="6.01" y2="12"/><line x1="18" y1="12" x2="18.01" y2="12"/></svg></span><span class="ng-tx">Cobros</span><span class="ng-chev"><svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg></span></button>
+        <button class="navgroup-h" type="button" data-tour="cobros"><span class="ng-ico"><svg viewBox="0 0 24 24"><rect x="2" y="5" width="20" height="14" rx="2"/><circle cx="12" cy="12" r="3"/><line x1="6" y1="12" x2="6.01" y2="12"/><line x1="18" y1="12" x2="18.01" y2="12"/></svg></span><span class="ng-tx">Cobros</span><span class="ng-chev"><svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg></span></button>
         <div class="navgroup-items">
           <button class="tab" data-tab="pagos">Pagos<span class="dot hidden" id="dotPagos">0</span></button>
           <button class="tab" data-tab="cuentas">Accesos</button>
@@ -318,6 +318,17 @@
       </div>
 
   <section class="panel active" id="panel-resumen">
+    <div class="group" data-tour="link-alumnos"><h2>// Comparte y cobra</h2>
+      <div style="background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:14px 16px;">
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:4px;">
+          <span class="hint" style="margin:0;">Tu portal de alumnos:</span>
+          <input id="linkAlumnosBox" readonly style="flex:1;min-width:220px;background:var(--bg);border:1px solid var(--line);color:var(--cream);padding:7px 10px;border-radius:4px;font-family:var(--mono);font-size:12px;" />
+          <button class="btn ghost sm" id="btnCopiarLinkAlumnos">Copiar</button>
+        </div>
+        <div class="hint" style="margin:10px 0 6px;">O manda un <b>link de cobro directo</b> por WhatsApp: el alumno paga sin registrarse y su cuenta se crea sola.</div>
+        <div id="linksCobro" style="display:flex;gap:8px;flex-wrap:wrap;"></div>
+      </div>
+    </div>
     <div class="group"><h2>// Hoy</h2><div class="grid cards" id="resHoy"></div></div>
     <div class="group"><h2>// Alumnos</h2><div class="grid cards" id="resAlumnos"></div></div>
     <div class="group"><h2>// Este mes</h2><div class="grid cards" id="resMes"></div></div>
@@ -325,7 +336,7 @@
   </section>
 
   <section class="panel" id="panel-alumnos">
-    <div style="margin-bottom:10px;"><button class="btn" id="btnNuevoAlumno">+ Nuevo alumno</button></div>
+    <div style="margin-bottom:10px;display:flex;gap:8px;flex-wrap:wrap;"><button class="btn" id="btnNuevoAlumno">+ Nuevo alumno</button><button class="btn ghost" id="btnImportCsv" title="Trae tu lista de alumnos desde un archivo CSV o pegando texto, todos de una vez">&#8681; Importar CSV</button></div>
     <p class="hint" style="margin-bottom:16px;">¿Te equivocaste registrando una clase? Edita o borra esa fila en REGISTRO — el saldo se recalcula solo.</p>
     <div class="tablewrap">
       <table id="tablaAlumnos">
@@ -599,6 +610,35 @@
 </div>
 
 <!-- Modal alumno -->
+<!-- Modal importar alumnos por CSV o lista pegada (portado de Batuta) -->
+<div class="overlay" id="ovImport">
+  <div class="modal">
+    <h3>Importar <em>alumnos</em></h3>
+    <div class="mlab">// Trae tu lista de siempre de una sola vez</div>
+    <div id="impPaso1">
+      <p class="hint" style="margin:0 0 12px;">Sube un archivo <b>.csv</b> con una fila por alumno. Columna obligatoria: <b>Nombre</b>. Opcionales: Curso, WhatsApp, Paquete, Notas. Si dejas la primera fila con los títulos, el orden no importa. ¿Tienes un Excel? Guárdalo como CSV (Archivo → Guardar como → CSV UTF-8).</p>
+      <div style="margin:0 0 16px;"><button class="btn ghost sm" id="btnPlantillaCsv">&#8595; Descargar plantilla</button></div>
+      <div class="field"><label>Tu archivo CSV</label><input id="impFile" type="file" accept=".csv,text/csv" /></div>
+      <div style="text-align:center;color:var(--muted);font-size:12px;margin:14px 0 10px;">— o más fácil todavía —</div>
+      <div class="field"><label>Pega tu lista aquí (un alumno por línea)</label>
+        <textarea id="impPega" rows="5" placeholder="María Fernández, Piano, 987654321&#10;José Ramírez&#10;Lucía Torres, Canto"></textarea>
+        <p class="hint" style="margin:5px 0 0;">Sirve pegar directo desde Excel (columnas), WhatsApp o una nota. Con el nombre basta; si pones más datos (curso, celular) los reconozco.</p></div>
+      <div style="margin-top:8px;"><button class="btn ghost sm" id="btnImpPegar">Previsualizar lo pegado</button></div>
+      <div id="impErr" style="display:none;color:var(--amber);margin-top:10px;font-size:13px;"></div>
+    </div>
+    <div id="impPaso2" style="display:none;">
+      <p class="hint" id="impResumen" style="margin:0 0 10px;"></p>
+      <div class="tablewrap" style="max-height:300px;overflow:auto;">
+        <table id="impTabla"><thead><tr><th>Nombre</th><th>Curso</th><th>WhatsApp</th><th>Paquete</th></tr></thead><tbody></tbody></table>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn ghost" data-close>Cancelar</button>
+      <button class="btn" id="btnImpConfirmar" style="display:none;">Importar</button>
+    </div>
+  </div>
+</div>
+
 <div class="overlay" id="ovAlumno">
   <div class="modal">
     <h3 id="alumnoTitulo">Nuevo <em>alumno</em></h3>
@@ -624,6 +664,7 @@
     <div class="field"><label>Notas</label><textarea id="a_notas"></textarea></div>
     <div class="modal-actions">
       <button class="btn ghost" data-close>Cancelar</button>
+      <button class="btn ghost" id="btnGuardarAlumnoOtro" title="Guarda este alumno y deja el formulario listo para el siguiente">Guardar y agregar otro</button>
       <button class="btn" id="btnGuardarAlumno">Guardar alumno</button>
     </div>
   </div>
@@ -1077,7 +1118,7 @@ function renderPagos(){
     : proc.map(function(c){
         var p=c.estado==="confirmada"?'<span class="pill green">Confirmada</span>':'<span class="pill red">Rechazada</span>';
         return '<tr><td class="mini">'+esc(c.fecha||'')+'</td><td class="name">'+esc(nombreCuenta(c.cuenta_id))+infoReferido(c,false)+'</td>'+
-          '<td>'+esc(c.paquete)+'</td><td>S/ '+(c.monto||0)+lineaDescuento(c)+'</td><td>'+p+'</td></tr>';
+          '<td>'+esc(c.paquete)+'</td><td>S/ '+(c.monto||0)+lineaDescuento(c)+'</td><td>'+p+(c.estado==="confirmada"?' <a href="/r/'+encodeURIComponent(c.id)+'" target="_blank" class="mini" style="color:var(--accent);text-decoration:none;white-space:nowrap" title="Recibo imprimible para el alumno">Recibo \u2197</a>':'')+'</td></tr>';
       }).join("");
 }
 
@@ -1270,7 +1311,7 @@ function renderLeads(){
     return '<tr><td>'+esc(l.fecha||'')+'</td><td>'+esc(l.email||'')+'</td><td>'+esc(l.fuente||'')+'</td><td>'+esc(l.interes||'')+'</td></tr>';
   }).join("");
 }
-function renderAll(){ renderResumen(); renderAlumnos(); renderRegistro(); renderPagos(); renderCuentas(); renderLeads(); renderRecursos(); renderEjercicios(); renderAjustes(); renderPerfil(); fillSelects(); }
+function renderAll(){ renderResumen(); renderAlumnos(); renderRegistro(); renderPagos(); renderCuentas(); renderLeads(); renderRecursos(); renderEjercicios(); renderAjustes(); renderPerfil(); fillSelects(); pintarLinksCobro(); }
 
 /* ---------- AGENDA (admin) ---------- */
 var AG_DISP = [], AG_RESERVAS = [];
@@ -1444,9 +1485,10 @@ el("btnNuevoAlumno").addEventListener("click",function(){
   setCursosAlumno(MARCA.cursoDefault); fillSelects(); el("a_paquete").value="Paquete 4";
   el("a_fecha").value=new Date().toISOString().slice(0,10); el("a_pago").value="Pagado";
   el("a_horario").value=""; el("a_notas").value=""; el("a_horario_derivado").textContent="";
+  el("btnGuardarAlumnoOtro").style.display="";
   openOv("ovAlumno");
 });
-el("btnGuardarAlumno").addEventListener("click",function(){
+function guardarAlumnoModal(encadenar){
   var nombre=el("a_nombre").value.trim();
   if(!nombre){ toast("Ponle nombre al alumno"); return; }
   var id=el("a_id").value;
@@ -1457,11 +1499,24 @@ el("btnGuardarAlumno").addEventListener("click",function(){
     horario:el("a_horario").value.trim(), notas:el("a_notas").value.trim() };
   if(id){ db.alumnos=db.alumnos.map(function(a){return a.id===id?obj:a;}); }
   else{ db.alumnos.push(obj); }
-  var btn=el("btnGuardarAlumno"); btn.disabled=true;
-  apiPut().then(function(){ renderAll(); closeOv("ovAlumno"); toast("Alumno guardado"); })
+  var b1=el("btnGuardarAlumno"),b2=el("btnGuardarAlumnoOtro"); b1.disabled=true; if(b2)b2.disabled=true;
+  apiPut().then(function(){
+    renderAll();
+    if(encadenar){
+      /* deja el formulario listo para el siguiente: conserva curso/paquete/pago/fecha
+         (suelen repetirse en una tanda) y limpia lo individual */
+      el("a_id").value=""; el("a_codigo").value=""; el("a_ciclo").value="1";
+      el("a_nombre").value=""; el("a_whatsapp").value="";
+      el("a_horario").value=""; el("a_notas").value=""; el("a_horario_derivado").textContent="";
+      el("alumnoTitulo").innerHTML='Nuevo <em>alumno</em>';
+      toast("Guardado ✓ — siguiente alumno"); el("a_nombre").focus();
+    } else { closeOv("ovAlumno"); toast("Alumno guardado"); }
+  })
     .catch(function(){ toast("No se pudo guardar. Revisa tu conexión e intenta de nuevo."); })
-    .finally(function(){ btn.disabled=false; });
-});
+    .finally(function(){ b1.disabled=false; if(b2)b2.disabled=false; });
+}
+el("btnGuardarAlumno").addEventListener("click",function(){ guardarAlumnoModal(false); });
+el("btnGuardarAlumnoOtro").addEventListener("click",function(){ guardarAlumnoModal(true); });
 
 document.body.addEventListener("click",function(e){
   var ed=e.target.closest("[data-edit]"), dl=e.target.closest("[data-del]"),
@@ -1484,6 +1539,7 @@ document.body.addEventListener("click",function(e){
   }
   if(ed){ var a=db.alumnos.find(function(x){return x.id===ed.dataset.edit;}); if(!a)return;
     el("alumnoTitulo").innerHTML='Editar <em>alumno</em>'; fillSelects();
+    el("btnGuardarAlumnoOtro").style.display="none";
     el("a_id").value=a.id; el("a_codigo").value=a.codigo||""; el("a_ciclo").value=a.ciclo||1;
     el("a_nombre").value=a.nombre; el("a_whatsapp").value=a.whatsapp||"";
     setCursosAlumno(a.curso); el("a_paquete").value=a.paquete; el("a_fecha").value=a.fecha||"";
@@ -2083,6 +2139,163 @@ function downloadBlob(blob,name){
   setTimeout(function(){URL.revokeObjectURL(url);a.remove();},100);
 }
 
+/* ---------- Importar alumnos por CSV o lista pegada (portado de Batuta; single-profe) ---------- */
+var IMP_ROWS=[];
+el("btnImportCsv").addEventListener("click",function(){
+  IMP_ROWS=[]; el("impFile").value=""; el("impPega").value="";
+  el("impPaso1").style.display=""; el("impPaso2").style.display="none";
+  el("btnImpConfirmar").style.display="none"; el("impErr").style.display="none";
+  openOv("ovImport");
+});
+el("btnPlantillaCsv").addEventListener("click",function(){
+  var head=["Nombre","Curso","WhatsApp","Paquete","Notas"];
+  var cd=MARCA.cursoDefault||"Canto";
+  var ej=[["Ana Torres",cd,"51987654321","Paquete 4","Viene de mi Excel"],
+          ["Luis Ramos",cd,"51912345678","Paquete 8",""]];
+  descargaCsv(head,ej,"plantilla-alumnos.csv");
+});
+function impNorm(s){ return String(s==null?"":s).trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,""); }
+function parseCsv(text){
+  text=String(text||"").replace(/^\ufeff/,"");
+  var l0=text.split(/\r?\n/)[0]||"";
+  var delim=((l0.split(";").length-1)>(l0.split(",").length-1))?";":",";
+  var rows=[],row=[],cur="",q=false;
+  for(var i=0;i<text.length;i++){var c=text[i];
+    if(q){ if(c=='"'){ if(text[i+1]=='"'){cur+='"';i++;} else q=false; } else cur+=c; }
+    else if(c=='"'){ q=true; }
+    else if(c===delim){ row.push(cur); cur=""; }
+    else if(c=="\n"){ row.push(cur); rows.push(row); row=[]; cur=""; }
+    else if(c=="\r"){ /* ignora */ }
+    else cur+=c;
+  }
+  if(cur!==""||row.length){ row.push(cur); rows.push(row); }
+  return rows.filter(function(r){ return r.some(function(v){ return String(v).trim()!==""; }); });
+}
+var IMP_ALIAS={ nombre:["nombre","alumno","alumna","name","nombre completo","nombres","estudiante"],
+  curso:["curso","cursos","materia","materias","clase","instrumento","asignatura"],
+  whatsapp:["whatsapp","wsp","celular","telefono","movil","phone","numero","contacto"],
+  paquete:["paquete","plan","package","clases","membresia"],
+  notas:["notas","nota","observaciones","observacion","comentario","comentarios"] };
+function impMapHeader(cells){
+  var map={},known=false;
+  cells.forEach(function(h,idx){ var n=impNorm(h);
+    for(var k in IMP_ALIAS){ if(IMP_ALIAS[k].indexOf(n)>=0 && map[k]==null){ map[k]=idx; known=true; } } });
+  return known?map:null;
+}
+function impError(msg){ var e=el("impErr"); e.textContent=msg; e.style.display=""; }
+el("impFile").addEventListener("change",function(){
+  var f=this.files&&this.files[0]; if(!f) return;
+  var fr=new FileReader();
+  fr.onload=function(){
+    try{
+      var rows=parseCsv(fr.result);
+      if(!rows.length){ impError("El archivo está vacío."); return; }
+      var map=impMapHeader(rows[0]),start=0;
+      if(map){ start=1; } else { map={nombre:0,curso:1,whatsapp:2,paquete:3,notas:4}; }
+      if(map.nombre==null){ impError("No encontré una columna de Nombre. Pon 'Nombre' como título de la primera columna."); return; }
+      var existe={}; (db.alumnos||[]).forEach(function(a){ existe[impNorm(a.nombre)]=true; });
+      var out=[],dup=0,vacios=0,vistos={};
+      for(var i=start;i<rows.length;i++){ var r=rows[i];
+        var nombre=String(r[map.nombre]!=null?r[map.nombre]:"").trim();
+        if(!nombre){ vacios++; continue; }
+        var key=impNorm(nombre);
+        if(existe[key]||vistos[key]){ dup++; continue; }
+        vistos[key]=true;
+        out.push({ nombre:nombre,
+          curso:(map.curso!=null?String(r[map.curso]||"").trim():"")||MARCA.cursoDefault,
+          whatsapp:(map.whatsapp!=null?String(r[map.whatsapp]||"").trim():"").replace(/[^\d+]/g,""),
+          paquete:(map.paquete!=null?String(r[map.paquete]||"").trim():"")||"Paquete 4",
+          notas:map.notas!=null?String(r[map.notas]||"").trim():"" });
+      }
+      IMP_ROWS=out; impPreview(out,dup,vacios);
+    }catch(e){ impError("No pude leer el archivo. Asegúrate de que sea un CSV."); }
+  };
+  fr.readAsText(f,"utf-8");
+});
+/* Pegar lista: un alumno por línea (de Excel con tabs, de WhatsApp, de una nota). */
+el("btnImpPegar").addEventListener("click",function(){
+  var txt=el("impPega").value||"";
+  var lineas=txt.split(/\r?\n/).map(function(l){return l.trim();}).filter(Boolean);
+  if(!lineas.length){ impError("Pega al menos una línea con un nombre."); return; }
+  var existe={}; (db.alumnos||[]).forEach(function(a){ existe[impNorm(a.nombre)]=true; });
+  var out=[],dup=0,vistos={};
+  lineas.forEach(function(linea){
+    var celdas=linea.split(/\t|;|,/).map(function(c){return c.trim();}).filter(Boolean);
+    if(!celdas.length) return;
+    var nombre=celdas[0];
+    var key=impNorm(nombre);
+    if(existe[key]||vistos[key]){ dup++; return; }
+    vistos[key]=true;
+    var curso="",wsp="",paq="",notas=[];
+    celdas.slice(1).forEach(function(c){
+      var soloDig=c.replace(/[^\d]/g,"");
+      if(!wsp && soloDig.length>=7 && soloDig.length===c.replace(/[\s+\-()]/g,"").length){ wsp=soloDig; }
+      else if(!paq && /paquete/i.test(c)){ paq=c; }
+      else if(!curso){ curso=c; }
+      else { notas.push(c); }
+    });
+    out.push({ nombre:nombre, curso:curso||MARCA.cursoDefault, whatsapp:wsp,
+      paquete:paq||"Paquete 4", notas:notas.join(" · ") });
+  });
+  IMP_ROWS=out; impPreview(out,dup,0);
+});
+function impPreview(rows,dup,vacios){
+  el("impErr").style.display="none";
+  if(!rows.length){ impError("No hay alumnos nuevos para importar"+(dup?(" ("+dup+" ya estaban en tu lista)"):"")+"."); return; }
+  var tb=el("impTabla").querySelector("tbody");
+  tb.innerHTML=rows.slice(0,50).map(function(a){
+    return "<tr><td>"+esc(a.nombre)+"</td><td>"+esc(a.curso)+"</td><td>"+esc(a.whatsapp)+"</td><td>"+esc(a.paquete)+"</td></tr>";
+  }).join("");
+  var extra=[]; if(dup)extra.push(dup+" ya estaban (omitidos)"); if(vacios)extra.push(vacios+" sin nombre (omitidos)");
+  el("impResumen").innerHTML="<b>"+rows.length+" alumno"+(rows.length!=1?"s":"")+"</b> list"+(rows.length!=1?"os":"o")+" para importar"+(extra.length?(" · "+extra.join(" · ")):"")+(rows.length>50?" · se muestran los primeros 50":"")+".";
+  el("impPaso1").style.display="none"; el("impPaso2").style.display="";
+  var btn=el("btnImpConfirmar"); btn.style.display=""; btn.disabled=false;
+  btn.textContent="Importar "+rows.length+" alumno"+(rows.length!=1?"s":"");
+}
+el("btnImpConfirmar").addEventListener("click",function(){
+  if(!IMP_ROWS.length){ closeOv("ovImport"); return; }
+  var hoy=new Date().toISOString().slice(0,10);
+  IMP_ROWS.forEach(function(a){
+    db.alumnos.push({ id:uid(), codigo:uid().slice(-6).toUpperCase(), ciclo:1,
+      nombre:a.nombre, whatsapp:a.whatsapp, curso:a.curso, paquete:a.paquete,
+      fecha:hoy, pago:"Pagado", horario:"", notas:a.notas });
+  });
+  var n=IMP_ROWS.length,btn=el("btnImpConfirmar"); btn.disabled=true;
+  apiPut().then(function(){ renderAll(); closeOv("ovImport"); toast(n+" alumno"+(n!=1?"s":"")+" importado"+(n!=1?"s":"")+" \u2713"); })
+    .catch(function(){ toast("No se pudo importar. Revisa tu conexión e intenta de nuevo."); btn.disabled=false; })
+    .finally(function(){ IMP_ROWS=[]; });
+});
+
+/* ---------- Chips de link de cobro directo en Inicio (portado de Batuta) ---------- */
+function pintarLinksCobro(){
+  try{
+    var box=el("linkAlumnosBox"); if(box) box.value=location.origin+"/alumnos/";
+    var cont=el("linksCobro");
+    if(cont && db && db.precios){
+      var pks=Object.keys(PAQUETES).filter(function(pk){ return pk!=="Clase de prueba" && (db.precios[pk]||0)>0; });
+      cont.innerHTML = pks.length ? "" : '<span class="hint">Pon tus precios en Ajustes y aquí salen los links.</span>';
+      pks.forEach(function(pk){
+        var b=document.createElement("button");
+        b.className="btn ghost sm"; b.type="button";
+        b.textContent="Copiar: "+pk+" (S/ "+db.precios[pk]+")";
+        b.addEventListener("click",function(){
+          var u=location.origin+"/pagar?p="+encodeURIComponent(pk);
+          if(navigator.clipboard&&navigator.clipboard.writeText){ navigator.clipboard.writeText(u).then(function(){ toast("Link de cobro copiado"); }); }
+          else { prompt("Copia el link:", u); }
+        });
+        cont.appendChild(b);
+      });
+    }
+  }catch(e){}
+}
+var _btnCopiarLinkAlumnos=el("btnCopiarLinkAlumnos");
+if(_btnCopiarLinkAlumnos) _btnCopiarLinkAlumnos.addEventListener("click",function(){
+  var box=el("linkAlumnosBox"); if(!box || !box.value) return;
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(box.value).then(function(){ toast("Link copiado"); }).catch(function(){ box.select(); });
+  } else { box.select(); }
+});
+
 /* ---------- Avisos push (Web Push / VAPID) ---------- */
 function urlB64(b){var p='='.repeat((4-b.length%4)%4);var s=(b+p).replace(/-/g,'+').replace(/_/g,'/');var r=atob(s);var a=new Uint8Array(r.length);for(var i=0;i<r.length;i++)a[i]=r.charCodeAt(i);return a;}
 
@@ -2254,6 +2467,92 @@ window.mvtInit = mvtInit;
       .catch(function(err){ typing(false); pintar("bot",(err&&err.message)||"Algo falló, intenta de nuevo."); })
       .then(function(){ ocupado=false; });
   });
+})();
+</script>
+<!-- Tour guiado de bienvenida (portado de Batuta): corre 1 vez, anclas estables data-tour. -->
+<style>
+  .tour-veil{position:fixed;inset:0;z-index:9000;background:rgba(8,9,12,.72);backdrop-filter:blur(1px);display:none;}
+  .tour-veil.on{display:block;animation:tourFade .25s ease both;}
+  @keyframes tourFade{from{opacity:0}to{opacity:1}}
+  .tour-ring{position:absolute;border:2px solid var(--accent);border-radius:8px;box-shadow:0 0 0 9999px rgba(8,9,12,.68);transition:all .3s cubic-bezier(.4,0,.2,1);pointer-events:none;}
+  .tour-pop{position:absolute;z-index:9001;max-width:300px;background:var(--panel);border:1px solid var(--accent);border-radius:12px;padding:16px 18px;box-shadow:0 18px 50px rgba(0,0,0,.5);color:var(--cream);transition:all .3s cubic-bezier(.4,0,.2,1);}
+  .tour-pop h4{margin:0 0 6px;font-family:var(--display);font-size:16px;color:var(--cream);}
+  .tour-pop p{margin:0 0 14px;font-size:13.5px;line-height:1.55;color:var(--muted);}
+  .tour-row{display:flex;align-items:center;justify-content:space-between;gap:10px;}
+  .tour-dots{display:flex;gap:6px;}
+  .tour-dot{width:6px;height:6px;border-radius:50%;background:var(--line);}
+  .tour-dot.on{background:var(--accent);}
+  .tour-btns{display:flex;gap:8px;}
+  .tour-skip{background:none;border:0;color:var(--muted);font-size:12.5px;cursor:pointer;padding:6px 4px;}
+  .tour-skip:hover{color:var(--cream);}
+  .tour-next{background:var(--accent);color:var(--bg);border:0;border-radius:7px;padding:7px 15px;font-weight:700;font-size:13px;cursor:pointer;font-family:inherit;}
+  .tour-next:hover{filter:brightness(1.08);}
+</style>
+<div class="tour-veil" id="tourVeil">
+  <div class="tour-ring" id="tourRing"></div>
+  <div class="tour-pop" id="tourPop">
+    <h4 id="tourTitle"></h4>
+    <p id="tourBody"></p>
+    <div class="tour-row">
+      <div class="tour-dots" id="tourDots"></div>
+      <div class="tour-btns">
+        <button class="tour-skip" id="tourSkip">Saltar</button>
+        <button class="tour-next" id="tourNext">Siguiente</button>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+(function(){
+  var SEEN="crm_tour_v1";
+  var veil=document.getElementById("tourVeil"), ring=document.getElementById("tourRing"), pop=document.getElementById("tourPop");
+  var elTitle=document.getElementById("tourTitle"), elBody=document.getElementById("tourBody"), elDots=document.getElementById("tourDots");
+  var btnNext=document.getElementById("tourNext"), btnSkip=document.getElementById("tourSkip");
+  var PASOS=[
+    {sel:null, t:"Un tour de 30 segundos", b:"Te muestro lo esencial del panel en 4 pasos rapidos. Si ya lo conoces, salta sin culpa."},
+    {sel:'[data-tour="personas"]', t:"Todo empieza en Alumnos", b:"Aca agregas alumnos uno a uno, importas tu Excel de golpe o pegas tu lista tal cual. Tambien ves quien se registro en tu portal."},
+    {sel:'[data-tour="link-alumnos"]', t:"Comparte y cobra", b:"Tu link del portal para alumnos y los links de cobro directo: los copias, los mandas por WhatsApp y el alumno paga sin registrarse."},
+    {sel:'[data-tour="cobros"]', t:"Cobros sin perseguir a nadie", b:"Los pagos por Yape llegan aca y los confirmas en un clic; la tarjeta se confirma sola. Cada pago confirmado tiene su recibo imprimible."},
+    {sel:'#oiaFab', t:"Tu guia siempre a la mano", b:"Si te trabas en algo, este boton abre un asistente que responde como hacer cualquier cosa del panel. Listo!"}
+  ];
+  var i=0;
+  function pos(){
+    var p=PASOS[i], target=p.sel?document.querySelector(p.sel):null;
+    for(var d=0;d<elDots.children.length;d++){ elDots.children[d].classList.toggle("on",d===i); }
+    elTitle.textContent=p.t; elBody.textContent=p.b;
+    btnNext.textContent=(i===PASOS.length-1)?"Empezar":"Siguiente";
+    var rc = target? target.getBoundingClientRect() : null;
+    if(target && rc && rc.width>0 && rc.height>0){
+      var r=rc;
+      ring.style.display="block";
+      ring.style.top=(r.top-6)+"px"; ring.style.left=(r.left-6)+"px";
+      ring.style.width=(r.width+12)+"px"; ring.style.height=(r.height+12)+"px";
+      var below=r.bottom+14, right=r.right+14;
+      if(r.left<300){ pop.style.left=Math.min(right, window.innerWidth-320)+"px"; pop.style.top=Math.max(14,r.top)+"px"; }
+      else { pop.style.left=Math.max(14,Math.min(r.left, window.innerWidth-320))+"px"; pop.style.top=(below+180>window.innerHeight? (r.top-190):below)+"px"; }
+    } else {
+      ring.style.display="none";
+      pop.style.left="50%"; pop.style.top="50%"; pop.style.transform="translate(-50%,-50%)"; return;
+    }
+    pop.style.transform="none";
+  }
+  function abrir(){ veil.classList.add("on"); i=0; pos(); }
+  function cerrar(){ veil.classList.remove("on"); try{localStorage.setItem(SEEN,"1");}catch(e){} }
+  PASOS.forEach(function(){ var d=document.createElement("span"); d.className="tour-dot"; elDots.appendChild(d); });
+  btnNext.addEventListener("click",function(){ if(i<PASOS.length-1){ i++; pos(); return; } cerrar(); });
+  btnSkip.addEventListener("click",cerrar);
+  window.addEventListener("resize",function(){ if(veil.classList.contains("on")) pos(); });
+  window.lanzarTour=function(force){ if(force){ abrir(); return; } try{ if(localStorage.getItem(SEEN)) return; }catch(e){} setTimeout(abrir,1400); };
+  // Auto-lanzar cuando el panel ya cargo (db lista y sin marca de visto).
+  var espera=setInterval(function(){
+    try{
+      if(window.db && db.alumnos && document.getElementById("linksCobro")){
+        clearInterval(espera);
+        if(!localStorage.getItem(SEEN)) setTimeout(abrir,1400);
+      }
+    }catch(e){ clearInterval(espera); }
+  },600);
+  setTimeout(function(){ clearInterval(espera); },30000);
 })();
 </script>
 </body>

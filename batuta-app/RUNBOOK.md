@@ -124,3 +124,17 @@
 - Webhook: https://batuta.lat/app/api/wa/webhook verificado; campo "messages" suscrito (fue el bug de Fase A: toggle a media tabla, revisar de nuevo al agregar numero real). E2E completo verificado con la demo, y envio con el token permanente verificado (wa-test a Andres, 200 + wamid).
 - Demo conectada: config wa_phone_id + wa_enabled=on (se borra con el reset diario de la demo; re-setear para probar otro dia).
 - **Fase B restante**: (1) numero REAL de produccion: conseguir un numero que reciba SMS/llamada (chip prepago sirve; NO puede estar en uso en la app de WhatsApp), agregarlo en Meta > WhatsApp > Configuracion de la API > Agregar numero, verificar por SMS, y anotar su phone_number_id; (2) conectar tenants reales (poner su phone_number_id en Ajustes); (3) verificacion del negocio en Business Manager: OPCIONAL por ahora (sin RUC/empresa es cuesta arriba; sin verificar hay tope de ~250 conversaciones iniciadas por el negocio/dia y limite de numeros, pero las RESPUESTAS a mensajes entrantes — el caso de Batuta — no lo necesitan).
+
+## Importar alumnos por CSV (10-jul-2026) — EN PROD
+- Onboarding: el tenant trae su lista de Excel de golpe. Personas -> Alumnos -> boton "Importar CSV" (junto a "+ Nuevo alumno").
+- 100% CLIENT-SIDE, cero endpoints nuevos: parsea el CSV en el navegador y reusa el guardado existente (PUT /app/api/admin/data, que ya scopea por tenant/profesor server-side). Por eso NO agrega superficie de fuga entre tenants.
+- Flujo: Descargar plantilla (Nombre,Curso,WhatsApp,Paquete,Notas,Profesor) -> subir CSV -> previsualizacion (cuenta + omitidos) -> Confirmar -> push a db.alumnos + apiPut.
+- Robustez: detecta delimitador , o ; (Excel espanol); tolera comillas; mapea encabezados por alias con/sin acentos; si no hay encabezado usa el orden de la plantilla; obligatorio Nombre; omite duplicados (mismo nombre ya cargado) y filas sin nombre; limpia WhatsApp a digitos; defaults paquete="Paquete 4", pago="Pagado", fecha=hoy.
+- Multi-profesor: columna Profesor se resuelve contra EQUIPO por nombre; los no reconocidos quedan del dueno (aviso en el preview). Para un profesor (no dueno) el server ya fuerza profesor_id=el mismo, la columna se ignora (sin fuga).
+- Verificado E2E en prod contra la demo: 3 alumnos importados persistieron tras recargar (acentos/enie OK), delimitador ; OK, dedup OK. Codigo en public/panel/index.html: btnImportCsv, parseCsv, impMapHeader, impPreview, btnImpConfirmar.
+- Export (ya existia): botones "CSV alumnos" / "CSV emails" en menu lateral -> Datos y respaldo (solo dueno).
+
+## Guias de uso for-dummies (10-jul-2026)
+- 4 guias por portal (alumno / profesor / academia / academia+) en el vault: proyectos/Batuta - Guia del portal del *.md
+- Manual visual + 5 PDFs (4 por portal + completo) en ~/Desktop/Batuta-Guias/ (marca Batuta, tema claro, listos para WhatsApp). Fuente: Guias-Batuta.html.
+- Dato de diseno de producto confirmado aqui: profesor/academia/academia+ son EL MISMO panel; solo cambian asientos (MAX_PROFES 1/5/20) y el gating solo-dueno (Profesores, Interesados, Caja).
