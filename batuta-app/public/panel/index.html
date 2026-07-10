@@ -495,7 +495,7 @@
     <div class="group">
       <h2>// Procesadas</h2>
       <div class="tablewrap">
-        <table><thead><tr><th>Fecha</th><th>Quién</th><th>Paquete</th><th>Monto</th><th>Estado</th></tr></thead>
+        <table><thead><tr><th>Fecha</th><th>Quién</th><th>Paquete</th><th>Monto</th><th>Estado</th><th>Boleta</th></tr></thead>
         <tbody id="tbProcesadas"></tbody></table>
       </div>
     </div>
@@ -750,6 +750,15 @@
       <p class="hint" style="margin-top:-4px;">Salen en el portal como métodos de pago al comprar.</p>
     </div>
     <div class="group">
+      <h2>// Facturación electrónica (SUNAT)</h2>
+      <p class="hint">Emite boletas oficiales desde Pagos con tu cuenta de <b>nubefact.com</b> (tiene modo demo gratis para probar). Crea tu cuenta, copia tu RUTA y tu TOKEN de integración, y pégalos aquí. La afectación de IGV consúltala con tu contador.</p>
+      <div class="cfgrow"><span class="pk">Ruta de Nubefact</span><input id="cfg_nubefact_ruta" type="text" placeholder="https://api.nubefact.com/api/v1/..." /></div>
+      <div class="cfgrow"><span class="pk">Token de Nubefact</span><input id="cfg_nubefact_token" type="password" autocomplete="off" placeholder="tu token de integración" /></div>
+      <div class="cfgrow"><span class="pk">Serie de boletas</span><input id="cfg_fact_serie_boleta" type="text" maxlength="4" placeholder="B001" /></div>
+      <div class="cfgrow"><span class="pk">IGV</span><select id="cfg_fact_igv"><option value="">Gravado 18%</option><option value="exonerado">Exonerado</option></select></div>
+      <div class="cfgrow"><span class="pk">Próximo número (opcional)</span><input id="cfg_fact_proximo_numero" type="number" min="1" placeholder="Solo si ya emitiste boletas fuera de Batuta" /></div>
+    </div>
+    <div class="group">
       <h2>// Avisos en tu teléfono (app + push)</h2>
       <p class="hint">Instala el panel como app: en tu celular abre batuta.lat/app/panel y elige "Agregar a pantalla de inicio" (en iPhone: botón Compartir → Agregar a inicio). Luego activa los avisos aquí y te llega una notificación con cada pago por confirmar y cada reserva nueva.</p>
       <div class="rowact" style="margin-top:8px;">
@@ -835,6 +844,26 @@
     <div style="display:flex;align-items:center;gap:12px;">
       <button class="btn ghost" id="btnPwFb">Enviar y ganar 7 días</button>
       <span class="hint" id="pwFbMsg"></span>
+    </div>
+  </div>
+</div>
+
+<!-- Modal emitir boleta (SUNAT via Nubefact) -->
+<div class="overlay" id="ovBoleta">
+  <div class="modal">
+    <h3>Emitir <em>boleta electrónica</em></h3>
+    <div class="mlab">// Se genera en Nubefact y se envía a SUNAT</div>
+    <input type="hidden" id="bl_compra" />
+    <p class="hint" id="bl_resumen" style="margin:0 0 10px;"></p>
+    <div class="frow">
+      <div class="field"><label>Nombre del cliente</label><input id="bl_nombre" type="text" /></div>
+      <div class="field"><label>DNI (opcional)</label><input id="bl_dni" type="text" maxlength="8" placeholder="8 dígitos" /></div>
+    </div>
+    <p class="hint">Sin DNI la boleta sale a "CLIENTES VARIOS" (SUNAT lo permite hasta S/ 700 por boleta).</p>
+    <div class="err" id="blErr" style="color:#e8604f;font-size:13px;min-height:16px;"></div>
+    <div class="modal-actions">
+      <button class="btn ghost" data-close>Cancelar</button>
+      <button class="btn" id="btnEmitirBoleta">Emitir y enviar a SUNAT</button>
     </div>
   </div>
 </div>
@@ -1528,12 +1557,34 @@ function renderPagos(){
         '</tr>';
       }).join("");
   el("tbProcesadas").innerHTML = proc.length===0
-    ? '<tr><td colspan="5" class="empty">Aún sin compras procesadas</td></tr>'
+    ? '<tr><td colspan="6" class="empty">Aún sin compras procesadas</td></tr>'
     : proc.map(function(c){
         var p=c.estado==="confirmada"?'<span class="pill green">Confirmada</span>':'<span class="pill red">Rechazada</span>';
         return '<tr><td class="mini">'+esc(c.fecha||'')+'</td><td class="name">'+esc(nombreCuenta(c.cuenta_id))+infoReferido(c,false)+'</td>'+
-          '<td>'+esc(c.paquete)+'</td><td>S/ '+(c.monto||0)+lineaDescuento(c)+'</td><td>'+p+'</td></tr>';
+          '<td>'+esc(c.paquete)+'</td><td>S/ '+(c.monto||0)+lineaDescuento(c)+'</td><td>'+p+'</td><td>'+celdaBoleta(c)+'</td></tr>';
       }).join("");
+}
+/* ---------- Facturación SUNAT: celda de boleta por pago confirmado ---------- */
+function comprobanteDe(compraId){
+  return (db.comprobantes||[]).find(function(x){return x.compra_id===compraId;});
+}
+function facturacionConectada(){
+  return !!(db.config && db.config.nubefact_ruta && db.config.nubefact_token);
+}
+function celdaBoleta(c){
+  /* la facturación es del dueño (el profesor ni siquiera recibe la config de Nubefact) */
+  if(ROL!=="dueno") return '<span class="mini">—</span>';
+  if(c.estado!=="confirmada" || !(Number(c.monto)>0)) return '<span class="mini">—</span>';
+  var cp=comprobanteDe(c.id);
+  if(cp && cp.estado!=="emitida" && !cp.enlace_pdf){
+    return '<button class="btn ghost sm" data-boleta="'+c.id+'" title="El intento anterior no se completó: reintenta (usa el mismo número '+esc(cp.serie)+'-'+cp.numero+')">Reintentar boleta</button>';
+  }
+  if(cp){
+    var etiqueta=esc(cp.serie)+'-'+cp.numero;
+    return cp.enlace_pdf?'<a class="btn ghost sm" target="_blank" rel="noopener" href="'+esc(cp.enlace_pdf)+'">'+etiqueta+' ↗</a>':('<span class="mini">'+etiqueta+'</span>');
+  }
+  if(!facturacionConectada()) return '<span class="mini" title="Conecta Nubefact en Ajustes para emitir boletas SUNAT">—</span>';
+  return '<button class="btn ghost sm" data-boleta="'+c.id+'">Emitir boleta</button>';
 }
 
 function renderCuentas(){
@@ -1576,6 +1627,11 @@ function renderAjustes(){
   if(el("cfg_agenda_cupo")) el("cfg_agenda_cupo").value=(db.config&&db.config.agenda_cupo)||"";
   if(el("cfg_recordatorios_clase")) el("cfg_recordatorios_clase").value=(db.config&&db.config.recordatorios_clase)||"";
   if(el("cfg_recordatorio_renovacion")) el("cfg_recordatorio_renovacion").value=(db.config&&db.config.recordatorio_renovacion)||"";
+  if(el("cfg_nubefact_ruta")) el("cfg_nubefact_ruta").value=(db.config&&db.config.nubefact_ruta)||"";
+  if(el("cfg_nubefact_token")) el("cfg_nubefact_token").value=(db.config&&db.config.nubefact_token)||"";
+  if(el("cfg_fact_serie_boleta")) el("cfg_fact_serie_boleta").value=(db.config&&db.config.fact_serie_boleta)||"";
+  if(el("cfg_fact_igv")) el("cfg_fact_igv").value=(db.config&&db.config.fact_igv)||"";
+  if(el("cfg_fact_proximo_numero")) el("cfg_fact_proximo_numero").value=(db.config&&db.config.fact_proximo_numero)||"";
   el("cfg_google_client_id").value=(db.config&&db.config.google_client_id)||"";
   el("cfg_bcp_cuenta").value=(db.config&&db.config.bcp_cuenta)||"";
   el("cfg_bcp_cci").value=(db.config&&db.config.bcp_cci)||"";
@@ -1845,6 +1901,35 @@ if(el("panel-leads")) el("panel-leads").addEventListener("change",function(e){
   apiPost("/app/api/admin/lead",{accion:"etapa",id:s.dataset.leadetapa,etapa:s.value})
     .then(function(){ toast("Etapa: "+etapaNombre(s.value)+" ✓"); return recargar(); })
     .catch(function(err){ toast((err&&err.message)||"No se pudo"); });
+});
+
+/* ---------- Facturación SUNAT: emitir boleta desde un pago ---------- */
+if(el("panel-pagos")) el("panel-pagos").addEventListener("click",function(e){
+  var b=e.target.closest("[data-boleta]");
+  if(!b) return;
+  var c=(db.compras||[]).find(function(x){return x.id===b.dataset.boleta;});
+  if(!c) return;
+  el("bl_compra").value=c.id;
+  el("bl_resumen").textContent=(c.paquete||"")+(c.curso?" de "+c.curso:"")+" · S/ "+(c.monto||0)+" · "+(nombreCuenta(c.cuenta_id)||"");
+  el("bl_nombre").value=nombreCuenta(c.cuenta_id)||"";
+  el("bl_dni").value=""; el("blErr").textContent="";
+  openOv("ovBoleta");
+});
+if(el("btnEmitirBoleta")) el("btnEmitirBoleta").addEventListener("click",function(){
+  var err=el("blErr"); err.textContent="";
+  var dni=el("bl_dni").value.trim();
+  if(dni && !/^\d{8}$/.test(dni)){ err.textContent="El DNI son 8 dígitos (o déjalo vacío)."; return; }
+  var cb=(db.compras||[]).find(function(x){return x.id===el("bl_compra").value;});
+  if(cb && Number(cb.monto)>=700 && !/^\d{8}$/.test(dni)){ err.textContent="SUNAT exige DNI para boletas de S/ 700 o más."; return; }
+  var btn=el("btnEmitirBoleta"); btn.disabled=true; btn.textContent="Emitiendo…";
+  apiPost("/app/api/admin/comprobante",{compra_id:el("bl_compra").value,cliente_nombre:el("bl_nombre").value.trim(),cliente_dni:dni})
+    .then(function(d){
+      closeOv("ovBoleta");
+      toast("Boleta "+d.serie+"-"+d.numero+" emitida ✓"+(d.aceptada_por_sunat?" (aceptada por SUNAT)":""),4000);
+      return recargar();
+    })
+    .catch(function(e2){ err.textContent=(e2&&e2.message)||"No se pudo emitir."; })
+    .finally(function(){ btn.disabled=false; btn.textContent="Emitir y enviar a SUNAT"; });
 });
 
 /* ---------- Caja: gastos + P&L del mes ---------- */
@@ -2794,6 +2879,11 @@ el("btnGuardarAjustes").addEventListener("click",function(){
             agenda_cupo:(el("cfg_agenda_cupo")?el("cfg_agenda_cupo").value.trim():""),
             recordatorios_clase:(el("cfg_recordatorios_clase")?el("cfg_recordatorios_clase").value:""),
             recordatorio_renovacion:(el("cfg_recordatorio_renovacion")?el("cfg_recordatorio_renovacion").value:""),
+            nubefact_ruta:(el("cfg_nubefact_ruta")?el("cfg_nubefact_ruta").value.trim():""),
+            nubefact_token:(el("cfg_nubefact_token")?el("cfg_nubefact_token").value.trim():""),
+            fact_serie_boleta:(el("cfg_fact_serie_boleta")?el("cfg_fact_serie_boleta").value.trim():""),
+            fact_igv:(el("cfg_fact_igv")?el("cfg_fact_igv").value:""),
+            fact_proximo_numero:(el("cfg_fact_proximo_numero")?el("cfg_fact_proximo_numero").value.trim():""),
             pago_numero:el("cfg_pago_numero").value.trim(),
             pago_titular:el("cfg_pago_titular").value.trim(),
             google_client_id:el("cfg_google_client_id").value.trim(),

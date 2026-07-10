@@ -1544,8 +1544,96 @@ async function ensureErpSchema(env){
     ).run();
   } catch (e) {}
   try { await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_gastos_tenant ON gastos (tenant_id, fecha)").run(); } catch (e) {}
+  /* Facturacion electronica SUNAT via Nubefact (10-jul-2026): boletas emitidas desde Pagos.
+     El numero se RESERVA con un INSERT antes de llamar a Nubefact (el UNIQUE de abajo mata
+     la carrera de dos emisiones simultaneas); estado: reservada -> emitida | error. */
+  try {
+    await env.DB.prepare(
+      "CREATE TABLE IF NOT EXISTS comprobantes (id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, compra_id TEXT DEFAULT '', tipo TEXT DEFAULT 'boleta', serie TEXT NOT NULL, numero INTEGER NOT NULL, cliente TEXT DEFAULT '', cliente_doc TEXT DEFAULT '', total REAL DEFAULT 0, fecha TEXT DEFAULT '', enlace_pdf TEXT DEFAULT '', enlace_xml TEXT DEFAULT '', enlace_cdr TEXT DEFAULT '', aceptada INTEGER DEFAULT 0, estado TEXT DEFAULT 'emitida', creado TEXT DEFAULT '')"
+    ).run();
+  } catch (e) {}
+  try { await env.DB.prepare("ALTER TABLE comprobantes ADD COLUMN estado TEXT DEFAULT 'emitida'").run(); } catch (e) {}
+  try { await env.DB.prepare("CREATE UNIQUE INDEX IF NOT EXISTS idx_comprobantes_serie ON comprobantes (tenant_id, serie, numero)").run(); } catch (e) {}
 }
 const ETAPAS_LEAD = ["nuevo", "contactado", "prueba", "alumno", "perdido"];
+
+/* ---------- Facturacion electronica SUNAT (Nubefact, 10-jul-2026) ----------
+   El tenant conecta SU cuenta de Nubefact en Ajustes (ruta + token; nubefact.com,
+   tiene modo demo gratis). Emitimos BOLETAS (tipo 2) desde un pago confirmado:
+   Nubefact genera PDF/XML, lo manda a SUNAT y devuelve los enlaces. Afectacion IGV
+   configurable (gravado 18% | exonerado) porque depende de cada academia y su contador.
+   Sin credenciales -> 501 con guia (patron de la casa: degradar con gracia). */
+function fechaEmisionLima(){
+  const d = hoyLima().split("-"); /* YYYY-MM-DD -> DD-MM-YYYY */
+  return d[2] + "-" + d[1] + "-" + d[0];
+}
+async function emitirBoletaNubefact(env, cfg, datos){
+  /* datos: {serie, numero, clienteNombre, clienteDni, descripcion, total, exonerado} */
+  const total = Math.round(datos.total * 100) / 100;
+  let gravada = 0, igv = 0, exonerada = 0, tipoIgvItem = 1, valorUnit = total;
+  if (datos.exonerado){
+    exonerada = total; tipoIgvItem = 8; /* 8 = exonerado, operacion onerosa */
+  } else {
+    gravada = Math.round((total / 1.18) * 100) / 100;
+    igv = Math.round((total - gravada) * 100) / 100;
+    valorUnit = gravada;
+  }
+  const conDni = /^\d{8}$/.test(String(datos.clienteDni || ""));
+  const body = {
+    operacion: "generar_comprobante",
+    tipo_de_comprobante: 2, /* boleta */
+    serie: datos.serie,
+    numero: String(datos.numero),
+    sunat_transaction: 1,
+    cliente_tipo_de_documento: conDni ? 1 : "-",
+    cliente_numero_de_documento: conDni ? String(datos.clienteDni) : "00000000",
+    cliente_denominacion: String(datos.clienteNombre || "CLIENTES VARIOS").slice(0, 100),
+    cliente_direccion: "", cliente_email: "", cliente_email_1: "", cliente_email_2: "",
+    fecha_de_emision: fechaEmisionLima(),
+    fecha_de_vencimiento: "", moneda: "1", tipo_de_cambio: "",
+    porcentaje_de_igv: "18.00",
+    descuento_global: "", total_descuento: "", total_anticipo: "",
+    total_gravada: datos.exonerado ? "" : String(gravada),
+    total_inafecta: "",
+    total_exonerada: datos.exonerado ? String(exonerada) : "",
+    total_igv: datos.exonerado ? "" : String(igv),
+    total_gratuita: "", total_otros_cargos: "",
+    total: String(total),
+    percepcion_tipo: "", percepcion_base_imponible: "", total_percepcion: "",
+    total_incluido_percepcion: "", detraccion: "false", observaciones: "",
+    documento_que_se_modifica_tipo: "", documento_que_se_modifica_serie: "",
+    documento_que_se_modifica_numero: "", tipo_de_nota_de_credito: "", tipo_de_nota_de_debito: "",
+    enviar_automaticamente_a_la_sunat: "true",
+    enviar_automaticamente_al_cliente: "false",
+    codigo_unico: "", condiciones_de_pago: "", medio_de_pago: "", placa_vehiculo: "",
+    orden_compra_servicio: "", tabla_personalizada_codigo: "", formato_de_pdf: "",
+    items: [{
+      unidad_de_medida: "ZZ", /* servicio */
+      codigo: "001",
+      descripcion: String(datos.descripcion || "Servicio educativo").slice(0, 250),
+      cantidad: "1",
+      valor_unitario: String(valorUnit),
+      precio_unitario: String(total),
+      descuento: "",
+      subtotal: String(valorUnit),
+      tipo_de_igv: String(tipoIgvItem),
+      igv: datos.exonerado ? "0" : String(igv),
+      total: String(total),
+      anticipo_regularizacion: "false", anticipo_documento_serie: "", anticipo_documento_numero: "",
+      codigo_producto_sunat: ""
+    }]
+  };
+  const resp = await fetch(String(cfg.nubefact_ruta), {
+    method: "POST",
+    headers: { "Authorization": 'Token token="' + String(cfg.nubefact_token) + '"', "Content-Type": "application/json" },
+    body: JSON.stringify(body)
+  });
+  const data = await resp.json().catch(() => null);
+  if (!data) return { ok: false, error: "Nubefact no respondio (HTTP " + resp.status + "). Revisa la ruta y el token en Ajustes." };
+  if (data.errors) return { ok: false, error: "Nubefact: " + String(data.errors).slice(0, 300) };
+  if (!resp.ok) return { ok: false, error: "Nubefact HTTP " + resp.status };
+  return { ok: true, data };
+}
 /* Cupo efectivo de UN slot: el de la franja si es >0, si no el global del tenant. */
 async function cupoDeSlot(env, tenantId, iso, prof, cfg){
   try {
@@ -1630,6 +1718,48 @@ async function recordatoriosDeClase(env){
   }
   return enviados;
 }
+/* Correo diario al DUENO: "tienes N interesados por seguir hoy" con la lista y el
+   link a su pipeline. Empuja la venta del tenant sin que abra el panel (1/dia, cron diario). */
+async function seguimientoLeadsDueno(env){
+  if (!env.RESEND_API_KEY) return 0;
+  const hoyL = hoyLima();
+  let rows = [];
+  try {
+    rows = ((await env.DB.prepare(
+      "SELECT l.tenant_id, l.nombre, l.email AS lead_email, l.whatsapp, l.interes, l.etapa, t.email AS dueno_email, t.academia " +
+      "FROM leads l JOIN tenants t ON t.id = l.tenant_id AND t.estado != 'vencido' AND t.email != ?1 " +
+      "WHERE COALESCE(l.seguir_el,'') != '' AND l.seguir_el <= ?2 AND COALESCE(l.etapa,'nuevo') NOT IN ('alumno','perdido') " +
+      "ORDER BY l.tenant_id, l.seguir_el LIMIT 300"
+    ).bind(DEMO_EMAIL, hoyL).all()).results) || [];
+  } catch (e) { return 0; }
+  const porTenant = new Map();
+  for (const r of rows){
+    if (!porTenant.has(r.tenant_id)) porTenant.set(r.tenant_id, { email: r.dueno_email, academia: r.academia, leads: [] });
+    porTenant.get(r.tenant_id).leads.push(r);
+  }
+  let enviados = 0;
+  for (const [, tInfo] of porTenant){
+    if (enviados >= 40) break;
+    if (!tInfo.email) continue;
+    const n = tInfo.leads.length;
+    const filas = tInfo.leads.slice(0, 10).map(l =>
+      "<li><b>" + esc(l.nombre || l.lead_email || l.whatsapp || "(sin nombre)") + "</b>" +
+      (l.interes ? " · " + esc(l.interes) : "") + " · etapa: " + esc(l.etapa || "nuevo") + "</li>").join("");
+    let ok = false;
+    try {
+      ok = await enviarCorreo(env, {
+        to: tInfo.email,
+        subject: "Tienes " + n + " interesado" + (n === 1 ? "" : "s") + " por seguir hoy",
+        html: "<p>Hoy toca escribirle a " + n + " interesado" + (n === 1 ? "" : "s") + " de <b>" + esc(tInfo.academia || "tu academia") + "</b>:</p>" +
+          "<ul>" + filas + "</ul>" + (n > 10 ? "<p>...y " + (n - 10) + " mas.</p>" : "") +
+          "<p><a href=\"" + MARCA.dominio + "/app/panel\"><b>Abrir mi pipeline</b></a> (el boton WhatsApp te arma el mensaje solo).</p>"
+      });
+    } catch (e) {}
+    if (ok) enviados++;
+  }
+  return enviados;
+}
+
 async function recordatorioRenovacion(env){
   if (!env.RESEND_API_KEY) return 0;
   const { results } = await env.DB.prepare(
@@ -1687,7 +1817,7 @@ async function resetDemo(env){
   ).bind(tid, new Date(Date.now() + 3650 * 86400000).toISOString()).run();
 
   // Borrón total de los datos del tenant demo (las sesiones de visitantes mueren con el reset).
-  const tablas = ["alumnos", "registro", "pausas", "precios", "config", "disponibilidad", "reservas", "grupos", "cuentas", "compras", "recursos", "ejercicios", "chat_mensajes", "push_subs", "leads", "feedback", "gastos"];
+  const tablas = ["alumnos", "registro", "pausas", "precios", "config", "disponibilidad", "reservas", "grupos", "cuentas", "compras", "recursos", "ejercicios", "chat_mensajes", "push_subs", "leads", "feedback", "gastos", "comprobantes"];
   await env.DB.batch(tablas.map(tb => env.DB.prepare("DELETE FROM " + tb + " WHERE tenant_id = ?1").bind(tid)));
   await env.DB.prepare("DELETE FROM sesiones WHERE cuenta_id = ?1 OR cuenta_id LIKE 'demo-cu-%'").bind("T:" + tid).run();
 
@@ -1798,13 +1928,34 @@ async function resetDemo(env){
       "INSERT INTO compras (id,tenant_id,cuenta_id,curso,paquete,monto,op_numero,estado,fecha,metodo) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10)"
     ).bind(cp[0], tid, cp[1], cp[2], cp[3], cp[4], cp[5], cp[6], cp[7], cp[8]));
   }
-  // leads capturados en el portal
-  const leads = [["carla.mv@gmail.com", "Canto", f(0)], ["jsoto94@gmail.com", "Piano", f(1)], ["andrea.qp@gmail.com", "Canto", f(3)]];
+  // CRM: pipeline con etapas variadas para que la demo luzca el embudo completo
+  // (nombre, email, whatsapp, interes, fecha, etapa, nota, seguir_el)
+  const hoyDemo = new Date(Date.now() - 5 * 3600000).toISOString().slice(0, 10);
+  const leads = [
+    ["Carla Mendoza", "carla.mv@gmail.com", "51987654321", "Canto", f(0), "nuevo", "Dejó su correo en la web", ""],
+    ["Jorge Soto", "jsoto94@gmail.com", "51976543210", "Piano", f(1), "contactado", "Le mandé precios, quedó en avisar", hoyDemo],
+    ["Andrea Quispe", "andrea.qp@gmail.com", "51965432109", "Canto", f(3), "prueba", "Prueba el sábado 10am", ""],
+    ["Lucía Paredes", "", "51954321098", "Canto", f(5), "alumno", "Cerró con Paquete 4", ""],
+    ["Marco Díaz", "marco.dz@gmail.com", "", "Piano", f(9), "perdido", "Se fue por horarios, retomar en agosto", ""]
+  ];
   leads.forEach((l, i) => {
     stmts.push(env.DB.prepare(
-      "INSERT INTO leads (id,tenant_id,email,marca,fuente,interes,fecha) VALUES (?1,?2,?3,'Batuta','Portal',?4,?5)"
-    ).bind("demo-ld-" + (i + 1), tid, l[0], l[1], l[2]));
+      "INSERT INTO leads (id,tenant_id,email,marca,fuente,interes,fecha,nombre,whatsapp,etapa,nota,seguir_el,actualizado) VALUES (?1,?2,?3,'Batuta','Portal',?4,?5,?6,?7,?8,?9,?10,?5)"
+    ).bind("demo-ld-" + (i + 1), tid, l[1], l[3], l[4], l[0], l[2], l[5], l[6], l[7]));
   });
+  // Caja: gastos del mes para que el P&L muestre numeros reales
+  const gastosDemo = [
+    ["demo-gs-1", f(8),  "Alquiler del estudio", "Local", 650],
+    ["demo-gs-2", f(6),  "Publicidad en Instagram", "Marketing", 120],
+    ["demo-gs-3", f(2),  "Afinación del piano", "Materiales", 180]
+  ];
+  for (const g of gastosDemo){
+    stmts.push(env.DB.prepare(
+      "INSERT INTO gastos (id,tenant_id,fecha,concepto,categoria,monto,creado) VALUES (?1,?2,?3,?4,?5,?6,?3)"
+    ).bind(g[0], tid, g[1], g[2], g[3], g[4]));
+  }
+  // comisión del dueño demo: luce la liquidación (20% + S/15 por clase)
+  stmts.push(env.DB.prepare("UPDATE profesores SET comision_pct = 20, tarifa_clase = 15 WHERE tenant_id = ?1 AND rol = 'dueno'").bind(tid));
   // material: publicado para alumnos + biblioteca privada
   stmts.push(env.DB.prepare("INSERT INTO recursos (id,tenant_id,titulo,descripcion,url,curso,fecha) VALUES ('demo-rc-1',?1,'Guía de respiración diafragmática','PDF con la rutina de 10 minutos','https://batuta.lat/demo','Todos',?2)").bind(tid, f(5)));
   stmts.push(env.DB.prepare("INSERT INTO recursos (id,tenant_id,titulo,descripcion,url,curso,fecha) VALUES ('demo-rc-2',?1,'Playlist de repertorio del mes','Para elegir tu próxima canción','https://open.spotify.com','Canto',?2)").bind(tid, f(12)));
@@ -4328,6 +4479,96 @@ export default {
           return json({ ok: true });
         }
 
+        /* -------- Facturacion electronica: emitir BOLETA de un pago confirmado (SOLO dueno) -------- */
+        if (path === "/app/api/admin/comprobante" && request.method === "POST"){
+          if (!esDueno) return json({ error: "La facturacion la maneja el dueno." }, 403);
+          await ensureErpSchema(env);
+          const cfgF = await loadConfig(env, tid);
+          if (!cfgF.nubefact_ruta || !cfgF.nubefact_token){
+            return json({ error: "Conecta tu cuenta de Nubefact en Ajustes (ruta y token) para emitir boletas. Crea tu cuenta en nubefact.com: tiene modo demo gratis." }, 501);
+          }
+          /* solo hablamos con Nubefact (el token viaja en el header: nada de rutas arbitrarias) */
+          let hostOk = false;
+          try { const uF = new URL(String(cfgF.nubefact_ruta)); hostOk = uF.protocol === "https:" && (uF.hostname === "nubefact.com" || uF.hostname.endsWith(".nubefact.com")); } catch (e) {}
+          if (!hostOk) return json({ error: "La ruta de Nubefact no parece valida: debe ser la URL que te da nubefact.com (api.nubefact.com/...)." }, 400);
+
+          const b = await request.json().catch(() => ({}));
+          const compra = await env.DB.prepare("SELECT * FROM compras WHERE id = ?1 AND tenant_id = ?2").bind(String(b.compra_id || ""), tid).first();
+          if (!compra) return json({ error: "Pago no encontrado" }, 404);
+          if (compra.estado !== "confirmada") return json({ error: "Solo se emiten boletas de pagos confirmados." }, 400);
+          const monto = Math.round((Number(compra.monto) || 0) * 100) / 100;
+          if (!(monto > 0)) return json({ error: "Ese pago tiene monto 0: no hay que emitir boleta." }, 400);
+
+          let clienteNombre = String(b.cliente_nombre || "").trim().slice(0, 100);
+          if (!clienteNombre && compra.cuenta_id){
+            const cuF = await env.DB.prepare("SELECT nombre FROM cuentas WHERE id = ?1 AND tenant_id = ?2").bind(compra.cuenta_id, tid).first();
+            clienteNombre = (cuF && cuF.nombre) || "";
+          }
+          const clienteDni = String(b.cliente_dni || "").replace(/\D/g, "").slice(0, 8);
+          /* regla SUNAT: boletas de S/700 o mas requieren identificar al comprador */
+          if (monto >= 700 && !/^\d{8}$/.test(clienteDni)){
+            return json({ error: "SUNAT exige DNI del cliente para boletas de S/ 700 o mas. Ponlo y vuelve a emitir." }, 400);
+          }
+          const descF = (compra.paquete || "Servicio educativo") + (compra.curso ? " de " + compra.curso : "") + " - clases";
+
+          /* ya emitida -> devolverla; reserva colgada de un intento fallido -> REUSAR su numero
+             (Nubefact es idempotente por serie-numero: si llego a generarse, devuelve ese mismo doc). */
+          const ya = await env.DB.prepare("SELECT * FROM comprobantes WHERE tenant_id = ?1 AND compra_id = ?2").bind(tid, compra.id).first().catch(() => null);
+          if (ya && ya.estado === "emitida") return json({ ok: true, ya_emitida: true, serie: ya.serie, numero: ya.numero, enlace_pdf: ya.enlace_pdf });
+
+          let serieF = String(cfgF.fact_serie_boleta || "B001").toUpperCase();
+          if (!/^B[A-Z0-9]{3}$/.test(serieF)) serieF = "B001";
+
+          /* RESERVA ATOMICA del correlativo: INSERT antes de llamar a Nubefact; el indice
+             UNIQUE (tenant, serie, numero) mata la carrera de dos emisiones simultaneas
+             (hallazgo critico del review). Si chocan, se recalcula y reintenta. */
+          let reservaId, numeroF;
+          if (ya){
+            reservaId = ya.id; numeroF = ya.numero; serieF = ya.serie;
+          } else {
+            const desde = parseInt(cfgF.fact_proximo_numero, 10);
+            reservaId = crypto.randomUUID();
+            let reservado = false;
+            for (let intento = 0; intento < 4 && !reservado; intento++){
+              const maxRow = await env.DB.prepare("SELECT MAX(numero) AS m FROM comprobantes WHERE tenant_id = ?1 AND serie = ?2").bind(tid, serieF).first();
+              numeroF = Math.max((Number(maxRow && maxRow.m) || 0) + 1, (Number.isFinite(desde) && desde >= 1) ? desde : 1) + intento;
+              try {
+                await env.DB.prepare(
+                  "INSERT INTO comprobantes (id,tenant_id,compra_id,tipo,serie,numero,cliente,cliente_doc,total,fecha,aceptada,estado,creado) VALUES (?1,?2,?3,'boleta',?4,?5,?6,?7,?8,?9,0,'reservada',?10)"
+                ).bind(reservaId, tid, compra.id, serieF, numeroF, clienteNombre || "CLIENTES VARIOS", clienteDni || "", monto, hoyLima(), new Date().toISOString()).run();
+                reservado = true;
+              } catch (e) { /* UNIQUE: otro request tomo ese numero, probar el siguiente */ }
+            }
+            if (!reservado) return json({ error: "No pude reservar un numero de boleta. Intenta de nuevo." }, 409);
+          }
+
+          const r = await emitirBoletaNubefact(env, cfgF, {
+            serie: serieF, numero: numeroF,
+            clienteNombre, clienteDni,
+            descripcion: descF, total: monto,
+            exonerado: cfgF.fact_igv === "exonerado"
+          });
+          if (!r.ok){
+            /* Nubefact RECHAZO con error explicito antes de generar -> liberar el numero.
+               "ya existe" (codigo 23) o falla de red/lectura: NO liberar (pudo generarse):
+               la reserva queda y el reintento de esta compra reusa el mismo numero. */
+            const esRechazoLimpio = /nubefact:/i.test(String(r.error || "")) && !/ya existe/i.test(String(r.error || ""));
+            if (esRechazoLimpio && !ya){
+              try { await env.DB.prepare("DELETE FROM comprobantes WHERE id = ?1 AND tenant_id = ?2 AND estado = 'reservada'").bind(reservaId, tid).run(); } catch (e) {}
+            }
+            return json({ error: r.error + (esRechazoLimpio ? "" : " El numero " + serieF + "-" + numeroF + " quedo reservado: reintenta esta misma boleta.") }, 502);
+          }
+          const d = r.data || {};
+          /* defensa: si Nubefact devolvio OTRO documento (serie/numero distintos), no lo ligamos */
+          if ((d.serie && String(d.serie) !== serieF) || (d.numero && String(d.numero) !== String(numeroF))){
+            return json({ error: "Nubefact devolvio un documento distinto (" + String(d.serie) + "-" + String(d.numero) + "). Revisa tu panel de Nubefact y el 'Proximo numero' en Ajustes." }, 502);
+          }
+          await env.DB.prepare(
+            "UPDATE comprobantes SET enlace_pdf = ?1, enlace_xml = ?2, enlace_cdr = ?3, aceptada = ?4, estado = 'emitida' WHERE id = ?5 AND tenant_id = ?6"
+          ).bind(String(d.enlace_del_pdf || ""), String(d.enlace_del_xml || ""), String(d.enlace_del_cdr || ""), d.aceptada_por_sunat ? 1 : 0, reservaId, tid).run();
+          return json({ ok: true, serie: serieF, numero: numeroF, enlace_pdf: String(d.enlace_del_pdf || ""), aceptada_por_sunat: !!d.aceptada_por_sunat });
+        }
+
         /* -------- Liquidacion mensual por profesor (SOLO dueno) --------
            ingresos = compras confirmadas del mes atribuidas al profe (NULL = dueno);
            clases = registros 'Asistió' del mes de SUS alumnos (asignacion actual);
@@ -4599,8 +4840,22 @@ export default {
               gastos = (await env.DB.prepare("SELECT id,fecha,concepto,categoria,monto FROM gastos WHERE tenant_id = ?1 ORDER BY fecha DESC, rowid DESC LIMIT 2000").bind(tid).all()).results || [];
             } catch (e) { gastos = []; }
           }
+          /* comprobantes SUNAT emitidos (para pintar el link de la boleta en Pagos): solo el dueno */
+          let comprobantes = [];
+          if (esDueno){
+            try {
+              comprobantes = (await env.DB.prepare("SELECT compra_id, serie, numero, enlace_pdf, aceptada, COALESCE(estado,'emitida') AS estado FROM comprobantes WHERE tenant_id = ?1 ORDER BY rowid DESC LIMIT 2000").bind(tid).all()).results || [];
+            } catch (e) { comprobantes = []; }
+          }
           const precios  = await loadPrecios(env, tid);
           const config   = await loadConfig(env, tid);
+          /* HALLAZGO del review: el rol profesor NO recibe secretos del tenant (con el token
+             de Nubefact podria emitir comprobantes por fuera saltandose el guard del dueno). */
+          if (!esDueno){
+            for (const kSec of ["nubefact_token", "nubefact_ruta", "fact_proximo_numero", "gcal_client_secret", "gcal_client_id", "bcp_cuenta", "bcp_cci", "scotia_cuenta", "scotia_cci", "crypto_wallet"]){
+              if (kSec in config) delete config[kSec];
+            }
+          }
           const grupos   = ((await env.DB.prepare(
             "SELECT * FROM grupos WHERE tenant_id = ?1 AND (?2 = 1 OR profesor_id = ?3) ORDER BY creado DESC, rowid DESC"
           ).bind(tid, esDueno ? 1 : 0, profeActorId || "").all()).results || [])
@@ -4613,7 +4868,7 @@ export default {
             ).bind(tid).all();
             equipo = eqRows || [];
           } catch (e) {}
-          return json({ alumnos, registro, precios, cuentas, compras, recursos, ejercicios, leads, gastos, config, grupos,
+          return json({ alumnos, registro, precios, cuentas, compras, recursos, ejercicios, leads, gastos, comprobantes, config, grupos,
                         slug: t.slug, academia: t.academia, estado: t.estado, demo: t.email === DEMO_EMAIL,
                         rol: esDueno ? "dueno" : "profesor", profe_id: profeActorId || "", equipo,
                         vapid_public: env.VAPID_PUBLIC_KEY || "" });
@@ -4739,7 +4994,7 @@ export default {
           /* config del tenant (cobros, marca, cupo, cursos): SOLO el dueno */
           if (!esDueno) return json({ error: "Los ajustes de la academia los maneja el dueno." }, 403);
           const b = await request.json().catch(() => ({}));
-          const claves = ["pago_numero", "pago_titular", "bcp_cuenta", "bcp_cci", "scotia_cuenta", "scotia_cci", "crypto_moneda", "crypto_red", "crypto_wallet", "profe_nombre", "profe_marca", "profe_foto", "whatsapp_profe", "cursos", "brand_color", "brand_font", "agenda_cupo", "recordatorios_clase", "recordatorio_renovacion"];
+          const claves = ["pago_numero", "pago_titular", "bcp_cuenta", "bcp_cci", "scotia_cuenta", "scotia_cci", "crypto_moneda", "crypto_red", "crypto_wallet", "profe_nombre", "profe_marca", "profe_foto", "whatsapp_profe", "cursos", "brand_color", "brand_font", "agenda_cupo", "recordatorios_clase", "recordatorio_renovacion", "nubefact_ruta", "nubefact_token", "fact_serie_boleta", "fact_igv", "fact_proximo_numero"];
           const stmts = [];
           for (const k of claves){
             if (k in b){
@@ -4753,6 +5008,21 @@ export default {
               if (k === "agenda_cupo"){
                 const nc = parseInt(valor, 10);
                 valor = (Number.isFinite(nc) && nc >= 1 && nc <= 20) ? String(nc) : "";
+              }
+              /* facturacion SUNAT: solo la URL real de Nubefact, serie B### y valores sanos */
+              if (k === "nubefact_ruta" && valor){
+                let okRuta = false;
+                try { const u = new URL(valor); okRuta = u.protocol === "https:" && (u.hostname === "nubefact.com" || u.hostname.endsWith(".nubefact.com")); } catch (e) {}
+                if (!okRuta) valor = "";
+              }
+              if (k === "fact_serie_boleta" && valor){
+                valor = valor.toUpperCase();
+                if (!/^B[A-Z0-9]{3}$/.test(valor)) valor = "";
+              }
+              if (k === "fact_igv" && valor && ["gravado", "exonerado"].indexOf(valor) === -1) valor = "";
+              if (k === "fact_proximo_numero" && valor){
+                const np = parseInt(valor, 10);
+                valor = (Number.isFinite(np) && np >= 1 && np <= 99999999) ? String(np) : "";
               }
               stmts.push(env.DB.prepare(
                 "INSERT INTO config (tenant_id, clave, valor) VALUES (?1, ?2, ?3) ON CONFLICT(tenant_id, clave) DO UPDATE SET valor = ?3"
@@ -5146,6 +5416,7 @@ export default {
     if (!(dSched.getUTCHours() === 14 && dSched.getUTCMinutes() === 0)) return;
     /* ---- desde aqui: SOLO la corrida diaria de las 9am Lima ---- */
     try { await recordatorioRenovacion(env); } catch (e) { console.error("recordatorio renovacion", e); }
+    try { await seguimientoLeadsDueno(env); } catch (e) { console.error("seguimiento leads dueno", e); }
     /* Nurture de trial (dia 1/3/6) + cierre proactivo del vencido. 1 corrida/dia (cron 14:00 UTC = 9am Lima).
        Migracion perezosa: la columna se crea sola en la primera corrida (patron MVT). */
     try { await env.DB.prepare("ALTER TABLE tenants ADD COLUMN nurture_paso INTEGER DEFAULT 0").run(); } catch (e) { /* ya existe */ }

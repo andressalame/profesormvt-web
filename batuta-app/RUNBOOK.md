@@ -74,3 +74,16 @@
 - **Cupo por franja:** disponibilidad.cupo (0 = usa el cupo global de Ajustes). Doble clic en la celda
   del horario para asignarlo. Permite grupos y 1-a-1 conviviendo en la misma agenda.
 - Schema: ALTERs perezosos via ensureErpSchema (corre solo en los endpoints nuevos; SELECTs con fallback).
+
+## Facturacion electronica SUNAT via Nubefact (10-jul-2026)
+- Por tenant, en Ajustes: ruta + token de su cuenta nubefact.com (modo demo gratis), serie B### (default B001),
+  IGV gravado|exonerado (que lo decida su contador), "proximo numero" opcional si ya emitia fuera de Batuta.
+- Emision: Pagos -> boton "Emitir boleta" en compras confirmadas (SOLO dueno; el rol profesor ni recibe la config).
+- Robustez (review adversarial): numero RESERVADO con INSERT + UNIQUE(tenant,serie,numero) antes de llamar a
+  Nubefact (sin carreras); si Nubefact rechaza limpio se libera el numero, si falla la red el numero queda
+  reservado y el reintento de la MISMA compra lo reusa (Nubefact es idempotente por serie-numero); la respuesta
+  se valida contra lo enviado; DNI obligatorio para boletas >= S/700 (regla SUNAT); ruta solo *.nubefact.com.
+- OJO: "aceptada" refleja la respuesta de generacion; las boletas van a SUNAT por resumen diario (asincrono).
+  Reconsulta automatica del estado = mejora futura si algun tenant la pide.
+- Correo diario al dueno "N interesados por seguir hoy" en el cron de 9am (seguimientoLeadsDueno).
+- La demo se siembra con pipeline CRM (5 etapas) + gastos + comision, y limpia comprobantes en su reset.
