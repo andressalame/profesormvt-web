@@ -1572,19 +1572,24 @@ function facturacionConectada(){
   return !!(db.config && db.config.nubefact_ruta && db.config.nubefact_token);
 }
 function celdaBoleta(c){
-  /* la facturación es del dueño (el profesor ni siquiera recibe la config de Nubefact) */
+  /* los comprobantes los maneja el dueño (el profesor ni recibe la config de Nubefact) */
   if(ROL!=="dueno") return '<span class="mini">—</span>';
   if(c.estado!=="confirmada" || !(Number(c.monto)>0)) return '<span class="mini">—</span>';
+  /* Recibo universal: sirve en cualquier país, siempre disponible */
+  var recibo='<a class="btn ghost sm" target="_blank" rel="noopener" href="/app/r/'+encodeURIComponent(c.id)+'" title="Recibo con tu marca para enviar al alumno (cualquier país)">Recibo ↗</a>';
+  var boleta;
   var cp=comprobanteDe(c.id);
   if(cp && cp.estado!=="emitida" && !cp.enlace_pdf){
-    return '<button class="btn ghost sm" data-boleta="'+c.id+'" title="El intento anterior no se completó: reintenta (usa el mismo número '+esc(cp.serie)+'-'+cp.numero+')">Reintentar boleta</button>';
-  }
-  if(cp){
+    boleta='<button class="btn ghost sm" data-boleta="'+c.id+'" title="El intento anterior no se completó: reintenta (usa el mismo número '+esc(cp.serie)+'-'+cp.numero+')">Reintentar boleta</button>';
+  } else if(cp){
     var etiqueta=esc(cp.serie)+'-'+cp.numero;
-    return cp.enlace_pdf?'<a class="btn ghost sm" target="_blank" rel="noopener" href="'+esc(cp.enlace_pdf)+'">'+etiqueta+' ↗</a>':('<span class="mini">'+etiqueta+'</span>');
+    boleta=cp.enlace_pdf?'<a class="btn ghost sm" target="_blank" rel="noopener" href="'+esc(cp.enlace_pdf)+'">Boleta '+etiqueta+' ↗</a>':('<span class="mini">'+etiqueta+'</span>');
+  } else if(facturacionConectada()){
+    boleta='<button class="btn ghost sm" data-boleta="'+c.id+'">Emitir boleta SUNAT</button>';
+  } else {
+    boleta='';
   }
-  if(!facturacionConectada()) return '<span class="mini" title="Conecta Nubefact en Ajustes para emitir boletas SUNAT">—</span>';
-  return '<button class="btn ghost sm" data-boleta="'+c.id+'">Emitir boleta</button>';
+  return '<div class="rowact">'+recibo+boleta+'</div>';
 }
 
 function renderCuentas(){

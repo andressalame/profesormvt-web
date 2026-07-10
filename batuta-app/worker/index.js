@@ -1430,6 +1430,50 @@ const SEC_HEADERS = {
 function htmlResponse(html){
   return new Response(html, { headers: Object.assign({ "content-type": "text/html; charset=utf-8", "cache-control": "no-store" }, SEC_HEADERS) });
 }
+/* Recibo de pago con la marca de la academia (universal, no fiscal). d=null -> no disponible. */
+function reciboHTML(d){
+  const css =
+    "*{box-sizing:border-box;margin:0;padding:0}" +
+    "body{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:#f4f1ea;color:#1c1813;padding:24px;line-height:1.5}" +
+    ".r{max-width:520px;margin:24px auto;background:#fff;border-radius:16px;overflow:hidden;box-shadow:0 14px 44px rgba(0,0,0,.10)}" +
+    ".rh{padding:26px 28px;color:#fff;display:flex;align-items:center;gap:14px}" +
+    ".rh img{max-height:40px;max-width:150px;background:#fff;border-radius:6px;padding:4px}" +
+    ".rh .nm{font-size:1.25rem;font-weight:700}" +
+    ".rb{padding:24px 28px}" +
+    ".tag{display:inline-block;font-size:.7rem;letter-spacing:.12em;text-transform:uppercase;color:#8a8172;font-weight:700;margin-bottom:4px}" +
+    ".amt{font-size:2.2rem;font-weight:800;margin:2px 0 18px}" +
+    ".row{display:flex;justify-content:space-between;gap:12px;padding:11px 0;border-top:1px solid #eee;font-size:.95rem}" +
+    ".row .k{color:#8a8172}" +
+    ".row .v{font-weight:600;text-align:right}" +
+    ".note{margin-top:20px;padding:12px 14px;background:#faf7f0;border-radius:9px;font-size:.8rem;color:#8a8172}" +
+    ".btns{max-width:520px;margin:0 auto 20px;display:flex;gap:10px;justify-content:center}" +
+    ".btns button,.btns a{font:inherit;font-size:.9rem;font-weight:600;padding:11px 20px;border-radius:8px;border:1px solid #d8d2c6;background:#fff;color:#1c1813;cursor:pointer;text-decoration:none}" +
+    "@media print{body{background:#fff;padding:0}.btns{display:none}.r{box-shadow:none;margin:0}}";
+  if (!d){
+    return "<!doctype html><html lang=\"es\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>Recibo</title><style>" + css + "</style></head><body>" +
+      "<div class=\"r\"><div class=\"rb\"><span class=\"tag\">Batuta</span><h1 style=\"font-size:1.3rem;margin-top:6px\">Recibo no disponible</h1><p style=\"margin-top:8px;color:#8a8172\">Este enlace no corresponde a un pago confirmado, o el pago aun no fue verificado por la academia.</p></div></div></body></html>";
+  }
+  const color = d.color || "#E8A13D";
+  const logoTag = d.logo ? "<img src=\"" + esc(d.logo) + "\" alt=\"\">" : "";
+  const metodoRow = d.metodo ? "<div class=\"row\"><span class=\"k\">Metodo</span><span class=\"v\">" + esc(d.metodo) + "</span></div>" : "";
+  const waRow = d.whatsapp ? "<div class=\"row\"><span class=\"k\">Contacto</span><span class=\"v\">" + esc(d.whatsapp) + "</span></div>" : "";
+  return "<!doctype html><html lang=\"es\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">" +
+    "<title>Recibo " + esc(d.numero) + " - " + esc(d.academia) + "</title><style>" + css + "</style></head><body>" +
+    "<div class=\"r\">" +
+      "<div class=\"rh\" style=\"background:" + esc(color) + "\">" + logoTag + "<span class=\"nm\">" + esc(d.academia) + "</span></div>" +
+      "<div class=\"rb\">" +
+        "<span class=\"tag\">Recibo de pago Nro " + esc(d.numero) + "</span>" +
+        "<div class=\"amt\">S/ " + d.monto.toFixed(2) + "</div>" +
+        "<div class=\"row\"><span class=\"k\">Cliente</span><span class=\"v\">" + esc(d.cliente) + "</span></div>" +
+        "<div class=\"row\"><span class=\"k\">Concepto</span><span class=\"v\">" + esc(d.concepto) + "</span></div>" +
+        "<div class=\"row\"><span class=\"k\">Fecha</span><span class=\"v\">" + esc(d.fecha) + "</span></div>" +
+        metodoRow + waRow +
+        "<div class=\"note\">Comprobante de pago emitido por la academia. No es un documento tributario oficial.</div>" +
+      "</div>" +
+    "</div>" +
+    "<div class=\"btns\"><button onclick=\"window.print()\">Descargar / imprimir</button></div>" +
+    "</body></html>";
+}
 /* Envuelve una respuesta de asset (panel/portal) para inyectar los headers de seguridad. */
 async function assetConSeguridad(resp){
   const h = new Headers(resp.headers);
@@ -2027,6 +2071,36 @@ export default {
     }
     if (path === "/app/panel" && request.method === "GET"){
       return env.ASSETS ? assetConSeguridad(await env.ASSETS.fetch(new Request(new URL("/panel/index.html", url), request))) : json({ error: "No encontrado" }, 404);
+    }
+    /* Recibo universal (10-jul-2026): comprobante de pago con la marca de la academia,
+       sirve en CUALQUIER pais (no es documento tributario). El id de la compra es un UUID
+       aleatorio (inadivinable); la pagina es publica para que el profe se la mande al alumno.
+       En Peru la boleta fiscal SUNAT es aparte (Nubefact). */
+    if (path.startsWith("/app/r/") && request.method === "GET"){
+      const cid = decodeURIComponent(path.slice("/app/r/".length));
+      const compraR = /^[0-9a-zA-Z_-]{6,40}$/.test(cid)
+        ? await env.DB.prepare("SELECT * FROM compras WHERE id = ?1").bind(cid).first().catch(() => null) : null;
+      if (!compraR || compraR.estado !== "confirmada"){
+        return htmlResponse(reciboHTML(null));
+      }
+      const tR = await env.DB.prepare("SELECT academia, slug FROM tenants WHERE id = ?1").bind(compraR.tenant_id).first();
+      const cfgR = await loadConfig(env, compraR.tenant_id);
+      let clienteR = "";
+      if (compraR.cuenta_id){
+        const cuR = await env.DB.prepare("SELECT nombre FROM cuentas WHERE id = ?1 AND tenant_id = ?2").bind(compraR.cuenta_id, compraR.tenant_id).first();
+        clienteR = (cuR && cuR.nombre) || "";
+      }
+      const brutoR = Math.round((Number(compraR.monto) || 0) * 100) / 100;
+      const numR = String(compraR.id).replace(/-/g, "").slice(0, 8).toUpperCase();
+      return htmlResponse(reciboHTML({
+        academia: (tR && tR.academia) || cfgR.profe_nombre || "Academia",
+        logo: (cfgR.brand_logo && String(cfgR.brand_logo).indexOf("/app/api/recurso/archivo/") === 0) ? cfgR.brand_logo : "",
+        color: /^#[0-9a-fA-F]{6}$/.test(String(cfgR.brand_color || "")) ? cfgR.brand_color : "#E8A13D",
+        cliente: clienteR || "Cliente",
+        concepto: (compraR.paquete || "Servicio educativo") + (compraR.curso ? " · " + compraR.curso : ""),
+        monto: brutoR, metodo: compraR.metodo || "", fecha: compraR.fecha || hoyLima(),
+        numero: numR, whatsapp: cfgR.whatsapp_profe || ""
+      }));
     }
     /* Invitacion de profesor (multi-profesor): pone su contrasena y entra a su sub-panel. */
     if (path === "/app/p/activar" && request.method === "GET"){

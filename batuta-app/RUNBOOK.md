@@ -87,3 +87,9 @@
   Reconsulta automatica del estado = mejora futura si algun tenant la pide.
 - Correo diario al dueno "N interesados por seguir hoy" en el cron de 9am (seguimientoLeadsDueno).
 - La demo se siembra con pipeline CRM (5 etapas) + gastos + comision, y limpia comprobantes en su reset.
+
+## Recibo universal (10-jul-2026) — para cualquier país
+- Comprobante de pago con la marca de la academia (logo + color), NO fiscal, sirve en todo LatAm.
+- Público en /app/r/<compra_id> (id = UUID inadivinable; la demo usa demo-cp-N). Solo compras confirmadas.
+- En el panel (Pagos, columna Boleta): link "Recibo ↗" en cada pago confirmado (dueño). La boleta SUNAT/Nubefact sigue siendo el comprobante fiscal SOLO para Perú.
+- Factura fiscal de otros países (México SAT, Colombia DIAN, etc.) = integración por país bajo demanda (Alegra cubre varios); NO construida hasta que un tenant de ese país la pida.
