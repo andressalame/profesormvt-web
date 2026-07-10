@@ -2560,6 +2560,17 @@ export default {
             await env.DB.prepare("UPDATE tenants SET estado = 'vencido' WHERE id = ?1").bind(id).run();
             return json({ ok: true });
           }
+          /* Socio fundador: 1 año gratis (o los meses de b.meses) para los tenants de prueba.
+             estado='trial' con trial_hasta lejano (el gate pasa mientras sea futuro) y
+             nurture_paso alto para NO spamearlos con el nurture de trial. Config fundador='on'. */
+          if (accion === "fundador"){
+            const meses = (Number.isFinite(Number(b.meses)) && Number(b.meses) >= 1 && Number(b.meses) <= 36) ? Number(b.meses) : 12;
+            const hasta = new Date(Date.now() + meses * 30 * 86400000).toISOString();
+            try { await env.DB.prepare("ALTER TABLE tenants ADD COLUMN nurture_paso INTEGER DEFAULT 0").run(); } catch (e) {}
+            await env.DB.prepare("UPDATE tenants SET trial_hasta = ?1, estado = 'trial', nurture_paso = 9 WHERE id = ?2").bind(hasta, id).run();
+            try { await env.DB.prepare("INSERT INTO config (tenant_id, clave, valor) VALUES (?1,'fundador','on') ON CONFLICT(tenant_id, clave) DO UPDATE SET valor='on'").bind(id).run(); } catch (e) {}
+            return json({ ok: true, estado: "trial", meses, gratis_hasta: hasta.slice(0, 10) });
+          }
           return json({ error: "Accion no valida" }, 400);
         }
         /* Crea un preapproval_plan en MP desde el worker (el token vive como secreto; asi no

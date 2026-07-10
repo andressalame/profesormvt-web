@@ -108,3 +108,9 @@
   Y en cada academia: guardar su phone_number_id en config wa_phone_id + wa_enabled='on'.
 - Verificado en prod: GET sin token = 403, POST inerte = 200. La lógica de lead+reply no se pudo
   probar E2E sin credenciales de Meta (misma situación que Nubefact hasta conectar la cuenta).
+
+## Socio fundador (1 año gratis) — 10-jul-2026
+- Activar a un profe/academia como fundador (default 12 meses, o {"meses":N}):
+  curl -X POST https://batuta.lat/app/api/su/tenant -H "Authorization: Bearer $(cat .admin-token.local)" -H "content-type: application/json" -d '{"id":"<tenant_id>","accion":"fundador"}'
+- Deja estado='trial' con trial_hasta a 1 año, salta el nurture (nurture_paso=9) y marca config fundador='on'.
+- El <tenant_id> lo sacas de: curl -s https://batuta.lat/app/api/su/tenants -H "Authorization: Bearer $(cat .admin-token.local)"
