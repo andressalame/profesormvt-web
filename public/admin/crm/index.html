@@ -868,7 +868,7 @@ function apiPost(path, body){
 function recargar(){
   return apiGet().then(function(d){
     db=d; if(!db.precios) db.precios=Object.assign({},PRECIOS_DEFAULT);
-    db.cuentas=db.cuentas||[]; db.compras=db.compras||[]; db.recursos=db.recursos||[]; db.ejercicios=db.ejercicios||[]; db.leads=db.leads||[]; db.grupos=db.grupos||[]; db.config=db.config||{};
+    db.cuentas=db.cuentas||[]; db.compras=db.compras||[]; db.recursos=db.recursos||[]; db.ejercicios=db.ejercicios||[]; db.leads=db.leads||[]; db.grupos=db.grupos||[]; db.config=db.config||{}; window.__crmData=true;
     renderAll(); setSync("Conectado ✓","ok");
   });
 }
@@ -892,7 +892,7 @@ function refrescoSilencioso(){
     var nuevoPend = (d.compras||[]).filter(function(c){ return c.estado==="pendiente"; }).length;
     var aumento = nuevoPend > prevPendientes;
     db=d; if(!db.precios) db.precios=Object.assign({},PRECIOS_DEFAULT);
-    db.cuentas=db.cuentas||[]; db.compras=db.compras||[]; db.recursos=db.recursos||[]; db.ejercicios=db.ejercicios||[]; db.leads=db.leads||[]; db.grupos=db.grupos||[]; db.config=db.config||{};
+    db.cuentas=db.cuentas||[]; db.compras=db.compras||[]; db.recursos=db.recursos||[]; db.ejercicios=db.ejercicios||[]; db.leads=db.leads||[]; db.grupos=db.grupos||[]; db.config=db.config||{}; window.__crmData=true;
     prevPendientes = nuevoPend;
     // si hay un modal abierto (registrar clase, editar alumno, etc.) NO repintamos: perderías lo que estás escribiendo/eligiendo
     if(!hayModalAbierto()) renderSilencioso();
@@ -2649,7 +2649,7 @@ window.mvtInit = mvtInit;
 </div>
 <script>
 (function(){
-  var SEEN="crm_tour_v1";
+  var SEEN="crm_tour_v2";
   var veil=document.getElementById("tourVeil"), ring=document.getElementById("tourRing"), pop=document.getElementById("tourPop");
   var elTitle=document.getElementById("tourTitle"), elBody=document.getElementById("tourBody"), elDots=document.getElementById("tourDots");
   var btnNext=document.getElementById("tourNext"), btnSkip=document.getElementById("tourSkip");
@@ -2691,7 +2691,9 @@ window.mvtInit = mvtInit;
   // Auto-lanzar cuando el panel ya cargo (db lista y sin marca de visto).
   var espera=setInterval(function(){
     try{
-      if(window.db && db.alumnos && document.getElementById("linksCobro")){
+      /* SOLO tras loguearse: data ya cargada del servidor y candado cerrado */
+      var lk=document.getElementById("ovLock");
+      if(window.__crmData && !(lk&&lk.classList.contains("open"))){
         clearInterval(espera);
         if(!localStorage.getItem(SEEN)) setTimeout(abrir,1400);
       }

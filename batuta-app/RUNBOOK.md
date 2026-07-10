@@ -150,3 +150,17 @@
 - Portado a AMBOS (sin tocar branding; mismos parches, script scratchpad/portar.py de la sesion): importador CSV + pegar lista + guardar-y-otro, chips "copiar link de cobro" en Inicio (usa el /pagar publico que ya existia), tour de bienvenida con anclas data-tour estables (personas/link-alumnos/cobros/#oiaFab, 1 vez por navegador via localStorage crm_tour_v1), recibo imprimible publico /r/<compra_id> (worker: reciboHTML + esc local + gate de assets deja pasar /r/* + run_worker_first), boton "Recibo ↗" en pagos confirmados, nombres de paquete UNIFICADOS en correos (los 2 inline viejos ahora usan NOMBRES_PAQUETE global "Plan Esencial/Intensivo/Estrella").
 - profesormvt.com: DEPLOYADO (push main -> Action success) y verificado E2E en el CRM real (22 alumnos, 4 chips, 7 links de recibo, recibo real 200, tour auto-lanzado y cerrado SIN marcar visto para que Andres lo vea).
 - nicole-web: codigo commiteado y pusheado; el DEPLOY del worker esta PENDIENTE (cuenta CF de Nicole 75cb4a4b..., token lo tiene Andres; wrangler de Andres da auth error 10000). Al tener el token: CLOUDFLARE_API_TOKEN=<token> npx wrangler deploy desde ~/Code/nicole-web.
+
+## Grupos portado a profesormvt y nicole-web (10-jul-2026, tarde-2)
+- Unica feature del gap que Andres quiso (Caja/Reportes/cupo NO: son profesores particulares).
+- Dos mitades portadas de Batuta a ambos: (a) "tambien estuvieron" en Registrar clase (N registros de una, cada alumno consume de SU paquete); (b) pestana Grupos (nav Alumnos) con CRUD + boton "Registrar clase" del grupo que pre-marca miembros. Adaptado single-teacher: cursos de MARCA.cursos, endpoint /api/admin/grupo sin tenant/profesor, tabla grupos sin tenant_id creada via ensureSchema (auto-migra al primer hit).
+- profesormvt.com: DEPLOYADO y verificado E2E con data real (grupo creado con 2 miembros -> persistio -> registrar clase pre-marco -> borrado limpio; NO se registro ninguna clase real).
+- nicole-web: commiteado/pusheado; deploy sigue esperando el token CF de Nicole (mismo pendiente de la tanda anterior).
+- OJO curl vs edge: tras deploy el primer curl puede traer HTML viejo de un hop intermedio; probar con ?v=<ts> antes de diagnosticar.
+
+## Nicole: deploy completado (10-jul-2026, tarde-3)
+- Token CF nuevo creado por Andres (custom: Workers Scripts/D1/R2/Workers AI Edit sobre la cuenta de Nicole), guardado en ~/Code/nicole-web/.cf-api-token.local (gitignored).
+- Deploy: cd ~/Code/nicole-web && CLOUDFLARE_API_TOKEN="$(cat .cf-api-token.local)" npx wrangler deploy
+- Verificado E2E en su CRM real (sesion de Andres): pegar lista persiste, grupo con miembros persiste, pre-marcado del registro grupal OK, /r/ OK. Data de prueba borrada (cuenta quedo en 0).
+- Lecciones del E2E: (1) el estado optimista del panel puede enganar — verificar SIEMPRE con recarga dura tras guardar; (2) al automatizar el modal de grupo, esperar a que abrirGrupo() pinte los checkboxes antes de marcarlos (la primera corrida guardo miembros=[] por esa carrera del test, no del codigo).
+- El CRM de Nicole vive en nicole-crm-worker.nicoleolavarria.workers.dev/admin/crm/ (el dominio .com es solo el sitio Vercel).
