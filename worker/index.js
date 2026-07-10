@@ -1074,6 +1074,22 @@ async function avisarLeadConTelefono(env, info){
   }
 }
 
+/* ---------- Auto-responder de WhatsApp (11-jul-2026) ----------
+   Mismo patron que Batuta: WhatsApp Cloud API oficial de Meta (sin riesgo de ban, a diferencia
+   de un bot no oficial). El numero WA_PHONE_ID es de ProfesorMVT; env.WHATSAPP_TOKEN es la
+   credencial de la WABA. Sin token -> inerte (degrada con gracia). */
+async function enviarWhatsApp(env, phoneId, to, text){
+  if (!env.WHATSAPP_TOKEN || !phoneId || !to || !text) return false;
+  try {
+    const r = await fetch("https://graph.facebook.com/v21.0/" + encodeURIComponent(phoneId) + "/messages", {
+      method: "POST",
+      headers: { "Authorization": "Bearer " + env.WHATSAPP_TOKEN, "Content-Type": "application/json" },
+      body: JSON.stringify({ messaging_product: "whatsapp", to: String(to), type: "text", text: { body: String(text).slice(0, 1000) } })
+    });
+    return r.ok;
+  } catch (e) { return false; }
+}
+
 /* ============ RESCATE DE COMPRAS ABANDONADAS (07-jul-2026) ============
    La compra que quedó 'iniciada' (checkout de tarjeta que nunca pagó) o 'rechazada' hoy muere
    en silencio. Este motor manda UN correo por compra invitando a retomarla en el portal.
@@ -1576,25 +1592,37 @@ function onboardingSystemAlumno(){
 }
 
 async function llamarClaudeOnboarding(env, system, mensajes){
-  if (!env.ANTHROPIC_API_KEY) return null;
-  const resp = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: {
-      "x-api-key": env.ANTHROPIC_API_KEY,
-      "anthropic-version": "2023-06-01",
-      "content-type": "application/json"
-    },
-    body: JSON.stringify({
-      model: ONBOARDING_MODELO,
-      max_tokens: 400,
-      system: system,
-      messages: mensajes
-    })
-  });
-  if (!resp.ok) return null;
-  const data = await resp.json().catch(() => null);
-  const bloque = data && Array.isArray(data.content) ? data.content.find(c => c.type === "text") : null;
-  return bloque ? sanearRespuestaIA(String(bloque.text || "").trim()) : null;
+  if (env.ANTHROPIC_API_KEY){
+    try {
+      const resp = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: {
+          "x-api-key": env.ANTHROPIC_API_KEY,
+          "anthropic-version": "2023-06-01",
+          "content-type": "application/json"
+        },
+        body: JSON.stringify({ model: ONBOARDING_MODELO, max_tokens: 400, system: system, messages: mensajes })
+      });
+      if (resp.ok){
+        const data = await resp.json().catch(() => null);
+        const bloque = data && Array.isArray(data.content) ? data.content.find(c => c.type === "text") : null;
+        const t = bloque ? String(bloque.text || "").trim() : "";
+        if (t) return sanearRespuestaIA(t);
+      }
+    } catch (e) { /* cae al binding AI */ }
+  }
+  // Fallback gratis (portado de Batuta): Workers AI (Llama), para instancias sin API key de Claude.
+  if (env.AI){
+    try {
+      const r = await env.AI.run("@cf/meta/llama-3.3-70b-instruct-fp8-fast", {
+        messages: [{ role: "system", content: system }].concat(mensajes),
+        max_tokens: 400
+      });
+      const t = (r && (r.response || "")).trim();
+      if (t) return sanearRespuestaIA(t);
+    } catch (e) { /* sin IA disponible */ }
+  }
+  return null;
 }
 /* clave = "admin:andres" o "alumno:<cuenta_id>". Incrementa y devuelve {usados, restantes}.
    Si ya estaba en el tope, NO vuelve a incrementar (para no seguir descontando de un contador ya frenado). */
@@ -2669,6 +2697,7 @@ export default {
             bcp_cuenta: config.bcp_cuenta, bcp_cci: config.bcp_cci,
             scotia_cuenta: config.scotia_cuenta, scotia_cci: config.scotia_cci,
             crypto_moneda: config.crypto_moneda, crypto_red: config.crypto_red, crypto_wallet: config.crypto_wallet,
+            mp_on: !!env.MP_ACCESS_TOKEN,
             vapid_public: env.VAPID_PUBLIC_KEY || ""
           }
         });
@@ -3065,6 +3094,96 @@ export default {
           ctx.waitUntil(avisarLeadConTelefono(env, { email, telefono, interes, fuente, nombre, esPrueba }));
         }
         return json({ ok: true, pdf });
+      }
+
+      /* ============ WhatsApp Cloud API: auto-respuesta + captura instantánea de leads ============
+         Mismo patrón que Batuta (11-jul-2026): número oficial de Meta dedicado a ProfesorMVT.
+         Cuando alguien escribe directo (bio de IG, Google Business, o la campaña de ads #2 que va
+         directo a WhatsApp sin pasar por la web): se captura el lead al toque, Andrés recibe la
+         misma alerta con el 1-click de cierre que ya usa (avisarLeadConTelefono, sin cambios), y el
+         lead recibe una respuesta cálida instantánea aunque sea de madrugada. Andrés sigue cerrando
+         a mano por su WhatsApp personal, como siempre — esto solo evita que un mensaje se pierda. */
+      if (url.pathname === "/api/wa/webhook" && request.method === "GET"){
+        const modo = url.searchParams.get("hub.mode");
+        const tok = url.searchParams.get("hub.verify_token");
+        const challenge = url.searchParams.get("hub.challenge");
+        if (modo === "subscribe" && env.WHATSAPP_VERIFY_TOKEN && tok === env.WHATSAPP_VERIFY_TOKEN){
+          return new Response(challenge || "", { status: 200, headers: { "content-type": "text/plain" } });
+        }
+        return new Response("forbidden", { status: 403 });
+      }
+      if (url.pathname === "/api/wa/webhook" && request.method === "POST"){
+        if (!env.WHATSAPP_TOKEN) return new Response("ok", { status: 200 });
+        const body = await request.json().catch(() => null);
+        ctx.waitUntil((async () => {
+          try {
+            const val = body && body.entry && body.entry[0] && body.entry[0].changes && body.entry[0].changes[0] && body.entry[0].changes[0].value;
+            if (!val || !val.messages || !val.messages[0]) return;
+            const msg = val.messages[0];
+            if (msg.type !== "text") return;
+            const wamid = String(msg.id || "");
+            if (wamid && await chatbotPasoTope(env, "wamid:" + wamid, 1)) return;
+            const phoneId = (val.metadata && val.metadata.phone_number_id) || "";
+            if (!phoneId || (env.WA_PHONE_ID && phoneId !== env.WA_PHONE_ID)) return;
+            const from = waDigitsLead(String(msg.from || ""));
+            const texto = String((msg.text && msg.text.body) || "").slice(0, 500);
+            const nombreWA = (val.contacts && val.contacts[0] && val.contacts[0].profile && val.contacts[0].profile.name) || "";
+            if (!from) return;
+            const email = "wa-" + from + "@wa.mvt";
+            const ya = await env.DB.prepare("SELECT id, COALESCE(nombre,'') AS nombre FROM leads WHERE email = ?1 AND marca = ?2").bind(email, "MVT").first();
+            const nombre = String(nombreWA).trim().slice(0, 80);
+            if (!ya){
+              await env.DB.prepare(
+                "INSERT INTO leads (id,email,marca,fuente,interes,fecha,telefono,nombre) VALUES (?1,?2,'MVT','whatsapp-directo','',?3,?4,?5)"
+              ).bind(crypto.randomUUID(), email, hoy(), from, nombre).run();
+            } else if (nombre && !ya.nombre){
+              await env.DB.prepare("UPDATE leads SET nombre = ?1 WHERE id = ?2").bind(nombre, ya.id).run();
+            }
+            // Alerta a Andrés con el mismo 1-click de siempre (esPrueba=true: alta intención,
+            // escribió directo por su cuenta). Se dispara en CADA mensaje, no solo el primero.
+            ctx.waitUntil(avisarLeadConTelefono(env, { email, telefono: from, interes: "", fuente: "whatsapp-directo", nombre, esPrueba: true }));
+            // Respuesta instantánea al lead: solo un acuse cálido. Andrés cierra personalmente
+            // por su WhatsApp (Script Maestro) apenas vea la alerta; sin bot multi-paso.
+            const saludo = nombre ? ("Hola " + nombre.split(" ")[0] + "!") : "Hola!";
+            const cuerpo = saludo + " Gracias por escribir a ProfesorMVT :) Recibí tu mensaje, te respondo personalmente en un rato para coordinar tu clase de prueba con diagnóstico incluido.";
+            await enviarWhatsApp(env, phoneId, from, cuerpo);
+          } catch (e) { console.error("wa webhook", e); }
+        })());
+        return new Response("ok", { status: 200 });
+      }
+
+      /* Diagnóstico del token/número de WhatsApp (mismo patrón que Batuta): confirma contra Meta
+         sin adivinar si el token venció o si el número configurado sigue siendo el correcto. */
+      if (url.pathname === "/api/su/wa-status" && request.method === "GET"){
+        if (!(await esAdminAuth(env, request))) return json({ error: "No autorizado" }, 401);
+        if (!env.WHATSAPP_TOKEN) return json({ ok: false, error: "Sin WHATSAPP_TOKEN cargado" }, 501);
+        const WABA_ID = "1527207328858190";
+        try {
+          const r = await fetch("https://graph.facebook.com/v21.0/" + WABA_ID + "/phone_numbers?fields=id,display_phone_number,verified_name,quality_rating,platform_type", {
+            headers: { "Authorization": "Bearer " + env.WHATSAPP_TOKEN }
+          });
+          const data = await r.json().catch(() => ({}));
+          if (!r.ok) return json({ ok: false, status: r.status, meta: (data && data.error) || null }, 502);
+          return json({ ok: true, wa_phone_id_configurado: env.WA_PHONE_ID || "", numeros: (data && data.data) || [] });
+        } catch (e) { return json({ ok: false, error: String(e && e.message) }, 502); }
+      }
+      if (url.pathname === "/api/su/wa-test" && request.method === "POST"){
+        if (!(await esAdminAuth(env, request))) return json({ error: "No autorizado" }, 401);
+        if (!env.WHATSAPP_TOKEN) return json({ ok: false, error: "Sin WHATSAPP_TOKEN cargado" }, 501);
+        const b = await request.json().catch(() => ({}));
+        const to = String(b.to || "").replace(/\D/g, "");
+        const texto = String(b.texto || "Prueba de ProfesorMVT: el envío de WhatsApp funciona ✅").slice(0, 1000);
+        const phoneId = String(b.phone_id || env.WA_PHONE_ID || "").replace(/\D/g, "");
+        if (!phoneId || !to) return json({ error: "Manda to (y phone_id si no hay WA_PHONE_ID configurado)" }, 400);
+        try {
+          const r = await fetch("https://graph.facebook.com/v21.0/" + phoneId + "/messages", {
+            method: "POST",
+            headers: { "Authorization": "Bearer " + env.WHATSAPP_TOKEN, "Content-Type": "application/json" },
+            body: JSON.stringify({ messaging_product: "whatsapp", to: to, type: "text", text: { body: texto } })
+          });
+          const data = await r.json().catch(() => ({}));
+          return json({ ok: r.ok, status: r.status, meta: data }, r.ok ? 200 : 502);
+        } catch (e) { return json({ ok: false, error: String(e && e.message) }, 502); }
       }
 
       /* ============ Rescate de los leads viejos de la guía → embudo de clase de prueba ============

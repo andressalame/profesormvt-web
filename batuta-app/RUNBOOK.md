@@ -115,10 +115,12 @@
 - Deja estado='trial' con trial_hasta a 1 año, salta el nurture (nurture_paso=9) y marca config fundador='on'.
 - El <tenant_id> lo sacas de: curl -s https://batuta.lat/app/api/su/tenants -H "Authorization: Bearer $(cat .admin-token.local)"
 
-## WhatsApp Cloud API — estado 11-jul-2026 (Fase A, numero de prueba)
+## WhatsApp Cloud API — estado 11-jul-2026 (Fase A completa · Fase B: token permanente listo)
 - App Meta "Batuta" id 2913551592328289 · WABA 1532220315245141 · numero de prueba +1 (555) 155-3825, phone_number_id 1149379364933769.
-- Secrets cargados: WHATSAPP_TOKEN (⚠️ TEMPORAL, dura 24h: regenerar en Meta > WhatsApp > Paso 1 y re-put si expira) y WHATSAPP_VERIFY_TOKEN (copia en batuta-app/.wa-verify-token.local).
-- Webhook: https://batuta.lat/app/api/wa/webhook verificado (challenge OK), app suscrita al WABA por API (subscribed_apps success). El "Verificar y guardar" de la pantalla de Meta quedo clickeado pero sin confirmar visual (Chrome se cayo): si el E2E no entrega webhooks, re-abrir Configurar webhooks y verificar de nuevo + suscribir campo "messages".
+- **TOKEN PERMANENTE (Fase B) CARGADO**: System User "batuta-worker" (id 61591862819375, Admin) en el portfolio batuta.lat con acceso total a la app Batuta y a la WABA; token sin caducidad con permisos whatsapp_business_management + whatsapp_business_messaging. Cargado como secret WHATSAPP_TOKEN (via pbpaste | wrangler, nunca se imprimio). Si hay que rotarlo: Business Suite > Configuracion > Usuarios del sistema > batuta-worker > Generar token.
+- WHATSAPP_VERIFY_TOKEN: copia en batuta-app/.wa-verify-token.local.
+- **Diagnostico sin adivinar**: GET /app/api/su/wa-status (valida token contra Meta + lista numeros de la WABA + tenants con wa_phone_id) y POST /app/api/su/wa-test {phone_id,to,texto} (envio con respuesta cruda de Meta). Ambos con el ADMIN_TOKEN.
+- **UI de tenant**: Ajustes > "WhatsApp de tu academia" (cfg_wa_enabled + cfg_wa_phone_id) en prod; la conexion del numero la hace Batuta (done-for-you) y se le pasa el phone_number_id al tenant.
+- Webhook: https://batuta.lat/app/api/wa/webhook verificado; campo "messages" suscrito (fue el bug de Fase A: toggle a media tabla, revisar de nuevo al agregar numero real). E2E completo verificado con la demo, y envio con el token permanente verificado (wa-test a Andres, 200 + wamid).
 - Demo conectada: config wa_phone_id + wa_enabled=on (se borra con el reset diario de la demo; re-setear para probar otro dia).
-- PENDIENTE Andres: agregar su celular (+51 989 077 928) como destinatario permitido del numero de prueba (Meta > WhatsApp > Paso 1 > Destinatario > Agregar numero > le llega codigo por WhatsApp). Luego: reenviar hello_world, responder al chat, y verificar lead en pipeline demo + auto-respuesta.
-- Fase B (produccion): verificar negocio batuta.lat en Business Manager + token permanente (System User) + numero real.
+- **Fase B restante**: (1) numero REAL de produccion: conseguir un numero que reciba SMS/llamada (chip prepago sirve; NO puede estar en uso en la app de WhatsApp), agregarlo en Meta > WhatsApp > Configuracion de la API > Agregar numero, verificar por SMS, y anotar su phone_number_id; (2) conectar tenants reales (poner su phone_number_id en Ajustes); (3) verificacion del negocio en Business Manager: OPCIONAL por ahora (sin RUC/empresa es cuesta arriba; sin verificar hay tope de ~250 conversaciones iniciadas por el negocio/dia y limite de numeros, pero las RESPUESTAS a mensajes entrantes — el caso de Batuta — no lo necesitan).

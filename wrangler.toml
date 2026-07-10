@@ -9,6 +9,11 @@ send_email = [
 
 [vars]
 VAPID_PUBLIC_KEY = "BOvh-j1DbMRYE_vHhKcp1kxNbT4hnlndhsX1evIqwsCMYyvE5sfijYoy9a9ztiSu24XVGJsabtTiLhgN1LM4or4"
+# WhatsApp Cloud API (11-jul-2026): phone_number_id de la WABA "ProfesorMVT" (app Meta id
+# 887510117208924, portfolio Tramboyos Musica). Numero de PRUEBA por ahora (Fase A); se
+# reemplaza por el numero real en Fase B cuando llegue el chip. Secrets: WHATSAPP_TOKEN /
+# WHATSAPP_VERIFY_TOKEN (no van aqui, ver .wa-verify-token.local).
+WA_PHONE_ID = "1175919422274911"
 
 [assets]
 directory = "./dist"

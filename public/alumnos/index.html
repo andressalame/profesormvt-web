@@ -1116,6 +1116,38 @@ function irAWizPaso(p){
   pintarWizDots();
 }
 
+/* Muestra SOLO los métodos que el profe configuró (portado de Batuta): si no puso su número
+   de Yape, la opción no aparece; igual bancos, crypto y tarjeta (mp_on del worker). Si no
+   configuró NINGUNO, cae al aviso de coordinar por WhatsApp (payboxNo). */
+function ajustarMetodosPago(){
+  var cf=(ME&&ME.config)||{};
+  var sel=$("c_metodo"); if(!sel) return [];
+  var disponibles=[];
+  function setOp(val,on){
+    var op=sel.querySelector('option[value="'+val+'"]');
+    if(!op) return;
+    op.disabled=!on; op.hidden=!on;
+    if(on) disponibles.push(val);
+  }
+  setOp("Tarjeta (Mercado Pago)", !!cf.mp_on);
+  setOp("Yape/Plin/Sip", !!cf.pago_numero);
+  setOp("Transferencia BCP", !!cf.bcp_cuenta);
+  setOp("Transferencia Scotiabank", !!cf.scotia_cuenta);
+  setOp("Crypto USDT", !!cf.crypto_wallet);
+  var mf=sel.closest(".field");
+  if(!disponibles.length){
+    if(mf) mf.style.display="none";
+    hide("payboxOk"); show("payboxNo");
+    var opF=$("c_op")&&$("c_op").closest(".field"); if(opF) opF.style.display="none";
+    var ssF=$("c_screenshot")&&$("c_screenshot").closest(".field"); if(ssF) ssF.style.display="none";
+    if($("btnYaPague")) $("btnYaPague").style.display="none";
+  } else {
+    if(mf) mf.style.display="";
+    hide("payboxNo");
+    if(disponibles.indexOf(sel.value)===-1) sel.value=disponibles[0];
+  }
+  return disponibles;
+}
 function abrirCompra(pk){
   if(!ME) return;
   if(ME.compraPendiente){ toast("Ya tienes un pago en verificación"); return; }
@@ -1126,8 +1158,8 @@ function abrirCompra(pk){
   actualizaMonto();
   COMPRA_SLOT = null; COMPRA_SLOTS_CACHE = null;
   actualizaSlotWrap();
-  $("c_metodo").value = "Tarjeta (Mercado Pago)";
-  renderPaybox();
+  var metsPago = ajustarMetodosPago();   // portado de Batuta: solo métodos que el profe configuró
+  if(metsPago.length){ $("c_metodo").value = metsPago[0]; renderPaybox(); }
   $("c_op").value=""; if($("c_screenshot")) $("c_screenshot").value=""; $("compraErr").textContent=""; $("wizErr1").textContent=""; $("wizErr2").textContent="";
   hide("c_yapeNote");
   actualizaBtnP1();
@@ -1391,6 +1423,9 @@ function mostrarAvisos(activos){
   else { show("btnAvisosOn"); hide("btnAvisosOff"); $("avisosTxt").textContent="Activa los avisos para enterarte de tus clases, tareas y respuestas del profe."; }
 }
 function renderAvisos(){
+  // Sin llaves VAPID en el servidor no hay push: se oculta todo el bloque (portado de Batuta).
+  var vapCfg=(ME&&ME.config&&ME.config.vapid_public)||"";
+  if(!vapCfg){ hide("btnAvisosOn"); hide("btnAvisosOff"); hide("avisosNoSop"); $("avisosTxt").textContent="Los avisos push no están disponibles en este portal por ahora."; return; }
   if(!pushSoportado()){ hide("btnAvisosOn"); hide("btnAvisosOff"); show("avisosNoSop"); return; }
   hide("avisosNoSop");
   navigator.serviceWorker.getRegistration('/alumnos/sw.js').then(function(reg){
