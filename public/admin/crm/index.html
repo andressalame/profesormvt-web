@@ -261,6 +261,7 @@
         <button class="navgroup-h" type="button" data-tour="personas"><span class="ng-ico"><svg viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span><span class="ng-tx">Alumnos</span><span class="ng-chev"><svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg></span></button>
         <div class="navgroup-items">
           <button class="tab" data-tab="alumnos">Alumnos</button>
+          <button class="tab" data-tab="grupos">Grupos</button>
           <button class="tab" data-tab="registro">Clases</button>
           <button class="tab" data-tab="agenda">Agenda</button>
           <button class="tab" data-tab="chat">Chat</button>
@@ -344,6 +345,17 @@
           <th>Alumno</th><th>Cuenta</th><th>Curso</th><th>Paquete</th><th>Pago</th><th>Horario</th>
           <th>Clases rest.</th><th>Reprog. rest.</th><th>Estado</th><th>Notas</th><th></th>
         </tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="panel" id="panel-grupos">
+    <div style="margin-bottom:10px;"><button class="btn" id="btnNuevoGrupo">+ Nuevo grupo</button></div>
+    <p class="hint" style="margin-bottom:16px;">Un grupo = un nombre, sus alumnos y su horario. Con "Registrar clase" pasas asistencia de todo el grupo en un clic (cada alumno consume 1 clase de su propio paquete).</p>
+    <div class="tablewrap">
+      <table id="tablaGrupos">
+        <thead><tr><th>Grupo</th><th>Curso</th><th>Horario</th><th>Alumnos</th><th></th></tr></thead>
         <tbody></tbody>
       </table>
     </div>
@@ -671,6 +683,28 @@
 </div>
 
 <!-- Modal registro -->
+<!-- Modal grupo -->
+<div class="overlay" id="ovGrupo">
+  <div class="modal">
+    <h3 id="grupoTitulo">Nuevo <em>grupo</em></h3>
+    <div class="mlab">// Nombre, curso, horario y miembros</div>
+    <input type="hidden" id="g_id" />
+    <div class="frow">
+      <div class="field"><label>Nombre del grupo</label><input id="g_nombre" type="text" placeholder="Coro juvenil / Ensamble sábados" /></div>
+      <div class="field"><label>Curso</label><select id="g_curso"></select></div>
+    </div>
+    <div class="field"><label>Horario (referencial)</label><input id="g_horario" type="text" placeholder="Sábados 10:00" />
+      <p class="hint" style="margin:5px 0 0;">Solo informativo, para que no se te crucen los grupos.</p></div>
+    <div class="field"><label>Alumnos del grupo</label>
+      <div id="g_miembros" style="display:flex;flex-wrap:wrap;gap:10px;padding:4px 0;max-height:150px;overflow-y:auto;"></div></div>
+    <div class="err" id="gErr"></div>
+    <div class="modal-actions">
+      <button class="btn ghost" data-close>Cancelar</button>
+      <button class="btn" id="btnGuardarGrupo">Guardar grupo</button>
+    </div>
+  </div>
+</div>
+
 <div class="overlay" id="ovRegistro">
   <div class="modal">
     <h3 id="regTitulo">Registrar <em>clase</em></h3>
@@ -685,6 +719,9 @@
       <div class="field"><label>Curso de esta clase</label><select id="r_curso"></select></div>
     </div>
     <p class="hint">Asistió y Falta consumen 1 clase. Reprogramar dentro del límite no consume; pasarse del límite cuenta como falta.</p>
+    <div class="field" id="r_grupal_wrap"><label>Clase grupal (opcional): también estuvieron</label>
+      <div id="r_grupales" style="display:flex;flex-wrap:wrap;gap:10px;padding:4px 0;max-height:96px;overflow-y:auto;"></div>
+      <p class="hint" style="margin:4px 0 0;">Marca a los demás alumnos de esa clase: se registra la misma clase para cada uno (mismo estado, trabajo y tarea) y cada quien consume 1 clase de su propio paquete.</p></div>
     <div class="field"><label>¿Qué se trabajó?</label><input id="r_trabajo" type="text" /></div>
     <div class="field"><label>Tarea asignada</label><input id="r_tarea" type="text" /></div>
     <div class="field"><label>¿Qué haremos la próxima clase?</label><input id="r_plan" type="text" placeholder="El plan de la siguiente sesión — el alumno también lo ve" />
@@ -765,7 +802,7 @@ var PAQUETES = {
 var PRECIOS_DEFAULT = { "Paquete 4":250, "Paquete 8":450, "Paquete 12":600, "Clase suelta":70 };
 var TOKEN_KEY = "pmvt_admin_token";
 
-var db = { alumnos:[], registro:[], precios:Object.assign({},PRECIOS_DEFAULT), cuentas:[], compras:[], recursos:[], ejercicios:[], config:{} };
+var db = { alumnos:[], registro:[], precios:Object.assign({},PRECIOS_DEFAULT), cuentas:[], compras:[], recursos:[], ejercicios:[], grupos:[], config:{} };
 var token = null;
 var cuentaModo = null;
 var refreshInterval = null;
@@ -831,7 +868,7 @@ function apiPost(path, body){
 function recargar(){
   return apiGet().then(function(d){
     db=d; if(!db.precios) db.precios=Object.assign({},PRECIOS_DEFAULT);
-    db.cuentas=db.cuentas||[]; db.compras=db.compras||[]; db.recursos=db.recursos||[]; db.ejercicios=db.ejercicios||[]; db.leads=db.leads||[]; db.config=db.config||{};
+    db.cuentas=db.cuentas||[]; db.compras=db.compras||[]; db.recursos=db.recursos||[]; db.ejercicios=db.ejercicios||[]; db.leads=db.leads||[]; db.grupos=db.grupos||[]; db.config=db.config||{};
     renderAll(); setSync("Conectado ✓","ok");
   });
 }
@@ -855,7 +892,7 @@ function refrescoSilencioso(){
     var nuevoPend = (d.compras||[]).filter(function(c){ return c.estado==="pendiente"; }).length;
     var aumento = nuevoPend > prevPendientes;
     db=d; if(!db.precios) db.precios=Object.assign({},PRECIOS_DEFAULT);
-    db.cuentas=db.cuentas||[]; db.compras=db.compras||[]; db.recursos=db.recursos||[]; db.ejercicios=db.ejercicios||[]; db.leads=db.leads||[]; db.config=db.config||{};
+    db.cuentas=db.cuentas||[]; db.compras=db.compras||[]; db.recursos=db.recursos||[]; db.ejercicios=db.ejercicios||[]; db.leads=db.leads||[]; db.grupos=db.grupos||[]; db.config=db.config||{};
     prevPendientes = nuevoPend;
     // si hay un modal abierto (registrar clase, editar alumno, etc.) NO repintamos: perderías lo que estás escribiendo/eligiendo
     if(!hayModalAbierto()) renderSilencioso();
@@ -1311,7 +1348,7 @@ function renderLeads(){
     return '<tr><td>'+esc(l.fecha||'')+'</td><td>'+esc(l.email||'')+'</td><td>'+esc(l.fuente||'')+'</td><td>'+esc(l.interes||'')+'</td></tr>';
   }).join("");
 }
-function renderAll(){ renderResumen(); renderAlumnos(); renderRegistro(); renderPagos(); renderCuentas(); renderLeads(); renderRecursos(); renderEjercicios(); renderAjustes(); renderPerfil(); fillSelects(); pintarLinksCobro(); }
+function renderAll(){ renderResumen(); renderAlumnos(); renderGrupos(); renderRegistro(); renderPagos(); renderCuentas(); renderLeads(); renderRecursos(); renderEjercicios(); renderAjustes(); renderPerfil(); fillSelects(); pintarLinksCobro(); }
 
 /* ---------- AGENDA (admin) ---------- */
 var AG_DISP = [], AG_RESERVAS = [];
@@ -1439,7 +1476,7 @@ function abrirGrupoActivo(){
 abrirGrupoActivo();
 
 /* ---------- Tabs / modales ---------- */
-var TITULOS={resumen:"Inicio",alumnos:"Alumnos",registro:"Clases",agenda:"Agenda",pagos:"Pagos",cuentas:"Accesos",leads:"Interesados",recursos:"Para tus alumnos",ejercicios:"Tu biblioteca",ajustes:"Ajustes",perfil:"Perfil",chat:"Chat"};
+var TITULOS={resumen:"Inicio",alumnos:"Alumnos",grupos:"Grupos",registro:"Clases",agenda:"Agenda",pagos:"Pagos",cuentas:"Accesos",leads:"Interesados",recursos:"Para tus alumnos",ejercicios:"Tu biblioteca",ajustes:"Ajustes",perfil:"Perfil",chat:"Chat"};
 document.querySelectorAll(".tab").forEach(function(t){
   t.addEventListener("click",function(){
     document.querySelectorAll(".tab").forEach(function(x){x.classList.remove("active");});
@@ -1574,6 +1611,7 @@ document.body.addEventListener("click",function(e){
     el("r_tarea").value=rg.tarea||"";
     el("r_plan").value=rg.plan||"";
     el("r_ejercicio").value="";
+    var gwEd=el("r_grupal_wrap"); if(gwEd) gwEd.style.display="none";
     syncCurso();
     if(rg.curso){   // conservar el curso original de la clase aunque el alumno ya no lo lleve
       var rs=el("r_curso");
@@ -1607,7 +1645,7 @@ function syncCurso(){
   sel.value=cursos[0];
   fillEjercicioSelect(cursos[0]);
 }
-el("r_alumno").addEventListener("change",syncCurso);
+el("r_alumno").addEventListener("change",function(){ syncCurso(); if(!el("r_id").value) fillGrupales(); });
 el("r_curso").addEventListener("change",function(){ fillEjercicioSelect(el("r_curso").value); });
 /* ---------- Filtros de Clases ---------- */
 ["regBuscar","regFiltroAlumno","regFiltroEstado"].forEach(function(id){
@@ -1618,6 +1656,101 @@ el("r_curso").addEventListener("change",function(){ fillEjercicioSelect(el("r_cu
 el("regLimpiar").addEventListener("click",function(){
   el("regBuscar").value=""; el("regFiltroAlumno").value=""; el("regFiltroEstado").value=""; renderRegistro();
 });
+/* ---------- Grupos (clases grupales con miembros; portado de Batuta) ---------- */
+function renderGrupos(){
+  var tw=el("tablaGrupos"); if(!tw) return;
+  var tb=tw.querySelector("tbody");
+  var gs=db.grupos||[];
+  if(!gs.length){ tb.innerHTML='<tr><td colspan="5" class="empty">Sin grupos todavía. Crea el primero.</td></tr>'; return; }
+  tb.innerHTML=gs.map(function(g){
+    var nombres=(g.miembros||[]).map(function(id){ var a=db.alumnos.find(function(x){return x.id===id;}); return a?a.nombre:null; }).filter(Boolean);
+    return '<tr>'+
+      '<td class="name">'+esc(g.nombre)+'</td>'+
+      '<td>'+esc(g.curso||"—")+'</td>'+
+      '<td>'+esc(g.horario||"—")+'</td>'+
+      '<td class="notes">'+(nombres.length?esc(nombres.join(", ")):'<span class="mini">Sin alumnos</span>')+' <span class="mini">('+nombres.length+')</span></td>'+
+      '<td><div class="rowact">'+
+        '<button class="btn sm" data-gclase="'+g.id+'"'+(nombres.length?'':' disabled')+'>Registrar clase</button>'+
+        '<button class="btn ghost sm" data-geditar="'+g.id+'">Editar</button>'+
+        '<button class="btn no sm" data-gborrar="'+g.id+'">Borrar</button>'+
+      '</div></td>'+
+    '</tr>';
+  }).join("");
+}
+function abrirGrupo(g){
+  el("grupoTitulo").innerHTML = g ? 'Editar <em>grupo</em>' : 'Nuevo <em>grupo</em>';
+  el("g_id").value = g ? g.id : "";
+  el("g_nombre").value = g ? (g.nombre||"") : "";
+  el("g_horario").value = g ? (g.horario||"") : "";
+  el("gErr").textContent="";
+  el("g_curso").innerHTML=MARCA.cursos.map(function(c){return '<option value="'+esc(c)+'">'+esc(c)+'</option>';}).join("");
+  if(g && g.curso){
+    var gc=el("g_curso");
+    if(![].slice.call(gc.options).some(function(o){return o.value===g.curso;})) gc.insertAdjacentHTML("beforeend",'<option value="'+esc(g.curso)+'">'+esc(g.curso)+'</option>');
+    gc.value=g.curso;
+  }
+  var mset={}; (g?(g.miembros||[]):[]).forEach(function(id){ mset[id]=true; });
+  el("g_miembros").innerHTML=db.alumnos.map(function(a){
+    return '<label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-family:var(--body);font-size:13px;"><input type="checkbox" data-gm="'+esc(a.id)+'"'+(mset[a.id]?' checked':'')+' style="width:auto;"> '+esc(a.nombre)+'</label>';
+  }).join("") || '<span class="mini">Agrega alumnos primero.</span>';
+  openOv("ovGrupo");
+}
+if(el("btnNuevoGrupo")) el("btnNuevoGrupo").addEventListener("click",function(){
+  if(db.alumnos.length===0){ toast("Agrega un alumno primero"); return; }
+  abrirGrupo(null);
+});
+if(el("btnGuardarGrupo")) el("btnGuardarGrupo").addEventListener("click",function(){
+  var id=el("g_id").value;
+  var body={ accion:id?"editar":"crear", id:id,
+    nombre:el("g_nombre").value.trim(), curso:el("g_curso").value, horario:el("g_horario").value.trim(),
+    miembros:[].slice.call(document.querySelectorAll('#g_miembros input[data-gm]:checked')).map(function(c){return c.dataset.gm;}) };
+  if(body.nombre.length<2){ el("gErr").textContent="Ponle un nombre al grupo."; return; }
+  var btn=el("btnGuardarGrupo"); btn.disabled=true;
+  apiPost("/api/admin/grupo",body)
+    .then(function(){ closeOv("ovGrupo"); toast(id?"Grupo actualizado ✓":"Grupo creado ✓"); return recargar(); })
+    .catch(function(e){ el("gErr").textContent=e.message||"No se pudo guardar"; })
+    .finally(function(){ btn.disabled=false; });
+});
+function registrarClaseGrupo(g){
+  var ids=(g.miembros||[]).filter(function(id){ return db.alumnos.some(function(a){return a.id===id;}); });
+  if(!ids.length){ toast("Ese grupo no tiene alumnos"); return; }
+  fillSelects();
+  el("regTitulo").innerHTML='Registrar <em>clase</em> · '+esc(g.nombre);
+  el("r_id").value="";
+  el("r_fecha").value=new Date().toISOString().slice(0,10);
+  el("r_estado").value="Asistió"; el("r_trabajo").value=""; el("r_tarea").value=""; el("r_plan").value=""; el("r_ejercicio").value="";
+  var gw=el("r_grupal_wrap"); if(gw) gw.style.display="";
+  el("r_alumno").value=ids[0];
+  fillGrupales();
+  ids.slice(1).forEach(function(id){ var c=document.querySelector('#r_grupales input[data-grupal="'+id+'"]'); if(c) c.checked=true; });
+  syncCurso();
+  if(g.curso){
+    var rs=el("r_curso");
+    if(![].slice.call(rs.options).some(function(o){return o.value===g.curso;})) rs.insertAdjacentHTML("beforeend",'<option value="'+esc(g.curso)+'">'+esc(g.curso)+'</option>');
+    rs.value=g.curso; fillEjercicioSelect(g.curso);
+  }
+  openOv("ovRegistro");
+}
+if(el("tablaGrupos")) el("tablaGrupos").addEventListener("click",function(e){
+  var b=e.target.closest("button"); if(!b) return;
+  if(b.dataset.geditar){ var g=(db.grupos||[]).find(function(x){return x.id===b.dataset.geditar;}); if(g) abrirGrupo(g); }
+  if(b.dataset.gborrar){ var g2=(db.grupos||[]).find(function(x){return x.id===b.dataset.gborrar;});
+    if(g2 && confirm('¿Borrar el grupo "'+g2.nombre+'"? (Los alumnos y sus clases no se tocan.)')){
+      apiPost("/api/admin/grupo",{accion:"borrar",id:g2.id})
+        .then(function(){ toast("Grupo borrado"); return recargar(); })
+        .catch(function(err){ toast(err.message||"No se pudo borrar"); });
+    }
+  }
+  if(b.dataset.gclase){ var g3=(db.grupos||[]).find(function(x){return x.id===b.dataset.gclase;}); if(g3) registrarClaseGrupo(g3); }
+});
+function fillGrupales(){
+  var box=el("r_grupales"); if(!box) return;
+  var main=el("r_alumno").value;
+  box.innerHTML=db.alumnos.filter(function(a){return a.id!==main;}).map(function(a){
+    return '<label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-family:var(--body);font-size:13px;"><input type="checkbox" data-grupal="'+esc(a.id)+'" style="width:auto;"> '+esc(a.nombre)+'</label>';
+  }).join("") || '<span class="mini">No hay más alumnos todavía.</span>';
+}
+
 el("btnNuevoRegistro").addEventListener("click",function(){
   if(db.alumnos.length===0){ toast("Agrega un alumno primero"); return; }
   fillSelects();
@@ -1625,6 +1758,8 @@ el("btnNuevoRegistro").addEventListener("click",function(){
   el("r_id").value="";
   el("r_fecha").value=new Date().toISOString().slice(0,10);
   el("r_estado").value="Asistió"; el("r_trabajo").value=""; el("r_tarea").value=""; el("r_plan").value=""; el("r_ejercicio").value="";
+  var gw=el("r_grupal_wrap"); if(gw) gw.style.display="";
+  fillGrupales();
   syncCurso(); openOv("ovRegistro");
 });
 el("btnGuardarRegistro").addEventListener("click",function(){
@@ -1646,14 +1781,24 @@ el("btnGuardarRegistro").addEventListener("click",function(){
       campos.tarea_audio=JSON.stringify(lista);
     }
   }
+  var nRegistrados=1;
   if(editId){
     // editar: conservamos lo que el modal no toca (adjuntos, ciclo)
     db.registro=db.registro.map(function(x){ return x.id===editId ? Object.assign({},x,campos) : x; });
   } else {
     db.registro.push(Object.assign({ id:uid(), ciclo:(a&&a.ciclo)||1 }, campos));
+    // clase grupal: la misma clase para cada alumno marcado, cada uno con su propio ciclo
+    [].slice.call(document.querySelectorAll('#r_grupales input[data-grupal]:checked')).forEach(function(c){
+      var idAl=c.dataset.grupal;
+      if(idAl===alumnoId) return;
+      var al=db.alumnos.find(function(x){return x.id===idAl;});
+      if(!al) return;
+      db.registro.push(Object.assign({}, campos, { id:uid(), ciclo:al.ciclo||1, alumnoId:idAl, alumno_id:idAl }));
+      nRegistrados++;
+    });
   }
   var btnReg=el("btnGuardarRegistro"); btnReg.disabled=true;
-  apiPut().then(function(){ renderAll(); closeOv("ovRegistro"); toast(editId?"Clase actualizada ✓":"Clase registrada"); })
+  apiPut().then(function(){ renderAll(); closeOv("ovRegistro"); toast(editId?"Clase actualizada ✓":(nRegistrados>1?"Clase grupal registrada para "+nRegistrados+" alumnos ✓":"Clase registrada")); })
     .catch(function(){ toast("No se pudo guardar. Revisa tu conexión e intenta de nuevo."); })
     .finally(function(){ btnReg.disabled=false; });
 });

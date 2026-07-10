@@ -2149,6 +2149,10 @@ async function ensureSchema(env){
     await env.DB.prepare(
       "CREATE TABLE IF NOT EXISTS ejercicios (id TEXT PRIMARY KEY, titulo TEXT DEFAULT '', descripcion TEXT DEFAULT '', url TEXT DEFAULT '', curso TEXT DEFAULT 'Todos', fecha TEXT DEFAULT '')"
     ).run();
+    // grupos (clases grupales con miembros; portado de Batuta 10-jul-2026)
+    await env.DB.prepare(
+      "CREATE TABLE IF NOT EXISTS grupos (id TEXT PRIMARY KEY, nombre TEXT NOT NULL, curso TEXT DEFAULT '', horario TEXT DEFAULT '', miembros TEXT DEFAULT '[]', creado TEXT DEFAULT '')"
+    ).run();
     // carpeta: ruta relativa (sin el nombre de archivo) cuando el ejercicio se subió como parte
     // de una carpeta completa (02-jul-2026). Vacío = subida suelta de un solo archivo (como antes).
     const infoEjercicios = await env.DB.prepare("PRAGMA table_info(ejercicios)").all();
@@ -3708,6 +3712,41 @@ export default {
           return json({ suscripciones: (row && row.n) || 0 });
         }
 
+        /* -------- Grupos (clases grupales con miembros; portado de Batuta) -------- */
+        if (url.pathname === "/api/admin/grupo" && request.method === "POST"){
+          const b = await request.json().catch(() => ({}));
+          const accion = String(b.accion || "");
+          if (accion === "borrar"){
+            await env.DB.prepare("DELETE FROM grupos WHERE id = ?1").bind(String(b.id || "")).run();
+            return json({ ok: true });
+          }
+          if (accion !== "crear" && accion !== "editar") return json({ error: "Accion no valida" }, 400);
+          const nombre = String(b.nombre || "").trim().slice(0, 60);
+          if (nombre.length < 2) return json({ error: "Ponle un nombre al grupo." }, 400);
+          const curso = String(b.curso || "").trim().slice(0, 40);
+          const horario = String(b.horario || "").trim().slice(0, 80);
+          /* miembros: solo ids de alumnos reales */
+          const pedidos = Array.isArray(b.miembros) ? b.miembros.map(x => String(x)).slice(0, 100) : [];
+          let miembros = [];
+          if (pedidos.length){
+            const { results: als } = await env.DB.prepare("SELECT id FROM alumnos").all();
+            const validos = new Set((als || []).map(a => a.id));
+            miembros = pedidos.filter((x, i, a) => validos.has(x) && a.indexOf(x) === i);
+          }
+          if (accion === "crear"){
+            await env.DB.prepare(
+              "INSERT INTO grupos (id,nombre,curso,horario,miembros,creado) VALUES (?1,?2,?3,?4,?5,?6)"
+            ).bind(crypto.randomUUID(), nombre, curso, horario, JSON.stringify(miembros), hoy()).run();
+          } else {
+            const r = await env.DB.prepare(
+              "UPDATE grupos SET nombre = ?1, curso = ?2, horario = ?3, miembros = ?4 WHERE id = ?5"
+            ).bind(nombre, curso, horario, JSON.stringify(miembros), String(b.id || "")).run();
+            const filas = (r && r.meta && (r.meta.changes ?? r.meta.rows_written)) || 0;
+            if (!filas) return json({ error: "Grupo no encontrado" }, 404);
+          }
+          return json({ ok: true });
+        }
+
         if (url.pathname === "/api/admin/data" && request.method === "GET"){
           const alumnos  = (await env.DB.prepare("SELECT * FROM alumnos ORDER BY nombre").all()).results || [];
           // Horario(s) fijo(s) derivado(s) de la agenda, en un solo barrido (sin N+1). Fuente única de verdad.
@@ -3738,7 +3777,12 @@ export default {
           const leads    = (await env.DB.prepare("SELECT id,email,marca,fuente,interes,fecha FROM leads ORDER BY fecha DESC, rowid DESC LIMIT 1000").all()).results || [];
           const precios  = await loadPrecios(env);
           const config   = await loadConfig(env);
-          return json({ alumnos, registro, precios, cuentas, compras, recursos, ejercicios, leads, config,
+          let grupos = [];
+          try {
+            grupos = ((await env.DB.prepare("SELECT * FROM grupos ORDER BY creado DESC, rowid DESC").all()).results || [])
+              .map(g => { let m = []; try { m = JSON.parse(g.miembros || "[]"); } catch (e) {} return Object.assign({}, g, { miembros: Array.isArray(m) ? m : [] }); });
+          } catch (e) { /* tabla aun no creada: [] */ }
+          return json({ alumnos, registro, precios, cuentas, compras, recursos, ejercicios, leads, grupos, config,
                         vapid_public: env.VAPID_PUBLIC_KEY || "" });
         }
 

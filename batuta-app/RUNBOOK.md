@@ -138,3 +138,15 @@
 - 4 guias por portal (alumno / profesor / academia / academia+) en el vault: proyectos/Batuta - Guia del portal del *.md
 - Manual visual + 5 PDFs (4 por portal + completo) en ~/Desktop/Batuta-Guias/ (marca Batuta, tema claro, listos para WhatsApp). Fuente: Guias-Batuta.html.
 - Dato de diseno de producto confirmado aqui: profesor/academia/academia+ son EL MISMO panel; solo cambian asientos (MAX_PROFES 1/5/20) y el gating solo-dueno (Profesores, Interesados, Caja).
+
+## Ingreso manual facilitado + onboarding al dia (10-jul-2026, tarde)
+- "Pega tu lista aqui" dentro del modal Importar CSV: un alumno por linea (de Excel/WhatsApp/nota), heuristica nombre/curso/celular/paquete, mismo preview+dedup+apiPut. Verificado E2E en prod (demo).
+- Boton "Guardar y agregar otro" en el modal de alumno (solo al CREAR; oculto al editar): guarda y deja el formulario listo conservando curso/paquete/pago/fecha. Verificado E2E.
+- Checklist de activacion: paso 2 ahora dice "Trae a tus alumnos (a mano, pegando tu lista o importando tu Excel/CSV)".
+- Asistente IA (onboarding-ia, prompt admin): sabe explicar Importar CSV / pegar lista / guardar-y-otro. Correo dia-1 del nurture ("Mete a tus alumnos") menciona el importador.
+- OJO cache: el navegador puede retener el HTML del panel (heuristica); tras deploy, probar con ?nc= o hard reload antes de diagnosticar "no salio".
+
+## Paridad portada a profesormvt y nicole-web (10-jul-2026, tarde)
+- Portado a AMBOS (sin tocar branding; mismos parches, script scratchpad/portar.py de la sesion): importador CSV + pegar lista + guardar-y-otro, chips "copiar link de cobro" en Inicio (usa el /pagar publico que ya existia), tour de bienvenida con anclas data-tour estables (personas/link-alumnos/cobros/#oiaFab, 1 vez por navegador via localStorage crm_tour_v1), recibo imprimible publico /r/<compra_id> (worker: reciboHTML + esc local + gate de assets deja pasar /r/* + run_worker_first), boton "Recibo ↗" en pagos confirmados, nombres de paquete UNIFICADOS en correos (los 2 inline viejos ahora usan NOMBRES_PAQUETE global "Plan Esencial/Intensivo/Estrella").
+- profesormvt.com: DEPLOYADO (push main -> Action success) y verificado E2E en el CRM real (22 alumnos, 4 chips, 7 links de recibo, recibo real 200, tour auto-lanzado y cerrado SIN marcar visto para que Andres lo vea).
+- nicole-web: codigo commiteado y pusheado; el DEPLOY del worker esta PENDIENTE (cuenta CF de Nicole 75cb4a4b..., token lo tiene Andres; wrangler de Andres da auth error 10000). Al tener el token: CLOUDFLARE_API_TOKEN=<token> npx wrangler deploy desde ~/Code/nicole-web.
