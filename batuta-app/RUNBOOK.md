@@ -93,3 +93,18 @@
 - Público en /app/r/<compra_id> (id = UUID inadivinable; la demo usa demo-cp-N). Solo compras confirmadas.
 - En el panel (Pagos, columna Boleta): link "Recibo ↗" en cada pago confirmado (dueño). La boleta SUNAT/Nubefact sigue siendo el comprobante fiscal SOLO para Perú.
 - Factura fiscal de otros países (México SAT, Colombia DIAN, etc.) = integración por país bajo demanda (Alegra cubre varios); NO construida hasta que un tenant de ese país la pida.
+
+## Auto-responder de WhatsApp (10-jul-2026) — SCAFFOLD (necesita conexión de Meta)
+- Webhook en /app/api/wa/webhook (GET verifica con WHATSAPP_VERIFY_TOKEN, POST recibe mensajes).
+- Al llegar un mensaje: crea/actualiza el lead del tenant (etapa 'contactado', seguir hoy) y manda
+  una auto-respuesta cálida de primer toque. NO es un bot multi-paso (el profe cierra desde su panel).
+- Ruteo por tenant: config wa_phone_id = el phone_number_id del número de esa academia. Encendido con
+  config wa_enabled='on' (apagado por defecto). Sin WHATSAPP_TOKEN el webhook es INERTE (200 vacío).
+- QUÉ FALTA (paso de Andrés, no se puede probar sin esto): crear una app en Meta for Developers con
+  WhatsApp Cloud API, conectar un número (WABA), y cargar los secrets:
+    npx wrangler secret put WHATSAPP_TOKEN --name batuta-app   (token permanente de la WABA)
+    npx wrangler secret put WHATSAPP_VERIFY_TOKEN --name batuta-app   (string que tú inventas)
+  Luego en Meta: webhook URL https://batuta.lat/app/api/wa/webhook, verify token = el mismo, suscribir 'messages'.
+  Y en cada academia: guardar su phone_number_id en config wa_phone_id + wa_enabled='on'.
+- Verificado en prod: GET sin token = 403, POST inerte = 200. La lógica de lead+reply no se pudo
+  probar E2E sin credenciales de Meta (misma situación que Nubefact hasta conectar la cuenta).

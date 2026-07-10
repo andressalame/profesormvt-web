@@ -464,6 +464,25 @@ function limpiarTextoChat(t){
 }
 
 /* ---------- correo transaccional (Resend). Sin key -> false, degrada con gracia. ---------- */
+/* ---------- Auto-responder de WhatsApp (10-jul-2026, scaffold) ----------
+   Responde el PRIMER contacto 24/7 y mete al interesado al pipeline del tenant, para
+   competir con Hamubot/WeGrou. Usa la WhatsApp Cloud API de Meta: el tenant conecta su
+   numero (guarda su phone_number_id en config wa_phone_id) y Batuta usa un token de la
+   WABA (secret WHATSAPP_TOKEN). Sin token -> inerte (degrada con gracia, patron de la casa).
+   NO es un bot conversacional multi-paso (eso es fragil sin poder probarlo): es un
+   primer-toque calido + captura del lead; el profe cierra desde su panel. */
+async function enviarWhatsApp(env, phoneId, to, text){
+  if (!env.WHATSAPP_TOKEN || !phoneId || !to || !text) return false;
+  try {
+    const r = await fetch("https://graph.facebook.com/v21.0/" + encodeURIComponent(phoneId) + "/messages", {
+      method: "POST",
+      headers: { "Authorization": "Bearer " + env.WHATSAPP_TOKEN, "Content-Type": "application/json" },
+      body: JSON.stringify({ messaging_product: "whatsapp", to: String(to), type: "text", text: { body: String(text).slice(0, 1000) } })
+    });
+    return r.ok;
+  } catch (e) { return false; }
+}
+
 async function enviarCorreo(env, { to, subject, html, text, from }){
   if (!env.RESEND_API_KEY || !to || !subject) return false;
   const remitente = (from && from.email)
@@ -2998,6 +3017,61 @@ export default {
          subscription_preapproval (alta/cambio de la suscripcion) y
          subscription_authorized_payment (cada cobro recurrente).
          ============================================================ */
+      /* Webhook de WhatsApp (Meta Cloud API): verificacion (GET) + mensajes entrantes (POST).
+         Auto-responde el primer contacto y crea el lead en el pipeline del tenant. */
+      if (path === "/app/api/wa/webhook" && request.method === "GET"){
+        const modo = url.searchParams.get("hub.mode");
+        const tok = url.searchParams.get("hub.verify_token");
+        const challenge = url.searchParams.get("hub.challenge");
+        if (modo === "subscribe" && env.WHATSAPP_VERIFY_TOKEN && tok === env.WHATSAPP_VERIFY_TOKEN){
+          return new Response(challenge || "", { status: 200, headers: { "content-type": "text/plain" } });
+        }
+        return new Response("forbidden", { status: 403 });
+      }
+      if (path === "/app/api/wa/webhook" && request.method === "POST"){
+        // Siempre 200 rapido (Meta reintenta si no); el trabajo va en waitUntil.
+        if (!env.WHATSAPP_TOKEN) return new Response("ok", { status: 200 });
+        const body = await request.json().catch(() => null);
+        ctx.waitUntil((async () => {
+          try {
+            const val = body && body.entry && body.entry[0] && body.entry[0].changes && body.entry[0].changes[0] && body.entry[0].changes[0].value;
+            if (!val || !val.messages || !val.messages[0]) return;
+            const msg = val.messages[0];
+            if (msg.type !== "text") return;
+            const wamid = String(msg.id || "");
+            // dedup: Meta reintenta el mismo mensaje; procesarlo una sola vez
+            if (wamid && await chatbotPasoTope(env, "wamid:" + wamid, 1)) return;
+            const phoneId = (val.metadata && val.metadata.phone_number_id) || "";
+            const from = String(msg.from || "").replace(/[^\d]/g, "");
+            const texto = String((msg.text && msg.text.body) || "").slice(0, 500);
+            const nombre = (val.contacts && val.contacts[0] && val.contacts[0].profile && val.contacts[0].profile.name) || "";
+            if (!phoneId || !from) return;
+            // resolver el tenant dueno de ese numero (config wa_phone_id)
+            const cfgRow = await env.DB.prepare("SELECT tenant_id FROM config WHERE clave = 'wa_phone_id' AND valor = ?1").bind(phoneId).first().catch(() => null);
+            if (!cfgRow) return;
+            const tW = await env.DB.prepare("SELECT id, academia, slug, estado FROM tenants WHERE id = ?1").bind(cfgRow.tenant_id).first();
+            if (!tW || tW.estado === "vencido") return;
+            const cfgW = await loadConfig(env, tW.id);
+            if (String(cfgW.wa_enabled || "") !== "on") return; // apagado por defecto
+            await ensureErpSchema(env);
+            // crea/actualiza el lead (una fila por telefono), etapa contactado, seguir hoy
+            const yaLead = await env.DB.prepare("SELECT id FROM leads WHERE tenant_id = ?1 AND whatsapp = ?2").bind(tW.id, from).first().catch(() => null);
+            if (yaLead){
+              await env.DB.prepare("UPDATE leads SET nota = ?1, etapa = CASE WHEN etapa IN ('alumno','perdido') THEN etapa ELSE 'contactado' END, seguir_el = ?2, actualizado = ?2 WHERE id = ?3 AND tenant_id = ?4")
+                .bind(("Escribió por WhatsApp: " + texto).slice(0, 500), hoyLima(), yaLead.id, tW.id).run();
+            } else {
+              await env.DB.prepare("INSERT INTO leads (id,tenant_id,email,marca,fuente,interes,fecha,nombre,whatsapp,etapa,nota,seguir_el,actualizado) VALUES (?1,?2,'','Batuta','whatsapp','',?3,?4,?5,'contactado',?6,?3,?3)")
+                .bind(crypto.randomUUID(), tW.id, hoyLima(), String(nombre).slice(0, 80), from, ("Escribió por WhatsApp: " + texto).slice(0, 500)).run();
+            }
+            // auto-respuesta calida de primer toque (solo la primera vez del dia)
+            const saludo = (nombre ? nombre.split(" ")[0] : "Hola") + ", gracias por escribir a " + (tW.academia || "nuestra academia") + " 🙌";
+            const cuerpo = saludo + "\n\nSoy el asistente de " + (tW.academia || "la academia") + ". Cuéntame qué te gustaría aprender y con gusto te paso los horarios y precios. Un profesor te responde en breve.";
+            await enviarWhatsApp(env, phoneId, from, cuerpo);
+          } catch (e) { console.error("wa webhook", e); }
+        })());
+        return new Response("ok", { status: 200 });
+      }
+
       if (path === "/app/api/mp/webhook" && request.method === "POST"){
         try {
           if (!(await validarFirmaMP(env, request, url))){
@@ -5068,7 +5142,7 @@ export default {
           /* config del tenant (cobros, marca, cupo, cursos): SOLO el dueno */
           if (!esDueno) return json({ error: "Los ajustes de la academia los maneja el dueno." }, 403);
           const b = await request.json().catch(() => ({}));
-          const claves = ["pago_numero", "pago_titular", "bcp_cuenta", "bcp_cci", "scotia_cuenta", "scotia_cci", "crypto_moneda", "crypto_red", "crypto_wallet", "profe_nombre", "profe_marca", "profe_foto", "whatsapp_profe", "cursos", "brand_color", "brand_font", "agenda_cupo", "recordatorios_clase", "recordatorio_renovacion", "nubefact_ruta", "nubefact_token", "fact_serie_boleta", "fact_igv", "fact_proximo_numero"];
+          const claves = ["pago_numero", "pago_titular", "bcp_cuenta", "bcp_cci", "scotia_cuenta", "scotia_cci", "crypto_moneda", "crypto_red", "crypto_wallet", "profe_nombre", "profe_marca", "profe_foto", "whatsapp_profe", "cursos", "brand_color", "brand_font", "agenda_cupo", "recordatorios_clase", "recordatorio_renovacion", "nubefact_ruta", "nubefact_token", "fact_serie_boleta", "fact_igv", "fact_proximo_numero", "wa_phone_id", "wa_enabled"];
           const stmts = [];
           for (const k of claves){
             if (k in b){
@@ -5094,6 +5168,8 @@ export default {
                 if (!/^B[A-Z0-9]{3}$/.test(valor)) valor = "";
               }
               if (k === "fact_igv" && valor && ["gravado", "exonerado"].indexOf(valor) === -1) valor = "";
+              if (k === "wa_enabled" && valor && valor !== "on") valor = "";
+              if (k === "wa_phone_id") valor = valor.replace(/\D/g, "").slice(0, 25);
               if (k === "fact_proximo_numero" && valor){
                 const np = parseInt(valor, 10);
                 valor = (Number.isFinite(np) && np >= 1 && np <= 99999999) ? String(np) : "";
