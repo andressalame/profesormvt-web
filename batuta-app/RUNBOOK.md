@@ -63,3 +63,14 @@
 - Cron UNICO cada 15 min (limite de 5 crons/cuenta en plan free): recordatorios de clase (24h y 1h antes, columnas aviso_24/aviso_1h) siempre; a las 14:00 UTC ademas nurture + renovaciones (vence −3d a +3d, 1 por ciclo via aviso_vence_ciclo) + reset demo.
 - Toggles por tenant en Ajustes: recordatorios_clase / recordatorio_renovacion ('' = ON, 'off' = apagado). Demo y tenants vencidos jamas mandan. Sin RESEND_API_KEY degrada mudo.
 - Probar a demanda: curl -X POST https://batuta.lat/app/api/su/correr-recordatorios -H "Authorization: Bearer $(cat .admin-token.local)"
+
+## ERP/CRM de la academia (10-jul-2026)
+- **CRM (Interesados):** pipeline nuevo|contactado|prueba|alumno|perdido con nota, fecha de seguimiento
+  (dot en el menu con los que tocan hoy) y boton WhatsApp con mensaje segun etapa. Alta manual + los que
+  capta la web del tenant entran solos como "nuevo". Endpoint admin/lead (SOLO dueno).
+- **Caja:** tabla `gastos` + pestana Caja (Cobros): P&L del mes = compras confirmadas - gastos. admin/gasto (SOLO dueno).
+- **Comisiones:** profesores.comision_pct / tarifa_clase (boton Comision en Profesores, aplica tambien al dueno)
+  + GET admin/liquidacion?mes=YYYY-MM: ingresos atribuidos, clases dictadas y a-pagar por profe.
+- **Cupo por franja:** disponibilidad.cupo (0 = usa el cupo global de Ajustes). Doble clic en la celda
+  del horario para asignarlo. Permite grupos y 1-a-1 conviviendo en la misma agenda.
+- Schema: ALTERs perezosos via ensureErpSchema (corre solo en los endpoints nuevos; SELECTs con fallback).

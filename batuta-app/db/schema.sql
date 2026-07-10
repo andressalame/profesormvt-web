@@ -18,7 +18,9 @@ CREATE TABLE IF NOT EXISTS profesores (
   rol          TEXT DEFAULT 'profesor',   -- dueno | profesor
   estado       TEXT DEFAULT 'activo',     -- activo | invitado | suspendido
   invite_token TEXT DEFAULT '',
-  creado       TEXT DEFAULT ''
+  creado       TEXT DEFAULT '',
+  comision_pct REAL DEFAULT 0,            -- % de sus ingresos atribuidos (liquidacion mensual)
+  tarifa_clase REAL DEFAULT 0             -- S/ por clase dictada (se suma al %)
 );
 CREATE INDEX IF NOT EXISTS idx_profesores_tenant ON profesores (tenant_id);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_profesores_email ON profesores (tenant_id, email);
@@ -137,6 +139,7 @@ CREATE TABLE IF NOT EXISTS disponibilidad (
   dia_semana  INTEGER NOT NULL,
   hora        TEXT NOT NULL,
   activo      INTEGER DEFAULT 1,
+  cupo        INTEGER DEFAULT 0,   -- cupo por franja: 0 = usa el cupo global (config agenda_cupo)
   PRIMARY KEY (tenant_id, profesor_id, dia_semana, hora)
 );
 CREATE INDEX IF NOT EXISTS idx_disponibilidad_tenant ON disponibilidad (tenant_id);
@@ -271,7 +274,7 @@ CREATE TABLE IF NOT EXISTS push_subs (
 );
 CREATE INDEX IF NOT EXISTS idx_push_subs_cuenta ON push_subs (tenant_id, cuenta_id);
 
--- ============ LEADS ============
+-- ============ LEADS / CRM (pipeline agregado 10-jul-2026) ============
 CREATE TABLE IF NOT EXISTS leads (
   id           TEXT PRIMARY KEY,
   tenant_id    TEXT NOT NULL,
@@ -280,8 +283,26 @@ CREATE TABLE IF NOT EXISTS leads (
   fuente       TEXT DEFAULT '',
   interes      TEXT DEFAULT '',
   nurture_paso INTEGER DEFAULT 0,
-  fecha        TEXT NOT NULL
+  fecha        TEXT NOT NULL,
+  nombre       TEXT DEFAULT '',
+  whatsapp     TEXT DEFAULT '',
+  etapa        TEXT DEFAULT 'nuevo',   -- nuevo | contactado | prueba | alumno | perdido
+  nota         TEXT DEFAULT '',
+  seguir_el    TEXT DEFAULT '',        -- fecha de proximo follow-up (YYYY-MM-DD)
+  actualizado  TEXT DEFAULT ''
 );
+
+-- ============ CAJA: gastos de la academia (10-jul-2026) ============
+CREATE TABLE IF NOT EXISTS gastos (
+  id        TEXT PRIMARY KEY,
+  tenant_id TEXT NOT NULL,
+  fecha     TEXT DEFAULT '',
+  concepto  TEXT NOT NULL,
+  categoria TEXT DEFAULT '',
+  monto     REAL DEFAULT 0,
+  creado    TEXT DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS idx_gastos_tenant ON gastos (tenant_id, fecha);
 CREATE INDEX IF NOT EXISTS idx_leads_email ON leads (tenant_id, email);
 CREATE INDEX IF NOT EXISTS idx_leads_fecha ON leads (tenant_id, fecha);
 

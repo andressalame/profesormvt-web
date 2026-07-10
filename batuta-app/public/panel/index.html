@@ -283,7 +283,7 @@
           <button class="tab" data-tab="grupos">Grupos</button>
           <button class="tab solo-dueno" data-tab="profesores">Profesores</button>
           <button class="tab" data-tab="cuentas">Accesos al portal</button>
-          <button class="tab solo-dueno" data-tab="leads">Interesados</button>
+          <button class="tab solo-dueno" data-tab="leads">Interesados<span class="dot hidden" id="dotLeads">0</span></button>
         </div>
       </div>
       <div class="navgroup">
@@ -298,6 +298,7 @@
         <button class="navgroup-h" type="button"><span class="ng-ico"><svg viewBox="0 0 24 24"><rect x="2" y="5" width="20" height="14" rx="2"/><circle cx="12" cy="12" r="3"/><line x1="6" y1="12" x2="6.01" y2="12"/><line x1="18" y1="12" x2="18.01" y2="12"/></svg></span><span class="ng-tx">Cobros</span><span class="ng-chev"><svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg></span></button>
         <div class="navgroup-items">
           <button class="tab" data-tab="pagos">Pagos<span class="dot hidden" id="dotPagos">0</span></button>
+          <button class="tab solo-dueno" data-tab="caja">Caja</button>
           <button class="tab" data-tab="reportes">Reportes</button>
         </div>
       </div>
@@ -410,9 +411,21 @@
     <p class="hint" style="margin-bottom:16px;">Cada profesor entra con su propio correo y contraseña, y ve SOLO sus alumnos, su agenda y sus horarios. Tú lo ves todo. Los pagos, precios y la marca siguen siendo tuyos.</p>
     <div class="tablewrap">
       <table id="tablaProfes">
-        <thead><tr><th>Profesor</th><th>Correo</th><th>Alumnos</th><th>Estado</th><th></th></tr></thead>
+        <thead><tr><th>Profesor</th><th>Correo</th><th>Alumnos</th><th>Comisión</th><th>Estado</th><th></th></tr></thead>
         <tbody></tbody>
       </table>
+    </div>
+    <div class="group" style="margin-top:24px;">
+      <h2>// Liquidación del mes</h2>
+      <div style="display:flex;align-items:center;gap:12px;margin:8px 0 12px;flex-wrap:wrap;">
+        <input id="liqMes" type="month" style="width:auto;" />
+        <span class="hint" id="liqResumen"></span>
+      </div>
+      <p class="hint">Ingresos = pagos confirmados del mes atribuidos a cada profe. Clases = las registradas como dictadas. A pagar = su % + su tarifa por clase.</p>
+      <div class="tablewrap">
+        <table id="tablaLiq"><thead><tr><th>Profesor</th><th>Ingresos que trajo</th><th>Clases dictadas</th><th>Comisión</th><th>A pagar</th></tr></thead>
+        <tbody id="tbLiq"></tbody></table>
+      </div>
     </div>
   </section>
 
@@ -517,10 +530,47 @@
   </section>
 
   <section class="panel" id="panel-leads">
-    <p class="hint">Correos capturados con la guía gratis (landing, blog, home). A los más calientes, escríbeles tú por WhatsApp para cerrarlos.</p>
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px;flex-wrap:wrap;">
+      <button class="btn" id="btnNuevoLead">+ Interesado</button>
+      <span class="hint" id="leadSeguirHoy"></span>
+    </div>
+    <p class="hint" style="margin-bottom:12px;">Tu embudo de ventas: cada interesado avanza por etapas hasta ser alumno. Ponle fecha de seguimiento y el botón WhatsApp te arma el mensaje según su etapa. Los que capta tu web entran solos como "Nuevo".</p>
+    <div id="leadEtapas" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;"></div>
     <div class="tablewrap">
-      <table><thead><tr><th>Fecha</th><th>Correo</th><th>Fuente</th><th>Interés</th></tr></thead>
+      <table id="tablaLeads"><thead><tr><th>Interesado</th><th>Interés</th><th>Etapa</th><th>Seguir el</th><th>Nota</th><th></th></tr></thead>
       <tbody id="tbLeads"></tbody></table>
+    </div>
+  </section>
+
+  <section class="panel" id="panel-caja">
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px;flex-wrap:wrap;">
+      <label class="hint" style="margin:0;">Mes</label>
+      <input id="cajaMes" type="month" style="width:auto;" />
+    </div>
+    <div class="frow" style="grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:18px;">
+      <div class="card" style="padding:14px 16px;"><div class="mini">Ingresos cobrados</div><div class="big" id="cajaIng">S/ 0</div></div>
+      <div class="card" style="padding:14px 16px;"><div class="mini">Gastos</div><div class="big" id="cajaGas">S/ 0</div></div>
+      <div class="card" style="padding:14px 16px;"><div class="mini">Neto del mes</div><div class="big" id="cajaNeto">S/ 0</div></div>
+    </div>
+    <div class="group">
+      <h2>// Registrar gasto</h2>
+      <div class="frow">
+        <div class="field"><label>Concepto</label><input id="g_concepto" type="text" placeholder="Alquiler del local" /></div>
+        <div class="field"><label>Monto (S/)</label><input id="g_monto" type="number" min="0" step="0.01" placeholder="0.00" /></div>
+      </div>
+      <div class="frow">
+        <div class="field"><label>Fecha</label><input id="g_fecha" type="date" /></div>
+        <div class="field"><label>Categoría</label><select id="g_categoria"><option>Local</option><option>Sueldos y comisiones</option><option>Marketing</option><option>Materiales</option><option>Servicios</option><option>Otro</option></select></div>
+      </div>
+      <div style="display:flex;align-items:center;gap:12px;">
+        <button class="btn" id="btnGuardarGasto">Registrar gasto</button>
+        <span class="hint" id="gastoErr"></span>
+      </div>
+    </div>
+    <h3 style="margin-top:22px;">Gastos del mes</h3>
+    <div class="tablewrap">
+      <table id="tablaGastos"><thead><tr><th>Fecha</th><th>Concepto</th><th>Categoría</th><th>Monto</th><th></th></tr></thead>
+      <tbody id="tbGastos"></tbody></table>
     </div>
   </section>
 
@@ -785,6 +835,52 @@
     <div style="display:flex;align-items:center;gap:12px;">
       <button class="btn ghost" id="btnPwFb">Enviar y ganar 7 días</button>
       <span class="hint" id="pwFbMsg"></span>
+    </div>
+  </div>
+</div>
+
+<!-- Modal interesado (CRM) -->
+<div class="overlay" id="ovLead">
+  <div class="modal">
+    <h3 id="leadTitulo">Nuevo <em>interesado</em></h3>
+    <div class="mlab">// Con nombre y WhatsApp basta para empezar a venderle</div>
+    <input type="hidden" id="l_id" />
+    <div class="frow">
+      <div class="field"><label>Nombre</label><input id="l_nombre" type="text" placeholder="María" /></div>
+      <div class="field"><label>WhatsApp (con 51…)</label><input id="l_whatsapp" type="text" placeholder="51999999999" /></div>
+    </div>
+    <div class="frow">
+      <div class="field"><label>Correo (opcional)</label><input id="l_email" type="email" /></div>
+      <div class="field"><label>Interés</label><input id="l_interes" type="text" placeholder="Canto / Piano / Inglés…" /></div>
+    </div>
+    <div class="frow">
+      <div class="field"><label>Etapa</label><select id="l_etapa"></select></div>
+      <div class="field"><label>Seguir el</label><input id="l_seguir" type="date" /></div>
+    </div>
+    <div class="field"><label>Nota</label><textarea id="l_nota" rows="2" placeholder="Qué le interesa, qué objeción tiene, qué quedaste en mandarle…"></textarea></div>
+    <div class="err" id="leadErr" style="color:#e8604f;font-size:13px;min-height:16px;"></div>
+    <div class="modal-actions">
+      <button class="btn ghost" data-close>Cancelar</button>
+      <button class="btn" id="btnGuardarLead">Guardar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal comisión de profesor -->
+<div class="overlay" id="ovComision">
+  <div class="modal">
+    <h3>Comisión de <em id="comisionNombre">profesor</em></h3>
+    <div class="mlab">// Se calcula sola en la liquidación de cada mes</div>
+    <input type="hidden" id="cm_id" />
+    <div class="frow">
+      <div class="field"><label>% de sus ingresos</label><input id="cm_pct" type="number" min="0" max="100" step="0.5" placeholder="0" /></div>
+      <div class="field"><label>S/ por clase dictada</label><input id="cm_tarifa" type="number" min="0" step="0.5" placeholder="0" /></div>
+    </div>
+    <p class="hint">Puedes usar uno, el otro o ambos: a pagar = % de los ingresos que trae + tarifa por cada clase que dicta.</p>
+    <div class="err" id="cmErr" style="color:#e8604f;font-size:13px;min-height:16px;"></div>
+    <div class="modal-actions">
+      <button class="btn ghost" data-close>Cancelar</button>
+      <button class="btn" id="btnGuardarComision">Guardar</button>
     </div>
   </div>
 </div>
@@ -1632,13 +1728,165 @@ function fillSelects(){
   if(prevPk) el("a_paquete").value=prevPk;
   if(prevAl) el("r_alumno").value=prevAl;
 }
+/* ---------- CRM de interesados: pipeline con etapas + WhatsApp por etapa ---------- */
+/* "hoy" en hora de Lima (UTC-5): sin esto, desde las 7pm el dot, la caja y la
+   liquidación saltaban al día/mes siguiente (hallazgo del review). */
+function hoyLima(){ return new Date(Date.now()-5*3600000).toISOString().slice(0,10); }
+var ETAPAS=[
+  {k:"nuevo",n:"Nuevo"},{k:"contactado",n:"Contactado"},{k:"prueba",n:"Prueba agendada"},
+  {k:"alumno",n:"Alumno ✓"},{k:"perdido",n:"Perdido"}];
+var LEAD_FILTRO="";
+function etapaNombre(k){ var e=ETAPAS.find(function(x){return x.k===k;}); return e?e.n:k; }
+function waLead(l){
+  var n=(l.nombre||"").split(" ")[0]||"";
+  var hola=n?("Hola "+n+"!"):"Hola!";
+  var interes=l.interes?(" "+l.interes):(" clases");
+  var textos={
+    nuevo: hola+" Vi que te interesa"+interes+" en "+MARCA.nombre+". Te cuento como funciona? :)",
+    contactado: hola+" Te sigo guardando el sitio para"+interes+". Agendamos tu clase de prueba? :)",
+    prueba: hola+" Todo listo para tu clase de prueba en "+MARCA.nombre+". Cualquier cosa me escribes por aqui :)",
+    alumno: hola+" Como vas con tus clases? Cualquier cosa que necesites, me dices :)",
+    perdido: hola+" Hace un tiempo te interesaba"+interes+". Seguimos teniendo sitio, te animas? :)"
+  };
+  return "https://wa.me/"+String(l.whatsapp||"").replace(/[^\d]/g,"")+"?text="+encodeURIComponent(textos[l.etapa]||textos.nuevo);
+}
+function leadsPorSeguirHoy(){
+  var hoyS=hoyLima();
+  return (db.leads||[]).filter(function(l){
+    return l.seguir_el && l.seguir_el<=hoyS && l.etapa!=="alumno" && l.etapa!=="perdido";
+  }).length;
+}
 function renderLeads(){
   var tb=el("tbLeads"); if(!tb) return;
-  if(!db.leads || db.leads.length===0){ tb.innerHTML='<tr><td colspan="4" class="empty">Aún no hay leads capturados</td></tr>'; return; }
-  tb.innerHTML=db.leads.map(function(l){
-    return '<tr><td>'+esc(l.fecha||'')+'</td><td>'+esc(l.email||'')+'</td><td>'+esc(l.fuente||'')+'</td><td>'+esc(l.interes||'')+'</td></tr>';
+  /* no repintar mientras el usuario interactúa con la tabla (el refresco de 30s
+     cerraba el select de etapa abierto: hallazgo del review) */
+  if(document.activeElement && document.activeElement.closest && document.activeElement.closest("#panel-leads")) return;
+  var leads=db.leads||[];
+  /* dot del menú + aviso "por seguir hoy" */
+  var nHoy=leadsPorSeguirHoy();
+  var dot=el("dotLeads");
+  if(dot){ dot.textContent=nHoy; dot.classList.toggle("hidden", !nHoy); dot.style.display=nHoy?"":"none"; }
+  var sh=el("leadSeguirHoy");
+  if(sh) sh.textContent=nHoy?("🔔 "+nHoy+" por seguir hoy"):"";
+  /* pills de etapas con conteo (filtran) */
+  var fe=el("leadEtapas");
+  if(fe){
+    var conteos={}; leads.forEach(function(l){ var k=l.etapa||"nuevo"; conteos[k]=(conteos[k]||0)+1; });
+    fe.innerHTML='<button class="btn ghost sm'+(LEAD_FILTRO===""?" sel":"")+'" data-letapa="">Todos ('+leads.length+')</button>'+
+      ETAPAS.map(function(e){
+        return '<button class="btn ghost sm'+(LEAD_FILTRO===e.k?" sel":"")+'" data-letapa="'+e.k+'">'+e.n+' ('+(conteos[e.k]||0)+')</button>';
+      }).join("");
+  }
+  var vista=LEAD_FILTRO?leads.filter(function(l){return (l.etapa||"nuevo")===LEAD_FILTRO;}):leads;
+  /* los que tocan seguimiento hoy, arriba */
+  var hoyS=hoyLima();
+  vista=vista.slice().sort(function(a,b){
+    var av=(a.seguir_el&&a.seguir_el<=hoyS)?0:1, bv=(b.seguir_el&&b.seguir_el<=hoyS)?0:1;
+    return av-bv || (b.fecha||"").localeCompare(a.fecha||"");
+  });
+  if(!vista.length){ tb.innerHTML='<tr><td colspan="6" class="empty">'+(LEAD_FILTRO?"Nadie en esta etapa.":"Aún no hay interesados. Agrega el primero o espera a los que capta tu web.")+'</td></tr>'; return; }
+  tb.innerHTML=vista.map(function(l){
+    var quien='<strong>'+esc(l.nombre||l.email||l.whatsapp||"(sin datos)")+'</strong>'+
+      '<br><span class="mini">'+esc(l.email||"")+(l.email&&l.whatsapp?" · ":"")+esc(l.whatsapp||"")+(l.fuente?' · '+esc(l.fuente):'')+'</span>';
+    var selEtapa='<select data-leadetapa="'+l.id+'" style="width:auto;">'+ETAPAS.map(function(e){
+      return '<option value="'+e.k+'"'+((l.etapa||"nuevo")===e.k?" selected":"")+'>'+e.n+'</option>';
+    }).join("")+'</select>';
+    var seguir=l.seguir_el?(l.seguir_el<=hoyS?'<span class="pill amber">'+esc(l.seguir_el)+'</span>':esc(l.seguir_el)):'—';
+    var acc='<div class="rowact">'+
+      (l.whatsapp?'<a class="btn sm" target="_blank" rel="noopener" href="'+esc(waLead(l))+'">WhatsApp</a>':'')+
+      '<button class="btn ghost sm" data-leadedit="'+l.id+'">Editar</button>'+
+      '<button class="btn ghost sm" data-leaddel="'+l.id+'">×</button></div>';
+    return '<tr><td class="name">'+quien+'</td><td>'+esc(l.interes||"")+'</td><td>'+selEtapa+'</td><td>'+seguir+'</td><td class="notes">'+esc(l.nota||"")+'</td><td>'+acc+'</td></tr>';
   }).join("");
 }
+function abrirLead(l){
+  el("leadTitulo").innerHTML=l?'Editar <em>interesado</em>':'Nuevo <em>interesado</em>';
+  el("l_id").value=l?l.id:"";
+  el("l_nombre").value=l?(l.nombre||""):"";
+  el("l_whatsapp").value=l?(l.whatsapp||""):"";
+  el("l_email").value=l?(l.email||""):"";
+  el("l_interes").value=l?(l.interes||""):"";
+  el("l_etapa").innerHTML=ETAPAS.map(function(e){return '<option value="'+e.k+'">'+e.n+'</option>';}).join("");
+  el("l_etapa").value=l?(l.etapa||"nuevo"):"nuevo";
+  el("l_seguir").value=l?(l.seguir_el||""):"";
+  el("l_nota").value=l?(l.nota||""):"";
+  el("leadErr").textContent="";
+  openOv("ovLead");
+}
+if(el("btnNuevoLead")) el("btnNuevoLead").addEventListener("click",function(){ abrirLead(null); });
+if(el("btnGuardarLead")) el("btnGuardarLead").addEventListener("click",function(){
+  var id=el("l_id").value;
+  var body={ accion:id?"editar":"crear", id:id||undefined,
+    nombre:el("l_nombre").value.trim(), whatsapp:el("l_whatsapp").value.trim(),
+    email:el("l_email").value.trim(), interes:el("l_interes").value.trim(),
+    etapa:el("l_etapa").value, seguir_el:el("l_seguir").value, nota:el("l_nota").value.trim() };
+  if(!body.nombre&&!body.email&&!body.whatsapp){ el("leadErr").textContent="Pon al menos un nombre, correo o WhatsApp."; return; }
+  var btn=el("btnGuardarLead"); btn.disabled=true;
+  apiPost("/app/api/admin/lead",body)
+    .then(function(){ closeOv("ovLead"); toast(id?"Interesado actualizado ✓":"Interesado creado ✓"); return recargar(); })
+    .catch(function(e){ el("leadErr").textContent=(e&&e.message)||"No se pudo guardar."; })
+    .finally(function(){ btn.disabled=false; });
+});
+if(el("panel-leads")) el("panel-leads").addEventListener("click",function(e){
+  var f=e.target.closest("[data-letapa]");
+  if(f){ LEAD_FILTRO=f.dataset.letapa; renderLeads(); return; }
+  var ed=e.target.closest("[data-leadedit]");
+  if(ed){ var l=(db.leads||[]).find(function(x){return x.id===ed.dataset.leadedit;}); if(l) abrirLead(l); return; }
+  var dl=e.target.closest("[data-leaddel]");
+  if(dl && confirm("¿Borrar a este interesado?")){
+    apiPost("/app/api/admin/lead",{accion:"borrar",id:dl.dataset.leaddel})
+      .then(function(){ toast("Borrado"); return recargar(); })
+      .catch(function(err){ toast((err&&err.message)||"No se pudo"); });
+  }
+});
+if(el("panel-leads")) el("panel-leads").addEventListener("change",function(e){
+  var s=e.target.closest("[data-leadetapa]");
+  if(!s) return;
+  apiPost("/app/api/admin/lead",{accion:"etapa",id:s.dataset.leadetapa,etapa:s.value})
+    .then(function(){ toast("Etapa: "+etapaNombre(s.value)+" ✓"); return recargar(); })
+    .catch(function(err){ toast((err&&err.message)||"No se pudo"); });
+});
+
+/* ---------- Caja: gastos + P&L del mes ---------- */
+function renderCaja(){
+  var mesEl=el("cajaMes"); if(!mesEl) return;
+  if(!mesEl.value) mesEl.value=hoyLima().slice(0,7);
+  var ym=mesEl.value;
+  var ing=0;
+  (db.compras||[]).forEach(function(c){ if(c.estado==="confirmada"&&(c.fecha||"").slice(0,7)===ym) ing+=Number(c.monto)||0; });
+  var gastosMes=(db.gastos||[]).filter(function(g){ return (g.fecha||"").slice(0,7)===ym; });
+  var gas=gastosMes.reduce(function(s,g){ return s+(Number(g.monto)||0); },0);
+  var fmt=function(n){ return "S/ "+(Math.round(n*100)/100).toLocaleString("es-PE"); };
+  if(el("cajaIng")) el("cajaIng").textContent=fmt(ing);
+  if(el("cajaGas")) el("cajaGas").textContent=fmt(gas);
+  if(el("cajaNeto")){ el("cajaNeto").textContent=fmt(ing-gas); el("cajaNeto").style.color=(ing-gas)<0?"#e8604f":""; }
+  var tb=el("tbGastos"); if(!tb) return;
+  tb.innerHTML=gastosMes.length?gastosMes.map(function(g){
+    return '<tr><td>'+esc(g.fecha||"")+'</td><td>'+esc(g.concepto||"")+'</td><td>'+esc(g.categoria||"")+'</td><td>'+fmt(Number(g.monto)||0)+'</td>'+
+      '<td><button class="btn ghost sm" data-gastodel="'+g.id+'">×</button></td></tr>';
+  }).join(""):'<tr><td colspan="5" class="empty">Sin gastos registrados este mes</td></tr>';
+}
+if(el("cajaMes")) el("cajaMes").addEventListener("change",renderCaja);
+if(el("btnGuardarGasto")) el("btnGuardarGasto").addEventListener("click",function(){
+  var err=el("gastoErr"); err.textContent="";
+  var body={ concepto:el("g_concepto").value.trim(), monto:Number(el("g_monto").value),
+    fecha:el("g_fecha").value||hoyLima(), categoria:el("g_categoria").value };
+  if(body.concepto.length<2){ err.textContent="Escribe el concepto."; return; }
+  if(!(body.monto>0)){ err.textContent="Pon el monto."; return; }
+  var btn=el("btnGuardarGasto"); btn.disabled=true;
+  apiPost("/app/api/admin/gasto",body)
+    .then(function(){ el("g_concepto").value=""; el("g_monto").value=""; toast("Gasto registrado ✓"); return recargar(); })
+    .catch(function(e){ err.textContent=(e&&e.message)||"No se pudo registrar."; })
+    .finally(function(){ btn.disabled=false; });
+});
+if(el("panel-caja")) el("panel-caja").addEventListener("click",function(e){
+  var d=e.target.closest("[data-gastodel]");
+  if(d && confirm("¿Borrar este gasto?")){
+    apiPost("/app/api/admin/gasto",{accion:"borrar",id:d.dataset.gastodel})
+      .then(function(){ toast("Gasto borrado"); return recargar(); })
+      .catch(function(err){ toast((err&&err.message)||"No se pudo"); });
+  }
+});
 /* ---------- Reportes por mes (ingresos + asistencia), calculados del histórico ya cargado ---------- */
 function mesLabel(ym){
   var meses=["ene","feb","mar","abr","may","jun","jul","ago","sep","oct","nov","dic"];
@@ -1689,7 +1937,7 @@ function renderReportes(){
   }
 }
 
-function renderAll(){ aplicarBrandTenant(); aplicarMarcaCursos(); renderResumen(); renderAlumnos(); renderGrupos(); renderRegistro(); renderPagos(); renderReportes(); renderCuentas(); renderLeads(); renderRecursos(); renderEjercicios(); renderAjustes(); renderPerfil(); fillSelects(); }
+function renderAll(){ aplicarBrandTenant(); aplicarMarcaCursos(); renderResumen(); renderAlumnos(); renderGrupos(); renderRegistro(); renderPagos(); renderReportes(); renderCuentas(); renderLeads(); renderCaja(); renderRecursos(); renderEjercicios(); renderAjustes(); renderPerfil(); fillSelects(); }
 
 /* ---------- AGENDA (admin) ---------- */
 var AG_DISP = [], AG_RESERVAS = [];
@@ -1728,13 +1976,20 @@ function renderAgendaAdmin(){
     html += '<div class="card" style="padding:12px 14px;margin:0 0 12px;border-color:var(--accent);"><strong>Tus alumnos aún no ven horarios.</strong> Marca abajo los días y horas en que dictas, y guarda: recién ahí podrán reservar desde su portal.</div>';
   }
   html += '<table class="dispt"><thead><tr><th></th>'+AG_DOW.map(function(d){return '<th>'+d.n+'</th>';}).join("")+'</tr></thead><tbody>';
+  var cupoDeCelda=function(dow,hora){
+    var r=(AG_DISP||[]).find(function(x){return x.dia_semana===dow&&x.hora===hora;});
+    var c=r?parseInt(r.cupo,10):0;
+    return (c>=1&&c<=20)?c:0;
+  };
   AG_HORAS.forEach(function(h){
     html += '<tr><td style="font-weight:600;font-family:var(--mono);font-size:12px;">'+h+'</td>'+AG_DOW.map(function(d){
       var on = dispActiva(d.d,h);
-      return '<td><button class="dcell'+(on?" on":"")+'" data-dow="'+d.d+'" data-hora="'+h+'">'+(on?"✓":"")+'</button></td>';
+      var cupo = cupoDeCelda(d.d,h);
+      return '<td><button class="dcell'+(on?" on":"")+'" data-dow="'+d.d+'" data-hora="'+h+'" data-cupo="'+cupo+'" title="'+(cupo?("Cupo "+cupo+" (doble clic para cambiar)"):"Doble clic para cupo grupal")+'">'+(on?("✓"+(cupo>1?cupo:"")):"")+'</button></td>';
     }).join("")+'</tr>';
   });
-  el("dispGrid").innerHTML = html + '</tbody></table>';
+  el("dispGrid").innerHTML = html + '</tbody></table>'+
+    '<p class="hint" style="margin-top:8px;">Doble clic en un horario activo para darle su propio cupo (ej. 8 para un grupo); lo define el dueño. Sin cupo propio, usa el "Cupo por horario" general de Ajustes.</p>';
 
   var sel = el("ag_alumno"), actual = sel.value;
   sel.innerHTML = '<option value="">— Solo bloquear (sin alumno) —</option>'+
@@ -1756,9 +2011,27 @@ function renderAgendaAdmin(){
     return '<tr><td style="white-space:nowrap;">'+esc(fmtLima(r.inicio_utc))+'</td><td>'+quien+'</td><td>'+esc(r.tipo)+'</td><td>'+esc(r.estado)+'</td><td style="white-space:nowrap;">'+acc+'</td></tr>';
   }).join("");
 }
+function pintarDcell(cell){
+  var on=cell.classList.contains("on");
+  var cupo=parseInt(cell.dataset.cupo,10)||0;
+  cell.textContent=on?("✓"+(cupo>1?cupo:"")):"";
+}
+el("panel-agenda").addEventListener("dblclick",function(e){
+  var cell = e.target.closest(".dcell");
+  if(!cell || !cell.classList.contains("on")) return;
+  /* el cupo por franja lo define SOLO el dueño (el server igual lo ignora si no lo es) */
+  if(ROL!=="dueno"){ toast("El cupo por horario lo define el dueño de la academia"); return; }
+  var actual=parseInt(cell.dataset.cupo,10)||0;
+  var v=prompt("Cupo para este horario (1-20). Vacío o 0 = usa el cupo general de Ajustes.", actual||"");
+  if(v===null) return;
+  var n=parseInt(String(v).trim(),10);
+  cell.dataset.cupo=(Number.isFinite(n)&&n>=1&&n<=20)?n:0;
+  pintarDcell(cell);
+  toast('Recuerda "Guardar disponibilidad" para aplicarlo');
+});
 el("panel-agenda").addEventListener("click",function(e){
   var cell = e.target.closest(".dcell");
-  if(cell){ var on=cell.classList.toggle("on"); cell.textContent=on?"✓":""; return; }
+  if(cell){ cell.classList.toggle("on"); pintarDcell(cell); return; }
   var mb = e.target.closest("[data-ag-marcar]");
   if(mb){
     apiPost("/app/api/admin/agenda/marcar",{id:mb.dataset.id, estado:mb.dataset.agMarcar})
@@ -1768,7 +2041,7 @@ el("panel-agenda").addEventListener("click",function(e){
 });
 el("btnGuardarDisp").addEventListener("click",function(){
   var activos = [];
-  el("dispGrid").querySelectorAll(".dcell.on").forEach(function(c){ activos.push({dia_semana:Number(c.dataset.dow), hora:c.dataset.hora}); });
+  el("dispGrid").querySelectorAll(".dcell.on").forEach(function(c){ activos.push({dia_semana:Number(c.dataset.dow), hora:c.dataset.hora, cupo:parseInt(c.dataset.cupo,10)||0}); });
   apiPost("/app/api/admin/disponibilidad",{activos:activos})
     .then(function(){ toast("Disponibilidad guardada"); cargarAgenda(); })
     .catch(function(e){ toast(e.message||"No se pudo guardar"); });
@@ -1875,7 +2148,7 @@ function cargarProfesores(){
     var ps=d.profesores||[];
     tb.innerHTML=ps.map(function(p){
       var ESTS={activo:'<span class="pill pago-ok">Activo</span>',invitado:'<span class="pill gray">Invitado</span>',suspendido:'<span class="pill pago-pend">Suspendido</span>'};
-      var acts=[];
+      var acts=['<button class="btn ghost sm" data-pfcomision="'+p.id+'" data-pfnombre="'+esc(p.nombre)+'" data-pfpct="'+(p.comision_pct||0)+'" data-pftarifa="'+(p.tarifa_clase||0)+'">Comisión</button>'];
       if(p.rol!=="dueno"){
         if(p.estado==="invitado"){
           acts.push('<button class="btn ghost sm" data-pfcopiar="'+esc(p.invite_link||'')+'">Copiar link</button>');
@@ -1887,16 +2160,54 @@ function cargarProfesores(){
           acts.push('<button class="btn ghost sm" data-pfsuspender="'+p.id+'">Suspender</button>');
         }
       }
+      var com=[];
+      if(Number(p.comision_pct)) com.push(p.comision_pct+"%");
+      if(Number(p.tarifa_clase)) com.push("S/ "+p.tarifa_clase+"/clase");
       return '<tr>'+
         '<td class="name">'+esc(p.nombre)+(p.rol==="dueno"?' <span class="pill profe">Dueño</span>':'')+'</td>'+
         '<td><span class="mini">'+esc(p.email)+'</span></td>'+
         '<td>'+(p.n_alumnos||0)+'</td>'+
+        '<td>'+(com.length?esc(com.join(" + ")):'—')+'</td>'+
         '<td>'+(ESTS[p.estado]||esc(p.estado))+'</td>'+
         '<td><div class="rowact">'+acts.join("")+'</div></td>'+
       '</tr>';
-    }).join("") || '<tr><td colspan="5" class="empty">Solo tú por ahora. Invita a tu primer profesor.</td></tr>';
+    }).join("") || '<tr><td colspan="6" class="empty">Solo tú por ahora. Invita a tu primer profesor.</td></tr>';
   }).catch(function(){ toast("No pude cargar los profesores."); });
 }
+/* ---------- Liquidación mensual por profesor ---------- */
+function cargarLiquidacion(){
+  var mesEl=el("liqMes"); if(!mesEl) return;
+  if(!mesEl.value) mesEl.value=hoyLima().slice(0,7);
+  fetch("/app/api/admin/liquidacion?mes="+encodeURIComponent(mesEl.value),{headers:hdr()})
+    .then(function(r){return r.json();}).then(function(d){
+      if(d.error){ toast(d.error); return; }
+      var fmt=function(n){ return "S/ "+(Math.round((Number(n)||0)*100)/100).toLocaleString("es-PE"); };
+      var res=el("liqResumen");
+      if(res) res.textContent="Cobrado: "+fmt(d.total_ingresos)+" · A pagar al equipo: "+fmt(d.total_a_pagar);
+      var tb=el("tbLiq"); if(!tb) return;
+      var filas=d.filas||[];
+      tb.innerHTML=filas.length?filas.map(function(f){
+        var com=[];
+        if(Number(f.comision_pct)) com.push(f.comision_pct+"%");
+        if(Number(f.tarifa_clase)) com.push("S/ "+f.tarifa_clase+"/clase");
+        return '<tr><td class="name">'+esc(f.nombre)+(f.rol==="dueno"?' <span class="pill profe">Dueño</span>':'')+'</td>'+
+          '<td>'+fmt(f.ingresos)+' <span class="mini">('+f.compras+' pagos)</span></td>'+
+          '<td>'+f.clases+'</td>'+
+          '<td>'+(com.length?esc(com.join(" + ")):'—')+'</td>'+
+          '<td class="big">'+(f.rol==="dueno"?'<span class="mini">(tuyo)</span> ':'')+fmt(f.a_pagar)+'</td></tr>';
+      }).join(""):'<tr><td colspan="5" class="empty">Sin datos este mes</td></tr>';
+    }).catch(function(){ toast("No pude cargar la liquidación."); });
+}
+if(el("liqMes")) el("liqMes").addEventListener("change",cargarLiquidacion);
+if(el("btnGuardarComision")) el("btnGuardarComision").addEventListener("click",function(){
+  var err=el("cmErr"); err.textContent="";
+  var btn=el("btnGuardarComision"); btn.disabled=true;
+  apiPost("/app/api/admin/profesores",{accion:"comision",id:el("cm_id").value,
+    comision_pct:Number(el("cm_pct").value)||0, tarifa_clase:Number(el("cm_tarifa").value)||0})
+    .then(function(){ closeOv("ovComision"); toast("Comisión guardada ✓"); cargarProfesores(); cargarLiquidacion(); })
+    .catch(function(e){ err.textContent=(e&&e.message)||"No se pudo guardar."; })
+    .finally(function(){ btn.disabled=false; });
+});
 if(el("btnInvitarProfe")) el("btnInvitarProfe").addEventListener("click",function(){
   el("pf_nombre").value=""; el("pf_email").value=""; el("pf_whatsapp").value=""; el("pfErr").textContent="";
   openOv("ovProfe");
@@ -1919,7 +2230,16 @@ if(el("btnGuardarProfe")) el("btnGuardarProfe").addEventListener("click",functio
 document.body.addEventListener("click",function(e){
   var cp=e.target.closest("[data-pfcopiar]"), rv=e.target.closest("[data-pfreenviar]"),
       su=e.target.closest("[data-pfsuspender]"), ra=e.target.closest("[data-pfreactivar]"),
-      bo=e.target.closest("[data-pfborrar]");
+      bo=e.target.closest("[data-pfborrar]"), cm=e.target.closest("[data-pfcomision]");
+  if(cm){
+    el("cm_id").value=cm.dataset.pfcomision;
+    el("comisionNombre").textContent=cm.dataset.pfnombre||"profesor";
+    el("cm_pct").value=Number(cm.dataset.pfpct)||"";
+    el("cm_tarifa").value=Number(cm.dataset.pftarifa)||"";
+    el("cmErr").textContent="";
+    openOv("ovComision");
+    return;
+  }
   var acc=function(body,msg){ apiPost("/app/api/admin/profesores",body).then(function(){ toast(msg); cargarProfesores(); recargar(); }).catch(function(err){ toast((err&&err.message)||"No se pudo"); }); };
   if(cp){ var lk=cp.dataset.pfcopiar||""; if(lk){ navigator.clipboard&&navigator.clipboard.writeText(lk); toast("Link copiado ✓ Mándaselo por WhatsApp"); } return; }
   if(rv){ acc({accion:"reenviar",id:rv.dataset.pfreenviar},"Invitación reenviada ✓"); return; }
@@ -1929,7 +2249,7 @@ document.body.addEventListener("click",function(e){
 });
 
 /* ---------- Tabs / modales ---------- */
-var TITULOS={resumen:"Inicio",alumnos:"Alumnos",grupos:"Grupos",profesores:"Profesores",registro:"Clases",agenda:"Agenda",pagos:"Pagos",reportes:"Reportes",cuentas:"Accesos",leads:"Interesados",recursos:"Para tus alumnos",ejercicios:"Tu biblioteca",ajustes:"Ajustes",perfil:"Perfil",chat:"Chat",feedback:"Ideas y errores"};
+var TITULOS={resumen:"Inicio",alumnos:"Alumnos",grupos:"Grupos",profesores:"Profesores",registro:"Clases",agenda:"Agenda",pagos:"Pagos",caja:"Caja",reportes:"Reportes",cuentas:"Accesos",leads:"Interesados",recursos:"Para tus alumnos",ejercicios:"Tu biblioteca",ajustes:"Ajustes",perfil:"Perfil",chat:"Chat",feedback:"Ideas y errores"};
 document.querySelectorAll(".tab").forEach(function(t){
   t.addEventListener("click",function(){
     document.querySelectorAll(".tab").forEach(function(x){x.classList.remove("active");});
@@ -1947,7 +2267,8 @@ document.querySelectorAll(".tab").forEach(function(t){
     if(t.dataset.tab==="agenda") cargarAgenda();
     if(t.dataset.tab==="perfil") renderPerfil();
     if(t.dataset.tab==="feedback") cargarFeedback();
-    if(t.dataset.tab==="profesores") cargarProfesores();
+    if(t.dataset.tab==="profesores"){ cargarProfesores(); cargarLiquidacion(); }
+    if(t.dataset.tab==="caja"){ renderCaja(); if(el("g_fecha")&&!el("g_fecha").value) el("g_fecha").value=hoyLima(); }
     cerrarDrawer();
   });
 });

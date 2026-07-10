@@ -66,6 +66,9 @@ function hex(buf){ return Array.from(new Uint8Array(buf)).map(b => b.toString(16
 function randHex(nBytes){ const a = new Uint8Array(nBytes); crypto.getRandomValues(a); return hex(a.buffer); }
 async function sha256Hex(texto){ return hex(await crypto.subtle.digest("SHA-256", enc.encode(texto))); }
 function hoy(){ return new Date().toISOString().slice(0, 10); }
+/* Fecha-dia en hora de Lima (UTC-5). Para lo que el usuario percibe como "hoy"
+   (CRM, caja, liquidacion): despues de las 7pm Lima, hoy() UTC ya es "manana". */
+function hoyLima(){ return new Date(Date.now() - 5 * 3600000).toISOString().slice(0, 10); }
 function safeEq(a, b){
   if (typeof a !== "string" || typeof b !== "string" || a.length !== b.length) return false;
   let d = 0;
@@ -1155,12 +1158,20 @@ async function slotValido(env, tenantId, iso, opts, prof){
 async function generarSlots(env, tenantId, prof){
   const pid = prof && prof.id ? prof.id : "";
   const esD = !!(prof && prof.esDueno);
-  const { results: disp } = await env.DB.prepare(
-    "SELECT dia_semana, hora FROM disponibilidad WHERE tenant_id = ?1 AND activo = 1 " +
-    "AND (profesor_id = ?2 OR (?3 = 1 AND (profesor_id IS NULL OR profesor_id = '')))"
-  ).bind(tenantId, pid, esD ? 1 : 0).all();
+  let disp = [];
+  try {
+    disp = ((await env.DB.prepare(
+      "SELECT dia_semana, hora, COALESCE(cupo,0) AS cupo FROM disponibilidad WHERE tenant_id = ?1 AND activo = 1 " +
+      "AND (profesor_id = ?2 OR (?3 = 1 AND (profesor_id IS NULL OR profesor_id = '')))"
+    ).bind(tenantId, pid, esD ? 1 : 0).all()).results) || [];
+  } catch (e) {
+    disp = ((await env.DB.prepare(
+      "SELECT dia_semana, hora, 0 AS cupo FROM disponibilidad WHERE tenant_id = ?1 AND activo = 1 " +
+      "AND (profesor_id = ?2 OR (?3 = 1 AND (profesor_id IS NULL OR profesor_id = '')))"
+    ).bind(tenantId, pid, esD ? 1 : 0).all()).results) || [];
+  }
   const porDia = {};
-  for (const r of (disp || [])){ (porDia[r.dia_semana] = porDia[r.dia_semana] || []).push(r.hora); }
+  for (const r of (disp || [])){ (porDia[r.dia_semana] = porDia[r.dia_semana] || []).push({ hora: r.hora, cupo: parseInt(r.cupo, 10) || 0 }); }
 
   const now = Date.now();
   const hastaMs = now + HORIZONTE_SEMANAS * 7 * 86400000;
@@ -1173,8 +1184,12 @@ async function generarSlots(env, tenantId, prof){
     conteo.set(r.inicio_utc, (conteo.get(r.inicio_utc) || 0) + 1);
     if (r.tipo === "bloqueo") bloqueados.add(r.inicio_utc);
   }
-  const cupo = cupoDeCfg(await loadConfig(env, tenantId));
-  const lleno = iso => bloqueados.has(iso) || (conteo.get(iso) || 0) >= cupo;
+  const cupoGlobal = cupoDeCfg(await loadConfig(env, tenantId));
+  /* cupo por franja: el de la celda si es >0, si no el global */
+  const lleno = (iso, cupoFranja) => {
+    const cupo = (cupoFranja >= 1 && cupoFranja <= 20) ? cupoFranja : cupoGlobal;
+    return bloqueados.has(iso) || (conteo.get(iso) || 0) >= cupo;
+  };
 
   const p0 = limaParts(new Date(now));
   const medianocheHoy = limaToUtc(p0.y, p0.m, p0.d, "00:00").getTime();
@@ -1183,10 +1198,10 @@ async function generarSlots(env, tenantId, prof){
     const p = limaParts(new Date(medianocheHoy + i * 86400000));
     const horas = porDia[p.dow] || [];
     for (const h of horas){
-      const ms = limaToUtc(p.y, p.m, p.d, h).getTime();
+      const ms = limaToUtc(p.y, p.m, p.d, h.hora).getTime();
       if (ms <= now + ANTICIPACION_MIN_H * 3600000 || ms > hastaMs) continue;
       const iso = new Date(ms).toISOString();
-      if (!lleno(iso)) slots.push(iso);
+      if (!lleno(iso, h.cupo)) slots.push(iso);
     }
   }
   slots.sort();
@@ -1508,6 +1523,45 @@ async function ensureFeedbackSchema(env){
   try { await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_feedback_tenant ON feedback (tenant_id, mes)").run(); } catch (e) {}
 }
 
+/* ---------- ERP/CRM de la academia (10-jul-2026) ----------
+   - leads gana pipeline (etapa nuevo|contactado|prueba|alumno|perdido, nombre, whatsapp,
+     nota, seguir_el) -> el "Salesforce" del tenant, con WhatsApp prellenado.
+   - gastos: caja simple (P&L mensual = compras confirmadas - gastos).
+   - profesores gana comision_pct / tarifa_clase -> liquidacion mensual por profe.
+   - disponibilidad gana cupo por franja (0 = usa el cupo global del tenant).
+   Todo additivo con ALTER perezoso (patron de la casa). */
+async function ensureErpSchema(env){
+  for (const col of ["nombre TEXT DEFAULT ''", "whatsapp TEXT DEFAULT ''", "etapa TEXT DEFAULT 'nuevo'", "nota TEXT DEFAULT ''", "seguir_el TEXT DEFAULT ''", "actualizado TEXT DEFAULT ''"]){
+    try { await env.DB.prepare("ALTER TABLE leads ADD COLUMN " + col).run(); } catch (e) {}
+  }
+  for (const col of ["comision_pct REAL DEFAULT 0", "tarifa_clase REAL DEFAULT 0"]){
+    try { await env.DB.prepare("ALTER TABLE profesores ADD COLUMN " + col).run(); } catch (e) {}
+  }
+  try { await env.DB.prepare("ALTER TABLE disponibilidad ADD COLUMN cupo INTEGER DEFAULT 0").run(); } catch (e) {}
+  try {
+    await env.DB.prepare(
+      "CREATE TABLE IF NOT EXISTS gastos (id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, fecha TEXT DEFAULT '', concepto TEXT NOT NULL, categoria TEXT DEFAULT '', monto REAL DEFAULT 0, creado TEXT DEFAULT '')"
+    ).run();
+  } catch (e) {}
+  try { await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_gastos_tenant ON gastos (tenant_id, fecha)").run(); } catch (e) {}
+}
+const ETAPAS_LEAD = ["nuevo", "contactado", "prueba", "alumno", "perdido"];
+/* Cupo efectivo de UN slot: el de la franja si es >0, si no el global del tenant. */
+async function cupoDeSlot(env, tenantId, iso, prof, cfg){
+  try {
+    const p = limaParts(new Date(Date.parse(iso)));
+    const pid = prof && prof.id ? prof.id : "";
+    const esD = !!(prof && prof.esDueno);
+    const row = await env.DB.prepare(
+      "SELECT COALESCE(cupo,0) AS cupo FROM disponibilidad WHERE tenant_id = ?1 AND dia_semana = ?2 AND hora = ?3 AND activo = 1 " +
+      "AND (profesor_id = ?4 OR (?5 = 1 AND (profesor_id IS NULL OR profesor_id = '')))"
+    ).bind(tenantId, p.dow, hhmm(p), pid, esD ? 1 : 0).first();
+    const c = row ? parseInt(row.cupo, 10) : 0;
+    if (Number.isFinite(c) && c >= 1 && c <= 20) return c;
+  } catch (e) { /* columna aun no existe -> cae al global */ }
+  return cupoDeCfg(cfg);
+}
+
 /* ---------- Recordatorios automaticos a alumnos (09-jul-2026) ----------
    Atacan ASISTENCIA y RETENCION, el problema real (no el precio):
    - recordatoriosDeClase: cron cada 15 min; correo 24h y 1h antes de la reserva
@@ -1614,6 +1668,7 @@ async function recordatorioRenovacion(env){
 
 async function resetDemo(env){
   await ensureFeedbackSchema(env); // la lista de tablas de abajo la incluye; que exista antes del batch
+  await ensureErpSchema(env);      // idem: gastos
   let t = await env.DB.prepare("SELECT * FROM tenants WHERE email = ?1").bind(DEMO_EMAIL).first();
   if (!t){
     const id = crypto.randomUUID();
@@ -1632,7 +1687,7 @@ async function resetDemo(env){
   ).bind(tid, new Date(Date.now() + 3650 * 86400000).toISOString()).run();
 
   // Borrón total de los datos del tenant demo (las sesiones de visitantes mueren con el reset).
-  const tablas = ["alumnos", "registro", "pausas", "precios", "config", "disponibilidad", "reservas", "grupos", "cuentas", "compras", "recursos", "ejercicios", "chat_mensajes", "push_subs", "leads", "feedback"];
+  const tablas = ["alumnos", "registro", "pausas", "precios", "config", "disponibilidad", "reservas", "grupos", "cuentas", "compras", "recursos", "ejercicios", "chat_mensajes", "push_subs", "leads", "feedback", "gastos"];
   await env.DB.batch(tablas.map(tb => env.DB.prepare("DELETE FROM " + tb + " WHERE tenant_id = ?1").bind(tid)));
   await env.DB.prepare("DELETE FROM sesiones WHERE cuenta_id = ?1 OR cuenta_id LIKE 'demo-cu-%'").bind("T:" + tid).run();
 
@@ -3899,7 +3954,8 @@ export default {
         const nowIso = new Date().toISOString();
         const startMs = Date.parse(iso);
 
-        const cupoT = cupoDeCfg(await loadConfig(env, tid));
+        /* cupo por franja: el de la celda de disponibilidad si es >0, si no el global */
+        const cupoT = await cupoDeSlot(env, tid, iso, profR, await loadConfig(env, tid));
         /* el mismo alumno no puede reservar dos veces el mismo slot (con cupo > 1 el conteo solo no lo impide) */
         const yaMia = await env.DB.prepare(
           "SELECT 1 AS ok FROM reservas WHERE tenant_id = ?1 AND inicio_utc = ?2 AND alumno_id = ?3 AND estado IN ('reservada','completada')"
@@ -4085,14 +4141,17 @@ export default {
         if (path === "/app/api/admin/profesores" && request.method === "GET"){
           if (!esDueno) return json({ error: "Solo el dueno gestiona profesores." }, 403);
           await ensureMultiprofesorSchema(env);
+          await ensureErpSchema(env);
           const { results: profs } = await env.DB.prepare(
             "SELECT p.id, p.nombre, p.email, p.whatsapp, p.rol, p.estado, p.invite_token, p.creado, " +
+            "COALESCE(p.comision_pct,0) AS comision_pct, COALESCE(p.tarifa_clase,0) AS tarifa_clase, " +
             "(SELECT COUNT(*) FROM alumnos a WHERE a.tenant_id = p.tenant_id AND a.profesor_id = p.id) AS n_alumnos " +
             "FROM profesores p WHERE p.tenant_id = ?1 ORDER BY CASE p.rol WHEN 'dueno' THEN 0 ELSE 1 END, p.nombre"
           ).bind(tid).all();
           const lista = (profs || []).map(p => ({
             id: p.id, nombre: p.nombre, email: p.email, whatsapp: p.whatsapp || "", rol: p.rol, estado: p.estado,
             n_alumnos: Number(p.n_alumnos) || 0,
+            comision_pct: Number(p.comision_pct) || 0, tarifa_clase: Number(p.tarifa_clase) || 0,
             invite_link: (p.estado === "invitado" && p.invite_token) ? (MARCA.dominio + "/app/p/activar?token=" + p.invite_token) : ""
           }));
           const maxA = MAX_PROFES[t.plan || "profe"] || 1;
@@ -4135,6 +4194,23 @@ export default {
               });
             } catch (e) {}
             return json({ ok: true, id: pidNuevo, invite_link: link, correo_enviado: !!correoEnviado });
+          }
+
+          /* comision: aplica a CUALQUIER profe, incluido el dueno (para verse en la liquidacion) */
+          if (accion === "comision"){
+            await ensureErpSchema(env);
+            const pidC = String(b.id || "");
+            const pRowC = await env.DB.prepare("SELECT id FROM profesores WHERE id = ?1 AND tenant_id = ?2").bind(pidC, tid).first();
+            if (!pRowC) return json({ error: "Profesor no encontrado" }, 404);
+            let pct = Number(b.comision_pct); let tarifa = Number(b.tarifa_clase);
+            /* fuera de rango = 400, no coercion silenciosa a 0 (hallazgo del review) */
+            if (!(Number.isFinite(pct) && pct >= 0 && pct <= 100)) return json({ error: "El % debe estar entre 0 y 100." }, 400);
+            if (!(Number.isFinite(tarifa) && tarifa >= 0 && tarifa <= 10000)) return json({ error: "La tarifa por clase debe estar entre 0 y 10,000." }, 400);
+            pct = Math.round(pct * 100) / 100;
+            tarifa = Math.round(tarifa * 100) / 100;
+            await env.DB.prepare("UPDATE profesores SET comision_pct = ?1, tarifa_clase = ?2 WHERE id = ?3 AND tenant_id = ?4")
+              .bind(pct, tarifa, pidC, tid).run();
+            return json({ ok: true, comision_pct: pct, tarifa_clase: tarifa });
           }
 
           const pid = String(b.id || "");
@@ -4188,6 +4264,119 @@ export default {
           }
           return json({ error: "Accion no valida" }, 400);
         }
+        /* -------- CRM de interesados: pipeline con etapas (SOLO dueno) -------- */
+        if (path === "/app/api/admin/lead" && request.method === "POST"){
+          if (!esDueno) return json({ error: "Los interesados los maneja el dueno." }, 403);
+          await ensureErpSchema(env);
+          const b = await request.json().catch(() => ({}));
+          const accion = String(b.accion || "");
+          if (accion === "borrar"){
+            await env.DB.prepare("DELETE FROM leads WHERE id = ?1 AND tenant_id = ?2").bind(String(b.id || ""), tid).run();
+            return json({ ok: true });
+          }
+          if (accion === "etapa"){
+            const etapa = ETAPAS_LEAD.indexOf(String(b.etapa || "")) !== -1 ? String(b.etapa) : "";
+            if (!etapa) return json({ error: "Etapa no valida" }, 400);
+            const r = await env.DB.prepare("UPDATE leads SET etapa = ?1, actualizado = ?2 WHERE id = ?3 AND tenant_id = ?4")
+              .bind(etapa, hoyLima(), String(b.id || ""), tid).run();
+            if (!((r && r.meta && (r.meta.changes ?? r.meta.rows_written)) || 0)) return json({ error: "Interesado no encontrado" }, 404);
+            return json({ ok: true });
+          }
+          if (accion === "crear" || accion === "editar"){
+            const nombreL = String(b.nombre || "").trim().slice(0, 80);
+            const emailL = String(b.email || "").trim().toLowerCase().slice(0, 120);
+            const waL = String(b.whatsapp || "").replace(/[^\d+]/g, "").slice(0, 20);
+            const interesL = String(b.interes || "").trim().slice(0, 60);
+            const notaL = String(b.nota || "").trim().slice(0, 500);
+            const seguirL = /^\d{4}-\d{2}-\d{2}$/.test(String(b.seguir_el || "")) ? String(b.seguir_el) : "";
+            const etapaL = ETAPAS_LEAD.indexOf(String(b.etapa || "")) !== -1 ? String(b.etapa) : "nuevo";
+            if (!nombreL && !emailL && !waL) return json({ error: "Pon al menos un nombre, correo o WhatsApp." }, 400);
+            if (emailL && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(emailL)) return json({ error: "Ese correo no parece valido." }, 400);
+            if (accion === "crear"){
+              await env.DB.prepare(
+                "INSERT INTO leads (id,tenant_id,email,marca,fuente,interes,fecha,nombre,whatsapp,etapa,nota,seguir_el,actualizado) VALUES (?1,?2,?3,'Batuta','manual',?4,?5,?6,?7,?8,?9,?10,?5)"
+              ).bind(crypto.randomUUID(), tid, emailL, interesL, hoyLima(), nombreL, waL, etapaL, notaL, seguirL).run();
+            } else {
+              const r = await env.DB.prepare(
+                "UPDATE leads SET nombre = ?1, email = ?2, whatsapp = ?3, interes = ?4, nota = ?5, seguir_el = ?6, etapa = ?7, actualizado = ?8 WHERE id = ?9 AND tenant_id = ?10"
+              ).bind(nombreL, emailL, waL, interesL, notaL, seguirL, etapaL, hoyLima(), String(b.id || ""), tid).run();
+              if (!((r && r.meta && (r.meta.changes ?? r.meta.rows_written)) || 0)) return json({ error: "Interesado no encontrado" }, 404);
+            }
+            return json({ ok: true });
+          }
+          return json({ error: "Accion no valida" }, 400);
+        }
+
+        /* -------- Caja: gastos de la academia (SOLO dueno) -------- */
+        if (path === "/app/api/admin/gasto" && request.method === "POST"){
+          if (!esDueno) return json({ error: "La caja la maneja el dueno." }, 403);
+          await ensureErpSchema(env);
+          const b = await request.json().catch(() => ({}));
+          if (b.accion === "borrar"){
+            await env.DB.prepare("DELETE FROM gastos WHERE id = ?1 AND tenant_id = ?2").bind(String(b.id || ""), tid).run();
+            return json({ ok: true });
+          }
+          const concepto = String(b.concepto || "").trim().slice(0, 120);
+          const monto = Math.round((Number(b.monto) || 0) * 100) / 100;
+          const fecha = /^\d{4}-\d{2}-\d{2}$/.test(String(b.fecha || "")) ? String(b.fecha) : hoyLima();
+          const categoria = String(b.categoria || "").trim().slice(0, 40);
+          if (concepto.length < 2) return json({ error: "Escribe el concepto del gasto." }, 400);
+          if (!(monto > 0)) return json({ error: "El monto tiene que ser mayor a 0." }, 400);
+          await env.DB.prepare(
+            "INSERT INTO gastos (id,tenant_id,fecha,concepto,categoria,monto,creado) VALUES (?1,?2,?3,?4,?5,?6,?7)"
+          ).bind(crypto.randomUUID(), tid, fecha, concepto, categoria, monto, new Date().toISOString()).run();
+          return json({ ok: true });
+        }
+
+        /* -------- Liquidacion mensual por profesor (SOLO dueno) --------
+           ingresos = compras confirmadas del mes atribuidas al profe (NULL = dueno);
+           clases = registros 'Asistió' del mes de SUS alumnos (asignacion actual);
+           a pagar = pct% de ingresos + tarifa por clase. */
+        if (path === "/app/api/admin/liquidacion" && request.method === "GET"){
+          if (!esDueno) return json({ error: "La liquidacion la ve el dueno." }, 403);
+          await ensureErpSchema(env);
+          const mesL = /^\d{4}-\d{2}$/.test(String(url.searchParams.get("mes") || "")) ? String(url.searchParams.get("mes")) : hoyLima().slice(0, 7);
+          const { results: profs } = await env.DB.prepare(
+            "SELECT id, nombre, rol, estado, COALESCE(comision_pct,0) AS pct, COALESCE(tarifa_clase,0) AS tarifa FROM profesores WHERE tenant_id = ?1"
+          ).bind(tid).all();
+          const duenoRow = (profs || []).find(p => p.rol === "dueno");
+          const { results: ingRows } = await env.DB.prepare(
+            "SELECT COALESCE(profesor_id, ?3) AS pid, COUNT(*) AS n, COALESCE(SUM(monto),0) AS total FROM compras " +
+            "WHERE tenant_id = ?1 AND estado = 'confirmada' AND fecha LIKE ?2 GROUP BY COALESCE(profesor_id, ?3)"
+          ).bind(tid, mesL + "%", (duenoRow && duenoRow.id) || "").all();
+          const { results: clsRows } = await env.DB.prepare(
+            "SELECT COALESCE(a.profesor_id, ?3) AS pid, COUNT(*) AS n FROM registro r " +
+            "JOIN alumnos a ON a.id = r.alumno_id AND a.tenant_id = r.tenant_id " +
+            "WHERE r.tenant_id = ?1 AND r.estado = 'Asistió' AND r.fecha LIKE ?2 GROUP BY COALESCE(a.profesor_id, ?3)"
+          ).bind(tid, mesL + "%", (duenoRow && duenoRow.id) || "").all();
+          /* + clases cerradas desde la AGENDA (reservas 'completada') que no tienen fila en registro:
+             sin esto, marcar "Asistió" en la agenda no contaba para la tarifa por clase (hallazgo del review).
+             La fecha de la reserva se lleva a dia-Lima (-5h) para casar con registro.fecha. */
+          const { results: clsAgRows } = await env.DB.prepare(
+            "SELECT COALESCE(rv.profesor_id, ?3) AS pid, COUNT(*) AS n FROM reservas rv " +
+            "WHERE rv.tenant_id = ?1 AND rv.estado = 'completada' AND rv.tipo != 'bloqueo' AND rv.alumno_id IS NOT NULL " +
+            "AND substr(date(rv.inicio_utc, '-5 hours'), 1, 7) = ?2 " +
+            "AND NOT EXISTS (SELECT 1 FROM registro rg WHERE rg.tenant_id = rv.tenant_id AND rg.alumno_id = rv.alumno_id " +
+            "AND rg.fecha = date(rv.inicio_utc, '-5 hours') AND rg.estado = 'Asistió') " +
+            "GROUP BY COALESCE(rv.profesor_id, ?3)"
+          ).bind(tid, mesL, (duenoRow && duenoRow.id) || "").all();
+          const ingM = new Map((ingRows || []).map(r => [r.pid, r]));
+          const clsM = new Map((clsRows || []).map(r => [r.pid, Number(r.n) || 0]));
+          for (const r of (clsAgRows || [])){ clsM.set(r.pid, (clsM.get(r.pid) || 0) + (Number(r.n) || 0)); }
+          const filas = (profs || []).map(p => {
+            const ing = ingM.get(p.id);
+            const ingresos = Math.round(((ing && Number(ing.total)) || 0) * 100) / 100;
+            const compras = (ing && Number(ing.n)) || 0;
+            const clases = clsM.get(p.id) || 0;
+            const pct = Number(p.pct) || 0, tarifa = Number(p.tarifa) || 0;
+            const aPagar = Math.round((ingresos * pct / 100 + clases * tarifa) * 100) / 100;
+            return { id: p.id, nombre: p.nombre, rol: p.rol, estado: p.estado, ingresos, compras, clases, comision_pct: pct, tarifa_clase: tarifa, a_pagar: aPagar };
+          });
+          return json({ mes: mesL, filas,
+            total_ingresos: Math.round(filas.reduce((s, f) => s + f.ingresos, 0) * 100) / 100,
+            total_a_pagar: Math.round(filas.reduce((s, f) => s + (f.rol === "dueno" ? 0 : f.a_pagar), 0) * 100) / 100 });
+        }
+
         /* Reasignar un alumno a otro profesor (SOLO dueno) */
         if (path === "/app/api/admin/alumno/asignar" && request.method === "POST"){
           if (!esDueno) return json({ error: "Solo el dueno reasigna alumnos." }, 403);
@@ -4208,17 +4397,38 @@ export default {
         if (path === "/app/api/admin/disponibilidad" && request.method === "GET"){
           const target = await resolverProfeTarget(url.searchParams.get("profe"));
           if (!target) return json({ error: "Profesor no encontrado" }, 404);
-          const rows = (await env.DB.prepare(
-            "SELECT dia_semana, hora, activo FROM disponibilidad WHERE tenant_id = ?1 " +
-            "AND (profesor_id = ?2 OR (?3 = 1 AND (profesor_id IS NULL OR profesor_id = ''))) ORDER BY dia_semana, hora"
-          ).bind(tid, target.id, target.esDueno ? 1 : 0).all()).results || [];
+          let rows = [];
+          try {
+            rows = (await env.DB.prepare(
+              "SELECT dia_semana, hora, activo, COALESCE(cupo,0) AS cupo FROM disponibilidad WHERE tenant_id = ?1 " +
+              "AND (profesor_id = ?2 OR (?3 = 1 AND (profesor_id IS NULL OR profesor_id = ''))) ORDER BY dia_semana, hora"
+            ).bind(tid, target.id, target.esDueno ? 1 : 0).all()).results || [];
+          } catch (e) {
+            rows = (await env.DB.prepare(
+              "SELECT dia_semana, hora, activo, 0 AS cupo FROM disponibilidad WHERE tenant_id = ?1 " +
+              "AND (profesor_id = ?2 OR (?3 = 1 AND (profesor_id IS NULL OR profesor_id = ''))) ORDER BY dia_semana, hora"
+            ).bind(tid, target.id, target.esDueno ? 1 : 0).all()).results || [];
+          }
           return json({ disponibilidad: rows });
         }
         if (path === "/app/api/admin/disponibilidad" && request.method === "POST"){
           const b = await request.json().catch(() => ({}));
           const target = await resolverProfeTarget(b.profe);
           if (!target) return json({ error: "Profesor no encontrado" }, 404);
+          await ensureErpSchema(env);
           const activos = Array.isArray(b.activos) ? b.activos : [];
+          /* El cupo por franja lo define SOLO el dueno (hallazgo del review: sin esto, un
+             profesor convertia sus horarios 1-a-1 en grupales de 20 sin permiso). Un profesor
+             que re-guarda su disponibilidad CONSERVA los cupos que el dueno ya le puso. */
+          let cuposPrevios = new Map();
+          if (!esDueno){
+            try {
+              const { results: prevC } = await env.DB.prepare(
+                "SELECT dia_semana, hora, COALESCE(cupo,0) AS cupo FROM disponibilidad WHERE tenant_id = ?1 AND profesor_id = ?2"
+              ).bind(tid, target.id).all();
+              cuposPrevios = new Map((prevC || []).map(r => [r.dia_semana + "|" + r.hora, parseInt(r.cupo, 10) || 0]));
+            } catch (e) {}
+          }
           /* BLINDADO multi-profesor: el DELETE va scoped al profesor objetivo, nunca
              al tenant entero (antes un profesor podia borrar los horarios de todos). */
           const stmts = [ env.DB.prepare(
@@ -4227,8 +4437,11 @@ export default {
           for (const s of activos){
             const dia = Number(s.dia_semana);
             const h = String(s.hora || "");
+            let cupoF = parseInt(s.cupo, 10);
+            cupoF = (Number.isFinite(cupoF) && cupoF >= 1 && cupoF <= 20) ? cupoF : 0; /* 0 = usa el cupo global */
+            if (!esDueno) cupoF = cuposPrevios.get(dia + "|" + h) || 0;
             if (dia >= 0 && dia <= 6 && /^\d{2}:\d{2}$/.test(h)){
-              stmts.push(env.DB.prepare("INSERT OR IGNORE INTO disponibilidad (tenant_id,profesor_id,dia_semana,hora,activo) VALUES (?1,?2,?3,?4,1)").bind(tid, target.id, dia, h));
+              stmts.push(env.DB.prepare("INSERT OR IGNORE INTO disponibilidad (tenant_id,profesor_id,dia_semana,hora,activo,cupo) VALUES (?1,?2,?3,?4,1,?5)").bind(tid, target.id, dia, h, cupoF));
             }
           }
           await env.DB.batch(stmts);
@@ -4270,7 +4483,8 @@ export default {
           const horizonMs = Date.now() + HORIZONTE_SEMANAS * 7 * 86400000;
           const nowIso = new Date().toISOString();
           let creadas = 0;
-          const cupoB = cupoDeCfg(await loadConfig(env, tid));
+          /* cupo por franja (la serie fija repite el mismo slot semanal: basta calcularlo una vez) */
+          const cupoB = await cupoDeSlot(env, tid, new Date(t0).toISOString(), targetB, await loadConfig(env, tid));
           for (let tms = t0; tms <= horizonMs; tms += 7 * 86400000){
             const isoT = new Date(tms).toISOString();
             const finT = new Date(tms + CLASE_MIN * 60000).toISOString();
@@ -4365,8 +4579,26 @@ export default {
           const compras = esDueno ? comprasAll : comprasAll.filter(c => c.profesor_id === profeActorId || idsCuentasScope.has(c.cuenta_id));
           const recursos = (await env.DB.prepare("SELECT * FROM recursos WHERE tenant_id = ?1 ORDER BY fecha DESC, rowid DESC").bind(tid).all()).results || [];
           const ejercicios = (await env.DB.prepare("SELECT * FROM ejercicios WHERE tenant_id = ?1 ORDER BY fecha DESC, rowid DESC").bind(tid).all()).results || [];
-          /* leads (interesados del marketing) son de la academia: solo el dueno */
-          const leads = esDueno ? ((await env.DB.prepare("SELECT id,email,marca,fuente,interes,fecha FROM leads WHERE tenant_id = ?1 ORDER BY fecha DESC, rowid DESC LIMIT 1000").bind(tid).all()).results || []) : [];
+          /* leads (interesados del marketing) son de la academia: solo el dueno.
+             CRM: columnas de pipeline con fallback si el ALTER aun no corrio. */
+          let leads = [];
+          if (esDueno){
+            try {
+              leads = (await env.DB.prepare(
+                "SELECT id,email,marca,fuente,interes,fecha,COALESCE(nombre,'') AS nombre,COALESCE(whatsapp,'') AS whatsapp,COALESCE(etapa,'nuevo') AS etapa,COALESCE(nota,'') AS nota,COALESCE(seguir_el,'') AS seguir_el FROM leads WHERE tenant_id = ?1 ORDER BY fecha DESC, rowid DESC LIMIT 1000"
+              ).bind(tid).all()).results || [];
+            } catch (e) {
+              leads = ((await env.DB.prepare("SELECT id,email,marca,fuente,interes,fecha FROM leads WHERE tenant_id = ?1 ORDER BY fecha DESC, rowid DESC LIMIT 1000").bind(tid).all()).results || [])
+                .map(l => Object.assign({ nombre: "", whatsapp: "", etapa: "nuevo", nota: "", seguir_el: "" }, l));
+            }
+          }
+          /* gastos (caja): solo el dueno */
+          let gastos = [];
+          if (esDueno){
+            try {
+              gastos = (await env.DB.prepare("SELECT id,fecha,concepto,categoria,monto FROM gastos WHERE tenant_id = ?1 ORDER BY fecha DESC, rowid DESC LIMIT 2000").bind(tid).all()).results || [];
+            } catch (e) { gastos = []; }
+          }
           const precios  = await loadPrecios(env, tid);
           const config   = await loadConfig(env, tid);
           const grupos   = ((await env.DB.prepare(
@@ -4381,7 +4613,7 @@ export default {
             ).bind(tid).all();
             equipo = eqRows || [];
           } catch (e) {}
-          return json({ alumnos, registro, precios, cuentas, compras, recursos, ejercicios, leads, config, grupos,
+          return json({ alumnos, registro, precios, cuentas, compras, recursos, ejercicios, leads, gastos, config, grupos,
                         slug: t.slug, academia: t.academia, estado: t.estado, demo: t.email === DEMO_EMAIL,
                         rol: esDueno ? "dueno" : "profesor", profe_id: profeActorId || "", equipo,
                         vapid_public: env.VAPID_PUBLIC_KEY || "" });
