@@ -34,6 +34,7 @@ const MARCA = {
   dominio: "https://profesormvt.com",
   correoAvisos: "avisos@profesormvt.com",       // remitente (dominio verificado en Resend)
   correoAdmin: "andressalame@gmail.com",        // a dónde llegan las alertas internas
+  telegramChatId: "1193399594",                 // chat de Andrés para avisos de lead caliente (bot: token en secret TELEGRAM_BOT_TOKEN)
   whatsapp: "51989077928",
   ciudad: "San Isidro, Lima",
   statementDescriptor: "PROFESORMVT",           // máx 22 chars, extracto de la tarjeta
@@ -1072,6 +1073,23 @@ async function avisarLeadConTelefono(env, info){
   if (!enviado){
     await enviarCorreo(env, { to: MARCA.correoAdmin, subject: subject, text: text, from: { name: "Avisos " + MARCA.nombre, email: MARCA.correoAvisos } });
   }
+  // Canal 3 (10-jul): además del correo, aviso a Telegram (más difícil de perder con ads corriendo).
+  // El link wa.me del cuerpo queda clickeable en Telegram (texto plano, sin parse_mode).
+  await avisarTelegram(env, subject + "\n\n" + text);
+}
+
+// Manda un aviso al Telegram personal de Andrés vía el bot (token en secret TELEGRAM_BOT_TOKEN).
+// No rompe el flujo si falta el token o falla la API: los avisos por correo siguen igual.
+async function avisarTelegram(env, text){
+  if (!env.TELEGRAM_BOT_TOKEN || !MARCA.telegramChatId || !text) return false;
+  try {
+    const r = await fetch("https://api.telegram.org/bot" + env.TELEGRAM_BOT_TOKEN + "/sendMessage", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ chat_id: MARCA.telegramChatId, text: text, disable_web_page_preview: true }),
+    });
+    return r.ok;
+  } catch (e) { return false; }
 }
 
 /* ---------- Auto-responder de WhatsApp (11-jul-2026) ----------
