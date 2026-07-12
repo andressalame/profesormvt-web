@@ -25,8 +25,11 @@ const {
   publishedTime,
 } = Astro.props;
 
-// URL canónica limpia
-const canonicalURL = new URL(Astro.url.pathname, Astro.site).href.replace(/\/$/, '') || Astro.site;
+// URL canónica: debe coincidir EXACTO con la URL servida y la del sitemap (con
+// trailing slash, build.format directory). Quitarle el slash hacía que el canonical
+// apuntara a la versión sin slash, que redirige 308 de vuelta -> "error de redirección"
+// en Search Console y subpáginas sin indexar. NO volver a stripear el slash.
+const canonicalURL = new URL(Astro.url.pathname, Astro.site).href;
 // Imagen absoluta para Open Graph (las redes exigen URL completa)
 const socialImage = new URL(image, Astro.site).href;
 
