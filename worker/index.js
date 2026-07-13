@@ -49,7 +49,7 @@ const PAQUETES = {
   "Clase suelta": { clases: 1,  reprog: 0 },
   "Clase de prueba": { clases: 1, reprog: 0 }   // 1 clase con diagnóstico, solo para leads nuevos
 };
-const PRECIOS_DEFAULT = { "Paquete 4": 250, "Paquete 8": 450, "Paquete 12": 600, "Clase suelta": 70, "Clase de prueba": 50 };
+const PRECIOS_DEFAULT = { "Paquete 4": 320, "Paquete 8": 580, "Paquete 12": 780, "Clase suelta": 90, "Clase de prueba": 50 };
 const SESION_DIAS = 30;
 const CREDITO_REFERIDO = 50; // S/ que gana el referidor cuando su amigo confirma su 1ª compra
 

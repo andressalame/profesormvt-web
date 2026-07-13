@@ -33,7 +33,7 @@ CREATE TABLE IF NOT EXISTS precios (
 );
 
 INSERT OR IGNORE INTO precios (paquete, precio) VALUES
-  ('Paquete 4', 250),
-  ('Paquete 8', 450),
-  ('Paquete 12', 600),
-  ('Clase suelta', 70);
+  ('Paquete 4', 320),
+  ('Paquete 8', 580),
+  ('Paquete 12', 780),
+  ('Clase suelta', 90);
