@@ -29,25 +29,137 @@ const SESION_DIAS = 30;
 const CREDITO_REFERIDO = 50;
 const TRIAL_DIAS = 7;
 
+/* ---------- Paquetes por tenant (11-jul-2026) ----------
+   Cada academia define SUS paquetes en config.paquetes (JSON): [{n,c,r,u}]
+   n = nombre, c = clases incluidas, r = reprogramaciones, u = ilimitada (mensualidad:
+   no descuenta clases, vence solo por fecha). Si el tenant no tiene config.paquetes,
+   se usa el set por defecto (4/8/12 de música), así ninguna academia existente se rompe.
+   La resolución es dinámica con fallback a PAQUETES (nombres legacy siempre resuelven). */
+function parsePaquetes(valor){
+  let arr; try { arr = JSON.parse(valor || ""); } catch (e) { return null; }
+  if (!Array.isArray(arr) || !arr.length) return null;
+  const map = {}, list = [];
+  for (const p of arr){
+    const n = String((p && p.n) || "").trim().slice(0, 40);
+    if (!n || map[n]) continue;
+    const u = !!(p && p.u);
+    let c = Math.max(0, Math.min(500, parseInt(p && p.c, 10) || 0));
+    if (u) c = 0;
+    else if (c < 1) continue;   // paquete por clases con 0 clases = invalido, se descarta
+    const r = Math.max(0, Math.min(50, parseInt(p && p.r, 10) || 0));
+    map[n] = { clases: c, reprog: r, ilim: u };
+    list.push(n);
+    if (list.length >= 20) break;
+  }
+  return list.length ? { map, list } : null;
+}
+function paquetesDefault(){
+  const map = {}, list = [];
+  for (const n of Object.keys(PAQUETES)){ map[n] = { clases: PAQUETES[n].clases, reprog: PAQUETES[n].reprog, ilim: false }; list.push(n); }
+  return { map, list };
+}
+async function loadPaquetes(env, tenantId){
+  const row = await env.DB.prepare("SELECT valor FROM config WHERE tenant_id = ?1 AND clave = 'paquetes'").bind(tenantId).first().catch(() => null);
+  return (row && parsePaquetes(row.valor)) || paquetesDefault();
+}
+/* Resuelve el paquete de un alumno por nombre: primero el set del tenant, luego los
+   nombres legacy por defecto, y si no existe (paquete renombrado/borrado) 0 clases. */
+function resolverPk(map, nombre){
+  if (map && map[nombre]) return map[nombre];
+  if (PAQUETES[nombre]) return { clases: PAQUETES[nombre].clases, reprog: PAQUETES[nombre].reprog, ilim: false };
+  return { clases: 0, reprog: 0, ilim: false };
+}
+
 /* ---------- Suscripciones (Mercado Pago — preapproval) ----------
    PEN mensual. plan ∈ PLANES; tenants.plan guarda la clave (profe|academia|xl).
-   Los precios se POSICIONAN en USD (9.95 / 24.95 / 49.95) pero se COBRAN en PEN:
-   MP Peru rechaza USD ("Cannot operate with currency id USD in MPE", verificado 06-jul-2026). */
-const PLANES = { profe: 34, academia: 85, xl: 170 };
-const PLANES_USD = { profe: "9.95", academia: "24.95", xl: "49.95" };
-const PLAN_NOMBRE = { profe: "Profe", academia: "Academia", xl: "Academia XL" };
+   Los precios se POSICIONAN en USD pero se COBRAN en PEN:
+   MP Peru rechaza USD ("Cannot operate with currency id USD in MPE", verificado 06-jul-2026).
+   Escalera AGRESIVA con tope por alumnos (12-jul-2026, decision de Andres tras el costeo):
+   Profe S/49 (hasta 40 alum) · Academia S/149 (hasta 150) · XL S/299 (hasta 400) · Enterprise 400+ (a medida). */
+const PLANES = { profe: 49, academia: 149, xl: 299 };
+const PLANES_USD = { profe: "14.95", academia: "43.95", xl: "87.95" };
+const PLAN_NOMBRE = { profe: "Profe", academia: "Academia", xl: "Academia XL", por_alumno: "Academia por alumno" };
+/* Tope de alumnos por plan (12-jul-2026): la palanca de valor. Se enforce en admin/data PUT SOLO
+   para tenants ya pagando (estado 'activo'); en trial no topa (para que importen su academia entera). */
+const ALUM_CAP = { profe: 40, academia: 150, xl: 400, por_alumno: 1000000 };
 const MP_TRIAL_DIAS = 7;
+/* Plan "por alumno activo" (la palanca del millón, 12-jul-2026): el cobro del SaaS a la academia
+   = max(piso, alumnos activos) × PRECIO_ALUMNO_PEN. Monto DINÁMICO -> se cobra por /preapproval
+   directo (no por plan fijo) y el cron lo recalcula cada día (PUT al preapproval si cambió).
+   Para ajustar el precio, cambia PRECIO_ALUMNO_PEN (y su display USD). */
+const PRECIO_ALUMNO_PEN = 5;          // ~US$1.50/alumno/mes a TC ~3.40 (número de negocio, ajustable)
+const PRECIO_ALUMNO_USD = "1.50";
+const MIN_ALUMNOS_FACTURABLES = 5;    // piso: la academia paga como mínimo por 5 alumnos (evita monto ínfimo)
+/* Alumno "activo" para facturación: con paquete cuyo vencimiento es futuro o de los últimos 35 días.
+   Se EXIGE fecha de vencimiento a propósito: un alumno de alta manual sin paquete no genera ingreso
+   para la academia, así que no se le factura indefinidamente (se prefiere sub-contar que sobre-cobrar). */
+async function contarAlumnosActivos(env, tenantId){
+  const limite = new Date(Date.now() - 35 * 86400000).toISOString().slice(0, 10);
+  const r = await env.DB.prepare(
+    "SELECT COUNT(*) AS n FROM alumnos WHERE tenant_id = ?1 AND vence IS NOT NULL AND vence != '' AND vence >= ?2"
+  ).bind(tenantId, limite).first().catch(() => null);
+  return Number(r && r.n) || 0;
+}
+function montoPorAlumno(activos){
+  return Math.max(MIN_ALUMNOS_FACTURABLES, Number(activos) || 0) * PRECIO_ALUMNO_PEN;
+}
+/* Cron diario: por cada academia en plan 'por_alumno' con suscripción viva, recalcula el monto por
+   alumnos activos y, si cambió, actualiza el preapproval en MP (rige desde el próximo cobro). Solo
+   toca suscripciones autorizadas/activas; sin MP_ACCESS_TOKEN no hace nada. Definida arriba pero usa
+   mpFetch/consultarPreapprovalMP (hoisted). */
+async function recalcularPorAlumno(env){
+  if (!env.MP_ACCESS_TOKEN) return;
+  try { await env.DB.prepare("ALTER TABLE tenants ADD COLUMN mp_monto_alumno REAL DEFAULT 0").run(); } catch (e) { /* ya existe */ }
+  let filas = [];
+  try {
+    const r = await env.DB.prepare(
+      "SELECT id, academia, mp_preapproval_id, COALESCE(mp_monto_alumno, 0) AS ultimo FROM tenants WHERE plan = 'por_alumno' AND estado != 'vencido' AND mp_preapproval_id IS NOT NULL AND mp_preapproval_id != ''"
+    ).all();
+    filas = r.results || [];
+  } catch (e) { return; }
+  for (const t of filas){
+    try {
+      const activos = await contarAlumnosActivos(env, t.id);
+      const monto = montoPorAlumno(activos);
+      const ultimo = Number(t.ultimo) || 0;
+      const cur = await consultarPreapprovalMP(env, t.mp_preapproval_id);
+      if (!cur || !cur.ok || !cur.data) continue;
+      const status = String(cur.data.status || "");
+      if (status !== "authorized" && status !== "active") continue; // ignora checkout_pendiente/cancelada
+      // Referencia del "último aplicado": la columna cacheada; si es 0 (primera vez), cae al monto real de MP.
+      let referencia = ultimo || (cur.data.auto_recurring ? Number(cur.data.auto_recurring.transaction_amount) : monto);
+      if (Math.abs(referencia - monto) < 0.005){
+        if (ultimo !== monto){ try { await env.DB.prepare("UPDATE tenants SET mp_monto_alumno = ?1 WHERE id = ?2").bind(monto, t.id).run(); } catch (e) {} }
+        continue; // sin cambio -> no llamar a MP
+      }
+      const up = await mpFetch(env, "/preapproval/" + encodeURIComponent(t.mp_preapproval_id), {
+        method: "PUT",
+        body: { auto_recurring: { transaction_amount: monto, currency_id: "PEN" }, reason: "Batuta · Academia por alumno (" + activos + " activos)" }
+      });
+      if (up && up.ok){
+        try { await env.DB.prepare("UPDATE tenants SET mp_monto_alumno = ?1 WHERE id = ?2").bind(monto, t.id).run(); } catch (e) {}
+        // Salto grande al alza: MP puede exigir re-autorización o pausar la suscripción. Avisar + re-chequear status.
+        if (monto >= referencia * 2 && (monto - referencia) >= 50){
+          let st2 = "";
+          try { const c2 = await consultarPreapprovalMP(env, t.mp_preapproval_id); st2 = c2 && c2.data ? String(c2.data.status || "") : ""; } catch (e) {}
+          try { await alertaCorreoAndres(env, "Batuta por-alumno: subida grande de cobro", "Academia: " + (t.academia || t.id) + "\nMonto: S/" + referencia + " -> S/" + monto + " (" + activos + " alumnos activos)\nStatus del preapproval tras el ajuste: " + (st2 || "?") + "\nSi quedó paused/pending, el dueño debe re-autorizar el nuevo monto en MP."); } catch (e) {}
+        }
+      }
+    } catch (e) { /* una academia no tumba el resto */ }
+  }
+}
 /* Planes YA creados en Mercado Pago (preapproval_plan con free_trial de 7 días; la API confirmó
    first_invoice_offset: 7). El checkout es del PLAN: el pagador se identifica al pagar (así se
    esquiva el error "payer must be real user" del preapproval directo). Al volver, el panel
    vincula la suscripción al tenant con /app/api/t/vincular-sub. */
 const MP_PLAN_IDS = {
-  profe: "ae98cb29a7b94853a2388c3d3ebc8874",
-  academia: "6af72fcd1e2f4ca497be3f2b4adca7a9",
-  xl: "7d4d75ea227b4dce860a480b404bf96f"
+  profe: "f8ed7d6ea1aa4f87943825ce179c53c3",     // S/49  (12-jul-2026)
+  academia: "bdc2e4f289b24d0e9b2c3286c2f89528",  // S/149 (12-jul-2026)
+  xl: "58b4c707c7ff400c94df72ace2f4e91e"          // S/299 (12-jul-2026)
 };
-/* Planes viejos (49/149/249, 06-jul mañana), por si hay que consultarlos:
-   profe=35ba601b3de344458c0b6960b4929459 · academia=cdf23adca57a40b8b53e6405ddfc274f · xl=fcb43515dbbd47e4a934e9426c3d7522 */
+/* Planes viejos por si hay que consultarlos:
+   34/85/170 (06-jul tarde): profe=ae98cb29a7b94853a2388c3d3ebc8874 · academia=6af72fcd1e2f4ca497be3f2b4adca7a9 · xl=7d4d75ea227b4dce860a480b404bf96f
+   49/149/249 (06-jul mañana): profe=35ba601b3de344458c0b6960b4929459 · academia=cdf23adca57a40b8b53e6405ddfc274f · xl=fcb43515dbbd47e4a934e9426c3d7522 */
 const MP_CHECKOUT_BASE = "https://www.mercadopago.com.pe/subscriptions/checkout?preapproval_plan_id=";
 
 const json = (data, status) => new Response(JSON.stringify(data), {
@@ -211,6 +323,115 @@ async function mpTokenProfe(env, tenant){
   if (exp && exp < Date.now()) return null; // vencido y sin refresh posible
   return tenant.mp_access_token;
 }
+
+/* ---------- Stripe Connect del PROFE (riel internacional; espeja el marketplace MP) ----------
+   Cada profe conecta SU cuenta Stripe (Standard) via Connect Onboarding. La plata del alumno
+   cae DIRECTO en su cuenta (direct charge, header Stripe-Account); Batuta nunca la toca ni
+   cobra comision (application_fee omitido = 0). Guardamos solo el acct_xxx, NO tokens.
+   OJO geografia: Stripe NO opera en Peru (LatAm = Brasil + Mexico) -> esto sirve a tenants
+   internacionales / Kanta, NO al profe peruano (a ese lo cubre MP/Yape). Gate stripeConnectOn:
+   sin STRIPE_SECRET_KEY + STRIPE_WEBHOOK_SECRET todo degrada con gracia (el boton no aparece). */
+function stripeConnectOn(env){ return !!(env.STRIPE_SECRET_KEY && env.STRIPE_WEBHOOK_SECRET && env.ADMIN_TOKEN); }
+async function ensureStripeProfeSchema(env){
+  try { await env.DB.prepare("ALTER TABLE tenants ADD COLUMN stripe_account_id TEXT DEFAULT ''").run(); } catch (e) { /* ya existe */ }
+  try { await env.DB.prepare("ALTER TABLE tenants ADD COLUMN stripe_charges_enabled INTEGER DEFAULT 0").run(); } catch (e) { /* ya existe */ }
+  try { await env.DB.prepare("ALTER TABLE tenants ADD COLUMN stripe_details_submitted INTEGER DEFAULT 0").run(); } catch (e) { /* ya existe */ }
+}
+/* Form-encode con notacion de brackets (Stripe usa x-www-form-urlencoded anidado, arrays por indice). */
+function stripeForm(obj, pre, acc){
+  acc = acc || [];
+  for (const k in obj){
+    const v = obj[k];
+    if (v === undefined || v === null) continue;
+    const key = pre ? pre + "[" + k + "]" : k;
+    if (typeof v === "object") stripeForm(v, key, acc);
+    else acc.push(encodeURIComponent(key) + "=" + encodeURIComponent(String(v)));
+  }
+  return acc.join("&");
+}
+async function stripeApi(env, method, path, body, opts){
+  opts = opts || {};
+  const headers = { "Authorization": "Bearer " + env.STRIPE_SECRET_KEY };
+  if (opts.account) headers["Stripe-Account"] = opts.account;
+  if (opts.idempotencyKey) headers["Idempotency-Key"] = opts.idempotencyKey;
+  const init = { method, headers };
+  if (method === "POST"){
+    headers["content-type"] = "application/x-www-form-urlencoded";
+    init.body = body ? stripeForm(body) : "";
+  }
+  try {
+    const r = await fetch("https://api.stripe.com" + path, init);
+    const data = await r.json().catch(() => null);
+    return { ok: r.ok, status: r.status, data };
+  } catch (e) { return { ok: false, status: 0, data: null }; }
+}
+/* Verifica la firma del webhook (header Stripe-Signature) sobre el body CRUDO, sin SDK.
+   signed_payload = t + '.' + rawBody ; v1 = hex(HMAC-SHA256(whsec, signed_payload)).
+   Rechaza si el timestamp esta fuera de +-5 min (anti-replay). Devuelve el evento o null. */
+async function stripeVerifWebhook(env, rawBody, sigHeader){
+  if (!sigHeader) return null;
+  const parts = {};
+  sigHeader.split(",").forEach(kv => { const i = kv.indexOf("="); if (i > 0){ const k = kv.slice(0, i).trim(); (parts[k] = parts[k] || []).push(kv.slice(i + 1).trim()); } });
+  const t = parts.t && parts.t[0];
+  const v1 = parts.v1 || [];
+  if (!t || !v1.length) return null;
+  if (Math.abs(Date.now() / 1000 - Number(t)) > 300) return null;
+  const key = await crypto.subtle.importKey("raw", enc.encode(env.STRIPE_WEBHOOK_SECRET), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  const sig = await crypto.subtle.sign("HMAC", key, enc.encode(t + "." + rawBody));
+  const expected = hex(sig);
+  if (!v1.some(s => safeEq(s, expected))) return null;
+  try { return JSON.parse(rawBody); } catch (e) { return null; }
+}
+/* Monedas Stripe que Batuta soporta (allowlist: no cobrar en una moneda no validada). */
+const STRIPE_CURRENCIES = ["usd", "eur", "mxn", "gbp", "brl", "clp", "cop", "cad"];
+/* Monedas SIN decimales en Stripe: el monto va en la unidad principal (NO se multiplica x100). */
+const STRIPE_ZERO_DECIMAL = new Set(["bif","clp","djf","gnf","jpy","kmf","krw","mga","pyg","rwf","ugx","vnd","vuv","xaf","xof","xpf"]);
+function stripeMoneda(cfgVal){
+  const m = String(cfgVal || "").toLowerCase();
+  return STRIPE_CURRENCIES.indexOf(m) !== -1 ? m : "usd";
+}
+/* Monto en la unidad minima que Stripe espera (centimos para 2-decimales; entero para 0-decimales). */
+function stripeMinorUnit(monto, moneda){
+  return STRIPE_ZERO_DECIMAL.has(String(moneda || "").toLowerCase()) ? Math.round(Number(monto) || 0) : Math.round((Number(monto) || 0) * 100);
+}
+
+/* ---------- Culqi del PROFE (BYOK: pega sus llaves; pasarela peruana con Yape por API) ----------
+   Culqi NO tiene OAuth ni marketplace ni split: la unica via es que el profe pegue SUS llaves
+   pk_live_ (publica, tokeniza en el front) + sk_live_ (privada, crea el cargo en el back). La
+   plata cae directo en la cuenta bancaria del profe (mismo RUC). El valor: Yape 100% automatico
+   por API (confirma solo). Requiere RUC del profe. La sk_ da acceso TOTAL a su cuenta Culqi:
+   se guarda CIFRADA en reposo (AES-GCM con CULQI_ENC_KEY) y nunca se expone al front.
+   Gate culqiConnectOn: sin CULQI_ENC_KEY el feature esta apagado (no se puede cifrar/descifrar). */
+function culqiConnectOn(env){ return !!(env.CULQI_ENC_KEY && env.ADMIN_TOKEN); }
+async function ensureCulqiProfeSchema(env){
+  for (const col of ["culqi_pk", "culqi_sk_enc", "culqi_titular"]){
+    try { await env.DB.prepare("ALTER TABLE tenants ADD COLUMN " + col + " TEXT DEFAULT ''").run(); } catch (e) { /* ya existe */ }
+  }
+  try { await env.DB.prepare("ALTER TABLE tenants ADD COLUMN culqi_on INTEGER DEFAULT 0").run(); } catch (e) { /* ya existe */ }
+}
+async function culqiEncKey(env){
+  const raw = await crypto.subtle.digest("SHA-256", enc.encode(env.CULQI_ENC_KEY));
+  return crypto.subtle.importKey("raw", raw, { name: "AES-GCM" }, false, ["encrypt", "decrypt"]);
+}
+async function culqiEncrypt(env, plain){
+  const key = await culqiEncKey(env);
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const ct = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, enc.encode(plain));
+  return hex(iv) + ":" + hex(ct);
+}
+async function culqiDecrypt(env, blob){
+  try {
+    const s = String(blob || "");
+    const idx = s.indexOf(":");
+    if (idx < 0) return null;
+    const iv = new Uint8Array(s.slice(0, idx).match(/../g).map(h => parseInt(h, 16)));
+    const ct = new Uint8Array(s.slice(idx + 1).match(/../g).map(h => parseInt(h, 16)));
+    const key = await culqiEncKey(env);
+    const pt = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, key, ct);
+    return new TextDecoder().decode(pt);
+  } catch (e) { return null; }
+}
+
 function esc(s){
   return String(s == null ? "" : s)
     .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
@@ -279,8 +500,8 @@ async function buscarRefCode(env, tenantId, ref){
 }
 
 /* ---------- reglas (compute / estado) ---------- */
-function compute(alumno, regs, precios, reservasUsadas){
-  const pk = PAQUETES[alumno.paquete] || { clases: 0, reprog: 0 };
+function compute(alumno, regs, precios, reservasUsadas, pk){
+  pk = pk || PAQUETES[alumno.paquete] || { clases: 0, reprog: 0, ilim: false };
   let asistio = 0, reprogramo = 0, falta = 0;
   for (const r of regs){
     if (r.estado === "Asistió") asistio++;
@@ -289,20 +510,35 @@ function compute(alumno, regs, precios, reservasUsadas){
   }
   const exceso = Math.max(0, reprogramo - pk.reprog);
   const usadas = asistio + falta + exceso + (Number(reservasUsadas) || 0);
+  const monto = precios[alumno.paquete] != null ? precios[alumno.paquete] : 0;
+  /* Mensualidad ilimitada: no descuenta clases; vence solo por fecha (a.vence, que
+     ya maneja el motor de recordatorios). Saldo alto = siempre "Activo" por saldo. */
+  if (pk.ilim){
+    return { compradas: null, ilim: true, usadas, restantes: 9999,
+      reprogPermitidas: pk.reprog, reprogUsadas: reprogramo,
+      reprogRestantes: pk.reprog ? Math.max(0, pk.reprog - reprogramo) : 9999,
+      saldo: 9999, monto };
+  }
   const saldo = pk.clases - usadas;
   return {
     compradas: pk.clases,
+    ilim: false,
     usadas,
     restantes: Math.max(0, saldo),
     reprogPermitidas: pk.reprog,
     reprogUsadas: reprogramo,
     reprogRestantes: Math.max(0, pk.reprog - reprogramo),
     saldo,
-    monto: precios[alumno.paquete] != null ? precios[alumno.paquete] : 0
+    monto
   };
 }
-function estadoAlumno(c){
+function estadoAlumno(c, vence){
   if (!c) return "Inactivo";
+  /* Mensualidad ilimitada: el estado va por la fecha de vencimiento, no por saldo. */
+  if (c.ilim){
+    if (vence){ const vms = Date.parse(vence + "T23:59:59Z"); if (!isNaN(vms) && vms <= Date.now() + 3 * 86400000) return "Renovar pronto"; }
+    return "Activo";
+  }
   if (c.saldo > 1) return "Activo";
   return "Renovar pronto";
 }
@@ -366,7 +602,7 @@ async function filaSesion(env, request){
    logins nuevos. 'T:'+tenants.id = legacy, se resuelve al DUENO del tenant (las sesiones
    vivas de antes siguen funcionando como sesion del dueno). Regla permanente:
    profesor_id NULL (o '' en disponibilidad) = "del dueno", nunca "de todos". */
-const MAX_PROFES = { profe: 1, academia: 5, xl: 20 };
+const MAX_PROFES = { profe: 1, academia: 5, xl: 20, por_alumno: 50 };
 
 async function duenoDeTenant(env, tenantId){
   return env.DB.prepare("SELECT * FROM profesores WHERE tenant_id = ?1 AND rol = 'dueno'").bind(tenantId).first();
@@ -1250,6 +1486,19 @@ function paginaBase(titulo, cuerpo, script){
   return "<!doctype html><html lang=\"es\"><head><meta charset=\"utf-8\">" +
     "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">" +
     "<title>" + esc(titulo) + "</title>" +
+    "<meta name=\"description\" content=\"Software de gestion para academias y profesores: cobros, agenda y renovaciones en piloto automatico.\">" +
+    "<meta property=\"og:title\" content=\"" + esc(titulo) + "\">" +
+    "<meta property=\"og:description\" content=\"Software de gestion para academias y profesores: cobros, agenda y renovaciones en piloto automatico.\">" +
+    "<meta property=\"og:type\" content=\"website\">" +
+    "<meta property=\"og:image\" content=\"https://batuta.lat/og-image.png\">" +
+    "<meta property=\"og:image:secure_url\" content=\"https://batuta.lat/og-image.png\">" +
+    "<meta property=\"og:image:width\" content=\"1200\">" +
+    "<meta property=\"og:image:height\" content=\"630\">" +
+    "<meta property=\"og:image:type\" content=\"image/png\">" +
+    "<meta property=\"og:image:alt\" content=\"Batuta\">" +
+    "<meta name=\"twitter:card\" content=\"summary_large_image\">" +
+    "<meta name=\"twitter:image\" content=\"https://batuta.lat/og-image.png\">" +
+    "<link rel=\"icon\" type=\"image/svg+xml\" href=\"https://batuta.lat/favicon.svg\">" +
     "<link rel=\"preconnect\" href=\"https://fonts.googleapis.com\">" +
     "<link href=\"https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;700;800&family=Space+Grotesk:wght@400;500;600&display=swap\" rel=\"stylesheet\">" +
     "<style>" +
@@ -1387,16 +1636,19 @@ function paginaSuscribir(){
     "<p class=\"sub\">S/0 hoy. Tu primer cobro es al terminar tus 7 dias de prueba. Cancela cuando quieras.</p>" +
     "<div id=\"planes\">" +
       "<div class=\"planopt\" data-plan=\"profe\">" +
-        "<div class=\"planopt-t\">Profe</div><div class=\"planopt-p\">US$9.95<span>/mes · se cobra S/34</span></div>" +
+        "<div class=\"planopt-t\">Profe</div><div class=\"planopt-p\">US$14.95<span>/mes · se cobra S/49 · hasta 40 alumnos</span></div>" +
       "</div>" +
       "<div class=\"planopt\" data-plan=\"academia\">" +
-        "<div class=\"planopt-t\">Academia</div><div class=\"planopt-p\">US$24.95<span>/mes · se cobra S/85</span></div>" +
+        "<div class=\"planopt-t\">Academia</div><div class=\"planopt-p\">US$43.95<span>/mes · se cobra S/149 · hasta 150 alumnos</span></div>" +
       "</div>" +
       "<div class=\"planopt\" data-plan=\"xl\">" +
-        "<div class=\"planopt-t\">Academia XL</div><div class=\"planopt-p\">US$49.95<span>/mes · se cobra S/170</span></div>" +
+        "<div class=\"planopt-t\">Academia XL</div><div class=\"planopt-p\">US$87.95<span>/mes · se cobra S/299 · hasta 400 alumnos</span></div>" +
+      "</div>" +
+      "<div class=\"planopt\" data-plan=\"por_alumno\">" +
+        "<div class=\"planopt-t\">Red / Enterprise</div><div class=\"planopt-p\">por alumno<span>· 400+ alumnos o varias sedes · a medida</span></div>" +
       "</div>" +
     "</div>" +
-    "<p class=\"sub\" style=\"margin:14px 0 0;font-size:12px\">El cobro es en soles peruanos via Mercado Pago. Con tarjeta de otro pais, tu banco convierte al equivalente en tu moneda.</p>" +
+    "<p class=\"sub\" style=\"margin:14px 0 0;font-size:12px\">El cobro es en soles peruanos via Mercado Pago. Con tarjeta de otro pais, tu banco convierte al equivalente en tu moneda. El plan por alumno cobra segun tus alumnos activos (minimo " + MIN_ALUMNOS_FACTURABLES + ") y se ajusta solo cada mes.</p>" +
     "<button type=\"button\" id=\"btn\">Activar plan</button>" +
     "<div class=\"err\" id=\"err\"></div>" +
     "<div id=\"whaBox\" style=\"display:none;text-align:center;margin-top:14px\">" +
@@ -1603,7 +1855,7 @@ async function ensureFeedbackSchema(env){
    - disponibilidad gana cupo por franja (0 = usa el cupo global del tenant).
    Todo additivo con ALTER perezoso (patron de la casa). */
 async function ensureErpSchema(env){
-  for (const col of ["nombre TEXT DEFAULT ''", "whatsapp TEXT DEFAULT ''", "etapa TEXT DEFAULT 'nuevo'", "nota TEXT DEFAULT ''", "seguir_el TEXT DEFAULT ''", "actualizado TEXT DEFAULT ''"]){
+  for (const col of ["nombre TEXT DEFAULT ''", "whatsapp TEXT DEFAULT ''", "etapa TEXT DEFAULT 'nuevo'", "nota TEXT DEFAULT ''", "seguir_el TEXT DEFAULT ''", "actualizado TEXT DEFAULT ''", "software_actual TEXT DEFAULT ''"]){
     try { await env.DB.prepare("ALTER TABLE leads ADD COLUMN " + col).run(); } catch (e) {}
   }
   for (const col of ["comision_pct REAL DEFAULT 0", "tarifa_clase REAL DEFAULT 0"]){
@@ -2178,9 +2430,10 @@ export default {
       if (tW.estado === "vencido") return htmlResponse(paginaBase("Página en pausa — Batuta", "<h1>Página en pausa</h1><p class=\"sub\">Esta academia está inactiva por ahora.</p>", ""));
       const cfgW = await loadConfig(env, tW.id);
       const preciosW = await loadPrecios(env, tW.id);
+      const paqW = await loadPaquetes(env, tW.id);
       const mpOnW = !!(tW.mp_access_token) && (!(Number(tW.mp_expires_at) || 0) || Number(tW.mp_expires_at) > Date.now());
       const cobroOnW = !!(mpOnW || cfgW.pago_numero || cfgW.bcp_cuenta || cfgW.scotia_cuenta || cfgW.crypto_wallet);
-      const paquetesW = Object.keys(PAQUETES).filter(pk => (preciosW[pk] || 0) > 0 && pk !== "Clase de prueba");
+      const paquetesW = paqW.list.filter(pk => (preciosW[pk] || 0) > 0 && pk !== "Clase de prueba");
       const pruebaOnW = (preciosW["Clase de prueba"] || 0) > 0;
       const cursosW = String(cfgW.cursos || "").split(",").map(s => s.trim()).filter(Boolean);
       const waW = String(cfgW.whatsapp_profe || "").replace(/[^0-9]/g, "");
@@ -2228,7 +2481,7 @@ export default {
         (paquetesW.length && cobroOnW ?
           "<div class=\"grid\">" + paquetesW.map(pk =>
             "<div class=\"paq\"><b>" + esc(pk) + "</b><span class=\"pr\">S/ " + (preciosW[pk] || 0) + "</span>" +
-            "<span class=\"cl\">" + PAQUETES[pk].clases + (PAQUETES[pk].clases === 1 ? " clase" : " clases") + "</span>" +
+            "<span class=\"cl\">" + (paqW.map[pk] && paqW.map[pk].ilim ? "Sin límite de clases / mes" : (resolverPk(paqW.map, pk).clases + (resolverPk(paqW.map, pk).clases === 1 ? " clase" : " clases"))) + "</span>" +
             "<a href=\"/app/a/" + esc(tW.slug) + "/pagar?p=" + encodeURIComponent(pk) + "\">Comprar →</a></div>").join("") + "</div>"
           : "") +
         "<p class=\"sub\" style=\"margin-top:20px\">Ya eres alumno? <a href=\"/app/a/" + esc(tW.slug) + "\" style=\"color:var(--acento);text-decoration:none\">Entra a tu portal</a></p>" +
@@ -2239,16 +2492,19 @@ export default {
 
     if (/^\/app\/a\/[^/]+\/pagar$/.test(path) && request.method === "GET"){
       const slugP = decodeURIComponent(path.split("/")[3] || "");
-      const tP = await env.DB.prepare("SELECT id, academia, slug, estado, mp_access_token, mp_expires_at FROM tenants WHERE slug = ?1").bind(slugP).first();
+      const tP = await env.DB.prepare("SELECT * FROM tenants WHERE slug = ?1").bind(slugP).first();
       if (!tP) return htmlResponse(paginaBase("Academia no encontrada — Batuta", "<h1>No encontramos esa academia</h1><p class=\"sub\">Revisa el link con tu profesor.</p>", ""));
       if (tP.estado === "vencido") return htmlResponse(paginaBase("No disponible — Batuta", "<h1>Pagos en pausa</h1><p class=\"sub\">Esta academia está inactiva por ahora. Escríbele a tu profesor.</p>", ""));
       const cfgP = await loadConfig(env, tP.id);
       const preciosP = await loadPrecios(env, tP.id);
-      const paquetesOk = Object.keys(PAQUETES).filter(pk => (preciosP[pk] || 0) > 0);
+      const paquetesOk = (await loadPaquetes(env, tP.id)).list.filter(pk => (preciosP[pk] || 0) > 0);
       const preSel = String(url.searchParams.get("p") || "");
       const mpOnP = !!(tP.mp_access_token) && (!(Number(tP.mp_expires_at) || 0) || Number(tP.mp_expires_at) > Date.now());
+      const stripeOnP = stripeConnectOn(env) && !!(tP.stripe_account_id) && !!Number(tP.stripe_charges_enabled);
       const metodos = [];
-      if (mpOnP) metodos.push({ v: "Tarjeta (Mercado Pago)", t: "Tarjeta (se confirma sola)" });
+      // MP Checkout ofrece tarjeta Y Yape (si la cuenta MP del profe lo tiene): se confirma solo por el webhook.
+      if (mpOnP) metodos.push({ v: "Tarjeta (Mercado Pago)", t: "Tarjeta / Yape (se confirma solo)" });
+      if (stripeOnP) metodos.push({ v: "Tarjeta (Stripe)", t: "Tarjeta internacional (se confirma sola)" });
       if (cfgP.pago_numero) metodos.push({ v: "Yape/Plin/Sip", t: "Yape / Plin / Sip" });
       if (cfgP.bcp_cuenta) metodos.push({ v: "Transferencia BCP", t: "Transferencia BCP" });
       if (cfgP.scotia_cuenta) metodos.push({ v: "Transferencia Scotiabank", t: "Transferencia Scotiabank" });
@@ -2289,7 +2545,8 @@ export default {
         "var INFO=" + JSON.stringify(infoPago) + ";var SLUGP=" + JSON.stringify(tP.slug) + ";" +
         "var mt=document.getElementById('mt'),pinfo=document.getElementById('pinfo'),manual=document.getElementById('manualbox'),btn=document.getElementById('btnp');" +
         "function pintaInfo(){var v=mt.value,t='';" +
-        "if(v==='Tarjeta (Mercado Pago)'){t='Te llevamos al checkout de Mercado Pago. Al aprobar, tu paquete se activa solo.';manual.style.display='none';btn.textContent='Pagar con tarjeta \\u2192';}" +
+        "if(v==='Tarjeta (Mercado Pago)'){t='Te llevamos al checkout de Mercado Pago (tarjeta o Yape). Al aprobar, tu paquete se activa solo.';manual.style.display='none';btn.textContent='Pagar con tarjeta \\u2192';}" +
+        "else if(v==='Tarjeta (Stripe)'){t='Te llevamos al checkout seguro de Stripe. Al aprobar, tu paquete se activa solo.';manual.style.display='none';btn.textContent='Pagar con tarjeta \\u2192';}" +
         "else{manual.style.display='';btn.textContent='Registrar mi pago';" +
         "if(v==='Yape/Plin/Sip'){t='Yapea o Plinea a: '+INFO.yape.numero+(INFO.yape.titular?('\\nA nombre de: '+INFO.yape.titular):'');}" +
         "else if(v==='Transferencia BCP'){t='BCP Soles: '+INFO.bcp.cuenta+(INFO.bcp.cci?('\\nCCI: '+INFO.bcp.cci):'');}" +
@@ -2960,6 +3217,7 @@ export default {
           const nP = await env.DB.prepare("SELECT COUNT(*) AS n FROM profesores WHERE tenant_id = ?1 AND estado != 'suspendido'").bind(t.id).first();
           asientos = { usados: Number(nP && nP.n) || 1, max: MAX_PROFES[t.plan || "profe"] || 1 };
         } catch (e) {}
+        const activosMe = await contarAlumnosActivos(env, t.id);
         return json({
           academia: t.academia, profe_nombre: t.profe_nombre, slug: t.slug,
           demo: t.email === DEMO_EMAIL,
@@ -2970,6 +3228,9 @@ export default {
           suscrito: t.mp_sub_status === "authorized",
           rol: actorMe.esDueno ? "dueno" : "profesor",
           profesor: actorMe.profesor ? { id: actorMe.profesor.id, nombre: actorMe.profesor.nombre } : null,
+          // Estimado del plan "por alumno": alumnos activos + monto (para mostrar en Perfil > Tu plan).
+          alumnos_activos: activosMe,
+          por_alumno_monto_pen: montoPorAlumno(activosMe),
           asientos
         });
       }
@@ -2992,8 +3253,10 @@ export default {
         if (t.email === DEMO_EMAIL) return json({ error: "En la demo no se cambia de plan." }, 400);
         const b = await request.json().catch(() => ({}));
         const plan = String(b.plan || "").trim();
-        if (!PLANES[plan]) return json({ error: "Plan no valido" }, 400);
+        if (!PLANES[plan] && plan !== "por_alumno") return json({ error: "Plan no valido" }, 400);
         if (plan === (t.plan || "profe")) return json({ error: "Ya estas en el plan " + PLAN_NOMBRE[plan] + "." }, 400);
+        // Monto del plan destino: fijo (PLANES) o dinámico por alumnos activos.
+        const montoDestino = (plan === "por_alumno") ? montoPorAlumno(await contarAlumnosActivos(env, t.id)) : PLANES[plan];
 
         if (!t.mp_preapproval_id){
           await env.DB.prepare("UPDATE tenants SET plan = ?1 WHERE id = ?2").bind(plan, t.id).run();
@@ -3001,15 +3264,35 @@ export default {
         }
         if (!env.MP_ACCESS_TOKEN) return json({ error: "No disponible ahora. Escribenos por WhatsApp y lo cambiamos hoy." }, 501);
 
+        // Cambiar HACIA por_alumno con una suscripción existente: no se puede sobre-escribir el monto de
+        // un preapproval atado a un plan fijo. Se cancela el viejo y se crea uno directo nuevo (un checkout).
+        if (plan === "por_alumno"){
+          const activosCp = await contarAlumnosActivos(env, t.id);
+          const montoCp = montoPorAlumno(activosCp);
+          try { await mpFetch(env, "/preapproval/" + encodeURIComponent(t.mp_preapproval_id), { method: "PUT", body: { status: "cancelled" } }); } catch (e) {}
+          const mpNuevo = await mpFetch(env, "/preapproval", { method: "POST", body: {
+            reason: "Batuta · Academia por alumno (" + activosCp + " activos)",
+            external_reference: t.id, payer_email: t.email,
+            auto_recurring: { frequency: 1, frequency_type: "months", transaction_amount: montoCp, currency_id: "PEN" },
+            back_url: MARCA.dominio + "/app/panel?sub=ok", status: "pending"
+          }});
+          if (!mpNuevo.ok || !mpNuevo.data || !mpNuevo.data.init_point){
+            return json({ error: "Mercado Pago no aceptó el cambio a por alumno. Escríbenos por WhatsApp y lo cambiamos hoy." }, 502);
+          }
+          await env.DB.prepare("UPDATE tenants SET plan = 'por_alumno', mp_preapproval_id = ?1, mp_sub_status = 'checkout_pendiente' WHERE id = ?2")
+            .bind(String(mpNuevo.data.id || ""), t.id).run();
+          return json({ ok: true, modo: "recheckout", init_point: mpNuevo.data.init_point, plan, nombre: PLAN_NOMBRE[plan] });
+        }
+
         const mp = await mpFetch(env, "/preapproval/" + encodeURIComponent(t.mp_preapproval_id), {
           method: "PUT",
-          body: { auto_recurring: { transaction_amount: PLANES[plan], currency_id: "PEN" }, reason: "Batuta · Plan " + PLAN_NOMBRE[plan] }
+          body: { auto_recurring: { transaction_amount: montoDestino, currency_id: "PEN" }, reason: "Batuta · " + (PLAN_NOMBRE[plan] || plan) }
         });
         if (!mp.ok){
           return json({ error: "Mercado Pago no acepto el cambio automatico. Escribenos por WhatsApp y lo cambiamos hoy mismo, sin costo." }, 502);
         }
         await env.DB.prepare("UPDATE tenants SET plan = ?1 WHERE id = ?2").bind(plan, t.id).run();
-        return json({ ok: true, modo: "actualizado", plan, nombre: PLAN_NOMBRE[plan], monto: PLANES[plan] });
+        return json({ ok: true, modo: "actualizado", plan, nombre: PLAN_NOMBRE[plan], monto: montoDestino });
       }
 
       if (path === "/app/api/t/suscribir" && request.method === "POST"){
@@ -3019,10 +3302,47 @@ export default {
         const t = actorSub.tenant;
         const b = await request.json().catch(() => ({}));
         const plan = String(b.plan || "").trim();
-        if (!PLANES[plan]) return json({ error: "Plan no valido" }, 400);
+        if (!PLANES[plan] && plan !== "por_alumno") return json({ error: "Plan no valido" }, 400);
 
         if (!env.MP_ACCESS_TOKEN){
           return json({ error: "La suscripcion automatica aun no esta disponible. Escribenos por WhatsApp para activar tu plan." }, 501);
+        }
+
+        // Plan "por alumno activo": monto DINÁMICO -> /preapproval directo (no hay plan fijo pre-creado).
+        // El pagador se identifica en el checkout hospedado (flujo pending-payments de MP). El cron recalcula.
+        if (plan === "por_alumno"){
+          // Guard anti-doble-cobro: si ya hay una suscripción autorizada viva, NO crear otra
+          // (para ajustar el monto ya está el cron / cambiar-plan). Evita dos preapprovals cobrando.
+          if (t.mp_sub_status === "authorized" && t.mp_preapproval_id){
+            return json({ error: "Ya tienes una suscripción activa. Se ajusta sola cada mes según tus alumnos." }, 409);
+          }
+          // Si quedó un preapproval anterior (checkout no completado, o cambio de plan), cancélalo en MP
+          // antes de crear el nuevo para no dejar uno huérfano cobrando.
+          if (t.mp_preapproval_id){
+            try { await mpFetch(env, "/preapproval/" + encodeURIComponent(t.mp_preapproval_id), { method: "PUT", body: { status: "cancelled" } }); } catch (e) {}
+          }
+          const activos = await contarAlumnosActivos(env, t.id);
+          const monto = montoPorAlumno(activos);
+          const mp = await mpFetch(env, "/preapproval", { method: "POST", body: {
+            reason: "Batuta · Academia por alumno (" + activos + " activos)",
+            external_reference: t.id,
+            payer_email: t.email,
+            auto_recurring: {
+              frequency: 1, frequency_type: "months",
+              transaction_amount: monto, currency_id: "PEN",
+              free_trial: { frequency: MP_TRIAL_DIAS, frequency_type: "days" }
+            },
+            back_url: MARCA.dominio + "/app/panel?sub=ok",
+            status: "pending"
+          }});
+          if (!mp.ok || !mp.data || !mp.data.init_point){
+            return json({ error: "Mercado Pago no aceptó la suscripción por alumno. Escríbenos por WhatsApp y lo activamos a mano." }, 502);
+          }
+          // Preapproval directo: ya conocemos su id (lo creamos nosotros). Lo guardamos para que el cron lo recalcule.
+          await env.DB.prepare(
+            "UPDATE tenants SET plan = 'por_alumno', mp_preapproval_id = ?1, mp_sub_status = 'checkout_pendiente' WHERE id = ?2"
+          ).bind(String(mp.data.id || ""), t.id).run();
+          return json({ init_point: mp.data.init_point });
         }
 
         // Checkout del PLAN pre-creado en MP (el pagador se identifica al pagar). Guardamos el plan
@@ -3050,7 +3370,10 @@ export default {
 
         const mp = await consultarPreapprovalMP(env, pid);
         if (!mp.ok || !mp.data) return json({ error: "No se pudo verificar la suscripcion" }, 502);
-        const esNuestro = Object.values(MP_PLAN_IDS).indexOf(String(mp.data.preapproval_plan_id || "")) !== -1;
+        // Es nuestra si es uno de los planes fijos pre-creados, O si es el preapproval directo
+        // (plan por alumno) cuyo external_reference apunta a ESTE tenant.
+        const esNuestro = Object.values(MP_PLAN_IDS).indexOf(String(mp.data.preapproval_plan_id || "")) !== -1
+          || String(mp.data.external_reference || "") === t.id;
         if (!esNuestro) return json({ error: "Suscripcion no reconocida" }, 400);
 
         const yaDeOtro = await env.DB.prepare(
@@ -3656,6 +3979,7 @@ export default {
 
         const precios = await loadPrecios(env, tid);
         const config = await loadConfig(env, tid);
+        const paqMe = await loadPaquetes(env, tid);
 
         let refCode = cu.ref_code || "";
         if (!refCode){
@@ -3676,7 +4000,8 @@ export default {
             ).bind(tid, alumno.id, ciclo).all();
             historial = (results || []).map(r => Object.assign({}, r, { tarea_audios: parseAudios(r.tarea_audio) }));
             const rUsadas = await reservasUsadasCount(env, tid, alumno.id, ciclo);
-            computed = compute(alumno, historial, precios, rUsadas);
+            const paqMap = (await loadPaquetes(env, tid)).map;
+            computed = compute(alumno, historial, precios, rUsadas, resolverPk(paqMap, alumno.paquete));
             horarioFijo = await horarioFijoDerivado(env, tid, alumno.id);
             proximasClases = (await env.DB.prepare(
               "SELECT id, inicio_utc, fin_utc, tipo, curso FROM reservas WHERE tenant_id = ?1 AND alumno_id = ?2 AND estado = 'reservada' AND inicio_utc >= ?3 ORDER BY inicio_utc ASC"
@@ -3715,17 +4040,19 @@ export default {
         return json({
           cuenta: { nombre: cu.nombre, email: cu.email, whatsapp: cu.whatsapp || "" },
           profesor: miProfe,
-          estado: estadoAlumno(computed),
+          estado: estadoAlumno(computed, alumno && alumno.vence),
           alumno: (alumno && computed) ? {
             curso: alumno.curso || "", paquete: alumno.paquete || "",
             horario: alumno.horario || "", horarioFijo: horarioFijo, pago: alumno.pago || "",
             compradas: computed.compradas, usadas: computed.usadas, restantes: computed.restantes,
+            ilim: !!computed.ilim,
             reprogPermitidas: computed.reprogPermitidas, reprogRestantes: computed.reprogRestantes,
             monto: computed.monto, vence: alumno.vence || "",
             historial: historial.slice().reverse()
           } : null,
           compraPendiente: pendiente || null,
           precios,
+          paquetes: paqMe.list.map(function(n){ return { pk: n, nombre: n, clases: paqMe.map[n].clases, ilim: !!paqMe.map[n].ilim, precio: precios[n] || 0 }; }),
           credito: Number(cu.credito) || 0,
           ref_code: refCode,
           referidos: {
@@ -3745,7 +4072,19 @@ export default {
             crypto_moneda: config.crypto_moneda, crypto_red: config.crypto_red, crypto_wallet: config.crypto_wallet,
             vapid_public: env.VAPID_PUBLIC_KEY || "",
             // Tarjeta del alumno: si el profe conecto su cuenta de MP (el APP_SECRET solo hace falta para el OAuth)
-            mp_tarjeta: !!(await env.DB.prepare("SELECT mp_access_token FROM tenants WHERE id = ?1").bind(tid).first().then(r => r && r.mp_access_token).catch(() => false))
+            mp_tarjeta: !!(await env.DB.prepare("SELECT mp_access_token FROM tenants WHERE id = ?1").bind(tid).first().then(r => r && r.mp_access_token).catch(() => false)),
+            // Rieles opcionales: Stripe (internacional) y Culqi (Yape/tarjeta por API). culqi_pk es publica (para el widget).
+            ...(await (async () => {
+              try {
+                const pt = await env.DB.prepare("SELECT stripe_account_id, stripe_charges_enabled, culqi_on, culqi_pk FROM tenants WHERE id = ?1").bind(tid).first();
+                const culqiOk = culqiConnectOn(env) && !!(pt && Number(pt.culqi_on) && pt.culqi_pk);
+                return {
+                  stripe_tarjeta: stripeConnectOn(env) && !!(pt && pt.stripe_account_id && Number(pt.stripe_charges_enabled)),
+                  culqi_tarjeta: culqiOk,
+                  culqi_pk: culqiOk ? pt.culqi_pk : ""
+                };
+              } catch (e) { return { stripe_tarjeta: false, culqi_tarjeta: false, culqi_pk: "" }; }
+            })())
           }
         });
       }
@@ -3767,7 +4106,8 @@ export default {
         if (t.estado === "vencido") return json({ error: "Esta academia está inactiva por ahora. Escríbele a tu profesor." }, 402);
 
         const paquete = String(b.paquete || "");
-        if (!(paquete in PAQUETES)) return json({ error: "Paquete no valido." }, 400);
+        const paqMapPd = (await loadPaquetes(env, t.id)).map;
+        if (!paqMapPd[paquete]) return json({ error: "Paquete no valido." }, 400);
         const nombre = String(b.nombre || "").trim();
         const email = String(b.email || "").trim().toLowerCase();
         const whatsapp = String(b.whatsapp || "").trim().slice(0, 20);
@@ -3874,6 +4214,40 @@ export default {
           return json({ init_point: pref.init_point });
         }
 
+        // ---- Tarjeta internacional: compra 'iniciada' + Stripe Checkout en la cuenta del profe ----
+        if (metodo === "Tarjeta (Stripe)"){
+          if (!stripeConnectOn(env) || !t.stripe_account_id || !Number(t.stripe_charges_enabled)){
+            return json({ error: "Tu profesor aún no activó el pago internacional. Elige otro método." }, 400);
+          }
+          const cfgSt = await loadConfig(env, t.id);
+          const monedaSt = stripeMoneda(cfgSt.stripe_moneda);
+          // El credito de referido es en soles: no aplica al riel Stripe internacional. Cobra el precio pleno.
+          const montoSt = Number(precio) || 0;
+          if (!(montoSt > 0)) return json({ error: "Ese paquete no está disponible. Escríbele a tu profesor." }, 400);
+          await env.DB.prepare(
+            "DELETE FROM compras WHERE tenant_id = ?1 AND cuenta_id = ?2 AND estado = 'iniciada' AND metodo = 'Tarjeta (Stripe)'"
+          ).bind(t.id, cu.id).run();
+          const compraIdSt = crypto.randomUUID();
+          await env.DB.prepare(
+            "INSERT INTO compras (id,tenant_id,cuenta_id,curso,paquete,monto,descuento,op_numero,estado,fecha,metodo,comprobante,slot_deseado) VALUES (?1,?2,?3,?4,?5,?6,0,'','iniciada',?7,'Tarjeta (Stripe)','','')"
+          ).bind(compraIdSt, t.id, cu.id, cursoDef, paquete, montoSt, hoy()).run();
+          const sessSt = await stripeApi(env, "POST", "/v1/checkout/sessions", {
+            mode: "payment",
+            expires_at: Math.floor(Date.now() / 1000) + 3600,
+            line_items: [{ quantity: 1, price_data: { currency: monedaSt, unit_amount: stripeMinorUnit(montoSt, monedaSt), product_data: { name: paquete + " - " + (t.academia || "clases") } } }],
+            client_reference_id: "btc:" + compraIdSt,
+            metadata: { batuta_tenant: t.id, batuta_compra: compraIdSt },
+            success_url: MARCA.dominio + "/app/a/" + t.slug + "?pago=ok",
+            cancel_url: MARCA.dominio + "/app/a/" + t.slug + "?pago=error"
+          }, { account: t.stripe_account_id, idempotencyKey: "sess-" + compraIdSt });
+          if (!sessSt.ok || !sessSt.data || !sessSt.data.url){
+            await env.DB.prepare("DELETE FROM compras WHERE id = ?1 AND tenant_id = ?2 AND estado = 'iniciada'").bind(compraIdSt, t.id).run();
+            return json({ error: "No se pudo iniciar el pago con Stripe. Elige otro método." }, 502);
+          }
+          await correoAcceso();
+          return json({ init_point: sessSt.data.url });
+        }
+
         // ---- Métodos manuales: compra 'pendiente' con captura opcional ----
         const comprobante = typeof b.comprobante === "string" ? b.comprobante : "";
         let comprobanteKey = "";
@@ -3917,7 +4291,8 @@ export default {
         const comprobante = typeof b.comprobante === "string" ? b.comprobante : "";
 
         const precios = await loadPrecios(env, tid);
-        if (!(paquete in PAQUETES)) return json({ error: "Paquete no valido." }, 400);
+        const paqMapC = (await loadPaquetes(env, tid)).map;
+        if (!paqMapC[paquete]) return json({ error: "Paquete no valido." }, 400);
         if (paquete === "Clase de prueba" && cu.alumno_id) return json({ error: "La clase de prueba es solo para tu primera clase. Elige un paquete para seguir." }, 400);
 
         let slotDeseado = "";
@@ -4046,7 +4421,8 @@ export default {
 
         const b = await request.json().catch(() => ({}));
         const paquete = String(b.paquete || "");
-        if (!(paquete in PAQUETES)) return json({ error: "Paquete no valido." }, 400);
+        const paqMapMp = (await loadPaquetes(env, tid)).map;
+        if (!paqMapMp[paquete]) return json({ error: "Paquete no valido." }, 400);
         if (paquete === "Clase de prueba" && cu.alumno_id) return json({ error: "La clase de prueba es solo para tu primera clase." }, 400);
         const cursosT = cursosDeCfg(await loadConfig(env, tid));
         const cursoPedido = String(b.curso || "").trim();
@@ -4150,6 +4526,353 @@ export default {
           }
         } catch (e) { /* nunca romper el 200 hacia MP */ }
         return json({ ok: true });
+      }
+
+      /* ============================================================
+         STRIPE CONNECT del PROFE (riel internacional; espeja MP)
+         Direct charges: la plata cae directo en la cuenta del profe.
+         OJO: Stripe NO opera en Peru. Gate stripeConnectOn -> off sin secrets.
+         ============================================================ */
+
+      // El profe consulta su estado de conexion Stripe (panel > Ajustes)
+      if (path === "/app/api/admin/stripe/estado" && request.method === "GET"){
+        const t = await tenantDeSesion(env, request);
+        if (!t) return json({ error: "Sesion expirada" }, 401);
+        await ensureStripeProfeSchema(env);
+        const row = await env.DB.prepare("SELECT stripe_account_id, stripe_charges_enabled, stripe_details_submitted FROM tenants WHERE id = ?1").bind(t.id).first();
+        let listo = !!(row && Number(row.stripe_charges_enabled));
+        let detalles = !!(row && Number(row.stripe_details_submitted));
+        // Si conecto pero aun no esta 'listo', re-consulta a Stripe (el onboarding pudo completarse)
+        if (stripeConnectOn(env) && row && row.stripe_account_id && !listo){
+          const acc = await stripeApi(env, "GET", "/v1/accounts/" + row.stripe_account_id, null, {});
+          if (acc.ok && acc.data){
+            listo = !!acc.data.charges_enabled;
+            detalles = !!acc.data.details_submitted;
+            await env.DB.prepare("UPDATE tenants SET stripe_charges_enabled = ?1, stripe_details_submitted = ?2 WHERE id = ?3")
+              .bind(listo ? 1 : 0, detalles ? 1 : 0, t.id).run();
+          }
+        }
+        return json({ disponible: stripeConnectOn(env), conectado: !!(row && row.stripe_account_id), listo, details_submitted: detalles });
+      }
+
+      // El profe inicia/continua el onboarding de Stripe (dueno)
+      if (path === "/app/api/admin/stripe/conectar" && request.method === "POST"){
+        if (!stripeConnectOn(env)) return json({ error: "El pago internacional (Stripe) aun no esta configurado en Batuta." }, 501);
+        const actorS = await actorDeSesion(env, request);
+        if (!actorS) return json({ error: "Sesion expirada" }, 401);
+        if (!actorS.esDueno) return json({ error: "Los cobros los configura el dueno de la academia." }, 403);
+        const t = actorS.tenant;
+        await ensureStripeProfeSchema(env);
+        const row = await env.DB.prepare("SELECT stripe_account_id FROM tenants WHERE id = ?1").bind(t.id).first();
+        let acct = row && row.stripe_account_id;
+        if (!acct){
+          const created = await stripeApi(env, "POST", "/v1/accounts", { type: "standard" }, { idempotencyKey: "acct-" + t.id });
+          if (!created.ok || !created.data || !created.data.id) return json({ error: "No se pudo crear la cuenta Stripe. Intenta de nuevo." }, 502);
+          acct = created.data.id;
+          await env.DB.prepare("UPDATE tenants SET stripe_account_id = ?1 WHERE id = ?2").bind(acct, t.id).run();
+        }
+        const link = await stripeApi(env, "POST", "/v1/account_links", {
+          account: acct, type: "account_onboarding",
+          refresh_url: MARCA.dominio + "/app/panel?stripe=refresh",
+          return_url: MARCA.dominio + "/app/panel?stripe=ok"
+        }, {});
+        if (!link.ok || !link.data || !link.data.url) return json({ error: "No se pudo iniciar el onboarding de Stripe." }, 502);
+        return json({ url: link.data.url });
+      }
+
+      // El profe desvincula Stripe (dueno). Solo lo desvincula en Batuta; su cuenta Stripe sigue existiendo.
+      if (path === "/app/api/admin/stripe/desconectar" && request.method === "POST"){
+        const actorSD = await actorDeSesion(env, request);
+        if (!actorSD) return json({ error: "Sesion expirada" }, 401);
+        if (!actorSD.esDueno) return json({ error: "Los cobros los configura el dueno de la academia." }, 403);
+        await ensureStripeProfeSchema(env);
+        await env.DB.prepare("UPDATE tenants SET stripe_account_id = '', stripe_charges_enabled = 0, stripe_details_submitted = 0 WHERE id = ?1").bind(actorSD.tenant.id).run();
+        return json({ ok: true });
+      }
+
+      // El ALUMNO (logueado) inicia el pago con Stripe: compra 'iniciada' + Checkout Session en la cuenta del profe
+      if (path === "/app/api/stripe/crear-alumno" && request.method === "POST"){
+        const cu = await cuentaDeSesion(env, request);
+        if (!cu) return json({ error: "Sesion expirada" }, 401);
+        const tid = cu.tenant_id;
+        const t = await env.DB.prepare("SELECT * FROM tenants WHERE id = ?1").bind(tid).first();
+        if (!t || !t.stripe_account_id || !Number(t.stripe_charges_enabled)){
+          return json({ error: "Tu profesor aun no activo el pago internacional. Elige otro metodo." }, 400);
+        }
+        const b = await request.json().catch(() => ({}));
+        const paquete = String(b.paquete || "");
+        const paqMapS = (await loadPaquetes(env, tid)).map;
+        if (!paqMapS[paquete]) return json({ error: "Paquete no valido." }, 400);
+        if (paquete === "Clase de prueba" && cu.alumno_id) return json({ error: "La clase de prueba es solo para tu primera clase." }, 400);
+        const cursosT = cursosDeCfg(await loadConfig(env, tid));
+        const partesCurso = String(b.curso || "").split(",").map(s => s.trim()).filter(Boolean);
+        const curso = (partesCurso.length && partesCurso.every(c => cursosT.indexOf(c) !== -1)) ? partesCurso.join(", ") : cursosT[0];
+        const ya = await env.DB.prepare("SELECT id FROM compras WHERE tenant_id = ?1 AND cuenta_id = ?2 AND estado = 'pendiente'").bind(tid, cu.id).first();
+        if (ya) return json({ error: "Ya tienes un pago en verificacion. Te confirmo apenas lo vea." }, 409);
+        let slotDeseado = "";
+        if (paquete === "Clase de prueba" && b.slot_deseado){
+          const iso = String(b.slot_deseado);
+          if (!(await slotValido(env, tid, iso))) return json({ error: "Ese horario ya no esta disponible. Elige otro." }, 400);
+          slotDeseado = iso;
+        }
+        const cfgS = await loadConfig(env, tid);
+        const moneda = stripeMoneda(cfgS.stripe_moneda);
+        const precios = await loadPrecios(env, tid);
+        const precio = precios[paquete] || 0;
+        // El credito de referido esta en soles: solo aplica si el cobro es en PEN (nunca en el riel Stripe internacional).
+        const credito = (moneda === "pen") ? (Number(cu.credito) || 0) : 0;
+        const descuento = Math.min(credito, precio);
+        const monto = Math.max(0, precio - descuento);
+        if (!(monto > 0)) return json({ error: "Ese paquete no esta disponible para tarjeta." }, 400);
+        await env.DB.prepare("DELETE FROM compras WHERE tenant_id = ?1 AND cuenta_id = ?2 AND estado = 'iniciada' AND metodo = 'Tarjeta (Stripe)'").bind(tid, cu.id).run();
+        const compraId = crypto.randomUUID();
+        await env.DB.prepare(
+          "INSERT INTO compras (id,tenant_id,cuenta_id,curso,paquete,monto,descuento,op_numero,estado,fecha,metodo,comprobante,slot_deseado) VALUES (?1,?2,?3,?4,?5,?6,?7,'','iniciada',?8,'Tarjeta (Stripe)','',?9)"
+        ).bind(compraId, tid, cu.id, curso, paquete, monto, descuento, hoy(), slotDeseado).run();
+        const sess = await stripeApi(env, "POST", "/v1/checkout/sessions", {
+          mode: "payment",
+          expires_at: Math.floor(Date.now() / 1000) + 3600, // sesion abandonada muere en 1h (evita pago huerfano en un reintento)
+          line_items: [{ quantity: 1, price_data: { currency: moneda, unit_amount: stripeMinorUnit(monto, moneda), product_data: { name: paquete + " - " + (t.academia || "clases") } } }],
+          client_reference_id: "btc:" + compraId,
+          metadata: { batuta_tenant: tid, batuta_compra: compraId },
+          success_url: MARCA.dominio + "/app/a/" + t.slug + "?pago=ok",
+          cancel_url: MARCA.dominio + "/app/a/" + t.slug + "?pago=error"
+        }, { account: t.stripe_account_id, idempotencyKey: "sess-" + compraId });
+        if (!sess.ok || !sess.data || !sess.data.url){
+          await env.DB.prepare("DELETE FROM compras WHERE id = ?1 AND tenant_id = ?2 AND estado = 'iniciada'").bind(compraId, tid).run();
+          return json({ error: "No se pudo iniciar el pago con Stripe. Intenta de nuevo o elige otro metodo." }, 502);
+        }
+        return json({ init_point: sess.data.url, monto, descuento });
+      }
+
+      // Webhook de Stripe (publico, tipo Connect). Firma verificada sobre el body CRUDO.
+      if (path === "/app/api/stripe/webhook" && request.method === "POST"){
+        if (!stripeConnectOn(env)) return json({ ok: true });
+        let evt = null;
+        try {
+          const raw = await request.text();
+          evt = await stripeVerifWebhook(env, raw, request.headers.get("Stripe-Signature"));
+        } catch (e) { evt = null; }
+        if (!evt) return json({ error: "firma invalida" }, 400);
+        try {
+          if (evt.type === "checkout.session.completed"){
+            const sess = evt.data && evt.data.object;
+            if (sess && sess.payment_status === "paid"){
+              let tid = (sess.metadata && sess.metadata.batuta_tenant) || "";
+              if (!tid && evt.account){
+                const tt = await env.DB.prepare("SELECT id FROM tenants WHERE stripe_account_id = ?1").bind(evt.account).first();
+                tid = tt ? tt.id : "";
+              }
+              const ref = String(sess.client_reference_id || "");
+              if (tid && ref.startsWith("btc:")){
+                const compraId = ref.slice(4);
+                const t = await env.DB.prepare("SELECT * FROM tenants WHERE id = ?1").bind(tid).first();
+                const compra = await env.DB.prepare("SELECT * FROM compras WHERE id = ?1 AND tenant_id = ?2").bind(compraId, tid).first();
+                // El total cobrado debe cubrir el monto de la compra (en la unidad minima, segun la moneda)
+                if (t && compra && (Number(sess.amount_total) || 0) + 1 >= stripeMinorUnit(Number(compra.monto) || 0, sess.currency || "usd")){
+                  const r = await confirmarCompra(env, tid, t, compra); // idempotente
+                  if (r && r.ok){ try { await avisarPush(env, tid, { title: "Pago con tarjeta confirmado", paquete: compra.paquete, monto: compra.monto }); } catch (e) {} }
+                }
+              }
+            }
+          }
+        } catch (e) { /* no romper el 200 */ }
+        return json({ ok: true });
+      }
+
+      /* ----- Otras rutas /app/api/stripe/* apagadas ----- */
+      if (path.startsWith("/app/api/stripe/") || path.startsWith("/app/api/admin/stripe/")){
+        return json({ error: "El pago con Stripe no esta disponible." }, 501);
+      }
+
+      /* ============================================================
+         CULQI del PROFE (BYOK; pasarela peruana con Yape por API)
+         El profe pega sus llaves; el cargo se crea con su sk_ (cifrada en reposo).
+         Confirmacion SINCRONA por la respuesta del POST /charges + webhook de respaldo.
+         Gate culqiConnectOn -> off sin CULQI_ENC_KEY.
+         ============================================================ */
+
+      // Estado de conexion Culqi (panel > Ajustes)
+      if (path === "/app/api/admin/culqi/estado" && request.method === "GET"){
+        const t = await tenantDeSesion(env, request);
+        if (!t) return json({ error: "Sesion expirada" }, 401);
+        await ensureCulqiProfeSchema(env);
+        const row = await env.DB.prepare("SELECT culqi_pk, culqi_sk_enc, culqi_on, culqi_titular FROM tenants WHERE id = ?1").bind(t.id).first();
+        return json({
+          disponible: culqiConnectOn(env),
+          conectado: !!(row && row.culqi_sk_enc),
+          activo: !!(row && Number(row.culqi_on)),
+          titular: (row && row.culqi_titular) || ""
+        });
+      }
+
+      // El profe conecta Culqi pegando sus llaves (dueno). Valida formato + ping autenticado, cifra la sk_.
+      if (path === "/app/api/admin/culqi/conectar" && request.method === "POST"){
+        if (!culqiConnectOn(env)) return json({ error: "El pago con Culqi aun no esta configurado en Batuta." }, 501);
+        const actorC = await actorDeSesion(env, request);
+        if (!actorC) return json({ error: "Sesion expirada" }, 401);
+        if (!actorC.esDueno) return json({ error: "Los cobros los configura el dueno de la academia." }, 403);
+        const t = actorC.tenant;
+        await ensureCulqiProfeSchema(env);
+        const b = await request.json().catch(() => ({}));
+        const pk = String(b.pk || "").trim();
+        const sk = String(b.sk || "").trim();
+        const titular = String(b.titular || "").trim().slice(0, 120);
+        if (!/^pk_(live|test)_[A-Za-z0-9]+$/.test(pk)) return json({ error: "La llave publica (pk_) no tiene el formato correcto." }, 400);
+        if (!/^sk_(live|test)_[A-Za-z0-9]+$/.test(sk)) return json({ error: "La llave secreta (sk_) no tiene el formato correcto." }, 400);
+        // Ping autenticado: un GET a /charges con la sk_ debe responder 2xx. Cualquier otra cosa
+        // (401/403 llave mala, o 429/5xx/timeout: no pude validar) => no guardamos, pide reintentar.
+        let pingOk = false, pingErr = false;
+        try {
+          const ping = await fetch("https://api.culqi.com/v2/charges?limit=1", { headers: { Authorization: "Bearer " + sk }, signal: AbortSignal.timeout(12000) });
+          pingOk = ping.ok; // 2xx
+          if (ping.status === 429 || ping.status >= 500) pingErr = true;
+        } catch (e) { pingErr = true; }
+        if (!pingOk){
+          if (pingErr) return json({ error: "No pudimos validar tu llave ahora (Culqi no respondió). Reintenta en un momento." }, 503);
+          return json({ error: "Culqi rechazó esa llave secreta. Revisa que sea la sk_ de producción correcta de tu cuenta." }, 400);
+        }
+        const skEnc = await culqiEncrypt(env, sk);
+        await env.DB.prepare("UPDATE tenants SET culqi_pk = ?1, culqi_sk_enc = ?2, culqi_titular = ?3, culqi_on = 1 WHERE id = ?4")
+          .bind(pk, skEnc, titular, t.id).run();
+        return json({ ok: true });
+      }
+
+      // El profe desconecta Culqi (dueno). Le recordamos rotar la sk_ en su panel Culqi.
+      if (path === "/app/api/admin/culqi/desconectar" && request.method === "POST"){
+        const actorCD = await actorDeSesion(env, request);
+        if (!actorCD) return json({ error: "Sesion expirada" }, 401);
+        if (!actorCD.esDueno) return json({ error: "Los cobros los configura el dueno de la academia." }, 403);
+        await ensureCulqiProfeSchema(env);
+        await env.DB.prepare("UPDATE tenants SET culqi_pk = '', culqi_sk_enc = '', culqi_titular = '', culqi_on = 0 WHERE id = ?1").bind(actorCD.tenant.id).run();
+        return json({ ok: true });
+      }
+
+      // El ALUMNO (logueado) paga con Culqi: el front tokeniza (Culqi.js) y manda el source_id (token).
+      if (path === "/app/api/culqi/crear-cargo" && request.method === "POST"){
+        if (!culqiConnectOn(env)) return json({ error: "Pago no disponible." }, 501);
+        const cu = await cuentaDeSesion(env, request);
+        if (!cu) return json({ error: "Sesion expirada" }, 401);
+        const tid = cu.tenant_id;
+        const t = await env.DB.prepare("SELECT * FROM tenants WHERE id = ?1").bind(tid).first();
+        if (!t || !Number(t.culqi_on) || !t.culqi_sk_enc) return json({ error: "Tu profesor aun no activo Culqi. Elige otro metodo." }, 400);
+        const b = await request.json().catch(() => ({}));
+        const token = String(b.token || "").trim();
+        if (!/^tkn_(live|test)_[A-Za-z0-9]+$/.test(token)) return json({ error: "Token de pago invalido. Reintenta." }, 400);
+        const paquete = String(b.paquete || "");
+        const paqMapC = (await loadPaquetes(env, tid)).map;
+        if (!paqMapC[paquete]) return json({ error: "Paquete no valido." }, 400);
+        if (paquete === "Clase de prueba" && cu.alumno_id) return json({ error: "La clase de prueba es solo para tu primera clase." }, 400);
+        const cursosT = cursosDeCfg(await loadConfig(env, tid));
+        const partesCurso = String(b.curso || "").split(",").map(s => s.trim()).filter(Boolean);
+        const curso = (partesCurso.length && partesCurso.every(c => cursosT.indexOf(c) !== -1)) ? partesCurso.join(", ") : cursosT[0];
+        const ya = await env.DB.prepare("SELECT id FROM compras WHERE tenant_id = ?1 AND cuenta_id = ?2 AND estado = 'pendiente'").bind(tid, cu.id).first();
+        if (ya) return json({ error: "Ya tienes un pago en verificacion. Te confirmo apenas lo vea." }, 409);
+        let slotDeseado = "";
+        if (paquete === "Clase de prueba" && b.slot_deseado){
+          const iso = String(b.slot_deseado);
+          if (!(await slotValido(env, tid, iso))) return json({ error: "Ese horario ya no esta disponible. Elige otro." }, 400);
+          slotDeseado = iso;
+        }
+        const precios = await loadPrecios(env, tid);
+        const precio = precios[paquete] || 0;
+        const credito = Number(cu.credito) || 0;
+        const descuento = Math.min(credito, precio);
+        const monto = Math.max(0, precio - descuento);
+        if (!(monto > 0)) return json({ error: "Ese paquete no esta disponible por Culqi." }, 400);
+        const email = String(cu.email || "").trim();
+        if (!emailOk(email)) return json({ error: "Tu cuenta no tiene un correo valido para el cargo." }, 400);
+        const sk = await culqiDecrypt(env, t.culqi_sk_enc);
+        if (!sk) return json({ error: "No se pudo procesar el pago. Escribele a tu profesor." }, 500);
+        await env.DB.prepare("DELETE FROM compras WHERE tenant_id = ?1 AND cuenta_id = ?2 AND estado = 'iniciada' AND metodo = 'Tarjeta/Yape (Culqi)'").bind(tid, cu.id).run();
+        const compraId = crypto.randomUUID();
+        await env.DB.prepare(
+          "INSERT INTO compras (id,tenant_id,cuenta_id,curso,paquete,monto,descuento,op_numero,estado,fecha,metodo,comprobante,slot_deseado) VALUES (?1,?2,?3,?4,?5,?6,?7,'','iniciada',?8,'Tarjeta/Yape (Culqi)','',?9)"
+        ).bind(compraId, tid, cu.id, curso, paquete, monto, descuento, hoy(), slotDeseado).run();
+        // Cargo directo con la sk_ del profe. amount en centimos (PEN). La respuesta es SINCRONA.
+        // Distinguimos 3 desenlaces: EXITO, RECHAZO explicito (4xx con error de Culqi) y AMBIGUO
+        // (timeout/red/5xx/sin JSON): en el ambiguo el dinero PUDO cobrarse, asi que NO borramos la
+        // compra; la dejamos 'pendiente' para que el webhook de respaldo (o el profe) la reconcilie.
+        let charge = null, chStatus = 0, ambiguo = false;
+        try {
+          const chr = await fetch("https://api.culqi.com/v2/charges", {
+            method: "POST",
+            headers: { Authorization: "Bearer " + sk, "content-type": "application/json" },
+            signal: AbortSignal.timeout(25000),
+            body: JSON.stringify({
+              amount: Math.round(monto * 100), currency_code: "PEN", email,
+              source_id: token, capture: true,
+              description: (paquete + " - " + (t.academia || "clases")).slice(0, 80),
+              metadata: { batuta_tenant: tid, batuta_compra: compraId, order_id: compraId }
+            })
+          });
+          chStatus = chr.status;
+          charge = await chr.json().catch(() => null);
+          // Respuesta sin cuerpo interpretable y no es un 4xx claro => no sabemos si cobro
+          if (charge === null && !(chStatus >= 400 && chStatus < 500)) ambiguo = true;
+          if (chStatus >= 500) ambiguo = true;
+        } catch (e) { ambiguo = true; } // timeout / corte de red: desenlace desconocido
+        const exito = !ambiguo && charge && charge.object === "charge" && (chStatus === 200 || chStatus === 201);
+        const rechazoExplicito = !exito && !ambiguo && chStatus >= 400 && chStatus < 500;
+        if (!exito){
+          if (rechazoExplicito){
+            // Rechazo real (tarjeta declinada, datos malos): no hubo cobro. Limpiamos y avisamos.
+            await env.DB.prepare("DELETE FROM compras WHERE id = ?1 AND tenant_id = ?2 AND estado = 'iniciada'").bind(compraId, tid).run();
+            const msg = (charge && charge.user_message) || (charge && charge.merchant_message) || "El pago fue rechazado. Revisa tus datos o intenta con otra tarjeta.";
+            return json({ error: msg }, 402);
+          }
+          // AMBIGUO: dejar la compra como 'pendiente' (no borrar) para no perder un cobro real.
+          await env.DB.prepare("UPDATE compras SET estado = 'pendiente' WHERE id = ?1 AND tenant_id = ?2 AND estado = 'iniciada'").bind(compraId, tid).run();
+          return json({ error: "No pudimos confirmar tu pago en el acto. Si te llegó el cobro, tu paquete se activa en breve; si no, reintenta.", pendiente: true }, 202);
+        }
+        const compra = await env.DB.prepare("SELECT * FROM compras WHERE id = ?1 AND tenant_id = ?2").bind(compraId, tid).first();
+        const r = await confirmarCompra(env, tid, t, compra); // idempotente (el webhook de respaldo no lo dobla)
+        if (r && r.ok){ try { await avisarPush(env, tid, { title: "Pago confirmado", paquete: compra.paquete, monto: compra.monto }); } catch (e) {} }
+        return json({ ok: true, monto, descuento });
+      }
+
+      // Webhook de Culqi (publico, respaldo). El profe pega esta URL en su CulqiPanel > Eventos (no hay API).
+      // NO confiamos en el body: re-consultamos el cargo a Culqi con la sk_ del profe (como el webhook de MP)
+      // y exigimos exito + monto que cubra la compra + PEN. Asi un POST forjado no puede activar un paquete.
+      if (path === "/app/api/culqi/webhook-alumno" && request.method === "POST"){
+        try {
+          if (!culqiConnectOn(env)) return json({ ok: true });
+          const tid = url.searchParams.get("t") || "";
+          const body = await request.json().catch(() => ({}));
+          const data = (body && body.data) || body;
+          const chargeId = String((data && data.id) || "");
+          const md = (data && data.metadata) || {};
+          const compraId = String(md.order_id || md.batuta_compra || "");
+          const tenantId = tid || String(md.batuta_tenant || "");
+          if (!tenantId || !compraId || !chargeId) return json({ ok: true });
+          const t = await env.DB.prepare("SELECT * FROM tenants WHERE id = ?1").bind(tenantId).first();
+          if (!t || !t.culqi_sk_enc) return json({ ok: true });
+          const compra = await env.DB.prepare("SELECT * FROM compras WHERE id = ?1 AND tenant_id = ?2").bind(compraId, tenantId).first();
+          if (!compra) return json({ ok: true });
+          const sk = await culqiDecrypt(env, t.culqi_sk_enc);
+          if (!sk) return json({ ok: true });
+          // Verdad del pago: se consulta a Culqi (no al body). Se acepta solo si el cargo existe, fue exitoso,
+          // cubre el monto y es PEN.
+          let charge = null;
+          try {
+            const chr = await fetch("https://api.culqi.com/v2/charges/" + encodeURIComponent(chargeId), { headers: { Authorization: "Bearer " + sk }, signal: AbortSignal.timeout(12000) });
+            if (chr.ok) charge = await chr.json().catch(() => null);
+          } catch (e) { charge = null; }
+          if (!charge || charge.object !== "charge") return json({ ok: true });
+          const okOutcome = charge.outcome && String(charge.outcome.type || "").indexOf("exitosa") !== -1;
+          const okMonto = (Number(charge.amount) || 0) + 1 >= Math.round((Number(compra.monto) || 0) * 100);
+          const okMoneda = String(charge.currency_code || "PEN").toUpperCase() === "PEN";
+          if (okOutcome && okMonto && okMoneda){
+            const r = await confirmarCompra(env, tenantId, t, compra); // idempotente (no dobla con la via sincrona)
+            if (r && r.ok){ try { await avisarPush(env, tenantId, { title: "Pago confirmado", paquete: compra.paquete, monto: compra.monto }); } catch (e) {} }
+          }
+        } catch (e) { /* nunca romper el 200 */ }
+        return json({ ok: true });
+      }
+
+      /* ----- Otras rutas /app/api/culqi/* apagadas ----- */
+      if (path.startsWith("/app/api/culqi/") || path.startsWith("/app/api/admin/culqi/")){
+        return json({ error: "El pago con Culqi no esta disponible." }, 501);
       }
 
       /* ----- Otras rutas /app/api/mp/* siguen apagadas ----- */
@@ -4306,7 +5029,15 @@ export default {
           "SELECT estado FROM registro WHERE tenant_id = ?1 AND alumno_id = ?2 AND COALESCE(ciclo,1) = ?3"
         ).bind(tid, alumno.id, ciclo).all();
         const rUsadas = await reservasUsadasCount(env, tid, alumno.id, ciclo);
-        const restantes = compute(alumno, regs || [], precios, rUsadas).restantes;
+        const paqMapR = (await loadPaquetes(env, tid)).map;
+        const pkR = resolverPk(paqMapR, alumno.paquete);
+        /* Mensualidad ilimitada: no descuenta clases, pero vence por fecha. Sin este freno,
+           un alumno con la mensualidad vencida reservaría para siempre (fuga de ingresos). */
+        if (pkR.ilim && alumno.vence){
+          const vms = Date.parse(alumno.vence + "T23:59:59Z");
+          if (!isNaN(vms) && vms < Date.now()) return json({ error: "Tu mensualidad venció. Renuévala para seguir reservando." }, 409);
+        }
+        const restantes = compute(alumno, regs || [], precios, rUsadas, pkR).restantes;
         if (restantes < 1) return json({ error: "No te quedan clases en tu paquete. Renueva para reservar mas." }, 409);
 
         const nowIso = new Date().toISOString();
@@ -4649,6 +5380,7 @@ export default {
             const emailL = String(b.email || "").trim().toLowerCase().slice(0, 120);
             const waL = String(b.whatsapp || "").replace(/[^\d+]/g, "").slice(0, 20);
             const interesL = String(b.interes || "").trim().slice(0, 60);
+            const softwareL = String(b.software_actual || "").trim().slice(0, 80);
             const notaL = String(b.nota || "").trim().slice(0, 500);
             const seguirL = /^\d{4}-\d{2}-\d{2}$/.test(String(b.seguir_el || "")) ? String(b.seguir_el) : "";
             const etapaL = ETAPAS_LEAD.indexOf(String(b.etapa || "")) !== -1 ? String(b.etapa) : "nuevo";
@@ -4656,12 +5388,12 @@ export default {
             if (emailL && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(emailL)) return json({ error: "Ese correo no parece valido." }, 400);
             if (accion === "crear"){
               await env.DB.prepare(
-                "INSERT INTO leads (id,tenant_id,email,marca,fuente,interes,fecha,nombre,whatsapp,etapa,nota,seguir_el,actualizado) VALUES (?1,?2,?3,'Batuta','manual',?4,?5,?6,?7,?8,?9,?10,?5)"
-              ).bind(crypto.randomUUID(), tid, emailL, interesL, hoyLima(), nombreL, waL, etapaL, notaL, seguirL).run();
+                "INSERT INTO leads (id,tenant_id,email,marca,fuente,interes,fecha,nombre,whatsapp,etapa,nota,seguir_el,software_actual,actualizado) VALUES (?1,?2,?3,'Batuta','manual',?4,?5,?6,?7,?8,?9,?10,?11,?5)"
+              ).bind(crypto.randomUUID(), tid, emailL, interesL, hoyLima(), nombreL, waL, etapaL, notaL, seguirL, softwareL).run();
             } else {
               const r = await env.DB.prepare(
-                "UPDATE leads SET nombre = ?1, email = ?2, whatsapp = ?3, interes = ?4, nota = ?5, seguir_el = ?6, etapa = ?7, actualizado = ?8 WHERE id = ?9 AND tenant_id = ?10"
-              ).bind(nombreL, emailL, waL, interesL, notaL, seguirL, etapaL, hoyLima(), String(b.id || ""), tid).run();
+                "UPDATE leads SET nombre = ?1, email = ?2, whatsapp = ?3, interes = ?4, nota = ?5, seguir_el = ?6, etapa = ?7, software_actual = ?8, actualizado = ?9 WHERE id = ?10 AND tenant_id = ?11"
+              ).bind(nombreL, emailL, waL, interesL, notaL, seguirL, etapaL, softwareL, hoyLima(), String(b.id || ""), tid).run();
               if (!((r && r.meta && (r.meta.changes ?? r.meta.rows_written)) || 0)) return json({ error: "Interesado no encontrado" }, 404);
             }
             return json({ ok: true });
@@ -5037,11 +5769,11 @@ export default {
           if (esDueno){
             try {
               leads = (await env.DB.prepare(
-                "SELECT id,email,marca,fuente,interes,fecha,COALESCE(nombre,'') AS nombre,COALESCE(whatsapp,'') AS whatsapp,COALESCE(etapa,'nuevo') AS etapa,COALESCE(nota,'') AS nota,COALESCE(seguir_el,'') AS seguir_el FROM leads WHERE tenant_id = ?1 ORDER BY fecha DESC, rowid DESC LIMIT 1000"
+                "SELECT id,email,marca,fuente,interes,fecha,COALESCE(nombre,'') AS nombre,COALESCE(whatsapp,'') AS whatsapp,COALESCE(etapa,'nuevo') AS etapa,COALESCE(nota,'') AS nota,COALESCE(seguir_el,'') AS seguir_el,COALESCE(software_actual,'') AS software_actual FROM leads WHERE tenant_id = ?1 ORDER BY fecha DESC, rowid DESC LIMIT 1000"
               ).bind(tid).all()).results || [];
             } catch (e) {
               leads = ((await env.DB.prepare("SELECT id,email,marca,fuente,interes,fecha FROM leads WHERE tenant_id = ?1 ORDER BY fecha DESC, rowid DESC LIMIT 1000").bind(tid).all()).results || [])
-                .map(l => Object.assign({ nombre: "", whatsapp: "", etapa: "nuevo", nota: "", seguir_el: "" }, l));
+                .map(l => Object.assign({ nombre: "", whatsapp: "", etapa: "nuevo", nota: "", seguir_el: "", software_actual: "" }, l));
             }
           }
           /* gastos (caja): solo el dueno */
@@ -5139,11 +5871,25 @@ export default {
             "SELECT id, vence, aviso_vence_ciclo, recordatorio_fecha, recordatorio_ciclo, winback_ciclo, profesor_id FROM alumnos WHERE tenant_id = ?1 AND (?2 = 1 OR profesor_id = ?3)"
           ).bind(tid, esDueno ? 1 : 0, profeActorId || "").all();
           const prev = new Map((prevRows || []).map(r => [r.id, r]));
+          const paqPut = (await loadPaquetes(env, tid)).map;   // para derivar vence de mensualidades ilimitadas
           let profesValidos = new Set();
           try {
             const { results: pv } = await env.DB.prepare("SELECT id FROM profesores WHERE tenant_id = ?1").bind(tid).all();
             profesValidos = new Set((pv || []).map(p => p.id));
           } catch (e) {}
+
+          /* Candado de alumnos por plan (12-jul-2026): topa el plan SOLO para tenants ya pagando
+             (en trial se importa la academia entera sin tope). Permite GUARDAR sin aumentar aunque
+             ya estén sobre el tope (no rompe a nadie); solo bloquea el neto que pasa el límite. */
+          if (t && t.estado === "activo"){
+            const capAl = ALUM_CAP[t.plan || "profe"] || 1000000;
+            const totActRow = await env.DB.prepare("SELECT COUNT(*) AS n FROM alumnos WHERE tenant_id = ?1").bind(tid).first();
+            const totActual = Number(totActRow && totActRow.n) || 0;
+            const totNuevo = esDueno ? body.alumnos.length : (totActual - (prevRows ? prevRows.length : 0)) + body.alumnos.length;
+            if (totNuevo > capAl && totNuevo > totActual){
+              return json({ error: "Tu plan " + (PLAN_NOMBRE[t.plan || "profe"] || "Profe") + " incluye hasta " + capAl + " alumnos. Sube de plan en Perfil para agregar más. O cuéntanos en Ideas y errores qué necesitas: tu primer aporte del mes te suma 7 días.", upgrade: true, cap: capAl }, 402);
+            }
+          }
 
           const stmts = [];
           if (esDueno){
@@ -5168,13 +5914,21 @@ export default {
             else if (pr && pr.profesor_id) pidAl = pr.profesor_id;
             else pidAl = profeActorId; /* dueno */
             idsSnapshot.add(a.id);
+            /* Mensualidad ilimitada: vence = fecha de pago + 30d (se re-deriva al renovar,
+               que actualiza la fecha). Para el resto se preserva el vence server-side. */
+            const pkAl = resolverPk(paqPut, a.paquete || "");
+            let venceAl = (pr && pr.vence) || "";
+            if (pkAl.ilim){
+              const base = (a.fecha && /^\d{4}-\d{2}-\d{2}$/.test(a.fecha)) ? a.fecha : hoy();
+              venceAl = new Date(Date.parse(base + "T00:00:00Z") + 30 * 86400000).toISOString().slice(0, 10);
+            }
             stmts.push(env.DB.prepare(
               "INSERT INTO alumnos (id,tenant_id,codigo,nombre,whatsapp,curso,paquete,fecha,pago,horario,notas,ciclo,vence,aviso_vence_ciclo,recordatorio_fecha,recordatorio_ciclo,winback_ciclo,profesor_id) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18)"
             ).bind(
               a.id, tid, String(a.codigo || "").toUpperCase() || randHex(3).toUpperCase(), a.nombre,
               a.whatsapp || "", a.curso || "", a.paquete || "",
               a.fecha || "", a.pago || "", a.horario || "", a.notas || "", a.ciclo || 1,
-              (pr && pr.vence) || "", (pr && pr.aviso_vence_ciclo) || 0,
+              venceAl, (pr && pr.aviso_vence_ciclo) || 0,
               (pr && pr.recordatorio_fecha) || "", (pr && pr.recordatorio_ciclo) || 0,
               (pr && pr.winback_ciclo) || 0, pidAl || null
             ));
@@ -5205,7 +5959,7 @@ export default {
           /* config del tenant (cobros, marca, cupo, cursos): SOLO el dueno */
           if (!esDueno) return json({ error: "Los ajustes de la academia los maneja el dueno." }, 403);
           const b = await request.json().catch(() => ({}));
-          const claves = ["pago_numero", "pago_titular", "bcp_cuenta", "bcp_cci", "scotia_cuenta", "scotia_cci", "crypto_moneda", "crypto_red", "crypto_wallet", "profe_nombre", "profe_marca", "profe_foto", "whatsapp_profe", "cursos", "brand_color", "brand_font", "agenda_cupo", "recordatorios_clase", "recordatorio_renovacion", "nubefact_ruta", "nubefact_token", "fact_serie_boleta", "fact_igv", "fact_proximo_numero", "wa_phone_id", "wa_enabled", "reprog_activo", "reprog_min_h"];
+          const claves = ["pago_numero", "pago_titular", "bcp_cuenta", "bcp_cci", "scotia_cuenta", "scotia_cci", "crypto_moneda", "crypto_red", "crypto_wallet", "stripe_moneda", "profe_nombre", "profe_marca", "profe_foto", "whatsapp_profe", "cursos", "brand_color", "brand_font", "agenda_cupo", "recordatorios_clase", "recordatorio_renovacion", "nubefact_ruta", "nubefact_token", "fact_serie_boleta", "fact_igv", "fact_proximo_numero", "wa_phone_id", "wa_enabled", "reprog_activo", "reprog_min_h", "paquetes"];
           const stmts = [];
           for (const k of claves){
             if (k in b){
@@ -5213,6 +5967,11 @@ export default {
               if (k === "cursos"){
                 valor = valor.split(",").map(s => s.trim().slice(0, 40)).filter(Boolean)
                   .filter((c, i, a) => a.indexOf(c) === i).slice(0, 15).join(", ");
+              }
+              /* paquetes por tenant: valida el JSON y lo reescribe canónico (o "" = usa el default) */
+              if (k === "paquetes"){
+                const parsed = parsePaquetes(valor);
+                valor = parsed ? JSON.stringify(parsed.list.map(n => ({ n: n, c: parsed.map[n].clases, r: parsed.map[n].reprog, u: parsed.map[n].ilim }))) : "";
               }
               if (k === "brand_color" && valor && !/^#[0-9a-fA-F]{6}$/.test(valor)) valor = "";
               if (k === "brand_font" && valor && BRAND_FONTS.indexOf(valor) === -1) valor = "";
@@ -5635,6 +6394,7 @@ export default {
     /* ---- desde aqui: SOLO la corrida diaria de las 9am Lima ---- */
     try { await recordatorioRenovacion(env); } catch (e) { console.error("recordatorio renovacion", e); }
     try { await seguimientoLeadsDueno(env); } catch (e) { console.error("seguimiento leads dueno", e); }
+    try { await recalcularPorAlumno(env); } catch (e) { console.error("recalcular por alumno", e); }
     /* Nurture de trial (dia 1/3/6) + cierre proactivo del vencido. 1 corrida/dia (cron 14:00 UTC = 9am Lima).
        Migracion perezosa: la columna se crea sola en la primera corrida (patron MVT). */
     try { await env.DB.prepare("ALTER TABLE tenants ADD COLUMN nurture_paso INTEGER DEFAULT 0").run(); } catch (e) { /* ya existe */ }

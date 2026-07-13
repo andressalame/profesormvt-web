@@ -401,10 +401,10 @@
 
       <div class="card hidden" id="iPkg">
         <span class="pill" id="iEstado"></span>
-        <div class="lab" style="margin-top:16px;">Clases restantes</div>
+        <div class="lab" style="margin-top:16px;" id="iLab">Clases restantes</div>
         <div class="hero-num"><span class="big" id="iRest">0</span><span class="of" id="iDe"></span></div>
         <div class="stubs" id="iStubs"></div>
-        <div class="stubcap">Cada ticket = una clase de tu paquete · los apagados ya se usaron</div>
+        <div class="stubcap" id="iStubCap">Cada ticket = una clase de tu paquete · los apagados ya se usaron</div>
         <a class="btn sm hidden" href="#comprar" id="iRenov" style="margin-top:8px;">Renovar mi paquete →</a>
         <div class="plan-grid" id="iPlan"></div>
         <div id="iPausaWrap" class="hidden" style="margin-top:14px;">
@@ -871,13 +871,27 @@ function renderInicio(){
     $("iPlanLine").textContent = (a.curso||"") + " · " + (a.paquete||"");
     var est=$("iEstado"); est.textContent=ME.estado;
     est.className = "pill " + (ME.estado==="Activo"?"green":(ME.estado==="Renovar pronto"?"amber":"gray"));
-    $("iRest").textContent = a.restantes;
-    $("iDe").textContent = "de " + a.compradas;
-    var s=""; for(var i=0;i<a.compradas;i++) s += '<div class="stub'+(i<a.usadas?" used":"")+'"></div>';
-    $("iStubs").innerHTML = s;
+    if(a.ilim){
+      /* Mensualidad: sin contador de clases; lo que importa es hasta cuándo va (vence). */
+      $("iLab").textContent = "Tu mensualidad vence";
+      $("iRest").textContent = fechaBonita(a.vence);
+      $("iRest").style.fontSize = "1.6em";
+      $("iDe").textContent = "";
+      $("iStubs").innerHTML = "";
+      if($("iStubCap")) $("iStubCap").style.display = "none";
+    } else {
+      $("iLab").textContent = "Clases restantes";
+      $("iRest").style.fontSize = "";
+      $("iRest").textContent = a.restantes;
+      $("iDe").textContent = "de " + a.compradas;
+      var s=""; for(var i=0;i<a.compradas;i++) s += '<div class="stub'+(i<a.usadas?" used":"")+'"></div>';
+      $("iStubs").innerHTML = s;
+      if($("iStubCap")) $("iStubCap").style.display = "";
+    }
     if(ME.estado==="Renovar pronto" && !ME.compraPendiente) show("iRenov"); else hide("iRenov");
     $("iPlan").innerHTML =
-      kv("Reprogramaciones disponibles", a.reprogRestantes+' <small>de '+a.reprogPermitidas+'</small>')+
+      (a.ilim ? kv("Tu mensualidad", "Clases sin límite hasta el "+esc(fechaBonita(a.vence)))
+              : kv("Reprogramaciones disponibles", (Number(a.reprogRestantes)>=9999) ? '∞' : (a.reprogRestantes+' <small>de '+a.reprogPermitidas+'</small>')))+
       kv("Horario fijo", esc((a.horarioFijo&&a.horarioFijo.length)?a.horarioFijo.join(" · "):(a.horario||"Por definir")))+
       kv("Paquete", esc(a.paquete||"—")+(a.monto?' <small>· S/ '+a.monto+'</small>':''))+
       kv("Pago", esc(a.pago||"—"))+
@@ -936,17 +950,37 @@ function renderClases(){
 }
 
 /* ---------- VISTA: COMPRAR ---------- */
-var TIERS = [
-  { pk:"Clase de prueba", nombre:"Clase de prueba", horas:1, primera:true, badge:"★ EMPIEZA AQUÍ", desc:"1 clase con diagnóstico" },
-  { pk:"Paquete 4",  nombre:"Esencial",  horas:4 },
-  { pk:"Paquete 8",  nombre:"Intensivo", horas:8, badge:"★ MÁS ELEGIDO" },
-  { pk:"Paquete 12", nombre:"Estrella",  horas:12 }
-];
+/* Etiquetas bonitas legacy para los paquetes por defecto; los custom usan su propio nombre. */
+var LEGACY_TIER = {
+  "Clase de prueba": { nombre:"Clase de prueba", primera:true, badge:"★ EMPIEZA AQUÍ", desc:"1 clase con diagnóstico" },
+  "Paquete 4":  { nombre:"Esencial" },
+  "Paquete 8":  { nombre:"Intensivo", badge:"★ MÁS ELEGIDO" },
+  "Paquete 12": { nombre:"Estrella" }
+};
+/* Los paquetes del portal salen de los que definió la academia (ME.paquetes), no de una lista fija. */
+function tiersDeMe(){
+  var pks = (ME && ME.paquetes && ME.paquetes.length) ? ME.paquetes : [];
+  var out = pks.map(function(p){
+    var leg = LEGACY_TIER[p.pk] || {};
+    return { pk:p.pk, nombre:leg.nombre||p.nombre||p.pk, horas:p.clases, ilim:!!p.ilim,
+             primera:!!leg.primera, badge:leg.badge||"",
+             desc:leg.desc||(p.ilim?"Clases sin límite este mes":"") };
+  });
+  out.sort(function(a,b){ return (b.primera?1:0)-(a.primera?1:0); });
+  return out;
+}
 function calc(pk){
   var precio = (ME.precios && ME.precios[pk]) || 0;
   var cred = Number(ME.credito) || 0;
   var desc = Math.min(cred, precio);
   return { precio:precio, desc:desc, final:Math.max(0, precio-desc) };
+}
+/* "2026-08-20" -> "20 ago" (para mostrar el vencimiento de la mensualidad) */
+function fechaBonita(iso){
+  if(!iso) return "—";
+  var p=String(iso).split("-"); if(p.length<3) return iso;
+  var m=["ene","feb","mar","abr","may","jun","jul","ago","sep","oct","nov","dic"];
+  return parseInt(p[2],10)+" "+(m[parseInt(p[1],10)-1]||"");
 }
 function renderComprar(){
   var cred = Number(ME.credito) || 0;
@@ -961,15 +995,15 @@ function renderComprar(){
     show("bPendC");
   } else hide("bPendC");
 
-  var tiersHtml = TIERS.filter(function(t){ return ME.precios && (t.pk in ME.precios) && (!t.primera || !ME.alumno); }).map(function(t){
+  var tiersHtml = tiersDeMe().filter(function(t){ return ME.precios && (Number(ME.precios[t.pk])||0)>0 && (!t.primera || !ME.alumno); }).map(function(t){
     var c = calc(t.pk);
     var precioHtml = c.desc>0
       ? '<span class="strike">S/ '+c.precio+'</span><span class="cur">S/</span>'+c.final
       : '<span class="cur">S/</span>'+c.precio;
     return '<div class="tier'+(t.badge?' featured':'')+'">'+
-      (t.badge?'<span class="badge">'+t.badge+'</span>':'')+
-      '<span class="tlab">'+t.nombre+'</span>'+
-      '<h3>'+(t.primera ? 'Tu primera clase' : 'Paquete de '+t.horas+' horas')+'</h3>'+
+      (t.badge?'<span class="badge">'+esc(t.badge)+'</span>':'')+
+      '<span class="tlab">'+esc(t.nombre)+'</span>'+
+      '<h3>'+(t.primera ? 'Tu primera clase' : (t.ilim ? 'Mensualidad · sin límite de clases' : 'Paquete de '+t.horas+' clase'+(t.horas===1?'':'s')))+'</h3>'+
       '<div class="tprecio">'+precioHtml+'</div>'+
       (t.desc?'<div class="tdesc">'+t.desc+'</div>':'')+
       (c.desc>0?'<div class="tdesc">incluye -S/'+c.desc+' de tu crédito</div>':'')+
@@ -1028,20 +1062,32 @@ try {
   }
 } catch(e){}
 
-/* Opción "Tarjeta" en el select SOLO si el profe conectó su Mercado Pago
-   (ME.config.mp_tarjeta). Se agrega/quita dinámicamente al abrir el modal. */
+/* Pagos automáticos (se confirman solos) según la pasarela que conectó el profe:
+   Mercado Pago (mp_tarjeta), Stripe internacional (stripe_tarjeta) o Culqi (culqi_tarjeta).
+   El optgroup se reconstruye idempotente al abrir el modal. */
+var METODOS_AUTO=[
+  {v:"Tarjeta (Mercado Pago)", t:"Tarjeta o Yape (se confirma solo)", flag:"mp_tarjeta"},
+  {v:"Tarjeta (Stripe)", t:"Tarjeta internacional (se confirma sola)", flag:"stripe_tarjeta"},
+  {v:"Tarjeta/Yape (Culqi)", t:"Tarjeta o Yape (se confirma solo)", flag:"culqi_tarjeta"}
+];
+function esMetodoAuto(m){ for(var i=0;i<METODOS_AUTO.length;i++) if(METODOS_AUTO[i].v===m) return true; return false; }
+function metodosAutoActivos(){
+  var cf=(ME&&ME.config)||{};
+  return METODOS_AUTO.filter(function(a){ return !!cf[a.flag]; });
+}
 function ensureOpcionTarjeta(){
   var sel=$("c_metodo"); if(!sel) return;
-  var existente=sel.querySelector('option[value="Tarjeta (Mercado Pago)"]');
-  var on=!!(ME && ME.config && ME.config.mp_tarjeta);
-  if(on && !existente){
-    var og=document.createElement("optgroup"); og.label="Pago automático"; og.id="ogTarjeta";
-    var op=document.createElement("option"); op.value="Tarjeta (Mercado Pago)"; op.textContent="Tarjeta (se confirma sola)";
-    og.appendChild(op); sel.insertBefore(og, sel.firstChild);
-  } else if(!on && existente){
-    var g=existente.closest("optgroup"); (g||existente).remove();
-    if(sel.value==="Tarjeta (Mercado Pago)") sel.value="Yape/Plin/Sip";
+  var prev=sel.value;
+  var og=document.getElementById("ogTarjeta");
+  if(og && og.parentNode) og.parentNode.removeChild(og);
+  var activos=metodosAutoActivos();
+  if(activos.length){
+    og=document.createElement("optgroup"); og.label="Pago automático"; og.id="ogTarjeta";
+    activos.forEach(function(a){ var op=document.createElement("option"); op.value=a.v; op.textContent=a.t; og.appendChild(op); });
+    sel.insertBefore(og, sel.firstChild);
   }
+  // Si el método elegido antes ya no existe (pasarela desconectada), cae a un manual visible.
+  if(!sel.querySelector('option[value="'+prev+'"]')){ if(esMetodoAuto(prev)) sel.value="Yape/Plin/Sip"; }
 }
 /* Muestra SOLO los métodos que el profe configuró (Yape/Plin no existe fuera de
    Perú: si el profe no puso su número, la opción no aparece; igual con bancos y
@@ -1061,8 +1107,9 @@ function ajustarMetodosPago(){
   setOp("Transferencia BCP", !!cf.bcp_cuenta);
   setOp("Transferencia Scotiabank", !!cf.scotia_cuenta);
   setOp("Crypto USDT", !!cf.crypto_wallet);
-  var opT=sel.querySelector('option[value="Tarjeta (Mercado Pago)"]');
-  if(opT) disponibles.unshift("Tarjeta (Mercado Pago)");
+  metodosAutoActivos().slice().reverse().forEach(function(a){
+    if(sel.querySelector('option[value="'+a.v+'"]')) disponibles.unshift(a.v);
+  });
   var mf=sel.closest(".field");
   if(!disponibles.length){
     if(mf) mf.style.display="none";
@@ -1080,8 +1127,8 @@ function abrirCompra(pk){
   ensureOpcionTarjeta();
   if(!ME) return;
   if(ME.compraPendiente){ toast("Ya tienes un pago en verificación"); return; }
-  $("c_paquete").innerHTML = TIERS.filter(function(t){ return ME.precios && (t.pk in ME.precios) && (!t.primera || !ME.alumno); })
-    .map(function(t){ var c=calc(t.pk); var et=(t.primera?'1 clase':t.horas+'h'); return '<option value="'+t.pk+'">'+t.nombre+' — '+et+' · S/ '+c.final+'</option>'; }).join("");
+  $("c_paquete").innerHTML = tiersDeMe().filter(function(t){ return ME.precios && (Number(ME.precios[t.pk])||0)>0 && (!t.primera || !ME.alumno); })
+    .map(function(t){ var c=calc(t.pk); var et=(t.primera?'1 clase':(t.ilim?'mensual':t.horas+(t.horas===1?' clase':' clases'))); return '<option value="'+esc(t.pk)+'">'+esc(t.nombre)+' — '+et+' · S/ '+c.final+'</option>'; }).join("");
   if(pk) $("c_paquete").value = pk;
   if(ME.alumno && ME.alumno.curso) $("c_curso").value = ME.alumno.curso;
   actualizaMonto();
@@ -1209,46 +1256,106 @@ function renderPaybox(){
     html = '<div class="lab">Transferencia Scotiabank (Soles)</div><div class="num">'+esc(cf.scotia_cuenta||"-")+'</div><div class="note">CCI: '+esc(cf.scotia_cci||"-")+'</div>'+titular;
   } else if(m === "Crypto USDT"){
     html = '<div class="lab">'+esc(cf.crypto_moneda||"USDT")+' por red '+esc(cf.crypto_red||"Tron (TRC20)")+'</div><div class="num" style="font-size:14px;word-break:break-all;">'+esc(cf.crypto_wallet||"-")+'</div><div class="note">Envía el equivalente del total en '+esc(cf.crypto_moneda||"USDT")+' por esa red.</div>';
-  } else if(m === "Tarjeta (Mercado Pago)"){
+  } else if(m === "Tarjeta (Mercado Pago)" || m === "Tarjeta (Stripe)" || m === "Tarjeta/Yape (Culqi)"){
     var pk = $("c_paquete").value;
     if(pk){
       var cc = calc(pk);
-      html = '<div class="lab">Tarjeta de crédito o débito</div>'
-        + '<button type="button" class="btn" id="btnPagarTarjeta" style="width:100%;justify-content:center;margin:4px 0 2px;">Pagar S/ '+cc.final+' con tarjeta →</button>'
-        + '<div class="note">Te llevamos a Mercado Pago para pagar con tu tarjeta (puedes en cuotas). Al terminar, tu paquete se activa solo.</div>';
+      var lab = (m === "Tarjeta (Stripe)") ? "Tarjeta internacional" : "Tarjeta o Yape";
+      var nota = (m === "Tarjeta (Stripe)") ? "Te llevamos al checkout seguro de Stripe. Al terminar, tu paquete se activa solo."
+        : (m === "Tarjeta/Yape (Culqi)") ? "Paga con tarjeta o Yape sin salir de aquí. Se confirma solo."
+        : "Te llevamos a Mercado Pago (tarjeta o Yape). Al terminar, tu paquete se activa solo.";
+      html = '<div class="lab">'+lab+'</div>'
+        + '<button type="button" class="btn" id="btnPagarTarjeta" data-metodo="'+esc(m)+'" style="width:100%;justify-content:center;margin:4px 0 2px;">Pagar S/ '+cc.final+' →</button>'
+        + '<div class="note">'+nota+'</div>';
     } else {
       html = '<div class="note">Elige un paquete arriba.</div>';
     }
   }
-  if(m !== "Tarjeta (Mercado Pago)") html += '<ol class="steps"><li>Paga el monto exacto.</li><li>Sube la captura del pago aquí abajo.</li><li>Toca <strong>“Ya pagué”</strong>.</li></ol>';
-  var esTarjeta = (m === "Tarjeta (Mercado Pago)");
-  var opF = $("c_op") && $("c_op").closest(".field"); if(opF) opF.style.display = esTarjeta ? "none" : "";
-  var ssF = $("c_screenshot") && $("c_screenshot").closest(".field"); if(ssF) ssF.style.display = esTarjeta ? "none" : "";
-  if($("btnYaPague")) $("btnYaPague").style.display = esTarjeta ? "none" : "";
+  var esAuto = esMetodoAuto(m);
+  if(!esAuto) html += '<ol class="steps"><li>Paga el monto exacto.</li><li>Sube la captura del pago aquí abajo.</li><li>Toca <strong>“Ya pagué”</strong>.</li></ol>';
+  var opF = $("c_op") && $("c_op").closest(".field"); if(opF) opF.style.display = esAuto ? "none" : "";
+  var ssF = $("c_screenshot") && $("c_screenshot").closest(".field"); if(ssF) ssF.style.display = esAuto ? "none" : "";
+  if($("btnYaPague")) $("btnYaPague").style.display = esAuto ? "none" : "";
   $("payboxOk").innerHTML = html;
   var btnT = document.getElementById("btnPagarTarjeta");
-  if(btnT) btnT.addEventListener("click", pagarConTarjeta);
+  if(btnT) btnT.addEventListener("click", pagarConAuto);
   show("payboxOk"); hide("payboxNo");
 }
-function pagarConTarjeta(){
+/* Dispara el pago automático según el método elegido (MP/Stripe = redirect; Culqi = widget). */
+function pagarConAuto(){
   var btn=document.getElementById("btnPagarTarjeta");
   if(btn && btn.disabled) return;
+  var metodo = (btn && btn.getAttribute("data-metodo")) || $("c_metodo").value;
   var txtOrig = btn ? btn.textContent : "";
-  if(btn){ btn.disabled=true; btn.textContent="Abriendo Mercado Pago…"; }
   $("compraErr").textContent="";
   var paquete=$("c_paquete").value, curso=$("c_curso").value;
-  if(!paquete){ irAWizPaso(1); $("wizErr1").textContent="Elige un paquete."; if(btn){ btn.disabled=false; btn.textContent=txtOrig; } return; }
-  if(paquete==="Clase de prueba" && !COMPRA_SLOT){ irAWizPaso(2); $("wizErr2").textContent="Elige un horario para tu clase de prueba."; if(btn){ btn.disabled=false; btn.textContent=txtOrig; } return; }
-  api("/app/api/mp/crear-alumno",{method:"POST",body:JSON.stringify({paquete:paquete,curso:curso,slot_deseado:(paquete==="Clase de prueba"?COMPRA_SLOT:"")})})
+  if(!paquete){ irAWizPaso(1); $("wizErr1").textContent="Elige un paquete."; return; }
+  if(paquete==="Clase de prueba" && !COMPRA_SLOT){ irAWizPaso(2); $("wizErr2").textContent="Elige un horario para tu clase de prueba."; return; }
+  if(metodo === "Tarjeta/Yape (Culqi)"){ pagarConCulqi(paquete, curso, btn, txtOrig); return; }
+  var endpoint = (metodo === "Tarjeta (Stripe)") ? "/app/api/stripe/crear-alumno" : "/app/api/mp/crear-alumno";
+  if(btn){ btn.disabled=true; btn.textContent="Abriendo checkout…"; }
+  api(endpoint,{method:"POST",body:JSON.stringify({paquete:paquete,curso:curso,slot_deseado:(paquete==="Clase de prueba"?COMPRA_SLOT:"")})})
     .then(function(r){
       if(r && r.init_point){ window.location.href = r.init_point; }
       else { throw new Error((r && r.error) || "No se pudo iniciar el pago."); }
     })
     .catch(function(e){
       $("compraErr").textContent = (e && e.message) || "No se pudo iniciar el pago con tarjeta.";
-      if(btn){ btn.disabled=false; btn.textContent="Reintentar pago con tarjeta →"; }
+      if(btn){ btn.disabled=false; btn.textContent="Reintentar pago →"; }
     });
 }
+function pagarConCulqi(paquete, curso, btn, txtOrig){
+  if(typeof window.__culqiPagar === "function"){ window.__culqiPagar(paquete, curso, btn, txtOrig); return; }
+  $("compraErr").textContent = "No se pudo abrir el pago. Recarga la página e intenta de nuevo.";
+}
+/* ---------- Widget de Culqi (tarjeta/Yape por API). Carga el JS de Culqi solo al primer uso. ---------- */
+var __culqiLoaded=false, __culqiLoading=false, __culqiCtx=null;
+function cargarCulqiJS(cb){
+  if(__culqiLoaded){ cb(true); return; }
+  if(__culqiLoading){ setTimeout(function(){ cargarCulqiJS(cb); }, 200); return; }
+  __culqiLoading=true;
+  var s=document.createElement("script");
+  s.src="https://checkout.culqi.com/js/v4";
+  s.onload=function(){ __culqiLoaded=true; __culqiLoading=false; cb(true); };
+  s.onerror=function(){ __culqiLoading=false; cb(false); };
+  document.head.appendChild(s);
+}
+/* Callback global que dispara Culqi al terminar el checkout (token de tarjeta o Yape). */
+window.culqi=function(){
+  try{
+    var ctx=__culqiCtx||{};
+    if(typeof Culqi!=="undefined" && Culqi.token && Culqi.token.id){
+      var tk=Culqi.token.id;
+      if(ctx.btn){ ctx.btn.disabled=true; ctx.btn.textContent="Confirmando pago…"; }
+      api("/app/api/culqi/crear-cargo",{method:"POST",body:JSON.stringify({token:tk,paquete:ctx.paquete,curso:ctx.curso,slot_deseado:(ctx.paquete==="Clase de prueba"?COMPRA_SLOT:"")})})
+        .then(function(){ window.location.href = "/app/a/"+SLUG+"?pago=ok"; })
+        .catch(function(e){
+          $("compraErr").textContent=(e&&e.message)||"El pago no se pudo procesar.";
+          if(ctx.btn){ ctx.btn.disabled=false; ctx.btn.textContent="Reintentar pago →"; }
+        });
+    } else if(typeof Culqi!=="undefined" && Culqi.error){
+      $("compraErr").textContent=(Culqi.error && Culqi.error.user_message)||"El pago fue rechazado.";
+      if(ctx.btn){ ctx.btn.disabled=false; ctx.btn.textContent="Reintentar pago →"; }
+    }
+  }catch(e){}
+};
+window.__culqiPagar=function(paquete, curso, btn, txtOrig){
+  var pk=(ME&&ME.config&&ME.config.culqi_pk)||"";
+  if(!pk){ $("compraErr").textContent="Culqi no está disponible ahora."; return; }
+  var cc=calc(paquete);
+  __culqiCtx={paquete:paquete, curso:curso, btn:btn};
+  if(btn){ btn.disabled=true; btn.textContent="Abriendo pago…"; }
+  cargarCulqiJS(function(ok){
+    if(!ok){ $("compraErr").textContent="No se pudo cargar el pago. Revisa tu conexión."; if(btn){ btn.disabled=false; btn.textContent=txtOrig||"Reintentar pago →"; } return; }
+    try{
+      Culqi.publicKey=pk;
+      Culqi.settings({ title:((MARCA&&MARCA.nombre)||"Batuta"), currency:"PEN", amount: Math.round(cc.final*100) });
+      Culqi.options({ lang:"auto", installments:false, paymentMethods:{ tarjeta:true, yape:true, bancaMovil:false, agente:false, billetera:false, cuotealo:false } });
+      Culqi.open();
+      if(btn){ btn.disabled=false; btn.textContent=txtOrig||("Pagar S/ "+cc.final+" →"); }
+    }catch(e){ $("compraErr").textContent="No se pudo abrir el pago."; if(btn){ btn.disabled=false; btn.textContent=txtOrig||"Reintentar pago →"; } }
+  });
+};
 $("c_metodo").addEventListener("change", renderPaybox);
 
 $("btnYaPague").addEventListener("click",function(){
@@ -1607,7 +1714,9 @@ function renderAgenda(){
   $("agSinPaquete").style.display="none"; $("agConPaquete").style.display="";
 
   var rest = Number(a.restantes)||0;
-  $("agSaldo").textContent = "Te quedan "+rest+" clase"+(rest===1?"":"s")+" en tu paquete "+(a.paquete||"");
+  $("agSaldo").textContent = a.ilim
+    ? ("Clases sin límite hasta el "+fechaBonita(a.vence)+" (tu mensualidad · "+(a.paquete||"")+")")
+    : ("Te quedan "+rest+" clase"+(rest===1?"":"s")+" en tu paquete "+(a.paquete||""));
 
   var prox = ME.proximasClases || [];
   if(prox.length===0){

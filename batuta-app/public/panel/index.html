@@ -89,6 +89,18 @@
   .pill.gray{background:transparent;color:var(--muted);border:1px solid var(--line);}
   .pill.pago-pend{background:transparent;color:var(--amber);border:1px dashed var(--amber);}
   .pill.pago-ok{background:transparent;color:var(--muted);border:1px solid var(--line);}
+  /* Grilla de asistencia por alumno (registro grupal por salón) */
+  .asist-grid{max-height:260px;overflow-y:auto;border:1px solid var(--line);border-radius:3px;padding:2px 10px;}
+  .asist-row{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;padding:8px 0;border-bottom:1px solid var(--line);}
+  .asist-row:last-child{border-bottom:none;}
+  .asist-name{font-family:var(--body);font-size:13.5px;color:var(--cream);flex:1 1 120px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .asist-seg{display:inline-flex;gap:4px;flex-shrink:0;}
+  .asist-opt{font-family:var(--mono);font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.03em;padding:5px 8px;border-radius:3px;border:1px solid var(--line);background:transparent;color:var(--muted);cursor:pointer;user-select:none;-webkit-tap-highlight-color:transparent;}
+  .asist-opt:hover{border-color:var(--accent);}
+  .asist-opt.on[data-v="Asistió"]{background:rgba(95,138,82,.16);color:var(--green);border-color:var(--green);}
+  .asist-opt.on[data-v="Falta"]{background:rgba(204,58,31,.16);color:var(--red);border-color:var(--red);}
+  .asist-opt.on[data-v="Reprogramó"]{background:rgba(217,154,60,.16);color:var(--amber);border-color:var(--amber);}
+  .asist-opt.on[data-v="omitir"]{background:rgba(140,140,140,.14);color:var(--cream);border-color:var(--muted);}
   .big{font-family:var(--display);font-size:19px;}
   .rowact{display:flex;gap:6px;flex-wrap:wrap;}
   .empty{padding:30px;text-align:center;color:var(--muted);font-family:var(--mono);font-size:12px;text-transform:uppercase;letter-spacing:.08em;}
@@ -314,6 +326,7 @@
         <div class="navgroup-items">
           <button class="tab solo-dueno" data-tab="perfil">Perfil</button>
           <button class="tab solo-dueno" data-tab="ajustes">Ajustes</button>
+          <button class="tab solo-dueno" data-tab="servicios">Servicios</button>
           <button class="tab" data-tab="feedback">Ideas y errores</button>
         </div>
       </div>
@@ -455,6 +468,54 @@
         <thead><tr><th>Fecha</th><th>Tipo</th><th>Aporte</th><th>Premio</th><th>Estado</th></tr></thead>
         <tbody></tbody>
       </table>
+    </div>
+  </section>
+
+  <section class="panel" id="panel-servicios">
+    <div class="card" style="padding:14px 16px;margin-bottom:16px;">
+      <strong>¿Quieres que te demos una mano?</strong>
+      <p class="hint" style="margin:6px 0 0;">Batuta lo hace solo, pero si prefieres, nosotros te lo dejamos andando, entrenamos a tu equipo o te acompañamos cada mes. Todos son opcionales. Nos escribes y coordinamos.</p>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:12px;">
+
+      <div class="card" style="padding:16px;border:1px solid var(--amber,#E8A13D);box-shadow:0 0 0 1px rgba(232,161,61,.18);">
+        <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;">
+          <strong>Acompañamiento de primer nivel</strong>
+          <span style="font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#E8A13D;">Más pedido</span>
+        </div>
+        <div style="font-size:22px;font-weight:700;color:#E8A13D;margin:6px 0;">S/129 <span style="font-size:12px;color:var(--ink-2,#9AA2B1);font-weight:400;">/ mes</span></div>
+        <p class="hint" style="margin:0 0 12px;">Soporte prioritario por WhatsApp, revisión mensual de tus números y hacemos por ti los cambios que pidas.</p>
+        <a class="btn sm" target="_blank" rel="noopener" href="https://wa.me/51989077928?text=Hola%2C%20quiero%20el%20acompa%C3%B1amiento%20mensual%20de%20Batuta%20(S%2F129)">Quiero esto</a>
+      </div>
+
+      <div class="card" style="padding:16px;">
+        <strong>Activación asistida</strong>
+        <div style="font-size:22px;font-weight:700;color:#E8A13D;margin:6px 0;">S/350 <span style="font-size:12px;color:var(--ink-2,#9AA2B1);font-weight:400;">única vez</span></div>
+        <p class="hint" style="margin:0 0 12px;">Cargamos a tus alumnos, armamos tus paquetes y conectamos tus cobros y tu marca. Te lo dejamos listo.</p>
+        <a class="btn sm ghost" target="_blank" rel="noopener" href="https://wa.me/51989077928?text=Hola%2C%20quiero%20la%20activaci%C3%B3n%20asistida%20de%20Batuta%20(S%2F350)">Solicitar</a>
+      </div>
+
+      <div class="card" style="padding:16px;">
+        <strong>Migración</strong>
+        <div style="font-size:22px;font-weight:700;color:#E8A13D;margin:6px 0;">S/200 <span style="font-size:12px;color:var(--ink-2,#9AA2B1);font-weight:400;">única vez</span></div>
+        <p class="hint" style="margin:0 0 12px;">Vienes de Excel u otra app? Mudamos tu lista de alumnos, su historial y tus pagos sin perder nada.</p>
+        <a class="btn sm ghost" target="_blank" rel="noopener" href="https://wa.me/51989077928?text=Hola%2C%20quiero%20migrar%20mi%20data%20a%20Batuta%20(S%2F200)">Solicitar</a>
+      </div>
+
+      <div class="card" style="padding:16px;">
+        <strong>Capacitación del equipo</strong>
+        <div style="font-size:22px;font-weight:700;color:#E8A13D;margin:6px 0;">S/180 <span style="font-size:12px;color:var(--ink-2,#9AA2B1);font-weight:400;">/ sesión</span></div>
+        <p class="hint" style="margin:0 0 12px;">Una sesión en vivo para ti y tus profesores. Paquete de 3 sesiones: S/450.</p>
+        <a class="btn sm ghost" target="_blank" rel="noopener" href="https://wa.me/51989077928?text=Hola%2C%20quiero%20una%20capacitaci%C3%B3n%20de%20Batuta%20para%20mi%20equipo%20(S%2F180)">Solicitar</a>
+      </div>
+
+      <div class="card" style="padding:16px;grid-column:1 / -1;">
+        <strong>Servicio evolutivo</strong>
+        <div style="font-size:22px;font-weight:700;color:#E8A13D;margin:6px 0;">S/100 <span style="font-size:12px;color:var(--ink-2,#9AA2B1);font-weight:400;">/ hora, o cotizado</span></div>
+        <p class="hint" style="margin:0 0 12px;">Necesitas reportes propios o una función a la medida de tu academia? La construimos contigo, con cotización cerrada antes de empezar.</p>
+        <a class="btn sm ghost" target="_blank" rel="noopener" href="https://wa.me/51989077928?text=Hola%2C%20quiero%20algo%20a%20medida%20en%20Batuta">Cuéntanos qué necesitas</a>
+      </div>
+
     </div>
   </section>
 
@@ -691,7 +752,9 @@
         <button class="btn ghost sm" data-plan="profe" id="btnPlanProfe">Profe · US$9.95 (S/34)</button>
         <button class="btn ghost sm" data-plan="academia" id="btnPlanAcademia">Academia · US$24.95 (S/85)</button>
         <button class="btn ghost sm" data-plan="xl" id="btnPlanXl">Academia XL · US$49.95 (S/170)</button>
+        <button class="btn ghost sm" data-plan="por_alumno" id="btnPlanPorAlumno">Academia por alumno · US$1.50/alumno</button>
       </div>
+      <p class="hint" id="porAlumnoHint" style="margin-top:6px;display:none;">Con tus <strong id="paCount">—</strong> alumnos activos hoy, tu cobro sería <strong id="paMonto">—</strong>/mes. Se recalcula solo cada mes según cuántos tengas. Ideal para academias grandes.</p>
     </div>
   </section>
 
@@ -723,9 +786,10 @@
       <div class="cfgrow"><span class="pk">Cursos</span><input id="cfg_cursos" type="text" placeholder="Canto, Piano, Guitarra" /></div>
     </div>
     <div class="group">
-      <h2>// Precios de paquetes (S/)</h2>
-      <p class="hint">El monto de compra del portal y de cada alumno sale de aquí.</p>
+      <h2>// Tus paquetes y precios</h2>
+      <p class="hint">Define los planes que vendes: <b>nombre libre</b>, cuántas <b>clases</b> incluye y su <b>precio</b>. Cada clase que registras le descuenta 1 al alumno. Marca <b>mensual</b> para una mensualidad sin límite de clases (no descuenta; vence por fecha). Estos paquetes salen en tu portal y en la ficha de cada alumno.</p>
       <div id="preciosBox"></div>
+      <button type="button" class="btn ghost sm" id="btnAddPaquete" style="margin-top:8px;">+ Agregar paquete</button>
     </div>
     <div class="group">
       <h2>// Pagos y reservas del portal</h2>
@@ -762,10 +826,11 @@
       <div class="cfgrow"><span class="pk">Próximo número (opcional)</span><input id="cfg_fact_proximo_numero" type="number" min="1" placeholder="Solo si ya emitiste boletas fuera de Batuta" /></div>
     </div>
     <div class="group">
-      <h2>// WhatsApp de tu academia (respuesta automática)</h2>
-      <p class="hint">Conecta el WhatsApp de tu academia y cada persona que te escriba entra sola a <b>Interesados</b> (tu CRM) y recibe una respuesta de bienvenida al instante, a cualquier hora. Tú cierras la venta desde el panel.<br><br><b>La conexión la hacemos nosotros:</b> escríbenos por WhatsApp y en 1-2 días dejamos tu número conectado. Cuando esté listo te pasamos el ID que va aquí abajo.</p>
-      <div class="cfgrow"><span class="pk">Respuesta automática</span><select id="cfg_wa_enabled"><option value="">Apagada</option><option value="on">Encendida</option></select></div>
-      <div class="cfgrow"><span class="pk">ID del número (te lo damos nosotros)</span><input id="cfg_wa_phone_id" type="text" inputmode="numeric" placeholder="Ej. 1149379364933769" /></div>
+      <h2>// WhatsApp</h2>
+      <p class="hint"><b>Ya funciona, sin conectar nada.</b> En <b>Interesados</b> y en <b>Alumnos</b>, cada fila tiene un botón <b>WhatsApp</b> que abre tu propio WhatsApp con el mensaje ya escrito (bienvenida, seguimiento, recordatorio de pago). Tú solo revisas y le das enviar: sale desde TU número de siempre y nadie pierde su WhatsApp.</p>
+      <p class="hint" style="margin-top:8px;"><b>🔜 Respuesta automática 24/7 (en camino):</b> que cada persona que te escriba entre sola a Interesados y reciba respuesta al instante, aunque estés durmiendo. Lo estamos habilitando con el proveedor oficial de WhatsApp; te avisamos apenas puedas activarlo. Los campos de abajo son para esa versión — déjalos vacíos por ahora.</p>
+      <div class="cfgrow"><span class="pk">Respuesta automática (beta)</span><select id="cfg_wa_enabled"><option value="">Apagada</option><option value="on">Encendida</option></select></div>
+      <div class="cfgrow"><span class="pk">ID del número (beta)</span><input id="cfg_wa_phone_id" type="text" inputmode="numeric" placeholder="Se activa con la versión automática" /></div>
     </div>
     <div class="group">
       <h2>// Avisos en tu teléfono (app + push)</h2>
@@ -783,6 +848,40 @@
         <span class="pill gray" id="mpEstado">—</span>
         <button class="btn ghost" id="btnMpConectar">Conectar Mercado Pago</button>
         <button class="btn ghost" id="btnMpDesconectar" style="display:none;">Desconectar</button>
+      </div>
+    </div>
+    <div class="group" id="grpStripe" style="display:none;">
+      <h2>// Pago internacional (Stripe)</h2>
+      <p class="hint">Para academias y profesores <b>fuera de Perú</b>. Conecta TU cuenta de Stripe y tus alumnos pagan con tarjeta internacional: el dinero cae directo en tu Stripe y el paquete se activa solo. Stripe no opera en Perú: si estás en Perú, usa Mercado Pago o Culqi.</p>
+      <div class="cfgrow"><span class="pk">Moneda de cobro</span>
+        <select id="cfg_stripe_moneda">
+          <option value="usd">USD — dólar</option>
+          <option value="eur">EUR — euro</option>
+          <option value="mxn">MXN — peso mexicano</option>
+          <option value="gbp">GBP — libra</option>
+          <option value="brl">BRL — real</option>
+          <option value="clp">CLP — peso chileno</option>
+          <option value="cop">COP — peso colombiano</option>
+          <option value="cad">CAD — dólar canadiense</option>
+        </select>
+      </div>
+      <p class="hint" style="margin-top:4px;">Tus precios de paquetes se cobran en esta moneda (el número que pusiste = ese monto en la moneda elegida). Guarda los ajustes para que aplique.</p>
+      <div class="rowact" style="margin-top:8px;">
+        <span class="pill gray" id="stripeEstado">—</span>
+        <button class="btn ghost" id="btnStripeConectar">Conectar Stripe</button>
+        <button class="btn ghost" id="btnStripeDesconectar" style="display:none;">Desconectar</button>
+      </div>
+    </div>
+    <div class="group" id="grpCulqi" style="display:none;">
+      <h2>// Tarjeta y Yape por API (Culqi)</h2>
+      <p class="hint">Cobra <b>tarjeta y Yape</b> a tus alumnos con confirmación automática, para Perú. Necesitas una cuenta Culqi con tu <b>RUC</b> y cuenta bancaria a tu nombre (créala en culqi.com). Pega tus llaves de producción del CulqiPanel. Tu llave secreta se guarda cifrada; si desconectas, rótala en tu panel de Culqi.</p>
+      <div class="cfgrow"><span class="pk">Llave pública</span><input id="cfg_culqi_pk" type="text" placeholder="pk_live_xxxxxxxx" /></div>
+      <div class="cfgrow"><span class="pk">Llave secreta</span><input id="cfg_culqi_sk" type="password" placeholder="sk_live_xxxxxxxx" /></div>
+      <div class="cfgrow"><span class="pk">Titular / RUC (opcional)</span><input id="cfg_culqi_titular" type="text" placeholder="Mi Academia SAC · RUC 20..." /></div>
+      <div class="rowact" style="margin-top:8px;">
+        <span class="pill gray" id="culqiEstado">—</span>
+        <button class="btn ghost" id="btnCulqiConectar">Conectar Culqi</button>
+        <button class="btn ghost" id="btnCulqiDesconectar" style="display:none;">Desconectar</button>
       </div>
     </div>
     <div class="group">
@@ -895,6 +994,7 @@
       <div class="field"><label>Etapa</label><select id="l_etapa"></select></div>
       <div class="field"><label>Seguir el</label><input id="l_seguir" type="date" /></div>
     </div>
+    <div class="field"><label>Qué software/apps usa hoy</label><input id="l_software" type="text" placeholder="Excel, WhatsApp, cuaderno, otro sistema…" /></div>
     <div class="field"><label>Nota</label><textarea id="l_nota" rows="2" placeholder="Qué le interesa, qué objeción tiene, qué quedaste en mandarle…"></textarea></div>
     <div class="err" id="leadErr" style="color:#e8604f;font-size:13px;min-height:16px;"></div>
     <div class="modal-actions">
@@ -1045,6 +1145,13 @@
     <div class="field" id="r_grupal_wrap"><label>Clase grupal (opcional): también estuvieron</label>
       <div id="r_grupales" style="display:flex;flex-wrap:wrap;gap:10px;padding:4px 0;max-height:96px;overflow-y:auto;"></div>
       <p class="hint" style="margin:4px 0 0;">Marca a los demás alumnos de esa clase: se registra la misma clase para cada uno (mismo estado, trabajo y tarea) y cada quien consume 1 clase de su propio paquete.</p></div>
+    <div class="field" id="r_asistencia_wrap" style="display:none;">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
+        <label style="margin:0;">Asistencia del salón</label>
+        <button type="button" class="btn ghost sm" id="btnTodosAsist">Todos asistieron</button>
+      </div>
+      <div id="r_asistencia_grid" class="asist-grid"></div>
+      <p class="hint" style="margin:6px 0 0;">Marca a cada alumno. "Asistió" y "Falta" consumen 1 clase de su propio paquete; "Omitir" no lo registra. El trabajo, la tarea y el plan de abajo son los mismos para todo el salón.</p></div>
     <div class="field"><label>¿Qué se trabajó?</label><input id="r_trabajo" type="text" /></div>
     <div class="field"><label>Tarea asignada</label><input id="r_tarea" type="text" /></div>
     <div class="field"><label>¿Qué haremos la próxima clase?</label><input id="r_plan" type="text" placeholder="El plan de la siguiente sesión — el alumno también lo ve" />
@@ -1120,9 +1227,34 @@ var PAQUETES = {
   "Paquete 4":  { clases:4,  reprog:2 },
   "Paquete 8":  { clases:8,  reprog:3 },
   "Paquete 12": { clases:12, reprog:4 },
-  "Clase suelta": { clases:1, reprog:0 }
+  "Clase suelta": { clases:1, reprog:0 },
+  "Clase de prueba": { clases:1, reprog:0 }
 };
-var PRECIOS_DEFAULT = { "Paquete 4":250, "Paquete 8":450, "Paquete 12":600, "Clase suelta":70 };
+var PRECIOS_DEFAULT = { "Paquete 4":250, "Paquete 8":450, "Paquete 12":600, "Clase suelta":70, "Clase de prueba":50 };
+/* Paquetes por tenant (11-jul): definiciones en db.config.paquetes (JSON [{n,c,r,u}]).
+   u = mensualidad ilimitada (no descuenta clases, vence por fecha). Sin config -> default. */
+function paquetesDefPanel(){ return Object.keys(PAQUETES).map(function(n){ return {n:n,c:PAQUETES[n].clases,r:PAQUETES[n].reprog,u:false}; }); }
+function paquetesTenant(){
+  var raw=db.config&&db.config.paquetes;
+  if(raw){ try{ var a=JSON.parse(raw); if(Array.isArray(a)&&a.length){ var out=a.map(function(p){return {n:String((p&&p.n)||'').trim().slice(0,40),c:(p&&p.u)?0:(parseInt(p&&p.c,10)||0),r:parseInt(p&&p.r,10)||0,u:!!(p&&p.u)};}).filter(function(p){return p.n;}); if(out.length) return out; } }catch(e){} }
+  return paquetesDefPanel();
+}
+function pkMap(){ var m={}; paquetesTenant().forEach(function(p){ m[p.n]={clases:p.c,reprog:p.r,ilim:p.u}; }); return m; }
+function pkDe(nombre){ var m=pkMap(); if(m[nombre])return m[nombre]; if(PAQUETES[nombre])return {clases:PAQUETES[nombre].clases,reprog:PAQUETES[nombre].reprog,ilim:false}; return {clases:0,reprog:0,ilim:false}; }
+function pkNombres(){ return paquetesTenant().map(function(p){return p.n;}); }
+function opcionesPaquete(actual){ var o=pkNombres().slice(); if(actual&&o.indexOf(actual)<0)o.unshift(actual); return o.map(function(p){return '<option>'+esc(p)+'</option>';}).join(""); }
+/* "2026-08-20" -> "20 ago" (vencimiento de la mensualidad) */
+function fechaBonita(iso){ if(!iso) return "—"; var p=String(iso).split("-"); if(p.length<3) return iso; var m=["ene","feb","mar","abr","may","jun","jul","ago","sep","oct","nov","dic"]; return parseInt(p[2],10)+" "+(m[parseInt(p[1],10)-1]||""); }
+function filaPaqHTML(p){
+  p=p||{n:"",c:4,r:0,u:false}; var ilim=!!p.u;
+  return '<div class="paqrow" style="display:grid;grid-template-columns:1.5fr 0.8fr auto 0.9fr auto;gap:6px;align-items:center;margin-bottom:6px;">'+
+    '<input type="text" class="pq-n" maxlength="40" data-orig="'+esc(p.n||"")+'" placeholder="Nombre (ej. Mensualidad)" value="'+esc(p.n||"")+'" />'+
+    '<input type="number" class="pq-c" min="0" max="500" placeholder="clases" value="'+(ilim?"":(p.c||0))+'"'+(ilim?' disabled style="opacity:.4"':'')+' />'+
+    '<label style="font-size:12px;opacity:.8;display:flex;gap:4px;align-items:center;white-space:nowrap;"><input type="checkbox" class="pq-u"'+(ilim?" checked":"")+' /> mensual</label>'+
+    '<input type="number" class="pq-p" min="0" placeholder="S/" value="'+(db.precios[p.n]||0)+'" />'+
+    '<button type="button" class="btn ghost sm pq-x" title="Quitar paquete">×</button>'+
+  '</div>';
+}
 var TOKEN_KEY = "batuta_t";
 var TENANT_SLUG = "";
 var TENANT_ESTADO = "trial";
@@ -1313,7 +1445,7 @@ function pintarLinkAlumnos(){
   try{
     var cont=el("linksCobro");
     if(cont && db && db.precios){
-      var pks=Object.keys(PAQUETES).filter(function(pk){ return (db.precios[pk]||0)>0; });
+      var pks=pkNombres().filter(function(pk){ return (db.precios[pk]||0)>0; });
       cont.innerHTML = pks.length ? "" : '<span class="hint">Pon tus precios en Ajustes y aquí salen los links.</span>';
       pks.forEach(function(pk){
         var b=document.createElement("button");
@@ -1390,7 +1522,7 @@ el("btnLogoutAdmin").addEventListener("click",function(){
 
 /* ---------- Cálculo (ciclo actual) ---------- */
 function computeAlumno(a){
-  var pk = PAQUETES[a.paquete] || {clases:0,reprog:0};
+  var pk = pkDe(a.paquete);
   var ciclo = a.ciclo||1;
   var regs = db.registro.filter(function(r){ return (r.alumnoId||r.alumno_id)===a.id && (r.ciclo||1)===ciclo; });
   var asistio=0,reprogramo=0,falta=0;
@@ -1401,12 +1533,21 @@ function computeAlumno(a){
   });
   var exceso=Math.max(0,reprogramo-pk.reprog);
   var usadas=asistio+falta+exceso;
+  /* Mensualidad ilimitada: no descuenta clases; el estado va por la fecha de vencimiento
+     (a.vence), para que el profe igual vea cuándo toca cobrar la mensualidad. */
+  if(pk.ilim){
+    var vms=a.vence?Date.parse(a.vence):0, est="Activo", cl="green";
+    if(vms){ if(vms<Date.now()){est="Mensualidad vencida";cl="red";} else if(vms<=Date.now()+3*86400000){est="Renovar mensualidad";cl="amber";} }
+    return {compradas:null,ilim:true,usadas:usadas,restantes:Infinity,
+            reprogPermit:pk.reprog,reprogRest:(pk.reprog?Math.max(0,pk.reprog-reprogramo):Infinity),
+            estado:est,clase:cl,monto:db.precios[a.paquete]||0};
+  }
   var saldo=pk.clases-usadas;
   var estado,clase;
   if(saldo<=0){estado="Completado — renovar";clase="red";}
   else if(saldo===1){estado="⚠ Última clase";clase="amber";}
   else{estado="Activo";clase="green";}
-  return {compradas:pk.clases,usadas:usadas,restantes:Math.max(0,saldo),
+  return {compradas:pk.clases,ilim:false,usadas:usadas,restantes:Math.max(0,saldo),
           reprogPermit:pk.reprog,reprogRest:Math.max(0,pk.reprog-reprogramo),
           estado:estado,clase:clase,monto:db.precios[a.paquete]||0};
 }
@@ -1427,8 +1568,8 @@ function renderResumen(){
   var activos=cs.filter(function(c){return c.estado==="Activo";}).length;
   var ultima=cs.filter(function(c){return c.estado==="⚠ Última clase";}).length;
   var compl=cs.filter(function(c){return c.estado==="Completado — renovar";}).length;
-  // MRR: suma del plan mensual de los alumnos en ciclo activo (Activo + Última clase), sin "Clase suelta" (no es recurrente)
-  var mrr=cs.reduce(function(s,c,i){ var a=db.alumnos[i]; if(a && a.paquete==="Clase suelta") return s; return (c.estado==="Activo"||c.estado==="⚠ Última clase") ? s+(Number(c.monto)||0) : s; },0);
+  // MRR: plan mensual de alumnos activos; excluye paquetes de 1 clase (no recurrentes). Ilimitada SÍ suma.
+  var mrr=cs.reduce(function(s,c,i){ var a=db.alumnos[i]; if(!a) return s; var _p=pkDe(a.paquete); if((!_p.ilim && _p.clases===1) || a.paquete==="Clase suelta") return s; return (c.estado==="Activo"||c.estado==="⚠ Última clase"||c.estado==="Renovar mensualidad") ? s+(Number(c.monto)||0) : s; },0);
   var mkt=db.cuentas.filter(function(c){return c.marketing;}).length;
 
   var now=new Date(); var ym=now.getFullYear()+"-"+String(now.getMonth()+1).padStart(2,"0");
@@ -1479,8 +1620,8 @@ function renderAlumnos(){
       '<td>'+esc(a.paquete)+'<br><span class="mini">S/ '+c.monto+' · ciclo '+(a.ciclo||1)+'</span></td>'+
       '<td>'+pago+'</td>'+
       '<td>'+esc((a.horarioFijo&&a.horarioFijo.length)?a.horarioFijo.join(' · '):(a.horario? a.horario+' (manual)':'—'))+'</td>'+
-      '<td><span class="big">'+c.restantes+'</span> <span class="mini">/ '+c.compradas+'</span></td>'+
-      '<td><span class="big">'+c.reprogRest+'</span> <span class="mini">/ '+c.reprogPermit+'</span></td>'+
+      '<td>'+(c.ilim?'<span class="mini" style="font-weight:600;">Mensual</span><br><span class="mini">vence '+esc(fechaBonita(a.vence))+'</span>':'<span class="big">'+c.restantes+'</span> <span class="mini">/ '+c.compradas+'</span>')+'</td>'+
+      '<td>'+(c.ilim?'<span class="mini">—</span>':'<span class="big">'+c.reprogRest+'</span> <span class="mini">/ '+c.reprogPermit+'</span>')+'</td>'+
       '<td><span class="pill '+c.clase+'">'+esc(c.estado)+'</span></td>'+
       '<td class="notes">'+esc(a.notas||'')+'</td>'+
       '<td><div class="rowact">'+renovBtn+'<button class="btn ghost sm" data-regrenovacion="'+a.id+'" title="Registrar un pago de renovación recibido fuera del portal">+ Renovar</button><button class="btn ghost sm" data-edit="'+a.id+'">Editar</button><button class="btn ghost sm" data-del="'+a.id+'">×</button></div></td>'+
@@ -1658,10 +1799,8 @@ function renderCuentas(){
 }
 
 function renderAjustes(){
-  el("preciosBox").innerHTML=Object.keys(PAQUETES).map(function(p){
-    return '<div class="cfgrow"><span class="pk">'+p+'</span><input type="number" min="0" data-precio="'+p+'" value="'+(db.precios[p]||0)+'" /></div>';
-  }).join("");
-  if(!MP_ESTADO_CARGADO){ MP_ESTADO_CARGADO=true; try{ refrescarMpEstado(); }catch(e){} try{ refrescarPushEstado(); }catch(e){} }
+  el("preciosBox").innerHTML=paquetesTenant().map(function(p){ return filaPaqHTML(p); }).join("");
+  if(!MP_ESTADO_CARGADO){ MP_ESTADO_CARGADO=true; try{ refrescarMpEstado(); }catch(e){} try{ refrescarPushEstado(); }catch(e){} try{ refrescarStripeEstado(); }catch(e){} try{ refrescarCulqiEstado(); }catch(e){} }
   if(el("cfg_cursos")) el("cfg_cursos").value=(db.config&&db.config.cursos)||MARCA.cursos.join(", ");
   if(el("cfg_brand_color")) el("cfg_brand_color").value=(db.config&&db.config.brand_color)||"#E8A13D";
   if(el("cfg_brand_font")) el("cfg_brand_font").value=(db.config&&db.config.brand_font)||"";
@@ -1689,6 +1828,7 @@ function renderAjustes(){
   el("cfg_crypto_moneda").value=(db.config&&db.config.crypto_moneda)||"";
   el("cfg_crypto_red").value=(db.config&&db.config.crypto_red)||"";
   el("cfg_crypto_wallet").value=(db.config&&db.config.crypto_wallet)||"";
+  if(el("cfg_stripe_moneda")) el("cfg_stripe_moneda").value=(db.config&&db.config.stripe_moneda)||"usd";
   el("cfg_msg_renovacion").value=(db.config&&db.config.msg_renovacion)||"";
   el("cfg_gcal_client_id").value=(db.config&&db.config.gcal_client_id)||"";
   el("cfg_gcal_client_secret").value=(db.config&&db.config.gcal_client_secret)||"";
@@ -1827,7 +1967,7 @@ function fillEjercicioSelect(curso){
 function fillSelects(){
   /* conservar lo que ya estaba elegido: si no, el auto-refresh resetea el select al primer alumno */
   var prevPk=el("a_paquete").value, prevAl=el("r_alumno").value;
-  el("a_paquete").innerHTML=Object.keys(PAQUETES).map(function(p){return '<option>'+p+'</option>';}).join("");
+  el("a_paquete").innerHTML=opcionesPaquete(prevPk);
   el("r_alumno").innerHTML=db.alumnos.map(function(a){return '<option value="'+a.id+'">'+esc(a.nombre)+'</option>';}).join("")
     || '<option value="">— agrega un alumno primero —</option>';
   if(prevPk) el("a_paquete").value=prevPk;
@@ -1842,14 +1982,17 @@ var ETAPAS=[
   {k:"alumno",n:"Alumno ✓"},{k:"perdido",n:"Perdido"}];
 var LEAD_FILTRO="";
 function etapaNombre(k){ var e=ETAPAS.find(function(x){return x.k===k;}); return e?e.n:k; }
+/* nombre de la academia del tenant (NO "Batuta"): sale en los mensajes al lead */
+function nombreAcademia(){ var c=db.config||{}; return (c.profe_marca||c.profe_nombre||MARCA.nombre); }
 function waLead(l){
   var n=(l.nombre||"").split(" ")[0]||"";
   var hola=n?("Hola "+n+"!"):"Hola!";
   var interes=l.interes?(" "+l.interes):(" clases");
+  var acad=nombreAcademia();
   var textos={
-    nuevo: hola+" Vi que te interesa"+interes+" en "+MARCA.nombre+". Te cuento como funciona? :)",
+    nuevo: hola+" Vi que te interesa"+interes+" en "+acad+". Te cuento como funciona? :)",
     contactado: hola+" Te sigo guardando el sitio para"+interes+". Agendamos tu clase de prueba? :)",
-    prueba: hola+" Todo listo para tu clase de prueba en "+MARCA.nombre+". Cualquier cosa me escribes por aqui :)",
+    prueba: hola+" Todo listo para tu clase de prueba en "+acad+". Cualquier cosa me escribes por aqui :)",
     alumno: hola+" Como vas con tus clases? Cualquier cosa que necesites, me dices :)",
     perdido: hola+" Hace un tiempo te interesaba"+interes+". Seguimos teniendo sitio, te animas? :)"
   };
@@ -1901,7 +2044,8 @@ function renderLeads(){
       (l.whatsapp?'<a class="btn sm" target="_blank" rel="noopener" href="'+esc(waLead(l))+'">WhatsApp</a>':'')+
       '<button class="btn ghost sm" data-leadedit="'+l.id+'">Editar</button>'+
       '<button class="btn ghost sm" data-leaddel="'+l.id+'">×</button></div>';
-    return '<tr><td class="name">'+quien+'</td><td>'+esc(l.interes||"")+'</td><td>'+selEtapa+'</td><td>'+seguir+'</td><td class="notes">'+esc(l.nota||"")+'</td><td>'+acc+'</td></tr>';
+    var interesCel=esc(l.interes||"")+(l.software_actual?'<br><span class="mini">usa: '+esc(l.software_actual)+'</span>':'');
+    return '<tr><td class="name">'+quien+'</td><td>'+interesCel+'</td><td>'+selEtapa+'</td><td>'+seguir+'</td><td class="notes">'+esc(l.nota||"")+'</td><td>'+acc+'</td></tr>';
   }).join("");
 }
 function abrirLead(l){
@@ -1911,6 +2055,7 @@ function abrirLead(l){
   el("l_whatsapp").value=l?(l.whatsapp||""):"";
   el("l_email").value=l?(l.email||""):"";
   el("l_interes").value=l?(l.interes||""):"";
+  el("l_software").value=l?(l.software_actual||""):"";
   el("l_etapa").innerHTML=ETAPAS.map(function(e){return '<option value="'+e.k+'">'+e.n+'</option>';}).join("");
   el("l_etapa").value=l?(l.etapa||"nuevo"):"nuevo";
   el("l_seguir").value=l?(l.seguir_el||""):"";
@@ -1924,6 +2069,7 @@ if(el("btnGuardarLead")) el("btnGuardarLead").addEventListener("click",function(
   var body={ accion:id?"editar":"crear", id:id||undefined,
     nombre:el("l_nombre").value.trim(), whatsapp:el("l_whatsapp").value.trim(),
     email:el("l_email").value.trim(), interes:el("l_interes").value.trim(),
+    software_actual:el("l_software").value.trim(),
     etapa:el("l_etapa").value, seguir_el:el("l_seguir").value, nota:el("l_nota").value.trim() };
   if(!body.nombre&&!body.email&&!body.whatsapp){ el("leadErr").textContent="Pon al menos un nombre, correo o WhatsApp."; return; }
   var btn=el("btnGuardarLead"); btn.disabled=true;
@@ -2383,7 +2529,7 @@ document.body.addEventListener("click",function(e){
 });
 
 /* ---------- Tabs / modales ---------- */
-var TITULOS={resumen:"Inicio",alumnos:"Alumnos",grupos:"Grupos",profesores:"Profesores",registro:"Clases",agenda:"Agenda",pagos:"Pagos",caja:"Caja",reportes:"Reportes",cuentas:"Accesos",leads:"Interesados",recursos:"Para tus alumnos",ejercicios:"Tu biblioteca",ajustes:"Ajustes",perfil:"Perfil",chat:"Chat",feedback:"Ideas y errores"};
+var TITULOS={resumen:"Inicio",alumnos:"Alumnos",grupos:"Grupos",profesores:"Profesores",registro:"Clases",agenda:"Agenda",pagos:"Pagos",caja:"Caja",reportes:"Reportes",cuentas:"Accesos",leads:"Interesados",recursos:"Para tus alumnos",ejercicios:"Tu biblioteca",ajustes:"Ajustes",perfil:"Perfil",servicios:"Servicios",chat:"Chat",feedback:"Ideas y errores"};
 document.querySelectorAll(".tab").forEach(function(t){
   t.addEventListener("click",function(){
     document.querySelectorAll(".tab").forEach(function(x){x.classList.remove("active");});
@@ -2442,7 +2588,7 @@ el("btnNuevoAlumno").addEventListener("click",function(){
   el("alumnoTitulo").innerHTML='Nuevo <em>alumno</em>';
   el("a_id").value=""; el("a_codigo").value=""; el("a_ciclo").value="1";
   el("a_nombre").value=""; el("a_whatsapp").value="";
-  setCursosAlumno(MARCA.cursoDefault); fillSelects(); el("a_paquete").value="Paquete 4";
+  setCursosAlumno(MARCA.cursoDefault); fillSelects(); el("a_paquete").value=pkNombres()[0]||"";
   el("a_fecha").value=new Date().toISOString().slice(0,10); el("a_pago").value="Pagado";
   el("a_horario").value=""; el("a_notas").value=""; el("a_horario_derivado").textContent="";
   fillProfeSelect("");
@@ -2506,7 +2652,7 @@ document.body.addEventListener("click",function(e){
     el("btnGuardarAlumnoOtro").style.display="none";
     el("a_id").value=a.id; el("a_codigo").value=a.codigo||""; el("a_ciclo").value=a.ciclo||1;
     el("a_nombre").value=a.nombre; el("a_whatsapp").value=a.whatsapp||"";
-    setCursosAlumno(a.curso); el("a_paquete").value=a.paquete; el("a_fecha").value=a.fecha||"";
+    setCursosAlumno(a.curso); el("a_paquete").innerHTML=opcionesPaquete(a.paquete); el("a_paquete").value=a.paquete; el("a_fecha").value=a.fecha||"";
     el("a_pago").value=a.pago; el("a_horario").value=a.horario||""; el("a_notas").value=a.notas||"";
     el("a_horario_derivado").textContent=(a.horarioFijo&&a.horarioFijo.length)?("Agenda: "+a.horarioFijo.join(" · ")):"Sin horario fijo en la agenda";
     fillProfeSelect(a.profesor_id||"");
@@ -2530,6 +2676,9 @@ document.body.addEventListener("click",function(e){
   }
   if(er){ var rg=db.registro.find(function(x){return x.id===er.dataset.editreg;}); if(!rg)return;
     fillSelects();
+    grupoAsistencia=null;
+    setFieldVis("r_alumno",true); setFieldVis("r_estado",true);
+    var awEd=el("r_asistencia_wrap"); if(awEd) awEd.style.display="none";
     el("regTitulo").innerHTML='Editar <em>clase</em>';
     el("r_id").value=rg.id;
     el("r_fecha").value=rg.fecha||"";
@@ -2640,18 +2789,35 @@ if(el("btnGuardarGrupo")) el("btnGuardarGrupo").addEventListener("click",functio
     .catch(function(e){ el("gErr").textContent=e.message||"No se pudo guardar"; })
     .finally(function(){ btn.disabled=false; });
 });
+/* Registro de clase por SALÓN: grilla de asistencia por alumno (Asistió/Falta/Reprogramó/Omitir).
+   grupoAsistencia != null pone al modal en "modo grupo"; btnGuardarRegistro lo detecta. */
+var grupoAsistencia=null;
+function setFieldVis(inputId, show){ var f=el(inputId); if(!f) return; var w=f.closest(".field"); if(w) w.style.display=show?"":"none"; }
+function renderAsistenciaGrid(miembros){
+  var grid=el("r_asistencia_grid"); if(!grid) return;
+  var opciones=[["Asistió","Asistió"],["Falta","Falta"],["Reprogramó","Reprog."],["omitir","Omitir"]];
+  grid.innerHTML=miembros.map(function(m){
+    var seg=opciones.map(function(o){
+      return '<button type="button" class="asist-opt'+(o[0]==="Asistió"?" on":"")+'" data-v="'+o[0]+'">'+o[1]+'</button>';
+    }).join("");
+    return '<div class="asist-row" data-al="'+esc(m.id)+'"><span class="asist-name" title="'+esc(m.nombre)+'">'+esc(m.nombre)+'</span><span class="asist-seg">'+seg+'</span></div>';
+  }).join("");
+}
 function registrarClaseGrupo(g){
-  var ids=(g.miembros||[]).filter(function(id){ return db.alumnos.some(function(a){return a.id===id;}); });
-  if(!ids.length){ toast("Ese grupo no tiene alumnos"); return; }
+  var miembros=(g.miembros||[]).map(function(id){ return db.alumnos.find(function(a){return a.id===id;}); }).filter(Boolean);
+  if(!miembros.length){ toast("Ese grupo no tiene alumnos"); return; }
   fillSelects();
-  el("regTitulo").innerHTML='Registrar <em>clase</em> · '+esc(g.nombre);
+  grupoAsistencia={ nombre:g.nombre };
+  el("regTitulo").innerHTML='Asistencia · <em>'+esc(g.nombre)+'</em>';
   el("r_id").value="";
   el("r_fecha").value=new Date().toISOString().slice(0,10);
   el("r_estado").value="Asistió"; el("r_trabajo").value=""; el("r_tarea").value=""; el("r_plan").value=""; el("r_ejercicio").value="";
-  var gw=el("r_grupal_wrap"); if(gw) gw.style.display="";
-  el("r_alumno").value=ids[0];
-  fillGrupales();
-  ids.slice(1).forEach(function(id){ var c=document.querySelector('#r_grupales input[data-grupal="'+id+'"]'); if(c) c.checked=true; });
+  /* modo grupo: se oculta el alumno/estado individual y el "también estuvieron"; manda la grilla */
+  setFieldVis("r_alumno",false); setFieldVis("r_estado",false);
+  var gw=el("r_grupal_wrap"); if(gw) gw.style.display="none";
+  var aw=el("r_asistencia_wrap"); if(aw) aw.style.display="";
+  el("r_alumno").value=miembros[0].id;   // para que syncCurso no reviente
+  renderAsistenciaGrid(miembros);
   syncCurso();
   if(g.curso){
     var rs=el("r_curso");
@@ -2659,6 +2825,49 @@ function registrarClaseGrupo(g){
     rs.value=g.curso; fillEjercicioSelect(g.curso);
   }
   openOv("ovRegistro");
+}
+/* Un solo estado activo por fila; "Todos asistieron" resetea la columna verde. */
+if(el("r_asistencia_grid")) el("r_asistencia_grid").addEventListener("click",function(e){
+  var b=e.target.closest(".asist-opt"); if(!b) return;
+  var seg=b.closest(".asist-seg"); if(!seg) return;
+  [].slice.call(seg.querySelectorAll(".asist-opt")).forEach(function(x){ x.classList.remove("on"); });
+  b.classList.add("on");
+});
+if(el("btnTodosAsist")) el("btnTodosAsist").addEventListener("click",function(){
+  [].slice.call(document.querySelectorAll("#r_asistencia_grid .asist-row")).forEach(function(row){
+    [].slice.call(row.querySelectorAll(".asist-opt")).forEach(function(x){ x.classList.toggle("on", x.dataset.v==="Asistió"); });
+  });
+});
+function guardarAsistenciaGrupo(){
+  var fecha=el("r_fecha").value;
+  if(!fecha){ toast("Ponle fecha a la clase"); return; }
+  var curso=el("r_curso").value;
+  var trabajo=el("r_trabajo").value.trim(), tarea=el("r_tarea").value.trim(), plan=el("r_plan").value.trim();
+  /* ejercicio de la biblioteca (opcional): mismo adjunto de tarea para todo el salón */
+  var tarea_audio="";
+  var ejId=el("r_ejercicio").value;
+  if(ejId){ var ej=(db.ejercicios||[]).find(function(x){return x.id===ejId;}); if(ej && ej.url){ tarea_audio=JSON.stringify([{u:ej.url,n:ej.titulo||"Ejercicio"}]); } }
+  var nuevos=[];
+  [].slice.call(document.querySelectorAll("#r_asistencia_grid .asist-row")).forEach(function(row){
+    var on=row.querySelector(".asist-opt.on"); var estado=on?on.dataset.v:"Asistió";
+    if(estado==="omitir") return;
+    var al=row.dataset.al; var alumno=db.alumnos.find(function(x){return x.id===al;});
+    if(!alumno) return;
+    nuevos.push({ id:uid(), fecha:fecha, alumnoId:al, alumno_id:al, curso:curso, estado:estado,
+      trabajo:trabajo, tarea:tarea, plan:plan, tarea_audio:tarea_audio, ciclo:alumno.ciclo||1 });
+  });
+  if(!nuevos.length){ toast("Marca al menos un alumno (todos están en Omitir)"); return; }
+  nuevos.forEach(function(r){ db.registro.push(r); });
+  var btnReg=el("btnGuardarRegistro"); btnReg.disabled=true;
+  apiPut().then(function(){
+    renderAll(); closeOv("ovRegistro"); grupoAsistencia=null;
+    toast("Asistencia registrada para "+nuevos.length+" alumno"+(nuevos.length===1?"":"s")+" ✓");
+  }).catch(function(){
+    /* revertir el push optimista para no dejar filas fantasma si reintenta */
+    var ids={}; nuevos.forEach(function(r){ ids[r.id]=true; });
+    db.registro=db.registro.filter(function(x){ return !ids[x.id]; });
+    toast("No se pudo guardar. Revisa tu conexión e intenta de nuevo.");
+  }).finally(function(){ btnReg.disabled=false; });
 }
 if(el("tablaGrupos")) el("tablaGrupos").addEventListener("click",function(e){
   var b=e.target.closest("button"); if(!b) return;
@@ -2683,6 +2892,9 @@ function fillGrupales(){
 el("btnNuevoRegistro").addEventListener("click",function(){
   if(db.alumnos.length===0){ toast("Agrega un alumno primero"); return; }
   fillSelects();
+  grupoAsistencia=null;
+  setFieldVis("r_alumno",true); setFieldVis("r_estado",true);
+  var aw=el("r_asistencia_wrap"); if(aw) aw.style.display="none";
   el("regTitulo").innerHTML='Registrar <em>clase</em>';
   el("r_id").value="";
   el("r_fecha").value=new Date().toISOString().slice(0,10);
@@ -2692,10 +2904,12 @@ el("btnNuevoRegistro").addEventListener("click",function(){
   syncCurso(); openOv("ovRegistro");
 });
 el("btnGuardarRegistro").addEventListener("click",function(){
+  var editId=el("r_id").value;
+  /* modo salón: la grilla de asistencia manda (una fila de registro por alumno, con su propio estado) */
+  if(grupoAsistencia && !editId){ guardarAsistenciaGrupo(); return; }
   var alumnoId=el("r_alumno").value;
   if(!alumnoId){ toast("Elige un alumno"); return; }
   var a=db.alumnos.find(function(x){return x.id===alumnoId;});
-  var editId=el("r_id").value;
   var campos={ fecha:el("r_fecha").value, alumnoId:alumnoId, alumno_id:alumnoId,
     curso:el("r_curso").value, estado:el("r_estado").value,
     trabajo:el("r_trabajo").value.trim(), tarea:el("r_tarea").value.trim(), plan:el("r_plan").value.trim() };
@@ -2893,9 +3107,8 @@ el("chatAdmEnviar").addEventListener("click", chatAdmEnviarMsg);
 el("chatAdmTexto").addEventListener("keydown",function(e){ if(e.key==="Enter") chatAdmEnviarMsg(); });
 
 /* ---------- Mensaje de renovación por WhatsApp ---------- */
-var MSG_RENOVACION_DEFAULT = "Hola {nombre}, ¡qué tal! Vamos cerrando tu paquete de {curso} y no quiero que pierdas el ritmo que llevas. "+
-  "¿Cuadramos la renovación? Te cuento del plan trimestral (el 3er mes va al 50%) para que reserves tus horarios fijos. "+
-  "Puedes renovar tú mismo desde tu portal: "+MARCA.portalUrl+" ¿Le entramos?";
+var MSG_RENOVACION_DEFAULT = "Hola {nombre}! Vamos cerrando tu paquete de {curso} y no quiero que pierdas el ritmo que llevas. "+
+  "¿Cuadramos la renovación para que reserves tus horarios fijos? :)";
 function renovar(a){
   var num=(a.whatsapp||"").replace(/\D/g,"");
   if(num.length===9) num="51"+num;
@@ -2909,7 +3122,7 @@ function renovar(a){
 function abrirRenovar(alumnoId){
   var a=db.alumnos.find(function(x){return x.id===alumnoId;}); if(!a) return;
   el("rn_id").value=a.id;
-  el("rn_paquete").innerHTML=Object.keys(PAQUETES).map(function(p){return '<option>'+p+'</option>';}).join("");
+  el("rn_paquete").innerHTML=opcionesPaquete(a.paquete);
   el("rn_paquete").value=a.paquete;
   el("rn_fecha").value=new Date().toISOString().slice(0,10);
   el("rn_pago").value="Pagado";
@@ -2934,10 +3147,31 @@ el("btnGuardarRenovar").addEventListener("click",function(){
 
 /* ---------- Ajustes ---------- */
 el("btnGuardarAjustes").addEventListener("click",function(){
-  document.querySelectorAll("[data-precio]").forEach(function(inp){
-    db.precios[inp.dataset.precio]=Number(inp.value)||0;
+  /* paquetes: colecta del editor (nombre + clases/mensual + precio) */
+  var paqRows=[], seenPq={}, rename={};
+  Array.prototype.forEach.call(document.querySelectorAll("#preciosBox .paqrow"),function(row){
+    var nInput=row.querySelector(".pq-n");
+    var n=(nInput.value||"").trim().slice(0,40); if(!n||seenPq[n])return; seenPq[n]=1;
+    var orig=(nInput.getAttribute("data-orig")||"").trim();
+    if(orig && orig!==n) rename[orig]=n;   // paquete renombrado
+    var u=row.querySelector(".pq-u").checked;
+    var c=u?0:Math.max(0,Math.min(500,parseInt(row.querySelector(".pq-c").value,10)||0));
+    var r=u?0:(c>=2?Math.round(c/4)+1:0);
+    var precio=Math.max(0,Number(row.querySelector(".pq-p").value)||0);
+    paqRows.push({n:n,c:c,r:r,u:u,precio:precio});
   });
-  var cfg={ cursos:el("cfg_cursos").value.trim(),
+  /* si renombró paquetes, migra a los alumnos que estaban en el nombre viejo (no los huérfana) */
+  if(Object.keys(rename).length && db.alumnos){
+    db.alumnos=db.alumnos.map(function(a){ return rename[a.paquete] ? Object.assign({},a,{paquete:rename[a.paquete]}) : a; });
+  }
+  /* preserva precios de claves que el editor NO muestra (ej. "Clase de prueba" en un tenant
+     con paquetes custom), y encima aplica los precios de las filas visibles. */
+  var nuevosPrecios={};
+  if(db.precios){ Object.keys(db.precios).forEach(function(k){ if(!seenPq[k]) nuevosPrecios[k]=db.precios[k]; }); }
+  paqRows.forEach(function(x){ nuevosPrecios[x.n]=x.precio; });
+  db.precios=nuevosPrecios;
+  var cfg={ paquetes: paqRows.length?JSON.stringify(paqRows.map(function(x){return {n:x.n,c:x.c,r:x.r,u:x.u};})):"",
+            cursos:el("cfg_cursos").value.trim(),
             brand_color:(el("cfg_brand_color")?el("cfg_brand_color").value.trim():""),
             brand_font:(el("cfg_brand_font")?el("cfg_brand_font").value:""),
             agenda_cupo:(el("cfg_agenda_cupo")?el("cfg_agenda_cupo").value.trim():""),
@@ -2962,6 +3196,7 @@ el("btnGuardarAjustes").addEventListener("click",function(){
             crypto_moneda:el("cfg_crypto_moneda").value.trim(),
             crypto_red:el("cfg_crypto_red").value.trim(),
             crypto_wallet:el("cfg_crypto_wallet").value.trim(),
+            stripe_moneda:(el("cfg_stripe_moneda")?el("cfg_stripe_moneda").value:""),
             msg_renovacion:el("cfg_msg_renovacion").value.trim(),
             gcal_client_id:el("cfg_gcal_client_id").value.trim(),
             gcal_client_secret:el("cfg_gcal_client_secret").value.trim(),
@@ -2970,6 +3205,26 @@ el("btnGuardarAjustes").addEventListener("click",function(){
     .then(function(){ db.config=Object.assign(db.config||{},cfg); renderAll(); toast("Ajustes guardados"); })
     .catch(function(){ toast("No se pudieron guardar los ajustes"); });
 });
+
+/* ---------- Editor de paquetes (agregar / quitar / toggle mensual) ---------- */
+if(el("btnAddPaquete")) el("btnAddPaquete").addEventListener("click",function(){
+  var box=el("preciosBox"); var tmp=document.createElement("div"); tmp.innerHTML=filaPaqHTML({n:"",c:4,r:0,u:false}); box.appendChild(tmp.firstChild);
+});
+if(el("preciosBox")){
+  el("preciosBox").addEventListener("click",function(e){
+    var x=e.target.closest?e.target.closest(".pq-x"):null; if(!x)return;
+    var row=x.closest(".paqrow"); if(!row)return;
+    var nombre=(row.querySelector(".pq-n").value||"").trim();
+    var enUso=nombre&&db.alumnos&&db.alumnos.some(function(a){return a.paquete===nombre;});
+    if(enUso&&!confirm('Hay alumnos en "'+nombre+'". Si lo quitas se quedan sin plan hasta que los pases a otro paquete. ¿Quitar igual?'))return;
+    row.remove();
+  });
+  el("preciosBox").addEventListener("change",function(e){
+    var u=e.target.closest?e.target.closest(".pq-u"):null; if(!u)return;
+    var row=u.closest(".paqrow"); var c=row.querySelector(".pq-c");
+    if(u.checked){ c.disabled=true; c.style.opacity=".4"; c.value=""; } else { c.disabled=false; c.style.opacity=""; if(!c.value)c.value="4"; }
+  });
+}
 
 /* ---------- Google Calendar ---------- */
 if(el("btnVerGcalSecret")) el("btnVerGcalSecret").addEventListener("click",function(){
@@ -3207,7 +3462,7 @@ el("btnBackupSrv").addEventListener("click",function(){
 el("btnCsv").addEventListener("click",function(){
   var head=["Alumno","WhatsApp","Curso","Paquete","Ciclo","Fecha compra","Monto","Estado pago","Horario","Clases compradas","Clases usadas","Clases restantes","Reprog restantes","Estado","Notas"];
   var rows=db.alumnos.map(function(a){ var c=computeAlumno(a);
-    return [a.nombre,a.whatsapp,a.curso,a.paquete,(a.ciclo||1),a.fecha,c.monto,a.pago,a.horario,c.compradas,c.usadas,c.restantes,c.reprogRest,c.estado,a.notas]; });
+    return [a.nombre,a.whatsapp,a.curso,a.paquete,(a.ciclo||1),a.fecha,c.monto,a.pago,a.horario,(c.ilim?"Ilimitado (mensual)":c.compradas),c.usadas,(c.ilim?("vence "+(a.vence||"")):c.restantes),(c.ilim?"":c.reprogRest),c.estado,a.notas]; });
   descargaCsv(head,rows,"alumnos-"+MARCA.archivoExport+".csv");
 });
 el("btnCsvEmails").addEventListener("click",function(){
@@ -3444,8 +3699,74 @@ var _bMpD=el("btnMpDesconectar"); if(_bMpD) _bMpD.addEventListener("click",funct
   apiPost('/app/api/admin/mp/desconectar',{}).then(function(){ toast("Mercado Pago desconectado"); refrescarMpEstado(); })
     .catch(function(e){ toast((e&&e.message)||"No se pudo desconectar"); });
 });
+
+/* ---------- Stripe Connect del profe (pago internacional) ---------- */
+function refrescarStripeEstado(){
+  var grp=el("grpStripe"), pill=el("stripeEstado"), bC=el("btnStripeConectar"), bD=el("btnStripeDesconectar");
+  if(!pill||!bC||!bD) return;
+  fetch('/app/api/admin/stripe/estado',{headers:hdr()}).then(function(r){return r.json().catch(function(){return {};});}).then(function(d){
+    if(!d || d.error || !d.disponible){ if(grp) grp.style.display="none"; return; }
+    if(grp) grp.style.display="";
+    if(d.conectado && d.listo){
+      pill.className="pill green"; pill.textContent="Conectado ✓";
+      bC.style.display="none"; bD.style.display="";
+    } else if(d.conectado && !d.listo){
+      pill.className="pill gray"; pill.textContent="Falta completar la verificación";
+      bC.style.display=""; bC.disabled=false; bC.textContent="Continuar verificación"; bD.style.display="";
+    } else {
+      pill.className="pill gray"; pill.textContent="No conectado";
+      bC.style.display=""; bC.disabled=false; bC.textContent="Conectar Stripe"; bD.style.display="none";
+    }
+  }).catch(function(){});
+}
+var _bStC=el("btnStripeConectar"); if(_bStC) _bStC.addEventListener("click",function(){
+  _bStC.disabled=true;
+  apiPost('/app/api/admin/stripe/conectar',{}).then(function(d){
+    if(d && d.url){ location.href=d.url; return; }
+    toast("No se pudo iniciar la conexión"); _bStC.disabled=false;
+  }).catch(function(e){ toast((e&&e.message)||"No se pudo iniciar la conexión"); _bStC.disabled=false; });
+});
+var _bStD=el("btnStripeDesconectar"); if(_bStD) _bStD.addEventListener("click",function(){
+  if(!confirm("Tus alumnos ya no podrán pagarte con Stripe hasta que vuelvas a conectar. ¿Desconectar?")) return;
+  apiPost('/app/api/admin/stripe/desconectar',{}).then(function(){ toast("Stripe desconectado"); refrescarStripeEstado(); })
+    .catch(function(e){ toast((e&&e.message)||"No se pudo desconectar"); });
+});
+
+/* ---------- Culqi del profe (tarjeta/Yape por API, BYOK con RUC) ---------- */
+function refrescarCulqiEstado(){
+  var grp=el("grpCulqi"), pill=el("culqiEstado"), bC=el("btnCulqiConectar"), bD=el("btnCulqiDesconectar");
+  if(!pill||!bC||!bD) return;
+  fetch('/app/api/admin/culqi/estado',{headers:hdr()}).then(function(r){return r.json().catch(function(){return {};});}).then(function(d){
+    if(!d || d.error || !d.disponible){ if(grp) grp.style.display="none"; return; }
+    if(grp) grp.style.display="";
+    if(d.conectado && d.activo){
+      pill.className="pill green"; pill.textContent="Conectado ✓"+(d.titular?(" · "+d.titular):"");
+      bC.style.display=""; bC.disabled=false; bC.textContent="Actualizar llaves"; bD.style.display="";
+    } else {
+      pill.className="pill gray"; pill.textContent="No conectado";
+      bC.style.display=""; bC.disabled=false; bC.textContent="Conectar Culqi"; bD.style.display="none";
+    }
+  }).catch(function(){});
+}
+var _bCuC=el("btnCulqiConectar"); if(_bCuC) _bCuC.addEventListener("click",function(){
+  var pk=(el("cfg_culqi_pk")&&el("cfg_culqi_pk").value.trim())||"";
+  var sk=(el("cfg_culqi_sk")&&el("cfg_culqi_sk").value.trim())||"";
+  var titular=(el("cfg_culqi_titular")&&el("cfg_culqi_titular").value.trim())||"";
+  if(!pk||!sk){ toast("Pega tus dos llaves de Culqi"); return; }
+  _bCuC.disabled=true;
+  apiPost('/app/api/admin/culqi/conectar',{pk:pk,sk:sk,titular:titular}).then(function(){
+    toast("Culqi conectado: tus alumnos ya pueden pagar con tarjeta o Yape");
+    if(el("cfg_culqi_sk")) el("cfg_culqi_sk").value="";
+    refrescarCulqiEstado();
+  }).catch(function(e){ toast((e&&e.message)||"No se pudo conectar Culqi"); _bCuC.disabled=false; });
+});
+var _bCuD=el("btnCulqiDesconectar"); if(_bCuD) _bCuD.addEventListener("click",function(){
+  if(!confirm("Tus alumnos ya no podrán pagar por Culqi. Acuérdate de ROTAR tu llave secreta en tu panel de Culqi. ¿Desconectar?")) return;
+  apiPost('/app/api/admin/culqi/desconectar',{}).then(function(){ toast("Culqi desconectado"); refrescarCulqiEstado(); })
+    .catch(function(e){ toast((e&&e.message)||"No se pudo desconectar"); });
+});
 /* ---------- Cambio de plan (Perfil > Tu plan) ---------- */
-var PLAN_NOMBRES={profe:"Profe",academia:"Academia",xl:"Academia XL"};
+var PLAN_NOMBRES={profe:"Profe",academia:"Academia",xl:"Academia XL",por_alumno:"Academia por alumno"};
 var PLAN_CARGADO=false;
 function refrescarPlan(){
   var pill=el("planActual"); if(!pill) return;
@@ -3453,11 +3774,18 @@ function refrescarPlan(){
     if(!d || d.error) return;
     var p=d.plan||"profe";
     pill.className="pill green"; pill.textContent="Tu plan: "+(PLAN_NOMBRES[p]||p)+(d.suscrito?" · suscripción activa":" · en prueba");
-    ["profe","academia","xl"].forEach(function(k){
+    ["profe","academia","xl","por_alumno"].forEach(function(k){
       var b=document.querySelector('[data-plan="'+k+'"]'); if(!b) return;
       b.disabled=(k===p);
       b.style.opacity=(k===p)?".45":"";
     });
+    // Estimado del plan por alumno (alumnos activos × precio)
+    var h=el("porAlumnoHint");
+    if(h && typeof d.alumnos_activos!=="undefined"){
+      if(el("paCount")) el("paCount").textContent=d.alumnos_activos;
+      if(el("paMonto")) el("paMonto").textContent="S/ "+(d.por_alumno_monto_pen||0);
+      h.style.display="";
+    }
   }).catch(function(){});
 }
 document.querySelectorAll("[data-plan]").forEach(function(b){
@@ -3466,6 +3794,7 @@ document.querySelectorAll("[data-plan]").forEach(function(b){
     if(!confirm("Cambiar al plan "+nombre+"? Si tienes suscripción activa, el nuevo monto rige desde tu siguiente cobro. Sin penalidad.")) return;
     b.disabled=true;
     apiPost('/app/api/t/cambiar-plan',{plan:plan}).then(function(d){
+      if(d && d.init_point){ location.href=d.init_point; return; } // por_alumno con sub previa: reconfirma en MP
       toast(d.modo==="actualizado" ? ("Listo: plan "+nombre+" desde tu siguiente cobro") : ("Plan "+nombre+" elegido: se aplica al activar tu suscripción"));
       refrescarPlan();
     }).catch(function(e){ toast((e&&e.message)||"No se pudo cambiar el plan"); b.disabled=false; });
@@ -3480,6 +3809,19 @@ try {
       if(_mpQ==="ok") toast("Mercado Pago conectado: tus alumnos ya pueden pagar con tarjeta");
       else if(_mpQ==="cancelado") toast("Conexion con Mercado Pago cancelada");
       else toast("No se pudo conectar Mercado Pago. Intenta de nuevo");
+    }, 600);
+    try { history.replaceState(null, "", location.pathname); } catch(e){}
+  }
+} catch(e){}
+
+/* Toast al volver del onboarding de Stripe (?stripe=ok|refresh) */
+try {
+  var _stQ = new URLSearchParams(location.search).get("stripe");
+  if(_stQ){
+    setTimeout(function(){
+      if(_stQ==="ok") toast("Stripe: revisa tu estado de conexión en Configuración");
+      else toast("Retomaste el onboarding de Stripe. Complétalo para activar los cobros");
+      try{ MP_ESTADO_CARGADO=false; renderAjustes(); }catch(e){}
     }, 600);
     try { history.replaceState(null, "", location.pathname); } catch(e){}
   }
@@ -3826,9 +4168,14 @@ window.batutaInit = batutaInit;
   window.addEventListener("resize",function(){ if(veil.classList.contains("on")) pos(); });
   // Auto-lanzar: solo profe en trial que no lo vio, tras cargar el panel.
   window.lanzarTourBienvenida=function(force){
-    PASOS=PASOS_BIENVENIDA; SEEN_ACTUAL=SEEN; armarDots();
-    try{ if(!force && localStorage.getItem(SEEN)) return; }catch(e){}
-    if(typeof TENANT_ESTADO!=="undefined" && TENANT_ESTADO==="activo" && !force) { /* activo puede verlo igual la 1a vez */ }
+    // Clave POR-TENANT: el flag "ya lo vio" es del profe, no del navegador.
+    // Sin esto, un tenant nuevo en un navegador que ya vio el tour (la demo,
+    // otra cuenta, pruebas de dev) nunca lo dispara. TENANT_SLUG lo setea
+    // recargar() (linea 1285) antes de que corra el tour.
+    var slug=(typeof TENANT_SLUG!=="undefined" && TENANT_SLUG) ? TENANT_SLUG : "";
+    var key=slug ? (SEEN+":"+slug) : SEEN;
+    PASOS=PASOS_BIENVENIDA; SEEN_ACTUAL=key; armarDots();
+    try{ if(!force && localStorage.getItem(key)) return; }catch(e){}
     setTimeout(abrir, force?0:1400);
   };
   // Tour de plata de la demo: 1 vez por navegador, solo el brazo "tour" del A/B.
