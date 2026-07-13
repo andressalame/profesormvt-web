@@ -75,13 +75,13 @@ function resolverPk(map, nombre){
    Los precios se POSICIONAN en USD pero se COBRAN en PEN:
    MP Peru rechaza USD ("Cannot operate with currency id USD in MPE", verificado 06-jul-2026).
    Escalera AGRESIVA con tope por alumnos (12-jul-2026, decision de Andres tras el costeo):
-   Profe S/49 (hasta 40 alum) · Academia S/149 (hasta 150) · XL S/299 (hasta 400) · Enterprise 400+ (a medida). */
+   Profe S/49 (alumnos ILIMITADOS) · Academia S/149 (hasta 150) · XL S/299 (hasta 400) · Enterprise 400+ (a medida). */
 const PLANES = { profe: 49, academia: 149, xl: 299 };
 const PLANES_USD = { profe: "14.95", academia: "43.95", xl: "87.95" };
 const PLAN_NOMBRE = { profe: "Profe", academia: "Academia", xl: "Academia XL", por_alumno: "Academia por alumno" };
 /* Tope de alumnos por plan (12-jul-2026): la palanca de valor. Se enforce en admin/data PUT SOLO
    para tenants ya pagando (estado 'activo'); en trial no topa (para que importen su academia entera). */
-const ALUM_CAP = { profe: 40, academia: 150, xl: 400, por_alumno: 1000000 };
+const ALUM_CAP = { profe: 1000000, academia: 150, xl: 400, por_alumno: 1000000 }; // Profe: alumnos ILIMITADOS (13-jul-2026, Andres: se cobra por profesor, no por alumno; gana la comparacion vs My Music Staff)
 const MP_TRIAL_DIAS = 7;
 /* Plan "por alumno activo" (la palanca del millón, 12-jul-2026): el cobro del SaaS a la academia
    = max(piso, alumnos activos) × PRECIO_ALUMNO_PEN. Monto DINÁMICO -> se cobra por /preapproval
@@ -1636,7 +1636,7 @@ function paginaSuscribir(){
     "<p class=\"sub\">S/0 hoy. Tu primer cobro es al terminar tus 7 dias de prueba. Cancela cuando quieras.</p>" +
     "<div id=\"planes\">" +
       "<div class=\"planopt\" data-plan=\"profe\">" +
-        "<div class=\"planopt-t\">Profe</div><div class=\"planopt-p\">US$14.95<span>/mes · se cobra S/49 · hasta 40 alumnos</span></div>" +
+        "<div class=\"planopt-t\">Profe</div><div class=\"planopt-p\">US$14.95<span>/mes · se cobra S/49 · alumnos ilimitados</span></div>" +
       "</div>" +
       "<div class=\"planopt\" data-plan=\"academia\">" +
         "<div class=\"planopt-t\">Academia</div><div class=\"planopt-p\">US$43.95<span>/mes · se cobra S/149 · hasta 150 alumnos</span></div>" +
