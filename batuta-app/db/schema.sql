@@ -339,6 +339,22 @@ CREATE TABLE IF NOT EXISTS certificados_101 (
   fecha    TEXT DEFAULT ''
 );
 
+-- ============ Examen oral con IA (Fase B, 14-jul-2026) ============
+-- Codigos vendidos a S/49.50/persona (cobro por WhatsApp, los genera su/examen-oral).
+-- El resultado se lee del analysis de la conversacion de ElevenLabs.
+CREATE TABLE IF NOT EXISTS examenes_orales (
+  codigo          TEXT PRIMARY KEY,   -- BAT-XXXXXX (sin 0/O/1/I/L)
+  nombre          TEXT NOT NULL,
+  email           TEXT DEFAULT '',
+  estado          TEXT DEFAULT 'pendiente',  -- pendiente | iniciado | aprobado | jalado
+  intentos        INTEGER DEFAULT 0,         -- max 3 (por caidas de llamada)
+  conversation_id TEXT DEFAULT '',
+  nota            INTEGER,                   -- preguntas correctas 0-5
+  resumen         TEXT DEFAULT '',
+  creado          TEXT DEFAULT '',
+  actualizado     TEXT DEFAULT ''
+);
+
 -- ============ Soporte IA: log de conversaciones (14-jul-2026) ============
 -- Cada pregunta real alimenta las guias y el roadmap. En prod nace via lazy CREATE
 -- (ensureSoporteLogSchema); aqui queda para instalaciones frescas.

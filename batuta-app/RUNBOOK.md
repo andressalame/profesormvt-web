@@ -199,6 +199,24 @@ Se agregaron 2 rieles nuevos de cobro alumno->profe, espejando el marketplace de
 - **Revision adversarial (12-jul):** 9 hallazgos, 5 arreglados pre/post-deploy (1 critico: Stripe cobraba 100x en monedas sin decimales; 2 altos de Culqi: respuesta ambigua borraba la compra; webhook Culqi ahora re-verifica; credito de referido en soles no aplica a Stripe; ping de sk_ exige 2xx). Verificado en vivo: panel + /pagar cargan sin errores de consola, tarjetas Stripe/Culqi ocultas mientras el gate esta off, endpoints dan 401 no 500.
 - PENDIENTE de Andres para activar: cargar los secrets de arriba + (Stripe) tener cuenta de plataforma verificada + (Culqi) que el profe tenga afiliacion con RUC.
 
+## Examen oral con IA — Fase B (14-jul-2026, noche) — EN PROD, verificado E2E menos la voz
+- **Que es:** capacitacion con IA S/49.50 POR PERSONA = curso gratis + examen ORAL de voz con "Maria" (agente de ElevenLabs, SOLO VOZ por decision permanente de Andres). 5 preguntas del banco, aprueba con 4, max 15 min, con nota y resumen.
+- **Agente:** agent_2801kxh700qme74sbhmg2mkss8dg (cuenta ElevenLabs de Andres, tier starter). PRIVADO (enable_auth) + daily_limit 20 llamadas + max_duration 900s. Voz: "Maria - Examinadora Batuta" (C96EBIpeVkPIxiJ0E16Y, latam) + eleven_flash_v2_5 + gemini-2.5-flash. Evaluacion en el agente: criterio binario "aprobado" (4 de 5) + nota numerica 0-5 + data collection (nombre, correctas, resumen). Editable con PATCH /v1/convai/agents/<id> o en el dashboard de ElevenLabs.
+- **Secret:** ELEVENLABS_API_KEY en el worker; respaldo en el vault secreto/credenciales/batuta-elevenlabs-api.key (600).
+- **Flujo de venta (v1, cobro manual):** cliente paga S/49.50 por WhatsApp -> generar codigo: curl -X POST https://batuta.lat/app/api/su/examen-oral -H "Authorization: Bearer $(cat .admin-token.local)" -d '{"nombre":"...","email":"..."}' -> la respuesta trae el MENSAJE DE WHATSAPP listo para pegar (codigo BAT-XXXXXX, 3 intentos por caidas).
+- **Examinado:** batuta.lat/aprende/examen -> codigo -> permiso de mic -> llamada (SDK @elevenlabs/client v1.15.0 por CDN, signed URL de /app/api/examen-oral/iniciar; la key JAMAS toca el browser). Al conectar, /vincular guarda la conversation_id, descuenta el intento y te avisa por correo.
+- **Resultados:** curl -s https://batuta.lat/app/api/su/examen-oral -H "Authorization: Bearer ..." — refresca desde ElevenLabs (analysis llega minutos despues de colgar; estados: pendiente|iniciado|aprobado|jalado, con nota y resumen). Transcripts y audio en el dashboard de ElevenLabs.
+- **Smoke test:** simulacion por texto (simulate-conversation) paso: Maria hizo las 5 preguntas, califico 4/5 sin regalar puntos, analysis correcto. La pagina + codigo + signed URL verificados en vivo; la LLAMADA DE VOZ real la prueba Andres (browser del agente no tiene mic). Codigo de prueba vivo: BAT-HSRXGE.
+- **Presupuesto:** starter = 75 min incluidos/mes (~5 examenes); cada examen extra ~S/6 de minutos. Si vende >5/mes, subir plan o aceptar overage (sigue rentable a S/49.50).
+
+## Batuta 101 (batuta.lat/aprende) + certificados (14-jul-2026) — EN PROD, verificado E2E
+- Curso gratis de 4 modulos con quiz (repo del sitio ~/Code/batuta, src/pages/aprende/ + CursoShell.astro). Puntajes en localStorage b101_m1..4 (aprueba con 4/5).
+- Certificado: POST /app/api/aprende/certificado (publico; rate limit 5/h/IP; valida nombre/email/4 quizzes; 1 por email, reintentos devuelven el mismo id; alertaCorreoAndres por cada emision) -> pagina publica batuta.lat/cert/<uuid> (rewrite Vercel a /app/cert/<id>; OG tags para LinkedIn + print CSS). Tabla certificados_101 (lazy + schema.sql).
+- Cuota del soporte por edad del tenant: 60/mes por persona (0-90 dias) -> 30/mes (90+), limiteSoporteAdmin(). PENDIENTE de Andres: precios de los paquetes de mensajes extra (30/60/120) y su flujo de compra.
+- Capacitacion humana subio a S/199.50/sesion (S/499.50 x3, espeja el descuento previo): /servicios del sitio + panel Servicios + prompt del bot. Capacitacion con IA S/49.50 POR PERSONA decidida pero NO publicada (falta construir el examen oral: SOLO VOZ, nunca video — decision permanente de Andres; ElevenLabs Agents, necesita su cuenta).
+- Subdominio aprende.batuta.lat: agregado al proyecto Vercel + redirect por host en vercel.json; FALTA el CNAME en Namecheap (DNS del dominio NO esta en Vercel): aprende -> cname.vercel-dns.com. Lo agrega Andres en su cuenta del registrar.
+- Certificado de prueba emitido en la verificacion: batuta.lat/cert/f9980c9e-7f45-485e-878c-27e1c06a04da (email prueba-cert@batuta.lat).
+
 ## Soporte con IA + modulos apagables (14-jul-2026) — DEPLOYADO y verificado E2E
 - **El widget "?" dejo de ser "Guia del panel" y ahora es SOPORTE** (panel: "Soporte"; portal alumno: "Ayuda").
   Mismo endpoint /app/api/onboarding-ia, evolucionado en sitio:

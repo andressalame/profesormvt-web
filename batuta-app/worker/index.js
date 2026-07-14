@@ -1775,6 +1775,43 @@ const SEC_HEADERS = {
 function htmlResponse(html){
   return new Response(html, { headers: Object.assign({ "content-type": "text/html; charset=utf-8", "cache-control": "no-store" }, SEC_HEADERS) });
 }
+/* ---------- Examen oral con IA (Fase B, 14-jul-2026): capacitacion S/49.50 por persona.
+   Agente ElevenLabs privado (enable_auth), SOLO VOZ (decision permanente de Andres).
+   Flujo: Andres cobra por WhatsApp -> genera codigo (su/examen-oral) -> el examinado entra
+   a batuta.lat/aprende/examen con su codigo -> el worker valida y pide la signed URL a
+   ElevenLabs (la key jamas toca el browser) -> la pagina abre la sesion de voz -> el
+   resultado (aprobado/nota) se lee del analysis de la conversacion via su/examen-oral. ---------- */
+const EXAMEN_AGENT_ID = "agent_2801kxh700qme74sbhmg2mkss8dg";
+const EXAMEN_MAX_INTENTOS = 3; // por si se cae la llamada; el codigo muere al aprobar
+let EXAMEN_SCHEMA_OK = false;
+async function ensureExamenSchema(env){
+  if (EXAMEN_SCHEMA_OK) return;
+  try {
+    await env.DB.prepare(
+      "CREATE TABLE IF NOT EXISTS examenes_orales (codigo TEXT PRIMARY KEY, nombre TEXT NOT NULL, email TEXT DEFAULT '', estado TEXT DEFAULT 'pendiente', intentos INTEGER DEFAULT 0, conversation_id TEXT DEFAULT '', nota INTEGER, resumen TEXT DEFAULT '', creado TEXT DEFAULT '', actualizado TEXT DEFAULT '')"
+    ).run();
+    EXAMEN_SCHEMA_OK = true;
+  } catch (e) {}
+}
+function codigoExamenNuevo(){
+  /* legible por telefono: sin 0/O/1/I/L */
+  const abc = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
+  let s = "";
+  const bytes = crypto.getRandomValues(new Uint8Array(6));
+  for (const b of bytes) s += abc[b % abc.length];
+  return "BAT-" + s;
+}
+async function examenConversacion(env, conversationId){
+  /* Lee una conversacion de ElevenLabs; analysis llega solo cuando status = done. */
+  try {
+    const r = await fetch("https://api.elevenlabs.io/v1/convai/conversations/" + encodeURIComponent(conversationId), {
+      headers: { "xi-api-key": env.ELEVENLABS_API_KEY }
+    });
+    if (!r.ok) return null;
+    return await r.json();
+  } catch (e) { return null; }
+}
+
 /* ---------- Batuta 101 (aprende.batuta.lat): certificado verificable ---------- */
 let CERT_SCHEMA_OK = false;
 async function ensureCertSchema(env){
@@ -2530,6 +2567,51 @@ export default {
       return json({ ok: true, id: certNuevo, url: "https://batuta.lat/cert/" + certNuevo });
     }
 
+    /* Examen oral: iniciar sesion de voz. Publico con CODIGO comprado (S/49.50/persona). */
+    if (path === "/app/api/examen-oral/iniciar" && request.method === "POST"){
+      if (!env.ELEVENLABS_API_KEY) return json({ error: "El examen no esta disponible ahora." }, 503);
+      const ipEx = clientIp(request);
+      if (ipEx && await chatbotPasoTope(env, "exoral:" + ipEx, 10)){
+        return json({ error: "Demasiados intentos desde tu conexion. Espera una hora." }, 429);
+      }
+      const bE = await request.json().catch(() => ({}));
+      const codE = String(bE.codigo || "").trim().toUpperCase();
+      if (!/^BAT-[A-Z2-9]{6}$/.test(codE)) return json({ error: "Ese codigo no tiene el formato correcto (es tipo BAT-XXXXXX)." }, 400);
+      await ensureExamenSchema(env);
+      const ex = await env.DB.prepare("SELECT * FROM examenes_orales WHERE codigo = ?1").bind(codE).first();
+      if (!ex) return json({ error: "Codigo no encontrado. Revisa que este bien escrito o escribenos por WhatsApp." }, 404);
+      if (ex.estado === "aprobado") return json({ error: "Este examen ya fue aprobado. Felicitaciones de nuevo." }, 409);
+      if (Number(ex.intentos) >= EXAMEN_MAX_INTENTOS) return json({ error: "Este codigo ya uso sus " + EXAMEN_MAX_INTENTOS + " intentos. Escribenos por WhatsApp." }, 409);
+      /* signed URL fresca (expira en ~15 min): se pide recien cuando la persona da clic */
+      let signed = null;
+      try {
+        const rS = await fetch("https://api.elevenlabs.io/v1/convai/conversation/get-signed-url?agent_id=" + EXAMEN_AGENT_ID, {
+          headers: { "xi-api-key": env.ELEVENLABS_API_KEY }
+        });
+        if (rS.ok){ const dS = await rS.json().catch(() => null); signed = dS && dS.signed_url; }
+      } catch (e) {}
+      if (!signed) return json({ error: "No pudimos conectar con la examinadora. Intenta en unos minutos." }, 502);
+      /* el intento se descuenta recien en /vincular (cuando la llamada CONECTA de verdad);
+         validar el codigo y no llegar a hablar no quema intentos */
+      return json({ ok: true, signed_url: signed, nombre: ex.nombre, intento: Number(ex.intentos) + 1, max_intentos: EXAMEN_MAX_INTENTOS });
+    }
+
+    /* Examen oral: la pagina vincula la conversacion apenas conecta (para leer el resultado despues). */
+    if (path === "/app/api/examen-oral/vincular" && request.method === "POST"){
+      const bV = await request.json().catch(() => ({}));
+      const codV = String(bV.codigo || "").trim().toUpperCase();
+      const convV = String(bV.conversation_id || "").trim().slice(0, 80);
+      if (!/^BAT-[A-Z2-9]{6}$/.test(codV) || !convV) return json({ error: "Faltan datos." }, 400);
+      await ensureExamenSchema(env);
+      const exV = await env.DB.prepare("SELECT codigo, nombre, estado, intentos FROM examenes_orales WHERE codigo = ?1").bind(codV).first();
+      if (!exV || exV.estado === "aprobado") return json({ error: "Codigo invalido." }, 404);
+      if (Number(exV.intentos) >= EXAMEN_MAX_INTENTOS) return json({ error: "Sin intentos." }, 409);
+      await env.DB.prepare("UPDATE examenes_orales SET conversation_id = ?2, estado = 'iniciado', intentos = intentos + 1, actualizado = ?3 WHERE codigo = ?1")
+        .bind(codV, convV, new Date().toISOString()).run();
+      try { ctx.waitUntil(alertaCorreoAndres(env, "Batuta: examen oral EN CURSO", "Examinado: " + exV.nombre + "\nCodigo: " + codV + "\nConversacion: " + convV + "\nResultado luego en: su/examen-oral")); } catch (e) {}
+      return json({ ok: true });
+    }
+
     if (path.startsWith("/app/r/") && request.method === "GET"){
       const cid = decodeURIComponent(path.slice("/app/r/".length));
       const compraR = /^[0-9a-zA-Z_-]{6,40}$/.test(cid)
@@ -2985,6 +3067,49 @@ export default {
           const r = await migrarProfesores(env);
           return json({ ok: true, resultado: r });
         }
+        /* Examen oral: generar codigo (tras cobrar S/49.50 por WhatsApp).
+           curl -X POST .../app/api/su/examen-oral -H "Authorization: Bearer $ADMIN_TOKEN" -d '{"nombre":"...","email":"..."}' */
+        if (path === "/app/api/su/examen-oral" && request.method === "POST"){
+          await ensureExamenSchema(env);
+          const bSE = await request.json().catch(() => ({}));
+          const nomSE = String(bSE.nombre || "").trim().slice(0, 60);
+          if (nomSE.length < 3) return json({ error: "Manda el nombre del examinado." }, 400);
+          const codSE = codigoExamenNuevo();
+          await env.DB.prepare(
+            "INSERT INTO examenes_orales (codigo, nombre, email, estado, intentos, creado, actualizado) VALUES (?1, ?2, ?3, 'pendiente', 0, ?4, ?4)"
+          ).bind(codSE, nomSE, String(bSE.email || "").trim().toLowerCase().slice(0, 120), new Date().toISOString()).run();
+          return json({ ok: true, codigo: codSE, link: "https://batuta.lat/aprende/examen", mensaje_whatsapp: "Listo! Tu examen oral con IA de Batuta esta activo. Entra a https://batuta.lat/aprende/examen con tu codigo " + codSE + " (necesitas microfono y unos 15 minutos tranquilos). Suerte!" });
+        }
+        /* Examen oral: listar + refrescar resultados desde ElevenLabs (analysis llega al rato de colgar). */
+        if (path === "/app/api/su/examen-oral" && request.method === "GET"){
+          await ensureExamenSchema(env);
+          const { results: exs } = await env.DB.prepare("SELECT * FROM examenes_orales ORDER BY creado DESC LIMIT 100").all();
+          const lista = [];
+          for (const ex of (exs || [])){
+            let fila = Object.assign({}, ex);
+            if (ex.conversation_id && ex.estado !== "aprobado" && ex.estado !== "jalado"){
+              const conv = await examenConversacion(env, ex.conversation_id);
+              if (conv && conv.status === "done"){
+                const an = conv.analysis || {};
+                const ecr = (an.evaluation_criteria_results || {}).aprobado || {};
+                const dcr = an.data_collection_results || {};
+                const notaEx = dcr.preguntas_correctas ? Number(dcr.preguntas_correctas.value) : null;
+                const resumenEx = dcr.resumen_desempeno ? String(dcr.resumen_desempeno.value || "").slice(0, 500) : "";
+                const nuevoEstado = ecr.result === "success" ? "aprobado" : (ecr.result === "failure" ? "jalado" : ex.estado);
+                if (nuevoEstado !== ex.estado || resumenEx){
+                  await env.DB.prepare("UPDATE examenes_orales SET estado = ?2, nota = ?3, resumen = ?4, actualizado = ?5 WHERE codigo = ?1")
+                    .bind(ex.codigo, nuevoEstado, Number.isFinite(notaEx) ? notaEx : null, resumenEx, new Date().toISOString()).run();
+                  fila.estado = nuevoEstado; fila.nota = notaEx; fila.resumen = resumenEx;
+                }
+              } else if (conv && conv.status){
+                fila.estado_llamada = conv.status;
+              }
+            }
+            lista.push(fila);
+          }
+          return json({ examenes: lista });
+        }
+
         // Log del soporte IA: que preguntan de verdad los tenants (alimenta guias y roadmap).
         if (path === "/app/api/su/soporte-log" && request.method === "GET"){
           await ensureSoporteLogSchema(env);
@@ -5143,7 +5268,7 @@ export default {
             "ESTILO (estricto): espanol claro de tu a tu, maximo 3 frases, SIEMPRE con el paso concreto (pestana > boton). Sin em dash. Sin signos de apertura invertidos (nada de ¿ ni ¡). Sin markdown ni asteriscos: el chat es texto plano. Sin saludos ni relleno: directo a la respuesta. Si la pregunta es amplia, da el primer paso y ofrece seguir.\n" +
             "EL PANEL (menu izquierdo): Inicio (resumen + tu link de alumnos) · Personas (Alumnos, Grupos, Profesores, Accesos al portal, Interesados) · Clases (Registro de clases, Agenda, Chat) · Cobros (Pagos, Caja, Reportes) · Material (Para tus alumnos, Tu biblioteca) · Configuracion (Perfil, Ajustes, Servicios, Ideas y errores).\n" +
             "PLANES Y PRECIOS (los unicos vigentes, en soles via Mercado Pago): prueba gratis de 7 dias sin tarjeta. Profe S/49/mes (1 profesor, alumnos ilimitados) · Academia S/149/mes (hasta 5 profesores y 150 alumnos) · Academia XL S/299/mes (hasta 20 profesores y 400 alumnos) · Academia por alumno (pagas por alumno activo, minimo 5; se activa en Perfil > Tu plan y ahi mismo ves tu estimado en vivo). Academias de mas de 400 alumnos: plan Red/Enterprise a medida por WhatsApp. Se activa o cambia de plan en Configuracion > Perfil > 'Tu plan'; sin penalidad, rige desde el siguiente cobro.\n" +
-            "SERVICIOS OPCIONALES (pestana Configuracion > Servicios, se coordinan por WhatsApp): Activacion asistida S/350 una vez (te dejamos todo andando: alumnos, pagos, marca) · Migracion desde Excel u otro software S/200 · Capacitacion del equipo en vivo S/199.50 por sesion o S/499.50 por 3 · Acompanamiento de primer nivel S/129/mes (soporte prioritario + revision mensual de numeros). Ademas hay un curso GRATIS con certificado: Batuta 101 en batuta.lat/aprende (4 modulos con quiz; el certificado se comparte en LinkedIn).\n" +
+            "SERVICIOS OPCIONALES (pestana Configuracion > Servicios, se coordinan por WhatsApp): Activacion asistida S/350 una vez (te dejamos todo andando: alumnos, pagos, marca) · Migracion desde Excel u otro software S/200 · Capacitacion con IA S/49.50 POR PERSONA (curso Batuta 101 + examen ORAL por voz con la examinadora IA en batuta.lat/aprende/examen, 15 min, con nota; se contrata por WhatsApp y se recibe un codigo) · Capacitacion del equipo en vivo (humana) S/199.50 por sesion o S/499.50 por 3 · Acompanamiento de primer nivel S/129/mes (soporte prioritario + revision mensual de numeros). Ademas hay un curso GRATIS con certificado: Batuta 101 en batuta.lat/aprende (4 modulos con quiz; el certificado se comparte en LinkedIn).\n" +
             "COMO SE HACE:\n" +
             "- Nuevo alumno: Personas > Alumnos > '+ Nuevo alumno' (nombre, curso, paquete, horario). Para varios seguidos, boton 'Guardar y agregar otro'.\n" +
             "- Traer tus alumnos de antes (Excel o lista): Personas > Alumnos > 'Importar CSV'. Descargas la plantilla y subes el archivo, o pegas tu lista tal cual (un alumno por linea). Previsualizas antes de confirmar y los repetidos se omiten solos. Para exportar: menu lateral > Datos y respaldo > 'CSV alumnos'.\n" +
