@@ -328,6 +328,17 @@ CREATE TABLE IF NOT EXISTS onboarding_ia_uso (
   mensajes INTEGER DEFAULT 0
 );
 
+-- ============ Batuta 101: certificados del curso (14-jul-2026) ============
+-- Emitidos por /app/api/aprende/certificado; publicos en batuta.lat/cert/<id>.
+-- En prod nace via lazy CREATE (ensureCertSchema); aqui para instalaciones frescas.
+CREATE TABLE IF NOT EXISTS certificados_101 (
+  id       TEXT PRIMARY KEY,     -- UUID inadivinable (es la verificacion)
+  nombre   TEXT NOT NULL,
+  email    TEXT NOT NULL,        -- 1 certificado por email
+  puntajes TEXT DEFAULT '',      -- JSON {m1..m4}
+  fecha    TEXT DEFAULT ''
+);
+
 -- ============ Soporte IA: log de conversaciones (14-jul-2026) ============
 -- Cada pregunta real alimenta las guias y el roadmap. En prod nace via lazy CREATE
 -- (ensureSoporteLogSchema); aqui queda para instalaciones frescas.

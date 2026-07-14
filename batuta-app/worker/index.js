@@ -1174,10 +1174,20 @@ async function llamarClaudeOnboarding(env, system, mensajes, extraSystem){
    - alumno:<cuenta_id>:<mes> = por cuenta + un TECHO por tenant (alumnos:<tenant>:<mes>),
      porque el registro de alumnos es abierto y sin techo se acunarian cuentas frescas
      para bolsas nuevas. */
-const ONBOARDING_LIMITE_ADMIN = 60;            // mensajes/mes por persona del equipo
+const ONBOARDING_LIMITE_ADMIN = 60;            // mensajes/mes por persona del equipo (tenant de 0-90 dias)
+const ONBOARDING_LIMITE_ADMIN_90D = 30;        // idem, tenant con mas de 90 dias (decision Andres 14-jul-2026)
 const ONBOARDING_LIMITE_ALUMNO = 15;           // mensajes/mes por cuenta de alumno
 const ONBOARDING_LIMITE_ALUMNOS_TENANT = 150;  // techo mensual de TODOS los alumnos de un tenant
 function mesActualUTC(){ return new Date().toISOString().slice(0, 7); }
+/* Bolsa del equipo segun edad del tenant: 60/mes los primeros 90 dias, 30/mes despues.
+   Paquetes de mensajes extra de pago (30/60/120) = PENDIENTE: faltan precios de Andres. */
+function limiteSoporteAdmin(tenant){
+  try {
+    const dias = (Date.now() - new Date(tenant.creado).getTime()) / 86400000;
+    if (Number.isFinite(dias) && dias > 90) return ONBOARDING_LIMITE_ADMIN_90D;
+  } catch (e) {}
+  return ONBOARDING_LIMITE_ADMIN;
+}
 function claveSoporteIA(who){
   if (who.admin){
     const pid = (who.profesor && who.profesor.id) ? who.profesor.id : who.tenant.id;
@@ -1764,6 +1774,74 @@ const SEC_HEADERS = {
 };
 function htmlResponse(html){
   return new Response(html, { headers: Object.assign({ "content-type": "text/html; charset=utf-8", "cache-control": "no-store" }, SEC_HEADERS) });
+}
+/* ---------- Batuta 101 (aprende.batuta.lat): certificado verificable ---------- */
+let CERT_SCHEMA_OK = false;
+async function ensureCertSchema(env){
+  if (CERT_SCHEMA_OK) return;
+  try {
+    await env.DB.prepare(
+      "CREATE TABLE IF NOT EXISTS certificados_101 (id TEXT PRIMARY KEY, nombre TEXT NOT NULL, email TEXT NOT NULL, puntajes TEXT DEFAULT '', fecha TEXT DEFAULT '')"
+    ).run();
+    CERT_SCHEMA_OK = true;
+  } catch (e) {}
+}
+/* Certificado publico (imprimible y compartible en LinkedIn). c=null -> no encontrado. */
+function certificadoHTML(c, certUrl){
+  const css =
+    "*{box-sizing:border-box;margin:0;padding:0}" +
+    "body{font-family:'Instrument Sans',system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:#ECE5D8;color:#17130C;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:28px;line-height:1.5}" +
+    ".cert{background:#FFFDF8;max-width:760px;width:100%;border:2px solid #E8A13D;border-radius:14px;padding:56px 48px;text-align:center;box-shadow:0 24px 60px rgba(23,19,12,.12);position:relative}" +
+    ".cert:before{content:'';position:absolute;inset:10px;border:1px solid rgba(232,161,61,.45);border-radius:9px;pointer-events:none}" +
+    ".marca{font-weight:800;letter-spacing:.34em;font-size:15px;color:#A66817}" +
+    ".tipo{margin-top:26px;font-size:11px;letter-spacing:.3em;text-transform:uppercase;color:#6E6656}" +
+    "h1{font-family:Georgia,'Times New Roman',serif;font-weight:700;font-size:clamp(30px,6vw,44px);margin-top:14px;letter-spacing:-.01em}" +
+    ".curso{margin-top:22px;font-size:15.5px;color:#3d372c;max-width:520px;margin-left:auto;margin-right:auto}" +
+    ".curso b{color:#17130C}" +
+    ".fecha{margin-top:24px;font-size:13px;color:#6E6656}" +
+    ".firma{margin-top:30px;display:flex;justify-content:center;gap:60px;flex-wrap:wrap}" +
+    ".firma .f{font-size:12px;color:#6E6656;border-top:1px solid rgba(23,19,12,.25);padding-top:8px;min-width:180px}" +
+    ".verif{margin-top:30px;font-size:11px;color:#8a8271;word-break:break-all}" +
+    ".acciones{margin-top:26px;display:flex;gap:12px;justify-content:center;flex-wrap:wrap}" +
+    ".btn{display:inline-block;padding:11px 20px;border-radius:10px;font-weight:600;font-size:14px;text-decoration:none;cursor:pointer;border:0}" +
+    ".btn-a{background:#E8A13D;color:#17130C}" +
+    ".btn-g{background:transparent;color:#17130C;border:1px solid rgba(23,19,12,.3)}" +
+    ".pie{margin-top:22px;font-size:12.5px;color:#6E6656;text-align:center}" +
+    ".pie a{color:#A66817;font-weight:600}" +
+    "@media print{body{background:#fff;padding:0}.acciones,.pie{display:none}.cert{box-shadow:none;border-radius:0;max-width:none;min-height:96vh;display:flex;flex-direction:column;justify-content:center}}";
+  if (!c){
+    return "<!doctype html><html lang='es'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>Certificado no encontrado · Batuta</title><style>" + css + "</style></head><body><div class='cert'><div class='marca'>BATUTA</div><h1>Certificado no encontrado</h1><p class='curso'>El link no corresponde a un certificado valido. Si crees que es un error, escribenos.</p><div class='acciones'><a class='btn btn-a' href='https://batuta.lat/aprende'>Ir al curso Batuta 101</a></div></div></body></html>";
+  }
+  const fechaBonita = (function(){
+    try { return new Date(c.fecha).toLocaleDateString("es-PE", { timeZone: "America/Lima", day: "numeric", month: "long", year: "numeric" }); }
+    catch (e) { return String(c.fecha || "").slice(0, 10); }
+  })();
+  const liUrl = "https://www.linkedin.com/sharing/share-offsite/?url=" + encodeURIComponent(certUrl);
+  const ogTitulo = "Certificado Batuta 101 · " + esc(c.nombre);
+  return "<!doctype html><html lang='es'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'>" +
+    "<title>" + ogTitulo + "</title>" +
+    "<meta name='description' content='Certificado verificable del curso Batuta 101: gestion de academias y clases con Batuta (batuta.lat).'>" +
+    "<meta property='og:title' content='" + ogTitulo + "'>" +
+    "<meta property='og:description' content='Completo Batuta 101, el curso oficial de Batuta: alumnos, agenda, cobros y equipo en un solo sistema.'>" +
+    "<meta property='og:type' content='website'>" +
+    "<meta property='og:url' content='" + esc(certUrl) + "'>" +
+    "<meta property='og:image' content='https://batuta.lat/og-image.png'>" +
+    "<style>" + css + "</style></head><body>" +
+    "<div class='cert'>" +
+    "<div class='marca'>BATUTA</div>" +
+    "<div class='tipo'>Certificado de finalizacion</div>" +
+    "<h1>" + esc(c.nombre) + "</h1>" +
+    "<p class='curso'>Completo y aprobo <b>Batuta 101</b>, el curso oficial de gestion de academias y clases con Batuta: alumnos, agenda, cobros, equipo y portal del alumno.</p>" +
+    "<div class='fecha'>Emitido el " + esc(fechaBonita) + " · batuta.lat</div>" +
+    "<div class='firma'><div class='f'>Batuta · batuta.lat</div><div class='f'>Curso Batuta 101 · 4 modulos aprobados</div></div>" +
+    "<div class='verif'>Certificado verificable: " + esc(certUrl) + "</div>" +
+    "<div class='acciones'>" +
+    "<a class='btn btn-a' href='" + liUrl + "' target='_blank' rel='noopener'>Compartir en LinkedIn</a>" +
+    "<button class='btn btn-g' onclick='window.print()'>Imprimir o guardar PDF</button>" +
+    "</div>" +
+    "</div>" +
+    "<p class='pie'>Este certificado acredita el curso, no es un titulo oficial. Quieres tu propia academia en Batuta? <a href='https://batuta.lat/app/registro?f=cert'>Pruebala gratis 7 dias</a>.</p>" +
+    "</body></html>";
 }
 /* Recibo de pago con la marca de la academia (universal, no fiscal). d=null -> no disponible. */
 function reciboHTML(d){
@@ -2411,6 +2489,47 @@ export default {
        sirve en CUALQUIER pais (no es documento tributario). El id de la compra es un UUID
        aleatorio (inadivinable); la pagina es publica para que el profe se la mande al alumno.
        En Peru la boleta fiscal SUNAT es aparte (Nubefact). */
+    /* Certificado Batuta 101 (publico, id UUID inadivinable). batuta.lat/cert/<id> llega
+       aqui via rewrite de Vercel como /app/cert/<id>. */
+    if (path.startsWith("/app/cert/") && request.method === "GET"){
+      const certId = decodeURIComponent(path.slice("/app/cert/".length));
+      let certRow = null;
+      if (/^[0-9a-f-]{36}$/.test(certId)){
+        await ensureCertSchema(env);
+        certRow = await env.DB.prepare("SELECT id, nombre, fecha FROM certificados_101 WHERE id = ?1").bind(certId).first().catch(() => null);
+      }
+      return htmlResponse(certificadoHTML(certRow, "https://batuta.lat/cert/" + certId));
+    }
+
+    /* Emitir certificado Batuta 101: publico (el curso vive en batuta.lat/aprende, sin login).
+       Guardas: rate limit por IP, nombre/email validados, 4 modulos aprobados (>=4/5 c/u),
+       y UN certificado por email (reintentos devuelven el mismo id). */
+    if (path === "/app/api/aprende/certificado" && request.method === "POST"){
+      const ipCert = clientIp(request);
+      if (ipCert && await chatbotPasoTope(env, "cert:" + ipCert, 5)){
+        return json({ error: "Demasiados intentos desde tu conexion. Intenta en una hora." }, 429);
+      }
+      const bC = await request.json().catch(() => ({}));
+      const nomC = String(bC.nombre || "").trim().replace(/\s+/g, " ").slice(0, 60);
+      const emC = String(bC.email || "").trim().toLowerCase().slice(0, 120);
+      if (nomC.length < 3) return json({ error: "Escribe tu nombre completo (como quieres que salga en el certificado)." }, 400);
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emC)) return json({ error: "Escribe un correo valido." }, 400);
+      const pts = (bC.puntajes && typeof bC.puntajes === "object") ? bC.puntajes : {};
+      const mods = ["m1", "m2", "m3", "m4"];
+      const aprobado = mods.every(m => Number(pts[m]) >= 4);
+      if (!aprobado) return json({ error: "Te falta aprobar los 4 modulos (minimo 4 de 5 en cada quiz)." }, 400);
+      await ensureCertSchema(env);
+      const previo = await env.DB.prepare("SELECT id FROM certificados_101 WHERE email = ?1").bind(emC).first().catch(() => null);
+      if (previo) return json({ ok: true, id: previo.id, url: "https://batuta.lat/cert/" + previo.id, repetido: true });
+      const certNuevo = crypto.randomUUID();
+      await env.DB.prepare(
+        "INSERT INTO certificados_101 (id, nombre, email, puntajes, fecha) VALUES (?1, ?2, ?3, ?4, ?5)"
+      ).bind(certNuevo, nomC, emC, JSON.stringify({ m1: Number(pts.m1), m2: Number(pts.m2), m3: Number(pts.m3), m4: Number(pts.m4) }), new Date().toISOString()).run();
+      /* aviso a Andres: un lead calificado termino el curso (correo degrada mudo sin Resend) */
+      try { ctx.waitUntil(alertaCorreoAndres(env, "Batuta 101: certificado emitido", "Nombre: " + nomC + "\nEmail: " + emC + "\nCert: https://batuta.lat/cert/" + certNuevo)); } catch (e) {}
+      return json({ ok: true, id: certNuevo, url: "https://batuta.lat/cert/" + certNuevo });
+    }
+
     if (path.startsWith("/app/r/") && request.method === "GET"){
       const cid = decodeURIComponent(path.slice("/app/r/".length));
       const compraR = /^[0-9a-zA-Z_-]{6,40}$/.test(cid)
@@ -4973,7 +5092,7 @@ export default {
         const who = await authChat(env, request);
         if (!who) return json({ error: "Sesion expirada" }, 401);
         const clave = claveSoporteIA(who);
-        const limite = who.admin ? ONBOARDING_LIMITE_ADMIN : ONBOARDING_LIMITE_ALUMNO;
+        const limite = who.admin ? limiteSoporteAdmin(who.tenant) : ONBOARDING_LIMITE_ALUMNO;
         const row = await env.DB.prepare("SELECT mensajes FROM onboarding_ia_uso WHERE clave = ?1").bind(clave).first();
         const usados = row ? Number(row.mensajes) : 0;
         return json({ limite, usados, restantes: Math.max(0, limite - usados) });
@@ -5004,7 +5123,7 @@ export default {
           }
         }
         const clave = claveSoporteIA(who);
-        const limite = who.admin ? ONBOARDING_LIMITE_ADMIN : ONBOARDING_LIMITE_ALUMNO;
+        const limite = who.admin ? limiteSoporteAdmin(who.tenant) : ONBOARDING_LIMITE_ALUMNO;
         const cont = await onboardingContar(env, clave, limite);
         if (cont.tope){
           return json({ error: who.admin
@@ -5024,7 +5143,7 @@ export default {
             "ESTILO (estricto): espanol claro de tu a tu, maximo 3 frases, SIEMPRE con el paso concreto (pestana > boton). Sin em dash. Sin signos de apertura invertidos (nada de ¿ ni ¡). Sin markdown ni asteriscos: el chat es texto plano. Sin saludos ni relleno: directo a la respuesta. Si la pregunta es amplia, da el primer paso y ofrece seguir.\n" +
             "EL PANEL (menu izquierdo): Inicio (resumen + tu link de alumnos) · Personas (Alumnos, Grupos, Profesores, Accesos al portal, Interesados) · Clases (Registro de clases, Agenda, Chat) · Cobros (Pagos, Caja, Reportes) · Material (Para tus alumnos, Tu biblioteca) · Configuracion (Perfil, Ajustes, Servicios, Ideas y errores).\n" +
             "PLANES Y PRECIOS (los unicos vigentes, en soles via Mercado Pago): prueba gratis de 7 dias sin tarjeta. Profe S/49/mes (1 profesor, alumnos ilimitados) · Academia S/149/mes (hasta 5 profesores y 150 alumnos) · Academia XL S/299/mes (hasta 20 profesores y 400 alumnos) · Academia por alumno (pagas por alumno activo, minimo 5; se activa en Perfil > Tu plan y ahi mismo ves tu estimado en vivo). Academias de mas de 400 alumnos: plan Red/Enterprise a medida por WhatsApp. Se activa o cambia de plan en Configuracion > Perfil > 'Tu plan'; sin penalidad, rige desde el siguiente cobro.\n" +
-            "SERVICIOS OPCIONALES (pestana Configuracion > Servicios, se coordinan por WhatsApp): Activacion asistida S/350 una vez (te dejamos todo andando: alumnos, pagos, marca) · Migracion desde Excel u otro software S/200 · Capacitacion del equipo en vivo S/180 por sesion o S/450 por 3 · Acompanamiento de primer nivel S/129/mes (soporte prioritario + revision mensual de numeros).\n" +
+            "SERVICIOS OPCIONALES (pestana Configuracion > Servicios, se coordinan por WhatsApp): Activacion asistida S/350 una vez (te dejamos todo andando: alumnos, pagos, marca) · Migracion desde Excel u otro software S/200 · Capacitacion del equipo en vivo S/199.50 por sesion o S/499.50 por 3 · Acompanamiento de primer nivel S/129/mes (soporte prioritario + revision mensual de numeros). Ademas hay un curso GRATIS con certificado: Batuta 101 en batuta.lat/aprende (4 modulos con quiz; el certificado se comparte en LinkedIn).\n" +
             "COMO SE HACE:\n" +
             "- Nuevo alumno: Personas > Alumnos > '+ Nuevo alumno' (nombre, curso, paquete, horario). Para varios seguidos, boton 'Guardar y agregar otro'.\n" +
             "- Traer tus alumnos de antes (Excel o lista): Personas > Alumnos > 'Importar CSV'. Descargas la plantilla y subes el archivo, o pegas tu lista tal cual (un alumno por linea). Previsualizas antes de confirmar y los repetidos se omiten solos. Para exportar: menu lateral > Datos y respaldo > 'CSV alumnos'.\n" +
