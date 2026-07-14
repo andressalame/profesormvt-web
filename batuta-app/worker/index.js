@@ -1781,8 +1781,19 @@ function htmlResponse(html){
    a batuta.lat/aprende/examen con su codigo -> el worker valida y pide la signed URL a
    ElevenLabs (la key jamas toca el browser) -> la pagina abre la sesion de voz -> el
    resultado (aprobado/nota) se lee del analysis de la conversacion via su/examen-oral. ---------- */
-const EXAMEN_AGENT_ID = "agent_2801kxh700qme74sbhmg2mkss8dg";
-const EXAMEN_MAX_INTENTOS = 3; // por si se cae la llamada; el codigo muere al aprobar
+/* v2 (mismo dia, pedido de Andres): ya no es UN examen sino la CAPACITACION completa:
+   4 sesiones de voz (una por seccion del SaaS) donde Maria ENSENA con laminas en pantalla
+   (client tool mostrar_lamina), abre pausa de dudas y toma un mini examen de 3 preguntas.
+   El certificado (tipo capacitacion-ia) sale SOLO al aprobar las 4 secciones. */
+const AGENTES_CAPACITACION = {
+  1: "agent_1801kxh8p4mkfjc9kd2xb6c9r879", // Tu academia, en marcha
+  2: "agent_6201kxh8p633f6k8yc071j3yfnnb", // Agenda y clases
+  3: "agent_8401kxh8p7qjeqjb5ne85w1nb3br", // Cobros
+  4: "agent_6501kxh8p96vf79bxenmdbe4k25p"  // Equipo, ventas y portal del alumno
+};
+const SECCIONES_CAPACITACION = { 1: "Tu academia, en marcha", 2: "Agenda y clases", 3: "Cobros", 4: "Equipo, ventas y portal del alumno" };
+const EXAMEN_AGENT_ID_V1 = "agent_2801kxh700qme74sbhmg2mkss8dg"; // v1 (solo examen), ya no se usa
+const EXAMEN_MAX_INTENTOS = 3; // por seccion, por si se cae la llamada
 let EXAMEN_SCHEMA_OK = false;
 async function ensureExamenSchema(env){
   if (EXAMEN_SCHEMA_OK) return;
@@ -1790,8 +1801,57 @@ async function ensureExamenSchema(env){
     await env.DB.prepare(
       "CREATE TABLE IF NOT EXISTS examenes_orales (codigo TEXT PRIMARY KEY, nombre TEXT NOT NULL, email TEXT DEFAULT '', estado TEXT DEFAULT 'pendiente', intentos INTEGER DEFAULT 0, conversation_id TEXT DEFAULT '', nota INTEGER, resumen TEXT DEFAULT '', creado TEXT DEFAULT '', actualizado TEXT DEFAULT '')"
     ).run();
+    try { await env.DB.prepare("ALTER TABLE examenes_orales ADD COLUMN cert_id TEXT DEFAULT ''").run(); } catch (e) {}
+    await env.DB.prepare(
+      "CREATE TABLE IF NOT EXISTS examen_secciones (codigo TEXT NOT NULL, seccion INTEGER NOT NULL, conversation_id TEXT DEFAULT '', intentos INTEGER DEFAULT 0, estado TEXT DEFAULT 'pendiente', nota INTEGER, resumen TEXT DEFAULT '', dudas TEXT DEFAULT '', actualizado TEXT DEFAULT '', PRIMARY KEY (codigo, seccion))"
+    ).run();
     EXAMEN_SCHEMA_OK = true;
   } catch (e) {}
+}
+/* Refresca desde ElevenLabs las secciones con llamada pendiente de resultado, y si las 4
+   quedan aprobadas emite el certificado (tipo capacitacion-ia) UNA sola vez. */
+async function refrescarCapacitacion(env, ex){
+  await ensureExamenSchema(env);
+  const { results: filas } = await env.DB.prepare("SELECT * FROM examen_secciones WHERE codigo = ?1").bind(ex.codigo).all();
+  const porSec = {};
+  for (const f of (filas || [])) porSec[f.seccion] = f;
+  const secciones = [];
+  for (let n = 1; n <= 4; n++){
+    let f = porSec[n] || { codigo: ex.codigo, seccion: n, estado: "pendiente", intentos: 0, nota: null, resumen: "", dudas: "" };
+    if (f.conversation_id && f.estado !== "aprobado" && f.estado !== "jalado"){
+      const conv = await examenConversacion(env, f.conversation_id);
+      if (conv && conv.status === "done"){
+        const an = conv.analysis || {};
+        const ecr = (an.evaluation_criteria_results || {}).aprobado || {};
+        const dcr = an.data_collection_results || {};
+        const notaS = dcr.preguntas_correctas ? Number(dcr.preguntas_correctas.value) : null;
+        const resS = dcr.resumen_desempeno ? String(dcr.resumen_desempeno.value || "").slice(0, 500) : "";
+        const dudasS = dcr.dudas_del_alumno ? String(dcr.dudas_del_alumno.value || "").slice(0, 500) : "";
+        const nuevo = ecr.result === "success" ? "aprobado" : (ecr.result === "failure" ? "jalado" : f.estado);
+        await env.DB.prepare(
+          "UPDATE examen_secciones SET estado = ?3, nota = ?4, resumen = ?5, dudas = ?6, actualizado = ?7 WHERE codigo = ?1 AND seccion = ?2"
+        ).bind(ex.codigo, n, nuevo, Number.isFinite(notaS) ? notaS : null, resS, dudasS, new Date().toISOString()).run();
+        f = Object.assign({}, f, { estado: nuevo, nota: notaS, resumen: resS, dudas: dudasS });
+      } else if (conv && conv.status){
+        f = Object.assign({}, f, { procesando: true });
+      }
+    }
+    secciones.push({ seccion: n, nombre: SECCIONES_CAPACITACION[n], estado: f.estado, intentos: Number(f.intentos) || 0, nota: f.nota, resumen: f.resumen || "", dudas: f.dudas || "", procesando: !!f.procesando });
+  }
+  /* certificado: SOLO con las 4 aprobadas (pedido explicito de Andres) */
+  let certUrl = ex.cert_id ? "https://batuta.lat/cert/" + ex.cert_id : "";
+  if (!certUrl && secciones.every(s => s.estado === "aprobado")){
+    await ensureCertSchema(env);
+    const certCap = crypto.randomUUID();
+    await env.DB.prepare(
+      "INSERT INTO certificados_101 (id, nombre, email, puntajes, tipo, fecha) VALUES (?1, ?2, ?3, ?4, 'capacitacion-ia', ?5)"
+    ).bind(certCap, ex.nombre, ex.email || "", JSON.stringify(secciones.map(s => ({ s: s.seccion, nota: s.nota }))), new Date().toISOString()).run();
+    await env.DB.prepare("UPDATE examenes_orales SET cert_id = ?2, estado = 'aprobado', actualizado = ?3 WHERE codigo = ?1")
+      .bind(ex.codigo, certCap, new Date().toISOString()).run();
+    certUrl = "https://batuta.lat/cert/" + certCap;
+    try { await alertaCorreoAndres(env, "Batuta: CAPACITACION CON IA APROBADA", "Examinado: " + ex.nombre + "\nCodigo: " + ex.codigo + "\nCertificado: " + certUrl); } catch (e) {}
+  }
+  return { secciones, cert_url: certUrl };
 }
 function codigoExamenNuevo(){
   /* legible por telefono: sin 0/O/1/I/L */
@@ -1818,8 +1878,10 @@ async function ensureCertSchema(env){
   if (CERT_SCHEMA_OK) return;
   try {
     await env.DB.prepare(
-      "CREATE TABLE IF NOT EXISTS certificados_101 (id TEXT PRIMARY KEY, nombre TEXT NOT NULL, email TEXT NOT NULL, puntajes TEXT DEFAULT '', fecha TEXT DEFAULT '')"
+      "CREATE TABLE IF NOT EXISTS certificados_101 (id TEXT PRIMARY KEY, nombre TEXT NOT NULL, email TEXT NOT NULL, puntajes TEXT DEFAULT '', tipo TEXT DEFAULT 'curso', fecha TEXT DEFAULT '')"
     ).run();
+    /* tabla nacida antes de la columna tipo (curso | capacitacion-ia): ALTER idempotente */
+    try { await env.DB.prepare("ALTER TABLE certificados_101 ADD COLUMN tipo TEXT DEFAULT 'curso'").run(); } catch (e) {}
     CERT_SCHEMA_OK = true;
   } catch (e) {}
 }
@@ -1853,8 +1915,14 @@ function certificadoHTML(c, certUrl){
     try { return new Date(c.fecha).toLocaleDateString("es-PE", { timeZone: "America/Lima", day: "numeric", month: "long", year: "numeric" }); }
     catch (e) { return String(c.fecha || "").slice(0, 10); }
   })();
+  const esCap = c.tipo === "capacitacion-ia";
+  const nombreCurso = esCap ? "la Capacitación con IA de Batuta" : "Batuta 101";
+  const detalleCurso = esCap
+    ? "Completo y aprobo <b>la Capacitacion con IA de Batuta</b>: las 4 secciones del sistema (academia, agenda y clases, cobros, y equipo y portal del alumno), cada una con examen oral aprobado ante la examinadora IA."
+    : "Completo y aprobo <b>Batuta 101</b>, el curso oficial de gestion de academias y clases con Batuta: alumnos, agenda, cobros, equipo y portal del alumno.";
+  const pieCurso = esCap ? "Capacitacion con IA · 4 examenes orales aprobados" : "Curso Batuta 101 · 4 modulos aprobados";
   const liUrl = "https://www.linkedin.com/sharing/share-offsite/?url=" + encodeURIComponent(certUrl);
-  const ogTitulo = "Certificado Batuta 101 · " + esc(c.nombre);
+  const ogTitulo = (esCap ? "Certificado de Capacitacion con IA · " : "Certificado Batuta 101 · ") + esc(c.nombre);
   return "<!doctype html><html lang='es'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'>" +
     "<title>" + ogTitulo + "</title>" +
     "<meta name='description' content='Certificado verificable del curso Batuta 101: gestion de academias y clases con Batuta (batuta.lat).'>" +
@@ -1866,11 +1934,11 @@ function certificadoHTML(c, certUrl){
     "<style>" + css + "</style></head><body>" +
     "<div class='cert'>" +
     "<div class='marca'>BATUTA</div>" +
-    "<div class='tipo'>Certificado de finalizacion</div>" +
+    "<div class='tipo'>" + (esCap ? "Certificado de capacitacion con IA" : "Certificado de finalizacion") + "</div>" +
     "<h1>" + esc(c.nombre) + "</h1>" +
-    "<p class='curso'>Completo y aprobo <b>Batuta 101</b>, el curso oficial de gestion de academias y clases con Batuta: alumnos, agenda, cobros, equipo y portal del alumno.</p>" +
+    "<p class='curso'>" + detalleCurso + "</p>" +
     "<div class='fecha'>Emitido el " + esc(fechaBonita) + " · batuta.lat</div>" +
-    "<div class='firma'><div class='f'>Batuta · batuta.lat</div><div class='f'>Curso Batuta 101 · 4 modulos aprobados</div></div>" +
+    "<div class='firma'><div class='f'>Batuta · batuta.lat</div><div class='f'>" + pieCurso + "</div></div>" +
     "<div class='verif'>Certificado verificable: " + esc(certUrl) + "</div>" +
     "<div class='acciones'>" +
     "<a class='btn btn-a' href='" + liUrl + "' target='_blank' rel='noopener'>Compartir en LinkedIn</a>" +
@@ -2533,7 +2601,7 @@ export default {
       let certRow = null;
       if (/^[0-9a-f-]{36}$/.test(certId)){
         await ensureCertSchema(env);
-        certRow = await env.DB.prepare("SELECT id, nombre, fecha FROM certificados_101 WHERE id = ?1").bind(certId).first().catch(() => null);
+        certRow = await env.DB.prepare("SELECT id, nombre, tipo, fecha FROM certificados_101 WHERE id = ?1").bind(certId).first().catch(() => null);
       }
       return htmlResponse(certificadoHTML(certRow, "https://batuta.lat/cert/" + certId));
     }
@@ -2556,60 +2624,86 @@ export default {
       const aprobado = mods.every(m => Number(pts[m]) >= 4);
       if (!aprobado) return json({ error: "Te falta aprobar los 4 modulos (minimo 4 de 5 en cada quiz)." }, 400);
       await ensureCertSchema(env);
-      const previo = await env.DB.prepare("SELECT id FROM certificados_101 WHERE email = ?1").bind(emC).first().catch(() => null);
+      /* dedup por email Y tipo: el cert del curso gratis no bloquea el de la capacitacion pagada */
+      const previo = await env.DB.prepare("SELECT id FROM certificados_101 WHERE email = ?1 AND tipo = 'curso'").bind(emC).first().catch(() => null);
       if (previo) return json({ ok: true, id: previo.id, url: "https://batuta.lat/cert/" + previo.id, repetido: true });
       const certNuevo = crypto.randomUUID();
       await env.DB.prepare(
-        "INSERT INTO certificados_101 (id, nombre, email, puntajes, fecha) VALUES (?1, ?2, ?3, ?4, ?5)"
+        "INSERT INTO certificados_101 (id, nombre, email, puntajes, tipo, fecha) VALUES (?1, ?2, ?3, ?4, 'curso', ?5)"
       ).bind(certNuevo, nomC, emC, JSON.stringify({ m1: Number(pts.m1), m2: Number(pts.m2), m3: Number(pts.m3), m4: Number(pts.m4) }), new Date().toISOString()).run();
       /* aviso a Andres: un lead calificado termino el curso (correo degrada mudo sin Resend) */
       try { ctx.waitUntil(alertaCorreoAndres(env, "Batuta 101: certificado emitido", "Nombre: " + nomC + "\nEmail: " + emC + "\nCert: https://batuta.lat/cert/" + certNuevo)); } catch (e) {}
       return json({ ok: true, id: certNuevo, url: "https://batuta.lat/cert/" + certNuevo });
     }
 
-    /* Examen oral: iniciar sesion de voz. Publico con CODIGO comprado (S/49.50/persona). */
+    /* Capacitacion con IA: iniciar la sesion de voz de UNA seccion (codigo comprado, S/49.50/persona). */
     if (path === "/app/api/examen-oral/iniciar" && request.method === "POST"){
-      if (!env.ELEVENLABS_API_KEY) return json({ error: "El examen no esta disponible ahora." }, 503);
+      if (!env.ELEVENLABS_API_KEY) return json({ error: "La capacitacion no esta disponible ahora." }, 503);
       const ipEx = clientIp(request);
-      if (ipEx && await chatbotPasoTope(env, "exoral:" + ipEx, 10)){
+      if (ipEx && await chatbotPasoTope(env, "exoral:" + ipEx, 15)){
         return json({ error: "Demasiados intentos desde tu conexion. Espera una hora." }, 429);
       }
       const bE = await request.json().catch(() => ({}));
       const codE = String(bE.codigo || "").trim().toUpperCase();
+      const secE = parseInt(bE.seccion, 10);
       if (!/^BAT-[A-Z2-9]{6}$/.test(codE)) return json({ error: "Ese codigo no tiene el formato correcto (es tipo BAT-XXXXXX)." }, 400);
+      if (!AGENTES_CAPACITACION[secE]) return json({ error: "Seccion invalida." }, 400);
       await ensureExamenSchema(env);
       const ex = await env.DB.prepare("SELECT * FROM examenes_orales WHERE codigo = ?1").bind(codE).first();
       if (!ex) return json({ error: "Codigo no encontrado. Revisa que este bien escrito o escribenos por WhatsApp." }, 404);
-      if (ex.estado === "aprobado") return json({ error: "Este examen ya fue aprobado. Felicitaciones de nuevo." }, 409);
-      if (Number(ex.intentos) >= EXAMEN_MAX_INTENTOS) return json({ error: "Este codigo ya uso sus " + EXAMEN_MAX_INTENTOS + " intentos. Escribenos por WhatsApp." }, 409);
+      const filaS = await env.DB.prepare("SELECT * FROM examen_secciones WHERE codigo = ?1 AND seccion = ?2").bind(codE, secE).first();
+      if (filaS && filaS.estado === "aprobado") return json({ error: "Esta seccion ya esta aprobada. Sigue con la que te falta." }, 409);
+      if (filaS && Number(filaS.intentos) >= EXAMEN_MAX_INTENTOS) return json({ error: "Esta seccion ya uso sus " + EXAMEN_MAX_INTENTOS + " intentos. Escribenos por WhatsApp." }, 409);
       /* signed URL fresca (expira en ~15 min): se pide recien cuando la persona da clic */
       let signed = null;
       try {
-        const rS = await fetch("https://api.elevenlabs.io/v1/convai/conversation/get-signed-url?agent_id=" + EXAMEN_AGENT_ID, {
+        const rS = await fetch("https://api.elevenlabs.io/v1/convai/conversation/get-signed-url?agent_id=" + AGENTES_CAPACITACION[secE], {
           headers: { "xi-api-key": env.ELEVENLABS_API_KEY }
         });
         if (rS.ok){ const dS = await rS.json().catch(() => null); signed = dS && dS.signed_url; }
       } catch (e) {}
-      if (!signed) return json({ error: "No pudimos conectar con la examinadora. Intenta en unos minutos." }, 502);
-      /* el intento se descuenta recien en /vincular (cuando la llamada CONECTA de verdad);
-         validar el codigo y no llegar a hablar no quema intentos */
-      return json({ ok: true, signed_url: signed, nombre: ex.nombre, intento: Number(ex.intentos) + 1, max_intentos: EXAMEN_MAX_INTENTOS });
+      if (!signed) return json({ error: "No pudimos conectar con Maria. Intenta en unos minutos." }, 502);
+      /* el intento se descuenta recien en /vincular (cuando la llamada CONECTA de verdad) */
+      return json({ ok: true, signed_url: signed, nombre: ex.nombre, seccion: secE, intento: (filaS ? Number(filaS.intentos) : 0) + 1, max_intentos: EXAMEN_MAX_INTENTOS });
     }
 
-    /* Examen oral: la pagina vincula la conversacion apenas conecta (para leer el resultado despues). */
+    /* Capacitacion con IA: la pagina vincula la conversacion de la seccion apenas conecta. */
     if (path === "/app/api/examen-oral/vincular" && request.method === "POST"){
       const bV = await request.json().catch(() => ({}));
       const codV = String(bV.codigo || "").trim().toUpperCase();
+      const secV = parseInt(bV.seccion, 10);
       const convV = String(bV.conversation_id || "").trim().slice(0, 80);
-      if (!/^BAT-[A-Z2-9]{6}$/.test(codV) || !convV) return json({ error: "Faltan datos." }, 400);
+      if (!/^BAT-[A-Z2-9]{6}$/.test(codV) || !AGENTES_CAPACITACION[secV] || !convV) return json({ error: "Faltan datos." }, 400);
       await ensureExamenSchema(env);
-      const exV = await env.DB.prepare("SELECT codigo, nombre, estado, intentos FROM examenes_orales WHERE codigo = ?1").bind(codV).first();
-      if (!exV || exV.estado === "aprobado") return json({ error: "Codigo invalido." }, 404);
-      if (Number(exV.intentos) >= EXAMEN_MAX_INTENTOS) return json({ error: "Sin intentos." }, 409);
-      await env.DB.prepare("UPDATE examenes_orales SET conversation_id = ?2, estado = 'iniciado', intentos = intentos + 1, actualizado = ?3 WHERE codigo = ?1")
-        .bind(codV, convV, new Date().toISOString()).run();
-      try { ctx.waitUntil(alertaCorreoAndres(env, "Batuta: examen oral EN CURSO", "Examinado: " + exV.nombre + "\nCodigo: " + codV + "\nConversacion: " + convV + "\nResultado luego en: su/examen-oral")); } catch (e) {}
+      const exV = await env.DB.prepare("SELECT codigo, nombre FROM examenes_orales WHERE codigo = ?1").bind(codV).first();
+      if (!exV) return json({ error: "Codigo invalido." }, 404);
+      const filaV = await env.DB.prepare("SELECT estado, intentos FROM examen_secciones WHERE codigo = ?1 AND seccion = ?2").bind(codV, secV).first();
+      if (filaV && filaV.estado === "aprobado") return json({ error: "Seccion ya aprobada." }, 409);
+      if (filaV && Number(filaV.intentos) >= EXAMEN_MAX_INTENTOS) return json({ error: "Sin intentos." }, 409);
+      await env.DB.prepare(
+        "INSERT INTO examen_secciones (codigo, seccion, conversation_id, intentos, estado, actualizado) VALUES (?1, ?2, ?3, 1, 'iniciado', ?4) " +
+        "ON CONFLICT(codigo, seccion) DO UPDATE SET conversation_id = ?3, intentos = intentos + 1, estado = 'iniciado', actualizado = ?4"
+      ).bind(codV, secV, convV, new Date().toISOString()).run();
+      await env.DB.prepare("UPDATE examenes_orales SET estado = 'iniciado', actualizado = ?2 WHERE codigo = ?1 AND estado = 'pendiente'")
+        .bind(codV, new Date().toISOString()).run();
+      try { ctx.waitUntil(alertaCorreoAndres(env, "Batuta: capacitacion IA en curso (S" + secV + ")", "Examinado: " + exV.nombre + "\nCodigo: " + codV + "\nSeccion: " + secV + " (" + SECCIONES_CAPACITACION[secV] + ")\nConversacion: " + convV)); } catch (e) {}
       return json({ ok: true });
+    }
+
+    /* Capacitacion con IA: progreso por codigo (refresca resultados y emite el certificado al aprobar las 4). */
+    if (path === "/app/api/examen-oral/progreso" && request.method === "POST"){
+      const bP = await request.json().catch(() => ({}));
+      const codP = String(bP.codigo || "").trim().toUpperCase();
+      if (!/^BAT-[A-Z2-9]{6}$/.test(codP)) return json({ error: "Codigo invalido." }, 400);
+      const ipP = clientIp(request);
+      if (ipP && await chatbotPasoTope(env, "exprog:" + ipP, 60)){
+        return json({ error: "Demasiadas consultas. Espera un momento." }, 429);
+      }
+      await ensureExamenSchema(env);
+      const exP = await env.DB.prepare("SELECT * FROM examenes_orales WHERE codigo = ?1").bind(codP).first();
+      if (!exP) return json({ error: "Codigo no encontrado." }, 404);
+      const prog = await refrescarCapacitacion(env, exP);
+      return json({ ok: true, nombre: exP.nombre, secciones: prog.secciones, cert_url: prog.cert_url });
     }
 
     if (path.startsWith("/app/r/") && request.method === "GET"){
@@ -3078,34 +3172,16 @@ export default {
           await env.DB.prepare(
             "INSERT INTO examenes_orales (codigo, nombre, email, estado, intentos, creado, actualizado) VALUES (?1, ?2, ?3, 'pendiente', 0, ?4, ?4)"
           ).bind(codSE, nomSE, String(bSE.email || "").trim().toLowerCase().slice(0, 120), new Date().toISOString()).run();
-          return json({ ok: true, codigo: codSE, link: "https://batuta.lat/aprende/examen", mensaje_whatsapp: "Listo! Tu examen oral con IA de Batuta esta activo. Entra a https://batuta.lat/aprende/examen con tu codigo " + codSE + " (necesitas microfono y unos 15 minutos tranquilos). Suerte!" });
+          return json({ ok: true, codigo: codSE, link: "https://batuta.lat/aprende/examen", mensaje_whatsapp: "Listo! Tu Capacitacion con IA de Batuta esta activa. Entra a https://batuta.lat/aprende/examen con tu codigo " + codSE + ": son 4 sesiones de voz con Maria (una por seccion, ~10 min cada una, con laminas en pantalla y mini examen). Al aprobar las 4 sale tu certificado. Necesitas microfono. Suerte!" });
         }
-        /* Examen oral: listar + refrescar resultados desde ElevenLabs (analysis llega al rato de colgar). */
+        /* Capacitacion con IA: listar codigos con su progreso por seccion (refresca desde ElevenLabs). */
         if (path === "/app/api/su/examen-oral" && request.method === "GET"){
           await ensureExamenSchema(env);
-          const { results: exs } = await env.DB.prepare("SELECT * FROM examenes_orales ORDER BY creado DESC LIMIT 100").all();
+          const { results: exs } = await env.DB.prepare("SELECT * FROM examenes_orales ORDER BY creado DESC LIMIT 50").all();
           const lista = [];
           for (const ex of (exs || [])){
-            let fila = Object.assign({}, ex);
-            if (ex.conversation_id && ex.estado !== "aprobado" && ex.estado !== "jalado"){
-              const conv = await examenConversacion(env, ex.conversation_id);
-              if (conv && conv.status === "done"){
-                const an = conv.analysis || {};
-                const ecr = (an.evaluation_criteria_results || {}).aprobado || {};
-                const dcr = an.data_collection_results || {};
-                const notaEx = dcr.preguntas_correctas ? Number(dcr.preguntas_correctas.value) : null;
-                const resumenEx = dcr.resumen_desempeno ? String(dcr.resumen_desempeno.value || "").slice(0, 500) : "";
-                const nuevoEstado = ecr.result === "success" ? "aprobado" : (ecr.result === "failure" ? "jalado" : ex.estado);
-                if (nuevoEstado !== ex.estado || resumenEx){
-                  await env.DB.prepare("UPDATE examenes_orales SET estado = ?2, nota = ?3, resumen = ?4, actualizado = ?5 WHERE codigo = ?1")
-                    .bind(ex.codigo, nuevoEstado, Number.isFinite(notaEx) ? notaEx : null, resumenEx, new Date().toISOString()).run();
-                  fila.estado = nuevoEstado; fila.nota = notaEx; fila.resumen = resumenEx;
-                }
-              } else if (conv && conv.status){
-                fila.estado_llamada = conv.status;
-              }
-            }
-            lista.push(fila);
+            const prog = await refrescarCapacitacion(env, ex);
+            lista.push({ codigo: ex.codigo, nombre: ex.nombre, email: ex.email, estado: prog.cert_url ? "aprobado" : ex.estado, cert_url: prog.cert_url, secciones: prog.secciones, creado: ex.creado });
           }
           return json({ examenes: lista });
         }

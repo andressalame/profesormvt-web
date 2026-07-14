@@ -334,25 +334,40 @@ CREATE TABLE IF NOT EXISTS onboarding_ia_uso (
 CREATE TABLE IF NOT EXISTS certificados_101 (
   id       TEXT PRIMARY KEY,     -- UUID inadivinable (es la verificacion)
   nombre   TEXT NOT NULL,
-  email    TEXT NOT NULL,        -- 1 certificado por email
-  puntajes TEXT DEFAULT '',      -- JSON {m1..m4}
+  email    TEXT NOT NULL,        -- 1 certificado por email y tipo
+  puntajes TEXT DEFAULT '',      -- JSON {m1..m4} (curso) o [{s,nota}] (capacitacion)
+  tipo     TEXT DEFAULT 'curso', -- curso | capacitacion-ia
   fecha    TEXT DEFAULT ''
 );
 
--- ============ Examen oral con IA (Fase B, 14-jul-2026) ============
+-- ============ Capacitacion con IA (Fase B v2, 14-jul-2026) ============
 -- Codigos vendidos a S/49.50/persona (cobro por WhatsApp, los genera su/examen-oral).
--- El resultado se lee del analysis de la conversacion de ElevenLabs.
+-- v2: 4 sesiones de voz (Maria ensena con laminas + mini examen por seccion);
+-- el certificado tipo capacitacion-ia sale SOLO al aprobar las 4 secciones.
 CREATE TABLE IF NOT EXISTS examenes_orales (
   codigo          TEXT PRIMARY KEY,   -- BAT-XXXXXX (sin 0/O/1/I/L)
   nombre          TEXT NOT NULL,
   email           TEXT DEFAULT '',
-  estado          TEXT DEFAULT 'pendiente',  -- pendiente | iniciado | aprobado | jalado
-  intentos        INTEGER DEFAULT 0,         -- max 3 (por caidas de llamada)
-  conversation_id TEXT DEFAULT '',
-  nota            INTEGER,                   -- preguntas correctas 0-5
-  resumen         TEXT DEFAULT '',
+  estado          TEXT DEFAULT 'pendiente',  -- pendiente | iniciado | aprobado
+  intentos        INTEGER DEFAULT 0,         -- legacy v1 (hoy los intentos van por seccion)
+  conversation_id TEXT DEFAULT '',           -- legacy v1
+  nota            INTEGER,                   -- legacy v1
+  resumen         TEXT DEFAULT '',           -- legacy v1
+  cert_id         TEXT DEFAULT '',           -- certificado emitido al aprobar las 4
   creado          TEXT DEFAULT '',
   actualizado     TEXT DEFAULT ''
+);
+CREATE TABLE IF NOT EXISTS examen_secciones (
+  codigo          TEXT NOT NULL,
+  seccion         INTEGER NOT NULL,          -- 1..4
+  conversation_id TEXT DEFAULT '',
+  intentos        INTEGER DEFAULT 0,         -- max 3 por seccion (caidas de llamada)
+  estado          TEXT DEFAULT 'pendiente',  -- pendiente | iniciado | aprobado | jalado
+  nota            INTEGER,                   -- preguntas correctas 0-3
+  resumen         TEXT DEFAULT '',
+  dudas           TEXT DEFAULT '',           -- que pregunto la persona (oro para el roadmap)
+  actualizado     TEXT DEFAULT '',
+  PRIMARY KEY (codigo, seccion)
 );
 
 -- ============ Soporte IA: log de conversaciones (14-jul-2026) ============
