@@ -394,7 +394,7 @@
   </section>
 
   <section class="panel" id="panel-alumnos">
-    <div style="margin-bottom:10px;display:flex;gap:8px;flex-wrap:wrap;"><button class="btn" id="btnNuevoAlumno">+ Nuevo alumno</button><button class="btn ghost" id="btnImportCsv" title="Trae tu lista de alumnos desde un archivo CSV o Excel, todos de una vez">&#8681; Importar CSV</button></div>
+    <div style="margin-bottom:10px;display:flex;gap:8px;flex-wrap:wrap;"><button class="btn" id="btnNuevoAlumno">+ Nuevo alumno</button><button class="btn ghost" id="btnImportCsv" title="Trae tu lista de alumnos desde un archivo CSV o Excel, todos de una vez">&#8681; Importar CSV</button><button class="btn ghost sm" type="button" onclick="lanzarTourModulo('alumnos')">? Cómo funciona</button></div>
     <p class="hint" style="margin-bottom:16px;">¿Te equivocaste registrando una clase? Edita o borra esa fila en REGISTRO — el saldo se recalcula solo.</p>
     <div class="tablewrap">
       <table id="tablaAlumnos">
@@ -529,7 +529,7 @@
   </section>
 
   <section class="panel" id="panel-registro">
-    <div style="margin-bottom:14px;"><button class="btn" id="btnNuevoRegistro">+ Registrar clase</button></div>
+    <div style="margin-bottom:14px;display:flex;gap:8px;flex-wrap:wrap;"><button class="btn" id="btnNuevoRegistro">+ Registrar clase</button><button class="btn ghost sm" type="button" onclick="lanzarTourModulo('registro')">? Cómo funciona</button></div>
     <input type="file" id="fileAudio" accept="audio/*,application/pdf,image/png,image/jpeg" style="display:none" multiple />
     <div class="filtros">
       <input id="regBuscar" type="search" placeholder="Buscar: qué se trabajó, tarea, plan…" autocomplete="off" />
@@ -555,7 +555,7 @@
 
   <section class="panel" id="panel-pagos">
     <div class="group">
-      <h2>// Pendientes de confirmar</h2>
+      <h2>// Pendientes de confirmar <button class="btn ghost sm" type="button" style="margin-left:8px;" onclick="lanzarTourModulo('pagos')">? Cómo funciona</button></h2>
       <p class="hint">Verifica en tu app de Yape/Plin que el monto llegó y dale Confirmar: el paquete se activa solo (primera compra crea al alumno; renovación abre nuevo ciclo).</p>
       <div class="tablewrap">
         <table><thead><tr><th>Fecha</th><th>Quién</th><th>Curso</th><th>Paquete</th><th>Monto</th><th>N° op.</th><th></th></tr></thead>
@@ -727,7 +727,7 @@
     </div>
 
     <div class="group">
-      <h2>// Mi disponibilidad semanal</h2>
+      <h2>// Mi disponibilidad semanal <button class="btn ghost sm" type="button" style="margin-left:8px;" onclick="lanzarTourModulo('agenda')">? Cómo funciona</button></h2>
       <p class="hint">Marca las horas en las que aceptas clases. Los alumnos solo verán slots libres dentro de esto. Hora de Lima.</p>
       <div class="tablewrap" id="dispGrid"></div>
       <button class="btn" id="btnGuardarDisp" style="margin-top:12px;">Guardar disponibilidad</button>
@@ -4195,7 +4195,7 @@ window.batutaInit = batutaInit;
     {sel:'[data-tour="cobros"]', t:"Un pago esperando tu clic", b:"Diego ya envio su pago por Yape. Entras a Cobros, le das Confirmar y su paquete se activa solo. Con tarjeta ni eso: se confirma sola."},
     {sel:'#linksCobro', t:"El link de cobro directo", b:"Copias el link de un paquete, lo pegas en WhatsApp y tu alumno paga sin registrarse: su cuenta se crea sola al pagar."},
     {sel:'[data-tour="personas"]', t:"Nadie se cae en silencio", b:"Laura termino su paquete y el panel te la marca para renovarla a tiempo. Retener sin Excel y sin memoria."},
-    {sel:null, t:"Esto mismo, con tu academia", b:"7 dias gratis con tus alumnos reales, sin tarjeta. Tu panel queda igual que este, con tu marca y tu link.", cta:"/app/registro?f=demo-tour", ctaLabel:"Crear mi academia gratis"}
+    {sel:null, t:"Esto mismo, con tu academia", b:"30 dias gratis con tus alumnos reales, sin tarjeta. Tu panel queda igual que este, con tu marca y tu link.", cta:"/app/registro?f=demo-tour", ctaLabel:"Crear mi academia gratis"}
   ];
   var PASOS=PASOS_BIENVENIDA, SEEN_ACTUAL=SEEN;
   var i=0;
@@ -4248,6 +4248,33 @@ window.batutaInit = batutaInit;
     PASOS=PASOS_BIENVENIDA; SEEN_ACTUAL=key; armarDots();
     try{ if(!force && localStorage.getItem(key)) return; }catch(e){}
     setTimeout(abrir, force?0:1400);
+  };
+  /* Tours POR MODULO (Paso 2 de capacitaciones self-serve, 14-jul-2026): relanzables
+     siempre desde el boton "? Como funciona" de cada seccion. Mismo motor de coach-marks. */
+  var TOURS_MODULO={
+    alumnos:[
+      {sel:'#btnNuevoAlumno', t:"Alta en 20 segundos", b:"Nombre, curso y paquete, y listo. Con 'Guardar y agregar otro' encadenas varios sin salir del formulario."},
+      {sel:'#btnImportCsv', t:"O trae tu lista completa", b:"Sube tu Excel como CSV o pega tu lista tal cual (un alumno por linea). Ves una previsualizacion antes de confirmar y los repetidos se omiten solos."},
+      {sel:'[data-tour="personas"]', t:"Dales su acceso", b:"En Accesos al portal generas el usuario y clave de cada alumno, o comparteles tu link de Inicio y se registran solos."}
+    ],
+    agenda:[
+      {sel:'#dispGrid', t:"Marca tu disponibilidad", b:"Pinta los bloques de la semana en que aceptas clases. Tus alumnos reservan solos sobre esos bloques desde su portal."},
+      {sel:'#dispGrid', t:"Doble clic = cupo grupal", b:"Doble clic en una franja le pone su propio cupo (por ejemplo 8 personas el martes 6pm) sin cambiar el resto de tu agenda."},
+      {sel:null, t:"Los recordatorios van solos", b:"Batuta le escribe a cada alumno 24 horas y 1 hora antes de su clase, y cuando su paquete esta por vencer. Menos faltas sin mover un dedo."}
+    ],
+    registro:[
+      {sel:'#btnNuevoRegistro', t:"Registra la clase dictada", b:"Asistio, falto o reprogramo, que trabajaron y la tarea (puedes grabar un audio o adjuntar un PDF de Tu biblioteca). Toma 30 segundos."},
+      {sel:null, t:"El saldo se descuenta solo", b:"Cada registro le resta 1 clase al paquete del alumno y arma su historial. Cuando el paquete este por vencer, Batuta le avisa para renovar."}
+    ],
+    pagos:[
+      {sel:'#panel-pagos', t:"Aqui caen los pagos", b:"El alumno paga por Yape desde su portal y sube su constancia. Tu la revisas aqui y confirmas con un clic: su paquete se activa al instante."},
+      {sel:null, t:"Con tarjeta, ni un clic", b:"Si conectas TU Mercado Pago en Configuracion > Ajustes, la tarjeta (y Yape automatico) se confirma sola y la plata cae directo en tu cuenta."},
+      {sel:null, t:"Recibo con tu marca", b:"Cada pago confirmado tiene su boton Recibo: un comprobante con tu logo que sirve en cualquier pais. Y si tienes RUC, boleta oficial SUNAT via Nubefact."}
+    ]
+  };
+  window.lanzarTourModulo=function(id){
+    var t=TOURS_MODULO[id]; if(!t) return;
+    PASOS=t; SEEN_ACTUAL="batuta_tour_mod_"+id; armarDots(); abrir();
   };
   // Tour de plata de la demo: 1 vez por navegador, solo el brazo "tour" del A/B.
   window.lanzarTourDemo=function(force){

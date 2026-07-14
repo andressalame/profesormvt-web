@@ -82,7 +82,7 @@ const PLAN_NOMBRE = { profe: "Profe", academia: "Academia", xl: "Academia XL", p
 /* Tope de alumnos por plan (12-jul-2026): la palanca de valor. Se enforce en admin/data PUT SOLO
    para tenants ya pagando (estado 'activo'); en trial no topa (para que importen su academia entera). */
 const ALUM_CAP = { profe: 1000000, academia: 150, xl: 400, por_alumno: 1000000 }; // Profe: alumnos ILIMITADOS (13-jul-2026, Andres: se cobra por profesor, no por alumno; gana la comparacion vs My Music Staff)
-const MP_TRIAL_DIAS = 7;
+const MP_TRIAL_DIAS = 30; // 14-jul-2026: alineado al trial de 30 dias. OJO: los 3 planes FIJOS de MP (MP_PLAN_IDS) siguen con free_trial 7 dias hasta que Andres los recree (ver RUNBOOK "Trial 30 + garantia"). Los preapproval DINAMICOS (por_alumno) ya usan 30.
 /* Plan "por alumno activo" (la palanca del millón, 12-jul-2026): el cobro del SaaS a la academia
    = max(piso, alumnos activos) × PRECIO_ALUMNO_PEN. Monto DINÁMICO -> se cobra por /preapproval
    directo (no por plan fijo) y el cron lo recalcula cada día (PUT al preapproval si cambió).
@@ -891,11 +891,19 @@ function correoNurtureTrial(tenant, etapa, extras){
     };
   }
   if (etapa === "dia6") return {
-    subject: "Tu prueba termina manana",
+    subject: "Una semana con tu academia en Batuta",
     html: wrap(
       '<p>' + hola + '</p>' +
-      '<p>Manana vence tu semana de prueba de ' + (tenant.academia ? "<b>" + esc(tenant.academia) + "</b>" : "tu academia") + '. Si el panel te sirvio, activar tu plan toma 1 minuto desde el mismo panel (desde US$9.95/mes, cobrado en soles).</p>' +
-      '<p>Y si algo no te cerro, respondeme por WhatsApp y lo vemos: feedback real vale oro por aca.</p>' +
+      '<p>Llevas ya varios dias probando Batuta con ' + (tenant.academia ? "<b>" + esc(tenant.academia) + "</b>" : "tu academia") + ', y aun te quedan dias de prueba de sobra: tienes 30 dias completos, sin tarjeta.</p>' +
+      '<p>Si todavia no lo hiciste, el momento en que Batuta se paga sola es cuando tus alumnos entran a su portal y te pagan por Yape con la confirmacion en un clic. Cualquier duda, respondeme por WhatsApp: feedback real vale oro por aca.</p>' +
+      '<p><a href="' + panel + '"><b>Ir a mi panel</b></a></p>')
+  };
+  if (etapa === "por_vencer") return {
+    subject: "Tu prueba termina pronto",
+    html: wrap(
+      '<p>' + hola + '</p>' +
+      '<p>Se acaban tus 30 dias de prueba de ' + (tenant.academia ? "<b>" + esc(tenant.academia) + "</b>" : "tu academia") + '. Si el panel te sirvio, activar tu plan toma 1 minuto desde el mismo panel: desde <b>S/49 al mes</b> (mostrado US$14.95), cobrado en soles. Y tu primer mes tiene garantia: si no te convence, te devolvemos tu plata.</p>' +
+      '<p>Si algo no te cerro, respondeme por WhatsApp y lo vemos antes de que venza.</p>' +
       '<p><a href="' + panel + '"><b>Activar mi plan</b></a></p>')
   };
   return {
@@ -1805,6 +1813,8 @@ async function ensureExamenSchema(env){
     await env.DB.prepare(
       "CREATE TABLE IF NOT EXISTS examen_secciones (codigo TEXT NOT NULL, seccion INTEGER NOT NULL, conversation_id TEXT DEFAULT '', intentos INTEGER DEFAULT 0, estado TEXT DEFAULT 'pendiente', nota INTEGER, resumen TEXT DEFAULT '', dudas TEXT DEFAULT '', actualizado TEXT DEFAULT '', PRIMARY KEY (codigo, seccion))"
     ).run();
+    /* emisiones = cuantas signed URL se pidieron (tope anti-farming de minutos ElevenLabs) */
+    try { await env.DB.prepare("ALTER TABLE examen_secciones ADD COLUMN emisiones INTEGER DEFAULT 0").run(); } catch (e) {}
     EXAMEN_SCHEMA_OK = true;
   } catch (e) {}
 }
@@ -1820,18 +1830,29 @@ async function refrescarCapacitacion(env, ex){
     let f = porSec[n] || { codigo: ex.codigo, seccion: n, estado: "pendiente", intentos: 0, nota: null, resumen: "", dudas: "" };
     if (f.conversation_id && f.estado !== "aprobado" && f.estado !== "jalado"){
       const conv = await examenConversacion(env, f.conversation_id);
-      if (conv && conv.status === "done"){
+      /* CANDADO ANTI-TRAMPA (review 14-jul): la conversacion DEBE ser del agente de ESTA
+         seccion. Sin esto, pasar 1 seccion y vincular esa conversation_id a las otras 3
+         sacaba el certificado con 1 de 4. */
+      const agenteOk = conv && conv.agent_id === AGENTES_CAPACITACION[n];
+      if (conv && conv.status === "done" && agenteOk){
         const an = conv.analysis || {};
         const ecr = (an.evaluation_criteria_results || {}).aprobado || {};
         const dcr = an.data_collection_results || {};
         const notaS = dcr.preguntas_correctas ? Number(dcr.preguntas_correctas.value) : null;
         const resS = dcr.resumen_desempeno ? String(dcr.resumen_desempeno.value || "").slice(0, 500) : "";
         const dudasS = dcr.dudas_del_alumno ? String(dcr.dudas_del_alumno.value || "").slice(0, 500) : "";
-        const nuevo = ecr.result === "success" ? "aprobado" : (ecr.result === "failure" ? "jalado" : f.estado);
+        /* done pero sin veredicto (unknown) = 'sin_resultado' terminal: no se re-consulta
+           (evita N fetches perpetuos) y cuenta como jalado (reintentable con su intento). */
+        const nuevo = ecr.result === "success" ? "aprobado" : (ecr.result === "failure" ? "jalado" : "sin_resultado");
         await env.DB.prepare(
           "UPDATE examen_secciones SET estado = ?3, nota = ?4, resumen = ?5, dudas = ?6, actualizado = ?7 WHERE codigo = ?1 AND seccion = ?2"
         ).bind(ex.codigo, n, nuevo, Number.isFinite(notaS) ? notaS : null, resS, dudasS, new Date().toISOString()).run();
         f = Object.assign({}, f, { estado: nuevo, nota: notaS, resumen: resS, dudas: dudasS });
+      } else if (conv && conv.status === "done" && !agenteOk){
+        /* conversacion de otro agente/seccion pegada a la fuerza: se descarta */
+        await env.DB.prepare("UPDATE examen_secciones SET estado = 'jalado', actualizado = ?3 WHERE codigo = ?1 AND seccion = ?2")
+          .bind(ex.codigo, n, new Date().toISOString()).run();
+        f = Object.assign({}, f, { estado: "jalado" });
       } else if (conv && conv.status){
         f = Object.assign({}, f, { procesando: true });
       }
@@ -1843,13 +1864,22 @@ async function refrescarCapacitacion(env, ex){
   if (!certUrl && secciones.every(s => s.estado === "aprobado")){
     await ensureCertSchema(env);
     const certCap = crypto.randomUUID();
-    await env.DB.prepare(
-      "INSERT INTO certificados_101 (id, nombre, email, puntajes, tipo, fecha) VALUES (?1, ?2, ?3, ?4, 'capacitacion-ia', ?5)"
-    ).bind(certCap, ex.nombre, ex.email || "", JSON.stringify(secciones.map(s => ({ s: s.seccion, nota: s.nota }))), new Date().toISOString()).run();
-    await env.DB.prepare("UPDATE examenes_orales SET cert_id = ?2, estado = 'aprobado', actualizado = ?3 WHERE codigo = ?1")
-      .bind(ex.codigo, certCap, new Date().toISOString()).run();
-    certUrl = "https://batuta.lat/cert/" + certCap;
-    try { await alertaCorreoAndres(env, "Batuta: CAPACITACION CON IA APROBADA", "Examinado: " + ex.nombre + "\nCodigo: " + ex.codigo + "\nCertificado: " + certUrl); } catch (e) {}
+    /* candado atomico anti-doble-emision (review 14-jul): el UPDATE gana solo si el cert
+       aun no existe; dos /progreso concurrentes no emiten dos certificados. */
+    const claim = await env.DB.prepare(
+      "UPDATE examenes_orales SET cert_id = ?2, estado = 'aprobado', actualizado = ?3 WHERE codigo = ?1 AND (cert_id IS NULL OR cert_id = '')"
+    ).bind(ex.codigo, certCap, new Date().toISOString()).run();
+    if (claim.meta && claim.meta.changes === 1){
+      await env.DB.prepare(
+        "INSERT INTO certificados_101 (id, nombre, email, puntajes, tipo, fecha) VALUES (?1, ?2, ?3, ?4, 'capacitacion-ia', ?5)"
+      ).bind(certCap, ex.nombre, ex.email || "", JSON.stringify(secciones.map(s => ({ s: s.seccion, nota: s.nota }))), new Date().toISOString()).run();
+      certUrl = "https://batuta.lat/cert/" + certCap;
+      try { await alertaCorreoAndres(env, "Batuta: CAPACITACION CON IA APROBADA", "Examinado: " + ex.nombre + "\nCodigo: " + ex.codigo + "\nCertificado: " + certUrl); } catch (e) {}
+    } else {
+      /* otro request ya lo emitio: recupero su id */
+      const rr = await env.DB.prepare("SELECT cert_id FROM examenes_orales WHERE codigo = ?1").bind(ex.codigo).first();
+      if (rr && rr.cert_id) certUrl = "https://batuta.lat/cert/" + rr.cert_id;
+    }
   }
   return { secciones, cert_url: certUrl };
 }
@@ -2654,6 +2684,12 @@ export default {
       const filaS = await env.DB.prepare("SELECT * FROM examen_secciones WHERE codigo = ?1 AND seccion = ?2").bind(codE, secE).first();
       if (filaS && filaS.estado === "aprobado") return json({ error: "Esta seccion ya esta aprobada. Sigue con la que te falta." }, 409);
       if (filaS && Number(filaS.intentos) >= EXAMEN_MAX_INTENTOS) return json({ error: "Esta seccion ya uso sus " + EXAMEN_MAX_INTENTOS + " intentos. Escribenos por WhatsApp." }, 409);
+      /* tope de EMISIONES de signed URL por seccion (review 14-jul): sin esto, pedir /iniciar
+         sin conectar nunca gastaba minutos de ElevenLabs sin limite. Holgura = 3x intentos
+         (URLs que expiran o llamadas que caen antes de conectar). */
+      const EMISIONES_MAX = EXAMEN_MAX_INTENTOS * 3;
+      const emisionesPrev = filaS ? Number(filaS.emisiones || 0) : 0;
+      if (emisionesPrev >= EMISIONES_MAX) return json({ error: "Esta seccion agoto sus reintentos de conexion. Escribenos por WhatsApp." }, 409);
       /* signed URL fresca (expira en ~15 min): se pide recien cuando la persona da clic */
       let signed = null;
       try {
@@ -2663,12 +2699,20 @@ export default {
         if (rS.ok){ const dS = await rS.json().catch(() => null); signed = dS && dS.signed_url; }
       } catch (e) {}
       if (!signed) return json({ error: "No pudimos conectar con Maria. Intenta en unos minutos." }, 502);
-      /* el intento se descuenta recien en /vincular (cuando la llamada CONECTA de verdad) */
+      /* cuenta la emision (crea la fila si no existia); el INTENTO se cuenta en /vincular al conectar */
+      await env.DB.prepare(
+        "INSERT INTO examen_secciones (codigo, seccion, emisiones, actualizado) VALUES (?1, ?2, 1, ?3) " +
+        "ON CONFLICT(codigo, seccion) DO UPDATE SET emisiones = emisiones + 1, actualizado = ?3"
+      ).bind(codE, secE, new Date().toISOString()).run();
       return json({ ok: true, signed_url: signed, nombre: ex.nombre, seccion: secE, intento: (filaS ? Number(filaS.intentos) : 0) + 1, max_intentos: EXAMEN_MAX_INTENTOS });
     }
 
     /* Capacitacion con IA: la pagina vincula la conversacion de la seccion apenas conecta. */
     if (path === "/app/api/examen-oral/vincular" && request.method === "POST"){
+      const ipVc = clientIp(request);
+      if (ipVc && await chatbotPasoTope(env, "exvinc:" + ipVc, 20)){
+        return json({ error: "Demasiados intentos desde tu conexion. Espera un rato." }, 429);
+      }
       const bV = await request.json().catch(() => ({}));
       const codV = String(bV.codigo || "").trim().toUpperCase();
       const secV = parseInt(bV.seccion, 10);
@@ -2680,6 +2724,10 @@ export default {
       const filaV = await env.DB.prepare("SELECT estado, intentos FROM examen_secciones WHERE codigo = ?1 AND seccion = ?2").bind(codV, secV).first();
       if (filaV && filaV.estado === "aprobado") return json({ error: "Seccion ya aprobada." }, 409);
       if (filaV && Number(filaV.intentos) >= EXAMEN_MAX_INTENTOS) return json({ error: "Sin intentos." }, 409);
+      /* la conversation_id no puede estar ya usada en OTRA (codigo,seccion): frena el replay
+         de pegar una misma conversacion aprobada a varias secciones/codigos (review 14-jul) */
+      const dup = await env.DB.prepare("SELECT 1 FROM examen_secciones WHERE conversation_id = ?1 AND NOT (codigo = ?2 AND seccion = ?3)").bind(convV, codV, secV).first().catch(() => null);
+      if (dup) return json({ error: "Esa sesion no corresponde a esta seccion." }, 409);
       await env.DB.prepare(
         "INSERT INTO examen_secciones (codigo, seccion, conversation_id, intentos, estado, actualizado) VALUES (?1, ?2, ?3, 1, 'iniciado', ?4) " +
         "ON CONFLICT(codigo, seccion) DO UPDATE SET conversation_id = ?3, intentos = intentos + 1, estado = 'iniciado', actualizado = ?4"
@@ -2695,8 +2743,14 @@ export default {
       const bP = await request.json().catch(() => ({}));
       const codP = String(bP.codigo || "").trim().toUpperCase();
       if (!/^BAT-[A-Z2-9]{6}$/.test(codP)) return json({ error: "Codigo invalido." }, 400);
+      /* rate limit POR CODIGO (no por IP): un equipo con la misma IP publica no se pisa
+         entre si, y cada codigo queda acotado por su cuenta (review 14-jul). Backstop por
+         IP mas holgado contra spray de codigos invalidos. */
       const ipP = clientIp(request);
-      if (ipP && await chatbotPasoTope(env, "exprog:" + ipP, 60)){
+      if (await chatbotPasoTope(env, "exprogc:" + codP, 50)){
+        return json({ error: "Demasiadas consultas. Espera un momento." }, 429);
+      }
+      if (ipP && await chatbotPasoTope(env, "exprogip:" + ipP, 300)){
         return json({ error: "Demasiadas consultas. Espera un momento." }, 429);
       }
       await ensureExamenSchema(env);
@@ -4450,6 +4504,9 @@ export default {
           clasesHistorico,
           proximasClases,
           reprog: (function(){ const rc = reprogCfg(config); return { activo: rc.activo, min_h: rc.minH }; })(),
+          /* modulos que el profe oculto: el portal del alumno los respeta (14-jul: por ahora
+             solo "material" toca al alumno; chat y agenda no son apagables). */
+          modulos_off: String(config.modulos_off || "").split(",").map(s => s.trim()).filter(Boolean),
           config: {
             pago_numero: config.pago_numero, pago_titular: config.pago_titular,
             bcp_cuenta: config.bcp_cuenta, bcp_cci: config.bcp_cci,
@@ -6847,11 +6904,14 @@ export default {
       if (venceMs && ahora > venceMs){
         // Mismo criterio que el gate de acceso, pero proactivo: no espera a que el profe entre.
         try { await env.DB.prepare("UPDATE tenants SET estado = 'vencido' WHERE id = ?1").bind(t.id).run(); } catch (e) {}
-        if ((t.paso | 0) < 4){
-          etapa = "vencido"; pasoNuevo = 4;
+        if ((t.paso | 0) < 5){
+          etapa = "vencido"; pasoNuevo = 5;
           try { await alertaCorreoAndres(env, "Trial vencido sin convertir: " + t.academia, "Tenant: " + t.academia + " (" + t.email + ")\nVenció: " + t.trial_hasta + "\nLe salió el correo de cierre con el link de suscripción."); } catch (e) {}
         }
       }
+      // "termina pronto" atado a trial_hasta (no a dias-desde-creacion): con trial de 30 dias
+      // el aviso de vencimiento debe dispararse cerca del final, no el dia 6 (review 14-jul).
+      else if ((t.paso | 0) >= 2 && (t.paso | 0) < 4 && venceMs && (venceMs - ahora) <= 2 * 86400000){ etapa = "por_vencer"; pasoNuevo = 4; }
       else if ((t.paso | 0) === 0 && dias >= 1){ etapa = "dia1"; pasoNuevo = 1; }
       else if ((t.paso | 0) === 1 && dias >= 3){ etapa = "dia3"; pasoNuevo = 2; }
       else if ((t.paso | 0) === 2 && dias >= 6){ etapa = "dia6"; pasoNuevo = 3; }

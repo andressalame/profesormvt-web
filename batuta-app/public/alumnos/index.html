@@ -834,8 +834,20 @@ function vistaActual(){
   var h=(location.hash||"#inicio").replace("#","");
   return VISTAS.indexOf(h)>=0 ? h : "inicio";
 }
+/* Modulos que el profe oculto (config.modulos_off): el portal del alumno los respeta.
+   Hoy solo "material" toca al alumno -> oculta la vista Recursos y su nav (14-jul-2026). */
+function aplicarModulosAlumno(){
+  var off=(ME&&ME.modulos_off)||[];
+  var sinMaterial=off.indexOf("material")!==-1;
+  var navRec=document.querySelector('a[data-v="recursos"]');
+  if(navRec) navRec.style.display=sinMaterial?"none":"";
+  var box=document.querySelector('#v-inicio [data-onb="recursos"]');
+  if(box) box.style.display=sinMaterial?"none":"";
+  if(sinMaterial && vistaActual()==="recursos"){ location.hash="#inicio"; }
+}
 function renderActive(){
   if(!ME) return;
+  aplicarModulosAlumno();
   var v=vistaActual();
   document.querySelectorAll(".side nav a").forEach(function(a){
     var on = a.dataset.v===v;
