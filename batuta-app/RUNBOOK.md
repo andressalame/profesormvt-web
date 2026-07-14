@@ -199,6 +199,30 @@ Se agregaron 2 rieles nuevos de cobro alumno->profe, espejando el marketplace de
 - **Revision adversarial (12-jul):** 9 hallazgos, 5 arreglados pre/post-deploy (1 critico: Stripe cobraba 100x en monedas sin decimales; 2 altos de Culqi: respuesta ambigua borraba la compra; webhook Culqi ahora re-verifica; credito de referido en soles no aplica a Stripe; ping de sk_ exige 2xx). Verificado en vivo: panel + /pagar cargan sin errores de consola, tarjetas Stripe/Culqi ocultas mientras el gate esta off, endpoints dan 401 no 500.
 - PENDIENTE de Andres para activar: cargar los secrets de arriba + (Stripe) tener cuenta de plataforma verificada + (Culqi) que el profe tenga afiliacion con RUC.
 
+## 🔴 PENDIENTE DE ANDRES: recrear los 3 planes de MP con free_trial 30 dias (14-jul noche)
+El trial subio a 30 dias en TODO (worker, sitio, copys). PERO los 3 planes FIJOS ya creados en
+Mercado Pago (MP_PLAN_IDS: profe/academia/xl) siguen con free_trial=7. Con 0 clientes pagando hoy
+NO hay dano, pero el PRIMER suscriptor de un plan fijo seria cobrado al dia 7, no al 31 (rompe la
+promesa "30 dias gratis"). MP no deja editar free_trial de un plan existente: hay que RECREAR.
+- MP_TRIAL_DIAS ya esta en 30 en el codigo (los preapprovals dinamicos por_alumno ya salen a 30 dias).
+- Recrear (cuando Andres quiera, toca su cuenta MP, por eso NO lo hizo Fable solo):
+  curl -X POST https://batuta.lat/app/api/su/mp-plan -H "Authorization: Bearer $(cat .admin-token.local)" -H "content-type: application/json" -d '{"plan":"profe"}'   (idem academia, xl)
+  -> devuelve el nuevo plan_id con first_invoice_offset 30. Pegar los 3 nuevos ids en MP_PLAN_IDS
+  (worker/index.js ~156) y deployar. Verificar con GET su/mp-plan que el offset es 30.
+
+## Review nocturno del 14-jul (16 hallazgos confirmados, arreglados y deployados)
+- ANTI-TRAMPA capacitacion (era CRITICO): se podia sacar el certificado pasando 1 seccion de 4 y
+  pegando esa conversation_id a las otras 3. Arreglado: refrescarCapacitacion exige conv.agent_id
+  === agente de la seccion; /vincular rechaza conv de otro agente + conv ya usada (dedup). Verificado.
+- Tope de EMISIONES de signed URL por seccion (anti farming de minutos ElevenLabs sin conectar).
+- Certificado con candado atomico anti-doble-emision; 'done' sin veredicto -> 'sin_resultado'.
+- /vincular con rate limit; /progreso rate-limit por CODIGO (equipos con IP compartida).
+- Nurture 'dia6' ya no dice "termina manana" ni el precio muerto US$9.95; aviso de vencimiento
+  re-anclado a trial_hasta (etapa 'por_vencer').
+- Riesgo aceptado (no arreglado, bajo): el certificado del CURSO GRATIS (/aprende/certificado) confia
+  en los puntajes del cliente -> se puede forjar por curl. Es lead magnet, no da acceso ni plata;
+  si molesta, mover el quiz a grading server-side (endpoint con clave de respuestas + token HMAC).
+
 ## Capacitacion con IA — Fase B v2 (14-jul-2026, noche) — EN PROD, pipeline verificado E2E
 - **Que es (v2, pedido de Andres tras probar la voz):** ya no es solo un examen: son 4 SESIONES DE VOZ (una por seccion del SaaS) donde Maria ENSENA cada parte con LAMINAS en pantalla (estilo pantalla compartida de Meet, con flechitas), pregunta "tienes alguna duda hasta aqui?", abre pausa de dudas y cierra con mini examen de 3 preguntas (aprueba con 2). El certificado (tipo capacitacion-ia, distinto al del curso gratis) sale SOLO al aprobar las 4 secciones y se emite automatico. S/49.50 POR PERSONA. SOLO VOZ, nunca video (decision permanente).
 - **Agentes (cuenta ElevenLabs de Andres, tier starter):** S1 agent_1801kxh8p4mkfjc9kd2xb6c9r879 (Tu academia en marcha) · S2 agent_6201kxh8p633f6k8yc071j3yfnnb (Agenda y clases) · S3 agent_8401kxh8p7qjeqjb5ne85w1nb3br (Cobros) · S4 agent_6501kxh8p96vf79bxenmdbe4k25p (Equipo, ventas y portal). Todos PRIVADOS (enable_auth) + daily_limit 20 + max 13 min + voz Maria (C96EBIpeVkPIxiJ0E16Y) + gemini-2.5-flash. Cada uno con client tool mostrar_lamina (Maria cambia las laminas de la pagina), system tool end_call, criterios aprobado/nota y data collection que incluye DUDAS_DEL_ALUMNO (oro para el roadmap: que pregunta la gente). Se editan con PATCH /v1/convai/agents/<id> o en el dashboard. El agente v1 (agent_2801kx...) quedo en desuso. Generador: scratchpad crear-agentes-capacitacion.py (sesion 14-jul).

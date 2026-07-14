@@ -1187,8 +1187,34 @@ const ONBOARDING_LIMITE_ADMIN_90D = 30;        // idem, tenant con mas de 90 dia
 const ONBOARDING_LIMITE_ALUMNO = 15;           // mensajes/mes por cuenta de alumno
 const ONBOARDING_LIMITE_ALUMNOS_TENANT = 150;  // techo mensual de TODOS los alumnos de un tenant
 function mesActualUTC(){ return new Date().toISOString().slice(0, 7); }
+/* Paquetes de mensajes EXTRA del soporte IA (precios de Andres, 14-jul-2026): 30->S/5,
+   60->S/10, 120->S/15. Se venden por WhatsApp y se otorgan con su/mensajes-pack. Se
+   consumen SOLO cuando la bolsa mensual del tenant ya se agoto. Tabla mensajes_extra por
+   (tenant, mes): comprados vs usados. */
+const PACKS_MENSAJES = { "5": 30, "10": 60, "15": 120 };
+let MENSAJES_EXTRA_OK = false;
+async function ensureMensajesExtraSchema(env){
+  if (MENSAJES_EXTRA_OK) return;
+  try {
+    await env.DB.prepare(
+      "CREATE TABLE IF NOT EXISTS mensajes_extra (tenant_id TEXT NOT NULL, mes TEXT NOT NULL, comprados INTEGER DEFAULT 0, usados INTEGER DEFAULT 0, actualizado TEXT DEFAULT '', PRIMARY KEY (tenant_id, mes))"
+    ).run();
+    MENSAJES_EXTRA_OK = true;
+  } catch (e) {}
+}
+/* Consume 1 mensaje extra del mes en curso si queda saldo. Atomico (usados < comprados en
+   el WHERE); meta.changes=1 = habia saldo y se descontó. */
+async function consumirMensajeExtra(env, tenantId){
+  try {
+    await ensureMensajesExtraSchema(env);
+    const r = await env.DB.prepare(
+      "UPDATE mensajes_extra SET usados = usados + 1, actualizado = ?3 WHERE tenant_id = ?1 AND mes = ?2 AND usados < comprados"
+    ).bind(tenantId, mesActualUTC(), new Date().toISOString()).run();
+    return !!(r.meta && r.meta.changes === 1);
+  } catch (e) { return false; }
+}
 /* Bolsa del equipo segun edad del tenant: 60/mes los primeros 90 dias, 30/mes despues.
-   Paquetes de mensajes extra de pago (30/60/120) = PENDIENTE: faltan precios de Andres. */
+   Al agotarse se pueden comprar packs extra (ver PACKS_MENSAJES / consumirMensajeExtra). */
 function limiteSoporteAdmin(tenant){
   try {
     const dias = (Date.now() - new Date(tenant.creado).getTime()) / 86400000;
@@ -3227,6 +3253,27 @@ export default {
             "INSERT INTO examenes_orales (codigo, nombre, email, estado, intentos, creado, actualizado) VALUES (?1, ?2, ?3, 'pendiente', 0, ?4, ?4)"
           ).bind(codSE, nomSE, String(bSE.email || "").trim().toLowerCase().slice(0, 120), new Date().toISOString()).run();
           return json({ ok: true, codigo: codSE, link: "https://batuta.lat/aprende/examen", mensaje_whatsapp: "Listo! Tu Capacitacion con IA de Batuta esta activa. Entra a https://batuta.lat/aprende/examen con tu codigo " + codSE + ": son 4 sesiones de voz con Maria (una por seccion, ~10 min cada una, con laminas en pantalla y mini examen). Al aprobar las 4 sale tu certificado. Necesitas microfono. Suerte!" });
+        }
+        /* Vender un pack de mensajes extra del soporte IA (tras cobrar por WhatsApp).
+           curl -X POST .../app/api/su/mensajes-pack -H "Authorization: Bearer $ADMIN_TOKEN" -d '{"tenant":"<slug o id>","pack":"10"}'
+           pack: 5 (30 msgs), 10 (60), 15 (120). */
+        if (path === "/app/api/su/mensajes-pack" && request.method === "POST"){
+          const bMP = await request.json().catch(() => ({}));
+          const packKey = String(bMP.pack || "").trim();
+          const cant = PACKS_MENSAJES[packKey];
+          if (!cant) return json({ error: "pack invalido: usa 5, 10 o 15" }, 400);
+          const ref = String(bMP.tenant || "").trim();
+          if (!ref) return json({ error: "manda tenant (slug o id)" }, 400);
+          const tMP = await env.DB.prepare("SELECT id, academia FROM tenants WHERE id = ?1 OR slug = ?1").bind(ref).first();
+          if (!tMP) return json({ error: "tenant no encontrado" }, 404);
+          await ensureMensajesExtraSchema(env);
+          const mesMP = mesActualUTC();
+          await env.DB.prepare(
+            "INSERT INTO mensajes_extra (tenant_id, mes, comprados, usados, actualizado) VALUES (?1, ?2, ?3, 0, ?4) " +
+            "ON CONFLICT(tenant_id, mes) DO UPDATE SET comprados = comprados + ?3, actualizado = ?4"
+          ).bind(tMP.id, mesMP, cant, new Date().toISOString()).run();
+          const saldo = await env.DB.prepare("SELECT comprados, usados FROM mensajes_extra WHERE tenant_id = ?1 AND mes = ?2").bind(tMP.id, mesMP).first();
+          return json({ ok: true, academia: tMP.academia, mes: mesMP, agregados: cant, precio: "S/" + packKey, saldo_disponible: (Number(saldo.comprados) - Number(saldo.usados)), mensaje_whatsapp: "Listo! Le sumamos " + cant + " mensajes extra al asistente de " + tMP.academia + " para este mes. Cuando quieras mas, aca estamos." });
         }
         /* Capacitacion con IA: listar codigos con su progreso por seccion (refresca desde ElevenLabs). */
         if (path === "/app/api/su/examen-oral" && request.method === "GET"){
@@ -5384,9 +5431,15 @@ export default {
         const limite = who.admin ? limiteSoporteAdmin(who.tenant) : ONBOARDING_LIMITE_ALUMNO;
         const cont = await onboardingContar(env, clave, limite);
         if (cont.tope){
-          return json({ error: who.admin
-            ? "Ya usaste tus " + limite + " mensajes de este mes. Escribenos por WhatsApp (el boton de aqui abajo) y te ayudamos en persona."
-            : "Ya usaste tus " + limite + " mensajes de este mes. Escribele a tu profe por el chat del portal." }, 429);
+          /* bolsa mensual agotada: si el tenant (admin) tiene mensajes EXTRA comprados este
+             mes (paquetes S/5=30, S/10=60, S/15=120), se consumen antes de bloquear. */
+          let usoExtra = false;
+          if (who.admin) usoExtra = await consumirMensajeExtra(env, who.tenant.id);
+          if (!usoExtra){
+            return json({ error: who.admin
+              ? "Ya usaste tus " + limite + " mensajes de este mes. Puedes comprar un paquete extra (30, 60 o 120 mensajes) escribiendonos por WhatsApp, o hablar con una persona con el boton de aqui abajo."
+              : "Ya usaste tus " + limite + " mensajes de este mes. Escribele a tu profe por el chat del portal." }, 429);
+          }
         }
 
         let historial = Array.isArray(b.historial) ? b.historial : [];
@@ -5402,6 +5455,7 @@ export default {
             "EL PANEL (menu izquierdo): Inicio (resumen + tu link de alumnos) · Personas (Alumnos, Grupos, Profesores, Accesos al portal, Interesados) · Clases (Registro de clases, Agenda, Chat) · Cobros (Pagos, Caja, Reportes) · Material (Para tus alumnos, Tu biblioteca) · Configuracion (Perfil, Ajustes, Servicios, Ideas y errores).\n" +
             "PLANES Y PRECIOS (los unicos vigentes, en soles via Mercado Pago): prueba gratis de 30 DIAS sin tarjeta (y garantia de devolucion en el primer mes pagado). Profe S/49/mes (1 profesor, alumnos ilimitados) · Academia S/149/mes (hasta 5 profesores y 150 alumnos) · Academia XL S/299/mes (hasta 20 profesores y 400 alumnos) · Academia por alumno (pagas por alumno activo, minimo 5; se activa en Perfil > Tu plan y ahi mismo ves tu estimado en vivo). Academias de mas de 400 alumnos: plan Red/Enterprise a medida por WhatsApp. Se activa o cambia de plan en Configuracion > Perfil > 'Tu plan'; sin penalidad, rige desde el siguiente cobro.\n" +
             "SERVICIOS OPCIONALES (pestana Configuracion > Servicios, se coordinan por WhatsApp): Activacion asistida S/350 una vez (te dejamos todo andando: alumnos, pagos, marca) · Migracion desde Excel u otro software S/200 · Capacitacion con IA S/49.50 POR PERSONA (curso Batuta 101 + examen ORAL por voz con la examinadora IA en batuta.lat/aprende/examen, 15 min, con nota; se contrata por WhatsApp y se recibe un codigo) · Capacitacion del equipo en vivo (humana) S/199.50 por sesion o S/499.50 por 3 · Acompanamiento de primer nivel S/129/mes (soporte prioritario + revision mensual de numeros). Ademas hay un curso GRATIS con certificado: Batuta 101 en batuta.lat/aprende (4 modulos con quiz; el certificado se comparte en LinkedIn).\n" +
+            "MENSAJES DE ESTE ASISTENTE: cada mes tienes una bolsa de mensajes incluida. Si se te acaba y necesitas mas, puedes comprar un paquete extra por WhatsApp: 30 mensajes por S/5, 60 por S/10, o 120 por S/15 (rigen solo el mes en curso). Escribenos con el boton de WhatsApp de aqui abajo.\n" +
             "COMO SE HACE:\n" +
             "- Nuevo alumno: Personas > Alumnos > '+ Nuevo alumno' (nombre, curso, paquete, horario). Para varios seguidos, boton 'Guardar y agregar otro'.\n" +
             "- Traer tus alumnos de antes (Excel o lista): Personas > Alumnos > 'Importar CSV'. Descargas la plantilla y subes el archivo, o pegas tu lista tal cual (un alumno por linea). Previsualizas antes de confirmar y los repetidos se omiten solos. Para exportar: menu lateral > Datos y respaldo > 'CSV alumnos'.\n" +

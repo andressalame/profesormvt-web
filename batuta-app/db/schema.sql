@@ -370,6 +370,18 @@ CREATE TABLE IF NOT EXISTS examen_secciones (
   PRIMARY KEY (codigo, seccion)
 );
 
+-- ============ Mensajes extra del soporte IA (packs, 14-jul-2026) ============
+-- Packs vendidos por WhatsApp (30->S/5, 60->S/10, 120->S/15), otorgados por su/mensajes-pack.
+-- Se consumen SOLO cuando la bolsa mensual del tenant ya se agoto. Nace via lazy CREATE.
+CREATE TABLE IF NOT EXISTS mensajes_extra (
+  tenant_id   TEXT NOT NULL,
+  mes         TEXT NOT NULL,        -- YYYY-MM
+  comprados   INTEGER DEFAULT 0,
+  usados      INTEGER DEFAULT 0,
+  actualizado TEXT DEFAULT '',
+  PRIMARY KEY (tenant_id, mes)
+);
+
 -- ============ Soporte IA: log de conversaciones (14-jul-2026) ============
 -- Cada pregunta real alimenta las guias y el roadmap. En prod nace via lazy CREATE
 -- (ensureSoporteLogSchema); aqui queda para instalaciones frescas.
