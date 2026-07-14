@@ -2120,11 +2120,11 @@ window.initAlumno = initAlumno;
 })();
 </script>
 
-<!-- IA de onboarding (Claude Haiku, tope 10 mensajes) -->
-<button class="oia-fab" id="oiaFab" aria-label="Abrir guía del portal" aria-expanded="false">?</button>
-<div class="oia-panel" id="oiaPanel" role="dialog" aria-label="Guía del portal" hidden>
+<!-- Soporte con IA (Claude Haiku, cuota mensual). Antes "Guía del portal". -->
+<button class="oia-fab" id="oiaFab" aria-label="Abrir ayuda" aria-expanded="false">?</button>
+<div class="oia-panel" id="oiaPanel" role="dialog" aria-label="Ayuda" hidden>
   <div class="oia-head">
-    <span class="oia-title">Guía del portal</span>
+    <span class="oia-title">Ayuda</span>
     <span class="oia-count" id="oiaCount"></span>
     <button class="oia-x" id="oiaClose" aria-label="Cerrar">&times;</button>
   </div>
@@ -2141,7 +2141,7 @@ window.initAlumno = initAlumno;
       form=document.getElementById("oiaForm"), input=document.getElementById("oiaText"),
       countEl=document.getElementById("oiaCount");
   if(!fab||!panel||!form||!input||!msgsEl) return;
-  var historia=[], ocupado=false, iniciado=false, restantes=null;
+  var historia=[], ocupado=false, iniciado=false, restantes=null, limiteTotal=null;
 
   function escapar(s){ var d=document.createElement("div"); d.textContent=s; return d.innerHTML; }
   function pintar(role,texto){
@@ -2157,15 +2157,16 @@ window.initAlumno = initAlumno;
   }
   function actualizarContador(){
     if(restantes==null) return;
-    countEl.textContent=restantes+"/10";
-    if(restantes<=0){ input.disabled=true; input.placeholder="Llegaste al tope de mensajes"; }
+    countEl.textContent=restantes+(limiteTotal?"/"+limiteTotal:"");
+    if(restantes<=0){ input.disabled=true; input.placeholder="Tope del mes: escríbele a tu profe por el chat"; }
   }
   function abrir(){
     panel.hidden=false; fab.setAttribute("aria-expanded","true");
     if(!iniciado){
       iniciado=true;
-      pintar("bot","Hola, soy tu guía del portal. Pregúntame cómo hacer algo aquí (ver tu próxima clase, tu tarea, tus recursos…). Tienes 10 mensajes.");
+      pintar("bot","Hola, soy la ayuda del portal. Pregúntame cómo hacer algo aquí (reservar, comprar tu paquete, ver tu tarea…). Lo de tus clases u horarios puntuales, escríbeselo a tu profe por el chat.");
       api("/app/api/onboarding-ia").then(function(d){
+        if(typeof d.limite==="number"){ limiteTotal=d.limite; }
         if(typeof d.restantes==="number"){ restantes=d.restantes; actualizarContador(); }
       }).catch(function(){});
     }

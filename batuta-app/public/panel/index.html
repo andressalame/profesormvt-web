@@ -266,6 +266,8 @@
   #ovPaywall .modal{border-color:var(--accent);}
   /* multi-profesor: lo que solo ve el dueno se esconde para el rol profesor */
   body.rol-profesor .solo-dueno{display:none !important;}
+  /* modulos apagables por tenant (Ajustes > Modulos de tu panel): mismo gesto que solo-dueno */
+  .mod-off{display:none !important;}
   .pill.profe{background:rgba(232,161,61,.14);color:var(--accent);font-size:10px;padding:2px 7px;border-radius:10px;margin-left:6px;}
 </style>
 </head>
@@ -784,6 +786,15 @@
       <h2>// Cursos que enseñas</h2>
       <p class="hint">Escríbelos separados por comas y de CUALQUIER materia (ej: Canto, Piano, Inglés, Matemática, Ajedrez). Se usan en el portal de compra de tus alumnos, sus fichas, el registro de clases y tu material.</p>
       <div class="cfgrow"><span class="pk">Cursos</span><input id="cfg_cursos" type="text" placeholder="Canto, Piano, Guitarra" /></div>
+    </div>
+    <div class="group">
+      <h2>// Módulos de tu panel</h2>
+      <p class="hint">Apaga lo que no uses y el menú queda limpio, a la medida de lo que enseñas. No se borra nada: al reactivar un módulo, tus datos siguen ahí.</p>
+      <div class="cfgrow"><span class="pk">Grupos (clases grupales)</span><select id="cfg_mod_grupos"><option value="">Visible</option><option value="off">Oculto</option></select></div>
+      <div class="cfgrow"><span class="pk">Material y biblioteca</span><select id="cfg_mod_material"><option value="">Visible</option><option value="off">Oculto</option></select></div>
+      <div class="cfgrow"><span class="pk">Interesados (CRM de ventas)</span><select id="cfg_mod_leads"><option value="">Visible</option><option value="off">Oculto</option></select></div>
+      <div class="cfgrow"><span class="pk">Caja (gastos y neto)</span><select id="cfg_mod_caja"><option value="">Visible</option><option value="off">Oculto</option></select></div>
+      <div class="cfgrow"><span class="pk">Reportes</span><select id="cfg_mod_reportes"><option value="">Visible</option><option value="off">Oculto</option></select></div>
     </div>
     <div class="group">
       <h2>// Tus paquetes y precios</h2>
@@ -1356,6 +1367,45 @@ function aplicarRol(){
   }
 }
 
+/* ---------- Modulos apagables (config.modulos_off): el panel a la medida del rubro ---------- */
+/* "chat" NO es apagable a proposito: el portal del alumno sigue ofreciendo el chat y
+   ocultarlo solo aqui dejaria mensajes sin leer (review 14-jul). Vuelve en v2. */
+var MODULOS_DEF=[
+  {id:"grupos",tabs:["grupos"]},
+  {id:"material",tabs:["recursos","ejercicios"]},
+  {id:"leads",tabs:["leads"]},
+  {id:"caja",tabs:["caja"]},
+  {id:"reportes",tabs:["reportes"]}
+];
+function modulosOff(){
+  return String((db.config&&db.config.modulos_off)||"").split(",").map(function(s){return s.trim();}).filter(Boolean);
+}
+function aplicarModulos(){
+  var off=modulosOff();
+  MODULOS_DEF.forEach(function(m){
+    var esconder=off.indexOf(m.id)!==-1;
+    m.tabs.forEach(function(t){
+      var b=document.querySelector('.tab[data-tab="'+t+'"]');
+      if(b) b.classList.toggle("mod-off",esconder);
+    });
+  });
+  /* un grupo del menu sin ningun tab visible se esconde entero */
+  var esProfesor=document.body.classList.contains("rol-profesor");
+  [].slice.call(document.querySelectorAll(".navgroup")).forEach(function(g){
+    var tabs=[].slice.call(g.querySelectorAll(".tab"));
+    if(!tabs.length) return;
+    var todasOcultas=tabs.every(function(b){
+      return b.classList.contains("mod-off")||(esProfesor&&b.classList.contains("solo-dueno"));
+    });
+    g.classList.toggle("mod-off",todasOcultas);
+  });
+  /* si el tab activo quedo oculto, de vuelta a Inicio (mismo gesto que aplicarRol) */
+  var act=document.querySelector(".tab.active");
+  if(act && act.classList.contains("mod-off")){
+    var home=document.querySelector('.tab[data-tab="resumen"]'); if(home) home.click();
+  }
+}
+
 /* ---------- Trial / paywall ---------- */
 function mostrarPaywall(){
   var wa = "https://wa.me/"+WA_ACTIVAR+"?text="+encodeURIComponent("Hola Andrés, quiero activar mi plan de Batuta (academia: "+TENANT_SLUG+")");
@@ -1820,6 +1870,10 @@ function renderAjustes(){
   if(el("cfg_fact_proximo_numero")) el("cfg_fact_proximo_numero").value=(db.config&&db.config.fact_proximo_numero)||"";
   if(el("cfg_wa_enabled")) el("cfg_wa_enabled").value=(db.config&&db.config.wa_enabled)||"";
   if(el("cfg_wa_phone_id")) el("cfg_wa_phone_id").value=(db.config&&db.config.wa_phone_id)||"";
+  var offModsR=modulosOff();
+  MODULOS_DEF.forEach(function(m){
+    var s=el("cfg_mod_"+m.id); if(s) s.value=offModsR.indexOf(m.id)!==-1?"off":"";
+  });
   el("cfg_google_client_id").value=(db.config&&db.config.google_client_id)||"";
   el("cfg_bcp_cuenta").value=(db.config&&db.config.bcp_cuenta)||"";
   el("cfg_bcp_cci").value=(db.config&&db.config.bcp_cci)||"";
@@ -2217,7 +2271,7 @@ function renderReportes(){
   }
 }
 
-function renderAll(){ aplicarBrandTenant(); aplicarMarcaCursos(); renderResumen(); renderAlumnos(); renderGrupos(); renderRegistro(); renderPagos(); renderReportes(); renderCuentas(); renderLeads(); renderCaja(); renderRecursos(); renderEjercicios(); renderAjustes(); renderPerfil(); fillSelects(); }
+function renderAll(){ aplicarBrandTenant(); aplicarModulos(); aplicarMarcaCursos(); renderResumen(); renderAlumnos(); renderGrupos(); renderRegistro(); renderPagos(); renderReportes(); renderCuentas(); renderLeads(); renderCaja(); renderRecursos(); renderEjercicios(); renderAjustes(); renderPerfil(); fillSelects(); }
 
 /* ---------- AGENDA (admin) ---------- */
 var AG_DISP = [], AG_RESERVAS = [];
@@ -3186,6 +3240,7 @@ el("btnGuardarAjustes").addEventListener("click",function(){
             fact_proximo_numero:(el("cfg_fact_proximo_numero")?el("cfg_fact_proximo_numero").value.trim():""),
             wa_enabled:(el("cfg_wa_enabled")?el("cfg_wa_enabled").value:""),
             wa_phone_id:(el("cfg_wa_phone_id")?el("cfg_wa_phone_id").value.trim():""),
+            modulos_off:MODULOS_DEF.filter(function(m){var s=el("cfg_mod_"+m.id);return s&&s.value==="off";}).map(function(m){return m.id;}).join(","),
             pago_numero:el("cfg_pago_numero").value.trim(),
             pago_titular:el("cfg_pago_titular").value.trim(),
             google_client_id:el("cfg_google_client_id").value.trim(),
@@ -3993,28 +4048,29 @@ window.batutaInit = batutaInit;
 })();
 </script>
 
-<!-- Asistente de onboarding con IA (Workers AI / Llama, gratis) -->
-<button class="oia-fab" id="oiaFab" aria-label="Abrir guía del panel" aria-expanded="false">?</button>
-<div class="oia-panel" id="oiaPanel" role="dialog" aria-label="Guía del panel" hidden>
+<!-- Soporte con IA (Claude Haiku + fallback Workers AI). Antes "Guía del panel". -->
+<button class="oia-fab" id="oiaFab" aria-label="Abrir soporte" aria-expanded="false">?</button>
+<div class="oia-panel" id="oiaPanel" role="dialog" aria-label="Soporte" hidden>
   <div class="oia-head">
-    <span class="oia-title">Guía del panel</span>
+    <span class="oia-title">Soporte</span>
     <span class="oia-count" id="oiaCount"></span>
     <button class="oia-x" id="oiaClose" aria-label="Cerrar">&times;</button>
   </div>
   <div class="oia-msgs" id="oiaMsgs" aria-live="polite"></div>
   <form class="oia-input" id="oiaForm">
-    <input id="oiaText" type="text" maxlength="500" placeholder="Pregúntame algo del panel…" autocomplete="off" />
+    <input id="oiaText" type="text" maxlength="500" placeholder="Pregunta o cuéntame tu problema…" autocomplete="off" />
     <button type="submit" class="oia-send">Ir</button>
   </form>
+  <a id="oiaWa" target="_blank" rel="noopener" href="#" style="display:block;text-align:center;padding:8px 10px;font-family:var(--mono);font-size:10.5px;color:var(--muted);text-decoration:underline;">Hablar con una persona (WhatsApp)</a>
 </div>
 <script>
 (function(){
   var fab=document.getElementById("oiaFab"), panel=document.getElementById("oiaPanel"),
       closeBtn=document.getElementById("oiaClose"), msgsEl=document.getElementById("oiaMsgs"),
       form=document.getElementById("oiaForm"), input=document.getElementById("oiaText"),
-      countEl=document.getElementById("oiaCount");
+      countEl=document.getElementById("oiaCount"), waEl=document.getElementById("oiaWa");
   if(!fab||!panel||!form||!input||!msgsEl) return;
-  var historia=[], ocupado=false, iniciado=false, restantes=null;
+  var historia=[], ocupado=false, iniciado=false, restantes=null, limiteTotal=null;
 
   function escapar(s){ var d=document.createElement("div"); d.textContent=s; return d.innerHTML; }
   function pintar(role,texto){
@@ -4030,15 +4086,23 @@ window.batutaInit = batutaInit;
   }
   function actualizarContador(){
     if(restantes==null) return;
-    countEl.textContent=restantes+"/10";
-    if(restantes<=0){ input.disabled=true; input.placeholder="Llegaste al tope de mensajes"; }
+    countEl.textContent=restantes+(limiteTotal?"/"+limiteTotal:"");
+    if(restantes<=0){ input.disabled=true; input.placeholder="Tope del mes: usa el WhatsApp de abajo"; }
   }
   function abrir(){
     panel.hidden=false; fab.setAttribute("aria-expanded","true");
+    /* escape a humano: WhatsApp de soporte con el slug de la academia ya puesto */
+    try{
+      if(waEl && typeof WA_ACTIVAR!=="undefined"){
+        var slugWa=(typeof TENANT_SLUG!=="undefined" && TENANT_SLUG)?TENANT_SLUG:"";
+        waEl.href="https://wa.me/"+WA_ACTIVAR+"?text="+encodeURIComponent("Hola, necesito ayuda con Batuta"+(slugWa?" (academia: "+slugWa+")":"")+": ");
+      }
+    }catch(e){}
     if(!iniciado){
       iniciado=true;
-      pintar("bot","Hola, soy tu guía del panel. Pregúntame cómo hacer algo aquí (agregar un alumno, mandar un ejercicio de tarea, ver tus pagos…). Tienes 10 mensajes.");
+      pintar("bot","Hola, soy el soporte de Batuta. Pregúntame cómo hacer algo del panel o cuéntame qué problema tienes. Si prefieres hablar con una persona, abajo está el WhatsApp.");
       fetch("/app/api/onboarding-ia",{headers:hdr()}).then(function(r){return r.json();}).then(function(d){
+        if(typeof d.limite==="number"){ limiteTotal=d.limite; }
         if(typeof d.restantes==="number"){ restantes=d.restantes; actualizarContador(); }
       }).catch(function(){});
     }

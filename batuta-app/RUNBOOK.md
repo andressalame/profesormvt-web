@@ -190,13 +190,24 @@ Se agregaron 2 rieles nuevos de cobro alumno->profe, espejando el marketplace de
   - En el Dashboard de Stripe: registrar un webhook Connect apuntando a `https://batuta.lat/app/api/stripe/webhook`, evento `checkout.session.completed`, "Listen to events on Connected accounts". Copiar el whsec_ al secret.
   - Endpoints: /app/api/admin/stripe/{estado,conectar,desconectar}, /app/api/stripe/crear-alumno, /app/api/stripe/webhook. Panel: tarjeta "Pago internacional (Stripe)" con selector de moneda (config `stripe_moneda`, default usd). El profe cobra en SU moneda; monedas sin decimales (CLP...) se manejan con stripeMinorUnit(). Firma del webhook: HMAC-SHA256 manual sobre el body crudo (sin SDK). BLOQUEANTE real: cuenta de plataforma Stripe verificada (KYC de Andres).
 
-- **CULQI (BYOK; tarjeta+Yape por API, para Peru con RUC):** el profe pega pk_live_/sk_live_ en Ajustes; la sk_ se cifra AES-GCM en reposo y NUNCA se expone al front. Cargo sincrono POST /v2/charges + webhook de respaldo que RE-VERIFICA el cargo con la sk_. Requiere RUC del profe.
-  - Encender: `npx wrangler secret put CULQI_ENC_KEY --name batuta-app` (string aleatorio fuerte, p.ej. `openssl rand -hex 32`; GUARDARLO: si se pierde, las sk_ cifradas quedan ilegibles y los profes deben reconectar).
+- **CULQI (BYOK; tarjeta+Yape por API, para Peru con RUC) — ✅ ENCENDIDO 13-jul-2026:** el profe pega pk_live_/sk_live_ en Ajustes; la sk_ se cifra AES-GCM en reposo y NUNCA se expone al front. Cargo sincrono POST /v2/charges + webhook de respaldo que RE-VERIFICA el cargo con la sk_. Requiere RUC del profe.
+  - CULQI_ENC_KEY ya cargado como secret en el worker (13-jul). Backup del valor en el vault: `secreto/credenciales/batuta-culqi-enc-key.txt` (perm 600, fuera de git/Obsidian). Si se pierde ese valor Y se borra el secret, las sk_ cifradas quedan ilegibles y los profes deben reconectar.
+  - (Cómo se generó: `openssl rand -hex 32` → `wrangler secret put CULQI_ENC_KEY`.)
   - Endpoints: /app/api/admin/culqi/{estado,conectar,desconectar}, /app/api/culqi/crear-cargo, /app/api/culqi/webhook-alumno?t=<tenant>. Panel: tarjeta "Tarjeta y Yape por API (Culqi)". Portal alumno: widget Culqi Checkout v4 (carga js de checkout.culqi.com al primer uso; CSP de Batuta lo permite). El webhook de Culqi el profe lo pega A MANO en su CulqiPanel > Eventos (no hay API); la via sincrona ya confirma, el webhook es cinturon-y-tirantes.
   - Manejo de fallo AMBIGUO (timeout/red): NO se borra la compra; queda 'pendiente' para reconciliar (evita "alumno cobrado sin paquete").
 
 - **Revision adversarial (12-jul):** 9 hallazgos, 5 arreglados pre/post-deploy (1 critico: Stripe cobraba 100x en monedas sin decimales; 2 altos de Culqi: respuesta ambigua borraba la compra; webhook Culqi ahora re-verifica; credito de referido en soles no aplica a Stripe; ping de sk_ exige 2xx). Verificado en vivo: panel + /pagar cargan sin errores de consola, tarjetas Stripe/Culqi ocultas mientras el gate esta off, endpoints dan 401 no 500.
 - PENDIENTE de Andres para activar: cargar los secrets de arriba + (Stripe) tener cuenta de plataforma verificada + (Culqi) que el profe tenga afiliacion con RUC.
+
+## Soporte con IA + modulos apagables (14-jul-2026) — DEPLOYADO y verificado E2E
+- **El widget "?" dejo de ser "Guia del panel" y ahora es SOPORTE** (panel: "Soporte"; portal alumno: "Ayuda").
+  Mismo endpoint /app/api/onboarding-ia, evolucionado en sitio:
+  - Cuota MENSUAL (antes vitalicia): clave admin:<tenant>:YYYY-MM en onboarding_ia_uso. Limites: 60/mes dueno-profe, 15/mes alumno. El front lee d.limite (adios "/10" hardcodeado).
+  - Cerebro nuevo: system prompt con TODO el producto (planes S/49/149/299 + por-alumno, servicios S/350/200/180/129, multi-profesor, CRM, caja, Nubefact, recibo universal, importador, modulos). Fuente: las 4 guias del vault con precios corregidos. Con cache_control (prompt caching) en la llamada a Anthropic; max_tokens 350. Estilo: texto plano sin markdown.
+  - Escape a humano: link "Hablar con una persona (WhatsApp)" al pie del widget del panel (wa.me/51989077928 con el slug). El alumno se deriva al chat con su profe.
+  - Log de conversaciones: tabla soporte_ia_log (lazy CREATE, tambien en schema.sql) via ctx.waitUntil. Ver que preguntan: curl -s "https://batuta.lat/app/api/su/soporte-log?limit=100" -H "Authorization: Bearer $(cat .admin-token.local)".
+- **Modulos apagables por tenant** (Ajustes > "Modulos de tu panel"): config modulos_off (csv, whitelist server-side: grupos|chat|material|leads|caja|reportes). El panel oculta tabs/grupos con .mod-off (mismo gesto que solo-dueno) en aplicarModulos() desde renderAll(); si el tab activo queda oculto vuelve a Inicio. NO es control de acceso (los endpoints siguen vivos); es UX. Agenda NO es apagable a proposito. Portal del alumno: pendiente (ver PENDIENTES.md).
+- Verificado en vivo en la demo: bot responde precios vivos (recomendo Academia para 3 profes), contador 59/60, flags ocultan Grupos + grupo Material entero y persisten tras recarga dura, demo restaurada, 0 errores de consola.
 
 ## Plan "Academia por alumno" (cobro del SaaS por alumno activo) — 12-jul-2026, DEPLOYADO
 La "palanca del millon" del deck: la academia paga el SaaS segun sus alumnos ACTIVOS, no un plan fijo. Es OPT-IN (un cuarto plan) y gated por MP_ACCESS_TOKEN (que ya esta en prod). Los 3 planes fijos NO cambian.

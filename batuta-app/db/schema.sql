@@ -322,7 +322,21 @@ CREATE TABLE IF NOT EXISTS feedback (
 CREATE INDEX IF NOT EXISTS idx_feedback_tenant ON feedback (tenant_id, mes);
 
 -- ============ IA de onboarding (apagada en v0 sin ANTHROPIC_API_KEY, tabla queda lista) ============
+-- Desde 14-jul-2026 la clave lleva el mes (admin:<tenant>:YYYY-MM): la cuota es MENSUAL.
 CREATE TABLE IF NOT EXISTS onboarding_ia_uso (
   clave    TEXT PRIMARY KEY,
   mensajes INTEGER DEFAULT 0
+);
+
+-- ============ Soporte IA: log de conversaciones (14-jul-2026) ============
+-- Cada pregunta real alimenta las guias y el roadmap. En prod nace via lazy CREATE
+-- (ensureSoporteLogSchema); aqui queda para instalaciones frescas.
+CREATE TABLE IF NOT EXISTS soporte_ia_log (
+  id        INTEGER PRIMARY KEY AUTOINCREMENT,
+  tenant_id TEXT NOT NULL,
+  quien     TEXT DEFAULT '',   -- dueno | profesor | alumno
+  pregunta  TEXT DEFAULT '',
+  respuesta TEXT DEFAULT '',
+  historial TEXT DEFAULT '',   -- contexto que MANDO EL CLIENTE (puede venir forjado); sin el, el triage engana
+  fecha     TEXT DEFAULT ''
 );

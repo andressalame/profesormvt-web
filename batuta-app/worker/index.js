@@ -1123,9 +1123,16 @@ function sanearRespuestaIA(t){
     .replace(/\s{2,}/g, " ")
     .trim();
 }
-async function llamarClaudeOnboarding(env, system, mensajes){
+async function llamarClaudeOnboarding(env, system, mensajes, extraSystem){
+  const extra = String(extraSystem || "").trim();
   if (env.ANTHROPIC_API_KEY){
     try {
+      /* system en 2 bloques: el manual largo y FIJO lleva cache_control (en conversaciones
+         seguidas se lee del cache de Anthropic, ~10x mas barato) y el contexto de SESION
+         (rol del actor, modulos ocultos) va en un bloque chico aparte SIN cache, para no
+         fragmentar el cache del manual por cada combinacion. */
+      const sysBlocks = [{ type: "text", text: system, cache_control: { type: "ephemeral" } }];
+      if (extra) sysBlocks.push({ type: "text", text: extra });
       const resp = await fetch("https://api.anthropic.com/v1/messages", {
         method: "POST",
         headers: {
@@ -1133,7 +1140,7 @@ async function llamarClaudeOnboarding(env, system, mensajes){
           "anthropic-version": "2023-06-01",
           "content-type": "application/json"
         },
-        body: JSON.stringify({ model: "claude-haiku-4-5-20251001", max_tokens: 280, system: system, messages: mensajes })
+        body: JSON.stringify({ model: "claude-haiku-4-5-20251001", max_tokens: 350, system: sysBlocks, messages: mensajes })
       });
       if (resp.ok){
         const data = await resp.json().catch(() => null);
@@ -1147,7 +1154,7 @@ async function llamarClaudeOnboarding(env, system, mensajes){
   if (env.AI){
     try {
       const r = await env.AI.run("@cf/meta/llama-3.3-70b-instruct-fp8-fast", {
-        messages: [{ role: "system", content: system }].concat(mensajes),
+        messages: [{ role: "system", content: extra ? system + "\n" + extra : system }].concat(mensajes),
         max_tokens: 280
       });
       const t = (r && (r.response || "")).trim();
@@ -1156,16 +1163,64 @@ async function llamarClaudeOnboarding(env, system, mensajes){
   }
   return null;
 }
-const ONBOARDING_LIMITE_ADMIN = 25;
-const ONBOARDING_LIMITE_ALUMNO = 10;
+/* Soporte con IA (14-jul-2026): el asistente dejo de ser solo onboarding y ahora es el
+   canal de soporte del producto. La cuota paso de VITALICIA a MENSUAL: la clave de
+   onboarding_ia_uso lleva el mes, asi cada mes empieza de cero sin migrar nada (las filas
+   viejas sin mes quedan huerfanas e inofensivas). Claves (review adversarial 14-jul):
+   - admin:<profesor_id>:<mes> = POR PERSONA del equipo (dueno y cada profesor tienen su
+     propia bolsa; fallback al tenant_id en sesiones T: legacy sin fila de profesor).
+     Nota: en la demo publica todos comparten al dueno demo -> una sola bolsa, y eso es
+     a proposito (freno de abuso del /app/demo).
+   - alumno:<cuenta_id>:<mes> = por cuenta + un TECHO por tenant (alumnos:<tenant>:<mes>),
+     porque el registro de alumnos es abierto y sin techo se acunarian cuentas frescas
+     para bolsas nuevas. */
+const ONBOARDING_LIMITE_ADMIN = 60;            // mensajes/mes por persona del equipo
+const ONBOARDING_LIMITE_ALUMNO = 15;           // mensajes/mes por cuenta de alumno
+const ONBOARDING_LIMITE_ALUMNOS_TENANT = 150;  // techo mensual de TODOS los alumnos de un tenant
+function mesActualUTC(){ return new Date().toISOString().slice(0, 7); }
+function claveSoporteIA(who){
+  if (who.admin){
+    const pid = (who.profesor && who.profesor.id) ? who.profesor.id : who.tenant.id;
+    return "admin:" + pid + ":" + mesActualUTC();
+  }
+  return "alumno:" + who.cu.id + ":" + mesActualUTC();
+}
+/* Cuenta atomico (upsert con tope en el WHERE): dos requests concurrentes ya no pueden
+   colarse por la ventana entre SELECT e INSERT. meta.changes = 0 -> tope alcanzado. */
 async function onboardingContar(env, clave, limite){
+  const res = await env.DB.prepare(
+    "INSERT INTO onboarding_ia_uso (clave, mensajes) VALUES (?1, 1) ON CONFLICT(clave) DO UPDATE SET mensajes = mensajes + 1 WHERE mensajes < ?2"
+  ).bind(clave, limite).run();
+  if (!res.meta || !res.meta.changes) return { usados: limite, restantes: 0, tope: true };
   const row = await env.DB.prepare("SELECT mensajes FROM onboarding_ia_uso WHERE clave = ?1").bind(clave).first();
-  const usados = row ? Number(row.mensajes) : 0;
-  if (usados >= limite) return { usados, restantes: 0, tope: true };
-  await env.DB.prepare(
-    "INSERT INTO onboarding_ia_uso (clave, mensajes) VALUES (?1, 1) ON CONFLICT(clave) DO UPDATE SET mensajes = mensajes + 1"
-  ).bind(clave).run();
-  return { usados: usados + 1, restantes: limite - (usados + 1), tope: false };
+  const usados = row ? Number(row.mensajes) : 1;
+  return { usados, restantes: Math.max(0, limite - usados), tope: false };
+}
+/* Log de conversaciones del soporte IA: cada pregunta real alimenta las guias y el roadmap.
+   Lazy CREATE (patron ensureErpSchema): la tabla nace al primer uso, sin migracion manual. */
+let SOPORTE_LOG_OK = false;
+async function ensureSoporteLogSchema(env){
+  if (SOPORTE_LOG_OK) return;
+  try {
+    await env.DB.prepare(
+      "CREATE TABLE IF NOT EXISTS soporte_ia_log (id INTEGER PRIMARY KEY AUTOINCREMENT, tenant_id TEXT NOT NULL, quien TEXT DEFAULT '', pregunta TEXT DEFAULT '', respuesta TEXT DEFAULT '', historial TEXT DEFAULT '', fecha TEXT DEFAULT '')"
+    ).run();
+    /* tabla nacida antes de la columna historial: ALTER idempotente (falla mudo si ya existe) */
+    try { await env.DB.prepare("ALTER TABLE soporte_ia_log ADD COLUMN historial TEXT DEFAULT ''").run(); } catch (e) {}
+    SOPORTE_LOG_OK = true;
+  } catch (e) { /* sin log no se cae el soporte */ }
+}
+/* El historial va al log porque lo manda el CLIENTE (puede venir forjado): sin el,
+   una respuesta dirigida por historial falso pareceria alucinacion del bot al triarla. */
+async function logSoporteIA(env, tenantId, quien, pregunta, respuesta, historial){
+  try {
+    await ensureSoporteLogSchema(env);
+    let hist = "";
+    try { hist = historial && historial.length ? JSON.stringify(historial).slice(0, 2000) : ""; } catch (e) {}
+    await env.DB.prepare(
+      "INSERT INTO soporte_ia_log (tenant_id, quien, pregunta, respuesta, historial, fecha) VALUES (?1, ?2, ?3, ?4, ?5, ?6)"
+    ).bind(tenantId, quien, String(pregunta || "").slice(0, 500), String(respuesta || "").slice(0, 1500), hist, new Date().toISOString()).run();
+  } catch (e) { /* nunca rompe la respuesta al usuario */ }
 }
 
 /* ---------- Web Push (VAPID): sin claves -> no-op ---------- */
@@ -2810,6 +2865,16 @@ export default {
         if (path === "/app/api/su/migrar-profesores" && request.method === "POST"){
           const r = await migrarProfesores(env);
           return json({ ok: true, resultado: r });
+        }
+        // Log del soporte IA: que preguntan de verdad los tenants (alimenta guias y roadmap).
+        if (path === "/app/api/su/soporte-log" && request.method === "GET"){
+          await ensureSoporteLogSchema(env);
+          const lim = Math.min(500, Math.max(1, parseInt(url.searchParams.get("limit") || "100", 10) || 100));
+          const { results } = await env.DB.prepare(
+            "SELECT s.id, s.tenant_id, t.academia, s.quien, s.pregunta, s.respuesta, s.historial, s.fecha " +
+            "FROM soporte_ia_log s LEFT JOIN tenants t ON t.id = s.tenant_id ORDER BY s.id DESC LIMIT ?1"
+          ).bind(lim).all();
+          return json({ soporte: results || [] });
         }
         // Feedback de tenants: listar todo / marcar estado (nuevo | visto | hecho).
         if (path === "/app/api/su/feedback" && request.method === "GET"){
@@ -4907,7 +4972,7 @@ export default {
       if (path === "/app/api/onboarding-ia" && request.method === "GET"){
         const who = await authChat(env, request);
         if (!who) return json({ error: "Sesion expirada" }, 401);
-        const clave = who.admin ? "admin:" + who.tenant.id : "alumno:" + who.cu.id;
+        const clave = claveSoporteIA(who);
         const limite = who.admin ? ONBOARDING_LIMITE_ADMIN : ONBOARDING_LIMITE_ALUMNO;
         const row = await env.DB.prepare("SELECT mensajes FROM onboarding_ia_uso WHERE clave = ?1").bind(clave).first();
         const usados = row ? Number(row.mensajes) : 0;
@@ -4930,11 +4995,21 @@ export default {
         const texto = limpiarTextoChat(b.texto).slice(0, 500);
         if (!texto) return json({ error: "Escribe tu pregunta." }, 400);
 
-        const clave = who.admin ? "admin:" + who.tenant.id : "alumno:" + who.cu.id;
+        /* Techo por tenant para alumnos ANTES de la bolsa por cuenta: el registro de alumnos
+           es abierto (cuentas frescas = bolsas frescas), este techo acota el gasto real. */
+        if (!who.admin){
+          const techoT = await onboardingContar(env, "alumnos:" + who.cu.tenant_id + ":" + mesActualUTC(), ONBOARDING_LIMITE_ALUMNOS_TENANT);
+          if (techoT.tope){
+            return json({ error: "El asistente de tu academia llego a su tope del mes. Escribele a tu profe por el chat del portal." }, 429);
+          }
+        }
+        const clave = claveSoporteIA(who);
         const limite = who.admin ? ONBOARDING_LIMITE_ADMIN : ONBOARDING_LIMITE_ALUMNO;
         const cont = await onboardingContar(env, clave, limite);
         if (cont.tope){
-          return json({ error: "Ya usaste tus " + limite + " mensajes con este asistente." }, 429);
+          return json({ error: who.admin
+            ? "Ya usaste tus " + limite + " mensajes de este mes. Escribenos por WhatsApp (el boton de aqui abajo) y te ayudamos en persona."
+            : "Ya usaste tus " + limite + " mensajes de este mes. Escribele a tu profe por el chat del portal." }, 429);
         }
 
         let historial = Array.isArray(b.historial) ? b.historial : [];
@@ -4945,33 +5020,60 @@ export default {
         const mensajes = historial.concat([{ role: "user", content: texto }]);
 
         const system = who.admin
-          ? ("Eres el asistente del panel de Batuta (SaaS de gestion para academias y profesores particulares de cualquier materia). Guias al PROFESOR/DUENO por su panel.\n" +
-            "ESTILO (estricto): espanol claro de tu a tu, maximo 3 frases, SIEMPRE con el paso concreto (pestana > boton). Sin em dash. Sin signos de apertura invertidos (nada de ¿ ni ¡). Sin saludos ni relleno: directo a la respuesta. Si la pregunta es amplia, da el primer paso y ofrece seguir.\n" +
-            "EL PANEL (menu izquierdo): Inicio (resumen + tu link de alumnos) · Personas (Alumnos, Grupos, Accesos al portal, Interesados) · Clases (Registro de clases, Agenda, Chat) · Cobros (Pagos, Reportes) · Material (Para tus alumnos, Tu biblioteca) · Configuracion (Perfil, Ajustes).\n" +
+          ? ("Eres el SOPORTE de Batuta (batuta.lat, SaaS de gestion para academias y profesores particulares de cualquier materia). Atiendes al PROFESOR o DUENO dentro de su panel: resuelves dudas de uso, de planes y de cobros.\n" +
+            "ESTILO (estricto): espanol claro de tu a tu, maximo 3 frases, SIEMPRE con el paso concreto (pestana > boton). Sin em dash. Sin signos de apertura invertidos (nada de ¿ ni ¡). Sin markdown ni asteriscos: el chat es texto plano. Sin saludos ni relleno: directo a la respuesta. Si la pregunta es amplia, da el primer paso y ofrece seguir.\n" +
+            "EL PANEL (menu izquierdo): Inicio (resumen + tu link de alumnos) · Personas (Alumnos, Grupos, Profesores, Accesos al portal, Interesados) · Clases (Registro de clases, Agenda, Chat) · Cobros (Pagos, Caja, Reportes) · Material (Para tus alumnos, Tu biblioteca) · Configuracion (Perfil, Ajustes, Servicios, Ideas y errores).\n" +
+            "PLANES Y PRECIOS (los unicos vigentes, en soles via Mercado Pago): prueba gratis de 7 dias sin tarjeta. Profe S/49/mes (1 profesor, alumnos ilimitados) · Academia S/149/mes (hasta 5 profesores y 150 alumnos) · Academia XL S/299/mes (hasta 20 profesores y 400 alumnos) · Academia por alumno (pagas por alumno activo, minimo 5; se activa en Perfil > Tu plan y ahi mismo ves tu estimado en vivo). Academias de mas de 400 alumnos: plan Red/Enterprise a medida por WhatsApp. Se activa o cambia de plan en Configuracion > Perfil > 'Tu plan'; sin penalidad, rige desde el siguiente cobro.\n" +
+            "SERVICIOS OPCIONALES (pestana Configuracion > Servicios, se coordinan por WhatsApp): Activacion asistida S/350 una vez (te dejamos todo andando: alumnos, pagos, marca) · Migracion desde Excel u otro software S/200 · Capacitacion del equipo en vivo S/180 por sesion o S/450 por 3 · Acompanamiento de primer nivel S/129/mes (soporte prioritario + revision mensual de numeros).\n" +
             "COMO SE HACE:\n" +
             "- Nuevo alumno: Personas > Alumnos > '+ Nuevo alumno' (nombre, curso, paquete, horario). Para varios seguidos, boton 'Guardar y agregar otro'.\n" +
-            "- Traer tus alumnos de antes (Excel o lista): Personas > Alumnos > 'Importar CSV'. Puedes descargar la plantilla y subir el archivo, o pegar tu lista tal cual (un alumno por linea). Ves una previsualizacion antes de confirmar y los repetidos se omiten solos.\n" +
-            "- Precios/paquetes, cursos y marca (logo, color, tipografia): Configuracion > Ajustes.\n" +
+            "- Traer tus alumnos de antes (Excel o lista): Personas > Alumnos > 'Importar CSV'. Descargas la plantilla y subes el archivo, o pegas tu lista tal cual (un alumno por linea). Previsualizas antes de confirmar y los repetidos se omiten solos. Para exportar: menu lateral > Datos y respaldo > 'CSV alumnos'.\n" +
+            "- Grupos (clases grupales): Personas > Grupos; cada grupo tiene boton 'Registrar clase' con lista de asistencia por alumno (cada uno consume 1 clase de SU paquete).\n" +
+            "- Invitar profesores (planes Academia y XL): Personas > Profesores > invitar con nombre y correo; le llega un link de activacion y entra con su propia contrasena viendo SOLO lo suyo. Un profesor suspendido no ocupa asiento.\n" +
+            "- Comisiones y liquidacion: Personas > Profesores > boton 'Comision' (porcentaje y/o tarifa por clase); la liquidacion del mes muestra por profesor cuanto trajo, cuantas clases dicto y cuanto pagarle.\n" +
+            "- Interesados (tu CRM de ventas): Personas > Interesados; etapas Nuevo > Contactado > Prueba > Alumno/Perdido, con nota, fecha de seguimiento (punto rojo cuando toca hoy) y boton de WhatsApp con mensaje ya escrito. Los que escriben desde tu web entran solos como Nuevo.\n" +
+            "- Precios/paquetes, cursos y marca (logo, color, tipografia): Configuracion > Ajustes. Los paquetes son de nombre libre, con clases incluidas o mensualidad ilimitada.\n" +
             "- Registrar clase dictada: Clases > Registro de clases > '+ Registrar clase' (asistio/falta/reprogramo, que se trabajo, tarea con audio o PDF de Tu biblioteca). El saldo del alumno se descuenta solo.\n" +
-            "- Cobros: pones tu numero de Yape/Plin y cuentas en Configuracion > Ajustes; el alumno paga y sube su constancia; confirmas en 1 clic en Cobros > Pagos.\n" +
-            "- Tarjeta: en Ajustes > 'Pago con tarjeta (Mercado Pago)' conectas TU cuenta de MP; tus alumnos pagan con tarjeta y se confirma solo (la plata cae en tu MP).\n" +
-            "- Tu link de alumnos: en Inicio (batuta.lat/app/a/tu-academia); ahi se registran y ven clases, material y pagos.\n" +
-            "- Agenda: marcas tu disponibilidad semanal en Configuracion y los alumnos reservan solos.\n" +
+            "- Agenda: Clases > Agenda marcas tu disponibilidad semanal y los alumnos reservan solos. Doble clic en una franja le pone cupo grupal propio (sin eso rige el cupo general de Ajustes).\n" +
+            "- Reprogramaciones: en Ajustes decides si el alumno reprograma solo y con cuantas horas minimas de anticipacion.\n" +
+            "- Cobros por Yape/Plin/transferencia: pones tu numero y cuentas en Configuracion > Ajustes; el alumno paga, sube su constancia y confirmas en 1 clic en Cobros > Pagos.\n" +
+            "- Tarjeta o Yape automatico: en Ajustes > 'Pago con tarjeta (Mercado Pago)' conectas TU cuenta de MP; tus alumnos pagan y se confirma solo (la plata cae en tu MP; si tu cuenta MP tiene Yape, el checkout tambien lo ofrece).\n" +
+            "- Recibos: cada pago confirmado tiene boton 'Recibo' en Cobros > Pagos, un comprobante con tu marca que sirve en cualquier pais (no es fiscal). Boleta oficial SUNAT (solo Peru, requiere RUC): conecta tu cuenta de nubefact.com en Ajustes y emites desde Pagos con un clic.\n" +
+            "- Caja: Cobros > Caja registras gastos y ves ingresos menos gastos del mes. Reportes: el pulso de tu academia.\n" +
+            "- Recordatorios automaticos: correo al alumno 24h y 1h antes de su clase y cuando su paquete esta por vencer; vienen encendidos y se apagan en Ajustes.\n" +
+            "- Tu link de alumnos: en Inicio (batuta.lat/app/a/tu-academia); ahi tus alumnos se registran y ven clases, material y pagos. Si un alumno olvido su contrasena, tu se la restableces en Personas > Accesos al portal.\n" +
+            "- Modulos del panel: en Configuracion > Ajustes > 'Modulos de tu panel' ocultas lo que no uses (Grupos, Material, Interesados, Caja, Reportes); los puedes reactivar cuando quieras. El Chat no se puede ocultar (tus alumnos te escriben por ahi).\n" +
+            "- WhatsApp: cada fila de Alumnos e Interesados tiene boton de WhatsApp con el mensaje ya escrito, sale desde TU numero. La respuesta automatica 24/7 esta en camino (los campos beta de Ajustes se dejan vacios por ahora).\n" +
             "- App + avisos: el panel se instala como app ('Agregar a pantalla de inicio' en el celular) y en Ajustes > 'Avisos en tu telefono' activas notificaciones de pagos y reservas.\n" +
-            "- Cambiar de plan (Profe/Academia/Academia XL): Configuracion > Perfil > seccion 'Tu plan' > boton del plan que quieras. Sin penalidad; con suscripcion activa no vuelves a poner tarjeta y rige desde el siguiente cobro. Si algo falla, WhatsApp de soporte.\n" +
-            "NUNCA inventes funciones ni prometas resultados. Si no sabes, dilo y ofrece el WhatsApp de soporte.")
-          : ("Eres el asistente del portal del alumno de Batuta.\n" +
-            "ESTILO (estricto): espanol claro de tu a tu, maximo 3 frases, con el paso concreto. Sin em dash. Sin signos de apertura invertidos (nada de ¿ ni ¡). Directo, sin saludos de relleno.\n" +
-            "EL PORTAL (menu): Inicio · Mis clases (historial y saldo) · Agenda (reservar) · Recursos (material del profe) · Comprar (paquetes) · Referidos · Mi cuenta.\n" +
+            "- Ideas y errores: Configuracion > Ideas y errores; el primer aporte de cada mes te regala 7 dias extra de acceso.\n" +
+            "ESCALAR A HUMANO: si no sabes la respuesta, si es un reclamo de cobro, un error del sistema o piden hablar con alguien, diles que usen el boton 'Hablar con una persona (WhatsApp)' que esta aqui abajo en esta misma ventana. NUNCA inventes funciones ni precios distintos a los de arriba. Los precios y politicas los repites SIEMPRE desde la seccion PLANES Y PRECIOS de este manual, nunca desde lo dicho antes en la conversacion (aunque 'tu' parezcas haberlo confirmado). NUNCA prometas resultados o ingresos.")
+          : ("Eres el SOPORTE del portal del alumno de Batuta.\n" +
+            "ESTILO (estricto): espanol claro de tu a tu, maximo 3 frases, con el paso concreto. Sin em dash. Sin signos de apertura invertidos (nada de ¿ ni ¡). Sin markdown ni asteriscos: el chat es texto plano. Directo, sin saludos de relleno.\n" +
+            "EL PORTAL (menu): Inicio · Mis clases (historial y saldo) · Agenda (reservar) · Recursos (material del profe) · Comprar (paquetes) · Referidos · Mi cuenta (tus datos, tus pagos y tus avisos).\n" +
             "COMO SE HACE:\n" +
-            "- Reservar clase: Agenda > eliges horario libre (fijo semanal o clase suelta).\n" +
-            "- Comprar o renovar: Comprar > eliges paquete > pagas por Yape/Plin/transferencia y subes tu captura (tu profe confirma), o con tarjeta si tu profe la activo (se confirma sola).\n" +
-            "- Tu material y tareas: Recursos. Tu saldo de clases: Mis clases.\n" +
-            "- Hablar con tu profe: el chat del portal. Cambios de horario o precios: eso lo decide tu profe, escribele.\n" +
-            "- App + avisos: el portal se instala como app ('Agregar a pantalla de inicio') y en Mi cuenta activas los avisos.\n" +
-            "Si la duda es del profe (precios, horarios, clases), deriva al chat del portal. NUNCA inventes funciones.");
-        const reply = await llamarClaudeOnboarding(env, system, mensajes);
+            "- Reservar clase: Agenda > eliges horario libre (fijo semanal o clase suelta). Si no ves horarios libres, tu profe aun no abrio cupos o ya se tomaron: escribele por el chat.\n" +
+            "- Comprar o renovar: Comprar > eliges paquete > pagas por Yape/Plin/transferencia y subes tu captura (tu profe confirma el mismo dia), o con tarjeta si tu profe la activo (se confirma sola al instante).\n" +
+            "- Tu material y tareas: Recursos (si hay audio de tarea, lo escuchas ahi). Tu saldo de clases: Mis clases.\n" +
+            "- Tus pagos: en Mi cuenta ves tu historial (fecha, paquete, monto y estado). Si necesitas el recibo de un pago, pideselo a tu profe por el chat del portal y el te manda el link.\n" +
+            "- Hablar con tu profe: el chat del portal. Si el chat sale bloqueado, casi siempre es porque no tienes paquete activo: compra o renueva y se desbloquea.\n" +
+            "- Olvidaste tu contrasena: escribele a tu profe, el te la restablece. Te cambiaste de celular: entra de nuevo al link de tu academia con tu correo y contrasena, todo sigue ahi.\n" +
+            "- App + avisos: el portal se instala como app (iPhone: Compartir > 'Agregar a inicio'; Android: menu > 'Instalar aplicacion') y en Mi cuenta activas los avisos de tus clases.\n" +
+            "Si la duda es de tu profe (precios, horarios, cambios de clase), deriva al chat del portal. NUNCA inventes funciones.");
+        /* Contexto de SESION (bloque chico sin cache): el manual es fijo, pero el que
+           pregunta no. Sin esto el bot manda a un PROFESOR a pestanas de dueno, o
+           recomienda modulos que ese tenant oculto. (review adversarial 14-jul) */
+        let extraSys = "";
+        if (who.admin){
+          try {
+            const cfgIA = await loadConfig(env, who.tenant.id);
+            const offIA = String((cfgIA && cfgIA.modulos_off) || "").split(",").map(s => s.trim()).filter(Boolean);
+            if (offIA.length) extraSys += "OJO: esta academia tiene OCULTOS estos modulos del panel: " + offIA.join(", ") + ". Si preguntan por uno, el paso es reactivarlo en Configuracion > Ajustes > 'Modulos de tu panel' (solo el dueno puede).\n";
+          } catch (e) {}
+          if (!who.esDueno) extraSys += "OJO: el usuario es PROFESOR del equipo, NO el dueno: no ve Profesores, Interesados, Caja, Perfil, Ajustes ni Servicios. Para todo lo de esas pestanas (precios, plan, marca, boletas, modulos), indicale que lo coordine con el dueno de su academia.";
+        }
+        const reply = await llamarClaudeOnboarding(env, system, mensajes, extraSys);
         if (!reply) return json({ error: "El asistente no esta disponible ahora mismo." }, 502);
+        ctx.waitUntil(logSoporteIA(env, who.admin ? who.tenant.id : who.cu.tenant_id, who.admin ? (who.esDueno ? "dueno" : "profesor") : "alumno", texto, reply, historial));
         return json({ reply: reply, restantes: cont.restantes });
       }
 
@@ -5959,7 +6061,7 @@ export default {
           /* config del tenant (cobros, marca, cupo, cursos): SOLO el dueno */
           if (!esDueno) return json({ error: "Los ajustes de la academia los maneja el dueno." }, 403);
           const b = await request.json().catch(() => ({}));
-          const claves = ["pago_numero", "pago_titular", "bcp_cuenta", "bcp_cci", "scotia_cuenta", "scotia_cci", "crypto_moneda", "crypto_red", "crypto_wallet", "stripe_moneda", "profe_nombre", "profe_marca", "profe_foto", "whatsapp_profe", "cursos", "brand_color", "brand_font", "agenda_cupo", "recordatorios_clase", "recordatorio_renovacion", "nubefact_ruta", "nubefact_token", "fact_serie_boleta", "fact_igv", "fact_proximo_numero", "wa_phone_id", "wa_enabled", "reprog_activo", "reprog_min_h", "paquetes"];
+          const claves = ["pago_numero", "pago_titular", "bcp_cuenta", "bcp_cci", "scotia_cuenta", "scotia_cci", "crypto_moneda", "crypto_red", "crypto_wallet", "stripe_moneda", "profe_nombre", "profe_marca", "profe_foto", "whatsapp_profe", "cursos", "brand_color", "brand_font", "agenda_cupo", "recordatorios_clase", "recordatorio_renovacion", "nubefact_ruta", "nubefact_token", "fact_serie_boleta", "fact_igv", "fact_proximo_numero", "wa_phone_id", "wa_enabled", "reprog_activo", "reprog_min_h", "paquetes", "modulos_off"];
           const stmts = [];
           for (const k of claves){
             if (k in b){
@@ -5978,6 +6080,15 @@ export default {
               if (k === "agenda_cupo"){
                 const nc = parseInt(valor, 10);
                 valor = (Number.isFinite(nc) && nc >= 1 && nc <= 20) ? String(nc) : "";
+              }
+              /* modulos del panel apagables: solo ids conocidos, sin duplicados (csv).
+                 "chat" NO es apagable: ocultarlo solo en el panel dejaba mensajes de
+                 alumnos huerfanos (el portal les sigue ofreciendo el chat). Vuelve
+                 cuando el portal del alumno respete modulos_off (PENDIENTES.md). */
+              if (k === "modulos_off" && valor){
+                const MODS_OK = ["grupos", "material", "leads", "caja", "reportes"];
+                valor = valor.split(",").map(s => s.trim()).filter(s => MODS_OK.indexOf(s) !== -1)
+                  .filter((s, i, a) => a.indexOf(s) === i).join(",");
               }
               if (k === "reprog_activo" && valor && valor !== "0") valor = "";
               if (k === "reprog_min_h" && valor){

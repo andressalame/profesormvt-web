@@ -31,3 +31,13 @@
 - Correos transaccionales con dominio batuta.lat verificado en Resend.
 - Cobro recurrente del plan (MP suscripciones) + corte automático.
 - Migrar MVT y Nicole al core multi-tenant ("patch para todos").
+
+## Producto por nicho — lo que falta tras la sesión del 14-jul-2026
+- **Módulos en el PORTAL DEL ALUMNO:** modulos_off hoy solo oculta en el panel del profe. Si el profe
+  apaga Chat o Material, el alumno todavía ve esas secciones (vacías). Falta: exponer modulos_off en
+  /app/api/publico y /app/api/me y ocultar en el portal. Ojo con agenda: NO se hizo apagable a propósito
+  (demasiados tentáculos en reservas/recordatorios).
+- **Presets por vertical:** el mecanismo (config vertical + terminos + modulos_off default por rubro) está
+  diseñado en el vault (proyectos/Batuta - producto por nicho (plan 2026-07-14).md). Falta que Andrés apruebe
+  los términos por rubro; luego son ~2-3 sesiones (diccionario T() + data-t + copy del worker + prompt del bot).
+- **Demo por vertical:** Estudio Sonata es de música; un prospecto de fútbol ve demo de música.
