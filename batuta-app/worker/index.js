@@ -27,7 +27,7 @@ const PAQUETES = {
 const PRECIOS_DEFAULT = { "Paquete 4": 250, "Paquete 8": 450, "Paquete 12": 600, "Clase suelta": 70, "Clase de prueba": 50 };
 const SESION_DIAS = 30;
 const CREDITO_REFERIDO = 50;
-const TRIAL_DIAS = 7;
+const TRIAL_DIAS = 30; // 30 dias + garantia (Fase 1 del plan, ejecutado 14-jul-2026; antes 7)
 
 /* ---------- Paquetes por tenant (11-jul-2026) ----------
    Cada academia define SUS paquetes en config.paquetes (JSON): [{n,c,r,u}]
@@ -930,7 +930,7 @@ function correoLeadMagnet(paso, origen){
       subject: "Un minuto te separa de tu panel",
       html: wrap(
         '<p>Hola. Ultima nota sobre Batuta, y no te escribo mas.</p>' +
-        '<p>Dejaste tu registro a medio camino y lo entiendo: probar un panel nuevo se siente como una decision grande. Por eso la prueba es de 7 dias, con tus alumnos reales y sin tarjeta.</p>' +
+        '<p>Dejaste tu registro a medio camino y lo entiendo: probar un panel nuevo se siente como una decision grande. Por eso la prueba es de 30 dias, con tus alumnos reales y sin tarjeta.</p>' +
         '<p><a href="' + MARCA.dominio + '/app/registro?f=abandono"><b>Retoma tu registro aqui</b></a> y en 1 minuto tienes tu portal de alumnos con tu marca.</p>')
     };
   }
@@ -946,7 +946,7 @@ function correoLeadMagnet(paso, origen){
     html: wrap(
       '<p>Hola. Ultima idea sobre tu plantilla, y no te escribo mas.</p>' +
       '<p>Hay 3 cosas que ninguna hoja de calculo hara por ti: avisarle al alumno que le quedan 2 clases, cobrarle sin que tu escribas, y dejarle su material en un portal con tu marca.</p>' +
-      '<p>Eso es exactamente lo que Batuta hace solo, con tus alumnos reales, en una prueba de 7 dias sin tarjeta: <a href="' + MARCA.dominio + '/app/registro?f=magnet"><b>crea tu academia aqui</b></a>. Y si prefieres mirar antes, entra a la <a href="' + MARCA.dominio + '/app/demo">demo en vivo</a> sin registrarte.</p>')
+      '<p>Eso es exactamente lo que Batuta hace solo, con tus alumnos reales, en una prueba de 30 dias sin tarjeta: <a href="' + MARCA.dominio + '/app/registro?f=magnet"><b>crea tu academia aqui</b></a>. Y si prefieres mirar antes, entra a la <a href="' + MARCA.dominio + '/app/demo">demo en vivo</a> sin registrarte.</p>')
   };
 }
 
@@ -1588,7 +1588,7 @@ function paginaBase(titulo, cuerpo, script){
 
 function paginaRegistro(googleOn){
   const cuerpo =
-    "<div class=\"pill\">7 dias gratis, sin tarjeta</div>" +
+    "<div class=\"pill\">30 dias gratis, sin tarjeta</div>" +
     "<h1>Crea tu academia en Batuta</h1>" +
     "<p class=\"sub\">Tu panel de gestion listo en un minuto.</p>" +
     (googleOn ? botonGoogle("profesor", "", "Registrarme con Google") + "<div class=\"gsep\">o con tu correo</div>" : "") +
@@ -1698,7 +1698,7 @@ function paginaLogin(googleOn){
 function paginaSuscribir(){
   const cuerpo =
     "<h1>Activa tu plan</h1>" +
-    "<p class=\"sub\">S/0 hoy. Tu primer cobro es al terminar tus 7 dias de prueba. Cancela cuando quieras.</p>" +
+    "<p class=\"sub\">S/0 hoy. Tu primer cobro es al terminar tus 30 dias de prueba. Cancela cuando quieras. Y con garantia: si en tu primer mes pagado no te convence, te devolvemos tu plata.</p>" +
     "<div id=\"planes\">" +
       "<div class=\"planopt\" data-plan=\"profe\">" +
         "<div class=\"planopt-t\">Profe</div><div class=\"planopt-p\">US$14.95<span>/mes · se cobra S/49 · alumnos ilimitados</span></div>" +
@@ -1945,7 +1945,7 @@ function certificadoHTML(c, certUrl){
     "<button class='btn btn-g' onclick='window.print()'>Imprimir o guardar PDF</button>" +
     "</div>" +
     "</div>" +
-    "<p class='pie'>Este certificado acredita el curso, no es un titulo oficial. Quieres tu propia academia en Batuta? <a href='https://batuta.lat/app/registro?f=cert'>Pruebala gratis 7 dias</a>.</p>" +
+    "<p class='pie'>Este certificado acredita el curso, no es un titulo oficial. Quieres tu propia academia en Batuta? <a href='https://batuta.lat/app/registro?f=cert'>Pruebala gratis 30 dias</a>.</p>" +
     "</body></html>";
 }
 /* Recibo de pago con la marca de la academia (universal, no fiscal). d=null -> no disponible. */
@@ -2999,7 +2999,7 @@ export default {
             '<div style="font-family:Arial,Helvetica,sans-serif;max-width:480px;margin:0 auto;color:#1a1a1a;font-size:15px;line-height:1.6">' +
               '<p>Aca esta tu plantilla: <a href="' + enlace + '"><b>descargar el Excel</b></a>.</p>' +
               '<p>Tiene 4 hojas: Alumnos, Pagos, Asistencia y un Resumen que se calcula solo (incluida la fila que mas duele: la plata en el aire sin confirmar).</p>' +
-              '<p>Y cuando llenarla a mano te canse, esa es exactamente la parte que <a href="' + MARCA.dominio + '/app/registro?f=magnet-correo">Batuta hace sola</a>: portal de alumnos, cobros y renovaciones automaticas. 7 dias gratis con tus alumnos reales.</p>' +
+              '<p>Y cuando llenarla a mano te canse, esa es exactamente la parte que <a href="' + MARCA.dominio + '/app/registro?f=magnet-correo">Batuta hace sola</a>: portal de alumnos, cobros y renovaciones automaticas. 30 dias gratis con tus alumnos reales.</p>' +
               '<p>Andres, de Batuta.</p>' +
             '</div>',
         });
@@ -5343,7 +5343,7 @@ export default {
           ? ("Eres el SOPORTE de Batuta (batuta.lat, SaaS de gestion para academias y profesores particulares de cualquier materia). Atiendes al PROFESOR o DUENO dentro de su panel: resuelves dudas de uso, de planes y de cobros.\n" +
             "ESTILO (estricto): espanol claro de tu a tu, maximo 3 frases, SIEMPRE con el paso concreto (pestana > boton). Sin em dash. Sin signos de apertura invertidos (nada de ¿ ni ¡). Sin markdown ni asteriscos: el chat es texto plano. Sin saludos ni relleno: directo a la respuesta. Si la pregunta es amplia, da el primer paso y ofrece seguir.\n" +
             "EL PANEL (menu izquierdo): Inicio (resumen + tu link de alumnos) · Personas (Alumnos, Grupos, Profesores, Accesos al portal, Interesados) · Clases (Registro de clases, Agenda, Chat) · Cobros (Pagos, Caja, Reportes) · Material (Para tus alumnos, Tu biblioteca) · Configuracion (Perfil, Ajustes, Servicios, Ideas y errores).\n" +
-            "PLANES Y PRECIOS (los unicos vigentes, en soles via Mercado Pago): prueba gratis de 7 dias sin tarjeta. Profe S/49/mes (1 profesor, alumnos ilimitados) · Academia S/149/mes (hasta 5 profesores y 150 alumnos) · Academia XL S/299/mes (hasta 20 profesores y 400 alumnos) · Academia por alumno (pagas por alumno activo, minimo 5; se activa en Perfil > Tu plan y ahi mismo ves tu estimado en vivo). Academias de mas de 400 alumnos: plan Red/Enterprise a medida por WhatsApp. Se activa o cambia de plan en Configuracion > Perfil > 'Tu plan'; sin penalidad, rige desde el siguiente cobro.\n" +
+            "PLANES Y PRECIOS (los unicos vigentes, en soles via Mercado Pago): prueba gratis de 30 DIAS sin tarjeta (y garantia de devolucion en el primer mes pagado). Profe S/49/mes (1 profesor, alumnos ilimitados) · Academia S/149/mes (hasta 5 profesores y 150 alumnos) · Academia XL S/299/mes (hasta 20 profesores y 400 alumnos) · Academia por alumno (pagas por alumno activo, minimo 5; se activa en Perfil > Tu plan y ahi mismo ves tu estimado en vivo). Academias de mas de 400 alumnos: plan Red/Enterprise a medida por WhatsApp. Se activa o cambia de plan en Configuracion > Perfil > 'Tu plan'; sin penalidad, rige desde el siguiente cobro.\n" +
             "SERVICIOS OPCIONALES (pestana Configuracion > Servicios, se coordinan por WhatsApp): Activacion asistida S/350 una vez (te dejamos todo andando: alumnos, pagos, marca) · Migracion desde Excel u otro software S/200 · Capacitacion con IA S/49.50 POR PERSONA (curso Batuta 101 + examen ORAL por voz con la examinadora IA en batuta.lat/aprende/examen, 15 min, con nota; se contrata por WhatsApp y se recibe un codigo) · Capacitacion del equipo en vivo (humana) S/199.50 por sesion o S/499.50 por 3 · Acompanamiento de primer nivel S/129/mes (soporte prioritario + revision mensual de numeros). Ademas hay un curso GRATIS con certificado: Batuta 101 en batuta.lat/aprende (4 modulos con quiz; el certificado se comparte en LinkedIn).\n" +
             "COMO SE HACE:\n" +
             "- Nuevo alumno: Personas > Alumnos > '+ Nuevo alumno' (nombre, curso, paquete, horario). Para varios seguidos, boton 'Guardar y agregar otro'.\n" +
