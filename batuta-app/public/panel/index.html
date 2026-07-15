@@ -4077,7 +4077,7 @@ window.batutaInit = batutaInit;
       form=document.getElementById("oiaForm"), input=document.getElementById("oiaText"),
       countEl=document.getElementById("oiaCount"), waEl=document.getElementById("oiaWa");
   if(!fab||!panel||!form||!input||!msgsEl) return;
-  var historia=[], ocupado=false, iniciado=false, restantes=null, limiteTotal=null;
+  var historia=[], ocupado=false, iniciado=false, restantes=null, limiteTotal=null, extrasSaldo=0, esDueno=!document.body.classList.contains("rol-profesor"), packsOfrecidos=false;
 
   function escapar(s){ var d=document.createElement("div"); d.textContent=s; return d.innerHTML; }
   function pintar(role,texto){
@@ -4093,9 +4093,69 @@ window.batutaInit = batutaInit;
   }
   function actualizarContador(){
     if(restantes==null) return;
-    countEl.textContent=restantes+(limiteTotal?"/"+limiteTotal:"");
-    if(restantes<=0){ input.disabled=true; input.placeholder="Tope del mes: usa el WhatsApp de abajo"; }
+    countEl.textContent=restantes+(extrasSaldo>0?" +"+extrasSaldo:"")+(limiteTotal?"/"+limiteTotal:"");
+    if(restantes<=0 && extrasSaldo<=0){
+      input.disabled=true;
+      input.placeholder=esDueno?"Tope del mes: compra un pack abajo":"Tope del mes: usa el WhatsApp de abajo";
+      if(esDueno) ofrecerPacks();
+    } else {
+      input.disabled=false;
+      input.placeholder="Pregunta o cuéntame tu problema…";
+    }
   }
+  /* Compra self-service de packs de mensajes (solo dueño): pinta 3 botones en el chat.
+     El precio real lo fija el worker; aquí solo viaja la llave del pack. */
+  function ofrecerPacks(){
+    if(!esDueno || packsOfrecidos) return;
+    packsOfrecidos=true;
+    var cont=document.createElement("div");
+    cont.className="oia-msg bot";
+    cont.innerHTML='<div style="margin-bottom:8px;">Elige tu pack (pago en línea, se acredita al instante y rige este mes):</div>';
+    var packs=[{k:"5",n:30},{k:"10",n:60},{k:"15",n:120}];
+    var fila=document.createElement("div");
+    fila.style.cssText="display:flex;gap:6px;flex-wrap:wrap;";
+    packs.forEach(function(p){
+      var b=document.createElement("button");
+      b.type="button";
+      b.textContent=p.n+" msgs · S/"+p.k;
+      b.style.cssText="background:var(--accent);color:#0F1115;border:0;border-radius:7px;padding:7px 10px;font-weight:700;font-size:12px;cursor:pointer;font-family:inherit;";
+      b.addEventListener("click",function(){
+        b.disabled=true; b.textContent="Abriendo…";
+        fetch("/app/api/admin/mensajes-pack/checkout",{method:"POST",headers:hdr(),body:JSON.stringify({pack:p.k})})
+          .then(function(r){ return r.json().catch(function(){return {};}).then(function(d){ if(!r.ok) throw new Error(d.error||"No se pudo iniciar el pago"); return d; }); })
+          .then(function(d){ location.href=d.init_point; })
+          .catch(function(err){ b.disabled=false; b.textContent=p.n+" msgs · S/"+p.k; pintar("bot",(err&&err.message)||"No se pudo iniciar el pago."); });
+      });
+      fila.appendChild(b);
+    });
+    cont.appendChild(fila);
+    msgsEl.appendChild(cont); msgsEl.scrollTop=msgsEl.scrollHeight;
+  }
+  /* Volviendo del checkout de MP (?pack=ok&payment_id=): confirmar contra el worker
+     (verifica el pago server-to-server en MP) y avisar. Idempotente si el webhook llegó antes. */
+  (function(){
+    var q=new URLSearchParams(location.search);
+    if(!q.get("pack")) return;
+    var pagoId=q.get("payment_id")||q.get("collection_id")||"";
+    var resultado=q.get("pack");
+    history.replaceState(null,"",location.pathname);
+    if(resultado==="ok" && pagoId && /^\d+$/.test(pagoId)){
+      fetch("/app/api/admin/mensajes-pack/confirmar",{method:"POST",headers:hdr(),body:JSON.stringify({payment_id:pagoId})})
+        .then(function(r){ return r.json().catch(function(){return {};}); })
+        .then(function(d){
+          if(d && d.ok){
+            if(typeof d.extras==="number"){ extrasSaldo=d.extras; actualizarContador(); }
+            toast(d.ya_estaba?"Tu pack ya estaba acreditado.":"Pack acreditado: +"+(d.mensajes||"")+" mensajes para este mes.");
+          } else if(d && d.estado){
+            toast("Tu pago está "+d.estado+". Se acreditará solo al aprobarse.");
+          }
+        }).catch(function(){});
+    } else if(resultado==="error"){
+      toast("El pago no se completó. Puedes intentarlo de nuevo desde el chat de soporte.");
+    } else if(resultado==="pendiente"){
+      toast("Tu pago quedó pendiente. Se acreditará solo al aprobarse.");
+    }
+  })();
   function abrir(){
     panel.hidden=false; fab.setAttribute("aria-expanded","true");
     /* escape a humano: WhatsApp de soporte con el slug de la academia ya puesto */
@@ -4110,6 +4170,8 @@ window.batutaInit = batutaInit;
       pintar("bot","Hola, soy el soporte de Batuta. Pregúntame cómo hacer algo del panel o cuéntame qué problema tienes. Si prefieres hablar con una persona, abajo está el WhatsApp.");
       fetch("/app/api/onboarding-ia",{headers:hdr()}).then(function(r){return r.json();}).then(function(d){
         if(typeof d.limite==="number"){ limiteTotal=d.limite; }
+        if(typeof d.extras==="number"){ extrasSaldo=d.extras; }
+        if(typeof d.dueno==="boolean"){ esDueno=d.dueno; }
         if(typeof d.restantes==="number"){ restantes=d.restantes; actualizarContador(); }
       }).catch(function(){});
     }
@@ -4128,14 +4190,18 @@ window.batutaInit = batutaInit;
     input.value=""; pintar("user",texto);
     ocupado=true; typing(true);
     fetch("/app/api/onboarding-ia",{method:"POST",headers:hdr(),body:JSON.stringify({texto:texto,historial:historia})})
-      .then(function(r){ return r.json().catch(function(){return {};}).then(function(d){ if(!r.ok) throw new Error(d.error||"No se pudo"); return d; }); })
+      .then(function(r){ return r.json().catch(function(){return {};}).then(function(d){ if(!r.ok){ var e=new Error(d.error||"No se pudo"); e.packs=!!d.packs; throw e; } return d; }); })
       .then(function(d){
         typing(false);
         pintar("bot",d.reply);
         historia.push({role:"user",content:texto}); historia.push({role:"assistant",content:d.reply});
+        if(typeof d.extras==="number"){ extrasSaldo=d.extras; }
         if(typeof d.restantes==="number"){ restantes=d.restantes; actualizarContador(); }
       })
-      .catch(function(err){ typing(false); pintar("bot",(err&&err.message)||"Algo falló, intenta de nuevo."); })
+      .catch(function(err){
+        typing(false); pintar("bot",(err&&err.message)||"Algo falló, intenta de nuevo.");
+        if(err&&err.packs){ esDueno=true; extrasSaldo=0; restantes=0; packsOfrecidos=false; actualizarContador(); }
+      })
       .then(function(){ ocupado=false; });
   });
 })();

@@ -1190,7 +1190,8 @@ const ONBOARDING_LIMITE_ALUMNO = 15;           // mensajes/mes por cuenta de alu
 const ONBOARDING_LIMITE_ALUMNOS_TENANT = 150;  // techo mensual de TODOS los alumnos de un tenant
 function mesActualUTC(){ return new Date().toISOString().slice(0, 7); }
 /* Paquetes de mensajes EXTRA del soporte IA (precios de Andres, 14-jul-2026): 30->S/5,
-   60->S/10, 120->S/15. Se venden por WhatsApp y se otorgan con su/mensajes-pack. Se
+   60->S/10, 120->S/15. Dos vias de venta: self-service en el chat del panel (checkout MP
+   de pago unico, tabla packs_compras) o manual por WhatsApp (su/mensajes-pack). Se
    consumen SOLO cuando la bolsa mensual del tenant ya se agoto. Tabla mensajes_extra por
    (tenant, mes): comprados vs usados. */
 const PACKS_MENSAJES = { "5": 30, "10": 60, "15": 120 };
@@ -1201,8 +1202,43 @@ async function ensureMensajesExtraSchema(env){
     await env.DB.prepare(
       "CREATE TABLE IF NOT EXISTS mensajes_extra (tenant_id TEXT NOT NULL, mes TEXT NOT NULL, comprados INTEGER DEFAULT 0, usados INTEGER DEFAULT 0, actualizado TEXT DEFAULT '', PRIMARY KEY (tenant_id, mes))"
     ).run();
+    await env.DB.prepare(
+      "CREATE TABLE IF NOT EXISTS packs_compras (id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, pack TEXT NOT NULL, mensajes INTEGER NOT NULL, monto INTEGER NOT NULL, estado TEXT NOT NULL, fecha TEXT DEFAULT '', mp_payment_id TEXT DEFAULT '')"
+    ).run();
     MENSAJES_EXTRA_OK = true;
   } catch (e) {}
+}
+/* Suma mensajes extra a la bolsa del mes EN CURSO (compra confirmada, cualquiera de las vias). */
+async function acreditarMensajesExtra(env, tenantId, cant){
+  await ensureMensajesExtraSchema(env);
+  await env.DB.prepare(
+    "INSERT INTO mensajes_extra (tenant_id, mes, comprados, usados, actualizado) VALUES (?1, ?2, ?3, 0, ?4) " +
+    "ON CONFLICT(tenant_id, mes) DO UPDATE SET comprados = comprados + ?3, actualizado = ?4"
+  ).bind(tenantId, mesActualUTC(), cant, new Date().toISOString()).run();
+}
+/* Saldo de mensajes extra del mes en curso (para el contador del chat). */
+async function saldoMensajesExtra(env, tenantId){
+  try {
+    await ensureMensajesExtraSchema(env);
+    const r = await env.DB.prepare(
+      "SELECT comprados - usados AS s FROM mensajes_extra WHERE tenant_id = ?1 AND mes = ?2"
+    ).bind(tenantId, mesActualUTC()).first();
+    return r ? Math.max(0, Number(r.s) || 0) : 0;
+  } catch (e) { return 0; }
+}
+/* Confirma una compra self-service de pack y acredita. ATOMICO anti-doble-credito: el
+   UPDATE solo pasa de 'iniciada' a 'pagada' una vez (changes=1); el webhook de MP y la
+   confirmacion al volver al panel pueden llegar ambos y solo uno acredita. */
+async function confirmarPackCompra(env, compraId, paymentId){
+  await ensureMensajesExtraSchema(env);
+  const upd = await env.DB.prepare(
+    "UPDATE packs_compras SET estado = 'pagada', mp_payment_id = ?2, fecha = ?3 WHERE id = ?1 AND estado = 'iniciada'"
+  ).bind(compraId, String(paymentId || ""), new Date().toISOString()).run();
+  if (!(upd.meta && upd.meta.changes === 1)) return null;
+  const compra = await env.DB.prepare("SELECT * FROM packs_compras WHERE id = ?1").bind(compraId).first();
+  if (!compra) return null;
+  await acreditarMensajesExtra(env, compra.tenant_id, Number(compra.mensajes) || 0);
+  return compra;
 }
 /* Consume 1 mensaje extra del mes en curso si queda saldo. Atomico (usados < comprados en
    el WHERE); meta.changes=1 = habia saldo y se descontó. */
@@ -1965,6 +2001,12 @@ function certificadoHTML(c, certUrl){
     ".btn-g{background:transparent;color:#17130C;border:1px solid rgba(23,19,12,.3)}" +
     ".pie{margin-top:22px;font-size:12.5px;color:#6E6656;text-align:center}" +
     ".pie a{color:#A66817;font-weight:600}" +
+    /* sello SOLO del certificado de capacitacion con IA (el pagado): que se distinga del
+       cert gratis de Batuta 101 de un vistazo */
+    ".sello{position:absolute;top:20px;right:20px;width:68px;height:68px;border-radius:50%;border:2px solid #E8A13D;background:rgba(232,161,61,.08);display:flex;flex-direction:column;align-items:center;justify-content:center;color:#A66817}" +
+    ".sello .est{font-size:18px;line-height:1}" +
+    ".sello .lb{font-size:6.5px;letter-spacing:.16em;text-transform:uppercase;margin-top:3px;text-align:center;line-height:1.4}" +
+    "@media (max-width:560px){.sello{position:static;margin:20px auto 0}}" +
     "@media print{body{background:#fff;padding:0}.acciones,.pie{display:none}.cert{box-shadow:none;border-radius:0;max-width:none;min-height:96vh;display:flex;flex-direction:column;justify-content:center}}";
   if (!c){
     return "<!doctype html><html lang='es'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>Certificado no encontrado · Batuta</title><style>" + css + "</style></head><body><div class='cert'><div class='marca'>BATUTA</div><h1>Certificado no encontrado</h1><p class='curso'>El link no corresponde a un certificado valido. Si crees que es un error, escribenos.</p><div class='acciones'><a class='btn btn-a' href='https://batuta.lat/aprende'>Ir al curso Batuta 101</a></div></div></body></html>";
@@ -1981,16 +2023,25 @@ function certificadoHTML(c, certUrl){
   const pieCurso = esCap ? "Capacitacion con IA · 4 examenes orales aprobados" : "Curso Batuta 101 · 4 modulos aprobados";
   const liUrl = "https://www.linkedin.com/sharing/share-offsite/?url=" + encodeURIComponent(certUrl);
   const ogTitulo = (esCap ? "Certificado de Capacitacion con IA · " : "Certificado Batuta 101 · ") + esc(c.nombre);
+  /* descripciones por tipo: antes decian "Batuta 101" tambien en el cert de capacitacion
+     (y eso es lo que LinkedIn muestra al compartir) */
+  const ogDesc = esCap
+    ? "Completo la Capacitacion con IA de Batuta: las 4 secciones del sistema aprobadas con examen oral ante la examinadora IA."
+    : "Completo Batuta 101, el curso oficial de Batuta: alumnos, agenda, cobros y equipo en un solo sistema.";
+  const metaDesc = esCap
+    ? "Certificado verificable de la Capacitacion con IA de Batuta: 4 secciones aprobadas con examen oral (batuta.lat)."
+    : "Certificado verificable del curso Batuta 101: gestion de academias y clases con Batuta (batuta.lat).";
   return "<!doctype html><html lang='es'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'>" +
     "<title>" + ogTitulo + "</title>" +
-    "<meta name='description' content='Certificado verificable del curso Batuta 101: gestion de academias y clases con Batuta (batuta.lat).'>" +
+    "<meta name='description' content='" + metaDesc + "'>" +
     "<meta property='og:title' content='" + ogTitulo + "'>" +
-    "<meta property='og:description' content='Completo Batuta 101, el curso oficial de Batuta: alumnos, agenda, cobros y equipo en un solo sistema.'>" +
+    "<meta property='og:description' content='" + ogDesc + "'>" +
     "<meta property='og:type' content='website'>" +
     "<meta property='og:url' content='" + esc(certUrl) + "'>" +
     "<meta property='og:image' content='https://batuta.lat/og-image.png'>" +
     "<style>" + css + "</style></head><body>" +
     "<div class='cert'>" +
+    (esCap ? "<div class='sello'><span class='est'>&#10022;</span><span class='lb'>Examen<br>oral<br>aprobado</span></div>" : "") +
     "<div class='marca'>BATUTA</div>" +
     "<div class='tipo'>" + (esCap ? "Certificado de capacitacion con IA" : "Certificado de finalizacion") + "</div>" +
     "<h1>" + esc(c.nombre) + "</h1>" +
@@ -2003,7 +2054,7 @@ function certificadoHTML(c, certUrl){
     "<button class='btn btn-g' onclick='window.print()'>Imprimir o guardar PDF</button>" +
     "</div>" +
     "</div>" +
-    "<p class='pie'>Este certificado acredita el curso, no es un titulo oficial. Quieres tu propia academia en Batuta? <a href='https://batuta.lat/app/registro?f=cert'>Pruebala gratis 30 dias</a>.</p>" +
+    "<p class='pie'>Este certificado acredita " + (esCap ? "la capacitacion" : "el curso") + ", no es un titulo oficial. Quieres tu propia academia en Batuta? <a href='https://batuta.lat/app/registro?f=cert'>Pruebala gratis 30 dias</a>.</p>" +
     "</body></html>";
 }
 /* Recibo de pago con la marca de la academia (universal, no fiscal). d=null -> no disponible. */
@@ -3268,12 +3319,8 @@ export default {
           if (!ref) return json({ error: "manda tenant (slug o id)" }, 400);
           const tMP = await env.DB.prepare("SELECT id, academia FROM tenants WHERE id = ?1 OR slug = ?1").bind(ref).first();
           if (!tMP) return json({ error: "tenant no encontrado" }, 404);
-          await ensureMensajesExtraSchema(env);
           const mesMP = mesActualUTC();
-          await env.DB.prepare(
-            "INSERT INTO mensajes_extra (tenant_id, mes, comprados, usados, actualizado) VALUES (?1, ?2, ?3, 0, ?4) " +
-            "ON CONFLICT(tenant_id, mes) DO UPDATE SET comprados = comprados + ?3, actualizado = ?4"
-          ).bind(tMP.id, mesMP, cant, new Date().toISOString()).run();
+          await acreditarMensajesExtra(env, tMP.id, cant);
           const saldo = await env.DB.prepare("SELECT comprados, usados FROM mensajes_extra WHERE tenant_id = ?1 AND mes = ?2").bind(tMP.id, mesMP).first();
           return json({ ok: true, academia: tMP.academia, mes: mesMP, agregados: cant, precio: "S/" + packKey, saldo_disponible: (Number(saldo.comprados) - Number(saldo.usados)), mensaje_whatsapp: "Listo! Le sumamos " + cant + " mensajes extra al asistente de " + tMP.academia + " para este mes. Cuando quieras mas, aca estamos." });
         }
@@ -4012,6 +4059,30 @@ export default {
               const vencido = Date.now() > Date.parse(t.trial_hasta);
               if (vencido){
                 await env.DB.prepare("UPDATE tenants SET estado = 'vencido' WHERE id = ?1").bind(t.id).run();
+              }
+            }
+            return new Response("ok", { status: 200 });
+          }
+
+          /* Pago UNICO (checkout preference): hoy solo packs de mensajes del soporte IA
+             (external_reference "btpk:<compra_id>"). La acreditacion es idempotente
+             (confirmarPackCompra); si la confirmacion al volver al panel llego primero,
+             aqui no pasa nada. */
+          if (topic === "payment"){
+            const mp = await mpFetch(env, "/v1/payments/" + encodeURIComponent(resId), { method: "GET" });
+            if (!mp.ok || !mp.data){
+              console.error("MP webhook: no se pudo consultar payment", resId, mp.status);
+              return new Response("ok", { status: 200 });
+            }
+            const pago = mp.data;
+            const refPk = String(pago.external_reference || "");
+            if (refPk.startsWith("btpk:") && String(pago.status || "") === "approved"){
+              const compra = await confirmarPackCompra(env, refPk.slice(5), pago.id);
+              if (compra){
+                const tPk = await env.DB.prepare("SELECT academia, email FROM tenants WHERE id = ?1").bind(compra.tenant_id).first();
+                ctx.waitUntil(alertaCorreoAndres(env,
+                  "PACK DE MENSAJES VENDIDO: S/" + compra.pack,
+                  "Academia: " + ((tPk && tPk.academia) || compra.tenant_id) + " (" + ((tPk && tPk.email) || "?") + ")\nPack: " + compra.mensajes + " mensajes por S/" + compra.pack + "\nPago MP: " + pago.id + "\nAcreditado automatico al mes en curso (via webhook)."));
               }
             }
             return new Response("ok", { status: 200 });
@@ -5393,6 +5464,79 @@ export default {
       }
 
       /* ============================================================
+         Packs de mensajes extra: compra SELF-SERVICE desde el chat del panel.
+         Checkout de pago unico de MP con el token de BATUTA (la plata es de
+         Batuta, no del profe: nada de mpTokenProfe aqui). Precio fijado
+         server-side por PACKS_MENSAJES; el cliente solo manda la llave.
+         ============================================================ */
+      if (path === "/app/api/admin/mensajes-pack/checkout" && request.method === "POST"){
+        const actorPk = await actorDeSesion(env, request);
+        if (!actorPk) return json({ error: "Sesion expirada" }, 401);
+        if (!actorPk.esDueno) return json({ error: "Solo el dueno de la academia puede comprar packs. Pideselo por el chat interno." }, 403);
+        if (!env.MP_ACCESS_TOKEN) return json({ error: "El pago en linea no esta disponible ahora. Escribenos por WhatsApp." }, 501);
+        const bPk = await request.json().catch(() => ({}));
+        const packKey = String(bPk.pack || "").trim();
+        const cantPk = PACKS_MENSAJES[packKey];
+        if (!cantPk) return json({ error: "pack invalido: usa 5, 10 o 15" }, 400);
+        await ensureMensajesExtraSchema(env);
+        /* OJO: NO se borran intentos 'iniciada' previos: una preference vieja sigue siendo
+           pagable en MP y su compra debe poder acreditarse (borrarla = plata sin credito). */
+        const compraIdPk = crypto.randomUUID();
+        await env.DB.prepare(
+          "INSERT INTO packs_compras (id, tenant_id, pack, mensajes, monto, estado, fecha) VALUES (?1, ?2, ?3, ?4, ?5, 'iniciada', ?6)"
+        ).bind(compraIdPk, actorPk.tenant.id, packKey, cantPk, Number(packKey), new Date().toISOString()).run();
+        const prefPk = await mpFetch(env, "/checkout/preferences", { method: "POST", body: {
+          items: [{ title: "Batuta - " + cantPk + " mensajes extra del asistente (mes en curso)", quantity: 1, unit_price: Number(packKey), currency_id: "PEN" }],
+          external_reference: "btpk:" + compraIdPk,
+          notification_url: MARCA.dominio + "/app/api/mp/webhook",
+          back_urls: {
+            success: MARCA.dominio + "/app/panel?pack=ok",
+            failure: MARCA.dominio + "/app/panel?pack=error",
+            pending: MARCA.dominio + "/app/panel?pack=pendiente"
+          },
+          auto_return: "approved",
+          statement_descriptor: "BATUTA",
+          metadata: { batuta_tenant: actorPk.tenant.id, batuta_pack_compra: compraIdPk }
+        }});
+        if (!prefPk.ok || !prefPk.data || !prefPk.data.init_point){
+          await env.DB.prepare("DELETE FROM packs_compras WHERE id = ?1 AND estado = 'iniciada'").bind(compraIdPk).run();
+          console.error("pack checkout: MP no devolvio init_point", prefPk.status);
+          return json({ error: "No se pudo iniciar el pago. Intenta de nuevo o escribenos por WhatsApp." }, 502);
+        }
+        return json({ init_point: prefPk.data.init_point, pack: packKey, mensajes: cantPk });
+      }
+
+      /* Confirmacion al VOLVER del checkout (back_url trae ?payment_id=): se verifica el
+         pago server-to-server contra MP antes de acreditar. Via primaria de acreditacion;
+         el webhook (topic payment) es el respaldo. Idempotente via confirmarPackCompra. */
+      if (path === "/app/api/admin/mensajes-pack/confirmar" && request.method === "POST"){
+        const actorPc = await actorDeSesion(env, request);
+        if (!actorPc) return json({ error: "Sesion expirada" }, 401);
+        if (!env.MP_ACCESS_TOKEN) return json({ error: "No disponible." }, 501);
+        const bPc = await request.json().catch(() => ({}));
+        const payIdPc = String(bPc.payment_id || "").trim().slice(0, 40);
+        if (!/^\d+$/.test(payIdPc)) return json({ error: "payment_id invalido" }, 400);
+        const mpPc = await mpFetch(env, "/v1/payments/" + payIdPc, { method: "GET" });
+        if (!mpPc.ok || !mpPc.data) return json({ error: "No se pudo consultar el pago. El sistema lo acreditara solo en unos minutos." }, 502);
+        const pagoPc = mpPc.data;
+        const refPc = String(pagoPc.external_reference || "");
+        if (!refPc.startsWith("btpk:")) return json({ error: "Ese pago no corresponde a un pack." }, 400);
+        const compraIdPc = refPc.slice(5);
+        const filaPc = await env.DB.prepare("SELECT id FROM packs_compras WHERE id = ?1 AND tenant_id = ?2").bind(compraIdPc, actorPc.tenant.id).first();
+        if (!filaPc) return json({ error: "Compra no encontrada." }, 404);
+        if (String(pagoPc.status || "") !== "approved"){
+          return json({ ok: false, estado: String(pagoPc.status || "desconocido") });
+        }
+        const compraPc = await confirmarPackCompra(env, compraIdPc, payIdPc);
+        const saldoPc = await saldoMensajesExtra(env, actorPc.tenant.id);
+        if (!compraPc) return json({ ok: true, ya_estaba: true, extras: saldoPc });
+        ctx.waitUntil(alertaCorreoAndres(env,
+          "PACK DE MENSAJES VENDIDO: S/" + compraPc.pack,
+          "Academia: " + (actorPc.tenant.academia || actorPc.tenant.id) + " (" + (actorPc.tenant.email || "?") + ")\nPack: " + compraPc.mensajes + " mensajes por S/" + compraPc.pack + "\nPago MP: " + payIdPc + "\nAcreditado automatico al mes en curso (al volver al panel)."));
+        return json({ ok: true, mensajes: Number(compraPc.mensajes), extras: saldoPc });
+      }
+
+      /* ============================================================
          IA de onboarding: sin ANTHROPIC_API_KEY -> 501
          ============================================================ */
       if (path === "/app/api/onboarding-ia" && request.method === "GET"){
@@ -5402,7 +5546,10 @@ export default {
         const limite = who.admin ? limiteSoporteAdmin(who.tenant) : ONBOARDING_LIMITE_ALUMNO;
         const row = await env.DB.prepare("SELECT mensajes FROM onboarding_ia_uso WHERE clave = ?1").bind(clave).first();
         const usados = row ? Number(row.mensajes) : 0;
-        return json({ limite, usados, restantes: Math.max(0, limite - usados) });
+        /* extras = mensajes comprados del mes (packs). Sin esto el front bloqueaba el
+           input al agotar la bolsa aunque el tenant tuviera pack vigente. */
+        const extras = who.admin ? await saldoMensajesExtra(env, who.tenant.id) : 0;
+        return json({ limite, usados, restantes: Math.max(0, limite - usados), extras, dueno: !!(who.admin && who.esDueno) });
       }
 
       if (path === "/app/api/onboarding-ia" && request.method === "POST"){
@@ -5438,8 +5585,12 @@ export default {
           let usoExtra = false;
           if (who.admin) usoExtra = await consumirMensajeExtra(env, who.tenant.id);
           if (!usoExtra){
+            if (who.admin && who.esDueno){
+              /* packs:true -> el front pinta los botones de compra self-service en el chat */
+              return json({ error: "Ya usaste tus " + limite + " mensajes de este mes. Compra un pack extra aqui abajo y sigues al toque, o escribenos por WhatsApp.", packs: true }, 429);
+            }
             return json({ error: who.admin
-              ? "Ya usaste tus " + limite + " mensajes de este mes. Puedes comprar un paquete extra (30, 60 o 120 mensajes) escribiendonos por WhatsApp, o hablar con una persona con el boton de aqui abajo."
+              ? "Ya usaste tus " + limite + " mensajes de este mes. El dueno de tu academia puede comprar un pack extra en 1 minuto desde su chat de soporte."
               : "Ya usaste tus " + limite + " mensajes de este mes. Escribele a tu profe por el chat del portal." }, 429);
           }
         }
@@ -5457,7 +5608,7 @@ export default {
             "EL PANEL (menu izquierdo): Inicio (resumen + tu link de alumnos) · Personas (Alumnos, Grupos, Profesores, Accesos al portal, Interesados) · Clases (Registro de clases, Agenda, Chat) · Cobros (Pagos, Caja, Reportes) · Material (Para tus alumnos, Tu biblioteca) · Configuracion (Perfil, Ajustes, Servicios, Ideas y errores).\n" +
             "PLANES Y PRECIOS (los unicos vigentes, en soles via Mercado Pago): prueba gratis de 30 DIAS sin tarjeta (y garantia de devolucion en el primer mes pagado). Profe S/49/mes (1 profesor, alumnos ilimitados) · Academia S/149/mes (hasta 5 profesores y 150 alumnos) · Academia XL S/299/mes (hasta 20 profesores y 400 alumnos) · Academia por alumno (pagas por alumno activo, minimo 5; se activa en Perfil > Tu plan y ahi mismo ves tu estimado en vivo). Academias de mas de 400 alumnos: plan Red/Enterprise a medida por WhatsApp. Se activa o cambia de plan en Configuracion > Perfil > 'Tu plan'; sin penalidad, rige desde el siguiente cobro.\n" +
             "SERVICIOS OPCIONALES (pestana Configuracion > Servicios, se coordinan por WhatsApp): Activacion asistida S/350 una vez (te dejamos todo andando: alumnos, pagos, marca) · Migracion desde Excel u otro software S/200 · Capacitacion con IA S/49.50 POR PERSONA (curso Batuta 101 + examen ORAL por voz con la examinadora IA en batuta.lat/aprende/examen, 15 min, con nota; se contrata por WhatsApp y se recibe un codigo) · Capacitacion del equipo en vivo (humana) S/199.50 por sesion o S/499.50 por 3 · Acompanamiento de primer nivel S/129/mes (soporte prioritario + revision mensual de numeros). Ademas hay un curso GRATIS con certificado: Batuta 101 en batuta.lat/aprende (4 modulos con quiz; el certificado se comparte en LinkedIn).\n" +
-            "MENSAJES DE ESTE ASISTENTE: cada mes tienes una bolsa de mensajes incluida. Si se te acaba y necesitas mas, puedes comprar un paquete extra por WhatsApp: 30 mensajes por S/5, 60 por S/10, o 120 por S/15 (rigen solo el mes en curso). Escribenos con el boton de WhatsApp de aqui abajo.\n" +
+            "MENSAJES DE ESTE ASISTENTE: cada mes tienes una bolsa de mensajes incluida. Si se te acaba, el dueno puede comprar un pack extra AQUI MISMO en el chat pagando en linea (Mercado Pago: tarjeta o Yape): 30 mensajes por S/5, 60 por S/10, o 120 por S/15 (rigen solo el mes en curso); al agotarse la bolsa aparecen los botones de compra en esta misma ventana y el saldo se acredita solo al pagar. Tambien se puede coordinar por WhatsApp.\n" +
             "COMO SE HACE:\n" +
             "- Nuevo alumno: Personas > Alumnos > '+ Nuevo alumno' (nombre, curso, paquete, horario). Para varios seguidos, boton 'Guardar y agregar otro'.\n" +
             "- Traer tus alumnos de antes (Excel o lista): Personas > Alumnos > 'Importar CSV'. Descargas la plantilla y subes el archivo, o pegas tu lista tal cual (un alumno por linea). Previsualizas antes de confirmar y los repetidos se omiten solos. Para exportar: menu lateral > Datos y respaldo > 'CSV alumnos'.\n" +
@@ -5507,7 +5658,8 @@ export default {
         const reply = await llamarClaudeOnboarding(env, system, mensajes, extraSys);
         if (!reply) return json({ error: "El asistente no esta disponible ahora mismo." }, 502);
         ctx.waitUntil(logSoporteIA(env, who.admin ? who.tenant.id : who.cu.tenant_id, who.admin ? (who.esDueno ? "dueno" : "profesor") : "alumno", texto, reply, historial));
-        return json({ reply: reply, restantes: cont.restantes });
+        const extrasPost = who.admin ? await saldoMensajesExtra(env, who.tenant.id) : 0;
+        return json({ reply: reply, restantes: cont.restantes, extras: extrasPost });
       }
 
       if (path === "/app/api/chatbot" && request.method === "POST"){

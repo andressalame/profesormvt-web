@@ -123,6 +123,13 @@
   /* ===== Polish visual (micro-animaciones + profundidad) ===== */
   @keyframes fadeUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
   .panel.active{animation:fadeUp .35s ease both;}
+  /* Reportes (portado de Batuta 15-jul): barras de ingresos por mes */
+  .repbars{display:flex;align-items:flex-end;gap:10px;height:170px;padding:10px 4px 0;max-width:640px;margin-bottom:16px;}
+  .repbar{flex:1;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;gap:6px;height:100%;min-width:0;}
+  .repbar i{display:block;width:100%;background:var(--accent);border-radius:2px 2px 0 0;opacity:.9;}
+  .repbar:last-child i{background:#3ea66a;}
+  .repbar .bl{font-family:var(--mono);font-size:9px;color:var(--muted);text-transform:uppercase;white-space:nowrap;}
+  .repbar .bv{font-family:var(--mono);font-size:9.5px;color:var(--cream);white-space:nowrap;}
   .card{transition:transform .18s ease,border-color .18s ease,box-shadow .18s ease;}
   .card:hover{transform:translateY(-3px);border-color:var(--muted);box-shadow:0 10px 26px rgba(0,0,0,.4);}
   .cards .card{animation:fadeUp .4s ease both;}
@@ -271,6 +278,7 @@
         <button class="navgroup-h" type="button" data-tour="cobros"><span class="ng-ico"><svg viewBox="0 0 24 24"><rect x="2" y="5" width="20" height="14" rx="2"/><circle cx="12" cy="12" r="3"/><line x1="6" y1="12" x2="6.01" y2="12"/><line x1="18" y1="12" x2="18.01" y2="12"/></svg></span><span class="ng-tx">Cobros</span><span class="ng-chev"><svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg></span></button>
         <div class="navgroup-items">
           <button class="tab" data-tab="pagos">Pagos<span class="dot hidden" id="dotPagos">0</span></button>
+          <button class="tab" data-tab="reportes">Reportes</button>
           <button class="tab" data-tab="cuentas">Accesos</button>
           <button class="tab" data-tab="leads">Interesados</button>
         </div>
@@ -400,6 +408,26 @@
       <div class="tablewrap">
         <table><thead><tr><th>Fecha</th><th>Quién</th><th>Paquete</th><th>Monto</th><th>Estado</th></tr></thead>
         <tbody id="tbProcesadas"></tbody></table>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel" id="panel-reportes">
+    <div class="group">
+      <h2>// Ingresos cobrados por mes</h2>
+      <p class="hint">Compras confirmadas (portal + las que confirmas a mano), agrupadas por mes. Histórico completo.</p>
+      <div class="repbars" id="repIngresosBars"></div>
+      <div class="tablewrap">
+        <table><thead><tr><th>Mes</th><th>Compras</th><th>Cobrado</th></tr></thead>
+        <tbody id="tbRepIngresos"></tbody></table>
+      </div>
+    </div>
+    <div class="group">
+      <h2>// Asistencia por mes</h2>
+      <p class="hint">Dictadas vs faltas de todas las clases registradas. Asistencia = dictadas / (dictadas + faltas).</p>
+      <div class="tablewrap">
+        <table><thead><tr><th>Mes</th><th>Dictadas</th><th>Faltas</th><th>Reprogramadas</th><th>Asistencia</th></tr></thead>
+        <tbody id="tbRepAsistencia"></tbody></table>
       </div>
     </div>
   </section>
@@ -1356,7 +1384,56 @@ function renderLeads(){
     return '<tr><td>'+esc(l.fecha||'')+'</td><td>'+esc(l.email||'')+'</td><td>'+esc(l.fuente||'')+'</td><td>'+esc(l.interes||'')+'</td></tr>';
   }).join("");
 }
-function renderAll(){ renderResumen(); renderAlumnos(); renderGrupos(); renderRegistro(); renderPagos(); renderCuentas(); renderLeads(); renderRecursos(); renderEjercicios(); renderAjustes(); renderPerfil(); fillSelects(); pintarLinksCobro(); }
+/* ---------- REPORTES (portado de Batuta 15-jul): ingresos + asistencia por mes, client-side ---------- */
+function mesLabel(ym){
+  var meses=["ene","feb","mar","abr","may","jun","jul","ago","sep","oct","nov","dic"];
+  var p=ym.split("-"); var m=parseInt(p[1],10);
+  return (meses[m-1]||ym)+" "+p[0];
+}
+function renderReportes(){
+  var ing={};
+  (db.compras||[]).forEach(function(c){
+    if(c.estado!=="confirmada") return;
+    var ym=(c.fecha||"").slice(0,7); if(!/^\d{4}-\d{2}$/.test(ym)) return;
+    if(!ing[ym]) ing[ym]={n:0,total:0};
+    ing[ym].n++; ing[ym].total+=Number(c.monto)||0;
+  });
+  var meses=Object.keys(ing).sort();
+  var barsBox=el("repIngresosBars");
+  if(barsBox){
+    var ult=meses.slice(-12);
+    var max=ult.reduce(function(m,k){return Math.max(m,ing[k].total);},0)||1;
+    barsBox.innerHTML = ult.length ? ult.map(function(k){
+      var h=Math.max(4,Math.round(ing[k].total/max*100));
+      return '<div class="repbar"><span class="bv">S/ '+Math.round(ing[k].total).toLocaleString("es-PE")+'</span><i style="height:'+h+'%"></i><span class="bl">'+mesLabel(k)+'</span></div>';
+    }).join("") : '<div class="empty" style="align-self:center;width:100%;">Sin cobros confirmados todavía</div>';
+  }
+  var tb=el("tbRepIngresos");
+  if(tb){
+    tb.innerHTML = meses.length ? meses.slice().reverse().map(function(k){
+      return '<tr><td>'+mesLabel(k)+'</td><td>'+ing[k].n+'</td><td class="big">S/ '+Math.round(ing[k].total).toLocaleString("es-PE")+'</td></tr>';
+    }).join("") : '<tr><td colspan="3" class="empty">Sin cobros confirmados todavía</td></tr>';
+  }
+  var asi={};
+  (db.registro||[]).forEach(function(r){
+    var ym=(r.fecha||"").slice(0,7); if(!/^\d{4}-\d{2}$/.test(ym)) return;
+    if(!asi[ym]) asi[ym]={a:0,f:0,r:0};
+    if(r.estado==="Asistió") asi[ym].a++;
+    else if(r.estado==="Falta") asi[ym].f++;
+    else if(r.estado==="Reprogramó") asi[ym].r++;
+  });
+  var meses2=Object.keys(asi).sort().reverse();
+  var tb2=el("tbRepAsistencia");
+  if(tb2){
+    tb2.innerHTML = meses2.length ? meses2.map(function(k){
+      var d=asi[k]; var tot=d.a+d.f;
+      var pct=tot?Math.round(d.a/tot*100):0;
+      var cls=pct>=90?"green":(pct>=75?"amber":"red");
+      return '<tr><td>'+mesLabel(k)+'</td><td>'+d.a+'</td><td>'+d.f+'</td><td>'+d.r+'</td><td><span class="pill '+cls+'">'+(tot? pct+'%':'—')+'</span></td></tr>';
+    }).join("") : '<tr><td colspan="5" class="empty">Sin clases registradas todavía</td></tr>';
+  }
+}
+function renderAll(){ renderResumen(); renderAlumnos(); renderGrupos(); renderRegistro(); renderPagos(); renderReportes(); renderCuentas(); renderLeads(); renderRecursos(); renderEjercicios(); renderAjustes(); renderPerfil(); fillSelects(); pintarLinksCobro(); }
 
 /* ---------- AGENDA (admin) ---------- */
 var AG_DISP = [], AG_RESERVAS = [];
@@ -1484,7 +1561,7 @@ function abrirGrupoActivo(){
 abrirGrupoActivo();
 
 /* ---------- Tabs / modales ---------- */
-var TITULOS={resumen:"Inicio",alumnos:"Alumnos",grupos:"Grupos",registro:"Clases",agenda:"Agenda",pagos:"Pagos",cuentas:"Accesos",leads:"Interesados",recursos:"Para tus alumnos",ejercicios:"Tu biblioteca",ajustes:"Ajustes",perfil:"Perfil",chat:"Chat"};
+var TITULOS={resumen:"Inicio",alumnos:"Alumnos",grupos:"Grupos",registro:"Clases",agenda:"Agenda",pagos:"Pagos",reportes:"Reportes",cuentas:"Accesos",leads:"Interesados",recursos:"Para tus alumnos",ejercicios:"Tu biblioteca",ajustes:"Ajustes",perfil:"Perfil",chat:"Chat"};
 document.querySelectorAll(".tab").forEach(function(t){
   t.addEventListener("click",function(){
     document.querySelectorAll(".tab").forEach(function(x){x.classList.remove("active");});
