@@ -326,6 +326,17 @@ section{position:relative;z-index:1}
 .method.flip .wrap{grid-template-columns:.95fr 1.05fr}
 .method.flip .copy{order:2}
 .method.flip .visual{order:1}
+/* Métodos fusionados en 3 columnas */
+.metodo-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--line);border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;margin-top:clamp(2rem,4vw,3rem)}
+.metodo-card{background:#130d0a;padding:clamp(1.6rem,2.4vw,2.2rem)}
+.metodo-card .idx{font-family:"JetBrains Mono",monospace;color:var(--orange);letter-spacing:.2em;font-size:.74rem;margin-bottom:1rem}
+.mword{font-family:"Anton",sans-serif;text-transform:uppercase;font-size:clamp(2rem,3.4vw,2.9rem);line-height:.95;letter-spacing:-.01em}
+.mkick{display:block;font-family:"JetBrains Mono",monospace;font-size:.72rem;letter-spacing:.2em;text-transform:uppercase;color:var(--gray);margin-top:.6rem}
+.mtag{font-size:clamp(1rem,1.4vw,1.15rem);color:var(--orange2);font-weight:500;margin:1.2rem 0 .8rem}
+.mbody{color:#cfc7b6;font-size:.98rem;line-height:1.55}
+.mfeats{list-style:none;margin:1.3rem 0 0;padding:0;display:flex;flex-wrap:wrap;gap:.5em}
+.mfeats li{font-family:"JetBrains Mono",monospace;font-size:.66rem;letter-spacing:.1em;text-transform:uppercase;color:var(--cream);border:1px solid var(--line);border-radius:var(--radius);padding:.45em .7em}
+@media(max-width:820px){.metodo-grid{grid-template-columns:1fr}}
 .visual{position:relative}
 .frame{
   border:3px solid var(--cream);border-radius:var(--radius);padding:clamp(1.5rem,3vw,2.4rem);
@@ -592,77 +603,42 @@ footer .fcol a:hover{color:var(--orange2)}
 <!-- METHODS -->
 <div id="metodo"></div>
 
-<!-- 5 · CANTO -->
-<section class="method pad stage" data-bg="#22100a" data-glow=".2">
+<!-- 5 · MÉTODOS (fusión canto + piano + composición) -->
+<section class="metodos pad stage" data-bg="#1a0f0a" data-glow=".16">
   <div class="spot"></div>
   <div class="wrap">
-    <div class="copy">
-      <div class="idx mono reveal-up">01 / Método de canto</div>
-      <h2 class="word display reveal-title">Canto<span class="kick">Modern Vocal Training</span></h2>
-      <p class="tag reveal-up">Lo opuesto a apoya más fuerte.</p>
-      <p class="body reveal-up">Tu voz funciona por coordinación, no por fuerza. Trabajamos resonancia, cierre cordal y libertad total para que el agudo salga fácil y tu voz suene tuya.</p>
-    </div>
-    <div class="visual reveal-up">
-      <div class="feats">
-        <div class="feat"><div class="n">01</div><div class="t">Coordinación</div></div>
-        <div class="feat"><div class="n">02</div><div class="t">Resonancia</div></div>
-        <div class="feat"><div class="n">03</div><div class="t">Cierre cordal</div></div>
-        <div class="feat"><div class="n">04</div><div class="t">Sin constricción</div></div>
+    <span class="eyebrow reveal-up">Los tres métodos</span>
+    <h2 class="display h2 reveal-title">Un camino para cada quién.</h2>
+    <div class="metodo-grid reveal-stagger">
+      <div class="metodo-card">
+        <div class="idx mono">01 / Canto</div>
+        <h3 class="mword">Canto</h3>
+        <span class="mkick">Modern Vocal Training</span>
+        <p class="mtag">Lo opuesto a apoya más fuerte.</p>
+        <p class="mbody">Tu voz funciona por coordinación, no por fuerza. Resonancia, cierre cordal y libertad para que el agudo salga fácil.</p>
+        <ul class="mfeats"><li>Coordinación</li><li>Resonancia</li><li>Cierre cordal</li><li>Sin constricción</li></ul>
+      </div>
+      <div class="metodo-card">
+        <div class="idx mono">02 / Piano</div>
+        <h3 class="mword">Piano</h3>
+        <span class="mkick">Técnica con propósito</span>
+        <p class="mtag">Para tocar tus canciones, no ejercicios eternos.</p>
+        <p class="mbody">Fuerza, coordinación e independencia entre manos desde el primer día, para que toques lo que amas pronto, no en años.</p>
+        <ul class="mfeats"><li>Fuerza y coordinación</li><li>Independencia</li><li>Dos manos</li><li>Tu repertorio</li></ul>
+      </div>
+      <div class="metodo-card">
+        <div class="idx mono">03 / Composición</div>
+        <h3 class="mword">Composición</h3>
+        <span class="mkick">De oyente a autor</span>
+        <p class="mtag">De entender canciones a escribir las tuyas.</p>
+        <p class="mbody">Diseccionas las canciones que amas con hook theory y análisis funcional, y pasas de entenderlas a escribir las tuyas.</p>
+        <ul class="mfeats"><li>Hook theory</li><li>Análisis funcional</li><li>Estructura y armonía</li><li>Tu propia voz</li></ul>
       </div>
     </div>
   </div>
 </section>
 
-<!-- 6 · PIANO -->
-<section class="method flip pad stage" data-bg="#130d0a" data-glow=".14">
-  <div class="spot"></div>
-  <div class="wrap">
-    <div class="copy">
-      <div class="idx mono reveal-up">02 / Método de piano</div>
-      <h2 class="word display reveal-title">Piano<span class="kick">Técnica con propósito</span></h2>
-      <p class="tag reveal-up">Para tocar tus canciones, no ejercicios eternos.</p>
-      <p class="body reveal-up">Construimos fuerza y coordinación en los dedos, e independencia entre manos, desde el primer día, con un objetivo claro: que toques tus canciones favoritas pronto, no dentro de años.</p>
-    </div>
-    <div class="visual reveal-up">
-      <div class="frame">
-        <div class="biglabel">Toca lo que <span class="fire">amas</span></div>
-        <svg class="wave-svg" viewBox="0 0 400 88" preserveAspectRatio="none" aria-hidden="true">
-          <path class="w2" d="M0,60 C40,20 70,80 110,50 C150,20 180,75 220,48 C260,22 300,78 340,46 C370,24 390,58 400,50"/>
-          <path d="M0,44 C40,70 80,18 120,46 C160,72 200,16 240,46 C280,72 320,18 360,46 C385,62 395,40 400,44"/>
-        </svg>
-        <div class="feats" style="margin-top:1.4rem;border:none">
-          <div class="feat" style="border-left:1px solid var(--line)"><div class="n">01</div><div class="t">Fuerza y coordinación</div></div>
-          <div class="feat"><div class="n">02</div><div class="t">Independencia</div></div>
-          <div class="feat" style="border-left:1px solid var(--line)"><div class="n">03</div><div class="t">Dos manos</div></div>
-          <div class="feat"><div class="n">04</div><div class="t">Tu repertorio</div></div>
-        </div>
-      </div>
-    </div>
-  </div>
-</section>
-
-<!-- 7 · COMPOSICION -->
-<section class="method pad stage" data-bg="#22100a" data-glow=".2">
-  <div class="spot"></div>
-  <div class="wrap">
-    <div class="copy">
-      <div class="idx mono reveal-up">03 / Método de composición</div>
-      <h2 class="word display reveal-title">Composición<span class="kick">De oyente a autor</span></h2>
-      <p class="tag reveal-up">De entender canciones a escribir las tuyas.</p>
-      <p class="body reveal-up">Aprendes a diseccionar las canciones que amas con hook theory y análisis funcional, y pasas de entender cómo funcionan a escribir las tuyas propias.</p>
-    </div>
-    <div class="visual reveal-up">
-      <div class="feats">
-        <div class="feat"><div class="n">01</div><div class="t">Hook theory</div></div>
-        <div class="feat"><div class="n">02</div><div class="t">Análisis funcional</div></div>
-        <div class="feat"><div class="n">03</div><div class="t">Estructura y armonía</div></div>
-        <div class="feat"><div class="n">04</div><div class="t">Tu propia voz</div></div>
-      </div>
-    </div>
-  </div>
-</section>
-
-<!-- 8 · PROCESO -->
+<!-- 6 · PROCESO -->
 <section class="proceso pad stage" data-bg="#130d0a" data-glow=".12">
   <div class="spot"></div>
   <div class="wrap">
