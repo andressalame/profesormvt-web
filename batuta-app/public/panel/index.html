@@ -3416,16 +3416,31 @@ el("btnSubirCarpeta").addEventListener("click",function(){
     else invalidos++;
   }
   if(!validos.length){ toast("Ningún archivo válido en esa carpeta (audio/PDF/imagen, máx 25 MB c/u)"); return; }
-  var btn=el("btnSubirCarpeta"); btn.disabled=true; var prev=btn.textContent; btn.textContent="Subiendo…";
-  el("carpEstado").textContent="Subiendo "+validos.length+" archivo(s)…";
-  var fd=new FormData();
-  validos.forEach(function(f){ fd.append("archivos",f); fd.append("rutas", f.webkitRelativePath || f.name); });
-  fd.append("curso", el("carp_curso").value);
-  fetch("/app/api/admin/ejercicio/carpeta",{method:"POST",headers:{"authorization":"Bearer "+token},body:fd})
-    .then(function(r){ return r.json().catch(function(){return {};}).then(function(d){ if(r.status===401) throw {auth:true}; if(!r.ok) throw new Error(d.error||("HTTP "+r.status)); return d; }); })
-    .then(function(d){
+  var btn=el("btnSubirCarpeta"); btn.disabled=true; var prev=btn.textContent;
+  /* De a UN archivo por request: todo junto reventaba el límite de 100 MB por request
+     (o la memoria del worker) con carpetas de audios y se quedaba "Subiendo…" eterno.
+     Así hay progreso real y un archivo caído no tumba el resto. */
+  var curso=el("carp_curso").value, subidos=0, saltados=invalidos, errores=0;
+  var subirUno=function(i){
+    if(i>=validos.length) return Promise.resolve();
+    el("carpEstado").textContent="Subiendo "+(i+1)+"/"+validos.length+"… ("+validos[i].name+")";
+    btn.textContent="Subiendo "+(i+1)+"/"+validos.length+"…";
+    var fd=new FormData();
+    fd.append("archivos",validos[i]); fd.append("rutas", validos[i].webkitRelativePath || validos[i].name);
+    fd.append("curso", curso);
+    return fetch("/app/api/admin/ejercicio/carpeta",{method:"POST",headers:{"authorization":"Bearer "+token},body:fd})
+      .then(function(r){ return r.json().catch(function(){return {};}).then(function(d){
+        if(r.status===401) throw {auth:true};
+        if(!r.ok) errores++;
+        else { subidos+=(d.subidos||0); saltados+=(d.saltados||0); }
+      }); })
+      .catch(function(err){ if(err&&err.auth) throw err; errores++; })
+      .then(function(){ return subirUno(i+1); });
+  };
+  subirUno(0)
+    .then(function(){
       el("carp_file").value=""; el("carp_curso").value="Todos";
-      var msg="Subidos "+(d.subidos||0)+" archivo(s)"+(invalidos||d.saltados?(" · "+((invalidos||0)+(d.saltados||0))+" saltado(s)"):"");
+      var msg="Subidos "+subidos+" archivo(s)"+(saltados?(" · "+saltados+" saltado(s)"):"")+(errores?(" · "+errores+" con error"):"");
       el("carpEstado").textContent=msg;
       return recargar().then(function(){ toast(msg); });
     })
