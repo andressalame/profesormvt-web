@@ -758,12 +758,26 @@
       <p class="hint">Sube o baja de plan cuando quieras, sin penalidad. Si ya tienes tu suscripción activa, el cambio se aplica solo (no vuelves a poner tu tarjeta) y rige desde tu siguiente cobro mensual.</p>
       <div class="rowact" style="margin-top:8px;flex-wrap:wrap;">
         <span class="pill gray" id="planActual">—</span>
-        <button class="btn ghost sm" data-plan="profe" id="btnPlanProfe">Profe · US$9.95 (S/34)</button>
-        <button class="btn ghost sm" data-plan="academia" id="btnPlanAcademia">Academia · US$24.95 (S/85)</button>
-        <button class="btn ghost sm" data-plan="xl" id="btnPlanXl">Academia XL · US$49.95 (S/170)</button>
+        <button class="btn ghost sm" data-plan="profe" id="btnPlanProfe">Profe · S/49 (1 profe, alumnos ilimitados)</button>
+        <button class="btn ghost sm" data-plan="profe_duo" id="btnPlanProfeDuo">Profe Dúo · S/78 (2 profes)</button>
+        <button class="btn ghost sm" data-plan="profe_trio" id="btnPlanProfeTrio">Profe Trío · S/107 (3 profes)</button>
+        <button class="btn ghost sm" data-plan="academia" id="btnPlanAcademia">Academia · S/149 (5 profes, 150 alumnos)</button>
+        <button class="btn ghost sm" data-plan="xl" id="btnPlanXl">Academia XL · S/299 (20 profes, 400 alumnos)</button>
         <button class="btn ghost sm" data-plan="por_alumno" id="btnPlanPorAlumno">Academia por alumno · US$1.50/alumno</button>
       </div>
       <p class="hint" id="porAlumnoHint" style="margin-top:6px;display:none;">Con tus <strong id="paCount">—</strong> alumnos activos hoy, tu cobro sería <strong id="paMonto">—</strong>/mes. Se recalcula solo cada mes según cuántos tengas. Ideal para academias grandes.</p>
+      <div class="rowact" style="margin-top:10px;flex-wrap:wrap;">
+        <button class="btn ghost sm" id="btnPlanAnualPerfil" type="button">💡 Pagar 1 año de mi plan (2 meses gratis)</button>
+        <span class="hint" style="margin:0;">Profe S/490 · Dúo S/780 · Trío S/1,070 · Academia S/1,490 · XL S/2,990. Un solo pago, cero cobros mensuales.</span>
+      </div>
+    </div>
+    <div class="group">
+      <h2>// Recomienda Batuta</h2>
+      <p class="hint">Comparte tu link y gana el <strong>30% de la mensualidad</strong> de cada academia que se suscriba con él, durante 12 meses. Te lo pagamos por Yape a fin de mes. Sin límite de referidos.</p>
+      <div class="rowact" style="flex-wrap:wrap;">
+        <input id="afLink" readonly value="" style="flex:1;min-width:220px;" />
+        <button class="btn ghost sm" id="btnAfCopiar" type="button">Copiar mi link</button>
+      </div>
     </div>
   </section>
 
@@ -953,16 +967,18 @@
 <!-- Overlay de paywall (trial vencido) -->
 <div class="overlay" id="ovPaywall">
   <div class="modal">
-    <h3>Tu semana de <em>prueba terminó</em></h3>
-    <div class="mlab">// Activa tu plan para seguir usando Batuta</div>
+    <h3>Tu <em>prueba terminó</em></h3>
+    <div class="mlab">// Activa tu plan para seguir usando Batuta (garantía de devolución en tu primer mes)</div>
     <div class="frow" style="grid-template-columns:1fr;gap:10px;">
-      <div class="card" style="padding:14px 16px;"><strong>Profe</strong> — US$9.95/mes (se cobra S/34)</div>
-      <div class="card" style="padding:14px 16px;"><strong>Academia</strong> — US$24.95/mes (se cobra S/85)</div>
-      <div class="card" style="padding:14px 16px;"><strong>Academia XL</strong> — US$49.95/mes (se cobra S/170)</div>
+      <div class="card" style="padding:14px 16px;"><strong>Profe</strong> — S/49/mes (US$14.95) · 1 profesor · alumnos ilimitados</div>
+      <div class="card" style="padding:14px 16px;"><strong>Academia</strong> — S/149/mes (US$43.95) · 5 profesores · hasta 150 alumnos</div>
+      <div class="card" style="padding:14px 16px;"><strong>Academia XL</strong> — S/299/mes (US$87.95) · 20 profesores · hasta 400 alumnos</div>
+      <div class="card" style="padding:14px 16px;">💡 <strong>Paga el año y llévate 2 meses gratis</strong> (Profe S/490 · Academia S/1,490 · XL S/2,990), desde "Activar mi plan".</div>
     </div>
     <div class="modal-actions">
       <a class="btn" href="/app/suscribir">Activar mi plan</a>
       <a class="btn ghost" id="btnPaywallWa" target="_blank" rel="noopener">Activar por WhatsApp</a>
+      <button class="btn ghost" id="btnPaywallGratis" type="button">Seguir con el plan Gratis (1 profe, 10 alumnos)</button>
     </div>
     <div class="mlab" style="margin-top:18px;">// O gana 7 días más de prueba</div>
     <p class="hint" style="margin:6px 0 8px;">Cuéntanos qué te faltó, qué mejorarías o qué error viste, y tu primer aporte del mes te regala 7 días más para seguir probando.</p>
@@ -1417,6 +1433,22 @@ function aplicarModulos(){
 function mostrarPaywall(){
   var wa = "https://wa.me/"+WA_ACTIVAR+"?text="+encodeURIComponent("Hola Andrés, quiero activar mi plan de Batuta (academia: "+TENANT_SLUG+")");
   var btn=el("btnPaywallWa"); if(btn) btn.href=wa;
+  /* Plan Gratis desde el paywall (15-jul-2026): 1 profe, 10 alumnos, sin recordatorios ni SUNAT.
+     Recupera al que no iba a pagar y lo deja dentro del producto (candidato natural a upgrade). */
+  var bG=el("btnPaywallGratis");
+  if(bG && !bG._listo){
+    bG._listo=true;
+    bG.addEventListener("click",function(){
+      if(!confirm("Pasar al plan Gratis? Mantienes tu cuenta y tus datos. Límites: 1 profesor, 10 alumnos, sin recordatorios automáticos ni boletas SUNAT. Puedes subir de plan cuando quieras.")) return;
+      bG.disabled=true;
+      fetch("/app/api/t/plan-gratis",{method:"POST",headers:Object.assign({"content-type":"application/json"},hdr()),body:"{}"})
+        .then(function(r){return r.json().catch(function(){return {};});})
+        .then(function(d){
+          if(d && d.ok){ location.reload(); return; }
+          alert((d&&d.error)||"No se pudo cambiar al plan Gratis. Escríbenos por WhatsApp."); bG.disabled=false;
+        }).catch(function(){ alert("Error de conexión. Intenta de nuevo."); bG.disabled=false; });
+    });
+  }
   /* multi-profesor: el plan lo paga el dueño; al profesor se le dice a quién acudir */
   if(ROL==="profesor"){
     var m=el("ovPaywall").querySelector(".modal");
@@ -3843,15 +3875,18 @@ var _bCuD=el("btnCulqiDesconectar"); if(_bCuD) _bCuD.addEventListener("click",fu
     .catch(function(e){ toast((e&&e.message)||"No se pudo desconectar"); });
 });
 /* ---------- Cambio de plan (Perfil > Tu plan) ---------- */
-var PLAN_NOMBRES={profe:"Profe",academia:"Academia",xl:"Academia XL",por_alumno:"Academia por alumno"};
+var PLAN_NOMBRES={gratis:"Gratis",profe:"Profe",profe_duo:"Profe Dúo",profe_trio:"Profe Trío",academia:"Academia",xl:"Academia XL",por_alumno:"Academia por alumno"};
 var PLAN_CARGADO=false;
 function refrescarPlan(){
   var pill=el("planActual"); if(!pill) return;
   fetch('/app/api/t/me',{headers:hdr()}).then(function(r){return r.json().catch(function(){return {};});}).then(function(d){
     if(!d || d.error) return;
     var p=d.plan||"profe";
-    pill.className="pill green"; pill.textContent="Tu plan: "+(PLAN_NOMBRES[p]||p)+(d.suscrito?" · suscripción activa":" · en prueba");
-    ["profe","academia","xl","por_alumno"].forEach(function(k){
+    var estadoTxt=d.anual?(" · plan anual hasta "+String(d.anual_hasta||"").slice(0,10)):(d.suscrito?" · suscripción activa":(p==="gratis"?" · gratis para siempre":" · en prueba"));
+    pill.className="pill green"; pill.textContent="Tu plan: "+(PLAN_NOMBRES[p]||p)+estadoTxt;
+    // Link de afiliado (Recomienda Batuta): el slug ya está en la sesión.
+    try{ var af=el("afLink"); if(af && d.slug){ af.value=location.origin+"/app/registro?ref="+d.slug; } }catch(e){}
+    ["profe","profe_duo","profe_trio","academia","xl","por_alumno"].forEach(function(k){
       var b=document.querySelector('[data-plan="'+k+'"]'); if(!b) return;
       b.disabled=(k===p);
       b.style.opacity=(k===p)?".45":"";
@@ -3872,11 +3907,38 @@ document.querySelectorAll("[data-plan]").forEach(function(b){
     b.disabled=true;
     apiPost('/app/api/t/cambiar-plan',{plan:plan}).then(function(d){
       if(d && d.init_point){ location.href=d.init_point; return; } // por_alumno con sub previa: reconfirma en MP
+      if(d && d.gracia){ toast("Plan "+nombre+" elegido: tienes 7 días para activar tu suscripción en /app/suscribir"); setTimeout(function(){ location.href="/app/suscribir"; }, 1500); return; }
       toast(d.modo==="actualizado" ? ("Listo: plan "+nombre+" desde tu siguiente cobro") : ("Plan "+nombre+" elegido: se aplica al activar tu suscripción"));
       refrescarPlan();
     }).catch(function(e){ toast((e&&e.message)||"No se pudo cambiar el plan"); b.disabled=false; });
   });
 });
+/* Pago ANUAL desde Perfil (2 meses gratis): usa el plan actual del tenant. */
+(function(){
+  var bA=el("btnPlanAnualPerfil"); if(!bA) return;
+  bA.addEventListener("click",function(){
+    fetch('/app/api/t/me',{headers:hdr()}).then(function(r){return r.json().catch(function(){return {};});}).then(function(d){
+      var p=(d&&d.plan)||"profe";
+      if(p==="por_alumno"||p==="gratis") p="profe"; // anual aplica a planes fijos; gratis paga Profe anual
+      if(!confirm("Pagar 1 año del plan "+(PLAN_NOMBRES[p]||p)+" (12 meses al precio de 10)? Es un solo pago por Mercado Pago.")) return;
+      bA.disabled=true;
+      apiPost('/app/api/t/plan-anual/checkout',{plan:p}).then(function(dd){
+        if(dd && dd.init_point){ location.href=dd.init_point; return; }
+        toast((dd&&dd.error)||"No se pudo iniciar el pago anual"); bA.disabled=false;
+      }).catch(function(e){ toast((e&&e.message)||"No se pudo iniciar el pago anual"); bA.disabled=false; });
+    });
+  });
+})();
+/* Copiar link de afiliado */
+(function(){
+  var bC=el("btnAfCopiar"); if(!bC) return;
+  bC.addEventListener("click",function(){
+    var af=el("afLink"); if(!af||!af.value) return;
+    try{ af.select(); document.execCommand("copy"); toast("Link copiado: compártelo donde quieras"); }catch(e){
+      try{ navigator.clipboard.writeText(af.value); toast("Link copiado"); }catch(e2){ toast("Copia el link manualmente"); }
+    }
+  });
+})();
 
 /* Toast al volver del OAuth de MP (?mp=ok|error|cancelado) */
 try {
@@ -4169,6 +4231,31 @@ window.batutaInit = batutaInit;
       toast("El pago no se completó. Puedes intentarlo de nuevo desde el chat de soporte.");
     } else if(resultado==="pendiente"){
       toast("Tu pago quedó pendiente. Se acreditará solo al aprobarse.");
+    }
+  })();
+  /* Volviendo del checkout ANUAL (?anual=ok&payment_id=): confirmar server-to-server y recargar
+     (el estado del tenant cambia a acceso anual). Idempotente si el webhook llegó antes. */
+  (function(){
+    var q=new URLSearchParams(location.search);
+    if(!q.get("anual")) return;
+    var pagoId=q.get("payment_id")||q.get("collection_id")||"";
+    var resultado=q.get("anual");
+    history.replaceState(null,"",location.pathname);
+    if(resultado==="ok" && pagoId && /^\d+$/.test(pagoId)){
+      fetch("/app/api/t/plan-anual/confirmar",{method:"POST",headers:Object.assign({"content-type":"application/json"},hdr()),body:JSON.stringify({payment_id:pagoId})})
+        .then(function(r){ return r.json().catch(function(){return {};}); })
+        .then(function(d){
+          if(d && d.ok){
+            toast(d.ya_estaba?"Tu año ya estaba acreditado.":"Listo: tienes 12 meses de Batuta pagados. Gracias por la confianza!");
+            setTimeout(function(){ location.reload(); }, 1800);
+          } else if(d && d.estado){
+            toast("Tu pago está "+d.estado+". Se acreditará solo al aprobarse.");
+          }
+        }).catch(function(){});
+    } else if(resultado==="error"){
+      toast("El pago anual no se completó. Puedes intentarlo de nuevo desde Perfil.");
+    } else if(resultado==="pendiente"){
+      toast("Tu pago anual quedó pendiente. Se acreditará solo al aprobarse.");
     }
   })();
   function abrir(){

@@ -76,13 +76,21 @@ function resolverPk(map, nombre){
    MP Peru rechaza USD ("Cannot operate with currency id USD in MPE", verificado 06-jul-2026).
    Escalera AGRESIVA con tope por alumnos (12-jul-2026, decision de Andres tras el costeo):
    Profe S/49 (alumnos ILIMITADOS) · Academia S/149 (hasta 150) · XL S/299 (hasta 400) · Enterprise 400+ (a medida). */
-const PLANES = { profe: 49, academia: 149, xl: 299 };
-const PLANES_USD = { profe: "14.95", academia: "43.95", xl: "87.95" };
-const PLAN_NOMBRE = { profe: "Profe", academia: "Academia", xl: "Academia XL", por_alumno: "Academia por alumno" };
+const PLANES = { profe: 49, profe_duo: 78, profe_trio: 107, academia: 149, xl: 299 };
+const PLANES_USD = { profe: "14.95", profe_duo: "22.95", profe_trio: "31.95", academia: "43.95", xl: "87.95" };
+const PLAN_NOMBRE = { gratis: "Gratis", profe: "Profe", profe_duo: "Profe Dúo", profe_trio: "Profe Trío", academia: "Academia", xl: "Academia XL", por_alumno: "Academia por alumno" };
 /* Tope de alumnos por plan (12-jul-2026): la palanca de valor. Se enforce en admin/data PUT SOLO
-   para tenants ya pagando (estado 'activo'); en trial no topa (para que importen su academia entera). */
-const ALUM_CAP = { profe: 1000000, academia: 150, xl: 400, por_alumno: 1000000 }; // Profe: alumnos ILIMITADOS (13-jul-2026, Andres: se cobra por profesor, no por alumno; gana la comparacion vs My Music Staff)
-const MP_TRIAL_DIAS = 30; // 14-jul-2026: alineado al trial de 30 dias. OJO: los 3 planes FIJOS de MP (MP_PLAN_IDS) siguen con free_trial 7 dias hasta que Andres los recree (ver RUNBOOK "Trial 30 + garantia"). Los preapproval DINAMICOS (por_alumno) ya usan 30.
+   para tenants ya pagando (estado 'activo'); en trial no topa (para que importen su academia entera).
+   15-jul-2026 (aprobado por Andres): plan GRATIS (10 alumnos, 1 profe, sin recordatorios ni SUNAT;
+   estado 'activo' sin preapproval) como anzuelo PLG/SEO, y Profe Duo/Trio (profe extra a ~S/29:
+   cierra la fuga de upgrade del salto 1 profe S/49 -> 5 profes S/149). */
+const ALUM_CAP = { gratis: 10, profe: 1000000, profe_duo: 1000000, profe_trio: 1000000, academia: 150, xl: 400, por_alumno: 1000000 }; // Profe: alumnos ILIMITADOS (13-jul-2026)
+/* Plan ANUAL (15-jul-2026, aprobado por Andres): 12 meses al precio de 10 (2 meses gratis, la norma
+   del mercado). Pago UNICO por checkout preference (patron packs de mensajes), NO preapproval: al
+   confirmarse se acreditan +365 dias (estado 'trial' + trial_hasta lejano + nurture_paso=9, el
+   mecanismo del año fundador) y se cancela el preapproval mensual si existia (anti doble cobro). */
+const PLANES_ANUAL = { profe: 490, profe_duo: 780, profe_trio: 1070, academia: 1490, xl: 2990 };
+const MP_TRIAL_DIAS = 30; // 15-jul-2026: los 3 planes fijos de MP ya fueron recreados con free_trial 30 (ver MP_PLAN_IDS). Los preapproval DINAMICOS (por_alumno) tambien usan 30.
 /* Plan "por alumno activo" (la palanca del millón, 12-jul-2026): el cobro del SaaS a la academia
    = max(piso, alumnos activos) × PRECIO_ALUMNO_PEN. Monto DINÁMICO -> se cobra por /preapproval
    directo (no por plan fijo) y el cron lo recalcula cada día (PUT al preapproval si cambió).
@@ -155,6 +163,8 @@ async function recalcularPorAlumno(env){
    Verificado por API: free_trial 30 days, status active. */
 const MP_PLAN_IDS = {
   profe: "04758b8ab04e4b628adbdfe529501d20",     // S/49  trial 30d (15-jul-2026)
+  profe_duo: "d318736d1edc4eaabf02a9a5d16eebd8",  // S/78  trial 30d (creado 15-jul-2026 via su/mp-crear-planes)
+  profe_trio: "34f803bc0a734019975b8335e43ef1c8", // S/107 trial 30d (idem)
   academia: "0e03058fe6834e16a2f806a0846d16c2",  // S/149 trial 30d (15-jul-2026)
   xl: "dc68cf0b618c4d93a6c147ff47c905d2"          // S/299 trial 30d (15-jul-2026)
 };
@@ -163,6 +173,13 @@ const MP_PLAN_IDS = {
    34/85/170 (06-jul tarde): profe=ae98cb29a7b94853a2388c3d3ebc8874 · academia=6af72fcd1e2f4ca497be3f2b4adca7a9 · xl=7d4d75ea227b4dce860a480b404bf96f
    49/149/249 (06-jul mañana): profe=35ba601b3de344458c0b6960b4929459 · academia=cdf23adca57a40b8b53e6405ddfc274f · xl=fcb43515dbbd47e4a934e9426c3d7522 */
 const MP_CHECKOUT_BASE = "https://www.mercadopago.com.pe/subscriptions/checkout?preapproval_plan_id=";
+/* ¿El preapproval_plan_id es uno de NUESTROS planes? Ignora entradas vacias de MP_PLAN_IDS
+   (los planes aun no creados): sin este filtro, un preapproval sin plan ("") pasaria el check. */
+function esPlanNuestroMP(planId){
+  const id = String(planId || "");
+  if (!id) return false;
+  return Object.values(MP_PLAN_IDS).filter(Boolean).indexOf(id) !== -1;
+}
 
 const json = (data, status) => new Response(JSON.stringify(data), {
   status: status || 200,
@@ -604,7 +621,7 @@ async function filaSesion(env, request){
    logins nuevos. 'T:'+tenants.id = legacy, se resuelve al DUENO del tenant (las sesiones
    vivas de antes siguen funcionando como sesion del dueno). Regla permanente:
    profesor_id NULL (o '' en disponibilidad) = "del dueno", nunca "de todos". */
-const MAX_PROFES = { profe: 1, academia: 5, xl: 20, por_alumno: 50 };
+const MAX_PROFES = { gratis: 1, profe: 1, profe_duo: 2, profe_trio: 3, academia: 5, xl: 20, por_alumno: 50 };
 
 async function duenoDeTenant(env, tenantId){
   return env.DB.prepare("SELECT * FROM profesores WHERE tenant_id = ?1 AND rol = 'dueno'").bind(tenantId).first();
@@ -1251,9 +1268,83 @@ async function consumirMensajeExtra(env, tenantId){
     return !!(r.meta && r.meta.changes === 1);
   } catch (e) { return false; }
 }
+/* ---------- Plan ANUAL (15-jul-2026): pago unico via checkout preference ----------
+   Mismo patron anti-doble-credito de los packs: iniciada -> pagada una sola vez
+   (el webhook y la confirmacion al volver pueden llegar ambos; solo uno acredita). */
+let ANUAL_OK = false;
+async function ensureAnualSchema(env){
+  if (ANUAL_OK) return;
+  try {
+    await env.DB.prepare(
+      "CREATE TABLE IF NOT EXISTS anual_compras (id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, plan TEXT NOT NULL, monto INTEGER NOT NULL, estado TEXT NOT NULL, fecha TEXT DEFAULT '', mp_payment_id TEXT DEFAULT '')"
+    ).run();
+    ANUAL_OK = true;
+  } catch (e) {}
+}
+/* Acredita 12 meses: estado 'trial' con trial_hasta a +365d desde hoy (o desde el fin del
+   trial vigente si aun es futuro) + nurture_paso=9 (fuera del nurture, mecanismo del año
+   fundador). Si habia preapproval mensual vivo, se CANCELA en MP (anti doble cobro). */
+async function acreditarPlanAnual(env, tenantId, plan){
+  const t = await env.DB.prepare("SELECT * FROM tenants WHERE id = ?1").bind(tenantId).first();
+  if (!t) return null;
+  if (t.mp_preapproval_id && env.MP_ACCESS_TOKEN){
+    try { await mpFetch(env, "/preapproval/" + encodeURIComponent(t.mp_preapproval_id), { method: "PUT", body: { status: "cancelled" } }); } catch (e) {}
+  }
+  const base = Math.max(Date.now(), Date.parse(t.trial_hasta) || 0);
+  const hasta = new Date(base + 365 * 86400000).toISOString();
+  try { await env.DB.prepare("ALTER TABLE tenants ADD COLUMN nurture_paso INTEGER DEFAULT 0").run(); } catch (e) {}
+  await env.DB.prepare(
+    "UPDATE tenants SET plan = ?1, estado = 'trial', trial_hasta = ?2, nurture_paso = 9, mp_preapproval_id = '', mp_sub_status = 'anual' WHERE id = ?3"
+  ).bind(plan, hasta, tenantId).run();
+  return hasta;
+}
+async function confirmarAnualCompra(env, compraId, paymentId){
+  await ensureAnualSchema(env);
+  const upd = await env.DB.prepare(
+    "UPDATE anual_compras SET estado = 'pagada', mp_payment_id = ?2, fecha = ?3 WHERE id = ?1 AND estado = 'iniciada'"
+  ).bind(compraId, String(paymentId || ""), new Date().toISOString()).run();
+  if (!(upd.meta && upd.meta.changes === 1)) return null;
+  const compra = await env.DB.prepare("SELECT * FROM anual_compras WHERE id = ?1").bind(compraId).first();
+  if (!compra) return null;
+  const hasta = await acreditarPlanAnual(env, compra.tenant_id, compra.plan);
+  return hasta ? Object.assign({}, compra, { hasta }) : null;
+}
+
+/* ---------- Afiliados (15-jul-2026, aprobado por Andres): 30% recurrente por 12 meses ----------
+   Tracking minimo viable: tenants.ref_code guarda el codigo de quien lo refirio (?ref= en el
+   registro). Codigo de un tenant = su slug. Afiliados EXTERNOS (contadores, KOLs) se dan de
+   alta con su/afiliado y usan su codigo propio. La liquidacion es manual (su/afiliados lista
+   todo); el pago lo hace Andres por Yape a fin de mes. */
+let AFILIADOS_OK = false;
+async function ensureAfiliadosSchema(env){
+  if (AFILIADOS_OK) return;
+  try {
+    await env.DB.prepare(
+      "CREATE TABLE IF NOT EXISTS afiliados_ext (codigo TEXT PRIMARY KEY, nombre TEXT NOT NULL, whatsapp TEXT DEFAULT '', email TEXT DEFAULT '', creado TEXT DEFAULT '')"
+    ).run();
+    try { await env.DB.prepare("ALTER TABLE tenants ADD COLUMN ref_code TEXT DEFAULT ''").run(); } catch (e) { /* ya existe */ }
+    AFILIADOS_OK = true;
+  } catch (e) {}
+}
+
+/* ---------- Activacion (15-jul-2026): LA metrica #1 del negocio ----------
+   Tenant activado = cargo >=5 alumnos Y registro >=1 cobro (compras no 'iniciada') en
+   cualquier momento. El plan maestro exige medirla en los primeros 7 dias; aqui se calcula
+   el estado actual y su/funnel lo cruza con la fecha de creacion. */
+async function tenantActivado(env, tenantId){
+  try {
+    const a = await env.DB.prepare("SELECT COUNT(*) AS n FROM alumnos WHERE tenant_id = ?1").bind(tenantId).first();
+    if ((Number(a && a.n) || 0) < 5) return { activado: false, alumnos: Number(a && a.n) || 0, cobros: 0 };
+    const c = await env.DB.prepare("SELECT COUNT(*) AS n FROM compras WHERE tenant_id = ?1 AND estado != 'iniciada'").bind(tenantId).first();
+    const cobros = Number(c && c.n) || 0;
+    return { activado: cobros >= 1, alumnos: Number(a.n) || 0, cobros };
+  } catch (e) { return { activado: false, alumnos: 0, cobros: 0 }; }
+}
+
 /* Bolsa del equipo segun edad del tenant: 60/mes los primeros 90 dias, 30/mes despues.
    Al agotarse se pueden comprar packs extra (ver PACKS_MENSAJES / consumirMensajeExtra). */
 function limiteSoporteAdmin(tenant){
+  if ((tenant && tenant.plan) === "gratis") return 10; // plan Gratis: 10 mensajes/mes (los packs siguen comprables)
   try {
     const dias = (Date.now() - new Date(tenant.creado).getTime()) / 86400000;
     if (Number.isFinite(dias) && dias > 90) return ONBOARDING_LIMITE_ADMIN_90D;
@@ -1689,6 +1780,11 @@ function paginaRegistro(googleOn){
     // Atribución: ?f= del CTA que lo trajo, o el referrer como fallback; sobrevive recargas en sessionStorage.
     "var fuente='';try{var q=new URLSearchParams(location.search).get('f');if(q){fuente=q;}else if(document.referrer){var u=new URL(document.referrer);fuente=(u.host===location.host?'':u.host)+u.pathname;}}catch(e){}" +
     "try{if(fuente){sessionStorage.setItem('batuta_f',fuente);}else{fuente=sessionStorage.getItem('batuta_f')||'';}}catch(e){}" +
+    // Afiliados (?ref=) y plan Gratis (?plan=gratis): mismos trucos de persistencia.
+    "var refc='';try{var qr=new URLSearchParams(location.search).get('ref');if(qr){refc=qr;}}catch(e){}" +
+    "try{if(refc){sessionStorage.setItem('batuta_ref',refc);}else{refc=sessionStorage.getItem('batuta_ref')||'';}}catch(e){}" +
+    "var planReg='';try{planReg=(new URLSearchParams(location.search).get('plan')||'');}catch(e){}" +
+    "if(planReg==='gratis'){try{var pill=document.querySelector('.pill');if(pill)pill.textContent='Plan Gratis: 1 profesor, hasta 10 alumnos, para siempre';var sub=document.querySelector('.sub');if(sub)sub.textContent='Sin tarjeta y sin fecha de vencimiento. Cuando crezcas, subes de plan.';var bt=document.querySelector('#f button[type=submit]');if(bt)bt.textContent='Crear mi cuenta gratis';}catch(e){}}" +
     // Rescate de registros abandonados: email valido tecleado + se va sin terminar el submit
     // -> sendBeacon lo guarda como lead. regEnviado (flag del submit) evita disparar en el flujo feliz.
     "var regEnviado=false;var abandonoEmail='';" +
@@ -1717,11 +1813,11 @@ function paginaRegistro(googleOn){
     "var pass2=document.getElementById('pass2').value;" +
     "if(pass!==pass2){err.textContent='Las contrasenas no coinciden.'; btn.disabled=false; regEnviado=false; return;}" +
     "try{" +
-    "var r=await fetch('/app/api/t/registro',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({academia:academia,nombre:nombre,email:email,whatsapp:whatsapp,pass:pass,rubro:rubro,tam:tam,fuente:fuente})});" +
+    "var r=await fetch('/app/api/t/registro',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({academia:academia,nombre:nombre,email:email,whatsapp:whatsapp,pass:pass,rubro:rubro,tam:tam,fuente:fuente,ref:refc,plan:planReg})});" +
     "var d=await r.json();" +
     "if(!r.ok){err.textContent=d.error||'No se pudo crear tu cuenta.'; btn.disabled=false; regEnviado=false; return;}" +
     "localStorage.setItem('batuta_t', d.token);" +
-    "location.href='/app/suscribir';" +
+    "location.href=(d.plan==='gratis')?'/app/panel':'/app/suscribir';" +
     "}catch(ex){err.textContent='Error de conexion. Intenta de nuevo.'; btn.disabled=false; regEnviado=false;}" +
     "});";
   return paginaBase("Crea tu academia — Batuta", cuerpo, script);
@@ -1773,18 +1869,26 @@ function paginaSuscribir(){
     "<p class=\"sub\">S/0 hoy. Tu primer cobro es al terminar tus 30 dias de prueba. Cancela cuando quieras. Y con garantia: si en tu primer mes pagado no te convence, te devolvemos tu plata.</p>" +
     "<div id=\"planes\">" +
       "<div class=\"planopt\" data-plan=\"profe\">" +
-        "<div class=\"planopt-t\">Profe</div><div class=\"planopt-p\">US$14.95<span>/mes · se cobra S/49 · alumnos ilimitados</span></div>" +
+        "<div class=\"planopt-t\">Profe</div><div class=\"planopt-p\">US$14.95<span>/mes · se cobra S/49 · 1 profesor · alumnos ilimitados</span></div>" +
+      "</div>" +
+      "<div class=\"planopt\" data-plan=\"profe_duo\">" +
+        "<div class=\"planopt-t\">Profe Dúo</div><div class=\"planopt-p\">US$22.95<span>/mes · se cobra S/78 · 2 profesores · alumnos ilimitados</span></div>" +
+      "</div>" +
+      "<div class=\"planopt\" data-plan=\"profe_trio\">" +
+        "<div class=\"planopt-t\">Profe Trío</div><div class=\"planopt-p\">US$31.95<span>/mes · se cobra S/107 · 3 profesores · alumnos ilimitados</span></div>" +
       "</div>" +
       "<div class=\"planopt\" data-plan=\"academia\">" +
-        "<div class=\"planopt-t\">Academia</div><div class=\"planopt-p\">US$43.95<span>/mes · se cobra S/149 · hasta 150 alumnos</span></div>" +
+        "<div class=\"planopt-t\">Academia</div><div class=\"planopt-p\">US$43.95<span>/mes · se cobra S/149 · 5 profesores · hasta 150 alumnos</span></div>" +
       "</div>" +
       "<div class=\"planopt\" data-plan=\"xl\">" +
-        "<div class=\"planopt-t\">Academia XL</div><div class=\"planopt-p\">US$87.95<span>/mes · se cobra S/299 · hasta 400 alumnos</span></div>" +
+        "<div class=\"planopt-t\">Academia XL</div><div class=\"planopt-p\">US$87.95<span>/mes · se cobra S/299 · 20 profesores · hasta 400 alumnos</span></div>" +
       "</div>" +
       "<div class=\"planopt\" data-plan=\"por_alumno\">" +
         "<div class=\"planopt-t\">Red / Enterprise</div><div class=\"planopt-p\">por alumno<span>· 400+ alumnos o varias sedes · a medida</span></div>" +
       "</div>" +
     "</div>" +
+    "<p class=\"sub\" style=\"margin:12px 0 0;font-size:13px\">💡 <b>Paga el año y llévate 2 meses gratis:</b> Profe S/490 · Dúo S/780 · Trío S/1,070 · Academia S/1,490 · XL S/2,990. Elige tu plan arriba y usa el botón de abajo.</p>" +
+    "<button type=\"button\" id=\"btnAnual\" style=\"margin-top:10px;background:transparent;border:1px solid var(--acento);color:var(--acento)\">Pagar 1 año (2 meses gratis)</button>" +
     "<p class=\"sub\" style=\"margin:14px 0 0;font-size:12px\">El cobro es en soles peruanos via Mercado Pago. Con tarjeta de otro pais, tu banco convierte al equivalente en tu moneda. El plan por alumno cobra segun tus alumnos activos (minimo " + MIN_ALUMNOS_FACTURABLES + ") y se ajusta solo cada mes.</p>" +
     "<button type=\"button\" id=\"btn\">Activar plan</button>" +
     "<div class=\"err\" id=\"err\"></div>" +
@@ -1817,6 +1921,18 @@ function paginaSuscribir(){
     "var d=await r.json();" +
     "if(r.status===501){err.textContent=d.error||'La suscripcion automatica aun no esta disponible.'; wha.style.display='block'; btn.disabled=false; return;}" +
     "if(!r.ok||!d.init_point){err.textContent=d.error||'No se pudo iniciar la suscripcion.'; btn.disabled=false; return;}" +
+    "location.href=d.init_point;" +
+    "}catch(ex){err.textContent='Error de conexion. Intenta de nuevo.'; btn.disabled=false;}" +
+    "});" +
+    // Plan ANUAL (pago unico, 2 meses gratis): mismo plan seleccionado arriba.
+    "document.getElementById('btnAnual').addEventListener('click', async function(e){" +
+    "var err=document.getElementById('err'); err.textContent='';" +
+    "var btn=e.target; btn.disabled=true;" +
+    "if(planSel==='por_alumno'){err.textContent='El plan por alumno no tiene modalidad anual: elige otro plan.'; btn.disabled=false; return;}" +
+    "try{" +
+    "var r=await fetch('/app/api/t/plan-anual/checkout',{method:'POST',headers:{'content-type':'application/json','authorization':'Bearer '+token},body:JSON.stringify({plan:planSel})});" +
+    "var d=await r.json();" +
+    "if(!r.ok||!d.init_point){err.textContent=d.error||'No se pudo iniciar el pago anual.'; btn.disabled=false; return;}" +
     "location.href=d.init_point;" +
     "}catch(ex){err.textContent='Error de conexion. Intenta de nuevo.'; btn.disabled=false;}" +
     "});";
@@ -2354,7 +2470,7 @@ async function recordatoriosDeClase(env){
     "SELECT r.id, r.tenant_id, r.inicio_utc, r.curso, COALESCE(r.aviso_24,0) AS aviso_24, COALESCE(r.aviso_1h,0) AS aviso_1h, " +
     "t.academia, t.slug, c.email AS alumno_email, c.nombre AS alumno_nombre, p.nombre AS profe_nombre " +
     "FROM reservas r " +
-    "JOIN tenants t ON t.id = r.tenant_id AND t.estado != 'vencido' AND t.email != ?3 " +
+    "JOIN tenants t ON t.id = r.tenant_id AND t.estado != 'vencido' AND COALESCE(t.plan,'profe') != 'gratis' AND t.email != ?3 " +
     "JOIN cuentas c ON c.alumno_id = r.alumno_id AND c.tenant_id = r.tenant_id " +
     "LEFT JOIN profesores p ON p.id = r.profesor_id " +
     "WHERE r.estado = 'reservada' AND r.alumno_id IS NOT NULL AND r.inicio_utc > ?1 AND r.inicio_utc <= ?2 " +
@@ -2437,7 +2553,7 @@ async function recordatorioRenovacion(env){
     "SELECT a.id, a.tenant_id, a.nombre, a.vence, COALESCE(a.ciclo,1) AS ciclo, a.paquete, a.curso, COALESCE(a.aviso_vence_ciclo,0) AS avisado, " +
     "t.academia, t.slug, c.email AS alumno_email " +
     "FROM alumnos a " +
-    "JOIN tenants t ON t.id = a.tenant_id AND t.estado != 'vencido' AND t.email != ?1 " +
+    "JOIN tenants t ON t.id = a.tenant_id AND t.estado != 'vencido' AND COALESCE(t.plan,'profe') != 'gratis' AND t.email != ?1 " +
     "JOIN cuentas c ON c.alumno_id = a.id AND c.tenant_id = a.tenant_id " +
     "WHERE a.vence IS NOT NULL AND a.vence != '' " +
     "AND date(a.vence) <= date('now', '+3 days') AND date(a.vence) >= date('now', '-3 days') " +
@@ -3324,6 +3440,145 @@ export default {
           const saldo = await env.DB.prepare("SELECT comprados, usados FROM mensajes_extra WHERE tenant_id = ?1 AND mes = ?2").bind(tMP.id, mesMP).first();
           return json({ ok: true, academia: tMP.academia, mes: mesMP, agregados: cant, precio: "S/" + packKey, saldo_disponible: (Number(saldo.comprados) - Number(saldo.usados)), mensaje_whatsapp: "Listo! Le sumamos " + cant + " mensajes extra al asistente de " + tMP.academia + " para este mes. Cuando quieras mas, aca estamos." });
         }
+
+        /* -------- Plan ANUAL manual (venta por WhatsApp): acredita 12 meses ya pagados. --------
+           curl -X POST .../app/api/su/plan-anual -H "Authorization: Bearer $ADMIN_TOKEN" -d '{"tenant":"<slug o id>","plan":"academia"}' */
+        if (path === "/app/api/su/plan-anual" && request.method === "POST"){
+          const bSA = await request.json().catch(() => ({}));
+          const planSA = String(bSA.plan || "").trim();
+          if (!PLANES_ANUAL[planSA]) return json({ error: "plan invalido: usa profe, profe_duo, profe_trio, academia o xl" }, 400);
+          const refSA = String(bSA.tenant || "").trim();
+          const tSA = refSA ? await env.DB.prepare("SELECT id, academia FROM tenants WHERE id = ?1 OR slug = ?1").bind(refSA).first() : null;
+          if (!tSA) return json({ error: "tenant no encontrado" }, 404);
+          const hastaSA = await acreditarPlanAnual(env, tSA.id, planSA);
+          return json({ ok: true, academia: tSA.academia, plan: planSA, monto: PLANES_ANUAL[planSA], acceso_hasta: hastaSA });
+        }
+
+        /* -------- Crear en MP los planes Profe Duo / Trio (una sola vez). Devuelve los ids
+           para pegarlos en MP_PLAN_IDS y redeployar. No expone el token. -------- */
+        if (path === "/app/api/su/mp-crear-planes" && request.method === "POST"){
+          if (!env.MP_ACCESS_TOKEN) return json({ error: "sin MP_ACCESS_TOKEN" }, 501);
+          const crear = async (nombre, monto) => {
+            const r = await mpFetch(env, "/preapproval_plan", { method: "POST", body: {
+              reason: nombre,
+              auto_recurring: {
+                frequency: 1, frequency_type: "months",
+                transaction_amount: monto, currency_id: "PEN",
+                free_trial: { frequency: MP_TRIAL_DIAS, frequency_type: "days" }
+              },
+              back_url: MARCA.dominio + "/app/panel"
+            }});
+            return { ok: r.ok, id: r.data && r.data.id, status: r.data && r.data.status, monto };
+          };
+          const duo = await crear("Batuta Profe Duo (2 profesores)", PLANES.profe_duo);
+          const trio = await crear("Batuta Profe Trio (3 profesores)", PLANES.profe_trio);
+          return json({ profe_duo: duo, profe_trio: trio, nota: "Pegar los ids en MP_PLAN_IDS del worker y redeployar." });
+        }
+
+        /* -------- Afiliados (30% recurrente x12, liquidacion manual) -------- */
+        if (path === "/app/api/su/afiliado" && request.method === "POST"){
+          await ensureAfiliadosSchema(env);
+          const bAf = await request.json().catch(() => ({}));
+          const codigoAf = String(bAf.codigo || "").trim().toLowerCase().replace(/[^a-z0-9-]/g, "").slice(0, 60);
+          const nombreAf = String(bAf.nombre || "").trim().slice(0, 80);
+          if (!codigoAf || !nombreAf) return json({ error: "manda codigo y nombre" }, 400);
+          const choca = await env.DB.prepare("SELECT id FROM tenants WHERE slug = ?1").bind(codigoAf).first();
+          if (choca) return json({ error: "ese codigo choca con el slug de un tenant; usa otro" }, 409);
+          await env.DB.prepare(
+            "INSERT INTO afiliados_ext (codigo, nombre, whatsapp, email, creado) VALUES (?1,?2,?3,?4,?5) " +
+            "ON CONFLICT(codigo) DO UPDATE SET nombre = ?2, whatsapp = ?3, email = ?4"
+          ).bind(codigoAf, nombreAf, String(bAf.whatsapp || "").trim().slice(0, 20), String(bAf.email || "").trim().slice(0, 120), new Date().toISOString()).run();
+          return json({ ok: true, codigo: codigoAf, link: MARCA.dominio + "/app/registro?ref=" + codigoAf, comision: "30% de la mensualidad por 12 meses (liquidacion manual por Yape)" });
+        }
+        if (path === "/app/api/su/afiliados" && request.method === "GET"){
+          await ensureAfiliadosSchema(env);
+          let refs = [];
+          try {
+            const r = await env.DB.prepare(
+              "SELECT COALESCE(t.ref_code,'') AS codigo, t.academia, t.email, t.plan, t.estado, t.mp_sub_status, t.creado " +
+              "FROM tenants t WHERE COALESCE(t.ref_code,'') != '' ORDER BY t.creado DESC"
+            ).all();
+            refs = r.results || [];
+          } catch (e) {}
+          const porCodigo = {};
+          for (const r of refs){
+            if (!porCodigo[r.codigo]) porCodigo[r.codigo] = { codigo: r.codigo, referidos: [], pagando: 0, comision_mensual_pen: 0 };
+            const paga = (r.estado === "activo" && r.mp_sub_status === "authorized") || r.mp_sub_status === "anual";
+            const monto = PLANES[r.plan] || 0;
+            porCodigo[r.codigo].referidos.push({ academia: r.academia, email: r.email, plan: r.plan, estado: r.estado, sub: r.mp_sub_status, creado: r.creado, paga });
+            if (paga){ porCodigo[r.codigo].pagando++; porCodigo[r.codigo].comision_mensual_pen += Math.round(monto * 0.30 * 100) / 100; }
+          }
+          let exts = [];
+          try { const e2 = await env.DB.prepare("SELECT * FROM afiliados_ext ORDER BY creado DESC").all(); exts = e2.results || []; } catch (e) {}
+          return json({ nota: "comision 30% x12 meses; pagar por Yape a fin de mes; codigo de tenant = su slug", por_codigo: Object.values(porCodigo), afiliados_externos: exts });
+        }
+
+        /* -------- Packs +50 alumnos (Academia/XL, S/39 c/u por WhatsApp): sube el tope sin salto de plan. --------
+           curl -X POST .../su/alumnos-extra -d '{"tenant":"...","packs":1}' */
+        if (path === "/app/api/su/alumnos-extra" && request.method === "POST"){
+          const bAE = await request.json().catch(() => ({}));
+          const refAE = String(bAE.tenant || "").trim();
+          const packsAE = Math.max(0, Math.min(20, parseInt(bAE.packs, 10) || 0));
+          const tAE = refAE ? await env.DB.prepare("SELECT id, academia, plan FROM tenants WHERE id = ?1 OR slug = ?1").bind(refAE).first() : null;
+          if (!tAE) return json({ error: "tenant no encontrado" }, 404);
+          await env.DB.prepare(
+            "INSERT INTO config (tenant_id, clave, valor) VALUES (?1,'alum_extra',?2) ON CONFLICT(tenant_id, clave) DO UPDATE SET valor = ?2"
+          ).bind(tAE.id, String(packsAE * 50)).run();
+          const capBase = ALUM_CAP[tAE.plan || "profe"] || 1000000;
+          return json({ ok: true, academia: tAE.academia, packs: packsAE, alumnos_extra: packsAE * 50, tope_total: capBase >= 1000000 ? "ilimitado" : capBase + packsAE * 50, precio_mensual: "S/" + (39 * packsAE) + " (cobro manual por WhatsApp)" });
+        }
+
+        /* -------- Cohortes y metricas para compradores (15-jul-2026): la historia que un
+           comprador audita (MRR, churn, GPV por tenant) empieza a grabarse aqui. ?format=csv -------- */
+        if (path === "/app/api/su/cohortes" && request.method === "GET"){
+          await ensureAfiliadosSchema(env); // la SELECT usa ref_code; sin la columna, D1 tira error y sale vacio
+          let tenantsCo = [];
+          try {
+            const r = await env.DB.prepare(
+              "SELECT id, academia, email, plan, estado, mp_sub_status, creado, trial_hasta, COALESCE(fuente,'') AS fuente, COALESCE(ref_code,'') AS ref_code FROM tenants ORDER BY creado ASC"
+            ).all();
+            tenantsCo = (r.results || []).filter(t => t.email !== DEMO_EMAIL);
+          } catch (e) {}
+          const mrrDe = t => {
+            if (t.mp_sub_status === "authorized" && t.estado === "activo") return PLANES[t.plan] || 0;
+            if (t.mp_sub_status === "anual") return Math.round(((PLANES_ANUAL[t.plan] || 0) / 12) * 100) / 100;
+            return 0;
+          };
+          const cohortes = {};
+          for (const t of tenantsCo){
+            const mes = String(t.creado || "").slice(0, 7) || "?";
+            if (!cohortes[mes]) cohortes[mes] = { mes, nuevos: 0, pagando_hoy: 0, gratis: 0, trial: 0, vencidos: 0, mrr_pen: 0 };
+            cohortes[mes].nuevos++;
+            const m = mrrDe(t);
+            if (m > 0){ cohortes[mes].pagando_hoy++; cohortes[mes].mrr_pen += m; }
+            else if ((t.plan || "") === "gratis") cohortes[mes].gratis++;
+            else if (t.estado === "trial") cohortes[mes].trial++;
+            else if (t.estado === "vencido") cohortes[mes].vencidos++;
+          }
+          // GPV por tenant (30d): el dato que valida el fee sobre el rail MP y la tesis payments.
+          let gpv = [];
+          try {
+            const desdeG = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10);
+            const g = await env.DB.prepare(
+              "SELECT c.tenant_id, t.academia, COUNT(*) AS pagos, SUM(c.monto) AS gpv_pen FROM compras c JOIN tenants t ON t.id = c.tenant_id " +
+              "WHERE c.estado = 'confirmada' AND c.fecha >= ?1 AND t.email != ?2 GROUP BY c.tenant_id ORDER BY gpv_pen DESC"
+            ).bind(desdeG, DEMO_EMAIL).all();
+            gpv = g.results || [];
+          } catch (e) {}
+          const mrrTotal = Math.round(tenantsCo.reduce((s, t) => s + mrrDe(t), 0) * 100) / 100;
+          const activaciones = [];
+          for (const t of tenantsCo){
+            if ((Date.now() - Date.parse(t.creado)) > 45 * 86400000) continue; // solo cohortes recientes (barato)
+            const act = await tenantActivado(env, t.id);
+            activaciones.push({ academia: t.academia, creado: t.creado, alumnos: act.alumnos, cobros: act.cobros, activado: act.activado });
+          }
+          if (url.searchParams.get("format") === "csv"){
+            const filas = ["mes,nuevos,pagando_hoy,gratis,trial,vencidos,mrr_pen"];
+            for (const c of Object.values(cohortes)) filas.push([c.mes, c.nuevos, c.pagando_hoy, c.gratis, c.trial, c.vencidos, c.mrr_pen].join(","));
+            return new Response(filas.join("\n"), { headers: { "content-type": "text/csv; charset=utf-8" } });
+          }
+          return json({ mrr_pen_total: mrrTotal, cohortes: Object.values(cohortes), gpv_30d_por_tenant: gpv, activacion_cohortes_recientes: activaciones });
+        }
         /* Capacitacion con IA: listar codigos con su progreso por seccion (refresca desde ElevenLabs). */
         if (path === "/app/api/su/examen-oral" && request.method === "GET"){
           await ensureExamenSchema(env);
@@ -3468,12 +3723,26 @@ export default {
             const b = await env.DB.prepare("SELECT SUM(n) AS n FROM funnel_hits WHERE es_bot = 1 AND dia >= ?1").bind(desde).first();
             hitsBots = Number(b && b.n) || 0;
           } catch (e) {}
+          /* ACTIVACION (metrica #1 del plan del 15-jul): >=5 alumnos + 1 cobro. Se lista cada
+             tenant de los ultimos 45 dias con su estado de activacion y si lo logro en 7 dias. */
+          let activacion = [];
+          try {
+            const desde45 = new Date(Date.now() - 45 * 86400000).toISOString();
+            const { results: tsAct } = await env.DB.prepare(
+              "SELECT id, academia, email, creado, estado, plan FROM tenants WHERE creado >= ?1 AND email != ?2 ORDER BY creado DESC"
+            ).bind(desde45, DEMO_EMAIL).all();
+            for (const tA of (tsAct || [])){
+              const a = await tenantActivado(env, tA.id);
+              activacion.push({ academia: tA.academia, plan: tA.plan, estado: tA.estado, creado: tA.creado, alumnos: a.alumnos, cobros: a.cobros, activado: a.activado });
+            }
+          } catch (e) {}
           return json({
             desde: desde,
             visitas_por_pagina: visitas,
             visitas_por_fuente: porFuente,
             registros_por_fuente: registros,
-            hits_bots_30d: hitsBots
+            hits_bots_30d: hitsBots,
+            activacion_45d: { definicion: ">=5 alumnos cargados + 1 cobro registrado", activados: activacion.filter(x => x.activado).length, total: activacion.length, detalle: activacion }
           });
         }
         return json({ error: "No encontrado" }, 404);
@@ -3572,6 +3841,10 @@ export default {
         const rubro = String(b.rubro || "").trim().slice(0, 40);
         // Tamaño de academia: el dato que valida la tesis per-alumno del plan (peces grandes primero).
         const tam = String(b.tam || "").trim().slice(0, 20);
+        // Afiliados (15-jul-2026): ?ref= = codigo de quien lo refirio (slug de un tenant o codigo externo).
+        const refCode = String(b.ref || "").trim().toLowerCase().replace(/[^a-z0-9-]/g, "").slice(0, 60);
+        // Plan GRATIS directo desde la landing (?plan=gratis): estado 'activo' sin trial ni checkout.
+        const esGratis = String(b.plan || "").trim() === "gratis";
 
         if (academia.length < 2) return json({ error: "Escribe el nombre de tu academia." }, 400);
         if (nombre.length < 2) return json({ error: "Escribe tu nombre." }, 400);
@@ -3596,10 +3869,12 @@ export default {
 
         // ALTER inline (no solo el perezoso del cron): un registro real entre deploy y tick no puede dar 500.
         try { await env.DB.prepare("ALTER TABLE tenants ADD COLUMN tam_alumnos TEXT DEFAULT ''").run(); } catch (e) { /* ya existe */ }
+        try { await env.DB.prepare("ALTER TABLE tenants ADD COLUMN ref_code TEXT DEFAULT ''").run(); } catch (e) { /* ya existe */ }
         await env.DB.prepare(
-          "INSERT INTO tenants (id,slug,academia,profe_nombre,email,whatsapp,pass_hash,pass_salt,plan,estado,trial_hasta,creado,fuente,rubro,tam_alumnos) " +
-          "VALUES (?1,?2,?3,?4,?5,?6,?7,?8,'profe','trial',?9,?10,?11,?12,?13)"
-        ).bind(id, slug, academia, nombre, email, whatsapp, hash, salt, trialHasta, new Date().toISOString(), fuente, rubro, tam).run();
+          "INSERT INTO tenants (id,slug,academia,profe_nombre,email,whatsapp,pass_hash,pass_salt,plan,estado,trial_hasta,creado,fuente,rubro,tam_alumnos,ref_code) " +
+          "VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?14,?15,?9,?10,?11,?12,?13,?16)"
+        ).bind(id, slug, academia, nombre, email, whatsapp, hash, salt, trialHasta, new Date().toISOString(), fuente, rubro, tam,
+               esGratis ? "gratis" : "profe", esGratis ? "activo" : "trial", refCode).run();
 
         // precios y config default para el tenant nuevo
         const stmts = [];
@@ -3615,7 +3890,7 @@ export default {
         const token = await crearSesion(env, "T:" + id);
         // Aviso instantáneo: el primer trial ES el evento de validación del plan; que no caiga en silencio.
         ctx.waitUntil(alertaCorreoAndres(env,
-          "TRIAL NUEVO en Batuta: " + academia + (rubro ? " · " + rubro : "") + (tam ? " · " + tam + " alumnos" : ""),
+          (esGratis ? "CUENTA GRATIS NUEVA" : "TRIAL NUEVO") + " en Batuta: " + academia + (rubro ? " · " + rubro : "") + (tam ? " · " + tam + " alumnos" : ""),
           "Academia: " + academia +
           "\nProfe: " + nombre +
           "\nEmail: " + email +
@@ -3623,8 +3898,11 @@ export default {
           (whatsapp ? "\nEscríbele ahora: https://wa.me/" + whatsapp.replace(/\D/g, "") : "") +
           "\nRubro: " + (rubro || "-") +
           "\nFuente: " + (fuente || "-") +
-          "\nSlug: " + slug));
-        return json({ ok: true, token, slug });
+          (refCode ? "\nReferido por (afiliado): " + refCode : "") +
+          "\nPlan: " + (esGratis ? "GRATIS (10 alumnos, 1 profe)" : "trial 30 dias") +
+          "\nSlug: " + slug +
+          "\n\nACTIVACION (la metrica #1): el objetivo del primer toque es que cargue 5 alumnos y registre 1 cobro en 7 dias. Ofrecele cargar su Excel juntos por chat."));
+        return json({ ok: true, token, slug, plan: esGratis ? "gratis" : "profe" });
       }
 
       if (path === "/app/api/t/login" && request.method === "POST"){
@@ -3760,7 +4038,10 @@ export default {
           link_alumnos: MARCA.dominio + "/app/a/" + t.slug,
           plan: t.plan || "profe",
           mp_sub_status: t.mp_sub_status || "",
-          suscrito: t.mp_sub_status === "authorized",
+          suscrito: t.mp_sub_status === "authorized" || t.mp_sub_status === "anual",
+          // Plan anual (15-jul-2026): acceso pagado por adelantado hasta trial_hasta.
+          anual: t.mp_sub_status === "anual",
+          anual_hasta: t.mp_sub_status === "anual" ? t.trial_hasta : null,
           rol: actorMe.esDueno ? "dueno" : "profesor",
           profesor: actorMe.profesor ? { id: actorMe.profesor.id, nombre: actorMe.profesor.nombre } : null,
           // Estimado del plan "por alumno": alumnos activos + monto (para mostrar en Perfil > Tu plan).
@@ -3794,6 +4075,14 @@ export default {
         const montoDestino = (plan === "por_alumno") ? montoPorAlumno(await contarAlumnosActivos(env, t.id)) : PLANES[plan];
 
         if (!t.mp_preapproval_id){
+          /* Origen GRATIS (estado 'activo' sin suscripcion): elegir un plan pagado NO puede dejarlo
+             'activo' con caps de pago sin pagar. Pasa a trial de 7 dias de gracia: o se suscribe
+             en ese plazo, o el paywall lo devuelve (ahi puede volver a Gratis). */
+          if ((t.plan || "") === "gratis"){
+            const gracia = new Date(Date.now() + 7 * 86400000).toISOString();
+            await env.DB.prepare("UPDATE tenants SET plan = ?1, estado = 'trial', trial_hasta = ?2 WHERE id = ?3").bind(plan, gracia, t.id).run();
+            return json({ ok: true, modo: "pre-checkout", plan, nombre: PLAN_NOMBRE[plan], gracia: true });
+          }
           await env.DB.prepare("UPDATE tenants SET plan = ?1 WHERE id = ?2").bind(plan, t.id).run();
           return json({ ok: true, modo: "pre-checkout", plan, nombre: PLAN_NOMBRE[plan] });
         }
@@ -3884,10 +4173,107 @@ export default {
         // elegido y marcamos que estamos esperando el checkout; al volver, /vincular-sub cierra el círculo.
         const planId = MP_PLAN_IDS[plan];
         if (!planId) return json({ error: "Plan no valido" }, 400);
+        /* Origen GRATIS: no puede quedar 'activo' con plan pagado si abandona el checkout.
+           Pasa a trial de 7 dias de gracia (paga o el paywall lo devuelve a Gratis). */
+        if ((t.plan || "") === "gratis" && t.estado === "activo" && !t.mp_preapproval_id){
+          const graciaSub = new Date(Date.now() + 7 * 86400000).toISOString();
+          await env.DB.prepare(
+            "UPDATE tenants SET plan = ?1, estado = 'trial', trial_hasta = ?2, mp_sub_status = 'checkout_pendiente' WHERE id = ?3"
+          ).bind(plan, graciaSub, t.id).run();
+          return json({ init_point: MP_CHECKOUT_BASE + planId });
+        }
         await env.DB.prepare(
           "UPDATE tenants SET plan = ?1, mp_sub_status = 'checkout_pendiente' WHERE id = ?2"
         ).bind(plan, t.id).run();
         return json({ init_point: MP_CHECKOUT_BASE + planId });
+      }
+
+      /* ============================================================
+         PLAN ANUAL (pago unico, 12 meses al precio de 10) + PLAN GRATIS.
+         Viven en t/* (ANTES del gate de vencido) a proposito: el tenant
+         vencido tambien debe poder pagar su año o bajarse a Gratis.
+         ============================================================ */
+      if (path === "/app/api/t/plan-anual/checkout" && request.method === "POST"){
+        const actorAn = await actorDeSesion(env, request);
+        if (!actorAn) return json({ error: "Sesion expirada" }, 401);
+        if (!actorAn.esDueno) return json({ error: "El plan lo maneja el dueno de la academia." }, 403);
+        const tAn = actorAn.tenant;
+        if (tAn.email === DEMO_EMAIL) return json({ error: "En la demo no se compra." }, 400);
+        if (!env.MP_ACCESS_TOKEN) return json({ error: "El pago en linea no esta disponible ahora. Escribenos por WhatsApp." }, 501);
+        const bAn = await request.json().catch(() => ({}));
+        const planAn = String(bAn.plan || "").trim();
+        const montoAn = PLANES_ANUAL[planAn];
+        if (!montoAn) return json({ error: "Plan no valido para pago anual." }, 400);
+        await ensureAnualSchema(env);
+        const compraAn = crypto.randomUUID();
+        await env.DB.prepare(
+          "INSERT INTO anual_compras (id, tenant_id, plan, monto, estado, fecha) VALUES (?1, ?2, ?3, ?4, 'iniciada', ?5)"
+        ).bind(compraAn, tAn.id, planAn, montoAn, new Date().toISOString()).run();
+        const prefAn = await mpFetch(env, "/checkout/preferences", { method: "POST", body: {
+          items: [{ title: "Batuta " + (PLAN_NOMBRE[planAn] || planAn) + " - plan anual (12 meses al precio de 10)", quantity: 1, unit_price: montoAn, currency_id: "PEN" }],
+          external_reference: "btan:" + compraAn,
+          notification_url: MARCA.dominio + "/app/api/mp/webhook",
+          back_urls: {
+            success: MARCA.dominio + "/app/panel?anual=ok",
+            failure: MARCA.dominio + "/app/panel?anual=error",
+            pending: MARCA.dominio + "/app/panel?anual=pendiente"
+          },
+          auto_return: "approved",
+          statement_descriptor: "BATUTA",
+          metadata: { batuta_tenant: tAn.id, batuta_anual_compra: compraAn }
+        }});
+        if (!prefAn.ok || !prefAn.data || !prefAn.data.init_point){
+          await env.DB.prepare("DELETE FROM anual_compras WHERE id = ?1 AND estado = 'iniciada'").bind(compraAn).run();
+          console.error("plan anual checkout: MP no devolvio init_point", prefAn.status);
+          return json({ error: "No se pudo iniciar el pago. Intenta de nuevo o escribenos por WhatsApp." }, 502);
+        }
+        return json({ init_point: prefAn.data.init_point, plan: planAn, monto: montoAn });
+      }
+
+      /* Confirmacion al VOLVER del checkout anual (?payment_id=). Idempotente; el webhook es respaldo. */
+      if (path === "/app/api/t/plan-anual/confirmar" && request.method === "POST"){
+        const actorAc = await actorDeSesion(env, request);
+        if (!actorAc) return json({ error: "Sesion expirada" }, 401);
+        if (!env.MP_ACCESS_TOKEN) return json({ error: "No disponible." }, 501);
+        const bAc = await request.json().catch(() => ({}));
+        const payAc = String(bAc.payment_id || "").trim().slice(0, 40);
+        if (!/^\d+$/.test(payAc)) return json({ error: "payment_id invalido" }, 400);
+        const mpAc = await mpFetch(env, "/v1/payments/" + payAc, { method: "GET" });
+        if (!mpAc.ok || !mpAc.data) return json({ error: "No se pudo consultar el pago. El sistema lo acreditara solo en unos minutos." }, 502);
+        const refAc = String(mpAc.data.external_reference || "");
+        if (!refAc.startsWith("btan:")) return json({ error: "Ese pago no corresponde a un plan anual." }, 400);
+        const compraIdAc = refAc.slice(5);
+        const filaAc = await env.DB.prepare("SELECT id FROM anual_compras WHERE id = ?1 AND tenant_id = ?2").bind(compraIdAc, actorAc.tenant.id).first();
+        if (!filaAc) return json({ error: "Compra no encontrada." }, 404);
+        if (String(mpAc.data.status || "") !== "approved") return json({ ok: false, estado: String(mpAc.data.status || "desconocido") });
+        const okAc = await confirmarAnualCompra(env, compraIdAc, payAc);
+        if (!okAc) return json({ ok: true, ya_estaba: true });
+        ctx.waitUntil(alertaCorreoAndres(env,
+          "PLAN ANUAL VENDIDO: S/" + okAc.monto + " (" + (PLAN_NOMBRE[okAc.plan] || okAc.plan) + ")",
+          "Academia: " + (actorAc.tenant.academia || actorAc.tenant.id) + " (" + (actorAc.tenant.email || "?") + ")\nPlan: " + okAc.plan + " anual S/" + okAc.monto + "\nAcceso hasta: " + okAc.hasta + "\nPago MP: " + payAc));
+        return json({ ok: true, plan: okAc.plan, hasta: okAc.hasta });
+      }
+
+      /* Bajarse (o entrar) al plan GRATIS: 1 profe, 10 alumnos, sin recordatorios ni SUNAT.
+         Cancela el preapproval mensual si existia. El candado de alumnos rige al toque
+         (estado 'activo'): no borra data sobre el tope, solo bloquea agregar mas. */
+      if (path === "/app/api/t/plan-gratis" && request.method === "POST"){
+        const actorGr = await actorDeSesion(env, request);
+        if (!actorGr) return json({ error: "Sesion expirada" }, 401);
+        if (!actorGr.esDueno) return json({ error: "El plan lo maneja el dueno de la academia." }, 403);
+        const tGr = actorGr.tenant;
+        if (tGr.email === DEMO_EMAIL) return json({ error: "En la demo no se cambia de plan." }, 400);
+        if ((tGr.plan || "") === "gratis") return json({ ok: true, ya_estaba: true });
+        if (tGr.mp_preapproval_id && env.MP_ACCESS_TOKEN){
+          try { await mpFetch(env, "/preapproval/" + encodeURIComponent(tGr.mp_preapproval_id), { method: "PUT", body: { status: "cancelled" } }); } catch (e) {}
+        }
+        await env.DB.prepare(
+          "UPDATE tenants SET plan = 'gratis', estado = 'activo', mp_preapproval_id = '', mp_sub_status = '' WHERE id = ?1"
+        ).bind(tGr.id).run();
+        ctx.waitUntil(alertaCorreoAndres(env,
+          "Tenant en plan GRATIS: " + (tGr.academia || tGr.id),
+          "Academia: " + (tGr.academia || "?") + " (" + (tGr.email || "?") + ")\nVenia de: " + (tGr.plan || "profe") + " / " + (tGr.estado || "?") + "\nEl plan Gratis topa en 10 alumnos y 1 profe: candidato natural a upgrade."));
+        return json({ ok: true, plan: "gratis" });
       }
 
       /* Vincula al tenant la suscripción creada en el checkout del plan. El panel llama esto al
@@ -3907,7 +4293,7 @@ export default {
         if (!mp.ok || !mp.data) return json({ error: "No se pudo verificar la suscripcion" }, 502);
         // Es nuestra si es uno de los planes fijos pre-creados, O si es el preapproval directo
         // (plan por alumno) cuyo external_reference apunta a ESTE tenant.
-        const esNuestro = Object.values(MP_PLAN_IDS).indexOf(String(mp.data.preapproval_plan_id || "")) !== -1
+        const esNuestro = esPlanNuestroMP(mp.data.preapproval_plan_id)
           || String(mp.data.external_reference || "") === t.id;
         if (!esNuestro) return json({ error: "Suscripcion no reconocida" }, 400);
 
@@ -4015,7 +4401,7 @@ export default {
               // Fallback: checkout de plan sin vincular todavía (el pagador no volvió al panel).
               // Solo si el preapproval es de UNO DE NUESTROS planes (verificado contra MP) y el
               // payer_email coincide exacto con el email de un tenant.
-              const esNuestro = Object.values(MP_PLAN_IDS).indexOf(String(pre.preapproval_plan_id || "")) !== -1;
+              const esNuestro = esPlanNuestroMP(pre.preapproval_plan_id);
               const payerEmail = String(pre.payer_email || "").trim().toLowerCase();
               if (esNuestro && payerEmail){
                 t = await env.DB.prepare("SELECT * FROM tenants WHERE email = ?1 AND (mp_preapproval_id = '' OR mp_preapproval_id IS NULL)").bind(payerEmail).first();
@@ -4034,6 +4420,29 @@ export default {
               const vencido = Date.now() > Date.parse(t.trial_hasta);
               await env.DB.prepare("UPDATE tenants SET mp_sub_status = ?1, mp_preapproval_id = ?2, estado = ?3 WHERE id = ?4")
                 .bind(status, resId, vencido ? "vencido" : t.estado, t.id).run();
+              /* DUNNING (15-jul-2026): 20-40% del churn SMB es involuntario (pago fallido, tarjeta
+                 vencida). Avisar AL TOQUE al dueno con link de reactivacion + alternativa Yape,
+                 y a Andres para el rescate humano. Solo si el estado CAMBIO (MP re-notifica). */
+              if (t.mp_sub_status !== status){
+                ctx.waitUntil((async () => {
+                  try {
+                    await enviarCorreo(env, {
+                      to: t.email,
+                      subject: (t.profe_nombre ? t.profe_nombre.split(" ")[0] + ", tu" : "Tu") + " suscripcion de Batuta quedo en pausa",
+                      html: "<p>Hola " + esc(t.profe_nombre || "") + ",</p>" +
+                        "<p>Mercado Pago nos avisa que tu suscripcion de Batuta quedo <b>" + (status === "paused" ? "pausada (un cobro no paso)" : "cancelada") + "</b>. Tu panel y el portal de tus alumnos siguen andando, pero sin suscripcion activa se pausaran pronto.</p>" +
+                        "<p><a href=\"" + MARCA.dominio + "/app/suscribir\"><b>Reactiva tu plan aqui</b></a> (2 minutos, sin volver a configurar nada).</p>" +
+                        "<p>Si prefieres pagar por Yape o tuviste un problema con la tarjeta, respondenos este correo o escribenos por WhatsApp y lo cuadramos hoy: <a href=\"https://wa.me/51989077928\">wa.me/51989077928</a>.</p>" +
+                        "<p style=\"color:#888;font-size:13px\">Batuta - tu academia en piloto automatico</p>"
+                    });
+                  } catch (e) {}
+                  try {
+                    await alertaCorreoAndres(env,
+                      "DUNNING: suscripcion " + status + " de " + (t.academia || t.id),
+                      "Tenant: " + (t.academia || "?") + " (" + (t.email || "?") + ")\nEstado MP: " + status + "\nPreapproval: " + resId + "\nYa le salio el correo de reactivacion con link + Yape. Si no vuelve en 48h, tocarlo por WhatsApp.");
+                  } catch (e) {}
+                })());
+              }
             } else {
               await env.DB.prepare("UPDATE tenants SET mp_sub_status = ?1, mp_preapproval_id = ?2 WHERE id = ?3")
                 .bind(status, resId, t.id).run();
@@ -4060,6 +4469,21 @@ export default {
               if (vencido){
                 await env.DB.prepare("UPDATE tenants SET estado = 'vencido' WHERE id = ?1").bind(t.id).run();
               }
+              /* DUNNING de cobro recurrente rechazado: 1 correo/dia maximo por tenant. */
+              if (status === "rejected" && !(await chatbotPasoTope(env, "dunpago:" + t.id + ":" + hoyLima(), 1))){
+                ctx.waitUntil((async () => {
+                  try {
+                    await enviarCorreo(env, {
+                      to: t.email,
+                      subject: (t.profe_nombre ? t.profe_nombre.split(" ")[0] + ", el" : "El") + " cobro de tu plan de Batuta no paso",
+                      html: "<p>Hola " + esc(t.profe_nombre || "") + ",</p>" +
+                        "<p>Mercado Pago intento cobrar tu plan de Batuta y el pago <b>no paso</b> (suele ser saldo o tarjeta vencida). Va a reintentar solo; si quieres resolverlo ya, entra a tu Mercado Pago y revisa el medio de pago de la suscripcion.</p>" +
+                        "<p>Si prefieres pagar por Yape o cambiar de plan, escribenos: <a href=\"https://wa.me/51989077928\">wa.me/51989077928</a>. No queremos que pierdas tu panel por un detalle de tarjeta.</p>"
+                    });
+                  } catch (e) {}
+                  try { await alertaCorreoAndres(env, "DUNNING: cobro rechazado de " + (t.academia || t.id), "Tenant: " + (t.academia || "?") + " (" + (t.email || "?") + ")\nMP reintentara. Ya le salio el correo. Si no se resuelve en 48h, tocarlo por WhatsApp."); } catch (e) {}
+                })());
+              }
             }
             return new Response("ok", { status: 200 });
           }
@@ -4076,6 +4500,17 @@ export default {
             }
             const pago = mp.data;
             const refPk = String(pago.external_reference || "");
+            /* Plan ANUAL (btan:) - respaldo del webhook; la via primaria es confirmar al volver. */
+            if (refPk.startsWith("btan:") && String(pago.status || "") === "approved"){
+              const compraAnW = await confirmarAnualCompra(env, refPk.slice(5), pago.id);
+              if (compraAnW){
+                const tAnW = await env.DB.prepare("SELECT academia, email FROM tenants WHERE id = ?1").bind(compraAnW.tenant_id).first();
+                ctx.waitUntil(alertaCorreoAndres(env,
+                  "PLAN ANUAL VENDIDO: S/" + compraAnW.monto + " (" + (PLAN_NOMBRE[compraAnW.plan] || compraAnW.plan) + ")",
+                  "Academia: " + ((tAnW && tAnW.academia) || compraAnW.tenant_id) + " (" + ((tAnW && tAnW.email) || "?") + ")\nPlan: " + compraAnW.plan + " anual S/" + compraAnW.monto + "\nAcceso hasta: " + compraAnW.hasta + "\nPago MP: " + pago.id + " (acreditado via webhook)."));
+              }
+              return new Response("ok", { status: 200 });
+            }
             if (refPk.startsWith("btpk:") && String(pago.status || "") === "approved"){
               const compra = await confirmarPackCompra(env, refPk.slice(5), pago.id);
               if (compra){
@@ -4751,10 +5186,15 @@ export default {
             const pr = await fetch("https://api.mercadopago.com/checkout/preferences", {
               method: "POST",
               headers: { Authorization: "Bearer " + tk, "content-type": "application/json" },
-              body: JSON.stringify({
+              body: JSON.stringify(Object.assign({
                 items: [{ title: paquete + " · " + (t.academia || "clases"), quantity: 1, unit_price: monto, currency_id: "PEN" }],
                 external_reference: "btc:" + compraId,
                 notification_url: MARCA.dominio + "/app/api/mp/webhook-alumno?t=" + encodeURIComponent(t.id),
+              /* FEE MARKETPLACE (15-jul-2026, aprobado en principio, GATED OFF): 1% del cobro
+                 para Batuta via marketplace_fee sobre el rail MP del profe. Se enciende con la
+                 secret FEE_MARKETPLACE_ON=1 SOLO despues del RUC de Andres + test en sandbox
+                 (application_fee con Yape). PROHIBIDO recargarlo al alumno (T&C MP 12-may-2025). */
+              }, env.FEE_MARKETPLACE_ON === "1" ? { marketplace_fee: Math.round(monto * 0.01 * 100) / 100 } : {}, {
                 back_urls: {
                   success: MARCA.dominio + "/app/a/" + t.slug + "?pago=ok",
                   failure: MARCA.dominio + "/app/a/" + t.slug + "?pago=error",
@@ -4763,7 +5203,7 @@ export default {
                 auto_return: "approved",
                 statement_descriptor: String(t.academia || "BATUTA").slice(0, 22),
                 metadata: { batuta_tenant: t.id, batuta_compra: compraId }
-              })
+              }))
             });
             pref = await pr.json().catch(() => null);
             if (!pr.ok) pref = null;
@@ -5028,10 +5468,12 @@ export default {
           const pr = await fetch("https://api.mercadopago.com/checkout/preferences", {
             method: "POST",
             headers: { Authorization: "Bearer " + tk, "content-type": "application/json" },
-            body: JSON.stringify({
+            body: JSON.stringify(Object.assign({
               items: [{ title: paquete + " · " + (t.academia || "clases"), quantity: 1, unit_price: monto, currency_id: "PEN" }],
               external_reference: "btc:" + compraId,
               notification_url: MARCA.dominio + "/app/api/mp/webhook-alumno?t=" + encodeURIComponent(tid),
+            /* Mismo fee gated OFF que el otro rail de cobro al alumno (ver comentario alla). */
+            }, env.FEE_MARKETPLACE_ON === "1" ? { marketplace_fee: Math.round(monto * 0.01 * 100) / 100 } : {}, {
               back_urls: {
                 success: MARCA.dominio + "/app/a/" + t.slug + "?pago=ok",
                 failure: MARCA.dominio + "/app/a/" + t.slug + "?pago=error",
@@ -5040,7 +5482,7 @@ export default {
               auto_return: "approved",
               statement_descriptor: String(t.academia || "BATUTA").slice(0, 22),
               metadata: { batuta_tenant: tid, batuta_compra: compraId }
-            })
+            }))
           });
           pref = await pr.json().catch(() => null);
           if (!pr.ok) pref = null;
@@ -5606,7 +6048,7 @@ export default {
           ? ("Eres el SOPORTE de Batuta (batuta.lat, SaaS de gestion para academias y profesores particulares de cualquier materia). Atiendes al PROFESOR o DUENO dentro de su panel: resuelves dudas de uso, de planes y de cobros.\n" +
             "ESTILO (estricto): espanol claro de tu a tu, maximo 3 frases, SIEMPRE con el paso concreto (pestana > boton). Sin em dash. Sin signos de apertura invertidos (nada de ¿ ni ¡). Sin markdown ni asteriscos: el chat es texto plano. Sin saludos ni relleno: directo a la respuesta. Si la pregunta es amplia, da el primer paso y ofrece seguir.\n" +
             "EL PANEL (menu izquierdo): Inicio (resumen + tu link de alumnos) · Personas (Alumnos, Grupos, Profesores, Accesos al portal, Interesados) · Clases (Registro de clases, Agenda, Chat) · Cobros (Pagos, Caja, Reportes) · Material (Para tus alumnos, Tu biblioteca) · Configuracion (Perfil, Ajustes, Servicios, Ideas y errores).\n" +
-            "PLANES Y PRECIOS (los unicos vigentes, en soles via Mercado Pago): prueba gratis de 30 DIAS sin tarjeta (y garantia de devolucion en el primer mes pagado). Profe S/49/mes (1 profesor, alumnos ilimitados) · Academia S/149/mes (hasta 5 profesores y 150 alumnos) · Academia XL S/299/mes (hasta 20 profesores y 400 alumnos) · Academia por alumno (pagas por alumno activo, minimo 5; se activa en Perfil > Tu plan y ahi mismo ves tu estimado en vivo). Academias de mas de 400 alumnos: plan Red/Enterprise a medida por WhatsApp. Se activa o cambia de plan en Configuracion > Perfil > 'Tu plan'; sin penalidad, rige desde el siguiente cobro.\n" +
+            "PLANES Y PRECIOS (los unicos vigentes, en soles via Mercado Pago): prueba gratis de 30 DIAS sin tarjeta (y garantia de devolucion en el primer mes pagado). Plan GRATIS S/0 para siempre (1 profesor, hasta 10 alumnos; sin recordatorios automaticos ni boletas SUNAT) · Profe S/49/mes (1 profesor, alumnos ilimitados) · Profe Duo S/78/mes (2 profesores, alumnos ilimitados) · Profe Trio S/107/mes (3 profesores, alumnos ilimitados) · Academia S/149/mes (hasta 5 profesores y 150 alumnos) · Academia XL S/299/mes (hasta 20 profesores y 400 alumnos) · Academia por alumno (pagas por alumno activo, minimo 5; se activa en Perfil > Tu plan y ahi mismo ves tu estimado en vivo). PLAN ANUAL: paga 12 meses al precio de 10 (Profe S/490 · Duo S/780 · Trio S/1,070 · Academia S/1,490 · XL S/2,990), un solo pago desde Perfil > Tu plan o /app/suscribir. Academias que pasan su tope de alumnos: packs de +50 alumnos por S/39/mes por WhatsApp, o subir de plan. Academias de mas de 400 alumnos: plan Red/Enterprise a medida por WhatsApp. PROGRAMA DE AFILIADOS: comparte tu link (Perfil > Recomienda Batuta) y ganas 30% de la mensualidad de cada academia referida por 12 meses, pagado por Yape. Se activa o cambia de plan en Configuracion > Perfil > 'Tu plan'; sin penalidad, rige desde el siguiente cobro.\n" +
             "SERVICIOS OPCIONALES (pestana Configuracion > Servicios, se coordinan por WhatsApp): Activacion asistida S/350 una vez (te dejamos todo andando: alumnos, pagos, marca) · Migracion desde Excel u otro software S/200 · Capacitacion con IA S/49.50 POR PERSONA (curso Batuta 101 + examen ORAL por voz con la examinadora IA en batuta.lat/aprende/examen, 15 min, con nota; se contrata por WhatsApp y se recibe un codigo) · Capacitacion del equipo en vivo (humana) S/199.50 por sesion o S/499.50 por 3 · Acompanamiento de primer nivel S/129/mes (soporte prioritario + revision mensual de numeros). Ademas hay un curso GRATIS con certificado: Batuta 101 en batuta.lat/aprende (4 modulos con quiz; el certificado se comparte en LinkedIn).\n" +
             "MENSAJES DE ESTE ASISTENTE: cada mes tienes una bolsa de mensajes incluida. Si se te acaba, el dueno puede comprar un pack extra AQUI MISMO en el chat pagando en linea (Mercado Pago: tarjeta o Yape): 30 mensajes por S/5, 60 por S/10, o 120 por S/15 (rigen solo el mes en curso); al agotarse la bolsa aparecen los botones de compra en esta misma ventana y el saldo se acredita solo al pagar. Tambien se puede coordinar por WhatsApp.\n" +
             "COMO SE HACE:\n" +
@@ -6113,6 +6555,9 @@ export default {
         if (path === "/app/api/admin/comprobante" && request.method === "POST"){
           if (!esDueno) return json({ error: "La facturacion la maneja el dueno." }, 403);
           await ensureErpSchema(env);
+          if ((t && t.plan) === "gratis"){
+            return json({ error: "La facturacion electronica SUNAT esta disponible desde el plan Profe (S/49/mes). Sube de plan en Perfil y emites tu primera boleta hoy mismo." }, 402);
+          }
           const cfgF = await loadConfig(env, tid);
           if (!cfgF.nubefact_ruta || !cfgF.nubefact_token){
             return json({ error: "Conecta tu cuenta de Nubefact en Ajustes (ruta y token) para emitir boletas. Crea tu cuenta en nubefact.com: tiene modo demo gratis." }, 501);
@@ -6569,12 +7014,18 @@ export default {
              (en trial se importa la academia entera sin tope). Permite GUARDAR sin aumentar aunque
              ya estén sobre el tope (no rompe a nadie); solo bloquea el neto que pasa el límite. */
           if (t && t.estado === "activo"){
-            const capAl = ALUM_CAP[t.plan || "profe"] || 1000000;
+            /* alum_extra (packs +50 por S/39, su/alumnos-extra) suma al tope base del plan. */
+            let extraAl = 0;
+            try { const cfgAl = await loadConfig(env, tid); extraAl = parseInt(cfgAl.alum_extra, 10) || 0; } catch (e) {}
+            const capAl = (ALUM_CAP[t.plan || "profe"] || 1000000) + extraAl;
             const totActRow = await env.DB.prepare("SELECT COUNT(*) AS n FROM alumnos WHERE tenant_id = ?1").bind(tid).first();
             const totActual = Number(totActRow && totActRow.n) || 0;
             const totNuevo = esDueno ? body.alumnos.length : (totActual - (prevRows ? prevRows.length : 0)) + body.alumnos.length;
             if (totNuevo > capAl && totNuevo > totActual){
-              return json({ error: "Tu plan " + (PLAN_NOMBRE[t.plan || "profe"] || "Profe") + " incluye hasta " + capAl + " alumnos. Sube de plan en Perfil para agregar más. O cuéntanos en Ideas y errores qué necesitas: tu primer aporte del mes te suma 7 días.", upgrade: true, cap: capAl }, 402);
+              const msgCap = (t.plan || "") === "gratis"
+                ? "Tu plan Gratis incluye hasta " + capAl + " alumnos. Pasa al plan Profe (S/49/mes, alumnos ilimitados) en Perfil y sigue creciendo."
+                : "Tu plan " + (PLAN_NOMBRE[t.plan || "profe"] || "Profe") + " incluye hasta " + capAl + " alumnos. Sube de plan en Perfil, o agrega packs de +50 alumnos por S/39/mes escribiendonos por WhatsApp. Y en Ideas y errores, tu primer aporte del mes te suma 7 días.";
+              return json({ error: msgCap, upgrade: true, cap: capAl }, 402);
             }
           }
 
@@ -7091,6 +7542,40 @@ export default {
     try { await recordatorioRenovacion(env); } catch (e) { console.error("recordatorio renovacion", e); }
     try { await seguimientoLeadsDueno(env); } catch (e) { console.error("seguimiento leads dueno", e); }
     try { await recalcularPorAlumno(env); } catch (e) { console.error("recalcular por alumno", e); }
+    /* ---- Digest de ACTIVACION para Andres (15-jul-2026): la metrica #1. Tenants de los
+       ultimos 7 dias que aun no cargan 5 alumnos + 1 cobro, con wa.me listo para el toque
+       humano (sales-assist manual mientras haya <20 trials/mes). + dunning pendiente. ---- */
+    try {
+      const desde7 = new Date(Date.now() - 7 * 86400000).toISOString();
+      const { results: nuevos } = await env.DB.prepare(
+        "SELECT id, academia, email, whatsapp, creado, plan, estado FROM tenants WHERE creado >= ?1 AND email != ?2"
+      ).bind(desde7, DEMO_EMAIL).all();
+      const sinActivar = [];
+      for (const tN of (nuevos || [])){
+        const aN = await tenantActivado(env, tN.id);
+        if (!aN.activado) sinActivar.push({ t: tN, a: aN });
+      }
+      let dunningPend = [];
+      try {
+        const dp = await env.DB.prepare(
+          "SELECT academia, email, whatsapp, mp_sub_status FROM tenants WHERE mp_sub_status IN ('paused','cancelled') AND estado != 'vencido' AND email != ?1"
+        ).bind(DEMO_EMAIL).all();
+        dunningPend = dp.results || [];
+      } catch (e) {}
+      if (sinActivar.length || dunningPend.length){
+        const lineas = sinActivar.map(x =>
+          "· " + (x.t.academia || "?") + " (" + (x.t.plan || "profe") + ", creado " + String(x.t.creado).slice(0, 10) + "): " +
+          x.a.alumnos + " alumnos, " + x.a.cobros + " cobros" +
+          (x.t.whatsapp ? " -> https://wa.me/" + String(x.t.whatsapp).replace(/\D/g, "") : " (sin WhatsApp, correo: " + x.t.email + ")"));
+        const lineasDun = dunningPend.map(d =>
+          "· " + (d.academia || "?") + " (" + d.mp_sub_status + ")" + (d.whatsapp ? " -> https://wa.me/" + String(d.whatsapp).replace(/\D/g, "") : " " + d.email));
+        await alertaCorreoAndres(env,
+          "Batuta hoy: " + sinActivar.length + " sin activar" + (dunningPend.length ? " · " + dunningPend.length + " en dunning" : ""),
+          (sinActivar.length ? "SIN ACTIVAR (objetivo: que carguen 5 alumnos + 1 cobro en su semana 1; ofrece cargarlo juntos por chat):\n" + lineas.join("\n") : "") +
+          (dunningPend.length ? "\n\nDUNNING (suscripcion pausada/cancelada, rescatar por WhatsApp):\n" + lineasDun.join("\n") : "") +
+          "\n\nDetalle vivo: su/funnel (activacion_45d) y su/cohortes.");
+      }
+    } catch (e) { console.error("digest activacion", e); }
     /* Nurture de trial (dia 1/3/6) + cierre proactivo del vencido. 1 corrida/dia (cron 14:00 UTC = 9am Lima).
        Migracion perezosa: la columna se crea sola en la primera corrida (patron MVT). */
     try { await env.DB.prepare("ALTER TABLE tenants ADD COLUMN nurture_paso INTEGER DEFAULT 0").run(); } catch (e) { /* ya existe */ }

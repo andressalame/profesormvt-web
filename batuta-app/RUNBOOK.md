@@ -275,3 +275,31 @@ Pedido de Andres tras probar a Maria: que el cert de la Capacitacion con IA (pag
 - El pie decia "acredita el curso" tambien en el de capacitacion -> ahora "acredita la capacitacion".
 - Distintivo visual: sello circular ambar con la estrella (✦) y "EXAMEN ORAL APROBADO" arriba a la derecha, SOLO en tipo capacitacion-ia (en movil <=560px baja a estatico centrado).
 Verificado en prod contra los 2 certs de prueba: cert/53fceafd... (capacitacion: titulo, sello, og y pie propios) y cert/f9980c9e... (curso: igual que antes, sin sello).
+
+## Monetizacion compuesta (15-jul-2026): anual, Gratis, Duo/Trio, afiliados, dunning, cohortes
+
+Deployado y verificado en prod (worker v007f2813 + panel). Aprobado por Andres (luz verde a las 7 decisiones del plan maestro del vault).
+
+**Plan ANUAL (12 meses al precio de 10):** PLANES_ANUAL = profe 490 / profe_duo 780 / profe_trio 1070 / academia 1490 / xl 2990 (PEN, pago unico via checkout preference, external_reference "btan:<id>", tabla anual_compras). Acredita +365d sobre trial_hasta (estado 'trial' + nurture_paso=9, mecanismo del año fundador) y CANCELA el preapproval mensual si existia. Vias: botones en /app/suscribir y en Perfil > Tu plan; confirmacion al volver (?anual=ok&payment_id=) con webhook de respaldo. Venta manual:
+  curl -X POST https://batuta.lat/app/api/su/plan-anual -H "Authorization: Bearer $ADMIN_TOKEN" -d '{"tenant":"<slug o id>","plan":"academia"}'
+t/me devuelve anual:true + anual_hasta; el pill del Perfil muestra "plan anual hasta ...".
+
+**Plan GRATIS (para siempre):** plan='gratis' + estado='activo'. Limites: 1 profe (MAX_PROFES), 10 alumnos (ALUM_CAP, verificado E2E: 12 alumnos -> 402), sin recordatorios de clase/renovacion (queries excluyen plan gratis), sin Nubefact (402 con upsell), soporte IA 10 msg/mes. Entradas: registro con ?plan=gratis (la landing /software-para-academias-gratis manda ahi) o boton "Seguir con el plan Gratis" del paywall (endpoint /app/api/t/plan-gratis, cancela preapproval si habia). Salida a plan pagado: cambiar-plan o suscribir le dan 7 dias de gracia en 'trial' (nunca queda 'activo' con plan pagado sin pagar).
+
+**Profe Duo S/78 (2 profes) y Trio S/107 (3):** planes MP creados por API el 15-jul (trial 30d): duo d318736d1edc4eaabf02a9a5d16eebd8, trio 34f803bc0a734019975b8335e43ef1c8. Creador reutilizable: POST su/mp-crear-planes. OJO: esPlanNuestroMP() filtra ids vacios (sin eso, un preapproval sin plan matchearia "").
+
+**AFILIADOS 30% x12:** tenants.ref_code guarda el codigo del referidor (?ref= en /app/registro, sobrevive en sessionStorage). Codigo de un tenant = su slug (card "Recomienda Batuta" en Perfil con link + copiar). Externos (contadores): POST su/afiliado {"codigo","nombre","whatsapp"}. Liquidacion: GET su/afiliados (agrupa por codigo, calcula 30% de PLANES[plan] de los que pagan; anual cuenta como PLANES_ANUAL/12). Pago manual por Yape a fin de mes. Verificado E2E con ref de prueba.
+
+**ACTIVACION (metrica #1):** tenantActivado = >=5 alumnos + >=1 compra no-iniciada. su/funnel -> activacion_45d con detalle por tenant. Digest diario 9am a Andres: tenants de la semana sin activar (con wa.me listo) + dunning pendiente.
+
+**COHORTES para compradores:** GET su/cohortes (JSON) o ?format=csv -> MRR total (mensual authorized + anual/12), cohortes por mes de alta, GPV 30d por tenant (compras confirmadas), activacion de cohortes recientes. Empezo a grabar historia el 15-jul-2026; no se puede reconstruir hacia atras.
+
+**DUNNING:** webhook preapproval paused/cancelled -> correo al dueño (reactivar + Yape) + alerta a Andres (solo si el estado CAMBIO). Cobro recurrente rejected -> correo (max 1/dia por tenant via rate-limit dunpago:). El digest 9am lista los que siguen en paused/cancelled.
+
+**FEE MARKETPLACE 1% (GATED OFF):** marketplace_fee en las 2 preferences de cobro al alumno, activable con la secret FEE_MARKETPLACE_ON=1. NO encender hasta: (1) RUC de Andres, (2) test sandbox de application_fee con Yape (payment_method_id=yape). PROHIBIDO recargar el fee al alumno dentro del checkout MP (T&C MP Peru 12-may-2025). Encender = wrangler secret put FEE_MARKETPLACE_ON (valor 1).
+
+**PACKS +50 ALUMNOS S/39/mes (manual):** POST su/alumnos-extra {"tenant","packs":N} -> config alum_extra = N*50 se suma al tope del plan. El 402 del tope ya ofrece la opcion. Cobro manual por WhatsApp (como servicios).
+
+**GATILLO DE PRECIOS ARMADO (no ejecutar aun):** con 3-5 tenants pagando, subir Academia a S/199-249 y XL a S/449-499 SOLO para nuevos (grandfathering a los existentes). Referencia: Kydemy cobra US$80 por el rango de Academia; XL esta debajo de todo el vertical.
+
+**Tenant de prueba del 15-jul:** "TEST Gratis Claude (borrar)" (test-gratis-claude@example.com) quedo en estado vencido tras las pruebas E2E; ignorar en metricas o borrar de la D1 cuando haya endpoint.
