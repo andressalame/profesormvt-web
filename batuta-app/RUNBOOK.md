@@ -199,16 +199,11 @@ Se agregaron 2 rieles nuevos de cobro alumno->profe, espejando el marketplace de
 - **Revision adversarial (12-jul):** 9 hallazgos, 5 arreglados pre/post-deploy (1 critico: Stripe cobraba 100x en monedas sin decimales; 2 altos de Culqi: respuesta ambigua borraba la compra; webhook Culqi ahora re-verifica; credito de referido en soles no aplica a Stripe; ping de sk_ exige 2xx). Verificado en vivo: panel + /pagar cargan sin errores de consola, tarjetas Stripe/Culqi ocultas mientras el gate esta off, endpoints dan 401 no 500.
 - PENDIENTE de Andres para activar: cargar los secrets de arriba + (Stripe) tener cuenta de plataforma verificada + (Culqi) que el profe tenga afiliacion con RUC.
 
-## 🔴 PENDIENTE DE ANDRES: recrear los 3 planes de MP con free_trial 30 dias (14-jul noche)
-El trial subio a 30 dias en TODO (worker, sitio, copys). PERO los 3 planes FIJOS ya creados en
-Mercado Pago (MP_PLAN_IDS: profe/academia/xl) siguen con free_trial=7. Con 0 clientes pagando hoy
-NO hay dano, pero el PRIMER suscriptor de un plan fijo seria cobrado al dia 7, no al 31 (rompe la
-promesa "30 dias gratis"). MP no deja editar free_trial de un plan existente: hay que RECREAR.
-- MP_TRIAL_DIAS ya esta en 30 en el codigo (los preapprovals dinamicos por_alumno ya salen a 30 dias).
-- Recrear (cuando Andres quiera, toca su cuenta MP, por eso NO lo hizo Fable solo):
-  curl -X POST https://batuta.lat/app/api/su/mp-plan -H "Authorization: Bearer $(cat .admin-token.local)" -H "content-type: application/json" -d '{"plan":"profe"}'   (idem academia, xl)
-  -> devuelve el nuevo plan_id con first_invoice_offset 30. Pegar los 3 nuevos ids en MP_PLAN_IDS
-  (worker/index.js ~156) y deployar. Verificar con GET su/mp-plan que el offset es 30.
+## ✅ Planes MP recreados con trial 30 (15-jul-2026) — HECHO
+Los 3 planes fijos de MP se recrearon con free_trial 30 dias (antes 7) para alinear con el trial nuevo.
+Nuevos ids en MP_PLAN_IDS (worker ~156): profe 04758b8a... · academia 0e03058f... · xl dc68cf0b...
+Verificado por API: los 3 con free_trial 30 days, status active, init_point ok. Los viejos de 7d quedaron
+anotados en el comentario por si hay que consultarlos. MP_TRIAL_DIAS=30 (preapprovals dinamicos por_alumno ok).
 
 ## Review nocturno del 14-jul (16 hallazgos confirmados, arreglados y deployados)
 - ANTI-TRAMPA capacitacion (era CRITICO): se podia sacar el certificado pasando 1 seccion de 4 y

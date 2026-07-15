@@ -148,16 +148,18 @@ async function recalcularPorAlumno(env){
     } catch (e) { /* una academia no tumba el resto */ }
   }
 }
-/* Planes YA creados en Mercado Pago (preapproval_plan con free_trial de 7 días; la API confirmó
-   first_invoice_offset: 7). El checkout es del PLAN: el pagador se identifica al pagar (así se
-   esquiva el error "payer must be real user" del preapproval directo). Al volver, el panel
-   vincula la suscripción al tenant con /app/api/t/vincular-sub. */
+/* Planes creados en Mercado Pago (preapproval_plan). El checkout es del PLAN: el pagador se
+   identifica al pagar (así se esquiva el error "payer must be real user" del preapproval
+   directo). Al volver, el panel vincula la suscripción al tenant con /app/api/t/vincular-sub.
+   15-jul-2026: RECREADOS con free_trial de 30 días (antes 7) para alinear con el trial nuevo.
+   Verificado por API: free_trial 30 days, status active. */
 const MP_PLAN_IDS = {
-  profe: "f8ed7d6ea1aa4f87943825ce179c53c3",     // S/49  (12-jul-2026)
-  academia: "bdc2e4f289b24d0e9b2c3286c2f89528",  // S/149 (12-jul-2026)
-  xl: "58b4c707c7ff400c94df72ace2f4e91e"          // S/299 (12-jul-2026)
+  profe: "04758b8ab04e4b628adbdfe529501d20",     // S/49  trial 30d (15-jul-2026)
+  academia: "0e03058fe6834e16a2f806a0846d16c2",  // S/149 trial 30d (15-jul-2026)
+  xl: "dc68cf0b618c4d93a6c147ff47c905d2"          // S/299 trial 30d (15-jul-2026)
 };
 /* Planes viejos por si hay que consultarlos:
+   49/149/299 trial 7d (12-jul): profe=f8ed7d6ea1aa4f87943825ce179c53c3 · academia=bdc2e4f289b24d0e9b2c3286c2f89528 · xl=58b4c707c7ff400c94df72ace2f4e91e
    34/85/170 (06-jul tarde): profe=ae98cb29a7b94853a2388c3d3ebc8874 · academia=6af72fcd1e2f4ca497be3f2b4adca7a9 · xl=7d4d75ea227b4dce860a480b404bf96f
    49/149/249 (06-jul mañana): profe=35ba601b3de344458c0b6960b4929459 · academia=cdf23adca57a40b8b53e6405ddfc274f · xl=fcb43515dbbd47e4a934e9426c3d7522 */
 const MP_CHECKOUT_BASE = "https://www.mercadopago.com.pe/subscriptions/checkout?preapproval_plan_id=";
