@@ -1310,21 +1310,288 @@ async function confirmarAnualCompra(env, compraId, paymentId){
   return hasta ? Object.assign({}, compra, { hasta }) : null;
 }
 
-/* ---------- Afiliados (15-jul-2026, aprobado por Andres): 30% recurrente por 12 meses ----------
-   Tracking minimo viable: tenants.ref_code guarda el codigo de quien lo refirio (?ref= en el
-   registro). Codigo de un tenant = su slug. Afiliados EXTERNOS (contadores, KOLs) se dan de
-   alta con su/afiliado y usan su codigo propio. La liquidacion es manual (su/afiliados lista
-   todo); el pago lo hace Andres por Yape a fin de mes. */
+/* ---------- Afiliados v1 (16-jul-2026, terminos aprobados por Andres) ----------
+   30% de cada mensualidad pagada del referido, tope 12 meses por tenant, reversa si hay refund.
+   Atribucion: ?ref= en cualquier pagina -> cookie batuta_ref (60 dias) -> tenants.ref_code
+   (inmutable, se escribe SOLO en el INSERT del registro) + fila en `referidos`.
+   Ledger: `comisiones` es la fuente de verdad (tipo comision/reversa/payout_credito/payout_paypal;
+   saldo del afiliado = SUM(monto), sin contador que se desvie).
+   Payout AUTOMATICO (regla de Andres: nada de Yape manual):
+   - Afiliado que es tenant de Batuta: su saldo >= S/50 se descuenta solo de su siguiente
+     cobro de MP (PUT al preapproval; el webhook del pago descontado lo liquida y restaura).
+   - Afiliado cash: PayPal Payouts, DETRAS del flag env.PAYPAL_PAYOUTS_ON (hasta que Andres
+     confirme la aprobacion del API en su cuenta business).
+   Alta manual via su/afiliado; los tenants que comparten su slug se auto-registran como
+   afiliados al traer su primer referido. */
+const AFILIADO_COMISION = 0.30;
+const AFILIADO_TOPE_MESES = 12;
+const AFILIADO_PAYOUT_MIN = 50; // S/. saldo minimo para disparar payout (evita micropagos)
 let AFILIADOS_OK = false;
 async function ensureAfiliadosSchema(env){
   if (AFILIADOS_OK) return;
   try {
     await env.DB.prepare(
-      "CREATE TABLE IF NOT EXISTS afiliados_ext (codigo TEXT PRIMARY KEY, nombre TEXT NOT NULL, whatsapp TEXT DEFAULT '', email TEXT DEFAULT '', creado TEXT DEFAULT '')"
+      "CREATE TABLE IF NOT EXISTS afiliados (codigo TEXT PRIMARY KEY, nombre TEXT NOT NULL, contacto TEXT DEFAULT '', email_paypal TEXT DEFAULT '', tenant_id TEXT DEFAULT '', token_panel TEXT NOT NULL, clics INTEGER DEFAULT 0, descuento_pen REAL DEFAULT 0, creado TEXT DEFAULT '')"
+    ).run();
+    await env.DB.prepare(
+      "CREATE TABLE IF NOT EXISTS referidos (tenant_id TEXT PRIMARY KEY, codigo TEXT NOT NULL, fecha TEXT DEFAULT '')"
+    ).run();
+    await env.DB.prepare(
+      "CREATE TABLE IF NOT EXISTS comisiones (id TEXT PRIMARY KEY, codigo TEXT NOT NULL, tenant_id TEXT DEFAULT '', tipo TEXT NOT NULL, mes TEXT DEFAULT '', mp_payment_id TEXT DEFAULT '', mp_pago_id TEXT DEFAULT '', monto_base REAL DEFAULT 0, monto REAL NOT NULL, fecha TEXT DEFAULT '')"
+    ).run();
+    await env.DB.prepare(
+      "CREATE TABLE IF NOT EXISTS afiliado_solicitudes (id TEXT PRIMARY KEY, nombre TEXT DEFAULT '', email TEXT DEFAULT '', whatsapp TEXT DEFAULT '', paypal TEXT DEFAULT '', canal TEXT DEFAULT '', fecha TEXT DEFAULT '')"
     ).run();
     try { await env.DB.prepare("ALTER TABLE tenants ADD COLUMN ref_code TEXT DEFAULT ''").run(); } catch (e) { /* ya existe */ }
+    /* Migracion best-effort del piloto viejo (afiliados_ext, liquidacion manual): una vez. */
+    try {
+      const viejos = await env.DB.prepare("SELECT codigo, nombre, whatsapp, email, creado FROM afiliados_ext").all();
+      for (const v of (viejos.results || [])){
+        await env.DB.prepare(
+          "INSERT INTO afiliados (codigo, nombre, contacto, token_panel, creado) VALUES (?1,?2,?3,?4,?5) ON CONFLICT(codigo) DO NOTHING"
+        ).bind(v.codigo, v.nombre, [v.whatsapp, v.email].filter(Boolean).join(" · "), randHex(16), v.creado || new Date().toISOString()).run();
+      }
+    } catch (e) { /* afiliados_ext puede no existir */ }
     AFILIADOS_OK = true;
   } catch (e) {}
+}
+function normRefCode(s){ return String(s || "").trim().toLowerCase().replace(/[^a-z0-9-]/g, "").slice(0, 60); }
+async function afiliadoPorCodigo(env, codigo){
+  const c = normRefCode(codigo);
+  if (!c) return null;
+  await ensureAfiliadosSchema(env);
+  return env.DB.prepare("SELECT * FROM afiliados WHERE codigo = ?1").bind(c).first().catch(() => null);
+}
+async function saldoAfiliado(env, codigo){
+  const r = await env.DB.prepare("SELECT COALESCE(SUM(monto),0) AS s FROM comisiones WHERE codigo = ?1").bind(codigo).first().catch(() => null);
+  return Math.round(((r && Number(r.s)) || 0) * 100) / 100;
+}
+/* Vincula un tenant RECIEN creado con su afiliado (fila en `referidos`, inmutable por PK).
+   Si el codigo es el slug de otro tenant y aun no hay afiliado, ese tenant se auto-registra
+   como afiliado (payout = credito automatico en su propio cobro de MP). */
+async function registrarReferido(env, tenantId, refCode){
+  const code = normRefCode(refCode);
+  if (!code || !tenantId) return null;
+  await ensureAfiliadosSchema(env);
+  let af = await afiliadoPorCodigo(env, code);
+  if (!af){
+    const tDueno = await env.DB.prepare("SELECT id, slug, academia, email, whatsapp FROM tenants WHERE slug = ?1").bind(code).first().catch(() => null);
+    if (!tDueno || tDueno.id === tenantId) return null;
+    await env.DB.prepare(
+      "INSERT INTO afiliados (codigo, nombre, contacto, tenant_id, token_panel, creado) VALUES (?1,?2,?3,?4,?5,?6) ON CONFLICT(codigo) DO NOTHING"
+    ).bind(code, tDueno.academia || code, [tDueno.email, tDueno.whatsapp].filter(Boolean).join(" · "), tDueno.id, randHex(16), new Date().toISOString()).run();
+    af = await afiliadoPorCodigo(env, code);
+  }
+  if (!af || af.tenant_id === tenantId) return null; // auto-referido NO
+  await env.DB.prepare(
+    "INSERT INTO referidos (tenant_id, codigo, fecha) VALUES (?1,?2,?3) ON CONFLICT(tenant_id) DO NOTHING"
+  ).bind(tenantId, af.codigo, new Date().toISOString()).run();
+  return af;
+}
+/* Marca un mes pagado como comisionable (30%, tope 12 meses por tenant). Idempotente por
+   mp_payment_id. Llamado desde el webhook de MP con el authorized_payment aprobado. */
+async function otorgarComision(env, tenant, pago, mpPaymentId){
+  try {
+    await ensureAfiliadosSchema(env);
+    let ref = await env.DB.prepare("SELECT codigo FROM referidos WHERE tenant_id = ?1").bind(tenant.id).first();
+    if (!ref && tenant.ref_code){
+      // self-heal: tenants referidos antes de esta version solo tienen tenants.ref_code
+      const afOld = await registrarReferido(env, tenant.id, tenant.ref_code);
+      if (afOld) ref = { codigo: afOld.codigo };
+    }
+    if (!ref) return null;
+    const af = await afiliadoPorCodigo(env, ref.codigo);
+    if (!af) return null;
+    const pagoId = String(mpPaymentId || "");
+    const ya = await env.DB.prepare("SELECT id FROM comisiones WHERE tipo = 'comision' AND mp_payment_id = ?1").bind(pagoId).first();
+    if (ya) return null; // MP re-notifica: no duplicar
+    const meses = await env.DB.prepare(
+      "SELECT COUNT(*) AS n FROM comisiones c WHERE c.tenant_id = ?1 AND c.tipo = 'comision' AND NOT EXISTS (SELECT 1 FROM comisiones r WHERE r.tipo = 'reversa' AND r.mp_payment_id = c.mp_payment_id)"
+    ).bind(tenant.id).first();
+    if (((meses && Number(meses.n)) || 0) >= AFILIADO_TOPE_MESES) return null; // tope 12 meses
+    const base = Number((pago && (pago.transaction_amount || (pago.payment && pago.payment.transaction_amount))) || 0) || (PLANES[tenant.plan] || 0);
+    if (!(base > 0)) return null;
+    const comision = Math.round(base * AFILIADO_COMISION * 100) / 100;
+    const pagoRealId = String((pago && pago.payment && pago.payment.id) || "");
+    await env.DB.prepare(
+      "INSERT INTO comisiones (id, codigo, tenant_id, tipo, mes, mp_payment_id, mp_pago_id, monto_base, monto, fecha) VALUES (?1,?2,?3,'comision',?4,?5,?6,?7,?8,?9)"
+    ).bind(crypto.randomUUID(), af.codigo, tenant.id, mesActualUTC(), pagoId, pagoRealId, base, comision, new Date().toISOString()).run();
+    try {
+      await alertaCorreoAndres(env,
+        "AFILIADOS: comision de S/" + comision + " para " + af.codigo,
+        "Referido: " + (tenant.academia || tenant.id) + " pago S/" + base + " (" + (tenant.plan || "?") + ").\n" +
+        "Afiliado: " + af.nombre + " (" + af.codigo + ") gana S/" + comision + " (30%).\n" +
+        "Saldo del afiliado: S/" + (await saldoAfiliado(env, af.codigo)) + " · payout " + (af.tenant_id ? "automatico (credito en su cobro de MP)" : "PayPal (flag " + (env.PAYPAL_PAYOUTS_ON === "1" ? "ON" : "OFF") + ")") + ".");
+    } catch (e) {}
+    return comision;
+  } catch (e) { console.error("otorgarComision", e); return null; }
+}
+/* Reversa por refund/contracargo: anula la comision de ESE pago (idempotente). */
+async function revertirComision(env, mpId){
+  try {
+    await ensureAfiliadosSchema(env);
+    const id = String(mpId || "");
+    if (!id) return null;
+    const c = await env.DB.prepare(
+      "SELECT * FROM comisiones WHERE tipo = 'comision' AND (mp_payment_id = ?1 OR mp_pago_id = ?1)"
+    ).bind(id).first();
+    if (!c) return null;
+    const ya = await env.DB.prepare("SELECT id FROM comisiones WHERE tipo = 'reversa' AND mp_payment_id = ?1").bind(c.mp_payment_id).first();
+    if (ya) return null;
+    await env.DB.prepare(
+      "INSERT INTO comisiones (id, codigo, tenant_id, tipo, mes, mp_payment_id, mp_pago_id, monto_base, monto, fecha) VALUES (?1,?2,?3,'reversa',?4,?5,?6,?7,?8,?9)"
+    ).bind(crypto.randomUUID(), c.codigo, c.tenant_id, mesActualUTC(), c.mp_payment_id, c.mp_pago_id, c.monto_base, -Number(c.monto), new Date().toISOString()).run();
+    try { await alertaCorreoAndres(env, "AFILIADOS: reversa de S/" + c.monto + " (" + c.codigo + ")", "Refund/contracargo del pago MP " + id + ": la comision de ese mes se revierte (regla 5 del programa)."); } catch (e) {}
+    return c;
+  } catch (e) { console.error("revertirComision", e); return null; }
+}
+/* Payout automatico v1 (cron diario): afiliados-tenant con saldo >= S/50 -> el saldo se baja
+   del monto de SU preapproval; el webhook del cobro descontado liquida y restaura el precio. */
+async function aplicarCreditosAfiliados(env){
+  await ensureAfiliadosSchema(env);
+  if (!env.MP_ACCESS_TOKEN) return;
+  let afs = [];
+  try { const r = await env.DB.prepare("SELECT * FROM afiliados WHERE tenant_id != ''").all(); afs = r.results || []; } catch (e) { return; }
+  for (const af of afs){
+    try {
+      if (Number(af.descuento_pen) > 0) continue; // ya hay un descuento en vuelo
+      const saldo = await saldoAfiliado(env, af.codigo);
+      if (saldo < AFILIADO_PAYOUT_MIN) continue;
+      const t = await env.DB.prepare("SELECT * FROM tenants WHERE id = ?1").bind(af.tenant_id).first();
+      if (!t || t.estado !== "activo" || t.mp_sub_status !== "authorized" || !t.mp_preapproval_id) continue;
+      const precio = PLANES[t.plan] || 0;
+      if (!(precio > 0)) continue; // gratis/por_alumno/anual: no hay cobro fijo que descontar (queda en saldo)
+      const aplicable = Math.min(saldo, precio - 1); // MP no acepta monto 0: siempre queda >= S/1
+      if (!(aplicable > 0)) continue;
+      const up = await mpFetch(env, "/preapproval/" + encodeURIComponent(t.mp_preapproval_id), {
+        method: "PUT",
+        body: { auto_recurring: { transaction_amount: Math.round((precio - aplicable) * 100) / 100, currency_id: "PEN" } }
+      });
+      if (!up.ok){ console.error("aplicarCreditosAfiliados PUT", af.codigo, up.status); continue; }
+      await env.DB.prepare("UPDATE afiliados SET descuento_pen = ?1 WHERE codigo = ?2").bind(aplicable, af.codigo).run();
+      try {
+        await alertaCorreoAndres(env,
+          "AFILIADOS: credito de S/" + aplicable + " aplicado a " + (t.academia || af.codigo),
+          "El afiliado " + af.nombre + " (" + af.codigo + ") tenia S/" + saldo + " de saldo.\nSu siguiente cobro de MP baja de S/" + precio + " a S/" + (Math.round((precio - aplicable) * 100) / 100) + ". Al confirmarse el pago, el precio se restaura solo.");
+      } catch (e) {}
+    } catch (e) { console.error("aplicarCreditosAfiliados", af && af.codigo, e); }
+  }
+}
+/* Al confirmarse el cobro DESCONTADO del afiliado-tenant: liquidar el saldo usado y restaurar
+   el precio del plan en su preapproval. Llamado desde el webhook (pago aprobado). */
+async function liquidarCreditoAfiliado(env, tenant){
+  try {
+    await ensureAfiliadosSchema(env);
+    const af = await env.DB.prepare("SELECT * FROM afiliados WHERE tenant_id = ?1 AND descuento_pen > 0").bind(tenant.id).first();
+    if (!af) return;
+    const usado = Math.round(Number(af.descuento_pen) * 100) / 100;
+    await env.DB.prepare(
+      "INSERT INTO comisiones (id, codigo, tenant_id, tipo, mes, monto, fecha) VALUES (?1,?2,?3,'payout_credito',?4,?5,?6)"
+    ).bind(crypto.randomUUID(), af.codigo, tenant.id, mesActualUTC(), -usado, new Date().toISOString()).run();
+    await env.DB.prepare("UPDATE afiliados SET descuento_pen = 0 WHERE codigo = ?1").bind(af.codigo).run();
+    const precio = PLANES[tenant.plan] || 0;
+    if (precio > 0 && tenant.mp_preapproval_id && env.MP_ACCESS_TOKEN){
+      const up = await mpFetch(env, "/preapproval/" + encodeURIComponent(tenant.mp_preapproval_id), {
+        method: "PUT", body: { auto_recurring: { transaction_amount: precio, currency_id: "PEN" } }
+      });
+      if (!up.ok){
+        try { await alertaCorreoAndres(env, "AFILIADOS: RESTAURAR PRECIO A MANO de " + (tenant.academia || tenant.id), "Se liquido el credito de S/" + usado + " de " + af.codigo + " pero MP no dejo restaurar el precio del preapproval " + tenant.mp_preapproval_id + " a S/" + precio + " (status " + up.status + "). Revisar en MP."); } catch (e) {}
+        return;
+      }
+    }
+    try { await alertaCorreoAndres(env, "AFILIADOS: payout de S/" + usado + " liquidado (" + af.codigo + ")", "El cobro descontado de " + (tenant.academia || tenant.id) + " se confirmo. Saldo restante del afiliado: S/" + (await saldoAfiliado(env, af.codigo)) + ". Precio del plan restaurado."); } catch (e) {}
+  } catch (e) { console.error("liquidarCreditoAfiliado", e); }
+}
+/* Riel PayPal Payouts (afiliados cash): DETRAS DE FLAG hasta que Andres confirme la
+   aprobacion del API. Con el flag apagado solo avisa cuanto se debe (sin mover dinero). */
+async function payoutsPayPalAfiliados(env){
+  await ensureAfiliadosSchema(env);
+  let afs = [];
+  try { const r = await env.DB.prepare("SELECT * FROM afiliados WHERE tenant_id = ''").all(); afs = r.results || []; } catch (e) { return; }
+  const pendientes = [];
+  for (const af of afs){
+    const saldo = await saldoAfiliado(env, af.codigo);
+    if (saldo >= AFILIADO_PAYOUT_MIN) pendientes.push({ af, saldo });
+  }
+  if (!pendientes.length) return;
+  const flagOn = env.PAYPAL_PAYOUTS_ON === "1" && env.PAYPAL_CLIENT_ID && env.PAYPAL_CLIENT_SECRET;
+  if (!flagOn){
+    try {
+      await alertaCorreoAndres(env,
+        "AFILIADOS: " + pendientes.length + " payout(s) PayPal en espera (flag OFF)",
+        pendientes.map(p => "· " + p.af.nombre + " (" + p.af.codigo + "): S/" + p.saldo + (p.af.email_paypal ? " -> " + p.af.email_paypal : " (SIN correo PayPal)")).join("\n") +
+        "\n\nEl riel PayPal esta detras del flag PAYPAL_PAYOUTS_ON hasta confirmar la aprobacion del Payouts API. Para encenderlo: secrets PAYPAL_CLIENT_ID, PAYPAL_CLIENT_SECRET, PAYPAL_TC_USD (tipo de cambio PEN->USD) y PAYPAL_PAYOUTS_ON=1.");
+    } catch (e) {}
+    return;
+  }
+  const tc = Number(env.PAYPAL_TC_USD) || 0; // ej. 3.75 (S/ por US$); sin tipo de cambio NO se paga
+  if (!(tc > 0)){
+    try { await alertaCorreoAndres(env, "AFILIADOS: falta PAYPAL_TC_USD para pagar", "El flag PayPal esta ON pero no hay tipo de cambio PEN->USD configurado (secret PAYPAL_TC_USD). No se envio ningun pago."); } catch (e) {}
+    return;
+  }
+  try {
+    const basic = btoa(env.PAYPAL_CLIENT_ID + ":" + env.PAYPAL_CLIENT_SECRET);
+    const tokRes = await fetch("https://api-m.paypal.com/v1/oauth2/token", {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded", authorization: "Basic " + basic },
+      body: "grant_type=client_credentials"
+    });
+    const tok = await tokRes.json().catch(() => ({}));
+    if (!tokRes.ok || !tok.access_token) throw new Error("PayPal oauth " + tokRes.status);
+    const items = pendientes.filter(p => p.af.email_paypal).map((p, i) => ({
+      recipient_type: "EMAIL",
+      amount: { value: (Math.round((p.saldo / tc) * 100) / 100).toFixed(2), currency: "USD" },
+      receiver: p.af.email_paypal,
+      note: "Comision del programa de afiliados de Batuta (batuta.lat)",
+      sender_item_id: "af-" + p.af.codigo + "-" + mesActualUTC()
+    }));
+    if (!items.length) return;
+    const res = await fetch("https://api-m.paypal.com/v1/payments/payouts", {
+      method: "POST",
+      headers: { "content-type": "application/json", authorization: "Bearer " + tok.access_token },
+      body: JSON.stringify({
+        sender_batch_header: { sender_batch_id: "batuta-af-" + mesActualUTC(), email_subject: "Tu comision de afiliado de Batuta" },
+        items
+      })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error("PayPal payouts " + res.status + " " + JSON.stringify(data).slice(0, 300));
+    for (const p of pendientes.filter(x => x.af.email_paypal)){
+      await env.DB.prepare(
+        "INSERT INTO comisiones (id, codigo, tipo, mes, monto, fecha) VALUES (?1,?2,'payout_paypal',?3,?4,?5)"
+      ).bind(crypto.randomUUID(), p.af.codigo, mesActualUTC(), -p.saldo, new Date().toISOString()).run();
+    }
+    try { await alertaCorreoAndres(env, "AFILIADOS: payout PayPal enviado (" + items.length + ")", pendientes.filter(x => x.af.email_paypal).map(p => "· " + p.af.nombre + ": S/" + p.saldo + " (US$" + (Math.round((p.saldo / tc) * 100) / 100) + ") -> " + p.af.email_paypal).join("\n") + "\nBatch: " + ((data.batch_header && data.batch_header.payout_batch_id) || "?")); } catch (e) {}
+  } catch (e) {
+    console.error("payoutsPayPalAfiliados", e);
+    try { await alertaCorreoAndres(env, "AFILIADOS: fallo el payout PayPal", String(e && e.message || e) + "\nNingun saldo se marco como pagado; se reintenta el proximo mes o a mano."); } catch (e2) {}
+  }
+}
+/* Stats de UN afiliado (para el panel por token y su/afiliados). */
+async function statsAfiliado(env, af){
+  const mes = mesActualUTC();
+  const refs = await env.DB.prepare(
+    "SELECT r.fecha, t.academia, t.plan, t.estado, t.mp_sub_status FROM referidos r JOIN tenants t ON t.id = r.tenant_id WHERE r.codigo = ?1 ORDER BY r.fecha DESC"
+  ).bind(af.codigo).all().catch(() => ({ results: [] }));
+  const lista = refs.results || [];
+  const activos = lista.filter(r => r.estado === "activo" && (r.mp_sub_status === "authorized" || r.mp_sub_status === "anual")).length;
+  const trials = lista.filter(r => r.estado === "trial").length;
+  const cMes = await env.DB.prepare(
+    "SELECT COALESCE(SUM(monto),0) AS s FROM comisiones WHERE codigo = ?1 AND mes = ?2 AND tipo IN ('comision','reversa')"
+  ).bind(af.codigo, mes).first().catch(() => null);
+  const cTotal = await env.DB.prepare(
+    "SELECT COALESCE(SUM(monto),0) AS s FROM comisiones WHERE codigo = ?1 AND tipo IN ('comision','reversa')"
+  ).bind(af.codigo).first().catch(() => null);
+  return {
+    codigo: af.codigo, nombre: af.nombre,
+    link: "https://batuta.lat/?ref=" + af.codigo,
+    clics: Number(af.clics) || 0,
+    referidos: lista.length, trials, activos,
+    comision_mes_pen: Math.round(((cMes && Number(cMes.s)) || 0) * 100) / 100,
+    comision_acumulada_pen: Math.round(((cTotal && Number(cTotal.s)) || 0) * 100) / 100,
+    saldo_pendiente_pen: await saldoAfiliado(env, af.codigo),
+    payout: af.tenant_id ? "credito automatico en su cobro de MP" : "PayPal mensual (saldo minimo S/" + AFILIADO_PAYOUT_MIN + ")"
+  };
 }
 
 /* ---------- Activacion (15-jul-2026): LA metrica #1 del negocio ----------
@@ -1780,9 +2047,10 @@ function paginaRegistro(googleOn){
     // Atribución: ?f= del CTA que lo trajo, o el referrer como fallback; sobrevive recargas en sessionStorage.
     "var fuente='';try{var q=new URLSearchParams(location.search).get('f');if(q){fuente=q;}else if(document.referrer){var u=new URL(document.referrer);fuente=(u.host===location.host?'':u.host)+u.pathname;}}catch(e){}" +
     "try{if(fuente){sessionStorage.setItem('batuta_f',fuente);}else{fuente=sessionStorage.getItem('batuta_f')||'';}}catch(e){}" +
-    // Afiliados (?ref=) y plan Gratis (?plan=gratis): mismos trucos de persistencia.
+    // Afiliados (?ref=): cookie 60 dias (la siembra cualquier pagina de batuta.lat) + sessionStorage.
     "var refc='';try{var qr=new URLSearchParams(location.search).get('ref');if(qr){refc=qr;}}catch(e){}" +
-    "try{if(refc){sessionStorage.setItem('batuta_ref',refc);}else{refc=sessionStorage.getItem('batuta_ref')||'';}}catch(e){}" +
+    "try{if(!refc){var mck=/(?:^|;\\s*)batuta_ref=([^;]+)/.exec(document.cookie);if(mck){refc=decodeURIComponent(mck[1]);}}}catch(e){}" +
+    "try{if(refc){sessionStorage.setItem('batuta_ref',refc);document.cookie='batuta_ref='+encodeURIComponent(refc)+';max-age=5184000;path=/;samesite=lax';}else{refc=sessionStorage.getItem('batuta_ref')||'';}}catch(e){}" +
     "var planReg='';try{planReg=(new URLSearchParams(location.search).get('plan')||'');}catch(e){}" +
     "if(planReg==='gratis'){try{var pill=document.querySelector('.pill');if(pill)pill.textContent='Plan Gratis: 1 profesor, hasta 10 alumnos, para siempre';var sub=document.querySelector('.sub');if(sub)sub.textContent='Sin tarjeta y sin fecha de vencimiento. Cuando crezcas, subes de plan.';var bt=document.querySelector('#f button[type=submit]');if(bt)bt.textContent='Crear mi cuenta gratis';}catch(e){}}" +
     // Rescate de registros abandonados: email valido tecleado + se va sin terminar el submit
@@ -3205,6 +3473,36 @@ export default {
       }), { headers: { "content-type": "application/manifest+json", "cache-control": "public, max-age=600" } });
     }
 
+    /* -------- Afiliados: panel simple por token (clics, trials, activos, comision) -------- */
+    if (path === "/app/afiliado" && request.method === "GET"){
+      await ensureAfiliadosSchema(env);
+      const tokenAf = String(url.searchParams.get("token") || "").trim();
+      const af = tokenAf ? await env.DB.prepare("SELECT * FROM afiliados WHERE token_panel = ?1").bind(tokenAf).first().catch(() => null) : null;
+      if (!af) return new Response("Link de panel no valido. Escribenos por WhatsApp: wa.me/51989077928", { status: 404, headers: { "content-type": "text/plain; charset=utf-8" } });
+      const s = await statsAfiliado(env, af);
+      if (url.searchParams.get("format") === "json") return json(s);
+      const fila = (k, v) => "<div class='fila'><span>" + k + "</span><b>" + v + "</b></div>";
+      const html = "<!doctype html><html lang='es'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'><meta name='robots' content='noindex'><title>Panel de afiliado · Batuta</title><style>" +
+        "body{font-family:system-ui,sans-serif;background:#0d1117;color:#e6edf3;margin:0;padding:24px;display:flex;justify-content:center}" +
+        ".card{max-width:560px;width:100%}h1{font-size:22px}h1 span{color:#e8a33d}" +
+        ".fila{display:flex;justify-content:space-between;padding:12px 14px;border:1px solid #30363d;border-radius:10px;margin:8px 0;background:#161b22}" +
+        ".link{background:#161b22;border:1px dashed #e8a33d;border-radius:10px;padding:12px 14px;margin:14px 0;word-break:break-all;font-family:monospace}" +
+        ".pie{color:#8b949e;font-size:13px;line-height:1.5}</style></head><body><div class='card'>" +
+        "<h1><span>BATUTA</span> · Panel de afiliado</h1>" +
+        "<p>Hola, " + esc(af.nombre) + ". Tu link para compartir:</p>" +
+        "<div class='link'>" + esc(s.link) + "</div>" +
+        fila("Clics en tu link", s.clics) +
+        fila("Registros referidos", s.referidos) +
+        fila("En prueba (trial)", s.trials) +
+        fila("Clientes activos pagando", s.activos) +
+        fila("Comision de este mes", "S/ " + s.comision_mes_pen.toFixed(2)) +
+        fila("Comision acumulada", "S/ " + s.comision_acumulada_pen.toFixed(2)) +
+        fila("Saldo por pagar", "S/ " + s.saldo_pendiente_pen.toFixed(2)) +
+        "<p class='pie'>Ganas el 30% de cada mensualidad pagada de tus referidos, durante sus primeros 12 meses. El pago sale automatico cuando tu saldo pasa S/" + AFILIADO_PAYOUT_MIN + ": " + esc(s.payout) + ". Si un referido pide reembolso, la comision de ese mes se revierte. Dudas: <a href='https://wa.me/51989077928' style='color:#e8a33d'>WhatsApp</a>.</p>" +
+        "</div></body></html>";
+      return new Response(html, { headers: { "content-type": "text/html; charset=utf-8" } });
+    }
+
     if (!path.startsWith("/app/api/")){
       return env.ASSETS ? env.ASSETS.fetch(request) : json({ error: "No encontrado" }, 404);
     }
@@ -3322,6 +3620,50 @@ export default {
           }
         } catch (e) { /* el beacon jamas tumba nada */ }
         return new Response(null, { status: 204 });
+      }
+
+      /* -------- Afiliados: clic en un link ?ref= (lo manda el snippet global de batuta.lat) -------- */
+      if (path === "/app/api/afiliados/click" && request.method === "POST"){
+        try {
+          const b = await request.json().catch(() => ({}));
+          const code = normRefCode(b.codigo);
+          const ua = request.headers.get("user-agent") || "";
+          const ip = clientIp(request);
+          if (code && ua && !BOT_UA.test(ua) && !(ip && await chatbotPasoTope(env, "afclick:" + ip, 20))){
+            await ensureAfiliadosSchema(env);
+            await env.DB.prepare("UPDATE afiliados SET clics = clics + 1 WHERE codigo = ?1").bind(code).run();
+          }
+        } catch (e) { /* el clic jamas tumba nada */ }
+        return new Response(null, { status: 204 });
+      }
+
+      /* -------- Afiliados: formulario de aplicacion de batuta.lat/afiliados (alta sigue siendo manual) -------- */
+      if (path === "/app/api/afiliados/aplicar" && request.method === "POST"){
+        const ipAp = clientIp(request);
+        if (ipAp && await chatbotPasoTope(env, "afapl:" + ipAp, 3)){
+          return json({ error: "Demasiados intentos. Escribenos por WhatsApp." }, 429);
+        }
+        const b = await request.json().catch(() => ({}));
+        const nombreAp = String(b.nombre || "").trim().slice(0, 80);
+        const emailAp = String(b.email || "").trim().toLowerCase().slice(0, 120);
+        const waAp = String(b.whatsapp || "").trim().slice(0, 30);
+        const ppAp = String(b.paypal || "").trim().slice(0, 120);
+        const canalAp = String(b.canal || "").trim().slice(0, 400);
+        if (nombreAp.length < 2 || !emailOk(emailAp)) return json({ error: "Manda tu nombre y un correo valido." }, 400);
+        await ensureAfiliadosSchema(env);
+        await env.DB.prepare(
+          "INSERT INTO afiliado_solicitudes (id, nombre, email, whatsapp, paypal, canal, fecha) VALUES (?1,?2,?3,?4,?5,?6,?7)"
+        ).bind(crypto.randomUUID(), nombreAp, emailAp, waAp, ppAp, canalAp, new Date().toISOString()).run();
+        ctx.waitUntil(alertaCorreoAndres(env,
+          "SOLICITUD DE AFILIADO Batuta: " + nombreAp,
+          "Nombre: " + nombreAp +
+          "\nCorreo: " + emailAp +
+          "\nWhatsApp: " + (waAp || "-") + (waAp ? "\nEscribele: https://wa.me/" + waAp.replace(/\D/g, "") : "") +
+          "\nPayPal: " + (ppAp || "-") +
+          "\nComo va a promocionar: " + (canalAp || "-") +
+          "\n\nSi lo apruebas, dale de alta con su/afiliado (alta manual, regla del programa):" +
+          "\ncurl -X POST https://batuta.lat/app/api/su/afiliado -H \"Authorization: Bearer $ADMIN_TOKEN\" -H \"content-type: application/json\" -d '{\"nombre\":\"" + nombreAp.replace(/"/g, "") + "\",\"contacto\":\"" + (waAp || emailAp) + "\",\"email_paypal\":\"" + ppAp + "\"}'"));
+        return json({ ok: true });
       }
 
       /* ============================================================
@@ -3475,42 +3817,53 @@ export default {
           return json({ profe_duo: duo, profe_trio: trio, nota: "Pegar los ids en MP_PLAN_IDS del worker y redeployar." });
         }
 
-        /* -------- Afiliados (30% recurrente x12, liquidacion manual) -------- */
+        /* -------- Afiliados v1 (30% x12 meses, payout automatico) --------
+           Alta MANUAL (Andres aprueba a cada uno):
+           curl -X POST .../app/api/su/afiliado -H "Authorization: Bearer $ADMIN_TOKEN" \
+             -d '{"nombre":"Juan Perez","contacto":"wa 999...","email_paypal":"juan@x.com","codigo":"juanp","tenant":"<slug si es cliente>"}' */
         if (path === "/app/api/su/afiliado" && request.method === "POST"){
           await ensureAfiliadosSchema(env);
           const bAf = await request.json().catch(() => ({}));
-          const codigoAf = String(bAf.codigo || "").trim().toLowerCase().replace(/[^a-z0-9-]/g, "").slice(0, 60);
           const nombreAf = String(bAf.nombre || "").trim().slice(0, 80);
-          if (!codigoAf || !nombreAf) return json({ error: "manda codigo y nombre" }, 400);
-          const choca = await env.DB.prepare("SELECT id FROM tenants WHERE slug = ?1").bind(codigoAf).first();
-          if (choca) return json({ error: "ese codigo choca con el slug de un tenant; usa otro" }, 409);
+          if (!nombreAf) return json({ error: "manda al menos nombre" }, 400);
+          // Si es tenant de Batuta, su payout es credito automatico y su codigo default = su slug.
+          let tenantAf = null;
+          const refT = String(bAf.tenant || "").trim();
+          if (refT){
+            tenantAf = await env.DB.prepare("SELECT id, slug, academia FROM tenants WHERE id = ?1 OR slug = ?1 OR email = ?1").bind(refT).first();
+            if (!tenantAf) return json({ error: "tenant no encontrado: " + refT }, 404);
+          }
+          const codigoAf = normRefCode(bAf.codigo) || (tenantAf ? tenantAf.slug : normRefCode(slugify(nombreAf)));
+          if (!codigoAf) return json({ error: "no pude generar codigo; manda uno" }, 400);
+          const chocaT = await env.DB.prepare("SELECT id FROM tenants WHERE slug = ?1").bind(codigoAf).first();
+          if (chocaT && (!tenantAf || chocaT.id !== tenantAf.id)) return json({ error: "ese codigo choca con el slug de otro tenant; usa otro" }, 409);
+          const yaAf = await env.DB.prepare("SELECT codigo, token_panel FROM afiliados WHERE codigo = ?1").bind(codigoAf).first();
+          const tokenAf = (yaAf && yaAf.token_panel) || randHex(16);
           await env.DB.prepare(
-            "INSERT INTO afiliados_ext (codigo, nombre, whatsapp, email, creado) VALUES (?1,?2,?3,?4,?5) " +
-            "ON CONFLICT(codigo) DO UPDATE SET nombre = ?2, whatsapp = ?3, email = ?4"
-          ).bind(codigoAf, nombreAf, String(bAf.whatsapp || "").trim().slice(0, 20), String(bAf.email || "").trim().slice(0, 120), new Date().toISOString()).run();
-          return json({ ok: true, codigo: codigoAf, link: MARCA.dominio + "/app/registro?ref=" + codigoAf, comision: "30% de la mensualidad por 12 meses (liquidacion manual por Yape)" });
+            "INSERT INTO afiliados (codigo, nombre, contacto, email_paypal, tenant_id, token_panel, creado) VALUES (?1,?2,?3,?4,?5,?6,?7) " +
+            "ON CONFLICT(codigo) DO UPDATE SET nombre = ?2, contacto = ?3, email_paypal = ?4, tenant_id = ?5"
+          ).bind(codigoAf, nombreAf, String(bAf.contacto || bAf.whatsapp || bAf.email || "").trim().slice(0, 160),
+                 String(bAf.email_paypal || "").trim().slice(0, 120), tenantAf ? tenantAf.id : "", tokenAf, new Date().toISOString()).run();
+          return json({
+            ok: true, codigo: codigoAf,
+            link: "https://batuta.lat/?ref=" + codigoAf,
+            panel: "https://batuta.lat/app/afiliado?token=" + tokenAf,
+            payout: tenantAf ? "credito automatico en el cobro de MP de " + tenantAf.academia : "PayPal Payouts (flag " + (env.PAYPAL_PAYOUTS_ON === "1" ? "ON" : "OFF") + ")",
+            comision: "30% de cada mensualidad, tope 12 meses por referido, reversa si hay refund"
+          });
         }
         if (path === "/app/api/su/afiliados" && request.method === "GET"){
           await ensureAfiliadosSchema(env);
-          let refs = [];
-          try {
-            const r = await env.DB.prepare(
-              "SELECT COALESCE(t.ref_code,'') AS codigo, t.academia, t.email, t.plan, t.estado, t.mp_sub_status, t.creado " +
-              "FROM tenants t WHERE COALESCE(t.ref_code,'') != '' ORDER BY t.creado DESC"
-            ).all();
-            refs = r.results || [];
-          } catch (e) {}
-          const porCodigo = {};
-          for (const r of refs){
-            if (!porCodigo[r.codigo]) porCodigo[r.codigo] = { codigo: r.codigo, referidos: [], pagando: 0, comision_mensual_pen: 0 };
-            const paga = (r.estado === "activo" && r.mp_sub_status === "authorized") || r.mp_sub_status === "anual";
-            const monto = PLANES[r.plan] || 0;
-            porCodigo[r.codigo].referidos.push({ academia: r.academia, email: r.email, plan: r.plan, estado: r.estado, sub: r.mp_sub_status, creado: r.creado, paga });
-            if (paga){ porCodigo[r.codigo].pagando++; porCodigo[r.codigo].comision_mensual_pen += Math.round(monto * 0.30 * 100) / 100; }
+          let afs = [];
+          try { const r = await env.DB.prepare("SELECT * FROM afiliados ORDER BY creado DESC").all(); afs = r.results || []; } catch (e) {}
+          const lista = [];
+          for (const af of afs){
+            const s = await statsAfiliado(env, af);
+            lista.push(Object.assign(s, { contacto: af.contacto, email_paypal: af.email_paypal, es_tenant: !!af.tenant_id, descuento_en_vuelo_pen: Number(af.descuento_pen) || 0, panel: "https://batuta.lat/app/afiliado?token=" + af.token_panel }));
           }
-          let exts = [];
-          try { const e2 = await env.DB.prepare("SELECT * FROM afiliados_ext ORDER BY creado DESC").all(); exts = e2.results || []; } catch (e) {}
-          return json({ nota: "comision 30% x12 meses; pagar por Yape a fin de mes; codigo de tenant = su slug", por_codigo: Object.values(porCodigo), afiliados_externos: exts });
+          let solicitudes = [];
+          try { const s2 = await env.DB.prepare("SELECT * FROM afiliado_solicitudes ORDER BY fecha DESC LIMIT 50").all(); solicitudes = s2.results || []; } catch (e) {}
+          return json({ nota: "30% x12 meses; payout automatico (credito MP o PayPal con flag); alta manual via su/afiliado", afiliados: lista, solicitudes });
         }
 
         /* -------- Packs +50 alumnos (Academia/XL, S/39 c/u por WhatsApp): sube el tope sin salto de plan. --------
@@ -3841,8 +4194,13 @@ export default {
         const rubro = String(b.rubro || "").trim().slice(0, 40);
         // Tamaño de academia: el dato que valida la tesis per-alumno del plan (peces grandes primero).
         const tam = String(b.tam || "").trim().slice(0, 20);
-        // Afiliados (15-jul-2026): ?ref= = codigo de quien lo refirio (slug de un tenant o codigo externo).
-        const refCode = String(b.ref || "").trim().toLowerCase().replace(/[^a-z0-9-]/g, "").slice(0, 60);
+        // Afiliados: ?ref= = codigo de quien lo refirio (slug de un tenant o codigo externo).
+        // Fallback server-side: cookie batuta_ref (60 dias, la siembra cualquier pagina de batuta.lat).
+        let refCode = normRefCode(b.ref);
+        if (!refCode){
+          const mCk = /(?:^|;\s*)batuta_ref=([^;]+)/.exec(request.headers.get("cookie") || "");
+          if (mCk) refCode = normRefCode(decodeURIComponent(mCk[1]));
+        }
         // Plan GRATIS directo desde la landing (?plan=gratis): estado 'activo' sin trial ni checkout.
         const esGratis = String(b.plan || "").trim() === "gratis";
 
@@ -3886,6 +4244,9 @@ export default {
           stmts.push(env.DB.prepare("INSERT INTO config (tenant_id, clave, valor) VALUES (?1,'cursos',?2)").bind(id, CURSOS_POR_RUBRO[rubro]));
         }
         await env.DB.batch(stmts);
+
+        // Afiliados: fila en `referidos` (la atribucion inmutable ya quedo en tenants.ref_code).
+        if (refCode){ try { await registrarReferido(env, id, refCode); } catch (e) { console.error("registrarReferido", e); } }
 
         const token = await crearSesion(env, "T:" + id);
         // Aviso instantáneo: el primer trial ES el evento de validación del plan; que no caiga en silencio.
@@ -4464,6 +4825,17 @@ export default {
             const status = String(pago.status || "");
             if (status === "approved" || status === "processed"){
               await env.DB.prepare("UPDATE tenants SET estado = 'activo', mp_sub_status = 'authorized' WHERE id = ?1").bind(t.id).run();
+              /* Afiliados: este pago marca el mes como comisionable (30%, tope 12 meses).
+                 Y si el pagador es un AFILIADO con credito en vuelo, se liquida y restaura su precio. */
+              try { await otorgarComision(env, t, pago, resId); } catch (e) { console.error("otorgarComision webhook", e); }
+              try { await liquidarCreditoAfiliado(env, t); } catch (e) { console.error("liquidarCreditoAfiliado webhook", e); }
+            } else if (status === "refunded" || status === "charged_back" || status === "cancelled"){
+              /* Refund/contracargo del cobro recurrente: la comision de ese mes se revierte. */
+              try { await revertirComision(env, resId); } catch (e) { console.error("revertirComision webhook", e); }
+              const vencidoRf = Date.now() > Date.parse(t.trial_hasta);
+              if (vencidoRf){
+                await env.DB.prepare("UPDATE tenants SET estado = 'vencido' WHERE id = ?1").bind(t.id).run();
+              }
             } else {
               const vencido = Date.now() > Date.parse(t.trial_hasta);
               if (vencido){
@@ -4499,6 +4871,11 @@ export default {
               return new Response("ok", { status: 200 });
             }
             const pago = mp.data;
+            /* Afiliados: refund/contracargo notificado por el topic payment (el id aqui es el
+               payment real; revertirComision tambien matchea contra mp_pago_id). */
+            if (["refunded", "charged_back", "cancelled"].includes(String(pago.status || ""))){
+              try { await revertirComision(env, String(pago.id || resId)); } catch (e) { console.error("revertirComision payment", e); }
+            }
             const refPk = String(pago.external_reference || "");
             /* Plan ANUAL (btan:) - respaldo del webhook; la via primaria es confirmar al volver. */
             if (refPk.startsWith("btan:") && String(pago.status || "") === "approved"){
@@ -6048,7 +6425,7 @@ export default {
           ? ("Eres el SOPORTE de Batuta (batuta.lat, SaaS de gestion para academias y profesores particulares de cualquier materia). Atiendes al PROFESOR o DUENO dentro de su panel: resuelves dudas de uso, de planes y de cobros.\n" +
             "ESTILO (estricto): espanol claro de tu a tu, maximo 3 frases, SIEMPRE con el paso concreto (pestana > boton). Sin em dash. Sin signos de apertura invertidos (nada de ¿ ni ¡). Sin markdown ni asteriscos: el chat es texto plano. Sin saludos ni relleno: directo a la respuesta. Si la pregunta es amplia, da el primer paso y ofrece seguir.\n" +
             "EL PANEL (menu izquierdo): Inicio (resumen + tu link de alumnos) · Personas (Alumnos, Grupos, Profesores, Accesos al portal, Interesados) · Clases (Registro de clases, Agenda, Chat) · Cobros (Pagos, Caja, Reportes) · Material (Para tus alumnos, Tu biblioteca) · Configuracion (Perfil, Ajustes, Servicios, Ideas y errores).\n" +
-            "PLANES Y PRECIOS (los unicos vigentes, en soles via Mercado Pago): prueba gratis de 30 DIAS sin tarjeta (y garantia de devolucion en el primer mes pagado). Plan GRATIS S/0 para siempre (1 profesor, hasta 10 alumnos; sin recordatorios automaticos ni boletas SUNAT) · Profe S/49/mes (1 profesor, alumnos ilimitados) · Profe Duo S/78/mes (2 profesores, alumnos ilimitados) · Profe Trio S/107/mes (3 profesores, alumnos ilimitados) · Academia S/149/mes (hasta 5 profesores y 150 alumnos) · Academia XL S/299/mes (hasta 20 profesores y 400 alumnos) · Academia por alumno (pagas por alumno activo, minimo 5; se activa en Perfil > Tu plan y ahi mismo ves tu estimado en vivo). PLAN ANUAL: paga 12 meses al precio de 10 (Profe S/490 · Duo S/780 · Trio S/1,070 · Academia S/1,490 · XL S/2,990), un solo pago desde Perfil > Tu plan o /app/suscribir. Academias que pasan su tope de alumnos: packs de +50 alumnos por S/39/mes por WhatsApp, o subir de plan. Academias de mas de 400 alumnos: plan Red/Enterprise a medida por WhatsApp. PROGRAMA DE AFILIADOS: comparte tu link (Perfil > Recomienda Batuta) y ganas 30% de la mensualidad de cada academia referida por 12 meses, pagado por Yape. Se activa o cambia de plan en Configuracion > Perfil > 'Tu plan'; sin penalidad, rige desde el siguiente cobro.\n" +
+            "PLANES Y PRECIOS (los unicos vigentes, en soles via Mercado Pago): prueba gratis de 30 DIAS sin tarjeta (y garantia de devolucion en el primer mes pagado). Plan GRATIS S/0 para siempre (1 profesor, hasta 10 alumnos; sin recordatorios automaticos ni boletas SUNAT) · Profe S/49/mes (1 profesor, alumnos ilimitados) · Profe Duo S/78/mes (2 profesores, alumnos ilimitados) · Profe Trio S/107/mes (3 profesores, alumnos ilimitados) · Academia S/149/mes (hasta 5 profesores y 150 alumnos) · Academia XL S/299/mes (hasta 20 profesores y 400 alumnos) · Academia por alumno (pagas por alumno activo, minimo 5; se activa en Perfil > Tu plan y ahi mismo ves tu estimado en vivo). PLAN ANUAL: paga 12 meses al precio de 10 (Profe S/490 · Duo S/780 · Trio S/1,070 · Academia S/1,490 · XL S/2,990), un solo pago desde Perfil > Tu plan o /app/suscribir. Academias que pasan su tope de alumnos: packs de +50 alumnos por S/39/mes por WhatsApp, o subir de plan. Academias de mas de 400 alumnos: plan Red/Enterprise a medida por WhatsApp. PROGRAMA DE AFILIADOS: comparte tu link batuta.lat/?ref=<tu-slug> y ganas 30% de la mensualidad de cada academia referida durante sus primeros 12 meses; cuando tu saldo pasa S/50 se descuenta AUTOMATICO de tu siguiente cobro de Batuta (detalle en batuta.lat/afiliados). Se activa o cambia de plan en Configuracion > Perfil > 'Tu plan'; sin penalidad, rige desde el siguiente cobro.\n" +
             "SERVICIOS OPCIONALES (pestana Configuracion > Servicios, se coordinan por WhatsApp): Activacion asistida S/350 una vez (te dejamos todo andando: alumnos, pagos, marca) · Migracion desde Excel u otro software S/200 · Capacitacion con IA S/49.50 POR PERSONA (curso Batuta 101 + examen ORAL por voz con la examinadora IA en batuta.lat/aprende/examen, 15 min, con nota; se contrata por WhatsApp y se recibe un codigo) · Capacitacion del equipo en vivo (humana) S/199.50 por sesion o S/499.50 por 3 · Acompanamiento de primer nivel S/129/mes (soporte prioritario + revision mensual de numeros). Ademas hay un curso GRATIS con certificado: Batuta 101 en batuta.lat/aprende (4 modulos con quiz; el certificado se comparte en LinkedIn).\n" +
             "MENSAJES DE ESTE ASISTENTE: cada mes tienes una bolsa de mensajes incluida. Si se te acaba, el dueno puede comprar un pack extra AQUI MISMO en el chat pagando en linea (Mercado Pago: tarjeta o Yape): 30 mensajes por S/5, 60 por S/10, o 120 por S/15 (rigen solo el mes en curso); al agotarse la bolsa aparecen los botones de compra en esta misma ventana y el saldo se acredita solo al pagar. Tambien se puede coordinar por WhatsApp.\n" +
             "COMO SE HACE:\n" +
@@ -7542,6 +7919,11 @@ export default {
     try { await recordatorioRenovacion(env); } catch (e) { console.error("recordatorio renovacion", e); }
     try { await seguimientoLeadsDueno(env); } catch (e) { console.error("seguimiento leads dueno", e); }
     try { await recalcularPorAlumno(env); } catch (e) { console.error("recalcular por alumno", e); }
+    /* Afiliados: credito automatico (diario) + riel PayPal (mes vencido, dia 1; con flag OFF solo avisa). */
+    try { await aplicarCreditosAfiliados(env); } catch (e) { console.error("creditos afiliados", e); }
+    if (dSched.getUTCDate() === 1){
+      try { await payoutsPayPalAfiliados(env); } catch (e) { console.error("payouts paypal afiliados", e); }
+    }
     /* ---- Digest de ACTIVACION para Andres (15-jul-2026): la metrica #1. Tenants de los
        ultimos 7 dias que aun no cargan 5 alumnos + 1 cobro, con wa.me listo para el toque
        humano (sales-assist manual mientras haya <20 trials/mes). + dunning pendiente. ---- */

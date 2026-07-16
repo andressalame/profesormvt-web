@@ -394,3 +394,46 @@ CREATE TABLE IF NOT EXISTS soporte_ia_log (
   historial TEXT DEFAULT '',   -- contexto que MANDO EL CLIENTE (puede venir forjado); sin el, el triage engana
   fecha     TEXT DEFAULT ''
 );
+
+-- ============ Programa de afiliados v1 (16-jul-2026) ============
+-- 30% de cada mensualidad pagada del referido, tope 12 meses por tenant, reversa por refund.
+-- En prod nacen via lazy CREATE (ensureAfiliadosSchema); aqui quedan para instalaciones frescas.
+-- Payout automatico: afiliado-tenant -> credito en su preapproval de MP; afiliado cash ->
+-- PayPal Payouts detras del flag PAYPAL_PAYOUTS_ON.
+CREATE TABLE IF NOT EXISTS afiliados (
+  codigo        TEXT PRIMARY KEY,   -- va en batuta.lat/?ref=<codigo>
+  nombre        TEXT NOT NULL,
+  contacto      TEXT DEFAULT '',    -- whatsapp / correo libre
+  email_paypal  TEXT DEFAULT '',
+  tenant_id     TEXT DEFAULT '',    -- si es cliente de Batuta: payout = credito en su cobro
+  token_panel   TEXT NOT NULL,      -- /app/afiliado?token=<token_panel>
+  clics         INTEGER DEFAULT 0,
+  descuento_pen REAL DEFAULT 0,     -- credito ya aplicado a su preapproval, pendiente de liquidar
+  creado        TEXT DEFAULT ''
+);
+CREATE TABLE IF NOT EXISTS referidos (
+  tenant_id TEXT PRIMARY KEY,       -- inmutable: un tenant tiene UN afiliado, se fija al crearse
+  codigo    TEXT NOT NULL,
+  fecha     TEXT DEFAULT ''
+);
+CREATE TABLE IF NOT EXISTS comisiones (        -- ledger: saldo del afiliado = SUM(monto)
+  id            TEXT PRIMARY KEY,
+  codigo        TEXT NOT NULL,
+  tenant_id     TEXT DEFAULT '',
+  tipo          TEXT NOT NULL,      -- comision | reversa | payout_credito | payout_paypal
+  mes           TEXT DEFAULT '',    -- YYYY-MM
+  mp_payment_id TEXT DEFAULT '',    -- authorized_payment de MP (idempotencia del webhook)
+  mp_pago_id    TEXT DEFAULT '',    -- payment real anidado (para matchear refunds del topic payment)
+  monto_base    REAL DEFAULT 0,
+  monto         REAL NOT NULL,      -- + comision / - reversa / - payout
+  fecha         TEXT DEFAULT ''
+);
+CREATE TABLE IF NOT EXISTS afiliado_solicitudes (  -- formulario de batuta.lat/afiliados (alta sigue manual)
+  id       TEXT PRIMARY KEY,
+  nombre   TEXT DEFAULT '',
+  email    TEXT DEFAULT '',
+  whatsapp TEXT DEFAULT '',
+  paypal   TEXT DEFAULT '',
+  canal    TEXT DEFAULT '',
+  fecha    TEXT DEFAULT ''
+);
