@@ -519,7 +519,12 @@
         </div>
 
         <div class="card">
-          <h3>// RESERVAR UNA CLASE</h3>
+          <h3 id="agReservarTit">// RESERVAR UNA CLASE</h3>
+          <div id="agReprogAviso" style="display:none;margin:8px 0 14px;padding:12px 14px;border:1px solid var(--amber);border-radius:10px;">
+            <div style="font-weight:600;margin-bottom:4px;">Estás moviendo tu clase</div>
+            <div class="note" style="margin:0 0 10px;" id="agReprogDe"></div>
+            <button class="btn ghost sm" data-reprog-cancelar="1">Mejor la dejo como está</button>
+          </div>
           <div class="agtipo" style="display:flex;gap:8px;margin:8px 0 12px;flex-wrap:wrap;">
             <button class="btn sm" data-tipo="fija">Horario fijo semanal</button>
             <button class="btn ghost sm" data-tipo="suelta">Clase suelta</button>
@@ -794,10 +799,23 @@ function api(path, opts){
   if(opts.body && !opts.headers["content-type"]) opts.headers["content-type"] = "application/json";
   return fetch(path, opts).then(function(res){
     return res.json().catch(function(){ return {}; }).then(function(data){
-      if(!res.ok){ var e = new Error(data.error || "Error"); e.status = res.status; e.data = data; throw e; }
+      if(!res.ok){
+        // Sesión vencida a mitad de camino: en vez de dejar la pantalla congelada con un toast
+        // que no explica nada, mandamos al login diciendo qué pasó. Ninguna operación queda a
+        // medias: el worker valida la sesión ANTES de tocar la base.
+        if(res.status === 401 && ME) sesionCaida();
+        var e = new Error(data.error || "Error"); e.status = res.status; e.data = data; throw e;
+      }
       return data;
     });
   });
+}
+function sesionCaida(){
+  setTok(null); ME = null;
+  try{ chatDetener(); }catch(e){}
+  setAuthTab("login");
+  setPantalla("viewAuth");
+  $("loginErr").textContent = "Tu sesión expiró. Entra de nuevo y sigue donde estabas — no perdiste ninguna clase.";
 }
 
 /* ---------- AUTH ---------- */
@@ -1601,6 +1619,11 @@ var AG_CANCELA_MIN_H = 4; // fallback: el valor real llega en /api/me (lo config
 var AG_REPROG_ON = true;
 function agSyncReprog(){ try{ if(ME&&ME.reprog){ AG_REPROG_ON=(ME.reprog.activo!==false); var h=Number(ME.reprog.min_h); if(h>=1&&h<=72) AG_CANCELA_MIN_H=h; } }catch(e){} }
 var AG_TIPO = "fija"; // horario fijo semanal = default (02-jul-2026): mantiene el ritmo consistente. Clase suelta sigue disponible como 2da opción.
+/* Reprogramar (19-jul-2026): el alumno entra en "modo mover" y su clase original NO se toca
+   hasta que elige el horario nuevo y el servidor confirma el cambio. Antes se liberaba la
+   clase de una y si la nueva reserva fallaba se quedaba sin nada. */
+var AG_REPROG_ID = null;    // id de la reserva que se está moviendo
+var AG_REPROG_LABEL = "";   // "lunes 20 de julio 20:00", para el aviso en pantalla
 var AG_CARGANDO = false;
 var AG_DIA = "";
 var AG_MESES = ["enero","febrero","marzo","abril","mayo","junio","julio","agosto","setiembre","octubre","noviembre","diciembre"];
@@ -1660,6 +1683,10 @@ function renderAgenda(){
   $("agSaldo").textContent = "Te quedan "+rest+" clase"+(rest===1?"":"s")+" en tu paquete "+(a.paquete||"");
 
   var prox = ME.proximasClases || [];
+  // Si la clase que estábamos moviendo ya no está en la lista (se movió, o se venció la ventana),
+  // salimos del modo mover para no dejar la pantalla en un estado que ya no existe.
+  if(AG_REPROG_ID && !prox.some(function(r){ return r.id===AG_REPROG_ID; })) AG_REPROG_ID = null;
+
   if(prox.length===0){
     $("agProx").innerHTML = '<p class="note" style="margin:0">Todavía no tienes clases agendadas. Reserva abajo 👇</p>';
   } else {
@@ -1668,15 +1695,19 @@ function renderAgenda(){
       agSyncReprog();
       var horas = (Date.parse(r.inicio_utc) - Date.now()) / 3600000;
       var puede = horas >= AG_CANCELA_MIN_H;
+      var moviendo = (AG_REPROG_ID === r.id);
       var boton = !AG_REPROG_ON ? ''
+        : (moviendo
+        ? '<button class="btn ghost sm" data-reprog-cancelar="1">Dejarla como está</button>'
         : (puede
-        ? '<button class="btn ghost sm" data-cancelar="'+esc(r.id)+'">Reprogramar</button>'
-        : '<button class="btn ghost sm" disabled title="Falta menos de '+AG_CANCELA_MIN_H+'h, ya no se puede reprogramar">Reprogramar</button>');
+        ? '<button class="btn ghost sm" data-reprog="'+esc(r.id)+'">Reprogramar</button>'
+        : '<button class="btn ghost sm" disabled title="Falta menos de '+AG_CANCELA_MIN_H+'h, ya no se puede reprogramar">Reprogramar</button>'));
       return '<div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--line);">'+
         '<div style="flex:1;min-width:0;">'+
           '<div style="font-weight:600;text-transform:capitalize;">'+esc(fmtFechaLocal(r.inicio_utc))+'</div>'+
           '<div class="note" style="margin:0;">'+esc(fmtHoraLocal(r.inicio_utc))+' '+badge+
-            ((AG_REPROG_ON&&!puede)?' · <span style="color:var(--amber)">ya no se puede reprogramar, si no asistes cuenta como falta</span>':'')+
+            (moviendo?' · <span style="color:var(--amber)">eligiendo horario nuevo…</span>':'')+
+            ((AG_REPROG_ON&&!puede&&!moviendo)?' · <span style="color:var(--amber)">ya no se puede reprogramar, si no asistes cuenta como falta</span>':'')+
           '</div>'+
         '</div>'+
         boton+
@@ -1684,8 +1715,55 @@ function renderAgenda(){
     }).join("");
   }
 
+  pintarModoReprog();
   setTipoReserva(AG_TIPO);
   cargarSlots();
+}
+
+/* Pinta el aviso de "estás moviendo tu clase" y esconde el selector fija/suelta:
+   mover una clase siempre produce una clase suelta en el horario nuevo. */
+function pintarModoReprog(){
+  var enModo = !!AG_REPROG_ID;
+  var aviso = $("agReprogAviso"), tipos = document.querySelector("#v-agenda .agtipo");
+  if(aviso) aviso.style.display = enModo ? "" : "none";
+  if(tipos) tipos.style.display = enModo ? "none" : "flex";
+  $("agReservarTit").textContent = enModo ? "// ELIGE EL HORARIO NUEVO" : "// RESERVAR UNA CLASE";
+  if(enModo){
+    $("agReprogDe").textContent = "Hoy la tienes el " + AG_REPROG_LABEL +
+      ". Elige abajo el horario nuevo: recién ahí se hace el cambio. Mientras tanto tu clase sigue en pie.";
+    $("agTipoNota").textContent = "";
+  }
+}
+
+function entrarModoReprog(id){
+  var r = (ME.proximasClases||[]).filter(function(x){ return x.id===id; })[0];
+  if(!r) return;
+  AG_REPROG_ID = id;
+  AG_REPROG_LABEL = fmtFechaLocal(r.inicio_utc) + " a las " + fmtHoraLocal(r.inicio_utc);
+  renderAgenda();
+  var slots = $("agSlots"); if(slots) slots.scrollIntoView({behavior:"smooth",block:"center"});
+}
+function salirModoReprog(){
+  AG_REPROG_ID = null; AG_REPROG_LABEL = "";
+  renderAgenda();
+}
+
+function confirmarReprogramar(iso){
+  var label = fmtFechaLocal(iso)+" "+fmtHoraLocal(iso);
+  if(!confirm("Mover tu clase del "+AG_REPROG_LABEL+" al "+label+". ¿Confirmas?")) return;
+  var id = AG_REPROG_ID;
+  api("/api/agenda/reprogramar",{method:"POST",body:JSON.stringify({id:id, inicio_utc:iso})})
+    .then(function(r){
+      AG_REPROG_ID = null; AG_REPROG_LABEL = "";
+      toast(r.mensaje || "Listo, moví tu clase 🎸");
+      return api("/api/me");
+    })
+    .then(function(d){ ME=d; renderAgenda(); })
+    .catch(function(e){
+      // La clase original NO se tocó: el alumno sigue en modo mover y puede elegir otro horario.
+      toast(e.message || "No se pudo mover la clase. Tu clase original sigue en pie.");
+      cargarSlots();
+    });
 }
 
 function setTipoReserva(t){
@@ -1693,6 +1771,8 @@ function setTipoReserva(t){
   document.querySelectorAll("#v-agenda .agtipo [data-tipo]").forEach(function(b){
     b.classList.toggle("ghost", b.dataset.tipo!==AG_TIPO);
   });
+  // Moviendo una clase no aplica fija/suelta: el aviso de arriba ya explica qué está pasando.
+  if(AG_REPROG_ID){ $("agTipoNota").textContent = ""; return; }
   $("agTipoNota").textContent = AG_TIPO==="fija"
     ? "Reservas el mismo día y hora las próximas 4 semanas. Si tu plan tiene más horas, puedes elegir varios horarios fijos."
     : "Reservas una sola clase en el horario que elijas.";
@@ -1712,7 +1792,8 @@ function cargarSlots(){
 
 function pintarSlots(){
   if(AG_SLOTS.length===0){
-    $("agSlots").innerHTML = '<p class="note" style="margin:0">No hay horarios libres en las próximas semanas. Escríbeme y lo cuadramos.</p>';
+    $("agSlots").innerHTML = '<p class="note" style="margin:0">No hay horarios libres en las próximas semanas. Escríbeme y lo cuadramos.'+
+      (AG_REPROG_ID ? ' Tranquilo: tu clase del '+esc(AG_REPROG_LABEL)+' sigue reservada.' : '')+'</p>';
     return;
   }
   // agrupo los slots por día (clave local)
@@ -1777,26 +1858,19 @@ function reservarSlot(iso){
     .catch(function(e){ toast(e.message || "No se pudo reservar."); cargarSlots(); });
 }
 
-function cancelarClase(id){
-  if(!confirm("¿Reprogramar esta clase? Se libera tu horario actual y eliges uno nuevo. Solo se puede con al menos "+AG_CANCELA_MIN_H+"h de anticipación.")) return;
-  api("/api/agenda/cancelar",{method:"POST",body:JSON.stringify({id:id})})
-    .then(function(r){ toast(r.mensaje || "Clase liberada."); return api("/api/me"); })
-    .then(function(d){
-      ME=d; renderAgenda();
-      var slots=$("agSlots"); if(slots) slots.scrollIntoView({behavior:"smooth",block:"start"});
-    })
-    .catch(function(e){ toast(e.message || "No se pudo reprogramar."); });
-}
-
 $("v-agenda").addEventListener("click", function(e){
   var dia = e.target.closest("[data-day]");
   if(dia){ AG_DIA = dia.dataset.day; pintarSlots(); return; }
   var t = e.target.closest("[data-tipo]");
   if(t){ setTipoReserva(t.dataset.tipo); pintarSlots(); return; }
   var s = e.target.closest("[data-slot]");
-  if(s){ reservarSlot(s.dataset.slot); return; }
-  var c = e.target.closest("[data-cancelar]");
-  if(c){ cancelarClase(c.dataset.cancelar); return; }
+  // En modo mover, elegir un horario reprograma (crea la nueva y libera la vieja de una);
+  // fuera del modo, reserva una clase más.
+  if(s){ if(AG_REPROG_ID) confirmarReprogramar(s.dataset.slot); else reservarSlot(s.dataset.slot); return; }
+  var rp = e.target.closest("[data-reprog]");
+  if(rp){ entrarModoReprog(rp.dataset.reprog); return; }
+  var rc = e.target.closest("[data-reprog-cancelar]");
+  if(rc){ salirModoReprog(); return; }
 });
 
 var RENDER = { inicio:renderInicio, clases:renderClases, agenda:renderAgenda, recursos:renderRecursos,

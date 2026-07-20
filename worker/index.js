@@ -196,9 +196,9 @@ async function verificarGoogle(env, credential){
 }
 
 /* ---------- reglas (idénticas al Excel/admin) ----------
-   reservasUsadas (opcional): clases de la AGENDA que ya consumen crédito de este
-   ciclo — reservas futuras (apartan), completadas (asistió) y faltas (cancelación
-   tardía). Así una reserva descuenta del paquete igual que un registro. */
+   reservasUsadas (opcional): clases FUTURAS que la agenda ya tiene apartadas en este
+   ciclo. Las clases que ya pasaron NO van aquí: esas las cuenta `regs` (el registro).
+   Si se suman las dos cosas, cada clase dictada descuenta dos créditos. */
 function compute(alumno, regs, precios, reservasUsadas){
   const pk = PAQUETES[alumno.paquete] || { clases: 0, reprog: 0 };
   let asistio = 0, reprogramo = 0, falta = 0;
@@ -1835,12 +1835,52 @@ function limaToUtc(y, m, d, hhmm){
 }
 function hhmm(p){ return String(p.h).padStart(2, "0") + ":" + String(p.min).padStart(2, "0"); }
 
-// Cuántas clases del paquete consume ya la agenda (este ciclo).
-async function reservasUsadasCount(env, alumnoId, ciclo){
-  const r = await env.DB.prepare(
-    "SELECT COUNT(*) AS n FROM reservas WHERE alumno_id = ?1 AND COALESCE(ciclo,1) = ?2 AND estado IN ('reservada','completada','falta')"
-  ).bind(alumnoId, ciclo).first();
-  return (r && Number(r.n)) || 0;
+/* Cuántas clases del paquete consume la AGENDA en este ciclo, sin pisarse con el `registro`.
+
+   Regla: cada clase descuenta UN crédito y una sola vez.
+     - Reserva futura        -> aparta crédito (todavía no hay fila de registro).
+     - Reserva ya pasada     -> la cuenta su fila de registro; si NO tiene fila (Andrés aún
+                                no la anotó), la contamos aquí para no regalar la clase.
+   El emparejamiento es 1 a 1 por fecha UTC, que es como el CRM guarda `registro.fecha`
+   (hoy() = new Date().toISOString().slice(0,10), y la clase se anota apenas termina).
+
+   Antes esto era un COUNT(*) de TODAS las reservas del ciclo sin filtro de fecha, sumado
+   encima de los "Asistió" del registro: cada clase dictada descontaba DOS créditos, porque
+   su reserva se queda en 'reservada' para siempre (nada la cierra salvo un botón manual del
+   CRM que nunca se usó). Así un Paquete 4 se agotaba a la 2ª clase y el alumno veía "0
+   clases": no podía reservar ni reprogramar — el bug que reportó Álvaro Guillén el
+   19-jul-2026, que además lo dejó sin la clase que quiso mover.
+
+   excluirId: la reserva que se está moviendo en un reprogramar. Mover una clase no puede
+   exigir un crédito extra, y la vieja sigue 'reservada' mientras validamos la nueva. */
+async function reservasUsadasCount(env, alumnoId, ciclo, excluirId){
+  const excl = String(excluirId || "");
+  const ahora = Date.now();
+  const { results: resv } = await env.DB.prepare(
+    "SELECT id, inicio_utc FROM reservas WHERE alumno_id = ?1 AND COALESCE(ciclo,1) = ?2 " +
+    "AND estado IN ('reservada','completada','falta') ORDER BY inicio_utc ASC"
+  ).bind(alumnoId, ciclo).all();
+  if (!resv || !resv.length) return 0;
+
+  const { results: regs } = await env.DB.prepare(
+    "SELECT fecha FROM registro WHERE alumno_id = ?1 AND COALESCE(ciclo,1) = ?2"
+  ).bind(alumnoId, ciclo).all();
+  const porFecha = new Map();          // fecha -> filas de registro libres para emparejar
+  for (const g of (regs || [])){
+    const f = String(g.fecha || "").slice(0, 10);
+    if (f) porFecha.set(f, (porFecha.get(f) || 0) + 1);
+  }
+
+  let n = 0;
+  for (const r of resv){
+    if (r.id === excl) continue;
+    if (Date.parse(r.inicio_utc) >= ahora){ n++; continue; }   // futura: aparta crédito
+    const f = String(r.inicio_utc || "").slice(0, 10);
+    const libres = porFecha.get(f) || 0;
+    if (libres > 0){ porFecha.set(f, libres - 1); continue; }  // ya la cuenta el registro
+    n++;                                                       // dictada y sin anotar: igual consume
+  }
+  return n;
 }
 
 const DIAS_FIJO = ["Domingo","Lunes","Martes","Miércoles","Jueves","Viernes","Sábado"];
@@ -3517,11 +3557,79 @@ export default {
         return json({ ok: true, reservadas: creadas, tipo: "fija", saltadas });
       }
 
+      /* ============ AGENDA: REPROGRAMAR (atómico) ============
+         Mueve una clase a otro horario en UNA sola llamada: primero aparta el horario nuevo y
+         recién entonces libera el viejo, los dos en el mismo batch (D1 lo corre en transacción,
+         así que o entran los dos o no entra ninguno). Si el horario nuevo ya no está libre, el
+         alumno se queda con su clase original intacta.
+         Antes esto eran dos pasos sueltos (cancelar -> reservar): si el segundo fallaba —sin
+         créditos, slot tomado, red caída, se cerró el tab— el alumno quedaba sin clase y sin
+         botón para recuperarla, que es justo lo que le pasó a Álvaro Guillén el 19-jul-2026. */
+      if (url.pathname === "/api/agenda/reprogramar" && request.method === "POST"){
+        const cu = await cuentaDeSesion(env, request);
+        if (!cu || !cu.alumno_id) return json({ error: "Sesión expirada" }, 401);
+        const b = await request.json().catch(() => ({}));
+
+        const vieja = await env.DB.prepare("SELECT * FROM reservas WHERE id = ?1").bind(String(b.id || "")).first();
+        if (!vieja || vieja.alumno_id !== cu.alumno_id) return json({ error: "No encuentro esa clase." }, 404);
+        if (vieja.estado !== "reservada") return json({ error: "Esa clase ya no se puede reprogramar." }, 400);
+
+        const rcfg = reprogCfg(await loadConfig(env).catch(() => ({})));
+        if (!rcfg.activo){
+          return json({ error: "Tu profesor gestiona los cambios de horario directamente. Escríbele para reprogramar esta clase." }, 403);
+        }
+        const horasV = (Date.parse(vieja.inicio_utc) - Date.now()) / 3600000;
+        if (horasV < rcfg.minH){
+          return json({ error: "Ya no se puede reprogramar: falta menos de " + rcfg.minH + " horas para tu clase. Si no puedes asistir, escríbele a tu profesor; de lo contrario, cuenta como clase usada." }, 400);
+        }
+
+        const isoN = String(b.inicio_utc || "");
+        if (isoN === vieja.inicio_utc) return json({ error: "Ese es el mismo horario que ya tienes." }, 400);
+        if (!(await slotValido(env, isoN))) return json({ error: "Ese horario ya no está disponible. Elige otro." }, 400);
+
+        const alumnoR = await env.DB.prepare("SELECT * FROM alumnos WHERE id = ?1").bind(cu.alumno_id).first();
+        if (!alumnoR) return json({ error: "No encuentro tu ficha de alumno." }, 400);
+        const cicloR = Number(alumnoR.ciclo) || 1;
+        const { results: regsR } = await env.DB.prepare(
+          "SELECT estado FROM registro WHERE alumno_id = ?1 AND COALESCE(ciclo,1) = ?2"
+        ).bind(alumnoR.id, cicloR).all();
+        // Excluimos la reserva que estamos moviendo: mover una clase no debe exigir un crédito extra.
+        const rUsadasR = await reservasUsadasCount(env, alumnoR.id, cicloR, vieja.id);
+        if (compute(alumnoR, regsR || [], await loadPrecios(env), rUsadasR).restantes < 1){
+          return json({ error: "No te quedan clases en tu paquete. Renueva para reservar más." }, 409);
+        }
+
+        const finN = new Date(Date.parse(isoN) + CLASE_MIN * 60000).toISOString();
+        const ridN = crypto.randomUUID();
+        try {
+          await env.DB.batch([
+            env.DB.prepare(
+              "INSERT INTO reservas (id,alumno_id,inicio_utc,fin_utc,tipo,serie_id,estado,curso,ciclo,creada) VALUES (?1,?2,?3,?4,'suelta','','reservada',?5,?6,?7)"
+            ).bind(ridN, alumnoR.id, isoN, finN, alumnoR.curso || "", cicloR, new Date().toISOString()),
+            env.DB.prepare("UPDATE reservas SET estado = 'cancelada' WHERE id = ?1 AND estado = 'reservada'").bind(vieja.id)
+          ]);
+        } catch (e){
+          // El índice único del slot reventó: alguien se ganó ese horario entre medio.
+          // El batch se revierte entero, así que la clase original sigue en pie.
+          return json({ error: "Justo tomaron ese horario. Tu clase original sigue en pie: elige otro." }, 409);
+        }
+
+        // El calendario va DESPUÉS del commit: la base es la fuente de verdad y si Google falla
+        // el alumno igual conserva su clase (el chequeo de salud de gcal ya avisa a Andrés aparte).
+        const eidN = await gcalCrearEvento(env, { inicio_utc: isoN, fin_utc: finN, curso: alumnoR.curso, alumnoNombre: alumnoR.nombre, email: cu.email });
+        if (eidN) await env.DB.prepare("UPDATE reservas SET gcal_event_id = ?1 WHERE id = ?2").bind(eidN, ridN).run();
+        if (vieja.gcal_event_id) await gcalBorrarEvento(env, vieja.gcal_event_id);
+
+        return json({ ok: true, id: ridN, inicio_utc: isoN, mensaje: "Listo, moví tu clase 🎸" });
+      }
+
       /* ============ AGENDA: cancelar / reprogramar una clase ============
          Con >=CANCELA_MIN_H de anticipación: se libera (no consume la clase) y el alumno
          queda listo para elegir un nuevo horario en el mismo tab. Con MENOS anticipación:
          el self-service queda BLOQUEADO (no se puede reprogramar) — si el alumno no avisa
-         a tiempo y no asiste, el profesor la marca como falta a mano desde el CRM. */
+         a tiempo y no asiste, el profesor la marca como falta a mano desde el CRM.
+         OJO: el portal ya NO usa este endpoint para reprogramar (usa /api/agenda/reprogramar,
+         que es atómico). Se queda vivo para los navegadores con el JS viejo en caché. */
       if (url.pathname === "/api/agenda/cancelar" && request.method === "POST"){
         const cu = await cuentaDeSesion(env, request);
         if (!cu || !cu.alumno_id) return json({ error: "Sesión expirada" }, 401);
