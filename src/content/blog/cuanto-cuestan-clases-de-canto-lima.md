@@ -2,7 +2,7 @@
 title: 'Cuánto cuestan las clases de canto en Lima: precios reales 2026'
 excerpt: 'Antes de comprometerte con un profesor de canto conviene saber qué se cobra en Lima, qué mueve el precio y qué deberías recibir a cambio. Aquí están los rangos reales y cómo decidir sin adivinar.'
 category: 'voz'
-date: 2026-07-16
+date: 2026-07-20
 readTime: '6 MIN'
 featured: false
 draft: false
