@@ -4291,9 +4291,21 @@ export default {
           }});
           return json({ status: mp.status, data: mp.data }, mp.ok ? 200 : 502);
         }
-        /* Consulta un preapproval_plan por id (verificacion) */
+        /* Consulta un preapproval_plan por id (verificacion). Con ?search=1 lista TODOS los planes
+           de la cuenta MP (activos y cancelados): sirve para cazar planes viejos que "ya no usamos"
+           pero siguen active con checkout vivo (leccion del 21-jul-2026). */
         if (path === "/app/api/su/mp-plan" && request.method === "GET"){
           if (!env.MP_ACCESS_TOKEN) return json({ error: "Sin MP_ACCESS_TOKEN" }, 501);
+          if (url.searchParams.get("search")){
+            const mpS = await mpFetch(env, "/preapproval_plan/search?limit=100", { method: "GET" });
+            return json({ status: mpS.status, data: mpS.data }, mpS.ok ? 200 : 502);
+          }
+          /* ?subs=1: lista los preapprovals (suscripciones de gente real) de la cuenta. Un preapproval
+             'authorized' que ningun tenant tenga vinculado = alguien pagando en el aire. */
+          if (url.searchParams.get("subs")){
+            const mpP = await mpFetch(env, "/preapproval/search?limit=100", { method: "GET" });
+            return json({ status: mpP.status, data: mpP.data }, mpP.ok ? 200 : 502);
+          }
           const pid = String(url.searchParams.get("id") || "").trim();
           if (!pid) return json({ error: "Falta id" }, 400);
           const mp = await mpFetch(env, "/preapproval_plan/" + encodeURIComponent(pid), { method: "GET" });
