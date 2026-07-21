@@ -22,6 +22,11 @@
   o un aviso claro en el panel. (Mejora rápida candidata.)
 - **Cobro del plan del tenant es manual:** el superadmin (Andrés) activa/extiende/vence tenants vía
   /app/api/su/* con ADMIN_TOKEN. No hay cobro recurrente automatizado todavía.
+- **Tenant nuevo arranca con PRECIOS de música sembrados** (250/450/600/70/50 en la tabla `precios`,
+  worker/index.js ~4488 registro público y ~4399 alta por Google). Una academia que no sea de música ve
+  esos precios en su panel hasta que los edite. Candidato: sembrar en 0 y cambiar `preciosPropios` del
+  checklist de activación (~4613) a `some(k => precios[k] > 0)`, dejando la demo con defaults a propósito.
+  Mientras tanto, `crear-fundador.sh --precios-cero` lo evita en las cuentas armadas a mano. (20-jul-2026)
 - **Sin Turnstile en t/registro:** hay rate limit 5/h por IP; suficiente para v0, captcha en v1.
 - **Queries globales justificadas:** sesiones por token (aleatorio 64-hex), tenants por email/slug (login/registro/público),
   reset_tokens por hash (aleatorio), chatbot_uso y onboarding_ia_uso (rate limit por IP/clave). Todo lo demás lleva tenant_id.

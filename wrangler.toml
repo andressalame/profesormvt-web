@@ -38,3 +38,8 @@ binding = "AI"
 # Cada hora: alimenta los recordatorios de clase (T-24h y T-2h).
 # Las renovaciones siguen corriendo 1 vez/día (el Worker filtra por la hora 14 UTC).
 crons = ["0 * * * *"]
+
+# Logs persistentes del Worker (21-jul-2026): sin esto, un bug como el del doble conteo
+# es invisible hasta que un alumno se queja.
+[observability]
+enabled = true

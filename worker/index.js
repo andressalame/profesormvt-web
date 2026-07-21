@@ -199,6 +199,16 @@ async function verificarGoogle(env, credential){
    reservasUsadas (opcional): clases FUTURAS que la agenda ya tiene apartadas en este
    ciclo. Las clases que ya pasaron NO van aquí: esas las cuenta `regs` (el registro).
    Si se suman las dos cosas, cada clase dictada descuenta dos créditos. */
+/* Plazo para canjear (decisión de Andrés, 21-jul-2026): pasada la fecha `alumnos.vence`, las
+   clases sin usar EXPIRAN (restantes = 0) pero el alumno CONSERVA el acceso al portal; solo se
+   le pide renovar. Los 23 alumnos de antes del 21-jul tienen `vence` vacío = SIN límite (regla
+   de por vida para ese paquete); cuando renueven, la compra les pone `vence` y ya entran. */
+function paqueteExpirado(alumno){
+  const v = (alumno && alumno.vence ? String(alumno.vence).trim() : "");
+  if (!v) return false;                            // sin fecha = sin límite (alumnos antiguos)
+  const ms = Date.parse(v + "T23:59:59Z");         // el día del vence todavía puede canjear
+  return Number.isFinite(ms) && Date.now() > ms;
+}
 function compute(alumno, regs, precios, reservasUsadas){
   const pk = PAQUETES[alumno.paquete] || { clases: 0, reprog: 0 };
   let asistio = 0, reprogramo = 0, falta = 0;
@@ -210,10 +220,13 @@ function compute(alumno, regs, precios, reservasUsadas){
   const exceso = Math.max(0, reprogramo - pk.reprog);
   const usadas = asistio + falta + exceso + (Number(reservasUsadas) || 0);
   const saldo = pk.clases - usadas;
+  const expirado = paqueteExpirado(alumno) && saldo > 0;
   return {
     compradas: pk.clases,
     usadas,
-    restantes: Math.max(0, saldo),
+    restantes: expirado ? 0 : Math.max(0, saldo),
+    expirado,
+    vence: (alumno && alumno.vence) || "",
     reprogPermitidas: pk.reprog,
     reprogUsadas: reprogramo,
     reprogRestantes: Math.max(0, pk.reprog - reprogramo),
@@ -223,6 +236,7 @@ function compute(alumno, regs, precios, reservasUsadas){
 }
 function estadoAlumno(c){
   if (!c) return "Inactivo";
+  if (c.expirado) return "Renovar pronto";   // plazo vencido: aunque el saldo bruto sea > 1
   if (c.saldo > 1) return "Activo";
   return "Renovar pronto";
 }
@@ -441,17 +455,25 @@ async function confirmarCompra(env, compra){
   const stmts = [];
   let renovado = false;
   let alumnoIdNuevo = null;
-  // Matrícula por mes (02-jul-2026): cada compra confirmada arma un plazo de 30 dias para usar
+  // Plazo para canjear (21-jul-2026, antes "matrícula por mes" de 30d): cada compra confirmada
+  // arma un plazo de 60 dias (2 meses) para usar
   // las horas del paquete, tal cual venga (1/semana en Esencial, 2/semana en Intensivo, etc, via
   // el horario fijo que ya es el default en el portal). No aplica de forma estricta a Clase de
   // prueba (1 sola clase), pero ponerle igual el plazo no hace daño.
-  const vence = new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10);
+  const vence = new Date(Date.now() + 60 * 86400000).toISOString().slice(0, 10);
   if (cu.alumno_id){
     const al = await env.DB.prepare("SELECT * FROM alumnos WHERE id = ?1").bind(cu.alumno_id).first();
     if (al){
+      const cicloNuevo = (Number(al.ciclo) || 1) + 1;
       stmts.push(env.DB.prepare(
-        "UPDATE alumnos SET paquete = ?1, curso = ?2, pago = 'Pagado', fecha = ?3, ciclo = COALESCE(ciclo,1) + 1, vence = ?4, aviso_vence_ciclo = 0 WHERE id = ?5"
-      ).bind(compra.paquete, compra.curso || al.curso, hoy(), vence, al.id));
+        "UPDATE alumnos SET paquete = ?1, curso = ?2, pago = 'Pagado', fecha = ?3, ciclo = ?4, vence = ?5, aviso_vence_ciclo = 0 WHERE id = ?6"
+      ).bind(compra.paquete, compra.curso || al.curso, hoy(), cicloNuevo, vence, al.id));
+      // Las clases YA agendadas a futuro pertenecen al paquete nuevo: si se quedaran con el
+      // ciclo viejo, el conteo del ciclo nuevo no las vería (sobre-reserva) y al dictarse la
+      // clase se cargaría igual al paquete nuevo con el crédito viejo huérfano.
+      stmts.push(env.DB.prepare(
+        "UPDATE reservas SET ciclo = ?1 WHERE alumno_id = ?2 AND estado = 'reservada' AND inicio_utc >= ?3"
+      ).bind(cicloNuevo, al.id, new Date().toISOString()));
       renovado = true;
     }
   }
@@ -623,10 +645,10 @@ async function procesarRenovaciones(env){
 }
 
 /* ============ MATRÍCULA POR MES: aviso antes de vencer ============
-   Cada paquete tiene un plazo (alumnos.vence, 30 dias desde la compra/renovación, o más si
+   Cada paquete tiene un plazo (alumnos.vence, 60 dias desde la compra/renovación, o más si
    pidió pausa). VENCE_AVISO_DIAS antes de esa fecha, si le quedan horas SIN usar, se le avisa
    una vez por ciclo (dedupe con aviso_vence_ciclo, mismo patron que recordatorio_ciclo). */
-const VENCE_AVISO_DIAS = 5;
+const VENCE_AVISO_DIAS = 14;
 
 async function correoAvisoVencimiento(env, alumno, to, diasRestantes, restantes, refCode){
   if (!to) return false;
@@ -1538,7 +1560,7 @@ function onboardingSystemAdmin(){
     "(con 51 delante), Curso(s) por checkbox (canto/piano/composición, puede marcar varios), Paquete (Clase de " +
     "prueba / Clase suelta / Paquete 4 / Paquete 8 / Paquete 12), Fecha de compra, Estado de pago (Pagado o " +
     "Pendiente), Nota de horario (texto libre, opcional, solo para recordar algo manual) y Notas. Al guardar, si " +
-    "puso Pagado ya queda activo con sus clases del paquete y 30 días de plazo para usarlas.\n\n" +
+    "puso Pagado ya queda activo con sus clases del paquete y 2 meses de plazo para usarlas.\n\n" +
 
     "CÓMO REGISTRAR UNA CLASE: pestaña Clases > 'Registrar clase'. Campos: Fecha, Alumno, Estado (Asistió / " +
     "Reprogramó / Falta), Curso de esa clase, qué se trabajó, tarea asignada en texto libre, qué harán la próxima " +
@@ -1553,12 +1575,12 @@ function onboardingSystemAdmin(){
 
     "CÓMO CONFIRMAR UN PAGO PENDIENTE (Yape/Plin/transferencia): pestaña Pagos > tabla 'Pendientes de confirmar' " +
     "muestra fecha, alumno, curso, paquete, monto y número de operación con la captura que subió; el botón " +
-    "'Confirmar' de esa fila activa el paquete, arma los 30 días de plazo y, si el alumno vino por un código de " +
+    "'Confirmar' de esa fila activa el paquete, arma los 2 meses de plazo y, si el alumno vino por un código de " +
     "referido y esta es su primera compra de un paquete real (no cuenta la clase de prueba), premia S/50 de " +
     "crédito al que lo refirió. Los pagos con tarjeta (Mercado Pago) se confirman solos, no pasan por aquí.\n\n" +
 
     "CÓMO REGISTRAR UNA RENOVACIÓN: pestaña Cuentas o la ficha del alumno > 'Registrar renovación'. Campos: " +
-    "Paquete comprado, Fecha de compra, Estado de pago. Guardar renueva el plazo de 30 días y sus clases del ciclo.\n\n" +
+    "Paquete comprado, Fecha de compra, Estado de pago. Guardar renueva el plazo de 2 meses y sus clases del ciclo.\n\n" +
 
     "AGENDA: pestaña Agenda tiene la tabla de próximas clases reservadas y dos herramientas tuyas: 'Bloquear " +
     "horario' (día y hora, alumno opcional, checkbox 'Cada semana' para que se repita como horario fijo, nota) con " +
@@ -1638,7 +1660,7 @@ function onboardingSystemAlumno(){
     "PAUSA POR VIAJE O SALUD: en Inicio hay un botón 'Congelar por viaje o salud' que extiende el vencimiento " +
     "del paquete hasta 14 días por mes, eligiendo motivo (Viaje o Salud) y los días que necesita.\n\n" +
 
-    "VENCIMIENTO: cada paquete comprado o renovado da 30 días para usar sus clases; pasado ese plazo sin usarlas " +
+    "VENCIMIENTO: cada paquete comprado o renovado desde el 21-jul-2026 da 2 meses para usar sus clases; los alumnos con vence vacío son de antes y NO tienen límite; pasado el plazo " +
     "se pierden, salvo que use la pausa.\n\n" +
 
     "AVISOS PUSH: en Mi cuenta puede activar notificaciones push del navegador para no perderse recordatorios de " +
@@ -1834,6 +1856,18 @@ function limaToUtc(y, m, d, hhmm){
   return new Date(Date.UTC(y, m, d, H, M) + LIMA_OFFSET_MS);
 }
 function hhmm(p){ return String(p.h).padStart(2, "0") + ":" + String(p.min).padStart(2, "0"); }
+/* Fecha-Lima (YYYY-MM-DD) de un instante ISO. La bitácora vive en días calendario de Lima:
+   con la fecha UTC, toda clase de 19:00+ Lima caía al día siguiente. */
+function fechaLimaDe(iso){
+  const t = Date.parse(iso);
+  if (!Number.isFinite(t)) return "";
+  const p = limaParts(new Date(t));
+  return p.y + "-" + String(p.m + 1).padStart(2, "0") + "-" + String(p.d).padStart(2, "0");
+}
+function diaVecino(f, delta){
+  const t = Date.parse(String(f) + "T12:00:00Z");
+  return Number.isFinite(t) ? new Date(t + delta * 86400000).toISOString().slice(0, 10) : "";
+}
 
 /* Cuántas clases del paquete consume la AGENDA en este ciclo, sin pisarse con el `registro`.
 
@@ -1862,8 +1896,10 @@ async function reservasUsadasCount(env, alumnoId, ciclo, excluirId){
   ).bind(alumnoId, ciclo).all();
   if (!resv || !resv.length) return 0;
 
+  // Solo filas de CLASE emparejan reservas: una fila 'Reprogramó' es el movimiento de un
+  // horario, no una clase dictada (su costo lo cobra compute() vía la cuota/exceso).
   const { results: regs } = await env.DB.prepare(
-    "SELECT fecha FROM registro WHERE alumno_id = ?1 AND COALESCE(ciclo,1) = ?2"
+    "SELECT fecha FROM registro WHERE alumno_id = ?1 AND COALESCE(ciclo,1) = ?2 AND estado != 'Reprogramó'"
   ).bind(alumnoId, ciclo).all();
   const porFecha = new Map();          // fecha -> filas de registro libres para emparejar
   for (const g of (regs || [])){
@@ -1871,14 +1907,29 @@ async function reservasUsadasCount(env, alumnoId, ciclo, excluirId){
     if (f) porFecha.set(f, (porFecha.get(f) || 0) + 1);
   }
 
+  // Dos pasadas: primero match exacto por fecha-Lima; luego ±1 día, porque el registro
+  // histórico se anotó con fecha UTC (clases nocturnas quedaron corridas un día). Solo
+  // puede emparejar MÁS que antes (la fecha UTC es la Lima o su vecina), nunca menos.
   let n = 0;
+  const pasadas = [];
   for (const r of resv){
     if (r.id === excl) continue;
     if (Date.parse(r.inicio_utc) >= ahora){ n++; continue; }   // futura: aparta crédito
-    const f = String(r.inicio_utc || "").slice(0, 10);
+    pasadas.push(fechaLimaDe(r.inicio_utc));
+  }
+  const sinPar = [];
+  for (const f of pasadas){
     const libres = porFecha.get(f) || 0;
-    if (libres > 0){ porFecha.set(f, libres - 1); continue; }  // ya la cuenta el registro
-    n++;                                                       // dictada y sin anotar: igual consume
+    if (libres > 0) porFecha.set(f, libres - 1);
+    else sinPar.push(f);
+  }
+  for (const f of sinPar){
+    let emparejada = false;
+    for (const vf of [diaVecino(f, 1), diaVecino(f, -1)]){
+      const libres = porFecha.get(vf) || 0;
+      if (libres > 0){ porFecha.set(vf, libres - 1); emparejada = true; break; }
+    }
+    if (!emparejada) n++;                                      // dictada y sin anotar: igual consume
   }
   return n;
 }
@@ -2094,18 +2145,36 @@ async function gcalCrearEvento(env, info){
   } catch (e) { return ""; }
 }
 
+/* Devuelve true si el evento quedó fuera del calendario (borrado ahora, o ya no existía:
+   404/410). false = Google falló y el evento sigue vivo; el llamador NO debe limpiar
+   gcal_event_id, así el barrido horario del cron lo reintenta (si no, el evento huérfano
+   bloquea ese slot para siempre vía gcalBusy y nadie se entera). */
 async function gcalBorrarEvento(env, eventId){
   try {
-    if (!eventId) return;
+    if (!eventId) return true;
     const tok = await gcalAccessToken(env);
-    if (!tok) return;
+    if (!tok) return false;
     const cfg = await loadConfig(env);
     const calId = cfg.gcal_calendar_id || "primary";
-    await fetch(
+    const r = await fetch(
       "https://www.googleapis.com/calendar/v3/calendars/" + encodeURIComponent(calId) + "/events/" + encodeURIComponent(eventId) + "?sendUpdates=all",
       { method: "DELETE", headers: { "authorization": "Bearer " + tok } }
     );
-  } catch (e) {}
+    return r.ok || r.status === 404 || r.status === 410;
+  } catch (e) { return false; }
+}
+
+/* Barrido del cron: reintenta borrar los eventos de Google de reservas CANCELADAS cuyo
+   borrado online falló (el gcal_event_id que quedó es la huella del huérfano). Tanda corta
+   por corrida: el waitUntil del cron corta por duración. */
+async function limpiarGcalHuerfanos(env){
+  const { results } = await env.DB.prepare(
+    "SELECT id, gcal_event_id FROM reservas WHERE estado = 'cancelada' AND COALESCE(gcal_event_id,'') != '' LIMIT 10"
+  ).all();
+  for (const r of (results || [])){
+    const ok = await gcalBorrarEvento(env, r.gcal_event_id);
+    if (ok) await env.DB.prepare("UPDATE reservas SET gcal_event_id = '' WHERE id = ?1").bind(r.id).run();
+  }
 }
 
 /* Bloques OCUPADOS del calendario de Andrés entre dos instantes (freeBusy).
@@ -2231,7 +2300,7 @@ async function ensureSchema(env){
     const tieneSlot = (infoCompras.results || []).some(c => c.name === "slot_deseado");
     if (!tieneSlot) await env.DB.prepare("ALTER TABLE compras ADD COLUMN slot_deseado TEXT DEFAULT ''").run();
     // vence: matrícula por mes (02-jul-2026). Cada compra confirmada arma un ritmo semanal fijo
-    // (horario fijo = default) y pone un plazo de 30 dias para usar las horas del paquete.
+    // (horario fijo = default) y pone un plazo de 60 dias para usar las horas del paquete.
     const infoAlumnos = await env.DB.prepare("PRAGMA table_info(alumnos)").all();
     const tieneVence = (infoAlumnos.results || []).some(c => c.name === "vence");
     if (!tieneVence) await env.DB.prepare("ALTER TABLE alumnos ADD COLUMN vence TEXT DEFAULT ''").run();
@@ -2283,6 +2352,13 @@ async function ensureSchema(env){
     await env.DB.prepare(
       "CREATE TABLE IF NOT EXISTS feedback (token_hash TEXT PRIMARY KEY, alumno_id TEXT NOT NULL, nota INTEGER DEFAULT 0, usado INTEGER DEFAULT 0, creada TEXT DEFAULT '', respondida TEXT DEFAULT '')"
     ).run();
+    // v20 (21-jul-2026): auditoría de cancelaciones. Sin esto, un bug que cancele reservas
+    // es invisible hasta que un alumno se queja (no quedaba ni cuándo ni quién).
+    const infoReservas = await env.DB.prepare("PRAGMA table_info(reservas)").all();
+    const tieneCancUtc = (infoReservas.results || []).some(c => c.name === "cancelada_utc");
+    if (!tieneCancUtc) await env.DB.prepare("ALTER TABLE reservas ADD COLUMN cancelada_utc TEXT DEFAULT ''").run();
+    const tieneCancPor = (infoReservas.results || []).some(c => c.name === "cancelada_por");
+    if (!tieneCancPor) await env.DB.prepare("ALTER TABLE reservas ADD COLUMN cancelada_por TEXT DEFAULT ''").run();
     _schemaChecked = true;
   } catch (e) { /* otra invocación pudo correrla en paralelo; se reintenta en la próxima request */ }
 }
@@ -3510,8 +3586,9 @@ export default {
           "SELECT estado FROM registro WHERE alumno_id = ?1 AND COALESCE(ciclo,1) = ?2"
         ).bind(alumno.id, ciclo).all();
         const rUsadas = await reservasUsadasCount(env, alumno.id, ciclo);
-        const restantes = compute(alumno, regs || [], precios, rUsadas).restantes;
-        if (restantes < 1) return json({ error: "No te quedan clases en tu paquete. Renueva para reservar más." }, 409);
+        const comp = compute(alumno, regs || [], precios, rUsadas);
+        if (comp.expirado) return json({ error: "El plazo de tu paquete venció y tus clases expiraron. Renueva para seguir reservando 🙂" }, 409);
+        if (comp.restantes < 1) return json({ error: "No te quedan clases en tu paquete. Renueva para reservar más." }, 409);
 
         const nowIso = new Date().toISOString();
         const startMs = Date.parse(iso);
@@ -3595,8 +3672,14 @@ export default {
         ).bind(alumnoR.id, cicloR).all();
         // Excluimos la reserva que estamos moviendo: mover una clase no debe exigir un crédito extra.
         const rUsadasR = await reservasUsadasCount(env, alumnoR.id, cicloR, vieja.id);
-        if (compute(alumnoR, regsR || [], await loadPrecios(env), rUsadasR).restantes < 1){
+        const compR = compute(alumnoR, regsR || [], await loadPrecios(env), rUsadasR);
+        if (compR.restantes < 1){
           return json({ error: "No te quedan clases en tu paquete. Renueva para reservar más." }, 409);
+        }
+        // Cuota real de reprogramaciones: agotada la del paquete, el cambio consume 1 clase
+        // del saldo (el exceso que ya cobra compute); si no hay una libre que lo cubra, se bloquea.
+        if (compR.reprogRestantes < 1 && compR.restantes < 2){
+          return json({ error: "Ya usaste las " + compR.reprogPermitidas + " reprogramaciones de tu paquete y no te queda una clase libre que cubra este cambio. Escríbele a tu profesor y lo ven juntos." }, 409);
         }
 
         const finN = new Date(Date.parse(isoN) + CLASE_MIN * 60000).toISOString();
@@ -3606,7 +3689,14 @@ export default {
             env.DB.prepare(
               "INSERT INTO reservas (id,alumno_id,inicio_utc,fin_utc,tipo,serie_id,estado,curso,ciclo,creada) VALUES (?1,?2,?3,?4,'suelta','','reservada',?5,?6,?7)"
             ).bind(ridN, alumnoR.id, isoN, finN, alumnoR.curso || "", cicloR, new Date().toISOString()),
-            env.DB.prepare("UPDATE reservas SET estado = 'cancelada' WHERE id = ?1 AND estado = 'reservada'").bind(vieja.id)
+            env.DB.prepare(
+              "UPDATE reservas SET estado = 'cancelada', cancelada_utc = ?2, cancelada_por = 'alumno' WHERE id = ?1 AND estado = 'reservada'"
+            ).bind(vieja.id, new Date().toISOString()),
+            // La cuota deja de ser decorativa: cada cambio self-service queda en la bitácora
+            // como 'Reprogramó' (compute lo cuenta contra pk.reprog y cobra el exceso).
+            env.DB.prepare(
+              "INSERT INTO registro (id,fecha,alumno_id,curso,estado,trabajo,tarea,ciclo,tarea_audio,plan) VALUES (?1,?2,?3,?4,'Reprogramó','Cambio de horario self-service','',?5,'','')"
+            ).bind(crypto.randomUUID(), fechaLimaDe(vieja.inicio_utc), alumnoR.id, vieja.curso || alumnoR.curso || "", Number(vieja.ciclo) || cicloR)
           ]);
         } catch (e){
           // El índice único del slot reventó: alguien se ganó ese horario entre medio.
@@ -3618,7 +3708,9 @@ export default {
         // el alumno igual conserva su clase (el chequeo de salud de gcal ya avisa a Andrés aparte).
         const eidN = await gcalCrearEvento(env, { inicio_utc: isoN, fin_utc: finN, curso: alumnoR.curso, alumnoNombre: alumnoR.nombre, email: cu.email });
         if (eidN) await env.DB.prepare("UPDATE reservas SET gcal_event_id = ?1 WHERE id = ?2").bind(eidN, ridN).run();
-        if (vieja.gcal_event_id) await gcalBorrarEvento(env, vieja.gcal_event_id);
+        if (vieja.gcal_event_id && await gcalBorrarEvento(env, vieja.gcal_event_id)){
+          await env.DB.prepare("UPDATE reservas SET gcal_event_id = '' WHERE id = ?1").bind(vieja.id).run();
+        }
 
         return json({ ok: true, id: ridN, inicio_utc: isoN, mensaje: "Listo, moví tu clase 🎸" });
       }
@@ -3645,8 +3737,12 @@ export default {
         if (horas < rcfg.minH){
           return json({ error: "Ya no se puede reprogramar: falta menos de " + rcfg.minH + " horas para tu clase. Si no puedes asistir, escríbele a tu profesor; de lo contrario, cuenta como clase usada." }, 400);
         }
-        await env.DB.prepare("UPDATE reservas SET estado = 'cancelada' WHERE id = ?1").bind(r.id).run();
-        if (r.gcal_event_id) await gcalBorrarEvento(env, r.gcal_event_id);
+        await env.DB.prepare(
+          "UPDATE reservas SET estado = 'cancelada', cancelada_utc = ?2, cancelada_por = 'alumno' WHERE id = ?1"
+        ).bind(r.id, new Date().toISOString()).run();
+        if (r.gcal_event_id && await gcalBorrarEvento(env, r.gcal_event_id)){
+          await env.DB.prepare("UPDATE reservas SET gcal_event_id = '' WHERE id = ?1").bind(r.id).run();
+        }
         return json({ ok: true, mensaje: "Listo, liberé tu horario. Elige tu nuevo horario abajo 👇" });
       }
 
@@ -3826,7 +3922,35 @@ export default {
           const id = String(b.id || "");
           const nuevo = String(b.estado || "");
           if (!["completada", "falta", "cancelada"].includes(nuevo)) return json({ error: "Estado inválido" }, 400);
-          await env.DB.prepare("UPDATE reservas SET estado = ?1 WHERE id = ?2").bind(nuevo, id).run();
+          const rsv = await env.DB.prepare("SELECT * FROM reservas WHERE id = ?1").bind(id).first();
+          if (!rsv) return json({ error: "No encuentro esa reserva" }, 404);
+          const stmts = [];
+          if (nuevo === "cancelada"){
+            stmts.push(env.DB.prepare(
+              "UPDATE reservas SET estado = 'cancelada', cancelada_utc = ?2, cancelada_por = 'admin' WHERE id = ?1"
+            ).bind(id, new Date().toISOString()));
+          } else {
+            stmts.push(env.DB.prepare("UPDATE reservas SET estado = ?1 WHERE id = ?2").bind(nuevo, id));
+            // Marcar también escribe la bitácora (antes solo cambiaba la reserva y el crédito
+            // dependía del emparejamiento). Idempotente: si ese día ya tiene fila de clase
+            // (la anotó el CRM, o un doble clic), no se duplica el descuento.
+            const fL = fechaLimaDe(rsv.inicio_utc);
+            const cicloRsv = Number(rsv.ciclo) || 1;
+            const ya = await env.DB.prepare(
+              "SELECT COUNT(*) AS n FROM registro WHERE alumno_id = ?1 AND COALESCE(ciclo,1) = ?2 AND estado != 'Reprogramó' AND substr(fecha,1,10) IN (?3,?4)"
+            ).bind(rsv.alumno_id, cicloRsv, fL, String(rsv.inicio_utc || "").slice(0, 10)).first();
+            if (!ya || !Number(ya.n)){
+              stmts.push(env.DB.prepare(
+                "INSERT INTO registro (id,fecha,alumno_id,curso,estado,trabajo,tarea,ciclo,tarea_audio,plan) VALUES (?1,?2,?3,?4,?5,'','',?6,'','')"
+              ).bind(crypto.randomUUID(), fL, rsv.alumno_id, rsv.curso || "", nuevo === "completada" ? "Asistió" : "Falta", cicloRsv));
+            }
+          }
+          await env.DB.batch(stmts);
+          // Cancelada desde el admin: el evento de Google también se va (si Google falla,
+          // el gcal_event_id queda como huella y el barrido horario lo reintenta).
+          if (nuevo === "cancelada" && rsv.gcal_event_id && await gcalBorrarEvento(env, rsv.gcal_event_id)){
+            await env.DB.prepare("UPDATE reservas SET gcal_event_id = '' WHERE id = ?1").bind(id).run();
+          }
           return json({ ok: true });
         }
 
@@ -3959,18 +4083,44 @@ export default {
           if (!body || !Array.isArray(body.alumnos) || !Array.isArray(body.registro)){
             return json({ error: "Cuerpo inválido" }, 400);
           }
+          // El CRM manda solo 11 de las 19 columnas. Antes de borrar y reinsertar hay que
+          // leer las 8 que NO viaja el CRM, o cada "Guardar" las pone en cero: eso vaciaba
+          // `vence` (mataba congelar plazo y el aviso de vencimiento) y reseteaba los dedupes
+          // de correo, con lo que un alumno podia recibir el mismo aviso dos veces.
+          const estadoPrevio = new Map();
+          for (const p of ((await env.DB.prepare(
+            "SELECT id, vence, recordatorio_ciclo, recordatorio_fecha, aviso_vence_ciclo, " +
+            "winback_ciclo, resena_pedida, nudge_ciclo, referido_nudge_ciclo FROM alumnos"
+          ).all()).results || [])) estadoPrevio.set(p.id, p);
+
           const stmts = [
             env.DB.prepare("DELETE FROM registro"),
             env.DB.prepare("DELETE FROM alumnos"),
             env.DB.prepare("DELETE FROM precios")
           ];
           for (const a of body.alumnos){
+            const prev = estadoPrevio.get(a.id) || {};
+            // Regla: un `vence` vacio que llegue del CRM NUNCA pisa al guardado (si no, un CRM
+            // abierto con datos viejos vuelve a borrarlo todo). Las otras 7 son estado de
+            // maquina que el CRM no edita: siempre gana la base.
+            const vence = (a.vence && String(a.vence).trim()) || prev.vence || "";
             stmts.push(env.DB.prepare(
-              "INSERT INTO alumnos (id,codigo,nombre,whatsapp,curso,paquete,fecha,pago,horario,notas,ciclo) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11)"
+              "INSERT INTO alumnos (id,codigo,nombre,whatsapp,curso,paquete,fecha,pago,horario,notas,ciclo," +
+              "vence,recordatorio_ciclo,recordatorio_fecha,aviso_vence_ciclo,winback_ciclo,resena_pedida," +
+              "nudge_ciclo,referido_nudge_ciclo) " +
+              "VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19)"
             ).bind(
               a.id, String(a.codigo || "").toUpperCase() || randHex(3).toUpperCase(), a.nombre,
               a.whatsapp || "", a.curso || "", a.paquete || "",
-              a.fecha || "", a.pago || "", a.horario || "", a.notas || "", a.ciclo || 1
+              a.fecha || "", a.pago || "", a.horario || "", a.notas || "", a.ciclo || 1,
+              vence,
+              prev.recordatorio_ciclo ?? 0,
+              prev.recordatorio_fecha ?? "",
+              prev.aviso_vence_ciclo ?? 0,
+              prev.winback_ciclo ?? 0,
+              prev.resena_pedida ?? 0,
+              prev.nudge_ciclo ?? 0,
+              prev.referido_nudge_ciclo ?? 0
             ));
           }
           for (const r of body.registro){
@@ -4274,6 +4424,66 @@ export default {
           return json({ error: "Acción no válida" }, 400);
         }
 
+        /* ----- Registrar un cobro recibido FUERA del portal (Yape directo, efectivo, transferencia).
+           Antes el boton "+ Renovar" del CRM solo tocaba paquete/fecha/ciclo por el PUT masivo: no
+           seteaba `vence`, no reseteaba el aviso, no acreditaba al referidor, no mandaba el correo de
+           gracias y no dejaba fila en `compras` (esa plata no figuraba en ningun reporte). Por eso el
+           `vence` se desfasaba. Ahora entra por el MISMO camino que una compra web: confirmarCompra(). ----- */
+        if (url.pathname === "/api/admin/renovar" && request.method === "POST"){
+          const b = await request.json().catch(() => ({}));
+          const al = await env.DB.prepare("SELECT * FROM alumnos WHERE id = ?1").bind(String(b.alumno_id || "")).first();
+          if (!al) return json({ error: "Alumno no encontrado" }, 404);
+          const paquete = String(b.paquete || al.paquete || "").trim();
+          if (!paquete) return json({ error: "Falta el paquete" }, 400);
+          const fecha = /^\d{4}-\d{2}-\d{2}$/.test(String(b.fecha || "")) ? String(b.fecha) : hoy();
+          const pagado = String(b.pago || "Pagado") === "Pagado";
+          const metodo = String(b.metodo || "Manual").slice(0, 40);
+          const op = String(b.op_numero || "").slice(0, 60);
+          let monto = Number(b.monto);
+          if (!Number.isFinite(monto) || monto < 0){
+            const pr = await env.DB.prepare("SELECT precio FROM precios WHERE paquete = ?1").bind(paquete).first();
+            monto = pr ? (Number(pr.precio) || 0) : 0;
+          }
+          const cu = await env.DB.prepare("SELECT * FROM cuentas WHERE alumno_id = ?1").bind(al.id).first();
+
+          // Sin pagar todavia: se anota la compra como pendiente y NO se abre ciclo ni se dan clases.
+          // Se aplica sola cuando la confirmes desde Cuentas (boton "confirmar"), que ya existe.
+          if (!pagado){
+            if (!cu) return json({ error: "Ese alumno no tiene cuenta, así que no se puede dejar un cobro pendiente. Regístralo cuando esté pagado." }, 400);
+            const cid = crypto.randomUUID();
+            await env.DB.prepare(
+              "INSERT INTO compras (id,cuenta_id,curso,paquete,monto,op_numero,estado,fecha,descuento,metodo,comprobante,slot_deseado) " +
+              "VALUES (?1,?2,?3,?4,?5,?6,'pendiente',?7,0,?8,'','')"
+            ).bind(cid, cu.id, al.curso || "", paquete, monto, op, fecha, metodo).run();
+            return json({ ok: true, pendiente: true, correo: false });
+          }
+
+          // Con cuenta: camino completo (renueva, sube ciclo, setea vence, resetea aviso,
+          // acredita referido, correo de gracias y push). Es literalmente el flujo de compra web.
+          if (cu){
+            const cid = crypto.randomUUID();
+            await env.DB.prepare(
+              "INSERT INTO compras (id,cuenta_id,curso,paquete,monto,op_numero,estado,fecha,descuento,metodo,comprobante,slot_deseado) " +
+              "VALUES (?1,?2,?3,?4,?5,?6,'pendiente',?7,0,?8,'','')"
+            ).bind(cid, cu.id, al.curso || "", paquete, monto, op, fecha, metodo).run();
+            const compra = await env.DB.prepare("SELECT * FROM compras WHERE id = ?1").bind(cid).first();
+            const r = await confirmarCompra(env, compra);
+            if (!r.ok){
+              try { await env.DB.prepare("DELETE FROM compras WHERE id = ?1 AND estado <> 'confirmada'").bind(cid).run(); } catch (e) {}
+              return json({ error: r.error }, r.status || 400);
+            }
+            return json({ ok: true, correo: true, monto: monto });
+          }
+
+          // Sin cuenta (6 alumnos viejos): se replica el MISMO efecto sobre `alumnos` que hace
+          // confirmarCompra, pero no hay correo ni fila en compras porque no hay a quien atribuirla.
+          const vence = new Date(Date.parse(fecha + "T12:00:00Z") + 60 * 86400000).toISOString().slice(0, 10);
+          await env.DB.prepare(
+            "UPDATE alumnos SET paquete = ?1, pago = 'Pagado', fecha = ?2, ciclo = COALESCE(ciclo,1) + 1, vence = ?3, aviso_vence_ciclo = 0 WHERE id = ?4"
+          ).bind(paquete, fecha, vence, al.id).run();
+          return json({ ok: true, correo: false, sinCuenta: true, vence: vence, monto: monto });
+        }
+
         if (url.pathname === "/api/admin/cuenta" && request.method === "POST"){
           const b = await request.json().catch(() => ({}));
           const cu = await env.DB.prepare("SELECT * FROM cuentas WHERE id = ?1").bind(String(b.id || "")).first();
@@ -4326,6 +4536,9 @@ export default {
     ctx.waitUntil(procesarRecordatoriosClase(env).catch(function(){}));
     // Salud de Google Calendar: cada hora, alerta 1 vez por incidencia (detección ≤1h).
     ctx.waitUntil(chequearSaludGcal(env).catch(function(){}));
+    // Eventos gcal huérfanos de reservas canceladas: reintento del borrado que falló online
+    // (si se quedan, bloquean su slot para siempre vía gcalBusy). Tanda corta por hora.
+    ctx.waitUntil(limpiarGcalHuerfanos(env).catch(function(){}));
     // Renovaciones: una sola vez al día, en el disparo de las 14:00 UTC (≈ 09:00 Lima).
     if (new Date().getUTCHours() === 14){
       ctx.waitUntil(procesarRenovaciones(env).catch(function(){}));

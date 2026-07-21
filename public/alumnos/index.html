@@ -1000,13 +1000,16 @@ function renderInicio(){
     $("iDe").textContent = "de " + a.compradas;
     var s=""; for(var i=0;i<a.compradas;i++) s += '<div class="stub'+(i<a.usadas?" used":"")+'"></div>';
     $("iStubs").innerHTML = s;
-    if(ME.estado==="Renovar pronto" && !ME.compraPendiente) show("iRenov"); else hide("iRenov");
+    /* Paquete expirado (plazo de canje vencido): el alumno conserva el portal completo,
+       solo se le explica qué pasó y se le deja el botón de renovar a la mano. */
+    if((a.expirado || ME.estado==="Renovar pronto") && !ME.compraPendiente) show("iRenov"); else hide("iRenov");
     $("iPlan").innerHTML =
+      (a.expirado ? '<div style="grid-column:1/-1;padding:10px 12px;border-radius:10px;background:rgba(232,80,31,.12);border:1px solid rgba(232,80,31,.4);"><b>El plazo de tu paquete venció</b> y tus clases sin usar expiraron. Tu portal, tu historial y tu material siguen intactos 🙂 Renueva cuando quieras para seguir con tus clases.</div>' : '')+
       kv("Reprogramaciones disponibles", a.reprogRestantes+' <small>de '+a.reprogPermitidas+'</small>')+
       kv("Horario fijo", esc((a.horarioFijo&&a.horarioFijo.length)?a.horarioFijo.join(" · "):(a.horario||"Por definir")))+
       kv("Paquete", esc(a.paquete||"—")+(a.monto?' <small>· S/ '+a.monto+'</small>':''))+
       kv("Pago", esc(a.pago||"—"))+
-      (a.vence ? kv("Tu paquete vence", esc(fmtFechaLocal(a.vence+"T23:59:59Z"))+' <small>('+diasHasta(a.vence)+')</small>') : "");
+      (a.vence ? kv(a.expirado?"Tu paquete venció":"Tu paquete vence", esc(fmtFechaLocal(a.vence+"T23:59:59Z"))+' <small>('+diasHasta(a.vence)+')</small>') : "");
     renderVencePausa(a);
   } else {
     hide("iPkg"); show("iVacio");

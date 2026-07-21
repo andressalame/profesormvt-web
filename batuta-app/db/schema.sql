@@ -437,3 +437,22 @@ CREATE TABLE IF NOT EXISTS afiliado_solicitudes (  -- formulario de batuta.lat/a
   canal    TEXT DEFAULT '',
   fecha    TEXT DEFAULT ''
 );
+CREATE TABLE IF NOT EXISTS reclamos (   -- Libro de Reclamaciones virtual (tambien lazy en ensureLibroSchema)
+  id         TEXT PRIMARY KEY,          -- LRV-YYYY-NNNN
+  tipo       TEXT NOT NULL,             -- reclamo | queja
+  nombre     TEXT DEFAULT '',
+  documento  TEXT DEFAULT '',           -- DNI / CE
+  domicilio  TEXT DEFAULT '',
+  email      TEXT DEFAULT '',
+  telefono   TEXT DEFAULT '',
+  menor      INTEGER DEFAULT 0,
+  apoderado  TEXT DEFAULT '',
+  servicio   TEXT DEFAULT '',
+  monto      REAL DEFAULT 0,
+  detalle    TEXT DEFAULT '',
+  pedido     TEXT DEFAULT '',
+  respuesta  TEXT DEFAULT '',
+  respondido TEXT DEFAULT '',           -- ISO de la respuesta (plazo legal: 15 dias habiles)
+  estado     TEXT DEFAULT 'pendiente',  -- pendiente | respondido
+  creado     TEXT DEFAULT ''
+);

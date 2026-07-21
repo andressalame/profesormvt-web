@@ -289,7 +289,9 @@
   .eyebrow::before,.card h3::before{content:"\2726  ";color:var(--accent)}
   .btn:not(.ghost):not(.no):hover{box-shadow:3px 3px 0 var(--cream)}
   body::after{content:"";position:fixed;left:-44px;bottom:-44px;width:230px;height:230px;z-index:0;pointer-events:none;opacity:.06;background:no-repeat center/contain url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100' fill='none' stroke='%23E8A13D' stroke-width='4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M50 6 L59 41 L94 50 L59 59 L50 94 L41 59 L6 50 L41 41 Z'/%3E%3C/svg%3E")}
-  .punkbg{position:fixed;inset:0;pointer-events:none;z-index:9998;opacity:.07;background:url(/punk-bg.svg) center center/cover no-repeat}
+  /* punk-bg.svg no existe: pedirlo tiraba un 404 en cada carga del portal por una textura
+     al 7% que nunca se vio. Apagado, igual que en el panel (.punkbg{display:none}). */
+  .punkbg{display:none}
   .onb-steps{list-style:none;margin:16px 0;padding:0;display:flex;flex-direction:column;gap:9px;text-align:left}
   .onb-steps li{font-size:14px;color:#cfc7b8;line-height:1.5;border-left:3px solid var(--accent);padding:5px 0 5px 14px}
   .onb-steps b{color:var(--cream);font-weight:700}

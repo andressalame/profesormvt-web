@@ -115,6 +115,32 @@
 - Deja estado='trial' con trial_hasta a 1 año, salta el nurture (nurture_paso=9) y marca config fundador='on'.
 - El <tenant_id> lo sacas de: curl -s https://batuta.lat/app/api/su/tenants -H "Authorization: Bearer $(cat .admin-token.local)"
 
+## Alta COMPLETA de un fundador en 1 comando — crear-fundador.sh (20-jul-2026)
+- `./crear-fundador.sh --academia "X" --email dueño@correo.com [...]` hace todo el armado que antes era a mano:
+  registro del tenant -> plan (`t/cambiar-plan`, funciona sin MP porque no hay preapproval) -> cursos y marca
+  (`admin/config`) -> logo (`admin/marca/logo`, multipart) -> N asientos de profesor -> `su/tenant` fundador N meses.
+  Imprime al final el acceso listo para pasarle al cliente (usuario, clave, panel, portal de alumnos y un link
+  de invitación por profesor).
+- Flags: --plan (default academia) --meses (default 3) --profes N --color #RRGGBB --font (BRAND_FONTS)
+  --logo ruta.png --cursos "a, b, c" --rubro --whatsapp --nombre --fuente --tam --pass
+  --paquetes-generico (Mensualidad/8/4/suelta/prueba, sin nombres de música) --precios-cero (borra los
+  precios sembrados por defecto: nunca inventarle precios al cliente).
+- **Profesoras con nombre real: `--profes-nombres "Kelly Rodas, Vania Zúñiga"`** (agregado 20-jul). Ya implica
+  cuántos asientos crear, no hace falta repetir --profes; sin él caen los genéricos "Profesora 1/2/3" del
+  --profes-prefijo. Opcional `--profes-emails "una@x.com, otra@y.com"`; sin eso cada asiento queda con
+  `profesoraN@pendiente.batuta.lat`. Los nombres van escapados contra la comilla simple (O'Brien no rompe el SQL).
+- **Los asientos de profesor se insertan directo en D1** (`wrangler d1 execute --remote`) a propósito:
+  el endpoint `admin/profesores` MANDA CORREO de invitación al crear, y en el armado done-for-you todavía
+  no queremos que le llegue nada a nadie. El invite_token es hex de 48 (el activador valida /^[0-9a-f]{16,64}$/).
+- OJO: **`admin/profesores` no tiene acción de EDITAR** (solo agregar / comision / suspender / reactivar /
+  reenviar / borrar), y `p/activar` solo canjea el token por contraseña, tampoco deja tocar el correo. O sea:
+  nombre y correo del profesor se siembran bien de una, o el dueño borra el asiento y lo recrea desde su panel.
+- OJO permanente: el **email del tenant es el login y no hay endpoint para cambiarlo**. Pedírselo al cliente
+  ANTES de correr el script.
+- Verificado E2E contra producción el 20-jul con 2 tenants desechables (plan academia 3/5 asientos, config
+  completa, logo en R2, /app/p/activar 200) y ambos borrados después (tenants, config, precios, profesores,
+  sesiones y el objeto de R2). La D1 quedó en los mismos 10 tenants de antes.
+
 ## WhatsApp Cloud API — estado 11-jul-2026 (Fase A completa · Fase B: token permanente listo)
 - App Meta "Batuta" id 2913551592328289 · WABA 1532220315245141 · numero de prueba +1 (555) 155-3825, phone_number_id 1149379364933769.
 - **TOKEN PERMANENTE (Fase B) CARGADO**: System User "batuta-worker" (id 61591862819375, Admin) en el portfolio batuta.lat con acceso total a la app Batuta y a la WABA; token sin caducidad con permisos whatsapp_business_management + whatsapp_business_messaging. Cargado como secret WHATSAPP_TOKEN (via pbpaste | wrangler, nunca se imprimio). Si hay que rotarlo: Business Suite > Configuracion > Usuarios del sistema > batuta-worker > Generar token.
@@ -195,6 +221,9 @@ Se agregaron 2 rieles nuevos de cobro alumno->profe, espejando el marketplace de
   - (Cómo se generó: `openssl rand -hex 32` → `wrangler secret put CULQI_ENC_KEY`.)
   - Endpoints: /app/api/admin/culqi/{estado,conectar,desconectar}, /app/api/culqi/crear-cargo, /app/api/culqi/webhook-alumno?t=<tenant>. Panel: tarjeta "Tarjeta y Yape por API (Culqi)". Portal alumno: widget Culqi Checkout v4 (carga js de checkout.culqi.com al primer uso; CSP de Batuta lo permite). El webhook de Culqi el profe lo pega A MANO en su CulqiPanel > Eventos (no hay API); la via sincrona ya confirma, el webhook es cinturon-y-tirantes.
   - Manejo de fallo AMBIGUO (timeout/red): NO se borra la compra; queda 'pendiente' para reconciliar (evita "alumno cobrado sin paquete").
+  - **📨 AFILIACION DE ANDRES ENVIADA 20-jul-2026, EN REVISION DE CULQI.** Se registro en afiliate.culqi.com tras el RUC del 17-jul (persona natural con negocio). Como quedo declarada: producto **CulqiOnline** (pasarela con API, NO CulqiLink) · tipo de cobro **Cargo Unico** (es lo que llama el codigo: token del widget -> POST /v2/charges; Suscripciones queda para pedir despues si se migra el cobro del SaaS de MP a Culqi, ~3.44%+IGV vs 4-5% de MP) · URL del comercio **batuta.lat** (pasa el filtro: precios visibles + /terminos + /privacidad + SSL + Libro de Reclamaciones) · rubro software, coherente con CIIU 6201 y nombre comercial BATUTA · cuenta bancaria a nombre de Andres (Culqi exige mismo titular que la Ficha RUC) · correo de la cuenta **holabatuta@gmail.com**. Validacion declarada: 1-3 dias habiles (hasta 7); llegan credenciales del CulqiPanel por correo y ahi salen pk_live_/sk_live_.
+  - **Al aprobar, los 3 pasos que faltan:** (1) Andres pega pk_/sk_ EL MISMO en Ajustes -> "Tarjeta y Yape por API (Culqi)" (la sk_ no debe pasar por el chat; el endpoint /conectar la valida con un ping a api.culqi.com/v2/charges?limit=1 antes de cifrarla). (2) Pegar a mano en CulqiPanel > Eventos el webhook `https://batuta.lat/app/api/culqi/webhook-alumno?t=<TENANT_ID>`. (3) Cargo real de S/1 por Yape para verificar E2E.
+  - ⚠️ **OJO ALCANCE:** el riel Culqi es BYOK alumno->profe, y Andres NO tiene tenant propio en produccion (los tenants reales son TCGPro Store, JULIO ARMANDO PRINCIPE y TEST R; sus alumnos de MVT viven en profesormvt.com). O sea que su cuenta Culqi por si sola no cobra nada todavia: sirve para dogfood/demo de venta y para habilitar a profes formales. **MVT NO debe cobrarse por ahi hasta consultar al contador** (clases = 4ta categoria; esta afiliacion es 3ra con rubro software).
 
 - **Revision adversarial (12-jul):** 9 hallazgos, 5 arreglados pre/post-deploy (1 critico: Stripe cobraba 100x en monedas sin decimales; 2 altos de Culqi: respuesta ambigua borraba la compra; webhook Culqi ahora re-verifica; credito de referido en soles no aplica a Stripe; ping de sk_ exige 2xx). Verificado en vivo: panel + /pagar cargan sin errores de consola, tarjetas Stripe/Culqi ocultas mientras el gate esta off, endpoints dan 401 no 500.
 - PENDIENTE de Andres para activar: cargar los secrets de arriba + (Stripe) tener cuenta de plataforma verificada + (Culqi) que el profe tenga afiliacion con RUC.

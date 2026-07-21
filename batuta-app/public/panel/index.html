@@ -104,6 +104,10 @@
   .big{font-family:var(--display);font-size:19px;}
   .rowact{display:flex;gap:6px;flex-wrap:wrap;}
   .empty{padding:30px;text-align:center;color:var(--muted);font-family:var(--mono);font-size:12px;text-transform:uppercase;letter-spacing:.08em;}
+  /* La clase que el JS prende y apaga en media docena de sitios (badges de pendientes,
+     el vacio de la agenda, el par Link/Archivo de recursos, los modos del overlay de
+     accesos) nunca existio en el CSS: todos esos elementos se veian SIEMPRE. */
+  .hidden{display:none !important;}
 
   .overlay{position:fixed;inset:0;background:rgba(0,0,0,.78);display:none;align-items:flex-start;justify-content:center;padding:30px 16px;z-index:50;overflow-y:auto;}
   .overlay.open{display:flex;}
@@ -1295,6 +1299,10 @@ var TENANT_ESTADO = "trial";
 var WA_ACTIVAR = "51989077928";
 
 var db = { alumnos:[], registro:[], precios:Object.assign({},PRECIOS_DEFAULT), cuentas:[], compras:[], recursos:[], ejercicios:[], grupos:[], config:{} };
+/* db arranca con los precios y paquetes DEFAULT (nombres legacy de musica) solo como semilla.
+   Hasta que admin/data responda, esos numeros NO son del tenant: nada que muestre precios puede
+   pintarse antes (si no, el primer login ve "Paquete 4 (S/ 250)" que no es suyo). */
+var DATOS_LISTOS = false;
 var token = null;
 var cuentaModo = null;
 var refreshInterval = null;
@@ -1367,6 +1375,7 @@ function recargar(){
     // El slug también llega por admin/data (path que SIEMPRE corre): así el link de alumnos no
     // depende de la carrera con /app/api/t/me y nunca queda vacío.
     if(d && d.slug){ TENANT_SLUG = d.slug; }
+    DATOS_LISTOS = true;   // desde aqui db.config/db.precios ya son los del tenant
     ROL=d.rol||"dueno"; PROFE_ID=d.profe_id||""; EQUIPO=d.equipo||[];
     aplicarRol();
     renderAll(); pintarLinkAlumnos(); setSync("Conectado ✓","ok");
@@ -1533,6 +1542,10 @@ function pintarLinkAlumnos(){
   // Chips de link de cobro directo por paquete (pago sin registro previo)
   try{
     var cont=el("linksCobro");
+    // Ojo: /app/api/t/me (el que trae el slug) suele ganarle la carrera a admin/data, asi que en el
+    // PRIMER login esto corre con db aun en semilla: paquetes y precios default de musica. No pintar
+    // nada hasta que lleguen los datos reales; recargar() vuelve a llamar a esta funcion al terminar.
+    if(cont && !DATOS_LISTOS){ cont.innerHTML='<span class="hint">Cargando tus links…</span>'; return; }
     if(cont && db && db.precios){
       var pks=pkNombres().filter(function(pk){ return (db.precios[pk]||0)>0; });
       cont.innerHTML = pks.length ? "" : '<span class="hint">Pon tus precios en Ajustes y aquí salen los links.</span>';
@@ -2564,7 +2577,7 @@ function cargarLiquidacion(){
         if(Number(f.comision_pct)) com.push(f.comision_pct+"%");
         if(Number(f.tarifa_clase)) com.push("S/ "+f.tarifa_clase+"/clase");
         return '<tr><td class="name">'+esc(f.nombre)+(f.rol==="dueno"?' <span class="pill profe">Dueño</span>':'')+'</td>'+
-          '<td>'+fmt(f.ingresos)+' <span class="mini">('+f.compras+' pagos)</span></td>'+
+          '<td>'+fmt(f.ingresos)+' <span class="mini">('+f.compras+(f.compras===1?' pago':' pagos')+')</span></td>'+
           '<td>'+f.clases+'</td>'+
           '<td>'+(com.length?esc(com.join(" + ")):'—')+'</td>'+
           '<td class="big">'+(f.rol==="dueno"?'<span class="mini">(tuyo)</span> ':'')+fmt(f.a_pagar)+'</td></tr>';

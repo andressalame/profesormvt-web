@@ -802,9 +802,17 @@
       <p class="hint" style="margin:6px 0 0;">Puede ser igual o distinto al que tenía antes.</p></div>
     <div class="frow">
       <div class="field"><label>Fecha de compra</label><input id="rn_fecha" type="date" /></div>
-      <div class="field"><label>Estado de pago</label><select id="rn_pago"><option>Pagado</option><option>Pendiente</option></select></div>
+      <div class="field"><label>Monto cobrado (S/)</label><input id="rn_monto" type="number" min="0" step="1" /></div>
     </div>
+    <div class="frow">
+      <div class="field"><label>Cómo te pagó</label><select id="rn_metodo">
+        <option>Yape</option><option>Plin</option><option>Efectivo</option><option>Transferencia</option><option>Otro</option>
+      </select></div>
+      <div class="field"><label>N° de operación <span class="mini">(opcional)</span></label><input id="rn_op" type="text" placeholder="ej. 00123456" /></div>
+    </div>
+    <div class="field"><label>Estado de pago</label><select id="rn_pago"><option>Pagado</option><option>Pendiente</option></select></div>
     <p class="hint">Esto abre un ciclo nuevo: las clases restantes se recalculan desde cero con el paquete elegido. El historial de clases anteriores se conserva, no se borra.</p>
+    <p class="hint" id="rn_aviso" style="margin-top:8px;"></p>
     <div class="modal-actions">
       <button class="btn ghost" data-close>Cancelar</button>
       <button class="btn" id="btnGuardarRenovar">Guardar renovación</button>
@@ -843,6 +851,9 @@ var refreshInterval = null;
 var prevPendientes = 0;
 
 function el(id){ return document.getElementById(id); }
+/* Fecha de HOY en Lima (YYYY-MM-DD). Con toISOString (UTC), desde las 19:00 Lima ya era
+   "mañana": toda clase anotada de noche caia en la bitacora con el dia siguiente. */
+function hoyLima(){ return new Date().toLocaleDateString("en-CA",{timeZone:"America/Lima"}); }
 function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,function(m){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m];}); }
 function uid(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,7); }
 /* tarea_audio: JSON array [{u,n}] (nuevo) o string con un solo url (formato viejo) */
@@ -1605,7 +1616,7 @@ el("btnNuevoAlumno").addEventListener("click",function(){
   el("a_id").value=""; el("a_codigo").value=""; el("a_ciclo").value="1";
   el("a_nombre").value=""; el("a_whatsapp").value="";
   setCursosAlumno(MARCA.cursoDefault); fillSelects(); el("a_paquete").value="Paquete 4";
-  el("a_fecha").value=new Date().toISOString().slice(0,10); el("a_pago").value="Pagado";
+  el("a_fecha").value=hoyLima(); el("a_pago").value="Pagado";
   el("a_horario").value=""; el("a_notas").value=""; el("a_horario_derivado").textContent="";
   el("btnGuardarAlumnoOtro").style.display="";
   openOv("ovAlumno");
@@ -1802,7 +1813,7 @@ function registrarClaseGrupo(g){
   fillSelects();
   el("regTitulo").innerHTML='Registrar <em>clase</em> · '+esc(g.nombre);
   el("r_id").value="";
-  el("r_fecha").value=new Date().toISOString().slice(0,10);
+  el("r_fecha").value=hoyLima();
   el("r_estado").value="Asistió"; el("r_trabajo").value=""; el("r_tarea").value=""; el("r_plan").value=""; el("r_ejercicio").value="";
   var gw=el("r_grupal_wrap"); if(gw) gw.style.display="";
   el("r_alumno").value=ids[0];
@@ -1841,7 +1852,7 @@ el("btnNuevoRegistro").addEventListener("click",function(){
   fillSelects();
   el("regTitulo").innerHTML='Registrar <em>clase</em>';
   el("r_id").value="";
-  el("r_fecha").value=new Date().toISOString().slice(0,10);
+  el("r_fecha").value=hoyLima();
   el("r_estado").value="Asistió"; el("r_trabajo").value=""; el("r_tarea").value=""; el("r_plan").value=""; el("r_ejercicio").value="";
   var gw=el("r_grupal_wrap"); if(gw) gw.style.display="";
   fillGrupales();
@@ -2062,30 +2073,62 @@ function renovar(a){
 }
 
 /* ---------- Renovación manual (pago recibido fuera del portal) ---------- */
+function rnPrecio(paq){ return Number((db.precios||{})[paq])||0; }
+function rnAviso(){
+  var a=db.alumnos.find(function(x){return x.id===el("rn_id").value;});
+  var av=el("rn_aviso"); if(!av||!a) return;
+  var pend=el("rn_pago").value==="Pendiente";
+  if(pend){
+    av.innerHTML='⏸️ Como está <b>Pendiente</b>, se anota el cobro pero <b>no</b> se abre el ciclo ni se dan clases. Se aplica solo cuando lo confirmes en <b>Cuentas</b>.';
+    return;
+  }
+  av.innerHTML = cuentaDeAlumno(a.id)
+    ? '✅ Se registra la venta, se abre el ciclo, se pone la fecha de vencimiento (2 meses) y le llega su <b>correo de gracias</b>.'
+    : '⚠️ Este alumno <b>no tiene cuenta</b>: se le abre el ciclo y se le pone el vencimiento igual, pero <b>no recibe correo</b> y la venta no queda registrada en Cuentas. Vincúlale una cuenta si quieres el registro completo.';
+}
 function abrirRenovar(alumnoId){
   var a=db.alumnos.find(function(x){return x.id===alumnoId;}); if(!a) return;
   el("rn_id").value=a.id;
   el("rn_paquete").innerHTML=Object.keys(PAQUETES).map(function(p){return '<option>'+p+'</option>';}).join("");
   el("rn_paquete").value=a.paquete;
-  el("rn_fecha").value=new Date().toISOString().slice(0,10);
+  el("rn_fecha").value=hoyLima();
   el("rn_pago").value="Pagado";
+  el("rn_monto").value=rnPrecio(a.paquete)||"";
+  el("rn_metodo").value="Yape";
+  el("rn_op").value="";
+  rnAviso();
   openOv("ovRenovar");
 }
+el("rn_paquete").addEventListener("change",function(){ el("rn_monto").value=rnPrecio(this.value)||""; });
+el("rn_pago").addEventListener("change",rnAviso);
+
+/* Pasa por /api/admin/renovar, que reusa el MISMO confirmarCompra() de una compra web:
+   deja la venta registrada, abre ciclo, setea `vence`, resetea el aviso de vencimiento,
+   acredita al referidor y manda el correo. Antes esto solo tocaba 4 campos por el PUT masivo
+   y no seteaba `vence`, que es de donde venía el desfase. */
 el("btnGuardarRenovar").addEventListener("click",function(){
   var id=el("rn_id").value;
   var a=db.alumnos.find(function(x){return x.id===id;}); if(!a) return;
-  var nuevoCiclo=(Number(a.ciclo)||1)+1;
-  var obj=Object.assign({},a,{
+  var btnRen=el("btnGuardarRenovar"); btnRen.disabled=true;
+  fetch("/api/admin/renovar",{method:"POST",headers:hdr(),body:JSON.stringify({
+    alumno_id:id,
     paquete:el("rn_paquete").value,
     fecha:el("rn_fecha").value,
     pago:el("rn_pago").value,
-    ciclo:nuevoCiclo
-  });
-  db.alumnos=db.alumnos.map(function(x){return x.id===id?obj:x;});
-  var btnRen=el("btnGuardarRenovar"); btnRen.disabled=true;
-  apiPut().then(function(){ renderAll(); closeOv("ovRenovar"); toast("Renovación registrada — ciclo "+nuevoCiclo); })
-    .catch(function(){ toast("No se pudo guardar. Revisa tu conexión e intenta de nuevo."); })
-    .finally(function(){ btnRen.disabled=false; });
+    monto:Number(el("rn_monto").value)||0,
+    metodo:el("rn_metodo").value,
+    op_numero:el("rn_op").value.trim()
+  })})
+  .then(function(r){ return r.json().then(function(j){ if(!r.ok) throw new Error(j.error||("HTTP "+r.status)); return j; }); })
+  .then(function(j){
+    closeOv("ovRenovar");
+    if(j.pendiente) toast("Cobro anotado como pendiente — confírmalo en Cuentas para que aplique");
+    else if(j.sinCuenta) toast("Renovado · vence "+j.vence+" — sin cuenta, no se envió correo");
+    else toast("Renovación registrada — venta guardada y correo enviado");
+    return cargar();
+  })
+  .catch(function(e){ toast(e.message||"No se pudo registrar. Revisa tu conexión e intenta de nuevo."); })
+  .finally(function(){ btnRen.disabled=false; });
 });
 
 /* ---------- Ajustes ---------- */
@@ -2348,7 +2391,7 @@ el("fileAudio").addEventListener("change",function(e){
 /* ---------- Export ---------- */
 el("btnExport").addEventListener("click",function(){
   var blob=new Blob([JSON.stringify(db,null,2)],{type:"application/json"});
-  downloadBlob(blob,"crm-"+MARCA.archivoExport+"-"+new Date().toISOString().slice(0,10)+".json");
+  downloadBlob(blob,"crm-"+MARCA.archivoExport+"-"+hoyLima()+".json");
   toast("Respaldo exportado");
 });
 el("btnBackupSrv").addEventListener("click",function(){
@@ -2501,7 +2544,7 @@ function impPreview(rows,dup,vacios){
 }
 el("btnImpConfirmar").addEventListener("click",function(){
   if(!IMP_ROWS.length){ closeOv("ovImport"); return; }
-  var hoy=new Date().toISOString().slice(0,10);
+  var hoy=hoyLima();
   IMP_ROWS.forEach(function(a){
     db.alumnos.push({ id:uid(), codigo:uid().slice(-6).toUpperCase(), ciclo:1,
       nombre:a.nombre, whatsapp:a.whatsapp, curso:a.curso, paquete:a.paquete,
