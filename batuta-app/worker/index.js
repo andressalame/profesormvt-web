@@ -170,6 +170,9 @@ const MP_PLAN_IDS = {
 };
 /* Planes viejos por si hay que consultarlos:
    49/149/299 trial 7d (12-jul): profe=f8ed7d6ea1aa4f87943825ce179c53c3 · academia=bdc2e4f289b24d0e9b2c3286c2f89528 · xl=58b4c707c7ff400c94df72ace2f4e91e
+     -> CANCELADOS en MP el 21-jul-2026 (status 'cancelled', su checkout ya devuelve error). Estaban
+        huerfanos en el codigo pero SEGUIAN 'active' en MP: su link vivo habria cobrado al dia 7
+        despues de prometer 30 (cobro no consentido / Indecopi). Se jubilaron con su/mp-plan PUT.
    34/85/170 (06-jul tarde): profe=ae98cb29a7b94853a2388c3d3ebc8874 · academia=6af72fcd1e2f4ca497be3f2b4adca7a9 · xl=7d4d75ea227b4dce860a480b404bf96f
    49/149/249 (06-jul mañana): profe=35ba601b3de344458c0b6960b4929459 · academia=cdf23adca57a40b8b53e6405ddfc274f · xl=fcb43515dbbd47e4a934e9426c3d7522 */
 const MP_CHECKOUT_BASE = "https://www.mercadopago.com.pe/subscriptions/checkout?preapproval_plan_id=";
@@ -755,7 +758,9 @@ async function enviarCorreo(env, { to, subject, html, text, from }){
         text: text || (html ? html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim() : undefined)
       })
     });
-    return r.ok;
+    if (!r.ok) return false;
+    // Devuelve el id de Resend (su acuse propio) cuando existe; los callers solo lo usan como truthy.
+    try { const d = await r.json(); return (d && d.id) ? d.id : true; } catch (e) { return true; }
   } catch (e) { return false; }
 }
 
@@ -1789,6 +1794,27 @@ const ICONOS_PWA = [
   { src: "/icons/batuta-512.png", sizes: "512x512", type: "image/png" },
   { src: "/icons/batuta-512.png", sizes: "512x512", type: "image/png", purpose: "maskable" }
 ];
+
+/* ---------- Libro de Reclamaciones virtual (LRV): obligatorio para comercio electronico
+   (enlace visible, libro funcional 24/7, acuse automatico, respuesta en max 15 dias habiles). ---------- */
+async function ensureLibroSchema(env){
+  await env.DB.prepare(
+    "CREATE TABLE IF NOT EXISTS reclamos (id TEXT PRIMARY KEY, tipo TEXT NOT NULL, nombre TEXT DEFAULT '', documento TEXT DEFAULT '', domicilio TEXT DEFAULT '', email TEXT DEFAULT '', telefono TEXT DEFAULT '', menor INTEGER DEFAULT 0, apoderado TEXT DEFAULT '', servicio TEXT DEFAULT '', monto REAL DEFAULT 0, detalle TEXT DEFAULT '', pedido TEXT DEFAULT '', respuesta TEXT DEFAULT '', respondido TEXT DEFAULT '', estado TEXT DEFAULT 'pendiente', creado TEXT DEFAULT '')"
+  ).run();
+}
+/* Dias habiles (L-V) transcurridos desde una fecha ISO. Aproximacion sin feriados:
+   sesga a favor del consumidor (alerta ANTES), que es el lado correcto del error. */
+function diasHabilesDesde(isoCreado){
+  const d = new Date(isoCreado); const hoy = new Date(); let n = 0;
+  while (d < hoy){ d.setUTCDate(d.getUTCDate() + 1); const dow = d.getUTCDay(); if (dow !== 0 && dow !== 6) n++; }
+  return n;
+}
+async function nuevoCodigoReclamo(env){
+  const anio = new Date().getFullYear();
+  const row = await env.DB.prepare("SELECT COUNT(*) AS n FROM reclamos WHERE id LIKE ?1").bind("LRV-" + anio + "-%").first();
+  return "LRV-" + anio + "-" + String(((row && Number(row.n)) || 0) + 1).padStart(4, "0");
+}
+const LRV_PROVEEDOR = "Andrés Salamé-Córdova Reina (BATUTA) · RUC 10707468152 · Lima, Perú";
 
 /* ---------- avisos internos a Andrés: Resend primero (enviarCorreo), AVISOS de fallback ---------- */
 async function alertaCorreoAndres(env, asunto, cuerpo){
@@ -2854,6 +2880,7 @@ async function recordatorioRenovacion(env){
 async function resetDemo(env){
   await ensureFeedbackSchema(env); // la lista de tablas de abajo la incluye; que exista antes del batch
   await ensureErpSchema(env);      // idem: gastos
+  await ensureMultiprofesorSchema(env); // idem: profesores + la columna profesor_id que usa el equipo
   let t = await env.DB.prepare("SELECT * FROM tenants WHERE email = ?1").bind(DEMO_EMAIL).first();
   if (!t){
     const id = crypto.randomUUID();
@@ -2876,6 +2903,44 @@ async function resetDemo(env){
   await env.DB.batch(tablas.map(tb => env.DB.prepare("DELETE FROM " + tb + " WHERE tenant_id = ?1").bind(tid)));
   await env.DB.prepare("DELETE FROM sesiones WHERE cuenta_id = ?1 OR cuenta_id LIKE 'demo-cu-%'").bind("T:" + tid).run();
 
+  /* Equipo de la academia. `profesores` NO va en la lista de arriba (el dueño debe
+     sobrevivir al reset), así que se purga aparte a los que siembra la demo, si no se
+     acumularían un par por cada reset diario. */
+  await env.DB.batch([
+    env.DB.prepare("DELETE FROM profesores WHERE tenant_id = ?1 AND rol != 'dueno'").bind(tid),
+    env.DB.prepare("DELETE FROM sesiones WHERE cuenta_id LIKE 'P:demo-pf-%'")
+  ]);
+  /* El dueño lo crea el backfill (migrarProfesores); si la demo nace en una base limpia
+     todavía no existe, y sin él no hay a quién colgar alumnos, reservas ni liquidación. */
+  let dueno = await env.DB.prepare("SELECT id FROM profesores WHERE tenant_id = ?1 AND rol = 'dueno'").bind(tid).first();
+  if (!dueno){
+    const pidD = crypto.randomUUID();
+    await env.DB.prepare(
+      "INSERT INTO profesores (id, tenant_id, nombre, email, whatsapp, pass_hash, pass_salt, rol, estado, creado) " +
+      "VALUES (?1,?2,'Emilia Vargas',?3,'51999888777',?4,?5,'dueno','activo',?6)"
+    ).bind(pidD, tid, DEMO_EMAIL, t.pass_hash || "", t.pass_salt || "", new Date().toISOString()).run();
+    dueno = { id: pidD };
+  }
+  const DUENO = dueno.id;
+  /* Los 2 profesores del equipo. Sin ellos la demo era una ACADEMIA de un solo profe:
+     "Solo tú por ahora" en Profesores y "A pagar al equipo: S/ 0" en la liquidación,
+     que es justo lo que viene a ver una academia. Renzo cobra %, Camila por clase:
+     así la liquidación luce los dos modelos de pago. La contraseña es basura aleatoria
+     a propósito (quedan activos para la vista, pero nadie entra con su correo). */
+  const PF_PIANO = "demo-pf-1", PF_GUITARRA = "demo-pf-2";
+  const equipoDemo = [
+    [PF_PIANO,    "Renzo Aguilar", "renzo@estudiosonata.pe",  "51977112233", 50, 0],
+    [PF_GUITARRA, "Camila Ruiz",   "camila@estudiosonata.pe", "51988223344", 0, 25]
+  ];
+  for (const p of equipoDemo){
+    const saltP = randHex(16);
+    const hashP = await hashPass(randHex(24), saltP);
+    await env.DB.prepare(
+      "INSERT INTO profesores (id, tenant_id, nombre, email, whatsapp, pass_hash, pass_salt, rol, estado, creado, comision_pct, tarifa_clase) " +
+      "VALUES (?1,?2,?3,?4,?5,?6,?7,'profesor','activo',?8,?9,?10)"
+    ).bind(p[0], tid, p[1], p[2], p[3], hashP, saltP, new Date().toISOString(), p[4], p[5]).run();
+  }
+
   // Fechas relativas (Lima = UTC-5) para que la demo siempre se vea viva.
   const DIA = 86400000, LIMA = 5 * 3600000;
   const f = (n) => new Date(Date.now() - LIMA - n * DIA).toISOString().slice(0, 10);
@@ -2890,22 +2955,24 @@ async function resetDemo(env){
   for (const k of Object.keys(PRECIOS_DEFAULT)){
     stmts.push(env.DB.prepare("INSERT INTO precios (tenant_id, paquete, precio) VALUES (?1,?2,?3)").bind(tid, k, PRECIOS_DEFAULT[k]));
   }
-  const cfg = { profe_nombre: "Profe Emilia", cursos: "Canto, Piano, Guitarra", pago_numero: "999 999 999", pago_titular: "Emilia Vargas", whatsapp_profe: "51999888777" };
+  const cfg = { profe_nombre: "Profe Emilia", cursos: "Canto, Piano, Guitarra", pago_numero: "987 654 321", pago_titular: "Emilia Vargas", whatsapp_profe: "51999888777" };
   for (const k of Object.keys(cfg)){
     stmts.push(env.DB.prepare("INSERT INTO config (tenant_id, clave, valor) VALUES (?1,?2,?3)").bind(tid, k, cfg[k]));
   }
-  // alumnos (mismos personajes que la réplica de batuta.lat/demo)
+  // alumnos (mismos personajes que la réplica de batuta.lat/demo), repartidos por curso
+  // entre la dueña y sus 2 profes: sin profesor_id la tabla Profesores decía "0 alumnos"
+  // para todos, que es lo primero que mira una academia.
   const alumnos = [
-    ["demo-al-1", "A001", "Fabio Mendoza",  "51987654321", "Canto",    "Paquete 8",  f(30),  "Pagado",    "Jue 18:00", "Le cuesta el pasaje; trabajar twang", 3],
-    ["demo-al-2", "A002", "Natalia Rojas",  "51912345678", "Piano",    "Paquete 4",  f(90),  "Pagado",    "Lun 19:00", "Independencia de manos en progreso", 5],
-    ["demo-al-3", "A003", "Yaritza Campos", "51998877665", "Canto",    "Paquete 12", f(45),  "Pagado",    "Sáb 10:00", "Belting seguro, va muy bien", 2],
-    ["demo-al-4", "A004", "Diego Salas",    "51955443322", "Guitarra", "Paquete 8",  f(50),  "Pagado",    "Mar 17:00", "Cambios de acorde lentos aún", 1],
-    ["demo-al-5", "A005", "Laura Pacheco",  "51966554433", "Piano",    "Paquete 4",  f(120), "Pendiente", "Mié 18:00", "Hablar renovación esta semana", 4]
+    ["demo-al-1", "A001", "Fabio Mendoza",  "51987654321", "Canto",    "Paquete 8",  f(30),  "Pagado",    "Jue 18:00", "Le cuesta el pasaje; trabajar twang", 3, DUENO],
+    ["demo-al-2", "A002", "Natalia Rojas",  "51912345678", "Piano",    "Paquete 4",  f(90),  "Pagado",    "Lun 19:00", "Independencia de manos en progreso", 5, PF_PIANO],
+    ["demo-al-3", "A003", "Yaritza Campos", "51998877665", "Canto",    "Paquete 12", f(45),  "Pagado",    "Sáb 10:00", "Belting seguro, va muy bien", 2, DUENO],
+    ["demo-al-4", "A004", "Diego Salas",    "51955443322", "Guitarra", "Paquete 8",  f(50),  "Pagado",    "Mar 17:00", "Cambios de acorde lentos aún", 1, PF_GUITARRA],
+    ["demo-al-5", "A005", "Laura Pacheco",  "51966554433", "Piano",    "Paquete 4",  f(120), "Pendiente", "Mié 18:00", "Hablar renovación esta semana", 4, PF_PIANO]
   ];
   for (const a of alumnos){
     stmts.push(env.DB.prepare(
-      "INSERT INTO alumnos (id,tenant_id,codigo,nombre,whatsapp,curso,paquete,fecha,pago,horario,notas,ciclo) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12)"
-    ).bind(a[0], tid, a[1], a[2], a[3], a[4], a[5], a[6], a[7], a[8], a[9], a[10]));
+      "INSERT INTO alumnos (id,tenant_id,codigo,nombre,whatsapp,curso,paquete,fecha,pago,horario,notas,ciclo,profesor_id) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13)"
+    ).bind(a[0], tid, a[1], a[2], a[3], a[4], a[5], a[6], a[7], a[8], a[9], a[10], a[11]));
   }
   // registro de clases: el saldo del panel sale de aquí (compute() cuenta por ciclo)
   const regs = [
@@ -2942,21 +3009,33 @@ async function resetDemo(env){
   });
   // reservas próximas (hoy 18:00 y 19:00 Lima, mañana 17:00, +3 días 10:00)
   const rvs = [
-    ["demo-rv-1", "demo-al-1", limaAt(0, 18, 0), "Canto", 3],
-    ["demo-rv-2", "demo-al-2", limaAt(0, 19, 0), "Piano", 5],
-    ["demo-rv-3", "demo-al-4", limaAt(1, 17, 0), "Guitarra", 1],
-    ["demo-rv-4", "demo-al-3", limaAt(3, 10, 0), "Canto", 2]
+    ["demo-rv-1", "demo-al-1", limaAt(0, 18, 0), "Canto", 3, DUENO],
+    ["demo-rv-2", "demo-al-2", limaAt(0, 19, 0), "Piano", 5, PF_PIANO],
+    ["demo-rv-3", "demo-al-4", limaAt(1, 17, 0), "Guitarra", 1, PF_GUITARRA],
+    ["demo-rv-4", "demo-al-3", limaAt(3, 10, 0), "Canto", 2, DUENO]
   ];
   for (const rv of rvs){
     const fin = new Date(rv[2].getTime() + 3600000);
     stmts.push(env.DB.prepare(
-      "INSERT INTO reservas (id,tenant_id,alumno_id,inicio_utc,fin_utc,tipo,serie_id,estado,curso,ciclo,creada) VALUES (?1,?2,?3,?4,?5,'suelta','','reservada',?6,?7,?8)"
-    ).bind(rv[0], tid, rv[1], rv[2].toISOString(), fin.toISOString(), rv[3], rv[4], ahoraIso));
+      "INSERT INTO reservas (id,tenant_id,alumno_id,inicio_utc,fin_utc,tipo,serie_id,estado,curso,ciclo,creada,profesor_id) VALUES (?1,?2,?3,?4,?5,'suelta','','reservada',?6,?7,?8,?9)"
+    ).bind(rv[0], tid, rv[1], rv[2].toISOString(), fin.toISOString(), rv[3], rv[4], ahoraIso, rv[5]));
   }
-  // disponibilidad semanal (1=lun ... 6=sáb)
+  /* disponibilidad semanal (1=lun ... 6=sáb), POR profesor: la agenda y el booking
+     público se scopean por profesor_id, así que un profe sin horarios propios aparece
+     con la agenda vacía y sin cupos que reservar. Las filas de la dueña van con
+     profesor_id '' (legacy = del dueño, la regla de compatibilidad de la casa). */
   const disp = [[1, "17:00"], [1, "18:00"], [1, "19:00"], [2, "17:00"], [2, "18:00"], [2, "19:00"], [3, "17:00"], [3, "18:00"], [4, "17:00"], [4, "18:00"], [4, "19:00"], [5, "18:00"], [5, "19:00"], [6, "10:00"]];
   for (const d of disp){
     stmts.push(env.DB.prepare("INSERT INTO disponibilidad (tenant_id, dia_semana, hora, activo) VALUES (?1,?2,?3,1)").bind(tid, d[0], d[1]));
+  }
+  const dispEquipo = [
+    [PF_PIANO, [[1, "16:00"], [1, "17:00"], [1, "18:00"], [3, "16:00"], [3, "17:00"], [3, "18:00"], [3, "19:00"], [5, "16:00"], [5, "17:00"]]],
+    [PF_GUITARRA, [[2, "15:00"], [2, "16:00"], [2, "17:00"], [4, "15:00"], [4, "16:00"], [4, "17:00"], [6, "11:00"], [6, "12:00"]]]
+  ];
+  for (const [pid, franjas] of dispEquipo){
+    for (const d of franjas){
+      stmts.push(env.DB.prepare("INSERT INTO disponibilidad (tenant_id, profesor_id, dia_semana, hora, activo) VALUES (?1,?2,?3,?4,1)").bind(tid, pid, d[0], d[1]));
+    }
   }
   // cuentas del portal (2 vinculadas, 1 sin vincular, como la réplica)
   const cuentas = [
@@ -2971,17 +3050,28 @@ async function resetDemo(env){
       "INSERT INTO cuentas (id,tenant_id,email,nombre,whatsapp,pass_hash,pass_salt,marketing,alumno_id,creada,ref_code,ref_por,credito) VALUES (?1,?2,?3,?4,?5,'x','x',?6,?7,?8,'','',0)"
     ).bind(c[0], tid, c[1], c[2], c[3], c[4], c[5], c[6]));
   }
-  // compras: 1 pendiente por confirmar (el gancho del panel) + 3 procesadas
+  // compras: 1 pendiente por confirmar (el gancho del panel) + 3 procesadas.
+  // Cada una atribuida al profe del alumno: de ahí sale el reparto de la liquidación.
   const compras = [
-    ["demo-cp-1", "demo-cu-4", "Guitarra", "Paquete 8",  450, "03471825", "pendiente",  f(0), "yape"],
-    ["demo-cp-2", "demo-cu-3", "Canto",    "Paquete 12", 600, "",         "confirmada", f(0), "tarjeta"],
-    ["demo-cp-3", "demo-cu-1", "Canto",    "Paquete 8",  450, "",         "confirmada", f(1), "tarjeta"],
-    ["demo-cp-4", "demo-cu-2", "Piano",    "Paquete 4",  250, "71624098", "confirmada", f(3), "yape"]
+    ["demo-cp-1", "demo-cu-4", "Guitarra", "Paquete 8",  450, "03471825", "pendiente",  f(0), "yape",    PF_GUITARRA],
+    ["demo-cp-2", "demo-cu-3", "Canto",    "Paquete 12", 600, "",         "confirmada", f(0), "tarjeta", DUENO],
+    ["demo-cp-3", "demo-cu-1", "Canto",    "Paquete 8",  450, "",         "confirmada", f(1), "tarjeta", DUENO],
+    ["demo-cp-4", "demo-cu-2", "Piano",    "Paquete 4",  250, "71624098", "confirmada", f(3), "yape",    PF_PIANO]
   ];
   for (const cp of compras){
     stmts.push(env.DB.prepare(
-      "INSERT INTO compras (id,tenant_id,cuenta_id,curso,paquete,monto,op_numero,estado,fecha,metodo) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10)"
-    ).bind(cp[0], tid, cp[1], cp[2], cp[3], cp[4], cp[5], cp[6], cp[7], cp[8]));
+      "INSERT INTO compras (id,tenant_id,cuenta_id,curso,paquete,monto,op_numero,estado,fecha,metodo,profesor_id) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11)"
+    ).bind(cp[0], tid, cp[1], cp[2], cp[3], cp[4], cp[5], cp[6], cp[7], cp[8], cp[9]));
+  }
+  // grupos: la pestaña salía vacía aunque es de las cosas que una academia viene a ver
+  const gruposDemo = [
+    ["demo-gr-1", "Coro juvenil",    "Canto", "Sáb 11:00", ["demo-al-1", "demo-al-3"], DUENO],
+    ["demo-gr-2", "Piano · nivel 1", "Piano", "Mié 18:00", ["demo-al-2", "demo-al-5"], PF_PIANO]
+  ];
+  for (const g of gruposDemo){
+    stmts.push(env.DB.prepare(
+      "INSERT INTO grupos (id,tenant_id,nombre,curso,horario,miembros,creado,profesor_id) VALUES (?1,?2,?3,?4,?5,?6,?7,?8)"
+    ).bind(g[0], tid, g[1], g[2], g[3], JSON.stringify(g[4]), f(0), g[5]));
   }
   // CRM: pipeline con etapas variadas para que la demo luzca el embudo completo
   // (nombre, email, whatsapp, interes, fecha, etapa, nota, seguir_el)
@@ -3538,19 +3628,28 @@ export default {
           await env.DB.prepare("INSERT OR IGNORE INTO lead_magnet (email, origen, fecha) VALUES (?1, ?2, ?3)")
             .bind(email, origen, new Date().toISOString().slice(0, 10)).run();
         } catch (e) {}
-        const enlace = MARCA.dominio + "/descargas/control-alumnos-batuta.xlsx";
-        await enviarCorreo(env, {
+        // Lead magnet nuevo (plantilla de 5 hojas del blog SEO de intencion): archivo y atribucion
+        // propios (f=plantilla), distintos del Excel clasico de 4 hojas (f=magnet-correo). El nurture
+        // de scheduled() ya lo levanta por cualquier origen distinto de 'registro-abandonado'.
+        const esPlantilla = origen.indexOf("plantilla") === 0;
+        const archivo = esPlantilla ? "plantilla-control-pagos-batuta.xlsx" : "control-alumnos-batuta.xlsx";
+        const fReg = esPlantilla ? "plantilla-correo" : "magnet-correo";
+        const descHojas = esPlantilla
+          ? 'Tiene 5 hojas: LEEME, Alumnos, Pagos, Clases y un Panel que se calcula solo: ingresos del mes por medio de pago y, lo que mas duele, el saldo de clases de cada alumno con su estado (al dia, por renovar o vencido).'
+          : 'Tiene 4 hojas: Alumnos, Pagos, Asistencia y un Resumen que se calcula solo (incluida la fila que mas duele: la plata en el aire sin confirmar).';
+        const enlace = MARCA.dominio + "/descargas/" + archivo;
+        const emailed = await enviarCorreo(env, {
           to: email,
           subject: "Tu plantilla de control de alumnos y pagos",
           html:
             '<div style="font-family:Arial,Helvetica,sans-serif;max-width:480px;margin:0 auto;color:#1a1a1a;font-size:15px;line-height:1.6">' +
               '<p>Aca esta tu plantilla: <a href="' + enlace + '"><b>descargar el Excel</b></a>.</p>' +
-              '<p>Tiene 4 hojas: Alumnos, Pagos, Asistencia y un Resumen que se calcula solo (incluida la fila que mas duele: la plata en el aire sin confirmar).</p>' +
-              '<p>Y cuando llenarla a mano te canse, esa es exactamente la parte que <a href="' + MARCA.dominio + '/app/registro?f=magnet-correo">Batuta hace sola</a>: portal de alumnos, cobros y renovaciones automaticas. 30 dias gratis con tus alumnos reales.</p>' +
+              '<p>' + descHojas + '</p>' +
+              '<p>Y cuando llenarla a mano te canse, esa es exactamente la parte que <a href="' + MARCA.dominio + '/app/registro?f=' + fReg + '">Batuta hace sola</a>: portal de alumnos, cobros y renovaciones automaticas. 30 dias gratis con tus alumnos reales.</p>' +
               '<p>Andres, de Batuta.</p>' +
             '</div>',
         });
-        return json({ ok: true, enlace: enlace });
+        return json({ ok: true, enlace: enlace, emailed: !!emailed, email_id: (typeof emailed === "string" ? emailed : null) });
       }
 
       /* ---------- Rescate de registro abandonado (público): lo dispara el sendBeacon de /app/registro.
@@ -3666,6 +3765,71 @@ export default {
         return json({ ok: true });
       }
 
+      /* Libro de Reclamaciones virtual: publico. Guarda la hoja, acuse por correo al
+         consumidor y alerta a Andres con el plazo legal corriendo (15 dias habiles). */
+      if (path === "/app/api/libro-reclamo" && request.method === "POST"){
+        const ipLr = clientIp(request);
+        if (ipLr && await chatbotPasoTope(env, "librorec:" + ipLr, 3)){
+          return json({ error: "Demasiados intentos. Escribenos por WhatsApp o al correo de contacto." }, 429);
+        }
+        const b = await request.json().catch(() => ({}));
+        if (String(b.web || "").trim()) return json({ ok: true, codigo: "" }); // honeypot: bot fuera, sin pista
+        const tipoLr = String(b.tipo || "").trim() === "queja" ? "queja" : "reclamo";
+        const nomLr = String(b.nombre || "").trim().slice(0, 120);
+        const docLr = String(b.documento || "").trim().slice(0, 20);
+        const domLr = String(b.domicilio || "").trim().slice(0, 200);
+        const emaLr = String(b.email || "").trim().toLowerCase().slice(0, 120);
+        const telLr = String(b.telefono || "").trim().slice(0, 30);
+        const menLr = b.menor ? 1 : 0;
+        const apoLr = String(b.apoderado || "").trim().slice(0, 120);
+        const serLr = String(b.servicio || "").trim().slice(0, 200);
+        const monLr = Math.max(0, Number(b.monto) || 0);
+        const detLr = String(b.detalle || "").trim().slice(0, 3000);
+        const pedLr = String(b.pedido || "").trim().slice(0, 1500);
+        if (nomLr.length < 2 || !emailOk(emaLr) || docLr.length < 6 || detLr.length < 20 || pedLr.length < 5){
+          return json({ error: "Completa nombre, documento de identidad, un correo valido, el detalle (minimo 20 caracteres) y tu pedido." }, 400);
+        }
+        if (menLr && apoLr.length < 2){
+          return json({ error: "Si el consumidor es menor de edad, indica el nombre de su padre, madre o apoderado." }, 400);
+        }
+        await ensureLibroSchema(env);
+        const codigoLr = await nuevoCodigoReclamo(env);
+        const creadoLr = new Date().toISOString();
+        await env.DB.prepare(
+          "INSERT INTO reclamos (id, tipo, nombre, documento, domicilio, email, telefono, menor, apoderado, servicio, monto, detalle, pedido, creado) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14)"
+        ).bind(codigoLr, tipoLr, nomLr, docLr, domLr, emaLr, telLr, menLr, apoLr, serLr, monLr, detLr, pedLr, creadoLr).run();
+        const escLr = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+        const filaLr = (k, v) => "<tr><td style=\"padding:4px 10px 4px 0;color:#666;white-space:nowrap;vertical-align:top\">" + k + "</td><td style=\"padding:4px 0\">" + v + "</td></tr>";
+        const htmlLr =
+          "<div style=\"font-family:system-ui,sans-serif;max-width:560px\">" +
+          "<h2 style=\"margin:0 0 4px\">Hoja de " + (tipoLr === "queja" ? "queja" : "reclamacion") + " " + codigoLr + "</h2>" +
+          "<p style=\"margin:0 0 14px;color:#666\">Libro de Reclamaciones virtual de BATUTA · recibida el " + creadoLr.slice(0, 10) + "</p>" +
+          "<table style=\"font-size:14px;border-collapse:collapse\">" +
+          filaLr("Proveedor", LRV_PROVEEDOR) +
+          filaLr("Consumidor", escLr(nomLr) + " · Doc. " + escLr(docLr)) +
+          (menLr ? filaLr("Apoderado", escLr(apoLr)) : "") +
+          filaLr("Contacto", escLr(emaLr) + (telLr ? " · " + escLr(telLr) : "")) +
+          (domLr ? filaLr("Domicilio", escLr(domLr)) : "") +
+          (serLr ? filaLr("Servicio", escLr(serLr)) : "") +
+          (monLr ? filaLr("Monto reclamado", "S/ " + monLr.toFixed(2)) : "") +
+          filaLr("Tipo", tipoLr.toUpperCase()) +
+          filaLr("Detalle", escLr(detLr)) +
+          filaLr("Pedido", escLr(pedLr)) +
+          "</table>" +
+          "<p style=\"font-size:13px;color:#444;margin-top:14px\">Te responderemos por escrito en un plazo maximo de <b>15 dias habiles</b>. RECLAMO: disconformidad relacionada con los productos o servicios. QUEJA: disconformidad no relacionada con ellos, o malestar respecto de la atencion. La formulacion del reclamo no impide acudir a otras vias de solucion de controversias ni es requisito previo para presentar una denuncia ante el INDECOPI.</p>" +
+          "</div>";
+        ctx.waitUntil((async () => {
+          try { await enviarCorreo(env, { to: emaLr, subject: "Recibimos tu " + tipoLr + " " + codigoLr + " — Batuta", html: htmlLr }); } catch (e) {}
+          await alertaCorreoAndres(env,
+            "🔴 LIBRO DE RECLAMACIONES " + codigoLr + " (" + tipoLr + "): responder antes de 15 dias habiles",
+            "De: " + nomLr + " (doc " + docLr + ")\nCorreo: " + emaLr + (telLr ? "\nTelefono: " + telLr : "") +
+            (serLr ? "\nServicio: " + serLr : "") + (monLr ? "\nMonto: S/ " + monLr.toFixed(2) : "") +
+            "\n\nDETALLE:\n" + detLr + "\n\nPEDIDO:\n" + pedLr +
+            "\n\nPara responder (queda registrado en el libro y se le envia por correo):\ncurl -X POST https://batuta.lat/app/api/su/reclamo-responder -H \"Authorization: Bearer $ADMIN_TOKEN\" -H \"content-type: application/json\" -d '{\"id\":\"" + codigoLr + "\",\"respuesta\":\"...\"}'");
+        })());
+        return json({ ok: true, codigo: codigoLr });
+      }
+
       /* ============================================================
          SUPERADMIN (Andres) — Bearer env.ADMIN_TOKEN. Sin sesion de tenant.
          ============================================================ */
@@ -3677,6 +3841,33 @@ export default {
         if (path === "/app/api/su/demo-reset" && request.method === "POST"){
           const idDemo = await resetDemo(env);
           return json({ ok: true, tenant_id: idDemo });
+        }
+        /* Libro de Reclamaciones: listar y responder (la respuesta queda registrada y va por correo). */
+        if (path === "/app/api/su/reclamos" && request.method === "GET"){
+          await ensureLibroSchema(env);
+          const { results: recLs } = await env.DB.prepare("SELECT * FROM reclamos ORDER BY creado DESC").all();
+          return json({ reclamos: (recLs || []).map(r => ({ ...r, dias_habiles: r.estado === "pendiente" ? diasHabilesDesde(r.creado) : null })) });
+        }
+        if (path === "/app/api/su/reclamo-responder" && request.method === "POST"){
+          const bRr = await request.json().catch(() => ({}));
+          const idRr = String(bRr.id || "").trim();
+          const respRr = String(bRr.respuesta || "").trim().slice(0, 4000);
+          if (!idRr || respRr.length < 10) return json({ error: "Manda id y una respuesta de al menos 10 caracteres." }, 400);
+          await ensureLibroSchema(env);
+          const rRr = await env.DB.prepare("SELECT * FROM reclamos WHERE id = ?1").bind(idRr).first();
+          if (!rRr) return json({ error: "No existe " + idRr }, 404);
+          await env.DB.prepare("UPDATE reclamos SET respuesta = ?1, respondido = ?2, estado = 'respondido' WHERE id = ?3")
+            .bind(respRr, new Date().toISOString(), idRr).run();
+          let correoRr = false;
+          try {
+            const escRr = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+            correoRr = await enviarCorreo(env, {
+              to: rRr.email,
+              subject: "Respuesta a tu " + rRr.tipo + " " + idRr + " — Batuta",
+              html: "<div style=\"font-family:system-ui,sans-serif;max-width:560px\"><h2 style=\"margin:0 0 10px\">Respuesta a tu " + rRr.tipo + " " + idRr + "</h2><p style=\"white-space:pre-wrap\">" + escRr(respRr) + "</p><p style=\"color:#666;font-size:13px;margin-top:14px\">" + LRV_PROVEEDOR + "</p></div>"
+            });
+          } catch (e) {}
+          return json({ ok: true, correo_enviado: !!correoRr });
         }
         /* Multi-profesor: migra la PK de `disponibilidad` a (tenant, profesor, dia, hora)
            para que dos profesores puedan dictar el mismo horario. Idempotente: si la tabla
@@ -3866,6 +4057,67 @@ export default {
           return json({ nota: "30% x12 meses; payout automatico (credito MP o PayPal con flag); alta manual via su/afiliado", afiliados: lista, solicitudes });
         }
 
+        /* -------- Estado de un batch de Payouts (TEMPORAL, solo lectura): GET su/paypal-batch?id=<payout_batch_id> */
+        if (path === "/app/api/su/paypal-batch" && request.method === "GET"){
+          if (!env.PAYPAL_CLIENT_ID || !env.PAYPAL_CLIENT_SECRET) return json({ error: "faltan secrets PAYPAL_CLIENT_ID/SECRET" }, 500);
+          const idPB = String(url.searchParams.get("id") || "").trim().slice(0, 60);
+          if (!idPB) return json({ error: "manda ?id=<payout_batch_id>" }, 400);
+          const basicPB = btoa(env.PAYPAL_CLIENT_ID + ":" + env.PAYPAL_CLIENT_SECRET);
+          const tokResPB = await fetch("https://api-m.paypal.com/v1/oauth2/token", {
+            method: "POST",
+            headers: { Authorization: "Basic " + basicPB, "content-type": "application/x-www-form-urlencoded" },
+            body: "grant_type=client_credentials"
+          });
+          const tokPB = await tokResPB.json().catch(() => ({}));
+          if (!tokResPB.ok || !tokPB.access_token) return json({ paso: "oauth", status: tokResPB.status, detalle: tokPB }, 502);
+          const resPB = await fetch("https://api-m.paypal.com/v1/payments/payouts/" + encodeURIComponent(idPB), {
+            headers: { Authorization: "Bearer " + tokPB.access_token }
+          });
+          const dataPB = await resPB.json().catch(() => ({}));
+          const itemPB = (dataPB.items && dataPB.items[0]) || {};
+          return json({ status: resPB.status,
+                        batch_status: (dataPB.batch_header && dataPB.batch_header.batch_status) || null,
+                        item_status: itemPB.transaction_status || null,
+                        errores: (itemPB.errors && itemPB.errors.message) || null,
+                        fees: (dataPB.batch_header && dataPB.batch_header.fees) || null,
+                        detalle: dataPB }, resPB.ok ? 200 : 502);
+        }
+
+        /* -------- Prueba minima de Payouts (TEMPORAL; la dispara SOLO Andres): manda un payout real
+           chico (tope S/5) al email que se pase. curl -X POST .../su/paypal-test -d '{"email":"...","monto_pen":1}'
+           Es TAMBIEN el detector de aprobacion (16-jul: 403 AUTHORIZATION_ERROR = Payouts aun sin aprobar;
+           el dia que devuelva batch_id = aprobado -> recien ahi PAYPAL_PAYOUTS_ON=1). No exige el flag a proposito. */
+        if (path === "/app/api/su/paypal-test" && request.method === "POST"){
+          if (!env.PAYPAL_CLIENT_ID || !env.PAYPAL_CLIENT_SECRET) return json({ error: "faltan secrets PAYPAL_CLIENT_ID/SECRET" }, 500);
+          const tcPT = Number(env.PAYPAL_TC_USD) || 0;
+          if (!tcPT) return json({ error: "falta PAYPAL_TC_USD" }, 500);
+          const bPT = await request.json().catch(() => ({}));
+          const emailPT = String(bPT.email || "").trim().slice(0, 120);
+          if (!emailPT.includes("@")) return json({ error: "manda email (el PayPal receptor)" }, 400);
+          const montoPen = Math.min(5, Math.max(0.5, Number(bPT.monto_pen) || 1));
+          const usdPT = (Math.round((montoPen / tcPT) * 100) / 100).toFixed(2);
+          const basicPT = btoa(env.PAYPAL_CLIENT_ID + ":" + env.PAYPAL_CLIENT_SECRET);
+          const tokResPT = await fetch("https://api-m.paypal.com/v1/oauth2/token", {
+            method: "POST",
+            headers: { Authorization: "Basic " + basicPT, "content-type": "application/x-www-form-urlencoded" },
+            body: "grant_type=client_credentials"
+          });
+          const tokPT = await tokResPT.json().catch(() => ({}));
+          if (!tokResPT.ok || !tokPT.access_token) return json({ paso: "oauth", status: tokResPT.status, detalle: tokPT }, 502);
+          const resPT = await fetch("https://api-m.paypal.com/v1/payments/payouts", {
+            method: "POST",
+            headers: { Authorization: "Bearer " + tokPT.access_token, "content-type": "application/json" },
+            body: JSON.stringify({
+              sender_batch_header: { sender_batch_id: "test-" + Date.now(), email_subject: "Prueba Payouts Batuta" },
+              items: [{ recipient_type: "EMAIL", amount: { value: usdPT, currency: "USD" }, receiver: emailPT, note: "Prueba minima del riel de afiliados Batuta", sender_item_id: "test-1" }]
+            })
+          });
+          const dataPT = await resPT.json().catch(() => ({}));
+          return json({ paso: "payouts", status: resPT.status, enviado_pen: montoPen, enviado_usd: usdPT, receptor: emailPT,
+                        batch_id: (dataPT.batch_header && dataPT.batch_header.payout_batch_id) || null,
+                        batch_status: (dataPT.batch_header && dataPT.batch_header.batch_status) || null, detalle: dataPT }, resPT.ok ? 200 : 502);
+        }
+
         /* -------- Packs +50 alumnos (Academia/XL, S/39 c/u por WhatsApp): sube el tope sin salto de plan. --------
            curl -X POST .../su/alumnos-extra -d '{"tenant":"...","packs":1}' */
         if (path === "/app/api/su/alumnos-extra" && request.method === "POST"){
@@ -4045,6 +4297,28 @@ export default {
           const pid = String(url.searchParams.get("id") || "").trim();
           if (!pid) return json({ error: "Falta id" }, 400);
           const mp = await mpFetch(env, "/preapproval_plan/" + encodeURIComponent(pid), { method: "GET" });
+          return json({ status: mp.status, data: mp.data }, mp.ok ? 200 : 502);
+        }
+        /* Jubila (cancela) un preapproval_plan viejo en MP. MP NO deja editar el free_trial de un
+           plan ya creado: para cambiar el trial hay que crear uno nuevo y CANCELAR el viejo. Si el
+           viejo queda 'active', su link de checkout sigue vivo y cobraria con las condiciones
+           antiguas -> cobro no consentido / publicidad enganosa (Indecopi). Body: { id, status }.
+           CANDADO: nunca cancela un id que siga en MP_PLAN_IDS (el que el sitio usa hoy). */
+        if (path === "/app/api/su/mp-plan" && request.method === "PUT"){
+          if (!env.MP_ACCESS_TOKEN) return json({ error: "Sin MP_ACCESS_TOKEN" }, 501);
+          const bp = await request.json().catch(() => ({}));
+          const pid = String(bp.id || "").trim();
+          const nuevoEstado = String(bp.status || "").trim();
+          if (!pid) return json({ error: "Falta id" }, 400);
+          if (nuevoEstado !== "cancelled" && nuevoEstado !== "active"){
+            return json({ error: "status debe ser 'cancelled' o 'active'" }, 400);
+          }
+          if (nuevoEstado === "cancelled" && esPlanNuestroMP(pid)){
+            return json({ error: "ese plan esta VIVO en MP_PLAN_IDS; apunta el worker a otro antes de cancelarlo" }, 409);
+          }
+          const mp = await mpFetch(env, "/preapproval_plan/" + encodeURIComponent(pid), {
+            method: "PUT", body: { status: nuevoEstado }
+          });
           return json({ status: mp.status, data: mp.data }, mp.ok ? 200 : 502);
         }
         /* Embudo TOP (30 dias): visitas humanas por pagina (funnel_hits, es_bot=0) + registros
@@ -7958,6 +8232,19 @@ export default {
           "\n\nDetalle vivo: su/funnel (activacion_45d) y su/cohortes.");
       }
     } catch (e) { console.error("digest activacion", e); }
+    /* Libro de Reclamaciones: vigilancia del plazo legal (15 dias habiles). Alerta diaria
+       desde el dia habil 10 de cada hoja pendiente, para que ninguna venza sin respuesta. */
+    try {
+      await ensureLibroSchema(env);
+      const { results: pendLr } = await env.DB.prepare("SELECT id, tipo, nombre, email, creado FROM reclamos WHERE estado = 'pendiente'").all();
+      const urgLr = (pendLr || []).map(r => ({ ...r, dh: diasHabilesDesde(r.creado) })).filter(r => r.dh >= 10);
+      if (urgLr.length){
+        await alertaCorreoAndres(env,
+          "🔴 " + urgLr.length + " hoja(s) del Libro de Reclamaciones por vencer (plazo 15 dias habiles)",
+          urgLr.map(r => "· " + r.id + " (" + r.tipo + ") de " + r.nombre + " <" + r.email + ">: va en el dia habil " + r.dh + " de 15. Creado " + String(r.creado).slice(0, 10)).join("\n") +
+          "\n\nResponde con su/reclamo-responder (el correo original del reclamo trae el curl listo).");
+      }
+    } catch (e) { console.error("libro reclamos plazo", e); }
     /* Nurture de trial (dia 1/3/6) + cierre proactivo del vencido. 1 corrida/dia (cron 14:00 UTC = 9am Lima).
        Migracion perezosa: la columna se crea sola en la primera corrida (patron MVT). */
     try { await env.DB.prepare("ALTER TABLE tenants ADD COLUMN nurture_paso INTEGER DEFAULT 0").run(); } catch (e) { /* ya existe */ }
