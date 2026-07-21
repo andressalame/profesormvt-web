@@ -2926,7 +2926,7 @@ export default {
         const cfgPd = await loadConfig(env).catch(() => ({}));
         const preciosPd = await loadPrecios(env).catch(() => PRECIOS_DEFAULT);
         const metodos = [];
-        if (env.MP_ACCESS_TOKEN) metodos.push({ v: "Tarjeta (Mercado Pago)", t: "Tarjeta (se confirma sola)" });
+        if (env.MP_ACCESS_TOKEN) metodos.push({ v: "Tarjeta (Mercado Pago)", t: "Tarjeta o Yape (se confirma sola)" });
         if (cfgPd.pago_numero) metodos.push({ v: "Yape/Plin/Sip", t: "Yape / Plin / Sip" });
         if (cfgPd.bcp_cuenta) metodos.push({ v: "Transferencia BCP", t: "Transferencia BCP" });
         if (cfgPd.scotia_cuenta) metodos.push({ v: "Transferencia Scotiabank", t: "Transferencia Scotiabank" });

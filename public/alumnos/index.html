@@ -446,7 +446,7 @@
         <h2 style="margin-top:12px;">¡Tu cuenta está lista! 🤘</h2>
         <p>Este es tu portal: acá manejas tus clases, pagos y material. Para arrancar son 3 pasos:</p>
         <ol class="onb-steps">
-          <li><b>1 · Compra tu paquete.</b> <span id="txtOnbPaso1">Elige canto, piano o composición (o combínalos).</span> Con tarjeta se activa al instante; con Yape, Plin o transferencia el mismo día.</li>
+          <li><b>1 · Compra tu paquete.</b> <span id="txtOnbPaso1">Elige canto, piano o composición (o combínalos).</span> Con tarjeta o Yape vía Mercado Pago se activa al instante; manual (Yape directo, transferencia) el mismo día.</li>
           <li><b>2 · Elige tus horarios.</b> Coordinamos tus clases 1 a 1 a tu ritmo.</li>
           <li><b>3 · Aprende y avanza.</b> Aquí verás tus clases restantes, tu tarea de la semana y el material exclusivo.</li>
         </ol>
@@ -539,7 +539,7 @@
     <section class="view" id="v-comprar">
       <div class="eyebrow">// COMPRAR</div>
       <h1>Elige tu <em>paquete</em></h1>
-      <div class="sub">Tarjeta, Yape, Plin o transferencia · activación al instante con tarjeta</div>
+      <div class="sub">Tarjeta, Yape, Plin o transferencia · al instante con tarjeta o Yape (Mercado Pago)</div>
       <hr class="rule" />
       <div class="banner hidden" id="bCredito"></div>
       <div class="banner naranja hidden" id="bPendC"></div>
@@ -677,10 +677,10 @@
         <div class="field"><label for="c_metodo">Método de pago</label>
           <select id="c_metodo">
             <optgroup label="Pago automático">
-              <option value="Tarjeta (Mercado Pago)">Tarjeta — confirma al instante</option>
+              <option value="Tarjeta (Mercado Pago)">Tarjeta o Yape — confirma al instante</option>
             </optgroup>
             <optgroup label="Pago manual">
-              <option value="Yape/Plin/Sip">Yape / Plin / Sip</option>
+              <option value="Yape/Plin/Sip">Yape / Plin / Sip — manual</option>
               <option value="Transferencia BCP">Transferencia BCP</option>
               <option value="Transferencia Scotiabank">Transferencia Scotiabank</option>
               <option value="Crypto USDT">Crypto (USDT)</option>
@@ -1276,7 +1276,7 @@ function renderPaybox(){
   var titular = cf.pago_titular ? ('<div class="note">A nombre de: '+esc(cf.pago_titular)+'</div>') : '';
   var html = "";
   if(m === "Yape/Plin/Sip"){
-    html = cf.pago_numero ? ('<div class="lab">Yape, Plin o Sip a</div><div class="num">'+esc(cf.pago_numero)+'</div>'+titular) : '<div class="note">Aún no configurado.</div>';
+    html = cf.pago_numero ? ('<div class="lab">Yape, Plin o Sip a</div><div class="num">'+esc(cf.pago_numero)+'</div>'+titular+'<div class="note">Tip: si eliges <strong>Tarjeta o Yape</strong> arriba, el Yape va por Mercado Pago y tu paquete se activa solo, sin esperarme.</div>') : '<div class="note">Aún no configurado.</div>';
   } else if(m === "Transferencia BCP"){
     html = '<div class="lab">Transferencia BCP (Soles)</div><div class="num">'+esc(cf.bcp_cuenta||"-")+'</div><div class="note">CCI: '+esc(cf.bcp_cci||"-")+'</div>'+titular;
   } else if(m === "Transferencia Scotiabank"){
@@ -1287,9 +1287,9 @@ function renderPaybox(){
     var pk = $("c_paquete").value;
     if(pk){
       var cc = calc(pk);
-      html = '<div class="lab">Tarjeta de crédito o débito</div>'
-        + '<button type="button" class="btn" id="btnPagarTarjeta" style="width:100%;justify-content:center;margin:4px 0 2px;">Pagar S/ '+cc.final+' con tarjeta →</button>'
-        + '<div class="note">Te llevamos a Mercado Pago para pagar con tu tarjeta (puedes en cuotas). Al terminar, tu paquete se activa solo.</div>';
+      html = '<div class="lab">Tarjeta o Yape (Mercado Pago)</div>'
+        + '<button type="button" class="btn" id="btnPagarTarjeta" style="width:100%;justify-content:center;margin:4px 0 2px;">Pagar S/ '+cc.final+' →</button>'
+        + '<div class="note">Te llevamos a Mercado Pago: ahí eliges tarjeta (puedes en cuotas) o Yape. Al terminar, tu paquete se activa solo.</div>';
     } else {
       html = '<div class="note">Elige un paquete arriba.</div>';
     }
