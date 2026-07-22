@@ -481,7 +481,7 @@ async function confirmarCompra(env, compra){
     const nuevoId = crypto.randomUUID();
     alumnoIdNuevo = nuevoId;
     stmts.push(env.DB.prepare(
-      "INSERT INTO alumnos (id,codigo,nombre,whatsapp,curso,paquete,fecha,pago,horario,notas,ciclo,vence) VALUES (?1,?2,?3,?4,?5,?6,?7,'Pagado','','Creado por compra web',1,?8)"
+      "INSERT INTO alumnos (id,codigo,nombre,whatsapp,curso,paquete,fecha,pago,horario,notas,ciclo,vence,origen) VALUES (?1,?2,?3,?4,?5,?6,?7,'Pagado','','Creado por compra web',1,?8,'compra-web')"
     ).bind(nuevoId, randHex(3).toUpperCase(), cu.nombre, cu.whatsapp || "", compra.curso || "Canto", compra.paquete, hoy(), vence));
     stmts.push(env.DB.prepare("UPDATE cuentas SET alumno_id = ?1 WHERE id = ?2").bind(nuevoId, cu.id));
   }
@@ -2348,6 +2348,11 @@ async function ensureSchema(env){
     // referido_nudge_ciclo: dedupe del correo de referidos tras renovar (máx 1 por ciclo).
     const tieneRefNudge = (infoAlumnos.results || []).some(c => c.name === "referido_nudge_ciclo");
     if (!tieneRefNudge) await env.DB.prepare("ALTER TABLE alumnos ADD COLUMN referido_nudge_ciclo INTEGER DEFAULT 0").run();
+    // v21 (21-jul-2026): origen del alumno (meta-ads, referido, organico, lead-email, compra-web, otro).
+    // Los alumnos reales entran por WhatsApp y ese canal no dejaba rastro en la base: sin `origen`
+    // es imposible cruzar el gasto de Meta contra alumnos reales (análisis del 21-jul).
+    const tieneOrigen = (infoAlumnos.results || []).some(c => c.name === "origen");
+    if (!tieneOrigen) await env.DB.prepare("ALTER TABLE alumnos ADD COLUMN origen TEXT DEFAULT ''").run();
     // feedback: notas del gate de satisfacción (token de un solo uso; solo se guarda su hash, como reset_tokens).
     await env.DB.prepare(
       "CREATE TABLE IF NOT EXISTS feedback (token_hash TEXT PRIMARY KEY, alumno_id TEXT NOT NULL, nota INTEGER DEFAULT 0, usado INTEGER DEFAULT 0, creada TEXT DEFAULT '', respondida TEXT DEFAULT '')"
@@ -4083,13 +4088,13 @@ export default {
           if (!body || !Array.isArray(body.alumnos) || !Array.isArray(body.registro)){
             return json({ error: "Cuerpo inválido" }, 400);
           }
-          // El CRM manda solo 11 de las 19 columnas. Antes de borrar y reinsertar hay que
+          // El CRM manda solo 12 de las 20 columnas. Antes de borrar y reinsertar hay que
           // leer las 8 que NO viaja el CRM, o cada "Guardar" las pone en cero: eso vaciaba
           // `vence` (mataba congelar plazo y el aviso de vencimiento) y reseteaba los dedupes
           // de correo, con lo que un alumno podia recibir el mismo aviso dos veces.
           const estadoPrevio = new Map();
           for (const p of ((await env.DB.prepare(
-            "SELECT id, vence, recordatorio_ciclo, recordatorio_fecha, aviso_vence_ciclo, " +
+            "SELECT id, vence, origen, recordatorio_ciclo, recordatorio_fecha, aviso_vence_ciclo, " +
             "winback_ciclo, resena_pedida, nudge_ciclo, referido_nudge_ciclo FROM alumnos"
           ).all()).results || [])) estadoPrevio.set(p.id, p);
 
@@ -4104,11 +4109,13 @@ export default {
             // abierto con datos viejos vuelve a borrarlo todo). Las otras 7 son estado de
             // maquina que el CRM no edita: siempre gana la base.
             const vence = (a.vence && String(a.vence).trim()) || prev.vence || "";
+            // origen sigue la regla de vence: un CRM abierto con datos viejos (sin el campo) no lo borra.
+            const origen = (a.origen && String(a.origen).trim()) || prev.origen || "";
             stmts.push(env.DB.prepare(
               "INSERT INTO alumnos (id,codigo,nombre,whatsapp,curso,paquete,fecha,pago,horario,notas,ciclo," +
               "vence,recordatorio_ciclo,recordatorio_fecha,aviso_vence_ciclo,winback_ciclo,resena_pedida," +
-              "nudge_ciclo,referido_nudge_ciclo) " +
-              "VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19)"
+              "nudge_ciclo,referido_nudge_ciclo,origen) " +
+              "VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20)"
             ).bind(
               a.id, String(a.codigo || "").toUpperCase() || randHex(3).toUpperCase(), a.nombre,
               a.whatsapp || "", a.curso || "", a.paquete || "",
@@ -4120,7 +4127,8 @@ export default {
               prev.winback_ciclo ?? 0,
               prev.resena_pedida ?? 0,
               prev.nudge_ciclo ?? 0,
-              prev.referido_nudge_ciclo ?? 0
+              prev.referido_nudge_ciclo ?? 0,
+              origen
             ));
           }
           for (const r of body.registro){

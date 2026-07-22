@@ -705,6 +705,16 @@
       <div class="field"><label>Fecha de compra</label><input id="a_fecha" type="date" /></div>
       <div class="field"><label>Estado de pago</label><select id="a_pago"><option>Pagado</option><option>Pendiente</option></select></div>
     </div>
+    <div class="field"><label>Origen (cómo llegó)</label><select id="a_origen">
+        <option value="">— sin marcar —</option>
+        <option value="meta-ads">Meta Ads (WhatsApp)</option>
+        <option value="referido">Referido</option>
+        <option value="organico">Orgánico (IG / web / Google)</option>
+        <option value="lead-email">Lead de email</option>
+        <option value="compra-web">Compra web</option>
+        <option value="otro">Otro</option>
+      </select>
+      <p class="hint" style="margin:6px 0 0;">Un tap al crear el alumno = saber cuánto cuesta un alumno de Meta.</p></div>
     <div class="field"><label>Nota de horario (manual, opcional)</label><input id="a_horario" type="text" placeholder="Solo si no usa la agenda. Ej: Martes 18:00" />
       <p class="hint" id="a_horario_derivado" style="margin:4px 0 0;"></p></div>
     <div class="field"><label>Notas</label><textarea id="a_notas"></textarea></div>
@@ -1072,7 +1082,7 @@ function renderAlumnos(){
     var renovBtn=(c.clase!=="green")?'<button class="btn sm" data-renovar="'+a.id+'">Enviar mensaje</button>':'';
     var pago=a.pago==="Pagado"?'<span class="pill pago-ok">Pagado</span>':'<span class="pill pago-pend">Pendiente</span>';
     return '<tr>'+
-      '<td class="name">'+esc(a.nombre)+'<br><span class="mini">'+esc(a.whatsapp||'')+'</span></td>'+
+      '<td class="name">'+esc(a.nombre)+'<br><span class="mini">'+esc(a.whatsapp||'')+(a.origen?' · '+esc(a.origen):'')+'</span></td>'+
       '<td>'+(cu?'<span class="mini">'+esc(cu.email)+'</span>':'<span class="pill gray">Sin cuenta</span>')+'</td>'+
       '<td>'+esc(a.curso)+'</td>'+
       '<td>'+esc(a.paquete)+'<br><span class="mini">S/ '+c.monto+' · ciclo '+(a.ciclo||1)+'</span></td>'+
@@ -1616,7 +1626,7 @@ el("btnNuevoAlumno").addEventListener("click",function(){
   el("a_id").value=""; el("a_codigo").value=""; el("a_ciclo").value="1";
   el("a_nombre").value=""; el("a_whatsapp").value="";
   setCursosAlumno(MARCA.cursoDefault); fillSelects(); el("a_paquete").value="Paquete 4";
-  el("a_fecha").value=hoyLima(); el("a_pago").value="Pagado";
+  el("a_fecha").value=hoyLima(); el("a_pago").value="Pagado"; el("a_origen").value="";
   el("a_horario").value=""; el("a_notas").value=""; el("a_horario_derivado").textContent="";
   el("btnGuardarAlumnoOtro").style.display="";
   openOv("ovAlumno");
@@ -1629,6 +1639,7 @@ function guardarAlumnoModal(encadenar){
     ciclo:Number(el("a_ciclo").value)||1,
     nombre:nombre, whatsapp:el("a_whatsapp").value.trim(), curso:getCursosAlumno()||MARCA.cursoDefault,
     paquete:el("a_paquete").value, fecha:el("a_fecha").value, pago:el("a_pago").value,
+    origen:el("a_origen").value,
     horario:el("a_horario").value.trim(), notas:el("a_notas").value.trim() };
   if(id){ db.alumnos=db.alumnos.map(function(a){return a.id===id?obj:a;}); }
   else{ db.alumnos.push(obj); }
@@ -1676,7 +1687,8 @@ document.body.addEventListener("click",function(e){
     el("a_id").value=a.id; el("a_codigo").value=a.codigo||""; el("a_ciclo").value=a.ciclo||1;
     el("a_nombre").value=a.nombre; el("a_whatsapp").value=a.whatsapp||"";
     setCursosAlumno(a.curso); el("a_paquete").value=a.paquete; el("a_fecha").value=a.fecha||"";
-    el("a_pago").value=a.pago; el("a_horario").value=a.horario||""; el("a_notas").value=a.notas||"";
+    el("a_pago").value=a.pago; el("a_origen").value=a.origen||"";
+    el("a_horario").value=a.horario||""; el("a_notas").value=a.notas||"";
     el("a_horario_derivado").textContent=(a.horarioFijo&&a.horarioFijo.length)?("Agenda: "+a.horarioFijo.join(" · ")):"Sin horario fijo en la agenda";
     openOv("ovAlumno");
   }
