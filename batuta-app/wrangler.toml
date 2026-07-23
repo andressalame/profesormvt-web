@@ -23,6 +23,11 @@ bucket_name = "batuta-app-archivos"
 [ai]
 binding = "AI"
 
+# Observabilidad: logs persistidos para que un bug de saldo/cobro no vuelva a ser invisible
+# hasta que un cliente se queje (leccion MVT 21-jul).
+[observability]
+enabled = true
+
 # UN solo cron (limite de 5 por cuenta en el plan free): corre cada 15 min.
 # - Cada corrida: recordatorios de clase a alumnos (24h y 1h antes de su reserva).
 # - La corrida de las 14:00 UTC (9am Lima): ademas nurture de trial + renovaciones + reset demo.

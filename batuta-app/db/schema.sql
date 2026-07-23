@@ -180,6 +180,19 @@ CREATE TABLE IF NOT EXISTS grupos (
 );
 CREATE INDEX IF NOT EXISTS idx_grupos_tenant ON grupos (tenant_id);
 
+-- ============ SEDES (multisede, 23-jul-2026) ============
+-- Locales fisicos de una academia. La sede es un ATRIBUTO de profesor/alumno/grupo
+-- (columna sede_id TEXT DEFAULT '' agregada por ALTER perezoso en ensureSedesSchema);
+-- la agenda no cambia: la sede de una clase se deriva de su profesor. '' = sin sede.
+CREATE TABLE IF NOT EXISTS sedes (
+  id        TEXT PRIMARY KEY,
+  tenant_id TEXT NOT NULL,
+  nombre    TEXT NOT NULL,
+  direccion TEXT DEFAULT '',
+  creado    TEXT DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS idx_sedes_tenant ON sedes (tenant_id);
+
 -- ============ CUENTAS DE ALUMNO (portal) ============
 CREATE TABLE IF NOT EXISTS cuentas (
   id        TEXT PRIMARY KEY,

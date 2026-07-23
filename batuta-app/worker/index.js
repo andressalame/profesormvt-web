@@ -582,9 +582,9 @@ async function loadConfig(env, tenantId){
   return c;
 }
 
-/* Branding por tenant: 5 fuentes de titulares permitidas (Google Fonts) + color de acento.
+/* Branding por tenant: 6 fuentes de titulares permitidas (Google Fonts) + color de acento.
    Se aplican al panel del profe y al portal de sus alumnos. */
-const BRAND_FONTS = ["Anton", "Bebas Neue", "Bricolage Grotesque", "Playfair Display", "Space Grotesk"];
+const BRAND_FONTS = ["Anton", "Bebas Neue", "Bricolage Grotesque", "Playfair Display", "Space Grotesk", "Space Mono"];
 
 /* Cursos del tenant: editables en Ajustes (config.cursos, separados por comas). Sin configurar → default. */
 const CURSOS_DEFAULT = ["Canto", "Piano", "Guitarra"];
@@ -776,12 +776,17 @@ async function enviarCorreo(env, { to, subject, html, text, from }){
      curl reducido de "pending-payments" que si pude leer completo (ver mensaje final para el detalle). Se
      incluye igual porque es el nombre oficial del campo; si MP lo rechazara, el catch de abajo devuelve el
      error tal cual lo manda MP (no rompe el flujo, ver requestMP). */
+/* Integrator ID de Andrés (certificación Checkout Pro aprobada 22-jul-2026, Partners Program):
+   MP pide mandarlo en todas las llamadas para atribuir la integración al desarrollador certificado. */
+const MP_INTEGRATOR_ID = "dev_681594c2861c11f1bb3162b6ae4fb21b";
+
 async function mpFetch(env, path, options){
   const r = await fetch("https://api.mercadopago.com" + path, {
     method: (options && options.method) || "GET",
     headers: Object.assign({
       "Authorization": "Bearer " + env.MP_ACCESS_TOKEN,
-      "Content-Type": "application/json"
+      "Content-Type": "application/json",
+      "X-Integrator-Id": MP_INTEGRATOR_ID
     }, (options && options.headers) || {}),
     body: options && options.body ? JSON.stringify(options.body) : undefined
   });
@@ -1010,9 +1015,15 @@ async function confirmarCompra(env, tenantId, tenant, compra){
   if (cu.alumno_id){
     const al = await env.DB.prepare("SELECT * FROM alumnos WHERE id = ?1 AND tenant_id = ?2").bind(cu.alumno_id, tenantId).first();
     if (al){
+      const cicloNuevo = (Number(al.ciclo) || 1) + 1;
       stmts.push(env.DB.prepare(
-        "UPDATE alumnos SET paquete = ?1, curso = ?2, pago = 'Pagado', fecha = ?3, ciclo = COALESCE(ciclo,1) + 1, vence = ?4, aviso_vence_ciclo = 0 WHERE id = ?5 AND tenant_id = ?6"
-      ).bind(compra.paquete, compra.curso || al.curso, hoy(), vence, al.id, tenantId));
+        "UPDATE alumnos SET paquete = ?1, curso = ?2, pago = 'Pagado', fecha = ?3, ciclo = ?4, vence = ?5, aviso_vence_ciclo = 0 WHERE id = ?6 AND tenant_id = ?7"
+      ).bind(compra.paquete, compra.curso || al.curso, hoyLima(), cicloNuevo, vence, al.id, tenantId));
+      /* Migrar las reservas FUTURAS al ciclo nuevo: si no, el credito de esas clases queda
+         huerfano en el ciclo viejo y la clase se carga mal al paquete nuevo (bug MVT 21-jul). */
+      stmts.push(env.DB.prepare(
+        "UPDATE reservas SET ciclo = ?1 WHERE tenant_id = ?2 AND alumno_id = ?3 AND estado = 'reservada' AND inicio_utc >= ?4"
+      ).bind(cicloNuevo, tenantId, al.id, new Date().toISOString()));
       renovado = true;
     }
   }
@@ -1028,7 +1039,7 @@ async function confirmarCompra(env, tenantId, tenant, compra){
     }
     stmts.push(env.DB.prepare(
       "INSERT INTO alumnos (id,tenant_id,codigo,nombre,whatsapp,curso,paquete,fecha,pago,horario,notas,ciclo,vence,profesor_id) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,'Pagado','','Creado por compra web',1,?9,?10)"
-    ).bind(nuevoId, tenantId, randHex(3).toUpperCase(), cu.nombre, cu.whatsapp || "", cursoNuevo, compra.paquete, hoy(), vence, profeNuevo));
+    ).bind(nuevoId, tenantId, randHex(3).toUpperCase(), cu.nombre, cu.whatsapp || "", cursoNuevo, compra.paquete, hoyLima(), vence, profeNuevo));
     stmts.push(env.DB.prepare("UPDATE cuentas SET alumno_id = ?1 WHERE id = ?2 AND tenant_id = ?3").bind(nuevoId, cu.id, tenantId));
   }
   /* atribucion del ingreso al profesor del alumno (reporte "ingresos por profe" del dueno) */
@@ -1194,6 +1205,170 @@ async function llamarClaudeOnboarding(env, system, mensajes, extraSystem){
     } catch (e) { /* sin IA disponible */ }
   }
   return null;
+}
+
+/* ============ Vendedor/recepcionista IA de WhatsApp (por academia) ============
+   Atiende por WhatsApp a los LEADS de una academia (distinto del soporte del producto,
+   que atiende a duenos/alumnos DENTRO de Batuta). Reusa llamarClaudeOnboarding (Claude
+   Haiku con prompt-cache + fallback Workers AI + saneo de estilo de marca). Compliance:
+   el prompt PROHIBE promesas de resultado/ingresos (regla permanente de la casa). */
+const WA_VENDEDOR_SYS =
+  "Eres el asistente de recepcion de una academia, atendiendo por WhatsApp a una persona interesada en tomar clases. " +
+  "Tu trabajo: dar la bienvenida, entender que quiere aprender, responder precios y horarios con los DATOS de abajo, y motivarla a agendar una clase de prueba. El profesor humano cierra; tu abres la puerta.\n" +
+  "ESTILO (estricto): espanol claro y calido, de tu, maximo 3 frases por mensaje, directo, sin relleno. Sin em dash. Sin signos de apertura invertidos (nada de ¿ ni ¡, solo los de cierre). Sin markdown, sin asteriscos, sin vinetas: es WhatsApp, texto plano. Un emoji ocasional esta bien, con mesura. Nunca suenes a robot.\n" +
+  "QUE HACES: saludas (por el nombre si lo tienes), preguntas que le gustaria aprender, respondes cursos/precios/horarios SOLO desde los DATOS, e invitas a agendar una clase de prueba o a dejar sus datos para que el profesor le escriba.\n" +
+  "REGLAS DURAS: NUNCA prometes resultados, progreso garantizado ni ingresos (nada de 'vas a aprender en X semanas' ni 'garantizado'). NUNCA inventas precios, horarios, promos ni cursos que no esten en los DATOS. NUNCA cierras un pago ni pides datos de tarjeta por el chat: para pagar, el profesor coordina. NUNCA hablas mal de nadie, tono positivo. Si es un reclamo, un problema serio o piden hablar con una persona: di que el profesor le escribe en breve, no improvises. Si algo no esta en los DATOS, dilo con honestidad y ofrece que el profesor lo confirme.\n" +
+  "CIERRE: siempre dejas una puerta abierta concreta (agendar prueba o 'el profesor te escribe hoy'). Nunca cierras en seco.";
+
+async function contextoVentaWA(env, tenant, cfg){
+  let lineas = "DATOS DE ESTA ACADEMIA:\n- Nombre: " + (tenant.academia || "la academia") + "\n";
+  const cursos = String((cfg && cfg.cursos) || "").split(",").map(s => s.trim()).filter(Boolean);
+  if (cursos.length) lineas += "- Cursos que ensena: " + cursos.join(", ") + "\n";
+  try {
+    const paq = await loadPaquetes(env, tenant.id);
+    const precios = await loadPrecios(env, tenant.id);
+    const items = (paq.list || []).map(nombre => {
+      const pk = paq.map[nombre] || {};
+      const monto = precios[nombre] != null ? precios[nombre] : null;
+      const detalle = pk.ilim ? "mensualidad" : (pk.clases + " clases");
+      return "  - " + nombre + " (" + detalle + ")" + (monto ? " por S/ " + monto : "");
+    });
+    if (items.length) lineas += "- Precios y paquetes:\n" + items.join("\n") + "\n";
+  } catch (e) {}
+  const waProfe = (cfg && cfg.whatsapp_profe) || tenant.whatsapp || "";
+  if (waProfe) lineas += "- WhatsApp del profesor (por si derivas): " + waProfe + "\n";
+  lineas += "Si algun dato viene vacio, no lo menciones: ofrece que el profesor lo confirme.";
+  return lineas;
+}
+
+/* Historial rolling de la conversacion WA por (tenant, telefono), ultimos ~8 turnos. */
+async function waHistorialCargar(env, tenantId, telefono){
+  try {
+    const row = await env.DB.prepare("SELECT historial FROM wa_conv WHERE tenant_id = ?1 AND telefono = ?2").bind(tenantId, telefono).first();
+    if (!row || !row.historial) return [];
+    const arr = JSON.parse(row.historial);
+    return Array.isArray(arr) ? arr.slice(-8) : [];
+  } catch (e) { return []; }
+}
+async function waHistorialGuardar(env, tenantId, telefono, mensajes){
+  try {
+    const recorte = JSON.stringify((mensajes || []).slice(-8));
+    await env.DB.prepare(
+      "INSERT INTO wa_conv (tenant_id, telefono, historial, actualizado) VALUES (?1,?2,?3,?4) " +
+      "ON CONFLICT(tenant_id, telefono) DO UPDATE SET historial = ?3, actualizado = ?4"
+    ).bind(tenantId, telefono, recorte, new Date().toISOString()).run();
+  } catch (e) {}
+}
+
+/* ============ Meta Ads (Marketing API) por tenant — AISLADO, gated por secrets ============
+   Cada academia conecta SU cuenta publicitaria via Facebook Login for Business (token System
+   User, no expira). Requiere los secrets META_APP_ID / META_APP_SECRET / META_LOGIN_CONFIG_ID
+   (los carga Andres al crear la app de Batuta en Meta). Sin ellos el modulo responde "no
+   configurado" y el panel lo oculta. Las campanas se crean SIEMPRE en PAUSED (la academia las
+   activa en Ads Manager: nunca se gasta plata sin su ok). Nada de esto toca la logica de cobros.
+   Compliance: el objetivo es leads a la web del tenant; el copy nunca promete resultados. */
+const META_GRAPH = "https://graph.facebook.com/v21.0";
+function metaConfigurado(env){ return !!(env.META_APP_ID && env.META_APP_SECRET && env.META_LOGIN_CONFIG_ID); }
+
+async function appsecretProof(token, appSecret){
+  const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(appSecret),
+    { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  const sig = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(token));
+  return [...new Uint8Array(sig)].map(b => b.toString(16).padStart(2, "0")).join("");
+}
+/* Llamada firmada al Graph API. GET manda params en la query; POST en el body (x-www-form). */
+async function metaFetch(env, token, path, opts){
+  opts = opts || {};
+  const method = opts.method || "GET";
+  const proof = await appsecretProof(token, env.META_APP_SECRET);
+  if (method === "GET"){
+    const qs = new URLSearchParams(Object.assign({ access_token: token, appsecret_proof: proof }, opts.params || {}));
+    const r = await fetch(META_GRAPH + path + (path.includes("?") ? "&" : "?") + qs.toString());
+    const data = await r.json().catch(() => null);
+    return { ok: r.ok, status: r.status, data, error: (data && data.error) || null };
+  }
+  const form = new URLSearchParams({ access_token: token, appsecret_proof: proof });
+  const p = opts.params || {};
+  for (const k of Object.keys(p)) form.set(k, typeof p[k] === "string" ? p[k] : JSON.stringify(p[k]));
+  const r = await fetch(META_GRAPH + path, { method, body: form });
+  const data = await r.json().catch(() => null);
+  return { ok: r.ok, status: r.status, data, error: (data && data.error) || null };
+}
+async function metaConexion(env, tenantId){
+  try { return await env.DB.prepare("SELECT * FROM meta_ads_conexion WHERE tenant_id = ?1").bind(tenantId).first(); }
+  catch (e) { return null; }
+}
+/* Canjea el `code` de Facebook Login for Business por un token de larga duracion / System User,
+   lista las cuentas publicitarias y paginas del usuario, y guarda la conexion del tenant. */
+async function metaConectarTenant(env, tenantId, code, redirectUri){
+  if (!metaConfigurado(env)) return { ok: false, error: "Meta Ads no esta configurado todavia." };
+  const tokRes = await fetch(META_GRAPH + "/oauth/access_token?" + new URLSearchParams({
+    client_id: env.META_APP_ID, client_secret: env.META_APP_SECRET,
+    redirect_uri: redirectUri || (MARCA.dominio + "/app/meta/callback"), code: code
+  }).toString());
+  const tokData = await tokRes.json().catch(() => null);
+  if (!tokRes.ok || !tokData || !tokData.access_token){
+    return { ok: false, error: (tokData && tokData.error && tokData.error.message) || "No se pudo canjear el codigo con Meta." };
+  }
+  const token = tokData.access_token;
+  const cuentasR = await metaFetch(env, token, "/me/adaccounts", { params: { fields: "account_id,id,name,account_status,currency,business" } });
+  const paginasR = await metaFetch(env, token, "/me/accounts", { params: { fields: "id,name" } });
+  const cuentas = (cuentasR.data && cuentasR.data.data) || [];
+  const paginas = (paginasR.data && paginasR.data.data) || [];
+  await env.DB.prepare(
+    "INSERT INTO meta_ads_conexion (tenant_id, token, cuentas_json, paginas_json, actualizado) VALUES (?1,?2,?3,?4,?5) " +
+    "ON CONFLICT(tenant_id) DO UPDATE SET token = ?2, cuentas_json = ?3, paginas_json = ?4, actualizado = ?5"
+  ).bind(tenantId, token, JSON.stringify(cuentas), JSON.stringify(paginas), new Date().toISOString()).run();
+  return { ok: true, cuentas, paginas };
+}
+/* Crea una campana de LEADS a la web del tenant: campaign -> adset -> creative -> ad, TODO en
+   PAUSED. Devuelve los ids y el link a Ads Manager para que la academia revise y active.
+   OJO (verificar la 1a vez contra la cuenta real de Andres via Graph API Explorer, segun el
+   research): los nombres de campo de /adsets y /adcreatives son los documentados y estables,
+   pero conviene una corrida de validacion antes de confiarla a un cliente. */
+async function metaCrearCampana(env, conx, opts){
+  const token = conx.token, act = conx.act_id;
+  if (!token || !act) return { ok: false, error: "Falta conectar y elegir una cuenta publicitaria." };
+  const nombre = String(opts.nombre || "Campana de leads").slice(0, 80);
+  const budget = Math.max(100, Math.round((Number(opts.presupuesto_dia) || 20) * 100)); // centavos de la moneda
+  // 1) campana
+  const camp = await metaFetch(env, token, "/act_" + act + "/campaigns", { method: "POST", params: {
+    name: nombre, objective: "OUTCOME_LEADS", special_ad_categories: [], status: "PAUSED" } });
+  if (!camp.ok || !camp.data || !camp.data.id) return { ok: false, error: metaMsg(camp), paso: "campana" };
+  const campaignId = camp.data.id;
+  // 2) ad set (conversiones web optimizadas por LEAD, si hay pixel; si no, por alcance a landing)
+  const promoted = conx.pixel_id ? { pixel_id: conx.pixel_id, custom_event_type: "LEAD" } : null;
+  const adsetParams = {
+    name: nombre + " - conjunto", campaign_id: campaignId, billing_event: "IMPRESSIONS",
+    daily_budget: String(budget), bid_strategy: "LOWEST_COST_WITHOUT_CAP", status: "PAUSED",
+    destination_type: "WEBSITE",
+    optimization_goal: promoted ? "OFFSITE_CONVERSIONS" : "LINK_CLICKS",
+    targeting: { geo_locations: { countries: [String(opts.pais || "PE")] }, age_min: 18, age_max: 65 }
+  };
+  if (promoted) adsetParams.promoted_object = promoted;
+  const adset = await metaFetch(env, token, "/act_" + act + "/adsets", { method: "POST", params: adsetParams });
+  if (!adset.ok || !adset.data || !adset.data.id) return { ok: false, error: metaMsg(adset), paso: "adset", campaignId };
+  // 3) creativo (dark post via object_story_spec). Requiere la app en Live (error 1885183 si no).
+  const link = String(opts.landing || (MARCA.dominio)).slice(0, 300);
+  const creativeParams = { name: nombre + " - creativo", object_story_spec: {
+    page_id: conx.page_id,
+    link_data: { link: link, message: String(opts.copy || "").slice(0, 600), name: String(opts.titular || "").slice(0, 120),
+      call_to_action: { type: "SIGN_UP", value: { link: link } } } } };
+  const creative = await metaFetch(env, token, "/act_" + act + "/adcreatives", { method: "POST", params: creativeParams });
+  if (!creative.ok || !creative.data || !creative.data.id) return { ok: false, error: metaMsg(creative), paso: "creativo", campaignId };
+  // 4) ad
+  const ad = await metaFetch(env, token, "/act_" + act + "/ads", { method: "POST", params: {
+    name: nombre + " - anuncio", adset_id: adset.data.id, creative: { creative_id: creative.data.id }, status: "PAUSED" } });
+  if (!ad.ok || !ad.data || !ad.data.id) return { ok: false, error: metaMsg(ad), paso: "ad", campaignId };
+  return { ok: true, campaignId, adsetId: adset.data.id, creativeId: creative.data.id, adId: ad.data.id,
+    adsManager: "https://www.facebook.com/adsmanager/manage/campaigns?act=" + act + "&selected_campaign_ids=" + campaignId };
+}
+function metaMsg(res){
+  const e = res && res.error;
+  if (!e) return "Error de Meta (" + (res && res.status) + ")";
+  let m = e.error_user_msg || e.message || "Error de Meta";
+  if (e.error_subcode === 1885183) m = "Tu app de Meta esta en modo desarrollo: pasala a Live para crear anuncios.";
+  return m;
 }
 /* Soporte con IA (14-jul-2026): el asistente dejo de ser solo onboarding y ahora es el
    canal de soporte del producto. La cuota paso de VITALICIA a MENSUAL: la clave de
@@ -1867,11 +2042,61 @@ function limaToUtc(y, m, d, hhmm){
 }
 function hhmm(p){ return String(p.h).padStart(2, "0") + ":" + String(p.min).padStart(2, "0"); }
 
-async function reservasUsadasCount(env, tenantId, alumnoId, ciclo){
-  const r = await env.DB.prepare(
-    "SELECT COUNT(*) AS n FROM reservas WHERE tenant_id = ?1 AND alumno_id = ?2 AND COALESCE(ciclo,1) = ?3 AND estado IN ('reservada','completada','falta')"
-  ).bind(tenantId, alumnoId, ciclo).first();
-  return (r && Number(r.n)) || 0;
+function fechaLimaDe(iso){
+  const t = Date.parse(iso);
+  if (!Number.isFinite(t)) return "";
+  const p = limaParts(new Date(t));
+  return p.y + "-" + String(p.m + 1).padStart(2, "0") + "-" + String(p.d).padStart(2, "0");
+}
+function diaVecino(f, delta){
+  const t = Date.parse(String(f) + "T12:00:00Z");
+  return Number.isFinite(t) ? new Date(t + delta * 86400000).toISOString().slice(0, 10) : "";
+}
+/* Regla de oro (portada de Kanta, 21-jul-2026): pasado = registro (bitacora), futuro = reservas.
+   Una reserva FUTURA aparta credito; una PASADA se empareja 1-a-1 con una fila de registro del
+   ciclo, para NO contar dos veces cuando el profe marca la clase en la Agenda Y ademas la anota
+   en Registrar clase. Emparejamiento tolerante +/-1 dia (el registro historico se anoto en fecha
+   UTC, las clases nocturnas quedaron corridas un dia). Las filas 'Reprogramo' no emparejan: su
+   costo lo cobra compute() via la cuota/exceso, no como clase dictada.
+   excluirId: la reserva que se esta moviendo en un reprogramar (no debe exigir credito extra). */
+async function reservasUsadasCount(env, tenantId, alumnoId, ciclo, excluirId){
+  const excl = String(excluirId || "");
+  const ahora = Date.now();
+  const { results: resv } = await env.DB.prepare(
+    "SELECT id, inicio_utc FROM reservas WHERE tenant_id = ?1 AND alumno_id = ?2 AND COALESCE(ciclo,1) = ?3 " +
+    "AND estado IN ('reservada','completada','falta') ORDER BY inicio_utc ASC"
+  ).bind(tenantId, alumnoId, ciclo).all();
+  if (!resv || !resv.length) return 0;
+  const { results: regs } = await env.DB.prepare(
+    "SELECT fecha FROM registro WHERE tenant_id = ?1 AND alumno_id = ?2 AND COALESCE(ciclo,1) = ?3 AND estado != 'Reprogramó'"
+  ).bind(tenantId, alumnoId, ciclo).all();
+  const porFecha = new Map();
+  for (const g of (regs || [])){
+    const f = String(g.fecha || "").slice(0, 10);
+    if (f) porFecha.set(f, (porFecha.get(f) || 0) + 1);
+  }
+  let n = 0;
+  const pasadas = [];
+  for (const r of resv){
+    if (r.id === excl) continue;
+    if (Date.parse(r.inicio_utc) >= ahora){ n++; continue; }   // futura: aparta credito
+    pasadas.push(fechaLimaDe(r.inicio_utc));
+  }
+  const sinPar = [];
+  for (const f of pasadas){
+    const libres = porFecha.get(f) || 0;
+    if (libres > 0) porFecha.set(f, libres - 1);
+    else sinPar.push(f);
+  }
+  for (const f of sinPar){
+    let emparejada = false;
+    for (const vf of [diaVecino(f, 1), diaVecino(f, -1)]){
+      const libres = porFecha.get(vf) || 0;
+      if (libres > 0){ porFecha.set(vf, libres - 1); emparejada = true; break; }
+    }
+    if (!emparejada) n++;                                       // dictada y sin anotar: igual consume
+  }
+  return n;
 }
 
 const DIAS_FIJO = ["Domingo","Lunes","Martes","Miercoles","Jueves","Viernes","Sabado"];
@@ -2619,6 +2844,11 @@ async function ensureErpSchema(env){
     try { await env.DB.prepare("ALTER TABLE profesores ADD COLUMN " + col).run(); } catch (e) {}
   }
   try { await env.DB.prepare("ALTER TABLE disponibilidad ADD COLUMN cupo INTEGER DEFAULT 0").run(); } catch (e) {}
+  /* Auditoria de cancelaciones: cuando y quien cancelo una reserva (para que un bug de saldo
+     no vuelva a ser invisible; leccion MVT 21-jul). ALTER perezoso idempotente. */
+  for (const col of ["cancelada_utc TEXT DEFAULT ''", "cancelada_por TEXT DEFAULT ''"]){
+    try { await env.DB.prepare("ALTER TABLE reservas ADD COLUMN " + col).run(); } catch (e) {}
+  }
   try {
     await env.DB.prepare(
       "CREATE TABLE IF NOT EXISTS gastos (id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, fecha TEXT DEFAULT '', concepto TEXT NOT NULL, categoria TEXT DEFAULT '', monto REAL DEFAULT 0, creado TEXT DEFAULT '')"
@@ -2635,8 +2865,52 @@ async function ensureErpSchema(env){
   } catch (e) {}
   try { await env.DB.prepare("ALTER TABLE comprobantes ADD COLUMN estado TEXT DEFAULT 'emitida'").run(); } catch (e) {}
   try { await env.DB.prepare("CREATE UNIQUE INDEX IF NOT EXISTS idx_comprobantes_serie ON comprobantes (tenant_id, serie, numero)").run(); } catch (e) {}
+  /* Historial de la conversacion del vendedor IA de WhatsApp (por tenant + telefono del lead). */
+  try {
+    await env.DB.prepare(
+      "CREATE TABLE IF NOT EXISTS wa_conv (tenant_id TEXT NOT NULL, telefono TEXT NOT NULL, historial TEXT DEFAULT '', actualizado TEXT DEFAULT '', PRIMARY KEY (tenant_id, telefono))"
+    ).run();
+  } catch (e) {}
+  /* Conexion de Meta Ads por tenant (cada academia conecta SU cuenta publicitaria via Facebook
+     Login for Business; el token System User no expira). AISLADO: nada de esto toca cobros. */
+  try {
+    await env.DB.prepare(
+      "CREATE TABLE IF NOT EXISTS meta_ads_conexion (tenant_id TEXT PRIMARY KEY, business_id TEXT DEFAULT '', act_id TEXT DEFAULT '', act_nombre TEXT DEFAULT '', moneda TEXT DEFAULT '', page_id TEXT DEFAULT '', page_nombre TEXT DEFAULT '', pixel_id TEXT DEFAULT '', token TEXT DEFAULT '', cuentas_json TEXT DEFAULT '', paginas_json TEXT DEFAULT '', actualizado TEXT DEFAULT '')"
+    ).run();
+  } catch (e) {}
 }
 const ETAPAS_LEAD = ["nuevo", "contactado", "prueba", "alumno", "perdido"];
+
+/* ---------- Multisede (23-jul-2026) ----------
+   sedes = locales fisicos de una academia. La sede es un ATRIBUTO de profesor/alumno/grupo
+   (un profesor pertenece a UNA sede), asi la agenda no cambia: la sede de una clase se
+   deriva de su profesor. sede_id '' = sin sede (academia de un solo local); compatible
+   hacia atras por construccion. ALTER perezoso idempotente, patron ensureErpSchema. */
+async function ensureSedesSchema(env){
+  try {
+    await env.DB.prepare(
+      "CREATE TABLE IF NOT EXISTS sedes (id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, nombre TEXT NOT NULL, direccion TEXT DEFAULT '', creado TEXT DEFAULT '')"
+    ).run();
+  } catch (e) {}
+  try { await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_sedes_tenant ON sedes (tenant_id)").run(); } catch (e) {}
+  for (const tabla of ["profesores", "alumnos", "grupos"]){
+    try { await env.DB.prepare("ALTER TABLE " + tabla + " ADD COLUMN sede_id TEXT DEFAULT ''").run(); } catch (e) { /* ya existe */ }
+  }
+}
+async function sedesDeTenant(env, tid){
+  try {
+    return (await env.DB.prepare("SELECT id, nombre, direccion FROM sedes WHERE tenant_id = ?1 ORDER BY creado, rowid").bind(tid).all()).results || [];
+  } catch (e) { return []; }
+}
+/* '' si viene vacia o no es una sede de ESTE tenant (nunca 400: sede invalida = sin sede) */
+async function sedeValidada(env, tid, sedeId){
+  const s = String(sedeId || "").trim();
+  if (!s) return "";
+  try {
+    const row = await env.DB.prepare("SELECT id FROM sedes WHERE id = ?1 AND tenant_id = ?2").bind(s, tid).first();
+    return row ? s : "";
+  } catch (e) { return ""; }
+}
 
 /* ---------- Facturacion electronica SUNAT (Nubefact, 10-jul-2026) ----------
    El tenant conecta SU cuenta de Nubefact en Ajustes (ruta + token; nubefact.com,
@@ -2881,6 +3155,7 @@ async function resetDemo(env){
   await ensureFeedbackSchema(env); // la lista de tablas de abajo la incluye; que exista antes del batch
   await ensureErpSchema(env);      // idem: gastos
   await ensureMultiprofesorSchema(env); // idem: profesores + la columna profesor_id que usa el equipo
+  await ensureSedesSchema(env);         // idem: sedes + la columna sede_id (multisede)
   let t = await env.DB.prepare("SELECT * FROM tenants WHERE email = ?1").bind(DEMO_EMAIL).first();
   if (!t){
     const id = crypto.randomUUID();
@@ -2899,7 +3174,7 @@ async function resetDemo(env){
   ).bind(tid, new Date(Date.now() + 3650 * 86400000).toISOString()).run();
 
   // Borrón total de los datos del tenant demo (las sesiones de visitantes mueren con el reset).
-  const tablas = ["alumnos", "registro", "pausas", "precios", "config", "disponibilidad", "reservas", "grupos", "cuentas", "compras", "recursos", "ejercicios", "chat_mensajes", "push_subs", "leads", "feedback", "gastos", "comprobantes"];
+  const tablas = ["alumnos", "registro", "pausas", "precios", "config", "disponibilidad", "reservas", "grupos", "sedes", "cuentas", "compras", "recursos", "ejercicios", "chat_mensajes", "push_subs", "leads", "feedback", "gastos", "comprobantes"];
   await env.DB.batch(tablas.map(tb => env.DB.prepare("DELETE FROM " + tb + " WHERE tenant_id = ?1").bind(tid)));
   await env.DB.prepare("DELETE FROM sesiones WHERE cuenta_id = ?1 OR cuenta_id LIKE 'demo-cu-%'").bind("T:" + tid).run();
 
@@ -2928,18 +3203,22 @@ async function resetDemo(env){
      así la liquidación luce los dos modelos de pago. La contraseña es basura aleatoria
      a propósito (quedan activos para la vista, pero nadie entra con su correo). */
   const PF_PIANO = "demo-pf-1", PF_GUITARRA = "demo-pf-2";
+  /* Las 2 sedes de la demo (multisede): la dueña y Renzo en Miraflores, Camila en San Borja.
+     Una academia con locales viene a ver exactamente esto. */
+  const SD_MIRA = "demo-sd-1", SD_BORJA = "demo-sd-2";
   const equipoDemo = [
-    [PF_PIANO,    "Renzo Aguilar", "renzo@estudiosonata.pe",  "51977112233", 50, 0],
-    [PF_GUITARRA, "Camila Ruiz",   "camila@estudiosonata.pe", "51988223344", 0, 25]
+    [PF_PIANO,    "Renzo Aguilar", "renzo@estudiosonata.pe",  "51977112233", 50, 0,  SD_MIRA],
+    [PF_GUITARRA, "Camila Ruiz",   "camila@estudiosonata.pe", "51988223344", 0, 25, SD_BORJA]
   ];
   for (const p of equipoDemo){
     const saltP = randHex(16);
     const hashP = await hashPass(randHex(24), saltP);
     await env.DB.prepare(
-      "INSERT INTO profesores (id, tenant_id, nombre, email, whatsapp, pass_hash, pass_salt, rol, estado, creado, comision_pct, tarifa_clase) " +
-      "VALUES (?1,?2,?3,?4,?5,?6,?7,'profesor','activo',?8,?9,?10)"
-    ).bind(p[0], tid, p[1], p[2], p[3], hashP, saltP, new Date().toISOString(), p[4], p[5]).run();
+      "INSERT INTO profesores (id, tenant_id, nombre, email, whatsapp, pass_hash, pass_salt, rol, estado, creado, comision_pct, tarifa_clase, sede_id) " +
+      "VALUES (?1,?2,?3,?4,?5,?6,?7,'profesor','activo',?8,?9,?10,?11)"
+    ).bind(p[0], tid, p[1], p[2], p[3], hashP, saltP, new Date().toISOString(), p[4], p[5], p[6]).run();
   }
+  await env.DB.prepare("UPDATE profesores SET sede_id = ?1 WHERE id = ?2 AND tenant_id = ?3").bind(SD_MIRA, DUENO, tid).run();
 
   // Fechas relativas (Lima = UTC-5) para que la demo siempre se vea viva.
   const DIA = 86400000, LIMA = 5 * 3600000;
@@ -2951,6 +3230,9 @@ async function resetDemo(env){
   const ahoraIso = new Date().toISOString();
 
   const stmts = [];
+  // sedes (multisede): con dirección, para que panel y portal luzcan el dato
+  stmts.push(env.DB.prepare("INSERT INTO sedes (id,tenant_id,nombre,direccion,creado) VALUES (?1,?2,'Sede Miraflores','Av. Larco 345, Miraflores',?3)").bind(SD_MIRA, tid, ahoraIso));
+  stmts.push(env.DB.prepare("INSERT INTO sedes (id,tenant_id,nombre,direccion,creado) VALUES (?1,?2,'Sede San Borja','Av. San Luis 2201, San Borja',?3)").bind(SD_BORJA, tid, ahoraIso));
   // precios + config
   for (const k of Object.keys(PRECIOS_DEFAULT)){
     stmts.push(env.DB.prepare("INSERT INTO precios (tenant_id, paquete, precio) VALUES (?1,?2,?3)").bind(tid, k, PRECIOS_DEFAULT[k]));
@@ -2963,16 +3245,16 @@ async function resetDemo(env){
   // entre la dueña y sus 2 profes: sin profesor_id la tabla Profesores decía "0 alumnos"
   // para todos, que es lo primero que mira una academia.
   const alumnos = [
-    ["demo-al-1", "A001", "Fabio Mendoza",  "51987654321", "Canto",    "Paquete 8",  f(30),  "Pagado",    "Jue 18:00", "Le cuesta el pasaje; trabajar twang", 3, DUENO],
-    ["demo-al-2", "A002", "Natalia Rojas",  "51912345678", "Piano",    "Paquete 4",  f(90),  "Pagado",    "Lun 19:00", "Independencia de manos en progreso", 5, PF_PIANO],
-    ["demo-al-3", "A003", "Yaritza Campos", "51998877665", "Canto",    "Paquete 12", f(45),  "Pagado",    "Sáb 10:00", "Belting seguro, va muy bien", 2, DUENO],
-    ["demo-al-4", "A004", "Diego Salas",    "51955443322", "Guitarra", "Paquete 8",  f(50),  "Pagado",    "Mar 17:00", "Cambios de acorde lentos aún", 1, PF_GUITARRA],
-    ["demo-al-5", "A005", "Laura Pacheco",  "51966554433", "Piano",    "Paquete 4",  f(120), "Pendiente", "Mié 18:00", "Hablar renovación esta semana", 4, PF_PIANO]
+    ["demo-al-1", "A001", "Fabio Mendoza",  "51987654321", "Canto",    "Paquete 8",  f(30),  "Pagado",    "Jue 18:00", "Le cuesta el pasaje; trabajar twang", 3, DUENO, SD_MIRA],
+    ["demo-al-2", "A002", "Natalia Rojas",  "51912345678", "Piano",    "Paquete 4",  f(90),  "Pagado",    "Lun 19:00", "Independencia de manos en progreso", 5, PF_PIANO, SD_MIRA],
+    ["demo-al-3", "A003", "Yaritza Campos", "51998877665", "Canto",    "Paquete 12", f(45),  "Pagado",    "Sáb 10:00", "Belting seguro, va muy bien", 2, DUENO, SD_MIRA],
+    ["demo-al-4", "A004", "Diego Salas",    "51955443322", "Guitarra", "Paquete 8",  f(50),  "Pagado",    "Mar 17:00", "Cambios de acorde lentos aún", 1, PF_GUITARRA, SD_BORJA],
+    ["demo-al-5", "A005", "Laura Pacheco",  "51966554433", "Piano",    "Paquete 4",  f(120), "Pendiente", "Mié 18:00", "Hablar renovación esta semana", 4, PF_PIANO, SD_MIRA]
   ];
   for (const a of alumnos){
     stmts.push(env.DB.prepare(
-      "INSERT INTO alumnos (id,tenant_id,codigo,nombre,whatsapp,curso,paquete,fecha,pago,horario,notas,ciclo,profesor_id) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13)"
-    ).bind(a[0], tid, a[1], a[2], a[3], a[4], a[5], a[6], a[7], a[8], a[9], a[10], a[11]));
+      "INSERT INTO alumnos (id,tenant_id,codigo,nombre,whatsapp,curso,paquete,fecha,pago,horario,notas,ciclo,profesor_id,sede_id) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14)"
+    ).bind(a[0], tid, a[1], a[2], a[3], a[4], a[5], a[6], a[7], a[8], a[9], a[10], a[11], a[12]));
   }
   // registro de clases: el saldo del panel sale de aquí (compute() cuenta por ciclo)
   const regs = [
@@ -3065,13 +3347,13 @@ async function resetDemo(env){
   }
   // grupos: la pestaña salía vacía aunque es de las cosas que una academia viene a ver
   const gruposDemo = [
-    ["demo-gr-1", "Coro juvenil",    "Canto", "Sáb 11:00", ["demo-al-1", "demo-al-3"], DUENO],
-    ["demo-gr-2", "Piano · nivel 1", "Piano", "Mié 18:00", ["demo-al-2", "demo-al-5"], PF_PIANO]
+    ["demo-gr-1", "Coro juvenil",    "Canto", "Sáb 11:00", ["demo-al-1", "demo-al-3"], DUENO,    SD_MIRA],
+    ["demo-gr-2", "Piano · nivel 1", "Piano", "Mié 18:00", ["demo-al-2", "demo-al-5"], PF_PIANO, SD_MIRA]
   ];
   for (const g of gruposDemo){
     stmts.push(env.DB.prepare(
-      "INSERT INTO grupos (id,tenant_id,nombre,curso,horario,miembros,creado,profesor_id) VALUES (?1,?2,?3,?4,?5,?6,?7,?8)"
-    ).bind(g[0], tid, g[1], g[2], g[3], JSON.stringify(g[4]), f(0), g[5]));
+      "INSERT INTO grupos (id,tenant_id,nombre,curso,horario,miembros,creado,profesor_id,sede_id) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9)"
+    ).bind(g[0], tid, g[1], g[2], g[3], JSON.stringify(g[4]), f(0), g[5], g[6]));
   }
   // CRM: pipeline con etapas variadas para que la demo luzca el embudo completo
   // (nombre, email, whatsapp, interes, fecha, etapa, nota, seguir_el)
@@ -5001,6 +5283,8 @@ export default {
             if (!tW || tW.estado === "vencido") return;
             const cfgW = await loadConfig(env, tW.id);
             if (String(cfgW.wa_enabled || "") !== "on") return; // apagado por defecto
+            // freno de abuso: maximo ~12 respuestas IA por lead por hora (misma ventana horaria)
+            if (await chatbotPasoTope(env, "wa:" + tW.id + ":" + from, 12)) return;
             await ensureErpSchema(env);
             // crea/actualiza el lead (una fila por telefono), etapa contactado, seguir hoy
             const yaLead = await env.DB.prepare("SELECT id FROM leads WHERE tenant_id = ?1 AND whatsapp = ?2").bind(tW.id, from).first().catch(() => null);
@@ -5011,10 +5295,22 @@ export default {
               await env.DB.prepare("INSERT INTO leads (id,tenant_id,email,marca,fuente,interes,fecha,nombre,whatsapp,etapa,nota,seguir_el,actualizado) VALUES (?1,?2,'','Batuta','whatsapp','',?3,?4,?5,'contactado',?6,?3,?3)")
                 .bind(crypto.randomUUID(), tW.id, hoyLima(), String(nombre).slice(0, 80), from, ("Escribió por WhatsApp: " + texto).slice(0, 500)).run();
             }
-            // auto-respuesta calida de primer toque (solo la primera vez del dia)
-            const saludo = (nombre ? nombre.split(" ")[0] : "Hola") + ", gracias por escribir a " + (tW.academia || "nuestra academia") + " 🙌";
-            const cuerpo = saludo + "\n\nSoy el asistente de " + (tW.academia || "la academia") + ". Cuéntame qué te gustaría aprender y con gusto te paso los horarios y precios. Un profesor te responde en breve.";
-            await enviarWhatsApp(env, phoneId, from, cuerpo);
+            /* Respuesta CONVERSACIONAL con IA: contexto de venta del tenant + historial rolling.
+               Reusa llamarClaudeOnboarding (Claude Haiku + fallback Workers AI + saneo de estilo). */
+            const tCtx = { id: tW.id, academia: tW.academia, slug: tW.slug, whatsapp: cfgW.whatsapp_profe || "" };
+            const datos = await contextoVentaWA(env, tCtx, cfgW);
+            const previo = await waHistorialCargar(env, tW.id, from);
+            const sysConNombre = WA_VENDEDOR_SYS + (nombre ? "\nLa persona se llama " + String(nombre).split(" ")[0] + "." : "");
+            const conversacion = previo.concat([{ role: "user", content: texto }]);
+            let reply = await llamarClaudeOnboarding(env, sysConNombre, conversacion, datos);
+            if (!reply){
+              // sin IA disponible: primer-toque calido de respaldo (no deja al lead sin respuesta)
+              reply = (nombre ? nombre.split(" ")[0] : "Hola") + ", gracias por escribir a " + (tW.academia || "la academia") + ". Cuentame que te gustaria aprender y un profesor te responde en breve.";
+            }
+            const enviado = await enviarWhatsApp(env, phoneId, from, reply);
+            if (enviado){
+              await waHistorialGuardar(env, tW.id, from, conversacion.concat([{ role: "assistant", content: reply }]));
+            }
           } catch (e) { console.error("wa webhook", e); }
         })());
         return new Response("ok", { status: 200 });
@@ -5689,14 +5985,27 @@ export default {
         ).bind(tid, cu.id).all()).results || [];
 
         // Multi-profesor: el alumno ve con que profesor va ("Tu profesor: Ana").
-        let miProfe = null;
+        let miProfe = null, miSede = null;
         if (alumno){
           const pAl = await profeDeAlumno(env, tid, alumno);
           if (pAl && pAl.nombre) miProfe = { nombre: pAl.nombre, foto: pAl.foto || "" };
+          /* multisede: la sede del alumno, o la de su profesor como fallback */
+          try {
+            let sidAl = String(alumno.sede_id || "");
+            if (!sidAl && alumno.profesor_id){
+              const pS = await env.DB.prepare("SELECT COALESCE(sede_id,'') AS sede_id FROM profesores WHERE id = ?1 AND tenant_id = ?2").bind(alumno.profesor_id, tid).first();
+              sidAl = (pS && pS.sede_id) || "";
+            }
+            if (sidAl){
+              const sRow = await env.DB.prepare("SELECT nombre, direccion FROM sedes WHERE id = ?1 AND tenant_id = ?2").bind(sidAl, tid).first();
+              if (sRow) miSede = { nombre: sRow.nombre, direccion: sRow.direccion || "" };
+            }
+          } catch (e) {}
         }
         return json({
           cuenta: { nombre: cu.nombre, email: cu.email, whatsapp: cu.whatsapp || "" },
           profesor: miProfe,
+          sede: miSede,
           estado: estadoAlumno(computed, alumno && alumno.vence),
           alumno: (alumno && computed) ? {
             curso: alumno.curso || "", paquete: alumno.paquete || "",
@@ -5848,7 +6157,7 @@ export default {
           try {
             const pr = await fetch("https://api.mercadopago.com/checkout/preferences", {
               method: "POST",
-              headers: { Authorization: "Bearer " + tk, "content-type": "application/json" },
+              headers: { Authorization: "Bearer " + tk, "content-type": "application/json", "X-Integrator-Id": MP_INTEGRATOR_ID },
               body: JSON.stringify(Object.assign({
                 items: [{ title: paquete + " · " + (t.academia || "clases"), quantity: 1, unit_price: monto, currency_id: "PEN" }],
                 external_reference: "btc:" + compraId,
@@ -6130,7 +6439,7 @@ export default {
         try {
           const pr = await fetch("https://api.mercadopago.com/checkout/preferences", {
             method: "POST",
-            headers: { Authorization: "Bearer " + tk, "content-type": "application/json" },
+            headers: { Authorization: "Bearer " + tk, "content-type": "application/json", "X-Integrator-Id": MP_INTEGRATOR_ID },
             body: JSON.stringify(Object.assign({
               items: [{ title: paquete + " · " + (t.academia || "clases"), quantity: 1, unit_price: monto, currency_id: "PEN" }],
               external_reference: "btc:" + compraId,
@@ -6174,7 +6483,7 @@ export default {
 
           // La verdad del pago se consulta a MP con el token del profe (no confiamos en el body)
           const pr = await fetch("https://api.mercadopago.com/v1/payments/" + encodeURIComponent(paymentId), {
-            headers: { Authorization: "Bearer " + tk }
+            headers: { Authorization: "Bearer " + tk, "X-Integrator-Id": MP_INTEGRATOR_ID }
           });
           const pago = await pr.json().catch(() => null);
           if (!pr.ok || !pago || pago.status !== "approved") return json({ ok: true });
@@ -6906,7 +7215,8 @@ export default {
         if (horas < rcfgB.minH){
           return json({ error: "Ya no se puede reprogramar: falta menos de " + rcfgB.minH + " horas para tu clase." }, 400);
         }
-        await env.DB.prepare("UPDATE reservas SET estado = 'cancelada' WHERE id = ?1 AND tenant_id = ?2").bind(r.id, tid).run();
+        await env.DB.prepare("UPDATE reservas SET estado = 'cancelada', cancelada_utc = ?1, cancelada_por = ?2 WHERE id = ?3 AND tenant_id = ?4")
+          .bind(new Date().toISOString(), "alumno:" + cu.alumno_id, r.id, tid).run();
         return json({ ok: true, mensaje: "Listo, libere tu horario. Elige tu nuevo horario abajo." });
       }
 
@@ -7029,12 +7339,13 @@ export default {
           await ensureErpSchema(env);
           const { results: profs } = await env.DB.prepare(
             "SELECT p.id, p.nombre, p.email, p.whatsapp, p.rol, p.estado, p.invite_token, p.creado, " +
-            "COALESCE(p.comision_pct,0) AS comision_pct, COALESCE(p.tarifa_clase,0) AS tarifa_clase, " +
+            "COALESCE(p.comision_pct,0) AS comision_pct, COALESCE(p.tarifa_clase,0) AS tarifa_clase, COALESCE(p.sede_id,'') AS sede_id, " +
             "(SELECT COUNT(*) FROM alumnos a WHERE a.tenant_id = p.tenant_id AND a.profesor_id = p.id) AS n_alumnos " +
             "FROM profesores p WHERE p.tenant_id = ?1 ORDER BY CASE p.rol WHEN 'dueno' THEN 0 ELSE 1 END, p.nombre"
           ).bind(tid).all();
           const lista = (profs || []).map(p => ({
             id: p.id, nombre: p.nombre, email: p.email, whatsapp: p.whatsapp || "", rol: p.rol, estado: p.estado,
+            sede_id: p.sede_id || "",
             n_alumnos: Number(p.n_alumnos) || 0,
             comision_pct: Number(p.comision_pct) || 0, tarifa_clase: Number(p.tarifa_clase) || 0,
             invite_link: (p.estado === "invitado" && p.invite_token) ? (MARCA.dominio + "/app/p/activar?token=" + p.invite_token) : ""
@@ -7064,9 +7375,11 @@ export default {
             if (ya) return json({ error: "Ya hay un profesor con ese correo en tu academia." }, 409);
             const inviteToken = randHex(24);
             const pidNuevo = crypto.randomUUID();
+            await ensureSedesSchema(env);
+            const sedeP = await sedeValidada(env, tid, b.sede_id);
             await env.DB.prepare(
-              "INSERT INTO profesores (id, tenant_id, nombre, email, whatsapp, pass_hash, pass_salt, rol, estado, invite_token, creado) VALUES (?1,?2,?3,?4,?5,'','','profesor','invitado',?6,?7)"
-            ).bind(pidNuevo, tid, nombreP, emailP, String(b.whatsapp || "").trim().slice(0, 20), inviteToken, new Date().toISOString()).run();
+              "INSERT INTO profesores (id, tenant_id, nombre, email, whatsapp, pass_hash, pass_salt, rol, estado, invite_token, creado, sede_id) VALUES (?1,?2,?3,?4,?5,'','','profesor','invitado',?6,?7,?8)"
+            ).bind(pidNuevo, tid, nombreP, emailP, String(b.whatsapp || "").trim().slice(0, 20), inviteToken, new Date().toISOString(), sedeP).run();
             const link = MARCA.dominio + "/app/p/activar?token=" + inviteToken;
             let correoEnviado = false;
             try {
@@ -7096,6 +7409,16 @@ export default {
             await env.DB.prepare("UPDATE profesores SET comision_pct = ?1, tarifa_clase = ?2 WHERE id = ?3 AND tenant_id = ?4")
               .bind(pct, tarifa, pidC, tid).run();
             return json({ ok: true, comision_pct: pct, tarifa_clase: tarifa });
+          }
+
+          /* sede: asignar local a CUALQUIER profe, incluido el dueno (multisede) */
+          if (accion === "sede"){
+            const pidS = String(b.id || "");
+            const pRowS = await env.DB.prepare("SELECT id FROM profesores WHERE id = ?1 AND tenant_id = ?2").bind(pidS, tid).first();
+            if (!pRowS) return json({ error: "Profesor no encontrado" }, 404);
+            const sedeS = await sedeValidada(env, tid, b.sede_id);
+            await env.DB.prepare("UPDATE profesores SET sede_id = ?1 WHERE id = ?2 AND tenant_id = ?3").bind(sedeS, pidS, tid).run();
+            return json({ ok: true, sede_id: sedeS });
           }
 
           const pid = String(b.id || "");
@@ -7495,11 +7818,34 @@ export default {
           const nuevo = String(b.estado || "");
           if (!["completada", "falta", "cancelada"].includes(nuevo)) return json({ error: "Estado invalido" }, 400);
           /* un profesor solo marca clases de SU agenda */
-          const r = await env.DB.prepare(
-            "UPDATE reservas SET estado = ?1 WHERE id = ?2 AND tenant_id = ?3 AND (?4 = 1 OR profesor_id = ?5)"
-          ).bind(nuevo, id, tid, esDueno ? 1 : 0, profeActorId || "").run();
-          const cambiadas = (r && r.meta && (r.meta.changes ?? r.meta.rows_written)) || 0;
-          if (!cambiadas) return json({ error: "Esa clase no esta en tu agenda." }, 404);
+          const rv = await env.DB.prepare(
+            "SELECT * FROM reservas WHERE id = ?1 AND tenant_id = ?2 AND (?3 = 1 OR profesor_id = ?4)"
+          ).bind(id, tid, esDueno ? 1 : 0, profeActorId || "").first();
+          if (!rv) return json({ error: "Esa clase no esta en tu agenda." }, 404);
+          const stmts = [];
+          if (nuevo === "cancelada"){
+            stmts.push(env.DB.prepare("UPDATE reservas SET estado = 'cancelada', cancelada_utc = ?1, cancelada_por = ?2 WHERE id = ?3 AND tenant_id = ?4")
+              .bind(new Date().toISOString(), (esDueno ? "dueno" : "profesor") + ":" + (profeActorId || ""), id, tid));
+          } else {
+            stmts.push(env.DB.prepare("UPDATE reservas SET estado = ?1 WHERE id = ?2 AND tenant_id = ?3").bind(nuevo, id, tid));
+          }
+          /* Escribir la bitacora de la clase dictada para que el PANEL del profe (que calcula el
+             saldo solo con registro) coincida con el PORTAL del alumno. Es seguro tras el dedupe
+             de reservasUsadasCount: una reserva con fila de registro del dia ya no cuenta doble.
+             Idempotente: no inserta si ya hay registro de ese alumno+fecha-Lima+ciclo. */
+          if ((nuevo === "completada" || nuevo === "falta") && rv.tipo !== "bloqueo" && rv.alumno_id){
+            const fechaL = fechaLimaDe(rv.inicio_utc);
+            const cicloR = Number(rv.ciclo) || 1;
+            const yaReg = await env.DB.prepare(
+              "SELECT 1 FROM registro WHERE tenant_id = ?1 AND alumno_id = ?2 AND COALESCE(ciclo,1) = ?3 AND fecha = ?4 AND estado != 'Reprogramó' LIMIT 1"
+            ).bind(tid, rv.alumno_id, cicloR, fechaL).first();
+            if (!yaReg){
+              stmts.push(env.DB.prepare(
+                "INSERT INTO registro (id,tenant_id,fecha,alumno_id,curso,estado,trabajo,tarea,ciclo,tarea_audio,plan) VALUES (?1,?2,?3,?4,?5,?6,'','',?7,'','')"
+              ).bind(crypto.randomUUID(), tid, fechaL, rv.alumno_id, rv.curso || "", (nuevo === "completada" ? "Asistió" : "Falta"), cicloR));
+            }
+          }
+          await env.DB.batch(stmts);
           return json({ ok: true });
         }
 
@@ -7602,14 +7948,49 @@ export default {
           let equipo = [];
           try {
             const { results: eqRows } = await env.DB.prepare(
-              "SELECT id, nombre, email, rol, estado, foto FROM profesores WHERE tenant_id = ?1 ORDER BY CASE rol WHEN 'dueno' THEN 0 ELSE 1 END, nombre"
+              "SELECT id, nombre, email, rol, estado, foto, COALESCE(sede_id,'') AS sede_id FROM profesores WHERE tenant_id = ?1 ORDER BY CASE rol WHEN 'dueno' THEN 0 ELSE 1 END, nombre"
             ).bind(tid).all();
             equipo = eqRows || [];
           } catch (e) {}
-          return json({ alumnos, registro, precios, cuentas, compras, recursos, ejercicios, leads, gastos, comprobantes, config, grupos,
+          const sedes = await sedesDeTenant(env, tid);
+          return json({ alumnos, registro, precios, cuentas, compras, recursos, ejercicios, leads, gastos, comprobantes, config, grupos, sedes,
                         slug: t.slug, academia: t.academia, estado: t.estado, demo: t.email === DEMO_EMAIL,
                         rol: esDueno ? "dueno" : "profesor", profe_id: profeActorId || "", equipo,
                         vapid_public: env.VAPID_PUBLIC_KEY || "" });
+        }
+
+        /* -------- Sedes (multisede: locales fisicos de la academia) -------- */
+        if (path === "/app/api/admin/sede" && request.method === "POST"){
+          if (!esDueno) return json({ error: "Las sedes las maneja el dueno." }, 403);
+          await ensureSedesSchema(env);
+          const b = await request.json().catch(() => ({}));
+          const accion = String(b.accion || "");
+          if (accion === "borrar"){
+            const idSede = String(b.id || "");
+            /* nadie se borra: profesores/alumnos/grupos de esa sede quedan "sin sede" */
+            await env.DB.batch([
+              env.DB.prepare("DELETE FROM sedes WHERE id = ?1 AND tenant_id = ?2").bind(idSede, tid),
+              env.DB.prepare("UPDATE profesores SET sede_id = '' WHERE tenant_id = ?1 AND sede_id = ?2").bind(tid, idSede),
+              env.DB.prepare("UPDATE alumnos SET sede_id = '' WHERE tenant_id = ?1 AND sede_id = ?2").bind(tid, idSede),
+              env.DB.prepare("UPDATE grupos SET sede_id = '' WHERE tenant_id = ?1 AND sede_id = ?2").bind(tid, idSede)
+            ]);
+            return json({ ok: true });
+          }
+          if (accion !== "crear" && accion !== "editar") return json({ error: "Accion no valida" }, 400);
+          const nombreS = String(b.nombre || "").trim().slice(0, 60);
+          if (nombreS.length < 2) return json({ error: "Ponle un nombre a la sede (ej: Sede Miraflores)." }, 400);
+          const direccionS = String(b.direccion || "").trim().slice(0, 120);
+          if (accion === "crear"){
+            const nS = await env.DB.prepare("SELECT COUNT(*) AS n FROM sedes WHERE tenant_id = ?1").bind(tid).first();
+            if ((Number(nS && nS.n) || 0) >= 20) return json({ error: "Maximo 20 sedes por academia." }, 400);
+            await env.DB.prepare("INSERT INTO sedes (id, tenant_id, nombre, direccion, creado) VALUES (?1,?2,?3,?4,?5)")
+              .bind(crypto.randomUUID(), tid, nombreS, direccionS, hoy()).run();
+          } else {
+            const r = await env.DB.prepare("UPDATE sedes SET nombre = ?1, direccion = ?2 WHERE id = ?3 AND tenant_id = ?4")
+              .bind(nombreS, direccionS, String(b.id || ""), tid).run();
+            if (!((r && r.meta && (r.meta.changes ?? r.meta.rows_written)) || 0)) return json({ error: "Sede no encontrada" }, 404);
+          }
+          return json({ ok: true });
         }
 
         /* -------- Grupos (clases grupales con miembros) -------- */
@@ -7627,6 +8008,8 @@ export default {
           if (nombre.length < 2) return json({ error: "Ponle un nombre al grupo." }, 400);
           const curso = String(b.curso || "").trim().slice(0, 40);
           const horario = String(b.horario || "").trim().slice(0, 80);
+          /* sede (multisede): undefined = no tocar (JS viejo en cache); '' o invalida = sin sede */
+          const sedeG = (b.sede_id === undefined) ? null : await sedeValidada(env, tid, b.sede_id);
           /* miembros: solo ids de alumnos reales de ESTE tenant (y del scope del profesor) */
           const pedidos = Array.isArray(b.miembros) ? b.miembros.map(x => String(x)).slice(0, 100) : [];
           let miembros = [];
@@ -7639,12 +8022,12 @@ export default {
           }
           if (accion === "crear"){
             await env.DB.prepare(
-              "INSERT INTO grupos (id,tenant_id,nombre,curso,horario,miembros,creado,profesor_id) VALUES (?1,?2,?3,?4,?5,?6,?7,?8)"
-            ).bind(crypto.randomUUID(), tid, nombre, curso, horario, JSON.stringify(miembros), hoy(), profeActorId || null).run();
+              "INSERT INTO grupos (id,tenant_id,nombre,curso,horario,miembros,creado,profesor_id,sede_id) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9)"
+            ).bind(crypto.randomUUID(), tid, nombre, curso, horario, JSON.stringify(miembros), hoy(), profeActorId || null, sedeG || "").run();
           } else {
             const r = await env.DB.prepare(
-              "UPDATE grupos SET nombre = ?1, curso = ?2, horario = ?3, miembros = ?4 WHERE id = ?5 AND tenant_id = ?6 AND (?7 = 1 OR profesor_id = ?8)"
-            ).bind(nombre, curso, horario, JSON.stringify(miembros), String(b.id || ""), tid, esDueno ? 1 : 0, profeActorId || "").run();
+              "UPDATE grupos SET nombre = ?1, curso = ?2, horario = ?3, miembros = ?4, sede_id = CASE WHEN ?9 IS NULL THEN COALESCE(sede_id,'') ELSE ?9 END WHERE id = ?5 AND tenant_id = ?6 AND (?7 = 1 OR profesor_id = ?8)"
+            ).bind(nombre, curso, horario, JSON.stringify(miembros), String(b.id || ""), tid, esDueno ? 1 : 0, profeActorId || "", sedeG).run();
             const filas = (r && r.meta && (r.meta.changes ?? r.meta.rows_written)) || 0;
             if (!filas) return json({ error: "Grupo no encontrado" }, 404);
           }
@@ -7663,7 +8046,7 @@ export default {
             return json({ error: "Cuerpo inválido" }, 400);
           }
           const { results: prevRows } = await env.DB.prepare(
-            "SELECT id, vence, aviso_vence_ciclo, recordatorio_fecha, recordatorio_ciclo, winback_ciclo, profesor_id FROM alumnos WHERE tenant_id = ?1 AND (?2 = 1 OR profesor_id = ?3)"
+            "SELECT id, vence, ciclo, aviso_vence_ciclo, recordatorio_fecha, recordatorio_ciclo, winback_ciclo, profesor_id, COALESCE(sede_id,'') AS sede_id FROM alumnos WHERE tenant_id = ?1 AND (?2 = 1 OR profesor_id = ?3)"
           ).bind(tid, esDueno ? 1 : 0, profeActorId || "").all();
           const prev = new Map((prevRows || []).map(r => [r.id, r]));
           const paqPut = (await loadPaquetes(env, tid)).map;   // para derivar vence de mensualidades ilimitadas
@@ -7671,6 +8054,11 @@ export default {
           try {
             const { results: pv } = await env.DB.prepare("SELECT id FROM profesores WHERE tenant_id = ?1").bind(tid).all();
             profesValidos = new Set((pv || []).map(p => p.id));
+          } catch (e) {}
+          let sedesValidas = new Set();
+          try {
+            const { results: sv } = await env.DB.prepare("SELECT id FROM sedes WHERE tenant_id = ?1").bind(tid).all();
+            sedesValidas = new Set((sv || []).map(s => s.id));
           } catch (e) {}
 
           /* Candado de alumnos por plan (12-jul-2026): topa el plan SOLO para tenants ya pagando
@@ -7715,23 +8103,36 @@ export default {
             else if (pr && pr.profesor_id) pidAl = pr.profesor_id;
             else pidAl = profeActorId; /* dueno */
             idsSnapshot.add(a.id);
-            /* Mensualidad ilimitada: vence = fecha de pago + 30d (se re-deriva al renovar,
-               que actualiza la fecha). Para el resto se preserva el vence server-side. */
+            /* Mensualidad ilimitada: vence = fecha de pago + 30d. Para el resto se preserva el
+               vence server-side, SALVO renovacion manual: si el profe sube el ciclo del alumno
+               (lo renovo cobrando por fuera), re-derivamos vence y reseteamos el aviso, si no
+               el vence viejo (ya pasado) dispara el correo "tu paquete vencio" en falso —el bug
+               que en MVT le llego a Fabio y Yaritza el 19-jul. */
             const pkAl = resolverPk(paqPut, a.paquete || "");
+            const cicloAl = Number(a.ciclo) || 1;
+            const cicloPrev = (pr && Number(pr.ciclo)) || 1;
+            const esRenovManual = !!pr && cicloAl > cicloPrev;
             let venceAl = (pr && pr.vence) || "";
-            if (pkAl.ilim){
-              const base = (a.fecha && /^\d{4}-\d{2}-\d{2}$/.test(a.fecha)) ? a.fecha : hoy();
+            let avisoAl = (pr && pr.aviso_vence_ciclo) || 0;
+            if (pkAl.ilim || esRenovManual){
+              const base = (a.fecha && /^\d{4}-\d{2}-\d{2}$/.test(a.fecha)) ? a.fecha : hoyLima();
               venceAl = new Date(Date.parse(base + "T00:00:00Z") + 30 * 86400000).toISOString().slice(0, 10);
             }
+            if (esRenovManual) avisoAl = 0;   // ciclo nuevo: el aviso de vencimiento se re-arma
+            /* sede (multisede): undefined = preservar la previa (JS viejo en cache); con valor,
+               validar contra las sedes del tenant (invalida = sin sede) */
+            let sedeAl = "";
+            if (a.sede_id !== undefined) sedeAl = sedesValidas.has(String(a.sede_id)) ? String(a.sede_id) : "";
+            else if (pr && pr.sede_id) sedeAl = pr.sede_id;
             stmts.push(env.DB.prepare(
-              "INSERT INTO alumnos (id,tenant_id,codigo,nombre,whatsapp,curso,paquete,fecha,pago,horario,notas,ciclo,vence,aviso_vence_ciclo,recordatorio_fecha,recordatorio_ciclo,winback_ciclo,profesor_id) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18)"
+              "INSERT INTO alumnos (id,tenant_id,codigo,nombre,whatsapp,curso,paquete,fecha,pago,horario,notas,ciclo,vence,aviso_vence_ciclo,recordatorio_fecha,recordatorio_ciclo,winback_ciclo,profesor_id,sede_id) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19)"
             ).bind(
               a.id, tid, String(a.codigo || "").toUpperCase() || randHex(3).toUpperCase(), a.nombre,
               a.whatsapp || "", a.curso || "", a.paquete || "",
               a.fecha || "", a.pago || "", a.horario || "", a.notas || "", a.ciclo || 1,
-              venceAl, (pr && pr.aviso_vence_ciclo) || 0,
+              venceAl, avisoAl,
               (pr && pr.recordatorio_fecha) || "", (pr && pr.recordatorio_ciclo) || 0,
-              (pr && pr.winback_ciclo) || 0, pidAl || null
+              (pr && pr.winback_ciclo) || 0, pidAl || null, sedeAl
             ));
           }
           for (const r of body.registro){
@@ -7753,6 +8154,71 @@ export default {
             }
           }
           await env.DB.batch(stmts);
+          return json({ ok: true });
+        }
+
+        /* ===== Meta Ads (campanas) — SOLO el dueno. Aislado, gated por secrets. ===== */
+        if (path === "/app/api/admin/meta/estado" && request.method === "GET"){
+          if (!esDueno) return json({ error: "Solo el dueno gestiona las campanas." }, 403);
+          const configurado = metaConfigurado(env);
+          const cx = await metaConexion(env, tid);
+          return json({
+            configurado,
+            app_id: configurado ? env.META_APP_ID : "",
+            config_id: configurado ? env.META_LOGIN_CONFIG_ID : "",
+            conectado: !!(cx && cx.token),
+            cuenta: cx ? { act_id: cx.act_id || "", act_nombre: cx.act_nombre || "", moneda: cx.moneda || "", page_id: cx.page_id || "", page_nombre: cx.page_nombre || "", pixel_id: cx.pixel_id || "" } : null,
+            cuentas: cx && cx.cuentas_json ? (JSON.parse(cx.cuentas_json || "[]")) : [],
+            paginas: cx && cx.paginas_json ? (JSON.parse(cx.paginas_json || "[]")) : []
+          });
+        }
+        if (path === "/app/api/admin/meta/conectar" && request.method === "POST"){
+          if (!esDueno) return json({ error: "Solo el dueno gestiona las campanas." }, 403);
+          if (!metaConfigurado(env)) return json({ error: "Meta Ads todavia no esta habilitado. Escribenos y lo activamos." }, 501);
+          const b = await request.json().catch(() => ({}));
+          const res = await metaConectarTenant(env, tid, String(b.code || ""), b.redirect_uri ? String(b.redirect_uri) : null);
+          if (!res.ok) return json({ error: res.error }, 502);
+          return json({ ok: true, cuentas: res.cuentas, paginas: res.paginas });
+        }
+        if (path === "/app/api/admin/meta/seleccionar" && request.method === "POST"){
+          if (!esDueno) return json({ error: "Solo el dueno gestiona las campanas." }, 403);
+          const cx = await metaConexion(env, tid);
+          if (!cx || !cx.token) return json({ error: "Primero conecta tu cuenta de Meta." }, 400);
+          const b = await request.json().catch(() => ({}));
+          const cuentas = JSON.parse(cx.cuentas_json || "[]");
+          const paginas = JSON.parse(cx.paginas_json || "[]");
+          const actSel = cuentas.find(c => String(c.account_id) === String(b.act_id) || String(c.id) === String(b.act_id));
+          const pageSel = paginas.find(p => String(p.id) === String(b.page_id));
+          if (!actSel) return json({ error: "Esa cuenta publicitaria no esta en tu lista." }, 400);
+          // pixel: si el dueno no lo manda, tomamos el primero de la cuenta
+          let pixelId = String(b.pixel_id || "");
+          if (!pixelId){
+            const px = await metaFetch(env, cx.token, "/act_" + actSel.account_id + "/adspixels", { params: { fields: "id,name" } });
+            const arr = (px.data && px.data.data) || [];
+            if (arr.length) pixelId = String(arr[0].id);
+          }
+          await env.DB.prepare(
+            "UPDATE meta_ads_conexion SET act_id = ?1, act_nombre = ?2, moneda = ?3, page_id = ?4, page_nombre = ?5, pixel_id = ?6, actualizado = ?7 WHERE tenant_id = ?8"
+          ).bind(String(actSel.account_id), String(actSel.name || ""), String(actSel.currency || ""),
+            pageSel ? String(pageSel.id) : "", pageSel ? String(pageSel.name || "") : "", pixelId, new Date().toISOString(), tid).run();
+          return json({ ok: true, pixel_id: pixelId });
+        }
+        if (path === "/app/api/admin/meta/campana" && request.method === "POST"){
+          if (!esDueno) return json({ error: "Solo el dueno gestiona las campanas." }, 403);
+          const cx = await metaConexion(env, tid);
+          if (!cx || !cx.token || !cx.act_id) return json({ error: "Conecta tu cuenta y elige una cuenta publicitaria primero." }, 400);
+          if (!cx.page_id) return json({ error: "Elige la pagina de Facebook de tu academia para el anuncio." }, 400);
+          const b = await request.json().catch(() => ({}));
+          const res = await metaCrearCampana(env, cx, {
+            nombre: b.nombre, presupuesto_dia: b.presupuesto_dia, landing: b.landing || (MARCA.dominio + "/app/a/" + (t.slug || "")),
+            titular: b.titular, copy: b.copy, pais: b.pais || "PE"
+          });
+          if (!res.ok) return json({ error: res.error, paso: res.paso || "" }, 502);
+          return json(res);
+        }
+        if (path === "/app/api/admin/meta/desconectar" && request.method === "POST"){
+          if (!esDueno) return json({ error: "Solo el dueno gestiona las campanas." }, 403);
+          try { await env.DB.prepare("DELETE FROM meta_ads_conexion WHERE tenant_id = ?1").bind(tid).run(); } catch (e) {}
           return json({ ok: true });
         }
 

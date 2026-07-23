@@ -332,6 +332,7 @@
         <div class="navgroup-items">
           <button class="tab solo-dueno" data-tab="perfil">Perfil</button>
           <button class="tab solo-dueno" data-tab="ajustes">Ajustes</button>
+          <button class="tab solo-dueno" data-tab="campanas">Campañas</button>
           <button class="tab solo-dueno" data-tab="servicios">Servicios</button>
           <button class="tab" data-tab="feedback">Ideas y errores</button>
         </div>
@@ -398,7 +399,7 @@
   </section>
 
   <section class="panel" id="panel-alumnos">
-    <div style="margin-bottom:10px;display:flex;gap:8px;flex-wrap:wrap;"><button class="btn" id="btnNuevoAlumno">+ Nuevo alumno</button><button class="btn ghost" id="btnImportCsv" title="Trae tu lista de alumnos desde un archivo CSV o Excel, todos de una vez">&#8681; Importar CSV</button><button class="btn ghost sm" type="button" onclick="lanzarTourModulo('alumnos')">? Cómo funciona</button></div>
+    <div style="margin-bottom:10px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;"><button class="btn" id="btnNuevoAlumno">+ Nuevo alumno</button><button class="btn ghost" id="btnImportCsv" title="Trae tu lista de alumnos desde un archivo CSV o Excel, todos de una vez">&#8681; Importar CSV</button><select id="alFiltroSede" title="Filtrar por sede" style="display:none;width:auto;"></select><button class="btn ghost sm" type="button" onclick="lanzarTourModulo('alumnos')">? Cómo funciona</button></div>
     <p class="hint" style="margin-bottom:16px;">¿Te equivocaste registrando una clase? Edita o borra esa fila en REGISTRO — el saldo se recalcula solo.</p>
     <div class="tablewrap">
       <table id="tablaAlumnos">
@@ -430,7 +431,7 @@
     <p class="hint" style="margin-bottom:16px;">Cada profesor entra con su propio correo y contraseña, y ve SOLO sus alumnos, su agenda y sus horarios. Tú lo ves todo. Los pagos, precios y la marca siguen siendo tuyos.</p>
     <div class="tablewrap">
       <table id="tablaProfes">
-        <thead><tr><th>Profesor</th><th>Correo</th><th>Alumnos</th><th>Comisión</th><th>Estado</th><th></th></tr></thead>
+        <thead><tr><th>Profesor</th><th>Correo</th><th>Alumnos</th><th>Sede</th><th>Comisión</th><th>Estado</th><th></th></tr></thead>
         <tbody></tbody>
       </table>
     </div>
@@ -475,6 +476,12 @@
         <tbody></tbody>
       </table>
     </div>
+  </section>
+
+  <section class="panel" id="panel-campanas">
+    <h2>// Campañas de Meta (Facebook e Instagram)</h2>
+    <p class="hint" style="margin-bottom:12px;">Consigue interesados nuevos: crea campañas de anuncios en Facebook e Instagram desde aquí, apuntando a tu propia cuenta publicitaria. Los interesados que lleguen entran solos a <b>Interesados</b>. Toda campaña se crea <b>en pausa</b> para que la revises y la actives tú en Ads Manager: nunca se gasta tu plata sin tu ok.</p>
+    <div id="campanas_box"><p class="hint">Cargando...</p></div>
   </section>
 
   <section class="panel" id="panel-servicios">
@@ -803,6 +810,7 @@
           <option>Bricolage Grotesque</option>
           <option>Playfair Display</option>
           <option>Space Grotesk</option>
+          <option>Space Mono</option>
         </select>
       </div>
       <p class="hint">El color y la tipografía se guardan con "Guardar ajustes". El logo se sube al instante y aparece en el portal de tus alumnos.</p>
@@ -811,6 +819,17 @@
       <h2>// Cursos que enseñas</h2>
       <p class="hint">Escríbelos separados por comas y de CUALQUIER materia (ej: Canto, Piano, Inglés, Matemática, Ajedrez). Se usan en el portal de compra de tus alumnos, sus fichas, el registro de clases y tu material.</p>
       <div class="cfgrow"><span class="pk">Cursos</span><input id="cfg_cursos" type="text" placeholder="Canto, Piano, Guitarra" /></div>
+    </div>
+    <div class="group solo-dueno">
+      <h2>// Sedes de tu academia</h2>
+      <p class="hint">¿Tienes más de un local? Crea tus sedes y asígnalas a tus profesores, alumnos y grupos (en Personas y Grupos). Todo se filtra por sede en un solo panel. Si tienes un solo local, ignora esta sección.</p>
+      <div id="sedesLista" style="display:flex;flex-direction:column;gap:8px;"></div>
+      <div class="cfgrow" style="margin-top:8px;"><span class="pk">Nueva sede</span>
+        <input id="sd_nombre" type="text" placeholder="Sede Miraflores" style="flex:1;min-width:140px;" />
+        <input id="sd_direccion" type="text" placeholder="Dirección (opcional)" style="flex:1;min-width:140px;" />
+        <button class="btn ghost sm" id="btnCrearSede" style="flex:0 0 auto;">Agregar</button>
+      </div>
+      <p class="hint" id="sdErr" style="color:#c00;"></p>
     </div>
     <div class="group">
       <h2>// Módulos de tu panel</h2>
@@ -864,9 +883,9 @@
     <div class="group">
       <h2>// WhatsApp</h2>
       <p class="hint"><b>Ya funciona, sin conectar nada.</b> En <b>Interesados</b> y en <b>Alumnos</b>, cada fila tiene un botón <b>WhatsApp</b> que abre tu propio WhatsApp con el mensaje ya escrito (bienvenida, seguimiento, recordatorio de pago). Tú solo revisas y le das enviar: sale desde TU número de siempre y nadie pierde su WhatsApp.</p>
-      <p class="hint" style="margin-top:8px;"><b>🔜 Respuesta automática 24/7 (en camino):</b> que cada persona que te escriba entre sola a Interesados y reciba respuesta al instante, aunque estés durmiendo. Lo estamos habilitando con el proveedor oficial de WhatsApp; te avisamos apenas puedas activarlo. Los campos de abajo son para esa versión — déjalos vacíos por ahora.</p>
-      <div class="cfgrow"><span class="pk">Respuesta automática (beta)</span><select id="cfg_wa_enabled"><option value="">Apagada</option><option value="on">Encendida</option></select></div>
-      <div class="cfgrow"><span class="pk">ID del número (beta)</span><input id="cfg_wa_phone_id" type="text" inputmode="numeric" placeholder="Se activa con la versión automática" /></div>
+      <p class="hint" style="margin-top:8px;"><b>🤖 Respuesta automática 24/7 con IA:</b> cada persona que te escriba por WhatsApp recibe respuesta al instante (aunque estés durmiendo) con los cursos, precios y horarios de tu academia, la invita a agendar una clase de prueba y la guarda sola en <b>Interesados</b>. Nunca promete resultados ni cierra pagos: eso lo cierras tú. Para activarla hay que conectar tu número de WhatsApp Business a Batuta (un paso único con el proveedor oficial de Meta): <b>escríbenos y lo dejamos andando</b>. Cuando esté conectado, pega aquí el ID de tu número y ponla en Encendida.</p>
+      <div class="cfgrow"><span class="pk">Respuesta automática con IA</span><select id="cfg_wa_enabled"><option value="">Apagada</option><option value="on">Encendida</option></select></div>
+      <div class="cfgrow"><span class="pk">ID del número de WhatsApp</span><input id="cfg_wa_phone_id" type="text" inputmode="numeric" placeholder="Te lo damos al conectar tu número" /></div>
     </div>
     <div class="group">
       <h2>// Avisos en tu teléfono (app + push)</h2>
@@ -1071,6 +1090,7 @@
       <div class="field"><label>Correo</label><input id="pf_email" type="email" placeholder="ana@correo.com" /></div>
     </div>
     <div class="field"><label>WhatsApp (opcional)</label><input id="pf_whatsapp" type="text" placeholder="51..." /></div>
+    <div class="field" id="pf_sede_wrap" style="display:none;"><label>Sede</label><select id="pf_sede"></select></div>
     <div class="err" id="pfErr" style="color:#e8604f;font-size:13px;min-height:16px;"></div>
     <div class="modal-actions">
       <button class="btn ghost" data-close>Cancelar</button>
@@ -1102,6 +1122,7 @@
     </div>
     <div class="field" id="a_profe_wrap" style="display:none;"><label>Profesor asignado</label><select id="a_profe"></select>
       <p class="hint" style="margin:5px 0 0;">El alumno reserva en la agenda de SU profesor, y ese profesor lo ve en su panel.</p></div>
+    <div class="field" id="a_sede_wrap" style="display:none;"><label>Sede</label><select id="a_sede"></select></div>
     <div class="field"><label>Nota de horario (manual, opcional)</label><input id="a_horario" type="text" placeholder="Solo si no usa la agenda. Ej: Martes 18:00" />
       <p class="hint" id="a_horario_derivado" style="margin:4px 0 0;"></p></div>
     <div class="field"><label>Notas</label><textarea id="a_notas"></textarea></div>
@@ -1152,6 +1173,7 @@
     <div class="frow">
       <div class="field"><label>Nombre del grupo</label><input id="g_nombre" type="text" placeholder="Coro juvenil / Guitarra sábados" /></div>
       <div class="field"><label>Curso</label><select id="g_curso"></select></div>
+      <div class="field" id="g_sede_wrap" style="display:none;"><label>Sede</label><select id="g_sede"></select></div>
     </div>
     <div class="field"><label>Horario (referencial)</label><input id="g_horario" type="text" placeholder="Sábados 10:00" />
       <p class="hint" style="margin:5px 0 0;">Solo informativo. Para apartar el horario real usa Agenda → Bloquear o sembrar.</p></div>
@@ -1708,15 +1730,30 @@ function renderResumen(){
 
 function renderAlumnos(){
   var tb=el("tablaAlumnos").querySelector("tbody");
+  /* filtro por sede (multisede): el select solo aparece si la academia creó sedes */
+  var fsel=el("alFiltroSede");
+  if(fsel){
+    var ssF=db.sedes||[];
+    if(ssF.length){
+      var prevFs=fsel.value;
+      fsel.innerHTML='<option value="">Todas las sedes</option>'+ssF.map(function(s){return '<option value="'+esc(s.id)+'">'+esc(s.nombre)+'</option>';}).join("");
+      fsel.value=prevFs; if(fsel.value!==prevFs) fsel.value="";
+      fsel.style.display="";
+    } else { fsel.style.display="none"; fsel.value=""; }
+  }
   if(db.alumnos.length===0){ tb.innerHTML='<tr><td colspan="11" class="empty">Sin alumnos todavía</td></tr>'; return; }
-  tb.innerHTML=db.alumnos.map(function(a){
+  var fs=(fsel&&fsel.value)||"";
+  var listaAl=fs?db.alumnos.filter(function(a){return (a.sede_id||"")===fs;}):db.alumnos;
+  if(!listaAl.length){ tb.innerHTML='<tr><td colspan="11" class="empty">Sin alumnos en esa sede</td></tr>'; return; }
+  tb.innerHTML=listaAl.map(function(a){
     var c=computeAlumno(a);
     var cu=cuentaDeAlumno(a.id);
     var renovBtn=(c.clase!=="green")?'<button class="btn sm" data-renovar="'+a.id+'">Enviar mensaje</button>':'';
     var pago=a.pago==="Pagado"?'<span class="pill pago-ok">Pagado</span>':'<span class="pill pago-pend">Pendiente</span>';
     var pillPf=(ROL==="dueno"&&esEquipoMulti()&&a.profesor_id)?'<span class="pill profe">'+esc((nombreProfe(a.profesor_id)||"?").split(" ")[0])+'</span>':'';
+    var pillSd=(a.sede_id&&nombreSede(a.sede_id))?'<span class="pill gray">'+esc(nombreSede(a.sede_id))+'</span>':'';
     return '<tr>'+
-      '<td class="name">'+esc(a.nombre)+pillPf+'<br><span class="mini">'+esc(a.whatsapp||'')+'</span></td>'+
+      '<td class="name">'+esc(a.nombre)+pillPf+pillSd+'<br><span class="mini">'+esc(a.whatsapp||'')+'</span></td>'+
       '<td>'+(cu?'<span class="mini">'+esc(cu.email)+'</span>':'<span class="pill gray">Sin cuenta</span>')+'</td>'+
       '<td>'+esc(a.curso)+'</td>'+
       '<td>'+esc(a.paquete)+'<br><span class="mini">S/ '+c.monto+' · ciclo '+(a.ciclo||1)+'</span></td>'+
@@ -2323,7 +2360,7 @@ function renderReportes(){
   }
 }
 
-function renderAll(){ aplicarBrandTenant(); aplicarModulos(); aplicarMarcaCursos(); renderResumen(); renderAlumnos(); renderGrupos(); renderRegistro(); renderPagos(); renderReportes(); renderCuentas(); renderLeads(); renderCaja(); renderRecursos(); renderEjercicios(); renderAjustes(); renderPerfil(); fillSelects(); }
+function renderAll(){ aplicarBrandTenant(); aplicarModulos(); aplicarMarcaCursos(); renderResumen(); renderAlumnos(); renderGrupos(); renderRegistro(); renderPagos(); renderReportes(); renderCuentas(); renderLeads(); renderCaja(); renderRecursos(); renderEjercicios(); renderAjustes(); renderSedes(); renderPerfil(); fillSelects(); }
 
 /* ---------- AGENDA (admin) ---------- */
 var AG_DISP = [], AG_RESERVAS = [];
@@ -2481,6 +2518,84 @@ function abrirGrupoActivo(){
 abrirGrupoActivo();
 
 /* ---------- Feedback con premio (+7 días el primer aporte del mes) ---------- */
+/* ===== Campañas de Meta (Facebook/Instagram) ===== */
+var CAMPA=null;
+function cargarCampanas(){
+  var box=el("campanas_box"); if(!box) return;
+  box.innerHTML='<p class="hint">Cargando...</p>';
+  fetch("/app/api/admin/meta/estado",{headers:hdr()}).then(function(r){return r.json();}).then(function(d){
+    CAMPA=d;
+    if(!d||d.error){ box.innerHTML='<p class="hint">No disponible ahora mismo.</p>'; return; }
+    if(!d.configurado){
+      box.innerHTML='<div class="card" style="padding:16px"><b>🚧 En preparación.</b><p class="hint" style="margin:8px 0 0">Estamos habilitando la conexión con Meta para que puedas crear anuncios de Facebook e Instagram desde aquí, apuntando a tu propia cuenta publicitaria. Te avisamos apenas esté listo. Mientras, si quieres lanzar una campaña te damos una mano: escríbenos.</p></div>';
+      return;
+    }
+    if(!d.conectado){ renderCampConectar(box,d); return; }
+    if(!d.cuenta||!d.cuenta.act_id){ renderCampElegir(box,d); return; }
+    renderCampForm(box,d);
+  }).catch(function(){ box.innerHTML='<p class="hint">No disponible ahora mismo.</p>'; });
+}
+function fbSdkListo(appId,cb){
+  if(window.FB){ cb(); return; }
+  window.fbAsyncInit=function(){ FB.init({appId:appId,cookie:true,xfbml:false,version:"v21.0"}); cb(); };
+  var s=document.createElement("script"); s.src="https://connect.facebook.net/es_LA/sdk.js"; s.async=true; s.defer=true;
+  document.body.appendChild(s);
+}
+function renderCampConectar(box,d){
+  box.innerHTML='<div class="card" style="padding:16px"><b>Conecta tu cuenta de Meta Ads</b><p class="hint" style="margin:8px 0 12px">Autoriza a Batuta a crear campañas en tu cuenta publicitaria de Facebook. Solo creamos campañas en pausa; tú las activas. Puedes desconectar cuando quieras.</p><button class="btn" id="btnMetaConn">Conectar con Facebook</button></div>';
+  el("btnMetaConn").addEventListener("click",function(){
+    fbSdkListo(d.app_id,function(){
+      FB.login(function(resp){
+        if(!resp||!resp.authResponse||!resp.authResponse.code){ toast("No se completó la conexión."); return; }
+        apiPost("/app/api/admin/meta/conectar",{code:resp.authResponse.code,redirect_uri:location.origin+"/app/panel/"}).then(function(r){
+          if(r.error){ toast(r.error); return; }
+          toast("Cuenta conectada"); cargarCampanas();
+        });
+      },{config_id:d.config_id,response_type:"code",override_default_response_type:true});
+    });
+  });
+}
+function renderCampElegir(box,d){
+  var cuentas=d.cuentas||[], paginas=d.paginas||[];
+  var oc=cuentas.map(function(c){return '<option value="'+(c.account_id||c.id)+'">'+esc(c.name||c.account_id)+' ('+esc(c.currency||"")+')</option>';}).join("");
+  var op=paginas.map(function(p){return '<option value="'+p.id+'">'+esc(p.name||p.id)+'</option>';}).join("");
+  box.innerHTML='<div class="card" style="padding:16px"><b>Elige dónde correr tus anuncios</b>'
+    +'<div class="cfgrow"><span class="pk">Cuenta publicitaria</span><select id="meta_act">'+(oc||'<option value="">No encontramos cuentas</option>')+'</select></div>'
+    +'<div class="cfgrow"><span class="pk">Página de Facebook</span><select id="meta_page">'+(op||'<option value="">No encontramos páginas</option>')+'</select></div>'
+    +'<button class="btn" id="btnMetaSel" style="margin-top:10px">Guardar</button> <button class="btn ghost" id="btnMetaDesc">Desconectar</button></div>';
+  el("btnMetaSel").addEventListener("click",function(){
+    apiPost("/app/api/admin/meta/seleccionar",{act_id:el("meta_act").value,page_id:el("meta_page").value}).then(function(r){
+      if(r.error){ toast(r.error); return; } toast("Listo"); cargarCampanas();
+    });
+  });
+  el("btnMetaDesc").addEventListener("click",metaDesconectar);
+}
+function renderCampForm(box,d){
+  var c=d.cuenta;
+  box.innerHTML='<div class="card" style="padding:14px 16px;margin-bottom:14px"><b>Conectado:</b> '+esc(c.act_nombre||c.act_id)+' ('+esc(c.moneda||"")+')'+(c.page_nombre?' · Página: '+esc(c.page_nombre):'')+(c.pixel_id?' · Pixel ✓':' · sin pixel (optimiza por clics)')+' <button class="btn ghost" id="btnMetaDesc" style="margin-left:8px">Desconectar</button></div>'
+    +'<div class="card" style="padding:16px"><b>Nueva campaña de interesados</b>'
+    +'<div class="cfgrow"><span class="pk">Nombre</span><input id="c_nombre" type="text" placeholder="Ej: Clases de canto - agosto" /></div>'
+    +'<div class="cfgrow"><span class="pk">Presupuesto por día (S/)</span><input id="c_budget" type="number" min="5" value="20" /></div>'
+    +'<div class="cfgrow"><span class="pk">Titular del anuncio</span><input id="c_titular" type="text" placeholder="Aprende a cantar en tu propia academia" /></div>'
+    +'<div class="cfgrow"><span class="pk">Texto del anuncio</span><input id="c_copy" type="text" placeholder="Clases 1 a 1 para todas las edades. Agenda tu clase de prueba." /></div>'
+    +'<div class="cfgrow"><span class="pk">Página de destino</span><input id="c_landing" type="text" placeholder="'+esc(location.origin)+'/app/a/tu-academia" /></div>'
+    +'<p class="hint" style="margin:6px 0 10px">La campaña se crea EN PAUSA. Revísala y actívala en Ads Manager. No se gasta nada hasta que tú la actives.</p>'
+    +'<button class="btn" id="btnMetaCrear">Crear campaña (en pausa)</button><div id="meta_result" style="margin-top:10px"></div></div>';
+  el("btnMetaDesc").addEventListener("click",metaDesconectar);
+  el("btnMetaCrear").addEventListener("click",function(){
+    var btn=el("btnMetaCrear"); btn.disabled=true; btn.textContent="Creando...";
+    apiPost("/app/api/admin/meta/campana",{nombre:el("c_nombre").value,presupuesto_dia:el("c_budget").value,titular:el("c_titular").value,copy:el("c_copy").value,landing:el("c_landing").value,pais:"PE"}).then(function(r){
+      btn.disabled=false; btn.textContent="Crear campaña (en pausa)";
+      if(r.error){ el("meta_result").innerHTML='<p class="hint" style="color:#c00">'+esc(r.error)+'</p>'; return; }
+      el("meta_result").innerHTML='<p class="hint" style="color:#0a0">Campaña creada en pausa ✓ <a href="'+r.adsManager+'" target="_blank"><b>Ábrela en Ads Manager</b></a> para revisarla y activarla.</p>';
+    });
+  });
+}
+function metaDesconectar(){
+  if(!confirm("¿Desconectar tu cuenta de Meta de Batuta?")) return;
+  apiPost("/app/api/admin/meta/desconectar",{}).then(function(){ toast("Desconectado"); cargarCampanas(); });
+}
+
 function cargarFeedback(){
   fetch("/app/api/admin/feedback",{headers:hdr()}).then(function(r){return r.json();}).then(function(d){
     var est=el("fbPremioEstado");
@@ -2524,6 +2639,65 @@ if(el("btnPwFb")) el("btnPwFb").addEventListener("click",function(){
     .finally(function(){ btn.disabled=false; });
 });
 
+/* ---------- Sedes (multisede: locales de la academia) ---------- */
+function nombreSede(id){ var s=(db.sedes||[]).find(function(x){return x.id===id;}); return s?s.nombre:""; }
+/* llena un <select> de sede y muestra/oculta su wrap según existan sedes */
+function fillSedeSelectGen(selId,wrapId,val){
+  var w=el(wrapId), s=el(selId); if(!w||!s) return;
+  var ss=db.sedes||[];
+  if(!ss.length){ w.style.display="none"; return; }
+  w.style.display="";
+  s.innerHTML='<option value="">Sin sede</option>'+ss.map(function(x){return '<option value="'+esc(x.id)+'">'+esc(x.nombre)+'</option>';}).join("");
+  s.value=val||""; if(s.value!==(val||"")) s.value="";
+}
+function renderSedes(){
+  var w=el("sedesLista"); if(!w) return;
+  var ss=db.sedes||[];
+  w.innerHTML=ss.length?ss.map(function(s){
+    return '<div class="cfgrow" data-sede="'+esc(s.id)+'">'+
+      '<input type="text" data-sdnombre value="'+esc(s.nombre)+'" style="flex:1;min-width:130px;" />'+
+      '<input type="text" data-sddireccion value="'+esc(s.direccion||"")+'" placeholder="Dirección" style="flex:1;min-width:130px;" />'+
+      '<button class="btn ghost sm" data-sdguardar="'+esc(s.id)+'" style="flex:0 0 auto;">Guardar</button>'+
+      '<button class="btn no sm" data-sdborrar="'+esc(s.id)+'" style="flex:0 0 auto;" title="Borrar sede (nadie se borra: quedan sin sede)">×</button>'+
+    '</div>';
+  }).join(""):'<span class="mini">Sin sedes: tu panel funciona como un solo local.</span>';
+}
+if(el("btnCrearSede")) el("btnCrearSede").addEventListener("click",function(){
+  var n=el("sd_nombre").value.trim(); el("sdErr").textContent="";
+  if(n.length<2){ el("sdErr").textContent="Ponle nombre a la sede (ej: Sede Miraflores)."; return; }
+  var btn=el("btnCrearSede"); btn.disabled=true;
+  apiPost("/app/api/admin/sede",{accion:"crear",nombre:n,direccion:el("sd_direccion").value.trim()})
+    .then(function(){ el("sd_nombre").value=""; el("sd_direccion").value=""; toast("Sede creada ✓"); return recargar(); })
+    .catch(function(err){ el("sdErr").textContent=(err&&err.message)||"No se pudo crear."; })
+    .finally(function(){ btn.disabled=false; });
+});
+document.body.addEventListener("click",function(e){
+  var sg=e.target.closest("[data-sdguardar]"), sb=e.target.closest("[data-sdborrar]");
+  if(sg){
+    var row=sg.closest("[data-sede]");
+    apiPost("/app/api/admin/sede",{accion:"editar",id:sg.dataset.sdguardar,
+      nombre:row.querySelector("[data-sdnombre]").value.trim(),
+      direccion:row.querySelector("[data-sddireccion]").value.trim()})
+      .then(function(){ toast("Sede guardada ✓"); return recargar(); })
+      .catch(function(err){ toast((err&&err.message)||"No se pudo guardar"); });
+    return;
+  }
+  if(sb){
+    if(!confirm("¿Borrar esta sede? Nadie se borra: sus profesores, alumnos y grupos quedan sin sede.")) return;
+    apiPost("/app/api/admin/sede",{accion:"borrar",id:sb.dataset.sdborrar})
+      .then(function(){ toast("Sede borrada"); return recargar(); })
+      .catch(function(err){ toast((err&&err.message)||"No se pudo borrar"); });
+  }
+});
+if(el("alFiltroSede")) el("alFiltroSede").addEventListener("change",renderAlumnos);
+/* asignar sede a un profe directo desde la tabla (select por fila) */
+document.body.addEventListener("change",function(e){
+  var ps=e.target.closest("[data-pfsede]"); if(!ps) return;
+  apiPost("/app/api/admin/profesores",{accion:"sede",id:ps.dataset.pfsede,sede_id:ps.value})
+    .then(function(){ toast("Sede asignada ✓"); cargarProfesores(); return recargar(); })
+    .catch(function(err){ toast((err&&err.message)||"No se pudo asignar"); });
+});
+
 /* ---------- Profesores del equipo (multi-profesor, solo dueño) ---------- */
 function cargarProfesores(){
   fetch("/app/api/admin/profesores",{headers:hdr()}).then(function(r){return r.json();}).then(function(d){
@@ -2549,15 +2723,21 @@ function cargarProfesores(){
       var com=[];
       if(Number(p.comision_pct)) com.push(p.comision_pct+"%");
       if(Number(p.tarifa_clase)) com.push("S/ "+p.tarifa_clase+"/clase");
+      var sedeCell;
+      if((db.sedes||[]).length){
+        var so='<option value="">Sin sede</option>'+(db.sedes||[]).map(function(s){return '<option value="'+esc(s.id)+'"'+(p.sede_id===s.id?' selected':'')+'>'+esc(s.nombre)+'</option>';}).join("");
+        sedeCell='<select data-pfsede="'+p.id+'" style="width:auto;min-width:110px;">'+so+'</select>';
+      } else sedeCell='<span class="mini">—</span>';
       return '<tr>'+
         '<td class="name">'+esc(p.nombre)+(p.rol==="dueno"?' <span class="pill profe">Dueño</span>':'')+'</td>'+
         '<td><span class="mini">'+esc(p.email)+'</span></td>'+
         '<td>'+(p.n_alumnos||0)+'</td>'+
+        '<td>'+sedeCell+'</td>'+
         '<td>'+(com.length?esc(com.join(" + ")):'—')+'</td>'+
         '<td>'+(ESTS[p.estado]||esc(p.estado))+'</td>'+
         '<td><div class="rowact">'+acts.join("")+'</div></td>'+
       '</tr>';
-    }).join("") || '<tr><td colspan="6" class="empty">Solo tú por ahora. Invita a tu primer profesor.</td></tr>';
+    }).join("") || '<tr><td colspan="7" class="empty">Solo tú por ahora. Invita a tu primer profesor.</td></tr>';
   }).catch(function(){ toast("No pude cargar los profesores."); });
 }
 /* ---------- Liquidación mensual por profesor ---------- */
@@ -2596,6 +2776,7 @@ if(el("btnGuardarComision")) el("btnGuardarComision").addEventListener("click",f
 });
 if(el("btnInvitarProfe")) el("btnInvitarProfe").addEventListener("click",function(){
   el("pf_nombre").value=""; el("pf_email").value=""; el("pf_whatsapp").value=""; el("pfErr").textContent="";
+  fillSedeSelectGen("pf_sede","pf_sede_wrap","");
   openOv("ovProfe");
 });
 if(el("btnGuardarProfe")) el("btnGuardarProfe").addEventListener("click",function(){
@@ -2604,7 +2785,8 @@ if(el("btnGuardarProfe")) el("btnGuardarProfe").addEventListener("click",functio
   if(nombre.length<2){ el("pfErr").textContent="Escribe el nombre."; return; }
   if(!email){ el("pfErr").textContent="Escribe el correo."; return; }
   var btn=el("btnGuardarProfe"); btn.disabled=true;
-  apiPost("/app/api/admin/profesores",{accion:"invitar",nombre:nombre,email:email,whatsapp:el("pf_whatsapp").value.trim()})
+  apiPost("/app/api/admin/profesores",{accion:"invitar",nombre:nombre,email:email,whatsapp:el("pf_whatsapp").value.trim(),
+    sede_id:(el("pf_sede_wrap")&&el("pf_sede_wrap").style.display!=="none")?el("pf_sede").value:""})
     .then(function(d){
       closeOv("ovProfe");
       toast(d.correo_enviado?"Invitación enviada por correo ✓":"Invitación creada ✓ (copia el link y mándaselo)",3400);
@@ -2635,7 +2817,7 @@ document.body.addEventListener("click",function(e){
 });
 
 /* ---------- Tabs / modales ---------- */
-var TITULOS={resumen:"Inicio",alumnos:"Alumnos",grupos:"Grupos",profesores:"Profesores",registro:"Clases",agenda:"Agenda",pagos:"Pagos",caja:"Caja",reportes:"Reportes",cuentas:"Accesos",leads:"Interesados",recursos:"Para tus alumnos",ejercicios:"Tu biblioteca",ajustes:"Ajustes",perfil:"Perfil",servicios:"Servicios",chat:"Chat",feedback:"Ideas y errores"};
+var TITULOS={resumen:"Inicio",alumnos:"Alumnos",grupos:"Grupos",profesores:"Profesores",registro:"Clases",agenda:"Agenda",pagos:"Pagos",caja:"Caja",reportes:"Reportes",cuentas:"Accesos",leads:"Interesados",recursos:"Para tus alumnos",ejercicios:"Tu biblioteca",ajustes:"Ajustes",perfil:"Perfil",servicios:"Servicios",campanas:"Campañas",chat:"Chat",feedback:"Ideas y errores"};
 document.querySelectorAll(".tab").forEach(function(t){
   t.addEventListener("click",function(){
     document.querySelectorAll(".tab").forEach(function(x){x.classList.remove("active");});
@@ -2655,6 +2837,7 @@ document.querySelectorAll(".tab").forEach(function(t){
     if(t.dataset.tab==="feedback") cargarFeedback();
     if(t.dataset.tab==="profesores"){ cargarProfesores(); cargarLiquidacion(); }
     if(t.dataset.tab==="caja"){ renderCaja(); if(el("g_fecha")&&!el("g_fecha").value) el("g_fecha").value=hoyLima(); }
+    if(t.dataset.tab==="campanas") cargarCampanas();
     cerrarDrawer();
   });
 });
@@ -2698,6 +2881,7 @@ el("btnNuevoAlumno").addEventListener("click",function(){
   el("a_fecha").value=new Date().toISOString().slice(0,10); el("a_pago").value="Pagado";
   el("a_horario").value=""; el("a_notas").value=""; el("a_horario_derivado").textContent="";
   fillProfeSelect("");
+  fillSedeSelectGen("a_sede","a_sede_wrap","");
   el("btnGuardarAlumnoOtro").style.display="";
   openOv("ovAlumno");
 });
@@ -2708,11 +2892,13 @@ function guardarAlumnoModal(encadenar){
   var prev=id?db.alumnos.find(function(a){return a.id===id;}):null;
   var wrapPf=el("a_profe_wrap");
   var profeSel=(wrapPf&&wrapPf.style.display!=="none")?el("a_profe").value:((prev&&prev.profesor_id)||"");
+  var wrapSd=el("a_sede_wrap");
+  var sedeSel=(wrapSd&&wrapSd.style.display!=="none")?el("a_sede").value:((prev&&prev.sede_id)||"");
   var obj={ id:id||uid(), codigo:el("a_codigo").value||uid().slice(-6).toUpperCase(),
     ciclo:Number(el("a_ciclo").value)||1,
     nombre:nombre, whatsapp:el("a_whatsapp").value.trim(), curso:getCursosAlumno()||MARCA.cursoDefault,
     paquete:el("a_paquete").value, fecha:el("a_fecha").value, pago:el("a_pago").value,
-    horario:el("a_horario").value.trim(), notas:el("a_notas").value.trim(), profesor_id:profeSel||undefined };
+    horario:el("a_horario").value.trim(), notas:el("a_notas").value.trim(), profesor_id:profeSel||undefined, sede_id:sedeSel||"" };
   if(id){ db.alumnos=db.alumnos.map(function(a){return a.id===id?obj:a;}); }
   else{ db.alumnos.push(obj); }
   var b1=el("btnGuardarAlumno"),b2=el("btnGuardarAlumnoOtro"); b1.disabled=true; if(b2)b2.disabled=true;
@@ -2762,6 +2948,7 @@ document.body.addEventListener("click",function(e){
     el("a_pago").value=a.pago; el("a_horario").value=a.horario||""; el("a_notas").value=a.notas||"";
     el("a_horario_derivado").textContent=(a.horarioFijo&&a.horarioFijo.length)?("Agenda: "+a.horarioFijo.join(" · ")):"Sin horario fijo en la agenda";
     fillProfeSelect(a.profesor_id||"");
+    fillSedeSelectGen("a_sede","a_sede_wrap",a.sede_id||"");
     openOv("ovAlumno");
   }
   if(dl){ var al=db.alumnos.find(function(x){return x.id===dl.dataset.del;});
@@ -2848,7 +3035,7 @@ function renderGrupos(){
   tb.innerHTML=gs.map(function(g){
     var nombres=(g.miembros||[]).map(function(id){ var a=db.alumnos.find(function(x){return x.id===id;}); return a?a.nombre:null; }).filter(Boolean);
     return '<tr>'+
-      '<td class="name">'+esc(g.nombre)+'</td>'+
+      '<td class="name">'+esc(g.nombre)+((g.sede_id&&nombreSede(g.sede_id))?' <span class="pill gray">'+esc(nombreSede(g.sede_id))+'</span>':'')+'</td>'+
       '<td>'+esc(g.curso||"—")+'</td>'+
       '<td>'+esc(g.horario||"—")+'</td>'+
       '<td class="notes">'+(nombres.length?esc(nombres.join(", ")):'<span class="mini">Sin alumnos</span>')+' <span class="mini">('+nombres.length+')</span></td>'+
@@ -2866,6 +3053,7 @@ function abrirGrupo(g){
   el("g_nombre").value = g ? (g.nombre||"") : "";
   el("g_horario").value = g ? (g.horario||"") : "";
   el("gErr").textContent="";
+  fillSedeSelectGen("g_sede","g_sede_wrap",g?(g.sede_id||""):"");
   var cursos=cursosActivos();
   el("g_curso").innerHTML=cursos.map(function(c){return '<option value="'+esc(c)+'">'+esc(c)+'</option>';}).join("");
   if(g && g.curso){
@@ -2887,6 +3075,7 @@ if(el("btnGuardarGrupo")) el("btnGuardarGrupo").addEventListener("click",functio
   var id=el("g_id").value;
   var body={ accion:id?"editar":"crear", id:id,
     nombre:el("g_nombre").value.trim(), curso:el("g_curso").value, horario:el("g_horario").value.trim(),
+    sede_id:(el("g_sede_wrap")&&el("g_sede_wrap").style.display!=="none")?el("g_sede").value:undefined,
     miembros:[].slice.call(document.querySelectorAll('#g_miembros input[data-gm]:checked')).map(function(c){return c.dataset.gm;}) };
   if(body.nombre.length<2){ el("gErr").textContent="Ponle un nombre al grupo."; return; }
   var btn=el("btnGuardarGrupo"); btn.disabled=true;
@@ -3984,7 +4173,8 @@ var BRAND_FONT_LINKS={
   "Bebas Neue":"family=Bebas+Neue",
   "Bricolage Grotesque":"family=Bricolage+Grotesque:wght@700",
   "Playfair Display":"family=Playfair+Display:wght@700",
-  "Space Grotesk":"family=Space+Grotesk:wght@700"
+  "Space Grotesk":"family=Space+Grotesk:wght@700",
+  "Space Mono":"family=Space+Mono:wght@700"
 };
 var brandAplicado=null;
 function aplicarBrandTenant(){

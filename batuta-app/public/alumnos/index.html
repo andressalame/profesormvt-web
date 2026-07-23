@@ -871,7 +871,12 @@ function renderInicio(){
     hp.style.cssText="margin:2px 0 0;font-size:13px;color:var(--muted,#8a8276);";
     $("iHola").insertAdjacentElement("afterend", hp);
   }
-  if(ME.profesor && ME.profesor.nombre){ hp.textContent="Tu profesor: "+ME.profesor.nombre; hp.style.display=""; }
+  if(ME.profesor && ME.profesor.nombre){
+    hp.textContent="Tu profesor: "+ME.profesor.nombre+((ME.sede&&ME.sede.nombre)?" · "+ME.sede.nombre:"");
+    hp.title=(ME.sede&&ME.sede.direccion)?ME.sede.direccion:"";
+    hp.style.display="";
+  }
+  else if(ME.sede&&ME.sede.nombre){ hp.textContent="Tu sede: "+ME.sede.nombre+(ME.sede.direccion?" — "+ME.sede.direccion:""); hp.style.display=""; }
   else hp.style.display="none";
   if(ME.compraPendiente){
     $("iPend").innerHTML = '<strong>// PAGO EN VERIFICACIÓN</strong><br>Tu pago de '+esc(ME.compraPendiente.paquete)+
@@ -2103,7 +2108,8 @@ function initAlumno(){
         var root = document.documentElement;
         if(d.marca.color && /^#[0-9a-fA-F]{6}$/.test(d.marca.color)){ root.style.setProperty("--accent", d.marca.color); }
         var fontLinks = { "Bebas Neue":"family=Bebas+Neue", "Bricolage Grotesque":"family=Bricolage+Grotesque:wght@700",
-                          "Playfair Display":"family=Playfair+Display:wght@700", "Space Grotesk":"family=Space+Grotesk:wght@700" };
+                          "Playfair Display":"family=Playfair+Display:wght@700", "Space Grotesk":"family=Space+Grotesk:wght@700",
+                          "Space Mono":"family=Space+Mono:wght@700" };
         if(d.marca.font && fontLinks[d.marca.font]){
           var fl = document.createElement("link"); fl.rel = "stylesheet";
           fl.href = "https://fonts.googleapis.com/css2?" + fontLinks[d.marca.font] + "&display=swap";
