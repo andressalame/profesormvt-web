@@ -3,15 +3,15 @@
 // Página standalone (sin Layout) para controlar 100% el diseño, conservando Meta Pixel + SEO.
 import Nav from '../components/Nav.astro';
 import ChatbotFloat from '../components/ChatbotFloat.astro';
-const title = "Profesor MVT · Canto, piano y composición para adultos en Lima";
-const description = "Clases 1 a 1 de canto (método MVT), piano y composición para adultos en Lima (San Isidro) y online. Con Andrés Salame, músico real. Planes mensuales desde S/320.";
+const title = "Profesor MVT · Clases de canto y composición para adultos en Lima";
+const description = "Clases 1 a 1 de canto (método MVT) y composición para adultos en Lima (San Isidro) y online. Con Andrés Salame, músico real. Planes mensuales desde S/320.";
 const faqSchema = {
   "@context":"https://schema.org","@type":"FAQPage","mainEntity":[
     {"@type":"Question","name":"Necesito saber música para empezar?","acceptedAnswer":{"@type":"Answer","text":"No. Diseñamos el punto de partida según tu nivel real, desde cero o desde donde lo dejaste."}},
     {"@type":"Question","name":"Soy adulto y siento que ya es tarde.","acceptedAnswer":{"@type":"Answer","text":"No lo es. El método está pensado para la forma en que aprende un adulto, con objetivos claros y resultados que se sienten rápido."}},
     {"@type":"Question","name":"Las clases online funcionan igual que las presenciales?","acceptedAnswer":{"@type":"Answer","text":"Sí. La estructura 1 a 1 se traslada completa al formato en vivo, con la misma atención y el mismo seguimiento."}},
     {"@type":"Question","name":"Qué incluye mi primera clase?","acceptedAnswer":{"@type":"Answer","text":"Una sesión completa 1 a 1 más un diagnóstico vocal en PDF con tu punto de partida y tu plan de trabajo, incluido en tu plan mensual desde la primera clase."}},
-    {"@type":"Question","name":"Puedo combinar canto, piano y composición?","acceptedAnswer":{"@type":"Answer","text":"Sí. Tu plan se arma a tu medida y puede mezclar las tres áreas según lo que quieras lograr."}},
+    {"@type":"Question","name":"Puedo llevar canto y composición juntos?","acceptedAnswer":{"@type":"Answer","text":"Sí, y es el formato que más recomiendo: sesiones de 2 horas seguidas donde entrenas la voz y escribes tus canciones. Va desde 8 horas al mes (S/580) y sale mejor por hora que llevarlos por separado."}},
     {"@type":"Question","name":"Cómo pago, desde Perú o del extranjero?","acceptedAnswer":{"@type":"Answer","text":"Desde Perú pagas con Yape, Plin, Sip, tarjeta de crédito o débito, o transferencia. La tarjeta se procesa al instante y activa tu paquete solo. Desde el extranjero, con tarjeta o cripto."}}
   ]
 };
@@ -20,8 +20,8 @@ const localBusinessSchema = {
   "@context":"https://schema.org","@type":["LocalBusiness","MusicSchool"],
   "@id":"https://profesormvt.com/#business",
   "name":"ProfesorMVT",
-  "alternateName":"Andrés Salamé-Córdova · Clases de canto, piano y composición",
-  "description":"Clases 1 a 1 de canto (método MVT), piano y composición para adultos en Lima (San Isidro) y online.",
+  "alternateName":"Andrés Salamé-Córdova · Clases de canto y composición",
+  "description":"Clases 1 a 1 de canto (método MVT) y composición para adultos en Lima (San Isidro) y online.",
   "url":"https://profesormvt.com/",
   "telephone":"+51989077928",
   "image":"https://profesormvt.com/og-image.jpg",
@@ -29,7 +29,7 @@ const localBusinessSchema = {
   "areaServed":[{"@type":"City","name":"Lima"},{"@type":"AdministrativeArea","name":"Lima Metropolitana"}],
   "address":{"@type":"PostalAddress","addressLocality":"San Isidro","addressRegion":"Lima","addressCountry":"PE"},
   "geo":{"@type":"GeoCoordinates","latitude":-12.0976,"longitude":-77.0365},
-  "knowsAbout":["Clases de canto","Técnica vocal MVT","Clases de piano","Composición musical"],
+  "knowsAbout":["Clases de canto","Técnica vocal MVT","Composición musical","Teoría musical"],
   "sameAs":[
     "https://www.instagram.com/asalamecordova/",
     "https://www.facebook.com/profile.php?id=61588980507102",
@@ -563,7 +563,7 @@ footer .fcol a:hover{color:var(--orange2)}
   <div class="wrap">
     <span class="eyebrow hero-eyebrow reveal-up">Método MVT · Para adultos · San Isidro y online</span>
     <h1 class="display h1 reveal-title">La música <span class="fire">se entrena</span>.</h1>
-    <p class="sub reveal-up">Clases 1 a 1 de canto, piano y composición.</p>
+    <p class="sub reveal-up">Clases 1 a 1 de canto y composición.</p>
     <p class="lead reveal-up">Método real, no academia genérica. Te enseña alguien que vivió de la música.</p>
     <div class="hero-cta reveal-up">
       <a class="btn btn-primary btn-lg" href="/prueba/?f=home">Quiero empezar <span class="arr">→</span></a>
@@ -592,7 +592,7 @@ footer .fcol a:hover{color:var(--orange2)}
     <p class="intro reveal-up">Si te identificas con alguno de estos puntos, no es casualidad. Es el resultado de aprender sin un método pensado para ti.</p>
     <div class="pain-list reveal-stagger">
       <div class="pain"><span class="x">!</span><p>El agudo te sale apretado y forzado.</p></div>
-      <div class="pain"><span class="x">!</span><p>Llevas meses estancado en las mismas 3 canciones al piano.</p></div>
+      <div class="pain"><span class="x">!</span><p>Llevas años con la misma canción a medio escribir en las notas del celular.</p></div>
       <div class="pain"><span class="x">!</span><p><b>«Apoya más fuerte»</b>, te lo repitieron mil veces y nada cambió.</p></div>
       <div class="pain"><span class="x">!</span><p>Escuchas la armonía pero no entiendes qué está pasando.</p></div>
     </div>
@@ -603,7 +603,7 @@ footer .fcol a:hover{color:var(--orange2)}
 <!-- METHODS -->
 <div id="metodo"></div>
 
-<!-- 5 · MÉTODOS (fusión canto + piano + composición) -->
+<!-- 5 · MÉTODOS (canto + composición + el combo de los dos) -->
 <section class="metodos pad stage" data-bg="#1a0f0a" data-glow=".16">
   <div class="spot"></div>
   <div class="wrap">
@@ -619,20 +619,20 @@ footer .fcol a:hover{color:var(--orange2)}
         <ul class="mfeats"><li>Coordinación</li><li>Resonancia</li><li>Cierre cordal</li><li>Sin constricción</li></ul>
       </div>
       <div class="metodo-card">
-        <div class="idx mono">02 / Piano</div>
-        <h3 class="mword">Piano</h3>
-        <span class="mkick">Técnica con propósito</span>
-        <p class="mtag">Para tocar tus canciones, no ejercicios eternos.</p>
-        <p class="mbody">Fuerza, coordinación e independencia entre manos desde el primer día, para que toques lo que amas pronto, no en años.</p>
-        <ul class="mfeats"><li>Fuerza y coordinación</li><li>Independencia</li><li>Dos manos</li><li>Tu repertorio</li></ul>
-      </div>
-      <div class="metodo-card">
-        <div class="idx mono">03 / Composición</div>
+        <div class="idx mono">02 / Composición</div>
         <h3 class="mword">Composición</h3>
         <span class="mkick">De oyente a autor</span>
         <p class="mtag">De entender canciones a escribir las tuyas.</p>
         <p class="mbody">Diseccionas las canciones que amas con hook theory y análisis funcional, y pasas de entenderlas a escribir las tuyas.</p>
         <ul class="mfeats"><li>Hook theory</li><li>Análisis funcional</li><li>Estructura y armonía</li><li>Tu propia voz</li></ul>
+      </div>
+      <div class="metodo-card">
+        <div class="idx mono">03 / Canto y composición</div>
+        <h3 class="mword">Los dos</h3>
+        <span class="mkick">Sesiones de 2 horas</span>
+        <p class="mtag">Cantar lo que tú mismo escribiste.</p>
+        <p class="mbody">Los dos métodos en una sola sesión de 2 horas seguidas: entrenas la voz y escribes tus canciones. Sale mejor por hora que llevarlos por separado.</p>
+        <ul class="mfeats"><li>2 horas seguidas</li><li>Desde 8 horas al mes</li><li>Voz + autoría</li><li>Mejor precio por hora</li></ul>
       </div>
     </div>
   </div>
@@ -818,8 +818,8 @@ footer .fcol a:hover{color:var(--orange2)}
         <div class="faq-a"><p>Una sesión completa 1 a 1 más un diagnóstico vocal en PDF con tu punto de partida y tu plan de trabajo, incluido en tu plan mensual desde la primera clase.</p></div>
       </div>
       <div class="faq-item">
-        <button class="faq-q" aria-expanded="false"><span>Puedo combinar canto, piano y composición?</span><span class="ico" aria-hidden="true"></span></button>
-        <div class="faq-a"><p>Sí. Tu plan se arma a tu medida y puede mezclar las tres áreas según lo que quieras lograr.</p></div>
+        <button class="faq-q" aria-expanded="false"><span>Puedo llevar canto y composición juntos?</span><span class="ico" aria-hidden="true"></span></button>
+        <div class="faq-a"><p>Sí, y es el formato que más recomiendo: sesiones de 2 horas seguidas donde entrenas la voz y escribes tus canciones. Va desde 8 horas al mes (S/580) y sale mejor por hora que llevarlos por separado.</p></div>
       </div>
       <div class="faq-item">
         <button class="faq-q" aria-expanded="false"><span>Cómo pago, desde Perú o del extranjero?</span><span class="ico" aria-hidden="true"></span></button>
@@ -846,7 +846,7 @@ footer .fcol a:hover{color:var(--orange2)}
   <div class="wrap">
     <div class="fcol">
       <div class="brand"><svg class="horns" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="5" y="2.5" width="3.2" height="12.5" rx="1.6"/><rect x="15.8" y="2.5" width="3.2" height="12.5" rx="1.6"/><rect x="8.7" y="9" width="3.1" height="6.5" rx="1.55"/><rect x="12.2" y="9" width="3.1" height="6.5" rx="1.55"/><rect x="4.6" y="12" width="14.8" height="9" rx="4"/><rect x="2.8" y="12.2" width="5.5" height="3.3" rx="1.65"/></svg>PROFESORMVT</div>
-      <p class="ftag">Clases 1 a 1 de canto, piano y composición para adultos. Método real, no academia genérica.</p>
+      <p class="ftag">Clases 1 a 1 de canto y composición para adultos. Método real, no academia genérica.</p>
     </div>
     <div class="fcol">
       <h4>Dónde</h4>
@@ -865,8 +865,6 @@ footer .fcol a:hover{color:var(--orange2)}
       <h4>Clases</h4>
       <a href="/clases-canto-lima/">Clases de canto</a>
       <a href="/clases-canto-online/">Canto online</a>
-      <a href="/clases-piano-lima/">Clases de piano</a>
-      <a href="/clases-piano-online/">Piano online</a>
       <a href="/clases-composicion-lima/">Composición</a>
       <a href="/clases-composicion-online/">Composición online</a>
     </div>

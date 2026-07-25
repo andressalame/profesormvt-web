@@ -8,23 +8,36 @@ import Layout from '../layouts/Layout.astro';
 // repartidos (anuncios, correos de nurture, WhatsApp enviados, bio de Instagram).
 // Captura NOMBRE + WHATSAPP (obligatorio) y cierra por WhatsApp, el canal real.
 const WA = '51989077928';
+// Los 3 cursos vigentes desde el 25-jul-2026. Piano salió de la oferta (casi no tenía alumnos).
+// El combo NO tiene plan de 4 horas: su mínimo es 8 horas al mes, en sesiones de 2 horas seguidas.
 const PLANES = [
   { n: 'Esencial',  clases: '4 clases al mes',  precio: 320, det: 'Una clase por semana. El punto de partida.' },
   { n: 'Intensivo', clases: '8 clases al mes',  precio: 580, det: 'Dos por semana. El más elegido.', destacado: true },
   { n: 'Estrella',  clases: '12 clases al mes', precio: 780, det: 'El mejor precio por clase y cupo asegurado.' },
 ];
+const CURSOS = [
+  { k: 'canto', n: 'Vocal coaching',
+    d: 'Método MVT: coordinación, cierre cordal y resonancia. Dejas de forzar, dejas de quebrarte y el agudo empieza a salir solo.',
+    precio: 'Desde S/320 al mes · clases de 1 hora' },
+  { k: 'composicion', n: 'Composición y teoría musical',
+    d: 'De oyente a autor. Armonía, estructura y letra con Hook Theory, aplicadas a tus propias ideas hasta que salgan canciones terminadas.',
+    precio: 'Desde S/320 al mes · clases de 1 hora' },
+  { k: 'canto y composición', n: 'Canto + Composición', destacado: true,
+    d: 'Los dos métodos en una sola sesión de 2 horas seguidas: entrenas la voz y escribes tus canciones. Sale mejor por hora que llevarlos por separado.',
+    precio: 'Desde S/580 al mes (8 horas) · sesiones de 2 horas' },
+];
 ---
 
 <Layout
-  title="Clases de canto, piano y composición en Lima | Planes desde S/320 | ProfesorMVT"
-  description="Clases 1 a 1 de canto, piano y composición para adultos. Planes mensuales desde S/320. Nunca es tarde para aprender bien. Presencial en San Isidro u online. Déjanos tu WhatsApp y coordinamos hoy."
+  title="Clases de canto y composición en Lima | Planes desde S/320 | ProfesorMVT"
+  description="Vocal coaching, composición y teoría musical 1 a 1 para adultos, o los dos juntos en sesiones de 2 horas. Planes desde S/320 al mes. Presencial en San Isidro u online. Déjanos tu WhatsApp y coordinamos hoy."
   activeNav="prueba"
 >
   <main class="pr">
     <!-- HERO + FORM -->
     <section class="pr-hero">
       <div class="pr-wrap">
-        <p class="pr-eyebrow">Canto · Piano · Composición · Lima y online</p>
+        <p class="pr-eyebrow">Canto · Composición · Lima y online</p>
         <h1>Nunca es tarde para <em>aprender a cantar bien.</em></h1>
         <p class="pr-lead">
           Clases 1 a 1 con un plan armado a tu medida desde la primera sesión.
@@ -42,13 +55,9 @@ const PLANES = [
             </label>
             <label>¿Qué quieres aprender?
               <select name="interes" required>
-                <option value="canto">Canto</option>
-                <option value="piano">Piano</option>
-                <option value="composicion">Composición</option>
-                <option value="canto y piano">Canto y piano</option>
-                <option value="canto y composición">Canto y composición</option>
-                <option value="piano y composición">Piano y composición</option>
-                <option value="canto, piano y composición">Los tres</option>
+                <option value="canto">Vocal coaching (canto)</option>
+                <option value="composicion">Composición y teoría musical</option>
+                <option value="canto y composición">Canto + Composición (sesiones de 2h)</option>
               </select>
             </label>
             <button type="submit" class="pr-btn">Quiero empezar →</button>
@@ -77,11 +86,29 @@ const PLANES = [
       </div>
     </section>
 
+    <!-- CURSOS -->
+    <section class="pr-cursos">
+      <div class="pr-wrap">
+        <h2>Tres formas de entrenar</h2>
+        <p class="pr-planes-sub">Todas 1 a 1, en persona en San Isidro o en vivo online.</p>
+        <div class="pr-cgrid">
+          {CURSOS.map((c) => (
+            <article class={`pr-curso${c.destacado ? ' pr-curso-top' : ''}`}>
+              {c.destacado && <span class="pr-badge">El que más rinde</span>}
+              <h3>{c.n}</h3>
+              <p class="pr-cdet">{c.d}</p>
+              <p class="pr-cprecio">{c.precio}</p>
+            </article>
+          ))}
+        </div>
+      </div>
+    </section>
+
     <!-- PLANES -->
     <section class="pr-planes">
       <div class="pr-wrap">
         <h2>Elige tu plan</h2>
-        <p class="pr-planes-sub">Todos son clases 1 a 1, en persona en San Isidro o en vivo online.</p>
+        <p class="pr-planes-sub">Precios de Vocal coaching y de Composición. El combo Canto + Composición arranca en 8 horas (S/580).</p>
         <div class="pr-grid">
           {PLANES.map((p) => (
             <article class={`pr-plan${p.destacado ? ' pr-plan-top' : ''}`}>
@@ -104,18 +131,18 @@ const PLANES = [
         <div class="pr-steps">
           <article class="pr-step">
             <span class="pr-num">1</span>
-            <h3>Diagnóstico de tu voz</h3>
-            <p>Escucho qué hace tu voz hoy: dónde te quiebras, dónde fuerzas, hasta dónde llegas. Sin juzgar, para saber de dónde partimos.</p>
+            <h3>Tu diagnóstico</h3>
+            <p>Escucho dónde estás hoy: qué hace tu voz, o qué tienes escrito a medias. Sin juzgar, para saber de dónde partimos.</p>
           </article>
           <article class="pr-step">
             <span class="pr-num">2</span>
             <h3>Tu plan, claro</h3>
-            <p>Sales con un plan concreto para tu voz: qué entrenar y en qué orden. Nada de temario genérico.</p>
+            <p>Sales con una ruta concreta: qué entrenar y en qué orden. Nada de temario genérico.</p>
           </article>
           <article class="pr-step">
             <span class="pr-num">3</span>
             <h3>Lo sientes tú mismo</h3>
-            <p>Pruebas cómo se siente cantar coordinado, no forzado. En una clase ya notas la diferencia.</p>
+            <p>Pruebas cómo se siente cantar coordinado en vez de forzado, o ver tu idea suelta convertirse en algo con forma. En una clase ya notas la diferencia.</p>
           </article>
         </div>
       </div>
@@ -136,13 +163,9 @@ const PLANES = [
             </label>
             <label>¿Qué quieres aprender?
               <select name="interes" required>
-                <option value="canto">Canto</option>
-                <option value="piano">Piano</option>
-                <option value="composicion">Composición</option>
-                <option value="canto y piano">Canto y piano</option>
-                <option value="canto y composición">Canto y composición</option>
-                <option value="piano y composición">Piano y composición</option>
-                <option value="canto, piano y composición">Los tres</option>
+                <option value="canto">Vocal coaching (canto)</option>
+                <option value="composicion">Composición y teoría musical</option>
+                <option value="canto y composición">Canto + Composición (sesiones de 2h)</option>
               </select>
             </label>
             <button type="submit" class="pr-btn">Quiero empezar →</button>
@@ -192,7 +215,16 @@ const PLANES = [
   .pr-social-p { font-family:"Space Grotesk",system-ui,sans-serif; font-size:16px; color:var(--cream-mute,#cfc7b6); max-width:52ch; margin:14px auto 0; line-height:1.6; }
   .pr-social-link { display:inline-block; margin-top:12px; color:var(--orange,#e8501f); font-family:"JetBrains Mono",monospace; font-size:12px; text-transform:uppercase; letter-spacing:.06em; text-decoration:none; }
 
-  .pr-planes { padding:44px 0 10px; }
+  .pr-cursos { padding:44px 0 6px; }
+  .pr-cursos h2 { font-family:"Anton",Impact,sans-serif; text-transform:uppercase; font-size:clamp(26px,4.5vw,38px); text-align:center; color:var(--cream,#f3ede0); margin:0 0 6px; }
+  .pr-cgrid { display:grid; grid-template-columns:repeat(3,1fr); gap:16px; align-items:stretch; margin-top:24px; }
+  .pr-curso { position:relative; background:#15110f; border:1px solid #2A2926; border-radius:12px; padding:26px 20px 22px; }
+  .pr-curso-top { border-color:var(--orange,#e8501f); }
+  .pr-curso h3 { font-family:"Space Grotesk",system-ui,sans-serif; font-weight:700; font-size:17px; color:var(--cream,#f3ede0); margin:0 0 10px; }
+  .pr-cdet { font-family:"Space Grotesk",system-ui,sans-serif; font-size:14px; color:#cfc7b6; line-height:1.55; margin:0 0 14px; }
+  .pr-cprecio { font-family:"JetBrains Mono",monospace; font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--orange,#e8501f); margin:0; line-height:1.5; }
+
+  .pr-planes { padding:30px 0 10px; }
   .pr-planes h2 { font-family:"Anton",Impact,sans-serif; text-transform:uppercase; font-size:clamp(26px,4.5vw,38px); text-align:center; color:var(--cream,#f3ede0); margin:0 0 6px; }
   .pr-planes-sub { font-family:"Space Grotesk",system-ui,sans-serif; font-size:15px; color:#cfc7b6; text-align:center; margin:0 0 24px; }
   .pr-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:16px; align-items:stretch; }
@@ -221,6 +253,7 @@ const PLANES = [
   @media (max-width:640px){
     .pr-steps { grid-template-columns:1fr; max-width:420px; margin:0 auto; }
     .pr-grid { grid-template-columns:1fr; max-width:420px; margin:0 auto; }
+    .pr-cgrid { grid-template-columns:1fr; max-width:420px; margin:24px auto 0; }
   }
 </style>
 
