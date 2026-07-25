@@ -45,4 +45,4 @@ Aquí va lo que casi nadie te dice: el adulto aprende a cantar **muy bien**, y e
 
 ## El primer paso
 
-La mejor forma de saber cuánto te va a tomar *a ti* es empezar con un diagnóstico de tu voz: dónde estás hoy y qué destrabar primero. Esa claridad convierte el "algún día" en un plan con fecha. Si te animas, agenda tu clase de prueba o crea tu cuenta en [profesormvt.com](https://profesormvt.com) y arrancamos esta semana. Tu voz de dentro de 6 meses empieza hoy.
+La mejor forma de saber cuánto te va a tomar *a ti* es empezar con un diagnóstico de tu voz: dónde estás hoy y qué destrabar primero. Esa claridad convierte el "algún día" en un plan con fecha. Si te animas, elige tu plan o crea tu cuenta en [profesormvt.com](https://profesormvt.com) y arrancamos esta semana. Tu voz de dentro de 6 meses empieza hoy.

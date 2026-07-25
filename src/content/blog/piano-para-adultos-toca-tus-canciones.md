@@ -38,4 +38,4 @@ Frecuencia le gana a duración: 15 a 20 minutos diarios rinden muchísimo más q
 
 ## Empieza
 
-La mejor forma de saber qué tan rápido avanzarías *tú* es empezar con una clase de prueba: vemos tu punto de partida y armamos el plan. Agenda la tuya o crea tu cuenta en [profesormvt.com](https://profesormvt.com), y en un mes estás tocando algo que hoy te parece lejos.
+La mejor forma de saber qué tan rápido avanzarías *tú* es empezar: en tu primera clase vemos tu punto de partida y armamos el plan. Elige tu plan o crea tu cuenta en [profesormvt.com](https://profesormvt.com), y en un mes estás tocando algo que hoy te parece lejos.

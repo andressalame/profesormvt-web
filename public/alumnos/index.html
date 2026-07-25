@@ -1063,10 +1063,14 @@ function renderClases(){
   }).join("");
 }
 
-/* ---------- VISTA: COMPRAR ---------- */
+/* ---------- VISTA: COMPRAR ----------
+   La "Clase de prueba" S/50 se retiró el 25-jul-2026 (decisión permanente de Andrés: se vende
+   paquete de frente o nada). El worker además la rechaza en los 3 endpoints de compra, así que
+   no basta con volver a listarla aquí. Al salir del catálogo, esPruebaSel() queda siempre en
+   false y el wizard usa su camino normal de 2 pasos [1,3]; el paso 2 (elegir horario antes de
+   pagar) queda sin uso pero intacto por si vuelve un flujo elige-luego-paga. */
 var TIERS = [
-  { pk:"Clase de prueba", nombre:"Clase de prueba", horas:1, primera:true, badge:"★ EMPIEZA AQUÍ", desc:"1 clase con diagnóstico" },
-  { pk:"Paquete 4",  nombre:"Esencial",  horas:4 },
+  { pk:"Paquete 4",  nombre:"Esencial",  horas:4, badge:"★ EMPIEZA AQUÍ" },
   { pk:"Paquete 8",  nombre:"Intensivo", horas:8, badge:"★ MÁS ELEGIDO" },
   { pk:"Paquete 12", nombre:"Estrella",  horas:12 }
 ];

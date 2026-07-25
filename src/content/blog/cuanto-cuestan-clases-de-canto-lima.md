@@ -40,10 +40,10 @@ En ProfesorMVT los precios están publicados, sin negociación por WhatsApp:
 
 Todos incluyen plan personalizado, material para casa y seguimiento. Mientras más constancia le pones, menos cuesta cada clase: exactamente el incentivo que tu voz necesita.
 
-Y para empezar no tienes que apostar a ciegas: la **clase de prueba cuesta S/50** e incluye una sesión completa más un diagnóstico vocal en PDF con tu punto de partida y tu plan. Sales de esa primera hora sabiendo dónde estás y qué sigue, decidas continuar o no.
+Y para empezar no tienes que apostar a ciegas: **los planes arrancan en S/320 al mes** e incluyen, desde la primera clase, una sesión completa más un diagnóstico vocal en PDF con tu punto de partida y tu ruta. Sales de esa primera hora sabiendo dónde estás y qué sigue.
 
 ## La pregunta correcta no es "cuánto cuesta"
 
 Es "qué recibo por ese precio". Una clase de S/80 con diagnóstico, plan y seguimiento vale más que una de S/50 donde repites vocalizaciones genéricas. Tu voz ya funciona; lo que necesita es entrenamiento bien dirigido.
 
-Si quieres saber exactamente dónde está tu voz hoy, [agenda tu clase de prueba en profesormvt.com](https://profesormvt.com/horarios): S/50, una hora completa, y te llevas tu diagnóstico en PDF.
+Si quieres saber exactamente dónde está tu voz hoy, [mira los planes en profesormvt.com](https://profesormvt.com/horarios): desde S/320 al mes, y en tu primera clase te llevas tu diagnóstico en PDF.

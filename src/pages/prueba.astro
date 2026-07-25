@@ -2,14 +2,22 @@
 import Layout from '../layouts/Layout.astro';
 
 // Embudo phone-first de alto intento: la landing a la que apuntar los anuncios.
-// El "premio" es una clase de prueba con diagnóstico (S/50), no un PDF gratis.
+// Vende PLANES MENSUALES de frente. La clase de prueba S/50 se retiró el 25-jul-2026
+// (decisión permanente de Andrés: paquete de frente o nada). No reintroducirla.
+// La URL se conserva en /prueba para no perder el SEO acumulado ni romper los links ya
+// repartidos (anuncios, correos de nurture, WhatsApp enviados, bio de Instagram).
 // Captura NOMBRE + WHATSAPP (obligatorio) y cierra por WhatsApp, el canal real.
 const WA = '51989077928';
+const PLANES = [
+  { n: 'Esencial',  clases: '4 clases al mes',  precio: 320, det: 'Una clase por semana. El punto de partida.' },
+  { n: 'Intensivo', clases: '8 clases al mes',  precio: 580, det: 'Dos por semana. El más elegido.', destacado: true },
+  { n: 'Estrella',  clases: '12 clases al mes', precio: 780, det: 'El mejor precio por clase y cupo asegurado.' },
+];
 ---
 
 <Layout
-  title="Clase de prueba de canto en Lima | Diagnóstico de tu voz (S/50) | ProfesorMVT"
-  description="Reserva una clase de prueba con diagnóstico de tu voz. Nunca es tarde para aprender a cantar bien. Presencial en San Isidro u online. Déjanos tu WhatsApp y coordinamos hoy."
+  title="Clases de canto, piano y composición en Lima | Planes desde S/320 | ProfesorMVT"
+  description="Clases 1 a 1 de canto, piano y composición para adultos. Planes mensuales desde S/320. Nunca es tarde para aprender bien. Presencial en San Isidro u online. Déjanos tu WhatsApp y coordinamos hoy."
   activeNav="prueba"
 >
   <main class="pr">
@@ -19,8 +27,8 @@ const WA = '51989077928';
         <p class="pr-eyebrow">Canto · Piano · Composición · Lima y online</p>
         <h1>Nunca es tarde para <em>aprender a cantar bien.</em></h1>
         <p class="pr-lead">
-          Reserva una clase de prueba con diagnóstico de tu voz. En 45 minutos sabes exactamente
-          qué entrenar, con un plan claro. Presencial en San Isidro u online.
+          Clases 1 a 1 con un plan armado a tu medida desde la primera sesión.
+          Planes mensuales desde S/320. Presencial en San Isidro u online.
         </p>
 
         <div class="pr-formcard">
@@ -43,13 +51,13 @@ const WA = '51989077928';
                 <option value="canto, piano y composición">Los tres</option>
               </select>
             </label>
-            <button type="submit" class="pr-btn">Reservar mi clase de prueba →</button>
-            <div class="pr-micro">Te escribimos por WhatsApp hoy mismo para coordinar. Clase de prueba con diagnóstico, S/50.</div>
+            <button type="submit" class="pr-btn">Quiero empezar →</button>
+            <div class="pr-micro">Te escribimos por WhatsApp hoy mismo para armar tu plan y cuadrar tu horario.</div>
             <div class="pr-err" data-err></div>
           </form>
           <div class="pr-ok" data-ok hidden>
             <h3>Listo :)</h3>
-            <p>Te acabamos de abrir WhatsApp para que nos escribas, o te contactamos nosotros hoy mismo para coordinar tu clase de prueba.</p>
+            <p>Te acabamos de abrir WhatsApp para que nos escribas, o te contactamos nosotros hoy mismo para armar tu plan.</p>
             <a class="pr-btn pr-btn-link" data-walink href={`https://wa.me/${WA}`} target="_blank" rel="noopener">Abrir WhatsApp →</a>
           </div>
         </div>
@@ -69,10 +77,30 @@ const WA = '51989077928';
       </div>
     </section>
 
-    <!-- QUÉ PASA EN LA PRUEBA -->
+    <!-- PLANES -->
+    <section class="pr-planes">
+      <div class="pr-wrap">
+        <h2>Elige tu plan</h2>
+        <p class="pr-planes-sub">Todos son clases 1 a 1, en persona en San Isidro o en vivo online.</p>
+        <div class="pr-grid">
+          {PLANES.map((p) => (
+            <article class={`pr-plan${p.destacado ? ' pr-plan-top' : ''}`}>
+              {p.destacado && <span class="pr-badge">Más elegido</span>}
+              <h3>Plan {p.n}</h3>
+              <p class="pr-precio">S/{p.precio}<span>/mes</span></p>
+              <p class="pr-clases">{p.clases}</p>
+              <p class="pr-det">{p.det}</p>
+            </article>
+          ))}
+        </div>
+        <p class="pr-suelta">¿Prefieres ir sin plan mensual? También hay clase suelta a S/90.</p>
+      </div>
+    </section>
+
+    <!-- QUÉ PASA DESDE LA PRIMERA CLASE -->
     <section class="pr-como">
       <div class="pr-wrap">
-        <h2>Qué pasa en tu clase de prueba</h2>
+        <h2>Qué pasa desde tu primera clase</h2>
         <div class="pr-steps">
           <article class="pr-step">
             <span class="pr-num">1</span>
@@ -82,7 +110,7 @@ const WA = '51989077928';
           <article class="pr-step">
             <span class="pr-num">2</span>
             <h3>Tu plan, claro</h3>
-            <p>Salimos con un plan concreto para tu voz: qué entrenar y en qué orden. Nada de temario genérico.</p>
+            <p>Sales con un plan concreto para tu voz: qué entrenar y en qué orden. Nada de temario genérico.</p>
           </article>
           <article class="pr-step">
             <span class="pr-num">3</span>
@@ -117,8 +145,8 @@ const WA = '51989077928';
                 <option value="canto, piano y composición">Los tres</option>
               </select>
             </label>
-            <button type="submit" class="pr-btn">Reservar mi clase de prueba →</button>
-            <div class="pr-micro">Te escribimos por WhatsApp hoy mismo. Clase de prueba con diagnóstico, S/50.</div>
+            <button type="submit" class="pr-btn">Quiero empezar →</button>
+            <div class="pr-micro">Te escribimos por WhatsApp hoy mismo para armar tu plan.</div>
             <div class="pr-err" data-err></div>
           </form>
           <div class="pr-ok" data-ok hidden>
@@ -164,7 +192,21 @@ const WA = '51989077928';
   .pr-social-p { font-family:"Space Grotesk",system-ui,sans-serif; font-size:16px; color:var(--cream-mute,#cfc7b6); max-width:52ch; margin:14px auto 0; line-height:1.6; }
   .pr-social-link { display:inline-block; margin-top:12px; color:var(--orange,#e8501f); font-family:"JetBrains Mono",monospace; font-size:12px; text-transform:uppercase; letter-spacing:.06em; text-decoration:none; }
 
-  .pr-como { padding:44px 0 20px; }
+  .pr-planes { padding:44px 0 10px; }
+  .pr-planes h2 { font-family:"Anton",Impact,sans-serif; text-transform:uppercase; font-size:clamp(26px,4.5vw,38px); text-align:center; color:var(--cream,#f3ede0); margin:0 0 6px; }
+  .pr-planes-sub { font-family:"Space Grotesk",system-ui,sans-serif; font-size:15px; color:#cfc7b6; text-align:center; margin:0 0 24px; }
+  .pr-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:16px; align-items:stretch; }
+  .pr-plan { position:relative; background:#15110f; border:1px solid #2A2926; border-radius:12px; padding:26px 20px 22px; text-align:center; }
+  .pr-plan-top { border-color:var(--orange,#e8501f); }
+  .pr-badge { position:absolute; top:-11px; left:50%; transform:translateX(-50%); background:var(--orange,#e8501f); color:#160a04; font-family:"JetBrains Mono",monospace; font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.08em; padding:4px 10px; border-radius:20px; white-space:nowrap; }
+  .pr-plan h3 { font-family:"Space Grotesk",system-ui,sans-serif; font-weight:700; font-size:16px; color:var(--cream,#f3ede0); margin:0 0 10px; }
+  .pr-precio { font-family:"Anton",Impact,sans-serif; font-size:36px; color:var(--orange,#e8501f); margin:0; line-height:1; }
+  .pr-precio span { font-family:"JetBrains Mono",monospace; font-size:12px; color:#8a8276; letter-spacing:.04em; }
+  .pr-clases { font-family:"JetBrains Mono",monospace; font-size:11px; text-transform:uppercase; letter-spacing:.08em; color:#cfc7b6; margin:10px 0 8px; }
+  .pr-det { font-family:"Space Grotesk",system-ui,sans-serif; font-size:13.5px; color:#cfc7b6; line-height:1.5; margin:0; }
+  .pr-suelta { font-family:"Space Grotesk",system-ui,sans-serif; font-size:14px; color:#8a8276; text-align:center; margin:22px 0 0; }
+
+  .pr-como { padding:34px 0 20px; }
   .pr-como h2 { font-family:"Anton",Impact,sans-serif; text-transform:uppercase; font-size:clamp(26px,4.5vw,38px); text-align:center; color:var(--cream,#f3ede0); margin:0 0 26px; }
   .pr-steps { display:grid; grid-template-columns:repeat(3,1fr); gap:16px; }
   .pr-step { background:#15110f; border:1px solid #2A2926; border-radius:12px; padding:24px 20px; }
@@ -176,7 +218,10 @@ const WA = '51989077928';
   .pr-cierre h2 { font-family:"Anton",Impact,sans-serif; text-transform:uppercase; font-size:clamp(26px,4.5vw,40px); color:var(--cream,#f3ede0); margin:0; }
   .pr-cierre h2 em { color:var(--orange,#e8501f); font-style:normal; }
 
-  @media (max-width:640px){ .pr-steps { grid-template-columns:1fr; max-width:420px; margin:0 auto; } }
+  @media (max-width:640px){
+    .pr-steps { grid-template-columns:1fr; max-width:420px; margin:0 auto; }
+    .pr-grid { grid-template-columns:1fr; max-width:420px; margin:0 auto; }
+  }
 </style>
 
 <script define:vars={{ WA }}>
@@ -190,12 +235,12 @@ const WA = '51989077928';
     }
   } catch (e) {}
   // Atribución de origen: ?f= o utm_source del link (ej. bio de IG /prueba?f=ig-bio),
-  // con fallback a 'landing-prueba'. Permite medir qué canal trae los leads que convierten.
-  var _fuente = 'landing-prueba';
+  // con fallback a 'landing-empezar'. Permite medir qué canal trae los leads que convierten.
+  var _fuente = 'landing-empezar';
   try {
     var _qs = new URLSearchParams(location.search);
     var _f = _qs.get('f') || _qs.get('utm_source');
-    if (_f) _fuente = _f.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 60) || 'landing-prueba';
+    if (_f) _fuente = _f.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 60) || 'landing-empezar';
   } catch (e) {}
   document.querySelectorAll('[data-form]').forEach(function(form){
     var card = form.closest('.pr-formcard');
@@ -215,23 +260,22 @@ const WA = '51989077928';
       btn.disabled = true; btn.textContent = 'Enviando...';
       fetch('/api/lead', {
         method:'POST', headers:{'content-type':'application/json'},
-        body: JSON.stringify({ nombre:nombre, telefono:tel, interes:interes, website:hp, marca:'MVT', fuente:_fuente, modo:'prueba' })
+        body: JSON.stringify({ nombre:nombre, telefono:tel, interes:interes, website:hp, marca:'MVT', fuente:_fuente, modo:'empezar' })
       })
       .then(function(r){ return r.json(); })
       .then(function(d){
         if(d && d.ok){
           if(window.fbq) fbq('track','Lead');
-          var digits = tel.length >= 9 ? (tel.length === 9 ? '51'+tel : tel) : tel;
-          var msg = encodeURIComponent('Hola! Soy ' + nombre + ', quiero reservar mi clase de prueba de ' + interes + ' :)');
+          var msg = encodeURIComponent('Hola! Soy ' + nombre + ', quiero empezar clases de ' + interes + ' :)');
           if (waLink) waLink.href = 'https://wa.me/' + WA + '?text=' + msg;
           form.hidden = true; okEl.hidden = false;
           try { window.open('https://wa.me/' + WA + '?text=' + msg, '_blank'); } catch(err){}
         } else {
           errEl.textContent = (d && d.error) || 'Algo salió mal. Intenta de nuevo.';
-          btn.disabled = false; btn.textContent = 'Reservar mi clase de prueba →';
+          btn.disabled = false; btn.textContent = 'Quiero empezar →';
         }
       })
-      .catch(function(){ errEl.textContent = 'No se pudo enviar. Intenta de nuevo.'; btn.disabled = false; btn.textContent = 'Reservar mi clase de prueba →'; });
+      .catch(function(){ errEl.textContent = 'No se pudo enviar. Intenta de nuevo.'; btn.disabled = false; btn.textContent = 'Quiero empezar →'; });
     });
   });
 </script>

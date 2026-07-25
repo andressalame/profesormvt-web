@@ -4,13 +4,13 @@
 import Nav from '../components/Nav.astro';
 import ChatbotFloat from '../components/ChatbotFloat.astro';
 const title = "Profesor MVT · Canto, piano y composición para adultos en Lima";
-const description = "Clases 1 a 1 de canto (método MVT), piano y composición para adultos en Lima (San Isidro) y online. Con Andrés Salame, músico real. Prueba S/50 con diagnóstico vocal en PDF.";
+const description = "Clases 1 a 1 de canto (método MVT), piano y composición para adultos en Lima (San Isidro) y online. Con Andrés Salame, músico real. Planes mensuales desde S/320.";
 const faqSchema = {
   "@context":"https://schema.org","@type":"FAQPage","mainEntity":[
     {"@type":"Question","name":"Necesito saber música para empezar?","acceptedAnswer":{"@type":"Answer","text":"No. Diseñamos el punto de partida según tu nivel real, desde cero o desde donde lo dejaste."}},
     {"@type":"Question","name":"Soy adulto y siento que ya es tarde.","acceptedAnswer":{"@type":"Answer","text":"No lo es. El método está pensado para la forma en que aprende un adulto, con objetivos claros y resultados que se sienten rápido."}},
     {"@type":"Question","name":"Las clases online funcionan igual que las presenciales?","acceptedAnswer":{"@type":"Answer","text":"Sí. La estructura 1 a 1 se traslada completa al formato en vivo, con la misma atención y el mismo seguimiento."}},
-    {"@type":"Question","name":"Qué incluye la clase de prueba?","acceptedAnswer":{"@type":"Answer","text":"Una sesión completa más un diagnóstico vocal en PDF con tu punto de partida y tu plan de trabajo."}},
+    {"@type":"Question","name":"Qué incluye mi primera clase?","acceptedAnswer":{"@type":"Answer","text":"Una sesión completa 1 a 1 más un diagnóstico vocal en PDF con tu punto de partida y tu plan de trabajo, incluido en tu plan mensual desde la primera clase."}},
     {"@type":"Question","name":"Puedo combinar canto, piano y composición?","acceptedAnswer":{"@type":"Answer","text":"Sí. Tu plan se arma a tu medida y puede mezclar las tres áreas según lo que quieras lograr."}},
     {"@type":"Question","name":"Cómo pago, desde Perú o del extranjero?","acceptedAnswer":{"@type":"Answer","text":"Desde Perú pagas con Yape, Plin, Sip, tarjeta de crédito o débito, o transferencia. La tarjeta se procesa al instante y activa tu paquete solo. Desde el extranjero, con tarjeta o cripto."}}
   ]
@@ -25,7 +25,7 @@ const localBusinessSchema = {
   "url":"https://profesormvt.com/",
   "telephone":"+51989077928",
   "image":"https://profesormvt.com/og-image.jpg",
-  "priceRange":"S/50 - S/780",
+  "priceRange":"S/90 - S/780",
   "areaServed":[{"@type":"City","name":"Lima"},{"@type":"AdministrativeArea","name":"Lima Metropolitana"}],
   "address":{"@type":"PostalAddress","addressLocality":"San Isidro","addressRegion":"Lima","addressCountry":"PE"},
   "geo":{"@type":"GeoCoordinates","latitude":-12.0976,"longitude":-77.0365},
@@ -566,7 +566,7 @@ footer .fcol a:hover{color:var(--orange2)}
     <p class="sub reveal-up">Clases 1 a 1 de canto, piano y composición.</p>
     <p class="lead reveal-up">Método real, no academia genérica. Te enseña alguien que vivió de la música.</p>
     <div class="hero-cta reveal-up">
-      <a class="btn btn-primary btn-lg" href="/prueba/?f=home">Reservar mi clase de prueba <span class="arr">→</span></a>
+      <a class="btn btn-primary btn-lg" href="/prueba/?f=home">Quiero empezar <span class="arr">→</span></a>
       <a class="btn btn-ghost btn-lg" href="#precios">Ver paquetes</a>
     </div>
   </div>
@@ -775,12 +775,12 @@ footer .fcol a:hover{color:var(--orange2)}
 
     <div class="trial reveal-up">
       <div class="tinfo">
-        <div class="tprice">Clase de prueba · <span class="fire">S/50</span></div>
-        <p>Incluye una sesión completa y un diagnóstico vocal en PDF con tu punto de partida y tu plan.</p>
+        <div class="tprice">Empieza desde <span class="fire">S/320</span> al mes</div>
+        <p>Tu plan incluye, desde la primera clase, una sesión completa y un diagnóstico vocal en PDF con tu punto de partida y tu ruta.</p>
         <p class="thint">Mira los espacios libres antes de decidir. Sin escribir ni crear cuenta.</p>
       </div>
       <div class="tcta">
-        <a class="btn btn-primary" href="/prueba/?f=home">Reservar clase de prueba <span class="arr">→</span></a>
+        <a class="btn btn-primary" href="/prueba/?f=home">Quiero empezar <span class="arr">→</span></a>
         <a class="btn btn-ghost" href="/horarios/">Ver horarios disponibles <span class="arr">→</span></a>
       </div>
     </div>
@@ -814,8 +814,8 @@ footer .fcol a:hover{color:var(--orange2)}
         <div class="faq-a"><p>Sí. La estructura 1 a 1 se traslada completa al formato en vivo, con la misma atención y el mismo seguimiento.</p></div>
       </div>
       <div class="faq-item">
-        <button class="faq-q" aria-expanded="false"><span>Qué incluye la clase de prueba?</span><span class="ico" aria-hidden="true"></span></button>
-        <div class="faq-a"><p>Una sesión completa más un diagnóstico vocal en PDF con tu punto de partida y tu plan de trabajo.</p></div>
+        <button class="faq-q" aria-expanded="false"><span>Qué incluye mi primera clase?</span><span class="ico" aria-hidden="true"></span></button>
+        <div class="faq-a"><p>Una sesión completa 1 a 1 más un diagnóstico vocal en PDF con tu punto de partida y tu plan de trabajo, incluido en tu plan mensual desde la primera clase.</p></div>
       </div>
       <div class="faq-item">
         <button class="faq-q" aria-expanded="false"><span>Puedo combinar canto, piano y composición?</span><span class="ico" aria-hidden="true"></span></button>
@@ -834,9 +834,9 @@ footer .fcol a:hover{color:var(--orange2)}
   <div class="spot"></div>
   <div class="wrap">
     <span class="eyebrow reveal-up" style="display:inline-flex">Empieza hoy</span>
-    <h2 class="display h2 reveal-title">Reserva tu clase de prueba.</h2>
-    <p class="sub reveal-up">Un diagnóstico de tu voz y un plan claro. Tu primera clase puede ser esta semana.</p>
-    <a class="btn btn-primary btn-lg reveal-up" href="/prueba/?f=home">Reservar mi clase de prueba <span class="arr">→</span></a>
+    <h2 class="display h2 reveal-title">Elige tu plan y arranca.</h2>
+    <p class="sub reveal-up">Un diagnóstico de tu voz y un plan claro desde la primera clase. Puede ser esta semana.</p>
+    <a class="btn btn-primary btn-lg reveal-up" href="/prueba/?f=home">Quiero empezar <span class="arr">→</span></a>
     <div class="mono reveal-up">San Isidro · Online en vivo</div>
   </div>
 </section>
@@ -858,7 +858,7 @@ footer .fcol a:hover{color:var(--orange2)}
       <h4>Empezar</h4>
       <a href="#precios">Paquetes</a>
       <a href="/horarios/">Horarios disponibles</a>
-      <a href="/prueba/">Clase de prueba</a>
+      <a href="/prueba/">Empezar clases</a>
       <a href="/alumnos/" class="fire" style="color:var(--orange2)">Crear mi cuenta</a>
     </div>
     <div class="fcol">

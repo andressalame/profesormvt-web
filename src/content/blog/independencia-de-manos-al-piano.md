@@ -39,4 +39,4 @@ No necesitas un cuaderno de ejercicios para niños ni meses de teoría antes de 
 
 Con práctica honesta de 15 a 20 minutos al día, la mayoría de mis alumnos adultos siente un salto claro en tres o cuatro semanas. No es que las manos dejen de trabarse de golpe: es que cada vez se traban menos, hasta que un día tocas tu canción completa y te das cuenta de que ni pensaste en las manos. Ese día engancha.
 
-Si quieres saltarte el ensayo y error y entrenar esto con un método que va directo a tocar tus canciones desde temprano, en [ProfesorMVT](https://profesormvt.com) doy clases de piano 1 a 1 para adultos en Lima y online. La primera clase de prueba cuesta S/50 y de ahí decides. Tus manos coordinan mejor de lo que crees, solo hay que entrenarlas en el orden correcto.
+Si quieres saltarte el ensayo y error y entrenar esto con un método que va directo a tocar tus canciones desde temprano, en [ProfesorMVT](https://profesormvt.com) doy clases de piano 1 a 1 para adultos en Lima y online. Los planes arrancan en S/320 al mes e incluyen tu diagnóstico desde la primera clase. Tus manos coordinan mejor de lo que crees, solo hay que entrenarlas en el orden correcto.

@@ -58,4 +58,4 @@ Tres cosas concretas:
 2. **Buscar un profesor con marco contemporáneo.** Modern Vocal Training, Estill, Complete Vocal Technique — cualquier metodología que parta de la fisiología real, no de metáforas.
 3. **Reentrenar con paciencia.** Si llevas años apretando, va a tomar semanas o meses desaprenderlo. La voz responde a la repetición específica, no al esfuerzo.
 
-Si quieres explorar este enfoque, te invito a una clase de prueba. Una hora bastará para que sientas la diferencia entre "esforzarte más" y "coordinarte mejor".
+Si quieres explorar este enfoque, te invito a empezar. Una hora bastará para que sientas la diferencia entre "esforzarte más" y "coordinarte mejor".

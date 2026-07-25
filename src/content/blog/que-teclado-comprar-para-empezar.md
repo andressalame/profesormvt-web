@@ -44,4 +44,4 @@ Las teclas *ponderadas* imitan el peso de un piano acústico (cuesta un poco má
 
 Para empezar bien y sin gastar de más: **mínimo 61 teclas, con sensibilidad al toque, y salida de audífonos.** Con eso aprendes todo lo del primer año tranquilamente. Lo demás es upgrade para cuando ya sepas que esto va para largo.
 
-Si quieres, antes de comprar te puedo orientar según tu objetivo y presupuesto en la clase de prueba —y de paso empezamos a tocar. [Reserva tu clase de prueba](/horarios/).
+Si quieres, antes de comprar te puedo orientar según tu objetivo y presupuesto en tu primera clase —y de paso empezamos a tocar. [Elige tu plan](/horarios/).

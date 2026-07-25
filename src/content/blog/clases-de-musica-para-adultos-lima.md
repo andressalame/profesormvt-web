@@ -28,11 +28,11 @@ Si el profesor te puede explicar *con qué método* trabaja y *por qué*, buena 
 
 En Lima, lo presencial tiene sentido si te queda cerca y valoras la energía del cara a cara — por ejemplo, clases en San Isidro. Pero el online en vivo (no grabado) funciona igual de bien para canto, piano y composición, y te ahorra tráfico y desplazamiento. Lo importante es que sea **en vivo y uno a uno**, no un curso pregrabado donde nadie corrige tus errores.
 
-## 4. La clase de prueba: úsala como filtro
+## 4. La primera clase: úsala como filtro
 
-Una buena clase de prueba no es un "tour de ventas". Debería darte un **diagnóstico real** de tu punto de partida y dejarte ver cómo enseña esa persona. Si sales con una idea clara de dónde estás y hacia dónde irías, vas bien. Si solo fue charla y promesas, sigue buscando.
+Una buena primera clase no es un "tour de ventas". Debería darte un **diagnóstico real** de tu punto de partida y dejarte ver cómo enseña esa persona. Si sales con una idea clara de dónde estás y hacia dónde irías, vas bien. Si solo fue charla y promesas, sigue buscando.
 
-Ojo con el "primera clase gratis" como único gancho: a veces significa que el valor está en venderte el paquete, no en la clase misma. Una prueba con costo pequeño pero con diagnóstico escrito suele decir más sobre la seriedad del profesor.
+Ojo con el "primera clase gratis" como único gancho: a veces significa que el valor está en venderte el paquete, no en la clase misma. Que la primera sesión venga con un diagnóstico escrito dice más sobre la seriedad del profesor que cualquier descuento de entrada.
 
 ## 5. Señales de un buen profesor para adultos
 
@@ -46,4 +46,4 @@ Ojo con el "primera clase gratis" como único gancho: a veces significa que el v
 
 Aprender música de adulto en Lima es totalmente viable —presencial o en línea— si eliges a alguien que enseñe *para adultos*, con método, y que use la primera clase para entenderte, no solo para venderte.
 
-Yo doy clases de canto (MVT), piano y composición (Hook Theory) para adultos, presenciales en San Isidro y online para todo el Perú y el extranjero. La clase de prueba incluye un diagnóstico vocal escrito. [Reserva tu clase de prueba](/horarios/) y armamos tu plan.
+Yo doy clases de canto (MVT), piano y composición (Hook Theory) para adultos, presenciales en San Isidro y online para todo el Perú y el extranjero. La primera clase incluye un diagnóstico vocal escrito. [Elige tu plan](/horarios/) y armamos tu plan.

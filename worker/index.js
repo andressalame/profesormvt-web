@@ -47,9 +47,17 @@ const PAQUETES = {
   "Paquete 8":    { clases: 8,  reprog: 3 },
   "Paquete 12":   { clases: 12, reprog: 4 },
   "Clase suelta": { clases: 1,  reprog: 0 },
-  "Clase de prueba": { clases: 1, reprog: 0 }   // 1 clase con diagnóstico, solo para leads nuevos
+  "Clase de prueba": { clases: 1, reprog: 0 }   // LEGADO: ya no se vende (ver PAQUETES_COMPRABLES)
 };
 const PRECIOS_DEFAULT = { "Paquete 4": 320, "Paquete 8": 580, "Paquete 12": 780, "Clase suelta": 90, "Clase de prueba": 50 };
+
+/* La clase de prueba S/50 MURIÓ el 25-jul-2026 (decisión de Andrés: se vende paquete de frente o
+   nada). Sigue en PAQUETES y PRECIOS_DEFAULT solo como LEGADO, para que los alumnos históricos que
+   la tienen en la D1 sigan calculando bien su saldo; comprarla está bloqueado en los 3 endpoints de
+   compra. NO reintroducirla ni inventar variantes ("primera clase con diagnóstico", "clase de
+   descubrimiento", descuento de arranque): la decisión es permanente. */
+const PAQUETES_COMPRABLES = ["Paquete 4", "Paquete 8", "Paquete 12", "Clase suelta"];
+const PAQUETE_RETIRADO_MSG = "Ese paquete ya no está disponible. Elige uno de los planes o una clase suelta.";
 const SESION_DIAS = 30;
 const CREDITO_REFERIDO = 50; // S/ que gana el referidor cuando su amigo confirma su 1ª compra
 
@@ -401,11 +409,11 @@ async function correoBienvenidaLead(env, to){
       '<p>Hola,</p>' +
       '<p>Aquí está tu guía <b>"De oyente a autor"</b>: las 3 herramientas para empezar a componer tu primera canción.</p>' +
       '<p style="text-align:center;margin:26px 0"><a href="' + url + '" style="background:#e8501f;color:#ffffff;text-decoration:none;font-weight:bold;padding:14px 26px;border-radius:6px;display:inline-block">Descargar mi guía</a></p>' +
-      '<p>Componer se entrena, no es un don. Si quieres pasar de oyente a autor en serio, tu primera clase de prueba cuesta S/50 e incluye un plan armado a tu medida, con alguien que ha compuesto más de 200 canciones.</p>' +
+      '<p>Componer se entrena, no es un don. Si quieres pasar de oyente a autor en serio, se hace con clases 1 a 1 y un plan armado a tu medida, con alguien que ha compuesto más de 200 canciones. Los planes arrancan en S/320 al mes.</p>' +
       '<p>Un abrazo,<br><b>' + MARCA.profe + '</b><br>' + MARCA.nombre + '</p>' +
       '<p style="font-size:12px;color:#888888;margin-top:26px">' + dominioLimpio + ' · Canto, piano y composición para adultos</p>' +
     '</div>';
-  const text = 'Hola,\n\nAquí está tu guía "De oyente a autor": ' + url + '\n\nComponer se entrena, no es un don. Si quieres pasar de oyente a autor en serio, tu primera clase de prueba cuesta S/50 e incluye un plan a tu medida.\n\nUn abrazo,\n' + MARCA.profe + ' - ' + MARCA.nombre + '\n' + dominioLimpio;
+  const text = 'Hola,\n\nAquí está tu guía "De oyente a autor": ' + url + '\n\nComponer se entrena, no es un don. Si quieres pasar de oyente a autor en serio, se hace con clases 1 a 1 y un plan a tu medida. Los planes arrancan en S/320 al mes.\n\nUn abrazo,\n' + MARCA.profe + ' - ' + MARCA.nombre + '\n' + dominioLimpio;
   return enviarCorreo(env, { to: to, subject: "Tu guía de composición", html: html, text: text });
 }
 
@@ -808,12 +816,15 @@ async function procesarWinBack(env){
 
 /* ============ NURTURE DE LEADS ============
    El lead que deja su correo por la guía recibe HOY un solo correo (la guía) y nada más. Este motor
-   le hace seguimiento automático: lo empuja a la clase de prueba S/50 mientras está tibio, sin que
-   Andrés mueva un dedo. Convierte el ~90% del tráfico pagado que hoy se enfría. Reusa Resend + D1.
-   Pasos de la secuencia: día desde la captura -> número de correo de seguimiento. */
+   le hace seguimiento automático: lo empuja a un PAQUETE mientras está tibio, sin que Andrés mueva
+   un dedo. Convierte el ~90% del tráfico pagado que hoy se enfría. Reusa Resend + D1.
+   Pasos de la secuencia: día desde la captura -> número de correo de seguimiento.
+   OJO (25-jul-2026): la clase de prueba S/50 está MUERTA por decisión de Andrés. Estos correos
+   venden paquetes de frente; no reintroducir ninguna variante de "prueba", "primera clase suelta
+   con diagnóstico" ni descuento de arranque. */
 const NURTURE_PASOS = [
-  { paso: 1, dia: 1 },   // ~1 día después: empuje suave + bajar la barrera
-  { paso: 2, dia: 3 }    // ~3 días después: la oferta concreta de la clase de prueba
+  { paso: 1, dia: 1 },   // ~1 día después: empuje suave + reencuadre ("esto se entrena")
+  { paso: 2, dia: 3 }    // ~3 días después: la oferta concreta de los planes mensuales
 ];
 
 /* Correo de seguimiento a un lead que dejó su correo y todavía no compra. paso = 1 | 2. */
@@ -831,7 +842,7 @@ async function correoNurtureLead(env, to, paso){
   const boton = function(texto){
     return '<p style="text-align:center;margin:26px 0"><a href="' + horarios + '" style="background:#e8501f;color:#ffffff;text-decoration:none;font-weight:bold;padding:14px 26px;border-radius:6px;display:inline-block">' + texto + '</a></p>';
   };
-  const wa = "https://wa.me/" + MARCA.whatsapp + "?text=" + encodeURIComponent("Hola! Vi tu correo sobre la clase de prueba y tengo una pregunta antes de reservar 🎤");
+  const wa = "https://wa.me/" + MARCA.whatsapp + "?text=" + encodeURIComponent("Hola! Vi tu correo sobre los planes y tengo una pregunta antes de empezar 🎤");
   const botonWsp = function(texto){
     return '<p style="text-align:center;margin:0 0 26px"><a href="' + wa + '" style="color:#e8501f;text-decoration:underline;font-weight:bold">' + texto + '</a></p>';
   };
@@ -841,27 +852,27 @@ async function correoNurtureLead(env, to, paso){
     html = wrap(
       '<p>Hola,</p>' +
       '<p>Te bajaste la guía ayer, así que te escribo por una sola razón: la mayoría de adultos cree que ya se le pasó el tren para cantar, tocar o componer. No es verdad. Esto no es talento, es entrenamiento, y se entrena a cualquier edad.</p>' +
-      '<p>La forma más rápida de comprobarlo es una clase de prueba (S/50) con un diagnóstico hecho a tu medida: en una hora ves exactamente dónde estás y qué te falta para sonar como quieres.</p>' +
-      boton("Ver horarios disponibles") +
-      '<p>Eliges tu horario ahí mismo, cuando quieras.</p>'
+      '<p>La forma de que pase de verdad es un plan sostenido: clases 1 a 1, cada semana, con alguien que te arma la ruta y te corrige en el momento. Un mes es suficiente para notar el cambio en tu voz o en tus manos.</p>' +
+      boton("Ver planes y horarios") +
+      '<p>Ahí mismo eliges el tuyo, cuando quieras.</p>'
     );
-    text = 'Hola,\n\nTe bajaste la guía ayer. La mayoría de adultos cree que ya se le pasó el tren para cantar, tocar o componer. No es verdad: esto no es talento, es entrenamiento, y se entrena a cualquier edad.\n\nLa forma más rápida de comprobarlo es una clase de prueba (S/50) con un diagnóstico a tu medida. Mira los horarios disponibles aquí: ' + horarios + '\n\nUn abrazo,\n' + MARCA.profe + ' - ' + MARCA.nombre;
+    text = 'Hola,\n\nTe bajaste la guía ayer. La mayoría de adultos cree que ya se le pasó el tren para cantar, tocar o componer. No es verdad: esto no es talento, es entrenamiento, y se entrena a cualquier edad.\n\nLa forma de que pase de verdad es un plan sostenido: clases 1 a 1, cada semana, con alguien que te arma la ruta y te corrige en el momento. Un mes basta para notar el cambio.\n\nMira los planes y horarios aquí: ' + horarios + '\n\nUn abrazo,\n' + MARCA.profe + ' - ' + MARCA.nombre;
   } else {
-    subject = "Tu clase de prueba con diagnóstico te espera";
+    subject = "Los planes, claros y sin vueltas";
     html = wrap(
       '<p>Hola,</p>' +
-      '<p>Te lo dejo claro para que decidas sin vueltas. Tu clase de prueba cuesta S/50 e incluye:</p>' +
+      '<p>Te lo dejo claro para que decidas sin vueltas. Así se entrena conmigo:</p>' +
       '<ul style="padding-left:18px">' +
-        '<li>Una hora 1 a 1, en persona (' + MARCA.ciudad.split(",")[0] + ') u online.</li>' +
-        '<li>Un diagnóstico de dónde estás y un plan armado a tu medida.</li>' +
-        '<li>Te enseña alguien que ha compuesto más de 200 canciones y trabajó años en la industria.</li>' +
+        '<li><b>Plan 4 clases · S/320 al mes.</b> Una clase por semana, 1 a 1, en persona (' + MARCA.ciudad.split(",")[0] + ') u online.</li>' +
+        '<li><b>Plan 8 clases · S/580 al mes.</b> Dos por semana, para el que quiere avanzar en serio.</li>' +
+        '<li><b>Plan Estrella, 12 clases · S/780 al mes.</b> El mejor precio por clase y cupo asegurado.</li>' +
       '</ul>' +
-      '<p>No es una clase de relleno: es la sesión donde ya empiezas a avanzar.</p>' +
-      boton("Elegir mi horario") +
+      '<p>Todos incluyen un plan armado a tu medida desde la primera sesión, y te enseña alguien que ha compuesto más de 200 canciones y trabajó años en la industria.</p>' +
+      boton("Elegir mi plan y horario") +
       botonWsp("¿Tienes una duda antes? Escríbeme por WhatsApp") +
       '<p>O si prefieres, responde este correo y lo vemos.</p>'
     );
-    text = 'Hola,\n\nTu clase de prueba cuesta S/50 e incluye:\n- Una hora 1 a 1, en persona (' + MARCA.ciudad.split(",")[0] + ') u online.\n- Un diagnóstico de dónde estás y un plan a tu medida.\n- Te enseña alguien que ha compuesto más de 200 canciones y trabajó años en la industria.\n\nNo es una clase de relleno: es donde ya empiezas a avanzar. Elige tu horario aquí: ' + horarios + '\n\n¿Tienes una duda antes? Escríbeme por WhatsApp: ' + wa + '\n\nO si prefieres, responde este correo.\n\nUn abrazo,\n' + MARCA.profe + ' - ' + MARCA.nombre;
+    text = 'Hola,\n\nTe lo dejo claro para que decidas sin vueltas. Así se entrena conmigo:\n- Plan 4 clases: S/320 al mes. Una por semana, 1 a 1, en persona (' + MARCA.ciudad.split(",")[0] + ') u online.\n- Plan 8 clases: S/580 al mes. Dos por semana.\n- Plan Estrella, 12 clases: S/780 al mes. El mejor precio por clase y cupo asegurado.\n\nTodos incluyen un plan a tu medida desde la primera sesión, y te enseña alguien que ha compuesto más de 200 canciones y trabajó años en la industria.\n\nElige el tuyo aquí: ' + horarios + '\n\n¿Tienes una duda antes? Escríbeme por WhatsApp: ' + wa + '\n\nO si prefieres, responde este correo.\n\nUn abrazo,\n' + MARCA.profe + ' - ' + MARCA.nombre;
   }
   return enviarCorreo(env, { to: to, subject: subject, html: html, text: text });
 }
@@ -1069,13 +1080,13 @@ async function avisarLeadConTelefono(env, info){
              : curso === "composicion" ? "Vemos en qué punto estás y armamos un plan claro."
              : "Te hago el diagnóstico de tu voz y salimos con un plan claro.";
   let subject, text, msgLead;
-  if (info.esPrueba){
-    // Embudo phone-first: quiere una clase de prueba. Máxima urgencia de contacto.
-    subject = "🔥🔥 Clase de prueba: " + (nombre || d);
-    msgLead = hola + " Soy " + MARCA.profe + " de ProfesorMVT :) Vi que quieres tu clase de prueba de " + curso + ". " + diag + " Elige tu horario y reserva acá: " + MARCA.dominio + "/horarios";
+  if (info.altaIntencion){
+    // Embudo phone-first: viene de la landing principal pidiendo empezar. Máxima urgencia de contacto.
+    subject = "🔥🔥 Quiere empezar: " + (nombre || d);
+    msgLead = hola + " Soy " + MARCA.profe + " de ProfesorMVT :) Vi que quieres empezar con " + curso + ". " + diag + " Mira los planes y elige tu horario acá: " + MARCA.dominio + "/horarios";
     const waCierre = "https://wa.me/" + d + "?text=" + encodeURIComponent(msgLead);
     text =
-      (nombre ? nombre : "Alguien") + " pidió una clase de prueba. Respóndele YA, mientras está caliente:\n\n" +
+      (nombre ? nombre : "Alguien") + " quiere empezar clases. Respóndele YA, mientras está caliente:\n\n" +
       "Nombre:   " + (nombre || "-") + "\n" +
       "Quiere:   " + curso + " · Fuente: " + (info.fuente || "-") + "\n\n" +
       "👉 RESPONDER CON 1 CLIC (abre tu WhatsApp con el mensaje de cierre ya escrito; solo revisa y dale enviar):\n" +
@@ -1083,7 +1094,7 @@ async function avisarLeadConTelefono(env, info){
       "Se enviará: \"" + msgLead + "\"\n";
   } else {
     subject = "🔥 Lead con WhatsApp: " + info.email;
-    msgLead = "Hola! Soy " + MARCA.profe + " de ProfesorMVT :) Vi que descargaste la guía. Cuéntame, qué te gustaría lograr con la música: cantar, tocar piano o componer? Si quieres, te armo una clase de prueba con diagnóstico.";
+    msgLead = "Hola! Soy " + MARCA.profe + " de ProfesorMVT :) Vi que descargaste la guía. Cuéntame, qué te gustaría lograr con la música: cantar, tocar piano o componer? Si quieres, te armo un plan a tu medida y arrancamos.";
     const waCierre = "https://wa.me/" + d + "?text=" + encodeURIComponent(msgLead);
     text =
       "Un lead dejó su WhatsApp al bajar la guía. Respóndele mientras está caliente:\n\n" +
@@ -1482,13 +1493,13 @@ function chatbotSystem(cfg, precios){
   return (
     "Eres el asistente virtual de " + MARCA.nombre + ", la marca de " + (cfg && cfg.profe_nombre ? cfg.profe_nombre : MARCA.profe) + ": clases 1 a 1 de canto (método MVT), piano y composición para ADULTOS, presenciales en " + ciudad + " (Lima) o en vivo online.\n\n" +
     "PLANES Y PRECIOS (en soles, S/):\n" +
-    "- Clase de prueba: S/" + precios["Clase de prueba"] + ". Una sesión completa con diagnóstico vocal en PDF. NO es gratis: ese es el mejor punto de partida. Solo para cuentas nuevas.\n" +
-    "- Clase suelta: S/" + precios["Clase suelta"] + ".\n" +
-    "- Plan Esencial: S/" + precios["Paquete 4"] + " al mes (4 clases).\n" +
+    "- Plan Esencial: S/" + precios["Paquete 4"] + " al mes (4 clases). El punto de partida.\n" +
     "- Plan Intensivo: S/" + precios["Paquete 8"] + " al mes (8 clases). El más elegido.\n" +
-    "- Plan Estrella: S/" + precios["Paquete 12"] + " (12 clases). El mejor precio por clase.\n\n" +
+    "- Plan Estrella: S/" + precios["Paquete 12"] + " (12 clases). El mejor precio por clase.\n" +
+    "- Clase suelta: S/" + precios["Clase suelta"] + ", si prefiere no tomar un plan mensual todavía.\n\n" +
+    "NO EXISTE CLASE DE PRUEBA NI CLASE GRATIS. Se retiró el 25-jul-2026 y no va a volver. Si alguien pregunta por una prueba, un descuento de arranque o una clase gratis, responde con calidez que no se maneja ese formato: se empieza con un plan mensual (o una clase suelta si prefiere ir sin compromiso), y que desde la primera sesión ya sale con su diagnóstico y su plan a la medida. Nunca inventes promociones ni descuentos.\n\n" +
     "PAGOS: desde Perú con Yape, Plin, Sip, tarjeta o transferencia (la tarjeta activa el paquete al instante). Desde el extranjero, con tarjeta o cripto.\n\n" +
-    "CÓMO EMPIEZA UN ALUMNO: ve los horarios libres en " + dominioLimpio + "/horarios (sin cuenta), luego crea su cuenta en " + dominioLimpio + "/alumnos, paga su paquete o la clase de prueba, y reserva su clase. Todo self-service.\n\n" +
+    "CÓMO EMPIEZA UN ALUMNO: ve los horarios libres en " + dominioLimpio + "/horarios (sin cuenta), luego crea su cuenta en " + dominioLimpio + "/alumnos, paga su plan, y reserva su clase. Todo self-service.\n\n" +
     "DATOS DE MÉTODO: el canto usa el método MVT (coordinación del músculo vocal, cierre cordal, resonancia). El piano se enfoca en fuerza e independencia de dedos para tocar tus canciones rápido. La composición usa herramientas reales para escribir tus propias canciones. No necesitas saber música para empezar, y nunca es tarde para un adulto.\n\n" +
     "REGLAS DE CONVERSACIÓN (obligatorias):\n" +
     "- Antes de soltar precios o planes, califica: pregunta qué le gustaría lograr y si lo quiere presencial u online. Recomienda el plan que encaje, no toda la lista.\n" +
@@ -1591,7 +1602,7 @@ function onboardingSystemAdmin(){
     "CÓMO CONFIRMAR UN PAGO PENDIENTE (Yape/Plin/transferencia): pestaña Pagos > tabla 'Pendientes de confirmar' " +
     "muestra fecha, alumno, curso, paquete, monto y número de operación con la captura que subió; el botón " +
     "'Confirmar' de esa fila activa el paquete, arma los 2 meses de plazo y, si el alumno vino por un código de " +
-    "referido y esta es su primera compra de un paquete real (no cuenta la clase de prueba), premia S/50 de " +
+    "referido y esta es su primera compra de un paquete real, premia S/50 de " +
     "crédito al que lo refirió. Los pagos con tarjeta (Mercado Pago) se confirman solos, no pasan por aquí.\n\n" +
 
     "CÓMO REGISTRAR UNA RENOVACIÓN: pestaña Cuentas o la ficha del alumno > 'Registrar renovación'. Campos: " +
@@ -1603,7 +1614,7 @@ function onboardingSystemAdmin(){
     "bloques abiertos y guardas con 'Guardar disponibilidad'. La asistencia (Asistió/Reprogramó/Falta) se marca al " +
     "Registrar clase, no en la Agenda.\n\n" +
 
-    "AJUSTES — precios y pagos del portal: 'Precios de paquetes (S/)' edita cada precio (Clase de prueba, Clase " +
+    "AJUSTES — precios y pagos del portal: 'Precios de paquetes (S/)' edita cada precio (Clase " +
     "suelta, Paquete 4/8/12). Métodos de pago manuales: Número Yape/Plin/Sip, Titular, cuentas BCP y Scotiabank " +
     "(cuenta y CCI), datos de cripto (moneda, red, wallet). También: Google " +
     "Client ID (para el botón 'Ingresar con Google' del portal), plantilla del mensaje de WhatsApp de renovación " +
@@ -1647,12 +1658,13 @@ function onboardingSystemAlumno(){
     "que viene' que dejó " + MARCA.profe + " en cada clase), Agenda, Comprar, Referidos, Mi cuenta. Un panel de " +
     "chat a la derecha permite escribirle directo a " + MARCA.profe + ".\n\n" +
 
-    "CÓMO COMPRAR: en Comprar elige su paquete (Clase de prueba, Clase suelta, o Paquete 4/8/12) y el método de " +
+    "CÓMO COMPRAR: en Comprar elige su plan (Paquete 4/8/12, o Clase suelta) y el método de " +
     "pago: Tarjeta de crédito/débito (Mercado Pago, confirma al instante y puede pagar en cuotas), Yape/Plin/Sip, " +
     "Transferencia BCP, Transferencia Scotiabank, o Crypto (USDT, red configurable) para el extranjero. Con " +
     "tarjeta el paquete se activa solo apenas termina de pagar; con los demás métodos transfiere el monto exacto, " +
-    "sube la captura del comprobante y toca 'Ya pagué', y el profesor lo confirma. Si compra la Clase de prueba, " +
-    "el sistema le pide elegir su horario ANTES de pagar, para que quede reservado de una vez.\n\n" +
+    "sube la captura del comprobante y toca 'Ya pagué', y el profesor lo confirma. NO existe clase de prueba ni " +
+    "clase gratis: se retiró el 25-jul-2026. Si pregunta por eso, dile con calidez que se empieza con un plan " +
+    "mensual, o una clase suelta si prefiere ir sin compromiso.\n\n" +
 
     "CÓMO RESERVAR EN AGENDA: horario fijo semanal es la opción por defecto: al elegir un horario libre, reserva " +
     "las próximas 4 semanas de una sola vez (de 4 en 4), para no tener que pensarlo cada semana. Clase suelta " +
@@ -1669,7 +1681,7 @@ function onboardingSystemAlumno(){
     "de horario o de la clase misma.\n\n" +
 
     "REFERIDOS: cada alumno tiene su código/link propio en la vista Referidos. Cuando un amigo se registra con ese " +
-    "código y compra su primer paquete (la clase de prueba sola no cuenta), el alumno gana S/50 de crédito para " +
+    "código y compra su primer paquete, el alumno gana S/50 de crédito para " +
     "su próxima compra.\n\n" +
 
     "PAUSA POR VIAJE O SALUD: en Inicio hay un botón 'Congelar por viaje o salud' que extiende el vencimiento " +
@@ -2995,8 +3007,8 @@ export default {
           ).bind(idCu, email, nombre, whatsapp, hash, salt, hoy(), refCode).run();
           cu = await env.DB.prepare("SELECT * FROM cuentas WHERE id = ?1").bind(idCu).first();
         }
-        // La clase de prueba es solo para la primera clase (mismo guard del portal).
-        if (paquete === "Clase de prueba" && cu.alumno_id) return json({ error: "La clase de prueba es solo para tu primera clase. Elige un paquete para seguir." }, 400);
+        // Solo se venden los paquetes vigentes: la clase de prueba está retirada (25-jul-2026).
+        if (!PAQUETES_COMPRABLES.includes(paquete)) return json({ error: PAQUETE_RETIRADO_MSG }, 400);
 
         const yaPend = await env.DB.prepare(
           "SELECT id FROM compras WHERE cuenta_id = ?1 AND estado = 'pendiente'"
@@ -3115,13 +3127,14 @@ export default {
 
         const precios = await loadPrecios(env);
         if (!(paquete in PAQUETES)) return json({ error: "Paquete no válido." }, 400);
-        // La clase de prueba es solo para tu primera clase: si la cuenta ya es alumno, no aplica.
-        if (paquete === "Clase de prueba" && cu.alumno_id) return json({ error: "La clase de prueba es solo para tu primera clase. Elige un paquete para seguir." }, 400);
+        // Solo se venden los paquetes vigentes: la clase de prueba está retirada (25-jul-2026).
+        if (!PAQUETES_COMPRABLES.includes(paquete)) return json({ error: PAQUETE_RETIRADO_MSG }, 400);
 
-        // Horario elegido ANTES de pagar (solo aplica a la Clase de prueba): se valida ahora
-        // (existe, libre, con anticipación) para no dejar pagar por un horario que ya no sirve.
+        // Horario elegido ANTES de pagar: se valida ahora (existe, libre, con anticipación) para
+        // no dejar pagar por un horario que ya no sirve. Quedó sin uso al retirar la clase de
+        // prueba (era su único caso), pero se conserva por si vuelve un flujo elige-luego-paga.
         let slotDeseado = "";
-        if (paquete === "Clase de prueba" && b.slot_deseado) {
+        if (b.slot_deseado) {
           const iso = String(b.slot_deseado);
           if (!(await slotValido(env, iso))) return json({ error: "Ese horario ya no está disponible. Elige otro." }, 400);
           slotDeseado = iso;
@@ -3170,11 +3183,11 @@ export default {
         const paquete = String(b.paquete || "");
         const curso = String(b.curso || "").trim() || "Canto";
         if (!(paquete in PAQUETES)) return json({ error: "Paquete no válido." }, 400);
-        // La clase de prueba es solo para tu primera clase: si la cuenta ya es alumno, no aplica.
-        if (paquete === "Clase de prueba" && cu.alumno_id) return json({ error: "La clase de prueba es solo para tu primera clase. Elige un paquete para seguir." }, 400);
+        // Solo se venden los paquetes vigentes: la clase de prueba está retirada (25-jul-2026).
+        if (!PAQUETES_COMPRABLES.includes(paquete)) return json({ error: PAQUETE_RETIRADO_MSG }, 400);
 
         let slotDeseado = "";
-        if (paquete === "Clase de prueba" && b.slot_deseado) {
+        if (b.slot_deseado) {
           const iso = String(b.slot_deseado);
           if (!(await slotValido(env, iso))) return json({ error: "Ese horario ya no está disponible. Elige otro." }, 400);
           slotDeseado = iso;
@@ -3301,13 +3314,15 @@ export default {
         const interes = String(b.interes || "composicion").trim().slice(0, 60);
         const telefono = String(b.telefono || "").replace(/[^\d]/g, "").slice(0, 15);
         const nombre = String(b.nombre || "").trim().slice(0, 80);
-        // Embudo phone-first (landing de clase de prueba): el dato principal es el WhatsApp,
-        // el correo es opcional. Se filtra por intención (quien deja su número para agendar
-        // una prueba sí considera pagar) y NO se le manda el PDF de composición.
-        const esPrueba = fuente.startsWith("landing-prueba") || b.modo === "prueba";
+        // Embudo phone-first (landing principal): el dato principal es el WhatsApp, el correo es
+        // opcional. Se filtra por intención (quien deja su número para arrancar sí considera pagar)
+        // y NO se le manda el PDF de composición.
+        // 'landing-prueba' se sigue reconociendo por los leads históricos guardados con esa fuente
+        // antes del 25-jul-2026; la clase de prueba en sí ya no existe.
+        const altaIntencion = fuente.startsWith("landing-empezar") || fuente.startsWith("landing-prueba") || b.modo === "empezar" || b.modo === "prueba";
         let email = String(b.email || "").trim().toLowerCase().slice(0, 120);
         const emailValido = /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email);
-        if (esPrueba){
+        if (altaIntencion){
           if (telefono.length < 8) return json({ error: "Deja un WhatsApp válido." }, 400);
           // clave de dedup: el correo si lo dio, si no un sintético por número.
           if (!emailValido) email = "wa-" + telefono + "@wa.mvt";
@@ -3319,13 +3334,13 @@ export default {
           await env.DB.prepare(
             "INSERT INTO leads (id,email,marca,fuente,interes,fecha,telefono,nombre) VALUES (?1,?2,?3,?4,?5,?6,?7,?8)"
           ).bind(crypto.randomUUID(), email, marca, fuente, interes, hoy(), telefono, nombre).run();
-          // PDF de bienvenida SOLO al embudo de la guía; el de prueba se cierra por WhatsApp.
-          if (marca === "MVT" && !esPrueba) ctx.waitUntil(correoBienvenidaLead(env, email));
-          if (telefono) ctx.waitUntil(avisarLeadConTelefono(env, { email, telefono, interes, fuente, nombre, esPrueba }));
+          // PDF de bienvenida SOLO al embudo de la guía; el de alta intención se cierra por WhatsApp.
+          if (marca === "MVT" && !altaIntencion) ctx.waitUntil(correoBienvenidaLead(env, email));
+          if (telefono) ctx.waitUntil(avisarLeadConTelefono(env, { email, telefono, interes, fuente, nombre, altaIntencion }));
         } else if (telefono && !ya.telefono){
           // El lead ya existía (dejó el correo primero) y ahora suma su número: guardar + avisar.
           await env.DB.prepare("UPDATE leads SET telefono = ?1, nombre = COALESCE(NULLIF(nombre,''), ?2) WHERE id = ?3").bind(telefono, nombre, ya.id).run();
-          ctx.waitUntil(avisarLeadConTelefono(env, { email, telefono, interes, fuente, nombre, esPrueba }));
+          ctx.waitUntil(avisarLeadConTelefono(env, { email, telefono, interes, fuente, nombre, altaIntencion }));
         }
         return json({ ok: true, pdf });
       }
@@ -3373,13 +3388,13 @@ export default {
             } else if (nombre && !ya.nombre){
               await env.DB.prepare("UPDATE leads SET nombre = ?1 WHERE id = ?2").bind(nombre, ya.id).run();
             }
-            // Alerta a Andrés con el mismo 1-click de siempre (esPrueba=true: alta intención,
-            // escribió directo por su cuenta). Se dispara en CADA mensaje, no solo el primero.
-            ctx.waitUntil(avisarLeadConTelefono(env, { email, telefono: from, interes: "", fuente: "whatsapp-directo", nombre, esPrueba: true }));
+            // Alerta a Andrés con el mismo 1-click de siempre (altaIntencion=true: escribió
+            // directo por su cuenta). Se dispara en CADA mensaje, no solo el primero.
+            ctx.waitUntil(avisarLeadConTelefono(env, { email, telefono: from, interes: "", fuente: "whatsapp-directo", nombre, altaIntencion: true }));
             // Respuesta instantánea al lead: solo un acuse cálido. Andrés cierra personalmente
             // por su WhatsApp (Script Maestro) apenas vea la alerta; sin bot multi-paso.
             const saludo = nombre ? ("Hola " + nombre.split(" ")[0] + "!") : "Hola!";
-            const cuerpo = saludo + " Gracias por escribir a ProfesorMVT :) Recibí tu mensaje, te respondo personalmente en un rato para coordinar tu clase de prueba con diagnóstico incluido.";
+            const cuerpo = saludo + " Gracias por escribir a ProfesorMVT :) Recibí tu mensaje, te respondo personalmente en un rato para armarte tu plan.";
             await enviarWhatsApp(env, phoneId, from, cuerpo);
           } catch (e) { console.error("wa webhook", e); }
         })());
@@ -3420,11 +3435,11 @@ export default {
         } catch (e) { return json({ ok: false, error: String(e && e.message) }, 502); }
       }
 
-      /* ============ Rescate de los leads viejos de la guía → embudo de clase de prueba ============
+      /* ============ Rescate de los leads viejos de la guía → embudo de PLANES ============
          Los que bajaron la guía de composición (interes=composicion) nunca convirtieron: imán de bajo
-         intento, sin teléfono. Este endpoint les manda UN correo que los pivotea a la clase de prueba
-         (S/50, diagnóstico, cierre por WhatsApp). En tandas (default 25) para no reventar subrequests ni
-         quemar la reputación de envío; deduplicado con nurture_paso=50. Admin-only. `dry:true` = simular. */
+         intento, sin teléfono. Este endpoint les manda UN correo que los pivotea a los planes mensuales
+         (cierre por WhatsApp). En tandas (default 25) para no reventar subrequests ni quemar la
+         reputación de envío; deduplicado con nurture_paso=50. Admin-only. `dry:true` = simular. */
       if (url.pathname === "/api/su/rescate-composicion" && request.method === "POST"){
         if (!(await esAdminAuth(env, request))) return json({ error: "No autorizado" }, 401);
         const b = await request.json().catch(() => ({}));
@@ -3442,7 +3457,7 @@ export default {
         ).first();
         if (dry) return json({ ok: true, dry: true, en_esta_tanda: lista.length, pendientes_total: restantesRow ? restantesRow.c : 0, muestra: lista.slice(0, 3).map(function(r){ return r.email; }) });
         let enviados = 0;
-        const prueba = MARCA.dominio + "/prueba";
+        const planes = MARCA.dominio + "/prueba";
         for (const r of lista){
           const nom = (r.nombre || "").trim();
           const hola = nom ? ("Hola " + nom + ",") : "Hola,";
@@ -3450,14 +3465,14 @@ export default {
             '<div style="font-family:Arial,Helvetica,sans-serif;max-width:480px;margin:0 auto;color:#1a1a1a;font-size:15px;line-height:1.6">' +
               '<p>' + hola + '</p>' +
               '<p>Hace unas semanas te bajaste mi guía de composición. Espero que te haya servido para arrancar tus canciones.</p>' +
-              '<p>Te escribo por algo puntual: si además te pica <b>aprender a cantar bien de verdad</b> (o tocar piano), tengo una clase de prueba con diagnóstico de tu voz. En 45 minutos sabes exactamente qué entrenar, con un plan claro.</p>' +
+              '<p>Te escribo por algo puntual: si además te pica <b>aprender a cantar bien de verdad</b> (o tocar piano), doy clases 1 a 1 con un plan armado a tu medida desde la primera sesión. Los planes arrancan en S/320 al mes.</p>' +
               '<p>No es cuestión de talento ni de edad: cantar bien es coordinación, y se entrena. Varios de mis alumnos empezaron creyendo que ya era tarde.</p>' +
-              '<p style="text-align:center;margin:26px 0"><a href="' + prueba + '" style="background:#e8501f;color:#ffffff;text-decoration:none;font-weight:bold;padding:14px 26px;border-radius:6px;display:inline-block">Reservar mi clase de prueba</a></p>' +
-              '<p>O respóndeme este correo con tu WhatsApp y coordinamos directo. La clase de prueba cuesta S/50 e incluye tu diagnóstico.</p>' +
+              '<p style="text-align:center;margin:26px 0"><a href="' + planes + '" style="background:#e8501f;color:#ffffff;text-decoration:none;font-weight:bold;padding:14px 26px;border-radius:6px;display:inline-block">Ver los planes</a></p>' +
+              '<p>O respóndeme este correo con tu WhatsApp y coordinamos directo.</p>' +
               '<p>Un abrazo,<br><b>' + MARCA.profe + '</b><br>' + MARCA.nombre + '</p>' +
               '<p style="font-size:12px;color:#888888;margin-top:26px">' + MARCA.dominio.replace(/^https?:\/\//, "") + ' · Canto, piano y composición para adultos</p>' +
             '</div>';
-          const text = hola + '\n\nHace unas semanas te bajaste mi guía de composición. Si además te pica aprender a cantar bien de verdad (o tocar piano), tengo una clase de prueba con diagnóstico de tu voz: en 45 min sabes qué entrenar, con un plan claro.\n\nNo es talento ni edad: cantar bien es coordinación, y se entrena.\n\nReserva tu clase de prueba: ' + prueba + '\nO respóndeme con tu WhatsApp y coordinamos. Cuesta S/50 e incluye tu diagnóstico.\n\nUn abrazo,\n' + MARCA.profe + ' - ' + MARCA.nombre;
+          const text = hola + '\n\nHace unas semanas te bajaste mi guía de composición. Si además te pica aprender a cantar bien de verdad (o tocar piano), doy clases 1 a 1 con un plan armado a tu medida desde la primera sesión. Los planes arrancan en S/320 al mes.\n\nNo es talento ni edad: cantar bien es coordinación, y se entrena.\n\nMira los planes: ' + planes + '\nO respóndeme con tu WhatsApp y coordinamos.\n\nUn abrazo,\n' + MARCA.profe + ' - ' + MARCA.nombre;
           const ok = await enviarCorreo(env, { to: r.email, subject: "Componer está bueno. Cantar bien lo cambia todo :)", html: html, text: text });
           if (ok){ enviados++; await env.DB.prepare("UPDATE leads SET nurture_paso=50 WHERE id=?1").bind(r.id).run(); }
         }

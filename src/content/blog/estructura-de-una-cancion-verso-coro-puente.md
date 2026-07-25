@@ -38,4 +38,4 @@ Tómala como plantilla, no como cárcel. Escribe primero tu coro (la idea centra
 
 Esto, como la técnica vocal o la del piano, se entrena. No hace falta haber estudiado música para entender qué función cumple cada sección, solo hace falta que alguien te lo explique claro y luego lo practiques con tus propias ideas.
 
-¿Tienes una canción a medio terminar que no sabes cómo cerrar? En una clase de prueba (S/50) revisamos tu estructura, identificamos qué falta y armamos un plan concreto para terminarla. [Reserva tu clase de prueba aquí](https://profesormvt.com/horarios).
+¿Tienes una canción a medio terminar que no sabes cómo cerrar? En clase revisamos tu estructura, identificamos qué falta y armamos un plan concreto para terminarla. [Elige tu plan aquí](https://profesormvt.com/horarios).

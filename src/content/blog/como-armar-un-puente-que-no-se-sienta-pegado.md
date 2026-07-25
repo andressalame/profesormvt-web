@@ -38,4 +38,4 @@ Toma tu canción actual y responde estas tres preguntas antes de escribir el pue
 
 Esto no es un don que unos tienen y otros no. Es una decisión de diseño, y como toda decisión de diseño, se entrena viéndolo aplicado a canciones reales, incluida la tuya.
 
-Si tienes una canción con un puente que no termina de cerrar, en una clase de prueba (S/50) la revisamos juntos y armamos el que le falta. [Reserva tu clase de prueba aquí](https://profesormvt.com/horarios).
+Si tienes una canción con un puente que no termina de cerrar, en clase la revisamos juntos y armamos el que le falta. [Elige tu plan aquí](https://profesormvt.com/horarios).

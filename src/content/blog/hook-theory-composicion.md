@@ -74,4 +74,4 @@ Lo que sí te garantiza es que **vas a entender** lo que estás haciendo. Vas a 
 
 ## ¿Empezamos?
 
-Si la composición es algo que llevas postergando porque no sabías por dónde empezar, este es el método. En la clase de prueba podemos analizar juntos una canción tuya favorita — me la mandas antes y la abrimos en Theorytab para que veas cómo se ve.
+Si la composición es algo que llevas postergando porque no sabías por dónde empezar, este es el método. En tu primera clase podemos analizar juntos una canción tuya favorita — me la mandas antes y la abrimos en Theorytab para que veas cómo se ve.

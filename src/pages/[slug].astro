@@ -76,7 +76,7 @@ export function getStaticPaths() {
 
 const { distrito, curso, cursoKey } = Astro.props;
 const titleSEO = `Clases de ${curso.nombre} en ${distrito.nombre} | Adultos, 1 a 1 (San Isidro y online) | ProfesorMVT`;
-const descSEO = `Clases de ${curso.nombre} 1 a 1 para adultos de ${distrito.nombre}: presencial en San Isidro u online. Clase de prueba con diagnóstico, S/50.`;
+const descSEO = `Clases de ${curso.nombre} 1 a 1 para adultos de ${distrito.nombre}: presencial en San Isidro u online. Planes mensuales desde S/320.`;
 const activeNav = cursoKey === 'composicion' ? 'composicion' : cursoKey;
 ---
 
@@ -88,10 +88,10 @@ const activeNav = cursoKey === 'composicion' ? 'composicion' : cursoKey;
         <h1>{curso.titulo(distrito.nombre)} que quieren <em>{curso.em}</em></h1>
         <p class="lead">{curso.lead}</p>
         <div class="cc-cta">
-          <a href={`/prueba/?curso=${cursoKey}&f=landing-${cursoKey}-${distrito.slug}`} class="btn-cta">Reservar mi clase de prueba →</a>
+          <a href={`/prueba/?curso=${cursoKey}&f=landing-${cursoKey}-${distrito.slug}`} class="btn-cta">Quiero empezar →</a>
           <a href="/alumnos/" class="btn-ghost">Crear mi cuenta</a>
         </div>
-        <p class="note">Clase de prueba con diagnóstico por S/50. Desde {distrito.nombre}: {distrito.nota}. Y si prefieres, la clase completa funciona online.</p>
+        <p class="note">Planes desde S/320 al mes. Desde {distrito.nombre}: {distrito.nota}. Y si prefieres, la clase completa funciona online.</p>
       </div>
     </section>
 
@@ -133,7 +133,7 @@ const activeNav = cursoKey === 'composicion' ? 'composicion' : cursoKey;
           </details>
           <details>
             <summary>Cuánto cuesta y cómo empiezo?</summary>
-            <p>La clase de prueba con diagnóstico cuesta S/50 y no te compromete a nada. <a href={`/prueba/?curso=${cursoKey}&f=landing-${cursoKey}-${distrito.slug}`}>Resérvala aquí</a> y elige el horario que te acomode.</p>
+            <p>Los planes arrancan en S/320 al mes e incluyen tu diagnóstico desde la primera clase. <a href={`/prueba/?curso=${cursoKey}&f=landing-${cursoKey}-${distrito.slug}`}>Elige tu plan aquí</a> y elige el horario que te acomode.</p>
           </details>
         </div>
         <p class="note" style="text-align:center; margin-top:18px;">
@@ -147,9 +147,9 @@ const activeNav = cursoKey === 'composicion' ? 'composicion' : cursoKey;
     <section class="cc-hero" style="text-align:center;">
       <div class="container-narrow">
         <h2>Empieza tu {curso.nombre} desde {distrito.nombre}</h2>
-        <p class="lead">Reserva tu clase de prueba con diagnóstico por S/50. Sin compromiso: sales sabiendo exactamente qué trabajar, y decides con la oreja.</p>
+        <p class="lead">Elige tu plan y arranca. Desde la primera clase sales sabiendo exactamente qué trabajar.</p>
         <div class="cc-cta" style="justify-content:center;">
-          <a href={`/prueba/?curso=${cursoKey}&f=landing-${cursoKey}-${distrito.slug}`} class="btn-cta">Reservar mi clase de prueba →</a>
+          <a href={`/prueba/?curso=${cursoKey}&f=landing-${cursoKey}-${distrito.slug}`} class="btn-cta">Quiero empezar →</a>
           <a href="/alumnos/" class="btn-ghost">Crear mi cuenta</a>
         </div>
       </div>
