@@ -244,6 +244,12 @@
   .oia-send:disabled{opacity:.5;cursor:default;}
   .oia-tope{padding:8px 10px;font-family:var(--mono);font-size:10.5px;color:var(--muted);border-top:1px solid var(--line);text-align:center;}
   #ovLock.open ~ .oia-fab,#ovLock.open ~ .oia-panel{display:none!important;}
+
+  /* Un botón bloqueado tiene que PARECER bloqueado (28-jul-2026): el importador deja
+     "Importar" apagado mientras haya una fila con el saldo mal. */
+  .btn:disabled,.btn:disabled:hover{opacity:.45;cursor:not-allowed;filter:none;}
+  /* La previsualización del importador ganó la columna "Le queda". */
+  #ovImport .modal{max-width:680px;}
 </style>
 </head>
 <body>
@@ -662,20 +668,22 @@
     <h3>Importar <em>alumnos</em></h3>
     <div class="mlab">// Trae tu lista de siempre de una sola vez</div>
     <div id="impPaso1">
-      <p class="hint" style="margin:0 0 12px;">Sube un archivo <b>.csv</b> con una fila por alumno. Columna obligatoria: <b>Nombre</b>. Opcionales: Curso, WhatsApp, Paquete, Notas. Si dejas la primera fila con los títulos, el orden no importa. ¿Tienes un Excel? Guárdalo como CSV (Archivo → Guardar como → CSV UTF-8).</p>
+      <p class="hint" style="margin:0 0 12px;">Sube un archivo <b>.csv</b> con una fila por alumno. Columna obligatoria: <b>Nombre</b>. Opcionales: Curso, WhatsApp, Paquete, <b>Clases restantes</b>, <b>Vence</b>, Notas. Si dejas la primera fila con los títulos, el orden no importa. ¿Tienes un Excel? Guárdalo como CSV (Archivo → Guardar como → CSV UTF-8).</p>
       <div style="margin:0 0 16px;"><button class="btn ghost sm" id="btnPlantillaCsv">&#8595; Descargar plantilla</button></div>
       <div class="field"><label>Tu archivo CSV</label><input id="impFile" type="file" accept=".csv,text/csv" /></div>
       <div style="text-align:center;color:var(--muted);font-size:12px;margin:14px 0 10px;">— o más fácil todavía —</div>
       <div class="field"><label>Pega tu lista aquí (un alumno por línea)</label>
         <textarea id="impPega" rows="5" placeholder="María Fernández, Piano, 987654321&#10;José Ramírez&#10;Lucía Torres, Canto"></textarea>
-        <p class="hint" style="margin:5px 0 0;">Sirve pegar directo desde Excel (columnas), WhatsApp o una nota. Con el nombre basta; si pones más datos (curso, celular) los reconozco.</p></div>
+        <p class="hint" style="margin:5px 0 0;">Sirve pegar directo desde Excel (columnas), WhatsApp o una nota. Con el nombre basta; si pones más datos (curso, celular) los reconozco.</p>
+        <p class="hint" style="margin:5px 0 0;">¿Vienes de otro sistema y tus alumnos ya usaron parte de su paquete? Pon las <b>clases que le quedan</b> y, si quieres, hasta cuándo le vence: <span class="mini">María Fernández, Paquete 8, 3 clases, vence 20/08/2026</span></p></div>
       <div style="margin-top:8px;"><button class="btn ghost sm" id="btnImpPegar">Previsualizar lo pegado</button></div>
       <div id="impErr" style="display:none;color:var(--amber);margin-top:10px;font-size:13px;"></div>
     </div>
     <div id="impPaso2" style="display:none;">
       <p class="hint" id="impResumen" style="margin:0 0 10px;"></p>
+      <div id="impSaldoErr" style="display:none;margin:0 0 10px;"></div>
       <div class="tablewrap" style="max-height:300px;overflow:auto;">
-        <table id="impTabla"><thead><tr><th>Nombre</th><th>Curso</th><th>WhatsApp</th><th>Paquete</th></tr></thead><tbody></tbody></table>
+        <table id="impTabla"><thead><tr><th>Nombre</th><th>Curso</th><th>WhatsApp</th><th>Paquete</th><th>Le queda</th></tr></thead><tbody></tbody></table>
       </div>
     </div>
     <div class="modal-actions">
@@ -1010,7 +1018,11 @@ function computeAlumno(a){
     else if(r.estado==="Falta")falta++;
   });
   var exceso=Math.max(0,reprogramo-pk.reprog);
-  var usadas=asistio+falta+exceso;
+  /* Saldo migrado (28-jul-2026): clases ya gastadas en el sistema anterior al importar.
+     Cuentan como usadas SOLO en el ciclo en que se importó: al renovar sube el ciclo y el
+     arrastre se cae solo. Espejo de compute() en el worker; si cambia uno, cambia el otro. */
+  var migradas=((Number(a.migrado_ciclo)||0)===ciclo)?Math.max(0,Number(a.migrado_usadas)||0):0;
+  var usadas=asistio+falta+exceso+migradas;
   var saldo=pk.clases-usadas;
   var estado,clase;
   if(saldo<=0){estado="Completado — renovar";clase="red";}
@@ -1640,7 +1652,10 @@ function guardarAlumnoModal(encadenar){
     nombre:nombre, whatsapp:el("a_whatsapp").value.trim(), curso:getCursosAlumno()||MARCA.cursoDefault,
     paquete:el("a_paquete").value, fecha:el("a_fecha").value, pago:el("a_pago").value,
     origen:el("a_origen").value,
-    horario:el("a_horario").value.trim(), notas:el("a_notas").value.trim() };
+    horario:el("a_horario").value.trim(), notas:el("a_notas").value.trim(),
+    /* el arrastre de clases migradas no se edita acá: se conserva tal cual (el server
+       también lo preserva, pero sin esto la tabla mostraría un saldo inflado) */
+    migrado_usadas:(prev&&prev.migrado_usadas)||0, migrado_ciclo:(prev&&prev.migrado_ciclo)||0 };
   if(id){ db.alumnos=db.alumnos.map(function(a){return a.id===id?obj:a;}); }
   else{ db.alumnos.push(obj); }
   var b1=el("btnGuardarAlumno"),b2=el("btnGuardarAlumnoOtro"); b1.disabled=true; if(b2)b2.disabled=true;
@@ -2447,16 +2462,69 @@ el("btnImportCsv").addEventListener("click",function(){
   IMP_ROWS=[]; el("impFile").value=""; el("impPega").value="";
   el("impPaso1").style.display=""; el("impPaso2").style.display="none";
   el("btnImpConfirmar").style.display="none"; el("impErr").style.display="none";
+  el("impSaldoErr").style.display="none"; el("impSaldoErr").innerHTML="";
   openOv("ovImport");
 });
 el("btnPlantillaCsv").addEventListener("click",function(){
-  var head=["Nombre","Curso","WhatsApp","Paquete","Notas"];
+  /* "Clases restantes" y "Vence" (28-jul-2026): para traer alumnos de otro sistema con el
+     saldo que ya tenían. Van vacías en la 2ª fila a propósito: se ve que son opcionales. */
+  var head=["Nombre","Curso","WhatsApp","Paquete","Clases restantes","Vence","Notas"];
   var cd=MARCA.cursoDefault||"Canto";
-  var ej=[["Ana Torres",cd,"51987654321","Paquete 4","Viene de mi Excel"],
-          ["Luis Ramos",cd,"51912345678","Paquete 8",""]];
+  var enUnMes=new Date(Date.now()+30*86400000).toISOString().slice(0,10);
+  var ej=[["Ana Torres",cd,"51987654321","Paquete 4","3",enUnMes,"Viene de mi Excel"],
+          ["Luis Ramos",cd,"51912345678","Paquete 8","","","Paquete recién comprado"]];
   descargaCsv(head,ej,"plantilla-alumnos.csv");
 });
 function impNorm(s){ return String(s==null?"":s).trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,""); }
+/* "2026-08-20" -> "20 ago" */
+function fechaBonita(iso){ if(!iso) return "—"; var p=String(iso).split("-"); if(p.length<3) return iso; var m=["ene","feb","mar","abr","may","jun","jul","ago","sep","oct","nov","dic"]; return parseInt(p[2],10)+" "+(m[parseInt(p[1],10)-1]||""); }
+function impPk(nombre){ return PAQUETES[nombre]||{clases:0,reprog:0}; }
+/* Fecha flexible del importador: acepta 2026-08-20, 20/08/2026, 20-8-26 y 20.08.2026.
+   Devuelve ISO o "" si no se puede leer; null si venía vacía (no es error). */
+function impFecha(txt){
+  var s=String(txt==null?"":txt).trim();
+  if(!s) return null;
+  var m=s.match(/^(\d{4})[-\/.](\d{1,2})[-\/.](\d{1,2})$/);
+  var y,mes,d;
+  if(m){ y=+m[1]; mes=+m[2]; d=+m[3]; }
+  else{
+    m=s.match(/^(\d{1,2})[-\/.](\d{1,2})[-\/.](\d{2,4})$/);
+    if(!m) return "";
+    d=+m[1]; mes=+m[2]; y=+m[3];
+    if(y<100) y+=2000;
+  }
+  if(!(y>=2000&&y<=2100)||!(mes>=1&&mes<=12)||!(d>=1&&d<=31)) return "";
+  var iso=y+"-"+String(mes).padStart(2,"0")+"-"+String(d).padStart(2,"0");
+  var dt=new Date(iso+"T00:00:00Z");
+  /* atrapa 31/02: el Date rebota al mes siguiente y el ISO ya no coincide */
+  if(isNaN(dt.getTime())||dt.toISOString().slice(0,10)!==iso) return "";
+  return iso;
+}
+/* Traduce "clases restantes" a lo que el sistema guarda: cuántas ya usó (migrado_usadas).
+   Devuelve {usadas, restantes, error} — error != "" => la fila bloquea la importación. */
+function impSaldo(txtRestantes, paquete){
+  var s=String(txtRestantes==null?"":txtRestantes).trim();
+  if(!s) return {usadas:0,restantes:null,error:""};
+  var n=s.replace(/\s*(clases?|sesiones?|restantes?)\s*/gi,"").trim();
+  if(!/^\d{1,4}$/.test(n)) return {usadas:0,restantes:null,error:'"'+s+'" no es un número de clases'};
+  var rest=parseInt(n,10);
+  var pk=impPk(paquete);
+  if(!pk.clases) return {usadas:0,restantes:null,error:'no reconozco el paquete "'+paquete+'"'};
+  if(rest>pk.clases) return {usadas:0,restantes:rest,error:"le quedan "+rest+" clases pero "+paquete+" trae "+pk.clases};
+  return {usadas:pk.clases-rest,restantes:rest,error:""};
+}
+/* ¿La celda pegada es el nombre de un paquete? Antes solo valía si decía "paquete". */
+function impEsPaquete(c){
+  var n=impNorm(c);
+  if(!n) return false;
+  if(Object.keys(PAQUETES).some(function(p){ return impNorm(p)===n; })) return true;
+  return /paquete/i.test(c);
+}
+/* ¿Tiene pinta de fecha? (para no confundir "20-08-2026" con un celular). */
+function impPintaDeFecha(c){
+  var s=String(c||"").trim().replace(/^(vence|vencimiento|valido hasta|vigencia|hasta|expira)\s*:?\s*/i,"");
+  return /^\d{1,4}[-\/.]\d{1,2}[-\/.]\d{2,4}$/.test(s)?s:"";
+}
 function parseCsv(text){
   text=String(text||"").replace(/^\ufeff/,"");
   var l0=text.split(/\r?\n/)[0]||"";
@@ -2477,6 +2545,8 @@ var IMP_ALIAS={ nombre:["nombre","alumno","alumna","name","nombre completo","nom
   curso:["curso","cursos","materia","materias","clase","instrumento","asignatura"],
   whatsapp:["whatsapp","wsp","celular","telefono","movil","phone","numero","contacto"],
   paquete:["paquete","plan","package","clases","membresia"],
+  restantes:["clases restantes","restantes","clases que le quedan","le quedan","saldo","saldo de clases","clases pendientes","pendientes","credits","clases disponibles","disponibles","remaining"],
+  vence:["vence","vencimiento","fecha de vencimiento","valido hasta","vigencia","expira","expiracion","expires"],
   notas:["notas","nota","observaciones","observacion","comentario","comentarios"] };
 function impMapHeader(cells){
   var map={},known=false;
@@ -2503,10 +2573,19 @@ el("impFile").addEventListener("change",function(){
         var key=impNorm(nombre);
         if(existe[key]||vistos[key]){ dup++; continue; }
         vistos[key]=true;
+        var paqFila=(map.paquete!=null?String(r[map.paquete]||"").trim():"")||"Paquete 4";
+        /* saldo migrado: columnas opcionales. Ausentes = alumno nuevo con su paquete
+           completo, exactamente como antes de que existieran. */
+        var sal=impSaldo(map.restantes!=null?r[map.restantes]:"", paqFila);
+        var vTxt=map.vence!=null?String(r[map.vence]||"").trim():"";
+        var vIso=impFecha(vTxt);
         out.push({ nombre:nombre,
           curso:(map.curso!=null?String(r[map.curso]||"").trim():"")||MARCA.cursoDefault,
           whatsapp:(map.whatsapp!=null?String(r[map.whatsapp]||"").trim():"").replace(/[^\d+]/g,""),
-          paquete:(map.paquete!=null?String(r[map.paquete]||"").trim():"")||"Paquete 4",
+          paquete:paqFila,
+          restantes:sal.restantes, migrado_usadas:sal.usadas,
+          vence:vIso||"", venceTxt:vTxt,
+          error:sal.error||((vIso==="")?('no entiendo la fecha "'+vTxt+'" (usa 20/08/2026 o 2026-08-20)'):""),
           notas:map.notas!=null?String(r[map.notas]||"").trim():"" });
       }
       IMP_ROWS=out; impPreview(out,dup,vacios);
@@ -2528,16 +2607,26 @@ el("btnImpPegar").addEventListener("click",function(){
     var key=impNorm(nombre);
     if(existe[key]||vistos[key]){ dup++; return; }
     vistos[key]=true;
-    var curso="",wsp="",paq="",notas=[];
+    var curso="",wsp="",paq="",notas=[],restTxt="",venTxt="",venIso="";
     celdas.slice(1).forEach(function(c){
       var soloDig=c.replace(/[^\d]/g,"");
-      if(!wsp && soloDig.length>=7 && soloDig.length===c.replace(/[\s+\-()]/g,"").length){ wsp=soloDig; }
-      else if(!paq && /paquete/i.test(c)){ paq=c; }
+      var fTxt=impPintaDeFecha(c);
+      /* la fecha va PRIMERO: "20-08-2026" también pasa el filtro de teléfono */
+      if(!venTxt && fTxt){ venTxt=fTxt; venIso=impFecha(fTxt); }
+      else if(!wsp && soloDig.length>=7 && soloDig.length===c.replace(/[\s+\-()]/g,"").length){ wsp=soloDig; }
+      else if(!restTxt && /^\d{1,3}$/.test(c.trim())){ restTxt=c.trim(); }
+      else if(!restTxt && /^\d{1,3}\s*(clases?|sesiones?)$/i.test(c.trim())){ restTxt=soloDig; }
+      else if(!paq && impEsPaquete(c)){ paq=c; }
       else if(!curso){ curso=c; }
       else { notas.push(c); }
     });
+    var paqL=paq||"Paquete 4";
+    var salL=impSaldo(restTxt,paqL);
     out.push({ nombre:nombre, curso:curso||MARCA.cursoDefault, whatsapp:wsp,
-      paquete:paq||"Paquete 4", notas:notas.join(" · ") });
+      paquete:paqL, notas:notas.join(" · "),
+      restantes:salL.restantes, migrado_usadas:salL.usadas,
+      vence:venIso||"", venceTxt:venTxt,
+      error:salL.error||((venTxt&&!venIso)?('no entiendo la fecha "'+venTxt+'" (usa 20/08/2026 o 2026-08-20)'):"") });
   });
   IMP_ROWS=out; impPreview(out,dup,0);
 });
@@ -2545,22 +2634,55 @@ function impPreview(rows,dup,vacios){
   el("impErr").style.display="none";
   if(!rows.length){ impError("No hay alumnos nuevos para importar"+(dup?(" ("+dup+" ya estaban en tu lista)"):"")+"."); return; }
   var tb=el("impTabla").querySelector("tbody");
-  tb.innerHTML=rows.slice(0,50).map(function(a){
-    return "<tr><td>"+esc(a.nombre)+"</td><td>"+esc(a.curso)+"</td><td>"+esc(a.whatsapp)+"</td><td>"+esc(a.paquete)+"</td></tr>";
+  /* las filas con problema van primero: solo se pintan 50 y una mala en la fila 137
+     dejaba el botón apagado sin que se viera por qué */
+  var orden=rows.slice().sort(function(x,y){ return (y.error?1:0)-(x.error?1:0); });
+  tb.innerHTML=orden.slice(0,50).map(function(a){
+    /* "Le queda": con qué saldo arranca. Sin saldo migrado = el paquete entero (lo de
+       siempre), dicho explícito para que nadie confirme a ciegas. */
+    var pk=impPk(a.paquete), saldo;
+    if(a.error){ saldo='<span style="color:var(--red);font-weight:600;">revisar</span><br><span class="mini">'+esc(a.error)+'</span>'; }
+    else if(a.restantes!=null){ saldo='<b>'+a.restantes+'</b> <span class="mini">/ '+pk.clases+'</span>'+(a.vence?'<br><span class="mini">vence '+esc(fechaBonita(a.vence))+'</span>':''); }
+    else { saldo='<b>'+(pk.clases||0)+'</b> <span class="mini">/ '+(pk.clases||0)+' (completo)</span>'+(a.vence?'<br><span class="mini">vence '+esc(fechaBonita(a.vence))+'</span>':''); }
+    return "<tr"+(a.error?' style="background:rgba(204,58,31,.10);"':'')+"><td>"+esc(a.nombre)+"</td><td>"+esc(a.curso)+"</td><td>"+esc(a.whatsapp)+"</td><td>"+esc(a.paquete)+"</td><td>"+saldo+"</td></tr>";
   }).join("");
   var extra=[]; if(dup)extra.push(dup+" ya estaban (omitidos)"); if(vacios)extra.push(vacios+" sin nombre (omitidos)");
+  var conSaldo=rows.filter(function(a){ return !a.error && a.restantes!=null; }).length;
+  if(conSaldo) extra.push(conSaldo+" con saldo traído de tu sistema anterior");
   el("impResumen").innerHTML="<b>"+rows.length+" alumno"+(rows.length!=1?"s":"")+"</b> list"+(rows.length!=1?"os":"o")+" para importar"+(extra.length?(" · "+extra.join(" · ")):"")+(rows.length>50?" · se muestran los primeros 50":"")+".";
+  /* Freno duro: con una sola fila mal (saldo mayor que el paquete, un valor que no es
+     número, una fecha imposible) NO se importa nada, y se dice quién y por qué. */
+  var malas=rows.filter(function(a){ return !!a.error; });
+  var box=el("impSaldoErr");
+  if(malas.length){
+    var lista=malas.slice(0,6).map(function(a){ return "<li><b>"+esc(a.nombre)+"</b>: "+esc(a.error)+"</li>"; }).join("");
+    box.style.display="";
+    box.innerHTML='<div style="border:1px solid var(--red);border-radius:8px;padding:10px 12px;">'+
+      '<b style="color:var(--red);">Hay '+malas.length+" fila"+(malas.length!=1?"s":"")+" con un saldo que no cuadra.</b>"+
+      '<ul style="margin:6px 0 0 16px;padding:0;font-size:13px;">'+lista+
+      (malas.length>6?"<li>… y "+(malas.length-6)+" más</li>":"")+"</ul>"+
+      '<p class="hint" style="margin:8px 0 0;">Corrige tu archivo (o la lista pegada) y vuelve a subirlo. Nadie se importa hasta que cuadre.</p></div>';
+  } else { box.style.display="none"; box.innerHTML=""; }
   el("impPaso1").style.display="none"; el("impPaso2").style.display="";
-  var btn=el("btnImpConfirmar"); btn.style.display=""; btn.disabled=false;
-  btn.textContent="Importar "+rows.length+" alumno"+(rows.length!=1?"s":"");
+  var btn=el("btnImpConfirmar"); btn.style.display="";
+  btn.disabled=malas.length>0;
+  btn.textContent=malas.length?("Corrige "+malas.length+" fila"+(malas.length!=1?"s":"")+" para importar")
+                              :("Importar "+rows.length+" alumno"+(rows.length!=1?"s":""));
 }
 el("btnImpConfirmar").addEventListener("click",function(){
   if(!IMP_ROWS.length){ closeOv("ovImport"); return; }
+  /* cinturón: el botón ya está apagado si hay filas malas, pero no se importa un saldo
+     inválido ni aunque alguien llame esto a mano desde la consola */
+  if(IMP_ROWS.some(function(a){ return !!a.error; })) return;
   var hoy=hoyLima();
   IMP_ROWS.forEach(function(a){
     db.alumnos.push({ id:uid(), codigo:uid().slice(-6).toUpperCase(), ciclo:1,
       nombre:a.nombre, whatsapp:a.whatsapp, curso:a.curso, paquete:a.paquete,
-      fecha:hoy, pago:"Pagado", horario:"", notas:a.notas });
+      fecha:hoy, pago:"Pagado", horario:"", notas:a.notas,
+      /* saldo traído de otro sistema: se guarda como clases ya usadas del ciclo 1 */
+      migrado_usadas:Number(a.migrado_usadas)||0,
+      migrado_ciclo:(Number(a.migrado_usadas)||0)>0?1:0,
+      vence:a.vence||"" });
   });
   var n=IMP_ROWS.length,btn=el("btnImpConfirmar"); btn.disabled=true;
   apiPut().then(function(){ renderAll(); closeOv("ovImport"); toast(n+" alumno"+(n!=1?"s":"")+" importado"+(n!=1?"s":"")+" \u2713"); })

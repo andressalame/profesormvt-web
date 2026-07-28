@@ -226,7 +226,13 @@ function compute(alumno, regs, precios, reservasUsadas){
     else if (r.estado === "Falta") falta++;
   }
   const exceso = Math.max(0, reprogramo - pk.reprog);
-  const usadas = asistio + falta + exceso + (Number(reservasUsadas) || 0);
+  /* Saldo migrado (28-jul-2026): clases que el alumno YA traía consumidas de otro sistema
+     al importarlo. Se guarda como "usadas de arranque" en vez de inventar clases dictadas
+     que ensucien reportes y caja. Pesa SOLO en el ciclo en que se importó: al renovar sube
+     el ciclo, deja de aplicar solo y arranca su paquete completo. */
+  const migradas = ((Number(alumno && alumno.migrado_ciclo) || 0) === (Number(alumno && alumno.ciclo) || 1))
+    ? Math.max(0, Number(alumno && alumno.migrado_usadas) || 0) : 0;
+  const usadas = asistio + falta + exceso + (Number(reservasUsadas) || 0) + migradas;
   const saldo = pk.clases - usadas;
   const expirado = paqueteExpirado(alumno) && saldo > 0;
   return {
@@ -4128,7 +4134,8 @@ export default {
           const estadoPrevio = new Map();
           for (const p of ((await env.DB.prepare(
             "SELECT id, vence, origen, recordatorio_ciclo, recordatorio_fecha, aviso_vence_ciclo, " +
-            "winback_ciclo, resena_pedida, nudge_ciclo, referido_nudge_ciclo FROM alumnos"
+            "winback_ciclo, resena_pedida, nudge_ciclo, referido_nudge_ciclo, " +
+            "COALESCE(migrado_usadas,0) AS migrado_usadas, COALESCE(migrado_ciclo,0) AS migrado_ciclo FROM alumnos"
           ).all()).results || [])) estadoPrevio.set(p.id, p);
 
           const stmts = [
@@ -4138,6 +4145,16 @@ export default {
           ];
           for (const a of body.alumnos){
             const prev = estadoPrevio.get(a.id) || {};
+            /* Saldo migrado: el importador es el UNICO que lo fija, y solo al CREAR al alumno.
+               Para uno que ya existe se preserva server-side (igual que vence): si no, cada
+               "Guardar" del CRM —que manda el snapshot completo— le borraria el arrastre. */
+            const esNuevo = !estadoPrevio.has(a.id);
+            let migUsadas = Number(prev.migrado_usadas) || 0;
+            let migCiclo = Number(prev.migrado_ciclo) || 0;
+            if (esNuevo){
+              const mu = Math.floor(Number(a.migrado_usadas));
+              if (Number.isFinite(mu) && mu > 0){ migUsadas = Math.min(mu, 9999); migCiclo = Number(a.ciclo) || 1; }
+            }
             // Regla: un `vence` vacio que llegue del CRM NUNCA pisa al guardado (si no, un CRM
             // abierto con datos viejos vuelve a borrarlo todo). Las otras 7 son estado de
             // maquina que el CRM no edita: siempre gana la base.
@@ -4147,8 +4164,8 @@ export default {
             stmts.push(env.DB.prepare(
               "INSERT INTO alumnos (id,codigo,nombre,whatsapp,curso,paquete,fecha,pago,horario,notas,ciclo," +
               "vence,recordatorio_ciclo,recordatorio_fecha,aviso_vence_ciclo,winback_ciclo,resena_pedida," +
-              "nudge_ciclo,referido_nudge_ciclo,origen) " +
-              "VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20)"
+              "nudge_ciclo,referido_nudge_ciclo,origen,migrado_usadas,migrado_ciclo) " +
+              "VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,?22)"
             ).bind(
               a.id, String(a.codigo || "").toUpperCase() || randHex(3).toUpperCase(), a.nombre,
               a.whatsapp || "", a.curso || "", a.paquete || "",
@@ -4161,7 +4178,8 @@ export default {
               prev.resena_pedida ?? 0,
               prev.nudge_ciclo ?? 0,
               prev.referido_nudge_ciclo ?? 0,
-              origen
+              origen,
+              migUsadas, migCiclo
             ));
           }
           for (const r of body.registro){
