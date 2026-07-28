@@ -390,3 +390,40 @@ paquetes a medio consumir. Antes el importador creaba a todos con el paquete com
   Mac) con el CSV de 5 alumnos (2 con saldo, 2 sin, 1 inválido) + modo pegar + 3 formatos viejos;
   13 casos de `compute()` recortado del fuente real; y round-trip contra PROD con un tenant
   desechable (creado, verificado y borrado de la D1, prod quedó en los mismos 17 alumnos).
+
+## Saldo migrado portado a los 3 paneles hermanos + "Mi web" avisa si no puede cobrar (28-jul-2026)
+
+**Port a ProfesorMVT / Kanta / Nicole Olavarría — EN PROD los 3.**
+- Los 3 CRM son forks del mismo ancestro que Batuta. MVT y Kanta difieren en **10 líneas**, todas
+  del bloque `MARCA` (nombre, inicial, portalUrl, archivoExport, TOKEN_KEY): el branding vive
+  aislado, por eso el port es seguro. Nicole diverge algo mas (tiene el editor "Mi web").
+- Se aplico con un script de anclas exactas (`scratchpad/harness/portar-panel.js` y
+  `portar-worker.js`): cada reemplazo exige **1 coincidencia exacta** o aborta sin escribir.
+  15 cambios en MVT/Kanta, 14 en Nicole (su ficha usa `Object.assign({}, prev, …)`, ya preservaba).
+- **Diferencias con Batuta:** estos forks tienen `PAQUETES` estatico (no config por tenant) y no
+  tienen mensualidad ilimitada, asi que `impSaldo` usa `impPk()` en vez de `pkDe()` y no hay rama
+  `ilim`. Tampoco tenian `fechaBonita` ni `.btn:disabled`: se portaron.
+- **D1 migradas:** `profesormvt-crm`, `kanta-crm`, `nicole-crm` (ALTER x2 cada una).
+- **Deploys, cada uno por su via:** MVT = push a main (GitHub Action) · Kanta = `./deploy-kanta.sh`
+  SIEMPRE (el `astro build` regenera dist con el sitio de MVT y el script lo poda) · Nicole =
+  `npm run build` + `CLOUDFLARE_API_TOKEN="$(cat .cf-api-token.local)" npx wrangler deploy`.
+- **Hallazgo en Nicole:** su `PUT /api/admin/data` no preservaba NADA server-side (borraba y
+  reinsertaba con lo que mandara el CRM). Se le puso el mismo `estadoPrevio` que MVT/Kanta.
+- Verificado: 17 casos de los helpers recortados de cada panel real + 8 casos de `compute()` de
+  cada worker + E2E en navegador con el CSV de 5 sobre el CRM de MVT + las 3 URLs en vivo.
+
+**"Mi web": el editor ya dice por que la seccion de Precios no sale.**
+- **Bug de producto** encontrado auditando el pedido de Elevate: `secPrecios()` devuelve "" si
+  `ctx.cobroOn` es falso (sin medio de cobro no se muestran planes, con razon). Pero el editor no
+  lo decia en ningun lado: el profe prendia "Mostrar mis paquetes con precio", no pasaba nada y no
+  habia explicacion. La funcion que le deja VENDER desde su web era invisible.
+- `GET /app/api/admin/data` ahora devuelve **`cobro_on`**, con la MISMA formula que `armarWebCtx`
+  (mp vivo || pago_numero || bcp_cuenta || scotia_cuenta || crypto_wallet). Se calcula **antes**
+  de borrarle los datos bancarios al rol profesor, si no saldria falso para el profe.
+- El editor muestra "✓ Tu web ya vende" o el aviso ambar con salto a Ajustes → Cobros
+  (`irACobros()`, reusa el mismo camino del buscador: tab + `ajTab`). Verificado en los 2 estados.
+- **Confirmado en prod:** comprar desde la web del tenant YA funciona
+  (`/app/a/<slug>/pagar?p=<paquete>` responde 200 con Yape). OJO al verificar: la ruta lleva
+  `/app` — `batuta.lat/a/<slug>/pagar` da 404 y parece un bug que no existe.
+- OJO cache: tras deployar, el worker sirve el panel nuevo al instante pero **batuta.lat tarda**
+  (Vercel). Comparar bytes contra el archivo local antes de diagnosticar "no salio".

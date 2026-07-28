@@ -5707,10 +5707,26 @@ window.batutaInit = batutaInit;
           campo("cursos.items."+i+".nombre","Nombre")+campo("cursos.items."+i+".desc","Descripción",{area:true})+"</div>"; }).join("")+
         agregar("cursos.items","Agregar tarjeta de curso"), true);
     }
+    /* salta a Ajustes → Cobros reusando el mismo camino del buscador (tab + ajTab) */
+    window.irACobros=function(){
+      var t=document.querySelector('.tab[data-tab="ajustes"]'); if(t) t.click();
+      setTimeout(function(){ try{ ajTab("cobros"); }catch(e){} },30);
+    };
     if(PG==="precios"){
+      /* 28-jul-2026: la sección de Precios NO sale en la web si la academia no tiene ningún
+         medio de cobro conectado (regla del render: sin cobro no se muestran planes). Antes
+         el profe prendía el toggle, no pasaba nada y no había explicación en ningún lado:
+         la función que le deja VENDER desde su web era invisible. Ahora se dice. */
+      var vende=!!db.cobro_on;
+      var avisoCobro=vende
+        ? '<div class="mini" style="margin-top:8px;color:var(--green,#5f8a52);"><b>✓ Tu web ya vende.</b> Cada plan sale con su precio y un botón <b>Comprar</b> que lleva a tu página de pago. Lo que cobras lo defines en Ajustes → Clases y paquetes.</div>'
+        : '<div style="margin-top:10px;border:1px solid var(--amber,#d99a3c);border-radius:8px;padding:10px 12px;">'+
+          '<b style="color:var(--amber,#d99a3c);">Tu web todavía no puede cobrar.</b>'+
+          '<p class="hint" style="margin:6px 0 0;">Mientras no tengas un medio de cobro conectado, esta sección <b>no aparece</b> en tu web aunque la prendas: no tendría con qué cobrar. Conecta tu <b>Yape/Plin</b>, tu cuenta de banco o <b>Mercado Pago</b> en <a href="#" onclick="irACobros();return false;"><b>Ajustes → Cobros</b></a> y tu web pasa a mostrar tus planes con botón <b>Comprar</b>.</p></div>';
       h+=grupo("Sección Precios", toggle("precios.on","Mostrar esta sección")+toggle("precios.mostrar","Mostrar mis paquetes con precio")+
         campo("precios.titulo","Título")+campo("precios.intro","Intro (opcional)",{area:true})+
-        '<div class="mini" style="margin-top:6px">Los paquetes y precios salen de <b>Ajustes</b> y de lo que cobras de verdad; acá solo eliges si se muestran.</div>', true);
+        '<div class="mini" style="margin-top:6px">Los paquetes y precios salen de <b>Ajustes</b> y de lo que cobras de verdad; acá solo eliges si se muestran.</div>'+
+        avisoCobro, true);
     }
     if(PG==="galeria"){
       var fotos=(WEB.galeria.fotos||[]);

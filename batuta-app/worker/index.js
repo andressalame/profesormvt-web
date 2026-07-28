@@ -8704,6 +8704,12 @@ export default {
           }
           const precios  = await loadPrecios(env, tid);
           const config   = await loadConfig(env, tid);
+          /* cobro_on (28-jul-2026): misma formula que armarWebCtx. Se calcula ACA, ANTES de
+             borrarle los datos bancarios al rol profesor, si no el flag saldria falso para el
+             profe aunque la academia si cobre. Lo consume el editor de "Mi web" para avisar
+             que la seccion de Precios no sale sin un medio de cobro conectado. */
+          const mpVivo = !!(t && t.mp_access_token) && (!(Number(t && t.mp_expires_at) || 0) || Number(t.mp_expires_at) > Date.now());
+          const cobroOnPanel = !!(mpVivo || config.pago_numero || config.bcp_cuenta || config.scotia_cuenta || config.crypto_wallet);
           /* HALLAZGO del review: el rol profesor NO recibe secretos del tenant (con el token
              de Nubefact podria emitir comprobantes por fuera saltandose el guard del dueno). */
           if (!esDueno){
@@ -8727,6 +8733,7 @@ export default {
           return json({ alumnos, registro, precios, cuentas, compras, recursos, ejercicios, leads, gastos, comprobantes, config, grupos, sedes,
                         slug: t.slug, academia: t.academia, estado: t.estado, demo: t.email === DEMO_EMAIL,
                         rol: esDueno ? "dueno" : "profesor", profe_id: profeActorId || "", equipo,
+                        cobro_on: cobroOnPanel,
                         vapid_public: env.VAPID_PUBLIC_KEY || "" });
         }
 
