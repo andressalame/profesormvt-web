@@ -59,7 +59,15 @@ function parsePaquetes(valor){
       if (s && !t.includes(s)) t.push(s);
       if (t.length >= CLASES_MAX) break;
     }
-    map[n] = { clases: c, reprog: r, ilim: u, tipos: t };
+    /* Vigencia del paquete (28-jul-2026, pedido de Elevate: sus planes duran 40 dias).
+       d = dias que dura (0 = no vence nunca por fecha, comportamiento de siempre)
+       i = desde cuando corre: "compra" (default) o "clase" (desde su primera clase).
+       Elevate lo queria a eleccion del dueno porque un alumno puede comprar en diciembre
+       y empezar en marzo: cobrarle la vigencia desde la compra seria regalarle el plan. */
+    let d = parseInt(p && p.d, 10);
+    d = (Number.isFinite(d) && d >= 1 && d <= 3650) ? d : 0;
+    const i = (String((p && p.i) || "").trim() === "clase") ? "clase" : "compra";
+    map[n] = { clases: c, reprog: r, ilim: u, tipos: t, dias: d, inicio: i };
     list.push(n);
     if (list.length >= 20) break;
   }
@@ -67,7 +75,7 @@ function parsePaquetes(valor){
 }
 function paquetesDefault(){
   const map = {}, list = [];
-  for (const n of Object.keys(PAQUETES)){ map[n] = { clases: PAQUETES[n].clases, reprog: PAQUETES[n].reprog, ilim: false, tipos: [] }; list.push(n); }
+  for (const n of Object.keys(PAQUETES)){ map[n] = { clases: PAQUETES[n].clases, reprog: PAQUETES[n].reprog, ilim: false, tipos: [], dias: 0, inicio: "compra" }; list.push(n); }
   return { map, list };
 }
 /* ¿Este paquete deja reservar esta franja? Paquete sin tipos = todo permitido.
@@ -87,8 +95,8 @@ async function loadPaquetes(env, tenantId){
    nombres legacy por defecto, y si no existe (paquete renombrado/borrado) 0 clases. */
 function resolverPk(map, nombre){
   if (map && map[nombre]) return map[nombre];
-  if (PAQUETES[nombre]) return { clases: PAQUETES[nombre].clases, reprog: PAQUETES[nombre].reprog, ilim: false, tipos: [] };
-  return { clases: 0, reprog: 0, ilim: false, tipos: [] };
+  if (PAQUETES[nombre]) return { clases: PAQUETES[nombre].clases, reprog: PAQUETES[nombre].reprog, ilim: false, tipos: [], dias: 0, inicio: "compra" };
+  return { clases: 0, reprog: 0, ilim: false, tipos: [], dias: 0, inicio: "compra" };
 }
 
 /* Contexto para "Mi web": junta los datos duros de la academia (config, precios,
@@ -592,20 +600,39 @@ function compute(alumno, regs, precios, reservasUsadas, pk){
       saldo: 9999, monto };
   }
   const saldo = pk.clases - usadas;
+  /* Vigencia (28-jul-2026): un paquete con fecha de vencimiento pasada ya no da clases,
+     aunque le sobre saldo — es justo lo que Elevate necesita para sus planes de 40 dias.
+     `caducado` es el otro corte: compro y nunca arranco dentro del plazo de la academia.
+     Ninguno de los dos borra nada: el alumno y su historial quedan intactos. */
+  const vencido = venceVencido(alumno && alumno.vence);
+  const caduco = !!(alumno && Number(alumno.caducado));
+  const muerto = vencido || caduco;
   return {
     compradas: pk.clases,
     ilim: false,
     usadas,
-    restantes: Math.max(0, saldo),
+    restantes: muerto ? 0 : Math.max(0, saldo),
+    vencido, caducado: caduco,
+    vence: (alumno && alumno.vence) || "",
     reprogPermitidas: pk.reprog,
     reprogUsadas: reprogramo,
     reprogRestantes: Math.max(0, pk.reprog - reprogramo),
-    saldo,
+    saldo: muerto ? 0 : saldo,
     monto
   };
 }
+/* Le fecha de vencimiento se compara al FINAL del dia de Lima: un plan que vence "hoy"
+   vale todo el dia de hoy, que es como lo entiende cualquier alumno. */
+function venceVencido(vence){
+  const v = String(vence || "").trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) return false;
+  const ms = Date.parse(v + "T23:59:59Z") + LIMA_OFFSET_MS;
+  return Number.isFinite(ms) && ms < Date.now();
+}
 function estadoAlumno(c, vence){
   if (!c) return "Inactivo";
+  if (c.caducado) return "Plan caducado";
+  if (c.vencido) return "Plan vencido";
   /* Mensualidad ilimitada: el estado va por la fecha de vencimiento, no por saldo. */
   if (c.ilim){
     if (vence){ const vms = Date.parse(vence + "T23:59:59Z"); if (!isNaN(vms) && vms <= Date.now() + 3 * 86400000) return "Renovar pronto"; }
@@ -629,6 +656,13 @@ async function loadConfig(env, tenantId){
               winback_activo: "", nurture_activo: "", cursos: "",
               /* clases de 2 niveles (categoria+variantes+aforo) y anticipacion minima de reserva */
               clases: "", anticipacion_h: "",
+              /* Pedidos de Elevate (28-jul-2026):
+                 caduca_meses     = meses que tiene un plan comprado para arrancar antes de caducar (0 = nunca)
+                 asistencia_auto  = "1" -> las clases pasadas se dan por asistidas solas; la falta se marca a mano
+                 asistencia_horas = cuantas horas despues del fin se cierra sola (default 6)
+                 campos_alumno    = que datos extra se piden en la ficha (apellido,email,nacimiento)
+                 mensajes         = JSON con el asunto/cuerpo propios de cada correo automatico */
+              caduca_meses: "", asistencia_auto: "", asistencia_horas: "", campos_alumno: "", mensajes: "",
               brand_color: "", brand_font: "", brand_logo: "", agenda_cupo: "",
               /* "Mi web" (editor visual de la página pública de la academia). Vacío = la
                  landing por defecto armada con los datos de la academia. web_version cambia
@@ -693,12 +727,188 @@ function parseClases(valor){
       if (s && !v.includes(s)) v.push(s);
       if (v.length >= VARIANTES_MAX) break;
     }
-    out.push({ n, a, v });
+    /* Reglas de reserva POR CATEGORIA (28-jul-2026, pedido de Elevate: minimos y maximos
+       distintos por curso). -1 = "usa la regla general de la academia", que es el default y
+       deja el comportamiento de siempre para quien no toque nada.
+       ah = horas minimas de anticipacion para RESERVAR
+       am = dias maximos hacia el futuro que se puede reservar (0 = sin tope)
+       ch = horas minimas para CANCELAR o REPROGRAMAR */
+    const num = (x, min, max, def) => { const k = parseInt(x, 10); return (Number.isFinite(k) && k >= min && k <= max) ? k : def; };
+    out.push({ n, a, v, ah: num(c && c.ah, 0, 168, -1), am: num(c && c.am, 0, 365, -1), ch: num(c && c.ch, 0, 168, -1) });
     if (out.length >= CLASES_MAX) break;
   }
   return out;
 }
 function clasesDeCfg(cfg){ return parseClases(cfg && cfg.clases); }
+/* Reglas de reserva efectivas para una etiqueta de franja: manda lo de la categoria si el
+   dueno la configuro, si no la regla general de la academia. Una sola fuente para el
+   endpoint de reservar, el de reprogramar y el portal (que esconde lo que no se puede). */
+function reglasDeClase(cfg, etiqueta){
+  const gen = { minH: anticipacionH(cfg), maxDias: 0, cancelH: reprogCfg(cfg).minH };
+  const cat = categoriaDe(etiqueta);
+  if (!cat) return gen;
+  const c = clasesDeCfg(cfg).find(x => x.n === cat);
+  if (!c) return gen;
+  return {
+    minH: (c.ah >= 0) ? c.ah : gen.minH,
+    maxDias: (c.am >= 0) ? c.am : gen.maxDias,
+    cancelH: (c.ch >= 0) ? c.ch : gen.cancelH
+  };
+}
+
+/* ---------- Vigencia del plan (28-jul-2026, pedido de Elevate) ----------
+   UNA sola funcion decide hasta cuando vale el paquete de un alumno, para que el panel,
+   el portal, los correos y el cron no puedan discrepar.
+   - paquete sin dias configurados -> se conserva lo que ya habia (comportamiento de siempre)
+   - inicio "compra" -> corre desde la fecha de compra del ciclo
+   - inicio "clase"  -> corre desde su PRIMERA clase; mientras no la tome, no vence (vacio)
+   Devuelve "" cuando no hay fecha de vencimiento aplicable. */
+function sumarDias(iso, dias){
+  const ms = Date.parse(String(iso || "") + "T00:00:00Z");
+  if (!Number.isFinite(ms)) return "";
+  return new Date(ms + dias * 86400000).toISOString().slice(0, 10);
+}
+function calcularVence(pk, alumno, venceActual){
+  const dias = Number(pk && pk.dias) || 0;
+  if (!dias) return venceActual || "";
+  if (pk.inicio === "clase"){
+    const act = String((alumno && alumno.activado) || "").trim();
+    return act ? sumarDias(act, dias) : "";   // comprado pero sin empezar: todavia no corre
+  }
+  const base = String((alumno && alumno.fecha) || "").trim();
+  return /^\d{4}-\d{2}-\d{2}$/.test(base) ? sumarDias(base, dias) : (venceActual || "");
+}
+/* Meses que la academia le da a un plan comprado para ARRANCAR antes de caducar.
+   Elevate: 6. 0 = nunca caduca. Solo aplica a paquetes que cuentan desde la primera clase:
+   uno que cuenta desde la compra ya vence solo por fecha. */
+/* ---------- Permisos por profesor (28-jul-2026, pedido de Elevate) ----------
+   "Poder tener mas control sobre lo que pueden hacer los profesores desde el panel del dueno."
+   Hasta hoy el rol era binario: dueno (todo) o profesor (lo suyo). Ahora el dueno puede QUITARLE
+   permisos a cada profe, uno por uno. Se guardan en profesores.permisos como lista separada por
+   comas de lo que tiene PROHIBIDO — asi un profesor sin nada configurado conserva exactamente los
+   permisos de siempre (vacio = puede todo lo suyo) y ningun equipo existente cambia de golpe.
+   El dueno NUNCA se limita a si mismo. */
+const PERMISOS = [
+  ["alumnos_crear", "Dar de alta alumnos nuevos"],
+  ["alumnos_editar", "Editar la ficha de sus alumnos"],
+  ["alumnos_borrar", "Borrar alumnos"],
+  ["clases_borrar", "Borrar clases ya registradas"],
+  ["agenda_editar", "Cambiar su horario de disponibilidad"],
+  ["pagos_ver", "Ver los pagos y montos"],
+  ["exportar", "Descargar la lista en Excel/CSV"]
+];
+const PERMISOS_CLAVES = PERMISOS.map(p => p[0]);
+function permisosDe(profe){
+  const crudo = String((profe && profe.permisos) || "").trim();
+  const negados = new Set(crudo ? crudo.split(",").map(x => x.trim()).filter(Boolean) : []);
+  return { negados, puede: (k) => !negados.has(k) };
+}
+/* Guard de escritura: el dueno siempre pasa; a un profe se le exige el permiso. */
+function puedeProfe(esDueno, profeActor, clave){
+  if (esDueno) return true;
+  return permisosDe(profeActor).puede(clave);
+}
+function sanearPermisos(valor){
+  const arr = Array.isArray(valor) ? valor : String(valor || "").split(",");
+  const out = [];
+  for (const x of arr){
+    const k = String(x || "").trim();
+    if (PERMISOS_CLAVES.includes(k) && !out.includes(k)) out.push(k);
+  }
+  return out.join(",");
+}
+
+const CADUCA_MESES_DEF = 0;
+function caducaMeses(cfg){
+  const m = parseInt(cfg && cfg.caduca_meses, 10);
+  return (Number.isFinite(m) && m >= 0 && m <= 60) ? m : CADUCA_MESES_DEF;
+}
+
+/* ---------- Mensajes automaticos, editables por la academia (28-jul-2026) ----------
+   Todo correo que Batuta le manda a un ALUMNO sale de aca. Cada academia puede reescribir
+   asunto y cuerpo desde Ajustes > Mensajes; lo que no toque usa el default de abajo.
+   Se guardan en config.mensajes (un solo JSON, no 12 filas de config).
+
+   Los {campos} se reemplazan con datos reales. El texto del dueno se ESCAPA siempre
+   (nadie inyecta HTML en un correo que sale con nuestro dominio) y los saltos de linea
+   se convierten en parrafos. Un {campo} que no exista para ese mensaje queda vacio, no
+   rompe el envio ni sale literal. */
+/* Campos disponibles, con la explicacion que ve el dueno en el panel. Los dos ultimos son
+   comodines "listos para leer": traen su preposicion y quedan VACIOS si el dato no existe,
+   asi la frase nunca sale coja ("tu clase de " sin curso). */
+const CAMPOS_MSG = [
+  ["alumno", "El nombre del alumno (solo el primero)"],
+  ["academia", "El nombre de tu academia"],
+  ["curso", "El curso o clase"],
+  ["profe", "El profesor de esa clase"],
+  ["fecha", "Día y hora completos de la clase"],
+  ["hora", "Solo la hora de la clase"],
+  ["paquete", "El plan que compró"],
+  ["saldo", "Cuántas clases le quedan, en palabras"],
+  ["vence", "La fecha en que se le vence el plan"],
+  ["dias", "Cuántos días lleva sin venir"],
+  ["curso_de", "El curso con su “de” delante (vacío si no hay curso)"],
+  ["con_profe", "El profesor con su “con” delante (vacío si no hay)"],
+  ["vence_frase", "La frase completa “Acuérdate que tu plan vence el …” (vacía si ese plan no vence)"]
+];
+const MSG_DEF = {
+  clase_24h: {
+    nombre: "Recordatorio de clase — 1 día antes",
+    cuando: "Sale 24 horas antes de cada clase reservada.",
+    asunto: "Mañana tienes clase{curso_de} · {hora}",
+    cuerpo: "{alumno}, te esperamos mañana en tu clase{curso_de}{con_profe} de {academia}: {fecha}.\n\nSi no llegas, entra a tu portal y reprograma con anticipación para no perder la clase."
+  },
+  clase_1h: {
+    nombre: "Recordatorio de clase — 1 hora antes",
+    cuando: "Sale 1 hora antes de cada clase reservada.",
+    asunto: "Tu clase{curso_de} es en 1 hora",
+    cuerpo: "{alumno}, tu clase{curso_de}{con_profe} en {academia} empieza en 1 hora: {fecha}."
+  },
+  renovacion: {
+    nombre: "Su paquete está por vencer",
+    cuando: "Sale cuando al plan del alumno le quedan 3 días o menos.",
+    asunto: "Tu {paquete} vence el {vence} · renueva y asegura tu horario",
+    cuerpo: "{alumno}, tu {paquete} en {academia} vence el {vence}.\n\nRenueva desde tu portal en 1 minuto y tu horario queda asegurado."
+  },
+  vencido: {
+    nombre: "Su paquete ya venció",
+    cuando: "Sale cuando el plan del alumno acaba de vencer.",
+    asunto: "Tu {paquete} venció · renuévalo y sigue",
+    cuerpo: "{alumno}, tu {paquete} en {academia} venció el {vence}.\n\nRenueva desde tu portal en 1 minuto y no pierdas tu horario ni tu avance."
+  },
+  winback: {
+    nombre: "Te extrañamos (alumno inactivo)",
+    cuando: "Sale cuando el alumno lleva varios días sin venir y todavía le quedan clases.",
+    asunto: "Te extrañamos en {academia} · reserva tu próxima clase",
+    cuerpo: "{alumno}, hace {dias} días que no te vemos en {academia} y {saldo}.{vence_frase}\n\nReserva tu próxima clase en 1 minuto desde tu portal y retoma tu ritmo."
+  }
+};
+function mensajesDeCfg(cfg){
+  let guardado = {};
+  try { guardado = JSON.parse((cfg && cfg.mensajes) || "") || {}; } catch (e) { guardado = {}; }
+  const out = {};
+  for (const k of Object.keys(MSG_DEF)){
+    const g = guardado[k] || {};
+    const a = String(g.a || "").trim();
+    const c = String(g.c || "").trim();
+    out[k] = { asunto: a || MSG_DEF[k].asunto, cuerpo: c || MSG_DEF[k].cuerpo, propio: !!(a || c) };
+  }
+  return out;
+}
+/* Rellena {campos}. Los valores se escapan; el resultado de asunto va en texto plano. */
+function pintarMsg(txt, datos){
+  return String(txt || "").replace(/\{([a-z_]+)\}/g, (m, k) => {
+    const v = datos[k];
+    return (v === undefined || v === null) ? "" : String(v);
+  });
+}
+function msgAsunto(plantilla, datos){ return pintarMsg(plantilla, datos).replace(/\s+/g, " ").trim().slice(0, 180); }
+function msgHtml(plantilla, datos, cta){
+  const cuerpo = pintarMsg(plantilla, datos);
+  const parrafos = cuerpo.split(/\n{2,}/).map(p =>
+    "<p>" + esc(p.trim()).replace(/\n/g, "<br>") + "</p>").join("");
+  return parrafos + (cta ? '<p><a href="' + cta.url + '"><b>' + esc(cta.texto) + "</b></a></p>" : "");
+}
 /* Etiqueta de franja: "Categoria" o "Categoria · Variante". La categoria es lo que
    manda para el aforo y para el permiso del plan. */
 const SEP_CLASE = " · ";
@@ -2546,8 +2756,14 @@ async function slotValido(env, tenantId, iso, opts, prof){
   const now = Date.now();
   /* Anticipacion minima por academia (27-jul-2026). Antes eran 12h fijas para todos:
      un estudio que llena la clase de las 7pm el mismo dia no podia operar. */
-  const antH = (opts && opts.cfg) ? anticipacionH(opts.cfg) : anticipacionH(await loadConfig(env, tenantId));
-  if (t <= now + antH * 3600000) return false;
+  /* La regla puede ser propia de la categoria de ESTA franja (28-jul-2026, Elevate). El
+     tipo de la franja se lee de disponibilidad mas abajo; aca se usa el curso que venga en
+     opts (el que ya resolvio el endpoint) y si no, la regla general. Este es el freno del
+     SERVIDOR: el portal ya esconde lo que no se puede, pero esconder no es impedir. */
+  const cfgSlot = (opts && opts.cfg) ? opts.cfg : await loadConfig(env, tenantId);
+  const regSlot = reglasDeClase(cfgSlot, (opts && opts.curso) || "");
+  if (t <= now + regSlot.minH * 3600000) return false;
+  if (regSlot.maxDias > 0 && t > now + regSlot.maxDias * 86400000) return false;
   if (!(opts && opts.ignorarHorizonte) && t > now + HORIZONTE_SEMANAS * 7 * 86400000) return false;
   const p = limaParts(new Date(t));
   /* NO se exige hora en punto (27-jul-2026): la franja vale si existe tal cual en
@@ -2613,7 +2829,16 @@ async function generarSlotsDetalle(env, tenantId, prof, opts){
     return porTipo || cupoGlobal;
   };
   const pk = opts && opts.pk;
-  const antMs = anticipacionH(cfgT) * 3600000;
+  /* Anticipacion POR CURSO (28-jul-2026, Elevate): cada categoria puede tener su minimo de
+     horas y su tope de dias hacia el futuro. Se resuelve por franja (cada una trae su curso),
+     no una sola vez, porque en la misma agenda conviven cursos con reglas distintas.
+     Se cachea por etiqueta: una semana de agenda son cientos de franjas de pocos cursos. */
+  const cacheReglas = new Map();
+  const reglasDe = (etiqueta) => {
+    const k = etiqueta || "";
+    if (!cacheReglas.has(k)) cacheReglas.set(k, reglasDeClase(cfgT, k));
+    return cacheReglas.get(k);
+  };
 
   const p0 = limaParts(new Date(now));
   const medianocheHoy = limaToUtc(p0.y, p0.m, p0.d, "00:00").getTime();
@@ -2626,7 +2851,10 @@ async function generarSlotsDetalle(env, tenantId, prof, opts){
     const horas = porDia[p.dow] || [];
     for (const h of horas){
       const ms = limaToUtc(p.y, p.m, p.d, h.hora).getTime();
-      if (ms <= now + antMs || ms > hastaMs) continue;
+      const reg = reglasDe(h.curso);
+      /* muy pronto (no llega la anticipacion minima) o demasiado lejos (tope de la categoria) */
+      if (ms <= now + reg.minH * 3600000 || ms > hastaMs) continue;
+      if (reg.maxDias > 0 && ms > now + reg.maxDias * 86400000) continue;
       const iso = new Date(ms).toISOString();
       if (bloqueados.has(iso)) continue;   // franja cerrada por el profe: ni libre ni espera
       const cupo = cupoEff(h.cupo, h.curso);
@@ -3380,6 +3608,28 @@ async function ensureSaldoMigradoSchema(env){
   }
   SALDO_MIGRADO_OK = true;
 }
+
+/* ---------- Pedidos de Elevate.pe (28-jul-2026) ----------
+   Columnas nuevas de alumnos:
+   - activado   : fecha (aaaa-mm-dd) en que ARRANCO a correr la vigencia del plan del ciclo
+                  actual. Solo se usa cuando el paquete cuenta "desde la primera clase";
+                  vacio = el alumno compro pero todavia no empezo.
+   - caducado   : 1 = el plan se cayo por no activarse nunca dentro del plazo de la academia
+                  (Elevate: 6 meses). El saldo pasa a 0 sin borrar al alumno ni su historial.
+   - apellido / email / nacimiento : datos que Elevate pide en el alta. Van en `alumnos` y no
+                  en `cuentas` porque un alumno puede existir sin cuenta de portal.
+   ALTER idempotente y memoizado por isolate; la migracion de prod se corre igual a mano. */
+let ELEVATE_SCHEMA_OK = false;
+async function ensureAlumnoExtraSchema(env){
+  if (ELEVATE_SCHEMA_OK) return;
+  const cols = [["activado", "TEXT DEFAULT ''"], ["caducado", "INTEGER DEFAULT 0"],
+                ["apellido", "TEXT DEFAULT ''"], ["email", "TEXT DEFAULT ''"], ["nacimiento", "TEXT DEFAULT ''"]];
+  for (const [c, tipo] of cols){
+    try { await env.DB.prepare("ALTER TABLE alumnos ADD COLUMN " + c + " " + tipo).run(); } catch (e) { /* ya existe */ }
+  }
+  try { await env.DB.prepare("ALTER TABLE profesores ADD COLUMN permisos TEXT DEFAULT ''").run(); } catch (e) { /* ya existe */ }
+  ELEVATE_SCHEMA_OK = true;
+}
 async function sedesDeTenant(env, tid){
   try {
     return (await env.DB.prepare("SELECT id, nombre, direccion FROM sedes WHERE tenant_id = ?1 ORDER BY creado, rowid").bind(tid).all()).results || [];
@@ -3517,6 +3767,16 @@ function fmtLima(iso){
   const p = limaParts(new Date(Date.parse(iso)));
   return DIAS_FIJO[p.dow] + " " + String(p.d).padStart(2, "0") + "/" + String(p.m).padStart(2, "0") + " a las " + hhmm(p) + " (hora de Lima)";
 }
+/* Plantillas de la academia, cacheadas por corrida del cron (un loadConfig por tenant,
+   no uno por correo: una academia con 40 recordatorios haria 40 lecturas iguales). */
+async function mensajesTenant(env, cache, tenantId){
+  if (cache.has(tenantId)) return cache.get(tenantId);
+  let msgs;
+  try { msgs = mensajesDeCfg(await loadConfig(env, tenantId)); }
+  catch (e) { msgs = mensajesDeCfg({}); }
+  cache.set(tenantId, msgs);
+  return msgs;
+}
 async function toggleTenantOn(env, cache, tenantId, clave){
   const k = tenantId + ":" + clave;
   if (cache.has(k)) return cache.get(k);
@@ -3543,7 +3803,7 @@ async function recordatoriosDeClase(env){
     "WHERE r.estado = 'reservada' AND r.alumno_id IS NOT NULL AND r.inicio_utc > ?1 AND r.inicio_utc <= ?2 " +
     "AND (COALESCE(r.aviso_24,0) = 0 OR COALESCE(r.aviso_1h,0) = 0) LIMIT 200"
   ).bind(desde, hasta, DEMO_EMAIL).all();
-  const cache = new Map();
+  const cache = new Map(), cacheMsg = new Map();
   let enviados = 0;
   for (const r of (results || [])){
     if (enviados >= 40) break; // tope por corrida (rate de Resend); la siguiente corrida sigue
@@ -3557,11 +3817,18 @@ async function recordatoriosDeClase(env){
     else if (dif <= 24 * 3600000 && dif > 22 * 3600000 && !r.aviso_24) cual = "24h";
     if (!cual) continue;
     const nombreCorto = (r.alumno_nombre || "").split(" ")[0] || "Hola";
-    const mail = cual === "1h"
-      ? { subject: "Tu clase" + (r.curso ? " de " + r.curso : "") + " es en 1 hora",
-          html: "<p>" + esc(nombreCorto) + ", tu clase" + esc(r.curso ? " de " + r.curso : "") + esc(conProfe) + " en <b>" + esc(r.academia || "") + "</b> empieza en 1 hora: <b>" + esc(fmtLima(r.inicio_utc)) + "</b>.</p><p><a href=\"" + linkPortal + "\">Ver mi portal</a></p>" }
-      : { subject: "Manana tienes clase" + (r.curso ? " de " + r.curso : "") + " · " + fmtLima(r.inicio_utc).split(" a las ")[1].replace(" (hora de Lima)", ""),
-          html: "<p>" + esc(nombreCorto) + ", te esperamos manana en tu clase" + esc(r.curso ? " de " + r.curso : "") + esc(conProfe) + " de <b>" + esc(r.academia || "") + "</b>: <b>" + esc(fmtLima(r.inicio_utc)) + "</b>.</p><p>Si no llegas, entra a tu portal y reprograma con anticipacion para no perder la clase.</p><p><a href=\"" + linkPortal + "\">Ver o reprogramar</a></p>" };
+    /* El texto sale de la plantilla de la academia (Ajustes > Mensajes); si no la toco,
+       del default. Una sola llamada a loadConfig por tenant y por corrida. */
+    const msgs = await mensajesTenant(env, cacheMsg, r.tenant_id);
+    const m = msgs[cual === "1h" ? "clase_1h" : "clase_24h"];
+    const datos = {
+      alumno: nombreCorto, academia: r.academia || "", curso: r.curso || "",
+      profe: r.profe_nombre || "", fecha: fmtLima(r.inicio_utc),
+      hora: (fmtLima(r.inicio_utc).split(" a las ")[1] || "").replace(" (hora de Lima)", ""),
+      curso_de: r.curso ? " de " + r.curso : "", con_profe: conProfe
+    };
+    const mail = { subject: msgAsunto(m.asunto, datos),
+                   html: msgHtml(m.cuerpo, datos, { url: linkPortal, texto: cual === "1h" ? "Ver mi portal" : "Ver o reprogramar" }) };
     let ok = false;
     try { ok = await enviarCorreo(env, { to: r.alumno_email, subject: mail.subject, html: mail.html }); } catch (e) {}
     if (ok){
@@ -3626,7 +3893,7 @@ async function recordatorioRenovacion(env){
     "AND date(a.vence) <= date('now', '+3 days') AND date(a.vence) >= date('now', '-3 days') " +
     "AND COALESCE(a.aviso_vence_ciclo,0) < COALESCE(a.ciclo,1) LIMIT 100"
   ).bind(DEMO_EMAIL).all();
-  const cache = new Map();
+  const cache = new Map(), cacheMsg = new Map();
   let enviados = 0;
   for (const a of (results || [])){
     if (enviados >= 40) break;
@@ -3635,11 +3902,16 @@ async function recordatorioRenovacion(env){
     const linkPortal = MARCA.dominio + "/app/a/" + (a.slug || "");
     const yaVencio = Date.parse(a.vence) < Date.now();
     const nombreCorto = (a.nombre || "").split(" ")[0] || "Hola";
-    const mail = yaVencio
-      ? { subject: "Tu paquete en " + (a.academia || "tu academia") + " vencio: renuevalo y sigue",
-          html: "<p>" + esc(nombreCorto) + ", tu " + esc(a.paquete || "paquete") + esc(a.curso ? " de " + a.curso : "") + " en <b>" + esc(a.academia || "") + "</b> vencio el " + esc(a.vence) + ".</p><p>Renueva desde tu portal en 1 minuto y no pierdas tu horario ni tu avance.</p><p><a href=\"" + linkPortal + "\"><b>Renovar ahora</b></a></p>" }
-      : { subject: "Tu paquete vence el " + a.vence + " · renueva y asegura tu horario",
-          html: "<p>" + esc(nombreCorto) + ", tu " + esc(a.paquete || "paquete") + esc(a.curso ? " de " + a.curso : "") + " en <b>" + esc(a.academia || "") + "</b> vence el <b>" + esc(a.vence) + "</b>.</p><p>Renueva desde tu portal en 1 minuto y tu horario queda asegurado.</p><p><a href=\"" + linkPortal + "\"><b>Renovar ahora</b></a></p>" };
+    /* Texto editable por la academia (Ajustes > Mensajes); si no lo toco, el default. */
+    const msgs = await mensajesTenant(env, cacheMsg, a.tenant_id);
+    const mPlant = msgs[yaVencio ? "vencido" : "renovacion"];
+    const datosR = {
+      alumno: nombreCorto, academia: a.academia || "", curso: a.curso || "",
+      paquete: a.paquete || "paquete", vence: a.vence,
+      curso_de: a.curso ? " de " + a.curso : "", con_profe: ""
+    };
+    const mail = { subject: msgAsunto(mPlant.asunto, datosR),
+                   html: msgHtml(mPlant.cuerpo, datosR, { url: linkPortal, texto: "Renovar ahora" }) };
     let ok = false;
     try { ok = await enviarCorreo(env, { to: a.alumno_email, subject: mail.subject, html: mail.html }); } catch (e) {}
     if (ok){
@@ -3671,7 +3943,7 @@ async function winbackAlumnos(env){
       "AND (a.vence IS NULL OR a.vence = '' OR date(a.vence) >= date('now')) LIMIT 200"
     ).bind(DEMO_EMAIL).all()).results) || [];
   } catch (e) { return 0; }
-  const cache = new Map();
+  const cache = new Map(), cacheMsg = new Map();
   const now = Date.now();
   let enviados = 0;
   for (const a of cand){
@@ -3719,12 +3991,24 @@ async function winbackAlumnos(env){
     const linkPortal = MARCA.dominio + "/app/a/" + (a.slug || "");
     const nombreCorto = (a.nombre || "").split(" ")[0] || "Hola";
     const saldoTxt = pk.ilim ? "tu mensualidad sigue activa" : ("te quedan " + restantes + " clase" + (restantes === 1 ? "" : "s"));
+    /* Elevate pidio que este correo diga tambien hasta cuando le vale el plan ("acuerdate
+       que tu plan vence tal fecha"): {vence} ya viene en los datos y el default lo usa. */
+    const msgsW = await mensajesTenant(env, cacheMsg, a.tenant_id);
+    const datosW = {
+      alumno: nombreCorto, academia: a.academia || "", curso: a.curso || "",
+      paquete: a.paquete || "paquete", saldo: saldoTxt, dias: diasQuieto,
+      vence: a.vence || "",
+      /* Elevate pidio que este correo recuerde el vencimiento; si ese plan no vence por
+         fecha, la frase entera desaparece en vez de dejar "vence el ." */
+      vence_frase: a.vence ? (" Acuérdate que tu plan vence el " + a.vence + ".") : "",
+      curso_de: a.curso ? " de " + a.curso : "", con_profe: ""
+    };
     let ok = false;
     try {
       ok = await enviarCorreo(env, {
         to: a.alumno_email,
-        subject: "Te extranamos en " + (a.academia || "tu academia") + " · reserva tu proxima clase",
-        html: "<p>" + esc(nombreCorto) + ", hace " + diasQuieto + " dias que no te vemos en <b>" + esc(a.academia || "") + "</b> y " + esc(saldoTxt) + ".</p><p>Reserva tu proxima clase en 1 minuto desde tu portal y retoma tu ritmo:</p><p><a href=\"" + linkPortal + "\"><b>Reservar mi clase</b></a></p>"
+        subject: msgAsunto(msgsW.winback.asunto, datosW),
+        html: msgHtml(msgsW.winback.cuerpo, datosW, { url: linkPortal, texto: "Reservar mi clase" })
       });
     } catch (e) {}
     if (ok){
@@ -3734,6 +4018,81 @@ async function winbackAlumnos(env){
   }
   return enviados;
 }
+
+/* ---------- Caducidad de planes nunca arrancados (28-jul-2026, pedido de Elevate) ----------
+   "Que el plan pueda permanecer inactivo maximo 6 meses. Si nunca lo activo y ya pasaron
+   6 meses, que desaparezca." Solo aplica a paquetes que cuentan DESDE LA PRIMERA CLASE (uno
+   que cuenta desde la compra ya vence solo por fecha) y solo si la academia puso el plazo:
+   `caduca_meses` vacio o 0 = nunca caduca, que es el default para todos los demas.
+   No borra al alumno ni su historial: marca `caducado` y su saldo pasa a 0. Renovar lo revive. */
+async function caducarPlanesSinArrancar(env){
+  await ensureAlumnoExtraSchema(env);
+  let filas = [];
+  try {
+    filas = ((await env.DB.prepare(
+      "SELECT a.id, a.tenant_id, a.paquete, a.fecha FROM alumnos a " +
+      "JOIN tenants t ON t.id = a.tenant_id AND t.estado != 'vencido' " +
+      "WHERE COALESCE(a.caducado,0) = 0 AND COALESCE(a.activado,'') = '' AND COALESCE(a.fecha,'') != '' LIMIT 2000"
+    ).all()).results) || [];
+  } catch (e) { return 0; }
+  const cfgCache = new Map(), paqCache = new Map();
+  let caducados = 0;
+  for (const a of filas){
+    let cfg = cfgCache.get(a.tenant_id);
+    if (!cfg){ try { cfg = await loadConfig(env, a.tenant_id); } catch (e) { continue; } cfgCache.set(a.tenant_id, cfg); }
+    const meses = caducaMeses(cfg);
+    if (!meses) continue;                              // esta academia no caduca planes
+    let paq = paqCache.get(a.tenant_id);
+    if (!paq){ try { paq = await loadPaquetes(env, a.tenant_id); } catch (e) { continue; } paqCache.set(a.tenant_id, paq); }
+    const pk = resolverPk(paq.map, a.paquete || "");
+    if (!pk.dias || pk.inicio !== "clase") continue;   // el que corre desde la compra ya vence solo
+    const compra = Date.parse(String(a.fecha) + "T00:00:00Z");
+    if (!Number.isFinite(compra)) continue;
+    const limite = new Date(compra);
+    limite.setUTCMonth(limite.getUTCMonth() + meses);
+    if (limite.getTime() > Date.now()) continue;
+    try {
+      await env.DB.prepare("UPDATE alumnos SET caducado = 1 WHERE id = ?1 AND tenant_id = ?2").bind(a.id, a.tenant_id).run();
+      caducados++;
+    } catch (e) {}
+  }
+  return caducados;
+}
+
+/* ---------- Asistencia automatica (28-jul-2026, pedido de Elevate) ----------
+   Jose lo dijo claro: prefiere que todo se marque como asistido y poner a mano solo al que no
+   vino. Con `asistencia_auto` prendido, las reservas que ya pasaron (y que nadie toco) se
+   cierran solas como 'completada' N horas despues de terminar. Apagado = como siempre, a mano.
+   El margen existe para que el profe alcance a marcar la falta antes de que se cierre. */
+const ASISTENCIA_HORAS_DEF = 6;
+async function cerrarAsistenciasAuto(env){
+  let tenants = [];
+  try {
+    tenants = ((await env.DB.prepare(
+      "SELECT t.id FROM tenants t JOIN config c ON c.tenant_id = t.id AND c.clave = 'asistencia_auto' AND c.valor = '1' " +
+      "WHERE t.estado != 'vencido' LIMIT 500"
+    ).all()).results) || [];
+  } catch (e) { return 0; }
+  let cerradas = 0;
+  for (const t of tenants){
+    let horas = ASISTENCIA_HORAS_DEF;
+    try {
+      const cfg = await loadConfig(env, t.id);
+      const h = parseInt(cfg.asistencia_horas, 10);
+      if (Number.isFinite(h) && h >= 0 && h <= 168) horas = h;
+    } catch (e) {}
+    const corte = new Date(Date.now() - horas * 3600000).toISOString();
+    try {
+      const r = await env.DB.prepare(
+        "UPDATE reservas SET estado = 'completada' WHERE tenant_id = ?1 AND estado = 'reservada' " +
+        "AND alumno_id IS NOT NULL AND tipo != 'bloqueo' AND fin_utc <= ?2"
+      ).bind(t.id, corte).run();
+      cerradas += (r && r.meta && (r.meta.changes ?? 0)) || 0;
+    } catch (e) {}
+  }
+  return cerradas;
+}
+
 
 async function resetDemo(env){
   await ensureFeedbackSchema(env); // la lista de tablas de abajo la incluye; que exista antes del batch
@@ -7791,11 +8150,30 @@ export default {
         if (!paqueteCubre(pkR, tipoSlot)){
           return json({ error: 'Tu plan "' + (alumno.paquete || "") + '" no incluye ' + (categoriaDe(tipoSlot) || "ese tipo de clase") + ". Escríbenos para cambiar de plan." }, 403);
         }
+        /* Reglas de reserva de ESE curso (28-jul-2026, Elevate): aca ya sabemos que categoria
+           es la franja, asi que se aplica su minimo de anticipacion y su tope hacia el futuro.
+           slotValido ya freno con la regla general; esto agrega la propia de la categoria. */
+        const regR = reglasDeClase(await loadConfig(env, tid).catch(() => ({})), tipoSlot);
+        const faltanH = (Date.parse(iso) - Date.now()) / 3600000;
+        if (faltanH < regR.minH){
+          return json({ error: "Para " + (categoriaDe(tipoSlot) || "esta clase") + " hay que reservar con al menos " + regR.minH + " hora" + (regR.minH === 1 ? "" : "s") + " de anticipación." }, 400);
+        }
+        if (regR.maxDias > 0 && faltanH / 24 > regR.maxDias){
+          return json({ error: "Para " + (categoriaDe(tipoSlot) || "esta clase") + " puedes reservar hasta " + regR.maxDias + " día" + (regR.maxDias === 1 ? "" : "s") + " antes. Vuelve más cerca de la fecha." }, 400);
+        }
         /* Mensualidad ilimitada: no descuenta clases, pero vence por fecha. Sin este freno,
            un alumno con la mensualidad vencida reservaría para siempre (fuga de ingresos). */
         if (pkR.ilim && alumno.vence){
           const vms = Date.parse(alumno.vence + "T23:59:59Z");
           if (!isNaN(vms) && vms < Date.now()) return json({ error: "Tu mensualidad venció. Renuévala para seguir reservando." }, 409);
+        }
+        /* Vigencia y caducidad del paquete por clases (28-jul-2026, Elevate). compute() ya
+           deja el saldo en 0, pero un mensaje claro evita el ticket de soporte. */
+        if (!pkR.ilim && Number(alumno.caducado)){
+          return json({ error: "Tu plan caducó por no haberse usado a tiempo. Escríbenos para reactivarlo." }, 409);
+        }
+        if (!pkR.ilim && venceVencido(alumno.vence)){
+          return json({ error: "Tu plan venció el " + alumno.vence + ". Renuévalo para seguir reservando." }, 409);
         }
         const restantes = compute(alumno, regs || [], precios, rUsadas, pkR).restantes;
         if (restantes < 1) return json({ error: "No te quedan clases en tu paquete. Renueva para reservar mas." }, 409);
@@ -7867,13 +8245,17 @@ export default {
         const r = await env.DB.prepare("SELECT * FROM reservas WHERE id = ?1 AND tenant_id = ?2").bind(String(b.id || ""), tid).first();
         if (!r || r.alumno_id !== cu.alumno_id) return json({ error: "No encuentro esa clase." }, 404);
         if (r.estado !== "reservada") return json({ error: "Esa clase ya no se puede cancelar." }, 400);
-        const rcfgB = reprogCfg(await loadConfig(env, tid).catch(() => ({})));
+        const cfgCancel = await loadConfig(env, tid).catch(() => ({}));
+        const rcfgB = reprogCfg(cfgCancel);
         if (!rcfgB.activo){
           return json({ error: "Tu profesor gestiona los cambios de horario directamente. Escribele para reprogramar esta clase." }, 403);
         }
+        /* La anticipacion para cancelar puede ser PROPIA de ese curso (28-jul, Elevate):
+           reformer con 12h y mat con 2h conviven sin pelearse. Sin regla propia, la general. */
+        const regCancel = reglasDeClase(cfgCancel, r.curso || "");
         const horas = (Date.parse(r.inicio_utc) - Date.now()) / 3600000;
-        if (horas < rcfgB.minH){
-          return json({ error: "Ya no se puede reprogramar: falta menos de " + rcfgB.minH + " horas para tu clase." }, 400);
+        if (horas < regCancel.cancelH){
+          return json({ error: "Ya no se puede reprogramar: falta menos de " + regCancel.cancelH + " horas para tu clase." }, 400);
         }
         await env.DB.prepare("UPDATE reservas SET estado = 'cancelada', cancelada_utc = ?1, cancelada_por = ?2 WHERE id = ?3 AND tenant_id = ?4")
           .bind(new Date().toISOString(), "alumno:" + cu.alumno_id, r.id, tid).run();
@@ -8104,9 +8486,10 @@ export default {
           if (!esDueno) return json({ error: "Solo el dueno gestiona profesores." }, 403);
           await ensureMultiprofesorSchema(env);
           await ensureErpSchema(env);
+          await ensureAlumnoExtraSchema(env);   // trae la columna permisos
           const { results: profs } = await env.DB.prepare(
             "SELECT p.id, p.nombre, p.email, p.whatsapp, p.rol, p.estado, p.invite_token, p.creado, " +
-            "COALESCE(p.comision_pct,0) AS comision_pct, COALESCE(p.tarifa_clase,0) AS tarifa_clase, COALESCE(p.sede_id,'') AS sede_id, " +
+            "COALESCE(p.comision_pct,0) AS comision_pct, COALESCE(p.tarifa_clase,0) AS tarifa_clase, COALESCE(p.sede_id,'') AS sede_id, COALESCE(p.permisos,'') AS permisos, " +
             "(SELECT COUNT(*) FROM alumnos a WHERE a.tenant_id = p.tenant_id AND a.profesor_id = p.id) AS n_alumnos " +
             "FROM profesores p WHERE p.tenant_id = ?1 ORDER BY CASE p.rol WHEN 'dueno' THEN 0 ELSE 1 END, p.nombre"
           ).bind(tid).all();
@@ -8115,6 +8498,7 @@ export default {
             sede_id: p.sede_id || "",
             n_alumnos: Number(p.n_alumnos) || 0,
             comision_pct: Number(p.comision_pct) || 0, tarifa_clase: Number(p.tarifa_clase) || 0,
+            permisos: p.permisos || "",
             invite_link: (p.estado === "invitado" && p.invite_token) ? (MARCA.dominio + "/app/p/activar?token=" + p.invite_token) : ""
           }));
           const maxA = MAX_PROFES[t.plan || "profe"] || 1;
@@ -8179,6 +8563,19 @@ export default {
           }
 
           /* sede: asignar local a CUALQUIER profe, incluido el dueno (multisede) */
+          /* Permisos por profesor (28-jul-2026, Elevate). Se manda la lista de lo que NO puede
+             hacer; vacio = puede todo lo suyo, que es el comportamiento historico. El dueno
+             no se puede limitar a si mismo (se quedaria sin poder revertirlo). */
+          if (accion === "permisos"){
+            await ensureAlumnoExtraSchema(env);
+            const pidP = String(b.id || "");
+            const pRowP = await env.DB.prepare("SELECT id, rol FROM profesores WHERE id = ?1 AND tenant_id = ?2").bind(pidP, tid).first();
+            if (!pRowP) return json({ error: "Profesor no encontrado" }, 404);
+            if (pRowP.rol === "dueno") return json({ error: "El dueno tiene todos los permisos siempre." }, 400);
+            const limpio = sanearPermisos(b.permisos);
+            await env.DB.prepare("UPDATE profesores SET permisos = ?1 WHERE id = ?2 AND tenant_id = ?3").bind(limpio, pidP, tid).run();
+            return json({ ok: true, permisos: limpio });
+          }
           if (accion === "sede"){
             const pidS = String(b.id || "");
             const pRowS = await env.DB.prepare("SELECT id FROM profesores WHERE id = ?1 AND tenant_id = ?2").bind(pidS, tid).first();
@@ -8734,6 +9131,18 @@ export default {
                         slug: t.slug, academia: t.academia, estado: t.estado, demo: t.email === DEMO_EMAIL,
                         rol: esDueno ? "dueno" : "profesor", profe_id: profeActorId || "", equipo,
                         cobro_on: cobroOnPanel,
+                        /* lo que este profe NO puede hacer, para que el panel esconda esos
+                           botones. El freno de verdad esta en el servidor; esto es cortesia. */
+                        permisos_negados: esDueno ? [] : [...permisosDe(profeActor).negados],
+                        permisos_catalogo: PERMISOS,
+                        /* Catalogo de correos automaticos: que hay, cuando sale cada uno y su
+                           texto por defecto. Lo manda el SERVIDOR para que el editor del panel
+                           no pueda quedar desincronizado de lo que el worker realmente envia. */
+                        msg_catalogo: Object.keys(MSG_DEF).map(k => ({
+                          clave: k, nombre: MSG_DEF[k].nombre, cuando: MSG_DEF[k].cuando,
+                          asunto_def: MSG_DEF[k].asunto, cuerpo_def: MSG_DEF[k].cuerpo
+                        })),
+                        msg_campos: CAMPOS_MSG,
                         vapid_public: env.VAPID_PUBLIC_KEY || "" });
         }
 
@@ -8823,12 +9232,59 @@ export default {
           if (!body || !Array.isArray(body.alumnos) || !Array.isArray(body.registro)){
             return json({ error: "Cuerpo inválido" }, 400);
           }
+          /* Permisos por profesor (28-jul-2026, Elevate). El panel ya esconde los botones que
+             el profe no tiene, pero esconder no es impedir: aca se compara el snapshot que
+             manda contra lo que hay hoy y se rechaza lo que su permiso no cubre. El dueno pasa
+             siempre, y un profesor sin permisos configurados tambien (vacio = todo lo suyo). */
+          if (!esDueno && profeActor){
+            const permAct = permisosDe(profeActor);
+            if (permAct.negados.size){
+              const { results: mios } = await env.DB.prepare(
+                "SELECT id FROM alumnos WHERE tenant_id = ?1 AND profesor_id = ?2"
+              ).bind(tid, profeActorId || "").all();
+              const idsHoy = new Set((mios || []).map(r => r.id));
+              const idsNuevos = new Set(body.alumnos.map(a => a.id));
+              if (!permAct.puede("alumnos_crear") && body.alumnos.some(a => !idsHoy.has(a.id))){
+                return json({ error: "Tu academia no te permite dar de alta alumnos. Pídeselo al dueño." }, 403);
+              }
+              if (!permAct.puede("alumnos_borrar") && [...idsHoy].some(id => !idsNuevos.has(id))){
+                return json({ error: "Tu academia no te permite borrar alumnos. Pídeselo al dueño." }, 403);
+              }
+              if (!permAct.puede("clases_borrar")){
+                const nHoy = await env.DB.prepare(
+                  "SELECT COUNT(*) AS n FROM registro WHERE tenant_id = ?1 AND alumno_id IN (SELECT id FROM alumnos WHERE tenant_id = ?1 AND profesor_id = ?2)"
+                ).bind(tid, profeActorId || "").first().catch(() => null);
+                if (Number(nHoy && nHoy.n) > body.registro.length){
+                  return json({ error: "Tu academia no te permite borrar clases ya registradas. Pídeselo al dueño." }, 403);
+                }
+              }
+              if (!permAct.puede("alumnos_editar") && body.alumnos.some(a => idsHoy.has(a.id))){
+                /* editar incluye cambiarle el paquete o el precio a un alumno: si no puede
+                   editar, solo se le deja mandar el snapshot tal cual (registrar clases) */
+                const { results: antes } = await env.DB.prepare(
+                  "SELECT id, nombre, whatsapp, curso, paquete, pago, horario, notas FROM alumnos WHERE tenant_id = ?1 AND profesor_id = ?2"
+                ).bind(tid, profeActorId || "").all();
+                const mapAntes = new Map((antes || []).map(r => [r.id, r]));
+                const cambio = body.alumnos.some(a => {
+                  const v = mapAntes.get(a.id);
+                  if (!v) return false;
+                  return ["nombre", "whatsapp", "curso", "paquete", "pago", "horario", "notas"]
+                    .some(k => String(a[k] === undefined ? (v[k] || "") : (a[k] || "")) !== String(v[k] || ""));
+                });
+                if (cambio) return json({ error: "Tu academia no te permite editar la ficha de tus alumnos. Pídeselo al dueño." }, 403);
+              }
+            }
+          }
           await ensureSaldoMigradoSchema(env);
+          await ensureAlumnoExtraSchema(env);
           const colsPrev = "id, vence, ciclo, aviso_vence_ciclo, recordatorio_fecha, recordatorio_ciclo, winback_ciclo, profesor_id, COALESCE(sede_id,'') AS sede_id";
           let prevRows = [];
           try {
             prevRows = (await env.DB.prepare(
-              "SELECT " + colsPrev + ", COALESCE(migrado_usadas,0) AS migrado_usadas, COALESCE(migrado_ciclo,0) AS migrado_ciclo FROM alumnos WHERE tenant_id = ?1 AND (?2 = 1 OR profesor_id = ?3)"
+              "SELECT " + colsPrev + ", COALESCE(migrado_usadas,0) AS migrado_usadas, COALESCE(migrado_ciclo,0) AS migrado_ciclo, " +
+              "COALESCE(activado,'') AS activado, COALESCE(caducado,0) AS caducado, " +
+              "COALESCE(apellido,'') AS apellido, COALESCE(email,'') AS email, COALESCE(nacimiento,'') AS nacimiento " +
+              "FROM alumnos WHERE tenant_id = ?1 AND (?2 = 1 OR profesor_id = ?3)"
             ).bind(tid, esDueno ? 1 : 0, profeActorId || "").all()).results || [];
           } catch (e) {
             /* D1 sin las columnas del saldo migrado: el guardado normal no se cae por eso */
@@ -8907,6 +9363,35 @@ export default {
               venceAl = new Date(Date.parse(base + "T00:00:00Z") + 30 * 86400000).toISOString().slice(0, 10);
             }
             if (esRenovManual) avisoAl = 0;   // ciclo nuevo: el aviso de vencimiento se re-arma
+            /* ---- Vigencia del paquete (28-jul-2026, Elevate) ----
+               `activado` = fecha de su PRIMERA clase del ciclo actual, que es desde cuando corre
+               la vigencia si el paquete cuenta "desde la primera clase". Se deriva del registro
+               que manda el panel, asi no hay una ruta aparte que se pueda olvidar de escribirla;
+               al renovar (ciclo nuevo) arranca vacia sola porque el registro se filtra por ciclo.
+               Si el paquete cuenta desde la compra, `calcularVence` ni la mira. */
+            let activadoAl = (pr && pr.activado) || "";
+            if (esRenovManual) activadoAl = "";
+            if (pkAl.dias && pkAl.inicio === "clase"){
+              let primera = "";
+              for (const rg of body.registro){
+                if ((rg.alumnoId || rg.alumno_id) !== a.id) continue;
+                if ((Number(rg.ciclo) || 1) !== cicloAl) continue;
+                const f = String(rg.fecha || "").trim();
+                if (!/^\d{4}-\d{2}-\d{2}$/.test(f)) continue;
+                if (!primera || f < primera) primera = f;
+              }
+              if (primera) activadoAl = primera;
+              else if (!esRenovManual && !(pr && pr.activado)) activadoAl = "";
+            }
+            if (pkAl.dias){
+              const vCalc = calcularVence(pkAl, { fecha: a.fecha, activado: activadoAl }, venceAl);
+              /* el paquete con vigencia MANDA sobre el vence guardado: si el dueno cambia los
+                 dias del plan, los vencimientos se recalculan solos en el siguiente guardado */
+              venceAl = vCalc;
+            }
+            /* Caducidad: si volvio a activarse, deja de estar caducado (no se castiga dos veces) */
+            let caducadoAl = (pr && Number(pr.caducado)) || 0;
+            if (esRenovManual || activadoAl) caducadoAl = 0;
             /* Saldo migrado (28-jul-2026): el importador es el UNICO que lo fija, y solo al crear
                al alumno. Para un alumno que ya existe se preserva server-side igual que vence, si
                no cada guardado del panel (que manda el snapshot completo) le borraria el arrastre.
@@ -8929,7 +9414,7 @@ export default {
             if (a.sede_id !== undefined) sedeAl = sedesValidas.has(String(a.sede_id)) ? String(a.sede_id) : "";
             else if (pr && pr.sede_id) sedeAl = pr.sede_id;
             stmts.push(env.DB.prepare(
-              "INSERT INTO alumnos (id,tenant_id,codigo,nombre,whatsapp,curso,paquete,fecha,pago,horario,notas,ciclo,vence,aviso_vence_ciclo,recordatorio_fecha,recordatorio_ciclo,winback_ciclo,profesor_id,sede_id,migrado_usadas,migrado_ciclo) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21)"
+              "INSERT INTO alumnos (id,tenant_id,codigo,nombre,whatsapp,curso,paquete,fecha,pago,horario,notas,ciclo,vence,aviso_vence_ciclo,recordatorio_fecha,recordatorio_ciclo,winback_ciclo,profesor_id,sede_id,migrado_usadas,migrado_ciclo,activado,caducado,apellido,email,nacimiento) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,?22,?23,?24,?25,?26)"
             ).bind(
               a.id, tid, String(a.codigo || "").toUpperCase() || randHex(3).toUpperCase(), a.nombre,
               a.whatsapp || "", a.curso || "", a.paquete || "",
@@ -8937,7 +9422,13 @@ export default {
               venceAl, avisoAl,
               (pr && pr.recordatorio_fecha) || "", (pr && pr.recordatorio_ciclo) || 0,
               (pr && pr.winback_ciclo) || 0, pidAl || null, sedeAl,
-              migUsadas, migCiclo
+              migUsadas, migCiclo,
+              activadoAl, caducadoAl,
+              /* datos que Elevate pide en el alta; el panel los manda solo si el dueno
+                 prendio esos campos, y si no llegan se preserva lo que ya habia */
+              (a.apellido !== undefined ? String(a.apellido || "").slice(0, 60) : ((pr && pr.apellido) || "")),
+              (a.email !== undefined ? String(a.email || "").trim().slice(0, 120) : ((pr && pr.email) || "")),
+              (a.nacimiento !== undefined ? String(a.nacimiento || "").slice(0, 10) : ((pr && pr.nacimiento) || ""))
             ));
           }
           for (const r of body.registro){
@@ -9031,7 +9522,9 @@ export default {
           /* config del tenant (cobros, marca, cupo, cursos): SOLO el dueno */
           if (!esDueno) return json({ error: "Los ajustes de la academia los maneja el dueno." }, 403);
           const b = await request.json().catch(() => ({}));
-          const claves = ["pago_numero", "pago_titular", "bcp_cuenta", "bcp_cci", "scotia_cuenta", "scotia_cci", "crypto_moneda", "crypto_red", "crypto_wallet", "stripe_moneda", "profe_nombre", "profe_marca", "profe_foto", "whatsapp_profe", "cursos", "brand_color", "brand_font", "agenda_cupo", "recordatorios_clase", "recordatorio_renovacion", "nubefact_ruta", "nubefact_token", "fact_serie_boleta", "fact_igv", "fact_proximo_numero", "wa_phone_id", "wa_enabled", "wa_modo", "wa_tono", "wa_instrucciones", "wa_kb", "reprog_activo", "reprog_min_h", "paquetes", "modulos_off", "clases", "anticipacion_h"];
+          const claves = ["pago_numero", "pago_titular", "bcp_cuenta", "bcp_cci", "scotia_cuenta", "scotia_cci", "crypto_moneda", "crypto_red", "crypto_wallet", "stripe_moneda", "profe_nombre", "profe_marca", "profe_foto", "whatsapp_profe", "cursos", "brand_color", "brand_font", "agenda_cupo", "recordatorios_clase", "recordatorio_renovacion", "nubefact_ruta", "nubefact_token", "fact_serie_boleta", "fact_igv", "fact_proximo_numero", "wa_phone_id", "wa_enabled", "wa_modo", "wa_tono", "wa_instrucciones", "wa_kb", "reprog_activo", "reprog_min_h", "paquetes", "modulos_off", "clases", "anticipacion_h",
+                          /* Elevate (28-jul-2026) */
+                          "caduca_meses", "asistencia_auto", "asistencia_horas", "mensajes"];
           const stmts = [];
           for (const k of claves){
             if (k in b){
@@ -9043,7 +9536,7 @@ export default {
               /* paquetes por tenant: valida el JSON y lo reescribe canónico (o "" = usa el default) */
               if (k === "paquetes"){
                 const parsed = parsePaquetes(valor);
-                valor = parsed ? JSON.stringify(parsed.list.map(n => ({ n: n, c: parsed.map[n].clases, r: parsed.map[n].reprog, u: parsed.map[n].ilim, t: parsed.map[n].tipos || [] }))) : "";
+                valor = parsed ? JSON.stringify(parsed.list.map(n => ({ n: n, c: parsed.map[n].clases, r: parsed.map[n].reprog, u: parsed.map[n].ilim, t: parsed.map[n].tipos || [], d: parsed.map[n].dias || 0, i: parsed.map[n].inicio || "compra" }))) : "";
               }
               /* clases de 2 niveles: valida y reescribe canónico ("" = cursos planos de siempre) */
               if (k === "clases"){
@@ -9053,6 +9546,32 @@ export default {
               if (k === "anticipacion_h" && valor !== ""){
                 const na = parseInt(valor, 10);
                 valor = (Number.isFinite(na) && na >= 0 && na <= 168) ? String(na) : "";
+              }
+              /* Elevate (28-jul-2026): numeros con tope, y las plantillas de correo saneadas
+                 (solo las claves del catalogo, con tope de largo; basura -> se descarta sola). */
+              if (k === "caduca_meses" && valor !== ""){
+                const nc = parseInt(valor, 10);
+                valor = (Number.isFinite(nc) && nc >= 0 && nc <= 60) ? String(nc) : "";
+              }
+              if (k === "asistencia_horas" && valor !== ""){
+                const nh = parseInt(valor, 10);
+                valor = (Number.isFinite(nh) && nh >= 0 && nh <= 168) ? String(nh) : "";
+              }
+              if (k === "asistencia_auto") valor = (valor === "1") ? "1" : "";
+              if (k === "mensajes" && valor !== ""){
+                let obj = null;
+                try { obj = JSON.parse(valor); } catch (e) { obj = null; }
+                const limpio = {};
+                if (obj && typeof obj === "object"){
+                  for (const kk of Object.keys(MSG_DEF)){
+                    const v = obj[kk];
+                    if (!v || typeof v !== "object") continue;
+                    const a2 = String(v.a || "").trim().slice(0, 180);
+                    const c2 = String(v.c || "").trim().slice(0, 2000);
+                    if (a2 || c2) limpio[kk] = { a: a2, c: c2 };
+                  }
+                }
+                valor = Object.keys(limpio).length ? JSON.stringify(limpio) : "";
               }
               if (k === "brand_color" && valor && !/^#[0-9a-fA-F]{6}$/.test(valor)) valor = "";
               if (k === "brand_font" && valor && BRAND_FONTS.indexOf(valor) === -1) valor = "";
@@ -9524,11 +10043,16 @@ export default {
     // (nurture, renovaciones, demo) solo en la corrida de las 14:00 UTC (9am Lima).
     // Asi Batuta usa 1 cron y no pisa el limite de 5 por cuenta del plan free.
     try { await recordatoriosDeClase(env); } catch (e) { console.error("recordatorios clase", e); }
+    /* Asistencia automatica: va en CADA corrida (cada 15 min), no en la diaria. Si esperara
+       al cron de las 9am, la clase de las 7pm quedaria "reservada" toda la noche y el saldo
+       del alumno mentiria hasta el dia siguiente. */
+    try { await cerrarAsistenciasAuto(env); } catch (e) { console.error("asistencia auto", e); }
     const dSched = new Date((event && event.scheduledTime) || Date.now());
     if (!(dSched.getUTCHours() === 14 && dSched.getUTCMinutes() === 0)) return;
     /* ---- desde aqui: SOLO la corrida diaria de las 9am Lima ---- */
     try { await recordatorioRenovacion(env); } catch (e) { console.error("recordatorio renovacion", e); }
     try { await winbackAlumnos(env); } catch (e) { console.error("winback alumnos", e); }
+    try { await caducarPlanesSinArrancar(env); } catch (e) { console.error("caducar planes", e); }
     try { await seguimientoLeadsDueno(env); } catch (e) { console.error("seguimiento leads dueno", e); }
     try { await recalcularPorAlumno(env); } catch (e) { console.error("recalcular por alumno", e); }
     /* Afiliados: credito automatico (diario) + riel PayPal (mes vencido, dia 1; con flag OFF solo avisa). */

@@ -88,7 +88,15 @@ CREATE TABLE IF NOT EXISTS alumnos (
   -- ciclo en el que aplican (al renovar sube el ciclo y el arrastre deja de contar solo).
   -- En D1 de prod se agregaron por ALTER; ensureSaldoMigradoSchema las asegura igual.
   migrado_usadas      INTEGER DEFAULT 0,
-  migrado_ciclo       INTEGER DEFAULT 0
+  migrado_ciclo       INTEGER DEFAULT 0,
+  -- Pedidos de Elevate (28-jul-2026). En prod se agregaron por ALTER; ensureAlumnoExtraSchema
+  -- las asegura igual. activado = desde cuando corre la vigencia del plan (su primera clase);
+  -- caducado = el plan se cayo por no arrancar nunca dentro del plazo de la academia.
+  activado            TEXT DEFAULT '',
+  caducado            INTEGER DEFAULT 0,
+  apellido            TEXT DEFAULT '',
+  email               TEXT DEFAULT '',
+  nacimiento          TEXT DEFAULT ''
 );
 CREATE UNIQUE INDEX IF NOT EXISTS idx_alumnos_codigo ON alumnos (tenant_id, codigo);
 CREATE INDEX IF NOT EXISTS idx_alumnos_tenant ON alumnos (tenant_id);

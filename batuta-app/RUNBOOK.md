@@ -427,3 +427,58 @@ paquetes a medio consumir. Antes el importador creaba a todos con el paquete com
   `/app` — `batuta.lat/a/<slug>/pagar` da 404 y parece un bug que no existe.
 - OJO cache: tras deployar, el worker sirve el panel nuevo al instante pero **batuta.lat tarda**
   (Vercel). Comparar bytes contra el archivo local antes de diagnosticar "no salio".
+
+## Los 6 pedidos de Elevate + mensajes editables (28-jul-2026) — EN PROD, verificado
+
+**1. Vigencia por paquete.** `parsePaquetes` acepta `d` (dias que dura, 0 = no vence) e `i`
+("compra" | "clase"). `calcularVence(pk, alumno, venceActual)` es la UNICA funcion que decide
+hasta cuando vale un plan — panel, portal, correos y cron no pueden discrepar.
+**El candado importante:** con inicio "clase" la vigencia NO corre hasta su primera clase. El
+`activado` se DERIVA en el PUT del registro que manda el panel (la fecha mas temprana del ciclo),
+no por una ruta aparte que se pueda olvidar de escribirla; al renovar sube el ciclo y arranca
+vacio solo. Verificado en prod: comprado-sin-empezar no vence, con 1 clase vence a los 40 dias.
+
+**2. Caducidad a los N meses sin arrancar** (`caduca_meses`, 0 = nunca). Cron diario
+`caducarPlanesSinArrancar`. Solo toca paquetes con inicio "clase" (el que corre desde la compra
+ya vence solo). NO borra nada: marca `caducado`, el saldo pasa a 0 y renovar lo revive.
+
+**3. Anticipacion por curso.** `parseClases` acepta `ah` (horas min para reservar), `am` (dias max
+hacia el futuro) y `ch` (horas min para cancelar). **-1 = usa la regla general**, que es el default
+y deja intacto a quien no la toque. `reglasDeClase(cfg, etiqueta)` resuelve por CATEGORIA (una
+variante hereda de la suya). Se aplica en 3 sitios: generacion de slots, `slotValido` y el POST de
+reservar (con mensaje de error que dice el curso y el numero).
+
+**4. Datos del alumno:** `apellido`, `email`, `nacimiento` en `alumnos` (no en `cuentas`: un alumno
+puede existir sin cuenta de portal). El PUT los preserva si no llegan, como todo lo demas.
+⚠️ Fecha de nacimiento = dato personal: la ficha avisa sobre el permiso del apoderado si hay
+menores. Antes de explotarlo (cumpleanos automaticos) revisar Ley 29733 con `abogado-peru`.
+
+**5. Asistencia automatica** (`asistencia_auto` = "1", `asistencia_horas` default 6). Cierra como
+'completada' las reservas pasadas que nadie toco. Corre en CADA corrida del cron (cada 15 min), NO
+en la diaria: si esperara a las 9am, la clase de las 7pm dejaria el saldo mintiendo toda la noche.
+Apagado por defecto — prenderlo cambia datos, no se le impone a nadie.
+
+**6. Permisos por profesor.** `profesores.permisos` = CSV de lo que tiene PROHIBIDO. **Vacio = puede
+todo lo suyo**, asi ningun equipo existente cambia de golpe. Catalogo en `PERMISOS` (server) y lo
+consume el panel: el panel no puede ofrecer un permiso que el worker no sabe aplicar. Se aplica
+SERVER-SIDE en el PUT masivo comparando el snapshot contra lo que hay hoy (crear/borrar/editar
+alumnos, borrar clases); el panel ademas esconde los botones, pero esconder no es impedir.
+
+**Mensajes editables (pedido de Andres: "todos los mensajes deben ser configurables").**
+`MSG_DEF` = catalogo de los 5 correos que Batuta le manda a un ALUMNO (clase 24h, clase 1h,
+renovacion, vencido, winback), cada uno con nombre, cuando sale, asunto y cuerpo por defecto.
+La academia los reescribe en **Ajustes > Mensajes**; se guardan en `config.mensajes` (UN JSON, no
+12 filas de config). Vacio = default, asi nadie se queda sin recordatorios por no llenar un form.
+- El catalogo lo manda el SERVIDOR en admin/data (`msg_catalogo`/`msg_campos`): el editor del panel
+  no puede desincronizarse de lo que el worker realmente envia.
+- `msgHtml` ESCAPA todo el texto del dueno y convierte saltos en parrafos: nadie inyecta HTML en un
+  correo que sale con nuestro dominio.
+- Comodines "listos para leer" (`curso_de`, `con_profe`, `vence_frase`) traen su preposicion y
+  quedan VACIOS si el dato no existe, para que la frase nunca salga coja ("tu clase de " sin curso).
+- El editor trae vista previa en vivo con datos de ejemplo: el dueno ve como le llega al alumno
+  ANTES de guardar. OJO: si se agrega un comodin nuevo hay que sumarlo a `MSG_EJEMPLO` del panel o
+  en la previa sale vacio y parece que no funciona.
+
+**Migracion prod:** 5 ALTER en `alumnos` + 1 en `profesores`, a mano antes del deploy (patron sedes).
+Verificado: los 17 alumnos existentes quedaron con caducado=0, activado='' y vence='' — nadie
+cambio de estado. Round-trip E2E contra PROD con tenant desechable (creado, verificado, borrado).

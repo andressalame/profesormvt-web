@@ -740,7 +740,7 @@
     <p class="hint" style="margin-bottom:16px;">Cada profesor entra con su propio correo y contraseña, y ve SOLO sus alumnos, su agenda y sus horarios. Tú lo ves todo. Los pagos, precios y la marca siguen siendo tuyos.</p>
     <div class="tablewrap">
       <table id="tablaProfes">
-        <thead><tr><th>Profesor</th><th>Correo</th><th>Alumnos</th><th>Sede</th><th>Comisión</th><th>Estado</th><th></th></tr></thead>
+        <thead><tr><th>Profesor</th><th>Correo</th><th>Alumnos</th><th>Sede</th><th>Comisión</th><th>Puede hacer</th><th>Estado</th><th></th></tr></thead>
         <tbody></tbody>
       </table>
     </div>
@@ -1183,6 +1183,7 @@
       <button class="webpg active" data-aj="academia" type="button">Academia</button>
       <button class="webpg" data-aj="clases" type="button">Clases y planes</button>
       <button class="webpg" data-aj="reservas" type="button">Reservas</button>
+      <button class="webpg" data-aj="mensajes" type="button">Mensajes</button>
       <button class="webpg" data-aj="cobros" type="button">Cobros</button>
       <button class="webpg" data-aj="wa" type="button">WhatsApp e IA</button>
       <button class="webpg" data-aj="avanzado" type="button">Avanzado</button>
@@ -1259,6 +1260,25 @@
       <p class="hint" style="margin-top:-4px;">Correo automático al alumno 24 horas y 1 hora antes de su reserva. Menos faltas sin que muevas un dedo.</p>
       <div class="cfgrow"><span class="pk">Recordatorio de renovación</span><select id="cfg_recordatorio_renovacion"><option value="">Activado</option><option value="off">Apagado</option></select></div>
       <p class="hint" style="margin-top:-4px;">Correo automático cuando el paquete del alumno está por vencer (o venció), con link para renovar desde su portal.</p>
+
+      <h2 style="margin-top:22px;">Asistencia</h2>
+      <div class="cfgrow"><span class="pk">¿Cómo se marca la asistencia?</span><select id="cfg_asistencia_auto">
+        <option value="">Una por una, a mano</option>
+        <option value="1">Doy todas por asistidas y marco solo al que faltó</option></select></div>
+      <p class="hint" style="margin-top:-4px;">La segunda opción es la de la mayoría de estudios: las clases que ya pasaron se dan por asistidas solas y tú solo marcas la inasistencia del que no vino.</p>
+      <div class="cfgrow"><span class="pk">Esperar antes de darla por asistida</span><input id="cfg_asistencia_horas" type="number" min="0" max="168" placeholder="6" /></div>
+      <p class="hint" style="margin-top:-4px;">Horas después de que termina la clase. Es tu margen para marcar la falta antes de que se cierre sola. Vacío = 6 horas.</p>
+
+      <h2 style="margin-top:22px;">Planes que nunca se usaron</h2>
+      <div class="cfgrow"><span class="pk">Caducan si no arrancan en</span><input id="cfg_caduca_meses" type="number" min="0" max="60" placeholder="nunca" /> <span class="pk" style="flex:0 0 auto;">meses</span></div>
+      <p class="hint" style="margin-top:-4px;">Para el que compra y nunca viene. Solo aplica a los planes que cuentan <b>desde la primera clase</b> (los que cuentan desde la compra ya vencen solos). Vacío o 0 = no caducan nunca. El alumno y su historial no se borran: se le apaga el saldo, y renovar lo revive.</p>
+    </div>
+
+    <div class="group" data-aj="mensajes">
+      <h2>Los correos que Batuta manda por ti</h2>
+      <p class="hint">Estos son <b>todos</b> los correos automáticos que reciben tus alumnos. Escríbelos con tus palabras: si dejas uno en blanco, se usa el texto por defecto. Puedes prender o apagar cada uno en <b>Reservas</b>.</p>
+      <div id="msgBox"></div>
+      <p class="hint" id="msgCampos" style="margin-top:10px;"></p>
     </div>
     <div class="group" data-aj="cobros">
       <h2>Yape, Plin y transferencia</h2>
@@ -1546,6 +1566,14 @@
       <div class="field"><label>Nombre</label><input id="a_nombre" type="text" /></div>
       <div class="field"><label>WhatsApp (con 51…)</label><input id="a_whatsapp" type="text" /></div>
     </div>
+    <!-- Datos que pidió Elevate en el alta (28-jul-2026). Opcionales: quien no los use ni
+         los llena, y quien los use los tiene sin pedir nada a nadie. -->
+    <div class="frow">
+      <div class="field"><label>Apellido</label><input id="a_apellido" type="text" placeholder="Opcional" /></div>
+      <div class="field"><label>Correo</label><input id="a_email" type="email" placeholder="Opcional" /></div>
+      <div class="field"><label>Fecha de nacimiento</label><input id="a_nacimiento" type="date" />
+        <p class="hint" style="margin:5px 0 0;">Sirve para saludarlo en su cumpleaños y para tus reportes. Si tienes alumnos menores de edad, recuerda pedirle permiso al padre o apoderado.</p></div>
+    </div>
     <div class="frow">
       <div class="field"><label>Curso(s)</label>
         <div id="a_cursos" style="display:flex;flex-wrap:wrap;gap:14px;padding:4px 0;"></div>
@@ -1602,6 +1630,21 @@
     <div class="modal-actions">
       <button class="btn ghost" data-close>Cancelar</button>
       <button class="btn" id="btnImpConfirmar" style="display:none;">Importar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal permisos por profesor (28-jul-2026, pedido de Elevate) -->
+<div class="overlay" id="ovPermisos">
+  <div class="modal">
+    <h3>Qué puede hacer <em id="pmNombre">este profesor</em></h3>
+    <div class="mlab">Desmarca lo que NO quieres que haga</div>
+    <input type="hidden" id="pm_id" />
+    <div id="pmLista" style="display:flex;flex-direction:column;gap:10px;margin:6px 0 4px;"></div>
+    <p class="hint">Todo marcado = puede hacer todo lo suyo (así funcionaba hasta ahora). Un profesor nunca ve ni toca los alumnos de otro, ni tus ajustes, ni tus cobros: eso ya es solo tuyo.</p>
+    <div class="modal-actions">
+      <button class="btn ghost" data-close>Cancelar</button>
+      <button class="btn" id="btnGuardarPermisos">Guardar</button>
     </div>
   </div>
 </div>
@@ -1790,14 +1833,14 @@ var PAQUETES = {
 var PRECIOS_DEFAULT = { "Paquete 4":250, "Paquete 8":450, "Paquete 12":600, "Clase suelta":70, "Clase de prueba":50 };
 /* Paquetes por tenant (11-jul): definiciones en db.config.paquetes (JSON [{n,c,r,u}]).
    u = mensualidad ilimitada (no descuenta clases, vence por fecha). Sin config -> default. */
-function paquetesDefPanel(){ return Object.keys(PAQUETES).map(function(n){ return {n:n,c:PAQUETES[n].clases,r:PAQUETES[n].reprog,u:false}; }); }
+function paquetesDefPanel(){ return Object.keys(PAQUETES).map(function(n){ return {n:n,c:PAQUETES[n].clases,r:PAQUETES[n].reprog,u:false,d:0,i:"compra"}; }); }
 function paquetesTenant(){
   var raw=db.config&&db.config.paquetes;
-  if(raw){ try{ var a=JSON.parse(raw); if(Array.isArray(a)&&a.length){ var out=a.map(function(p){return {n:String((p&&p.n)||'').trim().slice(0,40),c:(p&&p.u)?0:(parseInt(p&&p.c,10)||0),r:parseInt(p&&p.r,10)||0,u:!!(p&&p.u),t:(Array.isArray(p&&p.t)?p.t:[]).map(function(x){return String(x||'').trim();}).filter(Boolean)};}).filter(function(p){return p.n;}); if(out.length) return out; } }catch(e){} }
+  if(raw){ try{ var a=JSON.parse(raw); if(Array.isArray(a)&&a.length){ var out=a.map(function(p){return {n:String((p&&p.n)||'').trim().slice(0,40),c:(p&&p.u)?0:(parseInt(p&&p.c,10)||0),r:parseInt(p&&p.r,10)||0,u:!!(p&&p.u),t:(Array.isArray(p&&p.t)?p.t:[]).map(function(x){return String(x||'').trim();}).filter(Boolean),d:Math.max(0,Math.min(3650,parseInt(p&&p.d,10)||0)),i:((p&&p.i)==="clase")?"clase":"compra"};}).filter(function(p){return p.n;}); if(out.length) return out; } }catch(e){} }
   return paquetesDefPanel();
 }
-function pkMap(){ var m={}; paquetesTenant().forEach(function(p){ m[p.n]={clases:p.c,reprog:p.r,ilim:p.u}; }); return m; }
-function pkDe(nombre){ var m=pkMap(); if(m[nombre])return m[nombre]; if(PAQUETES[nombre])return {clases:PAQUETES[nombre].clases,reprog:PAQUETES[nombre].reprog,ilim:false}; return {clases:0,reprog:0,ilim:false}; }
+function pkMap(){ var m={}; paquetesTenant().forEach(function(p){ m[p.n]={clases:p.c,reprog:p.r,ilim:p.u,dias:p.d||0,inicio:p.i||"compra"}; }); return m; }
+function pkDe(nombre){ var m=pkMap(); if(m[nombre])return m[nombre]; if(PAQUETES[nombre])return {clases:PAQUETES[nombre].clases,reprog:PAQUETES[nombre].reprog,ilim:false,dias:0,inicio:"compra"}; return {clases:0,reprog:0,ilim:false,dias:0,inicio:"compra"}; }
 function pkNombres(){ return paquetesTenant().map(function(p){return p.n;}); }
 function opcionesPaquete(actual){ var o=pkNombres().slice(); if(actual&&o.indexOf(actual)<0)o.unshift(actual); return o.map(function(p){return '<option>'+esc(p)+'</option>';}).join(""); }
 /* "2026-08-20" -> "20 ago" (vencimiento de la mensualidad) */
@@ -1809,7 +1852,8 @@ function clasesTenant(){
   var raw=db.config&&db.config.clases;
   if(raw){ try{ var a=JSON.parse(raw);
     if(Array.isArray(a)&&a.length){
-      var out=a.map(function(c){ return {n:String((c&&c.n)||"").trim().slice(0,40), a:parseInt(c&&c.a,10)||0, v:(Array.isArray(c&&c.v)?c.v:[]).map(function(x){return String(x||"").trim();}).filter(Boolean)}; }).filter(function(c){return c.n;});
+      var lee=function(x,max){ var k=parseInt(x,10); return (isFinite(k)&&k>=0&&k<=max)?k:-1; };
+      var out=a.map(function(c){ return {n:String((c&&c.n)||"").trim().slice(0,40), a:parseInt(c&&c.a,10)||0, v:(Array.isArray(c&&c.v)?c.v:[]).map(function(x){return String(x||"").trim();}).filter(Boolean), ah:lee(c&&c.ah,168), am:lee(c&&c.am,365), ch:lee(c&&c.ch,168)}; }).filter(function(c){return c.n;});
       if(out.length) return out;
     }
   }catch(e){} }
@@ -1818,12 +1862,24 @@ function clasesTenant(){
   return cursosDe(cur).map(function(n){ return {n:n,a:0,v:[]}; });
 }
 function filaClaseHTML(c){
-  c=c||{n:"",a:0,v:[]};
+  c=c||{n:"",a:0,v:[],ah:-1,am:-1,ch:-1};
+  var num=function(x){ return (x!==undefined && x!==null && x>=0) ? x : ""; };
   return '<div class="clrow">'+
     '<input type="text" class="cl-n" maxlength="40" placeholder="Nombre (ej. Pilates Máquinas)" value="'+esc(c.n||"")+'" />'+
     '<input type="number" class="cl-a" min="0" max="60" placeholder="aforo" title="Cuánta gente entra. Vacío = usa el cupo general." value="'+(c.a||"")+'" />'+
     '<input type="text" class="cl-v" maxlength="240" placeholder="Variantes, separadas por coma (opcional)" value="'+esc((c.v||[]).join(", "))+'" />'+
     '<button type="button" class="btn ghost sm cl-x" title="Quitar tipo de clase">×</button>'+
+    /* Reglas de reserva propias de ESTA clase (28-jul-2026, pedido de Elevate). Van en un
+       desplegable: quien no las use no ve nada, y quien las use las tiene por curso. */
+    '<details class="cl-reg" style="grid-column:1/-1;margin:2px 0 8px;">'+
+      '<summary style="cursor:pointer;font-size:12px;color:var(--muted);">Reglas de reserva de esta clase (opcional)</summary>'+
+      '<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;padding:8px 0 0;">'+
+        '<label style="font-size:12px;">Reservar con al menos<br><input type="number" class="cl-ah" min="0" max="168" style="width:110px;" placeholder="general" value="'+num(c.ah)+'" /> horas</label>'+
+        '<label style="font-size:12px;">Reservar como mucho<br><input type="number" class="cl-am" min="0" max="365" style="width:110px;" placeholder="sin tope" value="'+num(c.am)+'" /> días antes</label>'+
+        '<label style="font-size:12px;">Cancelar con al menos<br><input type="number" class="cl-ch" min="0" max="168" style="width:110px;" placeholder="general" value="'+num(c.ch)+'" /> horas</label>'+
+      '</div>'+
+      '<p class="hint" style="margin:6px 0 0;font-size:11px;">Vacío = usa la regla general de tu academia (Ajustes → Reservas). Sirve para que reformer pida 12 horas y mat deje reservar a última hora.</p>'+
+    '</details>'+
   '</div>';
 }
 function renderClases(){
@@ -1837,7 +1893,10 @@ function leerClasesEditor(){
     var n=(row.querySelector(".cl-n").value||"").trim().slice(0,40); if(!n||vistos[n])return; vistos[n]=1;
     var a=parseInt(row.querySelector(".cl-a").value,10); a=(a>=1&&a<=60)?a:0;
     var v=(row.querySelector(".cl-v").value||"").split(",").map(function(s){return s.trim().slice(0,40);}).filter(Boolean).slice(0,12);
-    out.push({n:n,a:a,v:v});
+    /* reglas propias de la clase; vacío = -1 = "usa la general de la academia" */
+    var leerN=function(sel,max){ var el=row.querySelector(sel); if(!el||el.value==="")return -1;
+      var k=parseInt(el.value,10); return (isFinite(k)&&k>=0&&k<=max)?k:-1; };
+    out.push({n:n,a:a,v:v,ah:leerN(".cl-ah",168),am:leerN(".cl-am",365),ch:leerN(".cl-ch",168)});
   });
   return out.slice(0,12);
 }
@@ -1849,7 +1908,7 @@ function categoriasVigentes(){
 }
 
 function filaPaqHTML(p){
-  p=p||{n:"",c:4,r:0,u:false,t:[]}; var ilim=!!p.u; var tipos=(p.t||[]);
+  p=p||{n:"",c:4,r:0,u:false,t:[],d:0,i:"compra"}; var ilim=!!p.u; var tipos=(p.t||[]);
   var cats=categoriasVigentes();
   var resumen = !tipos.length ? "Incluye: todo" : ("Incluye: "+tipos.join(", "));
   var opciones = cats.length
@@ -1861,7 +1920,21 @@ function filaPaqHTML(p){
     '<label style="font-size:12px;opacity:.8;display:flex;gap:4px;align-items:center;white-space:nowrap;"><input type="checkbox" class="pq-u"'+(ilim?" checked":"")+' /> mensual</label>'+
     '<input type="number" class="pq-p" min="0" placeholder="S/" value="'+(db.precios[p.n]||0)+'" />'+
     '<details class="pq-inc"><summary>'+esc(resumen)+'</summary><div class="pq-incbox">'+opciones+
-      '<p class="hint" style="margin:6px 0 0;font-size:11px;">Nada marcado = el plan da acceso a todas.</p></div></details>'+
+      '<p class="hint" style="margin:6px 0 0;font-size:11px;">Nada marcado = el plan da acceso a todas.</p>'+
+      /* Vigencia (28-jul-2026, pedido de Elevate: sus planes duran 40 dias). Vive dentro del
+         desplegable de cada plan para no ensuchar la fila de quien no la usa. */
+      '<div style="border-top:1px solid var(--line);margin-top:10px;padding-top:10px;">'+
+        '<b style="font-size:12px;">¿Cuánto le dura?</b>'+
+        '<div style="display:flex;gap:8px;align-items:center;margin-top:6px;flex-wrap:wrap;">'+
+          '<input type="number" class="pq-d" min="0" max="3650" style="width:90px;" placeholder="días" value="'+(parseInt(p.d,10)>0?parseInt(p.d,10):"")+'" />'+
+          '<span style="font-size:12px;">días, contados desde</span>'+
+          '<select class="pq-i" style="width:auto;">'+
+            '<option value="compra"'+(p.i==="clase"?"":" selected")+'>que lo compra</option>'+
+            '<option value="clase"'+(p.i==="clase"?" selected":"")+'>su primera clase</option>'+
+          '</select>'+
+        '</div>'+
+        '<p class="hint" style="margin:6px 0 0;font-size:11px;">Vacío = no vence por fecha (solo se acaba cuando usa sus clases). <b>Desde su primera clase</b> es lo justo si alguien compra hoy y empieza en dos meses.</p>'+
+      '</div></div></details>'+
     '<button type="button" class="btn ghost sm pq-x" title="Quitar paquete">×</button>'+
   '</div>';
 }
@@ -1950,6 +2023,7 @@ function recargar(){
     DATOS_LISTOS = true;   // desde aqui db.config/db.precios ya son los del tenant
     ROL=d.rol||"dueno"; PROFE_ID=d.profe_id||""; EQUIPO=d.equipo||[];
     aplicarRol();
+    try{ aplicarPermisosPropios(); }catch(e){}
     renderAll(); pintarLinkAlumnos(); setSync("Conectado ✓","ok");
   });
 }
@@ -2194,6 +2268,14 @@ el("btnLogoutAdmin").addEventListener("click",function(){
   window.location = "/app/login";
 });
 
+/* ¿Ya venció? Se compara al FINAL del día: un plan que vence "hoy" vale todo el día de hoy,
+   que es como lo entiende cualquier alumno. Espejo de venceVencido() en el worker. */
+function venceVencidoPanel(v){
+  var s=String(v||"").trim();
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(s)) return false;
+  var ms=Date.parse(s+"T23:59:59");
+  return isFinite(ms) && ms<Date.now();
+}
 /* ---------- Cálculo (ciclo actual) ---------- */
 function computeAlumno(a){
   var pk = pkDe(a.paquete);
@@ -2222,11 +2304,18 @@ function computeAlumno(a){
             estado:est,clase:cl,monto:db.precios[a.paquete]||0};
   }
   var saldo=pk.clases-usadas;
+  /* Vigencia y caducidad (28-jul-2026, Elevate). Espejo de compute() en el worker: un plan
+     vencido o caducado ya no da clases aunque le sobre saldo. No borra nada. */
+  var vencido=venceVencidoPanel(a.vence), caduco=!!Number(a.caducado);
   var estado,clase;
-  if(saldo<=0){estado="Completado — renovar";clase="red";}
+  if(caduco){estado="Plan caducado";clase="red";}
+  else if(vencido){estado="Plan vencido";clase="red";}
+  else if(saldo<=0){estado="Completado — renovar";clase="red";}
   else if(saldo===1){estado="⚠ Última clase";clase="amber";}
   else{estado="Activo";clase="green";}
-  return {compradas:pk.clases,ilim:false,usadas:usadas,restantes:Math.max(0,saldo),
+  return {compradas:pk.clases,ilim:false,usadas:usadas,
+          restantes:(vencido||caduco)?0:Math.max(0,saldo),
+          vencido:vencido,caducado:caduco,vence:a.vence||"",
           reprogPermit:pk.reprog,reprogRest:Math.max(0,pk.reprog-reprogramo),
           estado:estado,clase:clase,monto:db.precios[a.paquete]||0};
 }
@@ -2562,11 +2651,102 @@ function renderCuentas(){
   }).join("");
 }
 
+/* ---------- Editor de los correos automáticos (28-jul-2026, pedido de Andrés) ----------
+   Toda academia escribe distinto: un estudio de pilates no habla como una escuela de música.
+   Acá se reescribe cada correo que Batuta manda por ellos. Lo que se deja en blanco usa el
+   texto por defecto, así nadie se queda sin recordatorios por no haber llenado un formulario.
+   El catálogo (qué correos hay, cuándo salen y qué campos acepta cada uno) lo manda el
+   servidor en admin/data: una sola fuente de verdad con lo que el worker realmente envía. */
+function msgCatalogo(){ return (db.msg_catalogo&&db.msg_catalogo.length)?db.msg_catalogo:[]; }
+function msgGuardados(){
+  try{ return JSON.parse((db.config&&db.config.mensajes)||"")||{}; }catch(e){ return {}; }
+}
+function renderMensajes(){
+  var box=el("msgBox"); if(!box) return;
+  var cat=msgCatalogo();
+  if(!cat.length){ box.innerHTML='<p class="hint">Cargando…</p>'; return; }
+  var g=msgGuardados();
+  box.innerHTML=cat.map(function(m){
+    var mio=g[m.clave]||{};
+    var propio=!!((mio.a||"").trim()||(mio.c||"").trim());
+    return '<div class="group" style="margin:0 0 14px;padding:14px 16px;border:1px solid var(--line);border-radius:var(--r-sm,8px);">'+
+      '<div style="display:flex;gap:10px;align-items:baseline;flex-wrap:wrap;">'+
+        '<b>'+esc(m.nombre)+'</b>'+
+        (propio?'<span class="pill green" style="font-size:11px;">tu texto</span>':'<span class="pill gray" style="font-size:11px;">texto por defecto</span>')+
+      '</div>'+
+      '<p class="hint" style="margin:4px 0 10px;">'+esc(m.cuando)+'</p>'+
+      '<div class="field"><label>Asunto</label>'+
+        '<input type="text" class="msg-a" data-k="'+esc(m.clave)+'" maxlength="180" placeholder="'+esc(m.asunto_def)+'" value="'+esc(mio.a||"")+'" /></div>'+
+      '<div class="field"><label>Mensaje</label>'+
+        '<textarea class="msg-c" data-k="'+esc(m.clave)+'" rows="4" placeholder="'+esc(m.cuerpo_def)+'">'+esc(mio.c||"")+'</textarea></div>'+
+      '<div class="mini" style="opacity:.85;">Vista previa: <span class="msg-prev" data-k="'+esc(m.clave)+'"></span></div>'+
+      (propio?'<button type="button" class="btn ghost sm msg-reset" data-k="'+esc(m.clave)+'" style="margin-top:8px;">Volver al texto por defecto</button>':'')+
+    '</div>';
+  }).join("");
+  var campos=(db.msg_campos||[]);
+  el("msgCampos").innerHTML='<b>Puedes usar estos datos</b> y Batuta los reemplaza por los de cada alumno:<br>'+
+    campos.map(function(c){ return '<code>{'+esc(c[0])+'}</code> '+esc(c[1]); }).join(' · ');
+  msgPintarPreviews();
+}
+/* Vista previa con datos de mentira pero realistas: el dueño ve cómo le llega al alumno
+   ANTES de guardar, que es cuando importa. */
+var MSG_EJEMPLO={ alumno:"María", academia:(db.config&&db.config.profe_marca)||"tu academia",
+  curso:"Reformer", profe:"Ana", fecha:"martes 5 de agosto a las 7:00 p.m.", hora:"7:00 p.m.",
+  paquete:"Paquete 8", saldo:"te quedan 3 clases", vence:"20 de agosto", dias:"9",
+  curso_de:" de Reformer", con_profe:" con Ana",
+  /* el comodín tiene que VERSE en la previa: si sale vacío, el dueño cree que no hace nada */
+  vence_frase:" Acuérdate que tu plan vence el 20 de agosto." };
+function msgPintar(txt){
+  return String(txt||"").replace(/\{([a-z_]+)\}/g,function(m,k){
+    var v=MSG_EJEMPLO[k]; return (v===undefined)?"":v;
+  });
+}
+function msgPintarPreviews(){
+  var cat=msgCatalogo();
+  MSG_EJEMPLO.academia=(db.config&&db.config.profe_marca)||"tu academia";
+  Array.prototype.forEach.call(document.querySelectorAll(".msg-prev"),function(sp){
+    var k=sp.dataset.k, m=cat.find(function(x){return x.clave===k;}); if(!m) return;
+    var a=document.querySelector('.msg-a[data-k="'+k+'"]'), c=document.querySelector('.msg-c[data-k="'+k+'"]');
+    var asunto=((a&&a.value.trim())||m.asunto_def);
+    var cuerpo=((c&&c.value.trim())||m.cuerpo_def);
+    sp.innerHTML='<b>'+esc(msgPintar(asunto))+'</b><br>'+esc(msgPintar(cuerpo)).replace(/\n/g,"<br>");
+  });
+}
+if(el("msgBox")){
+  el("msgBox").addEventListener("input",function(e){
+    if(e.target.classList.contains("msg-a")||e.target.classList.contains("msg-c")) msgPintarPreviews();
+  });
+  el("msgBox").addEventListener("click",function(e){
+    var b=e.target.closest(".msg-reset"); if(!b) return;
+    var k=b.dataset.k;
+    var a=document.querySelector('.msg-a[data-k="'+k+'"]'), c=document.querySelector('.msg-c[data-k="'+k+'"]');
+    if(a)a.value=""; if(c)c.value="";
+    msgPintarPreviews();
+    toast("Vuelve al texto por defecto al guardar");
+  });
+}
+/* Lee el editor para mandarlo con el resto de ajustes. Solo guarda lo que el dueño escribió:
+   si borró todo, la clave desaparece y el correo vuelve al default sin dejar basura. */
+function leerMensajesEditor(){
+  var out={};
+  msgCatalogo().forEach(function(m){
+    var a=document.querySelector('.msg-a[data-k="'+m.clave+'"]');
+    var c=document.querySelector('.msg-c[data-k="'+m.clave+'"]');
+    var va=a?a.value.trim().slice(0,180):"", vc=c?c.value.trim().slice(0,2000):"";
+    if(va||vc) out[m.clave]={a:va,c:vc};
+  });
+  return out;
+}
+
 function renderAjustes(){
   renderClases();
+  renderMensajes();
   el("preciosBox").innerHTML=paquetesTenant().map(function(p){ return filaPaqHTML(p); }).join("");
   if(!MP_ESTADO_CARGADO){ MP_ESTADO_CARGADO=true; try{ refrescarMpEstado(); }catch(e){} try{ refrescarPushEstado(); }catch(e){} try{ refrescarStripeEstado(); }catch(e){} try{ refrescarCulqiEstado(); }catch(e){} }
   if(el("cfg_anticipacion_h")) el("cfg_anticipacion_h").value=(db.config&&db.config.anticipacion_h)||"";
+  if(el("cfg_caduca_meses")) el("cfg_caduca_meses").value=(db.config&&db.config.caduca_meses)||"";
+  if(el("cfg_asistencia_auto")) el("cfg_asistencia_auto").value=(db.config&&db.config.asistencia_auto)||"";
+  if(el("cfg_asistencia_horas")) el("cfg_asistencia_horas").value=(db.config&&db.config.asistencia_horas)||"";
   if(el("cfg_cursos")) el("cfg_cursos").value=(db.config&&db.config.cursos)||MARCA.cursos.join(", ");
   if(el("cfg_brand_color")) el("cfg_brand_color").value=(db.config&&db.config.brand_color)||"#E8A13D";
   if(el("cfg_brand_font")) el("cfg_brand_font").value=(db.config&&db.config.brand_font)||"";
@@ -3632,6 +3812,11 @@ function cargarProfesores(){
     tb.innerHTML=ps.map(function(p){
       var ESTS={activo:'<span class="pill pago-ok">Activo</span>',invitado:'<span class="pill gray">Invitado</span>',suspendido:'<span class="pill pago-pend">Suspendido</span>'};
       var acts=['<button class="btn ghost sm" data-pfcomision="'+p.id+'" data-pfnombre="'+esc(p.nombre)+'" data-pfpct="'+(p.comision_pct||0)+'" data-pftarifa="'+(p.tarifa_clase||0)+'">Comisión</button>'];
+      /* Permisos por profesor (28-jul-2026, pedido de Elevate: "más control sobre lo que
+         pueden hacer los profesores"). El dueño siempre puede todo, así que no se le ofrece. */
+      if(p.rol!=="dueno"){
+        acts.push('<button class="btn ghost sm" data-pfpermisos="'+p.id+'" data-pfnombre="'+esc(p.nombre)+'" data-pfperm="'+esc(p.permisos||"")+'">Permisos</button>');
+      }
       if(p.rol!=="dueno"){
         if(p.estado==="invitado"){
           acts.push('<button class="btn ghost sm" data-pfcopiar="'+esc(p.invite_link||'')+'">Copiar link</button>');
@@ -3657,12 +3842,69 @@ function cargarProfesores(){
         '<td>'+(p.n_alumnos||0)+'</td>'+
         '<td>'+sedeCell+'</td>'+
         '<td>'+(com.length?esc(com.join(" + ")):'—')+'</td>'+
+        '<td>'+(p.rol==="dueno"?'<span class="mini">Todo</span>'
+                : (String(p.permisos||"").trim()
+                    ? '<span class="pill amber" title="'+esc(nombresPermisos(p.permisos))+'">'+String(p.permisos).split(",").filter(Boolean).length+' limitado(s)</span>'
+                    : '<span class="mini">Sin límites</span>'))+'</td>'+
         '<td>'+(ESTS[p.estado]||esc(p.estado))+'</td>'+
         '<td><div class="rowact">'+acts.join("")+'</div></td>'+
       '</tr>';
-    }).join("") || '<tr><td colspan="7" class="empty">Solo tú por ahora. Invita a tu primer profesor.</td></tr>';
+    }).join("") || '<tr><td colspan="8" class="empty">Solo tú por ahora. Invita a tu primer profesor.</td></tr>';
   }).catch(function(){ toast("No pude cargar los profesores."); });
 }
+/* ---------- Permisos por profesor (28-jul-2026, pedido de Elevate) ----------
+   El catálogo lo manda el servidor (db.permisos_catalogo): así el panel no puede ofrecer un
+   permiso que el worker no sabe aplicar. Se guarda la lista de lo que tiene PROHIBIDO, de
+   modo que un profe sin nada configurado conserva exactamente los permisos de siempre. */
+function catalogoPermisos(){ return (db.permisos_catalogo&&db.permisos_catalogo.length)?db.permisos_catalogo:[]; }
+function nombresPermisos(csv){
+  var negados=String(csv||"").split(",").map(function(x){return x.trim();}).filter(Boolean);
+  var cat=catalogoPermisos();
+  return negados.map(function(k){ var f=cat.find(function(c){return c[0]===k;}); return f?f[1]:k; }).join(" · ");
+}
+function abrirPermisos(id,nombre,csv){
+  var negados=String(csv||"").split(",").map(function(x){return x.trim();}).filter(Boolean);
+  el("pm_id").value=id;
+  el("pmNombre").textContent=nombre||"este profesor";
+  var cat=catalogoPermisos();
+  el("pmLista").innerHTML=cat.length
+    ? cat.map(function(c){
+        return '<label style="display:flex;gap:9px;align-items:flex-start;cursor:pointer;">'+
+          '<input type="checkbox" class="pm-c" value="'+esc(c[0])+'"'+(negados.indexOf(c[0])===-1?" checked":"")+' style="margin-top:3px;" />'+
+          '<span>'+esc(c[1])+'</span></label>';
+      }).join("")
+    : '<p class="hint">Actualiza la página para cargar la lista de permisos.</p>';
+  openOv("ovPermisos");
+}
+if(el("btnGuardarPermisos")){
+  el("btnGuardarPermisos").addEventListener("click",function(){
+    var negados=Array.prototype.filter.call(document.querySelectorAll("#pmLista .pm-c"),function(x){return !x.checked;})
+      .map(function(x){return x.value;});
+    var btn=this; btn.disabled=true;
+    apiPost("/app/api/admin/profesores",{accion:"permisos",id:el("pm_id").value,permisos:negados.join(",")})
+      .then(function(){ closeOv("ovPermisos"); toast(negados.length?"Permisos guardados":"Sin límites: puede todo lo suyo"); cargarProfesores(); })
+      .catch(function(err){ toast((err&&err.message)||"No se pudo guardar"); })
+      .finally(function(){ btn.disabled=false; });
+  });
+}
+/* El propio profe también debe VER menos: se esconden los botones que su academia le quitó.
+   El freno de verdad está en el servidor; esto es para que no choque contra un error. */
+function aplicarPermisosPropios(){
+  var negados=(db.permisos_negados||[]);
+  if(!negados.length) return;
+  var css=[];
+  if(negados.indexOf("alumnos_crear")>=0) css.push("#btnNuevoAlumno,#btnImportCsv");
+  if(negados.indexOf("alumnos_editar")>=0) css.push("[data-edit]");
+  if(negados.indexOf("alumnos_borrar")>=0) css.push("[data-del]");
+  if(negados.indexOf("clases_borrar")>=0) css.push("[data-delreg]");
+  if(negados.indexOf("exportar")>=0) css.push("#btnExportar,#btnExportCsv");
+  if(css.length){
+    var st=document.getElementById("permCss")||document.createElement("style");
+    st.id="permCss"; st.textContent=css.join(",")+"{display:none !important;}";
+    document.head.appendChild(st);
+  }
+}
+
 /* ---------- Liquidación mensual por profesor ---------- */
 function cargarLiquidacion(){
   var mesEl=el("liqMes"); if(!mesEl) return;
@@ -3731,6 +3973,8 @@ document.body.addEventListener("click",function(e){
     openOv("ovComision");
     return;
   }
+  var pm=e.target.closest?e.target.closest("[data-pfpermisos]"):null;
+  if(pm){ abrirPermisos(pm.dataset.pfpermisos, pm.dataset.pfnombre, pm.dataset.pfperm); return; }
   var acc=function(body,msg){ apiPost("/app/api/admin/profesores",body).then(function(){ toast(msg); cargarProfesores(); recargar(); }).catch(function(err){ toast((err&&err.message)||"No se pudo"); }); };
   if(cp){ var lk=cp.dataset.pfcopiar||""; if(lk){ navigator.clipboard&&navigator.clipboard.writeText(lk); toast("Link copiado ✓ Mándaselo por WhatsApp"); } return; }
   if(rv){ acc({accion:"reenviar",id:rv.dataset.pfreenviar},"Invitación reenviada ✓"); return; }
@@ -3799,6 +4043,7 @@ el("btnNuevoAlumno").addEventListener("click",function(){
   el("alumnoTitulo").innerHTML='Nuevo <em>alumno</em>';
   el("a_id").value=""; el("a_codigo").value=""; el("a_ciclo").value="1";
   el("a_nombre").value=""; el("a_whatsapp").value="";
+  ["a_apellido","a_email","a_nacimiento"].forEach(function(k){ if(el(k)) el(k).value=""; });
   setCursosAlumno(MARCA.cursoDefault); fillSelects(); el("a_paquete").value=pkNombres()[0]||"";
   el("a_fecha").value=new Date().toISOString().slice(0,10); el("a_pago").value="Pagado";
   el("a_horario").value=""; el("a_notas").value=""; el("a_horario_derivado").textContent="";
@@ -3823,7 +4068,12 @@ function guardarAlumnoModal(encadenar){
     horario:el("a_horario").value.trim(), notas:el("a_notas").value.trim(), profesor_id:profeSel||undefined, sede_id:sedeSel||"",
     /* el arrastre de clases migradas no se edita acá: se conserva tal cual (el server también
        lo preserva, pero sin esto la tabla mostraría un saldo inflado hasta el próximo refresco) */
-    migrado_usadas:(prev&&prev.migrado_usadas)||0, migrado_ciclo:(prev&&prev.migrado_ciclo)||0 };
+    migrado_usadas:(prev&&prev.migrado_usadas)||0, migrado_ciclo:(prev&&prev.migrado_ciclo)||0,
+    /* datos extra (28-jul, Elevate). El server los preserva si no llegan, pero se mandan
+       explícitos para que la ficha refleje al toque lo que se acaba de escribir. */
+    apellido:(el("a_apellido")?el("a_apellido").value.trim():((prev&&prev.apellido)||"")),
+    email:(el("a_email")?el("a_email").value.trim():((prev&&prev.email)||"")),
+    nacimiento:(el("a_nacimiento")?el("a_nacimiento").value:((prev&&prev.nacimiento)||"")) };
   if(id){ db.alumnos=db.alumnos.map(function(a){return a.id===id?obj:a;}); }
   else{ db.alumnos.push(obj); }
   var b1=el("btnGuardarAlumno"),b2=el("btnGuardarAlumnoOtro"); b1.disabled=true; if(b2)b2.disabled=true;
@@ -3834,6 +4084,7 @@ function guardarAlumnoModal(encadenar){
          (suelen repetirse en una tanda) y limpia lo individual */
       el("a_id").value=""; el("a_codigo").value=""; el("a_ciclo").value="1";
       el("a_nombre").value=""; el("a_whatsapp").value="";
+      ["a_apellido","a_email","a_nacimiento"].forEach(function(k){ if(el(k)) el(k).value=""; });
       el("a_horario").value=""; el("a_notas").value=""; el("a_horario_derivado").textContent="";
       el("alumnoTitulo").innerHTML='Nuevo <em>alumno</em>';
       toast("Guardado ✓ — siguiente alumno"); el("a_nombre").focus();
@@ -3869,6 +4120,9 @@ document.body.addEventListener("click",function(e){
     el("btnGuardarAlumnoOtro").style.display="none";
     el("a_id").value=a.id; el("a_codigo").value=a.codigo||""; el("a_ciclo").value=a.ciclo||1;
     el("a_nombre").value=a.nombre; el("a_whatsapp").value=a.whatsapp||"";
+    if(el("a_apellido")) el("a_apellido").value=a.apellido||"";
+    if(el("a_email")) el("a_email").value=a.email||"";
+    if(el("a_nacimiento")) el("a_nacimiento").value=a.nacimiento||"";
     setCursosAlumno(a.curso); el("a_paquete").innerHTML=opcionesPaquete(a.paquete); el("a_paquete").value=a.paquete; el("a_fecha").value=a.fecha||"";
     el("a_pago").value=a.pago; el("a_horario").value=a.horario||""; el("a_notas").value=a.notas||"";
     el("a_horario_derivado").textContent=(a.horarioFijo&&a.horarioFijo.length)?("Agenda: "+a.horarioFijo.join(" · ")):"Sin horario fijo en la agenda";
@@ -4380,7 +4634,11 @@ el("btnGuardarAjustes").addEventListener("click",function(){
     var precio=Math.max(0,Number(row.querySelector(".pq-p").value)||0);
     /* tipos de clase que habilita el paquete (vacío = todas) */
     var t=Array.prototype.map.call(row.querySelectorAll(".pq-t:checked"),function(x){return x.value;});
-    paqRows.push({n:n,c:c,r:r,u:u,t:t,precio:precio});
+    /* vigencia del plan: d = días que dura, i = desde cuándo corre (28-jul-2026) */
+    var dEl=row.querySelector(".pq-d"), iEl=row.querySelector(".pq-i");
+    var d=dEl?Math.max(0,Math.min(3650,parseInt(dEl.value,10)||0)):0;
+    var i=(iEl&&iEl.value==="clase")?"clase":"compra";
+    paqRows.push({n:n,c:c,r:r,u:u,t:t,d:d,i:i,precio:precio});
   });
   /* clases de 2 niveles + los cursos planos derivados (compatibilidad con todo el resto) */
   var clasesRows=leerClasesEditor();
@@ -4394,7 +4652,8 @@ el("btnGuardarAjustes").addEventListener("click",function(){
   if(db.precios){ Object.keys(db.precios).forEach(function(k){ if(!seenPq[k]) nuevosPrecios[k]=db.precios[k]; }); }
   paqRows.forEach(function(x){ nuevosPrecios[x.n]=x.precio; });
   db.precios=nuevosPrecios;
-  var cfg={ paquetes: paqRows.length?JSON.stringify(paqRows.map(function(x){return {n:x.n,c:x.c,r:x.r,u:x.u,t:x.t};})):"",
+  var msgRows=leerMensajesEditor();
+  var cfg={ paquetes: paqRows.length?JSON.stringify(paqRows.map(function(x){return {n:x.n,c:x.c,r:x.r,u:x.u,t:x.t,d:x.d,i:x.i};})):"",
             clases: clasesRows.length?JSON.stringify(clasesRows):"",
             cursos: clasesRows.length?clasesRows.map(function(c){return c.n;}).join(", "):el("cfg_cursos").value.trim(),
             anticipacion_h:(el("cfg_anticipacion_h")?el("cfg_anticipacion_h").value.trim():""),
@@ -4405,6 +4664,12 @@ el("btnGuardarAjustes").addEventListener("click",function(){
             reprog_activo:(el("cfg_reprog_activo")?el("cfg_reprog_activo").value:""),
             reprog_min_h:(el("cfg_reprog_min_h")?el("cfg_reprog_min_h").value.trim():""),
             recordatorio_renovacion:(el("cfg_recordatorio_renovacion")?el("cfg_recordatorio_renovacion").value:""),
+            /* Pedidos de Elevate (28-jul-2026): caducidad, asistencia automática y los
+               textos propios de cada correo. Vacío en cualquiera = comportamiento de siempre. */
+            caduca_meses:(el("cfg_caduca_meses")?el("cfg_caduca_meses").value.trim():""),
+            asistencia_auto:(el("cfg_asistencia_auto")?el("cfg_asistencia_auto").value:""),
+            asistencia_horas:(el("cfg_asistencia_horas")?el("cfg_asistencia_horas").value.trim():""),
+            mensajes: Object.keys(msgRows).length?JSON.stringify(msgRows):"",
             nubefact_ruta:(el("cfg_nubefact_ruta")?el("cfg_nubefact_ruta").value.trim():""),
             nubefact_token:(el("cfg_nubefact_token")?el("cfg_nubefact_token").value.trim():""),
             fact_serie_boleta:(el("cfg_fact_serie_boleta")?el("cfg_fact_serie_boleta").value.trim():""),
