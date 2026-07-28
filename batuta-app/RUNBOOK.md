@@ -332,3 +332,61 @@ t/me devuelve anual:true + anual_hasta; el pill del Perfil muestra "plan anual h
 **GATILLO DE PRECIOS ARMADO (no ejecutar aun):** con 3-5 tenants pagando, subir Academia a S/199-249 y XL a S/449-499 SOLO para nuevos (grandfathering a los existentes). Referencia: Kydemy cobra US$80 por el rango de Academia; XL esta debajo de todo el vertical.
 
 **Tenant de prueba del 15-jul:** "TEST Gratis Claude (borrar)" (test-gratis-claude@example.com) quedo en estado vencido tras las pruebas E2E; ignorar en metricas o borrar de la D1 cuando haya endpoint.
+
+## Multisede v1 (23-jul-2026) — EN PROD
+
+- **Modelo:** la sede es un ATRIBUTO de profesor/alumno/grupo (tabla `sedes` id/tenant_id/nombre/direccion/creado + columna `sede_id TEXT DEFAULT ''` en las 3 tablas, ALTER perezoso `ensureSedesSchema`). La agenda NO cambió: la sede de una clase se deriva de su profesor. `''` = sin sede (compat total hacia atrás; academias de 1 local no ven nada raro).
+- **Endpoints:** `POST /app/api/admin/sede` (crear/editar/borrar, SOLO dueño; borrar deja profesores/alumnos/grupos "sin sede", nadie se borra; máx 20 sedes) · `admin/data` GET devuelve `sedes` + `sede_id` en alumnos/equipo/grupos · `admin/data` PUT valida `sede_id` contra las sedes del tenant y PRESERVA la previa si el JS viejo no manda el campo · `admin/profesores` acepta `sede_id` en invitar y tiene `accion:"sede"` (funciona también para el dueño) · `admin/grupo` acepta `sede_id` (undefined = no tocar) · `/app/api/me` devuelve `sede:{nombre,direccion}` (la del alumno o la de su profe).
+- **Panel:** Ajustes → "Sedes de tu academia" (CRUD inline, solo-dueño) · filtro "Todas las sedes" + pill en Alumnos · columna Sede con select por fila en Profesores · select y pill en Grupos · select "Sede" en la ficha del alumno.
+- **Portal:** "Tu profesor: X · Sede Y" (dirección en tooltip).
+- **Demo:** sembrada con Sede Miraflores (dueña+Renzo, 4 alumnos, 2 grupos) y Sede San Borja (Camila, Diego); "sedes" está en la lista de tablas del reset.
+- **Migración prod:** corrida a mano con `wrangler d1 execute batuta-app --remote` (CREATE sedes + 3 ALTER) ANTES del deploy, patrón grupos. Verificado E2E en prod: CRUD completo + data GET + PUT + demo.
+- **Marketing:** /precios tiene FAQ "Mi academia tiene varias sedes, funciona?" y la tarjeta Enterprise quedó solo "400+ alumnos". Sedes incluidas en TODOS los planes (decisión 23-jul, sin candado MAX_SEDES por ahora).
+- **v2 pendiente (si alguien lo pide):** un profesor en 2+ sedes, filtro de sede en Agenda/Reportes/Liquidación, branding por sede.
+
+## Importador de alumnos con SALDO MIGRADO (28-jul-2026) — EN PROD, verificado E2E
+
+Caso real: Elevate Studio migrando desde Punchpass. Sus alumnos no arrancan de cero — traen
+paquetes a medio consumir. Antes el importador creaba a todos con el paquete completo.
+
+- **Modelo (lo importante):** el saldo NO se falsea con filas de `registro`. Dos columnas nuevas
+  en `alumnos`: `migrado_usadas INTEGER DEFAULT 0` (clases ya consumidas al importar) y
+  `migrado_ciclo INTEGER DEFAULT 0` (en qué ciclo aplica eso). ALTER perezoso memoizado por
+  isolate (`ensureSaldoMigradoSchema`) + corrido a mano en la D1 de prod ANTES del deploy,
+  patrón sedes. Se guarda "usadas" y no "restantes" a propósito: así el saldo sigue derivándose
+  del paquete vigente, igual que para todos los demás alumnos.
+  **Por qué gatear por ciclo:** al renovar sube `ciclo`, `migrado_ciclo` deja de coincidir y el
+  arrastre se cae SOLO. Sin ese candado habría que acordarse de resetearlo en cada ruta de
+  renovación (compra web, botón "+ Renovar", ciclo manual) y una olvidada le come clases al
+  alumno para siempre.
+- **compute() (worker) y computeAlumno() (panel)** suman el arrastre a `usadas`. Son espejo:
+  si cambia uno, cambia el otro. Los 4 llamadores de `compute()` leen el alumno con `SELECT *`,
+  así que no hubo que tocar queries.
+- **PUT /app/api/admin/data:** acepta `migrado_usadas`/`migrado_ciclo` y `vence` SOLO al CREAR
+  un alumno (fila sin previa). Para uno que ya existe los PRESERVA server-side, como ya hacía
+  con `vence`: sin eso, el primer guardado del panel (que manda el snapshot completo) le borra
+  el arrastre a toda la academia migrada. Verificado en prod: un guardado normal sin los campos
+  conserva 5/8, y un intento de inyectarle saldo a un alumno existente se ignora.
+- **Panel (importador):** columnas opcionales `Clases restantes` y `Vence` en la plantilla, en
+  el CSV (con alias: saldo, restantes, credits, vencimiento, válido hasta…) y en el modo PEGAR.
+  Fechas flexibles: `20/08/2026`, `2026-08-20`, `20-8-26`, `20.08.2026`. Previsualización con
+  columna "Le queda" (3 / 8 + vencimiento).
+- **Freno duro (no deja confirmar):** restantes > total del paquete · valor que no es número ·
+  paquete que no existe en el tenant · fecha imposible (31/02). Las filas malas se ORDENAN
+  primero (solo se pintan 50: una mala en la fila 137 dejaba el botón apagado sin explicación),
+  van en rojo, se listan por nombre arriba y el botón dice "Corrige N filas para importar".
+  Cinturón extra en el confirm por si alguien lo llama desde la consola.
+- **Compat hacia atrás verificada:** CSV de solo `Nombre`, CSV viejo de 6 columnas y CSV SIN
+  encabezado (mapa posicional) importan idéntico a antes, con `migrado_usadas=0` y sin `vence`.
+  El mapa posicional NO se tocó a propósito (col 4 sigue siendo Notas).
+- **De paso:** el modo pegar reconoce el paquete por su NOMBRE REAL (`pkNombres()`), no solo si
+  el texto dice "paquete" — una academia con "Mensual ilimitado" lo perdía a notas, y con saldo
+  eso significaba medirlo contra el paquete equivocado. Y `.btn:disabled` por fin se ve apagado.
+- **Ojo con la facturación por alumno:** `contarAlumnosActivos()` cuenta a los que tienen `vence`
+  futuro o de los últimos 35 días. Importar con fecha de vencimiento SUMA alumnos facturables a
+  un tenant en plan `por_alumno` (es lo correcto: sí son alumnos activos), pero conviene saberlo
+  antes de migrar una academia grande en ese plan.
+- **Verificación:** harness aislado (server Node + panel real, `wrangler dev` no corre en esta
+  Mac) con el CSV de 5 alumnos (2 con saldo, 2 sin, 1 inválido) + modo pegar + 3 formatos viejos;
+  13 casos de `compute()` recortado del fuente real; y round-trip contra PROD con un tenant
+  desechable (creado, verificado y borrado de la D1, prod quedó en los mismos 17 alumnos).

@@ -83,7 +83,12 @@ CREATE TABLE IF NOT EXISTS alumnos (
   recordatorio_ciclo  INTEGER DEFAULT 0,
   winback_ciclo       INTEGER DEFAULT 0,
   vence               TEXT DEFAULT '',
-  aviso_vence_ciclo   INTEGER DEFAULT 0
+  aviso_vence_ciclo   INTEGER DEFAULT 0,
+  -- saldo migrado desde otro sistema (28-jul-2026): clases ya consumidas al importar y el
+  -- ciclo en el que aplican (al renovar sube el ciclo y el arrastre deja de contar solo).
+  -- En D1 de prod se agregaron por ALTER; ensureSaldoMigradoSchema las asegura igual.
+  migrado_usadas      INTEGER DEFAULT 0,
+  migrado_ciclo       INTEGER DEFAULT 0
 );
 CREATE UNIQUE INDEX IF NOT EXISTS idx_alumnos_codigo ON alumnos (tenant_id, codigo);
 CREATE INDEX IF NOT EXISTS idx_alumnos_tenant ON alumnos (tenant_id);
@@ -140,7 +145,22 @@ CREATE TABLE IF NOT EXISTS disponibilidad (
   hora        TEXT NOT NULL,
   activo      INTEGER DEFAULT 1,
   cupo        INTEGER DEFAULT 0,   -- cupo por franja: 0 = usa el cupo global (config agenda_cupo)
+  curso       TEXT DEFAULT '',     -- tipo de clase de la franja (Mat / Maquinas / Reformer...); '' = sin etiqueta. Con `cupo` da "aforos por tipo de clase" (Elevate, 24-jul)
   PRIMARY KEY (tenant_id, profesor_id, dia_semana, hora)
+);
+
+-- Lista de espera por clase (Elevate Studio, 24-jul): cuando una franja llena, el alumno entra a
+-- la cola; al liberarse un cupo (cancelacion) se avisa al primero en orden de llegada (promoverEspera).
+CREATE TABLE IF NOT EXISTS espera (
+  id          TEXT PRIMARY KEY,
+  tenant_id   TEXT NOT NULL,
+  alumno_id   TEXT NOT NULL,
+  profesor_id TEXT DEFAULT '',
+  inicio_utc  TEXT NOT NULL,
+  curso       TEXT DEFAULT '',
+  estado      TEXT DEFAULT 'esperando',  -- esperando | avisado | convertida | cancelada
+  creado      TEXT DEFAULT '',
+  avisado_utc TEXT DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS idx_disponibilidad_tenant ON disponibilidad (tenant_id);
 

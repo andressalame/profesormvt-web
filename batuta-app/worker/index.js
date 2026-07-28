@@ -9,6 +9,10 @@
 */
 "use strict";
 
+/* Motor de "Mi web": la web pública editable de cada academia (tab Mi web del panel).
+   Una sola fuente para servir la web y para la vista previa del editor. */
+import { contexto as webContexto, htmlDocumento as webHtml, sanearWeb as webSanear, WEB_MAX_BYTES as WEB_MAX_BYTES } from "./web-render-batuta.js";
+
 /* ========== MARCA: Batuta, blanco (no white-label del cliente en v0) ========== */
 const MARCA = {
   nombre: "Batuta",
@@ -34,7 +38,9 @@ const TRIAL_DIAS = 30; // 30 dias + garantia (Fase 1 del plan, ejecutado 14-jul-
    n = nombre, c = clases incluidas, r = reprogramaciones, u = ilimitada (mensualidad:
    no descuenta clases, vence solo por fecha). Si el tenant no tiene config.paquetes,
    se usa el set por defecto (4/8/12 de música), así ninguna academia existente se rompe.
-   La resolución es dinámica con fallback a PAQUETES (nombres legacy siempre resuelven). */
+   La resolución es dinámica con fallback a PAQUETES (nombres legacy siempre resuelven).
+   27-jul-2026 (Elevate): t = categorías de clase que el paquete habilita. [] o ausente =
+   TODAS (comportamiento de siempre). Con t, el alumno solo ve y solo puede reservar esas. */
 function parsePaquetes(valor){
   let arr; try { arr = JSON.parse(valor || ""); } catch (e) { return null; }
   if (!Array.isArray(arr) || !arr.length) return null;
@@ -47,7 +53,13 @@ function parsePaquetes(valor){
     if (u) c = 0;
     else if (c < 1) continue;   // paquete por clases con 0 clases = invalido, se descarta
     const r = Math.max(0, Math.min(50, parseInt(p && p.r, 10) || 0));
-    map[n] = { clases: c, reprog: r, ilim: u };
+    const t = [];
+    for (const x of (Array.isArray(p && p.t) ? p.t : [])){
+      const s = String(x || "").trim().slice(0, 40);
+      if (s && !t.includes(s)) t.push(s);
+      if (t.length >= CLASES_MAX) break;
+    }
+    map[n] = { clases: c, reprog: r, ilim: u, tipos: t };
     list.push(n);
     if (list.length >= 20) break;
   }
@@ -55,8 +67,17 @@ function parsePaquetes(valor){
 }
 function paquetesDefault(){
   const map = {}, list = [];
-  for (const n of Object.keys(PAQUETES)){ map[n] = { clases: PAQUETES[n].clases, reprog: PAQUETES[n].reprog, ilim: false }; list.push(n); }
+  for (const n of Object.keys(PAQUETES)){ map[n] = { clases: PAQUETES[n].clases, reprog: PAQUETES[n].reprog, ilim: false, tipos: [] }; list.push(n); }
   return { map, list };
+}
+/* ¿Este paquete deja reservar esta franja? Paquete sin tipos = todo permitido.
+   Franja sin etiqueta = permitida siempre (la academia no la clasificó, no se le cierra la puerta). */
+function paqueteCubre(pk, etiquetaSlot){
+  const tipos = (pk && pk.tipos) || [];
+  if (!tipos.length) return true;
+  const cat = categoriaDe(etiquetaSlot);
+  if (!cat) return true;
+  return tipos.indexOf(cat) !== -1;
 }
 async function loadPaquetes(env, tenantId){
   const row = await env.DB.prepare("SELECT valor FROM config WHERE tenant_id = ?1 AND clave = 'paquetes'").bind(tenantId).first().catch(() => null);
@@ -66,8 +87,25 @@ async function loadPaquetes(env, tenantId){
    nombres legacy por defecto, y si no existe (paquete renombrado/borrado) 0 clases. */
 function resolverPk(map, nombre){
   if (map && map[nombre]) return map[nombre];
-  if (PAQUETES[nombre]) return { clases: PAQUETES[nombre].clases, reprog: PAQUETES[nombre].reprog, ilim: false };
-  return { clases: 0, reprog: 0, ilim: false };
+  if (PAQUETES[nombre]) return { clases: PAQUETES[nombre].clases, reprog: PAQUETES[nombre].reprog, ilim: false, tipos: [] };
+  return { clases: 0, reprog: 0, ilim: false, tipos: [] };
+}
+
+/* Contexto para "Mi web": junta los datos duros de la academia (config, precios,
+   paquetes, si cobra online) que el motor de render necesita. Lo usan el GET de
+   la web pública y la vista previa del editor, así ambos muestran lo mismo. */
+async function armarWebCtx(env, tenant){
+  const cfg = await loadConfig(env, tenant.id);
+  const precios = await loadPrecios(env, tenant.id);
+  const paq = await loadPaquetes(env, tenant.id);
+  const mpOn = !!(tenant.mp_access_token) && (!(Number(tenant.mp_expires_at) || 0) || Number(tenant.mp_expires_at) > Date.now());
+  const cobroOn = !!(mpOn || cfg.pago_numero || cfg.bcp_cuenta || cfg.scotia_cuenta || cfg.crypto_wallet);
+  const ctx = webContexto(tenant, cfg, precios, paq, { cobroOn: cobroOn, paqInfo: function (pk){ return resolverPk(paq.map, pk); } });
+  return { ctx: ctx, cfg: cfg };
+}
+function webJsonDe(cfg){
+  if (!cfg.web_json) return {};
+  try { return JSON.parse(cfg.web_json) || {}; } catch (e) { return {}; }
 }
 
 /* ---------- Suscripciones (Mercado Pago — preapproval) ----------
@@ -75,16 +113,21 @@ function resolverPk(map, nombre){
    Los precios se POSICIONAN en USD pero se COBRAN en PEN:
    MP Peru rechaza USD ("Cannot operate with currency id USD in MPE", verificado 06-jul-2026).
    Escalera AGRESIVA con tope por alumnos (12-jul-2026, decision de Andres tras el costeo):
-   Profe S/49 (alumnos ILIMITADOS) · Academia S/149 (hasta 150) · XL S/299 (hasta 400) · Enterprise 400+ (a medida). */
+   Freemium 23-jul-2026: alumnos ILIMITADOS en Profe/Academia/XL; diferencian por profes (1/5/20), funciones y cupo de conversaciones IA. Enterprise = mas de 20 profes / red grande. */
 const PLANES = { profe: 49, profe_duo: 78, profe_trio: 107, academia: 149, xl: 299 };
 const PLANES_USD = { profe: "14.95", profe_duo: "22.95", profe_trio: "31.95", academia: "43.95", xl: "87.95" };
 const PLAN_NOMBRE = { gratis: "Gratis", profe: "Profe", profe_duo: "Profe Dúo", profe_trio: "Profe Trío", academia: "Academia", xl: "Academia XL", por_alumno: "Academia por alumno" };
 /* Tope de alumnos por plan (12-jul-2026): la palanca de valor. Se enforce en admin/data PUT SOLO
    para tenants ya pagando (estado 'activo'); en trial no topa (para que importen su academia entera).
-   15-jul-2026 (aprobado por Andres): plan GRATIS (10 alumnos, 1 profe, sin recordatorios ni SUNAT;
+   15-jul-2026 (aprobado por Andres): plan GRATIS (15 alumnos desde el freemium 23-jul, 1 profe, sin recordatorios ni SUNAT;
    estado 'activo' sin preapproval) como anzuelo PLG/SEO, y Profe Duo/Trio (profe extra a ~S/29:
    cierra la fuga de upgrade del salto 1 profe S/49 -> 5 profes S/149). */
-const ALUM_CAP = { gratis: 10, profe: 1000000, profe_duo: 1000000, profe_trio: 1000000, academia: 150, xl: 400, por_alumno: 1000000 }; // Profe: alumnos ILIMITADOS (13-jul-2026)
+const ALUM_CAP = { gratis: 15, profe: 1000000, profe_duo: 1000000, profe_trio: 1000000, academia: 1000000, xl: 1000000, por_alumno: 1000000 }; // Freemium 23-jul-2026: alumnos ILIMITADOS en TODO plan de pago (Academia/XL ya no topan en 150/400); solo Gratis topa (15). Diferencian por profes + funciones + cupo de conversaciones IA.
+/* Freemium (23-jul-2026): tope de CONVERSACIONES del asistente de WhatsApp con IA por plan.
+   Gratis = 20 de POR VIDA (la probadita que engancha; periodo 'total'). Los de pago = por MES.
+   Una conversacion = ventana de 24h por telefono (no cada mensaje). Protege el piso de margen
+   (ver [[Batuta - mapa de costos freemium]]): operar la IA cuesta ~S/2-16/academia/mes. */
+const PLAN_CONV_CAP = { gratis: 20, profe: 500, profe_duo: 500, profe_trio: 500, academia: 1500, xl: 6000, por_alumno: 6000 };
 /* Plan ANUAL (15-jul-2026, aprobado por Andres): 12 meses al precio de 10 (2 meses gratis, la norma
    del mercado). Pago UNICO por checkout preference (patron packs de mensajes), NO preapproval: al
    confirmarse se acreditan +365 dias (estado 'trial' + trial_hasta lejano + nurture_paso=9, el
@@ -531,7 +574,14 @@ function compute(alumno, regs, precios, reservasUsadas, pk){
     else if (r.estado === "Falta") falta++;
   }
   const exceso = Math.max(0, reprogramo - pk.reprog);
-  const usadas = asistio + falta + exceso + (Number(reservasUsadas) || 0);
+  /* Saldo migrado (28-jul-2026): clases que el alumno YA habia consumido en el sistema del
+     que viene la academia (Punchpass y compania). Se guarda como "usadas de arranque" y no
+     como historial falso: asi el saldo sale bien sin inventar clases dictadas que ensucien
+     reportes y caja. Pesa SOLO en el ciclo en el que se importo: al renovar, el ciclo sube,
+     el ajuste deja de aplicar solo y el alumno arranca su paquete completo. */
+  const migradas = ((Number(alumno && alumno.migrado_ciclo) || 0) === (Number(alumno && alumno.ciclo) || 1))
+    ? Math.max(0, Number(alumno && alumno.migrado_usadas) || 0) : 0;
+  const usadas = asistio + falta + exceso + (Number(reservasUsadas) || 0) + migradas;
   const monto = precios[alumno.paquete] != null ? precios[alumno.paquete] : 0;
   /* Mensualidad ilimitada: no descuenta clases; vence solo por fecha (a.vence, que
      ya maneja el motor de recordatorios). Saldo alto = siempre "Activo" por saldo. */
@@ -577,7 +627,13 @@ async function loadConfig(env, tenantId){
               crypto_moneda: "", crypto_red: "", crypto_wallet: "",
               profe_nombre: "", profe_foto: "", profe_marca: "", whatsapp_profe: "",
               winback_activo: "", nurture_activo: "", cursos: "",
-              brand_color: "", brand_font: "", brand_logo: "", agenda_cupo: "" };
+              /* clases de 2 niveles (categoria+variantes+aforo) y anticipacion minima de reserva */
+              clases: "", anticipacion_h: "",
+              brand_color: "", brand_font: "", brand_logo: "", agenda_cupo: "",
+              /* "Mi web" (editor visual de la página pública de la academia). Vacío = la
+                 landing por defecto armada con los datos de la academia. web_version cambia
+                 en cada publicación (por si algún día se cachea la web). */
+              web_json: "", web_version: "" };
   for (const row of (results || [])) c[row.clave] = row.valor || "";
   return c;
 }
@@ -601,8 +657,79 @@ const CURSOS_POR_RUBRO = {
   "Deporte": "Entrenamiento 1 a 1, Entrenamiento grupal",
 };
 function cursosDeCfg(cfg){
+  /* Si la academia configuro clases de 2 niveles, los "cursos" son las CATEGORIAS
+     (Pilates Mat / Pilates Maquinas): asi ficha, registro y material siguen simples
+     y el detalle (Reformer, Tower...) vive solo en la agenda. */
+  const cl = clasesDeCfg(cfg);
+  if (cl.length) return cl.map(c => c.n);
   const arr = String((cfg && cfg.cursos) || "").split(",").map(s => s.trim()).filter(Boolean);
   return arr.length ? arr : CURSOS_DEFAULT;
+}
+
+/* ---------- Clases de 2 niveles: categoria -> variantes (27-jul-2026, pedido de Elevate) ----------
+   Un estudio real no tiene "cursos" planos: tiene 2 modalidades (Pilates Mat / Pilates Maquinas)
+   y cada una con variantes (Reformer, Tower / Max, Roller, Spine corrector, Sculpt) y un AFORO
+   propio (maquinas 3, piso 8). config.clases (JSON):
+     [{ n:"Pilates Maquinas", a:3, v:["Reformer","Tower"] }, ...]
+   n = nombre de la categoria (= un "curso" para el resto del sistema)
+   a = aforo por defecto de la categoria (1-60; 0 = usa el cupo general)
+   v = variantes (etiquetas libres, opcional)
+   El ORDEN manda: la primera categoria es la principal (portal y web la muestran primero).
+   Sin config.clases el sistema se comporta exactamente como antes (cursos planos). */
+const CLASES_MAX = 12, VARIANTES_MAX = 12;
+function parseClases(valor){
+  let arr; try { arr = JSON.parse(valor || ""); } catch (e) { return []; }
+  if (!Array.isArray(arr)) return [];
+  const out = [], vistos = new Set();
+  for (const c of arr){
+    const n = String((c && c.n) || "").trim().slice(0, 40);
+    if (!n || vistos.has(n)) continue;
+    vistos.add(n);
+    let a = parseInt(c && c.a, 10);
+    a = (Number.isFinite(a) && a >= 1 && a <= 60) ? a : 0;
+    const v = [];
+    for (const x of (Array.isArray(c && c.v) ? c.v : [])){
+      const s = String(x || "").trim().slice(0, 40);
+      if (s && !v.includes(s)) v.push(s);
+      if (v.length >= VARIANTES_MAX) break;
+    }
+    out.push({ n, a, v });
+    if (out.length >= CLASES_MAX) break;
+  }
+  return out;
+}
+function clasesDeCfg(cfg){ return parseClases(cfg && cfg.clases); }
+/* Etiqueta de franja: "Categoria" o "Categoria · Variante". La categoria es lo que
+   manda para el aforo y para el permiso del plan. */
+const SEP_CLASE = " · ";
+function categoriaDe(etiqueta){
+  const s = String(etiqueta || "").trim();
+  if (!s) return "";
+  const i = s.indexOf(SEP_CLASE);
+  return i > 0 ? s.slice(0, i).trim() : s;
+}
+/* Aforo por tipo de clase: el de la categoria de esa etiqueta. 0 = no definido. */
+function aforoDeTipo(cfg, etiqueta){
+  const cat = categoriaDe(etiqueta);
+  if (!cat) return 0;
+  const c = clasesDeCfg(cfg).find(x => x.n === cat);
+  return (c && c.a) || 0;
+}
+/* Todas las etiquetas seleccionables (categoria sola + categoria·variante). */
+function etiquetasDeClase(cfg){
+  const out = [];
+  for (const c of clasesDeCfg(cfg)){
+    out.push(c.n);
+    for (const v of c.v) out.push(c.n + SEP_CLASE + v);
+  }
+  return out;
+}
+/* Anticipacion minima para reservar, configurable por academia (config.anticipacion_h).
+   Un estudio de pilates quiere que se reserve la clase de esta tarde; una profe de canto
+   quiere 12h de aviso. 0 = hasta el minuto anterior. Vacio = ANTICIPACION_MIN_H. */
+function anticipacionH(cfg){
+  const h = parseInt(cfg && cfg.anticipacion_h, 10);
+  return (Number.isFinite(h) && h >= 0 && h <= 168) ? h : ANTICIPACION_MIN_H;
 }
 
 /* ---------- sesiones: helper genérico (compartido tenant + alumno) ---------- */
@@ -915,7 +1042,7 @@ function correoNurtureTrial(tenant, etapa, extras){
       html: wrap(
         '<p>' + hola + '</p>' +
         '<p>El momento en que Batuta empieza a pagarse sola es cuando tus alumnos entran a SU portal: ven sus clases, su material y sus pagos sin escribirte.</p>' +
-        '<p>Trae a tus alumnos de siempre en un clic: en Personas &gt; Alumnos esta el boton <b>Importar CSV</b> (subes tu Excel o pegas tu lista tal cual, un alumno por linea). Luego comparteles el link del portal. Los cobros por Yape, Plin o transferencia quedan con constancia y los confirmas en un clic.</p>' +
+        '<p>Trae a tus alumnos de siempre en un clic: en Personas &gt; Alumnos esta el boton <b>Traer mi lista de Excel</b> (pegas tu lista tal cual, un alumno por linea, o subes un archivo). Luego comparteles el link del portal. Los cobros por Yape, Plin o transferencia quedan con constancia y los confirmas en un clic.</p>' +
         '<p><a href="' + panel + '"><b>Agregar alumnos ahora</b></a></p>')
     };
   }
@@ -931,7 +1058,7 @@ function correoNurtureTrial(tenant, etapa, extras){
     subject: "Tu prueba termina pronto",
     html: wrap(
       '<p>' + hola + '</p>' +
-      '<p>Se acaban tus 30 dias de prueba de ' + (tenant.academia ? "<b>" + esc(tenant.academia) + "</b>" : "tu academia") + '. Si el panel te sirvio, activar tu plan toma 1 minuto desde el mismo panel: desde <b>S/49 al mes</b> (mostrado US$14.95), cobrado en soles. Y tu primer mes tiene garantia: si no te convence, te devolvemos tu plata.</p>' +
+      '<p>Se acaban tus 30 dias de prueba de ' + (tenant.academia ? "<b>" + esc(tenant.academia) + "</b>" : "tu academia") + '. Si el panel te sirvio, activar tu plan toma 1 minuto desde el mismo panel: desde <b>S/49 al mes</b>, cobrado en soles. Y tu primer mes tiene garantia: si no te convence, te devolvemos tu plata.</p>' +
       '<p>Si algo no te cerro, respondeme por WhatsApp y lo vemos antes de que venza.</p>' +
       '<p><a href="' + panel + '"><b>Activar mi plan</b></a></p>')
   };
@@ -983,7 +1110,7 @@ function correoLeadMagnet(paso, origen){
     html: wrap(
       '<p>Hola. Ultima idea sobre tu plantilla, y no te escribo mas.</p>' +
       '<p>Hay 3 cosas que ninguna hoja de calculo hara por ti: avisarle al alumno que le quedan 2 clases, cobrarle sin que tu escribas, y dejarle su material en un portal con tu marca.</p>' +
-      '<p>Eso es exactamente lo que Batuta hace solo, con tus alumnos reales, en una prueba de 30 dias sin tarjeta: <a href="' + MARCA.dominio + '/app/registro?f=magnet"><b>crea tu academia aqui</b></a>. Y si prefieres mirar antes, entra a la <a href="' + MARCA.dominio + '/app/demo">demo en vivo</a> sin registrarte.</p>')
+      '<p>Eso es exactamente lo que Batuta hace solo, con tus alumnos reales, en el plan Gratis para siempre y sin tarjeta: <a href="' + MARCA.dominio + '/app/registro?f=magnet"><b>crea tu academia aqui</b></a>. Y si prefieres mirar antes, entra a la <a href="' + MARCA.dominio + '/app/demo">demo en vivo</a> sin registrarte.</p>')
   };
 }
 
@@ -1237,8 +1364,57 @@ async function contextoVentaWA(env, tenant, cfg){
   } catch (e) {}
   const waProfe = (cfg && cfg.whatsapp_profe) || tenant.whatsapp || "";
   if (waProfe) lineas += "- WhatsApp del profesor (por si derivas): " + waProfe + "\n";
+  /* Base de conocimiento libre editable por el dueno (Ajustes > WhatsApp): FAQ, promos,
+     politicas, cualquier dato que el asistente deba saber y que no salga de cursos/precios. */
+  const kb = String((cfg && cfg.wa_kb) || "").trim();
+  if (kb) lineas += "- Informacion adicional que te dio la academia (usala como fuente):\n" + kb.slice(0, 2000) + "\n";
   lineas += "Si algun dato viene vacio, no lo menciones: ofrece que el profesor lo confirme.";
   return lineas;
+}
+
+/* ============ Voz editable del asistente (tono + instrucciones libres por tenant) ============
+   El dueno elige un tono y escribe instrucciones desde Ajustes > WhatsApp. Este bloque se
+   inyecta al system prompt del vendedor IA en CADA llamada (manda sobre el estilo por defecto,
+   nunca sobre las REGLAS DURAS de compliance). Vacio si el dueno no configuro nada. */
+const WA_TONOS = {
+  cercano: "Tono cercano y calido, como quien recibe a un amigo. Trato de tu, con calidez y cero acartonamiento.",
+  formal:  "Tono formal y profesional, con respeto y cortesia. Nada de jerga ni emojis.",
+  directo: "Tono directo y breve, al grano, sin rodeos ni relleno. Frases cortas.",
+  cordial: "Tono cordial y amable, con buena onda y una sonrisa en el texto. Un emoji ocasional bienvenido.",
+  serio:   "Tono serio y sobrio, sin bromas y sin emojis. Profesional y mesurado."
+};
+function bloqueVozWA(cfg){
+  const tono = WA_TONOS[String((cfg && cfg.wa_tono) || "").trim()] || "";
+  const instr = String((cfg && cfg.wa_instrucciones) || "").trim().slice(0, 800);
+  if (!tono && !instr) return "";
+  let b = "\nVOZ DE ESTA ACADEMIA (respetala siempre; manda sobre el estilo por defecto, jamas sobre las REGLAS DURAS):";
+  if (tono) b += "\n- " + tono;
+  if (instr) b += "\n- Instrucciones del dueno: " + instr;
+  return b;
+}
+
+/* ============ Sugerencias del asistente (modo "sugerencias": IA propone, el staff envia) ============
+   Cuando el tenant elige modo 'sugerencias', la IA arma el borrador pero NO lo envia: se guarda
+   aqui para que el dueno lo revise, copie y mande a mano desde su WhatsApp. Es la version segura
+   y sin bandeja-en-vivo (esa llega con Meta aprobado, Parte B del plan). */
+let WA_SUG_OK = false;
+async function ensureWaSugSchema(env){
+  if (WA_SUG_OK) return;
+  try {
+    await env.DB.prepare(
+      "CREATE TABLE IF NOT EXISTS wa_sugerencia (id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, telefono TEXT NOT NULL, nombre TEXT DEFAULT '', mensaje TEXT DEFAULT '', borrador TEXT DEFAULT '', estado TEXT DEFAULT 'pendiente', creado TEXT DEFAULT '')"
+    ).run();
+    await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_wa_sug_tenant ON wa_sugerencia (tenant_id, estado, creado)").run();
+    WA_SUG_OK = true;
+  } catch (e) {}
+}
+async function waSugerenciaGuardar(env, tenantId, telefono, nombre, mensaje, borrador){
+  try {
+    await ensureWaSugSchema(env);
+    await env.DB.prepare(
+      "INSERT INTO wa_sugerencia (id, tenant_id, telefono, nombre, mensaje, borrador, estado, creado) VALUES (?1,?2,?3,?4,?5,?6,'pendiente',?7)"
+    ).bind(crypto.randomUUID(), tenantId, telefono, String(nombre || "").slice(0, 80), String(mensaje || "").slice(0, 500), String(borrador || "").slice(0, 1500), new Date().toISOString()).run();
+  } catch (e) {}
 }
 
 /* Historial rolling de la conversacion WA por (tenant, telefono), ultimos ~8 turnos. */
@@ -1258,6 +1434,221 @@ async function waHistorialGuardar(env, tenantId, telefono, mensajes){
       "ON CONFLICT(tenant_id, telefono) DO UPDATE SET historial = ?3, actualizado = ?4"
     ).bind(tenantId, telefono, recorte, new Date().toISOString()).run();
   } catch (e) {}
+}
+
+/* ============ Cupo de conversaciones del asistente WA (freemium 23-jul-2026) ============
+   Gratis = 20 de POR VIDA (periodo 'total', la probadita que engancha); pago = por MES
+   (PLAN_CONV_CAP). Una "conversacion" = ventana de 24h por telefono (no cada mensaje). Es lo
+   que gatea el asistente por plan y protege el piso de 60% de margen. */
+let WA_USO_OK = false;
+async function ensureWaUsoSchema(env){
+  if (WA_USO_OK) return;
+  try {
+    await env.DB.prepare(
+      "CREATE TABLE IF NOT EXISTS wa_uso (tenant_id TEXT NOT NULL, periodo TEXT NOT NULL, usados INTEGER DEFAULT 0, actualizado TEXT DEFAULT '', PRIMARY KEY (tenant_id, periodo))"
+    ).run();
+    WA_USO_OK = true;
+  } catch (e) {}
+}
+function waPlanEfectivo(tW){ const p = (tW && tW.plan) || ""; return (!p || (tW && tW.estado) === "vencido") ? "gratis" : p; }
+function waPeriodo(plan){ return plan === "gratis" ? "total" : mesActualUTC(); }
+function waConvCap(plan){ return PLAN_CONV_CAP[plan] != null ? PLAN_CONV_CAP[plan] : 500; }
+/* Es conversacion NUEVA (nueva ventana de 24h)? Solo las nuevas consumen cupo; las
+   continuaciones dentro de las 24h no. Se mide con wa_conv.actualizado (aun no reescrito). */
+async function waEsNuevaConversacion(env, tenantId, telefono){
+  try {
+    const row = await env.DB.prepare("SELECT actualizado FROM wa_conv WHERE tenant_id = ?1 AND telefono = ?2").bind(tenantId, telefono).first();
+    if (!row || !row.actualizado) return true;
+    const last = Date.parse(row.actualizado);
+    if (!last) return true;
+    return (Date.now() - last) > 24 * 3600 * 1000;
+  } catch (e) { return true; }
+}
+/* Consume 1 conversacion del cupo del plan. Atomico (usados < cap en el WHERE). Devuelve
+   {ok, usados, cap}: ok=false = cupo agotado (no responder con IA). Fail-open ante error DB. */
+async function waConsumirConversacion(env, tenantId, plan){
+  await ensureWaUsoSchema(env);
+  const periodo = waPeriodo(plan), cap = waConvCap(plan), ahora = new Date().toISOString();
+  try {
+    await env.DB.prepare("INSERT OR IGNORE INTO wa_uso (tenant_id, periodo, usados, actualizado) VALUES (?1, ?2, 0, ?3)").bind(tenantId, periodo, ahora).run();
+    const r = await env.DB.prepare("UPDATE wa_uso SET usados = usados + 1, actualizado = ?4 WHERE tenant_id = ?1 AND periodo = ?2 AND usados < ?3").bind(tenantId, periodo, cap, ahora).run();
+    const ok = !!(r.meta && r.meta.changes === 1);
+    const row = await env.DB.prepare("SELECT usados FROM wa_uso WHERE tenant_id = ?1 AND periodo = ?2").bind(tenantId, periodo).first();
+    return { ok, usados: row ? Number(row.usados) : 0, cap };
+  } catch (e) { return { ok: true, usados: 0, cap }; }
+}
+/* Uso actual del cupo (para el panel via /me), sin consumir. */
+async function waUsoActual(env, tenantId, plan){
+  try {
+    await ensureWaUsoSchema(env);
+    const periodo = waPeriodo(plan), cap = waConvCap(plan);
+    const row = await env.DB.prepare("SELECT usados FROM wa_uso WHERE tenant_id = ?1 AND periodo = ?2").bind(tenantId, periodo).first();
+    return { usados: row ? Number(row.usados) : 0, cap, periodo, plan };
+  } catch (e) { return { usados: 0, cap: waConvCap(plan), periodo: waPeriodo(plan), plan }; }
+}
+
+/* ============ Asistente-cliente para NEGOCIOS sueltos (no-academia) — AISLADO, default OFF ============
+   CAMINO A del "Configurador de WhatsApp con IA" (S/890): reusa la MISMA WABA de Batuta y el
+   MISMO webhook ya vivo, pero rutea los numeros dados de alta como "negocio" a una rama propia
+   con KB de TEXTO LIBRE (servicios/precios/FAQ/reglas) y system prompt generico. NO toca la
+   logica de academias ni la de cobros: si el numero no esta en wa_negocio, esta rama no hace
+   nada y sigue el flujo de academia intacto. Mismo espiritu de aislamiento que el modulo de
+   Meta Ads. Compliance de la casa: el prompt PROHIBE promesas de resultado/ingresos, inventar
+   datos y cerrar pagos/pedir tarjeta por chat. */
+let NEG_SCHEMA_OK = false;
+async function ensureNegocioSchema(env){
+  if (NEG_SCHEMA_OK) return;
+  try {
+    await env.DB.prepare(
+      "CREATE TABLE IF NOT EXISTS wa_negocio (id TEXT PRIMARY KEY, nombre TEXT NOT NULL, phone_id TEXT NOT NULL, enabled TEXT DEFAULT 'off', kb TEXT DEFAULT '', cap_mes INTEGER DEFAULT 1000, creado TEXT DEFAULT '', actualizado TEXT DEFAULT '')"
+    ).run();
+    await env.DB.prepare("CREATE UNIQUE INDEX IF NOT EXISTS idx_wa_negocio_phone ON wa_negocio (phone_id)").run();
+    await env.DB.prepare(
+      "CREATE TABLE IF NOT EXISTS wa_negocio_lead (negocio_id TEXT NOT NULL, telefono TEXT NOT NULL, nombre TEXT DEFAULT '', ultimo TEXT DEFAULT '', actualizado TEXT DEFAULT '', PRIMARY KEY (negocio_id, telefono))"
+    ).run();
+    NEG_SCHEMA_OK = true;
+  } catch (e) {}
+}
+
+/* System prompt FIJO del asistente de negocio (va con cache_control en llamarClaudeOnboarding;
+   la KB y la voz por-negocio viajan en el bloque de sesion, sin cache). Generalizado a
+   "negocio" (no "academia"): recepcionista/vendedor que abre la puerta, el dueno cierra. */
+const WA_NEGOCIO_SYS =
+  "Eres el asistente por WhatsApp de un negocio, atendiendo a un cliente que escribe. " +
+  "Tu trabajo: saludar, entender que necesita, responder con los DATOS de abajo (servicios, precios, preguntas frecuentes) y seguir las REGLAS del negocio para agendar una visita, pedir fotos o medidas, o derivar al dueno cuando toque. Tu abres la puerta, el dueno cierra.\n" +
+  "ESTILO (estricto): espanol claro y calido, de tu, maximo 3 frases por mensaje, directo, sin relleno. Sin em dash. Sin signos de apertura invertidos (nada de un ¿ ni un ¡ al inicio, solo los de cierre). Sin markdown, sin asteriscos, sin vinetas ni dos puntos de titulo: es WhatsApp, texto plano. Un emoji ocasional con mesura. Habla con la VOZ que te indican los DATOS. Nunca suenes a robot ni a formulario.\n" +
+  "REGLAS DURAS (no negociables): NUNCA prometes resultados, plazos garantizados ni ingresos. NUNCA inventas precios, datos, promos ni servicios que no esten en los DATOS: si no lo sabes, dilo con honestidad y ofrece que el dueno lo confirme. NUNCA cierras un pago ni pides datos de tarjeta, cuenta bancaria ni claves por el chat: para pagar, el dueno coordina. NUNCA hablas mal de nadie, tono positivo. Si es un reclamo serio o piden hablar con una persona, di que el dueno le escribe en breve y no improvises.\n" +
+  "CIERRE: siempre dejas una puerta abierta concreta segun las REGLAS (agendar, mandar fotos o medidas, o 'el dueno te escribe'). Nunca cierras en seco.";
+
+function negocioKbParse(kbStr){
+  if (!kbStr) return {};
+  try { const o = JSON.parse(kbStr); return (o && typeof o === "object") ? o : {}; } catch (e) { return {}; }
+}
+
+/* Saneo de estilo EXTRA solo para la rama negocio (no toca sanearRespuestaIA, que es compartido
+   con el vendedor de academia). Aplica las reglas duras del "Configurador": NUNCA em dash, NUNCA
+   markdown/vinetas. Belt-and-suspenders sobre lo que el prompt ya pide, por si el modelo lo ignora. */
+function negocioLimpiarEstilo(t){
+  if (!t) return t;
+  return sanearRespuestaIA(String(t))
+    .replace(/\s*[—–]\s*/g, ", ")        // em/en dash -> coma (regla de la casa: nunca em dash)
+    .replace(/\*\*(.*?)\*\*/g, "$1")     // **negrita** -> plano
+    .replace(/\*(.*?)\*/g, "$1")          // *cursiva* -> plano
+    .replace(/[*_`>#~]/g, "")             // restos de markdown
+    .replace(/^\s*[-•]\s+/gm, "")         // vinetas al inicio de linea
+    .replace(/\s{2,}/g, " ")
+    .trim();
+}
+
+/* Arma el bloque DATOS del negocio a partir de su KB (JSON de texto libre editable por cliente).
+   Todo campo vacio se omite (regla: no menciones lo que no tienes). */
+function contextoNegocioWA(neg, kb, nombreCliente){
+  const b = kb || {};
+  let l = "DATOS DEL NEGOCIO:\n- Nombre: " + (b.negocio || (neg && neg.nombre) || "el negocio") + "\n";
+  if (b.rubro) l += "- Rubro: " + b.rubro + "\n";
+  if (b.voz) l += "- Voz con la que hablas (imitala, es la del dueno): " + b.voz + "\n";
+  const serv = Array.isArray(b.servicios) ? b.servicios : [];
+  if (serv.length){
+    l += "- Servicios y precios:\n";
+    for (const s of serv){
+      if (typeof s === "string"){ l += "  - " + s + "\n"; continue; }
+      const nom = (s && (s.nombre || s.servicio)) || "";
+      const pre = (s && s.precio != null && s.precio !== "") ? (" — " + s.precio) : "";
+      const det = (s && s.detalle) ? (" (" + s.detalle + ")") : "";
+      if (nom) l += "  - " + nom + pre + det + "\n";
+    }
+  }
+  const faq = Array.isArray(b.faq) ? b.faq : [];
+  if (faq.length){
+    l += "- Preguntas frecuentes:\n";
+    for (const f of faq){
+      const q = (f && (f.q || f.pregunta)) || ""; const a = (f && (f.a || f.respuesta)) || "";
+      if (q && a) l += "  - " + q + " -> " + a + "\n";
+    }
+  }
+  const reglas = Array.isArray(b.reglas) ? b.reglas : [];
+  if (reglas.length){
+    l += "- Reglas de cuando agendar visita, pedir fotos o medidas, o derivar al dueno:\n";
+    for (const r of reglas) if (r) l += "  - " + r + "\n";
+  }
+  if (b.horario) l += "- Horario de atencion: " + b.horario + "\n";
+  if (b.zona) l += "- Zona o cobertura: " + b.zona + "\n";
+  if (b.derivar_a) l += "- WhatsApp del dueno (por si derivas): " + b.derivar_a + "\n";
+  if (b.cierre) l += "- Como cerrar cada mensaje: " + b.cierre + "\n";
+  if (nombreCliente) l += "- El cliente se llama " + String(nombreCliente).split(" ")[0] + ".\n";
+  l += "Si un dato no esta aqui, no lo inventes: dilo y ofrece que el dueno lo confirme.";
+  return l;
+}
+
+/* Resuelve el negocio dueno de un phone_number_id (o null si ese numero no es un negocio). */
+async function negocioPorPhone(env, phoneId){
+  await ensureNegocioSchema(env);
+  try {
+    return await env.DB.prepare("SELECT id, nombre, phone_id, enabled, kb, cap_mes FROM wa_negocio WHERE phone_id = ?1").bind(String(phoneId)).first();
+  } catch (e) { return null; }
+}
+
+/* Registra/actualiza el lead entrante del negocio (una fila por telefono) para que el dueno lo vea. */
+async function negocioLeadUpsert(env, negId, from, nombre, texto){
+  try {
+    await ensureNegocioSchema(env);
+    const ahora = new Date().toISOString();
+    await env.DB.prepare(
+      "INSERT INTO wa_negocio_lead (negocio_id, telefono, nombre, ultimo, actualizado) VALUES (?1,?2,?3,?4,?5) " +
+      "ON CONFLICT(negocio_id, telefono) DO UPDATE SET nombre = CASE WHEN ?3 != '' THEN ?3 ELSE nombre END, ultimo = ?4, actualizado = ?5"
+    ).bind(negId, from, String(nombre || "").slice(0, 80), String(texto || "").slice(0, 500), ahora).run();
+  } catch (e) {}
+}
+
+/* Cupo MENSUAL de conversaciones por negocio (protege el costo de tokens del worker de Andres,
+   ver "COSTO PARA ANDRES" del reporte). Reusa la tabla wa_uso con tenant sintetico 'neg:'+id.
+   Atomico (usados < cap en el WHERE). Fail-open ante error de DB. */
+async function negocioConsumirConv(env, negId, cap){
+  await ensureWaUsoSchema(env);
+  const tid = "neg:" + negId, periodo = mesActualUTC(), ahora = new Date().toISOString(), tope = Number(cap) > 0 ? Number(cap) : 1000;
+  try {
+    await env.DB.prepare("INSERT OR IGNORE INTO wa_uso (tenant_id, periodo, usados, actualizado) VALUES (?1, ?2, 0, ?3)").bind(tid, periodo, ahora).run();
+    const r = await env.DB.prepare("UPDATE wa_uso SET usados = usados + 1, actualizado = ?4 WHERE tenant_id = ?1 AND periodo = ?2 AND usados < ?3").bind(tid, periodo, tope, ahora).run();
+    const ok = !!(r.meta && r.meta.changes === 1);
+    const row = await env.DB.prepare("SELECT usados FROM wa_uso WHERE tenant_id = ?1 AND periodo = ?2").bind(tid, periodo).first();
+    return { ok, usados: row ? Number(row.usados) : 0, cap: tope };
+  } catch (e) { return { ok: true, usados: 0, cap: tope }; }
+}
+
+/* Maneja un mensaje entrante SI el numero es un negocio dado de alta. Devuelve:
+   - false: el numero NO es un negocio -> el webhook sigue con el flujo de academia (sin cambios).
+   - true : era un negocio (respondido, apagado, o sin cupo) -> el webhook NO sigue con academia.
+   Es la UNICA integracion con el webhook existente y es un no-op mientras wa_negocio este vacia. */
+async function manejarNegocioWA(env, { phoneId, from, texto, nombre }){
+  let neg;
+  try { neg = await negocioPorPhone(env, phoneId); } catch (e) { return false; }
+  if (!neg) return false;                                   // no es negocio: sigue el flujo academia
+  if (String(neg.enabled || "") !== "on") return true;      // dado de alta pero apagado: no responde
+  // freno de abuso: max ~12 respuestas por cliente por hora (misma ventana horaria)
+  if (await chatbotPasoTope(env, "neg:" + neg.id + ":" + from, 12)) return true;
+  const kb = negocioKbParse(neg.kb);
+  await negocioLeadUpsert(env, neg.id, from, nombre, texto);
+  const synthTenant = "neg:" + neg.id;
+  // cupo mensual: solo las conversaciones NUEVAS (ventana de 24h) consumen. Al agotarse, el lead
+  // ya quedo registrado y el dueno responde a mano (no se llama a la IA).
+  if (await waEsNuevaConversacion(env, synthTenant, from)){
+    const cupo = await negocioConsumirConv(env, neg.id, neg.cap_mes);
+    if (!cupo.ok) return true;
+  }
+  const datos = contextoNegocioWA(neg, kb, nombre);
+  const previo = await waHistorialCargar(env, synthTenant, from);
+  const conversacion = previo.concat([{ role: "user", content: texto }]);
+  let reply = await llamarClaudeOnboarding(env, WA_NEGOCIO_SYS, conversacion, datos);
+  if (reply) reply = negocioLimpiarEstilo(reply); // regla dura negocio: sin em dash ni markdown
+  if (!reply){
+    // sin IA disponible: primer-toque calido de respaldo (no deja al cliente sin respuesta)
+    reply = (nombre ? String(nombre).split(" ")[0] : "Hola") + ", gracias por escribir a " + (neg.nombre || "nosotros") + ". Cuentame que necesitas y te ayudo, o el dueno te escribe en breve.";
+  }
+  const enviado = await enviarWhatsApp(env, phoneId, from, reply);
+  if (enviado){
+    await waHistorialGuardar(env, synthTenant, from, conversacion.concat([{ role: "assistant", content: reply }]));
+  }
+  return true;
 }
 
 /* ============ Meta Ads (Marketing API) por tenant — AISLADO, gated por secrets ============
@@ -2125,10 +2516,12 @@ async function horarioFijoDerivado(env, tenantId, alumnoId){
 }
 
 /* Cupo por horario (clases grupales): cuantos alumnos aceptan reservar el MISMO slot.
-   config.agenda_cupo (1-20, default 1 = individual). Un "bloqueo" cierra el slot completo. */
+   config.agenda_cupo (1-60, default 1 = individual). Un "bloqueo" cierra el slot completo.
+   Es el ULTIMO recurso: manda el aforo de la franja, luego el del tipo de clase, luego este. */
+const CUPO_MAX = 60;
 function cupoDeCfg(cfg){
   const c = parseInt(cfg && cfg.agenda_cupo, 10);
-  return (Number.isFinite(c) && c >= 1 && c <= 20) ? c : 1;
+  return (Number.isFinite(c) && c >= 1 && c <= CUPO_MAX) ? c : 1;
 }
 /* Ocupacion de un slot EN LA AGENDA DE UN PROFESOR (multi-profesor: dos profes pueden
    dictar a la misma hora sin chocar). prof = {id, esDueno}; las reservas legacy con
@@ -2151,10 +2544,14 @@ async function slotValido(env, tenantId, iso, opts, prof){
   const t = Date.parse(iso);
   if (!Number.isFinite(t)) return false;
   const now = Date.now();
-  if (t <= now + ANTICIPACION_MIN_H * 3600000) return false;
+  /* Anticipacion minima por academia (27-jul-2026). Antes eran 12h fijas para todos:
+     un estudio que llena la clase de las 7pm el mismo dia no podia operar. */
+  const antH = (opts && opts.cfg) ? anticipacionH(opts.cfg) : anticipacionH(await loadConfig(env, tenantId));
+  if (t <= now + antH * 3600000) return false;
   if (!(opts && opts.ignorarHorizonte) && t > now + HORIZONTE_SEMANAS * 7 * 86400000) return false;
   const p = limaParts(new Date(t));
-  if (p.min !== 0) return false;
+  /* NO se exige hora en punto (27-jul-2026): la franja vale si existe tal cual en
+     disponibilidad, asi una academia puede dictar 7:15, 8:45 o cada 30 minutos. */
   const pid = prof && prof.id ? prof.id : "";
   const esD = !!(prof && prof.esDueno);
   const row = await env.DB.prepare(
@@ -2165,23 +2562,35 @@ async function slotValido(env, tenantId, iso, opts, prof){
   return true;
 }
 
-async function generarSlots(env, tenantId, prof){
+/* Version rica: ademas de los slots libres, devuelve los LLENOS (para ofrecer lista de espera)
+   y el detalle por slot {cupo, ocupados, curso}. generarSlots() la envuelve para no romper a
+   los llamadores viejos (solo quieren el array de ISOs libres).
+   opts.pk (27-jul-2026): paquete del alumno. Si trae tipos, los slots de OTRA categoria
+   salen en `fuera` (el portal los muestra apagados y explica por que) y jamas en `slots`. */
+async function generarSlotsDetalle(env, tenantId, prof, opts){
   const pid = prof && prof.id ? prof.id : "";
   const esD = !!(prof && prof.esDueno);
   let disp = [];
   try {
     disp = ((await env.DB.prepare(
-      "SELECT dia_semana, hora, COALESCE(cupo,0) AS cupo FROM disponibilidad WHERE tenant_id = ?1 AND activo = 1 " +
+      "SELECT dia_semana, hora, COALESCE(cupo,0) AS cupo, COALESCE(curso,'') AS curso FROM disponibilidad WHERE tenant_id = ?1 AND activo = 1 " +
       "AND (profesor_id = ?2 OR (?3 = 1 AND (profesor_id IS NULL OR profesor_id = '')))"
     ).bind(tenantId, pid, esD ? 1 : 0).all()).results) || [];
   } catch (e) {
-    disp = ((await env.DB.prepare(
-      "SELECT dia_semana, hora, 0 AS cupo FROM disponibilidad WHERE tenant_id = ?1 AND activo = 1 " +
-      "AND (profesor_id = ?2 OR (?3 = 1 AND (profesor_id IS NULL OR profesor_id = '')))"
-    ).bind(tenantId, pid, esD ? 1 : 0).all()).results) || [];
+    try {
+      disp = ((await env.DB.prepare(
+        "SELECT dia_semana, hora, COALESCE(cupo,0) AS cupo FROM disponibilidad WHERE tenant_id = ?1 AND activo = 1 " +
+        "AND (profesor_id = ?2 OR (?3 = 1 AND (profesor_id IS NULL OR profesor_id = '')))"
+      ).bind(tenantId, pid, esD ? 1 : 0).all()).results) || [];
+    } catch (e2) {
+      disp = ((await env.DB.prepare(
+        "SELECT dia_semana, hora, 0 AS cupo FROM disponibilidad WHERE tenant_id = ?1 AND activo = 1 " +
+        "AND (profesor_id = ?2 OR (?3 = 1 AND (profesor_id IS NULL OR profesor_id = '')))"
+      ).bind(tenantId, pid, esD ? 1 : 0).all()).results) || [];
+    }
   }
   const porDia = {};
-  for (const r of (disp || [])){ (porDia[r.dia_semana] = porDia[r.dia_semana] || []).push({ hora: r.hora, cupo: parseInt(r.cupo, 10) || 0 }); }
+  for (const r of (disp || [])){ (porDia[r.dia_semana] = porDia[r.dia_semana] || []).push({ hora: r.hora, cupo: parseInt(r.cupo, 10) || 0, curso: r.curso || "" }); }
 
   const now = Date.now();
   const hastaMs = now + HORIZONTE_SEMANAS * 7 * 86400000;
@@ -2194,28 +2603,76 @@ async function generarSlots(env, tenantId, prof){
     conteo.set(r.inicio_utc, (conteo.get(r.inicio_utc) || 0) + 1);
     if (r.tipo === "bloqueo") bloqueados.add(r.inicio_utc);
   }
-  const cupoGlobal = cupoDeCfg(await loadConfig(env, tenantId));
-  /* cupo por franja: el de la celda si es >0, si no el global */
-  const lleno = (iso, cupoFranja) => {
-    const cupo = (cupoFranja >= 1 && cupoFranja <= 20) ? cupoFranja : cupoGlobal;
-    return bloqueados.has(iso) || (conteo.get(iso) || 0) >= cupo;
+  const cfgT = await loadConfig(env, tenantId);
+  const cupoGlobal = cupoDeCfg(cfgT);
+  /* Aforo efectivo, en orden: el de la celda (1-60) > el AFORO DEL TIPO DE CLASE
+     (Maquinas 3 / Mat 8, definido una sola vez en Ajustes) > el cupo general. */
+  const cupoEff = (cupoFranja, etiqueta) => {
+    if (cupoFranja >= 1 && cupoFranja <= 60) return cupoFranja;
+    const porTipo = aforoDeTipo(cfgT, etiqueta);
+    return porTipo || cupoGlobal;
   };
+  const pk = opts && opts.pk;
+  const antMs = anticipacionH(cfgT) * 3600000;
 
   const p0 = limaParts(new Date(now));
   const medianocheHoy = limaToUtc(p0.y, p0.m, p0.d, "00:00").getTime();
-  const slots = [];
+  const slots = [];      // libres (con cupo) y dentro del plan del alumno
+  const llenos = [];     // sin cupo pero abiertos (no bloqueo) -> lista de espera
+  const fuera = [];      // existen pero su tipo NO esta en el plan del alumno
+  const detalle = {};    // iso -> {cupo, ocupados, curso}
   for (let i = 0; i <= HORIZONTE_SEMANAS * 7; i++){
     const p = limaParts(new Date(medianocheHoy + i * 86400000));
     const horas = porDia[p.dow] || [];
     for (const h of horas){
       const ms = limaToUtc(p.y, p.m, p.d, h.hora).getTime();
-      if (ms <= now + ANTICIPACION_MIN_H * 3600000 || ms > hastaMs) continue;
+      if (ms <= now + antMs || ms > hastaMs) continue;
       const iso = new Date(ms).toISOString();
-      if (!lleno(iso, h.cupo)) slots.push(iso);
+      if (bloqueados.has(iso)) continue;   // franja cerrada por el profe: ni libre ni espera
+      const cupo = cupoEff(h.cupo, h.curso);
+      const ocupados = conteo.get(iso) || 0;
+      detalle[iso] = { cupo, ocupados, curso: h.curso || "" };
+      if (pk && !paqueteCubre(pk, h.curso)){ fuera.push(iso); continue; }
+      if (ocupados < cupo) slots.push(iso); else llenos.push(iso);
     }
   }
-  slots.sort();
-  return slots;
+  slots.sort(); llenos.sort(); fuera.sort();
+  return { slots, llenos, fuera, detalle };
+}
+
+async function generarSlots(env, tenantId, prof){
+  return (await generarSlotsDetalle(env, tenantId, prof)).slots;
+}
+
+/* Lista de espera: al liberarse un cupo en <iso> (una cancelacion), avisa al PRIMERO en la cola
+   de ese slot (orden de llegada). NO auto-reserva (evita liar creditos/consentimiento): avisa por
+   correo + push y el alumno entra a reservar. Marca 'avisado' para no re-spamear ni saltar la fila.
+   Best-effort total: cualquier fallo se traga, jamas rompe la cancelacion que lo dispara. */
+async function promoverEspera(env, tenantId, iso){
+  try {
+    const row = await env.DB.prepare(
+      "SELECT e.id AS eid, e.alumno_id, c.id AS cuenta_id, c.email AS email, c.nombre AS nombre " +
+      "FROM espera e JOIN cuentas c ON c.alumno_id = e.alumno_id AND c.tenant_id = e.tenant_id " +
+      "WHERE e.tenant_id = ?1 AND e.inicio_utc = ?2 AND e.estado = 'esperando' ORDER BY e.creado ASC LIMIT 1"
+    ).bind(tenantId, iso).first();
+    if (!row) return;
+    await env.DB.prepare("UPDATE espera SET estado = 'avisado', avisado_utc = ?1 WHERE id = ?2 AND tenant_id = ?3")
+      .bind(new Date().toISOString(), row.eid, tenantId).run();
+    const tenant = await env.DB.prepare("SELECT academia, slug FROM tenants WHERE id = ?1").bind(tenantId).first().catch(() => null);
+    const cuando = fmtLima(iso);
+    const primer = (row.nombre || "").split(" ")[0] || "Hola";
+    if (row.email && env.RESEND_API_KEY && tenant){
+      const link = "https://batuta.lat/app/a/" + (tenant.slug || "");
+      try {
+        await enviarCorreo(env, {
+          to: row.email,
+          subject: "Se liberó tu horario del " + cuando + " · resérvalo",
+          html: "<p>" + esc(primer) + ", se liberó un cupo en <b>" + esc(tenant.academia || "tu academia") + "</b> para la clase del <b>" + esc(cuando) + "</b>, que estabas esperando.</p><p>Entra a tu portal y resérvalo antes de que lo tomen:</p><p><a href=\"" + link + "\"><b>Reservar ahora</b></a></p>"
+        });
+      } catch (e) {}
+    }
+    try { await avisarPushAlumno(env, tenantId, row.cuenta_id, { title: "Se liberó tu horario", body: "Cupo libre el " + cuando + ". Reserva antes de que lo tomen.", url: tenant ? ("https://batuta.lat/app/a/" + (tenant.slug || "")) : "" }); } catch (e) {}
+  } catch (e) {}
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -2269,9 +2726,9 @@ function paginaBase(titulo, cuerpo, script){
 
 function paginaRegistro(googleOn){
   const cuerpo =
-    "<div class=\"pill\">30 dias gratis, sin tarjeta</div>" +
+    "<div class=\"pill\">Plan Gratis para siempre, sin tarjeta</div>" +
     "<h1>Crea tu academia en Batuta</h1>" +
-    "<p class=\"sub\">Tu panel de gestion listo en un minuto.</p>" +
+    "<p class=\"sub\">Gratis para siempre hasta 15 alumnos. Tu panel listo en un minuto.</p>" +
     (googleOn ? botonGoogle("profesor", "", "Registrarme con Google") + "<div class=\"gsep\">o con tu correo</div>" : "") +
     "<form id=\"f\">" +
       "<label>Nombre de tu academia</label><input id=\"academia\" required>" +
@@ -2303,7 +2760,7 @@ function paginaRegistro(googleOn){
     "try{if(!refc){var mck=/(?:^|;\\s*)batuta_ref=([^;]+)/.exec(document.cookie);if(mck){refc=decodeURIComponent(mck[1]);}}}catch(e){}" +
     "try{if(refc){sessionStorage.setItem('batuta_ref',refc);document.cookie='batuta_ref='+encodeURIComponent(refc)+';max-age=5184000;path=/;samesite=lax';}else{refc=sessionStorage.getItem('batuta_ref')||'';}}catch(e){}" +
     "var planReg='';try{planReg=(new URLSearchParams(location.search).get('plan')||'');}catch(e){}" +
-    "if(planReg==='gratis'){try{var pill=document.querySelector('.pill');if(pill)pill.textContent='Plan Gratis: 1 profesor, hasta 10 alumnos, para siempre';var sub=document.querySelector('.sub');if(sub)sub.textContent='Sin tarjeta y sin fecha de vencimiento. Cuando crezcas, subes de plan.';var bt=document.querySelector('#f button[type=submit]');if(bt)bt.textContent='Crear mi cuenta gratis';}catch(e){}}" +
+    "if(planReg==='gratis'){try{var pill=document.querySelector('.pill');if(pill)pill.textContent='Plan Gratis: 1 profesor, hasta 15 alumnos, para siempre';var sub=document.querySelector('.sub');if(sub)sub.textContent='Sin tarjeta y sin fecha de vencimiento. Cuando crezcas, subes de plan.';var bt=document.querySelector('#f button[type=submit]');if(bt)bt.textContent='Crear mi cuenta gratis';}catch(e){}}" +
     // Rescate de registros abandonados: email valido tecleado + se va sin terminar el submit
     // -> sendBeacon lo guarda como lead. regEnviado (flag del submit) evita disparar en el flujo feliz.
     "var regEnviado=false;var abandonoEmail='';" +
@@ -2385,25 +2842,25 @@ function paginaLogin(googleOn){
 function paginaSuscribir(){
   const cuerpo =
     "<h1>Activa tu plan</h1>" +
-    "<p class=\"sub\">S/0 hoy. Tu primer cobro es al terminar tus 30 dias de prueba. Cancela cuando quieras. Y con garantia: si en tu primer mes pagado no te convence, te devolvemos tu plata.</p>" +
+    "<p class=\"sub\">S/0 hoy: al activar un plan de pago, tu primer cobro es recien al mes (via Mercado Pago). Cancela cuando quieras. Y con garantia: si en tu primer mes pagado no te convence, te devolvemos tu plata.</p>" +
     "<div id=\"planes\">" +
       "<div class=\"planopt\" data-plan=\"profe\">" +
-        "<div class=\"planopt-t\">Profe</div><div class=\"planopt-p\">US$14.95<span>/mes · se cobra S/49 · 1 profesor · alumnos ilimitados</span></div>" +
+        "<div class=\"planopt-t\">Profe</div><div class=\"planopt-p\">S/49<span>/mes · 1 profesor · asistente WhatsApp con IA 24/7 · cobros automáticos · alumnos ilimitados</span></div>" +
       "</div>" +
       "<div class=\"planopt\" data-plan=\"profe_duo\">" +
-        "<div class=\"planopt-t\">Profe Dúo</div><div class=\"planopt-p\">US$22.95<span>/mes · se cobra S/78 · 2 profesores · alumnos ilimitados</span></div>" +
+        "<div class=\"planopt-t\">Profe Dúo</div><div class=\"planopt-p\">S/78<span>/mes · 2 profesores · alumnos ilimitados</span></div>" +
       "</div>" +
       "<div class=\"planopt\" data-plan=\"profe_trio\">" +
-        "<div class=\"planopt-t\">Profe Trío</div><div class=\"planopt-p\">US$31.95<span>/mes · se cobra S/107 · 3 profesores · alumnos ilimitados</span></div>" +
+        "<div class=\"planopt-t\">Profe Trío</div><div class=\"planopt-p\">S/107<span>/mes · 3 profesores · alumnos ilimitados</span></div>" +
       "</div>" +
       "<div class=\"planopt\" data-plan=\"academia\">" +
-        "<div class=\"planopt-t\">Academia</div><div class=\"planopt-p\">US$43.95<span>/mes · se cobra S/149 · 5 profesores · hasta 150 alumnos</span></div>" +
+        "<div class=\"planopt-t\">Academia</div><div class=\"planopt-p\">S/149<span>/mes · 5 profesores · multi-sede, Meta Ads y marca propia</span></div>" +
       "</div>" +
       "<div class=\"planopt\" data-plan=\"xl\">" +
-        "<div class=\"planopt-t\">Academia XL</div><div class=\"planopt-p\">US$87.95<span>/mes · se cobra S/299 · 20 profesores · hasta 400 alumnos</span></div>" +
+        "<div class=\"planopt-t\">Academia XL</div><div class=\"planopt-p\">S/299<span>/mes · 20 profesores · boletas SUNAT y soporte prioritario</span></div>" +
       "</div>" +
       "<div class=\"planopt\" data-plan=\"por_alumno\">" +
-        "<div class=\"planopt-t\">Red / Enterprise</div><div class=\"planopt-p\">por alumno<span>· 400+ alumnos o varias sedes · a medida</span></div>" +
+        "<div class=\"planopt-t\">Red / Enterprise</div><div class=\"planopt-p\">a medida<span>· más de 20 profesores o varias sedes grandes</span></div>" +
       "</div>" +
     "</div>" +
     "<p class=\"sub\" style=\"margin:12px 0 0;font-size:13px\">💡 <b>Paga el año y llévate 2 meses gratis:</b> Profe S/490 · Dúo S/780 · Trío S/1,070 · Academia S/1,490 · XL S/2,990. Elige tu plan arriba y usa el botón de abajo.</p>" +
@@ -2844,11 +3301,25 @@ async function ensureErpSchema(env){
     try { await env.DB.prepare("ALTER TABLE profesores ADD COLUMN " + col).run(); } catch (e) {}
   }
   try { await env.DB.prepare("ALTER TABLE disponibilidad ADD COLUMN cupo INTEGER DEFAULT 0").run(); } catch (e) {}
+  /* Tipo de clase por franja (estudios con clases distintas: Mat vs Maquinas del pilates,
+     Reformer, Yoga...). Junto con el cupo por franja da "aforos distintos por tipo de clase"
+     (Elevate Studio, 24-jul). ALTER perezoso idempotente; '' = franja sin etiqueta (como siempre). */
+  try { await env.DB.prepare("ALTER TABLE disponibilidad ADD COLUMN curso TEXT DEFAULT ''").run(); } catch (e) {}
   /* Auditoria de cancelaciones: cuando y quien cancelo una reserva (para que un bug de saldo
      no vuelva a ser invisible; leccion MVT 21-jul). ALTER perezoso idempotente. */
   for (const col of ["cancelada_utc TEXT DEFAULT ''", "cancelada_por TEXT DEFAULT ''"]){
     try { await env.DB.prepare("ALTER TABLE reservas ADD COLUMN " + col).run(); } catch (e) {}
   }
+  /* Lista de espera por clase (Elevate Studio, 24-jul): cuando una franja llena, el alumno
+     entra a la cola; al liberarse un cupo (cancelacion), se avisa al primero en orden de llegada.
+     estado: esperando -> avisado (se le libero) -> convertida (reservo) | cancelada (se salio). */
+  try {
+    await env.DB.prepare(
+      "CREATE TABLE IF NOT EXISTS espera (id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, alumno_id TEXT NOT NULL, profesor_id TEXT DEFAULT '', inicio_utc TEXT NOT NULL, curso TEXT DEFAULT '', estado TEXT DEFAULT 'esperando', creado TEXT DEFAULT '', avisado_utc TEXT DEFAULT '')"
+    ).run();
+  } catch (e) {}
+  try { await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_espera_slot ON espera (tenant_id, inicio_utc, estado)").run(); } catch (e) {}
+  try { await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_espera_alumno ON espera (tenant_id, alumno_id, estado)").run(); } catch (e) {}
   try {
     await env.DB.prepare(
       "CREATE TABLE IF NOT EXISTS gastos (id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, fecha TEXT DEFAULT '', concepto TEXT NOT NULL, categoria TEXT DEFAULT '', monto REAL DEFAULT 0, creado TEXT DEFAULT '')"
@@ -2896,6 +3367,18 @@ async function ensureSedesSchema(env){
   for (const tabla of ["profesores", "alumnos", "grupos"]){
     try { await env.DB.prepare("ALTER TABLE " + tabla + " ADD COLUMN sede_id TEXT DEFAULT ''").run(); } catch (e) { /* ya existe */ }
   }
+}
+/* Saldo de clases migrado desde otro sistema (28-jul-2026, caso Elevate Studio <- Punchpass).
+   Dos columnas en alumnos: cuantas clases traia ya consumidas y en que ciclo aplica eso.
+   ALTER idempotente y memoizado por isolate (una sola ida a D1 por worker vivo); la migracion
+   de prod se corre igual a mano antes del deploy, esto es el cinturon por si falta en alguna D1. */
+let SALDO_MIGRADO_OK = false;
+async function ensureSaldoMigradoSchema(env){
+  if (SALDO_MIGRADO_OK) return;
+  for (const col of ["migrado_usadas", "migrado_ciclo"]){
+    try { await env.DB.prepare("ALTER TABLE alumnos ADD COLUMN " + col + " INTEGER DEFAULT 0").run(); } catch (e) { /* ya existe */ }
+  }
+  SALDO_MIGRADO_OK = true;
 }
 async function sedesDeTenant(env, tid){
   try {
@@ -2996,13 +3479,29 @@ async function cupoDeSlot(env, tenantId, iso, prof, cfg){
     const pid = prof && prof.id ? prof.id : "";
     const esD = !!(prof && prof.esDueno);
     const row = await env.DB.prepare(
-      "SELECT COALESCE(cupo,0) AS cupo FROM disponibilidad WHERE tenant_id = ?1 AND dia_semana = ?2 AND hora = ?3 AND activo = 1 " +
+      "SELECT COALESCE(cupo,0) AS cupo, COALESCE(curso,'') AS curso FROM disponibilidad WHERE tenant_id = ?1 AND dia_semana = ?2 AND hora = ?3 AND activo = 1 " +
       "AND (profesor_id = ?4 OR (?5 = 1 AND (profesor_id IS NULL OR profesor_id = '')))"
     ).bind(tenantId, p.dow, hhmm(p), pid, esD ? 1 : 0).first();
     const c = row ? parseInt(row.cupo, 10) : 0;
-    if (Number.isFinite(c) && c >= 1 && c <= 20) return c;
+    if (Number.isFinite(c) && c >= 1 && c <= CUPO_MAX) return c;
+    /* sin aforo propio: el del TIPO de clase de esa franja (Maquinas 3 / Mat 8) */
+    const porTipo = aforoDeTipo(cfg, row && row.curso);
+    if (porTipo) return porTipo;
   } catch (e) { /* columna aun no existe -> cae al global */ }
   return cupoDeCfg(cfg);
+}
+/* Etiqueta de tipo de clase de una franja concreta (para validar el plan al reservar). */
+async function tipoDeSlot(env, tenantId, iso, prof){
+  try {
+    const p = limaParts(new Date(Date.parse(iso)));
+    const pid = prof && prof.id ? prof.id : "";
+    const esD = !!(prof && prof.esDueno);
+    const row = await env.DB.prepare(
+      "SELECT COALESCE(curso,'') AS curso FROM disponibilidad WHERE tenant_id = ?1 AND dia_semana = ?2 AND hora = ?3 AND activo = 1 " +
+      "AND (profesor_id = ?4 OR (?5 = 1 AND (profesor_id IS NULL OR profesor_id = '')))"
+    ).bind(tenantId, p.dow, hhmm(p), pid, esD ? 1 : 0).first();
+    return (row && row.curso) || "";
+  } catch (e) { return ""; }
 }
 
 /* ---------- Recordatorios automaticos a alumnos (09-jul-2026) ----------
@@ -3146,6 +3645,91 @@ async function recordatorioRenovacion(env){
     if (ok){
       enviados++;
       try { await env.DB.prepare("UPDATE alumnos SET aviso_vence_ciclo = ?1 WHERE id = ?2 AND tenant_id = ?3").bind(a.ciclo, a.id, a.tenant_id).run(); } catch (e) {}
+    }
+  }
+  return enviados;
+}
+
+/* ---------- Win-back (09-jul columna, activado 24-jul para Elevate) ----------
+   Al alumno que "deja de usar sus clases varios dias": tiene paquete VIGENTE (no vencido) y clases
+   por delante, PERO no vino en >= WINBACK_DIAS y no tiene ninguna clase futura agendada -> correo
+   "te extranamos, reserva tu proxima". 1 por ciclo (winback_ciclo < ciclo) para no spamear.
+   Distinto de recordatorioRenovacion: eso avisa cuando el paquete VENCE; esto cuando el alumno se
+   ENFRIA con clases todavia disponibles. Toggle por tenant: config 'winback' ('' = ON, 'off' = apagado). */
+const WINBACK_DIAS = 7;
+async function winbackAlumnos(env){
+  if (!env.RESEND_API_KEY) return 0;
+  let cand = [];
+  try {
+    cand = ((await env.DB.prepare(
+      "SELECT a.id, a.tenant_id, a.nombre, a.curso, a.paquete, COALESCE(a.ciclo,1) AS ciclo, a.vence, " +
+      "t.academia, t.slug, c.email AS alumno_email " +
+      "FROM alumnos a " +
+      "JOIN tenants t ON t.id = a.tenant_id AND t.estado != 'vencido' AND COALESCE(t.plan,'profe') != 'gratis' AND t.email != ?1 " +
+      "JOIN cuentas c ON c.alumno_id = a.id AND c.tenant_id = a.tenant_id " +
+      "WHERE COALESCE(a.winback_ciclo,0) < COALESCE(a.ciclo,1) " +
+      "AND (a.vence IS NULL OR a.vence = '' OR date(a.vence) >= date('now')) LIMIT 200"
+    ).bind(DEMO_EMAIL).all()).results) || [];
+  } catch (e) { return 0; }
+  const cache = new Map();
+  const now = Date.now();
+  let enviados = 0;
+  for (const a of cand){
+    if (enviados >= 40) break;
+    if (!a.alumno_email) continue;
+    if (!(await toggleTenantOn(env, cache, a.tenant_id, "winback"))) continue;
+    /* si tiene una clase futura agendada, no esta "enfriado": no molestar */
+    const prox = await env.DB.prepare(
+      "SELECT 1 AS ok FROM reservas WHERE tenant_id = ?1 AND alumno_id = ?2 AND estado = 'reservada' AND inicio_utc > ?3 LIMIT 1"
+    ).bind(a.tenant_id, a.id, new Date(now).toISOString()).first();
+    if (prox) continue;
+    /* ultima actividad = ultima clase asistida/falta (reservas completadas o registro) */
+    let ultMs = NaN;
+    try {
+      const ult = await env.DB.prepare(
+        "SELECT MAX(x) AS ult FROM (" +
+        "SELECT MAX(inicio_utc) AS x FROM reservas WHERE tenant_id = ?1 AND alumno_id = ?2 AND estado IN ('completada','falta') " +
+        "UNION ALL SELECT MAX(fecha) AS x FROM registro WHERE tenant_id = ?1 AND alumno_id = ?2)"
+      ).bind(a.tenant_id, a.id).first();
+      const s = ult && ult.ult ? String(ult.ult) : "";
+      if (s) ultMs = Date.parse(s.length <= 10 ? (s + "T12:00:00Z") : s);
+    } catch (e) {}
+    /* nunca tuvo clase: usar su fecha de inscripcion (no molestar a un recien inscrito) */
+    if (!Number.isFinite(ultMs)){
+      const fa = await env.DB.prepare("SELECT fecha FROM alumnos WHERE id = ?1 AND tenant_id = ?2").bind(a.id, a.tenant_id).first().catch(() => null);
+      const sf = fa && fa.fecha ? String(fa.fecha) : "";
+      if (sf) ultMs = Date.parse(sf.length <= 10 ? (sf + "T12:00:00Z") : sf);
+    }
+    if (!Number.isFinite(ultMs)) continue;
+    const diasQuieto = Math.floor((now - ultMs) / 86400000);
+    if (diasQuieto < WINBACK_DIAS) continue;
+    /* ¿le quedan clases? (para que el CTA "reserva tu proxima" tenga sentido; sin clases = renovacion) */
+    const alumno = await env.DB.prepare("SELECT * FROM alumnos WHERE id = ?1 AND tenant_id = ?2").bind(a.id, a.tenant_id).first();
+    if (!alumno) continue;
+    const cicloA = Number(alumno.ciclo) || 1;
+    const precios = await loadPrecios(env, a.tenant_id);
+    const pk = resolverPk((await loadPaquetes(env, a.tenant_id)).map, alumno.paquete);
+    const { results: regs } = await env.DB.prepare(
+      "SELECT estado FROM registro WHERE tenant_id = ?1 AND alumno_id = ?2 AND COALESCE(ciclo,1) = ?3"
+    ).bind(a.tenant_id, a.id, cicloA).all();
+    const rUsadas = await reservasUsadasCount(env, a.tenant_id, a.id, cicloA);
+    const restantes = compute(alumno, regs || [], precios, rUsadas, pk).restantes;
+    const tieneClases = pk.ilim ? true : (restantes >= 1);
+    if (!tieneClases) continue;
+    const linkPortal = MARCA.dominio + "/app/a/" + (a.slug || "");
+    const nombreCorto = (a.nombre || "").split(" ")[0] || "Hola";
+    const saldoTxt = pk.ilim ? "tu mensualidad sigue activa" : ("te quedan " + restantes + " clase" + (restantes === 1 ? "" : "s"));
+    let ok = false;
+    try {
+      ok = await enviarCorreo(env, {
+        to: a.alumno_email,
+        subject: "Te extranamos en " + (a.academia || "tu academia") + " · reserva tu proxima clase",
+        html: "<p>" + esc(nombreCorto) + ", hace " + diasQuieto + " dias que no te vemos en <b>" + esc(a.academia || "") + "</b> y " + esc(saldoTxt) + ".</p><p>Reserva tu proxima clase en 1 minuto desde tu portal y retoma tu ritmo:</p><p><a href=\"" + linkPortal + "\"><b>Reservar mi clase</b></a></p>"
+      });
+    } catch (e) {}
+    if (ok){
+      enviados++;
+      try { await env.DB.prepare("UPDATE alumnos SET winback_ciclo = ?1 WHERE id = ?2 AND tenant_id = ?3").bind(cicloA, a.id, a.tenant_id).run(); } catch (e) {}
     }
   }
   return enviados;
@@ -3667,66 +4251,14 @@ export default {
       const tW = await env.DB.prepare("SELECT id, academia, slug, estado, rubro, mp_access_token, mp_expires_at FROM tenants WHERE slug = ?1").bind(slugW).first();
       if (!tW) return htmlResponse(paginaBase("Academia no encontrada — Batuta", "<h1>No encontramos esa academia</h1><p class=\"sub\">Revisa el link.</p>", ""));
       if (tW.estado === "vencido") return htmlResponse(paginaBase("Página en pausa — Batuta", "<h1>Página en pausa</h1><p class=\"sub\">Esta academia está inactiva por ahora.</p>", ""));
-      const cfgW = await loadConfig(env, tW.id);
-      const preciosW = await loadPrecios(env, tW.id);
-      const paqW = await loadPaquetes(env, tW.id);
-      const mpOnW = !!(tW.mp_access_token) && (!(Number(tW.mp_expires_at) || 0) || Number(tW.mp_expires_at) > Date.now());
-      const cobroOnW = !!(mpOnW || cfgW.pago_numero || cfgW.bcp_cuenta || cfgW.scotia_cuenta || cfgW.crypto_wallet);
-      const paquetesW = paqW.list.filter(pk => (preciosW[pk] || 0) > 0 && pk !== "Clase de prueba");
-      const pruebaOnW = (preciosW["Clase de prueba"] || 0) > 0;
-      const cursosW = String(cfgW.cursos || "").split(",").map(s => s.trim()).filter(Boolean);
-      const waW = String(cfgW.whatsapp_profe || "").replace(/[^0-9]/g, "");
-      const colorW = /^#[0-9a-fA-F]{6}$/.test(String(cfgW.brand_color || "")) ? cfgW.brand_color : "#E8A13D";
-      const logoW = String(cfgW.brand_logo || "");
-      const descW = cursosW.length ? ("Clases de " + cursosW.join(", ") + ". Reserva y paga online.") : "Reserva y paga tus clases online.";
-      const waMsgW = encodeURIComponent("Hola! Vi la página de " + tW.academia + " y quiero más información :)");
+      const { ctx: ctxW, cfg: cfgW } = await armarWebCtx(env, tW);
       const beaconW =
         "try{var _bq=new URLSearchParams(location.search),_bf=_bq.get('f')||_bq.get('utm_source')||'';" +
         "if(!_bf&&document.referrer){var _bu=new URL(document.referrer);if(_bu.host!==location.host)_bf=_bu.host;}" +
         "navigator.sendBeacon('/app/api/beacon',JSON.stringify({pagina:'/a/'+" + JSON.stringify(tW.slug) + ",fuente:_bf}));}catch(e){}";
-      const htmlW = "<!doctype html><html lang=\"es\"><head><meta charset=\"utf-8\">" +
-        "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">" +
-        "<title>" + esc(tW.academia) + " · Reserva y paga online</title>" +
-        "<meta name=\"description\" content=\"" + esc(descW) + "\">" +
-        "<meta property=\"og:title\" content=\"" + esc(tW.academia) + "\">" +
-        "<meta property=\"og:description\" content=\"" + esc(descW) + "\">" +
-        (logoW ? "<meta property=\"og:image\" content=\"https://batuta.lat" + esc(logoW) + "\">" : "") +
-        "<link rel=\"preconnect\" href=\"https://fonts.googleapis.com\">" +
-        "<link href=\"https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;700;800&family=Space+Grotesk:wght@400;500;600&display=swap\" rel=\"stylesheet\">" +
-        "<style>:root{--bg:#0F1115;--acento:" + colorW + ";--texto:#F3EDE0;--muted:#8a8276}" +
-        "*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--texto);font-family:'Space Grotesk',system-ui,sans-serif}" +
-        ".wrap{max-width:680px;margin:0 auto;padding:48px 20px 32px}" +
-        "h1{font-family:'Bricolage Grotesque',sans-serif;font-size:clamp(28px,6vw,40px);margin:12px 0 8px}" +
-        ".logo{width:72px;height:72px;border-radius:16px;object-fit:cover;border:1px solid #262a33}" +
-        ".sub{color:var(--muted);font-size:15px;margin:0 0 8px}" +
-        ".chips{display:flex;flex-wrap:wrap;gap:8px;margin:14px 0 6px}" +
-        ".chip{background:rgba(255,255,255,0.06);border:1px solid #262a33;font-size:13px;padding:5px 12px;border-radius:20px}" +
-        ".cta{display:inline-block;background:var(--acento);color:#0F1115;border-radius:10px;padding:13px 22px;font-weight:600;font-size:15px;text-decoration:none;margin:18px 12px 0 0}" +
-        ".cta.sec{background:transparent;color:var(--texto);border:1px solid #2c303a}" +
-        ".grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin:26px 0 4px}" +
-        ".paq{background:#161920;border:1px solid #262a33;border-radius:14px;padding:18px}" +
-        ".paq b{display:block;font-size:15px;margin-bottom:4px}" +
-        ".paq .pr{display:block;font-family:'Bricolage Grotesque',sans-serif;font-size:24px;color:var(--acento);line-height:1.1;margin-top:6px}" +
-        ".paq .cl{display:block;color:var(--muted);font-size:13px;margin-top:4px}" +
-        ".paq a{display:inline-block;margin-top:10px;color:var(--acento);font-size:14px;text-decoration:none}" +
-        ".foot{margin-top:40px;padding-top:18px;border-top:1px solid #1d212a;font-size:13px;color:var(--muted)}" +
-        ".foot a{color:var(--acento);text-decoration:none}</style></head><body><div class=\"wrap\">" +
-        (logoW ? "<img class=\"logo\" src=\"" + esc(logoW) + "\" alt=\"\">" : "") +
-        "<h1>" + esc(tW.academia) + "</h1>" +
-        (cfgW.profe_nombre ? "<p class=\"sub\">Con " + esc(cfgW.profe_nombre) + (tW.rubro ? " · " + esc(tW.rubro) : "") + "</p>" : (tW.rubro ? "<p class=\"sub\">" + esc(tW.rubro) + "</p>" : "")) +
-        (cursosW.length ? "<div class=\"chips\">" + cursosW.map(c => "<span class=\"chip\">" + esc(c) + "</span>").join("") + "</div>" : "") +
-        (waW ? "<a class=\"cta\" href=\"https://wa.me/" + esc(waW) + "?text=" + waMsgW + "\">Escríbeme por WhatsApp</a>" : "") +
-        (pruebaOnW && cobroOnW ? "<a class=\"cta sec\" href=\"/app/a/" + esc(tW.slug) + "/pagar?p=" + encodeURIComponent("Clase de prueba") + "\">Clase de prueba · S/ " + (preciosW["Clase de prueba"] || 0) + "</a>" : "") +
-        (paquetesW.length && cobroOnW ?
-          "<div class=\"grid\">" + paquetesW.map(pk =>
-            "<div class=\"paq\"><b>" + esc(pk) + "</b><span class=\"pr\">S/ " + (preciosW[pk] || 0) + "</span>" +
-            "<span class=\"cl\">" + (paqW.map[pk] && paqW.map[pk].ilim ? "Sin límite de clases / mes" : (resolverPk(paqW.map, pk).clases + (resolverPk(paqW.map, pk).clases === 1 ? " clase" : " clases"))) + "</span>" +
-            "<a href=\"/app/a/" + esc(tW.slug) + "/pagar?p=" + encodeURIComponent(pk) + "\">Comprar →</a></div>").join("") + "</div>"
-          : "") +
-        "<p class=\"sub\" style=\"margin-top:20px\">Ya eres alumno? <a href=\"/app/a/" + esc(tW.slug) + "\" style=\"color:var(--acento);text-decoration:none\">Entra a tu portal</a></p>" +
-        "<div class=\"foot\">Esta página se genera sola con <a href=\"https://batuta.lat/?f=pagina-academia\">Batuta</a> · Crea la tuya gratis</div>" +
-        "</div><script>" + beaconW + "</script></body></html>";
-      return htmlResponse(htmlW);
+      /* La web pública sale del editor "Mi web" (web_json). Si la academia no editó nada,
+         el motor arma una landing con sus propios datos (nombre, cursos, paquetes). */
+      return htmlResponse(webHtml(webJsonDe(cfgW), ctxW, { beacon: beaconW }));
     }
 
     if (/^\/app\/a\/[^/]+\/pagar$/.test(path) && request.method === "GET"){
@@ -3927,7 +4459,7 @@ export default {
             '<div style="font-family:Arial,Helvetica,sans-serif;max-width:480px;margin:0 auto;color:#1a1a1a;font-size:15px;line-height:1.6">' +
               '<p>Aca esta tu plantilla: <a href="' + enlace + '"><b>descargar el Excel</b></a>.</p>' +
               '<p>' + descHojas + '</p>' +
-              '<p>Y cuando llenarla a mano te canse, esa es exactamente la parte que <a href="' + MARCA.dominio + '/app/registro?f=' + fReg + '">Batuta hace sola</a>: portal de alumnos, cobros y renovaciones automaticas. 30 dias gratis con tus alumnos reales.</p>' +
+              '<p>Y cuando llenarla a mano te canse, esa es exactamente la parte que <a href="' + MARCA.dominio + '/app/registro?f=' + fReg + '">Batuta hace sola</a>: portal de alumnos, cobros y renovaciones automaticas. Gratis para siempre con tus alumnos reales.</p>' +
               '<p>Andres, de Batuta.</p>' +
             '</div>',
         });
@@ -4180,7 +4712,8 @@ export default {
         if (path === "/app/api/su/correr-recordatorios" && request.method === "POST"){
           const nClase = await recordatoriosDeClase(env).catch(e => "error: " + (e && e.message));
           const nRenov = await recordatorioRenovacion(env).catch(e => "error: " + (e && e.message));
-          return json({ ok: true, clase_enviados: nClase, renovacion_enviados: nRenov });
+          const nWink = await winbackAlumnos(env).catch(e => "error: " + (e && e.message));
+          return json({ ok: true, clase_enviados: nClase, renovacion_enviados: nRenov, winback_enviados: nWink });
         }
 
         /* WhatsApp Cloud API (Fase B): diagnostico del token + numeros de la WABA de Batuta
@@ -4220,6 +4753,69 @@ export default {
             return json({ ok: r.ok, status: r.status, meta: data }, r.ok ? 200 : 502);
           } catch (e) { return json({ ok: false, error: String(e && e.message) }, 502); }
         }
+        /* ===== Asistente-cliente para NEGOCIOS sueltos (no-academia) — alta y prueba (AISLADO) =====
+           Da de alta un negocio bajo la MISMA WABA de Batuta y lo rutea a la rama "negocio" del
+           webhook. Default OFF: crear/editar NO enciende nada hasta enabled='on'. No toca academias. */
+        // Alta o edicion de un negocio. curl -X POST .../app/api/su/negocio-upsert -H "Authorization: Bearer $ADMIN_TOKEN"
+        //   -H 'content-type: application/json' -d '{"nombre":"Vidrieria X","phone_id":"1234567890","cap_mes":1000,"enabled":"off","kb":{...}}'
+        if (path === "/app/api/su/negocio-upsert" && request.method === "POST"){
+          await ensureNegocioSchema(env);
+          const b = await request.json().catch(() => ({}));
+          const nombre = String(b.nombre || "").trim().slice(0, 80);
+          const phoneId = String(b.phone_id || "").replace(/\D/g, "");
+          if (!nombre || !phoneId) return json({ error: "manda nombre y phone_id (phone_number_id de la WABA, solo digitos)" }, 400);
+          let kbStr = "";
+          if (b.kb != null){
+            if (typeof b.kb === "string"){ try { JSON.parse(b.kb); kbStr = b.kb; } catch (e) { return json({ error: "kb debe ser JSON valido" }, 400); } }
+            else kbStr = JSON.stringify(b.kb);
+          }
+          const cap = (Number.isFinite(Number(b.cap_mes)) && Number(b.cap_mes) > 0) ? Math.floor(Number(b.cap_mes)) : 1000;
+          const enabled = (String(b.enabled || "") === "on" || b.enabled === true) ? "on" : "off";
+          const ahora = new Date().toISOString();
+          const existe = await env.DB.prepare("SELECT id FROM wa_negocio WHERE phone_id = ?1").bind(phoneId).first().catch(() => null);
+          const id = (b.id && String(b.id)) || (existe && existe.id) || crypto.randomUUID();
+          try {
+            await env.DB.prepare(
+              "INSERT INTO wa_negocio (id, nombre, phone_id, enabled, kb, cap_mes, creado, actualizado) VALUES (?1,?2,?3,?4,?5,?6,?7,?7) " +
+              "ON CONFLICT(id) DO UPDATE SET nombre=?2, phone_id=?3, enabled=?4, kb=?5, cap_mes=?6, actualizado=?7"
+            ).bind(id, nombre, phoneId, enabled, kbStr, cap, ahora).run();
+          } catch (e) { return json({ error: "no se pudo guardar (¿ese phone_id ya es de otro negocio?): " + String(e && e.message) }, 409); }
+          return json({ ok: true, id, nombre, phone_id: phoneId, enabled, cap_mes: cap });
+        }
+        // Lista los negocios dados de alta + su uso del mes. curl .../app/api/su/negocio-list -H "Authorization: Bearer $ADMIN_TOKEN"
+        if (path === "/app/api/su/negocio-list" && request.method === "GET"){
+          await ensureNegocioSchema(env);
+          const { results } = await env.DB.prepare("SELECT id, nombre, phone_id, enabled, cap_mes, actualizado FROM wa_negocio ORDER BY actualizado DESC").all().catch(() => ({ results: [] }));
+          const out = [];
+          for (const n of (results || [])){
+            const uso = await env.DB.prepare("SELECT usados FROM wa_uso WHERE tenant_id = ?1 AND periodo = ?2").bind("neg:" + n.id, mesActualUTC()).first().catch(() => null);
+            const nl = await env.DB.prepare("SELECT COUNT(*) AS n FROM wa_negocio_lead WHERE negocio_id = ?1").bind(n.id).first().catch(() => null);
+            out.push(Object.assign({}, n, { usados_mes: uso ? Number(uso.usados) : 0, leads: nl ? Number(nl.n) : 0 }));
+          }
+          return json({ ok: true, negocios: out });
+        }
+        /* Prueba EN SECO la respuesta del asistente de un negocio SIN enviar WhatsApp (usa la MISMA
+           IA del webhook: Claude Haiku si hay key/creditos, si no el fallback Workers AI). Sirve para
+           verificar la KB y el tono contra prod sin depender de Meta. Devuelve el texto que enviaria.
+           curl -X POST .../app/api/su/negocio-test -H "Authorization: Bearer $ADMIN_TOKEN"
+             -H 'content-type: application/json' -d '{"id":"<id o phone_id>","texto":"hola, hacen ventanas?","nombre":"Ana"}' */
+        if (path === "/app/api/su/negocio-test" && request.method === "POST"){
+          await ensureNegocioSchema(env);
+          const b = await request.json().catch(() => ({}));
+          const ref = String(b.id || b.phone_id || "").trim();
+          const texto = String(b.texto || "").slice(0, 500);
+          if (!ref || !texto) return json({ error: "manda id (o phone_id) y texto" }, 400);
+          let neg = await env.DB.prepare("SELECT id, nombre, phone_id, enabled, kb, cap_mes FROM wa_negocio WHERE id = ?1").bind(ref).first().catch(() => null);
+          if (!neg){ const ph = ref.replace(/\D/g, ""); if (ph) neg = await env.DB.prepare("SELECT id, nombre, phone_id, enabled, kb, cap_mes FROM wa_negocio WHERE phone_id = ?1").bind(ph).first().catch(() => null); }
+          if (!neg) return json({ error: "negocio no encontrado" }, 404);
+          const kb = negocioKbParse(neg.kb);
+          const datos = contextoNegocioWA(neg, kb, b.nombre || "");
+          const previo = (b.usar_historial && b.from) ? await waHistorialCargar(env, "neg:" + neg.id, String(b.from).replace(/\D/g, "")) : [];
+          const conversacion = previo.concat([{ role: "user", content: texto }]);
+          const reply = await llamarClaudeOnboarding(env, WA_NEGOCIO_SYS, conversacion, datos);
+          return json({ ok: true, negocio: neg.nombre, enabled: neg.enabled, ia_disponible: reply != null, respuesta: reply, kb_datos: datos });
+        }
+
         // Multi-profesor Fase 0: migración additiva + backfill. Idempotente. No cambia el panel.
         if (path === "/app/api/su/migrar-profesores" && request.method === "POST"){
           const r = await migrarProfesores(env);
@@ -4800,7 +5396,10 @@ export default {
           "INSERT INTO tenants (id,slug,academia,profe_nombre,email,whatsapp,pass_hash,pass_salt,plan,estado,trial_hasta,creado,fuente,rubro,tam_alumnos,ref_code) " +
           "VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?14,?15,?9,?10,?11,?12,?13,?16)"
         ).bind(id, slug, academia, nombre, email, whatsapp, hash, salt, trialHasta, new Date().toISOString(), fuente, rubro, tam,
-               esGratis ? "gratis" : "profe", esGratis ? "activo" : "trial", refCode).run();
+               // Freemium (23-jul-2026): TODO registro nuevo nace en el plan Gratis permanente
+               // (estado 'activo', esquiva el gate). Se sube a un plan de pago desde el panel.
+               // (Se conserva esGratis por si un dia se quiere reintroducir un trial via ?plan.)
+               "gratis", "activo", refCode).run();
 
         // precios y config default para el tenant nuevo
         const stmts = [];
@@ -4819,7 +5418,7 @@ export default {
         const token = await crearSesion(env, "T:" + id);
         // Aviso instantáneo: el primer trial ES el evento de validación del plan; que no caiga en silencio.
         ctx.waitUntil(alertaCorreoAndres(env,
-          (esGratis ? "CUENTA GRATIS NUEVA" : "TRIAL NUEVO") + " en Batuta: " + academia + (rubro ? " · " + rubro : "") + (tam ? " · " + tam + " alumnos" : ""),
+          "CUENTA GRATIS NUEVA en Batuta: " + academia + (rubro ? " · " + rubro : "") + (tam ? " · " + tam + " alumnos" : ""),
           "Academia: " + academia +
           "\nProfe: " + nombre +
           "\nEmail: " + email +
@@ -4828,10 +5427,10 @@ export default {
           "\nRubro: " + (rubro || "-") +
           "\nFuente: " + (fuente || "-") +
           (refCode ? "\nReferido por (afiliado): " + refCode : "") +
-          "\nPlan: " + (esGratis ? "GRATIS (10 alumnos, 1 profe)" : "trial 30 dias") +
+          "\nPlan: " + (esGratis ? "GRATIS (15 alumnos, 1 profe)" : "GRATIS (nuevo registro freemium)") +
           "\nSlug: " + slug +
           "\n\nACTIVACION (la metrica #1): el objetivo del primer toque es que cargue 5 alumnos y registre 1 cobro en 7 dias. Ofrecele cargar su Excel juntos por chat."));
-        return json({ ok: true, token, slug, plan: esGratis ? "gratis" : "profe" });
+        return json({ ok: true, token, slug, plan: "gratis" }); // freemium: todo registro nuevo es gratis
       }
 
       if (path === "/app/api/t/login" && request.method === "POST"){
@@ -4921,15 +5520,20 @@ export default {
         // Checklist de activación: estado derivado de los datos reales, sin migración.
         const t = await tenantDeSesion(env, request);
         if (!t) return json({ error: "Sesion expirada" }, 401);
-        const [nAl, nDisp, nComp, precios] = await Promise.all([
+        /* "Puse mis precios" = tener GUARDADO al menos un paquete con precio > 0.
+           27-jul-2026: antes se comparaba contra PRECIOS_DEFAULT y bastaba con que UNO fuera
+           distinto, así que una academia con todo en S/0 veía el paso tachado como hecho.
+           A Elevate le mintió literalmente ("✓ Pon tus precios reales" con los 5 en S/0).
+           Se consulta la tabla, NO loadPrecios(), porque esa mezcla los defaults (todos > 0)
+           y un tenant recién creado sin ninguna fila volvería a dar un falso positivo.
+           La demo se siembra con los defaults a propósito y cuenta como hecha. */
+        const [nAl, nDisp, nComp, nPre] = await Promise.all([
           env.DB.prepare("SELECT COUNT(*) AS n FROM alumnos WHERE tenant_id = ?1").bind(t.id).first(),
           env.DB.prepare("SELECT COUNT(*) AS n FROM disponibilidad WHERE tenant_id = ?1 AND activo = 1").bind(t.id).first(),
           env.DB.prepare("SELECT COUNT(*) AS n FROM compras WHERE tenant_id = ?1").bind(t.id).first(),
-          loadPrecios(env, t.id),
+          env.DB.prepare("SELECT COUNT(*) AS n FROM precios WHERE tenant_id = ?1 AND precio > 0").bind(t.id).first(),
         ]);
-        // La demo se siembra con los precios default a propósito: para ella el paso cuenta como hecho
-        // (el visitante no debe ver la academia de muestra "incompleta").
-        const preciosPropios = t.email === DEMO_EMAIL || Object.keys(PRECIOS_DEFAULT).some((k) => Number(precios[k]) !== PRECIOS_DEFAULT[k]);
+        const preciosPropios = t.email === DEMO_EMAIL || Number(nPre && nPre.n) > 0;
         return json({
           pasos: {
             precios: preciosPropios,
@@ -4960,6 +5564,13 @@ export default {
           asientos = { usados: Number(nP && nP.n) || 1, max: MAX_PROFES[t.plan || "profe"] || 1 };
         } catch (e) {}
         const activosMe = await contarAlumnosActivos(env, t.id);
+        // Cupo del asistente de WhatsApp con IA por plan (freemium 23-jul-2026): el panel muestra
+        // "X de N conversaciones" y avisa "sube de plan" al toparse (usados >= cap).
+        let wa_cupo = null;
+        try {
+          // Se muestra siempre (aunque la IA este apagada) para que el dueno vea su cupo del plan.
+          wa_cupo = await waUsoActual(env, t.id, waPlanEfectivo(t));
+        } catch (e) {}
         return json({
           academia: t.academia, profe_nombre: t.profe_nombre, slug: t.slug,
           demo: t.email === DEMO_EMAIL,
@@ -4976,6 +5587,7 @@ export default {
           // Estimado del plan "por alumno": alumnos activos + monto (para mostrar en Perfil > Tu plan).
           alumnos_activos: activosMe,
           por_alumno_monto_pen: montoPorAlumno(activosMe),
+          wa_cupo,
           asientos
         });
       }
@@ -5183,7 +5795,7 @@ export default {
         return json({ ok: true, plan: okAc.plan, hasta: okAc.hasta });
       }
 
-      /* Bajarse (o entrar) al plan GRATIS: 1 profe, 10 alumnos, sin recordatorios ni SUNAT.
+      /* Bajarse (o entrar) al plan GRATIS: 1 profe, 15 alumnos, sin recordatorios ni SUNAT.
          Cancela el preapproval mensual si existia. El candado de alumnos rige al toque
          (estado 'activo'): no borra data sobre el tope, solo bloquea agregar mas. */
       if (path === "/app/api/t/plan-gratis" && request.method === "POST"){
@@ -5201,7 +5813,7 @@ export default {
         ).bind(tGr.id).run();
         ctx.waitUntil(alertaCorreoAndres(env,
           "Tenant en plan GRATIS: " + (tGr.academia || tGr.id),
-          "Academia: " + (tGr.academia || "?") + " (" + (tGr.email || "?") + ")\nVenia de: " + (tGr.plan || "profe") + " / " + (tGr.estado || "?") + "\nEl plan Gratis topa en 10 alumnos y 1 profe: candidato natural a upgrade."));
+          "Academia: " + (tGr.academia || "?") + " (" + (tGr.email || "?") + ")\nVenia de: " + (tGr.plan || "profe") + " / " + (tGr.estado || "?") + "\nEl plan Gratis topa en 15 alumnos y 1 profe: candidato natural a upgrade."));
         return json({ ok: true, plan: "gratis" });
       }
 
@@ -5276,11 +5888,15 @@ export default {
             const texto = String((msg.text && msg.text.body) || "").slice(0, 500);
             const nombre = (val.contacts && val.contacts[0] && val.contacts[0].profile && val.contacts[0].profile.name) || "";
             if (!phoneId || !from) return;
+            // RAMA NEGOCIO (asistente-cliente para negocio suelto, no-academia). AISLADA y default
+            // vacia: si el numero no esta dado de alta en wa_negocio, devuelve false y el flujo de
+            // academia de abajo queda intacto. Si lo maneja (respondio, apagado o sin cupo), corta aca.
+            if (await manejarNegocioWA(env, { phoneId, from, texto, nombre })) return;
             // resolver el tenant dueno de ese numero (config wa_phone_id)
             const cfgRow = await env.DB.prepare("SELECT tenant_id FROM config WHERE clave = 'wa_phone_id' AND valor = ?1").bind(phoneId).first().catch(() => null);
             if (!cfgRow) return;
-            const tW = await env.DB.prepare("SELECT id, academia, slug, estado FROM tenants WHERE id = ?1").bind(cfgRow.tenant_id).first();
-            if (!tW || tW.estado === "vencido") return;
+            const tW = await env.DB.prepare("SELECT id, academia, slug, estado, plan FROM tenants WHERE id = ?1").bind(cfgRow.tenant_id).first();
+            if (!tW) return; // freemium: los tenants gratis/vencidos tambien pueden tener asistente (capado por plan)
             const cfgW = await loadConfig(env, tW.id);
             if (String(cfgW.wa_enabled || "") !== "on") return; // apagado por defecto
             // freno de abuso: maximo ~12 respuestas IA por lead por hora (misma ventana horaria)
@@ -5297,19 +5913,39 @@ export default {
             }
             /* Respuesta CONVERSACIONAL con IA: contexto de venta del tenant + historial rolling.
                Reusa llamarClaudeOnboarding (Claude Haiku + fallback Workers AI + saneo de estilo). */
+            // Cupo de conversaciones del asistente por plan (freemium 23-jul-2026): solo las
+            // conversaciones NUEVAS (ventana de 24h) consumen cupo. Al agotarse, no se llama a la
+            // IA (el dueno ve el uso en su panel via /me y sube de plan). El lead ya quedo
+            // registrado arriba, asi que el dueno puede responderle a mano.
+            const planW = waPlanEfectivo(tW);
+            if (await waEsNuevaConversacion(env, tW.id, from)){
+              const cupo = await waConsumirConversacion(env, tW.id, planW);
+              if (!cupo.ok) return;
+            }
             const tCtx = { id: tW.id, academia: tW.academia, slug: tW.slug, whatsapp: cfgW.whatsapp_profe || "" };
             const datos = await contextoVentaWA(env, tCtx, cfgW);
             const previo = await waHistorialCargar(env, tW.id, from);
-            const sysConNombre = WA_VENDEDOR_SYS + (nombre ? "\nLa persona se llama " + String(nombre).split(" ")[0] + "." : "");
+            // Voz editable del tenant (tono + instrucciones del dueno) inyectada al system prompt.
+            const sysConNombre = WA_VENDEDOR_SYS + bloqueVozWA(cfgW) + (nombre ? "\nLa persona se llama " + String(nombre).split(" ")[0] + "." : "");
             const conversacion = previo.concat([{ role: "user", content: texto }]);
             let reply = await llamarClaudeOnboarding(env, sysConNombre, conversacion, datos);
             if (!reply){
               // sin IA disponible: primer-toque calido de respaldo (no deja al lead sin respuesta)
               reply = (nombre ? nombre.split(" ")[0] : "Hola") + ", gracias por escribir a " + (tW.academia || "la academia") + ". Cuentame que te gustaria aprender y un profesor te responde en breve.";
             }
-            const enviado = await enviarWhatsApp(env, phoneId, from, reply);
-            if (enviado){
-              await waHistorialGuardar(env, tW.id, from, conversacion.concat([{ role: "assistant", content: reply }]));
+            /* MODO del asistente (freemium 24-jul): 'auto' = la IA responde sola; 'sugerencias' =
+               la IA arma el borrador pero NO lo envia, queda para que el dueno lo mande a mano.
+               (El master ON/OFF es wa_enabled arriba: OFF = "solo yo respondo".) */
+            const waModo = String(cfgW.wa_modo || "auto").trim() === "sugerencias" ? "sugerencias" : "auto";
+            if (waModo === "sugerencias"){
+              await waSugerenciaGuardar(env, tW.id, from, nombre, texto, reply);
+              // guarda el turno del cliente para dar contexto a la proxima sugerencia (sin el borrador)
+              await waHistorialGuardar(env, tW.id, from, conversacion);
+            } else {
+              const enviado = await enviarWhatsApp(env, phoneId, from, reply);
+              if (enviado){
+                await waHistorialGuardar(env, tW.id, from, conversacion.concat([{ role: "assistant", content: reply }]));
+              }
             }
           } catch (e) { console.error("wa webhook", e); }
         })());
@@ -5537,8 +6173,8 @@ export default {
           const d = await duenoDeTenant(env, t.id).catch(() => null);
           profPub = d ? { id: d.id, esDueno: true } : { id: "", esDueno: true };
         }
-        const slots = await generarSlots(env, t.id, profPub);
-        return json({ slots });
+        const det = await generarSlotsDetalle(env, t.id, profPub);
+        return json({ slots: det.slots, detalle: det.detalle });
       }
 
       /* ============================================================
@@ -5647,14 +6283,20 @@ export default {
 
       if (tenantActor){
         const ahora = Date.now();
-        if (tenantActor.estado === "trial" && ahora > Date.parse(tenantActor.trial_hasta)){
-          await env.DB.prepare("UPDATE tenants SET estado = 'vencido' WHERE id = ?1").bind(tenantActor.id).run();
-          tenantActor.estado = "vencido";
-        }
-        // El feedback pasa aunque el trial este vencido: es la via de re-enganche
-        // (+7 dias por el primer aporte del mes, ver endpoints admin/feedback).
-        if (tenantActor.estado === "vencido" && path !== "/app/api/admin/feedback"){
-          return json({ error: "trial_vencido" }, 402);
+        /* FREEMIUM (23-jul-2026): al vencer el trial el tenant NO se bloquea; CAE al plan Gratis
+           permanente (15 alumnos / 1 profe / basico, estado 'activo'). El plan Gratis esquiva
+           este gate. Ya no hay paywall 402: el piso es el plan Gratis, no el bloqueo. SALVO que
+           tenga una suscripcion MP viva (authorized/anual): ese es un cliente de pago y no se toca,
+           aunque su trial_hasta ya pasara (podria estar en su mes gratis de MP). */
+        const suscritoMP = tenantActor.mp_sub_status === "authorized" || tenantActor.mp_sub_status === "anual";
+        const caeAGratis = !suscritoMP && (
+          (tenantActor.estado === "trial" && ahora > Date.parse(tenantActor.trial_hasta))
+          || tenantActor.estado === "vencido" // migra en caliente a los historicos que quedaron 'vencido'
+        );
+        if (caeAGratis){
+          await env.DB.prepare("UPDATE tenants SET estado = 'activo', plan = 'gratis' WHERE id = ?1").bind(tenantActor.id).run();
+          tenantActor.estado = "activo";
+          tenantActor.plan = "gratis";
         }
       }
 
@@ -7019,35 +7661,40 @@ export default {
         const system = who.admin
           ? ("Eres el SOPORTE de Batuta (batuta.lat, SaaS de gestion para academias y profesores particulares de cualquier materia). Atiendes al PROFESOR o DUENO dentro de su panel: resuelves dudas de uso, de planes y de cobros.\n" +
             "ESTILO (estricto): espanol claro de tu a tu, maximo 3 frases, SIEMPRE con el paso concreto (pestana > boton). Sin em dash. Sin signos de apertura invertidos (nada de ¿ ni ¡). Sin markdown ni asteriscos: el chat es texto plano. Sin saludos ni relleno: directo a la respuesta. Si la pregunta es amplia, da el primer paso y ofrece seguir.\n" +
-            "EL PANEL (menu izquierdo): Inicio (resumen + tu link de alumnos) · Personas (Alumnos, Grupos, Profesores, Accesos al portal, Interesados) · Clases (Registro de clases, Agenda, Chat) · Cobros (Pagos, Caja, Reportes) · Material (Para tus alumnos, Tu biblioteca) · Configuracion (Perfil, Ajustes, Servicios, Ideas y errores).\n" +
-            "PLANES Y PRECIOS (los unicos vigentes, en soles via Mercado Pago): prueba gratis de 30 DIAS sin tarjeta (y garantia de devolucion en el primer mes pagado). Plan GRATIS S/0 para siempre (1 profesor, hasta 10 alumnos; sin recordatorios automaticos ni boletas SUNAT) · Profe S/49/mes (1 profesor, alumnos ilimitados) · Profe Duo S/78/mes (2 profesores, alumnos ilimitados) · Profe Trio S/107/mes (3 profesores, alumnos ilimitados) · Academia S/149/mes (hasta 5 profesores y 150 alumnos) · Academia XL S/299/mes (hasta 20 profesores y 400 alumnos) · Academia por alumno (pagas por alumno activo, minimo 5; se activa en Perfil > Tu plan y ahi mismo ves tu estimado en vivo). PLAN ANUAL: paga 12 meses al precio de 10 (Profe S/490 · Duo S/780 · Trio S/1,070 · Academia S/1,490 · XL S/2,990), un solo pago desde Perfil > Tu plan o /app/suscribir. Academias que pasan su tope de alumnos: packs de +50 alumnos por S/39/mes por WhatsApp, o subir de plan. Academias de mas de 400 alumnos: plan Red/Enterprise a medida por WhatsApp. PROGRAMA DE AFILIADOS: comparte tu link batuta.lat/?ref=<tu-slug> y ganas 30% de la mensualidad de cada academia referida durante sus primeros 12 meses; cuando tu saldo pasa S/50 se descuenta AUTOMATICO de tu siguiente cobro de Batuta (detalle en batuta.lat/afiliados). Se activa o cambia de plan en Configuracion > Perfil > 'Tu plan'; sin penalidad, rige desde el siguiente cobro.\n" +
+            "EL PANEL (menu izquierdo, TODO abierto a la vista): Inicio ('Tu dia' con lo pendiente de hoy + tu link de alumnos) · Personas (Alumnos, Grupos, Profesores, Accesos al portal, Interesados) · Clases (Registro de clases, Agenda, Chat) · Cobros (Pagos, Caja, Reportes) · Material (Para tus alumnos, Tu biblioteca) · Configuracion (Perfil, Ajustes, Servicios, Ideas y errores).\n" +
+            "PLANES Y PRECIOS (los unicos vigentes, en soles via Mercado Pago): modelo freemium, empiezas GRATIS sin tarjeta y subes de plan cuando quieras (garantia de devolucion en tu primer mes pagado). Plan GRATIS S/0 para siempre (1 profesor, hasta 15 alumnos, con 20 conversaciones de prueba del asistente de WhatsApp con IA; sin asistente 24/7, cobros automaticos, recordatorios ni boletas SUNAT) · Profe S/49/mes (asistente de WhatsApp con IA 24/7 hasta 500 conversaciones/mes, cobros automaticos Yape/MP, reservas y recordatorios, 1 profesor, alumnos ilimitados) · Profe Duo S/78/mes (2 profesores, alumnos ilimitados) · Profe Trio S/107/mes (3 profesores, alumnos ilimitados) · Academia S/149/mes (hasta 5 profesores, multi-sede, Meta Ads y marca propia, asistente IA hasta 1,500 conversaciones/mes) · Academia XL S/299/mes (hasta 20 profesores, boletas SUNAT, soporte prioritario, asistente IA uso justo alto) · Academia por alumno (pagas por alumno activo, minimo 5; se activa en Perfil > Tu plan y ahi mismo ves tu estimado en vivo). PLAN ANUAL: paga 12 meses al precio de 10 (Profe S/490 · Duo S/780 · Trio S/1,070 · Academia S/1,490 · XL S/2,990), un solo pago desde Perfil > Tu plan o /app/suscribir. El plan Gratis topa en 15 alumnos; para mas, sube al plan Profe (S/49/mes, alumnos ilimitados). Academias con mas de 20 profesores o redes grandes: plan Red/Enterprise a medida por WhatsApp. PROGRAMA DE AFILIADOS: comparte tu link batuta.lat/?ref=<tu-slug> y ganas 30% de la mensualidad de cada academia referida durante sus primeros 12 meses; cuando tu saldo pasa S/50 se descuenta AUTOMATICO de tu siguiente cobro de Batuta (detalle en batuta.lat/afiliados). Se activa o cambia de plan en Configuracion > Perfil > 'Tu plan'; sin penalidad, rige desde el siguiente cobro.\n" +
             "SERVICIOS OPCIONALES (pestana Configuracion > Servicios, se coordinan por WhatsApp): Activacion asistida S/350 una vez (te dejamos todo andando: alumnos, pagos, marca) · Migracion desde Excel u otro software S/200 · Capacitacion con IA S/49.50 POR PERSONA (curso Batuta 101 + examen ORAL por voz con la examinadora IA en batuta.lat/aprende/examen, 15 min, con nota; se contrata por WhatsApp y se recibe un codigo) · Capacitacion del equipo en vivo (humana) S/199.50 por sesion o S/499.50 por 3 · Acompanamiento de primer nivel S/129/mes (soporte prioritario + revision mensual de numeros). Ademas hay un curso GRATIS con certificado: Batuta 101 en batuta.lat/aprende (4 modulos con quiz; el certificado se comparte en LinkedIn).\n" +
             "MENSAJES DE ESTE ASISTENTE: cada mes tienes una bolsa de mensajes incluida. Si se te acaba, el dueno puede comprar un pack extra AQUI MISMO en el chat pagando en linea (Mercado Pago: tarjeta o Yape): 30 mensajes por S/5, 60 por S/10, o 120 por S/15 (rigen solo el mes en curso); al agotarse la bolsa aparecen los botones de compra en esta misma ventana y el saldo se acredita solo al pagar. Tambien se puede coordinar por WhatsApp.\n" +
+            "BUSCADOR: si el dueno no encuentra algo, la respuesta mas rapida es Ctrl+K (Cmd+K en Mac) o el boton Buscar de la barra de arriba: escribe lo que quiere HACER (aforo, precios, yape, vencer) y salta a la pantalla exacta; tambien entiende los nombres de sus propias clases.\n" +
             "COMO SE HACE:\n" +
             "- Nuevo alumno: Personas > Alumnos > '+ Nuevo alumno' (nombre, curso, paquete, horario). Para varios seguidos, boton 'Guardar y agregar otro'.\n" +
-            "- Traer tus alumnos de antes (Excel o lista): Personas > Alumnos > 'Importar CSV'. Descargas la plantilla y subes el archivo, o pegas tu lista tal cual (un alumno por linea). Previsualizas antes de confirmar y los repetidos se omiten solos. Para exportar: menu lateral > Datos y respaldo > 'CSV alumnos'.\n" +
+            "- Traer tus alumnos de antes (Excel o lista): Personas > Alumnos > boton 'Traer mi lista de Excel'. Lo mas facil es PEGAR la lista tal cual (un alumno por linea, desde Excel, WhatsApp o una nota): con el nombre basta. Tambien se puede subir un .csv. Previsualizas antes de confirmar y los repetidos se saltan solos. Para exportar: menu lateral > Datos y respaldo > 'CSV alumnos'.\n" +
             "- Grupos (clases grupales): Personas > Grupos; cada grupo tiene boton 'Registrar clase' con lista de asistencia por alumno (cada uno consume 1 clase de SU paquete).\n" +
             "- Invitar profesores (planes Academia y XL): Personas > Profesores > invitar con nombre y correo; le llega un link de activacion y entra con su propia contrasena viendo SOLO lo suyo. Un profesor suspendido no ocupa asiento.\n" +
             "- Comisiones y liquidacion: Personas > Profesores > boton 'Comision' (porcentaje y/o tarifa por clase); la liquidacion del mes muestra por profesor cuanto trajo, cuantas clases dicto y cuanto pagarle.\n" +
-            "- Interesados (tu CRM de ventas): Personas > Interesados; etapas Nuevo > Contactado > Prueba > Alumno/Perdido, con nota, fecha de seguimiento (punto rojo cuando toca hoy) y boton de WhatsApp con mensaje ya escrito. Los que escriben desde tu web entran solos como Nuevo.\n" +
-            "- Precios/paquetes, cursos y marca (logo, color, tipografia): Configuracion > Ajustes. Los paquetes son de nombre libre, con clases incluidas o mensualidad ilimitada.\n" +
+            "- Interesados (seguimiento de ventas): Personas > Interesados; etapas Nuevo > Contactado > Prueba > Alumno/Perdido, con nota, fecha de seguimiento (punto rojo cuando toca hoy) y boton de WhatsApp con mensaje ya escrito. Los que escriben desde tu web entran solos como Nuevo.\n" +
+            "- AJUSTES esta dividido en 6 sub-pestanas y hay UN solo boton de guardar (abajo) que guarda todas: Academia (logo, color, tipografia, sedes, modulos) · Clases y planes (tus clases con su aforo, y tus paquetes con precio) · Reservas (anticipacion, reprogramar, recordatorios) · Cobros (Yape, bancos, Mercado Pago, Culqi, SUNAT) · WhatsApp e IA · Avanzado (push, Google Calendar).\n" +
+            "- Precios/paquetes: Ajustes > Clases y planes. Los paquetes son de nombre libre, con clases incluidas o mensualidad ilimitada, y la columna 'Incluye' marca a que clases dan acceso.\n" +
+            "- Marca (logo, color, tipografia) y sedes: Ajustes > Academia.\n" +
             "- Registrar clase dictada: Clases > Registro de clases > '+ Registrar clase' (asistio/falta/reprogramo, que se trabajo, tarea con audio o PDF de Tu biblioteca). El saldo del alumno se descuenta solo.\n" +
-            "- Agenda: Clases > Agenda marcas tu disponibilidad semanal y los alumnos reservan solos. Doble clic en una franja le pone cupo grupal propio (sin eso rige el cupo general de Ajustes).\n" +
-            "- Reprogramaciones: en Ajustes decides si el alumno reprograma solo y con cuantas horas minimas de anticipacion.\n" +
-            "- Cobros por Yape/Plin/transferencia: pones tu numero y cuentas en Configuracion > Ajustes; el alumno paga, sube su constancia y confirmas en 1 clic en Cobros > Pagos.\n" +
-            "- Tarjeta o Yape automatico: en Ajustes > 'Pago con tarjeta (Mercado Pago)' conectas TU cuenta de MP; tus alumnos pagan y se confirma solo (la plata cae en tu MP; si tu cuenta MP tiene Yape, el checkout tambien lo ofrece).\n" +
-            "- Recibos: cada pago confirmado tiene boton 'Recibo' en Cobros > Pagos, un comprobante con tu marca que sirve en cualquier pais (no es fiscal). Boleta oficial SUNAT (solo Peru, requiere RUC): conecta tu cuenta de nubefact.com en Ajustes y emites desde Pagos con un clic.\n" +
+            "- Agenda: Clases > Agenda arma tu horario semanal y los alumnos reservan solos. Un clic prende la franja; otro clic sobre una prendida abre su tipo de clase y su aforo, y se puede aplicar a todo el dia o a toda la semana. El rango de horas y el paso (1h, 30 o 15 min) se cambian arriba de la grilla.\n" +
+            "- Tipos de clase: Ajustes > Clases y planes. Cada tipo tiene su aforo (ej. Maquinas 3, Mat 8) y sus variantes (Reformer, Tower). En cada paquete, 'Incluye' marca a que tipos da acceso: el alumno con ese plan solo ve y solo puede reservar esos.\n" +
+            "- Reprogramaciones y anticipacion minima para reservar: Ajustes > Reservas. La anticipacion en 0 deja reservar la clase de dentro de un rato (lo normal en un estudio); vacia son 12 horas.\n" +
+            "- Cobros por Yape/Plin/transferencia: pones tu numero y cuentas en Ajustes > Cobros; el alumno paga, sube su constancia y confirmas en 1 clic en Cobros > Pagos.\n" +
+            "- Tarjeta o Yape automatico: en Ajustes > Cobros > 'Pago con tarjeta (Mercado Pago)' conectas TU cuenta de MP; tus alumnos pagan y se confirma solo (la plata cae en tu MP; si tu cuenta MP tiene Yape, el checkout tambien lo ofrece).\n" +
+            "- Recibos: cada pago confirmado tiene boton 'Recibo' en Cobros > Pagos, un comprobante con tu marca que sirve en cualquier pais (no es fiscal). Boleta oficial SUNAT (solo Peru, requiere RUC): conecta tu cuenta de nubefact.com en Ajustes > Cobros y emites desde Pagos con un clic.\n" +
             "- Caja: Cobros > Caja registras gastos y ves ingresos menos gastos del mes. Reportes: el pulso de tu academia.\n" +
-            "- Recordatorios automaticos: correo al alumno 24h y 1h antes de su clase y cuando su paquete esta por vencer; vienen encendidos y se apagan en Ajustes.\n" +
+            "- Recordatorios automaticos: correo al alumno 24h y 1h antes de su clase y cuando su paquete esta por vencer; vienen encendidos y se apagan en Ajustes > Reservas.\n" +
             "- Tu link de alumnos: en Inicio (batuta.lat/app/a/tu-academia); ahi tus alumnos se registran y ven clases, material y pagos. Si un alumno olvido su contrasena, tu se la restableces en Personas > Accesos al portal.\n" +
-            "- Modulos del panel: en Configuracion > Ajustes > 'Modulos de tu panel' ocultas lo que no uses (Grupos, Material, Interesados, Caja, Reportes); los puedes reactivar cuando quieras. El Chat no se puede ocultar (tus alumnos te escriben por ahi).\n" +
+            "- Modulos del panel: en Ajustes > Academia > 'Modulos de tu panel' ocultas lo que no uses (Grupos, Material, Interesados, Caja, Reportes); los puedes reactivar cuando quieras. El Chat no se puede ocultar (tus alumnos te escriben por ahi).\n" +
             "- WhatsApp: cada fila de Alumnos e Interesados tiene boton de WhatsApp con el mensaje ya escrito, sale desde TU numero. La respuesta automatica 24/7 esta en camino (los campos beta de Ajustes se dejan vacios por ahora).\n" +
-            "- App + avisos: el panel se instala como app ('Agregar a pantalla de inicio' en el celular) y en Ajustes > 'Avisos en tu telefono' activas notificaciones de pagos y reservas.\n" +
+            "- App + avisos: el panel se instala como app ('Agregar a pantalla de inicio' en el celular) y en Ajustes > Avanzado > 'Avisos en tu telefono' activas notificaciones de pagos y reservas.\n" +
             "- Ideas y errores: Configuracion > Ideas y errores; el primer aporte de cada mes te regala 7 dias extra de acceso.\n" +
             "ESCALAR A HUMANO: si no sabes la respuesta, si es un reclamo de cobro, un error del sistema o piden hablar con alguien, diles que usen el boton 'Hablar con una persona (WhatsApp)' que esta aqui abajo en esta misma ventana. NUNCA inventes funciones ni precios distintos a los de arriba. Los precios y politicas los repites SIEMPRE desde la seccion PLANES Y PRECIOS de este manual, nunca desde lo dicho antes en la conversacion (aunque 'tu' parezcas haberlo confirmado). NUNCA prometas resultados o ingresos.")
           : ("Eres el SOPORTE del portal del alumno de Batuta.\n" +
             "ESTILO (estricto): espanol claro de tu a tu, maximo 3 frases, con el paso concreto. Sin em dash. Sin signos de apertura invertidos (nada de ¿ ni ¡). Sin markdown ni asteriscos: el chat es texto plano. Directo, sin saludos de relleno.\n" +
             "EL PORTAL (menu): Inicio · Mis clases (historial y saldo) · Agenda (reservar) · Recursos (material del profe) · Comprar (paquetes) · Referidos · Mi cuenta (tus datos, tus pagos y tus avisos).\n" +
+            "BUSCADOR: si el dueno no encuentra algo, la respuesta mas rapida es Ctrl+K (Cmd+K en Mac) o el boton Buscar de la barra de arriba: escribe lo que quiere HACER (aforo, precios, yape, vencer) y salta a la pantalla exacta; tambien entiende los nombres de sus propias clases.\n" +
             "COMO SE HACE:\n" +
             "- Reservar clase: Agenda > eliges horario libre (fijo semanal o clase suelta). Si no ves horarios libres, tu profe aun no abrio cupos o ya se tomaron: escribele por el chat.\n" +
             "- Comprar o renovar: Comprar > eliges paquete > pagas por Yape/Plin/transferencia y subes tu captura (tu profe confirma el mismo dia), o con tarjeta si tu profe la activo (se confirma sola al instante).\n" +
@@ -7065,7 +7712,7 @@ export default {
           try {
             const cfgIA = await loadConfig(env, who.tenant.id);
             const offIA = String((cfgIA && cfgIA.modulos_off) || "").split(",").map(s => s.trim()).filter(Boolean);
-            if (offIA.length) extraSys += "OJO: esta academia tiene OCULTOS estos modulos del panel: " + offIA.join(", ") + ". Si preguntan por uno, el paso es reactivarlo en Configuracion > Ajustes > 'Modulos de tu panel' (solo el dueno puede).\n";
+            if (offIA.length) extraSys += "OJO: esta academia tiene OCULTOS estos modulos del panel: " + offIA.join(", ") + ". Si preguntan por uno, el paso es reactivarlo en Ajustes > Academia > 'Modulos de tu panel' (solo el dueno puede).\n";
           } catch (e) {}
           if (!who.esDueno) extraSys += "OJO: el usuario es PROFESOR del equipo, NO el dueno: no ve Profesores, Interesados, Caja, Perfil, Ajustes ni Servicios. Para todo lo de esas pestanas (precios, plan, marca, boletas, modulos), indicale que lo coordine con el dueno de su academia.";
         }
@@ -7103,10 +7750,15 @@ export default {
         const cu = await cuentaDeSesion(env, request);
         if (!cu) return json({ error: "Sesion expirada" }, 401);
         // El alumno ve la agenda de SU profesor (multi-profesor); sin ficha aun -> la del dueno.
-        const alS = cu.alumno_id ? await env.DB.prepare("SELECT profesor_id FROM alumnos WHERE id = ?1 AND tenant_id = ?2").bind(cu.alumno_id, cu.tenant_id).first() : null;
+        const alS = cu.alumno_id ? await env.DB.prepare("SELECT profesor_id, paquete FROM alumnos WHERE id = ?1 AND tenant_id = ?2").bind(cu.alumno_id, cu.tenant_id).first() : null;
         const profS = await profeDeAlumno(env, cu.tenant_id, alS);
-        const slots = await generarSlots(env, cu.tenant_id, profS);
-        return json({ slots });
+        /* El alumno solo ve lo que SU plan cubre (27-jul-2026, Elevate): un plan de Mat no
+           muestra Maquinas. Lo de fuera se devuelve aparte para poder explicarlo, no ocultarlo. */
+        const pkS = alS ? resolverPk((await loadPaquetes(env, cu.tenant_id)).map, alS.paquete) : null;
+        const det = await generarSlotsDetalle(env, cu.tenant_id, profS, { pk: pkS });
+        return json({ slots: det.slots, llenos: det.llenos, fuera: det.fuera, detalle: det.detalle,
+                      plan: { nombre: (alS && alS.paquete) || "", tipos: (pkS && pkS.tipos) || [] },
+                      profe: { nombre: profS.nombre || "", foto: profS.foto || "" } });
       }
 
       if (path === "/app/api/agenda/reservar" && request.method === "POST"){
@@ -7132,6 +7784,13 @@ export default {
         const rUsadas = await reservasUsadasCount(env, tid, alumno.id, ciclo);
         const paqMapR = (await loadPaquetes(env, tid)).map;
         const pkR = resolverPk(paqMapR, alumno.paquete);
+        /* El plan manda (27-jul-2026): si el paquete solo cubre ciertas categorias, esta franja
+           tiene que ser de una de ellas. Se valida en el SERVIDOR: el portal ya las esconde,
+           pero esconder no es impedir. */
+        const tipoSlot = await tipoDeSlot(env, tid, iso, profR);
+        if (!paqueteCubre(pkR, tipoSlot)){
+          return json({ error: 'Tu plan "' + (alumno.paquete || "") + '" no incluye ' + (categoriaDe(tipoSlot) || "ese tipo de clase") + ". Escríbenos para cambiar de plan." }, 403);
+        }
         /* Mensualidad ilimitada: no descuenta clases, pero vence por fecha. Sin este freno,
            un alumno con la mensualidad vencida reservaría para siempre (fuga de ingresos). */
         if (pkR.ilim && alumno.vence){
@@ -7166,6 +7825,7 @@ export default {
             await env.DB.prepare("DELETE FROM reservas WHERE id = ?1 AND tenant_id = ?2").bind(rid, tid).run();
             return json({ error: "Justo se lleno ese horario. Elige otro." }, 409);
           }
+          try { await env.DB.prepare("UPDATE espera SET estado = 'convertida' WHERE tenant_id = ?1 AND inicio_utc = ?2 AND alumno_id = ?3 AND estado IN ('esperando','avisado')").bind(tid, iso, alumno.id).run(); } catch (e) {}
           return json({ ok: true, reservadas: 1, tipo: "suelta" });
         }
 
@@ -7217,7 +7877,73 @@ export default {
         }
         await env.DB.prepare("UPDATE reservas SET estado = 'cancelada', cancelada_utc = ?1, cancelada_por = ?2 WHERE id = ?3 AND tenant_id = ?4")
           .bind(new Date().toISOString(), "alumno:" + cu.alumno_id, r.id, tid).run();
+        await promoverEspera(env, tid, r.inicio_utc);   // se libero un cupo: avisar a la lista de espera
         return json({ ok: true, mensaje: "Listo, libere tu horario. Elige tu nuevo horario abajo." });
+      }
+
+      /* ---- Lista de espera (clases llenas): entrar / salir / ver la mia ---- */
+      if (path === "/app/api/agenda/espera" && request.method === "GET"){
+        const cu = await cuentaDeSesion(env, request);
+        if (!cu || !cu.alumno_id) return json({ error: "Sesion expirada" }, 401);
+        let rows = [];
+        try {
+          rows = (await env.DB.prepare(
+            "SELECT id, inicio_utc, curso, estado FROM espera WHERE tenant_id = ?1 AND alumno_id = ?2 AND estado IN ('esperando','avisado') ORDER BY inicio_utc ASC"
+          ).bind(cu.tenant_id, cu.alumno_id).all()).results || [];
+        } catch (e) {}
+        return json({ espera: rows });
+      }
+
+      if (path === "/app/api/agenda/espera" && request.method === "POST"){
+        const cu = await cuentaDeSesion(env, request);
+        if (!cu || !cu.alumno_id) return json({ error: "Sesion expirada" }, 401);
+        const tid = cu.tenant_id;
+        const b = await request.json().catch(() => ({}));
+        const iso = String(b.inicio_utc || "");
+        const alumno = await env.DB.prepare("SELECT * FROM alumnos WHERE id = ?1 AND tenant_id = ?2").bind(cu.alumno_id, tid).first();
+        if (!alumno) return json({ error: "No encuentro tu ficha de alumno." }, 400);
+        const profR = await profeDeAlumno(env, tid, alumno);
+        if (!(await slotValido(env, tid, iso, null, profR))) return json({ error: "Ese horario ya no esta disponible." }, 400);
+        /* no tiene sentido hacer cola por una clase que su plan no cubre */
+        const pkE = resolverPk((await loadPaquetes(env, tid)).map, alumno.paquete);
+        const tipoE = await tipoDeSlot(env, tid, iso, profR);
+        if (!paqueteCubre(pkE, tipoE)){
+          return json({ error: 'Tu plan "' + (alumno.paquete || "") + '" no incluye ' + (categoriaDe(tipoE) || "ese tipo de clase") + "." }, 403);
+        }
+        await ensureErpSchema(env);
+        /* si el slot NO esta lleno, no tiene sentido esperar: que reserve directo */
+        const cupoT = await cupoDeSlot(env, tid, iso, profR, await loadConfig(env, tid));
+        const oc = await ocupacionSlot(env, tid, iso, profR);
+        if (!oc.bloqueado && oc.n < cupoT) return json({ error: "Ese horario tiene cupo libre, resérvalo directo.", hay_cupo: true }, 409);
+        const yaMia = await env.DB.prepare(
+          "SELECT 1 AS ok FROM reservas WHERE tenant_id = ?1 AND inicio_utc = ?2 AND alumno_id = ?3 AND estado IN ('reservada','completada')"
+        ).bind(tid, iso, alumno.id).first();
+        if (yaMia) return json({ error: "Ya tienes una reserva en ese horario." }, 409);
+        const yaEsp = await env.DB.prepare(
+          "SELECT id FROM espera WHERE tenant_id = ?1 AND inicio_utc = ?2 AND alumno_id = ?3 AND estado IN ('esperando','avisado')"
+        ).bind(tid, iso, alumno.id).first();
+        if (yaEsp) return json({ ok: true, ya: true, mensaje: "Ya estás en la lista de espera de ese horario." });
+        const pos = await env.DB.prepare(
+          "SELECT COUNT(*) AS n FROM espera WHERE tenant_id = ?1 AND inicio_utc = ?2 AND estado = 'esperando'"
+        ).bind(tid, iso).first();
+        await env.DB.prepare(
+          "INSERT INTO espera (id,tenant_id,alumno_id,profesor_id,inicio_utc,curso,estado,creado) VALUES (?1,?2,?3,?4,?5,?6,'esperando',?7)"
+        ).bind(crypto.randomUUID(), tid, alumno.id, profR.id || "", iso, alumno.curso || "", new Date().toISOString()).run();
+        return json({ ok: true, posicion: (Number(pos && pos.n) || 0) + 1, mensaje: "Listo, estás en la lista de espera. Te aviso apenas se libere un cupo." });
+      }
+
+      if (path === "/app/api/agenda/espera/cancelar" && request.method === "POST"){
+        const cu = await cuentaDeSesion(env, request);
+        if (!cu || !cu.alumno_id) return json({ error: "Sesion expirada" }, 401);
+        const tid = cu.tenant_id;
+        const b = await request.json().catch(() => ({}));
+        const id = String(b.id || ""); const iso = String(b.inicio_utc || "");
+        if (id){
+          await env.DB.prepare("UPDATE espera SET estado = 'cancelada' WHERE id = ?1 AND tenant_id = ?2 AND alumno_id = ?3").bind(id, tid, cu.alumno_id).run();
+        } else if (iso){
+          await env.DB.prepare("UPDATE espera SET estado = 'cancelada' WHERE tenant_id = ?1 AND inicio_utc = ?2 AND alumno_id = ?3 AND estado IN ('esperando','avisado')").bind(tid, iso, cu.alumno_id).run();
+        } else return json({ error: "Falta id." }, 400);
+        return json({ ok: true, mensaje: "Saliste de la lista de espera." });
       }
 
       if (path === "/app/api/agenda/pausar" && request.method === "POST"){
@@ -7274,6 +8000,47 @@ export default {
           if (!p || p.estado === "suspendido") return null;
           return { id: p.id, esDueno: p.rol === "dueno" };
         };
+
+        /* -------- "Mi web": editor visual de la página pública de la academia -------- */
+        // Publicar: guarda el web_json (saneado) + una versión nueva. Solo el dueño.
+        if (path === "/app/api/admin/web" && request.method === "POST"){
+          if (!esDueno) return json({ error: "Tu página web la maneja el dueño de la academia." }, 403);
+          const b = await request.json().catch(() => null);
+          if (!b || typeof b !== "object") return json({ error: "No pude leer los cambios." }, 400);
+          const limpio = webSanear(b.web);
+          const texto = JSON.stringify(limpio);
+          if (texto.length > WEB_MAX_BYTES) return json({ error: "Hay demasiado contenido en la página. Recorta algún texto y vuelve a publicar." }, 400);
+          const version = new Date().toISOString();
+          await env.DB.batch([
+            env.DB.prepare("INSERT INTO config (tenant_id, clave, valor) VALUES (?1,'web_json',?2) ON CONFLICT(tenant_id, clave) DO UPDATE SET valor = ?2").bind(tid, texto),
+            env.DB.prepare("INSERT INTO config (tenant_id, clave, valor) VALUES (?1,'web_version',?2) ON CONFLICT(tenant_id, clave) DO UPDATE SET valor = ?2").bind(tid, version)
+          ]);
+          return json({ ok: true, version: version, web: limpio });
+        }
+        // Vista previa: renderiza un borrador SIN guardarlo (lo pinta el iframe del editor).
+        if (path === "/app/api/admin/web/preview" && request.method === "POST"){
+          if (!esDueno) return json({ error: "No autorizado" }, 403);
+          const b = await request.json().catch(() => ({}));
+          const { ctx: ctxP } = await armarWebCtx(env, t);
+          return htmlResponse(webHtml(webSanear(b && b.web), ctxP, { editable: true }));
+        }
+        // Subir una foto de la web a R2 (mismo patrón que el logo; no borra la anterior
+        // porque una foto puede reusarse en otra sección).
+        if (path === "/app/api/admin/web/foto" && request.method === "POST"){
+          if (!esDueno) return json({ error: "No autorizado" }, 403);
+          if (!env.RECURSOS_R2) return json({ error: "No disponible en el trial." }, 501);
+          const form = await request.formData().catch(() => null);
+          if (!form) return json({ error: "Formulario invalido" }, 400);
+          const archivo = form.get("archivo");
+          const esArchivo = archivo && typeof archivo !== "string" && typeof archivo.arrayBuffer === "function";
+          const ext = esArchivo ? extArchivo(archivo.name) : null;
+          if (!ext || !/^(png|jpg|jpeg)$/.test(ext) || archivo.size > 8 * 1024 * 1024){
+            return json({ error: "Solo imagenes (png/jpg) de hasta 8 MB." }, 400);
+          }
+          const key = crypto.randomUUID() + "." + ext;
+          await env.RECURSOS_R2.put(key, archivo, { httpMetadata: { contentType: MIME_ARCHIVO[ext], contentDisposition: "inline" } });
+          return json({ ok: true, url: "/app/api/recurso/archivo/" + key });
+        }
 
         /* -------- Feedback con premio (+7 dias el primer aporte del mes) -------- */
         if (path === "/app/api/admin/feedback" && request.method === "GET"){
@@ -7702,7 +8469,7 @@ export default {
           let rows = [];
           try {
             rows = (await env.DB.prepare(
-              "SELECT dia_semana, hora, activo, COALESCE(cupo,0) AS cupo FROM disponibilidad WHERE tenant_id = ?1 " +
+              "SELECT dia_semana, hora, activo, COALESCE(cupo,0) AS cupo, COALESCE(curso,'') AS curso FROM disponibilidad WHERE tenant_id = ?1 " +
               "AND (profesor_id = ?2 OR (?3 = 1 AND (profesor_id IS NULL OR profesor_id = ''))) ORDER BY dia_semana, hora"
             ).bind(tid, target.id, target.esDueno ? 1 : 0).all()).results || [];
           } catch (e) {
@@ -7723,12 +8490,14 @@ export default {
              profesor convertia sus horarios 1-a-1 en grupales de 20 sin permiso). Un profesor
              que re-guarda su disponibilidad CONSERVA los cupos que el dueno ya le puso. */
           let cuposPrevios = new Map();
+          let cursosPrevios = new Map();
           if (!esDueno){
             try {
               const { results: prevC } = await env.DB.prepare(
-                "SELECT dia_semana, hora, COALESCE(cupo,0) AS cupo FROM disponibilidad WHERE tenant_id = ?1 AND profesor_id = ?2"
+                "SELECT dia_semana, hora, COALESCE(cupo,0) AS cupo, COALESCE(curso,'') AS curso FROM disponibilidad WHERE tenant_id = ?1 AND profesor_id = ?2"
               ).bind(tid, target.id).all();
               cuposPrevios = new Map((prevC || []).map(r => [r.dia_semana + "|" + r.hora, parseInt(r.cupo, 10) || 0]));
+              cursosPrevios = new Map((prevC || []).map(r => [r.dia_semana + "|" + r.hora, r.curso || ""]));
             } catch (e) {}
           }
           /* BLINDADO multi-profesor: el DELETE va scoped al profesor objetivo, nunca
@@ -7740,10 +8509,11 @@ export default {
             const dia = Number(s.dia_semana);
             const h = String(s.hora || "");
             let cupoF = parseInt(s.cupo, 10);
-            cupoF = (Number.isFinite(cupoF) && cupoF >= 1 && cupoF <= 20) ? cupoF : 0; /* 0 = usa el cupo global */
-            if (!esDueno) cupoF = cuposPrevios.get(dia + "|" + h) || 0;
+            cupoF = (Number.isFinite(cupoF) && cupoF >= 1 && cupoF <= CUPO_MAX) ? cupoF : 0; /* 0 = aforo del tipo, y si no el cupo global */
+            let cursoF = String(s.curso || "").trim().slice(0, 90);   /* "Categoria · Variante" (ej. "Pilates Maquinas · Reformer") */
+            if (!esDueno){ cupoF = cuposPrevios.get(dia + "|" + h) || 0; cursoF = cursosPrevios.get(dia + "|" + h) || ""; }
             if (dia >= 0 && dia <= 6 && /^\d{2}:\d{2}$/.test(h)){
-              stmts.push(env.DB.prepare("INSERT OR IGNORE INTO disponibilidad (tenant_id,profesor_id,dia_semana,hora,activo,cupo) VALUES (?1,?2,?3,?4,1,?5)").bind(tid, target.id, dia, h, cupoF));
+              stmts.push(env.DB.prepare("INSERT OR IGNORE INTO disponibilidad (tenant_id,profesor_id,dia_semana,hora,activo,cupo,curso) VALUES (?1,?2,?3,?4,1,?5,?6)").bind(tid, target.id, dia, h, cupoF, cursoF));
             }
           }
           await env.DB.batch(stmts);
@@ -7846,6 +8616,7 @@ export default {
             }
           }
           await env.DB.batch(stmts);
+          if (nuevo === "cancelada" && rv.tipo !== "bloqueo") await promoverEspera(env, tid, rv.inicio_utc);   // cupo liberado: avisar lista de espera
           return json({ ok: true });
         }
 
@@ -8045,9 +8816,19 @@ export default {
           if (!body || !Array.isArray(body.alumnos) || !Array.isArray(body.registro)){
             return json({ error: "Cuerpo inválido" }, 400);
           }
-          const { results: prevRows } = await env.DB.prepare(
-            "SELECT id, vence, ciclo, aviso_vence_ciclo, recordatorio_fecha, recordatorio_ciclo, winback_ciclo, profesor_id, COALESCE(sede_id,'') AS sede_id FROM alumnos WHERE tenant_id = ?1 AND (?2 = 1 OR profesor_id = ?3)"
-          ).bind(tid, esDueno ? 1 : 0, profeActorId || "").all();
+          await ensureSaldoMigradoSchema(env);
+          const colsPrev = "id, vence, ciclo, aviso_vence_ciclo, recordatorio_fecha, recordatorio_ciclo, winback_ciclo, profesor_id, COALESCE(sede_id,'') AS sede_id";
+          let prevRows = [];
+          try {
+            prevRows = (await env.DB.prepare(
+              "SELECT " + colsPrev + ", COALESCE(migrado_usadas,0) AS migrado_usadas, COALESCE(migrado_ciclo,0) AS migrado_ciclo FROM alumnos WHERE tenant_id = ?1 AND (?2 = 1 OR profesor_id = ?3)"
+            ).bind(tid, esDueno ? 1 : 0, profeActorId || "").all()).results || [];
+          } catch (e) {
+            /* D1 sin las columnas del saldo migrado: el guardado normal no se cae por eso */
+            prevRows = (await env.DB.prepare(
+              "SELECT " + colsPrev + " FROM alumnos WHERE tenant_id = ?1 AND (?2 = 1 OR profesor_id = ?3)"
+            ).bind(tid, esDueno ? 1 : 0, profeActorId || "").all()).results || [];
+          }
           const prev = new Map((prevRows || []).map(r => [r.id, r]));
           const paqPut = (await loadPaquetes(env, tid)).map;   // para derivar vence de mensualidades ilimitadas
           let profesValidos = new Set();
@@ -8119,20 +8900,37 @@ export default {
               venceAl = new Date(Date.parse(base + "T00:00:00Z") + 30 * 86400000).toISOString().slice(0, 10);
             }
             if (esRenovManual) avisoAl = 0;   // ciclo nuevo: el aviso de vencimiento se re-arma
+            /* Saldo migrado (28-jul-2026): el importador es el UNICO que lo fija, y solo al crear
+               al alumno. Para un alumno que ya existe se preserva server-side igual que vence, si
+               no cada guardado del panel (que manda el snapshot completo) le borraria el arrastre.
+               Mismo motivo para el vence: si el alumno es nuevo y el CSV trajo fecha, manda el CSV;
+               si ya existia, manda el server. */
+            let migUsadas = (pr && Number(pr.migrado_usadas)) || 0;
+            let migCiclo = (pr && Number(pr.migrado_ciclo)) || 0;
+            if (!pr){
+              const mu = Math.floor(Number(a.migrado_usadas));
+              if (Number.isFinite(mu) && mu > 0){
+                migUsadas = Math.min(mu, 9999);
+                migCiclo = cicloAl;
+              }
+              const vImp = String(a.vence || "").trim();
+              if (/^\d{4}-\d{2}-\d{2}$/.test(vImp) && !isNaN(Date.parse(vImp + "T00:00:00Z"))) venceAl = vImp;
+            }
             /* sede (multisede): undefined = preservar la previa (JS viejo en cache); con valor,
                validar contra las sedes del tenant (invalida = sin sede) */
             let sedeAl = "";
             if (a.sede_id !== undefined) sedeAl = sedesValidas.has(String(a.sede_id)) ? String(a.sede_id) : "";
             else if (pr && pr.sede_id) sedeAl = pr.sede_id;
             stmts.push(env.DB.prepare(
-              "INSERT INTO alumnos (id,tenant_id,codigo,nombre,whatsapp,curso,paquete,fecha,pago,horario,notas,ciclo,vence,aviso_vence_ciclo,recordatorio_fecha,recordatorio_ciclo,winback_ciclo,profesor_id,sede_id) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19)"
+              "INSERT INTO alumnos (id,tenant_id,codigo,nombre,whatsapp,curso,paquete,fecha,pago,horario,notas,ciclo,vence,aviso_vence_ciclo,recordatorio_fecha,recordatorio_ciclo,winback_ciclo,profesor_id,sede_id,migrado_usadas,migrado_ciclo) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21)"
             ).bind(
               a.id, tid, String(a.codigo || "").toUpperCase() || randHex(3).toUpperCase(), a.nombre,
               a.whatsapp || "", a.curso || "", a.paquete || "",
               a.fecha || "", a.pago || "", a.horario || "", a.notas || "", a.ciclo || 1,
               venceAl, avisoAl,
               (pr && pr.recordatorio_fecha) || "", (pr && pr.recordatorio_ciclo) || 0,
-              (pr && pr.winback_ciclo) || 0, pidAl || null, sedeAl
+              (pr && pr.winback_ciclo) || 0, pidAl || null, sedeAl,
+              migUsadas, migCiclo
             ));
           }
           for (const r of body.registro){
@@ -8226,7 +9024,7 @@ export default {
           /* config del tenant (cobros, marca, cupo, cursos): SOLO el dueno */
           if (!esDueno) return json({ error: "Los ajustes de la academia los maneja el dueno." }, 403);
           const b = await request.json().catch(() => ({}));
-          const claves = ["pago_numero", "pago_titular", "bcp_cuenta", "bcp_cci", "scotia_cuenta", "scotia_cci", "crypto_moneda", "crypto_red", "crypto_wallet", "stripe_moneda", "profe_nombre", "profe_marca", "profe_foto", "whatsapp_profe", "cursos", "brand_color", "brand_font", "agenda_cupo", "recordatorios_clase", "recordatorio_renovacion", "nubefact_ruta", "nubefact_token", "fact_serie_boleta", "fact_igv", "fact_proximo_numero", "wa_phone_id", "wa_enabled", "reprog_activo", "reprog_min_h", "paquetes", "modulos_off"];
+          const claves = ["pago_numero", "pago_titular", "bcp_cuenta", "bcp_cci", "scotia_cuenta", "scotia_cci", "crypto_moneda", "crypto_red", "crypto_wallet", "stripe_moneda", "profe_nombre", "profe_marca", "profe_foto", "whatsapp_profe", "cursos", "brand_color", "brand_font", "agenda_cupo", "recordatorios_clase", "recordatorio_renovacion", "nubefact_ruta", "nubefact_token", "fact_serie_boleta", "fact_igv", "fact_proximo_numero", "wa_phone_id", "wa_enabled", "wa_modo", "wa_tono", "wa_instrucciones", "wa_kb", "reprog_activo", "reprog_min_h", "paquetes", "modulos_off", "clases", "anticipacion_h"];
           const stmts = [];
           for (const k of claves){
             if (k in b){
@@ -8238,13 +9036,22 @@ export default {
               /* paquetes por tenant: valida el JSON y lo reescribe canónico (o "" = usa el default) */
               if (k === "paquetes"){
                 const parsed = parsePaquetes(valor);
-                valor = parsed ? JSON.stringify(parsed.list.map(n => ({ n: n, c: parsed.map[n].clases, r: parsed.map[n].reprog, u: parsed.map[n].ilim }))) : "";
+                valor = parsed ? JSON.stringify(parsed.list.map(n => ({ n: n, c: parsed.map[n].clases, r: parsed.map[n].reprog, u: parsed.map[n].ilim, t: parsed.map[n].tipos || [] }))) : "";
+              }
+              /* clases de 2 niveles: valida y reescribe canónico ("" = cursos planos de siempre) */
+              if (k === "clases"){
+                const cl = parseClases(valor);
+                valor = cl.length ? JSON.stringify(cl) : "";
+              }
+              if (k === "anticipacion_h" && valor !== ""){
+                const na = parseInt(valor, 10);
+                valor = (Number.isFinite(na) && na >= 0 && na <= 168) ? String(na) : "";
               }
               if (k === "brand_color" && valor && !/^#[0-9a-fA-F]{6}$/.test(valor)) valor = "";
               if (k === "brand_font" && valor && BRAND_FONTS.indexOf(valor) === -1) valor = "";
               if (k === "agenda_cupo"){
                 const nc = parseInt(valor, 10);
-                valor = (Number.isFinite(nc) && nc >= 1 && nc <= 20) ? String(nc) : "";
+                valor = (Number.isFinite(nc) && nc >= 1 && nc <= CUPO_MAX) ? String(nc) : "";
               }
               /* modulos del panel apagables: solo ids conocidos, sin duplicados (csv).
                  "chat" NO es apagable: ocultarlo solo en el panel dejaba mensajes de
@@ -8272,6 +9079,10 @@ export default {
               }
               if (k === "fact_igv" && valor && ["gravado", "exonerado"].indexOf(valor) === -1) valor = "";
               if (k === "wa_enabled" && valor && valor !== "on") valor = "";
+              if (k === "wa_modo" && ["auto", "sugerencias"].indexOf(valor) === -1) valor = "auto";
+              if (k === "wa_tono" && valor && Object.keys(WA_TONOS).indexOf(valor) === -1) valor = "";
+              if (k === "wa_instrucciones") valor = valor.slice(0, 800);
+              if (k === "wa_kb") valor = valor.slice(0, 2000);
               if (k === "wa_phone_id") valor = valor.replace(/\D/g, "").slice(0, 25);
               if (k === "fact_proximo_numero" && valor){
                 const np = parseInt(valor, 10);
@@ -8283,6 +9094,47 @@ export default {
             }
           }
           if (stmts.length) await env.DB.batch(stmts);
+          return json({ ok: true });
+        }
+
+        /* -------- Asistente WhatsApp: prueba EN SECO del tono/KB (sin enviar, sin gastar cupo) --------
+           Deja al dueno verificar como responde su IA con el tono e instrucciones actuales, aun sin
+           tener el numero conectado (Meta en revision). Usa la MISMA IA del webhook. Solo el dueno. */
+        if (path === "/app/api/admin/wa/probar" && request.method === "POST"){
+          if (!esDueno) return json({ error: "El asistente lo configura el dueno." }, 403);
+          const b = await request.json().catch(() => ({}));
+          const texto = String(b.texto || "").trim().slice(0, 500);
+          const nombre = String(b.nombre || "").trim().slice(0, 60);
+          if (!texto) return json({ error: "Escribe un mensaje de prueba (lo que diria un interesado)." }, 400);
+          const cfgW = await loadConfig(env, tid);
+          // Overrides inline (para probar sin guardar): el panel manda el tono/instrucciones/KB que
+          // el dueno esta editando; si no vienen, usa lo persistido.
+          if (b.wa_tono != null) cfgW.wa_tono = String(b.wa_tono).trim();
+          if (b.wa_instrucciones != null) cfgW.wa_instrucciones = String(b.wa_instrucciones).slice(0, 800);
+          if (b.wa_kb != null) cfgW.wa_kb = String(b.wa_kb).slice(0, 2000);
+          const tCtx = { id: tid, academia: t.academia, slug: t.slug, whatsapp: cfgW.whatsapp_profe || "" };
+          const datos = await contextoVentaWA(env, tCtx, cfgW);
+          const sys = WA_VENDEDOR_SYS + bloqueVozWA(cfgW) + (nombre ? "\nLa persona se llama " + nombre.split(" ")[0] + "." : "");
+          const reply = await llamarClaudeOnboarding(env, sys, [{ role: "user", content: texto }], datos);
+          return json({ ok: true, ia_disponible: reply != null, respuesta: reply, tono: cfgW.wa_tono || "", modo: cfgW.wa_modo || "auto" });
+        }
+        /* Sugerencias pendientes del asistente (modo 'sugerencias'): las lista el dueno para copiarlas
+           y enviarlas a mano. GET = lista; POST {id, accion:'listo'} = marca enviada (la quita). */
+        if (path === "/app/api/admin/wa/sugerencias" && request.method === "GET"){
+          if (!esDueno) return json({ error: "Solo el dueno." }, 403);
+          await ensureWaSugSchema(env);
+          const { results } = await env.DB.prepare(
+            "SELECT id, telefono, nombre, mensaje, borrador, creado FROM wa_sugerencia WHERE tenant_id = ?1 AND estado = 'pendiente' ORDER BY creado DESC LIMIT 50"
+          ).bind(tid).all().catch(() => ({ results: [] }));
+          return json({ ok: true, sugerencias: results || [] });
+        }
+        if (path === "/app/api/admin/wa/sugerencias" && request.method === "POST"){
+          if (!esDueno) return json({ error: "Solo el dueno." }, 403);
+          await ensureWaSugSchema(env);
+          const b = await request.json().catch(() => ({}));
+          const id = String(b.id || "").trim();
+          if (!id) return json({ error: "Falta el id." }, 400);
+          await env.DB.prepare("UPDATE wa_sugerencia SET estado = 'enviada' WHERE id = ?1 AND tenant_id = ?2").bind(id, tid).run().catch(() => {});
           return json({ ok: true });
         }
 
@@ -8669,6 +9521,7 @@ export default {
     if (!(dSched.getUTCHours() === 14 && dSched.getUTCMinutes() === 0)) return;
     /* ---- desde aqui: SOLO la corrida diaria de las 9am Lima ---- */
     try { await recordatorioRenovacion(env); } catch (e) { console.error("recordatorio renovacion", e); }
+    try { await winbackAlumnos(env); } catch (e) { console.error("winback alumnos", e); }
     try { await seguimientoLeadsDueno(env); } catch (e) { console.error("seguimiento leads dueno", e); }
     try { await recalcularPorAlumno(env); } catch (e) { console.error("recalcular por alumno", e); }
     /* Afiliados: credito automatico (diario) + riel PayPal (mes vencido, dia 1; con flag OFF solo avisa). */

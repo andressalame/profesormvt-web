@@ -36,6 +36,7 @@
   a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--accent);outline-offset:2px;}
 
   .eyebrow{font-family:var(--mono);text-transform:uppercase;letter-spacing:.18em;font-size:11.5px;color:var(--accent);font-weight:700;}
+  #authLogo img{max-height:64px;max-width:190px;display:block;margin:0 0 14px;}
   h1{font-family:var(--display);font-weight:700;font-size:clamp(28px,5.5vw,40px);margin:.18em 0 .08em;line-height:1.14;}
   h1 em{font-style:italic;color:var(--accent);}
   .sub{font-family:var(--mono);text-transform:uppercase;letter-spacing:.12em;font-size:11px;color:var(--muted);}
@@ -344,6 +345,8 @@
 
 <!-- ============ AUTH (login / registro) ============ -->
 <section id="viewAuth" class="auth-card hidden">
+  <!-- Logo de la academia (si subio uno en Ajustes); vacio = solo el eyebrow de siempre. -->
+  <div id="authLogo"></div>
   <div class="eyebrow" id="eyebrowAuth">// BATUTA</div>
   <h1>Portal de <em>alumno</em></h1>
   <div class="sub">Tus clases · Tu avance · Tu comunidad</div>
@@ -499,8 +502,14 @@
           <div id="agProx"></div>
         </div>
 
+        <div class="card" id="agEsperaCard" style="margin-bottom:16px;display:none;">
+          <h3>// EN LISTA DE ESPERA</h3>
+          <div id="agEspera"></div>
+        </div>
+
         <div class="card">
           <h3>// RESERVAR UNA CLASE</h3>
+          <div id="agProfe" style="margin:0 0 12px;"></div>
           <div class="agtipo" style="display:flex;gap:8px;margin:8px 0 12px;flex-wrap:wrap;">
             <button class="btn sm" data-tipo="fija">Horario fijo semanal</button>
             <button class="btn ghost sm" data-tipo="suelta">Clase suelta</button>
@@ -1673,6 +1682,12 @@ $("btnSalirSide").addEventListener("click", salir);
 
 /* ---------- VISTA: AGENDA ---------- */
 var AG_SLOTS = [];
+var AG_LLENOS = [];       // slots llenos (para ofrecer lista de espera)
+var AG_FUERA = [];        // slots que existen pero NO los cubre mi plan
+var AG_DET = {};          // iso -> {cupo, ocupados, curso}
+var AG_PLAN = null;       // {nombre, tipos[]} — el plan del alumno
+var AG_FILTRO = "";       // categoría elegida en los chips de filtro ("" = todas)
+var AG_PROFE = null;      // {nombre, foto} del profe de esta agenda
 var AG_CANCELA_MIN_H = 4; // fallback: el valor real llega en /api/me (lo configura tu profesor)
 var AG_REPROG_ON = true;
 function agSyncReprog(){ try{ if(ME&&ME.reprog){ AG_REPROG_ON=(ME.reprog.activo!==false); var h=Number(ME.reprog.min_h); if(h>=1&&h<=72) AG_CANCELA_MIN_H=h; } }catch(e){} }
@@ -1782,7 +1797,14 @@ function cargarSlots(){
   $("agSlots").innerHTML = '<p class="note" style="margin:0">Cargando horarios…</p>';
   api("/app/api/agenda/slots").then(function(d){
     AG_SLOTS = (d && d.slots) || [];
+    AG_LLENOS = (d && d.llenos) || [];
+    AG_FUERA = (d && d.fuera) || [];
+    AG_DET = (d && d.detalle) || {};
+    AG_PLAN = (d && d.plan) || null;
+    AG_PROFE = (d && d.profe) || null;
+    pintarProfe();
     pintarSlots();
+    cargarEspera();
   }).catch(function(){
     $("agSlots").innerHTML = '<p class="note" style="margin:0 0 8px">No pude cargar los horarios.</p>'+
       '<button class="btn ghost" id="agReintentar" type="button">Reintentar</button>';
@@ -1790,21 +1812,74 @@ function cargarSlots(){
   }).finally(function(){ AG_CARGANDO=false; });
 }
 
+// Muestra a quién le reservas + su foto (dato que pidió Elevate: "ver quién da la clase").
+function pintarProfe(){
+  var box=$("agProfe"); if(!box) return;
+  if(!AG_PROFE || !AG_PROFE.nombre){ box.innerHTML=""; box.style.display="none"; return; }
+  box.style.display="";
+  var ini = (AG_PROFE.nombre||"?").trim().slice(0,1).toUpperCase();
+  var foto = AG_PROFE.foto
+    ? '<img src="'+esc(AG_PROFE.foto)+'" alt="" style="width:44px;height:44px;border-radius:50%;object-fit:cover;flex:none;">'
+    : '<div style="width:44px;height:44px;border-radius:50%;background:var(--accent,#7c6cf0);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;flex:none;">'+esc(ini)+'</div>';
+  box.innerHTML = '<div style="display:flex;align-items:center;gap:10px;">'+foto+
+    '<div><div class="note" style="margin:0;font-size:12px;">Tu clase con</div>'+
+    '<div style="font-weight:700;">'+esc(AG_PROFE.nombre)+'</div></div></div>';
+}
+
+// Chip de tipo de clase (Mat / Máquinas) + cupos libres, si la franja los tiene.
+function slotMeta(iso){
+  var d=AG_DET[iso]; if(!d) return "";
+  var out="";
+  if(d.curso) out += '<span style="display:inline-block;font-size:10px;font-weight:700;letter-spacing:.03em;text-transform:uppercase;background:var(--accent,#7c6cf0);color:#fff;border-radius:6px;padding:1px 6px;margin-left:6px;">'+esc(d.curso)+'</span>';
+  var cupo=Number(d.cupo)||0;
+  if(cupo>1){ var libres=Math.max(0,cupo-(Number(d.ocupados)||0)); out += '<span style="font-size:11px;opacity:.7;margin-left:6px;">'+libres+'/'+cupo+' libres</span>'; }
+  return out;
+}
+
+// Categoría de una etiqueta: "Pilates Máquinas · Reformer" -> "Pilates Máquinas"
+function catDe(t){ var s=String(t||"").trim(); var i=s.indexOf(" · "); return i>0?s.slice(0,i).trim():s; }
+// Chips para filtrar por tipo de clase cuando hay más de uno disponible.
+function chipsDeTipo(isos){
+  var cats=[];
+  isos.forEach(function(iso){ var c=catDe((AG_DET[iso]||{}).curso); if(c && cats.indexOf(c)===-1) cats.push(c); });
+  if(cats.length<2) return "";
+  var b=function(v,tx){ return '<button class="btn '+(AG_FILTRO===v?"":"ghost ")+'sm" data-filtro="'+esc(v)+'">'+esc(tx)+'</button>'; };
+  return '<div style="display:flex;gap:6px;flex-wrap:wrap;margin:0 0 12px;">'+b("","Todas")+cats.map(function(c){return b(c,c);}).join("")+'</div>';
+}
+// Aviso honesto de lo que su plan NO cubre: no se esconde, se explica.
+function avisoFueraDePlan(){
+  if(!AG_FUERA.length) return "";
+  var cats=[];
+  AG_FUERA.forEach(function(iso){ var c=catDe((AG_DET[iso]||{}).curso); if(c && cats.indexOf(c)===-1) cats.push(c); });
+  if(!cats.length) return "";
+  var plan=(AG_PLAN&&AG_PLAN.nombre)?('Tu plan <b>'+esc(AG_PLAN.nombre)+'</b>'):"Tu plan";
+  return '<p class="note" style="margin:0 0 12px;">'+plan+' no incluye <b>'+esc(cats.join(", "))+
+    '</b>. Si quieres esas clases, escríbenos y te cambiamos de plan.</p>';
+}
+
 function pintarSlots(){
-  if(AG_SLOTS.length===0){
-    $("agSlots").innerHTML = '<p class="note" style="margin:0">No hay horarios libres en las próximas semanas. Escríbeme y lo cuadramos.</p>';
+  var todos = AG_SLOTS.concat(AG_LLENOS);
+  if(AG_FILTRO) todos = todos.filter(function(iso){ return catDe((AG_DET[iso]||{}).curso)===AG_FILTRO; });
+  if(todos.length===0){
+    $("agSlots").innerHTML = chipsDeTipo(AG_SLOTS.concat(AG_LLENOS)) + avisoFueraDePlan() +
+      '<p class="note" style="margin:0">'+(AG_FILTRO?"No hay horarios de ese tipo en las próximas semanas.":"No hay horarios en las próximas semanas. Escríbeme y lo cuadramos.")+'</p>';
     return;
   }
-  // agrupo los slots por día (clave local)
+  var llenoSet={}; AG_LLENOS.forEach(function(iso){ llenoSet[iso]=1; });
+  // agrupo TODOS los slots (libres + llenos) por día
   var mapa = {};
-  AG_SLOTS.forEach(function(iso){ var k=diaKeyLocal(iso); (mapa[k]=mapa[k]||[]).push(iso); });
-  // día seleccionado: el guardado si aún tiene cupo, si no el primero disponible
-  if(!AG_DIA || !mapa[AG_DIA]) AG_DIA = diaKeyLocal(AG_SLOTS[0]);
+  todos.forEach(function(iso){ var k=diaKeyLocal(iso); (mapa[k]=mapa[k]||[]).push(iso); });
+  Object.keys(mapa).forEach(function(k){ mapa[k].sort(); });
+  /* ref sale de lo que se está mostrando (ya filtrado): si no, al filtrar por tipo el día
+     seleccionado podía quedar sin horarios y la lista salía vacía. */
+  var ref = todos.slice().sort()[0];
+  if(!AG_DIA || !mapa[AG_DIA]) AG_DIA = diaKeyLocal(ref);
 
   // rango del calendario: lunes de esta semana → domingo de la semana del último slot
+  var todosSort = todos.slice().sort();
   var hoy = new Date(); hoy.setHours(0,0,0,0);
   var ini = new Date(hoy); ini.setDate(ini.getDate() - ((hoy.getDay()+6)%7));
-  var ult = new Date(AG_SLOTS[AG_SLOTS.length-1]); ult.setHours(0,0,0,0);
+  var ult = new Date(todosSort[todosSort.length-1]); ult.setHours(0,0,0,0);
   var fin = new Date(ult); fin.setDate(fin.getDate() + ((7-ult.getDay())%7));
 
   var mesIni = AG_MESES[ini.getMonth()], mesFin = AG_MESES[fin.getMonth()];
@@ -1821,16 +1896,60 @@ function pintarSlots(){
   }
 
   var diaSlots = mapa[AG_DIA] || [];
-  var titulo = fmtFechaLocal(diaSlots[0] || AG_SLOTS[0]);
+  var titulo = fmtFechaLocal(diaSlots[0] || ref);
   var slotsHtml = diaSlots.map(function(iso){
-    return '<button class="btn ghost sm" data-slot="'+esc(iso)+'">'+esc(fmtHoraLocal(iso))+'</button>';
+    if(llenoSet[iso]){
+      return '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:6px 0;">'+
+        '<span style="font-weight:600;opacity:.55;">'+esc(fmtHoraLocal(iso))+'</span>'+slotMeta(iso)+
+        '<span style="font-size:11px;font-weight:700;color:var(--amber,#c47f16);">LLENO</span>'+
+        '<button class="btn ghost sm" data-espera="'+esc(iso)+'">Lista de espera</button>'+
+      '</div>';
+    }
+    return '<button class="btn ghost sm" data-slot="'+esc(iso)+'">'+esc(fmtHoraLocal(iso))+slotMeta(iso)+'</button>';
   }).join("");
 
   $("agSlots").innerHTML =
+    chipsDeTipo(AG_SLOTS.concat(AG_LLENOS)) +
+    avisoFueraDePlan() +
     '<div class="calmes">'+esc(label)+'</div>'+
     '<div class="cal">'+celdas+'</div>'+
     '<div style="margin-top:18px;font-weight:700;text-transform:capitalize;">'+esc(titulo)+'</div>'+
     '<div class="agslotsdia">'+slotsHtml+'</div>';
+}
+
+// ---- Lista de espera (clases llenas) ----
+function cargarEspera(){
+  api("/app/api/agenda/espera").then(function(d){ renderEspera((d&&d.espera)||[]); }).catch(function(){ renderEspera([]); });
+}
+function renderEspera(list){
+  var card=$("agEsperaCard"), box=$("agEspera"); if(!card||!box) return;
+  if(!list.length){ card.style.display="none"; box.innerHTML=""; return; }
+  card.style.display="";
+  box.innerHTML = list.map(function(e){
+    var av = e.estado==="avisado";
+    return '<div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--line);">'+
+      '<div style="flex:1;min-width:0;">'+
+        '<div style="font-weight:600;text-transform:capitalize;">'+esc(fmtFechaLocal(e.inicio_utc))+' · '+esc(fmtHoraLocal(e.inicio_utc))+(e.curso?' · '+esc(e.curso):'')+'</div>'+
+        '<div class="note" style="margin:0;">'+(av?'<span style="color:var(--accent,#7c6cf0);font-weight:700;">¡Se liberó un cupo! Resérvalo abajo 👇</span>':'En lista de espera · te aviso si se libera un cupo')+'</div>'+
+      '</div>'+
+      '<button class="btn ghost sm" data-salir-espera="'+esc(e.id)+'">Salir</button>'+
+    '</div>';
+  }).join("");
+}
+function joinEspera(iso){
+  var label = fmtFechaLocal(iso)+" "+fmtHoraLocal(iso);
+  if(!confirm("Esa clase está llena. ¿Entrar a la lista de espera de "+label+"? Te aviso apenas se libere un cupo.")) return;
+  api("/app/api/agenda/espera",{method:"POST",body:JSON.stringify({inicio_utc:iso})})
+    .then(function(r){ toast(r.mensaje||"Estás en la lista de espera."); cargarEspera(); })
+    .catch(function(e){
+      if(e && /cupo libre/i.test(e.message||"")){ toast("Se liberó un cupo, resérvalo."); cargarSlots(); return; }
+      toast((e&&e.message)||"No se pudo.");
+    });
+}
+function salirEspera(id){
+  api("/app/api/agenda/espera/cancelar",{method:"POST",body:JSON.stringify({id:id})})
+    .then(function(r){ toast(r.mensaje||"Saliste de la lista de espera."); cargarEspera(); })
+    .catch(function(e){ toast((e&&e.message)||"No se pudo."); });
 }
 
 function reservarSlot(iso){
@@ -1871,10 +1990,16 @@ function cancelarClase(id){
 $("v-agenda").addEventListener("click", function(e){
   var dia = e.target.closest("[data-day]");
   if(dia){ AG_DIA = dia.dataset.day; pintarSlots(); return; }
+  var f = e.target.closest("[data-filtro]");
+  if(f){ AG_FILTRO = f.dataset.filtro || ""; AG_DIA = ""; pintarSlots(); return; }
   var t = e.target.closest("[data-tipo]");
   if(t){ setTipoReserva(t.dataset.tipo); pintarSlots(); return; }
   var s = e.target.closest("[data-slot]");
   if(s){ reservarSlot(s.dataset.slot); return; }
+  var w = e.target.closest("[data-espera]");
+  if(w){ joinEspera(w.dataset.espera); return; }
+  var ws = e.target.closest("[data-salir-espera]");
+  if(ws){ salirEspera(ws.dataset.salirEspera); return; }
   var c = e.target.closest("[data-cancelar]");
   if(c){ cancelarClase(c.dataset.cancelar); return; }
 });
@@ -2118,6 +2243,8 @@ function initAlumno(){
         }
         if(d.marca.logo && d.marca.logo.indexOf("/app/api/recurso/archivo/") === 0){
           $("logoSidebar").innerHTML = '<img src="' + esc(d.marca.logo) + '" alt="' + esc(MARCA.nombre) + '" style="max-height:34px;max-width:150px;display:block;" />';
+          /* mismo logo en la pantalla de ingreso: es lo primero que ve el alumno */
+          if($("authLogo")) $("authLogo").innerHTML = '<img src="' + esc(d.marca.logo) + '" alt="' + esc(MARCA.nombre) + '" />';
         }
       }
     }).catch(function(){});
