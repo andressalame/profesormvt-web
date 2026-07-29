@@ -479,6 +479,18 @@ La academia los reescribe en **Ajustes > Mensajes**; se guardan en `config.mensa
   ANTES de guardar. OJO: si se agrega un comodin nuevo hay que sumarlo a `MSG_EJEMPLO` del panel o
   en la previa sale vacio y parece que no funciona.
 
+**Los 8 correos editables son SOLO academia -> sus alumnos** (clase 24h, clase 1h, renovacion,
+vencido, lista de espera, bienvenida/crear contrasena, pago registrado, win-back). Los 3 ultimos
+se sumaron el 28-jul al auditar: faltaban.
+**DECISION (Andres, 28-jul): los correos a duenos de academia, a profesores y los avisos internos
+al dev NO se hacen editables.** Se llego a construir el nivel "plataforma" (catalogo MSG_PLAT,
+`su/mensajes`, pagina de superadmin) y se REVIRTIO entero a pedido suyo: esa copy es de Batuta y
+se cambia deployando, no vale la superficie extra. No re-proponerlo.
+**Regla al agregar un correo nuevo al catalogo:** si lleva un ENLACE funcional (magic link, portal),
+el link va SIEMPRE como CTA que pone el sistema, nunca dentro del cuerpo editable — si el dueno
+reescribe el texto y borra el link, el alumno queda sin poder entrar. Ver `acceso`, que ademas
+agrega server-side el aviso de "vence en 24 horas".
+
 **Migracion prod:** 5 ALTER en `alumnos` + 1 en `profesores`, a mano antes del deploy (patron sedes).
 Verificado: los 17 alumnos existentes quedaron con caducado=0, activado='' y vence='' — nadie
 cambio de estado. Round-trip E2E contra PROD con tenant desechable (creado, verificado, borrado).

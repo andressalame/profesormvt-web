@@ -876,6 +876,24 @@ const MSG_DEF = {
     asunto: "Tu {paquete} venció · renuévalo y sigue",
     cuerpo: "{alumno}, tu {paquete} en {academia} venció el {vence}.\n\nRenueva desde tu portal en 1 minuto y no pierdas tu horario ni tu avance."
   },
+  espera: {
+    nombre: "Se liberó un cupo que estaba esperando",
+    cuando: "Sale cuando alguien cancela y se libera el horario que el alumno esperaba.",
+    asunto: "Se liberó tu horario del {fecha} · resérvalo",
+    cuerpo: "{alumno}, se liberó un cupo en {academia} para la clase del {fecha}, que estabas esperando.\n\nEntra a tu portal y resérvalo antes de que lo tomen."
+  },
+  acceso: {
+    nombre: "Bienvenida: crear su contraseña",
+    cuando: "Sale cuando registras el pago de alguien que todavía no tiene cuenta en tu portal.",
+    asunto: "Tu acceso a {academia}",
+    cuerpo: "{alumno}, tu pago quedó registrado en {academia}.\n\nCrea tu contraseña para entrar a tu portal y ver tus clases, tu material y tus pagos."
+  },
+  pago: {
+    nombre: "Le registraste un pago",
+    cuando: "Sale cada vez que registras un pago de un alumno que ya tiene su cuenta.",
+    asunto: "Pago registrado — {academia}",
+    cuerpo: "{alumno}, registramos tu pago en {academia}. Puedes verlo en tu portal cuando quieras."
+  },
   winback: {
     nombre: "Te extrañamos (alumno inactivo)",
     cuando: "Sale cuando el alumno lleva varios días sin venir y todavía le quedan clases.",
@@ -2892,10 +2910,12 @@ async function promoverEspera(env, tenantId, iso){
     if (row.email && env.RESEND_API_KEY && tenant){
       const link = "https://batuta.lat/app/a/" + (tenant.slug || "");
       try {
+        const msgsE = mensajesDeCfg(await loadConfig(env, tenantId).catch(() => ({})));
+        const datosE = { alumno: primer, academia: tenant.academia || "tu academia", fecha: cuando, curso: "", curso_de: "", con_profe: "", vence_frase: "" };
         await enviarCorreo(env, {
           to: row.email,
-          subject: "Se liberó tu horario del " + cuando + " · resérvalo",
-          html: "<p>" + esc(primer) + ", se liberó un cupo en <b>" + esc(tenant.academia || "tu academia") + "</b> para la clase del <b>" + esc(cuando) + "</b>, que estabas esperando.</p><p>Entra a tu portal y resérvalo antes de que lo tomen:</p><p><a href=\"" + link + "\"><b>Reservar ahora</b></a></p>"
+          subject: msgAsunto(msgsE.espera.asunto, datosE),
+          html: msgHtml(msgsE.espera.cuerpo, datosE, { url: link, texto: "Reservar ahora" })
         });
       } catch (e) {}
     }
@@ -7128,16 +7148,25 @@ export default {
                 env.DB.prepare("DELETE FROM reset_tokens WHERE tenant_id = ?1 AND cuenta_id = ?2").bind(t.id, cu.id),
                 env.DB.prepare("INSERT INTO reset_tokens (token_hash, tenant_id, cuenta_id, expira, usado) VALUES (?1, ?2, ?3, ?4, 0)").bind(tokenHash, t.id, cu.id, expira)
               ]);
+              /* El ENLACE lo pone el sistema como boton, nunca el texto editable: si el dueno
+                 reescribe el correo y borra el link, el alumno se queda sin poder entrar. Lo
+                 mismo con el aviso de las 24 horas, que evita el ticket de "no me funciona". */
+              const msgsA = mensajesDeCfg(await loadConfig(env, t.id).catch(() => ({})));
+              const datosA = { alumno: nombre, academia: t.academia || "tu academia", curso: "", curso_de: "", con_profe: "", vence_frase: "" };
+              const linkAcceso = MARCA.dominio + "/app/a/" + t.slug + "?reset=" + token;
               await enviarCorreo(env, {
                 to: email,
-                subject: "Tu acceso a " + (t.academia || "tu academia"),
-                text: "Hola " + nombre + ". Tu pago quedó registrado en " + (t.academia || "tu academia") + ".\n\nCrea tu contraseña aquí para entrar a tu portal (clases, material y pagos):\n" + MARCA.dominio + "/app/a/" + t.slug + "?reset=" + token + "\n\nEl link vence en 24 horas. Si vence, en el portal puedes pedir otro con 'Olvidé mi contraseña'."
+                subject: msgAsunto(msgsA.acceso.asunto, datosA),
+                html: msgHtml(msgsA.acceso.cuerpo, datosA, { url: linkAcceso, texto: "Crear mi contraseña" }) +
+                      "<p style=\"color:#777;font-size:13px;\">El enlace vence en 24 horas. Si se te pasa, en el portal puedes pedir otro con “Olvidé mi contraseña”.</p>"
               });
             } else {
+              const msgsP = mensajesDeCfg(await loadConfig(env, t.id).catch(() => ({})));
+              const datosP = { alumno: nombre, academia: t.academia || "tu academia", curso: "", curso_de: "", con_profe: "", vence_frase: "" };
               await enviarCorreo(env, {
                 to: email,
-                subject: "Pago registrado — " + (t.academia || "tu academia"),
-                text: "Hola " + nombre + ". Registramos tu pago en " + (t.academia || "tu academia") + ". Míralo en tu portal: " + portal
+                subject: msgAsunto(msgsP.pago.asunto, datosP),
+                html: msgHtml(msgsP.pago.cuerpo, datosP, { url: portal, texto: "Ver mi portal" })
               });
             }
           } catch (e) { /* sin correo no se rompe el pago */ }
