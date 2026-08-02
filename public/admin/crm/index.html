@@ -101,6 +101,24 @@
   .field input,.field select,.field textarea{width:100%;background:var(--bg);border:1px solid var(--line);color:var(--cream);font-family:var(--body);font-size:14px;padding:9px 11px;border-radius:2px;}
   .field input:focus,.field select:focus,.field textarea:focus{outline:2px solid var(--accent);outline-offset:1px;border-color:var(--accent);}
   .field textarea{resize:vertical;min-height:54px;}
+  /* Armado de la clase grupal + tareas adjuntas (1-ago-2026). Reemplaza el muro de checkboxes.
+     Solo usa tokens que existen en los 3 paneles (MVT, Batuta, Nicole); el radio cae al de la
+     marca donde exista (--r-pill / --r-sm) y a 2px donde no, así cada uno conserva su look. */
+  .gsel{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;}
+  .gsel:empty{display:none;}
+  .gchip{display:inline-flex;align-items:center;gap:6px;font-family:var(--body);font-size:12.5px;max-width:100%;
+         padding:4px 5px 4px 10px;border:1px solid var(--accent);color:var(--accent);border-radius:var(--r-pill,2px);}
+  /* el nombre nunca parte la píldora en dos líneas: se recorta con puntos y el título completo
+     queda en el tooltip (nombres largos + fuentes anchas como DM Mono la rompían). */
+  .gchipn{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .gchip button{background:none;border:0;color:inherit;cursor:pointer;font-size:15px;line-height:1;padding:0 3px;flex:0 0 auto;}
+  .gchip button:hover{opacity:.6;}
+  .glist{max-height:158px;overflow-y:auto;border:1px solid var(--line);border-radius:var(--r-sm,2px);margin-top:7px;}
+  .glist button{display:block;width:100%;text-align:left;background:none;border:0;border-bottom:1px solid var(--line);
+                color:var(--cream);font-family:var(--body);font-size:13.5px;padding:9px 11px;cursor:pointer;}
+  .glist button:last-child{border-bottom:0;}
+  .glist button:hover,.glist button:focus{background:var(--panel2);color:var(--accent);outline:none;}
+  .glist .vacio{padding:10px 11px;color:var(--muted);font-size:12.5px;}
   .frow{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
   .modal-actions{display:flex;gap:10px;justify-content:flex-end;margin-top:20px;flex-wrap:wrap;}
   .hint{font-size:12.5px;color:var(--muted);margin-top:-4px;margin-bottom:14px;}
@@ -376,7 +394,12 @@
   </section>
 
   <section class="panel" id="panel-registro">
-    <div style="margin-bottom:14px;"><button class="btn" id="btnNuevoRegistro">+ Registrar clase</button></div>
+    <!-- Dos puertas separadas (1-ago-2026): la individual no carga la pantalla con los nombres
+         de todos los demás alumnos, que es lo que la hacía pesada para el 90% de las clases. -->
+    <div style="margin-bottom:14px;display:flex;gap:8px;flex-wrap:wrap;">
+      <button class="btn" id="btnNuevoRegistro">+ Registrar clase individual</button>
+      <button class="btn ghost" id="btnNuevoRegistroGrupal">+ Registrar clase grupal</button>
+    </div>
     <input type="file" id="fileAudio" accept="audio/*,application/pdf,image/png,image/jpeg" style="display:none" multiple />
     <div class="filtros">
       <input id="regBuscar" type="search" placeholder="Buscar: qué se trabajó, tarea, plan…" autocomplete="off" />
@@ -771,16 +794,19 @@
       <div class="field"><label>Curso de esta clase</label><select id="r_curso"></select></div>
     </div>
     <p class="hint">Asistió y Falta consumen 1 clase. Reprogramar dentro del límite no consume; pasarse del límite cuenta como falta.</p>
-    <div class="field" id="r_grupal_wrap"><label>Clase grupal (opcional): también estuvieron</label>
-      <div id="r_grupales" style="display:flex;flex-wrap:wrap;gap:10px;padding:4px 0;max-height:96px;overflow-y:auto;"></div>
-      <p class="hint" style="margin:4px 0 0;">Marca a los demás alumnos de esa clase: se registra la misma clase para cada uno (mismo estado, trabajo y tarea) y cada quien consume 1 clase de su propio paquete.</p></div>
+    <div class="field" id="r_grupal_wrap"><label>Quiénes más estuvieron en esta clase</label>
+      <div id="r_gsel" class="gsel"></div>
+      <input id="r_gbuscar" type="search" placeholder="Busca por nombre y haz clic para sumarlo" autocomplete="off" />
+      <div id="r_grupales" class="glist"></div>
+      <p class="hint" style="margin:7px 0 0;">Se registra la misma clase para cada uno (mismo estado, trabajo y tarea) y cada quien consume 1 clase de su propio paquete.</p></div>
     <div class="field"><label>¿Qué se trabajó?</label><input id="r_trabajo" type="text" /></div>
     <div class="field"><label>Tarea asignada</label><input id="r_tarea" type="text" /></div>
     <div class="field"><label>¿Qué haremos la próxima clase?</label><input id="r_plan" type="text" placeholder="El plan de la siguiente sesión — el alumno también lo ve" />
       <p class="hint" style="margin:5px 0 0;">Opcional. Aparece en su portal como "Lo que viene".</p></div>
-    <div class="field"><label>Mandar ejercicio de tu biblioteca (tarea)</label>
-      <select id="r_ejercicio"><option value="">— Ninguno —</option></select>
-      <p class="hint" style="margin:5px 0 0;">Se adjunta a esta clase como tarea para el alumno. Súbelos en Material → Tu biblioteca.</p></div>
+    <div class="field"><label>Mandar ejercicios de tu biblioteca (tareas)</label>
+      <select id="r_ejercicio"><option value="">— Elige uno y se suma abajo —</option></select>
+      <div id="r_ejsel" class="gsel" style="margin:8px 0 0;"></div>
+      <p class="hint" style="margin:6px 0 0;">Puedes adjuntar <b>varias</b>: eliges una, se suma a la lista, y repites (hasta 8). Súbelos en Material → Tu biblioteca.</p></div>
     <div class="modal-actions">
       <button class="btn ghost" data-close>Cancelar</button>
       <button class="btn" id="btnGuardarRegistro">Guardar</button>
@@ -1395,7 +1421,7 @@ function fillEjercicioSelect(curso){
   var sel=el("r_ejercicio"); if(!sel) return;
   var prev=sel.value;
   var lista=(db.ejercicios||[]).filter(function(e){ return !curso || (e.curso||"Todos")==="Todos" || (e.curso||"")===curso; });
-  sel.innerHTML='<option value="">— Ninguno —</option>'+lista.map(function(e){
+  sel.innerHTML='<option value="">— Elige uno y se suma abajo —</option>'+lista.map(function(e){
     return '<option value="'+esc(e.id)+'">'+esc(e.titulo)+(e.curso&&e.curso!=="Todos"?' ('+esc(e.curso)+')':'')+'</option>';
   }).join("");
   sel.value=prev;
@@ -1734,7 +1760,8 @@ document.body.addEventListener("click",function(e){
     el("r_tarea").value=rg.tarea||"";
     el("r_plan").value=rg.plan||"";
     el("r_ejercicio").value="";
-    var gwEd=el("r_grupal_wrap"); if(gwEd) gwEd.style.display="none";
+    REG_EJ=[]; pintarEjerciciosReg();
+    modoRegistro(false);   /* editar toca UNA clase ya registrada, no rearma el grupo */
     syncCurso();
     if(rg.curso){   // conservar el curso original de la clase aunque el alumno ya no lo lleve
       var rs=el("r_curso");
@@ -1768,7 +1795,7 @@ function syncCurso(){
   sel.value=cursos[0];
   fillEjercicioSelect(cursos[0]);
 }
-el("r_alumno").addEventListener("change",function(){ syncCurso(); if(!el("r_id").value) fillGrupales(); });
+el("r_alumno").addEventListener("change",function(){ syncCurso(); if(!el("r_id").value) pintarGrupoReg(); });
 el("r_curso").addEventListener("change",function(){ fillEjercicioSelect(el("r_curso").value); });
 /* ---------- Filtros de Clases ---------- */
 ["regBuscar","regFiltroAlumno","regFiltroEstado"].forEach(function(id){
@@ -1842,10 +1869,10 @@ function registrarClaseGrupo(g){
   el("r_id").value="";
   el("r_fecha").value=hoyLima();
   el("r_estado").value="Asistió"; el("r_trabajo").value=""; el("r_tarea").value=""; el("r_plan").value=""; el("r_ejercicio").value="";
-  var gw=el("r_grupal_wrap"); if(gw) gw.style.display="";
+  REG_EJ=[]; pintarEjerciciosReg();
   el("r_alumno").value=ids[0];
-  fillGrupales();
-  ids.slice(1).forEach(function(id){ var c=document.querySelector('#r_grupales input[data-grupal="'+id+'"]'); if(c) c.checked=true; });
+  REG_GRUPO=ids.slice(1);          /* el titular es ids[0]; el resto entra ya sumado */
+  modoRegistro(true);
   syncCurso();
   if(g.curso){
     var rs=el("r_curso");
@@ -1866,25 +1893,93 @@ if(el("tablaGrupos")) el("tablaGrupos").addEventListener("click",function(e){
   }
   if(b.dataset.gclase){ var g3=(db.grupos||[]).find(function(x){return x.id===b.dataset.gclase;}); if(g3) registrarClaseGrupo(g3); }
 });
+/* ---------- Clase grupal por chips + varias tareas adjuntas (1-ago-2026) ----------
+   Antes: un muro de checkboxes con TODOS los alumnos, visible aunque la clase fuera
+   individual, y un solo ejercicio adjuntable por clase. Ahora la clase grupal se arma
+   buscando y sumando, y se pueden adjuntar varias tareas de la biblioteca.
+   La verdad de quién está en la clase vive en REG_GRUPO, no en el DOM: el buscador filtra
+   la lista y, si se leyera del DOM, filtrar borraría en silencio a los ya elegidos. */
+var REG_GRUPO = [];   /* ids de los alumnos EXTRA de la clase (sin el titular) */
+var REG_EJ = [];      /* ids de ejercicios que se adjuntan en este guardado */
+
+function nombreAlumnoReg(id){ var a=(db.alumnos||[]).find(function(x){return x.id===id;}); return a?a.nombre:""; }
+function chipsRegHTML(items, attr){
+  return items.map(function(it){
+    return '<span class="gchip" title="'+esc(it.n)+'"><span class="gchipn">'+esc(it.n)+'</span>'+
+           '<button type="button" '+attr+'="'+esc(it.id)+'" title="Quitar">×</button></span>';
+  }).join("");
+}
+function pintarGrupoReg(){
+  var box=el("r_gsel"); if(!box) return;
+  var main=el("r_alumno").value;
+  /* el titular nunca puede estar dos veces, y un alumno borrado deja de contar */
+  REG_GRUPO=REG_GRUPO.filter(function(id){ return id!==main && (db.alumnos||[]).some(function(a){return a.id===id;}); });
+  box.innerHTML=chipsRegHTML(REG_GRUPO.map(function(id){ return {id:id,n:nombreAlumnoReg(id)}; }),"data-quitagrupo");
+  fillGrupales();
+}
 function fillGrupales(){
   var box=el("r_grupales"); if(!box) return;
   var main=el("r_alumno").value;
-  box.innerHTML=db.alumnos.filter(function(a){return a.id!==main;}).map(function(a){
-    return '<label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-family:var(--body);font-size:13px;"><input type="checkbox" data-grupal="'+esc(a.id)+'" style="width:auto;"> '+esc(a.nombre)+'</label>';
-  }).join("") || '<span class="mini">No hay más alumnos todavía.</span>';
+  var q=((el("r_gbuscar")&&el("r_gbuscar").value)||"").trim().toLowerCase();
+  var lista=(db.alumnos||[]).filter(function(a){
+    return a.id!==main && REG_GRUPO.indexOf(a.id)===-1 && (!q || (a.nombre||"").toLowerCase().indexOf(q)!==-1);
+  });
+  box.innerHTML = lista.length
+    ? lista.map(function(a){ return '<button type="button" data-sumagrupo="'+esc(a.id)+'">'+esc(a.nombre)+'</button>'; }).join("")
+    : '<div class="vacio">'+(q?"Ningún alumno con ese nombre.":"No hay más alumnos para sumar.")+'</div>';
 }
+function pintarEjerciciosReg(){
+  var box=el("r_ejsel"); if(!box) return;
+  box.innerHTML=chipsRegHTML(REG_EJ.map(function(id){
+    var e=(db.ejercicios||[]).find(function(x){return x.id===id;});
+    return {id:id, n:(e&&e.titulo)||"Ejercicio"};
+  }),"data-quitaej");
+}
+/* Única puerta para abrir el modal en modo individual o grupal. */
+function modoRegistro(grupal){
+  var gw=el("r_grupal_wrap"); if(gw) gw.style.display = grupal ? "" : "none";
+  if(!grupal) REG_GRUPO=[];
+  if(el("r_gbuscar")) el("r_gbuscar").value="";
+  pintarGrupoReg();
+}
+if(el("r_gbuscar")) el("r_gbuscar").addEventListener("input", fillGrupales);
+if(el("r_grupales")) el("r_grupales").addEventListener("click",function(e){
+  var b=e.target.closest?e.target.closest("[data-sumagrupo]"):null; if(!b) return;
+  if(REG_GRUPO.indexOf(b.dataset.sumagrupo)===-1) REG_GRUPO.push(b.dataset.sumagrupo);
+  if(el("r_gbuscar")) el("r_gbuscar").value="";
+  pintarGrupoReg();
+});
+if(el("r_gsel")) el("r_gsel").addEventListener("click",function(e){
+  var b=e.target.closest?e.target.closest("[data-quitagrupo]"):null; if(!b) return;
+  REG_GRUPO=REG_GRUPO.filter(function(id){ return id!==b.dataset.quitagrupo; });
+  pintarGrupoReg();
+});
+if(el("r_ejsel")) el("r_ejsel").addEventListener("click",function(e){
+  var b=e.target.closest?e.target.closest("[data-quitaej]"):null; if(!b) return;
+  REG_EJ=REG_EJ.filter(function(id){ return id!==b.dataset.quitaej; });
+  pintarEjerciciosReg();
+});
+if(el("r_ejercicio")) el("r_ejercicio").addEventListener("change",function(){
+  var id=this.value; this.value="";     /* el select es el que SUMA, no el que guarda */
+  if(!id) return;
+  if(REG_EJ.indexOf(id)!==-1){ toast("Esa tarea ya está en la lista"); return; }
+  if(REG_EJ.length>=8){ toast("Máximo 8 tareas por clase"); return; }
+  REG_EJ.push(id); pintarEjerciciosReg();
+});
 
-el("btnNuevoRegistro").addEventListener("click",function(){
+function abrirRegistroNuevo(grupal){
   if(db.alumnos.length===0){ toast("Agrega un alumno primero"); return; }
   fillSelects();
-  el("regTitulo").innerHTML='Registrar <em>clase</em>';
+  el("regTitulo").innerHTML = grupal ? 'Registrar <em>clase grupal</em>' : 'Registrar <em>clase</em>';
   el("r_id").value="";
   el("r_fecha").value=hoyLima();
   el("r_estado").value="Asistió"; el("r_trabajo").value=""; el("r_tarea").value=""; el("r_plan").value=""; el("r_ejercicio").value="";
-  var gw=el("r_grupal_wrap"); if(gw) gw.style.display="";
-  fillGrupales();
+  REG_EJ=[]; REG_GRUPO=[]; pintarEjerciciosReg();
+  modoRegistro(!!grupal);
   syncCurso(); openOv("ovRegistro");
-});
+}
+el("btnNuevoRegistro").addEventListener("click",function(){ abrirRegistroNuevo(false); });
+if(el("btnNuevoRegistroGrupal")) el("btnNuevoRegistroGrupal").addEventListener("click",function(){ abrirRegistroNuevo(true); });
 el("btnGuardarRegistro").addEventListener("click",function(){
   var alumnoId=el("r_alumno").value;
   if(!alumnoId){ toast("Elige un alumno"); return; }
@@ -1893,16 +1988,18 @@ el("btnGuardarRegistro").addEventListener("click",function(){
   var campos={ fecha:el("r_fecha").value, alumnoId:alumnoId, alumno_id:alumnoId,
     curso:el("r_curso").value, estado:el("r_estado").value,
     trabajo:el("r_trabajo").value.trim(), tarea:el("r_tarea").value.trim(), plan:el("r_plan").value.trim() };
-  /* si eligió un ejercicio de la biblioteca, lo adjunta a la tarea de esta clase (por referencia, sin resubir) */
-  var ejId=el("r_ejercicio").value;
-  if(ejId){
-    var ej=(db.ejercicios||[]).find(function(x){return x.id===ejId;});
-    if(ej && ej.url){
-      var base=editId ? ((db.registro.find(function(x){return x.id===editId;})||{}).tarea_audio||"") : "";
-      var lista=parseAudios(base);
-      if(!lista.some(function(x){return x.u===ej.url;}) && lista.length<8){ lista.push({u:ej.url, n:ej.titulo||"Ejercicio"}); }
-      campos.tarea_audio=JSON.stringify(lista);
-    }
+  /* Tareas de la biblioteca: se adjuntan TODAS las de la lista (por referencia, sin resubir).
+     Al editar se suman a lo que la clase ya tenía, sin duplicar por URL, con tope de 8. */
+  if(REG_EJ.length){
+    var base=editId ? ((db.registro.find(function(x){return x.id===editId;})||{}).tarea_audio||"") : "";
+    var lista=parseAudios(base);
+    REG_EJ.forEach(function(eid){
+      var ej=(db.ejercicios||[]).find(function(x){return x.id===eid;});
+      if(!ej || !ej.url) return;
+      if(lista.some(function(x){return x.u===ej.url;}) || lista.length>=8) return;
+      lista.push({u:ej.url, n:ej.titulo||"Ejercicio"});
+    });
+    campos.tarea_audio=JSON.stringify(lista);
   }
   var nRegistrados=1;
   if(editId){
@@ -1910,9 +2007,8 @@ el("btnGuardarRegistro").addEventListener("click",function(){
     db.registro=db.registro.map(function(x){ return x.id===editId ? Object.assign({},x,campos) : x; });
   } else {
     db.registro.push(Object.assign({ id:uid(), ciclo:(a&&a.ciclo)||1 }, campos));
-    // clase grupal: la misma clase para cada alumno marcado, cada uno con su propio ciclo
-    [].slice.call(document.querySelectorAll('#r_grupales input[data-grupal]:checked')).forEach(function(c){
-      var idAl=c.dataset.grupal;
+    // clase grupal: la misma clase para cada alumno sumado, cada uno con su propio ciclo
+    REG_GRUPO.forEach(function(idAl){
       if(idAl===alumnoId) return;
       var al=db.alumnos.find(function(x){return x.id===idAl;});
       if(!al) return;

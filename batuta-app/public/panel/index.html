@@ -133,6 +133,24 @@
   .field input,.field select,.field textarea{width:100%;background:var(--bg);border:1px solid var(--line);color:var(--cream);font-family:var(--body);font-size:14px;padding:9px 11px;border-radius:2px;}
   .field input:focus,.field select:focus,.field textarea:focus{outline:2px solid var(--accent);outline-offset:1px;border-color:var(--accent);}
   .field textarea{resize:vertical;min-height:54px;}
+  /* Armado de la clase grupal + tareas adjuntas (1-ago-2026). Reemplaza el muro de checkboxes.
+     Solo usa tokens que existen en los 3 paneles (MVT, Batuta, Nicole); el radio cae al de la
+     marca donde exista (--r-pill / --r-sm) y a 2px donde no, así cada uno conserva su look. */
+  .gsel{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;}
+  .gsel:empty{display:none;}
+  .gchip{display:inline-flex;align-items:center;gap:6px;font-family:var(--body);font-size:12.5px;max-width:100%;
+         padding:4px 5px 4px 10px;border:1px solid var(--accent);color:var(--accent);border-radius:var(--r-pill,2px);}
+  /* el nombre nunca parte la píldora en dos líneas: se recorta con puntos y el título completo
+     queda en el tooltip (nombres largos + fuentes anchas como DM Mono la rompían). */
+  .gchipn{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .gchip button{background:none;border:0;color:inherit;cursor:pointer;font-size:15px;line-height:1;padding:0 3px;flex:0 0 auto;}
+  .gchip button:hover{opacity:.6;}
+  .glist{max-height:158px;overflow-y:auto;border:1px solid var(--line);border-radius:var(--r-sm,2px);margin-top:7px;}
+  .glist button{display:block;width:100%;text-align:left;background:none;border:0;border-bottom:1px solid var(--line);
+                color:var(--cream);font-family:var(--body);font-size:13.5px;padding:9px 11px;cursor:pointer;}
+  .glist button:last-child{border-bottom:0;}
+  .glist button:hover,.glist button:focus{background:var(--panel2);color:var(--accent);outline:none;}
+  .glist .vacio{padding:10px 11px;color:var(--muted);font-size:12.5px;}
   .frow{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
   .modal-actions{display:flex;gap:10px;justify-content:flex-end;margin-top:20px;flex-wrap:wrap;}
   .hint{font-size:12.5px;color:var(--muted);margin-top:-4px;margin-bottom:14px;}
@@ -850,7 +868,9 @@
 
   <section class="panel" id="panel-registro">
     <p class="hint quees">📕 <b>Esto es el PASADO: las clases que ya dictaste.</b> Anotas qué se trabajó, la tarea y si el alumno asistió — y se le descuenta 1 clase de su paquete. ¿Buscas los horarios y las reservas que vienen? Eso es <b><a href="#" data-ira="agenda">Agenda</a></b>.</p>
-    <div style="margin-bottom:14px;display:flex;gap:8px;flex-wrap:wrap;"><button class="btn" id="btnNuevoRegistro">+ Registrar clase</button><button class="btn ghost sm" type="button" onclick="lanzarTourModulo('registro')">? Cómo funciona</button></div>
+    <!-- Dos puertas separadas (1-ago-2026): la individual no carga la pantalla con los nombres
+         de todos los demás alumnos, que es lo que la hacía pesada para el 90% de las clases. -->
+    <div style="margin-bottom:14px;display:flex;gap:8px;flex-wrap:wrap;"><button class="btn" id="btnNuevoRegistro">+ Registrar clase individual</button><button class="btn ghost" id="btnNuevoRegistroGrupal">+ Registrar clase grupal</button><button class="btn ghost sm" type="button" onclick="lanzarTourModulo('registro')">? Cómo funciona</button></div>
     <input type="file" id="fileAudio" accept="audio/*,application/pdf,image/png,image/jpeg" style="display:none" multiple />
     <div class="filtros">
       <input id="regBuscar" type="search" placeholder="Buscar: qué se trabajó, tarea, plan…" autocomplete="off" />
@@ -1063,8 +1083,17 @@
     </div>
 
     <div class="group">
-      <h2>Tu horario semanal <button class="btn ghost sm" type="button" style="margin-left:8px;" onclick="lanzarTourModulo('agenda')">? Cómo funciona</button></h2>
+      <h2 id="dispTitulo">Tu horario semanal <button class="btn ghost sm" type="button" style="margin-left:8px;" onclick="lanzarTourModulo('agenda')">? Cómo funciona</button></h2>
       <p class="hint">Prende las franjas en las que dictas. Un clic la prende o la apaga; clic en una franja prendida abre su <b>tipo de clase y aforo</b>. Los alumnos solo ven lo que esté prendido. Hora de Lima.</p>
+      <!-- Horario POR PROFESOR (01-ago-2026, pedido de Elevate: "a las 7 hay 3 cursos distintos
+           dictados por distintos profes"). El worker ya resolvía ?profe=<id>; el panel nunca lo
+           mandaba, así que el dueño solo podía editar SU propio horario. Solo lo ve el dueño y
+           solo si tiene equipo. -->
+      <div class="dispcfg solo-dueno hidden" id="dispProfeWrap" style="margin-bottom:6px;">
+        <span class="pk" style="flex:0 0 auto;">Horario de</span>
+        <select id="disp_profe" style="width:auto;min-width:180px;"></select>
+        <span class="hint" style="margin:0;">Cada profesor tiene su propio horario: dos profes con las 7:00 prendidas = dos clases en paralelo a esa hora.</span>
+      </div>
       <div class="dispcfg">
         <span class="pk" style="flex:0 0 auto;">Mostrar de</span>
         <input id="disp_desde" type="time" step="900" value="07:00" />
@@ -1742,9 +1771,11 @@
       <div class="field"><label>Curso de esta clase</label><select id="r_curso"></select></div>
     </div>
     <p class="hint">Asistió y Falta consumen 1 clase. Reprogramar dentro del límite no consume; pasarse del límite cuenta como falta.</p>
-    <div class="field" id="r_grupal_wrap"><label>Clase grupal (opcional): también estuvieron</label>
-      <div id="r_grupales" style="display:flex;flex-wrap:wrap;gap:10px;padding:4px 0;max-height:96px;overflow-y:auto;"></div>
-      <p class="hint" style="margin:4px 0 0;">Marca a los demás alumnos de esa clase: se registra la misma clase para cada uno (mismo estado, trabajo y tarea) y cada quien consume 1 clase de su propio paquete.</p></div>
+    <div class="field" id="r_grupal_wrap"><label>Quiénes más estuvieron en esta clase</label>
+      <div id="r_gsel" class="gsel"></div>
+      <input id="r_gbuscar" type="search" placeholder="Busca por nombre y haz clic para sumarlo" autocomplete="off" />
+      <div id="r_grupales" class="glist"></div>
+      <p class="hint" style="margin:7px 0 0;">Se registra la misma clase para cada uno (mismo estado, trabajo y tarea) y cada quien consume 1 clase de su propio paquete. Si el grupo es fijo, créalo en <b>Grupos</b> y pasa lista de todo el salón de un golpe.</p></div>
     <div class="field" id="r_asistencia_wrap" style="display:none;">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
         <label style="margin:0;">Asistencia del salón</label>
@@ -1756,9 +1787,10 @@
     <div class="field"><label>Tarea asignada</label><input id="r_tarea" type="text" /></div>
     <div class="field"><label>¿Qué haremos la próxima clase?</label><input id="r_plan" type="text" placeholder="El plan de la siguiente sesión — el alumno también lo ve" />
       <p class="hint" style="margin:5px 0 0;">Opcional. Aparece en su portal como "Lo que viene".</p></div>
-    <div class="field"><label>Mandar ejercicio de tu biblioteca (tarea)</label>
-      <select id="r_ejercicio"><option value="">— Ninguno —</option></select>
-      <p class="hint" style="margin:5px 0 0;">Se adjunta a esta clase como tarea para el alumno. Súbelos en Material → Tu biblioteca.</p></div>
+    <div class="field"><label>Mandar ejercicios de tu biblioteca (tareas)</label>
+      <select id="r_ejercicio"><option value="">— Elige uno y se suma abajo —</option></select>
+      <div id="r_ejsel" class="gsel" style="margin:8px 0 0;"></div>
+      <p class="hint" style="margin:6px 0 0;">Puedes adjuntar <b>varias</b>: eliges una, se suma a la lista, y repites (hasta 8). Súbelos en Material → Tu biblioteca.</p></div>
     <div class="modal-actions">
       <button class="btn ghost" data-close>Cancelar</button>
       <button class="btn" id="btnGuardarRegistro">Guardar</button>
@@ -1919,7 +1951,10 @@ function filaPaqHTML(p){
     '<input type="number" class="pq-c" min="0" max="500" placeholder="clases" value="'+(ilim?"":(p.c||0))+'"'+(ilim?' disabled style="opacity:.4"':'')+' />'+
     '<label style="font-size:12px;opacity:.8;display:flex;gap:4px;align-items:center;white-space:nowrap;"><input type="checkbox" class="pq-u"'+(ilim?" checked":"")+' /> mensual</label>'+
     '<input type="number" class="pq-p" min="0" placeholder="S/" value="'+(db.precios[p.n]||0)+'" />'+
-    '<details class="pq-inc"><summary>'+esc(resumen)+'</summary><div class="pq-incbox">'+opciones+
+    /* .pq-tipos = lo ÚNICO que repinta refrescarIncluyeDePaquetes(). El <summary> y el bloque
+       de vigencia de abajo quedan fuera a propósito: ver el comentario de esa función. */
+    '<details class="pq-inc"><summary>'+esc(resumen)+'</summary><div class="pq-incbox">'+
+      '<div class="pq-tipos">'+opciones+'</div>'+
       '<p class="hint" style="margin:6px 0 0;font-size:11px;">Nada marcado = el plan da acceso a todas.</p>'+
       /* Vigencia (28-jul-2026, pedido de Elevate: sus planes duran 40 dias). Vive dentro del
          desplegable de cada plan para no ensuchar la fila de quien no la usa. */
@@ -2992,7 +3027,7 @@ function fillEjercicioSelect(curso){
   var sel=el("r_ejercicio"); if(!sel) return;
   var prev=sel.value;
   var lista=(db.ejercicios||[]).filter(function(e){ return !curso || (e.curso||"Todos")==="Todos" || (e.curso||"")===curso; });
-  sel.innerHTML='<option value="">— Ninguno —</option>'+lista.map(function(e){
+  sel.innerHTML='<option value="">— Elige uno y se suma abajo —</option>'+lista.map(function(e){
     return '<option value="'+esc(e.id)+'">'+esc(e.titulo)+(e.curso&&e.curso!=="Todos"?' ('+esc(e.curso)+')':'')+'</option>';
   }).join("");
   sel.value=prev;
@@ -3314,17 +3349,53 @@ function dispActiva(dow,hora){
   for(var i=0;i<AG_DISP.length;i++){ if(AG_DISP[i].dia_semana===dow && AG_DISP[i].hora===hora) return AG_DISP[i].activo!==0; }
   return false;
 }
+/* Horario por profesor: AG_PROFE = de quién estoy editando el horario ("" = el mío).
+   Solo el dueño puede cambiarlo; el worker ignora el parámetro si lo manda un profesor. */
+var AG_PROFE = "";
+var AG_PROFES = null;   /* null = todavía no preguntado */
+function esDuenoPanel(){ return !document.body.classList.contains("rol-profesor"); }
+function pintarSelectProfeAgenda(){
+  var wrap=el("dispProfeWrap"), sel=el("disp_profe");
+  if(!wrap||!sel) return;
+  /* Invitados (aún no entraron) y suspendidos no tienen horario que editar: el worker
+     además rechaza al suspendido con 404, así que ofrecerlos sería ofrecer un error. */
+  var lista=(AG_PROFES||[]).filter(function(p){ return p.estado!=="invitado" && p.estado!=="suspendido"; });
+  /* Sin equipo no hay nada que elegir: el selector solo estorbaría. */
+  if(!esDuenoPanel() || lista.length<2){ wrap.classList.add("hidden"); AG_PROFE=""; return; }
+  wrap.classList.remove("hidden");
+  sel.innerHTML=lista.map(function(p){
+    return '<option value="'+esc(p.id)+'"'+(p.id===AG_PROFE?' selected':'')+'>'+esc(p.nombre)+(p.rol==="dueno"?" (tú)":"")+'</option>';
+  }).join("");
+  /* Si el que estaba elegido ya no está (suspendido, borrado), vuelve al dueño. */
+  if(!lista.some(function(p){ return p.id===AG_PROFE; })){
+    var yo=lista.filter(function(p){ return p.rol==="dueno"; })[0]||lista[0];
+    AG_PROFE=yo?yo.id:""; sel.value=AG_PROFE;
+  }
+}
 function cargarAgenda(){
   el("dispGrid").innerHTML = '<p class="hint">Cargando…</p>';
-  Promise.all([
-    fetch("/app/api/admin/disponibilidad",{headers:hdr()}).then(function(r){return r.json();}),
-    fetch("/app/api/admin/agenda",{headers:hdr()}).then(function(r){return r.json();})
-  ]).then(function(res){
+  /* La lista de profesores se pide UNA vez y se cachea: la agenda se recarga en cada guardado. */
+  var profes = (AG_PROFES!==null || !esDuenoPanel())
+    ? Promise.resolve(null)
+    : fetch("/app/api/admin/profesores",{headers:hdr()}).then(function(r){return r.json();}).catch(function(){return null;});
+  profes.then(function(dp){
+    if(dp && !dp.error) AG_PROFES=dp.profesores||[];
+    else if(AG_PROFES===null) AG_PROFES=[];
+    pintarSelectProfeAgenda();
+    var qs = AG_PROFE ? ("?profe="+encodeURIComponent(AG_PROFE)) : "";
+    return Promise.all([
+      fetch("/app/api/admin/disponibilidad"+qs,{headers:hdr()}).then(function(r){return r.json();}),
+      fetch("/app/api/admin/agenda",{headers:hdr()}).then(function(r){return r.json();})
+    ]);
+  }).then(function(res){
     AG_DISP = (res[0] && res[0].disponibilidad) || [];
     AG_RESERVAS = (res[1] && res[1].reservas) || [];
     renderAgendaAdmin();
   }).catch(function(){ toast("No pude cargar la agenda"); });
 }
+if(el("disp_profe")) el("disp_profe").addEventListener("change",function(){
+  AG_PROFE=this.value||""; cargarAgenda();
+});
 /* Abreviatura para la celda: "Pilates Máquinas · Reformer" -> "MÁQ·REF" */
 function abrevTipo(t){
   if(!t) return "";
@@ -3335,10 +3406,19 @@ function renderAgendaAdmin(){
   if(el("disp_desde")) el("disp_desde").value=DISP_PREF.desde;
   if(el("disp_hasta")) el("disp_hasta").value=DISP_PREF.hasta;
   if(el("disp_paso")) el("disp_paso").value=String(DISP_PREF.paso);
-  /* aviso de disponibilidad vacia: sin horarios marcados, los alumnos NO ven slots */
+  /* aviso de disponibilidad vacia: sin horarios marcados, los alumnos NO ven slots.
+     Con el selector de profesor puesto, el aviso tiene que decir DE QUIÉN es el horario vacío
+     o el dueño cree que su academia entera está muerta cuando solo falta un profe. */
+  var quien = "";
+  if(AG_PROFE){
+    var pSel=(AG_PROFES||[]).filter(function(p){ return p.id===AG_PROFE; })[0];
+    if(pSel && pSel.rol!=="dueno") quien=pSel.nombre;
+  }
   var html = "";
   if(!(AG_DISP||[]).some(function(r){return r.activo;})){
-    html += '<div class="card" style="padding:12px 14px;margin:0 0 12px;border-color:var(--accent);"><strong>Tus alumnos aún no ven horarios.</strong> Prende abajo los días y horas en que dictas, y guarda: recién ahí podrán reservar desde su portal.</div>';
+    html += '<div class="card" style="padding:12px 14px;margin:0 0 12px;border-color:var(--accent);"><strong>'+
+      (quien ? (esc(quien)+" todavía no tiene horarios.") : "Tus alumnos aún no ven horarios.")+
+      '</strong> Prende abajo los días y horas '+(quien?"en que dicta":"en que dictas")+', y guarda: recién ahí podrán reservar desde su portal.</div>';
   }
   html += '<table class="dispt"><thead><tr><th></th>'+AG_DOW.map(function(d){return '<th>'+d.n+'</th>';}).join("")+'</tr></thead><tbody>';
   var filaDe=function(dow,hora){ return (AG_DISP||[]).find(function(x){return x.dia_semana===dow&&x.hora===hora;}); };
@@ -3540,7 +3620,7 @@ if(el("btnCopiarDiaOk")) el("btnCopiarDiaOk").addEventListener("click",function(
 el("btnGuardarDisp").addEventListener("click",function(){
   var activos = [];
   el("dispGrid").querySelectorAll(".dcell.on").forEach(function(c){ activos.push({dia_semana:Number(c.dataset.dow), hora:c.dataset.hora, cupo:parseInt(c.dataset.cupo,10)||0, curso:c.dataset.curso||""}); });
-  apiPost("/app/api/admin/disponibilidad",{activos:activos})
+  apiPost("/app/api/admin/disponibilidad",{activos:activos, profe: AG_PROFE||undefined})
     .then(function(){ toast("Disponibilidad guardada"); cargarAgenda(); })
     .catch(function(e){ toast(e.message||"No se pudo guardar"); });
 });
@@ -4160,7 +4240,8 @@ document.body.addEventListener("click",function(e){
     el("r_tarea").value=rg.tarea||"";
     el("r_plan").value=rg.plan||"";
     el("r_ejercicio").value="";
-    var gwEd=el("r_grupal_wrap"); if(gwEd) gwEd.style.display="none";
+    REG_EJ=[]; pintarEjerciciosReg();
+    modoRegistro(false);   /* editar toca UNA clase ya registrada, no rearma el grupo */
     syncCurso();
     if(rg.curso){   // conservar el curso original de la clase aunque el alumno ya no lo lleve
       var rs=el("r_curso");
@@ -4194,7 +4275,7 @@ function syncCurso(){
   sel.value=cursos[0];
   fillEjercicioSelect(cursos[0]);
 }
-el("r_alumno").addEventListener("change",function(){ syncCurso(); if(!el("r_id").value) fillGrupales(); });
+el("r_alumno").addEventListener("change",function(){ syncCurso(); if(!el("r_id").value) pintarGrupoReg(); });
 el("r_curso").addEventListener("change",function(){ fillEjercicioSelect(el("r_curso").value); });
 /* ---------- Filtros de Clases ---------- */
 ["regBuscar","regFiltroAlumno","regFiltroEstado"].forEach(function(id){
@@ -4286,9 +4367,10 @@ function registrarClaseGrupo(g){
   el("r_id").value="";
   el("r_fecha").value=new Date().toISOString().slice(0,10);
   el("r_estado").value="Asistió"; el("r_trabajo").value=""; el("r_tarea").value=""; el("r_plan").value=""; el("r_ejercicio").value="";
+  REG_EJ=[]; pintarEjerciciosReg();
   /* modo grupo: se oculta el alumno/estado individual y el "también estuvieron"; manda la grilla */
   setFieldVis("r_alumno",false); setFieldVis("r_estado",false);
-  var gw=el("r_grupal_wrap"); if(gw) gw.style.display="none";
+  modoRegistro(false);
   var aw=el("r_asistencia_wrap"); if(aw) aw.style.display="";
   el("r_alumno").value=miembros[0].id;   // para que syncCurso no reviente
   renderAsistenciaGrid(miembros);
@@ -4317,10 +4399,20 @@ function guardarAsistenciaGrupo(){
   if(!fecha){ toast("Ponle fecha a la clase"); return; }
   var curso=el("r_curso").value;
   var trabajo=el("r_trabajo").value.trim(), tarea=el("r_tarea").value.trim(), plan=el("r_plan").value.trim();
-  /* ejercicio de la biblioteca (opcional): mismo adjunto de tarea para todo el salón */
+  /* Tareas de la biblioteca (opcional): los MISMOS adjuntos para todo el salón.
+     Lee REG_EJ, no el <select>: desde el 1-ago-2026 el select solo suma a la lista y se
+     resetea, así que leerlo aquí dejaría al salón sin ninguna tarea adjunta. */
   var tarea_audio="";
-  var ejId=el("r_ejercicio").value;
-  if(ejId){ var ej=(db.ejercicios||[]).find(function(x){return x.id===ejId;}); if(ej && ej.url){ tarea_audio=JSON.stringify([{u:ej.url,n:ej.titulo||"Ejercicio"}]); } }
+  if(REG_EJ.length){
+    var listaSalon=[];
+    REG_EJ.forEach(function(eid){
+      var ej=(db.ejercicios||[]).find(function(x){return x.id===eid;});
+      if(!ej || !ej.url) return;
+      if(listaSalon.some(function(x){return x.u===ej.url;}) || listaSalon.length>=8) return;
+      listaSalon.push({u:ej.url, n:ej.titulo||"Ejercicio"});
+    });
+    if(listaSalon.length) tarea_audio=JSON.stringify(listaSalon);
+  }
   var nuevos=[];
   [].slice.call(document.querySelectorAll("#r_asistencia_grid .asist-row")).forEach(function(row){
     var on=row.querySelector(".asist-opt.on"); var estado=on?on.dataset.v:"Asistió";
@@ -4356,27 +4448,95 @@ if(el("tablaGrupos")) el("tablaGrupos").addEventListener("click",function(e){
   if(b.dataset.gclase){ var g3=(db.grupos||[]).find(function(x){return x.id===b.dataset.gclase;}); if(g3) registrarClaseGrupo(g3); }
 });
 
+/* ---------- Clase grupal por chips + varias tareas adjuntas (1-ago-2026) ----------
+   Antes: un muro de checkboxes con TODOS los alumnos, visible aunque la clase fuera
+   individual, y un solo ejercicio adjuntable por clase. Ahora la clase grupal se arma
+   buscando y sumando, y se pueden adjuntar varias tareas de la biblioteca.
+   La verdad de quién está en la clase vive en REG_GRUPO, no en el DOM: el buscador filtra
+   la lista y, si se leyera del DOM, filtrar borraría en silencio a los ya elegidos. */
+var REG_GRUPO = [];   /* ids de los alumnos EXTRA de la clase (sin el titular) */
+var REG_EJ = [];      /* ids de ejercicios que se adjuntan en este guardado */
+
+function nombreAlumnoReg(id){ var a=(db.alumnos||[]).find(function(x){return x.id===id;}); return a?a.nombre:""; }
+function chipsRegHTML(items, attr){
+  return items.map(function(it){
+    return '<span class="gchip" title="'+esc(it.n)+'"><span class="gchipn">'+esc(it.n)+'</span>'+
+           '<button type="button" '+attr+'="'+esc(it.id)+'" title="Quitar">×</button></span>';
+  }).join("");
+}
+function pintarGrupoReg(){
+  var box=el("r_gsel"); if(!box) return;
+  var main=el("r_alumno").value;
+  /* el titular nunca puede estar dos veces, y un alumno borrado deja de contar */
+  REG_GRUPO=REG_GRUPO.filter(function(id){ return id!==main && (db.alumnos||[]).some(function(a){return a.id===id;}); });
+  box.innerHTML=chipsRegHTML(REG_GRUPO.map(function(id){ return {id:id,n:nombreAlumnoReg(id)}; }),"data-quitagrupo");
+  fillGrupales();
+}
 function fillGrupales(){
   var box=el("r_grupales"); if(!box) return;
   var main=el("r_alumno").value;
-  box.innerHTML=db.alumnos.filter(function(a){return a.id!==main;}).map(function(a){
-    return '<label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-family:var(--body);font-size:13px;"><input type="checkbox" data-grupal="'+esc(a.id)+'" style="width:auto;"> '+esc(a.nombre)+'</label>';
-  }).join("") || '<span class="mini">No hay más alumnos todavía.</span>';
+  var q=((el("r_gbuscar")&&el("r_gbuscar").value)||"").trim().toLowerCase();
+  var lista=(db.alumnos||[]).filter(function(a){
+    return a.id!==main && REG_GRUPO.indexOf(a.id)===-1 && (!q || (a.nombre||"").toLowerCase().indexOf(q)!==-1);
+  });
+  box.innerHTML = lista.length
+    ? lista.map(function(a){ return '<button type="button" data-sumagrupo="'+esc(a.id)+'">'+esc(a.nombre)+'</button>'; }).join("")
+    : '<div class="vacio">'+(q?"Ningún alumno con ese nombre.":"No hay más alumnos para sumar.")+'</div>';
 }
-el("btnNuevoRegistro").addEventListener("click",function(){
+function pintarEjerciciosReg(){
+  var box=el("r_ejsel"); if(!box) return;
+  box.innerHTML=chipsRegHTML(REG_EJ.map(function(id){
+    var e=(db.ejercicios||[]).find(function(x){return x.id===id;});
+    return {id:id, n:(e&&e.titulo)||"Ejercicio"};
+  }),"data-quitaej");
+}
+/* Única puerta para abrir el modal en modo individual o grupal. */
+function modoRegistro(grupal){
+  var gw=el("r_grupal_wrap"); if(gw) gw.style.display = grupal ? "" : "none";
+  if(!grupal) REG_GRUPO=[];
+  if(el("r_gbuscar")) el("r_gbuscar").value="";
+  pintarGrupoReg();
+}
+if(el("r_gbuscar")) el("r_gbuscar").addEventListener("input", fillGrupales);
+if(el("r_grupales")) el("r_grupales").addEventListener("click",function(e){
+  var b=e.target.closest?e.target.closest("[data-sumagrupo]"):null; if(!b) return;
+  if(REG_GRUPO.indexOf(b.dataset.sumagrupo)===-1) REG_GRUPO.push(b.dataset.sumagrupo);
+  if(el("r_gbuscar")) el("r_gbuscar").value="";
+  pintarGrupoReg();
+});
+if(el("r_gsel")) el("r_gsel").addEventListener("click",function(e){
+  var b=e.target.closest?e.target.closest("[data-quitagrupo]"):null; if(!b) return;
+  REG_GRUPO=REG_GRUPO.filter(function(id){ return id!==b.dataset.quitagrupo; });
+  pintarGrupoReg();
+});
+if(el("r_ejsel")) el("r_ejsel").addEventListener("click",function(e){
+  var b=e.target.closest?e.target.closest("[data-quitaej]"):null; if(!b) return;
+  REG_EJ=REG_EJ.filter(function(id){ return id!==b.dataset.quitaej; });
+  pintarEjerciciosReg();
+});
+if(el("r_ejercicio")) el("r_ejercicio").addEventListener("change",function(){
+  var id=this.value; this.value="";     /* el select es el que SUMA, no el que guarda */
+  if(!id) return;
+  if(REG_EJ.indexOf(id)!==-1){ toast("Esa tarea ya está en la lista"); return; }
+  if(REG_EJ.length>=8){ toast("Máximo 8 tareas por clase"); return; }
+  REG_EJ.push(id); pintarEjerciciosReg();
+});
+function abrirRegistroNuevo(grupal){
   if(db.alumnos.length===0){ toast("Agrega un alumno primero"); return; }
   fillSelects();
   grupoAsistencia=null;
   setFieldVis("r_alumno",true); setFieldVis("r_estado",true);
   var aw=el("r_asistencia_wrap"); if(aw) aw.style.display="none";
-  el("regTitulo").innerHTML='Registrar <em>clase</em>';
+  el("regTitulo").innerHTML = grupal ? 'Registrar <em>clase grupal</em>' : 'Registrar <em>clase</em>';
   el("r_id").value="";
   el("r_fecha").value=new Date().toISOString().slice(0,10);
   el("r_estado").value="Asistió"; el("r_trabajo").value=""; el("r_tarea").value=""; el("r_plan").value=""; el("r_ejercicio").value="";
-  var gw=el("r_grupal_wrap"); if(gw) gw.style.display="";
-  fillGrupales();
+  REG_EJ=[]; REG_GRUPO=[]; pintarEjerciciosReg();
+  modoRegistro(!!grupal);
   syncCurso(); openOv("ovRegistro");
-});
+}
+el("btnNuevoRegistro").addEventListener("click",function(){ abrirRegistroNuevo(false); });
+if(el("btnNuevoRegistroGrupal")) el("btnNuevoRegistroGrupal").addEventListener("click",function(){ abrirRegistroNuevo(true); });
 el("btnGuardarRegistro").addEventListener("click",function(){
   var editId=el("r_id").value;
   /* modo salón: la grilla de asistencia manda (una fila de registro por alumno, con su propio estado) */
@@ -4387,16 +4547,18 @@ el("btnGuardarRegistro").addEventListener("click",function(){
   var campos={ fecha:el("r_fecha").value, alumnoId:alumnoId, alumno_id:alumnoId,
     curso:el("r_curso").value, estado:el("r_estado").value,
     trabajo:el("r_trabajo").value.trim(), tarea:el("r_tarea").value.trim(), plan:el("r_plan").value.trim() };
-  /* si eligió un ejercicio de la biblioteca, lo adjunta a la tarea de esta clase (por referencia, sin resubir) */
-  var ejId=el("r_ejercicio").value;
-  if(ejId){
-    var ej=(db.ejercicios||[]).find(function(x){return x.id===ejId;});
-    if(ej && ej.url){
-      var base=editId ? ((db.registro.find(function(x){return x.id===editId;})||{}).tarea_audio||"") : "";
-      var lista=parseAudios(base);
-      if(!lista.some(function(x){return x.u===ej.url;}) && lista.length<8){ lista.push({u:ej.url, n:ej.titulo||"Ejercicio"}); }
-      campos.tarea_audio=JSON.stringify(lista);
-    }
+  /* Tareas de la biblioteca: se adjuntan TODAS las de la lista (por referencia, sin resubir).
+     Al editar se suman a lo que la clase ya tenía, sin duplicar por URL, con tope de 8. */
+  if(REG_EJ.length){
+    var base=editId ? ((db.registro.find(function(x){return x.id===editId;})||{}).tarea_audio||"") : "";
+    var lista=parseAudios(base);
+    REG_EJ.forEach(function(eid){
+      var ej=(db.ejercicios||[]).find(function(x){return x.id===eid;});
+      if(!ej || !ej.url) return;
+      if(lista.some(function(x){return x.u===ej.url;}) || lista.length>=8) return;
+      lista.push({u:ej.url, n:ej.titulo||"Ejercicio"});
+    });
+    campos.tarea_audio=JSON.stringify(lista);
   }
   var nRegistrados=1;
   if(editId){
@@ -4404,9 +4566,8 @@ el("btnGuardarRegistro").addEventListener("click",function(){
     db.registro=db.registro.map(function(x){ return x.id===editId ? Object.assign({},x,campos) : x; });
   } else {
     db.registro.push(Object.assign({ id:uid(), ciclo:(a&&a.ciclo)||1 }, campos));
-    // clase grupal: la misma clase para cada alumno marcado, cada uno con su propio ciclo
-    [].slice.call(document.querySelectorAll('#r_grupales input[data-grupal]:checked')).forEach(function(c){
-      var idAl=c.dataset.grupal;
+    // clase grupal: la misma clase para cada alumno sumado, cada uno con su propio ciclo
+    REG_GRUPO.forEach(function(idAl){
       if(idAl===alumnoId) return;
       var al=db.alumnos.find(function(x){return x.id===idAl;});
       if(!al) return;
@@ -4898,18 +5059,25 @@ if(el("clasesBox")){
     if(e.target.classList&&e.target.classList.contains("cl-n")) refrescarIncluyeDePaquetes();
   });
 }
-/* Repinta los desplegables "incluye" conservando lo que ya estaba marcado. */
+/* Repinta los desplegables "incluye" conservando lo que ya estaba marcado.
+   ⚠️ REGLA DURA (bug de Elevate, 01-ago-2026): repinta SOLO .pq-tipos. Nunca el <details>
+   entero, por dos razones que rompieron el editor:
+   1. Se llama DESDE el click en el <summary>. Reemplazar el <summary> deja huérfano al nodo
+      que el navegador iba a abrir, y el <details> ya no abre NUNCA (el toggle nativo corre
+      después del handler, sobre un nodo que ya no está en el árbol).
+   2. Dentro de .pq-incbox también viven .pq-d / .pq-i (la vigencia del plan): rehacer el
+      innerHTML los borraba, y al guardar la vigencia volvía a 0 en silencio. */
 function refrescarIncluyeDePaquetes(){
   var cats=categoriasVigentes();
   Array.prototype.forEach.call(document.querySelectorAll("#preciosBox .paqrow"),function(row){
     var det=row.querySelector(".pq-inc"); if(!det) return;
+    var caja=det.querySelector(".pq-tipos"); if(!caja) return;
     var marcados=Array.prototype.map.call(row.querySelectorAll(".pq-t:checked"),function(x){return x.value;});
     var vigentes=marcados.filter(function(m){ return cats.indexOf(m)!==-1; });
-    det.innerHTML='<summary>'+esc(vigentes.length?("Incluye: "+vigentes.join(", ")):"Incluye: todo")+'</summary>'+
-      '<div class="pq-incbox">'+
-      (cats.length?cats.map(function(c){ return '<label><input type="checkbox" class="pq-t" value="'+esc(c)+'"'+(vigentes.indexOf(c)!==-1?" checked":"")+' /> '+esc(c)+'</label>'; }).join("")
-                  :'<span class="hint" style="margin:0;">Primero crea tus tipos de clase arriba.</span>')+
-      '<p class="hint" style="margin:6px 0 0;font-size:11px;">Nada marcado = el plan da acceso a todas.</p></div>';
+    caja.innerHTML=(cats.length?cats.map(function(c){ return '<label><input type="checkbox" class="pq-t" value="'+esc(c)+'"'+(vigentes.indexOf(c)!==-1?" checked":"")+' /> '+esc(c)+'</label>'; }).join("")
+                  :'<span class="hint" style="margin:0;">Primero crea tus tipos de clase arriba.</span>');
+    var sum=det.querySelector("summary");
+    if(sum) sum.textContent=vigentes.length?("Incluye: "+vigentes.join(", ")):"Incluye: todo";
   });
 }
 
