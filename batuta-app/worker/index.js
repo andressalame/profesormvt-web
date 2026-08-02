@@ -674,7 +674,11 @@ async function loadConfig(env, tenantId){
 
 /* Branding por tenant: 6 fuentes de titulares permitidas (Google Fonts) + color de acento.
    Se aplican al panel del profe y al portal de sus alumnos. */
-const BRAND_FONTS = ["Anton", "Bebas Neue", "Bricolage Grotesque", "Playfair Display", "Space Grotesk", "Space Mono"];
+/* Whitelist de tipografias de marca que el servidor acepta. Cabinet Grotesk y Switzer
+   son las propias de Batuta (self-hosted); el resto se queda por las academias que
+   ya eligieron una. Si se agrega un nombre aqui hay que sumarlo tambien a
+   BRAND_FONT_LINKS del panel, o el panel no sabra cargarla. */
+const BRAND_FONTS = ["Cabinet Grotesk", "Switzer", "Anton", "Bebas Neue", "Bricolage Grotesque", "Playfair Display", "Space Grotesk", "Space Mono"];
 
 /* Cursos del tenant: editables en Ajustes (config.cursos, separados por comas). Sin configurar → default. */
 const CURSOS_DEFAULT = ["Canto", "Piano", "Guitarra"];
@@ -2559,6 +2563,16 @@ async function avisarPushAlumno(env, tenantId, cuentaId, payload){
   return enviarPushA(env, results || [], payload);
 }
 
+/* Tipografia de Batuta (01-ago-2026). Se fueron Bricolage Grotesque y Space Grotesk:
+   las dos estan en la lista negra de "look AI" de Andres. Cabinet Grotesk + Switzer,
+   self-hosted desde Fontshare (ITF Free Font License). Los .woff2 salen por /app/fonts/,
+   que es la unica ruta que atraviesa el rewrite de batuta.lat hacia este worker. */
+const FUENTES_BATUTA_CSS =
+  "@font-face{font-family:'Cabinet Grotesk';src:url('/app/fonts/CabinetGrotesk-700.woff2') format('woff2');font-weight:700;font-style:normal;font-display:swap}" +
+  "@font-face{font-family:'Switzer';src:url('/app/fonts/Switzer-400.woff2') format('woff2');font-weight:400;font-style:normal;font-display:swap}" +
+  "@font-face{font-family:'Switzer';src:url('/app/fonts/Switzer-500.woff2') format('woff2');font-weight:500;font-style:normal;font-display:swap}" +
+  "@font-face{font-family:'Switzer';src:url('/app/fonts/Switzer-600.woff2') format('woff2');font-weight:600;font-style:normal;font-display:swap}";
+
 /* ---------- PWA: service workers servidos por el worker ----------
    El panel vive en /app/panel y el portal en /app/a/<slug> (rutas del worker),
    así que los SW también se sirven desde /app/... para que su scope los cubra:
@@ -2950,13 +2964,11 @@ function paginaBase(titulo, cuerpo, script){
     "<meta name=\"twitter:card\" content=\"summary_large_image\">" +
     "<meta name=\"twitter:image\" content=\"https://batuta.lat/og-image.png\">" +
     "<link rel=\"icon\" type=\"image/svg+xml\" href=\"https://batuta.lat/favicon.svg\">" +
-    "<link rel=\"preconnect\" href=\"https://fonts.googleapis.com\">" +
-    "<link href=\"https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;700;800&family=Space+Grotesk:wght@400;500;600&display=swap\" rel=\"stylesheet\">" +
-    "<style>" +
+    "<style>" + FUENTES_BATUTA_CSS +
     ":root{--bg:#0F1115;--acento:#E8A13D;--texto:#F3EDE0;--muted:#8a8276}" +
     "*{box-sizing:border-box}" +
-    "body{margin:0;background:var(--bg);color:var(--texto);font-family:'Space Grotesk',system-ui,sans-serif;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px}" +
-    "h1{font-family:'Bricolage Grotesque',sans-serif;font-size:26px;margin:0 0 6px}" +
+    "body{margin:0;background:var(--bg);color:var(--texto);font-family:'Switzer',system-ui,sans-serif;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px}" +
+    "h1{font-family:'Cabinet Grotesk',system-ui,sans-serif;font-weight:700;font-size:26px;margin:0 0 6px}" +
     ".card{max-width:420px;width:100%;background:#161920;border:1px solid #262a33;border-radius:14px;padding:32px}" +
     ".sub{color:var(--muted);font-size:14px;margin:0 0 24px}" +
     "label{display:block;font-size:13px;color:var(--muted);margin:14px 0 6px}" +
@@ -4414,6 +4426,22 @@ export default {
       const tokenDemo = await crearSesion(env, "T:" + tDemo.id);
       return htmlResponse(paginaBase("Entrando a la demo — Batuta", "<h1>Entrando…</h1><p class=\"sub\">Abriendo la academia de demostración.</p>",
         "try{localStorage.setItem('batuta_t','" + tokenDemo + "');}catch(e){};location.replace('/app/panel');"));
+    }
+    /* Fuentes self-hosted (01-ago-2026). Van bajo /app/ a proposito: batuta.lat solo
+       reescribe /app/* hacia este worker (vercel.json), asi que un /fonts/... en la raiz
+       lo atenderia Vercel y daria 404. Cache larga e inmutable: el nombre del archivo
+       cambia si cambia la fuente. */
+    if (path.startsWith("/app/fonts/") && request.method === "GET"){
+      const archivo = path.slice("/app/fonts/".length);
+      if (!/^[A-Za-z0-9_-]+\.woff2$/.test(archivo)) return new Response("No encontrado", { status: 404 });
+      if (!env.ASSETS) return new Response("No encontrado", { status: 404 });
+      const r = await env.ASSETS.fetch(new Request(new URL("/fonts/" + archivo, url), request));
+      if (!r.ok) return new Response("No encontrado", { status: 404 });
+      const h = new Headers(r.headers);
+      h.set("content-type", "font/woff2");
+      h.set("cache-control", "public, max-age=31536000, immutable");
+      h.set("access-control-allow-origin", "*");
+      return new Response(r.body, { status: 200, headers: h });
     }
     if (path === "/app/panel" && request.method === "GET"){
       return env.ASSETS ? assetConSeguridad(await env.ASSETS.fetch(new Request(new URL("/panel/index.html", url), request))) : json({ error: "No encontrado" }, 404);

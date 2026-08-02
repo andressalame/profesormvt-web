@@ -19,7 +19,10 @@
      con sus propios datos (nombre, cursos, paquetes) — nunca una página vacía.
    ========================================================================== */
 
+/* null = fuente self-hosted de Batuta (ver WEB_FUENTES_SELF), no se pide a Google Fonts. */
 export const WEB_FUENTES = {
+  "Cabinet Grotesk": null,
+  "Switzer": null,
   "Anton": "family=Anton",
   "Bebas Neue": "family=Bebas+Neue",
   "Bricolage Grotesque": "family=Bricolage+Grotesque:wght@600;700;800",
@@ -28,6 +31,21 @@ export const WEB_FUENTES = {
   "Poppins": "family=Poppins:ital,wght@0,400;0,500;0,600;0,700;1,400",
   "Space Grotesk": "family=Space+Grotesk:wght@400;500;700",
   "Space Mono": "family=Space+Mono:ital,wght@0,400;0,700;1,400"
+};
+
+/* Fuentes propias de Batuta, servidas por el worker en /app/fonts/. URL absoluta a
+   proposito: la web de una academia puede estar en su propio subdominio, y el worker
+   responde estas con Access-Control-Allow-Origin: *. */
+export const WEB_FUENTES_SELF = {
+  "Cabinet Grotesk":
+    "@font-face{font-family:'Cabinet Grotesk';src:url('https://batuta.lat/app/fonts/CabinetGrotesk-500.woff2') format('woff2');font-weight:500;font-style:normal;font-display:swap}" +
+    "@font-face{font-family:'Cabinet Grotesk';src:url('https://batuta.lat/app/fonts/CabinetGrotesk-700.woff2') format('woff2');font-weight:700;font-style:normal;font-display:swap}" +
+    "@font-face{font-family:'Cabinet Grotesk';src:url('https://batuta.lat/app/fonts/CabinetGrotesk-800.woff2') format('woff2');font-weight:800;font-style:normal;font-display:swap}",
+  "Switzer":
+    "@font-face{font-family:'Switzer';src:url('https://batuta.lat/app/fonts/Switzer-400.woff2') format('woff2');font-weight:400;font-style:normal;font-display:swap}" +
+    "@font-face{font-family:'Switzer';src:url('https://batuta.lat/app/fonts/Switzer-500.woff2') format('woff2');font-weight:500;font-style:normal;font-display:swap}" +
+    "@font-face{font-family:'Switzer';src:url('https://batuta.lat/app/fonts/Switzer-600.woff2') format('woff2');font-weight:600;font-style:normal;font-display:swap}" +
+    "@font-face{font-family:'Switzer';src:url('https://batuta.lat/app/fonts/Switzer-700.woff2') format('woff2');font-weight:700;font-style:normal;font-display:swap}"
 };
 
 /* Secciones que la academia puede prender/apagar y reordenar. */
@@ -125,22 +143,38 @@ export function mezclar(data){
 }
 
 /* ---------- estilo ---------- */
-export function fuentesHref(data, cfg){
+/* Que fuentes usa esta web: titulos y cuerpo ya resueltos con su default.
+   Defaults nuevos (01-ago-2026): Cabinet Grotesk + Switzer. Antes eran Bricolage
+   Grotesque + Space Grotesk, las dos en la lista negra de "look AI" de Andres, o sea
+   que toda academia nueva nacia con la tipografia equivocada. */
+export function fuentesDe(data, cfg){
   var e = mezclar(data).estilo;
+  var ft = (e.fuente_titulos && WEB_FUENTES.hasOwnProperty(e.fuente_titulos)) ? e.fuente_titulos
+         : ((cfg && cfg.brand_font && WEB_FUENTES.hasOwnProperty(cfg.brand_font)) ? cfg.brand_font : "Cabinet Grotesk");
+  var fc = (e.fuente_cuerpo && WEB_FUENTES.hasOwnProperty(e.fuente_cuerpo)) ? e.fuente_cuerpo : "Switzer";
+  return { ft: ft, fc: fc };
+}
+export function fuentesHref(data, cfg){
+  var f = fuentesDe(data, cfg);
   var qs = [];
-  var ft = e.fuente_titulos || (cfg && cfg.brand_font) || "Bricolage Grotesque";
-  var fc = e.fuente_cuerpo || "Space Grotesk";
-  [ft, fc].forEach(function (f){ if (f && WEB_FUENTES[f] && qs.indexOf(WEB_FUENTES[f]) === -1) qs.push(WEB_FUENTES[f]); });
+  [f.ft, f.fc].forEach(function (n){ if (WEB_FUENTES[n] && qs.indexOf(WEB_FUENTES[n]) === -1) qs.push(WEB_FUENTES[n]); });
   return qs.length ? "https://fonts.googleapis.com/css2?" + qs.join("&") + "&display=swap" : "";
+}
+/* @font-face de las fuentes propias que ESTA web use (vacio si eligio solo de Google). */
+export function fuentesSelfCss(data, cfg){
+  var f = fuentesDe(data, cfg), out = "";
+  [f.ft, f.fc].forEach(function (n){
+    var css = WEB_FUENTES_SELF[n];
+    if (css && out.indexOf(css) === -1) out += css;
+  });
+  return out;
 }
 
 function estiloVars(data, cfg){
   var e = mezclar(data).estilo;
   var claro = e.tema === "claro";
   var acento = hex(e.acento) || hex(cfg && cfg.brand_color) || "#E8A13D";
-  var ft = (e.fuente_titulos && WEB_FUENTES[e.fuente_titulos]) ? e.fuente_titulos
-         : ((cfg && cfg.brand_font && WEB_FUENTES[cfg.brand_font]) ? cfg.brand_font : "Bricolage Grotesque");
-  var fc = (e.fuente_cuerpo && WEB_FUENTES[e.fuente_cuerpo]) ? e.fuente_cuerpo : "Space Grotesk";
+  var _f = fuentesDe(data, cfg), ft = _f.ft, fc = _f.fc;
   var bg = claro ? "#F7F4EE" : "#0F1115";
   var texto = claro ? "#17130C" : "#F3EDE0";
   var panel = claro ? "#FFFFFF" : "#161920";
@@ -389,7 +423,7 @@ export function htmlDocumento(data, ctx, opciones){
     "<link rel=\"preconnect\" href=\"https://fonts.googleapis.com\">" +
     "<link rel=\"preconnect\" href=\"https://fonts.gstatic.com\" crossorigin>" +
     (href ? "<link href=\"" + esc(href) + "\" rel=\"stylesheet\">" : "") +
-    "<style>:root{" + estiloVars(d, ctx.cfg) + "}" + css() + editorCss + "</style></head><body>" +
+    "<style>" + fuentesSelfCss(d, ctx.cfg) + ":root{" + estiloVars(d, ctx.cfg) + "}" + css() + editorCss + "</style></head><body>" +
     htmlCuerpo(d, ctx) +
     (editorJs ? "<script>" + editorJs + "</script>" : "") +
     "</body></html>";
@@ -426,8 +460,10 @@ export function sanearWeb(raw){
   out.estilo = sSeccion(d.estilo, {
     tema: function (v){ return v === "claro" ? "claro" : "oscuro"; },
     acento: function (v){ return hex(v); },
-    fuente_titulos: function (v){ return WEB_FUENTES[v] ? String(v) : ""; },
-    fuente_cuerpo: function (v){ return WEB_FUENTES[v] ? String(v) : ""; },
+    /* hasOwnProperty, NO truthy: las fuentes propias de Batuta valen null en el mapa
+       (son self-hosted) y con la prueba de verdad se descartaban en silencio. */
+    fuente_titulos: function (v){ return WEB_FUENTES.hasOwnProperty(v) ? String(v) : ""; },
+    fuente_cuerpo: function (v){ return WEB_FUENTES.hasOwnProperty(v) ? String(v) : ""; },
     escala: function (v){ return num(v, 100, 80, 130); },
     esquinas: function (v){ return num(v, 16, 0, 32); }
   });
