@@ -1316,6 +1316,11 @@
       <p class="hint" style="margin-top:-4px;">Correo automático cuando el paquete del alumno está por vencer (o venció), con link para renovar desde su portal.</p>
 
       <h2 style="margin-top:22px;">Asistencia</h2>
+      <div class="cfgrow"><span class="pk">Pedir fecha de nacimiento al comprar</span><select id="cfg_campos_alumno">
+          <option value="">No pedirla</option>
+          <option value="nacimiento">Sí, pedirla en el formulario de compra</option>
+        </select></div>
+      <p class="hint" style="margin-top:-4px;">Solo si de verdad la usas (cumpleaños, categorías por edad). Es un <b>dato personal</b>: si el alumno resulta menor de 14 años, el formulario le exige a quien compra declarar que es su apoderado, y sin esa marca no deja inscribirlo. Tú eres el responsable de esos datos; Batuta solo los guarda por encargo tuyo. El <b>apellido</b> se pide siempre, opcional.</p>
       <div class="cfgrow"><span class="pk">¿Cómo se marca la asistencia?</span><select id="cfg_asistencia_auto">
         <option value="">Una por una, a mano</option>
         <option value="1">Doy todas por asistidas y marco solo al que faltó</option></select></div>
@@ -2805,6 +2810,7 @@ function renderAjustes(){
   if(!MP_ESTADO_CARGADO){ MP_ESTADO_CARGADO=true; try{ refrescarMpEstado(); }catch(e){} try{ refrescarPushEstado(); }catch(e){} try{ refrescarStripeEstado(); }catch(e){} try{ refrescarCulqiEstado(); }catch(e){} }
   if(el("cfg_anticipacion_h")) el("cfg_anticipacion_h").value=(db.config&&db.config.anticipacion_h)||"";
   if(el("cfg_caduca_meses")) el("cfg_caduca_meses").value=(db.config&&db.config.caduca_meses)||"";
+  if(el("cfg_campos_alumno")) el("cfg_campos_alumno").value=(db.config&&db.config.campos_alumno)||"";
   if(el("cfg_asistencia_auto")) el("cfg_asistencia_auto").value=(db.config&&db.config.asistencia_auto)||"";
   if(el("cfg_asistencia_horas")) el("cfg_asistencia_horas").value=(db.config&&db.config.asistencia_horas)||"";
   if(el("cfg_cursos")) el("cfg_cursos").value=(db.config&&db.config.cursos)||MARCA.cursos.join(", ");
@@ -4853,6 +4859,7 @@ el("btnGuardarAjustes").addEventListener("click",function(){
             /* Pedidos de Elevate (28-jul-2026): caducidad, asistencia automática y los
                textos propios de cada correo. Vacío en cualquiera = comportamiento de siempre. */
             caduca_meses:(el("cfg_caduca_meses")?el("cfg_caduca_meses").value.trim():""),
+            campos_alumno:(el("cfg_campos_alumno")?el("cfg_campos_alumno").value:""),
             asistencia_auto:(el("cfg_asistencia_auto")?el("cfg_asistencia_auto").value:""),
             asistencia_horas:(el("cfg_asistencia_horas")?el("cfg_asistencia_horas").value.trim():""),
             mensajes: Object.keys(msgRows).length?JSON.stringify(msgRows):"",

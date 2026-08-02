@@ -1348,6 +1348,9 @@ function correoLeadMagnet(paso, origen){
 
 /* ---------- Confirmar una compra (reutilizado por el panel y por el webhook de MP) ---------- */
 async function confirmarCompra(env, tenantId, tenant, compra){
+  /* La ficha nueva se crea con apellido/email/nacimiento, que son columnas agregadas por
+     migracion: hay que garantizarlas antes del INSERT o el pago confirmado se cae. */
+  await ensureAlumnoExtraSchema(env).catch(() => {});
   if (!compra) return { ok: false, error: "Compra no encontrada", status: 404 };
   if (compra.estado !== "pendiente" && compra.estado !== "iniciada"){
     return { ok: false, error: "Esa compra ya fue procesada", status: 409 };
@@ -1396,9 +1399,13 @@ async function confirmarCompra(env, tenantId, tenant, compra){
       const dN = await duenoDeTenant(env, tenantId).catch(() => null);
       profeNuevo = dN ? dN.id : null;
     }
+    /* apellido/nacimiento los recogio el formulario publico y quedaron en la cuenta: aqui
+       se copian a la ficha, que es donde el profe los ve. Si la academia no los pidio, van
+       vacios y la ficha queda igual que siempre. */
     stmts.push(env.DB.prepare(
-      "INSERT INTO alumnos (id,tenant_id,codigo,nombre,whatsapp,curso,paquete,fecha,pago,horario,notas,ciclo,vence,profesor_id) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,'Pagado','','Creado por compra web',1,?9,?10)"
-    ).bind(nuevoId, tenantId, randHex(3).toUpperCase(), cu.nombre, cu.whatsapp || "", cursoNuevo, compra.paquete, hoyLima(), vence, profeNuevo));
+      "INSERT INTO alumnos (id,tenant_id,codigo,nombre,whatsapp,curso,paquete,fecha,pago,horario,notas,ciclo,vence,profesor_id,apellido,email,nacimiento) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,'Pagado','','Creado por compra web',1,?9,?10,?11,?12,?13)"
+    ).bind(nuevoId, tenantId, randHex(3).toUpperCase(), cu.nombre, cu.whatsapp || "", cursoNuevo, compra.paquete, hoyLima(), vence, profeNuevo,
+           cu.apellido || "", cu.email || "", cu.nacimiento || ""));
     stmts.push(env.DB.prepare("UPDATE cuentas SET alumno_id = ?1 WHERE id = ?2 AND tenant_id = ?3").bind(nuevoId, cu.id, tenantId));
   }
   /* atribucion del ingreso al profesor del alumno (reporte "ingresos por profe" del dueno) */
@@ -3660,7 +3667,36 @@ async function ensureAlumnoExtraSchema(env){
     try { await env.DB.prepare("ALTER TABLE alumnos ADD COLUMN " + c + " " + tipo).run(); } catch (e) { /* ya existe */ }
   }
   try { await env.DB.prepare("ALTER TABLE profesores ADD COLUMN permisos TEXT DEFAULT ''").run(); } catch (e) { /* ya existe */ }
+  /* El formulario publico de compra recoge apellido y (si la academia lo pide) fecha de
+     nacimiento. Viven primero en `cuentas` porque el alumno todavia no existe: se crea
+     recien cuando el pago se confirma, y ahi se copian a su ficha. */
+  for (const [c, tipo] of [["apellido", "TEXT DEFAULT ''"], ["nacimiento", "TEXT DEFAULT ''"]]){
+    try { await env.DB.prepare("ALTER TABLE cuentas ADD COLUMN " + c + " " + tipo).run(); } catch (e) { /* ya existe */ }
+  }
   ELEVATE_SCHEMA_OK = true;
+}
+/* ---------- Datos de menores en el formulario publico (Ley 29733 + DS 016-2024-JUS) ----------
+   El reglamento vigente desde el 30-mar-2025 divide asi el consentimiento:
+     - 14 a 18 anios: consiente el propio adolescente, si la informacion esta en lenguaje
+       que entienda.
+     - menores de 14: consiente quien ejerce la patria potestad o tutela, y la plataforma
+       debe hacer una "verificacion razonable" de quien lo da.
+   Por eso el formulario publico pide la fecha de nacimiento SOLO si la academia la activo,
+   y cuando la fecha implica menos de 14 exige la declaracion del apoderado. El chequeo se
+   repite en el servidor: esconder el campo no es impedir el envio. */
+function edadDesde(iso){
+  const t = Date.parse(String(iso || "") + "T00:00:00Z");
+  if (!Number.isFinite(t)) return null;
+  const hoyMs = Date.now();
+  if (t > hoyMs) return null;                       /* fecha futura = invalida */
+  const anios = (hoyMs - t) / (365.2425 * 86400000);
+  return anios > 120 ? null : Math.floor(anios);    /* 120+ = tipeo, no persona */
+}
+/* Que campos extra pide el formulario publico. Vacio = ninguno; la academia los activa
+   en Ajustes. Se mantiene como lista para poder sumar otro sin tocar el gating. */
+function camposPublicos(cfg){
+  const raw = String((cfg && cfg.campos_alumno) || "").toLowerCase();
+  return { nacimiento: raw.split(",").map(x => x.trim()).includes("nacimiento") };
 }
 async function sedesDeTenant(env, tid){
   try {
@@ -4690,6 +4726,7 @@ export default {
       if (!paquetesOk.length || !metodos.length){
         return htmlResponse(paginaBase("Pagos — " + esc(tP.academia), "<h1>" + esc(tP.academia) + "</h1><p class=\"sub\">Tu profesor aún no configuró los pagos por aquí. Escríbele y lo coordinan directo.</p>", ""));
       }
+      const camposP = camposPublicos(cfgP);
       const infoPago = {
         yape: { numero: cfgP.pago_numero || "", titular: cfgP.pago_titular || "" },
         bcp: { cuenta: cfgP.bcp_cuenta || "", cci: cfgP.bcp_cci || "" },
@@ -4704,8 +4741,17 @@ export default {
             paquetesOk.map(pk => "<option value=\"" + esc(pk) + "\"" + (pk === preSel ? " selected" : "") + ">" + esc(pk) + " — S/ " + (preciosP[pk] || 0) + "</option>").join("") +
           "</select>" +
           "<label>Tu nombre</label><input id=\"nm\" type=\"text\" required maxlength=\"80\">" +
+          "<label>Tus apellidos</label><input id=\"ap\" type=\"text\" maxlength=\"80\" placeholder=\"Opcional\">" +
           "<label>Tu correo</label><input id=\"em\" type=\"email\" required maxlength=\"120\">" +
           "<label>Tu WhatsApp (opcional)</label><input id=\"wa\" type=\"tel\" maxlength=\"20\">" +
+          (camposP.nacimiento
+            ? "<label>Fecha de nacimiento</label><input id=\"fn\" type=\"date\" max=\"" + hoy() + "\">" +
+              "<div id=\"tutorbox\" style=\"display:none;margin:10px 0 0\">" +
+                "<label style=\"display:flex;gap:9px;align-items:flex-start;font-size:13px;line-height:1.45\">" +
+                  "<input id=\"tutor\" type=\"checkbox\" style=\"width:auto;margin-top:3px;flex:0 0 auto\">" +
+                  "<span>Soy el padre, la madre o el apoderado del alumno y autorizo que " + esc(tP.academia) + " trate sus datos.</span>" +
+                "</label></div>"
+            : "") +
           "<label>Método de pago</label><select id=\"mt\">" +
             metodos.map(m => "<option value=\"" + esc(m.v) + "\">" + esc(m.t) + "</option>").join("") +
           "</select>" +
@@ -4718,9 +4764,26 @@ export default {
           "<div class=\"err\" id=\"errp\"></div>" +
         "</form>" +
         "<div id=\"okp\" style=\"display:none\"><h1>Listo 🎉</h1><p class=\"sub\" id=\"okmsg\"></p></div>" +
+        /* Aviso de privacidad (Ley 29733): quien es el responsable, para que, y como ejercer
+           derechos. La academia es la titular del banco de datos; Batuta solo lo trata por
+           encargo suyo. Antes este formulario no decia NADA. */
+        "<p class=\"sub\" style=\"font-size:12px;line-height:1.5;margin:16px 0 0\">" +
+          "Tus datos los recibe <b>" + esc(tP.academia) + "</b> para registrarte como alumno, cobrarte y avisarte de tus clases. " +
+          "Batuta los guarda por encargo de la academia y no los usa para otra cosa ni los vende. " +
+          "Puedes pedir verlos, corregirlos o borrarlos escribiendo a la academia. " +
+          "<a href=\"https://batuta.lat/privacidad\" target=\"_blank\" rel=\"noopener\">Politica de privacidad</a>." +
+        "</p>" +
         "<div class=\"foot\">Ya tienes cuenta? <a href=\"/app/a/" + esc(tP.slug) + "\">Entra a tu portal</a></div>";
       const scriptP =
         "var INFO=" + JSON.stringify(infoPago) + ";var SLUGP=" + JSON.stringify(tP.slug) + ";" +
+        /* menos de 14 -> aparece la declaracion del apoderado y sin ella no se envia.
+           Es la "verificacion razonable" que pide el reglamento; el servidor la reexige. */
+        "var fnEl=document.getElementById('fn');" +
+        "function edadDe(v){var t=Date.parse(v+'T00:00:00Z');if(!isFinite(t))return null;var a=(Date.now()-t)/(365.2425*86400000);return (a<0||a>120)?null:Math.floor(a);}" +
+        "function chkMenor(){var box=document.getElementById('tutorbox');if(!fnEl||!box)return;" +
+        "var e=edadDe(fnEl.value);box.style.display=(e!==null&&e<14)?'block':'none';" +
+        "if(box.style.display==='none'){var c=document.getElementById('tutor');if(c)c.checked=false;}}" +
+        "if(fnEl) fnEl.addEventListener('change',chkMenor);" +
         "var mt=document.getElementById('mt'),pinfo=document.getElementById('pinfo'),manual=document.getElementById('manualbox'),btn=document.getElementById('btnp');" +
         "function pintaInfo(){var v=mt.value,t='';" +
         "if(v==='Tarjeta (Mercado Pago)'){t='Te llevamos al checkout de Mercado Pago (tarjeta o Yape). Al aprobar, tu paquete se activa solo.';manual.style.display='none';btn.textContent='Pagar con tarjeta \\u2192';}" +
@@ -4734,10 +4797,15 @@ export default {
         "mt.addEventListener('change',pintaInfo);pintaInfo();" +
         "function leerCap(){return new Promise(function(res){var f=document.getElementById('cap').files[0];if(!f)return res('');var r=new FileReader();r.onload=function(){res(String(r.result||''));};r.onerror=function(){res('');};r.readAsDataURL(f);});}" +
         "document.getElementById('fp').addEventListener('submit',async function(e){" +
-        "e.preventDefault();var err=document.getElementById('errp');err.textContent='';btn.disabled=true;" +
+        "e.preventDefault();var err=document.getElementById('errp');err.textContent='';" +
+        "var tb=document.getElementById('tutorbox'),tc=document.getElementById('tutor');" +
+        "if(tb&&tb.style.display!=='none'&&tc&&!tc.checked){err.textContent='Marca la autorizacion del apoderado para continuar.';return;}" +
+        "btn.disabled=true;" +
         "try{var cap=await leerCap();" +
         "var r=await fetch('/app/api/pagar-directo',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({" +
         "slug:SLUGP,paquete:document.getElementById('pq').value,nombre:document.getElementById('nm').value.trim()," +
+        "apellido:(document.getElementById('ap')?document.getElementById('ap').value.trim():'')," +
+        "nacimiento:(fnEl?fnEl.value:''),tutor:(document.getElementById('tutor')?document.getElementById('tutor').checked:false)," +
         "email:document.getElementById('em').value.trim(),whatsapp:document.getElementById('wa').value.trim()," +
         "metodo:mt.value,op_numero:document.getElementById('op')?document.getElementById('op').value.trim():'',comprobante:cap})});" +
         "var d=await r.json();" +
@@ -7132,6 +7200,24 @@ export default {
         const metodo = String(b.metodo || "").trim().slice(0, 40);
         if (nombre.length < 2) return json({ error: "Escribe tu nombre." }, 400);
         if (!emailOk(email)) return json({ error: "Ese correo no parece valido." }, 400);
+        /* Apellido y fecha de nacimiento (Ley 29733). La fecha SOLO se acepta si la academia
+           la pidio: si no, se descarta aunque venga en el POST, para no guardar un dato que
+           nadie declaro necesitar. Y con menos de 14 anios exige la declaracion del apoderado,
+           el mismo chequeo que hace el formulario: esconder el campo no es impedir el envio. */
+        const cfgPd = await loadConfig(env, t.id);
+        const apellidoPd = String(b.apellido || "").trim().slice(0, 80);
+        let nacimientoPd = "";
+        if (camposPublicos(cfgPd).nacimiento){
+          const raw = String(b.nacimiento || "").trim().slice(0, 10);
+          if (raw){
+            const edad = edadDesde(raw);
+            if (edad === null) return json({ error: "Esa fecha de nacimiento no parece valida." }, 400);
+            if (edad < 14 && !b.tutor){
+              return json({ error: "Para inscribir a un menor de 14 anios necesitamos la autorizacion de su apoderado." }, 400);
+            }
+            nacimientoPd = raw;
+          }
+        }
 
         // Cuenta: reusa por correo o crea una nueva con contraseña aleatoria
         // (el alumno la define después con el link del correo).
@@ -7143,9 +7229,10 @@ export default {
           const hash = await hashPass(randHex(24), salt);
           const idCu = crypto.randomUUID();
           const refCode = await genRefCode(env, t.id);
+          await ensureAlumnoExtraSchema(env);   /* cuentas.apellido / cuentas.nacimiento */
           await env.DB.prepare(
-            "INSERT INTO cuentas (id,tenant_id,email,nombre,whatsapp,pass_hash,pass_salt,marketing,alumno_id,creada,ref_code,ref_por,credito) VALUES (?1,?2,?3,?4,?5,?6,?7,0,NULL,?8,?9,'',0)"
-          ).bind(idCu, t.id, email, nombre, whatsapp, hash, salt, hoy(), refCode).run();
+            "INSERT INTO cuentas (id,tenant_id,email,nombre,whatsapp,pass_hash,pass_salt,marketing,alumno_id,creada,ref_code,ref_por,credito,apellido,nacimiento) VALUES (?1,?2,?3,?4,?5,?6,?7,0,NULL,?8,?9,'',0,?10,?11)"
+          ).bind(idCu, t.id, email, nombre, whatsapp, hash, salt, hoy(), refCode, apellidoPd, nacimientoPd).run();
           cu = await env.DB.prepare("SELECT * FROM cuentas WHERE id = ?1").bind(idCu).first();
         }
 
@@ -9581,7 +9668,9 @@ export default {
           const b = await request.json().catch(() => ({}));
           const claves = ["pago_numero", "pago_titular", "bcp_cuenta", "bcp_cci", "scotia_cuenta", "scotia_cci", "crypto_moneda", "crypto_red", "crypto_wallet", "stripe_moneda", "profe_nombre", "profe_marca", "profe_foto", "whatsapp_profe", "cursos", "brand_color", "brand_font", "agenda_cupo", "recordatorios_clase", "recordatorio_renovacion", "nubefact_ruta", "nubefact_token", "fact_serie_boleta", "fact_igv", "fact_proximo_numero", "wa_phone_id", "wa_enabled", "wa_modo", "wa_tono", "wa_instrucciones", "wa_kb", "reprog_activo", "reprog_min_h", "paquetes", "modulos_off", "clases", "anticipacion_h",
                           /* Elevate (28-jul-2026) */
-                          "caduca_meses", "asistencia_auto", "asistencia_horas", "mensajes"];
+                          "caduca_meses", "asistencia_auto", "asistencia_horas", "mensajes",
+                          /* que datos extra pide el formulario publico de compra (02-ago-2026) */
+                          "campos_alumno"];
           const stmts = [];
           for (const k of claves){
             if (k in b){
@@ -9606,6 +9695,13 @@ export default {
               }
               /* Elevate (28-jul-2026): numeros con tope, y las plantillas de correo saneadas
                  (solo las claves del catalogo, con tope de largo; basura -> se descarta sola). */
+              /* Solo se acepta lo que el sistema sabe pedir. Un valor raro se descarta entero
+                 en vez de guardarse: es un dato personal de por medio, no un ajuste cosmetico. */
+              if (k === "campos_alumno"){
+                const permitidos = ["nacimiento"];
+                valor = valor.toLowerCase().split(",").map(x => x.trim())
+                  .filter(x => permitidos.includes(x)).filter((x, i, a) => a.indexOf(x) === i).join(",");
+              }
               if (k === "caduca_meses" && valor !== ""){
                 const nc = parseInt(valor, 10);
                 valor = (Number.isFinite(nc) && nc >= 0 && nc <= 60) ? String(nc) : "";
