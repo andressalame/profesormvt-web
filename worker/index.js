@@ -36,7 +36,7 @@ const MARCA = {
   correoAdmin: "andressalame@gmail.com",        // a dónde llegan las alertas internas
   telegramChatId: "1193399594",                 // chat de Andrés para avisos de lead caliente (bot: token en secret TELEGRAM_BOT_TOKEN)
   whatsapp: "51989077928",
-  ciudad: "San Isidro, Lima",
+  ciudad: "Miraflores, Lima",                   // sede presencial: solo el distrito. La calle NO se publica: es temporal (mudanza a fin de ago-2026)
   statementDescriptor: "PROFESORMVT",           // máx 22 chars, extracto de la tarjeta
   vapidSubject: "mailto:andressalame@gmail.com",
   leadMagnetPdf: "/recursos/composicion-primera-cancion.pdf",
@@ -1069,6 +1069,29 @@ function waDigitsLead(tel){
   const d = String(tel || "").replace(/\D/g, "");
   return (d.length === 9 && d.charAt(0) === "9") ? "51" + d : d;   // celular Perú sin código → +51
 }
+
+/* ============ TELÉFONO DEL LEAD: NORMALIZAR Y VALIDAR (03-ago-2026) ============
+   Entraban leads con números imposibles y se perdían (leads pagados de Meta Ads).
+   Casos reales: "510943526436" (12 dígitos: el +51 y además un 0 de más) y
+   "0473849278" (10 dígitos empezando en 0).
+   Criterio: NO rechazar por formato, primero LIMPIAR. Si el lead pegó +51, 51 o un 0
+   delante, se le quita y se guarda el celular limpio. Solo se rechaza lo que no puede
+   ser un celular peruano (9 dígitos empezando en 9) ni un número del extranjero.
+   Esto NO puede vivir solo en el HTML: el endpoint es público y lo llaman las 3
+   landings (prueba, guía y el bloque del blog), más lo que se pegue a futuro. */
+function normalizarTelPE(raw){
+  let d = String(raw || "").replace(/\D/g, "");
+  if (d.startsWith("011051")) d = d.slice(6);          // prefijo de salida EE.UU. + 51
+  else if (d.startsWith("0051")) d = d.slice(4);       // prefijo de salida internacional + 51
+  if (d.startsWith("51") && d.length > 9) d = d.slice(2);   // código de país
+  d = d.replace(/^0+/, "");                            // 0 de marcado nacional (o dedazo)
+  if (d.startsWith("51") && d.length > 9) d = d.slice(2);   // venían el +51 Y el 0 juntos
+  return d.slice(0, 15);
+}
+function esCelularPE(d){ return /^9\d{8}$/.test(d); }
+// Alumnos online del extranjero: válido si trae código de país (10-15 dígitos).
+function telAceptable(d){ return esCelularPE(d) || (d.length >= 10 && d.length <= 15); }
+const ERROR_TEL = "Ese número no se ve bien. Un celular peruano son 9 dígitos y empieza en 9 (ej. 989 077 928). Si es del extranjero, agrégale el código del país.";
 
 async function avisarLeadConTelefono(env, info){
   const d = waDigitsLead(info.telefono);
@@ -3515,7 +3538,9 @@ export default {
         const marca = String(b.marca || "MVT").trim().slice(0, 20);
         const fuente = String(b.fuente || "").trim().slice(0, 60);
         const interes = String(b.interes || "composicion").trim().slice(0, 60);
-        const telefono = String(b.telefono || "").replace(/[^\d]/g, "").slice(0, 15);
+        // Se normaliza SIEMPRE (quita +51 / 51 / el 0 de más) antes de validar o guardar,
+        // así el número entra limpio a la base y el aviso de wa.me sale bien armado.
+        const telefono = normalizarTelPE(b.telefono);
         const nombre = String(b.nombre || "").trim().slice(0, 80);
         // Embudo phone-first (landing principal): el dato principal es el WhatsApp, el correo es
         // opcional. Se filtra por intención (quien deja su número para arrancar sí considera pagar)
@@ -3526,11 +3551,16 @@ export default {
         let email = String(b.email || "").trim().toLowerCase().slice(0, 120);
         const emailValido = /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email);
         if (altaIntencion){
-          if (telefono.length < 8) return json({ error: "Deja un WhatsApp válido." }, 400);
+          // El WhatsApp ES el lead en este embudo: si no sirve, no hay a quién escribirle.
+          if (!telefono) return json({ error: "Déjame tu WhatsApp para escribirte :)" }, 400);
+          if (!telAceptable(telefono)) return json({ error: ERROR_TEL }, 400);
           // clave de dedup: el correo si lo dio, si no un sintético por número.
           if (!emailValido) email = "wa-" + telefono + "@wa.mvt";
         } else {
           if (!emailValido) return json({ error: "Correo no valido." }, 400);
+          // El número es opcional acá, pero si lo dejó tiene que servir: guardar uno roto
+          // dispara un aviso de lead caliente que no lleva a ninguna parte.
+          if (telefono && !telAceptable(telefono)) return json({ error: ERROR_TEL }, 400);
         }
         const ya = await env.DB.prepare("SELECT id, COALESCE(telefono,'') AS telefono FROM leads WHERE email = ?1 AND marca = ?2").bind(email, marca).first();
         if (!ya){

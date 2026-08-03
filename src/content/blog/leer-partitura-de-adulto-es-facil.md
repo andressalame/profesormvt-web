@@ -1,7 +1,7 @@
 ---
 title: 'Leer partitura de adulto es más fácil de lo que crees'
 excerpt: 'La notación musical asusta porque parece un idioma alienígena. Pero leer partitura es un sistema lógico que un adulto puede entender más rápido que un niño. Te explico cómo funciona y por qué tu cabeza adulta juega a favor.'
-category: 'piano'
+category: 'teoria'
 date: 2026-04-21
 readTime: '6 MIN'
 featured: false

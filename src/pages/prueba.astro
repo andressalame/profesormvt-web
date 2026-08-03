@@ -30,7 +30,7 @@ const CURSOS = [
 
 <Layout
   title="Clases de canto y composición en Lima | Planes desde S/320 | ProfesorMVT"
-  description="Vocal coaching, composición y teoría musical 1 a 1 para adultos, o los dos juntos en sesiones de 2 horas. Planes desde S/320 al mes. Presencial en San Isidro u online. Déjanos tu WhatsApp y coordinamos hoy."
+  description="Vocal coaching, composición y teoría musical 1 a 1 para adultos, o los dos juntos en sesiones de 2 horas. Planes desde S/320 al mes. Presencial en Miraflores u online. Déjanos tu WhatsApp y coordinamos hoy."
   activeNav="prueba"
 >
   <main class="pr">
@@ -41,7 +41,7 @@ const CURSOS = [
         <h1>Nunca es tarde para <em>aprender a cantar bien.</em></h1>
         <p class="pr-lead">
           Clases 1 a 1 con un plan armado a tu medida desde la primera sesión.
-          Planes mensuales desde S/320. Presencial en San Isidro u online.
+          Planes mensuales desde S/320. Presencial en Miraflores u online.
         </p>
 
         <div class="pr-formcard">
@@ -51,7 +51,10 @@ const CURSOS = [
               <input type="text" name="nombre" placeholder="Cómo te llamas" required autocomplete="name" />
             </label>
             <label>Tu WhatsApp
-              <input type="tel" name="telefono" placeholder="Ej. 989 077 928" required autocomplete="tel" inputmode="tel" />
+              <input type="tel" name="telefono" placeholder="Ej. 989 077 928" required autocomplete="tel"
+                     inputmode="tel" maxlength="18"
+                     pattern="([+]?51)?[ -]?9[ -]?[0-9]{2}[ -]?[0-9]{3}[ -]?[0-9]{3}"
+                     title="Celular peruano: 9 dígitos que empiezan en 9 (ej. 989 077 928)" />
             </label>
             <label>¿Qué quieres aprender?
               <select name="interes" required>
@@ -90,7 +93,7 @@ const CURSOS = [
     <section class="pr-cursos">
       <div class="pr-wrap">
         <h2>Tres formas de entrenar</h2>
-        <p class="pr-planes-sub">Todas 1 a 1, en persona en San Isidro o en vivo online.</p>
+        <p class="pr-planes-sub">Todas 1 a 1, en persona en Miraflores o en vivo online.</p>
         <div class="pr-cgrid">
           {CURSOS.map((c) => (
             <article class={`pr-curso${c.destacado ? ' pr-curso-top' : ''}`}>
@@ -159,7 +162,10 @@ const CURSOS = [
               <input type="text" name="nombre" placeholder="Cómo te llamas" required autocomplete="name" />
             </label>
             <label>Tu WhatsApp
-              <input type="tel" name="telefono" placeholder="Ej. 989 077 928" required autocomplete="tel" inputmode="tel" />
+              <input type="tel" name="telefono" placeholder="Ej. 989 077 928" required autocomplete="tel"
+                     inputmode="tel" maxlength="18"
+                     pattern="([+]?51)?[ -]?9[ -]?[0-9]{2}[ -]?[0-9]{3}[ -]?[0-9]{3}"
+                     title="Celular peruano: 9 dígitos que empiezan en 9 (ej. 989 077 928)" />
             </label>
             <label>¿Qué quieres aprender?
               <select name="interes" required>
@@ -258,7 +264,39 @@ const CURSOS = [
 </style>
 
 <script define:vars={{ WA }}>
-  // Pre-selecciona el curso si viene por ?curso= (desde las landings de canto/piano/composición).
+  /* ===== WhatsApp del lead: normalizar antes que rechazar (03-ago-2026) =====
+     Cada lead de Meta Ads cuesta plata, así que el número NO se rechaza por formato:
+     primero se limpia. Se acepta que lo peguen con +51, con 51 o con un 0 delante
+     y se guarda el celular limpio. Solo se frena lo que no puede ser un celular:
+     en Perú son 9 dígitos y empiezan en 9.
+     Casos reales que entraban rotos y se perdían:
+       "510943526436" -> 51 + 0 + 943526436  =>  943526436  (se recupera, es válido)
+       "0473849278"   -> 473849278           =>  se frena y se le pide corregir     */
+  function normTelPE(raw){
+    var d = String(raw || '').replace(/\D/g, '');
+    if (d.indexOf('011051') === 0) d = d.slice(6);        // prefijo de salida EE.UU. + 51
+    else if (d.indexOf('0051') === 0) d = d.slice(4);     // prefijo de salida internacional + 51
+    if (d.indexOf('51') === 0 && d.length > 9) d = d.slice(2);   // código de país
+    d = d.replace(/^0+/, '');                             // 0 de marcado nacional (o dedazo)
+    if (d.indexOf('51') === 0 && d.length > 9) d = d.slice(2);   // pegó el +51 Y el 0
+    return d.slice(0, 15);
+  }
+  function esCelularPE(d){ return /^9\d{8}$/.test(d); }
+  // Alumnos online del extranjero: se acepta si vino con código de país (+...).
+  function esInternacional(raw, d){
+    return String(raw || '').trim().charAt(0) === '+' && d.length >= 10 && d.length <= 15;
+  }
+  var ERR_TEL = 'Ese número no se ve bien. Un celular peruano son 9 dígitos y empieza en 9 (ej. 989 077 928). Si es del extranjero, agrégale el + y el código del país.';
+  // Al salir del campo se le devuelve el número ya limpio y espaciado: le confirma
+  // al lead que quedó bien y evita que reintente pensando que no se guardó.
+  document.querySelectorAll('input[name=telefono]').forEach(function(inp){
+    inp.addEventListener('blur', function(){
+      var d = normTelPE(inp.value);
+      if (esCelularPE(d)) inp.value = d.slice(0,3) + ' ' + d.slice(3,6) + ' ' + d.slice(6);
+    });
+  });
+
+  // Pre-selecciona el curso si viene por ?curso= (desde las landings de canto/composición).
   try {
     var _curso = new URLSearchParams(location.search).get('curso');
     if (_curso) {
@@ -285,11 +323,16 @@ const CURSOS = [
       e.preventDefault();
       errEl.textContent = '';
       var nombre = form.querySelector('input[name=nombre]').value.trim();
-      var tel = form.querySelector('input[name=telefono]').value.replace(/\D/g, '');
+      var telInput = form.querySelector('input[name=telefono]');
+      var telCrudo = telInput.value;
+      var tel = normTelPE(telCrudo);
       var interes = form.querySelector('select[name=interes]').value;
       var hp = form.querySelector('input[name=website]').value;
       if (nombre.length < 2){ errEl.textContent = 'Déjame tu nombre :)'; return; }
-      if (tel.length < 8){ errEl.textContent = 'Ese WhatsApp se ve incompleto.'; return; }
+      if (!tel){ errEl.textContent = 'Déjame tu WhatsApp para escribirte :)'; telInput.focus(); return; }
+      if (!esCelularPE(tel) && !esInternacional(telCrudo, tel)){
+        errEl.textContent = ERR_TEL; telInput.focus(); return;
+      }
       btn.disabled = true; btn.textContent = 'Enviando...';
       fetch('/api/lead', {
         method:'POST', headers:{'content-type':'application/json'},

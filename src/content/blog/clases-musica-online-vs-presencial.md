@@ -1,6 +1,6 @@
 ---
 title: 'Clases de música online vs presencial: ¿cuál te conviene?'
-excerpt: 'Las clases de música online en vivo funcionan mejor de lo que muchos creen, pero lo presencial tiene lo suyo. Comparo ambas para canto, piano y composición, sin sesgo, para que elijas la que de verdad te sirve.'
+excerpt: 'Las clases de música online en vivo funcionan mejor de lo que muchos creen, pero lo presencial tiene lo suyo. Comparo ambas para canto, composición y teoría, sin sesgo, para que elijas la que de verdad te sirve.'
 category: 'metodo'
 date: 2026-03-28
 readTime: '6 MIN'
@@ -31,14 +31,14 @@ Cuando hablo de online aquí, hablo siempre de clases **en vivo**.
 
 - **Energía del cara a cara.** Para algunas personas, la presencia física motiva y enfoca más.
 - **Cero fricción técnica.** Sin depender de internet, audio o cámara.
-- **Contacto directo con el instrumento del profesor.** En piano, ver las manos en vivo desde cualquier ángulo puede ayudar al inicio.
+- **Contacto directo con el instrumento.** Cuando hay un instrumento de por medio, ver las manos en vivo desde cualquier ángulo puede ayudar al inicio.
 - **Ritual de "salir a la clase".** Para algunos, moverse físicamente ayuda a separar la clase del resto del día.
 
 ## ¿Funciona online para cada disciplina?
 
-- **Composición:** funciona perfecto online. Es trabajo de análisis, escritura y pantalla compartida. Casi no hay diferencia.
+- **Composición y teoría:** funcionan perfecto online. Es trabajo de análisis, escritura y pantalla compartida. Casi no hay diferencia.
 - **Canto:** funciona muy bien en vivo. Con un audio decente, el profesor diagnostica y corrige sin problema. La clave es buena conexión y un micrófono razonable.
-- **Piano:** funciona bien; al inicio algunos prefieren presencial para ver las manos de cerca, pero con buen encuadre de cámara se resuelve.
+- **Canto + composición (sesiones de dos horas):** funciona igual de bien online, y el bloque largo rinde más porque no gastas el tiempo en desplazarte.
 
 ## Cómo decidir
 
@@ -54,4 +54,4 @@ Lo que NO debería pasar: que elijas pregrabado pensando que es "como online". E
 
 Lo presencial y el online en vivo son ambas buenas opciones — la mejor es la que te permita ser **constante**, porque la constancia le gana a todo lo demás. Lo único que sí conviene evitar es el curso pregrabado sin acompañamiento.
 
-Yo doy clases en ambas modalidades: presenciales en San Isidro (Lima) y online en vivo para todo el Perú y el extranjero. Si tienes dudas de cuál te conviene según tu caso, lo conversamos y probamos. [Elige tu plan](/horarios/).
+Yo doy clases en ambas modalidades: presenciales en Miraflores (Lima) y online en vivo para todo el Perú y el extranjero. Si tienes dudas de cuál te conviene según tu caso, lo conversamos y probamos. [Elige tu plan](/horarios/).

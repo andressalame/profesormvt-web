@@ -1,19 +1,31 @@
 ---
 // Matriz distrito × curso (SEO local): 18 páginas generadas de una sola plantilla.
-// Honestidad geográfica: la sede presencial ES San Isidro; cada distrito lleva su
-// nota real de cercanía y el ángulo online. Voz de la casa: positiva y empoderadora,
-// nunca menospreciar al alumno. Piano SIN "método Faber" (regla permanente).
+// Honestidad geográfica: la sede presencial ES MIRAFLORES (cambió el 26-jul-2026;
+// antes era San Isidro). Se nombra el DISTRITO, nunca la calle: la dirección actual
+// es temporal y Andrés se muda a fin de agosto de 2026.
+// Cada distrito lleva su nota real de cercanía
+// RECALCULADA desde Miraflores y el ángulo online. Miraflores es la sede, así que su
+// página no habla de "venir hasta acá": la clase ya es en su distrito (flag esSede).
+// Voz de la casa: positiva y empoderadora, nunca menospreciar al alumno.
 import Layout from '../layouts/Layout.astro';
 import PruebaSocial from '../components/PruebaSocial.astro';
 
+// Sede presencial única. Si vuelve a mudarse, se cambia SOLO acá y en el JSON-LD
+// del Layout/index (y en MARCA.ciudad del worker).
+const SEDE = 'Miraflores';
+
 export function getStaticPaths() {
+  // La `nota` se inserta después de "Desde {distrito}:" y de "Desde {distrito},",
+  // así que va sin sujeto y sin repetir el nombre del distrito.
+  // Tiempos conservadores en auto y fuera de hora punta; donde el rango es
+  // demasiado variable para prometer un número, se dice sin número.
   const DISTRITOS = [
-    { slug: 'miraflores', nombre: 'Miraflores', nota: 'San Isidro está al lado: unos 10 minutos desde el centro de Miraflores' },
-    { slug: 'surco', nombre: 'Santiago de Surco', nota: 'San Isidro queda a 15-20 minutos por Javier Prado o Angamos' },
-    { slug: 'san-borja', nombre: 'San Borja', nota: 'San Isidro queda a 10-15 minutos por Javier Prado' },
-    { slug: 'la-molina', nombre: 'La Molina', nota: 'San Isidro queda a 20-30 minutos; muchos alumnos de La Molina eligen la clase online y vienen presencial cuando pueden' },
-    { slug: 'barranco', nombre: 'Barranco', nota: 'San Isidro queda a 15-20 minutos subiendo por la Costa Verde' },
-    { slug: 'jesus-maria', nombre: 'Jesús María', nota: 'San Isidro está cruzando la Av. Salaverry: unos 10 minutos' },
+    { slug: 'miraflores', nombre: 'Miraflores', esSede: true, nota: 'la clase presencial es acá mismo, en Miraflores' },
+    { slug: 'surco', nombre: 'Santiago de Surco', nota: 'son unos 15-25 minutos por Angamos o Benavides, según tu zona' },
+    { slug: 'san-borja', nombre: 'San Borja', nota: 'son unos 15-20 minutos por Angamos o Javier Prado' },
+    { slug: 'la-molina', nombre: 'La Molina', nota: 'el viaje se hace largo en hora punta, así que muchos alumnos de allá llevan la clase online y vienen presencial cuando les queda cómodo' },
+    { slug: 'barranco', nombre: 'Barranco', nota: 'son unos 15-20 minutos por la Costa Verde o el Malecón' },
+    { slug: 'jesus-maria', nombre: 'Jesús María', nota: 'son unos 15-20 minutos bajando por Salaverry o Brasil' },
   ];
   const CURSOS = {
     canto: {
@@ -60,8 +72,13 @@ export function getStaticPaths() {
 }
 
 const { distrito, curso, cursoKey } = Astro.props;
-const titleSEO = `Clases de ${curso.nombre} en ${distrito.nombre} | Adultos, 1 a 1 (San Isidro y online) | ProfesorMVT`;
-const descSEO = `Clases de ${curso.nombre} 1 a 1 para adultos de ${distrito.nombre}: presencial en San Isidro u online. Planes mensuales desde S/320.`;
+// En la página de la sede no se repite "(Miraflores y online)" después de "en Miraflores".
+const titleSEO = distrito.esSede
+  ? `Clases de ${curso.nombre} en ${SEDE} | Adultos, 1 a 1 (presencial y online) | ProfesorMVT`
+  : `Clases de ${curso.nombre} en ${distrito.nombre} | Adultos, 1 a 1 (${SEDE} y online) | ProfesorMVT`;
+const descSEO = distrito.esSede
+  ? `Clases de ${curso.nombre} 1 a 1 para adultos en ${SEDE}: presenciales u online. Planes mensuales desde S/320.`
+  : `Clases de ${curso.nombre} 1 a 1 para adultos de ${distrito.nombre}: presencial en ${SEDE} u online. Planes mensuales desde S/320.`;
 const activeNav = cursoKey === 'composicion' ? 'composicion' : cursoKey;
 ---
 
@@ -69,14 +86,18 @@ const activeNav = cursoKey === 'composicion' ? 'composicion' : cursoKey;
   <main class="cc">
     <section class="cc-hero">
       <div class="container-narrow">
-        <p class="label">{curso.nombre} · {distrito.nombre} · presencial en San Isidro y online</p>
+        <p class="label">{curso.nombre} · {distrito.nombre} · {distrito.esSede ? 'presencial y online' : `presencial en ${SEDE} y online`}</p>
         <h1>{curso.titulo(distrito.nombre)} que quieren <em>{curso.em}</em></h1>
         <p class="lead">{curso.lead}</p>
         <div class="cc-cta">
           <a href={`/prueba/?curso=${cursoKey}&f=landing-${cursoKey}-${distrito.slug}`} class="btn-cta">Quiero empezar →</a>
           <a href="/alumnos/" class="btn-ghost">Crear mi cuenta</a>
         </div>
-        <p class="note">Planes desde S/320 al mes. Desde {distrito.nombre}: {distrito.nota}. Y si prefieres, la clase completa funciona online.</p>
+        <p class="note">
+          {distrito.esSede
+            ? `Planes desde S/320 al mes. La clase presencial es acá mismo, en ${SEDE}. Y si prefieres, funciona completa online.`
+            : `Planes desde S/320 al mes. Desde ${distrito.nombre}: ${distrito.nota}. Y si prefieres, la clase completa funciona online.`}
+        </p>
       </div>
     </section>
 
@@ -110,7 +131,11 @@ const activeNav = cursoKey === 'composicion' ? 'composicion' : cursoKey;
         <div class="faq">
           <details>
             <summary>Las clases son en {distrito.nombre}?</summary>
-            <p>La sede presencial está en San Isidro. {distrito.nota}. Y la clase online funciona igual de bien: mismo profesor, mismo método, sin traslado.</p>
+            <p>
+              {distrito.esSede
+                ? `Sí. La sede presencial está en ${SEDE}: la clase es en tu propio distrito, sin cruzar la ciudad. Y si un día no puedes moverte, la misma clase funciona online.`
+                : `La sede presencial está en ${SEDE}. Desde ${distrito.nombre}, ${distrito.nota}. Y la clase online funciona igual de bien: mismo profesor, mismo método, sin traslado.`}
+            </p>
           </details>
           <details>
             <summary>Nunca he tomado clases de {curso.nombre}. Puedo empezar de cero?</summary>

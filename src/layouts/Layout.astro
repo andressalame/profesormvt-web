@@ -39,14 +39,20 @@ const localBusinessSchema = {
   "@id":"https://profesormvt.com/#business",
   "name":"ProfesorMVT",
   "alternateName":"Andrés Salamé-Córdova · Clases de canto y composición",
-  "description":"Clases 1 a 1 de canto (método MVT) y composición para adultos en Lima (San Isidro) y online.",
+  "description":"Clases 1 a 1 de canto (método MVT) y composición para adultos en Lima (Miraflores) y online.",
   "url":"https://profesormvt.com/",
   "telephone":"+51989077928",
   "image":"https://profesormvt.com/og-image.jpg",
   "priceRange":"S/90 - S/780",
   "areaServed":[{"@type":"City","name":"Lima"},{"@type":"AdministrativeArea","name":"Lima Metropolitana"}],
-  "address":{"@type":"PostalAddress","addressLocality":"San Isidro","addressRegion":"Lima","addressCountry":"PE"},
-  "geo":{"@type":"GeoCoordinates","latitude":-12.0976,"longitude":-77.0365},
+  // Sede presencial: MIRAFLORES. A propósito va SOLO el distrito, sin calle:
+  // la dirección actual (Calle Toribio Polo 322) es temporal, Andrés se muda a fin
+  // de agosto de 2026. Una calle equivocada en el schema rompe la coherencia NAP
+  // con Google Business y penaliza; el distrito es lo que de verdad da SEO local.
+  "address":{"@type":"PostalAddress","addressLocality":"Miraflores","addressRegion":"Lima","addressCountry":"PE"},
+  // ⚠️ Coordenada APROXIMADA del centro de Miraflores, NO de la puerta. Poner el pin
+  // exacto del perfil de Google Business solo cuando la mudanza esté cerrada.
+  "geo":{"@type":"GeoCoordinates","latitude":-12.1200,"longitude":-77.0300},
   "knowsAbout":["Clases de canto","Técnica vocal MVT","Composición musical","Teoría musical"],
   "sameAs":[
     "https://www.instagram.com/asalamecordova/",

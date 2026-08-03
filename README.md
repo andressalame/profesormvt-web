@@ -171,7 +171,7 @@ Si te salen errores, lo más probable es que falte el OAuth (paso 2) o que el re
 ## 📞 Datos de contacto integrados (ya están)
 
 - WhatsApp: +51 989 077 928
-- Dirección: San Isidro, Lima, Perú
+- Dirección: Miraflores, Lima, Perú
 - Instagram: [@asalamecordova](https://instagram.com/asalamecordova)
 - TikTok: [@profesordecantomvt](https://tiktok.com/@profesordecantomvt)
 - Calendly: [calendly.com/andressalame/30min](https://calendly.com/andressalame/30min)
