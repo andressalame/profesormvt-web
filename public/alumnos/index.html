@@ -541,6 +541,7 @@
       <h1>Elige tu <em>paquete</em></h1>
       <div class="sub">Tarjeta, Yape, Plin o transferencia · al instante con tarjeta o Yape (Mercado Pago)</div>
       <hr class="rule" />
+      <div class="banner naranja hidden" id="bSorteo"></div>
       <div class="banner hidden" id="bCredito"></div>
       <div class="banner naranja hidden" id="bPendC"></div>
       <div class="tiers" id="tiers"></div>
@@ -1081,7 +1082,18 @@ function calc(pk){
   var desc = Math.min(cred, precio);
   return { precio:precio, desc:desc, final:Math.max(0, precio-desc) };
 }
+/* Sorteo de cumpleaños (5-ago-2026): el banner aparece solo mientras haya uno abierto.
+   Cuando cierre, /api/sorteo devuelve cerrado:true y esto se apaga solo. */
+function renderSorteo(){
+  fetch("/api/sorteo").then(function(r){ return r.json(); }).then(function(s){
+    if(!s || !s.activo || s.cerrado){ hide("bSorteo"); return; }
+    $("bSorteo").innerHTML = '<strong>// SORTEO DE CUMPLEAÑOS</strong><br>Renueva con un paquete de 4 clases o más y entras al sorteo de <b>un mes de clases gratis</b>. 8 clases = 2 boletos, 12 = 3. Cierra el 5 de agosto a las 8 p.m. — <a href="/sorteo/" style="color:inherit;text-decoration:underline">ver el sorteo</a>';
+    show("bSorteo");
+  }).catch(function(){ hide("bSorteo"); });
+}
+
 function renderComprar(){
+  renderSorteo();
   var cred = Number(ME.credito) || 0;
   if(cred>0){
     $("bCredito").innerHTML = '<strong>// CRÉDITO</strong><br>Tienes S/'+cred+

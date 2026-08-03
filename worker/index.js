@@ -1169,6 +1169,189 @@ async function enviarWhatsApp(env, phoneId, to, text){
    (0 pendiente, 1 enviado, 2 saltada). Encendido por defecto (config.rescate_activo). */
 const NOMBRES_PAQUETE = { "Paquete 4": "Plan Esencial", "Paquete 8": "Plan Intensivo", "Paquete 12": "Plan Estrella", "Clase suelta": "Clase suelta", "Clase de prueba": "Clase de prueba" };
 
+/* ═══════════════════════════════════════════════════════════════════════════
+   SORTEO DE CUMPLEAÑOS (02-ago-2026) — campaña con fecha de muerte.
+   Regla: quien compre un paquete de 4, 8 o 12 clases dentro de la ventana entra
+   al sorteo de 1 mes de clases gratis. Más clases = más boletos (empuja el ticket
+   promedio hacia arriba sin descontar el precio).
+
+   Cómo se cierra solo: el cron horario llama a sorteoElegir(); en el primer disparo
+   posterior a SORTEO.cierraUTC congela la lista, elige un boleto al azar
+   (crypto.getRandomValues) y lo escribe en config con INSERT ... ON CONFLICT DO NOTHING,
+   que es atómico: aunque el cron y una visita a la página corran a la vez, gana uno solo
+   y el ganador queda inmutable. La página /sorteo solo lee ese registro.
+
+   PARTICIPAN estados 'confirmada' y 'pendiente': la tarjeta se confirma sola por webhook,
+   pero el que yapea queda 'pendiente' hasta que Andrés lo confirme en el CRM, y dejarlo
+   fuera castigaría al que sí pagó. Nadie llega a 'pendiente' sin dar nombre y correo reales.
+
+   OJO: compras.fecha se guarda con hoy() = fecha UTC, no Lima. Por eso la ventana en
+   fechas va un día más allá del cierre real; el corte fino lo pone el instante del sorteo.
+
+   PARA APAGARLO cuando pase el cumpleaños: SORTEO.activo = false (la página avisa que
+   no hay sorteo vigente y el endpoint deja de listar). El ganador queda guardado en config.
+   ═══════════════════════════════════════════════════════════════════════════ */
+const SORTEO = {
+  activo: true,
+  id: "cumple-2026",
+  titulo: "Sorteo de cumpleaños",
+  premio: "1 mes de clases gratis de Canto + Composición",
+  premioDetalle: "Plan Intensivo del combo: 8 horas al mes (4 sesiones de 2 horas), valorizado en S/580.",
+  cierraUTC: "2026-08-06T01:00:00Z",          // 5-ago-2026, 20:00 Lima (UTC-5)
+  desdeFecha: "2026-08-02",                   // compras.fecha (UTC) desde
+  hastaFecha: "2026-08-06",                   // compras.fecha (UTC) hasta — cubre la noche del 5 en Lima
+  boletos: { "Paquete 4": 1, "Paquete 8": 2, "Paquete 12": 3 }   // clase suelta NO entra
+};
+
+/* "Andrés Salamé Córdova" -> "Andrés S." · la lista del sorteo es pública, así que
+   solo sale el nombre y la inicial: nadie ve la lista completa de quién compró. */
+function nombreCortoSorteo(nombre){
+  const partes = String(nombre || "").trim().split(/\s+/).filter(Boolean);
+  if (!partes.length) return "Alumno";
+  if (partes.length === 1) return partes[0];
+  return partes[0] + " " + partes[1].charAt(0).toUpperCase() + ".";
+}
+
+/* Lista viva de participantes, una entrada por PERSONA (no por compra) con sus boletos sumados. */
+async function sorteoParticipantes(env){
+  const paquetes = Object.keys(SORTEO.boletos);
+  const marcas = paquetes.map((_, i) => "?" + (i + 3)).join(",");
+  const { results } = await env.DB.prepare(
+    "SELECT c.id, c.cuenta_id, c.paquete, c.fecha, c.estado, cu.nombre, cu.email " +
+    "FROM compras c JOIN cuentas cu ON cu.id = c.cuenta_id " +
+    "WHERE c.estado IN ('confirmada','pendiente') AND c.fecha >= ?1 AND c.fecha <= ?2 " +
+    "AND c.paquete IN (" + marcas + ") ORDER BY c.fecha ASC, c.id ASC"
+  ).bind(SORTEO.desdeFecha, SORTEO.hastaFecha, ...paquetes).all();
+
+  const porCuenta = new Map();
+  for (const r of (results || [])){
+    const b = SORTEO.boletos[r.paquete] || 0;
+    if (!b) continue;
+    const prev = porCuenta.get(r.cuenta_id);
+    if (prev){
+      prev.boletos += b;
+      if (!prev.paquetes.includes(r.paquete)) prev.paquetes.push(r.paquete);
+      if (r.estado === "confirmada") prev.confirmado = true;
+    } else {
+      porCuenta.set(r.cuenta_id, {
+        cuenta_id: r.cuenta_id, compra_id: r.id, nombre: r.nombre || "", email: r.email || "",
+        corto: nombreCortoSorteo(r.nombre), boletos: b, paquetes: [r.paquete],
+        confirmado: r.estado === "confirmada"
+      });
+    }
+  }
+  const lista = Array.from(porCuenta.values());
+  return { lista, totalBoletos: lista.reduce((s, x) => s + x.boletos, 0) };
+}
+
+async function sorteoGanadorGuardado(env){
+  const row = await env.DB.prepare("SELECT valor FROM config WHERE clave = ?1")
+    .bind("sorteo_ganador_" + SORTEO.id).first();
+  if (!row || !row.valor) return null;
+  try { return JSON.parse(row.valor); } catch (e) { return null; }
+}
+
+/* Elige (una sola vez, para siempre) al ganador. No-op antes del cierre. */
+async function sorteoElegir(env){
+  if (!SORTEO.activo) return null;
+  if (Date.now() < Date.parse(SORTEO.cierraUTC)) return null;
+  const clave = "sorteo_ganador_" + SORTEO.id;
+  const ya = await sorteoGanadorGuardado(env);
+  if (ya) return ya;
+
+  const { lista, totalBoletos } = await sorteoParticipantes(env);
+  if (!lista.length || !totalBoletos) return null;   // sin participantes no se congela nada
+
+  // Un boleto = una chance. Se sortea entre TODOS los boletos, no entre las personas.
+  const urna = [];
+  lista.forEach((p, i) => { for (let k = 0; k < p.boletos; k++) urna.push(i); });
+  const r32 = new Uint32Array(1);
+  crypto.getRandomValues(r32);
+  const boletoGanador = r32[0] % urna.length;
+  const g = lista[urna[boletoGanador]];
+
+  const pickId = randHex(8);
+  const registro = {
+    pick_id: pickId, sorteo: SORTEO.id, premio: SORTEO.premio,
+    cuenta_id: g.cuenta_id, nombre: g.nombre, corto: g.corto, email: g.email,
+    boletos: g.boletos, paquetes: g.paquetes,
+    boleto_ganador: boletoGanador + 1, total_boletos: totalBoletos,
+    participantes: lista.length, elegido_utc: new Date().toISOString()
+  };
+  await env.DB.prepare("INSERT INTO config (clave, valor) VALUES (?1, ?2) ON CONFLICT(clave) DO NOTHING")
+    .bind(clave, JSON.stringify(registro)).run();
+
+  const guardado = await sorteoGanadorGuardado(env);
+  if (!guardado) return null;
+  // Si otra corrida ganó la carrera, ella manda los avisos: acá se sale sin duplicar correos.
+  if (guardado.pick_id !== pickId) return guardado;
+
+  try { await sorteoAvisar(env, guardado, lista); } catch (e) {}
+  return guardado;
+}
+
+/* Avisos del resultado: correo al ganador + alerta a Andrés (correo, Telegram y push). */
+async function sorteoAvisar(env, g, lista){
+  const portal = MARCA.dominio + "/alumnos/";
+  if (g.email){
+    await enviarCorreo(env, {
+      to: g.email,
+      subject: "Ganaste el sorteo de " + MARCA.nombre + " 🎉",
+      html:
+        '<div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:#1c1813;line-height:1.6">' +
+        '<h2 style="margin:0 0 10px">Ganaste 🎉</h2>' +
+        '<p>Hola ' + esc(String(g.nombre || "").split(/\s+/)[0] || "") + ', saliste sorteado entre ' + g.participantes +
+        ' participantes: te llevas <b>' + esc(SORTEO.premio) + '</b>.</p>' +
+        '<p>' + esc(SORTEO.premioDetalle) + '</p>' +
+        '<p>Te escribo por WhatsApp para cuadrar los horarios. El mes gratis arranca cuando termines el paquete que ya tienes, así no pierdes ninguna clase pagada.</p>' +
+        '<p style="text-align:center;margin:26px 0"><a href="' + portal + '" style="background:#e8501f;color:#fff;text-decoration:none;font-weight:bold;padding:14px 26px;border-radius:6px;display:inline-block">Ver mi portal</a></p>' +
+        '<p style="color:#8a8172;font-size:.9rem">Gracias por celebrar mi cumpleaños comprando clases. — ' + esc(MARCA.profe) + '</p></div>',
+      text: "Ganaste el sorteo de " + MARCA.nombre + ": " + SORTEO.premio + ". " + SORTEO.premioDetalle + " Te escribo por WhatsApp para cuadrar horarios. Portal: " + portal
+    });
+  }
+  const resumen =
+    "SORTEO CERRADO — ganó " + g.nombre + " (" + g.email + ")\n" +
+    "Boleto " + g.boleto_ganador + " de " + g.total_boletos + " · " + g.participantes + " participantes\n" +
+    "Compró: " + (g.paquetes || []).join(", ") + "\n\n" +
+    "Premio: " + SORTEO.premio + "\n" + SORTEO.premioDetalle + "\n\n" +
+    "OJO: el premio NO se aplicó solo, a propósito. Cargarlo ahora le subiría el ciclo y le\n" +
+    "mataría las clases que todavía no usa del paquete que acaba de pagar. Aplícalo en el CRM\n" +
+    "cuando termine su paquete actual (Renovar → Paquete 8, monto 0).\n\n" +
+    "Participantes:\n" + (lista || []).map(p => "· " + p.nombre + " — " + p.boletos + " boleto(s)" + (p.confirmado ? "" : " (pago SIN confirmar)")).join("\n");
+  try {
+    await enviarCorreo(env, { to: MARCA.correoAdmin, subject: "Sorteo de cumpleaños: ganó " + g.nombre, text: resumen });
+  } catch (e) {}
+  try { await avisarTelegram(env, resumen); } catch (e) {}
+  try {
+    await avisarPush(env, {
+      title: "Sorteo cerrado: ganó " + g.corto,
+      body: g.participantes + " participantes · " + g.total_boletos + " boletos",
+      url: MARCA.dominio + "/sorteo/"
+    });
+  } catch (e) {}
+}
+
+/* Foto pública del sorteo (lo que consume /sorteo). Solo nombres cortos. */
+async function sorteoEstado(env){
+  const ahora = Date.now();
+  const cierra = Date.parse(SORTEO.cierraUTC);
+  const base = {
+    activo: SORTEO.activo, titulo: SORTEO.titulo, premio: SORTEO.premio,
+    premioDetalle: SORTEO.premioDetalle, cierraUTC: SORTEO.cierraUTC,
+    ahoraUTC: new Date().toISOString(), cerrado: ahora >= cierra,
+    boletosPorPaquete: SORTEO.boletos, nombresPaquete: NOMBRES_PAQUETE
+  };
+  if (!SORTEO.activo) return Object.assign(base, { participantes: [], totalBoletos: 0, ganador: null });
+  const ganador = await sorteoGanadorGuardado(env);
+  const { lista, totalBoletos } = await sorteoParticipantes(env);
+  return Object.assign(base, {
+    participantes: lista.map((p, i) => ({ n: i + 1, nombre: p.corto, boletos: p.boletos })),
+    totalBoletos,
+    ganador: ganador ? { nombre: ganador.corto, boleto: ganador.boleto_ganador, total: ganador.total_boletos, participantes: ganador.participantes, cuando: ganador.elegido_utc } : null,
+    desierto: base.cerrado && !ganador && !lista.length
+  });
+}
+
 /* ---------- Recibo de pago imprimible (portado de Batuta; universal, no fiscal) ---------- */
 const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (m) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[m]));
 const RECIBO_COLOR = "#e8501f";
@@ -2963,6 +3146,14 @@ export default {
           numero: numR, whatsapp: MARCA.whatsapp || ""
         }));
       }
+      /* Estado público del sorteo de cumpleaños. Además del cron, este GET dispara el
+         sorteoElegir() de respaldo: si el cron fallara, el primer visitante después de las
+         8pm cierra el sorteo igual (el ON CONFLICT garantiza que solo se elija una vez). */
+      if (url.pathname === "/api/sorteo" && request.method === "GET"){
+        try { await sorteoElegir(env); } catch (e) {}
+        return json(await sorteoEstado(env));
+      }
+
       if (url.pathname === "/api/pagar-info" && request.method === "GET"){
         const cfgPd = await loadConfig(env).catch(() => ({}));
         const preciosPd = await loadPrecios(env).catch(() => PRECIOS_DEFAULT);
@@ -2973,7 +3164,10 @@ export default {
         if (cfgPd.scotia_cuenta) metodos.push({ v: "Transferencia Scotiabank", t: "Transferencia Scotiabank" });
         if (cfgPd.crypto_wallet) metodos.push({ v: "Crypto USDT", t: "Crypto (" + (cfgPd.crypto_moneda || "USDT") + ")" });
         return json({
-          paquetes: Object.keys(PAQUETES).filter(pk => (preciosPd[pk] || 0) > 0).map(pk => ({ k: pk, precio: preciosPd[pk] || 0 })),
+          // Solo lo que de verdad se puede comprar. Antes salía de PAQUETES (que conserva la
+          // "Clase de prueba" como LEGADO para el cálculo de saldo de alumnos viejos), así que
+          // el selector la ofrecía y pagar-directo la rechazaba después: callejón sin salida.
+          paquetes: PAQUETES_COMPRABLES.filter(pk => (preciosPd[pk] || 0) > 0).map(pk => ({ k: pk, precio: preciosPd[pk] || 0 })),
           metodos,
           infoPago: {
             yape: { numero: cfgPd.pago_numero || "", titular: cfgPd.pago_titular || "" },
@@ -4598,6 +4792,10 @@ export default {
     // Eventos gcal huérfanos de reservas canceladas: reintento del borrado que falló online
     // (si se quedan, bloquean su slot para siempre vía gcalBusy). Tanda corta por hora.
     ctx.waitUntil(limpiarGcalHuerfanos(env).catch(function(){}));
+    // Sorteo de cumpleaños: no-op hasta SORTEO.cierraUTC (5-ago 20:00 Lima = 01:00 UTC del 6);
+    // en el disparo siguiente congela la lista, elige al ganador y avisa. Corre cada hora para
+    // no depender de que el cron de esa hora exacta no falle.
+    ctx.waitUntil(sorteoElegir(env).catch(function(){}));
     // Renovaciones: una sola vez al día, en el disparo de las 14:00 UTC (≈ 09:00 Lima).
     if (new Date().getUTCHours() === 14){
       ctx.waitUntil(procesarRenovaciones(env).catch(function(){}));

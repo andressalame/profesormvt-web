@@ -1,0 +1,271 @@
+---
+/*
+  Sorteo de cumpleaños (5-ago-2026). Página de campaña con fecha de muerte.
+  Todo lo dinámico sale de GET /api/sorteo (worker/index.js, bloque SORTEO):
+  lista de participantes en vivo, cuenta regresiva y revelación del ganador.
+  Cuando pase la fecha: poner SORTEO.activo = false en el worker; esta página
+  se queda mostrando el resultado sin que haya que tocarla.
+*/
+import Layout from '../layouts/Layout.astro';
+---
+
+<Layout
+  title="Sorteo de cumpleaños | ProfesorMVT"
+  description="Compra tu paquete de 4 clases o más antes del 5 de agosto y entra al sorteo de un mes de clases gratis de canto y composición."
+>
+  <main class="sorteo">
+    <section class="so-hero">
+      <div class="container-narrow">
+        <p class="label" id="soLabel">Cumplo años el 5 de agosto</p>
+        <h1>El regalo <em>te lo llevas tú</em></h1>
+        <p class="lead">
+          Sorteo <strong>un mes entero de clases gratis</strong> de canto y composición
+          entre todos los que compren un paquete de 4 clases o más antes de mi cumpleaños.
+        </p>
+
+        <div class="so-reloj" id="soReloj">
+          <div class="so-cd" id="soCd">
+            <div><b id="cdD">--</b><span>días</span></div>
+            <div><b id="cdH">--</b><span>horas</span></div>
+            <div><b id="cdM">--</b><span>min</span></div>
+            <div><b id="cdS">--</b><span>seg</span></div>
+          </div>
+          <p class="so-cierra">Cierra el <b>5 de agosto a las 8:00 p.m.</b> (hora de Lima)</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Resultado: aparece solo cuando el sorteo ya cerró -->
+    <section class="so-resultado" id="soResultado" hidden>
+      <div class="container-narrow">
+        <div class="so-ganador" id="soGanadorCard">
+          <p class="label">El ganador es</p>
+          <h2 id="soGanadorNombre">—</h2>
+          <p class="so-detalle" id="soGanadorDetalle"></p>
+        </div>
+      </div>
+    </section>
+
+    <section class="so-como">
+      <div class="container-narrow">
+        <h2>Cómo participas</h2>
+        <ol class="so-pasos">
+          <li><b>Compras</b> tu paquete de 4, 8 o 12 clases en la web.</li>
+          <li><b>Entras solo</b>: apenas se registra tu pago, tu nombre aparece en la lista de abajo.</li>
+          <li><b>El 5 de agosto a las 8:00 p.m.</b> se elige al ganador en esta misma página.</li>
+        </ol>
+
+        <h3>Mientras más clases, más chances</h3>
+        <p class="so-nota">Cada paquete te da boletos en el sorteo. Un boleto, una chance.</p>
+        <div class="so-planes">
+          <a class="so-plan" href="/pagar/?p=Paquete%204">
+            <span class="so-boletos">1 boleto</span>
+            <b>Plan Esencial</b>
+            <span class="so-sub">4 clases · S/320</span>
+            <span class="so-cta">Comprar →</span>
+          </a>
+          <a class="so-plan destacado" href="/pagar/?p=Paquete%208">
+            <span class="so-boletos">2 boletos</span>
+            <b>Plan Intensivo</b>
+            <span class="so-sub">8 clases · S/580</span>
+            <span class="so-cta">Comprar →</span>
+          </a>
+          <a class="so-plan" href="/pagar/?p=Paquete%2012">
+            <span class="so-boletos">3 boletos</span>
+            <b>Plan Estrella</b>
+            <span class="so-sub">12 clases · S/780</span>
+            <span class="so-cta">Comprar →</span>
+          </a>
+        </div>
+        <p class="so-nota">La clase suelta no entra al sorteo.</p>
+      </div>
+    </section>
+
+    <section class="so-lista-wrap">
+      <div class="container-narrow">
+        <h2>Quiénes ya están dentro</h2>
+        <p class="so-conteo" id="soConteo">Cargando…</p>
+        <ul class="so-lista" id="soLista"></ul>
+        <p class="so-nota" id="soVacio" hidden>Todavía no hay nadie. Puedes ser el primero.</p>
+      </div>
+    </section>
+
+    <section class="so-bases">
+      <div class="container-narrow">
+        <h2>Las bases, en corto</h2>
+        <ul>
+          <li>Participa toda compra de <b>Plan Esencial (4), Intensivo (8) o Estrella (12)</b> registrada entre el <b>2 y el 5 de agosto de 2026 hasta las 8:00 p.m.</b> (hora de Lima). La clase suelta no participa.</li>
+          <li>Boletos por compra: 4 clases = 1 · 8 clases = 2 · 12 clases = 3. Si compras más de un paquete, se suman.</li>
+          <li>Vale igual si eres alumno nuevo o si estás renovando.</li>
+          <li>El premio es <b>un mes de clases de Canto + Composición: 8 horas (4 sesiones de 2 horas)</b>, valorizado en S/580. Es intransferible y no se cambia por dinero.</li>
+          <li>Si el ganador ya tiene un paquete en curso, el mes gratis <b>arranca cuando termine el que pagó</b>: no se pierde ninguna clase comprada.</li>
+          <li>El ganador se elige <b>al azar entre todos los boletos</b>, de forma automática, a las 8:00 p.m. del 5 de agosto. Se publica en esta página y se le avisa por correo y WhatsApp.</li>
+          <li>Compras hechas con un pago que no se llegue a confirmar quedan fuera.</li>
+          <li>La lista pública muestra solo nombre e inicial del apellido. Ningún dato de contacto se hace público.</li>
+        </ul>
+        <p class="so-nota">Organiza: ProfesorMVT (Andrés Salamé-Córdova). Dudas: <a href="https://wa.me/51989077928">WhatsApp</a>.</p>
+      </div>
+    </section>
+  </main>
+</Layout>
+
+<style>
+  .sorteo{background:var(--negro,#0d0b0a);color:var(--crema,#EBE5D6);}
+  .sorteo h2{font-family:var(--display,'Anton',sans-serif);text-transform:uppercase;font-size:clamp(1.4rem,4vw,2rem);letter-spacing:.01em;}
+  .sorteo h3{font-family:var(--display,'Anton',sans-serif);text-transform:uppercase;font-size:1.1rem;margin:34px 0 6px;}
+  .label{font-family:var(--mono,'JetBrains Mono',monospace);text-transform:uppercase;letter-spacing:.14em;font-size:.72rem;color:var(--naranja,#e8501f);margin-bottom:10px;}
+  .so-nota{font-size:.88rem;opacity:.6;margin-top:10px;}
+  .so-nota a{color:var(--naranja,#e8501f);}
+
+  .so-hero{padding:72px 0 34px;}
+  .so-hero h1{font-family:var(--display,'Anton',sans-serif);font-size:clamp(2.2rem,7vw,3.6rem);line-height:1;text-transform:uppercase;}
+  .so-hero h1 em{color:var(--naranja,#e8501f);font-style:normal;}
+  .so-hero .lead{margin-top:16px;max-width:540px;opacity:.88;font-size:1.05rem;}
+  .so-hero .lead strong{color:var(--crema,#EBE5D6);}
+
+  .so-reloj{margin-top:30px;}
+  .so-cd{display:flex;gap:10px;flex-wrap:wrap;}
+  .so-cd>div{background:rgba(255,255,255,.04);border:1px solid rgba(235,229,214,.14);border-radius:6px;padding:12px 16px;min-width:74px;text-align:center;}
+  .so-cd b{display:block;font-family:var(--display,'Anton',sans-serif);font-size:1.9rem;line-height:1;color:var(--naranja,#e8501f);font-variant-numeric:tabular-nums;}
+  .so-cd span{font-family:var(--mono,'JetBrains Mono',monospace);font-size:.62rem;text-transform:uppercase;letter-spacing:.12em;opacity:.6;}
+  .so-cierra{margin-top:12px;font-size:.9rem;opacity:.7;}
+
+  .so-resultado{padding:8px 0 40px;}
+  .so-ganador{background:linear-gradient(180deg,rgba(232,80,31,.16),rgba(232,80,31,.04));border:1px solid rgba(232,80,31,.42);border-radius:8px;padding:34px 26px;text-align:center;}
+  .so-ganador h2{font-size:clamp(1.8rem,7vw,3rem);color:var(--naranja,#e8501f);margin:4px 0 8px;}
+  .so-ganador.girando h2{opacity:.55;}
+  .so-detalle{font-size:.92rem;opacity:.75;}
+
+  .so-como{padding:34px 0 10px;}
+  .so-pasos{margin:16px 0 0;padding-left:20px;display:grid;gap:10px;max-width:560px;opacity:.9;}
+  .so-planes{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px;margin-top:14px;}
+  .so-plan{display:block;background:rgba(255,255,255,.035);border:1px solid rgba(235,229,214,.14);border-radius:6px;padding:18px 16px;text-decoration:none;color:inherit;transition:border-color .15s,transform .15s;}
+  .so-plan:hover{border-color:var(--naranja,#e8501f);transform:translateY(-2px);}
+  .so-plan.destacado{border-color:rgba(232,80,31,.55);background:rgba(232,80,31,.07);}
+  .so-boletos{display:inline-block;font-family:var(--mono,'JetBrains Mono',monospace);font-size:.62rem;text-transform:uppercase;letter-spacing:.12em;color:var(--naranja,#e8501f);border:1px solid rgba(232,80,31,.4);border-radius:999px;padding:3px 9px;margin-bottom:10px;}
+  .so-plan b{display:block;font-family:var(--display,'Anton',sans-serif);text-transform:uppercase;font-size:1.15rem;}
+  .so-sub{display:block;font-size:.86rem;opacity:.65;margin-top:2px;}
+  .so-cta{display:block;margin-top:12px;font-family:var(--mono,'JetBrains Mono',monospace);font-size:.72rem;text-transform:uppercase;letter-spacing:.1em;color:var(--naranja,#e8501f);}
+
+  .so-lista-wrap{padding:38px 0 10px;}
+  .so-conteo{margin-top:8px;font-family:var(--mono,'JetBrains Mono',monospace);font-size:.78rem;text-transform:uppercase;letter-spacing:.1em;opacity:.7;}
+  .so-lista{list-style:none;padding:0;margin:16px 0 0;display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:8px;}
+  .so-lista li{display:flex;align-items:center;gap:10px;background:rgba(255,255,255,.035);border:1px solid rgba(235,229,214,.12);border-radius:6px;padding:10px 12px;font-size:.92rem;}
+  .so-lista li.gano{border-color:var(--naranja,#e8501f);background:rgba(232,80,31,.12);}
+  .so-lista .num{font-family:var(--mono,'JetBrains Mono',monospace);font-size:.7rem;opacity:.45;min-width:22px;}
+  .so-lista .bol{margin-left:auto;font-family:var(--mono,'JetBrains Mono',monospace);font-size:.65rem;opacity:.55;white-space:nowrap;}
+
+  .so-bases{padding:40px 0 84px;}
+  .so-bases ul{margin-top:14px;padding-left:20px;display:grid;gap:9px;max-width:640px;font-size:.9rem;opacity:.8;line-height:1.55;}
+</style>
+
+<script>
+(function(){
+  var $ = function(id){ return document.getElementById(id); };
+  var lista = $('soLista'), conteo = $('soConteo'), vacio = $('soVacio'),
+      reloj = $('soReloj'), res = $('soResultado'), card = $('soGanadorCard'),
+      gNombre = $('soGanadorNombre'), gDetalle = $('soGanadorDetalle'), label = $('soLabel');
+
+  var cierraMs = 0;            // instante del cierre, en ms
+  var desfase = 0;             // reloj del servidor - reloj del visitante (evita PCs con la hora mal puesta)
+  var participantes = [];      // ultima lista conocida
+  var yaRevelado = false;
+  var estabaAbierto = null;    // para saber si el visitante estaba presente en el momento del cierre
+  var timerPoll = null;
+
+  function ahora(){ return Date.now() + desfase; }
+
+  function pinta(d){
+    cierraMs = Date.parse(d.cierraUTC);
+    desfase = Date.parse(d.ahoraUTC) - Date.now();
+    participantes = d.participantes || [];
+
+    // Lista de participantes
+    lista.innerHTML = participantes.map(function(p){
+      var gano = d.ganador && d.ganador.nombre === p.nombre;
+      return '<li class="' + (gano ? 'gano' : '') + '">' +
+             '<span class="num">' + p.n + '</span>' +
+             '<span class="nom"></span>' +
+             '<span class="bol">' + p.boletos + (p.boletos === 1 ? ' boleto' : ' boletos') + '</span></li>';
+    }).join('');
+    // El nombre se inyecta como texto (nunca como HTML): viene de lo que el alumno escribio al pagar.
+    Array.prototype.forEach.call(lista.querySelectorAll('.nom'), function(el, i){
+      el.textContent = participantes[i].nombre;
+    });
+
+    var n = participantes.length;
+    conteo.textContent = n === 0 ? 'Nadie todavía'
+      : (n + (n === 1 ? ' participante · ' : ' participantes · ') + d.totalBoletos + ' boletos en juego');
+    vacio.hidden = n > 0;
+
+    if (!d.cerrado){
+      estabaAbierto = true;
+      return;
+    }
+
+    // ---- Cerrado ----
+    reloj.hidden = true;
+    label.textContent = 'Sorteo cerrado · 5 de agosto de 2026';
+    if (d.ganador){
+      res.hidden = false;
+      // Ruleta solo para quien estaba mirando cuando cerró; el que llega después ve el resultado directo.
+      if (!yaRevelado && estabaAbierto === true && participantes.length > 1) ruleta(d.ganador);
+      else muestraGanador(d.ganador);
+    } else if (d.desierto){
+      res.hidden = false;
+      gNombre.textContent = 'Sorteo desierto';
+      gDetalle.textContent = 'Nadie compró un paquete en la ventana del sorteo.';
+    }
+  }
+
+  function muestraGanador(g){
+    yaRevelado = true;
+    card.classList.remove('girando');
+    gNombre.textContent = g.nombre;
+    gDetalle.textContent = 'Boleto ' + g.boleto + ' de ' + g.total + ' · entre ' + g.participantes +
+      (g.participantes === 1 ? ' participante' : ' participantes') +
+      '. Te escribo por WhatsApp para cuadrar tus horarios.';
+    if (timerPoll) clearTimeout(timerPoll);
+  }
+
+  function ruleta(g){
+    yaRevelado = true;
+    res.hidden = false;
+    card.classList.add('girando');
+    gDetalle.textContent = 'Sacando el boleto ganador…';
+    var i = 0, fin = Date.now() + 3000;
+    var t = setInterval(function(){
+      gNombre.textContent = participantes[i % participantes.length].nombre;
+      i++;
+      if (Date.now() >= fin){ clearInterval(t); muestraGanador(g); }
+    }, 90);
+  }
+
+  function tick(){
+    if (!cierraMs) return;
+    var falta = cierraMs - ahora();
+    if (falta < 0) falta = 0;
+    var s = Math.floor(falta / 1000);
+    $('cdD').textContent = Math.floor(s / 86400);
+    $('cdH').textContent = String(Math.floor(s % 86400 / 3600)).padStart(2, '0');
+    $('cdM').textContent = String(Math.floor(s % 3600 / 60)).padStart(2, '0');
+    $('cdS').textContent = String(s % 60).padStart(2, '0');
+  }
+
+  function carga(){
+    fetch('/api/sorteo').then(function(r){ return r.json(); }).then(pinta).catch(function(){});
+  }
+
+  // Refresco con ritmo variable: cada 25s de lejos, cada 4s en el último minuto, para que
+  // el ganador aparezca casi en vivo a las 8pm sin martillar el worker el resto del tiempo.
+  function programaPoll(){
+    if (yaRevelado) return;
+    var falta = cierraMs ? (cierraMs - ahora()) : 25000;
+    timerPoll = setTimeout(function(){ carga(); programaPoll(); }, (falta > -30000 && falta < 60000) ? 4000 : 25000);
+  }
+
+  carga();
+  setInterval(tick, 1000);
+  programaPoll();
+})();
+</script>

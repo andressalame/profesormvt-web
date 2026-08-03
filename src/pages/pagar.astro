@@ -15,6 +15,12 @@ import Layout from '../layouts/Layout.astro';
           Elige tu paquete, paga y listo: tu cuenta del portal se crea sola y te llega
           un correo para ponerle tu contraseña. Sin registro previo.
         </p>
+        <!-- Aviso del sorteo de cumpleaños: se esconde solo cuando el sorteo cierra
+             (lo decide /api/sorteo, no hay que volver a tocar esta página). -->
+        <a class="pg-sorteo" id="pgSorteo" href="/sorteo/" hidden>
+          <b>Sorteo de cumpleaños</b>
+          <span>Compra 4 clases o más y entras al sorteo de un mes de clases gratis. Cierra el 5 de agosto, 8 p.m. →</span>
+        </a>
       </div>
     </section>
 
@@ -63,6 +69,10 @@ import Layout from '../layouts/Layout.astro';
   .pg-hero h1{font-family:var(--display,'Anton',sans-serif);font-size:clamp(2rem,6vw,3.2rem);line-height:1.02;text-transform:uppercase;}
   .pg-hero h1 em{color:var(--naranja,#e8501f);font-style:normal;}
   .pg-hero .lead{margin-top:14px;max-width:520px;opacity:.85;}
+  .pg-sorteo{display:block;margin-top:20px;max-width:520px;background:rgba(232,80,31,.1);border:1px solid rgba(232,80,31,.45);border-radius:6px;padding:14px 16px;text-decoration:none;color:inherit;transition:border-color .15s;}
+  .pg-sorteo:hover{border-color:var(--naranja,#e8501f);}
+  .pg-sorteo b{display:block;font-family:var(--mono,'JetBrains Mono',monospace);font-size:.68rem;text-transform:uppercase;letter-spacing:.14em;color:var(--naranja,#e8501f);margin-bottom:5px;}
+  .pg-sorteo span{font-size:.9rem;opacity:.88;}
   .pg-form{padding:12px 0 84px;}
   .pg-card{background:rgba(255,255,255,.035);border:1px solid rgba(235,229,214,.14);border-radius:6px;padding:26px 22px;max-width:520px;}
   .pg-card label{display:block;font-family:var(--mono,'JetBrains Mono',monospace);font-size:.7rem;text-transform:uppercase;letter-spacing:.12em;opacity:.75;margin:16px 0 6px;}
@@ -85,6 +95,11 @@ import Layout from '../layouts/Layout.astro';
       form=document.getElementById('fp'), err=document.getElementById('errp');
   var preSel="";
   try{ preSel=new URLSearchParams(location.search).get('p')||""; }catch(e){}
+
+  // Banner del sorteo: solo si hay uno vigente y todavía abierto.
+  fetch('/api/sorteo').then(function(r){ return r.json(); }).then(function(s){
+    if(s && s.activo && !s.cerrado) document.getElementById('pgSorteo').hidden=false;
+  }).catch(function(){});
 
   fetch('/api/pagar-info').then(function(r){ return r.json(); }).then(function(d){
     if(!d || !d.paquetes || !d.paquetes.length || !d.metodos || !d.metodos.length){
