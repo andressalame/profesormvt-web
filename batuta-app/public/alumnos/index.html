@@ -1708,6 +1708,8 @@ var AG_SLOTS = [];
 var AG_LLENOS = [];       // slots llenos (para ofrecer lista de espera)
 var AG_FUERA = [];        // slots que existen pero NO los cubre mi plan
 var AG_DET = {};          // iso -> {cupo, ocupados, curso}
+var AG_FRANJAS = {};      // iso -> [{sala, curso, cupo, ocupados, estado, profe}] (03-ago-2026: N clases por hora)
+var AG_SALAS = [];        // salas de la academia (para saber si mostrar la etiqueta de sala)
 var AG_PLAN = null;       // {nombre, tipos[]} — el plan del alumno
 var AG_FILTRO = "";       // categoría elegida en los chips de filtro ("" = todas)
 var AG_PROFE = null;      // {nombre, foto} del profe de esta agenda
@@ -1823,6 +1825,8 @@ function cargarSlots(){
     AG_LLENOS = (d && d.llenos) || [];
     AG_FUERA = (d && d.fuera) || [];
     AG_DET = (d && d.detalle) || {};
+    AG_FRANJAS = (d && d.franjas) || {};
+    AG_SALAS = (d && d.salas) || [];
     AG_PLAN = (d && d.plan) || null;
     AG_PROFE = (d && d.profe) || null;
     pintarProfe();
@@ -1849,31 +1853,51 @@ function pintarProfe(){
     '<div style="font-weight:700;">'+esc(AG_PROFE.nombre)+'</div></div></div>';
 }
 
-// Chip de tipo de clase (Mat / Máquinas) + cupos libres, si la franja los tiene.
-function slotMeta(iso){
-  var d=AG_DET[iso]; if(!d) return "";
+/* ---------- N clases por hora (03-ago-2026): la unidad reservable es (hora, sala) ----------
+   itemsAgenda() aplana AG_FRANJAS a una lista de clases; si el worker aún no manda franjas
+   (cache viejo), se reconstruye desde las listas por ISO de siempre y todo sigue igual. */
+function itemsAgenda(){
+  var out=[];
+  var isos=Object.keys(AG_FRANJAS||{});
+  if(isos.length){
+    isos.forEach(function(iso){
+      (AG_FRANJAS[iso]||[]).forEach(function(f){
+        out.push({iso:iso, sala:String(f.sala||""), curso:String(f.curso||""), cupo:Number(f.cupo)||0, ocupados:Number(f.ocupados)||0, estado:String(f.estado||"libre"), profe:String(f.profe||"")});
+      });
+    });
+  } else {
+    var lee=function(iso,estado){ var d=AG_DET[iso]||{}; return {iso:iso, sala:"", curso:String(d.curso||""), cupo:Number(d.cupo)||0, ocupados:Number(d.ocupados)||0, estado:estado, profe:""}; };
+    AG_SLOTS.forEach(function(iso){ out.push(lee(iso,"libre")); });
+    AG_LLENOS.forEach(function(iso){ out.push(lee(iso,"lleno")); });
+    AG_FUERA.forEach(function(iso){ out.push(lee(iso,"fuera")); });
+  }
+  return out;
+}
+// Chips de la clase: tipo (Mat / Máquinas), sala, quién la dicta y cupos libres.
+function slotMeta(it){
   var out="";
-  if(d.curso) out += '<span style="display:inline-block;font-size:10px;font-weight:700;letter-spacing:.03em;text-transform:uppercase;background:var(--accent,#7c6cf0);color:#fff;border-radius:6px;padding:1px 6px;margin-left:6px;">'+esc(d.curso)+'</span>';
-  var cupo=Number(d.cupo)||0;
-  if(cupo>1){ var libres=Math.max(0,cupo-(Number(d.ocupados)||0)); out += '<span style="font-size:11px;opacity:.7;margin-left:6px;">'+libres+'/'+cupo+' libres</span>'; }
+  if(it.curso) out += '<span style="display:inline-block;font-size:10px;font-weight:700;letter-spacing:.03em;text-transform:uppercase;background:var(--accent,#7c6cf0);color:#fff;border-radius:6px;padding:1px 6px;margin-left:6px;">'+esc(it.curso)+'</span>';
+  if(it.sala) out += '<span style="display:inline-block;font-size:10px;font-weight:700;letter-spacing:.03em;text-transform:uppercase;border:1px solid var(--line,#444);border-radius:6px;padding:1px 6px;margin-left:6px;opacity:.85;">'+esc(it.sala)+'</span>';
+  if(it.profe) out += '<span style="font-size:11px;opacity:.75;margin-left:6px;">con '+esc(it.profe)+'</span>';
+  var cupo=Number(it.cupo)||0;
+  if(cupo>1){ var libres=Math.max(0,cupo-(Number(it.ocupados)||0)); out += '<span style="font-size:11px;opacity:.7;margin-left:6px;">'+libres+'/'+cupo+' libres</span>'; }
   return out;
 }
 
 // Categoría de una etiqueta: "Pilates Máquinas · Reformer" -> "Pilates Máquinas"
 function catDe(t){ var s=String(t||"").trim(); var i=s.indexOf(" · "); return i>0?s.slice(0,i).trim():s; }
 // Chips para filtrar por tipo de clase cuando hay más de uno disponible.
-function chipsDeTipo(isos){
+function chipsDeTipo(items){
   var cats=[];
-  isos.forEach(function(iso){ var c=catDe((AG_DET[iso]||{}).curso); if(c && cats.indexOf(c)===-1) cats.push(c); });
+  items.forEach(function(it){ var c=catDe(it.curso); if(c && cats.indexOf(c)===-1) cats.push(c); });
   if(cats.length<2) return "";
   var b=function(v,tx){ return '<button class="btn '+(AG_FILTRO===v?"":"ghost ")+'sm" data-filtro="'+esc(v)+'">'+esc(tx)+'</button>'; };
   return '<div style="display:flex;gap:6px;flex-wrap:wrap;margin:0 0 12px;">'+b("","Todas")+cats.map(function(c){return b(c,c);}).join("")+'</div>';
 }
 // Aviso honesto de lo que su plan NO cubre: no se esconde, se explica.
-function avisoFueraDePlan(){
-  if(!AG_FUERA.length) return "";
+function avisoFueraDePlan(items){
   var cats=[];
-  AG_FUERA.forEach(function(iso){ var c=catDe((AG_DET[iso]||{}).curso); if(c && cats.indexOf(c)===-1) cats.push(c); });
+  items.forEach(function(it){ if(it.estado!=="fuera") return; var c=catDe(it.curso); if(c && cats.indexOf(c)===-1) cats.push(c); });
   if(!cats.length) return "";
   var plan=(AG_PLAN&&AG_PLAN.nombre)?('Tu plan <b>'+esc(AG_PLAN.nombre)+'</b>'):"Tu plan";
   return '<p class="note" style="margin:0 0 12px;">'+plan+' no incluye <b>'+esc(cats.join(", "))+
@@ -1881,28 +1905,28 @@ function avisoFueraDePlan(){
 }
 
 function pintarSlots(){
-  var todos = AG_SLOTS.concat(AG_LLENOS);
-  if(AG_FILTRO) todos = todos.filter(function(iso){ return catDe((AG_DET[iso]||{}).curso)===AG_FILTRO; });
+  var items = itemsAgenda();
+  var reservables = items.filter(function(it){ return it.estado==="libre"||it.estado==="lleno"; });
+  var todos = AG_FILTRO ? reservables.filter(function(it){ return catDe(it.curso)===AG_FILTRO; }) : reservables;
   if(todos.length===0){
-    $("agSlots").innerHTML = chipsDeTipo(AG_SLOTS.concat(AG_LLENOS)) + avisoFueraDePlan() +
+    $("agSlots").innerHTML = chipsDeTipo(reservables) + avisoFueraDePlan(items) +
       '<p class="note" style="margin:0">'+(AG_FILTRO?"No hay horarios de ese tipo en las próximas semanas.":"No hay horarios en las próximas semanas. Escríbeme y lo cuadramos.")+'</p>';
     return;
   }
-  var llenoSet={}; AG_LLENOS.forEach(function(iso){ llenoSet[iso]=1; });
-  // agrupo TODOS los slots (libres + llenos) por día
+  // agrupo TODAS las clases (libres + llenas) por día
   var mapa = {};
-  todos.forEach(function(iso){ var k=diaKeyLocal(iso); (mapa[k]=mapa[k]||[]).push(iso); });
-  Object.keys(mapa).forEach(function(k){ mapa[k].sort(); });
+  todos.forEach(function(it){ var k=diaKeyLocal(it.iso); (mapa[k]=mapa[k]||[]).push(it); });
+  Object.keys(mapa).forEach(function(k){ mapa[k].sort(function(a,b){ return a.iso<b.iso?-1:(a.iso>b.iso?1:(a.sala<b.sala?-1:1)); }); });
   /* ref sale de lo que se está mostrando (ya filtrado): si no, al filtrar por tipo el día
      seleccionado podía quedar sin horarios y la lista salía vacía. */
-  var ref = todos.slice().sort()[0];
+  var isosVis = todos.map(function(it){return it.iso;}).sort();
+  var ref = isosVis[0];
   if(!AG_DIA || !mapa[AG_DIA]) AG_DIA = diaKeyLocal(ref);
 
   // rango del calendario: lunes de esta semana → domingo de la semana del último slot
-  var todosSort = todos.slice().sort();
   var hoy = new Date(); hoy.setHours(0,0,0,0);
   var ini = new Date(hoy); ini.setDate(ini.getDate() - ((hoy.getDay()+6)%7));
-  var ult = new Date(todosSort[todosSort.length-1]); ult.setHours(0,0,0,0);
+  var ult = new Date(isosVis[isosVis.length-1]); ult.setHours(0,0,0,0);
   var fin = new Date(ult); fin.setDate(fin.getDate() + ((7-ult.getDay())%7));
 
   var mesIni = AG_MESES[ini.getMonth()], mesFin = AG_MESES[fin.getMonth()];
@@ -1918,22 +1942,22 @@ function pintarSlots(){
     cur.setDate(cur.getDate()+1);
   }
 
-  var diaSlots = mapa[AG_DIA] || [];
-  var titulo = fmtFechaLocal(diaSlots[0] || ref);
-  var slotsHtml = diaSlots.map(function(iso){
-    if(llenoSet[iso]){
+  var diaItems = mapa[AG_DIA] || [];
+  var titulo = fmtFechaLocal((diaItems[0]&&diaItems[0].iso) || ref);
+  var slotsHtml = diaItems.map(function(it){
+    if(it.estado==="lleno"){
       return '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:6px 0;">'+
-        '<span style="font-weight:600;opacity:.55;">'+esc(fmtHoraLocal(iso))+'</span>'+slotMeta(iso)+
+        '<span style="font-weight:600;opacity:.55;">'+esc(fmtHoraLocal(it.iso))+'</span>'+slotMeta(it)+
         '<span style="font-size:11px;font-weight:700;color:var(--amber,#c47f16);">LLENO</span>'+
-        '<button class="btn ghost sm" data-espera="'+esc(iso)+'">Lista de espera</button>'+
+        '<button class="btn ghost sm" data-espera="'+esc(it.iso)+'" data-esala="'+esc(it.sala)+'">Lista de espera</button>'+
       '</div>';
     }
-    return '<button class="btn ghost sm" data-slot="'+esc(iso)+'">'+esc(fmtHoraLocal(iso))+slotMeta(iso)+'</button>';
+    return '<button class="btn ghost sm" data-slot="'+esc(it.iso)+'" data-sala="'+esc(it.sala)+'">'+esc(fmtHoraLocal(it.iso))+slotMeta(it)+'</button>';
   }).join("");
 
   $("agSlots").innerHTML =
-    chipsDeTipo(AG_SLOTS.concat(AG_LLENOS)) +
-    avisoFueraDePlan() +
+    chipsDeTipo(reservables) +
+    avisoFueraDePlan(items) +
     '<div class="calmes">'+esc(label)+'</div>'+
     '<div class="cal">'+celdas+'</div>'+
     '<div style="margin-top:18px;font-weight:700;text-transform:capitalize;">'+esc(titulo)+'</div>'+
@@ -1952,17 +1976,17 @@ function renderEspera(list){
     var av = e.estado==="avisado";
     return '<div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--line);">'+
       '<div style="flex:1;min-width:0;">'+
-        '<div style="font-weight:600;text-transform:capitalize;">'+esc(fmtFechaLocal(e.inicio_utc))+' · '+esc(fmtHoraLocal(e.inicio_utc))+(e.curso?' · '+esc(e.curso):'')+'</div>'+
+        '<div style="font-weight:600;text-transform:capitalize;">'+esc(fmtFechaLocal(e.inicio_utc))+' · '+esc(fmtHoraLocal(e.inicio_utc))+(e.curso?' · '+esc(e.curso):'')+(e.sala?' · '+esc(e.sala):'')+'</div>'+
         '<div class="note" style="margin:0;">'+(av?'<span style="color:var(--accent,#7c6cf0);font-weight:700;">¡Se liberó un cupo! Resérvalo abajo 👇</span>':'En lista de espera · te aviso si se libera un cupo')+'</div>'+
       '</div>'+
       '<button class="btn ghost sm" data-salir-espera="'+esc(e.id)+'">Salir</button>'+
     '</div>';
   }).join("");
 }
-function joinEspera(iso){
-  var label = fmtFechaLocal(iso)+" "+fmtHoraLocal(iso);
+function joinEspera(iso, sala){
+  var label = fmtFechaLocal(iso)+" "+fmtHoraLocal(iso)+(sala?(" ("+sala+")"):"");
   if(!confirm("Esa clase está llena. ¿Entrar a la lista de espera de "+label+"? Te aviso apenas se libere un cupo.")) return;
-  api("/app/api/agenda/espera",{method:"POST",body:JSON.stringify({inicio_utc:iso})})
+  api("/app/api/agenda/espera",{method:"POST",body:JSON.stringify({inicio_utc:iso, sala:sala||""})})
     .then(function(r){ toast(r.mensaje||"Estás en la lista de espera."); cargarEspera(); })
     .catch(function(e){
       if(e && /cupo libre/i.test(e.message||"")){ toast("Se liberó un cupo, resérvalo."); cargarSlots(); return; }
@@ -1975,13 +1999,13 @@ function salirEspera(id){
     .catch(function(e){ toast((e&&e.message)||"No se pudo."); });
 }
 
-function reservarSlot(iso){
-  var label = fmtFechaLocal(iso)+" "+fmtHoraLocal(iso);
+function reservarSlot(iso, sala){
+  var label = fmtFechaLocal(iso)+" "+fmtHoraLocal(iso)+(sala?(" ("+sala+")"):"");
   var msg = AG_TIPO==="fija"
     ? "Vas a reservar el horario fijo de "+label+" las próximas 4 semanas. ¿Confirmas?"
     : "Vas a reservar tu clase del "+label+". ¿Confirmas?";
   if(!confirm(msg)) return;
-  api("/app/api/agenda/reservar",{method:"POST",body:JSON.stringify({inicio_utc:iso, tipo:AG_TIPO})})
+  api("/app/api/agenda/reservar",{method:"POST",body:JSON.stringify({inicio_utc:iso, tipo:AG_TIPO, sala:sala||""})})
     .then(function(r){
       if(r.tipo==="fija"){
         var m = "Listo, aparté "+r.reservadas+" clase"+(r.reservadas===1?"":"s")+" 🎸";
@@ -2018,9 +2042,9 @@ $("v-agenda").addEventListener("click", function(e){
   var t = e.target.closest("[data-tipo]");
   if(t){ setTipoReserva(t.dataset.tipo); pintarSlots(); return; }
   var s = e.target.closest("[data-slot]");
-  if(s){ reservarSlot(s.dataset.slot); return; }
+  if(s){ reservarSlot(s.dataset.slot, s.dataset.sala||""); return; }
   var w = e.target.closest("[data-espera]");
-  if(w){ joinEspera(w.dataset.espera); return; }
+  if(w){ joinEspera(w.dataset.espera, w.dataset.esala||""); return; }
   var ws = e.target.closest("[data-salir-espera]");
   if(ws){ salirEspera(ws.dataset.salirEspera); return; }
   var c = e.target.closest("[data-cancelar]");

@@ -2772,18 +2772,52 @@ function cupoDeCfg(cfg){
   const c = parseInt(cfg && cfg.agenda_cupo, 10);
   return (Number.isFinite(c) && c >= 1 && c <= CUPO_MAX) ? c : 1;
 }
+/* Salas o espacios fisicos (03-ago-2026, Elevate: "Sala grande" y "Sala chica"): la unidad
+   de PARALELISMO de la agenda. Dos clases distintas a la misma hora = dos franjas de
+   disponibilidad en salas distintas, cada una con su tipo de clase, su aforo y su profe.
+   config.salas = JSON ["Sala grande","Sala chica"]. Sin salas ([]) la academia tiene una
+   sola grilla y TODO se comporta exactamente como antes (sala = ''). */
+function salasDeCfg(cfg){
+  try {
+    const raw = JSON.parse((cfg && cfg.salas) || "[]");
+    if (!Array.isArray(raw)) return [];
+    const out = [];
+    for (const s of raw){
+      const n = String(s || "").trim().slice(0, 40);
+      if (n && !out.includes(n)) out.push(n);
+      if (out.length >= 8) break;
+    }
+    return out;
+  } catch (e) { return []; }
+}
 /* Ocupacion de un slot EN LA AGENDA DE UN PROFESOR (multi-profesor: dos profes pueden
    dictar a la misma hora sin chocar). prof = {id, esDueno}; las reservas legacy con
-   profesor_id NULL cuentan como del dueno. */
-async function ocupacionSlot(env, tenantId, iso, prof){
+   profesor_id NULL cuentan como del dueno.
+   sala (03-ago-2026): con salas, la ocupacion se cuenta POR SALA (la clase de Mat llena
+   no bloquea la de Maquinas de la misma hora). Un "bloqueo" cierra la hora ENTERA
+   (todas las salas): es el profe cerrando su horario, no un ocupante mas. */
+async function ocupacionSlot(env, tenantId, iso, prof, sala){
   const pid = prof && prof.id ? prof.id : "";
   const esD = !!(prof && prof.esDueno);
-  const { results } = await env.DB.prepare(
-    "SELECT tipo, COUNT(*) AS n FROM reservas WHERE tenant_id = ?1 AND inicio_utc = ?2 AND estado IN ('reservada','completada') " +
-    "AND (profesor_id = ?3 OR (?4 = 1 AND profesor_id IS NULL)) GROUP BY tipo"
-  ).bind(tenantId, iso, pid, esD ? 1 : 0).all();
+  const salaK = String(sala || "");
+  let results = [];
+  try {
+    results = ((await env.DB.prepare(
+      "SELECT tipo, COALESCE(sala,'') AS sala, COUNT(*) AS n FROM reservas WHERE tenant_id = ?1 AND inicio_utc = ?2 AND estado IN ('reservada','completada') " +
+      "AND (profesor_id = ?3 OR (?4 = 1 AND profesor_id IS NULL)) GROUP BY tipo, sala"
+    ).bind(tenantId, iso, pid, esD ? 1 : 0).all()).results) || [];
+  } catch (e) {
+    /* columna sala aun no existe en esta D1: conteo viejo, todo junto */
+    results = ((await env.DB.prepare(
+      "SELECT tipo, '' AS sala, COUNT(*) AS n FROM reservas WHERE tenant_id = ?1 AND inicio_utc = ?2 AND estado IN ('reservada','completada') " +
+      "AND (profesor_id = ?3 OR (?4 = 1 AND profesor_id IS NULL)) GROUP BY tipo"
+    ).bind(tenantId, iso, pid, esD ? 1 : 0).all()).results) || [];
+  }
   let n = 0, bloqueado = false;
-  for (const r of (results || [])){ n += Number(r.n) || 0; if (r.tipo === "bloqueo") bloqueado = true; }
+  for (const r of results){
+    if (r.tipo === "bloqueo"){ bloqueado = true; continue; }
+    if (String(r.sala || "") === salaK) n += Number(r.n) || 0;
+  }
   return { n, bloqueado };
 }
 
@@ -2828,13 +2862,13 @@ async function generarSlotsDetalle(env, tenantId, prof, opts){
   let disp = [];
   try {
     disp = ((await env.DB.prepare(
-      "SELECT dia_semana, hora, COALESCE(cupo,0) AS cupo, COALESCE(curso,'') AS curso FROM disponibilidad WHERE tenant_id = ?1 AND activo = 1 " +
+      "SELECT dia_semana, hora, COALESCE(cupo,0) AS cupo, COALESCE(curso,'') AS curso, COALESCE(sala,'') AS sala, COALESCE(profe,'') AS profe FROM disponibilidad WHERE tenant_id = ?1 AND activo = 1 " +
       "AND (profesor_id = ?2 OR (?3 = 1 AND (profesor_id IS NULL OR profesor_id = '')))"
     ).bind(tenantId, pid, esD ? 1 : 0).all()).results) || [];
   } catch (e) {
     try {
       disp = ((await env.DB.prepare(
-        "SELECT dia_semana, hora, COALESCE(cupo,0) AS cupo FROM disponibilidad WHERE tenant_id = ?1 AND activo = 1 " +
+        "SELECT dia_semana, hora, COALESCE(cupo,0) AS cupo, COALESCE(curso,'') AS curso FROM disponibilidad WHERE tenant_id = ?1 AND activo = 1 " +
         "AND (profesor_id = ?2 OR (?3 = 1 AND (profesor_id IS NULL OR profesor_id = '')))"
       ).bind(tenantId, pid, esD ? 1 : 0).all()).results) || [];
     } catch (e2) {
@@ -2845,18 +2879,41 @@ async function generarSlotsDetalle(env, tenantId, prof, opts){
     }
   }
   const porDia = {};
-  for (const r of (disp || [])){ (porDia[r.dia_semana] = porDia[r.dia_semana] || []).push({ hora: r.hora, cupo: parseInt(r.cupo, 10) || 0, curso: r.curso || "" }); }
+  for (const r of (disp || [])){ (porDia[r.dia_semana] = porDia[r.dia_semana] || []).push({ hora: r.hora, cupo: parseInt(r.cupo, 10) || 0, curso: r.curso || "", sala: r.sala || "", profe: r.profe || "" }); }
+
+  /* Nombres de los profes que dictan franjas ("La dicta Fiorella"): un solo query. */
+  const profeNombres = new Map();
+  const profeIds = [...new Set((disp || []).map(r => r.profe || "").filter(Boolean))];
+  if (profeIds.length){
+    try {
+      const marcas = profeIds.map((_, i) => "?" + (i + 2)).join(",");
+      const { results: pr } = await env.DB.prepare(
+        "SELECT id, nombre FROM profesores WHERE tenant_id = ?1 AND id IN (" + marcas + ")"
+      ).bind(tenantId, ...profeIds).all();
+      for (const p of (pr || [])) profeNombres.set(p.id, p.nombre || "");
+    } catch (e) {}
+  }
 
   const now = Date.now();
   const hastaMs = now + HORIZONTE_SEMANAS * 7 * 86400000;
-  const { results: tomadas } = await env.DB.prepare(
-    "SELECT inicio_utc, tipo FROM reservas WHERE tenant_id = ?1 AND estado IN ('reservada','completada') AND inicio_utc >= ?2 AND inicio_utc <= ?3 " +
-    "AND (profesor_id = ?4 OR (?5 = 1 AND profesor_id IS NULL))"
-  ).bind(tenantId, new Date(now).toISOString(), new Date(hastaMs).toISOString(), pid, esD ? 1 : 0).all();
+  let tomadas = [];
+  try {
+    tomadas = ((await env.DB.prepare(
+      "SELECT inicio_utc, tipo, COALESCE(sala,'') AS sala FROM reservas WHERE tenant_id = ?1 AND estado IN ('reservada','completada') AND inicio_utc >= ?2 AND inicio_utc <= ?3 " +
+      "AND (profesor_id = ?4 OR (?5 = 1 AND profesor_id IS NULL))"
+    ).bind(tenantId, new Date(now).toISOString(), new Date(hastaMs).toISOString(), pid, esD ? 1 : 0).all()).results) || [];
+  } catch (e) {
+    tomadas = ((await env.DB.prepare(
+      "SELECT inicio_utc, tipo, '' AS sala FROM reservas WHERE tenant_id = ?1 AND estado IN ('reservada','completada') AND inicio_utc >= ?2 AND inicio_utc <= ?3 " +
+      "AND (profesor_id = ?4 OR (?5 = 1 AND profesor_id IS NULL))"
+    ).bind(tenantId, new Date(now).toISOString(), new Date(hastaMs).toISOString(), pid, esD ? 1 : 0).all()).results) || [];
+  }
+  /* Ocupacion POR SALA (iso|sala); un bloqueo cierra la hora entera, todas las salas. */
   const conteo = new Map(); const bloqueados = new Set();
   for (const r of (tomadas || [])){
-    conteo.set(r.inicio_utc, (conteo.get(r.inicio_utc) || 0) + 1);
-    if (r.tipo === "bloqueo") bloqueados.add(r.inicio_utc);
+    if (r.tipo === "bloqueo"){ bloqueados.add(r.inicio_utc); continue; }
+    const k = r.inicio_utc + "|" + (r.sala || "");
+    conteo.set(k, (conteo.get(k) || 0) + 1);
   }
   const cfgT = await loadConfig(env, tenantId);
   const cupoGlobal = cupoDeCfg(cfgT);
@@ -2881,10 +2938,11 @@ async function generarSlotsDetalle(env, tenantId, prof, opts){
 
   const p0 = limaParts(new Date(now));
   const medianocheHoy = limaToUtc(p0.y, p0.m, p0.d, "00:00").getTime();
-  const slots = [];      // libres (con cupo) y dentro del plan del alumno
-  const llenos = [];     // sin cupo pero abiertos (no bloqueo) -> lista de espera
-  const fuera = [];      // existen pero su tipo NO esta en el plan del alumno
-  const detalle = {};    // iso -> {cupo, ocupados, curso}
+  const slots = [];      // ISOs con AL MENOS una clase libre dentro del plan (contrato viejo)
+  const llenos = [];     // ISOs abiertos pero sin cupo en ninguna clase del plan -> lista de espera
+  const fuera = [];      // ISOs cuyas clases existen pero ninguna esta en el plan del alumno
+  const detalle = {};    // iso -> {cupo, ocupados, curso} (contrato viejo: UNA clase por hora)
+  const franjas = {};    // iso -> [{sala, curso, cupo, ocupados, estado, profe}] (03-ago-2026: N clases por hora)
   for (let i = 0; i <= HORIZONTE_SEMANAS * 7; i++){
     const p = limaParts(new Date(medianocheHoy + i * 86400000));
     const horas = porDia[p.dow] || [];
@@ -2895,16 +2953,29 @@ async function generarSlotsDetalle(env, tenantId, prof, opts){
       if (ms <= now + reg.minH * 3600000 || ms > hastaMs) continue;
       if (reg.maxDias > 0 && ms > now + reg.maxDias * 86400000) continue;
       const iso = new Date(ms).toISOString();
-      if (bloqueados.has(iso)) continue;   // franja cerrada por el profe: ni libre ni espera
+      if (bloqueados.has(iso)) continue;   // hora cerrada por el profe: ni libre ni espera
       const cupo = cupoEff(h.cupo, h.curso);
-      const ocupados = conteo.get(iso) || 0;
-      detalle[iso] = { cupo, ocupados, curso: h.curso || "" };
-      if (pk && !paqueteCubre(pk, h.curso)){ fuera.push(iso); continue; }
-      if (ocupados < cupo) slots.push(iso); else llenos.push(iso);
+      const ocupados = conteo.get(iso + "|" + (h.sala || "")) || 0;
+      const enPlan = !(pk && !paqueteCubre(pk, h.curso));
+      const estado = !enPlan ? "fuera" : (ocupados < cupo ? "libre" : "lleno");
+      (franjas[iso] = franjas[iso] || []).push({
+        sala: h.sala || "", curso: h.curso || "", cupo, ocupados, estado,
+        profe: (h.profe && profeNombres.get(h.profe)) || ""
+      });
     }
   }
+  /* Contrato viejo por ISO (portal cacheado / web publica): gana la mejor clase de la hora
+     (libre > llena > fuera del plan) y el ISO cae en UNA sola de las tres listas. */
+  for (const iso of Object.keys(franjas)){
+    const fs = franjas[iso];
+    const mejor = fs.find(f => f.estado === "libre") || fs.find(f => f.estado === "lleno") || fs[0];
+    detalle[iso] = { cupo: mejor.cupo, ocupados: mejor.ocupados, curso: mejor.curso };
+    if (mejor.estado === "libre") slots.push(iso);
+    else if (mejor.estado === "lleno") llenos.push(iso);
+    else fuera.push(iso);
+  }
   slots.sort(); llenos.sort(); fuera.sort();
-  return { slots, llenos, fuera, detalle };
+  return { slots, llenos, fuera, detalle, franjas, salas: salasDeCfg(cfgT) };
 }
 
 async function generarSlots(env, tenantId, prof){
@@ -2915,13 +2986,25 @@ async function generarSlots(env, tenantId, prof){
    de ese slot (orden de llegada). NO auto-reserva (evita liar creditos/consentimiento): avisa por
    correo + push y el alumno entra a reservar. Marca 'avisado' para no re-spamear ni saltar la fila.
    Best-effort total: cualquier fallo se traga, jamas rompe la cancelacion que lo dispara. */
-async function promoverEspera(env, tenantId, iso){
+async function promoverEspera(env, tenantId, iso, sala){
   try {
-    const row = await env.DB.prepare(
-      "SELECT e.id AS eid, e.alumno_id, c.id AS cuenta_id, c.email AS email, c.nombre AS nombre " +
-      "FROM espera e JOIN cuentas c ON c.alumno_id = e.alumno_id AND c.tenant_id = e.tenant_id " +
-      "WHERE e.tenant_id = ?1 AND e.inicio_utc = ?2 AND e.estado = 'esperando' ORDER BY e.creado ASC LIMIT 1"
-    ).bind(tenantId, iso).first();
+    /* Con salas, el cupo liberado es DE UNA SALA: se avisa al primero de la cola de esa sala
+       (las esperas legacy sin sala cuentan para cualquiera). Fallback si la columna no existe. */
+    let row = null;
+    try {
+      row = await env.DB.prepare(
+        "SELECT e.id AS eid, e.alumno_id, c.id AS cuenta_id, c.email AS email, c.nombre AS nombre " +
+        "FROM espera e JOIN cuentas c ON c.alumno_id = e.alumno_id AND c.tenant_id = e.tenant_id " +
+        "WHERE e.tenant_id = ?1 AND e.inicio_utc = ?2 AND e.estado = 'esperando' " +
+        "AND (COALESCE(e.sala,'') = ?3 OR COALESCE(e.sala,'') = '') ORDER BY e.creado ASC LIMIT 1"
+      ).bind(tenantId, iso, String(sala || "")).first();
+    } catch (e) {
+      row = await env.DB.prepare(
+        "SELECT e.id AS eid, e.alumno_id, c.id AS cuenta_id, c.email AS email, c.nombre AS nombre " +
+        "FROM espera e JOIN cuentas c ON c.alumno_id = e.alumno_id AND c.tenant_id = e.tenant_id " +
+        "WHERE e.tenant_id = ?1 AND e.inicio_utc = ?2 AND e.estado = 'esperando' ORDER BY e.creado ASC LIMIT 1"
+      ).bind(tenantId, iso).first();
+    }
     if (!row) return;
     await env.DB.prepare("UPDATE espera SET estado = 'avisado', avisado_utc = ?1 WHERE id = ?2 AND tenant_id = ?3")
       .bind(new Date().toISOString(), row.eid, tenantId).run();
@@ -3572,6 +3655,15 @@ async function ensureErpSchema(env){
      Reformer, Yoga...). Junto con el cupo por franja da "aforos distintos por tipo de clase"
      (Elevate Studio, 24-jul). ALTER perezoso idempotente; '' = franja sin etiqueta (como siempre). */
   try { await env.DB.prepare("ALTER TABLE disponibilidad ADD COLUMN curso TEXT DEFAULT ''").run(); } catch (e) {}
+  /* Salas (03-ago-2026, Elevate): N clases en paralelo a la misma hora, una por sala, y el
+     profe que dicta cada franja. OJO: estos ALTER solo agregan las columnas; para que quepan
+     DOS filas en la misma hora la PK debe incluir `sala`, y eso NO se puede con ALTER: la
+     tabla de prod se reconstruyo a mano (disponibilidad_legacy_v2 quedo de respaldo). En una
+     D1 sin reconstruir, la segunda sala de una hora se pierde por el INSERT OR IGNORE. */
+  try { await env.DB.prepare("ALTER TABLE disponibilidad ADD COLUMN sala TEXT DEFAULT ''").run(); } catch (e) {}
+  try { await env.DB.prepare("ALTER TABLE disponibilidad ADD COLUMN profe TEXT DEFAULT ''").run(); } catch (e) {}
+  try { await env.DB.prepare("ALTER TABLE reservas ADD COLUMN sala TEXT DEFAULT ''").run(); } catch (e) {}
+  try { await env.DB.prepare("ALTER TABLE espera ADD COLUMN sala TEXT DEFAULT ''").run(); } catch (e) {}
   /* Auditoria de cancelaciones: cuando y quien cancelo una reserva (para que un bug de saldo
      no vuelva a ser invisible; leccion MVT 21-jul). ALTER perezoso idempotente. */
   for (const col of ["cancelada_utc TEXT DEFAULT ''", "cancelada_por TEXT DEFAULT ''"]){
@@ -3790,35 +3882,62 @@ async function emitirBoletaNubefact(env, cfg, datos){
   if (!resp.ok) return { ok: false, error: "Nubefact HTTP " + resp.status };
   return { ok: true, data };
 }
-/* Cupo efectivo de UN slot: el de la franja si es >0, si no el global del tenant. */
-async function cupoDeSlot(env, tenantId, iso, prof, cfg){
+/* TODAS las franjas de una hora concreta en la agenda de un profesor (03-ago-2026).
+   Con salas, una misma hora puede tener N clases en paralelo: cada fila trae su
+   {sala, curso, cupo, profe}. Fallback en cascada si la D1 aun no tiene las columnas. */
+async function franjasDeSlot(env, tenantId, iso, prof){
+  const t = Date.parse(iso);
+  if (!Number.isFinite(t)) return [];
+  const p = limaParts(new Date(t));
+  const pid = prof && prof.id ? prof.id : "";
+  const esD = !!(prof && prof.esDueno);
+  const base = "FROM disponibilidad WHERE tenant_id = ?1 AND dia_semana = ?2 AND hora = ?3 AND activo = 1 " +
+    "AND (profesor_id = ?4 OR (?5 = 1 AND (profesor_id IS NULL OR profesor_id = '')))";
+  const bindear = (q) => env.DB.prepare(q).bind(tenantId, p.dow, hhmm(p), pid, esD ? 1 : 0);
   try {
-    const p = limaParts(new Date(Date.parse(iso)));
-    const pid = prof && prof.id ? prof.id : "";
-    const esD = !!(prof && prof.esDueno);
-    const row = await env.DB.prepare(
-      "SELECT COALESCE(cupo,0) AS cupo, COALESCE(curso,'') AS curso FROM disponibilidad WHERE tenant_id = ?1 AND dia_semana = ?2 AND hora = ?3 AND activo = 1 " +
-      "AND (profesor_id = ?4 OR (?5 = 1 AND (profesor_id IS NULL OR profesor_id = '')))"
-    ).bind(tenantId, p.dow, hhmm(p), pid, esD ? 1 : 0).first();
-    const c = row ? parseInt(row.cupo, 10) : 0;
+    return ((await bindear("SELECT COALESCE(sala,'') AS sala, COALESCE(curso,'') AS curso, COALESCE(cupo,0) AS cupo, COALESCE(profe,'') AS profe " + base).all()).results) || [];
+  } catch (e) {
+    try {
+      const rows = ((await bindear("SELECT COALESCE(curso,'') AS curso, COALESCE(cupo,0) AS cupo " + base).all()).results) || [];
+      return rows.map(r => ({ sala: "", curso: r.curso || "", cupo: r.cupo || 0, profe: "" }));
+    } catch (e2) { return []; }
+  }
+}
+/* Resuelve QUE franja de esa hora quiere el alumno. sala vacia + una sola franja = esa
+   (compatibilidad total con academias sin salas). sala vacia + varias franjas = ambigua:
+   el que llama decide (el portal nuevo siempre manda la sala). */
+async function resolverFranja(env, tenantId, iso, prof, sala){
+  const rows = await franjasDeSlot(env, tenantId, iso, prof);
+  if (!rows.length) return { franja: null, ambigua: false };
+  const salaK = String(sala || "");
+  if (salaK){
+    const exacta = rows.find(r => String(r.sala || "") === salaK);
+    if (exacta) return { franja: exacta, ambigua: false };
+    /* franja legacy sin sala: vale para cualquier sala pedida (transicion) */
+    const legacy = rows.find(r => !r.sala);
+    if (legacy) return { franja: legacy, ambigua: false };
+    return { franja: null, ambigua: false };
+  }
+  if (rows.length === 1) return { franja: rows[0], ambigua: false };
+  return { franja: null, ambigua: true };
+}
+/* Cupo efectivo de UN slot: el de la franja si es >0, si no el aforo del tipo, si no el global. */
+async function cupoDeSlot(env, tenantId, iso, prof, cfg, sala){
+  try {
+    const { franja } = await resolverFranja(env, tenantId, iso, prof, sala);
+    const c = franja ? parseInt(franja.cupo, 10) : 0;
     if (Number.isFinite(c) && c >= 1 && c <= CUPO_MAX) return c;
     /* sin aforo propio: el del TIPO de clase de esa franja (Maquinas 3 / Mat 8) */
-    const porTipo = aforoDeTipo(cfg, row && row.curso);
+    const porTipo = aforoDeTipo(cfg, franja && franja.curso);
     if (porTipo) return porTipo;
   } catch (e) { /* columna aun no existe -> cae al global */ }
   return cupoDeCfg(cfg);
 }
 /* Etiqueta de tipo de clase de una franja concreta (para validar el plan al reservar). */
-async function tipoDeSlot(env, tenantId, iso, prof){
+async function tipoDeSlot(env, tenantId, iso, prof, sala){
   try {
-    const p = limaParts(new Date(Date.parse(iso)));
-    const pid = prof && prof.id ? prof.id : "";
-    const esD = !!(prof && prof.esDueno);
-    const row = await env.DB.prepare(
-      "SELECT COALESCE(curso,'') AS curso FROM disponibilidad WHERE tenant_id = ?1 AND dia_semana = ?2 AND hora = ?3 AND activo = 1 " +
-      "AND (profesor_id = ?4 OR (?5 = 1 AND (profesor_id IS NULL OR profesor_id = '')))"
-    ).bind(tenantId, p.dow, hhmm(p), pid, esD ? 1 : 0).first();
-    return (row && row.curso) || "";
+    const { franja } = await resolverFranja(env, tenantId, iso, prof, sala);
+    return (franja && franja.curso) || "";
   } catch (e) { return ""; }
 }
 
@@ -6649,7 +6768,7 @@ export default {
           profPub = d ? { id: d.id, esDueno: true } : { id: "", esDueno: true };
         }
         const det = await generarSlotsDetalle(env, t.id, profPub);
-        return json({ slots: det.slots, detalle: det.detalle });
+        return json({ slots: det.slots, detalle: det.detalle, franjas: det.franjas, salas: det.salas });
       }
 
       /* ============================================================
@@ -8180,7 +8299,7 @@ export default {
             "- Precios/paquetes: Ajustes > Clases y planes. Los paquetes son de nombre libre, con clases incluidas o mensualidad ilimitada, y la columna 'Incluye' marca a que clases dan acceso.\n" +
             "- Marca (logo, color, tipografia) y sedes: Ajustes > Academia.\n" +
             "- Registrar clase dictada: Clases > Registro de clases > '+ Registrar clase' (asistio/falta/reprogramo, que se trabajo, tarea con audio o PDF de Tu biblioteca). El saldo del alumno se descuenta solo.\n" +
-            "- Agenda: Clases > Agenda arma tu horario semanal y los alumnos reservan solos. Un clic prende la franja; otro clic sobre una prendida abre su tipo de clase y su aforo, y se puede aplicar a todo el dia o a toda la semana. El rango de horas y el paso (1h, 30 o 15 min) se cambian arriba de la grilla.\n" +
+            "- Agenda: Clases > Agenda arma tu horario semanal y los alumnos reservan solos. Un clic prende la franja; otro clic sobre una prendida abre su tipo de clase, su aforo y el profesor que la dicta, y se puede aplicar a todo el dia o a toda la semana. El rango de horas y el paso (1h, 30 o 15 min) se cambian arriba de la grilla. Si dictas dos clases a la misma hora en espacios distintos, crea tus salas en Ajustes > Clases y planes: el horario tendra una pestana por sala y cada una lleva su propia clase y aforo.\n" +
             "- Tipos de clase: Ajustes > Clases y planes. Cada tipo tiene su aforo (ej. Maquinas 3, Mat 8) y sus variantes (Reformer, Tower). En cada paquete, 'Incluye' marca a que tipos da acceso: el alumno con ese plan solo ve y solo puede reservar esos.\n" +
             "- Reprogramaciones y anticipacion minima para reservar: Ajustes > Reservas. La anticipacion en 0 deja reservar la clase de dentro de un rato (lo normal en un estudio); vacia son 12 horas.\n" +
             "- Cobros por Yape/Plin/transferencia: pones tu numero y cuentas en Ajustes > Cobros; el alumno paga, sube su constancia y confirmas en 1 clic en Cobros > Pagos.\n" +
@@ -8260,6 +8379,7 @@ export default {
         const pkS = alS ? resolverPk((await loadPaquetes(env, cu.tenant_id)).map, alS.paquete) : null;
         const det = await generarSlotsDetalle(env, cu.tenant_id, profS, { pk: pkS });
         return json({ slots: det.slots, llenos: det.llenos, fuera: det.fuera, detalle: det.detalle,
+                      franjas: det.franjas, salas: det.salas,
                       plan: { nombre: (alS && alS.paquete) || "", tipos: (pkS && pkS.tipos) || [] },
                       profe: { nombre: profS.nombre || "", foto: profS.foto || "" } });
       }
@@ -8273,12 +8393,19 @@ export default {
         const b = await request.json().catch(() => ({}));
         const tipo = b.tipo === "fija" ? "fija" : "suelta";
         const iso = String(b.inicio_utc || "");
+        const salaPedida = String(b.sala || "").trim().slice(0, 40);
 
         const alumno = await env.DB.prepare("SELECT * FROM alumnos WHERE id = ?1 AND tenant_id = ?2").bind(cu.alumno_id, tid).first();
         if (!alumno) return json({ error: "No encuentro tu ficha de alumno." }, 400);
         // La reserva vive en la agenda del profesor del alumno (multi-profesor).
         const profR = await profeDeAlumno(env, tid, alumno);
         if (!(await slotValido(env, tid, iso, null, profR))) return json({ error: "Ese horario ya no esta disponible. Elige otro." }, 400);
+        /* Con salas hay N clases a la misma hora: primero se resuelve CUAL es (03-ago-2026).
+           El portal nuevo siempre manda la sala; si no llega y la hora es ambigua, error claro. */
+        const { franja: frR, ambigua: ambR } = await resolverFranja(env, tid, iso, profR, salaPedida);
+        if (ambR) return json({ error: "A esa hora hay más de una clase. Actualiza la página y elige la clase que quieres." }, 400);
+        if (!frR) return json({ error: "Ese horario ya no esta disponible. Elige otro." }, 400);
+        const salaR = frR.sala || "";
         const precios = await loadPrecios(env, tid);
         const ciclo = Number(alumno.ciclo) || 1;
         const { results: regs } = await env.DB.prepare(
@@ -8290,7 +8417,7 @@ export default {
         /* El plan manda (27-jul-2026): si el paquete solo cubre ciertas categorias, esta franja
            tiene que ser de una de ellas. Se valida en el SERVIDOR: el portal ya las esconde,
            pero esconder no es impedir. */
-        const tipoSlot = await tipoDeSlot(env, tid, iso, profR);
+        const tipoSlot = frR.curso || "";
         if (!paqueteCubre(pkR, tipoSlot)){
           return json({ error: 'Tu plan "' + (alumno.paquete || "") + '" no incluye ' + (categoriaDe(tipoSlot) || "ese tipo de clase") + ". Escríbenos para cambiar de plan." }, 403);
         }
@@ -8325,24 +8452,28 @@ export default {
         const nowIso = new Date().toISOString();
         const startMs = Date.parse(iso);
 
-        /* cupo por franja: el de la celda de disponibilidad si es >0, si no el global */
-        const cupoT = await cupoDeSlot(env, tid, iso, profR, await loadConfig(env, tid));
-        /* el mismo alumno no puede reservar dos veces el mismo slot (con cupo > 1 el conteo solo no lo impide) */
+        /* cupo por franja: el de la celda de disponibilidad si es >0, si no el aforo del tipo, si no el global */
+        const cupoT = await cupoDeSlot(env, tid, iso, profR, await loadConfig(env, tid), salaR);
+        /* el mismo alumno no puede reservar dos veces la misma hora (en ninguna sala: nadie
+           esta en dos salones a la vez; con cupo > 1 el conteo solo no lo impide) */
         const yaMia = await env.DB.prepare(
           "SELECT 1 AS ok FROM reservas WHERE tenant_id = ?1 AND inicio_utc = ?2 AND alumno_id = ?3 AND estado IN ('reservada','completada')"
         ).bind(tid, iso, alumno.id).first();
         if (yaMia) return json({ error: "Ya tienes una reserva en ese horario." }, 409);
 
+        /* La reserva guarda el CURSO DE LA FRANJA (si lo tiene): las reglas de cancelacion
+           por tipo de clase se aplican sobre lo que realmente reservo, no sobre su ficha. */
+        const cursoR = frR.curso || alumno.curso || "";
         if (tipo === "suelta"){
-          const oc = await ocupacionSlot(env, tid, iso, profR);
+          const oc = await ocupacionSlot(env, tid, iso, profR, salaR);
           if (oc.bloqueado || oc.n >= cupoT) return json({ error: "Ese horario ya se lleno. Elige otro." }, 409);
           const fin = new Date(startMs + CLASE_MIN * 60000).toISOString();
           const rid = crypto.randomUUID();
           await env.DB.prepare(
-            "INSERT INTO reservas (id,tenant_id,alumno_id,inicio_utc,fin_utc,tipo,serie_id,estado,curso,ciclo,creada,profesor_id) VALUES (?1,?2,?3,?4,?5,'suelta','','reservada',?6,?7,?8,?9)"
-          ).bind(rid, tid, alumno.id, iso, fin, alumno.curso || "", ciclo, nowIso, profR.id || null).run();
+            "INSERT INTO reservas (id,tenant_id,alumno_id,inicio_utc,fin_utc,tipo,serie_id,estado,curso,ciclo,creada,profesor_id,sala) VALUES (?1,?2,?3,?4,?5,'suelta','','reservada',?6,?7,?8,?9,?10)"
+          ).bind(rid, tid, alumno.id, iso, fin, cursoR, ciclo, nowIso, profR.id || null, salaR).run();
           /* re-verificacion optimista: si una carrera paso el cupo, se deshace esta reserva */
-          const oc2 = await ocupacionSlot(env, tid, iso, profR);
+          const oc2 = await ocupacionSlot(env, tid, iso, profR, salaR);
           if (oc2.bloqueado || oc2.n > cupoT){
             await env.DB.prepare("DELETE FROM reservas WHERE id = ?1 AND tenant_id = ?2").bind(rid, tid).run();
             return json({ error: "Justo se lleno ese horario. Elige otro." }, 409);
@@ -8359,7 +8490,7 @@ export default {
           const t = startMs + i * 7 * 86400000;
           const isoT = new Date(t).toISOString();
           if (!(await slotValido(env, tid, isoT, { ignorarHorizonte: true }, profR))){ saltadas.push(isoT); continue; }
-          const ocF = await ocupacionSlot(env, tid, isoT, profR);
+          const ocF = await ocupacionSlot(env, tid, isoT, profR, salaR);
           if (ocF.bloqueado || ocF.n >= cupoT){ saltadas.push(isoT); continue; }
           const miaF = await env.DB.prepare(
             "SELECT 1 AS ok FROM reservas WHERE tenant_id = ?1 AND inicio_utc = ?2 AND alumno_id = ?3 AND estado IN ('reservada','completada')"
@@ -8368,9 +8499,9 @@ export default {
           const finT = new Date(t + CLASE_MIN * 60000).toISOString();
           const rid = crypto.randomUUID();
           await env.DB.prepare(
-            "INSERT INTO reservas (id,tenant_id,alumno_id,inicio_utc,fin_utc,tipo,serie_id,estado,curso,ciclo,creada,profesor_id) VALUES (?1,?2,?3,?4,?5,'fija',?6,'reservada',?7,?8,?9,?10)"
-          ).bind(rid, tid, alumno.id, isoT, finT, serie, alumno.curso || "", ciclo, nowIso, profR.id || null).run();
-          const ocF2 = await ocupacionSlot(env, tid, isoT, profR);
+            "INSERT INTO reservas (id,tenant_id,alumno_id,inicio_utc,fin_utc,tipo,serie_id,estado,curso,ciclo,creada,profesor_id,sala) VALUES (?1,?2,?3,?4,?5,'fija',?6,'reservada',?7,?8,?9,?10,?11)"
+          ).bind(rid, tid, alumno.id, isoT, finT, serie, cursoR, ciclo, nowIso, profR.id || null, salaR).run();
+          const ocF2 = await ocupacionSlot(env, tid, isoT, profR, salaR);
           if (ocF2.bloqueado || ocF2.n > cupoT){
             await env.DB.prepare("DELETE FROM reservas WHERE id = ?1 AND tenant_id = ?2").bind(rid, tid).run();
             saltadas.push(isoT); continue;
@@ -8403,7 +8534,7 @@ export default {
         }
         await env.DB.prepare("UPDATE reservas SET estado = 'cancelada', cancelada_utc = ?1, cancelada_por = ?2 WHERE id = ?3 AND tenant_id = ?4")
           .bind(new Date().toISOString(), "alumno:" + cu.alumno_id, r.id, tid).run();
-        await promoverEspera(env, tid, r.inicio_utc);   // se libero un cupo: avisar a la lista de espera
+        await promoverEspera(env, tid, r.inicio_utc, r.sala || "");   // se libero un cupo EN ESA SALA: avisar a su lista de espera
         return json({ ok: true, mensaje: "Listo, libere tu horario. Elige tu nuevo horario abajo." });
       }
 
@@ -8414,9 +8545,15 @@ export default {
         let rows = [];
         try {
           rows = (await env.DB.prepare(
-            "SELECT id, inicio_utc, curso, estado FROM espera WHERE tenant_id = ?1 AND alumno_id = ?2 AND estado IN ('esperando','avisado') ORDER BY inicio_utc ASC"
+            "SELECT id, inicio_utc, curso, estado, COALESCE(sala,'') AS sala FROM espera WHERE tenant_id = ?1 AND alumno_id = ?2 AND estado IN ('esperando','avisado') ORDER BY inicio_utc ASC"
           ).bind(cu.tenant_id, cu.alumno_id).all()).results || [];
-        } catch (e) {}
+        } catch (e) {
+          try {
+            rows = (await env.DB.prepare(
+              "SELECT id, inicio_utc, curso, estado FROM espera WHERE tenant_id = ?1 AND alumno_id = ?2 AND estado IN ('esperando','avisado') ORDER BY inicio_utc ASC"
+            ).bind(cu.tenant_id, cu.alumno_id).all()).results || [];
+          } catch (e2) {}
+        }
         return json({ espera: rows });
       }
 
@@ -8426,20 +8563,26 @@ export default {
         const tid = cu.tenant_id;
         const b = await request.json().catch(() => ({}));
         const iso = String(b.inicio_utc || "");
+        const salaE = String(b.sala || "").trim().slice(0, 40);
         const alumno = await env.DB.prepare("SELECT * FROM alumnos WHERE id = ?1 AND tenant_id = ?2").bind(cu.alumno_id, tid).first();
         if (!alumno) return json({ error: "No encuentro tu ficha de alumno." }, 400);
         const profR = await profeDeAlumno(env, tid, alumno);
         if (!(await slotValido(env, tid, iso, null, profR))) return json({ error: "Ese horario ya no esta disponible." }, 400);
+        /* que franja de esa hora (multi-sala, 03-ago-2026) */
+        const { franja: frE, ambigua: ambE } = await resolverFranja(env, tid, iso, profR, salaE);
+        if (ambE) return json({ error: "A esa hora hay más de una clase. Actualiza la página y elige la clase que quieres." }, 400);
+        if (!frE) return json({ error: "Ese horario ya no esta disponible." }, 400);
+        const salaFE = frE.sala || "";
         /* no tiene sentido hacer cola por una clase que su plan no cubre */
         const pkE = resolverPk((await loadPaquetes(env, tid)).map, alumno.paquete);
-        const tipoE = await tipoDeSlot(env, tid, iso, profR);
+        const tipoE = frE.curso || "";
         if (!paqueteCubre(pkE, tipoE)){
           return json({ error: 'Tu plan "' + (alumno.paquete || "") + '" no incluye ' + (categoriaDe(tipoE) || "ese tipo de clase") + "." }, 403);
         }
         await ensureErpSchema(env);
         /* si el slot NO esta lleno, no tiene sentido esperar: que reserve directo */
-        const cupoT = await cupoDeSlot(env, tid, iso, profR, await loadConfig(env, tid));
-        const oc = await ocupacionSlot(env, tid, iso, profR);
+        const cupoT = await cupoDeSlot(env, tid, iso, profR, await loadConfig(env, tid), salaFE);
+        const oc = await ocupacionSlot(env, tid, iso, profR, salaFE);
         if (!oc.bloqueado && oc.n < cupoT) return json({ error: "Ese horario tiene cupo libre, resérvalo directo.", hay_cupo: true }, 409);
         const yaMia = await env.DB.prepare(
           "SELECT 1 AS ok FROM reservas WHERE tenant_id = ?1 AND inicio_utc = ?2 AND alumno_id = ?3 AND estado IN ('reservada','completada')"
@@ -8450,11 +8593,11 @@ export default {
         ).bind(tid, iso, alumno.id).first();
         if (yaEsp) return json({ ok: true, ya: true, mensaje: "Ya estás en la lista de espera de ese horario." });
         const pos = await env.DB.prepare(
-          "SELECT COUNT(*) AS n FROM espera WHERE tenant_id = ?1 AND inicio_utc = ?2 AND estado = 'esperando'"
-        ).bind(tid, iso).first();
+          "SELECT COUNT(*) AS n FROM espera WHERE tenant_id = ?1 AND inicio_utc = ?2 AND estado = 'esperando' AND COALESCE(sala,'') = ?3"
+        ).bind(tid, iso, salaFE).first().catch(() => null);
         await env.DB.prepare(
-          "INSERT INTO espera (id,tenant_id,alumno_id,profesor_id,inicio_utc,curso,estado,creado) VALUES (?1,?2,?3,?4,?5,?6,'esperando',?7)"
-        ).bind(crypto.randomUUID(), tid, alumno.id, profR.id || "", iso, alumno.curso || "", new Date().toISOString()).run();
+          "INSERT INTO espera (id,tenant_id,alumno_id,profesor_id,inicio_utc,curso,estado,creado,sala) VALUES (?1,?2,?3,?4,?5,?6,'esperando',?7,?8)"
+        ).bind(crypto.randomUUID(), tid, alumno.id, profR.id || "", iso, tipoE || alumno.curso || "", new Date().toISOString(), salaFE).run();
         return json({ ok: true, posicion: (Number(pos && pos.n) || 0) + 1, mensaje: "Listo, estás en la lista de espera. Te aviso apenas se libere un cupo." });
       }
 
@@ -9010,14 +9153,21 @@ export default {
           let rows = [];
           try {
             rows = (await env.DB.prepare(
-              "SELECT dia_semana, hora, activo, COALESCE(cupo,0) AS cupo, COALESCE(curso,'') AS curso FROM disponibilidad WHERE tenant_id = ?1 " +
+              "SELECT dia_semana, hora, activo, COALESCE(cupo,0) AS cupo, COALESCE(curso,'') AS curso, COALESCE(sala,'') AS sala, COALESCE(profe,'') AS profe FROM disponibilidad WHERE tenant_id = ?1 " +
               "AND (profesor_id = ?2 OR (?3 = 1 AND (profesor_id IS NULL OR profesor_id = ''))) ORDER BY dia_semana, hora"
             ).bind(tid, target.id, target.esDueno ? 1 : 0).all()).results || [];
           } catch (e) {
-            rows = (await env.DB.prepare(
-              "SELECT dia_semana, hora, activo, 0 AS cupo FROM disponibilidad WHERE tenant_id = ?1 " +
-              "AND (profesor_id = ?2 OR (?3 = 1 AND (profesor_id IS NULL OR profesor_id = ''))) ORDER BY dia_semana, hora"
-            ).bind(tid, target.id, target.esDueno ? 1 : 0).all()).results || [];
+            try {
+              rows = (await env.DB.prepare(
+                "SELECT dia_semana, hora, activo, COALESCE(cupo,0) AS cupo, COALESCE(curso,'') AS curso FROM disponibilidad WHERE tenant_id = ?1 " +
+                "AND (profesor_id = ?2 OR (?3 = 1 AND (profesor_id IS NULL OR profesor_id = ''))) ORDER BY dia_semana, hora"
+              ).bind(tid, target.id, target.esDueno ? 1 : 0).all()).results || [];
+            } catch (e2) {
+              rows = (await env.DB.prepare(
+                "SELECT dia_semana, hora, activo, 0 AS cupo FROM disponibilidad WHERE tenant_id = ?1 " +
+                "AND (profesor_id = ?2 OR (?3 = 1 AND (profesor_id IS NULL OR profesor_id = ''))) ORDER BY dia_semana, hora"
+              ).bind(tid, target.id, target.esDueno ? 1 : 0).all()).results || [];
+            }
           }
           return json({ disponibilidad: rows });
         }
@@ -9030,15 +9180,24 @@ export default {
           /* El cupo por franja lo define SOLO el dueno (hallazgo del review: sin esto, un
              profesor convertia sus horarios 1-a-1 en grupales de 20 sin permiso). Un profesor
              que re-guarda su disponibilidad CONSERVA los cupos que el dueno ya le puso. */
+          /* "La dicta" por franja (03-ago-2026, pedido de Elevate): solo ids de profesores
+             REALES del tenant; cualquier otra cosa se guarda como '' (sin profe asignado). */
+          let profesValidos = new Set();
+          try {
+            const { results: profs } = await env.DB.prepare("SELECT id FROM profesores WHERE tenant_id = ?1").bind(tid).all();
+            profesValidos = new Set((profs || []).map(p => p.id));
+          } catch (e) {}
           let cuposPrevios = new Map();
           let cursosPrevios = new Map();
+          let profesPrevios = new Map();
           if (!esDueno){
             try {
               const { results: prevC } = await env.DB.prepare(
-                "SELECT dia_semana, hora, COALESCE(cupo,0) AS cupo, COALESCE(curso,'') AS curso FROM disponibilidad WHERE tenant_id = ?1 AND profesor_id = ?2"
+                "SELECT dia_semana, hora, COALESCE(cupo,0) AS cupo, COALESCE(curso,'') AS curso, COALESCE(sala,'') AS sala, COALESCE(profe,'') AS profe FROM disponibilidad WHERE tenant_id = ?1 AND profesor_id = ?2"
               ).bind(tid, target.id).all();
-              cuposPrevios = new Map((prevC || []).map(r => [r.dia_semana + "|" + r.hora, parseInt(r.cupo, 10) || 0]));
-              cursosPrevios = new Map((prevC || []).map(r => [r.dia_semana + "|" + r.hora, r.curso || ""]));
+              cuposPrevios = new Map((prevC || []).map(r => [r.dia_semana + "|" + r.hora + "|" + (r.sala || ""), parseInt(r.cupo, 10) || 0]));
+              cursosPrevios = new Map((prevC || []).map(r => [r.dia_semana + "|" + r.hora + "|" + (r.sala || ""), r.curso || ""]));
+              profesPrevios = new Map((prevC || []).map(r => [r.dia_semana + "|" + r.hora + "|" + (r.sala || ""), r.profe || ""]));
             } catch (e) {}
           }
           /* BLINDADO multi-profesor: el DELETE va scoped al profesor objetivo, nunca
@@ -9049,12 +9208,20 @@ export default {
           for (const s of activos){
             const dia = Number(s.dia_semana);
             const h = String(s.hora || "");
+            const salaF = String(s.sala || "").trim().slice(0, 40);   /* '' = academia sin salas (una sola grilla) */
             let cupoF = parseInt(s.cupo, 10);
             cupoF = (Number.isFinite(cupoF) && cupoF >= 1 && cupoF <= CUPO_MAX) ? cupoF : 0; /* 0 = aforo del tipo, y si no el cupo global */
             let cursoF = String(s.curso || "").trim().slice(0, 90);   /* "Categoria · Variante" (ej. "Pilates Maquinas · Reformer") */
-            if (!esDueno){ cupoF = cuposPrevios.get(dia + "|" + h) || 0; cursoF = cursosPrevios.get(dia + "|" + h) || ""; }
+            let profeF = String(s.profe || "").trim();
+            if (profeF && !profesValidos.has(profeF)) profeF = "";
+            if (!esDueno){
+              const kPrev = dia + "|" + h + "|" + salaF;
+              cupoF = cuposPrevios.get(kPrev) || 0;
+              cursoF = cursosPrevios.get(kPrev) || "";
+              profeF = profesPrevios.get(kPrev) || "";
+            }
             if (dia >= 0 && dia <= 6 && /^\d{2}:\d{2}$/.test(h)){
-              stmts.push(env.DB.prepare("INSERT OR IGNORE INTO disponibilidad (tenant_id,profesor_id,dia_semana,hora,activo,cupo,curso) VALUES (?1,?2,?3,?4,1,?5,?6)").bind(tid, target.id, dia, h, cupoF, cursoF));
+              stmts.push(env.DB.prepare("INSERT OR IGNORE INTO disponibilidad (tenant_id,profesor_id,dia_semana,hora,activo,cupo,curso,sala,profe) VALUES (?1,?2,?3,?4,1,?5,?6,?7,?8)").bind(tid, target.id, dia, h, cupoF, cursoF, salaF, profeF));
             }
           }
           await env.DB.batch(stmts);
@@ -9096,12 +9263,20 @@ export default {
           const horizonMs = Date.now() + HORIZONTE_SEMANAS * 7 * 86400000;
           const nowIso = new Date().toISOString();
           let creadas = 0;
+          /* Multi-sala (03-ago-2026): un BLOQUEO cierra la hora entera (sala ''); apartar a un
+             alumno cae en UNA franja: la de b.sala, o la unica de esa hora, o la primera. */
+          let salaB = "";
+          if (alumnoId){
+            const { franja: frB, ambigua: ambB } = await resolverFranja(env, tid, new Date(t0).toISOString(), targetB, String(b.sala || "").trim().slice(0, 40));
+            const frUsar = frB || (ambB ? (await franjasDeSlot(env, tid, new Date(t0).toISOString(), targetB))[0] : null);
+            if (frUsar){ salaB = frUsar.sala || ""; if (frUsar.curso) curso = frUsar.curso; }
+          }
           /* cupo por franja (la serie fija repite el mismo slot semanal: basta calcularlo una vez) */
-          const cupoB = await cupoDeSlot(env, tid, new Date(t0).toISOString(), targetB, await loadConfig(env, tid));
+          const cupoB = await cupoDeSlot(env, tid, new Date(t0).toISOString(), targetB, await loadConfig(env, tid), salaB);
           for (let tms = t0; tms <= horizonMs; tms += 7 * 86400000){
             const isoT = new Date(tms).toISOString();
             const finT = new Date(tms + CLASE_MIN * 60000).toISOString();
-            const oc = await ocupacionSlot(env, tid, isoT, targetB);
+            const oc = await ocupacionSlot(env, tid, isoT, targetB, salaB);
             /* bloqueo: 1 por slot basta. Con alumno: respeta el cupo y evita duplicar al mismo alumno. */
             let cabe;
             if (!alumnoId){
@@ -9114,8 +9289,8 @@ export default {
             }
             if (cabe){
               await env.DB.prepare(
-                "INSERT INTO reservas (id,tenant_id,alumno_id,inicio_utc,fin_utc,tipo,serie_id,estado,curso,nota,ciclo,creada,profesor_id) VALUES (?1,?2,?3,?4,?5,?6,?7,'reservada',?8,?9,?10,?11,?12)"
-              ).bind(crypto.randomUUID(), tid, alumnoId, isoT, finT, tipo, serie, curso, nota, ciclo, nowIso, targetB.id || null).run();
+                "INSERT INTO reservas (id,tenant_id,alumno_id,inicio_utc,fin_utc,tipo,serie_id,estado,curso,nota,ciclo,creada,profesor_id,sala) VALUES (?1,?2,?3,?4,?5,?6,?7,'reservada',?8,?9,?10,?11,?12,?13)"
+              ).bind(crypto.randomUUID(), tid, alumnoId, isoT, finT, tipo, serie, curso, nota, ciclo, nowIso, targetB.id || null, salaB).run();
               creadas++;
             }
             if (!fija) break;
@@ -9157,7 +9332,7 @@ export default {
             }
           }
           await env.DB.batch(stmts);
-          if (nuevo === "cancelada" && rv.tipo !== "bloqueo") await promoverEspera(env, tid, rv.inicio_utc);   // cupo liberado: avisar lista de espera
+          if (nuevo === "cancelada" && rv.tipo !== "bloqueo") await promoverEspera(env, tid, rv.inicio_utc, rv.sala || "");   // cupo liberado en esa sala: avisar lista de espera
           return json({ ok: true });
         }
 
@@ -9670,7 +9845,9 @@ export default {
                           /* Elevate (28-jul-2026) */
                           "caduca_meses", "asistencia_auto", "asistencia_horas", "mensajes",
                           /* que datos extra pide el formulario publico de compra (02-ago-2026) */
-                          "campos_alumno"];
+                          "campos_alumno",
+                          /* salas o espacios fisicos: N clases en paralelo (03-ago-2026, Elevate) */
+                          "salas"];
           const stmts = [];
           for (const k of claves){
             if (k in b){
@@ -9688,6 +9865,12 @@ export default {
               if (k === "clases"){
                 const cl = parseClases(valor);
                 valor = cl.length ? JSON.stringify(cl) : "";
+              }
+              /* salas: llega como JSON o como csv; se guarda canónico ("" = sin salas) */
+              if (k === "salas" && valor !== ""){
+                let lista = salasDeCfg({ salas: valor });
+                if (!lista.length) lista = salasDeCfg({ salas: JSON.stringify(valor.split(",")) });
+                valor = lista.length ? JSON.stringify(lista) : "";
               }
               if (k === "anticipacion_h" && valor !== ""){
                 const na = parseInt(valor, 10);

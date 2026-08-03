@@ -1273,6 +1273,11 @@
       <button type="button" class="btn ghost sm" id="btnAddClase" style="margin-top:8px;">+ Agregar tipo de clase</button>
       <input id="cfg_cursos" type="hidden" />
     </div>
+    <div class="group" data-aj="clases">
+      <h2>Salas o espacios (clases en paralelo)</h2>
+      <p class="hint">¿Dictas <b>dos clases a la misma hora</b> en espacios distintos (ej. salón de máquinas y salón de mat)? Escribe tus salas separadas por coma y tu horario semanal tendrá <b>una pestaña por sala</b>: en cada una pones la clase, el aforo y quién la dicta. Si dictas una sola clase a la vez, deja esto vacío y todo sigue igual.</p>
+      <input id="cfg_salas" type="text" maxlength="200" placeholder="Sala grande, Sala chica" style="width:100%;max-width:420px;" />
+    </div>
     <div class="group solo-dueno" data-aj="academia">
       <h2>Sedes de tu academia</h2>
       <p class="hint">¿Tienes más de un local? Crea tus sedes y asígnalas a tus profesores, alumnos y grupos (en Personas y Grupos). Todo se filtra por sede en un solo panel. Si tienes un solo local, ignora esta sección.</p>
@@ -1754,6 +1759,9 @@
     <div class="field"><label>Aforo (cuántos entran)</label>
       <input id="fr_aforo" type="number" min="0" max="60" placeholder="Vacío = el del tipo de clase" />
       <p class="hint" style="margin:5px 0 0;" id="fr_aforoHint">&nbsp;</p></div>
+    <div class="field" id="fr_profeWrap"><label>La dicta</label>
+      <select id="fr_profe"></select>
+      <p class="hint" style="margin:5px 0 0;">Opcional: tus alumnos lo ven al reservar ("con Fiorella"). Crea a tu equipo en <b>Personas → Profesores</b>.</p></div>
     <div class="field"><label>Aplicar también a…</label>
       <select id="fr_aplicar">
         <option value="una">Solo esta franja</option>
@@ -1922,6 +1930,19 @@ function clasesTenant(){
   /* sin clases configuradas: migra los cursos planos de siempre a filas sin aforo ni variantes */
   var cur=(db.config&&db.config.cursos)||MARCA.cursos.join(", ");
   return cursosDe(cur).map(function(n){ return {n:n,a:0,v:[]}; });
+}
+/* ---------- Salas o espacios físicos (03-ago-2026): clases en paralelo ----------
+   config.salas (JSON ["Sala grande","Sala chica"]). Con salas, la grilla del horario tiene
+   una pestaña por sala; sin salas, una sola grilla y todo como siempre. */
+function salasTenant(){
+  var raw=db.config&&db.config.salas;
+  if(raw){ try{ var a=JSON.parse(raw);
+    if(Array.isArray(a)){
+      var out=[]; a.forEach(function(s){ s=String(s||"").trim().slice(0,40); if(s&&out.indexOf(s)===-1&&out.length<8) out.push(s); });
+      if(out.length) return out;
+    }
+  }catch(e){} }
+  return [];
 }
 function filaClaseHTML(c){
   c=c||{n:"",a:0,v:[],ah:-1,am:-1,ch:-1};
@@ -2821,6 +2842,7 @@ function renderAjustes(){
   el("cfg_pago_numero").value=(db.config&&db.config.pago_numero)||"";
   el("cfg_pago_titular").value=(db.config&&db.config.pago_titular)||"";
   if(el("cfg_agenda_cupo")) el("cfg_agenda_cupo").value=(db.config&&db.config.agenda_cupo)||"";
+  if(el("cfg_salas")) el("cfg_salas").value=salasTenant().join(", ");
   if(el("cfg_recordatorios_clase")) el("cfg_recordatorios_clase").value=(db.config&&db.config.recordatorios_clase)||"";
   if(el("cfg_reprog_activo")) el("cfg_reprog_activo").value=(db.config&&db.config.reprog_activo)||"";
   if(el("cfg_reprog_min_h")) el("cfg_reprog_min_h").value=(db.config&&db.config.reprog_min_h)||"";
@@ -3376,8 +3398,25 @@ function limaInputToUtc(val){
   if(!m) return null;
   return new Date(Date.UTC(+m[1], +m[2]-1, +m[3], +m[4]+5, +m[5])).toISOString();
 }
+/* ---------- Salas (03-ago-2026): pestañas de la grilla, una por espacio físico ----------
+   AG_SALA = la pestaña activa ('' = academia sin salas, una sola grilla). AG_DISP guarda las
+   filas de TODAS las salas; la grilla pinta solo las de la activa y al guardar van todas. */
+var AG_SALA = "";
+function salasGrilla(){
+  var out=salasTenant().slice();
+  (AG_DISP||[]).forEach(function(r){ var s=String((r&&r.sala)||"").trim(); if(s&&out.indexOf(s)===-1) out.push(s); });
+  return out;
+}
+/* Filas viejas sin sala: cuando la academia ya definió salas, se adoptan a la PRIMERA
+   (José: "la tabla que ya está ahí puesta es la del salón grande"). Se persiste al guardar. */
+function normalizarSalasDisp(){
+  var salas=salasTenant();
+  if(!salas.length){ AG_SALA=""; return; }
+  (AG_DISP||[]).forEach(function(r){ if(r && !String(r.sala||"").trim()) r.sala=salas[0]; });
+  if(salasGrilla().indexOf(AG_SALA)===-1) AG_SALA=salas[0];
+}
 function dispActiva(dow,hora){
-  for(var i=0;i<AG_DISP.length;i++){ if(AG_DISP[i].dia_semana===dow && AG_DISP[i].hora===hora) return AG_DISP[i].activo!==0; }
+  for(var i=0;i<AG_DISP.length;i++){ if(AG_DISP[i].dia_semana===dow && AG_DISP[i].hora===hora && String(AG_DISP[i].sala||"")===AG_SALA) return AG_DISP[i].activo!==0; }
   return false;
 }
 /* Horario por profesor: AG_PROFE = de quién estoy editando el horario ("" = el mío).
@@ -3421,12 +3460,19 @@ function cargarAgenda(){
   }).then(function(res){
     AG_DISP = (res[0] && res[0].disponibilidad) || [];
     AG_RESERVAS = (res[1] && res[1].reservas) || [];
+    normalizarSalasDisp();
     renderAgendaAdmin();
   }).catch(function(){ toast("No pude cargar la agenda"); });
 }
 if(el("disp_profe")) el("disp_profe").addEventListener("change",function(){
   AG_PROFE=this.value||""; cargarAgenda();
 });
+/* Nombre de un profesor por id (para "la dicta X" en la grilla y el modal de franja). */
+function nombreProfe(id){
+  if(!id) return "";
+  var p=(AG_PROFES||[]).filter(function(x){ return x.id===id; })[0];
+  return (p&&p.nombre)||"";
+}
 /* Abreviatura para la celda: "Pilates Máquinas · Reformer" -> "MÁQ·REF" */
 function abrevTipo(t){
   if(!t) return "";
@@ -3451,25 +3497,36 @@ function renderAgendaAdmin(){
       (quien ? (esc(quien)+" todavía no tiene horarios.") : "Tus alumnos aún no ven horarios.")+
       '</strong> Prende abajo los días y horas '+(quien?"en que dicta":"en que dictas")+', y guarda: recién ahí podrán reservar desde su portal.</div>';
   }
+  /* Pestañas por sala (03-ago-2026): una grilla por espacio físico, clases en paralelo. */
+  var salasTabs=salasGrilla();
+  if(salasTabs.length){
+    html += '<div style="display:flex;gap:6px;flex-wrap:wrap;margin:0 0 10px;">'+salasTabs.map(function(s){
+      var nFr=(AG_DISP||[]).filter(function(r){return r.activo!==0 && String(r.sala||"")===s;}).length;
+      return '<button type="button" class="btn '+(s===AG_SALA?"":"ghost ")+'sm" data-disptab="'+esc(s)+'">'+esc(s)+(nFr?(' · '+nFr):'')+'</button>';
+    }).join("")+'</div>'+
+    '<p class="hint" style="margin:0 0 10px;">Estás editando <b>'+esc(AG_SALA)+'</b>. Cada sala tiene su propia grilla: dos salas pueden dictar clases distintas a la misma hora. Al guardar se guardan todas las salas juntas.</p>';
+  }
   html += '<table class="dispt"><thead><tr><th></th>'+AG_DOW.map(function(d){return '<th>'+d.n+'</th>';}).join("")+'</tr></thead><tbody>';
-  var filaDe=function(dow,hora){ return (AG_DISP||[]).find(function(x){return x.dia_semana===dow&&x.hora===hora;}); };
+  var filaDe=function(dow,hora){ return (AG_DISP||[]).find(function(x){return x.dia_semana===dow&&x.hora===hora&&String(x.sala||"")===AG_SALA;}); };
   var cupoDeCelda=function(dow,hora){
     var r=filaDe(dow,hora); var c=r?parseInt(r.cupo,10):0;
     return (c>=1&&c<=60)?c:0;
   };
   var cursoDeCelda=function(dow,hora){ var r=filaDe(dow,hora); return (r&&r.curso)?String(r.curso):""; };
+  var profeDeCelda=function(dow,hora){ var r=filaDe(dow,hora); return (r&&r.profe)?String(r.profe):""; };
   AG_HORAS.forEach(function(h){
     html += '<tr><td style="font-weight:600;font-family:var(--mono);font-size:12px;">'+h+'</td>'+AG_DOW.map(function(d){
       var on = dispActiva(d.d,h);
       var cupo = cupoDeCelda(d.d,h);
       var curso = cursoDeCelda(d.d,h);
+      var profe = profeDeCelda(d.d,h);
       var badge = on ? ((curso?('<span class="dc-t">'+esc(abrevTipo(curso))+'</span>'):"✓")+(cupo?('<span class="dc-n">'+cupo+'</span>'):"")) : "";
-      var ttl = on ? ((curso||"Sin tipo de clase")+" · aforo "+(cupo?cupo:"el del tipo")+" · clic para cambiarlo") : "Clic para prender esta franja";
-      return '<td><button class="dcell'+(on?" on":"")+'" data-dow="'+d.d+'" data-hora="'+h+'" data-cupo="'+cupo+'" data-curso="'+esc(curso)+'" title="'+esc(ttl)+'">'+badge+'</button></td>';
+      var ttl = on ? ((curso||"Sin tipo de clase")+(profe?(" · la dicta "+nombreProfe(profe)):"")+" · aforo "+(cupo?cupo:"el del tipo")+" · clic para cambiarlo") : "Clic para prender esta franja";
+      return '<td><button class="dcell'+(on?" on":"")+'" data-dow="'+d.d+'" data-hora="'+h+'" data-cupo="'+cupo+'" data-curso="'+esc(curso)+'" data-sala="'+esc(AG_SALA)+'" data-profe="'+esc(profe)+'" title="'+esc(ttl)+'">'+badge+'</button></td>';
     }).join("")+'</tr>';
   });
   el("dispGrid").innerHTML = html + '</tbody></table>'+
-    '<p class="hint" style="margin-top:8px;">Clic en una franja apagada la <b>prende</b>. Clic en una prendida abre su <b>tipo de clase y aforo</b> (Máquinas 3, Mat 8…), y puedes aplicarlo a todo el día o a toda la semana de un golpe. Los tipos de clase se crean en <b>Ajustes → Clases y planes</b>.</p>';
+    '<p class="hint" style="margin-top:8px;">Clic en una franja apagada la <b>prende</b>. Clic en una prendida abre su <b>tipo de clase, aforo y profesor</b> (Máquinas 3, Mat 8…), y puedes aplicarlo a todo el día o a toda la semana de un golpe. Los tipos de clase se crean en <b>Ajustes → Clases y planes</b>'+(salasTabs.length?'; las salas también.':'. ¿Dictas dos clases a la misma hora en espacios distintos? Crea tus salas en <b>Ajustes → Clases y planes</b>.')+'</p>';
 
   var sel = el("ag_alumno"), actual = sel.value;
   sel.innerHTML = '<option value="">— Solo bloquear (sin alumno) —</option>'+
@@ -3495,8 +3552,9 @@ function pintarDcell(cell){
   var on=cell.classList.contains("on");
   var cupo=parseInt(cell.dataset.cupo,10)||0;
   var curso=cell.dataset.curso||"";
+  var profe=cell.dataset.profe||"";
   cell.innerHTML=on?((curso?('<span class="dc-t">'+esc(abrevTipo(curso))+'</span>'):"✓")+(cupo?('<span class="dc-n">'+cupo+'</span>'):"")):"";
-  cell.title=on?((curso||"Sin tipo de clase")+" · aforo "+(cupo?cupo:"el del tipo")+" · clic para cambiarlo"):"Clic para prender esta franja";
+  cell.title=on?((curso||"Sin tipo de clase")+(profe?(" · la dicta "+nombreProfe(profe)):"")+" · aforo "+(cupo?cupo:"el del tipo")+" · clic para cambiarlo"):"Clic para prender esta franja";
 }
 
 /* ---------- Modal de franja: tipo de clase + aforo (27-jul-2026) ---------- */
@@ -3532,10 +3590,28 @@ function abrirFranja(cell){
   FRANJA_CELDA=cell;
   var dow=Number(cell.dataset.dow), hora=cell.dataset.hora;
   var d=AG_DOW.find(function(x){return x.d===dow;});
-  el("franjaCuando").textContent=((d&&d.n)||"")+" "+hora;
+  el("franjaCuando").textContent=((d&&d.n)||"")+" "+hora+(cell.dataset.sala?(" · "+cell.dataset.sala):"");
   el("fr_tipo").innerHTML=opcionesDeTipo(cell.dataset.curso||"");
   el("fr_tipo").value=cell.dataset.curso||"";
   el("fr_aforo").value=(parseInt(cell.dataset.cupo,10)||"")||"";
+  /* "La dicta" (03-ago-2026, pedido de Elevate): solo si la academia tiene equipo cargado. */
+  var profesFr=(AG_PROFES||[]).filter(function(p){ return p.estado!=="invitado" && p.estado!=="suspendido"; });
+  if(el("fr_profeWrap")){
+    if(profesFr.length){
+      el("fr_profeWrap").style.display="";
+      el("fr_profe").innerHTML='<option value="">— Sin profesor asignado —</option>'+profesFr.map(function(p){
+        return '<option value="'+esc(p.id)+'">'+esc(p.nombre)+'</option>';
+      }).join("");
+      /* si la franja tenía un profe que ya no está en la lista, no se pierde en silencio */
+      var pAct=cell.dataset.profe||"";
+      if(pAct && !profesFr.some(function(p){return p.id===pAct;})){
+        el("fr_profe").innerHTML+='<option value="'+esc(pAct)+'">'+esc(nombreProfe(pAct)||"(profesor retirado)")+'</option>';
+      }
+      el("fr_profe").value=pAct;
+    } else {
+      el("fr_profeWrap").style.display="none";
+    }
+  }
   el("fr_aplicar").value="una";
   el("fr_tipoHint").innerHTML=clasesTenant().length>1
     ? 'Decide qué planes pueden reservarla (Ajustes → Clases y planes → Incluye).'
@@ -3561,16 +3637,26 @@ if(el("btnFranjaOk")) el("btnFranjaOk").addEventListener("click",function(){
       return true;
     });
   }
-  objetivo.forEach(function(c){ c.classList.add("on"); c.dataset.curso=tipo; c.dataset.cupo=cupo; pintarDcell(c); });
+  var profeFr=(el("fr_profe")&&el("fr_profeWrap")&&el("fr_profeWrap").style.display!=="none")?(el("fr_profe").value||""):(FRANJA_CELDA.dataset.profe||"");
+  objetivo.forEach(function(c){ c.classList.add("on"); c.dataset.curso=tipo; c.dataset.cupo=cupo; c.dataset.profe=profeFr; pintarDcell(c); });
   closeOv("ovFranja");
   toast(objetivo.length>1?("Aplicado a "+objetivo.length+" franjas — dale Guardar horario"):'Listo — dale "Guardar horario"');
 });
 if(el("btnFranjaApagar")) el("btnFranjaApagar").addEventListener("click",function(){
-  if(FRANJA_CELDA){ FRANJA_CELDA.classList.remove("on"); FRANJA_CELDA.dataset.curso=""; FRANJA_CELDA.dataset.cupo=0; pintarDcell(FRANJA_CELDA); }
+  if(FRANJA_CELDA){ FRANJA_CELDA.classList.remove("on"); FRANJA_CELDA.dataset.curso=""; FRANJA_CELDA.dataset.cupo=0; FRANJA_CELDA.dataset.profe=""; pintarDcell(FRANJA_CELDA); }
   closeOv("ovFranja");
 });
 
 el("panel-agenda").addEventListener("click",function(e){
+  var tab = e.target.closest("[data-disptab]");
+  if(tab){
+    /* cambiar de sala: primero guardar EN MEMORIA lo que el usuario tocó en la pestaña actual
+       (si no, al volver habría perdido sus cambios sin guardar) */
+    sincronizarGrillaEnMemoria();
+    AG_SALA = tab.dataset.disptab || "";
+    renderAgendaAdmin();
+    return;
+  }
   var cell = e.target.closest(".dcell");
   if(cell){
     if(!cell.classList.contains("on")){        // apagada -> prender (un clic, sin fricción)
@@ -3599,16 +3685,21 @@ function guardarPrefDisp(){
   DISP_PREF={ desde:(el("disp_desde").value||"07:00"), hasta:(el("disp_hasta").value||"21:00"), paso:parseInt(el("disp_paso").value,10)||60 };
   try{ localStorage.setItem("bt_disp_pref",JSON.stringify(DISP_PREF)); }catch(e){}
 }
+/* Vuelca el estado del DOM de la grilla a AG_DISP, SOLO para la sala activa: las filas de
+   las otras salas (que la grilla no está pintando) se conservan tal cual (03-ago-2026). */
+function sincronizarGrillaEnMemoria(){
+  var celdas=el("dispGrid").querySelectorAll(".dcell");
+  if(!celdas.length) return;   // grilla no pintada: no hay nada que volcar
+  var otras=(AG_DISP||[]).filter(function(r){ return String(r.sala||"")!==AG_SALA; });
+  var vivos=[];
+  Array.prototype.forEach.call(el("dispGrid").querySelectorAll(".dcell.on"),function(c){
+    vivos.push({dia_semana:Number(c.dataset.dow), hora:c.dataset.hora, activo:1, cupo:parseInt(c.dataset.cupo,10)||0, curso:c.dataset.curso||"", sala:AG_SALA, profe:c.dataset.profe||""});
+  });
+  AG_DISP=otras.concat(vivos);
+}
 /* Repinta la grilla SIN volver al servidor: conserva lo que el usuario prendió y aún no guardó. */
 function repintarGrillaConservando(){
-  var celdas=el("dispGrid").querySelectorAll(".dcell");
-  if(celdas.length){   // solo si la grilla ya está pintada (si no, se perdería lo guardado)
-    var vivos=[];
-    Array.prototype.forEach.call(el("dispGrid").querySelectorAll(".dcell.on"),function(c){
-      vivos.push({dia_semana:Number(c.dataset.dow), hora:c.dataset.hora, activo:1, cupo:parseInt(c.dataset.cupo,10)||0, curso:c.dataset.curso||""});
-    });
-    AG_DISP=vivos;
-  }
+  sincronizarGrillaEnMemoria();
   renderAgendaAdmin();
 }
 ["disp_desde","disp_hasta","disp_paso"].forEach(function(id){
@@ -3636,21 +3727,26 @@ if(el("btnCopiarDiaOk")) el("btnCopiarDiaOk").addEventListener("click",function(
   if(o===d){ toast("Elige dos días distintos"); return; }
   var origen={};
   Array.prototype.forEach.call(el("dispGrid").querySelectorAll('.dcell[data-dow="'+o+'"]'),function(c){
-    if(c.classList.contains("on")) origen[c.dataset.hora]={curso:c.dataset.curso||"",cupo:parseInt(c.dataset.cupo,10)||0};
+    if(c.classList.contains("on")) origen[c.dataset.hora]={curso:c.dataset.curso||"",cupo:parseInt(c.dataset.cupo,10)||0,profe:c.dataset.profe||""};
   });
   var n=0;
   Array.prototype.forEach.call(el("dispGrid").querySelectorAll('.dcell[data-dow="'+d+'"]'),function(c){
     var src=origen[c.dataset.hora];
-    if(src){ c.classList.add("on"); c.dataset.curso=src.curso; c.dataset.cupo=src.cupo; n++; }
-    else { c.classList.remove("on"); c.dataset.curso=""; c.dataset.cupo=0; }
+    if(src){ c.classList.add("on"); c.dataset.curso=src.curso; c.dataset.cupo=src.cupo; c.dataset.profe=src.profe; n++; }
+    else { c.classList.remove("on"); c.dataset.curso=""; c.dataset.cupo=0; c.dataset.profe=""; }
     pintarDcell(c);
   });
   closeOv("ovCopiarDia");
   toast(n+" franjas copiadas — dale \"Guardar horario\"");
 });
 el("btnGuardarDisp").addEventListener("click",function(){
+  /* Se guardan TODAS las salas juntas: la grilla pinta solo la activa, así que primero se
+     vuelca al estado en memoria y de ahí sale el paquete completo (03-ago-2026). */
+  sincronizarGrillaEnMemoria();
   var activos = [];
-  el("dispGrid").querySelectorAll(".dcell.on").forEach(function(c){ activos.push({dia_semana:Number(c.dataset.dow), hora:c.dataset.hora, cupo:parseInt(c.dataset.cupo,10)||0, curso:c.dataset.curso||""}); });
+  (AG_DISP||[]).forEach(function(r){
+    if(r && r.activo!==0) activos.push({dia_semana:Number(r.dia_semana), hora:r.hora, cupo:parseInt(r.cupo,10)||0, curso:r.curso||"", sala:String(r.sala||""), profe:r.profe||""});
+  });
   apiPost("/app/api/admin/disponibilidad",{activos:activos, profe: AG_PROFE||undefined})
     .then(function(){ toast("Disponibilidad guardada"); cargarAgenda(); })
     .catch(function(e){ toast(e.message||"No se pudo guardar"); });
@@ -4845,8 +4941,10 @@ el("btnGuardarAjustes").addEventListener("click",function(){
   paqRows.forEach(function(x){ nuevosPrecios[x.n]=x.precio; });
   db.precios=nuevosPrecios;
   var msgRows=leerMensajesEditor();
+  var salasRows=(el("cfg_salas")?el("cfg_salas").value:"").split(",").map(function(s){return s.trim().slice(0,40);}).filter(Boolean).filter(function(s,i,a){return a.indexOf(s)===i;}).slice(0,8);
   var cfg={ paquetes: paqRows.length?JSON.stringify(paqRows.map(function(x){return {n:x.n,c:x.c,r:x.r,u:x.u,t:x.t,d:x.d,i:x.i};})):"",
             clases: clasesRows.length?JSON.stringify(clasesRows):"",
+            salas: salasRows.length?JSON.stringify(salasRows):"",
             cursos: clasesRows.length?clasesRows.map(function(c){return c.n;}).join(", "):el("cfg_cursos").value.trim(),
             anticipacion_h:(el("cfg_anticipacion_h")?el("cfg_anticipacion_h").value.trim():""),
             brand_color:(el("cfg_brand_color")?el("cfg_brand_color").value.trim():""),
@@ -6697,7 +6795,8 @@ window.batutaInit = batutaInit;
     agenda:[
       {sel:'.dispcfg', t:"Primero, la vista", b:"«Mostrar de … a … cada …» ajusta la grilla a TU horario. ¿Tus clases son 7:15 u 8:30? Pon el paso en 30 o 15 minutos. Esto es solo tu vista: nunca borra un horario ya guardado."},
       {sel:'#dispGrid', t:"Un clic prende la franja", b:"Prende las horas en que dictas. Los alumnos solo ven lo que esté prendido."},
-      {sel:'#dispGrid', t:"Otro clic la configura", b:"Sobre una franja prendida eliges su tipo de clase y su aforo. Y con «Aplicar también a…» se lo pones a todo el día o a toda la semana de un golpe."},
+      {sel:'#dispGrid', t:"Otro clic la configura", b:"Sobre una franja prendida eliges su tipo de clase, su aforo y quién la dicta. Y con «Aplicar también a…» se lo pones a todo el día o a toda la semana de un golpe."},
+      {sel:'#dispGrid', t:"¿Dos clases a la misma hora?", b:"Crea tus salas en Ajustes → Clases y planes (ej. Sala grande, Sala chica) y acá aparecerá una pestaña por sala: máquinas y mat pueden dictarse en paralelo, cada una con su propio cupo."},
       {sel:'#btnDispCopiar', t:"Arma el mes en 5 minutos", b:"Deja el lunes perfecto y cópialo al resto de días. Al final, dale «Guardar horario»: nada se aplica hasta ese botón."},
       {sel:null, t:"Los recordatorios van solos", b:"Batuta le escribe a cada alumno 24 horas y 1 hora antes de su clase, y cuando su paquete está por vencer. Menos faltas sin mover un dedo."}
     ],
