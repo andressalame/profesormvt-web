@@ -1761,7 +1761,7 @@
       <p class="hint" style="margin:5px 0 0;" id="fr_aforoHint">&nbsp;</p></div>
     <div class="field" id="fr_profeWrap"><label>La dicta</label>
       <select id="fr_profe"></select>
-      <p class="hint" style="margin:5px 0 0;">Opcional: tus alumnos lo ven al reservar ("con Fiorella"). Crea a tu equipo en <b>Personas → Profesores</b>.</p></div>
+      <p class="hint" style="margin:5px 0 0;" id="fr_profeHint">Opcional: tus alumnos lo ven al reservar ("con Fiorella"). Crea a tu equipo en <b>Personas → Profesores</b>.</p></div>
     <div class="field"><label>Aplicar también a…</label>
       <select id="fr_aplicar">
         <option value="una">Solo esta franja</option>
@@ -3427,14 +3427,15 @@ function esDuenoPanel(){ return !document.body.classList.contains("rol-profesor"
 function pintarSelectProfeAgenda(){
   var wrap=el("dispProfeWrap"), sel=el("disp_profe");
   if(!wrap||!sel) return;
-  /* Invitados (aún no entraron) y suspendidos no tienen horario que editar: el worker
-     además rechaza al suspendido con 404, así que ofrecerlos sería ofrecer un error. */
-  var lista=(AG_PROFES||[]).filter(function(p){ return p.estado!=="invitado" && p.estado!=="suspendido"; });
+  /* Solo los suspendidos quedan fuera (el worker los rechaza con 404). Los INVITADOS SÍ van
+     (03-ago-2026, caso José/Elevate): activar la cuenta es para que el profe entre a SU panel,
+     no un requisito para que el dueño le arme el horario. El worker ya los aceptaba. */
+  var lista=(AG_PROFES||[]).filter(function(p){ return p.estado!=="suspendido"; });
   /* Sin equipo no hay nada que elegir: el selector solo estorbaría. */
   if(!esDuenoPanel() || lista.length<2){ wrap.classList.add("hidden"); AG_PROFE=""; return; }
   wrap.classList.remove("hidden");
   sel.innerHTML=lista.map(function(p){
-    return '<option value="'+esc(p.id)+'"'+(p.id===AG_PROFE?' selected':'')+'>'+esc(p.nombre)+(p.rol==="dueno"?" (tú)":"")+'</option>';
+    return '<option value="'+esc(p.id)+'"'+(p.id===AG_PROFE?' selected':'')+'>'+esc(p.nombre)+(p.rol==="dueno"?" (tú)":(p.estado==="invitado"?" · pendiente de activar":""))+'</option>';
   }).join("");
   /* Si el que estaba elegido ya no está (suspendido, borrado), vuelve al dueño. */
   if(!lista.some(function(p){ return p.id===AG_PROFE; })){
@@ -3594,13 +3595,16 @@ function abrirFranja(cell){
   el("fr_tipo").innerHTML=opcionesDeTipo(cell.dataset.curso||"");
   el("fr_tipo").value=cell.dataset.curso||"";
   el("fr_aforo").value=(parseInt(cell.dataset.cupo,10)||"")||"";
-  /* "La dicta" (03-ago-2026, pedido de Elevate): solo si la academia tiene equipo cargado. */
-  var profesFr=(AG_PROFES||[]).filter(function(p){ return p.estado!=="invitado" && p.estado!=="suspendido"; });
+  /* "La dicta" (03-ago-2026, pedido de Elevate): solo si la academia tiene equipo cargado.
+     Los INVITADOS también salen (caso José: sus 3 profes sin activar no aparecían y creyó
+     que el sistema estaba roto). Asignar la franja es dato del horario, no una sesión:
+     el profe existe desde que el dueño lo crea, y al activar hereda solo (mismo id). */
+  var profesFr=(AG_PROFES||[]).filter(function(p){ return p.estado!=="suspendido"; });
   if(el("fr_profeWrap")){
     if(profesFr.length){
       el("fr_profeWrap").style.display="";
       el("fr_profe").innerHTML='<option value="">— Sin profesor asignado —</option>'+profesFr.map(function(p){
-        return '<option value="'+esc(p.id)+'">'+esc(p.nombre)+'</option>';
+        return '<option value="'+esc(p.id)+'">'+esc(p.nombre)+(p.estado==="invitado"?" · pendiente de activar":"")+'</option>';
       }).join("");
       /* si la franja tenía un profe que ya no está en la lista, no se pierde en silencio */
       var pAct=cell.dataset.profe||"";
@@ -3608,6 +3612,7 @@ function abrirFranja(cell){
         el("fr_profe").innerHTML+='<option value="'+esc(pAct)+'">'+esc(nombreProfe(pAct)||"(profesor retirado)")+'</option>';
       }
       el("fr_profe").value=pAct;
+      pintarProfeHint();
     } else {
       el("fr_profeWrap").style.display="none";
     }
@@ -3622,6 +3627,27 @@ function abrirFranja(cell){
 if(el("fr_tipo")) el("fr_tipo").addEventListener("change",function(){
   pintarAforoHint();
   if(!el("fr_aforo").value){ /* nada que hacer: vacío ya hereda el aforo del tipo */ }
+});
+/* Hint de "La dicta": si el elegido está pendiente de activar, lo dice y ofrece reenviar
+   la invitación AHÍ MISMO (sin ir a Personas → Profesores). Asignarlo funciona igual. */
+function pintarProfeHint(){
+  var h=el("fr_profeHint"); if(!h) return;
+  var id=el("fr_profe")?el("fr_profe").value:"";
+  var p=(AG_PROFES||[]).filter(function(x){ return x.id===id; })[0];
+  if(p && p.estado==="invitado"){
+    h.innerHTML='<b>'+esc((p.nombre||"").split(" ")[0])+' aún no activa su cuenta</b> — igual puedes asignarle clases; activar es solo para que entre a su propio panel. '+
+      '<button type="button" class="btn ghost sm" id="fr_reenviar" data-pid="'+esc(p.id)+'">Reenviar invitación</button>';
+  } else {
+    h.innerHTML='Opcional: tus alumnos lo ven al reservar ("con Fiorella"). Crea a tu equipo en <b>Personas → Profesores</b>.';
+  }
+}
+if(el("fr_profe")) el("fr_profe").addEventListener("change",pintarProfeHint);
+if(el("fr_profeHint")) el("fr_profeHint").addEventListener("click",function(e){
+  var b=e.target.closest("#fr_reenviar"); if(!b) return;
+  b.disabled=true;
+  apiPost("/app/api/admin/profesores",{accion:"reenviar",id:b.dataset.pid})
+    .then(function(r){ toast(r.correo_enviado?"Invitación reenviada ✓":"Link listo (el correo no salió; cópialo de Personas → Profesores)"); b.disabled=false; })
+    .catch(function(err){ toast(err.message||"No se pudo reenviar"); b.disabled=false; });
 });
 if(el("btnFranjaOk")) el("btnFranjaOk").addEventListener("click",function(){
   if(!FRANJA_CELDA) return closeOv("ovFranja");

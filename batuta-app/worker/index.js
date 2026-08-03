@@ -6731,10 +6731,13 @@ export default {
         const cfg = await loadConfig(env, t.id);
         // Multi-profesor: lista publica (id, nombre, foto) para elegir profe al reservar
         // la prueba. Academia de 1 profesor -> lista de 1 y el front salta ese paso.
+        // Los INVITADOS tambien salen (03-ago-2026, caso Elevate: 3 de 4 profes sin activar
+        // dejaban la lista publica en solo el dueno). Que el profe active su cuenta es para
+        // entrar a SU panel; para el publico es equipo real desde que el dueno lo carga.
         let profesoresPub = [];
         try {
           const { results: profs } = await env.DB.prepare(
-            "SELECT id, nombre, foto, rol FROM profesores WHERE tenant_id = ?1 AND estado = 'activo' ORDER BY CASE rol WHEN 'dueno' THEN 0 ELSE 1 END, nombre"
+            "SELECT id, nombre, foto, rol FROM profesores WHERE tenant_id = ?1 AND estado != 'suspendido' ORDER BY CASE rol WHEN 'dueno' THEN 0 ELSE 1 END, nombre"
           ).bind(t.id).all();
           profesoresPub = (profs || []).map(p => ({ id: p.id, nombre: p.nombre || "", foto: p.foto || "" }));
         } catch (e) {}
@@ -7567,7 +7570,9 @@ export default {
         let profeCompra = null;
         const profePedido = String(b.profe || "").trim();
         if (profePedido){
-          const pC = await env.DB.prepare("SELECT id FROM profesores WHERE id = ?1 AND tenant_id = ?2 AND estado = 'activo'").bind(profePedido, tid).first().catch(() => null);
+          /* != suspendido (03-ago-2026): un profe invitado es asignable — si la lista publica
+             lo ofrece, la validacion tiene que aceptarlo o la atribucion se pierde en silencio. */
+          const pC = await env.DB.prepare("SELECT id FROM profesores WHERE id = ?1 AND tenant_id = ?2 AND estado != 'suspendido'").bind(profePedido, tid).first().catch(() => null);
           if (pC) profeCompra = pC.id;
         }
         if (!profeCompra && cu.alumno_id){
