@@ -1392,8 +1392,12 @@ async function confirmarCompra(env, tenantId, tenant, compra){
     const al = await env.DB.prepare("SELECT * FROM alumnos WHERE id = ?1 AND tenant_id = ?2").bind(cu.alumno_id, tenantId).first();
     if (al){
       const cicloNuevo = (Number(al.ciclo) || 1) + 1;
+      /* caducado = 0 + activado = '': renovar REVIVE al alumno caducado (promesa del cron
+         caducarPlanesSinArrancar) y el ciclo nuevo arranca su vigencia de cero — el mismo
+         reset que hace el guardado manual de la ficha. Sin esto, el alumno pagaba su
+         renovacion y reservar lo seguia rebotando con 'Tu plan caduco'. */
       stmts.push(env.DB.prepare(
-        "UPDATE alumnos SET paquete = ?1, curso = ?2, pago = 'Pagado', fecha = ?3, ciclo = ?4, vence = ?5, aviso_vence_ciclo = 0 WHERE id = ?6 AND tenant_id = ?7"
+        "UPDATE alumnos SET paquete = ?1, curso = ?2, pago = 'Pagado', fecha = ?3, ciclo = ?4, vence = ?5, aviso_vence_ciclo = 0, caducado = 0, activado = '' WHERE id = ?6 AND tenant_id = ?7"
       ).bind(compra.paquete, compra.curso || al.curso, hoyLima(), cicloNuevo, vence, al.id, tenantId));
       /* Migrar las reservas FUTURAS al ciclo nuevo: si no, el credito de esas clases queda
          huerfano en el ciclo viejo y la clase se carga mal al paquete nuevo (bug MVT 21-jul). */
