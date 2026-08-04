@@ -700,6 +700,12 @@
       </div>
 
   <section class="panel active" id="panel-resumen">
+    <!-- Aviso de web sin precios (03-ago-2026): la web pública esconde la sección de
+         precios EN SILENCIO si los paquetes están en S/0 o no hay cobro conectado.
+         Este banner hace visible la consecuencia; lo pinta cargarActivacion(). -->
+    <div class="group" id="grpAvisoWeb" style="display:none;">
+      <div class="card" id="avisoWebCard" style="max-width:560px;border:1px solid var(--amber,#d99a3c);"></div>
+    </div>
     <div class="group" id="grpActivacion" style="display:none;">
       <h2>Pon tu academia a andar</h2>
       <div class="card" style="max-width:560px;">
@@ -6128,12 +6134,46 @@ function aplicarMarca(){ aplicarMarcaCursos(); aplicarMarcaTextos(); }
 
 /* ---------- Init ---------- */
 /* ---------- Checklist de activación (guía al trial a su momento aha; se oculta al completar) ---------- */
+/* Botones "Ir": llevan a la pantalla exacta (tab + sub-pestaña de Ajustes). Lo usan el
+   checklist y el banner de la web sin precios. */
+function wireIrPantalla(root){
+  Array.prototype.forEach.call(root.querySelectorAll("[data-acttab]"),function(b){
+    b.addEventListener("click",function(){
+      var t=document.querySelector('.tab[data-tab="'+b.getAttribute("data-acttab")+'"]');
+      if(t) t.click();
+      var aj=b.getAttribute("data-actaj");
+      if(aj) setTimeout(function(){ try{ ajTab(aj); }catch(e){} },30);
+    });
+  });
+}
+/* Banner de Inicio (03-ago-2026): la web pública esconde la sección de precios EN SILENCIO
+   si todo está en S/0 o no hay medio de cobro conectado. A 3 de 3 academias fundadoras les
+   pasó y nadie se lo dijo. Acá se dice, con botón a la pantalla exacta. */
+function pintarAvisoWeb(p){
+  var gW=el("grpAvisoWeb"), card=el("avisoWebCard");
+  if(!gW||!card) return;
+  var faltaPrecios=!p.precios;
+  var faltaCobro=("cobro_conectado" in p)&&!p.cobro_conectado;
+  if(!faltaPrecios&&!faltaCobro){ gW.style.display="none"; return; }
+  var motivo=faltaPrecios&&faltaCobro?"tus paquetes no tienen precio y aún no conectaste un medio de cobro"
+    :(faltaPrecios?"todos tus paquetes están sin precio (S/0)":"aún no conectaste un medio de cobro (Yape o Mercado Pago)");
+  var btns=(faltaPrecios?'<button class="btn sm" data-acttab="ajustes" data-actaj="clases">Ponerles precio</button>':"")+
+           (faltaCobro?'<button class="btn ghost sm" data-acttab="ajustes" data-actaj="cobros">Conectar mi cobro</button>':"");
+  card.innerHTML='<div style="display:flex;gap:10px;align-items:flex-start;">'+
+    '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--amber,#d99a3c)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex:0 0 auto;margin-top:2px;" aria-hidden="true"><path d="M10.3 3.9 1.9 18a2 2 0 0 0 1.7 3h16.8a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>'+
+    '<div style="flex:1;"><b style="color:var(--amber,#d99a3c);">Tu web NO muestra precios</b>'+
+    '<p class="hint" style="margin:6px 0 10px;">Porque '+motivo+'. Quien entra a tu página no ve tus planes ni un botón para comprar: no te puede pagar por ahí.</p>'+
+    '<div style="display:flex;gap:8px;flex-wrap:wrap;">'+btns+'</div></div></div>';
+  wireIrPantalla(card);
+  gW.style.display="";
+}
 function cargarActivacion(){
   fetch("/app/api/t/activacion",{headers:hdr()}).then(function(r){
     if(!r.ok) throw new Error("HTTP "+r.status);
     return r.json();
   }).then(function(d){
     var p=(d&&d.pasos)||{};
+    try{ pintarAvisoWeb(p); }catch(e){}
     /* [clave, texto, tab, sub-pestaña de Ajustes] — el "Ir" aterriza en la pantalla EXACTA */
     var defs=[
       ["precios","Pon tus clases, tus paquetes y sus precios","ajustes","clases"],
@@ -6156,14 +6196,7 @@ function cargarActivacion(){
         (ok?"":"<button class='btn ghost sm' data-acttab='"+x[2]+"' data-actaj='"+(x[3]||"")+"'>Ir</button>");
       box.appendChild(row);
     });
-    Array.prototype.forEach.call(box.querySelectorAll("[data-acttab]"),function(b){
-      b.addEventListener("click",function(){
-        var t=document.querySelector('.tab[data-tab="'+b.getAttribute("data-acttab")+'"]');
-        if(t) t.click();
-        var aj=b.getAttribute("data-actaj");
-        if(aj) setTimeout(function(){ try{ ajTab(aj); }catch(e){} },30);
-      });
-    });
+    wireIrPantalla(box);
     var g=el("grpActivacion"); if(g) g.style.display="";
   }).catch(function(e){ /* el checklist es opcional: jamás rompe el panel */ });
 }
