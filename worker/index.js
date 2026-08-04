@@ -1170,6 +1170,37 @@ async function avisarTelegram(env, text){
   } catch (e) { return false; }
 }
 
+// Smoke test diario de los flujos que cobran (auditoria 4-ago-2026): dos roturas silenciosas
+// en dos semanas (Guardar alumno 6 dias muerto, Reservar horario fijo 14 dias devolviendo 500)
+// que nadie vio. Prueba lo critico y avisa al Telegram personal SOLO si algo falla.
+async function smokeTestDiario(env){
+  const fallas = [];
+  async function prueba(nombre, fn){
+    try { await fn(); }
+    catch (e) { fallas.push(nombre + ": " + (e && e.message ? e.message : String(e))); }
+  }
+  await prueba("Base de datos (D1)", async function(){
+    await env.DB.prepare("SELECT 1").first();
+  });
+  await prueba("Slots de reserva (generarSlots)", async function(){
+    const s = await generarSlots(env);
+    if (!Array.isArray(s)) throw new Error("no devolvio lista de slots");
+  });
+  await prueba("Precios (flujo de pago)", async function(){
+    const p = await loadPrecios(env);
+    if (!p || typeof p !== "object") throw new Error("sin precios");
+  });
+  await prueba("Config", async function(){ await loadConfig(env); });
+  await prueba("Home publica", async function(){
+    const r = await fetch("https://profesormvt.com/", { headers: { "user-agent": "smoke-mvt/1" } });
+    if (!r.ok) throw new Error("HTTP " + r.status);
+  });
+  if (fallas.length){
+    await avisarTelegram(env, "🔴 SMOKE TEST MVT: " + fallas.length + " falla(s) hoy\n\n- " + fallas.join("\n- ") + "\n\nAlgo de lo que cobra esta roto: revisar el worker.");
+  }
+  return fallas.length;
+}
+
 /* ---------- Auto-responder de WhatsApp (11-jul-2026) ----------
    Mismo patron que Batuta: WhatsApp Cloud API oficial de Meta (sin riesgo de ban, a diferencia
    de un bot no oficial). El numero WA_PHONE_ID es de ProfesorMVT; env.WHATSAPP_TOKEN es la
@@ -4893,6 +4924,11 @@ export default {
     // en el disparo siguiente congela la lista, elige al ganador y avisa. Corre cada hora para
     // no depender de que el cron de esa hora exacta no falle.
     ctx.waitUntil(sorteoElegir(env).catch(function(){}));
+    // Smoke test de los flujos que cobran: 1 vez al día a las 13:00 UTC (≈ 08:00 Lima).
+    // Solo hace ruido si algo falla (aviso al Telegram personal). Auditoria 4-ago-2026.
+    if (new Date().getUTCHours() === 13){
+      ctx.waitUntil(smokeTestDiario(env).catch(function(){}));
+    }
     // Renovaciones: una sola vez al día, en el disparo de las 14:00 UTC (≈ 09:00 Lima).
     if (new Date().getUTCHours() === 14){
       ctx.waitUntil(procesarRenovaciones(env).catch(function(){}));
