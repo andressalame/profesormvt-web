@@ -4278,7 +4278,7 @@ el("btnNuevoAlumno").addEventListener("click",function(){
   el("a_nombre").value=""; el("a_whatsapp").value="";
   ["a_apellido","a_email","a_nacimiento"].forEach(function(k){ if(el(k)) el(k).value=""; });
   setCursosAlumno(MARCA.cursoDefault); fillSelects(); el("a_paquete").value=pkNombres()[0]||"";
-  el("a_fecha").value=new Date().toISOString().slice(0,10); el("a_pago").value="Pagado";
+  el("a_fecha").value=hoyLima(); el("a_pago").value="Pagado";
   el("a_horario").value=""; el("a_notas").value=""; el("a_horario_derivado").textContent="";
   fillProfeSelect("");
   fillSedeSelectGen("a_sede","a_sede_wrap","");
@@ -4518,7 +4518,7 @@ function registrarClaseGrupo(g){
   grupoAsistencia={ nombre:g.nombre };
   el("regTitulo").innerHTML='Asistencia · <em>'+esc(g.nombre)+'</em>';
   el("r_id").value="";
-  el("r_fecha").value=new Date().toISOString().slice(0,10);
+  el("r_fecha").value=hoyLima();
   el("r_estado").value="Asistió"; el("r_trabajo").value=""; el("r_tarea").value=""; el("r_plan").value=""; el("r_ejercicio").value="";
   REG_EJ=[]; pintarEjerciciosReg();
   /* modo grupo: se oculta el alumno/estado individual y el "también estuvieron"; manda la grilla */
@@ -4682,7 +4682,7 @@ function abrirRegistroNuevo(grupal){
   var aw=el("r_asistencia_wrap"); if(aw) aw.style.display="none";
   el("regTitulo").innerHTML = grupal ? 'Registrar <em>clase grupal</em>' : 'Registrar <em>clase</em>';
   el("r_id").value="";
-  el("r_fecha").value=new Date().toISOString().slice(0,10);
+  el("r_fecha").value=hoyLima();
   el("r_estado").value="Asistió"; el("r_trabajo").value=""; el("r_tarea").value=""; el("r_plan").value=""; el("r_ejercicio").value="";
   REG_EJ=[]; REG_GRUPO=[]; pintarEjerciciosReg();
   modoRegistro(!!grupal);
@@ -4912,7 +4912,7 @@ function abrirRenovar(alumnoId){
   el("rn_id").value=a.id;
   el("rn_paquete").innerHTML=opcionesPaquete(a.paquete);
   el("rn_paquete").value=a.paquete;
-  el("rn_fecha").value=new Date().toISOString().slice(0,10);
+  el("rn_fecha").value=hoyLima();
   el("rn_pago").value="Pagado";
   openOv("ovRenovar");
 }
