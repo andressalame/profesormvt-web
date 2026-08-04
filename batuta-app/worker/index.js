@@ -234,6 +234,18 @@ function esPlanNuestroMP(planId){
   if (!id) return false;
   return Object.values(MP_PLAN_IDS).filter(Boolean).indexOf(id) !== -1;
 }
+/* Plan que corresponde a un preapproval de MP ya verificado como nuestro: reverso de
+   MP_PLAN_IDS para los planes fijos; un preapproval directo (sin plan asociado) solo lo
+   creamos nosotros para el dinamico "por alumno". Con esto tenants.plan se escribe RECIEN
+   cuando MP confirma 'authorized', derivado del preapproval realmente pagado. */
+function planDePreapprovalMP(pre){
+  const pid = String((pre && pre.preapproval_plan_id) || "").trim();
+  if (pid){
+    for (const k of Object.keys(MP_PLAN_IDS)){ if (MP_PLAN_IDS[k] === pid) return k; }
+    return "";
+  }
+  return "por_alumno";
+}
 
 const json = (data, status) => new Response(JSON.stringify(data), {
   status: status || 200,
@@ -6230,7 +6242,12 @@ export default {
         if (plan === "por_alumno"){
           const activosCp = await contarAlumnosActivos(env, t.id);
           const montoCp = montoPorAlumno(activosCp);
-          try { await mpFetch(env, "/preapproval/" + encodeURIComponent(t.mp_preapproval_id), { method: "PUT", body: { status: "cancelled" } }); } catch (e) {}
+          /* La suscripcion vigente NO se cancela ni se pisa aqui: recien cuando el preapproval
+             nuevo quede 'authorized' (webhook / vincular-sub lo promueven y cancelan el viejo).
+             Si el dueno abandona este checkout, su plan y su cobro actual siguen intactos
+             (antes: se cancelaba primero y el abandono dejaba al cliente con acceso completo
+             pagando S/0, sin alerta posible). El preapproval nuevo se atribuye al volver por
+             external_reference = tenant.id. */
           const mpNuevo = await mpFetch(env, "/preapproval", { method: "POST", body: {
             reason: "Batuta · Academia por alumno (" + activosCp + " activos)",
             external_reference: t.id, payer_email: t.email,
@@ -6240,8 +6257,6 @@ export default {
           if (!mpNuevo.ok || !mpNuevo.data || !mpNuevo.data.init_point){
             return json({ error: "Mercado Pago no aceptó el cambio a por alumno. Escríbenos por WhatsApp y lo cambiamos hoy." }, 502);
           }
-          await env.DB.prepare("UPDATE tenants SET plan = 'por_alumno', mp_preapproval_id = ?1, mp_sub_status = 'checkout_pendiente' WHERE id = ?2")
-            .bind(String(mpNuevo.data.id || ""), t.id).run();
           return json({ ok: true, modo: "recheckout", init_point: mpNuevo.data.init_point, plan, nombre: PLAN_NOMBRE[plan] });
         }
 
@@ -6299,29 +6314,38 @@ export default {
           if (!mp.ok || !mp.data || !mp.data.init_point){
             return json({ error: "Mercado Pago no aceptó la suscripción por alumno. Escríbenos por WhatsApp y lo activamos a mano." }, 502);
           }
-          // Preapproval directo: ya conocemos su id (lo creamos nosotros). Lo guardamos para que el cron lo recalcule.
+          /* Preapproval directo: ya conocemos su id (lo creamos nosotros). Se guarda para la
+             atribucion del webhook, pero tenants.plan NO se toca: se aplica recien cuando MP
+             confirme 'authorized'. Abandonar el checkout ya no regala el plan por_alumno. */
           await env.DB.prepare(
-            "UPDATE tenants SET plan = 'por_alumno', mp_preapproval_id = ?1, mp_sub_status = 'checkout_pendiente' WHERE id = ?2"
+            "UPDATE tenants SET mp_preapproval_id = ?1, mp_sub_status = 'checkout_pendiente' WHERE id = ?2"
           ).bind(String(mp.data.id || ""), t.id).run();
           return json({ init_point: mp.data.init_point });
         }
 
-        // Checkout del PLAN pre-creado en MP (el pagador se identifica al pagar). Guardamos el plan
-        // elegido y marcamos que estamos esperando el checkout; al volver, /vincular-sub cierra el círculo.
+        // Checkout del PLAN pre-creado en MP (el pagador se identifica al pagar). Al volver,
+        // /vincular-sub cierra el círculo; el webhook 'authorized' es el respaldo.
         const planId = MP_PLAN_IDS[plan];
         if (!planId) return json({ error: "Plan no valido" }, 400);
-        /* Origen GRATIS: no puede quedar 'activo' con plan pagado si abandona el checkout.
-           Pasa a trial de 7 dias de gracia (paga o el paywall lo devuelve a Gratis). */
-        if ((t.plan || "") === "gratis" && t.estado === "activo" && !t.mp_preapproval_id){
-          const graciaSub = new Date(Date.now() + 7 * 86400000).toISOString();
-          await env.DB.prepare(
-            "UPDATE tenants SET plan = ?1, estado = 'trial', trial_hasta = ?2, mp_sub_status = 'checkout_pendiente' WHERE id = ?3"
-          ).bind(plan, graciaSub, t.id).run();
-          return json({ init_point: MP_CHECKOUT_BASE + planId });
+        /* Guard anti doble-preapproval (paridad con por_alumno): con una suscripcion viva NO se
+           abre otro checkout — seria un segundo cobro mensual en paralelo. Para moverse de plan
+           esta cambiar-plan, que ajusta el monto del preapproval existente sin doble cobro. */
+        if (t.mp_sub_status === "authorized" && t.mp_preapproval_id){
+          return json({ error: "Ya tienes una suscripción activa. Usa \"Cambiar de plan\": se ajusta sin doble cobro." }, 409);
         }
+        /* Resto de un preapproval anterior (checkout abandonado o sub cancelada/pausada): se
+           cancela en MP y se limpia, para que el webhook del checkout nuevo pueda atribuirse
+           por payer_email (ese fallback exige mp_preapproval_id vacio). */
+        if (t.mp_preapproval_id){
+          try { await mpFetch(env, "/preapproval/" + encodeURIComponent(t.mp_preapproval_id), { method: "PUT", body: { status: "cancelled" } }); } catch (e) {}
+        }
+        /* FREEMIUM: tenants.plan NO se escribe aqui. Se aplica recien cuando MP confirme
+           'authorized' (webhook / vincular-sub), derivado del preapproval realmente pagado.
+           Abandonar el checkout ya no regala nada: el tenant queda tal cual estaba
+           (Gratis sigue Gratis; ya no hace falta la "gracia" de 7 dias que alimentaba al cron). */
         await env.DB.prepare(
-          "UPDATE tenants SET plan = ?1, mp_sub_status = 'checkout_pendiente' WHERE id = ?2"
-        ).bind(plan, t.id).run();
+          "UPDATE tenants SET mp_preapproval_id = '', mp_sub_status = 'checkout_pendiente' WHERE id = ?1"
+        ).bind(t.id).run();
         return json({ init_point: MP_CHECKOUT_BASE + planId });
       }
 
@@ -6440,10 +6464,28 @@ export default {
         if (yaDeOtro) return json({ error: "Esa suscripcion ya esta vinculada a otra cuenta" }, 409);
 
         const st = String(mp.data.status || "");
+        const pidVigenteVs = String(t.mp_preapproval_id || "");
+        /* Con una suscripcion viva, un preapproval DISTINTO solo se vincula si llega
+           'authorized' (cambio de plan confirmado): un pending/cancelled ajeno no la pisa. */
+        if (st !== "authorized" && t.mp_sub_status === "authorized" && pidVigenteVs && pidVigenteVs !== pid){
+          return json({ ok: true, estado: t.estado, mp_sub_status: t.mp_sub_status });
+        }
         const nuevoEstado = st === "authorized" ? "activo" : t.estado;
-        await env.DB.prepare(
-          "UPDATE tenants SET mp_preapproval_id = ?1, mp_sub_status = ?2, estado = ?3 WHERE id = ?4"
-        ).bind(pid, st, nuevoEstado, t.id).run();
+        /* El plan se aplica recien con el preapproval autorizado (derivado del pagado). */
+        const planVs = st === "authorized" ? planDePreapprovalMP(mp.data) : "";
+        if (planVs){
+          await env.DB.prepare(
+            "UPDATE tenants SET mp_preapproval_id = ?1, mp_sub_status = ?2, estado = ?3, plan = ?4 WHERE id = ?5"
+          ).bind(pid, st, nuevoEstado, planVs, t.id).run();
+        } else {
+          await env.DB.prepare(
+            "UPDATE tenants SET mp_preapproval_id = ?1, mp_sub_status = ?2, estado = ?3 WHERE id = ?4"
+          ).bind(pid, st, nuevoEstado, t.id).run();
+        }
+        /* Igual que el webhook: el preapproval anterior se cancela recien con el nuevo autorizado. */
+        if (st === "authorized" && pidVigenteVs && pidVigenteVs !== pid){
+          try { await mpFetch(env, "/preapproval/" + encodeURIComponent(pidVigenteVs), { method: "PUT", body: { status: "cancelled" } }); } catch (e) {}
+        }
         return json({ ok: true, estado: nuevoEstado, mp_sub_status: st });
       }
 
@@ -6585,13 +6627,41 @@ export default {
             if (!t){ return new Response("ok", { status: 200 }); }
 
             const status = String(pre.status || "");
+            const pidVigente = String(t.mp_preapproval_id || "");
+            /* Notificacion de un preapproval que NO es el vigente del tenant (p.ej. el viejo que
+               se cancela tras un cambio de plan, o un checkout abandonado): solo 'authorized'
+               puede promover un preapproval nuevo. El resto de estados de un id ajeno se ignora
+               para no pisar la suscripcion viva con datos del reemplazado. */
+            if (status !== "authorized" && pidVigente && pidVigente !== resId){
+              return new Response("ok", { status: 200 });
+            }
             if (status === "authorized"){
-              await env.DB.prepare("UPDATE tenants SET estado = 'activo', mp_sub_status = ?1, mp_preapproval_id = ?2 WHERE id = ?3")
-                .bind(status, resId, t.id).run();
+              /* El plan se aplica AQUI, con el pago ya autorizado: derivado del preapproval
+                 pagado (fijo por su preapproval_plan_id; directo = por_alumno). Nunca antes. */
+              const planPagado = planDePreapprovalMP(pre);
+              if (planPagado){
+                await env.DB.prepare("UPDATE tenants SET estado = 'activo', mp_sub_status = ?1, mp_preapproval_id = ?2, plan = ?3 WHERE id = ?4")
+                  .bind(status, resId, planPagado, t.id).run();
+              } else {
+                await env.DB.prepare("UPDATE tenants SET estado = 'activo', mp_sub_status = ?1, mp_preapproval_id = ?2 WHERE id = ?3")
+                  .bind(status, resId, t.id).run();
+              }
+              /* El preapproval anterior recien se cancela ahora que el nuevo ya cobra (cambio de
+                 plan / re-suscripcion): nunca queda uno viejo cobrando en paralelo, y nunca se
+                 cancela antes de que el nuevo este autorizado. */
+              if (pidVigente && pidVigente !== resId){
+                try { await mpFetch(env, "/preapproval/" + encodeURIComponent(pidVigente), { method: "PUT", body: { status: "cancelled" } }); } catch (e) {}
+              }
               ctx.waitUntil(alertaCorreoAndres(env,
                 "SUSCRIPCIÓN MP AUTORIZADA: " + t.academia,
-                "El tenant " + t.academia + " (" + t.email + ") autorizó su suscripción.\nPlan: " + (t.plan || "?") + "\nPreapproval: " + resId));
+                "El tenant " + t.academia + " (" + t.email + ") autorizó su suscripción.\nPlan: " + (planPagado || t.plan || "?") + "\nPreapproval: " + resId));
             } else if (status === "cancelled" || status === "paused"){
+              /* Dunning SOLO para suscripciones que estaban cobrando (authorized/paused): la
+                 cancelacion de un checkout abandonado o reemplazado (checkout_pendiente, '')
+                 no puede apagar una academia que simplemente sigue o volvio a Gratis. */
+              if (t.mp_sub_status !== "authorized" && t.mp_sub_status !== "paused"){
+                return new Response("ok", { status: 200 });
+              }
               const vencido = Date.now() > Date.parse(t.trial_hasta);
               await env.DB.prepare("UPDATE tenants SET mp_sub_status = ?1, mp_preapproval_id = ?2, estado = ?3 WHERE id = ?4")
                 .bind(status, resId, vencido ? "vencido" : t.estado, t.id).run();
@@ -6893,9 +6963,14 @@ export default {
           || tenantActor.estado === "vencido" // migra en caliente a los historicos que quedaron 'vencido'
         );
         if (caeAGratis){
-          await env.DB.prepare("UPDATE tenants SET estado = 'activo', plan = 'gratis' WHERE id = ?1").bind(tenantActor.id).run();
+          /* Se limpia tambien el preapproval muerto (cancelled/checkout_pendiente): si el dueno
+             se re-suscribe despues, el webhook del checkout nuevo necesita mp_preapproval_id
+             vacio para poder atribuirse por payer_email. */
+          await env.DB.prepare("UPDATE tenants SET estado = 'activo', plan = 'gratis', mp_preapproval_id = '', mp_sub_status = '' WHERE id = ?1").bind(tenantActor.id).run();
           tenantActor.estado = "activo";
           tenantActor.plan = "gratis";
+          tenantActor.mp_preapproval_id = "";
+          tenantActor.mp_sub_status = "";
         }
       }
 
@@ -10498,7 +10573,8 @@ export default {
            pagadas (webhooks de MP). A los clientes con MP viva (authorized/anual) no se les toca. */
         const suscritoMPCron = t.mp_sub_status === "authorized" || t.mp_sub_status === "anual";
         if (suscritoMPCron) continue; // cliente de pago: ni degradar ni mandarle nurture de trial
-        try { await env.DB.prepare("UPDATE tenants SET estado = 'activo', plan = 'gratis' WHERE id = ?1").bind(t.id).run(); } catch (e) {}
+        // Limpia el preapproval muerto (igual que el gate): la re-suscripcion futura se atribuye por payer_email.
+        try { await env.DB.prepare("UPDATE tenants SET estado = 'activo', plan = 'gratis', mp_preapproval_id = '', mp_sub_status = '' WHERE id = ?1").bind(t.id).run(); } catch (e) {}
         if ((t.paso | 0) < 5){
           etapa = "vencido"; pasoNuevo = 5;
           try { await alertaCorreoAndres(env, "Trial vencido sin convertir: " + t.academia, "Tenant: " + t.academia + " (" + t.email + ")\nVenció: " + t.trial_hasta + "\nCayó al plan Gratis (web y portal siguen vivos). Le salió el correo con el link de suscripción."); } catch (e) {}
