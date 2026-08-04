@@ -5036,7 +5036,7 @@ el("btnGuardarAjustes").addEventListener("click",function(){
             gcal_client_secret:el("cfg_gcal_client_secret").value.trim(),
             gcal_calendar_id:el("cfg_gcal_calendar_id").value.trim()||"primary" };
   Promise.all([ apiPut(), apiPost("/app/api/admin/config",cfg) ])
-    .then(function(){ db.config=Object.assign(db.config||{},cfg); renderAll(); toast("Ajustes guardados"); })
+    .then(function(){ AJ_DIRTY=false; db.config=Object.assign(db.config||{},cfg); renderAll(); toast("Ajustes guardados"); })
     .catch(function(){ toast("No se pudieron guardar los ajustes"); });
 });
 
@@ -5214,6 +5214,26 @@ if(el("ajNav")){
   var ajGuardada=""; try{ ajGuardada=localStorage.getItem("bt_ajtab")||""; }catch(e){}
   ajTab(ajGuardada||"academia");
 }
+
+/* ---------- Dirty-state de Ajustes (03-ago-2026) ----------
+   Antes: cerrabas la pestaña con cambios sin guardar y se perdían sin ningún aviso
+   (el botón "Guardar ajustes" vive al fondo y es fácil no llegar). Ahora, si tocaste
+   cualquier input de Ajustes y no guardaste, el navegador pregunta antes de cerrar. */
+var AJ_DIRTY=false;
+(function(){
+  var pa=el("panel-ajustes"); if(!pa) return;
+  function ajMarcarDirty(e){
+    var t=e.target;
+    if(t&&(t.tagName==="INPUT"||t.tagName==="SELECT"||t.tagName==="TEXTAREA")) AJ_DIRTY=true;
+  }
+  pa.addEventListener("input",ajMarcarDirty);
+  pa.addEventListener("change",ajMarcarDirty);
+  window.addEventListener("beforeunload",function(e){
+    if(!AJ_DIRTY) return;
+    e.preventDefault();
+    e.returnValue="Tienes cambios sin guardar en Ajustes.";
+  });
+})();
 
 /* ---------- Editor de tipos de clase (categoría + aforo + variantes) ---------- */
 if(el("btnAddClase")) el("btnAddClase").addEventListener("click",function(){
@@ -6191,6 +6211,14 @@ function cargarActivacion(){
   }).then(function(d){
     var p=(d&&d.pasos)||{};
     try{ pintarAvisoWeb(p); }catch(e){}
+    /* Ajustes aterriza en lo pendiente (03-ago-2026): sin precios → "Clases y planes";
+       con precios pero sin cobro → "Cobros". Antes aterrizaba en "Academia" (marca/logo)
+       y el dueño se perdía antes de llegar a lo importante. Si no falta nada, se respeta
+       la última sub-pestaña que usó. */
+    try{
+      if(!p.precios) ajTab("clases");
+      else if(("cobro_conectado" in p)&&!p.cobro_conectado) ajTab("cobros");
+    }catch(e){}
     /* [clave, texto, tab, sub-pestaña de Ajustes] — el "Ir" aterriza en la pantalla EXACTA */
     var defs=[
       ["precios","Pon tus clases, tus paquetes y sus precios","ajustes","clases"],
