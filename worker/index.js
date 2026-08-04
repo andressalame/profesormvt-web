@@ -3917,7 +3917,7 @@ export default {
         // Intensivo 8 = 2 slots, Estrella 12 = 3 slots). Revisamos el freebusy de CADA
         // semana en serie: la que choque con el Google Calendar de Andrés (o ya esté
         // tomada) se salta y NO consume crédito; el alumno luego la reserva suelta.
-        const objetivo = Math.min(SERIE_SEMANAS, restantes);
+        const objetivo = Math.min(SERIE_SEMANAS, comp.restantes);
         const serie = crypto.randomUUID();
         let creadas = 0;
         const saltadas = [];
