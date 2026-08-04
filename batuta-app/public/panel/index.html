@@ -1912,7 +1912,9 @@ var PRECIOS_DEFAULT = { "Paquete 4":250, "Paquete 8":450, "Paquete 12":600, "Cla
 function paquetesDefPanel(){ return Object.keys(PAQUETES).map(function(n){ return {n:n,c:PAQUETES[n].clases,r:PAQUETES[n].reprog,u:false,d:0,i:"compra"}; }); }
 function paquetesTenant(){
   var raw=db.config&&db.config.paquetes;
-  if(raw){ try{ var a=JSON.parse(raw); if(Array.isArray(a)&&a.length){ var out=a.map(function(p){return {n:String((p&&p.n)||'').trim().slice(0,40),c:(p&&p.u)?0:(parseInt(p&&p.c,10)||0),r:parseInt(p&&p.r,10)||0,u:!!(p&&p.u),t:(Array.isArray(p&&p.t)?p.t:[]).map(function(x){return String(x||'').trim();}).filter(Boolean),d:Math.max(0,Math.min(3650,parseInt(p&&p.d,10)||0)),i:((p&&p.i)==="clase")?"clase":"compra"};}).filter(function(p){return p.n;}); if(out.length) return out; } }catch(e){} }
+  /* "[]" guardado = sin paquetes DE VERDAD (registro nuevo, 03-ago-2026): nada de pintar
+     los 5 de música por default — el editor muestra el estado vacío "crea el primero". */
+  if(raw){ try{ var a=JSON.parse(raw); if(Array.isArray(a)&&!a.length) return []; if(Array.isArray(a)&&a.length){ var out=a.map(function(p){return {n:String((p&&p.n)||'').trim().slice(0,40),c:(p&&p.u)?0:(parseInt(p&&p.c,10)||0),r:parseInt(p&&p.r,10)||0,u:!!(p&&p.u),t:(Array.isArray(p&&p.t)?p.t:[]).map(function(x){return String(x||'').trim();}).filter(Boolean),d:Math.max(0,Math.min(3650,parseInt(p&&p.d,10)||0)),i:((p&&p.i)==="clase")?"clase":"compra"};}).filter(function(p){return p.n;}); if(out.length) return out; } }catch(e){} }
   return paquetesDefPanel();
 }
 function pkMap(){ var m={}; paquetesTenant().forEach(function(p){ m[p.n]={clases:p.c,reprog:p.r,ilim:p.u,dias:p.d||0,inicio:p.i||"compra"}; }); return m; }
@@ -2833,7 +2835,10 @@ function leerMensajesEditor(){
 function renderAjustes(){
   renderClases();
   renderMensajes();
-  el("preciosBox").innerHTML=paquetesTenant().map(function(p){ return filaPaqHTML(p); }).join("");
+  var pqT=paquetesTenant();
+  el("preciosBox").innerHTML=pqT.length?pqT.map(function(p){ return filaPaqHTML(p); }).join("")
+    /* estado vacío (03-ago-2026): el vacío visible empuja a llenar; antes venían 5 paquetes de música sembrados */
+    :'<div class="hint" id="pqVacio" style="border:1px dashed var(--line);border-radius:8px;padding:14px;margin:0;">Aún no tienes paquetes. Un paquete es lo que vendes: un pack de clases (por ejemplo "Paquete de 8" a S/450) o una mensualidad. Crea el primero con el botón de abajo y ponle su precio real.</div>';
   if(!MP_ESTADO_CARGADO){ MP_ESTADO_CARGADO=true; try{ refrescarMpEstado(); }catch(e){} try{ refrescarPushEstado(); }catch(e){} try{ refrescarStripeEstado(); }catch(e){} try{ refrescarCulqiEstado(); }catch(e){} }
   if(el("cfg_anticipacion_h")) el("cfg_anticipacion_h").value=(db.config&&db.config.anticipacion_h)||"";
   if(el("cfg_caduca_meses")) el("cfg_caduca_meses").value=(db.config&&db.config.caduca_meses)||"";
@@ -4983,7 +4988,8 @@ el("btnGuardarAjustes").addEventListener("click",function(){
   db.precios=nuevosPrecios;
   var msgRows=leerMensajesEditor();
   var salasRows=(el("cfg_salas")?el("cfg_salas").value:"").split(",").map(function(s){return s.trim().slice(0,40);}).filter(Boolean).filter(function(s,i,a){return a.indexOf(s)===i;}).slice(0,8);
-  var cfg={ paquetes: paqRows.length?JSON.stringify(paqRows.map(function(x){return {n:x.n,c:x.c,r:x.r,u:x.u,t:x.t,d:x.d,i:x.i};})):"",
+  /* sin filas se guarda "[]" (set vacío de verdad), no "" (que cae al default de música) */
+  var cfg={ paquetes: paqRows.length?JSON.stringify(paqRows.map(function(x){return {n:x.n,c:x.c,r:x.r,u:x.u,t:x.t,d:x.d,i:x.i};})):"[]",
             clases: clasesRows.length?JSON.stringify(clasesRows):"",
             salas: salasRows.length?JSON.stringify(salasRows):"",
             cursos: clasesRows.length?clasesRows.map(function(c){return c.n;}).join(", "):el("cfg_cursos").value.trim(),
@@ -5254,7 +5260,9 @@ function refrescarIncluyeDePaquetes(){
 
 /* ---------- Editor de paquetes (agregar / quitar / toggle mensual / incluye) ---------- */
 if(el("btnAddPaquete")) el("btnAddPaquete").addEventListener("click",function(){
+  var v=el("pqVacio"); if(v) v.remove();   /* adiós al estado vacío al crear el primero */
   var box=el("preciosBox"); var tmp=document.createElement("div"); tmp.innerHTML=filaPaqHTML({n:"",c:4,r:0,u:false,t:[]}); box.appendChild(tmp.firstChild);
+  var ultP=box.querySelector(".paqrow:last-child .pq-n"); if(ultP) ultP.focus();
 });
 if(el("preciosBox")){
   el("preciosBox").addEventListener("click",function(e){

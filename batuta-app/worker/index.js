@@ -43,7 +43,12 @@ const TRIAL_DIAS = 30; // 30 dias + garantia (Fase 1 del plan, ejecutado 14-jul-
    TODAS (comportamiento de siempre). Con t, el alumno solo ve y solo puede reservar esas. */
 function parsePaquetes(valor){
   let arr; try { arr = JSON.parse(valor || ""); } catch (e) { return null; }
-  if (!Array.isArray(arr) || !arr.length) return null;
+  if (!Array.isArray(arr)) return null;
+  /* "[]" guardado = la academia (o el registro nuevo, 03-ago-2026) todavia NO tiene
+     paquetes: set vacio DE VERDAD, sin caer al default de musica. El panel muestra
+     "crea el primero" y la web no muestra precios. "" o basura siguen cayendo al
+     default, como siempre (compatibilidad con los tenants existentes). */
+  if (!arr.length) return { map: {}, list: [] };
   const map = {}, list = [];
   for (const p of arr){
     const n = String((p && p.n) || "").trim().slice(0, 40);
@@ -656,6 +661,11 @@ function estadoAlumno(c, vence){
 
 async function loadPrecios(env, tenantId){
   const { results } = await env.DB.prepare("SELECT paquete, precio FROM precios WHERE tenant_id = ?1").bind(tenantId).all();
+  /* Tenant sin NINGUNA fila = nacio sin paquetes sembrados (03-ago-2026): nada de
+     inventarle los precios default de musica — la web mostraria "Paquete 4 S/250"
+     que no es suyo, y el primer guardado del panel los grabaria como reales. Los
+     tenants con filas conservan la fusion con el default de siempre. */
+  if (!results || !results.length) return {};
   const p = Object.assign({}, PRECIOS_DEFAULT);
   for (const row of (results || [])) p[row.paquete] = Number(row.precio) || 0;
   return p;
@@ -5939,7 +5949,9 @@ export default {
               "VALUES (?1,?2,?3,?4,?5,'',?6,?7,'gratis','activo',?8,?9,'google','g')"
             ).bind(id, slug, nombre, nombre, perfil.email, hash, salt, trialHasta, new Date().toISOString()).run();
             const stmts = [];
-            for (const k of Object.keys(PRECIOS_DEFAULT)) stmts.push(env.DB.prepare("INSERT INTO precios (tenant_id, paquete, precio) VALUES (?1,?2,?3)").bind(id, k, PRECIOS_DEFAULT[k]));
+            /* sin siembra de precios de musica (03-ago-2026): paquetes vacios de verdad,
+               igual que el registro por email — el panel guia a crear el primero */
+            stmts.push(env.DB.prepare("INSERT INTO config (tenant_id, clave, valor) VALUES (?1,'paquetes','[]')").bind(id));
             stmts.push(env.DB.prepare("INSERT INTO config (tenant_id, clave, valor) VALUES (?1,'profe_nombre',?2)").bind(id, nombre));
             try { await env.DB.batch(stmts); } catch (e) {}
             ctx.waitUntil(alertaCorreoAndres(env, "CUENTA GRATIS NUEVA en Batuta (Google): " + nombre, "Academia: " + nombre + "\nEmail: " + perfil.email + "\nEntró con Google.\nSlug: " + slug));
@@ -6029,11 +6041,13 @@ export default {
                // (Se conserva esGratis por si un dia se quiere reintroducir un trial via ?plan.)
                "gratis", "activo", refCode).run();
 
-        // precios y config default para el tenant nuevo
+        // config default para el tenant nuevo. Los paquetes nacen VACIOS a proposito
+        // (03-ago-2026): antes se sembraban 5 paquetes de musica con precios inventados
+        // ("Paquete 4" S/250...) y el panel nunca se veia vacio — el dueno creia que "ya
+        // estaba" o los dejaba en S/0. config.paquetes='[]' = sin paquetes de verdad
+        // (parsePaquetes lo respeta) y el panel muestra "crea el primero".
         const stmts = [];
-        for (const k of Object.keys(PRECIOS_DEFAULT)){
-          stmts.push(env.DB.prepare("INSERT INTO precios (tenant_id, paquete, precio) VALUES (?1,?2,?3)").bind(id, k, PRECIOS_DEFAULT[k]));
-        }
+        stmts.push(env.DB.prepare("INSERT INTO config (tenant_id, clave, valor) VALUES (?1,'paquetes','[]')").bind(id));
         stmts.push(env.DB.prepare("INSERT INTO config (tenant_id, clave, valor) VALUES (?1,'profe_nombre',?2)").bind(id, nombre));
         if (CURSOS_POR_RUBRO[rubro]){
           stmts.push(env.DB.prepare("INSERT INTO config (tenant_id, clave, valor) VALUES (?1,'cursos',?2)").bind(id, CURSOS_POR_RUBRO[rubro]));
