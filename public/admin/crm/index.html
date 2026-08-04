@@ -1673,6 +1673,10 @@ function guardarAlumnoModal(encadenar){
   var nombre=el("a_nombre").value.trim();
   if(!nombre){ toast("Ponle nombre al alumno"); return; }
   var id=el("a_id").value;
+  /* La fila que ya existía (solo al editar). Sin esto la línea de `migrado_*` de abajo
+     reventaba con "prev is not defined" y el botón Guardar no hacía NADA: ni crear ni
+     editar alumnos, desde el 28-jul-2026. */
+  var prev=id ? db.alumnos.filter(function(a){ return a.id===id; })[0] : null;
   var obj={ id:id||uid(), codigo:el("a_codigo").value||uid().slice(-6).toUpperCase(),
     ciclo:Number(el("a_ciclo").value)||1,
     nombre:nombre, whatsapp:el("a_whatsapp").value.trim(), curso:getCursosAlumno()||MARCA.cursoDefault,
