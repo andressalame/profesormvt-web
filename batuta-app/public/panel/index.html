@@ -703,7 +703,7 @@
     <div class="group" id="grpActivacion" style="display:none;">
       <h2>Pon tu academia a andar</h2>
       <div class="card" style="max-width:560px;">
-        <div class="hint" style="margin-bottom:10px;">4 pasos y tu academia trabaja sola. Se marcan solos con tus datos reales.</div>
+        <div class="hint" style="margin-bottom:10px;">Completa estos pasos y tu academia trabaja sola. Se marcan solos con tus datos reales.</div>
         <div id="actPasos"></div>
       </div>
     </div>
@@ -6137,10 +6137,13 @@ function cargarActivacion(){
     /* [clave, texto, tab, sub-pestaña de Ajustes] — el "Ir" aterriza en la pantalla EXACTA */
     var defs=[
       ["precios","Pon tus clases, tus paquetes y sus precios","ajustes","clases"],
+      ["cobro_conectado","Conecta cómo te pagan (Yape o Mercado Pago)","ajustes","cobros"],
       ["alumnos","Trae a tus alumnos (a mano o importando tu Excel/CSV)","alumnos",""],
       ["disponibilidad","Arma tu horario semanal","agenda",""],
       ["cobro","Registra o recibe tu primer cobro","pagos",""]
     ];
+    /* si la API todavía no manda cobro_conectado (deploy viejo cacheado), ese paso no se pinta */
+    if(!("cobro_conectado" in p)) defs=defs.filter(function(x){ return x[0]!=="cobro_conectado"; });
     if(!defs.some(function(x){ return !p[x[0]]; })) return; // 4/4: el card no aparece
     var box=el("actPasos"); if(!box) return;
     box.innerHTML="";

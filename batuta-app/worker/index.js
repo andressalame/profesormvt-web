@@ -6162,11 +6162,18 @@ export default {
           env.DB.prepare("SELECT COUNT(*) AS n FROM precios WHERE tenant_id = ?1 AND precio > 0").bind(t.id).first(),
         ]);
         const preciosPropios = t.email === DEMO_EMAIL || Number(nPre && nPre.n) > 0;
+        /* "Conecta como te pagan": misma formula cobroOn de armarWebCtx / cobroOnPanel.
+           Sin esto el checklist llegaba a 4/4 anotando un cobro en efectivo sin haber
+           conectado nunca Yape/MP, y la web publica seguia sin poder vender (03-ago-2026). */
+        const cfgAct = await loadConfig(env, t.id);
+        const mpOnAct = !!(t.mp_access_token) && (!(Number(t.mp_expires_at) || 0) || Number(t.mp_expires_at) > Date.now());
+        const cobroConectado = !!(mpOnAct || cfgAct.pago_numero || cfgAct.bcp_cuenta || cfgAct.scotia_cuenta || cfgAct.crypto_wallet);
         return json({
           pasos: {
             precios: preciosPropios,
             alumnos: Number(nAl && nAl.n) > 0,
             disponibilidad: Number(nDisp && nDisp.n) > 0,
+            cobro_conectado: cobroConectado,
             cobro: Number(nComp && nComp.n) > 0,
           },
         });
