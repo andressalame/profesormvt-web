@@ -212,10 +212,10 @@ function secHero(d, ctx){
   var logo = (h.mostrar_logo && ctx.cfg.brand_logo)
     ? '<img class="bt-logo" src="' + urlSegura(ctx.cfg.brand_logo) + '" alt="" data-ed="hero.logo" />' : "";
   var cta = "";
-  if (ctx.pruebaOn && ctx.cobroOn){
-    cta = '<a class="bt-cta" href="' + esc(ctx.base) + '/pagar?p=' + encodeURIComponent("Clase de prueba") + '" data-ed="hero.cta">' +
-      esc(h.cta_texto || "Reserva tu clase de prueba · S/ " + ctx.precios["Clase de prueba"]) + "</a>";
-  } else if (ctx.wa){
+  /* La "clase de prueba" esta MUERTA (decision 25-jul-2026): el hero ya no anuncia ese
+     producto fantasma que la academia nunca definio ni puede apagar desde su panel
+     (la fila 'Clase de prueba' de precios existe por default en todo tenant). */
+  if (ctx.wa){
     cta = '<a class="bt-cta" href="https://wa.me/' + esc(ctx.wa) + "?text=" + ctx.waMsg + '" data-ed="hero.cta">' + SVG_WA + esc(h.cta_texto || "Escríbenos por WhatsApp") + "</a>";
   }
   var foto = fotoTag(h.foto, "bt-hero-foto", "", "hero.foto");
@@ -377,11 +377,10 @@ export function contexto(tenant, cfg, precios, paq, opciones){
     ? clases.map(function (c){ return c.n; })
     : String(cfg.cursos || "").split(",").map(function (s){ return s.trim(); }).filter(Boolean);
   var wa = String(cfg.whatsapp_profe || "").replace(/[^0-9]/g, "");
-  var pruebaOn = (precios["Clase de prueba"] || 0) > 0;
   var paquetes = (paq && paq.list ? paq.list : []).filter(function (pk){ return (precios[pk] || 0) > 0 && pk !== "Clase de prueba"; });
   return {
     tenant: tenant, cfg: cfg, precios: precios,
-    cursos: cursos, clases: clases, wa: wa, pruebaOn: pruebaOn, cobroOn: !!o.cobroOn, paquetes: paquetes,
+    cursos: cursos, clases: clases, wa: wa, cobroOn: !!o.cobroOn, paquetes: paquetes,
     base: "/app/a/" + tenant.slug,
     waMsg: encodeURIComponent("Hola! Vi la página de " + tenant.academia + " y quiero más información :)"),
     paqInfo: function (pk){ return (o.paqInfo ? o.paqInfo(pk) : { clases: 0, ilim: false }); }
