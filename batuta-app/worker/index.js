@@ -1295,12 +1295,12 @@ function correoNurtureTrial(tenant, etapa, extras){
       '<p><a href="' + panel + '"><b>Activar mi plan</b></a></p>')
   };
   return {
-    subject: "Tu panel sigue aca (y tus datos tambien)",
+    subject: "Tu academia sigue andando (ahora en el plan Gratis)",
     html: wrap(
       '<p>' + hola + '</p>' +
-      '<p>Tu prueba termino, pero no borramos nada: tus alumnos, paquetes y horarios siguen guardados tal cual los dejaste.</p>' +
-      '<p>Cuando quieras retomar, activas tu plan desde el panel y todo vuelve a estar operativo al instante.</p>' +
-      '<p><a href="' + panel + '"><b>Reactivar mi academia</b></a></p>')
+      '<p>Tu prueba termino y no se pauso nada: tu academia paso al <b>plan Gratis para siempre</b>. Tu web, el portal de tus alumnos y los pagos siguen vivos, con los limites del plan Gratis (hasta 15 alumnos y 1 profesor).</p>' +
+      '<p>Si necesitas mas (alumnos ilimitados, asistente de WhatsApp con IA, mas profesores), activas un plan en 1 minuto desde el panel, desde <b>S/49 al mes</b>.</p>' +
+      '<p><a href="' + panel + '"><b>Ver planes en mi panel</b></a></p>')
   };
 }
 
@@ -10481,7 +10481,7 @@ export default {
     let tenants = [];
     try {
       const r = await env.DB.prepare(
-        "SELECT id, slug, academia, profe_nombre, email, estado, trial_hasta, creado, COALESCE(nurture_paso, 0) AS paso FROM tenants WHERE estado = 'trial'"
+        "SELECT id, slug, academia, profe_nombre, email, estado, trial_hasta, creado, mp_sub_status, COALESCE(nurture_paso, 0) AS paso FROM tenants WHERE estado = 'trial'"
       ).all();
       tenants = r.results || [];
     } catch (e) { return; }
@@ -10491,11 +10491,17 @@ export default {
       const venceMs = Date.parse(t.trial_hasta) || 0;
       let etapa = null, pasoNuevo = t.paso | 0;
       if (venceMs && ahora > venceMs){
-        // Mismo criterio que el gate de acceso, pero proactivo: no espera a que el profe entre.
-        try { await env.DB.prepare("UPDATE tenants SET estado = 'vencido' WHERE id = ?1").bind(t.id).run(); } catch (e) {}
+        /* FREEMIUM (23-jul-2026): el trial vencido CAE al plan Gratis (mismo criterio que el
+           gate de acceso, pero proactivo: no espera a que el profe entre). 'vencido' ya NO se
+           marca aqui — apagaba la web publica, el checkout y el login de alumnos de academias
+           que solo debian volver a Gratis. 'vencido' queda solo para el dunning de suscripciones
+           pagadas (webhooks de MP). A los clientes con MP viva (authorized/anual) no se les toca. */
+        const suscritoMPCron = t.mp_sub_status === "authorized" || t.mp_sub_status === "anual";
+        if (suscritoMPCron) continue; // cliente de pago: ni degradar ni mandarle nurture de trial
+        try { await env.DB.prepare("UPDATE tenants SET estado = 'activo', plan = 'gratis' WHERE id = ?1").bind(t.id).run(); } catch (e) {}
         if ((t.paso | 0) < 5){
           etapa = "vencido"; pasoNuevo = 5;
-          try { await alertaCorreoAndres(env, "Trial vencido sin convertir: " + t.academia, "Tenant: " + t.academia + " (" + t.email + ")\nVenció: " + t.trial_hasta + "\nLe salió el correo de cierre con el link de suscripción."); } catch (e) {}
+          try { await alertaCorreoAndres(env, "Trial vencido sin convertir: " + t.academia, "Tenant: " + t.academia + " (" + t.email + ")\nVenció: " + t.trial_hasta + "\nCayó al plan Gratis (web y portal siguen vivos). Le salió el correo con el link de suscripción."); } catch (e) {}
         }
       }
       // "termina pronto" atado a trial_hasta (no a dias-desde-creacion): con trial de 30 dias
