@@ -1227,13 +1227,21 @@ const SORTEO = {
   hastaFecha: "2026-08-06",                   // compras.fecha (UTC) hasta — cubre la noche del 5 en Lima
   boletos: { "Paquete 4": 1, "Paquete 8": 2, "Paquete 12": 3 },  // clase suelta NO entra
   /* Invitados a dedo (03-ago-2026, pedido de Andrés): alumnos que entran al sorteo aunque su
-     compra caiga fuera de la ventana. Se resuelven por email contra `cuentas`; NO se inventa
-     ninguna fila en `compras`, que ensuciaría la caja y le subiría el ciclo al alumno (y con
-     eso le mataría las clases que aún no usa). Los boletos son un PISO: si el invitado además
-     compró dentro de la ventana, se queda con lo que más le convenga, nunca se le suma dos veces. */
+     compra no aparezca en `compras` dentro de la ventana. NO se inventa ninguna fila en
+     `compras`, que ensuciaría la caja y le subiría el ciclo al alumno (y con eso le mataría
+     las clases que aún no usa). Los boletos son un PISO: si el invitado además compró dentro
+     de la ventana, se queda con lo que más le convenga, nunca se le suma dos veces.
+
+     Dos formas de identificarlo:
+       { email }      -> cuenta del portal. Si gana, el correo de aviso le llega solo.
+       { alumno_id }  -> alumno del CRM SIN cuenta del portal (alta manual, pagó por fuera).
+                         Si gana NO hay correo que mandarle: el aviso a Andrés lo dice y él
+                         le escribe por WhatsApp. Si algún día se crea su cuenta, se engancha
+                         sola y sus compras se suman en la misma entrada. */
   invitados: [
     { email: "alvaro.guillenc1612@gmail.com", boletos: 1 },   // Álvaro Guillén
-    { email: "missdelilah12345@gmail.com",    boletos: 1 }    // Delilah Rivera
+    { email: "missdelilah12345@gmail.com",    boletos: 1 },   // Delilah Rivera
+    { alumno_id: "mse2dkz8eun8t",             boletos: 1 }    // Renato Cárdenas (sin cuenta del portal)
   ]
 };
 
@@ -1274,22 +1282,40 @@ async function sorteoParticipantes(env){
       });
     }
   }
-  // Invitados a dedo: se resuelven por email y sus boletos son un piso, no una suma.
+  // Invitados a dedo: por email (cuenta del portal) o por alumno_id (alumno sin cuenta).
+  // Sus boletos son un piso, no una suma.
   for (const inv of (SORTEO.invitados || [])){
-    const email = String((inv && inv.email) || "").trim().toLowerCase();
     const b = Math.max(0, Number(inv && inv.boletos) || 0);
-    if (!email || !b) continue;
-    const cu = await env.DB.prepare("SELECT id, nombre, email FROM cuentas WHERE lower(email) = ?1")
-      .bind(email).first();
-    if (!cu) continue;                                  // sin cuenta no hay a quién avisarle
-    const prev = porCuenta.get(cu.id);
+    if (!b) continue;
+    const email = String((inv && inv.email) || "").trim().toLowerCase();
+    const alumnoId = String((inv && inv.alumno_id) || "").trim();
+    if (!email && !alumnoId) continue;
+
+    let cu = null, alumno = null;
+    if (email){
+      cu = await env.DB.prepare("SELECT id, nombre, email FROM cuentas WHERE lower(email) = ?1")
+        .bind(email).first();
+    } else {
+      alumno = await env.DB.prepare("SELECT id, nombre FROM alumnos WHERE id = ?1").bind(alumnoId).first();
+      if (!alumno) continue;                            // alumno borrado: se ignora la invitación
+      // Si ese alumno YA tiene cuenta, se usa la cuenta: así sus compras y su boleto de
+      // invitado caen en la MISMA entrada y no aparece dos veces en la lista.
+      cu = await env.DB.prepare("SELECT id, nombre, email FROM cuentas WHERE alumno_id = ?1")
+        .bind(alumno.id).first();
+    }
+    if (!cu && !alumno) continue;                       // email que no existe en `cuentas`
+
+    const clave = cu ? cu.id : ("alu:" + alumno.id);    // sin cuenta se indexa por alumno
+    const nombre = (cu && cu.nombre) || (alumno && alumno.nombre) || "";
+    const prev = porCuenta.get(clave);
     if (prev){
       if (prev.boletos < b) prev.boletos = b;
       prev.invitado = true;
     } else {
-      porCuenta.set(cu.id, {
-        cuenta_id: cu.id, compra_id: null, nombre: cu.nombre || "", email: cu.email || "",
-        corto: nombreCortoSorteo(cu.nombre), boletos: b, paquetes: [],
+      porCuenta.set(clave, {
+        cuenta_id: cu ? cu.id : null, alumno_id: alumno ? alumno.id : null, compra_id: null,
+        nombre, email: (cu && cu.email) || "",
+        corto: nombreCortoSorteo(nombre), boletos: b, paquetes: [],
         confirmado: true, invitado: true
       });
     }
@@ -1328,7 +1354,8 @@ async function sorteoElegir(env){
   const pickId = randHex(8);
   const registro = {
     pick_id: pickId, sorteo: SORTEO.id, premio: SORTEO.premio,
-    cuenta_id: g.cuenta_id, nombre: g.nombre, corto: g.corto, email: g.email,
+    cuenta_id: g.cuenta_id, alumno_id: g.alumno_id || null,
+    nombre: g.nombre, corto: g.corto, email: g.email,
     boletos: g.boletos, paquetes: g.paquetes,
     boleto_ganador: boletoGanador + 1, total_boletos: totalBoletos,
     participantes: lista.length, elegido_utc: new Date().toISOString()
@@ -1365,7 +1392,7 @@ async function sorteoAvisar(env, g, lista){
     });
   }
   const resumen =
-    "SORTEO CERRADO — ganó " + g.nombre + " (" + g.email + ")\n" +
+    "SORTEO CERRADO — ganó " + g.nombre + " (" + (g.email || "SIN CORREO: no tiene cuenta del portal, avísale tú por WhatsApp") + ")\n" +
     "Boleto " + g.boleto_ganador + " de " + g.total_boletos + " · " + g.participantes + " participantes\n" +
     "Compró: " + ((g.paquetes && g.paquetes.length) ? g.paquetes.join(", ") : "— (invitado a dedo)") + "\n\n" +
     "Premio: " + SORTEO.premio + "\n" + SORTEO.premioDetalle + "\n\n" +
