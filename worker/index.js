@@ -515,9 +515,11 @@ async function confirmarCompra(env, compra){
     stmts.push(env.DB.prepare("UPDATE cuentas SET alumno_id = ?1 WHERE id = ?2").bind(nuevoId, cu.id));
   }
 
+  // OJO: el reclamo atómico de arriba YA puso ESTA compra en 'confirmada', así que ambos COUNT
+  // deben excluirla (id != ?2); si no, "primera compra" jamás da true (bug del 02-jul al 04-ago).
   const previas = await env.DB.prepare(
-    "SELECT COUNT(*) AS n FROM compras WHERE cuenta_id = ?1 AND estado = 'confirmada'"
-  ).bind(cu.id).first();
+    "SELECT COUNT(*) AS n FROM compras WHERE cuenta_id = ?1 AND estado = 'confirmada' AND id != ?2"
+  ).bind(cu.id, compra.id).first();
   const esPrimera = !previas || !Number(previas.n);
 
   // El premio de referido (S/50) se gana con la primera compra de un PAQUETE real, NO con la clase
@@ -525,8 +527,8 @@ async function confirmarCompra(env, compra){
   // y se abriría un loop de auto-referidos baratos). Si hizo prueba y LUEGO compra paquete, ahí sí paga.
   if (compra.paquete !== "Clase de prueba" && cu.ref_por){
     const previasReales = await env.DB.prepare(
-      "SELECT COUNT(*) AS n FROM compras WHERE cuenta_id = ?1 AND estado = 'confirmada' AND paquete != 'Clase de prueba'"
-    ).bind(cu.id).first();
+      "SELECT COUNT(*) AS n FROM compras WHERE cuenta_id = ?1 AND estado = 'confirmada' AND paquete != 'Clase de prueba' AND id != ?2"
+    ).bind(cu.id, compra.id).first();
     const esPrimeraReal = !previasReales || !Number(previasReales.n);
     if (esPrimeraReal){
       const refidor = await env.DB.prepare("SELECT id FROM cuentas WHERE ref_code = ?1").bind(cu.ref_por).first();
