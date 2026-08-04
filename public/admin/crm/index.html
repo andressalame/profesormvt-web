@@ -2252,7 +2252,7 @@ el("btnGuardarRenovar").addEventListener("click",function(){
     if(j.pendiente) toast("Cobro anotado como pendiente — confírmalo en Cuentas para que aplique");
     else if(j.sinCuenta) toast("Renovado · vence "+j.vence+" — sin cuenta, no se envió correo");
     else toast("Renovación registrada — venta guardada y correo enviado");
-    return cargar();
+    return recargar();
   })
   .catch(function(e){ toast(e.message||"No se pudo registrar. Revisa tu conexión e intenta de nuevo."); })
   .finally(function(){ btnRen.disabled=false; });
