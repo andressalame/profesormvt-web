@@ -1560,7 +1560,7 @@ el("panel-agenda").addEventListener("click",function(e){
   var mb = e.target.closest("[data-ag-marcar]");
   if(mb){
     apiPost("/api/admin/agenda/marcar",{id:mb.dataset.id, estado:mb.dataset.agMarcar})
-      .then(function(){ toast("Listo"); cargarAgenda(); })
+      .then(function(){ toast("Listo"); cargarAgenda(); return recargar(); /* el server insertó la clase en registro: refrescar db para que el siguiente PUT no la pise */ })
       .catch(function(err){ toast(err.message||"No se pudo"); });
   }
 });
