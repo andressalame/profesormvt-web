@@ -1352,7 +1352,9 @@ async function confirmarCompra(env, tenantId, tenant, compra){
      migracion: hay que garantizarlas antes del INSERT o el pago confirmado se cae. */
   await ensureAlumnoExtraSchema(env).catch(() => {});
   if (!compra) return { ok: false, error: "Compra no encontrada", status: 404 };
-  if (compra.estado !== "pendiente" && compra.estado !== "iniciada"){
+  /* 'cancelada' tambien se acredita: es un intento de tarjeta reemplazado por un reintento,
+     pero su preference de MP sigue pagable. Si el pago aprobado llega por ella, es plata real. */
+  if (compra.estado !== "pendiente" && compra.estado !== "iniciada" && compra.estado !== "cancelada"){
     return { ok: false, error: "Esa compra ya fue procesada", status: 409 };
   }
   const cu = await env.DB.prepare("SELECT * FROM cuentas WHERE id = ?1 AND tenant_id = ?2").bind(compra.cuenta_id, tenantId).first();
@@ -1363,7 +1365,7 @@ async function confirmarCompra(env, tenantId, tenant, compra){
   }
 
   const reclamo = await env.DB.prepare(
-    "UPDATE compras SET estado = 'confirmada' WHERE id = ?1 AND tenant_id = ?2 AND estado IN ('pendiente','iniciada')"
+    "UPDATE compras SET estado = 'confirmada' WHERE id = ?1 AND tenant_id = ?2 AND estado IN ('pendiente','iniciada','cancelada')"
   ).bind(compra.id, tenantId).run();
   const filasReclamo = (reclamo && reclamo.meta && (reclamo.meta.changes ?? reclamo.meta.rows_written)) || 0;
   if (!filasReclamo){
@@ -7413,8 +7415,11 @@ export default {
         if (metodo === "Tarjeta (Mercado Pago)"){
           const tk = await mpTokenProfe(env, t);
           if (!tk) return json({ error: "Tu profesor aún no activó el pago con tarjeta. Elige otro método." }, 400);
+          /* NO se borran los intentos 'iniciada' previos: su preference vieja sigue siendo pagable
+             en MP (borrarla = plata cobrada sin credito, mismo criterio que los packs). Se marcan
+             'cancelada' y confirmarCompra las acredita igual si ese pago llega aprobado. */
           await env.DB.prepare(
-            "DELETE FROM compras WHERE tenant_id = ?1 AND cuenta_id = ?2 AND estado = 'iniciada' AND metodo = 'Tarjeta (Mercado Pago)'"
+            "UPDATE compras SET estado = 'cancelada' WHERE tenant_id = ?1 AND cuenta_id = ?2 AND estado = 'iniciada' AND metodo = 'Tarjeta (Mercado Pago)'"
           ).bind(t.id, cu.id).run();
           const compraId = crypto.randomUUID();
           await env.DB.prepare(
@@ -7465,8 +7470,9 @@ export default {
           // El credito de referido es en soles: no aplica al riel Stripe internacional. Cobra el precio pleno.
           const montoSt = Number(precio) || 0;
           if (!(montoSt > 0)) return json({ error: "Ese paquete no está disponible. Escríbele a tu profesor." }, 400);
+          /* Igual que en MP: la session vieja vive 1h y sigue pagable; 'cancelada', no DELETE. */
           await env.DB.prepare(
-            "DELETE FROM compras WHERE tenant_id = ?1 AND cuenta_id = ?2 AND estado = 'iniciada' AND metodo = 'Tarjeta (Stripe)'"
+            "UPDATE compras SET estado = 'cancelada' WHERE tenant_id = ?1 AND cuenta_id = ?2 AND estado = 'iniciada' AND metodo = 'Tarjeta (Stripe)'"
           ).bind(t.id, cu.id).run();
           const compraIdSt = crypto.randomUUID();
           await env.DB.prepare(
@@ -7694,9 +7700,10 @@ export default {
         const monto = Math.max(0, precio - descuento);
         if (!(monto > 0)) return json({ error: "Ese paquete no esta disponible para tarjeta. Escribele a tu profesor." }, 400);
 
-        // Limpia intentos de tarjeta abandonados de esta cuenta y crea la compra 'iniciada'
+        /* Intentos de tarjeta abandonados: se marcan 'cancelada', NUNCA DELETE. La preference
+           vieja sigue pagable en MP y confirmarCompra debe poder acreditarla (patron packs). */
         await env.DB.prepare(
-          "DELETE FROM compras WHERE tenant_id = ?1 AND cuenta_id = ?2 AND estado = 'iniciada' AND metodo = 'Tarjeta (Mercado Pago)'"
+          "UPDATE compras SET estado = 'cancelada' WHERE tenant_id = ?1 AND cuenta_id = ?2 AND estado = 'iniciada' AND metodo = 'Tarjeta (Mercado Pago)'"
         ).bind(tid, cu.id).run();
         const compraId = crypto.randomUUID();
         await env.DB.prepare(
@@ -7761,7 +7768,23 @@ export default {
           if (!ref.startsWith("btc:")) return json({ ok: true });
           const compraId = ref.slice(4);
           const compra = await env.DB.prepare("SELECT * FROM compras WHERE id = ?1 AND tenant_id = ?2").bind(compraId, tid).first();
-          if (!compra) return json({ ok: true });
+          if (!compra){
+            /* Pago APROBADO sin compra que lo respalde: la plata SI entro al MP del profe y nadie
+               la acreditaria. Nunca 200 mudo: aviso al dueno de la academia y a Andres. */
+            try {
+              const detalleHuerfano =
+                "Llego un pago APROBADO de Mercado Pago que no coincide con ninguna compra registrada en Batuta.\n" +
+                "Academia: " + (t.academia || tid) + "\n" +
+                "Pago MP: " + paymentId + "\n" +
+                "Monto: S/" + (Number(pago.transaction_amount) || 0) + "\n" +
+                "Referencia: " + ref + "\n" +
+                "Pagador: " + ((pago.payer && pago.payer.email) || "?") + "\n" +
+                "El dinero SI entro a la cuenta de MP del profesor: hay que acreditar el paquete a mano desde el panel.";
+              if (t.email) await enviarCorreo(env, { to: t.email, subject: "Batuta: llego un pago con tarjeta sin compra asociada", text: detalleHuerfano });
+              await alertaCorreoAndres(env, "Batuta: pago MP aprobado SIN compra (" + (t.academia || tid) + ")", detalleHuerfano);
+            } catch (e) { /* la alerta jamas rompe el 200 hacia MP */ }
+            return json({ ok: true });
+          }
           // El monto aprobado debe cubrir el de la compra
           if ((Number(pago.transaction_amount) || 0) + 0.01 < (Number(compra.monto) || 0)) return json({ ok: true });
 
@@ -7869,7 +7892,8 @@ export default {
         const descuento = Math.min(credito, precio);
         const monto = Math.max(0, precio - descuento);
         if (!(monto > 0)) return json({ error: "Ese paquete no esta disponible para tarjeta." }, 400);
-        await env.DB.prepare("DELETE FROM compras WHERE tenant_id = ?1 AND cuenta_id = ?2 AND estado = 'iniciada' AND metodo = 'Tarjeta (Stripe)'").bind(tid, cu.id).run();
+        /* Igual que en MP: la session vieja vive 1h y sigue pagable; 'cancelada', no DELETE. */
+        await env.DB.prepare("UPDATE compras SET estado = 'cancelada' WHERE tenant_id = ?1 AND cuenta_id = ?2 AND estado = 'iniciada' AND metodo = 'Tarjeta (Stripe)'").bind(tid, cu.id).run();
         const compraId = crypto.randomUUID();
         await env.DB.prepare(
           "INSERT INTO compras (id,tenant_id,cuenta_id,curso,paquete,monto,descuento,op_numero,estado,fecha,metodo,comprobante,slot_deseado) VALUES (?1,?2,?3,?4,?5,?6,?7,'','iniciada',?8,'Tarjeta (Stripe)','',?9)"
