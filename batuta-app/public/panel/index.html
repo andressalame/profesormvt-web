@@ -4960,6 +4960,15 @@ el("btnGuardarAjustes").addEventListener("click",function(){
     var i=(iEl&&iEl.value==="clase")?"clase":"compra";
     paqRows.push({n:n,c:c,r:r,u:u,t:t,d:d,i:i,precio:precio});
   });
+  /* S/0 ya no se acepta en silencio (03-ago-2026): un paquete sin precio no sale en la
+     web pública ni en el portal, y una fundadora estuvo 13 días así sin enterarse. */
+  var pqEnCero=paqRows.filter(function(x){ return !(x.precio>0); });
+  if(pqEnCero.length){
+    var txtCero=pqEnCero.length===1
+      ? 'Tienes 1 paquete en S/0 ("'+pqEnCero[0].n+'"): no saldrá en tu web ni en el portal de tus alumnos. ¿Guardar igual?'
+      : 'Tienes '+pqEnCero.length+' paquetes en S/0: no saldrán en tu web ni en el portal de tus alumnos. ¿Guardar igual?';
+    if(!confirm(txtCero)) return;
+  }
   /* clases de 2 niveles + los cursos planos derivados (compatibilidad con todo el resto) */
   var clasesRows=leerClasesEditor();
   /* si renombró paquetes, migra a los alumnos que estaban en el nombre viejo (no los huérfana) */
