@@ -2837,7 +2837,13 @@ async function ocupacionSlot(env, tenantId, iso, prof, sala){
   let n = 0, bloqueado = false;
   for (const r of results){
     if (r.tipo === "bloqueo"){ bloqueado = true; continue; }
-    if (String(r.sala || "") === salaK) n += Number(r.n) || 0;
+    /* Comodin de transicion: una reserva sin sala ('') cuenta en TODAS las salas de esa
+       hora (mismo criterio que resolverFranja y la lista de espera). Sobre-conservador a
+       proposito: sin esto, tras migrar a salas las reservas viejas dejan de contar en la
+       ocupacion y la agenda sobrevende el aforo. Solo muerde mientras existan reservas
+       sin backfillear (migrar-salas.sh las asigna a su sala). */
+    const salaRes = String(r.sala || "");
+    if (salaRes === salaK || salaRes === "") n += Number(r.n) || 0;
   }
   return { n, bloqueado };
 }
@@ -2976,7 +2982,10 @@ async function generarSlotsDetalle(env, tenantId, prof, opts){
       const iso = new Date(ms).toISOString();
       if (bloqueados.has(iso)) continue;   // hora cerrada por el profe: ni libre ni espera
       const cupo = cupoEff(h.cupo, h.curso);
-      const ocupados = conteo.get(iso + "|" + (h.sala || "")) || 0;
+      /* Comodin de transicion (igual que ocupacionSlot): las reservas sin sala ('')
+         ocupan TODAS las salas de esa hora, para no sobrevender mientras haya
+         reservas viejas sin backfillear. */
+      const ocupados = (conteo.get(iso + "|" + (h.sala || "")) || 0) + (h.sala ? (conteo.get(iso + "|") || 0) : 0);
       const enPlan = !(pk && !paqueteCubre(pk, h.curso));
       const estado = !enPlan ? "fuera" : (ocupados < cupo ? "libre" : "lleno");
       (franjas[iso] = franjas[iso] || []).push({
