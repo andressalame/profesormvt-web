@@ -4831,7 +4831,7 @@ export default {
     // Solo datos ya publicos por diseno: nombre, cursos, paquetes con precio y WhatsApp de contacto.
     if (/^\/app\/a\/[^/]+\/web$/.test(path) && request.method === "GET"){
       const slugW = decodeURIComponent(path.split("/")[3] || "");
-      const tW = await env.DB.prepare("SELECT id, academia, slug, estado, rubro, mp_access_token, mp_expires_at FROM tenants WHERE slug = ?1").bind(slugW).first();
+      const tW = await env.DB.prepare("SELECT id, academia, slug, estado, rubro, whatsapp, mp_access_token, mp_expires_at FROM tenants WHERE slug = ?1").bind(slugW).first();
       if (!tW) return htmlResponse(paginaBase("Academia no encontrada — Batuta", "<h1>No encontramos esa academia</h1><p class=\"sub\">Revisa el link.</p>", ""));
       if (tW.estado === "vencido") return htmlResponse(paginaBase("Página en pausa — Batuta", "<h1>Página en pausa</h1><p class=\"sub\">Esta academia está inactiva por ahora.</p>", ""));
       const { ctx: ctxW, cfg: cfgW } = await armarWebCtx(env, tW);

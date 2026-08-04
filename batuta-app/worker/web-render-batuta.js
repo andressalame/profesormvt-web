@@ -376,7 +376,11 @@ export function contexto(tenant, cfg, precios, paq, opciones){
   var cursos = clases.length
     ? clases.map(function (c){ return c.n; })
     : String(cfg.cursos || "").split(",").map(function (s){ return s.trim(); }).filter(Boolean);
-  var wa = String(cfg.whatsapp_profe || "").replace(/[^0-9]/g, "");
+  /* Fallback al WhatsApp que la academia dio en el REGISTRO (tenants.whatsapp): el registro
+     nunca escribe config.whatsapp_profe, y sin este fallback toda academia nueva sin cobros
+     configurados estrenaba una landing sin ningun CTA ni via de contacto. Mismo criterio que
+     el resto del worker (cfg.whatsapp_profe || tenant.whatsapp). */
+  var wa = String(cfg.whatsapp_profe || (tenant && tenant.whatsapp) || "").replace(/[^0-9]/g, "");
   var paquetes = (paq && paq.list ? paq.list : []).filter(function (pk){ return (precios[pk] || 0) > 0 && pk !== "Clase de prueba"; });
   return {
     tenant: tenant, cfg: cfg, precios: precios,
