@@ -1036,11 +1036,14 @@ function renderInicio(){
 /* ---------- VISTA: MIS CLASES ---------- */
 function renderClases(){
   var h = (ME.alumno && ME.alumno.historial) || [];
-  /* historial viene en orden ascendente: el último con tarea/plan es el más reciente */
+  /* h llega del worker en orden DESCENDENTE (la clase más reciente primero), así que la tarea
+     y el plan vigentes son el PRIMER registro que traiga cada uno. Antes se recorría entero
+     sin cortar y ganaba el ÚLTIMO: al alumno le quedaba pegada la tarea de su primera clase. */
   var con = null, prox = null;
   for(var i=0;i<h.length;i++){
-    if((h[i].tarea && String(h[i].tarea).trim()) || audiosDe(h[i]).length) con = h[i];
-    if(h[i].plan && String(h[i].plan).trim()) prox = h[i];
+    if(!con && ((h[i].tarea && String(h[i].tarea).trim()) || audiosDe(h[i]).length)) con = h[i];
+    if(!prox && h[i].plan && String(h[i].plan).trim()) prox = h[i];
+    if(con && prox) break;
   }
   if(prox){
     $("cProxTxt").textContent = prox.plan || "";
@@ -1055,14 +1058,29 @@ function renderClases(){
   } else hide("cTarea");
   if(h.length===0){ hide("cWrap"); show("cVacio"); return; }
   show("cWrap"); hide("cVacio");
-  $("cTabla").querySelector("tbody").innerHTML = h.map(function(r){
+  /* La tabla trae TODAS las clases, también las de paquetes anteriores. Cuando hay más de un
+     paquete se separa cada bloque con una fila-título para que se entienda de dónde viene
+     cada clase; con un solo paquete no se pinta nada (sería ruido). */
+  var cAct = Number((ME.alumno && ME.alumno.cicloActual) || 1);
+  var ciclos = {};
+  h.forEach(function(r){ ciclos[Number(r.ciclo||1)] = 1; });
+  var variosPaquetes = Object.keys(ciclos).length > 1;
+  var prevC = null, filas = [];
+  h.forEach(function(r){
+    var c = Number(r.ciclo||1);
+    if(variosPaquetes && c !== prevC){
+      filas.push('<tr><td colspan="5" class="mut" style="padding-top:16px;text-transform:uppercase;letter-spacing:.05em;font-size:11.5px;">'+
+        (c === cAct ? '// Paquete actual' : '// Paquete anterior')+'</td></tr>');
+    }
+    prevC = c;
     var pc = r.estado==="Asistió"?"green":(r.estado==="Reprogramó"?"amber":"gray");
     var audioCell = adjuntosHtml(audiosDe(r), false);
-    return '<tr><td class="mono">'+esc(r.fecha||"")+'</td>'+
+    filas.push('<tr><td class="mono">'+esc(r.fecha||"")+'</td>'+
       '<td><span class="pill '+pc+'">'+esc(r.estado||"")+'</span></td>'+
       '<td>'+esc(r.trabajo||"")+'</td><td class="mut">'+esc(r.tarea||"")+audioCell+'</td>'+
-      '<td class="mut">'+esc(r.plan||"")+'</td></tr>';
-  }).join("");
+      '<td class="mut">'+esc(r.plan||"")+'</td></tr>');
+  });
+  $("cTabla").querySelector("tbody").innerHTML = filas.join("");
 }
 
 /* ---------- VISTA: COMPRAR ----------

@@ -1223,7 +1223,16 @@ const SORTEO = {
   cierraUTC: "2026-08-06T01:00:00Z",          // 5-ago-2026, 20:00 Lima (UTC-5)
   desdeFecha: "2026-08-02",                   // compras.fecha (UTC) desde
   hastaFecha: "2026-08-06",                   // compras.fecha (UTC) hasta — cubre la noche del 5 en Lima
-  boletos: { "Paquete 4": 1, "Paquete 8": 2, "Paquete 12": 3 }   // clase suelta NO entra
+  boletos: { "Paquete 4": 1, "Paquete 8": 2, "Paquete 12": 3 },  // clase suelta NO entra
+  /* Invitados a dedo (03-ago-2026, pedido de Andrés): alumnos que entran al sorteo aunque su
+     compra caiga fuera de la ventana. Se resuelven por email contra `cuentas`; NO se inventa
+     ninguna fila en `compras`, que ensuciaría la caja y le subiría el ciclo al alumno (y con
+     eso le mataría las clases que aún no usa). Los boletos son un PISO: si el invitado además
+     compró dentro de la ventana, se queda con lo que más le convenga, nunca se le suma dos veces. */
+  invitados: [
+    { email: "alvaro.guillenc1612@gmail.com", boletos: 1 },   // Álvaro Guillén
+    { email: "missdelilah12345@gmail.com",    boletos: 1 }    // Delilah Rivera
+  ]
 };
 
 /* "Andrés Salamé Córdova" -> "Andrés S." · la lista del sorteo es pública, así que
@@ -1263,6 +1272,27 @@ async function sorteoParticipantes(env){
       });
     }
   }
+  // Invitados a dedo: se resuelven por email y sus boletos son un piso, no una suma.
+  for (const inv of (SORTEO.invitados || [])){
+    const email = String((inv && inv.email) || "").trim().toLowerCase();
+    const b = Math.max(0, Number(inv && inv.boletos) || 0);
+    if (!email || !b) continue;
+    const cu = await env.DB.prepare("SELECT id, nombre, email FROM cuentas WHERE lower(email) = ?1")
+      .bind(email).first();
+    if (!cu) continue;                                  // sin cuenta no hay a quién avisarle
+    const prev = porCuenta.get(cu.id);
+    if (prev){
+      if (prev.boletos < b) prev.boletos = b;
+      prev.invitado = true;
+    } else {
+      porCuenta.set(cu.id, {
+        cuenta_id: cu.id, compra_id: null, nombre: cu.nombre || "", email: cu.email || "",
+        corto: nombreCortoSorteo(cu.nombre), boletos: b, paquetes: [],
+        confirmado: true, invitado: true
+      });
+    }
+  }
+
   const lista = Array.from(porCuenta.values());
   return { lista, totalBoletos: lista.reduce((s, x) => s + x.boletos, 0) };
 }
@@ -1335,12 +1365,13 @@ async function sorteoAvisar(env, g, lista){
   const resumen =
     "SORTEO CERRADO — ganó " + g.nombre + " (" + g.email + ")\n" +
     "Boleto " + g.boleto_ganador + " de " + g.total_boletos + " · " + g.participantes + " participantes\n" +
-    "Compró: " + (g.paquetes || []).join(", ") + "\n\n" +
+    "Compró: " + ((g.paquetes && g.paquetes.length) ? g.paquetes.join(", ") : "— (invitado a dedo)") + "\n\n" +
     "Premio: " + SORTEO.premio + "\n" + SORTEO.premioDetalle + "\n\n" +
     "OJO: el premio NO se aplicó solo, a propósito. Cargarlo ahora le subiría el ciclo y le\n" +
     "mataría las clases que todavía no usa del paquete que acaba de pagar. Aplícalo en el CRM\n" +
     "cuando termine su paquete actual (Renovar → Paquete 8, monto 0).\n\n" +
-    "Participantes:\n" + (lista || []).map(p => "· " + p.nombre + " — " + p.boletos + " boleto(s)" + (p.confirmado ? "" : " (pago SIN confirmar)")).join("\n");
+    "Participantes:\n" + (lista || []).map(p => "· " + p.nombre + " — " + p.boletos + " boleto(s)" +
+      (p.invitado ? " (invitado)" : (p.confirmado ? "" : " (pago SIN confirmar)"))).join("\n");
   try {
     await enviarCorreo(env, { to: MARCA.correoAdmin, subject: "Sorteo de cumpleaños: ganó " + g.nombre, text: resumen });
   } catch (e) {}
@@ -3066,12 +3097,18 @@ export default {
           alumno = await env.DB.prepare("SELECT * FROM alumnos WHERE id = ?1").bind(cu.alumno_id).first();
           if (alumno){
             const ciclo = alumno.ciclo || 1;
+            /* El alumno ve TODAS sus clases, de todos los ciclos (03-ago-2026). Antes esto
+               filtraba por el ciclo actual y al renovar se le vaciaba el historial y la tarea:
+               Álvaro (ciclo 4, clases registradas en el 1 y el 2) no veía nada. El filtro por
+               ciclo sigue vivo pero SOLO para la cuenta de clases usadas/restantes (`compute`),
+               que es lo único que debe reiniciarse al renovar. */
             const { results } = await env.DB.prepare(
-              "SELECT fecha, estado, trabajo, tarea, COALESCE(plan,'') AS plan, COALESCE(tarea_audio,'') AS tarea_audio FROM registro WHERE alumno_id = ?1 AND COALESCE(ciclo,1) = ?2 ORDER BY fecha ASC, id ASC"
-            ).bind(alumno.id, ciclo).all();
+              "SELECT fecha, estado, trabajo, tarea, COALESCE(plan,'') AS plan, COALESCE(tarea_audio,'') AS tarea_audio, COALESCE(ciclo,1) AS ciclo FROM registro WHERE alumno_id = ?1 ORDER BY fecha ASC, id ASC"
+            ).bind(alumno.id).all();
             historial = (results || []).map(r => Object.assign({}, r, { tarea_audios: parseAudios(r.tarea_audio) }));
+            const histCiclo = historial.filter(r => Number(r.ciclo) === Number(ciclo));
             const rUsadas = await reservasUsadasCount(env, alumno.id, ciclo);
-            computed = compute(alumno, historial, precios, rUsadas);
+            computed = compute(alumno, histCiclo, precios, rUsadas);
             horarioFijo = await horarioFijoDerivado(env, alumno.id);
             proximasClases = (await env.DB.prepare(
               "SELECT id, inicio_utc, fin_utc, tipo, curso FROM reservas WHERE alumno_id = ?1 AND estado = 'reservada' AND inicio_utc >= ?2 ORDER BY inicio_utc ASC"
@@ -3115,6 +3152,7 @@ export default {
             compradas: computed.compradas, usadas: computed.usadas, restantes: computed.restantes,
             reprogPermitidas: computed.reprogPermitidas, reprogRestantes: computed.reprogRestantes,
             monto: computed.monto, vence: alumno.vence || "",
+            cicloActual: alumno.ciclo || 1,
             historial: historial.slice().reverse()
           } : null,
           compraPendiente: pendiente || null,
