@@ -1434,15 +1434,18 @@ async function confirmarCompra(env, tenantId, tenant, compra){
     }
   } catch (e) {}
 
+  /* OJO: el claim de arriba YA puso ESTA compra en 'confirmada', asi que los COUNT deben
+     excluirla (AND id != compra.id). Sin eso, esPrimera/esPrimeraReal daban SIEMPRE false:
+     el credito de referido S/50 no se pagaba nunca y el correo de bienvenida nunca salia. */
   const previas = await env.DB.prepare(
-    "SELECT COUNT(*) AS n FROM compras WHERE tenant_id = ?1 AND cuenta_id = ?2 AND estado = 'confirmada'"
-  ).bind(tenantId, cu.id).first();
+    "SELECT COUNT(*) AS n FROM compras WHERE tenant_id = ?1 AND cuenta_id = ?2 AND estado = 'confirmada' AND id != ?3"
+  ).bind(tenantId, cu.id, compra.id).first();
   const esPrimera = !previas || !Number(previas.n);
 
   if (compra.paquete !== "Clase de prueba" && cu.ref_por){
     const previasReales = await env.DB.prepare(
-      "SELECT COUNT(*) AS n FROM compras WHERE tenant_id = ?1 AND cuenta_id = ?2 AND estado = 'confirmada' AND paquete != 'Clase de prueba'"
-    ).bind(tenantId, cu.id).first();
+      "SELECT COUNT(*) AS n FROM compras WHERE tenant_id = ?1 AND cuenta_id = ?2 AND estado = 'confirmada' AND paquete != 'Clase de prueba' AND id != ?3"
+    ).bind(tenantId, cu.id, compra.id).first();
     const esPrimeraReal = !previasReales || !Number(previasReales.n);
     if (esPrimeraReal){
       const refidor = await env.DB.prepare("SELECT id FROM cuentas WHERE tenant_id = ?1 AND ref_code = ?2").bind(tenantId, cu.ref_por).first();
