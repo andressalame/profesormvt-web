@@ -5916,18 +5916,22 @@ export default {
             for (let i = 0; i < 6; i++){ const c = slugify(nombre || "academia") + "-" + randHex(2); const ya = await env.DB.prepare("SELECT id FROM tenants WHERE slug = ?1").bind(c).first(); if (!ya){ slug = c; break; } }
             if (!slug) slug = "academia-" + randHex(4);
             const salt = randHex(16); const hash = await hashPass(randHex(24), salt); // pass aleatoria: entra por Google
+            /* Freemium (23-jul-2026): TODO registro nuevo nace en el plan Gratis permanente
+               (igual que el registro por email). Este canal quedo sin migrar y seguia creando
+               'profe'/'trial' con redirect a la pagina de pago, contradiciendo el "Gratis para
+               siempre, sin tarjeta" del mismo formulario, y a los 30 dias caia en el cron. */
             const trialHasta = new Date(Date.now() + TRIAL_DIAS * 86400000).toISOString();
             await env.DB.prepare(
               "INSERT INTO tenants (id,slug,academia,profe_nombre,email,whatsapp,pass_hash,pass_salt,plan,estado,trial_hasta,creado,fuente,google_id) " +
-              "VALUES (?1,?2,?3,?4,?5,'',?6,?7,'profe','trial',?8,?9,'google','g')"
+              "VALUES (?1,?2,?3,?4,?5,'',?6,?7,'gratis','activo',?8,?9,'google','g')"
             ).bind(id, slug, nombre, nombre, perfil.email, hash, salt, trialHasta, new Date().toISOString()).run();
             const stmts = [];
             for (const k of Object.keys(PRECIOS_DEFAULT)) stmts.push(env.DB.prepare("INSERT INTO precios (tenant_id, paquete, precio) VALUES (?1,?2,?3)").bind(id, k, PRECIOS_DEFAULT[k]));
             stmts.push(env.DB.prepare("INSERT INTO config (tenant_id, clave, valor) VALUES (?1,'profe_nombre',?2)").bind(id, nombre));
             try { await env.DB.batch(stmts); } catch (e) {}
-            ctx.waitUntil(alertaCorreoAndres(env, "TRIAL NUEVO en Batuta (Google): " + nombre, "Academia: " + nombre + "\nEmail: " + perfil.email + "\nEntró con Google.\nSlug: " + slug));
+            ctx.waitUntil(alertaCorreoAndres(env, "CUENTA GRATIS NUEVA en Batuta (Google): " + nombre, "Academia: " + nombre + "\nEmail: " + perfil.email + "\nEntró con Google.\nSlug: " + slug));
             const token = await crearSesion(env, "T:" + id);
-            return irCon(token, "/app/suscribir");
+            return irCon(token, "/app/panel");
           }
           const token = await crearSesion(env, "T:" + t.id);
           return irCon(token, "/app/panel");
