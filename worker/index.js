@@ -232,11 +232,17 @@ function compute(alumno, regs, precios, reservasUsadas){
      el ciclo, deja de aplicar solo y arranca su paquete completo. */
   const migradas = ((Number(alumno && alumno.migrado_ciclo) || 0) === (Number(alumno && alumno.ciclo) || 1))
     ? Math.max(0, Number(alumno && alumno.migrado_usadas) || 0) : 0;
+  /* Bono de clases (05-ago-2026): clases de cortesía que Andrés regala en un ciclo puntual
+     (ajustes, promesas hechas por chat). Amplía el paquete SOLO en ese ciclo, sin inventar
+     compras ni clases dictadas que ensucien caja y reportes. Al renovar sube el ciclo y el
+     bono se cae solo. Espejo de computeAlumno() en el CRM; si cambia uno, cambia el otro. */
+  const bono = ((Number(alumno && alumno.bono_ciclo) || 0) === (Number(alumno && alumno.ciclo) || 1))
+    ? Math.max(0, Number(alumno && alumno.bono_clases) || 0) : 0;
   const usadas = asistio + falta + exceso + (Number(reservasUsadas) || 0) + migradas;
-  const saldo = pk.clases - usadas;
+  const saldo = pk.clases + bono - usadas;
   const expirado = paqueteExpirado(alumno) && saldo > 0;
   return {
-    compradas: pk.clases,
+    compradas: pk.clases + bono,
     usadas,
     restantes: expirado ? 0 : Math.max(0, saldo),
     expirado,

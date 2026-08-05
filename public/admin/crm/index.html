@@ -1048,13 +1048,16 @@ function computeAlumno(a){
      Cuentan como usadas SOLO en el ciclo en que se importó: al renovar sube el ciclo y el
      arrastre se cae solo. Espejo de compute() en el worker; si cambia uno, cambia el otro. */
   var migradas=((Number(a.migrado_ciclo)||0)===ciclo)?Math.max(0,Number(a.migrado_usadas)||0):0;
+  /* Bono de clases (05-ago-2026): cortesía de un ciclo puntual; amplía el paquete sin tocar
+     caja. Se cae solo al renovar. Espejo de compute() en el worker. */
+  var bono=((Number(a.bono_ciclo)||0)===ciclo)?Math.max(0,Number(a.bono_clases)||0):0;
   var usadas=asistio+falta+exceso+migradas;
-  var saldo=pk.clases-usadas;
+  var saldo=pk.clases+bono-usadas;
   var estado,clase;
   if(saldo<=0){estado="Completado — renovar";clase="red";}
   else if(saldo===1){estado="⚠ Última clase";clase="amber";}
   else{estado="Activo";clase="green";}
-  return {compradas:pk.clases,usadas:usadas,restantes:Math.max(0,saldo),
+  return {compradas:pk.clases+bono,usadas:usadas,restantes:Math.max(0,saldo),
           reprogPermit:pk.reprog,reprogRest:Math.max(0,pk.reprog-reprogramo),
           estado:estado,clase:clase,monto:db.precios[a.paquete]||0};
 }
