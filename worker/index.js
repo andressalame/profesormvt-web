@@ -1170,6 +1170,19 @@ async function avisarTelegram(env, text){
   } catch (e) { return false; }
 }
 
+/* ---------- Token de Mercado Pago: SOLO produccion (5-ago-2026) ----------
+   Bug real: el secreto MP_ACCESS_TOKEN tenia un token de PRUEBA (TEST-...). Con ese token la
+   preferencia se crea sin error y el alumno llega a Mercado Pago, pero ahi MP lo corta con
+   "Una de las partes con la que intentas hacer el pago es de prueba". O sea: rompe RECIEN en la
+   pantalla de pago, con el alumno adentro, y el portal ni se entera. Desde el 16-jun-2026 hasta
+   el 5-ago-2026 ningun pago con tarjeta llego a confirmarse.
+   Con esta guarda, un token TEST- se trata como "no hay Mercado Pago": la tarjeta ni se ofrece
+   y el alumno ve Yape/transferencia, en vez de estrellarse contra el error de MP. */
+function mpToken(env){
+  const t = String(env.MP_ACCESS_TOKEN || "");
+  return /^TEST-/i.test(t) ? "" : t;
+}
+
 // Smoke test diario de los flujos que cobran (auditoria 4-ago-2026): dos roturas silenciosas
 // en dos semanas (Guardar alumno 6 dias muerto, Reservar horario fijo 14 dias devolviendo 500)
 // que nadie vio. Prueba lo critico y avisa al Telegram personal SOLO si algo falla.
@@ -1191,6 +1204,16 @@ async function smokeTestDiario(env){
     if (!p || typeof p !== "object") throw new Error("sin precios");
   });
   await prueba("Config", async function(){ await loadConfig(env); });
+  // Tarjeta (Mercado Pago): esto se rompio en silencio ~7 semanas. Un token de PRUEBA crea la
+  // preferencia sin quejarse y recien falla en la pantalla de MP, con el alumno adentro.
+  await prueba("Tarjeta (Mercado Pago)", async function(){
+    if (!env.MP_ACCESS_TOKEN) throw new Error("no hay MP_ACCESS_TOKEN (la tarjeta esta apagada)");
+    if (!mpToken(env)) throw new Error("el token es de PRUEBA (TEST-...): nadie puede pagar con tarjeta. Pon el Access Token de PRODUCCION (APP_USR-...)");
+    const r = await fetch("https://api.mercadopago.com/users/me", {
+      headers: { "Authorization": "Bearer " + mpToken(env) }
+    });
+    if (!r.ok) throw new Error("Mercado Pago rechaza el token: HTTP " + r.status);
+  });
   await prueba("Home publica", async function(){
     const r = await fetch("https://profesormvt.com/", { headers: { "user-agent": "smoke-mvt/1" } });
     if (!r.ok) throw new Error("HTTP " + r.status);
@@ -3235,7 +3258,7 @@ export default {
             bcp_cuenta: config.bcp_cuenta, bcp_cci: config.bcp_cci,
             scotia_cuenta: config.scotia_cuenta, scotia_cci: config.scotia_cci,
             crypto_moneda: config.crypto_moneda, crypto_red: config.crypto_red, crypto_wallet: config.crypto_wallet,
-            mp_on: !!env.MP_ACCESS_TOKEN,
+            mp_on: !!mpToken(env),
             vapid_public: env.VAPID_PUBLIC_KEY || ""
           }
         });
@@ -3279,7 +3302,7 @@ export default {
         const cfgPd = await loadConfig(env).catch(() => ({}));
         const preciosPd = await loadPrecios(env).catch(() => PRECIOS_DEFAULT);
         const metodos = [];
-        if (env.MP_ACCESS_TOKEN) metodos.push({ v: "Tarjeta (Mercado Pago)", t: "Tarjeta o Yape (se confirma sola)" });
+        if (mpToken(env)) metodos.push({ v: "Tarjeta (Mercado Pago)", t: "Tarjeta o Yape (se confirma sola)" });
         if (cfgPd.pago_numero) metodos.push({ v: "Yape/Plin/Sip", t: "Yape / Plin / Sip" });
         if (cfgPd.bcp_cuenta) metodos.push({ v: "Transferencia BCP", t: "Transferencia BCP" });
         if (cfgPd.scotia_cuenta) metodos.push({ v: "Transferencia Scotiabank", t: "Transferencia Scotiabank" });
@@ -3375,7 +3398,7 @@ export default {
 
         // ---- Tarjeta: compra 'iniciada' + checkout de Mercado Pago (mismo webhook de siempre) ----
         if (metodo === "Tarjeta (Mercado Pago)"){
-          if (!env.MP_ACCESS_TOKEN) return json({ error: "El pago con tarjeta no está disponible por ahora. Elige otro método." }, 503);
+          if (!mpToken(env)) return json({ error: "El pago con tarjeta no está disponible por ahora. Elige otro método." }, 503);
           if (montoPd < 1) return json({ error: "Tu crédito cubre el paquete completo. Escríbeme por WhatsApp para activarlo." }, 400);
           await env.DB.prepare("DELETE FROM compras WHERE cuenta_id = ?1 AND estado = 'iniciada'").bind(cu.id).run();
           const compraIdPd = crypto.randomUUID();
@@ -3387,7 +3410,7 @@ export default {
           try {
             const mpResPd = await fetch("https://api.mercadopago.com/checkout/preferences", {
               method: "POST",
-              headers: { "Authorization": "Bearer " + env.MP_ACCESS_TOKEN, "Content-Type": "application/json" },
+              headers: { "Authorization": "Bearer " + mpToken(env), "Content-Type": "application/json" },
               body: JSON.stringify({
                 items: [{ title: nombrePaquetePd + " - " + MARCA.nombre + " (" + cursoPd + ")", quantity: 1, unit_price: montoPd, currency_id: "PEN" }],
                 external_reference: compraIdPd,
@@ -3502,7 +3525,7 @@ export default {
       if (url.pathname === "/api/mp/crear" && request.method === "POST"){
         const cu = await cuentaDeSesion(env, request);
         if (!cu) return json({ error: "Sesión expirada" }, 401);
-        if (!env.MP_ACCESS_TOKEN) return json({ error: "El pago con tarjeta no está disponible por ahora." }, 503);
+        if (!mpToken(env)) return json({ error: "El pago con tarjeta no está disponible por ahora." }, 503);
         const b = await request.json().catch(() => ({}));
         const paquete = String(b.paquete || "");
         const curso = String(b.curso || "").trim() || "Canto";
@@ -3553,7 +3576,7 @@ export default {
         try {
           const mpRes = await fetch("https://api.mercadopago.com/checkout/preferences", {
             method: "POST",
-            headers: { "Authorization": "Bearer " + env.MP_ACCESS_TOKEN, "Content-Type": "application/json" },
+            headers: { "Authorization": "Bearer " + mpToken(env), "Content-Type": "application/json" },
             body: JSON.stringify(pref)
           });
           if (mpRes.ok) mpData = await mpRes.json().catch(() => ({}));
