@@ -10140,6 +10140,18 @@ export default {
             }
           }
           if (stmts.length) await env.DB.batch(stmts);
+          /* Sincronía del nombre del dueño (6-ago-2026, reporte de José/Elevate): el nombre vive
+             en TRES sitios (config.profe_nombre, tenants.profe_nombre y la fila rol='dueno' de
+             profesores, que es la que pinta la lista de Personas → Profesores). Cambiarlo en
+             Ajustes solo tocaba config, y el dueño seguía saliendo con el nombre viejo (o el de
+             la academia) en Profesores — y se agregaba a sí mismo de nuevo para "arreglarlo". */
+          if ("profe_nombre" in b){
+            const nombreDueno = String(b.profe_nombre || "").trim().slice(0, 80);
+            if (nombreDueno){
+              try { await env.DB.prepare("UPDATE tenants SET profe_nombre = ?1 WHERE id = ?2").bind(nombreDueno, tid).run(); } catch (e) {}
+              try { await env.DB.prepare("UPDATE profesores SET nombre = ?1 WHERE tenant_id = ?2 AND rol = 'dueno'").bind(nombreDueno, tid).run(); } catch (e) {}
+            }
+          }
           return json({ ok: true });
         }
 
