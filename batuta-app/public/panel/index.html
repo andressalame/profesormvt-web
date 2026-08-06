@@ -743,7 +743,7 @@
         </div>
         <div class="hint" style="margin:14px 0 6px;">O manda un <b>link de cobro directo</b> por WhatsApp: el alumno paga sin registrarse y su cuenta se crea sola.</div>
         <div id="linksCobro" style="display:flex;gap:8px;flex-wrap:wrap;"></div>
-        <div class="hint" style="margin:14px 0 6px;">Y esta es <b>tu página web pública</b> (se genera sola con tus cursos y precios): ponla en tu bio de Instagram o compártela en redes.</div>
+        <div class="hint" style="margin:14px 0 6px;">Y esta es <b>tu página web pública</b>, ahora en tu propio subdominio (se genera sola con tus cursos y precios, y la editas en la pestaña <b>Mi web</b>): ponla en tu bio de Instagram o compártela en redes.</div>
         <div class="cfgrow" style="max-width:100%;">
           <input id="linkPublicaBox" type="text" readonly style="flex:1;font-family:var(--mono);font-size:12.5px;" />
           <button class="btn ghost sm" id="btnCopiarLinkPublica" style="flex:0 0 auto;">Copiar</button>
@@ -1160,13 +1160,14 @@
       </div>
       <div class="web-acts">
         <span class="web-estado" id="webEstado">&nbsp;</span>
+        <button class="btn ghost sm" type="button" onclick="lanzarTourModulo('web')">? Cómo funciona</button>
         <button class="btn ghost sm" id="btnWebDeshacer" type="button" title="Descarta los cambios sin publicar">Deshacer</button>
         <button class="btn" id="btnWebPublicar" type="button">Publicar</button>
       </div>
     </div>
     <div class="web-editor">
       <div class="web-side">
-        <p class="hint" id="webAyuda">Haz clic en cualquier parte de la vista previa para editar esa parte. Los cambios se ven al instante aquí; tu web pública recién cambia cuando le das <b>Publicar</b>. Tu página vive en <b id="webLink">batuta.lat/a/tu-academia</b>.</p>
+        <p class="hint" id="webAyuda">Haz clic en cualquier parte de la vista previa para editar esa parte. Los cambios se ven al instante aquí; tu web pública recién cambia cuando le das <b>Publicar</b>. Tu página vive en <b id="webLink">tuacademia.batuta.lat</b>.</p>
         <div id="webControles"></div>
         <div class="web-danger">
           <button class="btn ghost sm" id="btnWebOriginal" type="button">Volver al diseño automático</button>
@@ -2279,8 +2280,9 @@ function pintarLinkAlumnos(){
   var link = location.origin + "/app/a/" + TENANT_SLUG;
   if(box) box.value=link;
   var ft=el("ftLinkAlumnos"); if(ft) ft.textContent=link;
-  // Página pública de la academia (URL canónica en batuta.lat, no en workers.dev)
-  var linkPub = "https://batuta.lat/a/" + TENANT_SLUG;
+  // Página pública de la academia: subdominio propio (06-ago-2026); el link corto
+  // batuta.lat/a/slug sigue vivo como fallback (mismo backend, ambos sirven la misma web).
+  var linkPub = "https://" + TENANT_SLUG + ".batuta.lat";
   var boxPub = el("linkPublicaBox"); if(boxPub) boxPub.value = linkPub;
   var verPub = el("btnVerPublica"); if(verPub) verPub.href = linkPub;
   // Chips de link de cobro directo por paquete (pago sin registro previo)
@@ -5095,7 +5097,7 @@ var BS_INDICE=[
   {t:"Accesos al portal — la cuenta de cada alumno", tab:"cuentas", k:"acceso accesos cuenta clave contrasena portal login entrar alumno password"},
   {t:"Interesados — los que preguntaron y no compraron", tab:"leads", k:"interesados leads prospectos crm ventas seguimiento"},
   {t:"Agenda — tu horario y las reservas por venir", tab:"agenda", k:"agenda horario disponibilidad reservas calendario franjas futuro proximas bloquear"},
-  {t:"Aforo y cupos de una franja", tab:"agenda", k:"aforo cupo cupos capacidad cuantos entran maximo personas limite cabida"},
+  {t:"Aforo y cupos de una franja", tab:"agenda", k:"aforo cupo cupos capacidad cuantos entran maximo personas limite cabida salas sala clases en paralelo dos clases misma hora"},
   {t:"Registro de clases — lo que YA dictaste", tab:"registro", k:"registro historial bitacora dictadas pasado asistencia faltas"},
   {t:"Chat con tus alumnos", tab:"chat", k:"chat mensajes conversacion hablar escribir"},
   {t:"Pagos — confirmar y ver comprobantes", tab:"pagos", k:"pagos cobros confirmar comprobante voucher recibo boleta pagar cobrar plata dinero"},
@@ -5103,13 +5105,13 @@ var BS_INDICE=[
   {t:"Reportes — números de tu academia", tab:"reportes", k:"reportes reporte metricas numeros estadisticas grafico ingresos"},
   {t:"Material para tus alumnos", tab:"recursos", k:"material recursos pdf audio archivos tareas compartir"},
   {t:"Tu biblioteca de ejercicios", tab:"ejercicios", k:"biblioteca ejercicios repertorio banco material propio"},
-  {t:"Mi web — editar mi página pública", tab:"web", k:"web pagina sitio landing publica editar diseno online internet"},
+  {t:"Mi web — editar mi página pública", tab:"web", k:"web pagina sitio landing publica editar diseno online internet subdominio dominio tuacademia batuta lat"},
   {t:"Mi perfil y mi plan de Batuta", tab:"perfil", k:"perfil plan suscripcion pagar batuta foto nombre subir bajar plan afiliados referir"},
   {t:"Campañas de publicidad", tab:"campanas", k:"campanas ads publicidad meta facebook instagram anuncios"},
   {t:"Servicios", tab:"servicios", k:"servicios extras"},
   {t:"Ideas y errores — reportar algo", tab:"feedback", k:"feedback idea error bug problema sugerencia ayuda reportar reclamo"},
   /* Ajustes, por sub-pestaña: acá es donde más se pierde la gente */
-  {t:"Tus clases y su aforo", tab:"ajustes", aj:"clases", k:"clases tipos modalidad curso cursos categoria variantes aforo cupo materia disciplina"},
+  {t:"Tus clases y su aforo", tab:"ajustes", aj:"clases", k:"clases tipos modalidad curso cursos categoria variantes aforo cupo materia disciplina salas sala crear sala"},
   {t:"Paquetes, precios y qué incluye cada plan", tab:"ajustes", aj:"clases", k:"precios precio paquetes planes tarifa costo cuanto cobro mensualidad incluye acceso"},
   {t:"Cómo reservan tus alumnos (anticipación, reprogramar)", tab:"ajustes", aj:"reservas", k:"reservas reservar anticipacion reprogramar cancelar recordatorios cupo general politica"},
   {t:"Recordatorios automáticos de clase y de renovación", tab:"ajustes", aj:"reservas", k:"recordatorio recordatorios aviso avisos correo automatico renovacion vencimiento"},
@@ -6608,7 +6610,7 @@ window.batutaInit = batutaInit;
     var slug=""; try{ slug=(typeof TENANT_SLUG!=="undefined"&&TENANT_SLUG)||""; }catch(e){}
     if(slug){
       var a=el("webAbrir"); if(a) a.href="/app/a/"+encodeURIComponent(slug)+"/web";
-      var l=el("webLink"); if(l) l.textContent="batuta.lat/a/"+slug;
+      var l=el("webLink"); if(l) l.textContent=slug+".batuta.lat";
     }
     if(!cargado){ cargado=true; cargar(); }
     else { render(); pintar(); }
@@ -6952,6 +6954,16 @@ window.batutaInit = batutaInit;
       {sel:'#panel-pagos', t:"Acá caen los pagos", b:"El alumno paga por Yape desde su portal y sube su constancia. Tú la revisas acá y confirmas con un clic: su paquete se activa al instante."},
       {sel:null, t:"Con tarjeta, ni un clic", b:"Si conectas TU Mercado Pago en Ajustes → Cobros, la tarjeta (y Yape automático) se confirma sola y la plata cae directo en tu cuenta."},
       {sel:null, t:"Recibo con tu marca", b:"Cada pago confirmado tiene su botón Recibo: un comprobante con tu logo que sirve en cualquier país y sin RUC. Y si tienes RUC, boleta oficial SUNAT vía Nubefact."}
+    ],
+    /* Tour NUEVO (06-ago-2026): "Mi web" no tenia guia ni boton "? Como funciona", y
+       estreno subdominio propio el mismo dia. Selectores centrados (sel:null) donde el
+       contenido es texto suelto (no hay una caja fija que rodear). */
+    web:[
+      {sel:'#webPages', t:"Seis secciones, un clic para editar cada una", b:"Portada, Nosotros, Cursos, Precios, Galería y Contacto. Haz clic en cualquier parte de la vista previa (a la derecha) y editas eso mismo, ahí."},
+      {sel:'.web-prev', t:"Ves el cambio al instante", b:"La vista previa se actualiza mientras escribes. Nada sale al público todavía: eso pasa recién con «Publicar», arriba a la derecha."},
+      {sel:null, t:"Si no tocas nada, igual tienes web", b:"Sin editar una sola letra, Batuta arma tu web con el nombre, los cursos y los precios reales de tu academia. Editar es para afinarla, no un requisito."},
+      {sel:null, t:"Tu propio subdominio", b:"Tu web vive en tuacademia.batuta.lat: la ves arriba en «Tu página vive en…». Compártela en tu bio de Instagram o en Google Business."},
+      {sel:null, t:"¿No aparecen tus precios?", b:"Si tus paquetes están en S/0 o falta conectar Yape o Mercado Pago, tu web esconde la sección de precios y avisa en Inicio. Complétalos en Ajustes → Cobros y vuelven a salir solos."}
     ]
   };
   window.lanzarTourModulo=function(id){
