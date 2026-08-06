@@ -580,7 +580,11 @@
   /* La previsualización del importador tiene 6 columnas (28-jul: entró "Le queda"): en 560px
      el saldo quedaba cortado justo cuando es lo que hay que revisar antes de confirmar. */
   #ovImport .modal{max-width:720px;}
-  .overlay{background:rgba(0,0,0,.55);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);align-items:center;}
+  /* Centrado seguro (6-ago-2026, bug Elevate): align-items:center recortaba la parte de arriba
+     de un modal más alto que la pantalla (el título y Nombre/Apellido quedaban inalcanzables en
+     laptops chicas). Los márgenes auto centran cuando sobra sitio y ceden a scroll cuando no. */
+  .overlay{background:rgba(0,0,0,.55);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);}
+  .overlay .modal{margin-top:auto;margin-bottom:auto;}
   .bsbox{border-radius:var(--r-lg);border:1px solid var(--line);box-shadow:var(--sh-3);}
   .bsit-s{font-family:var(--body);text-transform:none;letter-spacing:.01em;font-size:12px;}
   .pq-inc>summary{font-family:var(--body);text-transform:none;letter-spacing:.01em;font-size:12.5px;border-radius:var(--r-sm);padding:9px 11px;}
@@ -4270,6 +4274,14 @@ function setCursosAlumno(str){
   var set=cursosDe(str);
   [].slice.call(box.querySelectorAll("input")).forEach(function(c){ c.checked=set.indexOf(c.value)>=0; });
 }
+/* Elevate (6-ago-2026): al elegir un paquete, sus cursos se marcan solos desde el "Incluye"
+   del plan (siguen editables). Solo en el cambio manual del select: al abrir un alumno
+   guardado no se le pisa el curso que ya tiene. Paquete sin "Incluye" no toca nada. */
+el("a_paquete").addEventListener("change",function(){
+  var val=this.value;
+  var p=paquetesTenant().filter(function(x){return x.n===val;})[0];
+  if(p&&p.t&&p.t.length) setCursosAlumno(p.t.join(", "));
+});
 /* multi-profesor: el dueño asigna profesor al alumno (con 1 solo profe el campo se esconde) */
 function fillProfeSelect(valor){
   var wrap=el("a_profe_wrap"), sel=el("a_profe");
