@@ -364,7 +364,7 @@ async function ensureGoogleSchema(env){
 /* Columnas de tenants agregadas por ALTER perezoso (fuente/rubro/tam_alumnos/google_id):
    asegurarlas para que su/tenants no dé 500 en una D1 recién reconstruida desde schema.sql. */
 async function ensureTenantsSchema(env){
-  for (const col of ["fuente", "rubro", "tam_alumnos", "google_id"]){
+  for (const col of ["fuente", "rubro", "tam_alumnos", "google_id", "aviso_anual"]){
     try { await env.DB.prepare("ALTER TABLE tenants ADD COLUMN " + col + " TEXT DEFAULT ''").run(); } catch (e) { /* ya existe */ }
   }
 }
@@ -1255,6 +1255,41 @@ async function correoBienvenidaAlumno(env, tenant, cu, compra){
       '<p>Un abrazo.</p>' +
     '</div>';
   return enviarCorreo(env, { to: cu.email, subject: "Ya estas dentro de " + academia, html: html });
+}
+
+/* ---------- Renovación del plan ANUAL (candado 6-ago-2026). Lo dispara scheduled(). ----------
+   El anual acredita 365 días en trial_hasta con mp_sub_status='anual'; antes de este candado,
+   al cumplir el año quedaba con acceso indefinido gratis. Ahora: aviso 7 días antes (una vez),
+   7 días de cortesía al vencer, y luego cae al plan Gratis con correo de renovación (una vez).
+   El re-pago usa el flujo anual existente (repone trial_hasta +365 y mp_sub_status='anual'). */
+function correoAnual(tenant, etapa){
+  const nombre = ((tenant.profe_nombre || "").trim().split(/\s+/)[0]) || "";
+  const hola = nombre ? ("Hola " + nombre + ",") : "Hola,";
+  const academia = tenant.academia || "tu academia";
+  const fecha = String(tenant.trial_hasta || "").slice(0, 10);
+  const panel = "https://batuta.lat/app/panel";
+  const wrap = function(inner){
+    return '<div style="font-family:Arial,Helvetica,sans-serif;max-width:480px;margin:0 auto;color:#1a1a1a;font-size:15px;line-height:1.6">' + inner +
+      '<p style="text-align:center;margin:26px 0"><a href="' + panel + '" style="background:#E8A13D;color:#17130C;text-decoration:none;font-weight:bold;padding:13px 24px;border-radius:6px;display:inline-block">Renovar mi plan</a></p>' +
+      '<p>Cualquier duda, responde este correo y te ayudamos.</p><p>— El equipo de Batuta<br><span style="font-size:12px;color:#888">batuta.lat</span></p></div>';
+  };
+  if (etapa === "pre"){
+    return {
+      to: tenant.email,
+      subject: "Tu año con Batuta se cumple el " + fecha,
+      html: wrap('<p>' + hola + '</p><p>Un aviso con tiempo: el plan anual de <b>' + academia + '</b> cumple sus 12 meses el <b>' + fecha + '</b>.</p>' +
+        '<p>Para que todo siga corriendo igual (portal de alumnos, cobros, agenda y tu web), renueva desde tu panel: <b>Configuración &rarr; Plan</b>. Si prefieres pasarte al pago mes a mes, ahí mismo está la opción.</p>' +
+        '<p>Hasta esa fecha no cambia nada.</p>'),
+      text: hola + "\n\nEl plan anual de " + academia + " cumple sus 12 meses el " + fecha + ". Para que todo siga corriendo igual, renueva desde tu panel (Configuración > Plan): " + panel + "\n\nHasta esa fecha no cambia nada.\n\n— El equipo de Batuta"
+    };
+  }
+  return {
+    to: tenant.email,
+    subject: "Tu plan anual terminó: " + academia + " pasó al plan Gratis",
+    html: wrap('<p>' + hola + '</p><p>El plan anual de <b>' + academia + '</b> cumplió su año (venció el <b>' + fecha + '</b>, y sumamos unos días de cortesía).</p>' +
+      '<p><b>No se borró nada:</b> tu academia sigue viva en el plan Gratis (hasta 15 alumnos, 1 profesor). Cuando quieras recuperar tu plan completo, se renueva en un par de clics desde tu panel: <b>Configuración &rarr; Plan</b>.</p>'),
+    text: hola + "\n\nEl plan anual de " + academia + " cumplió su año (venció el " + fecha + " más unos días de cortesía). No se borró nada: tu academia sigue en el plan Gratis. Para recuperar tu plan completo: " + panel + " (Configuración > Plan).\n\n— El equipo de Batuta"
+  };
 }
 
 /* ---------- Nurture de trial (dia 1 / 3 / 6 + cierre al vencer). Lo dispara scheduled(). ----------
@@ -8858,13 +8893,15 @@ export default {
           return json({ ok: true, url: "/app/api/recurso/archivo/" + key });
         }
 
-        /* -------- Feedback con premio (+7 dias el primer aporte del mes) -------- */
+        /* -------- Feedback con premio (+7 dias, UNA sola vez por academia) --------
+           Candado 6-ago-2026 (decisión de Andrés): antes premiaba el primer aporte de CADA mes,
+           lo que permitía vivir en trial eterno desde Gratis (7 días/mes esquivando el tope de
+           15 alumnos y el cupo de IA). Ahora el premio es único de por vida por tenant. */
         if (path === "/app/api/admin/feedback" && request.method === "GET"){
           await ensureFeedbackSchema(env);
-          const mesFb = hoy().slice(0, 7);
           const usado = await env.DB.prepare(
-            "SELECT COUNT(*) AS n FROM feedback WHERE tenant_id = ?1 AND premiado = 1 AND mes = ?2"
-          ).bind(tid, mesFb).first();
+            "SELECT COUNT(*) AS n FROM feedback WHERE tenant_id = ?1 AND premiado = 1"
+          ).bind(tid).first();
           const { results } = await env.DB.prepare(
             "SELECT id, tipo, texto, premiado, estado, fecha FROM feedback WHERE tenant_id = ?1 ORDER BY fecha DESC LIMIT 20"
           ).bind(tid).all();
@@ -8889,8 +8926,8 @@ export default {
             return json({ error: "Ya recibimos varios aportes tuyos este mes, gracias! El proximo mes puedes mandar mas." }, 429);
           }
           const yaPremiado = await env.DB.prepare(
-            "SELECT COUNT(*) AS n FROM feedback WHERE tenant_id = ?1 AND premiado = 1 AND mes = ?2"
-          ).bind(tid, mesFb).first();
+            "SELECT COUNT(*) AS n FROM feedback WHERE tenant_id = ?1 AND premiado = 1"
+          ).bind(tid).first();
           const premia = !(yaPremiado && Number(yaPremiado.n) > 0);
           let trialHastaNueva = "";
           if (premia){
@@ -8910,7 +8947,7 @@ export default {
             "Academia: " + (t.academia || "") + " (" + (t.email || "") + ")\n" +
             "Estado: " + t.estado + " · Plan: " + (t.plan || "") + "\n" +
             "Tipo: " + tipoFb + "\n" +
-            "Premiado: " + (premia ? "si (+7 dias, hasta " + trialHastaNueva.slice(0, 10) + ")" : "no (ya uso el del mes)") + "\n\n" +
+            "Premiado: " + (premia ? "si (+7 dias, hasta " + trialHastaNueva.slice(0, 10) + ")" : "no (premio unico ya usado)") + "\n\n" +
             textoFb));
           return json({ ok: true, premiado: premia, trial_hasta: trialHastaNueva });
         }
@@ -10598,8 +10635,9 @@ export default {
     const ahora = Date.now();
     let tenants = [];
     try {
+      await ensureTenantsSchema(env); // asegura aviso_anual en D1 vieja (ALTER perezoso)
       const r = await env.DB.prepare(
-        "SELECT id, slug, academia, profe_nombre, email, estado, trial_hasta, creado, mp_sub_status, COALESCE(nurture_paso, 0) AS paso FROM tenants WHERE estado = 'trial'"
+        "SELECT id, slug, academia, profe_nombre, email, estado, trial_hasta, creado, mp_sub_status, COALESCE(nurture_paso, 0) AS paso, COALESCE(aviso_anual, '') AS aviso_anual FROM tenants WHERE estado = 'trial'"
       ).all();
       tenants = r.results || [];
     } catch (e) { return; }
@@ -10607,6 +10645,23 @@ export default {
       if (!t.email || t.email === "demo@batuta.lat") continue; // la demo no recibe nurture
       const dias = Math.floor((ahora - (Date.parse(t.creado) || ahora)) / 86400000);
       const venceMs = Date.parse(t.trial_hasta) || 0;
+      /* Renovación ANUAL (candado 6-ago-2026): el anual ya no es eterno. Aviso 7 días antes
+         (una vez) · al vencer, 7 días de cortesía · pasada la cortesía cae al plan Gratis con
+         correo de renovación (una vez) y aviso a Andrés. El re-pago repone el año entero. */
+      if (t.mp_sub_status === "anual"){
+        const avisoA = String(t.aviso_anual || "");
+        if (venceMs && venceMs - ahora <= 7 * 86400000 && ahora <= venceMs && avisoA !== "pre" && avisoA !== "post"){
+          try {
+            const okPre = await enviarCorreo(env, correoAnual(t, "pre"));
+            if (okPre) await env.DB.prepare("UPDATE tenants SET aviso_anual = 'pre' WHERE id = ?1").bind(t.id).run();
+          } catch (e) {}
+        } else if (venceMs && ahora > venceMs + 7 * 86400000 && avisoA !== "post"){
+          try { await env.DB.prepare("UPDATE tenants SET estado = 'activo', plan = 'gratis', mp_sub_status = '', mp_preapproval_id = '', aviso_anual = 'post' WHERE id = ?1").bind(t.id).run(); } catch (e) {}
+          try { await enviarCorreo(env, correoAnual(t, "post")); } catch (e) {}
+          try { await alertaCorreoAndres(env, "Plan anual vencido sin renovar: " + t.academia, "Tenant: " + (t.academia || "") + " (" + (t.email || "") + ")\nCumplió su año el " + String(t.trial_hasta).slice(0, 10) + " + 7 días de cortesía.\nCayó al plan Gratis; le salió el correo de renovación."); } catch (e) {}
+        }
+        continue; // el anual nunca entra al nurture de trial
+      }
       let etapa = null, pasoNuevo = t.paso | 0;
       if (venceMs && ahora > venceMs){
         /* FREEMIUM (23-jul-2026): el trial vencido CAE al plan Gratis (mismo criterio que el

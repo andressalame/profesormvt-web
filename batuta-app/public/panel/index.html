@@ -811,7 +811,7 @@
 
   <section class="panel" id="panel-feedback">
     <div class="card" style="padding:14px 16px;margin-bottom:16px;">
-      <strong>Tu primer aporte de cada mes te regala 7 días de acceso.</strong>
+      <strong>Tu primer aporte te regala 7 días de acceso (una sola vez).</strong>
       <p class="hint" id="fbPremioEstado" style="margin:6px 0 0;">Cargando…</p>
     </div>
     <div class="frow">
@@ -1536,7 +1536,7 @@
       <button class="btn ghost" id="btnPaywallGratis" type="button">Seguir con el plan Gratis (1 profe, 10 alumnos)</button>
     </div>
     <div class="mlab" style="margin-top:18px;">O gana 7 días más de prueba</div>
-    <p class="hint" style="margin:6px 0 8px;">Cuéntanos qué te faltó, qué mejorarías o qué error viste, y tu primer aporte del mes te regala 7 días más para seguir probando.</p>
+    <p class="hint" style="margin:6px 0 8px;">Cuéntanos qué te faltó, qué mejorarías o qué error viste, y tu primer aporte te regala 7 días más para seguir probando (una sola vez por academia).</p>
     <div class="field"><textarea id="pw_fb" rows="3" placeholder="Ej: me faltó poder cobrar en dólares, o el botón X no me funcionó."></textarea></div>
     <div style="display:flex;align-items:center;gap:12px;">
       <button class="btn ghost" id="btnPwFb">Enviar y ganar 7 días</button>
@@ -3953,8 +3953,8 @@ function cargarFeedback(){
   fetch("/app/api/admin/feedback",{headers:hdr()}).then(function(r){return r.json();}).then(function(d){
     var est=el("fbPremioEstado");
     if(est) est.textContent = d.premio_disponible
-      ? "Este mes tu premio está disponible: el próximo aporte que mandes suma 7 días a tu cuenta."
-      : "Ya ganaste tus 7 días de este mes. Puedes seguir mandando aportes; el premio vuelve el próximo mes.";
+      ? "Tu premio está disponible: el próximo aporte que mandes suma 7 días a tu cuenta (una sola vez)."
+      : "Ya usaste tus 7 días de regalo. Igual puedes seguir mandando aportes: cada uno se lee y se trabaja.";
     var tabla=el("tablaFb"); var tb=tabla?tabla.querySelector("tbody"):null; if(!tb) return;
     var items=d.items||[];
     if(!items.length){ tb.innerHTML='<tr><td colspan="5" class="empty">Todavía no mandas ninguno. El primero del mes te da 7 días gratis.</td></tr>'; return; }
