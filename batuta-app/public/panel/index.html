@@ -1326,6 +1326,14 @@
       <div class="cfgrow"><span class="pk">¿El alumno reprograma solo?</span><select id="cfg_reprog_activo"><option value="">Sí, desde su portal</option><option value="0">No, solo a través del profesor</option></select></div>
       <div class="cfgrow"><span class="pk">Horas mínimas para reprogramar</span><input id="cfg_reprog_min_h" type="number" min="1" max="72" placeholder="4" /></div>
       <p class="hint" style="margin-top:-4px;">Con esa anticipación o más, reprogramar libera el horario sin consumir la clase; con menos ya no se puede. Vacío = 4 horas.</p>
+      <div class="cfgrow"><span class="pk">Horario fijo semanal en el portal</span><select id="cfg_portal_fija_off"><option value="">Encendido — pueden apartar el mismo horario cada semana</option><option value="1">Apagado — solo reservan clase por clase</option></select></div>
+      <p class="hint" style="margin-top:-4px;">Apágalo si tus alumnos no tienen horario fijo (típico en estudios con clases grupales): el portal solo ofrecerá reservar clase por clase.</p>
+      <div class="cfgrow"><span class="pk">Lista de espera al liberarse un cupo</span><select id="cfg_espera_auto"><option value="">Avisar al primero para que reserve</option><option value="1">Reservarle la clase automáticamente al primero</option></select></div>
+      <p class="hint" style="margin-top:-4px;">Con el modo automático, apenas alguien cancela, el primero de la cola queda <b>dentro</b> de la clase (si su plan tiene saldo) y le llega el aviso por correo y notificación. Si su plan no alcanza, se le avisa como siempre.</p>
+      <div class="cfgrow"><span class="pk">Nombres de profesores en el portal</span><select id="cfg_portal_sin_profe"><option value="">Mostrarlos ("Tu clase con Ana")</option><option value="1">Ocultarlos ("Tu clase en tu academia")</option></select></div>
+      <p class="hint" style="margin-top:-4px;">Ocúltalos si tus clases son grupales y ningún alumno tiene profesor fijo.</p>
+      <div class="cfgrow"><span class="pk">Chat del portal</span><select id="cfg_portal_chat_off"><option value="">Encendido</option><option value="1">Apagado — botón directo a tu WhatsApp</option></select></div>
+      <p class="hint" style="margin-top:-4px;">Apagado: en vez del chat, el alumno ve un botón que abre tu WhatsApp (el número de tu Perfil).</p>
       <div class="cfgrow"><span class="pk">Recordatorio de clase (24h y 1h)</span><select id="cfg_recordatorios_clase"><option value="">Activado</option><option value="off">Apagado</option></select></div>
       <p class="hint" style="margin-top:-4px;">Correo automático al alumno 24 horas y 1 hora antes de su reserva. Menos faltas sin que muevas un dedo.</p>
       <div class="cfgrow"><span class="pk">Recordatorio de renovación</span><select id="cfg_recordatorio_renovacion"><option value="">Activado</option><option value="off">Apagado</option></select></div>
@@ -1362,12 +1370,17 @@
       <p class="hint">Hasta que llenes el número, el portal manda a los alumnos a coordinarte el pago por WhatsApp.</p>
       <div class="cfgrow"><span class="pk">BCP cuenta (Soles)</span><input id="cfg_bcp_cuenta" type="text" placeholder="19100000000000" /></div>
       <div class="cfgrow"><span class="pk">BCP CCI</span><input id="cfg_bcp_cci" type="text" placeholder="00219100000000000000" /></div>
+      <div class="cfgrow"><span class="pk">Interbank cuenta (Soles)</span><input id="cfg_interbank_cuenta" type="text" placeholder="0000000000000" /></div>
+      <div class="cfgrow"><span class="pk">Interbank CCI</span><input id="cfg_interbank_cci" type="text" placeholder="00300000000000000000" /></div>
       <div class="cfgrow"><span class="pk">Scotiabank cuenta (Soles)</span><input id="cfg_scotia_cuenta" type="text" placeholder="0000000000" /></div>
       <div class="cfgrow"><span class="pk">Scotiabank CCI</span><input id="cfg_scotia_cci" type="text" placeholder="00900100000000000000" /></div>
       <div class="cfgrow"><span class="pk">Crypto moneda</span><input id="cfg_crypto_moneda" type="text" placeholder="USDT" /></div>
       <div class="cfgrow"><span class="pk">Crypto red</span><input id="cfg_crypto_red" type="text" placeholder="Tron (TRC20)" /></div>
       <div class="cfgrow"><span class="pk">Crypto wallet</span><input id="cfg_crypto_wallet" type="text" placeholder="T..." /></div>
       <p class="hint" style="margin-top:-4px;">Salen en el portal como métodos de pago al comprar.</p>
+      <h2 style="margin-top:22px;">Mercado Pago: qué acepta</h2>
+      <div class="cfgrow"><span class="pk">Métodos dentro de Mercado Pago</span><select id="cfg_mp_solo_tarjeta"><option value="">Tarjeta y Yape</option><option value="1">Solo tarjeta</option></select></div>
+      <p class="hint" style="margin-top:-4px;">Si el alumno paga con Yape <b>dentro</b> de Mercado Pago, MP te cobra su comisión igual. Con <b>"Solo tarjeta"</b>, el que elige Yape/Plin paga directo a tu número (sin comisión) y Mercado Pago queda solo para tarjetas.</p>
     </div>
     <div class="group" data-aj="cobros">
       <h2>Facturación electrónica (SUNAT) · solo con RUC</h2>
@@ -1690,7 +1703,7 @@
       <div style="margin-top:8px;"><button class="btn" id="btnImpPegar">Ver cómo quedaría</button></div>
       <div style="text-align:center;color:var(--muted);font-size:12px;margin:18px 0 12px;">— o, si ya tienes el archivo —</div>
       <div class="field"><label>Subir un archivo .csv</label><input id="impFile" type="file" accept=".csv,text/csv" />
-        <p class="hint" style="margin:5px 0 0;">Una fila por alumno. La única columna obligatoria es <b>Nombre</b>; opcionales: Curso, WhatsApp, Paquete, <b>Clases restantes</b>, <b>Vence</b>, Notas, Profesor. Desde Excel: Archivo → Guardar como → CSV UTF-8.</p></div>
+        <p class="hint" style="margin:5px 0 0;">Una fila por alumno. La única columna obligatoria es <b>Nombre</b>; opcionales: Apellido, Correo, WhatsApp, Nacimiento, Curso, Paquete, <b>Clases restantes</b>, <b>Vence</b>, <b>Reservas</b> (los horarios que ya tenía agendados, ej. <code>20/08/2026 19:00; 27/08/2026 19:00</code>) , Notas, Profesor. Desde Excel: Archivo → Guardar como → CSV UTF-8.</p></div>
       <div style="margin:0 0 4px;"><button class="btn ghost sm" id="btnPlantillaCsv">&#8595; Descargar una plantilla de ejemplo</button></div>
       <div id="impErr" style="display:none;color:var(--amber,#E8A13D);margin-top:10px;font-size:13px;"></div>
     </div>
@@ -2033,6 +2046,23 @@ function filaPaqHTML(p){
           '</select>'+
         '</div>'+
         '<p class="hint" style="margin:6px 0 0;font-size:11px;">Vacío = no vence por fecha (solo se acaba cuando usa sus clases). <b>Desde su primera clase</b> es lo justo si alguien compra hoy y empieza en dos meses.</p>'+
+      '</div>'+
+      /* Congelamiento POR PLAN (7-ago-2026, reunión Elevate): cada plan decide si se puede
+         pausar y cuánto. Vacío = regla general de Batuta; 0 = este plan no congela. */
+      '<div style="border-top:1px solid var(--line);margin-top:10px;padding-top:10px;">'+
+        '<b style="font-size:12px;">Congelamiento (pausa por viaje o salud)</b>'+
+        '<div style="display:flex;gap:8px;align-items:center;margin-top:6px;flex-wrap:wrap;">'+
+          '<input type="number" class="pq-g" min="0" max="365" style="width:90px;" placeholder="—" value="'+((p.g===undefined||p.g===null||p.g==="")?"":Math.max(0,parseInt(p.g,10)||0))+'" />'+
+          '<span style="font-size:12px;">días máx por ciclo, repartidos en hasta</span>'+
+          '<input type="number" class="pq-gb" min="1" max="12" style="width:70px;" placeholder="2" value="'+((parseInt(p.gb,10)>=1)?parseInt(p.gb,10):"")+'" />'+
+          '<span style="font-size:12px;">bloques</span>'+
+        '</div>'+
+        '<p class="hint" style="margin:6px 0 0;font-size:11px;"><b>0</b> = este plan no permite congelar. Vacío = la regla general (14 días). Ej.: 14 días en máximo 2 bloques = un bloque de 14 o dos de 7.</p>'+
+      '</div>'+
+      /* Plan oculto (7-ago-2026): para clientes especiales, sin mostrarlo al público */
+      '<div style="border-top:1px solid var(--line);margin-top:10px;padding-top:10px;">'+
+        '<label style="font-size:12px;display:flex;gap:6px;align-items:center;cursor:pointer;"><input type="checkbox" class="pq-o"'+(p.o?" checked":"")+' style="width:auto;" /> <b>Plan oculto</b> — no sale en tu web ni en el portal</label>'+
+        '<p class="hint" style="margin:6px 0 0;font-size:11px;">Para planes especiales de clientes puntuales. Se lo asignas tú desde el panel, o le pasas su link directo de compra: tu link de Pagos + <b>?p=NombreDelPlan</b>. El que ya lo tiene puede renovarlo normal.</p>'+
       '</div></div></details>'+
     '<button type="button" class="btn ghost sm pq-x" title="Quitar paquete">×</button>'+
   '</div>';
@@ -2885,6 +2915,13 @@ function renderAjustes(){
   el("cfg_bcp_cci").value=(db.config&&db.config.bcp_cci)||"";
   el("cfg_scotia_cuenta").value=(db.config&&db.config.scotia_cuenta)||"";
   el("cfg_scotia_cci").value=(db.config&&db.config.scotia_cci)||"";
+  if(el("cfg_interbank_cuenta")) el("cfg_interbank_cuenta").value=(db.config&&db.config.interbank_cuenta)||"";
+  if(el("cfg_interbank_cci")) el("cfg_interbank_cci").value=(db.config&&db.config.interbank_cci)||"";
+  if(el("cfg_mp_solo_tarjeta")) el("cfg_mp_solo_tarjeta").value=(db.config&&db.config.mp_solo_tarjeta)||"";
+  if(el("cfg_espera_auto")) el("cfg_espera_auto").value=(db.config&&db.config.espera_auto)||"";
+  if(el("cfg_portal_fija_off")) el("cfg_portal_fija_off").value=(db.config&&db.config.portal_fija_off)||"";
+  if(el("cfg_portal_chat_off")) el("cfg_portal_chat_off").value=(db.config&&db.config.portal_chat_off)||"";
+  if(el("cfg_portal_sin_profe")) el("cfg_portal_sin_profe").value=(db.config&&db.config.portal_sin_profe)||"";
   el("cfg_crypto_moneda").value=(db.config&&db.config.crypto_moneda)||"";
   el("cfg_crypto_red").value=(db.config&&db.config.crypto_red)||"";
   el("cfg_crypto_wallet").value=(db.config&&db.config.crypto_wallet)||"";
@@ -4068,15 +4105,18 @@ function cargarProfesores(){
         acts.push('<button class="btn ghost sm" data-pfpermisos="'+p.id+'" data-pfnombre="'+esc(p.nombre)+'" data-pfperm="'+esc(p.permisos||"")+'">Permisos</button>');
       }
       if(p.rol!=="dueno"){
+        /* Editar y Borrar SIEMPRE visibles (7-ago-2026, reunión Elevate: José tenía un profe
+           duplicado y no encontraba cómo sacarlo — el Borrar solo salía para invitados y decía "×"). */
+        acts.push('<button class="btn ghost sm" data-pfeditar="'+p.id+'" data-pfnombre="'+esc(p.nombre)+'" data-pfwa="'+esc(p.whatsapp||"")+'">Editar</button>');
         if(p.estado==="invitado"){
           acts.push('<button class="btn ghost sm" data-pfcopiar="'+esc(p.invite_link||'')+'">Copiar link</button>');
           acts.push('<button class="btn ghost sm" data-pfreenviar="'+p.id+'">Reenviar correo</button>');
-          acts.push('<button class="btn ghost sm" data-pfborrar="'+p.id+'">×</button>');
         } else if(p.estado==="suspendido"){
           acts.push('<button class="btn ghost sm" data-pfreactivar="'+p.id+'">Reactivar</button>');
         } else {
           acts.push('<button class="btn ghost sm" data-pfsuspender="'+p.id+'">Suspender</button>');
         }
+        acts.push('<button class="btn ghost sm" data-pfborrar="'+p.id+'" data-pfalumnos="'+(p.n_alumnos||0)+'">Borrar</button>');
       }
       var com=[];
       if(Number(p.comision_pct)) com.push(p.comision_pct+"%");
@@ -4230,7 +4270,24 @@ document.body.addEventListener("click",function(e){
   if(rv){ acc({accion:"reenviar",id:rv.dataset.pfreenviar},"Invitación reenviada ✓"); return; }
   if(su){ if(confirm("¿Suspender a este profesor? No podrá entrar, pero sus alumnos e historial se conservan.")) acc({accion:"suspender",id:su.dataset.pfsuspender},"Profesor suspendido"); return; }
   if(ra){ acc({accion:"reactivar",id:ra.dataset.pfreactivar},"Profesor reactivado ✓"); return; }
-  if(bo){ if(confirm("¿Borrar esta invitación?")) acc({accion:"borrar",id:bo.dataset.pfborrar},"Invitación borrada"); return; }
+  if(bo){
+    var nAl=Number(bo.dataset.pfalumnos)||0;
+    if(nAl>0){ toast("Ese profesor tiene "+nAl+" alumno(s): reasígnalos o suspéndelo (el historial no se borra)."); return; }
+    if(confirm("¿Borrar a este profesor? Se borra su acceso y su horario. Esta acción no se deshace."))
+      acc({accion:"borrar",id:bo.dataset.pfborrar},"Profesor borrado ✓");
+    return;
+  }
+  var ed=e.target.closest("[data-pfeditar]");
+  if(ed){
+    var nuevoNom=prompt("Nombre del profesor:", ed.dataset.pfnombre||"");
+    if(nuevoNom===null) return;
+    nuevoNom=nuevoNom.trim();
+    if(nuevoNom.length<2){ toast("El nombre es muy corto."); return; }
+    var nuevoWa=prompt("WhatsApp del profesor (opcional):", ed.dataset.pfwa||"");
+    if(nuevoWa===null) nuevoWa=ed.dataset.pfwa||"";
+    acc({accion:"editar",id:ed.dataset.pfeditar,nombre:nuevoNom,whatsapp:nuevoWa.trim()},"Profesor actualizado ✓");
+    return;
+  }
 });
 
 /* ---------- Tabs / modales ---------- */
@@ -4291,11 +4348,14 @@ function fillProfeSelect(valor){
   var activos=(EQUIPO||[]).filter(function(p){return p.estado!=="suspendido";});
   if(ROL!=="dueno" || activos.length<2){ wrap.style.display="none"; sel.innerHTML=""; return; }
   wrap.style.display="";
-  sel.innerHTML=activos.map(function(p){
+  /* "Sin profesor" (7-ago-2026, reunión Elevate): en academias de clases grupales el alumno
+     no tiene profe fijo — obligar a elegir uno no tenía sentido. Sin profe = alumno de la
+     academia (lo ve el dueño; internamente cae en la agenda del dueño). */
+  sel.innerHTML='<option value="">— Sin profesor —</option>'+activos.map(function(p){
     return '<option value="'+esc(p.id)+'">'+esc(p.nombre)+(p.rol==="dueno"?" (tú)":"")+'</option>';
   }).join("");
-  sel.value=valor||PROFE_ID||activos[0].id;
-  if(!sel.value) sel.selectedIndex=0;
+  var sinProfeDef=(db.config&&db.config.portal_sin_profe)==="1";
+  sel.value=valor||(sinProfeDef?"":(PROFE_ID||activos[0].id));
 }
 el("btnNuevoAlumno").addEventListener("click",function(){
   el("alumnoTitulo").innerHTML='Nuevo <em>alumno</em>';
@@ -4977,7 +5037,14 @@ el("btnGuardarAjustes").addEventListener("click",function(){
     var dEl=row.querySelector(".pq-d"), iEl=row.querySelector(".pq-i");
     var d=dEl?Math.max(0,Math.min(3650,parseInt(dEl.value,10)||0)):0;
     var i=(iEl&&iEl.value==="clase")?"clase":"compra";
-    paqRows.push({n:n,c:c,r:r,u:u,t:t,d:d,i:i,precio:precio});
+    /* oculto + congelamiento por plan (7-ago-2026). g vacío NO se manda: significa
+       "regla general de Batuta", distinto de 0 ("este plan no congela"). */
+    var fila={n:n,c:c,r:r,u:u,t:t,d:d,i:i,precio:precio};
+    var oEl=row.querySelector(".pq-o"), gEl=row.querySelector(".pq-g"), gbEl=row.querySelector(".pq-gb");
+    if(oEl&&oEl.checked) fila.o=1;
+    if(gEl&&String(gEl.value).trim()!=="") fila.g=Math.max(0,Math.min(365,parseInt(gEl.value,10)||0));
+    if(gbEl&&String(gbEl.value).trim()!=="") fila.gb=Math.max(1,Math.min(12,parseInt(gbEl.value,10)||2));
+    paqRows.push(fila);
   });
   /* S/0 ya no se acepta en silencio (03-ago-2026): un paquete sin precio no sale en la
      web pública ni en el portal, y una fundadora estuvo 13 días así sin enterarse. */
@@ -5003,7 +5070,7 @@ el("btnGuardarAjustes").addEventListener("click",function(){
   var msgRows=leerMensajesEditor();
   var salasRows=(el("cfg_salas")?el("cfg_salas").value:"").split(",").map(function(s){return s.trim().slice(0,40);}).filter(Boolean).filter(function(s,i,a){return a.indexOf(s)===i;}).slice(0,8);
   /* sin filas se guarda "[]" (set vacío de verdad), no "" (que cae al default de música) */
-  var cfg={ paquetes: paqRows.length?JSON.stringify(paqRows.map(function(x){return {n:x.n,c:x.c,r:x.r,u:x.u,t:x.t,d:x.d,i:x.i};})):"[]",
+  var cfg={ paquetes: paqRows.length?JSON.stringify(paqRows.map(function(x){var j={n:x.n,c:x.c,r:x.r,u:x.u,t:x.t,d:x.d,i:x.i};if(x.o)j.o=1;if(x.g!==undefined)j.g=x.g;if(x.gb!==undefined)j.gb=x.gb;return j;})):"[]",
             clases: clasesRows.length?JSON.stringify(clasesRows):"",
             salas: salasRows.length?JSON.stringify(salasRows):"",
             cursos: clasesRows.length?clasesRows.map(function(c){return c.n;}).join(", "):el("cfg_cursos").value.trim(),
@@ -5041,6 +5108,14 @@ el("btnGuardarAjustes").addEventListener("click",function(){
             bcp_cci:el("cfg_bcp_cci").value.trim(),
             scotia_cuenta:el("cfg_scotia_cuenta").value.trim(),
             scotia_cci:el("cfg_scotia_cci").value.trim(),
+            interbank_cuenta:(el("cfg_interbank_cuenta")?el("cfg_interbank_cuenta").value.trim():""),
+            interbank_cci:(el("cfg_interbank_cci")?el("cfg_interbank_cci").value.trim():""),
+            /* interruptores de la reunión Elevate (7-ago-2026) */
+            mp_solo_tarjeta:(el("cfg_mp_solo_tarjeta")?el("cfg_mp_solo_tarjeta").value:""),
+            espera_auto:(el("cfg_espera_auto")?el("cfg_espera_auto").value:""),
+            portal_fija_off:(el("cfg_portal_fija_off")?el("cfg_portal_fija_off").value:""),
+            portal_chat_off:(el("cfg_portal_chat_off")?el("cfg_portal_chat_off").value:""),
+            portal_sin_profe:(el("cfg_portal_sin_profe")?el("cfg_portal_sin_profe").value:""),
             crypto_moneda:el("cfg_crypto_moneda").value.trim(),
             crypto_red:el("cfg_crypto_red").value.trim(),
             crypto_wallet:el("cfg_crypto_wallet").value.trim(),
@@ -5609,11 +5684,13 @@ el("btnImportCsv").addEventListener("click",function(){
 el("btnPlantillaCsv").addEventListener("click",function(){
   /* "Clases restantes" y "Vence" (28-jul-2026) son para migrar de otro sistema con el saldo
      que el alumno ya traía. Van vacías en la 2ª fila a propósito: se ve que son opcionales. */
-  var head=["Nombre","Curso","WhatsApp","Paquete","Clases restantes","Vence","Notas","Profesor"];
+  var head=["Nombre","Apellido","Correo","WhatsApp","Nacimiento","Curso","Paquete","Clases restantes","Vence","Reservas","Notas","Profesor"];
   var cd=MARCA.cursoDefault||"Canto";
   var enUnMes=new Date(Date.now()+30*86400000).toISOString().slice(0,10);
-  var ej=[["Ana Torres",cd,"51987654321","Paquete 4","3",enUnMes,"Viene de mi Excel",""],
-          ["Luis Ramos",cd,"51912345678","Paquete 8","","","Paquete recién comprado",""]];
+  var enUnaSem=new Date(Date.now()+7*86400000);
+  var resEj=("0"+enUnaSem.getDate()).slice(-2)+"/"+("0"+(enUnaSem.getMonth()+1)).slice(-2)+"/"+enUnaSem.getFullYear()+" 19:00";
+  var ej=[["Ana","Torres","ana@gmail.com","51987654321","1995-04-12",cd,"Paquete 4","3",enUnMes,resEj,"Viene de mi Excel",""],
+          ["Luis","Ramos","","51912345678","",cd,"Paquete 8","","","","Paquete recién comprado",""]];
   descargaCsv(head,ej,"plantilla-alumnos-batuta.csv");
 });
 /* Fecha flexible del importador: acepta 2026-08-20, 20/08/2026, 20-8-26 y 20.08.2026.
@@ -5668,14 +5745,37 @@ function parseCsv(text){
   if(cur!==""||row.length){ row.push(cur); rows.push(row); }
   return rows.filter(function(r){ return r.some(function(v){ return String(v).trim()!==""; }); });
 }
-var IMP_ALIAS={ nombre:["nombre","alumno","alumna","name","nombre completo","nombres","estudiante"],
+var IMP_ALIAS={ nombre:["nombre","alumno","alumna","name","nombre completo","nombres","estudiante","first name"],
+  apellido:["apellido","apellidos","last name","surname","apellido paterno"],
+  email:["correo","email","e-mail","mail","correo electronico","gmail"],
+  nacimiento:["nacimiento","fecha de nacimiento","cumpleanos","cumple","birthday","fecha nac","nac","birth date","dob"],
   curso:["curso","cursos","materia","materias","clase","instrumento","asignatura"],
   whatsapp:["whatsapp","wsp","celular","telefono","movil","phone","numero","contacto"],
-  paquete:["paquete","plan","package","clases","membresia"],
+  paquete:["paquete","plan","package","clases","membresia","pase","pass"],
   restantes:["clases restantes","restantes","clases que le quedan","le quedan","saldo","saldo de clases","clases pendientes","pendientes","credits","clases disponibles","disponibles","remaining"],
   vence:["vence","vencimiento","fecha de vencimiento","valido hasta","vigencia","expira","expiracion","expires"],
+  reservas:["reservas","clases reservadas","horarios reservados","reservado","reservados","proximas clases","bookings","registrations","schedule"],
   notas:["notas","nota","observaciones","observacion","comentario","comentarios"],
   profesor:["profesor","profesora","profe","docente","maestro","maestra","teacher","tutor"] };
+/* "Reservas" migradas (7-ago-2026, reunión Elevate): los horarios que el alumno YA tenía
+   agendados en el sistema anterior. Formato por celda: fechas+hora separadas por ";" o "|",
+   ej. "20/08/2026 19:00; 27/08/2026 19:00" (hora de Lima, 24h). */
+function impReservas(txt){
+  var s=String(txt==null?"":txt).trim();
+  if(!s) return {isos:[],error:""};
+  var partes=s.split(/[;|\n]+/).map(function(x){return x.trim();}).filter(Boolean);
+  var isos=[],malas=[];
+  partes.forEach(function(p){
+    var m=p.match(/^(.+?)\s+(\d{1,2}):(\d{2})\s*$/);
+    var f=m?impFecha(m[1].trim()):"";
+    var hh=m?parseInt(m[2],10):NaN, mi=m?parseInt(m[3],10):NaN;
+    if(!m||!f||!(hh>=0&&hh<=23)||!(mi>=0&&mi<=59)){ malas.push(p); return; }
+    var d=new Date(f+"T"+String(hh).padStart(2,"0")+":"+String(mi).padStart(2,"0")+":00-05:00"); // Lima = UTC-5 fijo
+    if(isNaN(d.getTime())){ malas.push(p); return; }
+    isos.push(d.toISOString());
+  });
+  return {isos:isos.slice(0,60),error:malas.length?('no entiendo la reserva "'+malas[0]+'" (usa 20/08/2026 19:00)'):""};
+}
 function impMapHeader(cells){
   var map={},known=false;
   cells.forEach(function(h,idx){ var n=impNorm(h);
@@ -5714,14 +5814,27 @@ el("impFile").addEventListener("change",function(){
         var sal=impSaldo(map.restantes!=null?r[map.restantes]:"", paqFila);
         var vTxt=map.vence!=null?String(r[map.vence]||"").trim():"";
         var vIso=impFecha(vTxt);
+        /* datos completos de la migración (7-ago-2026): apellido, correo, nacimiento y
+           las reservas que el alumno ya tenía agendadas en el sistema anterior. */
+        var nTxt=map.nacimiento!=null?String(r[map.nacimiento]||"").trim():"";
+        var nIso=impFecha(nTxt);
+        var rsv=map.reservas!=null?impReservas(r[map.reservas]):{isos:[],error:""};
+        var errFila=sal.error
+          ||((vIso==="")?('no entiendo la fecha "'+vTxt+'" (usa 20/08/2026 o 2026-08-20)'):"")
+          ||((nIso==="")?('no entiendo la fecha de nacimiento "'+nTxt+'"'):"")
+          ||rsv.error;
         out.push({ nombre:nombre,
+          apellido:map.apellido!=null?String(r[map.apellido]||"").trim().slice(0,80):"",
+          email:map.email!=null?String(r[map.email]||"").trim().slice(0,120):"",
+          nacimiento:nIso||"",
           curso:(map.curso!=null?String(r[map.curso]||"").trim():"")||MARCA.cursoDefault,
           whatsapp:(map.whatsapp!=null?String(r[map.whatsapp]||"").trim():"").replace(/[^\d+]/g,""),
           paquete:paqFila,
           notas:map.notas!=null?String(r[map.notas]||"").trim():"",
           restantes:sal.restantes, migrado_usadas:sal.usadas, saldoNota:sal.nota||"",
           vence:vIso||"", venceTxt:vTxt,
-          error:sal.error||((vIso==="")?('no entiendo la fecha "'+vTxt+'" (usa 20/08/2026 o 2026-08-20)'):""),
+          reservas:rsv.isos,
+          error:errFila,
           profTxt:profTxt, profesor_id:impResolveProfe(profTxt) });
       }
       IMP_ROWS=out; impPreview(out,dup,vacios);
@@ -5808,6 +5921,10 @@ function impPreview(rows,dup,vacios){
   var extra=[]; if(dup)extra.push(dup+" ya estaban (omitidos)"); if(vacios)extra.push(vacios+" sin nombre (omitidos)");
   var conSaldo=rows.filter(function(a){ return !a.error && a.restantes!=null; }).length;
   if(conSaldo) extra.push(conSaldo+" con saldo traído de tu sistema anterior");
+  var conRes=rows.filter(function(a){ return !a.error && a.reservas && a.reservas.length; }).length;
+  if(conRes) extra.push(conRes+" con reservas ya agendadas que se migran");
+  var conMail=rows.filter(function(a){ return !a.error && a.email; }).length;
+  if(conMail) extra.push(conMail+" con correo");
   el("impResumen").innerHTML="<b>"+rows.length+" alumno"+(rows.length!=1?"s":"")+"</b> list"+(rows.length!=1?"os":"o")+" para importar"+(extra.length?(" · "+extra.join(" · ")):"")+(rows.length>50?" · se muestran los primeros 50":"")+".";
   var multi=(ROL||"dueno")==="dueno" && (EQUIPO||[]).filter(function(p){return p.estado!=="suspendido";}).length>1;
   var noRec=rows.filter(function(a){ return a.profTxt && !a.profesor_id; });
@@ -5840,9 +5957,12 @@ el("btnImpConfirmar").addEventListener("click",function(){
      un saldo inválido ni aunque alguien llame esto a mano desde la consola */
   if(IMP_ROWS.some(function(a){ return !!a.error; })) return;
   var hoy=new Date().toISOString().slice(0,10);
+  var resPend=[];   // reservas migradas (7-ago-2026): se crean DESPUÉS de guardar los alumnos
   IMP_ROWS.forEach(function(a){
-    db.alumnos.push({ id:uid(), codigo:uid().slice(-6).toUpperCase(), ciclo:1,
-      nombre:a.nombre, whatsapp:a.whatsapp, curso:a.curso, paquete:a.paquete,
+    var idNuevo=uid();
+    db.alumnos.push({ id:idNuevo, codigo:uid().slice(-6).toUpperCase(), ciclo:1,
+      nombre:a.nombre, apellido:a.apellido||"", email:a.email||"", nacimiento:a.nacimiento||"",
+      whatsapp:a.whatsapp, curso:a.curso, paquete:a.paquete,
       fecha:hoy, pago:"Pagado", horario:"", notas:a.notas,
       /* saldo traído de otro sistema: se guarda como clases ya usadas del ciclo 1 (el server
          solo lo acepta al CREAR al alumno; después lo preserva él). vence viaja igual. */
@@ -5850,9 +5970,22 @@ el("btnImpConfirmar").addEventListener("click",function(){
       migrado_ciclo:(Number(a.migrado_usadas)||0)>0?1:0,
       vence:a.vence||"",
       profesor_id:a.profesor_id||undefined });
+    if(a.reservas && a.reservas.length) resPend.push({alumno_id:idNuevo, isos:a.reservas});
   });
   var n=IMP_ROWS.length,btn=el("btnImpConfirmar"); btn.disabled=true;
-  apiPut().then(function(){ renderAll(); closeOv("ovImport"); toast(n+" alumno"+(n!=1?"s":"")+" importado"+(n!=1?"s":"")+" ✓"); })
+  apiPut().then(function(){
+    if(!resPend.length) return null;
+    return apiPost("/app/api/admin/importar-reservas",{filas:resPend}).catch(function(){ return {creadas:0,saltadas:[{motivo:"error de conexión"}]}; });
+  }).then(function(rr){
+    renderAll(); closeOv("ovImport");
+    var msg=n+" alumno"+(n!=1?"s":"")+" importado"+(n!=1?"s":"")+" ✓";
+    if(rr){ msg+=" · "+(rr.creadas||0)+" reserva"+(rr.creadas===1?"":"s")+" migrada"+(rr.creadas===1?"":"s");
+      if(rr.saltadas&&rr.saltadas.length){ msg+=" · "+rr.saltadas.length+" no entraron"; console.warn("Reservas no migradas:",rr.saltadas); } }
+    toast(msg);
+    if(rr&&rr.saltadas&&rr.saltadas.length){
+      alert("Estas reservas no se pudieron migrar:\n\n"+rr.saltadas.slice(0,15).map(function(s){return "· "+(s.alumno||"?")+" — "+(s.iso?new Date(s.iso).toLocaleString("es-PE",{timeZone:"America/Lima"})+" — ":"")+(s.motivo||"");}).join("\n")+(rr.saltadas.length>15?"\n… y "+(rr.saltadas.length-15)+" más":"")+"\n\nRevisa que el horario exista en tu Agenda y tenga cupo, y agéndalas a mano.");
+    }
+  })
     .catch(function(){ toast("No se pudo importar. Revisa tu conexión e intenta de nuevo."); btn.disabled=false; })
     .finally(function(){ IMP_ROWS=[]; });
 });

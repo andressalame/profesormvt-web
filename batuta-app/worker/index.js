@@ -72,7 +72,20 @@ function parsePaquetes(valor){
     let d = parseInt(p && p.d, 10);
     d = (Number.isFinite(d) && d >= 1 && d <= 3650) ? d : 0;
     const i = (String((p && p.i) || "").trim() === "clase") ? "clase" : "compra";
-    map[n] = { clases: c, reprog: r, ilim: u, tipos: t, dias: d, inicio: i };
+    /* Reunión Elevate 7-ago-2026 — dos perillas nuevas POR PLAN:
+       o  = 1 -> plan OCULTO: no sale en la web pública ni en el portal; se asigna desde
+            el panel o se compra con su link directo (?plan=). Para los planes especiales
+            de clientes antiguos.
+       g  = días máximos de congelamiento por ciclo (0 = este plan NO congela).
+            AUSENTE en el JSON = regla global de siempre (las academias que nunca
+            tocaron esto no pierden el congelar).
+       gb = en cuántos bloques se puede partir el congelamiento (default 2). */
+    const o = !!(p && p.o);
+    let g = parseInt(p && p.g, 10);
+    g = (p && p.g !== undefined && p.g !== null && p.g !== "" && Number.isFinite(g)) ? Math.max(0, Math.min(365, g)) : null;
+    let gb = parseInt(p && p.gb, 10);
+    gb = (Number.isFinite(gb) && gb >= 1 && gb <= 12) ? gb : 2;
+    map[n] = { clases: c, reprog: r, ilim: u, tipos: t, dias: d, inicio: i, oculto: o, congela: g, congelaBloques: gb };
     list.push(n);
     if (list.length >= 20) break;
   }
@@ -80,7 +93,7 @@ function parsePaquetes(valor){
 }
 function paquetesDefault(){
   const map = {}, list = [];
-  for (const n of Object.keys(PAQUETES)){ map[n] = { clases: PAQUETES[n].clases, reprog: PAQUETES[n].reprog, ilim: false, tipos: [], dias: 0, inicio: "compra" }; list.push(n); }
+  for (const n of Object.keys(PAQUETES)){ map[n] = { clases: PAQUETES[n].clases, reprog: PAQUETES[n].reprog, ilim: false, tipos: [], dias: 0, inicio: "compra", oculto: false, congela: null, congelaBloques: 2 }; list.push(n); }
   return { map, list };
 }
 /* ¿Este paquete deja reservar esta franja? Paquete sin tipos = todo permitido.
@@ -100,8 +113,8 @@ async function loadPaquetes(env, tenantId){
    nombres legacy por defecto, y si no existe (paquete renombrado/borrado) 0 clases. */
 function resolverPk(map, nombre){
   if (map && map[nombre]) return map[nombre];
-  if (PAQUETES[nombre]) return { clases: PAQUETES[nombre].clases, reprog: PAQUETES[nombre].reprog, ilim: false, tipos: [], dias: 0, inicio: "compra" };
-  return { clases: 0, reprog: 0, ilim: false, tipos: [], dias: 0, inicio: "compra" };
+  if (PAQUETES[nombre]) return { clases: PAQUETES[nombre].clases, reprog: PAQUETES[nombre].reprog, ilim: false, tipos: [], dias: 0, inicio: "compra", oculto: false, congela: null, congelaBloques: 2 };
+  return { clases: 0, reprog: 0, ilim: false, tipos: [], dias: 0, inicio: "compra", oculto: false, congela: null, congelaBloques: 2 };
 }
 
 /* Contexto para "Mi web": junta los datos duros de la academia (config, precios,
@@ -111,9 +124,13 @@ async function armarWebCtx(env, tenant){
   const cfg = await loadConfig(env, tenant.id);
   const precios = await loadPrecios(env, tenant.id);
   const paq = await loadPaquetes(env, tenant.id);
+  /* Los planes ocultos (o=1, 7-ago-2026) NO existen para la web pública: se venden solo
+     por su link directo de compra o asignados desde el panel. */
+  const paqPub = { map: {}, list: paq.list.filter(n => !paq.map[n].oculto) };
+  for (const nPub of paqPub.list) paqPub.map[nPub] = paq.map[nPub];
   const mpOn = !!(tenant.mp_access_token) && (!(Number(tenant.mp_expires_at) || 0) || Number(tenant.mp_expires_at) > Date.now());
-  const cobroOn = !!(mpOn || cfg.pago_numero || cfg.bcp_cuenta || cfg.scotia_cuenta || cfg.crypto_wallet);
-  const ctx = webContexto(tenant, cfg, precios, paq, { cobroOn: cobroOn, paqInfo: function (pk){ return resolverPk(paq.map, pk); } });
+  const cobroOn = !!(mpOn || cfg.pago_numero || cfg.bcp_cuenta || cfg.interbank_cuenta || cfg.scotia_cuenta || cfg.crypto_wallet);
+  const ctx = webContexto(tenant, cfg, precios, paqPub, { cobroOn: cobroOn, paqInfo: function (pk){ return resolverPk(paq.map, pk); } });
   return { ctx: ctx, cfg: cfg };
 }
 function webJsonDe(cfg){
@@ -685,6 +702,18 @@ async function loadConfig(env, tenantId){
                  campos_alumno    = que datos extra se piden en la ficha (apellido,email,nacimiento)
                  mensajes         = JSON con el asunto/cuerpo propios de cada correo automatico */
               caduca_meses: "", asistencia_auto: "", asistencia_horas: "", campos_alumno: "", mensajes: "",
+              /* Reunión Elevate 7-ago-2026 — interruptores por academia (todos apagados por defecto):
+                 interbank_*      = cuenta Interbank como método de pago por transferencia
+                 mp_solo_tarjeta  = "1" -> Mercado Pago solo acepta tarjeta (Yape/Plin va directo al
+                                    número de la academia, sin comisión de pasarela)
+                 espera_auto      = "1" -> al liberarse un cupo, el primero de la lista de espera
+                                    queda RESERVADO automáticamente (no solo avisado)
+                 portal_fija_off  = "1" -> el portal no ofrece "horario fijo semanal", solo clase por clase
+                 portal_chat_off  = "1" -> el portal esconde el chat y muestra un botón a WhatsApp
+                 portal_sin_profe = "1" -> el portal no nombra profesores ("Tu clase en {academia}") */
+              interbank_cuenta: "", interbank_cci: "",
+              mp_solo_tarjeta: "", espera_auto: "",
+              portal_fija_off: "", portal_chat_off: "", portal_sin_profe: "",
               brand_color: "", brand_font: "", brand_logo: "", agenda_cupo: "",
               /* "Mi web" (editor visual de la página pública de la academia). Vacío = la
                  landing por defecto armada con los datos de la academia. web_version cambia
@@ -907,6 +936,12 @@ const MSG_DEF = {
     cuando: "Sale cuando alguien cancela y se libera el horario que el alumno esperaba.",
     asunto: "Se liberó tu horario del {fecha} · resérvalo",
     cuerpo: "{alumno}, se liberó un cupo en {academia} para la clase del {fecha}, que estabas esperando.\n\nEntra a tu portal y resérvalo antes de que lo tomen."
+  },
+  espera_auto: {
+    nombre: "Quedó dentro desde la lista de espera",
+    cuando: "Sale cuando se libera un cupo y el sistema le reserva la clase automáticamente (modo automático de la lista de espera).",
+    asunto: "¡Quedaste dentro! Tu clase del {fecha} ya está reservada",
+    cuerpo: "{alumno}, se liberó un cupo para la clase del {fecha} en {academia} y, como estabas primero en la lista de espera, tu reserva ya quedó hecha.\n\nSi no puedes asistir, cancela desde tu portal con anticipación para liberar el cupo."
   },
   acceso: {
     nombre: "Bienvenida: crear su contraseña",
@@ -3081,11 +3116,71 @@ async function promoverEspera(env, tenantId, iso, sala){
       ).bind(tenantId, iso).first();
     }
     if (!row) return;
-    await env.DB.prepare("UPDATE espera SET estado = 'avisado', avisado_utc = ?1 WHERE id = ?2 AND tenant_id = ?3")
-      .bind(new Date().toISOString(), row.eid, tenantId).run();
     const tenant = await env.DB.prepare("SELECT academia, slug FROM tenants WHERE id = ?1").bind(tenantId).first().catch(() => null);
     const cuando = fmtLima(iso);
     const primer = (row.nombre || "").split(" ")[0] || "Hola";
+    const cfgEsp = await loadConfig(env, tenantId).catch(() => ({}));
+
+    /* Modo AUTOMÁTICO (7-ago-2026, reunión Elevate; config espera_auto="1"): en vez de solo
+       avisar, se le RESERVA el cupo al primero de la cola y se le avisa que quedó dentro.
+       Solo si su plan aguanta (saldo, vigencia, cobertura y cupo); si algo no cuadra, cae al
+       aviso clásico de siempre. Best-effort igual que el resto de la función. */
+    if (String(cfgEsp.espera_auto || "") === "1" && Date.parse(iso) > Date.now()){
+      try {
+        const alE = await env.DB.prepare("SELECT * FROM alumnos WHERE id = ?1 AND tenant_id = ?2").bind(row.alumno_id, tenantId).first();
+        const pkE = alE ? resolverPk((await loadPaquetes(env, tenantId)).map, alE.paquete) : null;
+        const vivo = alE && pkE && !Number(alE.caducado) && !venceVencido(alE.vence);
+        if (vivo){
+          const cicloE = Number(alE.ciclo) || 1;
+          const { results: regsE } = await env.DB.prepare(
+            "SELECT estado FROM registro WHERE tenant_id = ?1 AND alumno_id = ?2 AND COALESCE(ciclo,1) = ?3"
+          ).bind(tenantId, alE.id, cicloE).all();
+          const rUsE = await reservasUsadasCount(env, tenantId, alE.id, cicloE);
+          const restE = compute(alE, regsE || [], await loadPrecios(env, tenantId), rUsE, pkE).restantes;
+          const profE = await profeDeAlumno(env, tenantId, alE);
+          const { franja: frE, ambigua: ambE } = await resolverFranja(env, tenantId, iso, profE, String(sala || ""));
+          const yaE = await env.DB.prepare(
+            "SELECT 1 AS ok FROM reservas WHERE tenant_id = ?1 AND inicio_utc = ?2 AND alumno_id = ?3 AND estado IN ('reservada','completada')"
+          ).bind(tenantId, iso, alE.id).first();
+          if (restE >= 1 && frE && !ambE && !yaE && paqueteCubre(pkE, frE.curso || "")){
+            const salaE = frE.sala || "";
+            const cupoE = await cupoDeSlot(env, tenantId, iso, profE, cfgEsp, salaE);
+            const ocE = await ocupacionSlot(env, tenantId, iso, profE, salaE);
+            if (!ocE.bloqueado && ocE.n < cupoE){
+              const ridE = crypto.randomUUID();
+              await env.DB.prepare(
+                "INSERT INTO reservas (id,tenant_id,alumno_id,inicio_utc,fin_utc,tipo,serie_id,estado,curso,ciclo,creada,profesor_id,sala) VALUES (?1,?2,?3,?4,?5,'suelta','','reservada',?6,?7,?8,?9,?10)"
+              ).bind(ridE, tenantId, alE.id, iso, new Date(Date.parse(iso) + CLASE_MIN * 60000).toISOString(),
+                     frE.curso || alE.curso || "", cicloE, new Date().toISOString(), profE.id || null, salaE).run();
+              /* misma re-verificación optimista que el reservar del portal */
+              const ocE2 = await ocupacionSlot(env, tenantId, iso, profE, salaE);
+              if (ocE2.bloqueado || ocE2.n > cupoE){
+                await env.DB.prepare("DELETE FROM reservas WHERE id = ?1 AND tenant_id = ?2").bind(ridE, tenantId).run();
+              } else {
+                await env.DB.prepare("UPDATE espera SET estado = 'convertida', avisado_utc = ?1 WHERE id = ?2 AND tenant_id = ?3")
+                  .bind(new Date().toISOString(), row.eid, tenantId).run();
+                if (row.email && env.RESEND_API_KEY && tenant){
+                  try {
+                    const msgsA = mensajesDeCfg(cfgEsp);
+                    const datosA = { alumno: primer, academia: tenant.academia || "tu academia", fecha: cuando, curso: "", curso_de: "", con_profe: "", vence_frase: "" };
+                    await enviarCorreo(env, {
+                      to: row.email,
+                      subject: msgAsunto(msgsA.espera_auto.asunto, datosA),
+                      html: msgHtml(msgsA.espera_auto.cuerpo, datosA, { url: "https://batuta.lat/app/a/" + (tenant.slug || ""), texto: "Ver mi clase" })
+                    });
+                  } catch (e) {}
+                }
+                try { await avisarPushAlumno(env, tenantId, row.cuenta_id, { title: "¡Quedaste dentro!", body: "Se liberó un cupo y tu clase del " + cuando + " ya está reservada.", url: tenant ? ("https://batuta.lat/app/a/" + (tenant.slug || "")) : "" }); } catch (e) {}
+                return;
+              }
+            }
+          }
+        }
+      } catch (e) {}
+    }
+
+    await env.DB.prepare("UPDATE espera SET estado = 'avisado', avisado_utc = ?1 WHERE id = ?2 AND tenant_id = ?3")
+      .bind(new Date().toISOString(), row.eid, tenantId).run();
     if (row.email && env.RESEND_API_KEY && tenant){
       const link = "https://batuta.lat/app/a/" + (tenant.slug || "");
       try {
@@ -4905,16 +5000,22 @@ export default {
       if (tP.estado === "vencido") return htmlResponse(paginaBase("No disponible — Batuta", "<h1>Pagos en pausa</h1><p class=\"sub\">Esta academia está inactiva por ahora. Escríbele a tu profesor.</p>", ""));
       const cfgP = await loadConfig(env, tP.id);
       const preciosP = await loadPrecios(env, tP.id);
-      const paquetesOk = (await loadPaquetes(env, tP.id)).list.filter(pk => (preciosP[pk] || 0) > 0);
       const preSel = String(url.searchParams.get("p") || "");
+      /* Planes ocultos (7-ago-2026, Elevate): no se listan — SALVO que el link traiga
+         justo ese plan (?p=...): ese es el "link especial" para clientes puntuales. */
+      const paqP = await loadPaquetes(env, tP.id);
+      const paquetesOk = paqP.list.filter(pk => (preciosP[pk] || 0) > 0 && (!paqP.map[pk].oculto || pk === preSel));
       const mpOnP = !!(tP.mp_access_token) && (!(Number(tP.mp_expires_at) || 0) || Number(tP.mp_expires_at) > Date.now());
       const stripeOnP = stripeConnectOn(env) && !!(tP.stripe_account_id) && !!Number(tP.stripe_charges_enabled);
+      const mpSoloTarjetaP = String(cfgP.mp_solo_tarjeta || "") === "1";
       const metodos = [];
-      // MP Checkout ofrece tarjeta Y Yape (si la cuenta MP del profe lo tiene): se confirma solo por el webhook.
-      if (mpOnP) metodos.push({ v: "Tarjeta (Mercado Pago)", t: "Tarjeta / Yape (se confirma solo)" });
+      // MP Checkout ofrece tarjeta Y Yape — salvo mp_solo_tarjeta (7-ago-2026): ahí MP es solo
+      // tarjeta y el Yape/Plin va directo al número de la academia, sin comisión de pasarela.
+      if (mpOnP) metodos.push({ v: "Tarjeta (Mercado Pago)", t: mpSoloTarjetaP ? "Tarjeta (se confirma sola)" : "Tarjeta / Yape (se confirma solo)" });
       if (stripeOnP) metodos.push({ v: "Tarjeta (Stripe)", t: "Tarjeta internacional (se confirma sola)" });
       if (cfgP.pago_numero) metodos.push({ v: "Yape/Plin/Sip", t: "Yape / Plin / Sip" });
       if (cfgP.bcp_cuenta) metodos.push({ v: "Transferencia BCP", t: "Transferencia BCP" });
+      if (cfgP.interbank_cuenta) metodos.push({ v: "Transferencia Interbank", t: "Transferencia Interbank" });
       if (cfgP.scotia_cuenta) metodos.push({ v: "Transferencia Scotiabank", t: "Transferencia Scotiabank" });
       if (cfgP.crypto_wallet) metodos.push({ v: "Crypto USDT", t: "Crypto (" + (cfgP.crypto_moneda || "USDT") + ")" });
       if (!paquetesOk.length || !metodos.length){
@@ -4924,8 +5025,10 @@ export default {
       const infoPago = {
         yape: { numero: cfgP.pago_numero || "", titular: cfgP.pago_titular || "" },
         bcp: { cuenta: cfgP.bcp_cuenta || "", cci: cfgP.bcp_cci || "" },
+        interbank: { cuenta: cfgP.interbank_cuenta || "", cci: cfgP.interbank_cci || "" },
         scotia: { cuenta: cfgP.scotia_cuenta || "", cci: cfgP.scotia_cci || "" },
-        crypto: { moneda: cfgP.crypto_moneda || "USDT", red: cfgP.crypto_red || "", wallet: cfgP.crypto_wallet || "" }
+        crypto: { moneda: cfgP.crypto_moneda || "USDT", red: cfgP.crypto_red || "", wallet: cfgP.crypto_wallet || "" },
+        mpSoloTarjeta: mpSoloTarjetaP
       };
       const cuerpoP =
         "<h1>" + esc(tP.academia) + "</h1>" +
@@ -4980,11 +5083,12 @@ export default {
         "if(fnEl) fnEl.addEventListener('change',chkMenor);" +
         "var mt=document.getElementById('mt'),pinfo=document.getElementById('pinfo'),manual=document.getElementById('manualbox'),btn=document.getElementById('btnp');" +
         "function pintaInfo(){var v=mt.value,t='';" +
-        "if(v==='Tarjeta (Mercado Pago)'){t='Te llevamos al checkout de Mercado Pago (tarjeta o Yape). Al aprobar, tu paquete se activa solo.';manual.style.display='none';btn.textContent='Pagar con tarjeta \\u2192';}" +
+        "if(v==='Tarjeta (Mercado Pago)'){t=INFO.mpSoloTarjeta?'Te llevamos al checkout de Mercado Pago (solo tarjeta). Al aprobar, tu paquete se activa solo.':'Te llevamos al checkout de Mercado Pago (tarjeta o Yape). Al aprobar, tu paquete se activa solo.';manual.style.display='none';btn.textContent='Pagar con tarjeta \\u2192';}" +
         "else if(v==='Tarjeta (Stripe)'){t='Te llevamos al checkout seguro de Stripe. Al aprobar, tu paquete se activa solo.';manual.style.display='none';btn.textContent='Pagar con tarjeta \\u2192';}" +
         "else{manual.style.display='';btn.textContent='Registrar mi pago';" +
         "if(v==='Yape/Plin/Sip'){t='Yapea o Plinea a: '+INFO.yape.numero+(INFO.yape.titular?('\\nA nombre de: '+INFO.yape.titular):'');}" +
         "else if(v==='Transferencia BCP'){t='BCP Soles: '+INFO.bcp.cuenta+(INFO.bcp.cci?('\\nCCI: '+INFO.bcp.cci):'');}" +
+        "else if(v==='Transferencia Interbank'){t='Interbank Soles: '+INFO.interbank.cuenta+(INFO.interbank.cci?('\\nCCI: '+INFO.interbank.cci):'');}" +
         "else if(v==='Transferencia Scotiabank'){t='Scotiabank Soles: '+INFO.scotia.cuenta+(INFO.scotia.cci?('\\nCCI: '+INFO.scotia.cci):'');}" +
         "else if(v==='Crypto USDT'){t=INFO.crypto.moneda+' por '+INFO.crypto.red+':\\n'+INFO.crypto.wallet;}}" +
         "pinfo.textContent=t;}" +
@@ -7336,6 +7440,7 @@ export default {
         let clasesHistorico = 0;
         let proximasClases = [];
         let horarioFijo = [];
+        let congelaMe = null;   // reglas de congelamiento del plan del alumno (7-ago-2026)
         if (cu.alumno_id){
           alumno = await env.DB.prepare("SELECT * FROM alumnos WHERE id = ?1 AND tenant_id = ?2").bind(cu.alumno_id, tid).first();
           if (alumno){
@@ -7355,6 +7460,23 @@ export default {
               "SELECT COUNT(*) AS n FROM registro WHERE tenant_id = ?1 AND alumno_id = ?2 AND estado = 'Asistió'"
             ).bind(tid, alumno.id).first();
             clasesHistorico = (ch && Number(ch.n)) || 0;
+            /* Congelamiento por plan (7-ago-2026): el portal muestra el botón solo si el plan
+               lo permite, con los días y bloques que le quedan a ESTE alumno en ESTE ciclo. */
+            try {
+              const pkMe = resolverPk(paqMap, alumno.paquete);
+              const porPlanMe = pkMe.congela !== null && pkMe.congela !== undefined;
+              const maxMe = porPlanMe ? pkMe.congela : PAUSA_MAX_DIAS;
+              const usoMe = await env.DB.prepare(
+                "SELECT COALESCE(SUM(dias),0) AS d, COUNT(*) AS b FROM pausas WHERE tenant_id = ?1 AND alumno_id = ?2 AND ciclo = ?3"
+              ).bind(tid, alumno.id, ciclo).first();
+              congelaMe = {
+                permitido: maxMe > 0,
+                max_dias: maxMe,
+                max_bloques: porPlanMe ? (pkMe.congelaBloques || 2) : 0,
+                dias_usados: Number(usoMe && usoMe.d) || 0,
+                bloques_usados: Number(usoMe && usoMe.b) || 0
+              };
+            } catch (e) { congelaMe = null; }
           }
         }
         const pendiente = await env.DB.prepare(
@@ -7394,9 +7516,18 @@ export default {
             }
           } catch (e) {}
         }
+        const portalFlags = {
+          fija_off: String(config.portal_fija_off || "") === "1",
+          chat_off: String(config.portal_chat_off || "") === "1",
+          sin_profe: String(config.portal_sin_profe || "") === "1",
+          whatsapp: String(config.whatsapp_profe || "").replace(/\D/g, "")
+        };
+        const tRowMe = await env.DB.prepare("SELECT academia FROM tenants WHERE id = ?1").bind(tid).first().catch(() => null);
         return json({
           cuenta: { nombre: cu.nombre, email: cu.email, whatsapp: cu.whatsapp || "" },
-          profesor: miProfe,
+          profesor: portalFlags.sin_profe ? null : miProfe,
+          academia: (tRowMe && tRowMe.academia) || "",
+          portal: portalFlags,
           sede: miSede,
           estado: estadoAlumno(computed, alumno && alumno.vence),
           alumno: (alumno && computed) ? {
@@ -7406,11 +7537,15 @@ export default {
             ilim: !!computed.ilim,
             reprogPermitidas: computed.reprogPermitidas, reprogRestantes: computed.reprogRestantes,
             monto: computed.monto, vence: alumno.vence || "",
+            congela: congelaMe,
             historial: historial.slice().reverse()
           } : null,
           compraPendiente: pendiente || null,
           precios,
-          paquetes: paqMe.list.map(function(n){ return { pk: n, nombre: n, clases: paqMe.map[n].clases, ilim: !!paqMe.map[n].ilim, precio: precios[n] || 0 }; }),
+          /* Los planes ocultos (o=1) no se ofrecen en el portal — salvo que sea EL plan del
+             alumno (para que pueda renovarlo). Se venden por su link directo o desde el panel. */
+          paquetes: paqMe.list.filter(function(n){ return !paqMe.map[n].oculto || (alumno && alumno.paquete === n); })
+            .map(function(n){ return { pk: n, nombre: n, clases: paqMe.map[n].clases, ilim: !!paqMe.map[n].ilim, precio: precios[n] || 0 }; }),
           credito: Number(cu.credito) || 0,
           ref_code: refCode,
           referidos: {
@@ -7430,6 +7565,8 @@ export default {
             pago_numero: config.pago_numero, pago_titular: config.pago_titular,
             bcp_cuenta: config.bcp_cuenta, bcp_cci: config.bcp_cci,
             scotia_cuenta: config.scotia_cuenta, scotia_cci: config.scotia_cci,
+            interbank_cuenta: config.interbank_cuenta, interbank_cci: config.interbank_cci,
+            mp_solo_tarjeta: String(config.mp_solo_tarjeta || "") === "1",
             crypto_moneda: config.crypto_moneda, crypto_red: config.crypto_red, crypto_wallet: config.crypto_wallet,
             vapid_public: env.VAPID_PUBLIC_KEY || "",
             // Tarjeta del alumno: si el profe conecto su cuenta de MP (el APP_SECRET solo hace falta para el OAuth)
@@ -7577,11 +7714,14 @@ export default {
             "INSERT INTO compras (id,tenant_id,cuenta_id,curso,paquete,monto,descuento,op_numero,estado,fecha,metodo,comprobante,slot_deseado) VALUES (?1,?2,?3,?4,?5,?6,?7,'','iniciada',?8,'Tarjeta (Mercado Pago)','','')"
           ).bind(compraId, t.id, cu.id, cursoDef, paquete, monto, descuento, hoy()).run();
           let pref = null;
+          /* mp_solo_tarjeta (7-ago-2026, Elevate): MP queda SOLO para tarjeta — Yape dentro de MP
+             le come comisión a la academia; el Yape directo (sin comisión) ya es otro método. */
+          const mpSoloT1 = String(((await loadConfig(env, t.id).catch(() => ({}))).mp_solo_tarjeta) || "") === "1";
           try {
             const pr = await fetch("https://api.mercadopago.com/checkout/preferences", {
               method: "POST",
               headers: { Authorization: "Bearer " + tk, "content-type": "application/json", "X-Integrator-Id": MP_INTEGRATOR_ID },
-              body: JSON.stringify(Object.assign({
+              body: JSON.stringify(Object.assign(mpSoloT1 ? { payment_methods: { excluded_payment_methods: [{ id: "yape" }], excluded_payment_types: [{ id: "ticket" }, { id: "atm" }, { id: "bank_transfer" }] } } : {}, {
                 items: [{ title: paquete + " · " + (t.academia || "clases"), quantity: 1, unit_price: monto, currency_id: "PEN" }],
                 external_reference: "btc:" + compraId,
                 notification_url: MARCA.dominio + "/app/api/mp/webhook-alumno?t=" + encodeURIComponent(t.id),
@@ -7863,11 +8003,13 @@ export default {
 
         // Preferencia con el token del PROFE: la plata cae en SU cuenta de MP
         let pref = null;
+        /* mp_solo_tarjeta (7-ago-2026, Elevate): ver comentario en pagar-directo. */
+        const mpSoloT2 = String(((await loadConfig(env, tid).catch(() => ({}))).mp_solo_tarjeta) || "") === "1";
         try {
           const pr = await fetch("https://api.mercadopago.com/checkout/preferences", {
             method: "POST",
             headers: { Authorization: "Bearer " + tk, "content-type": "application/json", "X-Integrator-Id": MP_INTEGRATOR_ID },
-            body: JSON.stringify(Object.assign({
+            body: JSON.stringify(Object.assign(mpSoloT2 ? { payment_methods: { excluded_payment_methods: [{ id: "yape" }], excluded_payment_types: [{ id: "ticket" }, { id: "atm" }, { id: "bank_transfer" }] } } : {}, {
               items: [{ title: paquete + " · " + (t.academia || "clases"), quantity: 1, unit_price: monto, currency_id: "PEN" }],
               external_reference: "btc:" + compraId,
               notification_url: MARCA.dominio + "/app/api/mp/webhook-alumno?t=" + encodeURIComponent(tid),
@@ -8560,22 +8702,32 @@ export default {
            muestra Maquinas. Lo de fuera se devuelve aparte para poder explicarlo, no ocultarlo. */
         const pkS = alS ? resolverPk((await loadPaquetes(env, cu.tenant_id)).map, alS.paquete) : null;
         const det = await generarSlotsDetalle(env, cu.tenant_id, profS, { pk: pkS });
+        /* portal_sin_profe (7-ago-2026, Elevate): clases grupales sin profe fijo por alumno.
+           No se nombra al profesor; el portal dice "Tu clase en {academia}". */
+        const sinProfeS = String(((await loadConfig(env, cu.tenant_id).catch(() => ({}))).portal_sin_profe) || "") === "1";
         return json({ slots: det.slots, llenos: det.llenos, fuera: det.fuera, detalle: det.detalle,
                       franjas: det.franjas, salas: det.salas,
                       plan: { nombre: (alS && alS.paquete) || "", tipos: (pkS && pkS.tipos) || [] },
-                      profe: { nombre: profS.nombre || "", foto: profS.foto || "" } });
+                      profe: sinProfeS ? { nombre: "", foto: "" } : { nombre: profS.nombre || "", foto: profS.foto || "" } });
       }
 
       if (path === "/app/api/agenda/reservar" && request.method === "POST"){
         const cu = await cuentaDeSesion(env, request);
         if (!cu) return json({ error: "Sesion expirada" }, 401);
-        if (!cu.alumno_id) return json({ error: "Reservas disponibles cuando activas tu paquete." }, 403);
+        /* Mensaje claro (7-ago-2026, reunión Elevate: "parecía que no tenía créditos"): la cuenta
+           existe pero no está enlazada a una ficha de alumno — no es un tema de saldo. */
+        if (!cu.alumno_id) return json({ error: "Tu cuenta aún no está conectada a una ficha de alumno. Pídele a tu academia que registre tu paquete con este mismo correo y listo." }, 403);
         const tid = cu.tenant_id;
 
         const b = await request.json().catch(() => ({}));
         const tipo = b.tipo === "fija" ? "fija" : "suelta";
         const iso = String(b.inicio_utc || "");
         const salaPedida = String(b.sala || "").trim().slice(0, 40);
+        /* Horario fijo semanal apagable por academia (7-ago-2026, Elevate). El portal ya
+           esconde el botón, pero esconder no es impedir. */
+        if (tipo === "fija" && String(((await loadConfig(env, tid).catch(() => ({}))).portal_fija_off) || "") === "1"){
+          return json({ error: "Esta academia agenda clase por clase. Reserva cada clase individualmente." }, 403);
+        }
 
         const alumno = await env.DB.prepare("SELECT * FROM alumnos WHERE id = ?1 AND tenant_id = ?2").bind(cu.alumno_id, tid).first();
         if (!alumno) return json({ error: "No encuentro tu ficha de alumno." }, 400);
@@ -8803,18 +8955,30 @@ export default {
         const tid = cu.tenant_id;
         const b = await request.json().catch(() => ({}));
         const motivo = (b.motivo === "salud") ? "salud" : "viaje";
-        const dias = Math.max(1, Math.min(PAUSA_MAX_DIAS, Number(b.dias) || 0));
-        if (!dias) return json({ error: "Indica cuantos dias necesitas." }, 400);
 
         const al = await env.DB.prepare("SELECT * FROM alumnos WHERE id = ?1 AND tenant_id = ?2").bind(cu.alumno_id, tid).first();
         if (!al) return json({ error: "No encuentro tu ficha de alumno." }, 400);
+        /* Congelamiento POR PLAN (7-ago-2026, reunión Elevate): cada plan define g (días máx
+           por ciclo; 0 = no congela) y gb (máx de bloques). Plan sin g en su config (academias
+           que nunca tocaron esto) = regla global de siempre, para no quitarle el congelar a nadie. */
+        const pkP = resolverPk((await loadPaquetes(env, tid)).map, al.paquete);
+        const porPlan = pkP.congela !== null && pkP.congela !== undefined;
+        const maxDias = porPlan ? pkP.congela : PAUSA_MAX_DIAS;
+        if (!maxDias) return json({ error: "Tu plan no incluye congelamiento. Escríbenos si necesitas una pausa." }, 403);
+        const maxBloques = porPlan ? (pkP.congelaBloques || 2) : 0;
+
+        const dias = Math.max(1, Math.min(maxDias, Number(b.dias) || 0));
+        if (!dias) return json({ error: "Indica cuantos dias necesitas." }, 400);
         const ciclo = Number(al.ciclo) || 1;
         const usados = await env.DB.prepare(
-          "SELECT COALESCE(SUM(dias),0) AS n FROM pausas WHERE tenant_id = ?1 AND alumno_id = ?2 AND ciclo = ?3"
+          "SELECT COALESCE(SUM(dias),0) AS n, COUNT(*) AS bloques FROM pausas WHERE tenant_id = ?1 AND alumno_id = ?2 AND ciclo = ?3"
         ).bind(tid, al.id, ciclo).first();
         const yaUsados = Number(usados && usados.n) || 0;
-        if (yaUsados + dias > PAUSA_MAX_DIAS){
-          return json({ error: "Ya usaste " + yaUsados + " de " + PAUSA_MAX_DIAS + " dias de pausa este mes." }, 400);
+        if (yaUsados + dias > maxDias){
+          return json({ error: "Ya usaste " + yaUsados + " de " + maxDias + " dias de congelamiento de este ciclo." }, 400);
+        }
+        if (maxBloques && (Number(usados && usados.bloques) || 0) >= maxBloques){
+          return json({ error: "Tu plan permite partir el congelamiento en máximo " + maxBloques + " bloques y ya los usaste este ciclo." }, 400);
         }
 
         const nuevoVence = new Date(Date.parse(al.vence || hoy()) + dias * 86400000).toISOString().slice(0, 10);
@@ -8851,6 +9015,47 @@ export default {
           if (!p || p.estado === "suspendido") return null;
           return { id: p.id, esDueno: p.rol === "dueno" };
         };
+
+        /* -------- Importar RESERVAS migradas (7-ago-2026, reunión Elevate) --------
+           Los horarios que los alumnos YA tenían agendados en el sistema anterior se respetan
+           al migrar. Crea reservas sueltas validando que la franja exista y tenga cupo; NO
+           valida saldo (la migración es del dueño: su palabra manda sobre lo ya pactado). */
+        if (path === "/app/api/admin/importar-reservas" && request.method === "POST"){
+          if (!esDueno) return json({ error: "Las migraciones las maneja el dueno." }, 403);
+          const bIR = await request.json().catch(() => ({}));
+          const filasIR = Array.isArray(bIR.filas) ? bIR.filas.slice(0, 500) : [];
+          const cfgIR = await loadConfig(env, tid);
+          let creadasIR = 0; const saltadasIR = [];
+          for (const fIR of filasIR){
+            const alIR = await env.DB.prepare("SELECT * FROM alumnos WHERE id = ?1 AND tenant_id = ?2")
+              .bind(String((fIR && fIR.alumno_id) || ""), tid).first();
+            const isosIR = Array.isArray(fIR && fIR.isos) ? fIR.isos.slice(0, 60) : [];
+            if (!alIR){ isosIR.forEach(x => saltadasIR.push({ alumno: String((fIR && fIR.alumno_id) || "?"), iso: x, motivo: "alumno no encontrado" })); continue; }
+            const profIR = await profeDeAlumno(env, tid, alIR);
+            const cicloIR = Number(alIR.ciclo) || 1;
+            for (const isoRaw of isosIR){
+              const isoIR = String(isoRaw || "");
+              if (isNaN(Date.parse(isoIR))){ saltadasIR.push({ alumno: alIR.nombre, iso: isoIR, motivo: "fecha invalida" }); continue; }
+              const { franja: frIR, ambigua: ambIR } = await resolverFranja(env, tid, isoIR, profIR, "");
+              if (ambIR){ saltadasIR.push({ alumno: alIR.nombre, iso: isoIR, motivo: "a esa hora hay varias clases (agendar a mano eligiendo la sala)" }); continue; }
+              if (!frIR){ saltadasIR.push({ alumno: alIR.nombre, iso: isoIR, motivo: "no hay clase a esa hora en tu Agenda" }); continue; }
+              const salaIR = frIR.sala || "";
+              const yaIR = await env.DB.prepare(
+                "SELECT 1 AS ok FROM reservas WHERE tenant_id = ?1 AND inicio_utc = ?2 AND alumno_id = ?3 AND estado IN ('reservada','completada')"
+              ).bind(tid, isoIR, alIR.id).first();
+              if (yaIR){ saltadasIR.push({ alumno: alIR.nombre, iso: isoIR, motivo: "ya estaba reservada" }); continue; }
+              const cupoIR = await cupoDeSlot(env, tid, isoIR, profIR, cfgIR, salaIR);
+              const ocIR = await ocupacionSlot(env, tid, isoIR, profIR, salaIR);
+              if (ocIR.bloqueado || ocIR.n >= cupoIR){ saltadasIR.push({ alumno: alIR.nombre, iso: isoIR, motivo: "sin cupo" }); continue; }
+              await env.DB.prepare(
+                "INSERT INTO reservas (id,tenant_id,alumno_id,inicio_utc,fin_utc,tipo,serie_id,estado,curso,ciclo,creada,profesor_id,sala) VALUES (?1,?2,?3,?4,?5,'suelta','','reservada',?6,?7,?8,?9,?10)"
+              ).bind(crypto.randomUUID(), tid, alIR.id, isoIR, new Date(Date.parse(isoIR) + CLASE_MIN * 60000).toISOString(),
+                     frIR.curso || alIR.curso || "", cicloIR, new Date().toISOString(), profIR.id || null, salaIR).run();
+              creadasIR++;
+            }
+          }
+          return json({ ok: true, creadas: creadasIR, saltadas: saltadasIR });
+        }
 
         /* -------- "Mi web": editor visual de la página pública de la academia -------- */
         // Publicar: guarda el web_json (saneado) + una versión nueva. Solo el dueño.
@@ -10031,7 +10236,10 @@ export default {
                           /* que datos extra pide el formulario publico de compra (02-ago-2026) */
                           "campos_alumno",
                           /* salas o espacios fisicos: N clases en paralelo (03-ago-2026, Elevate) */
-                          "salas"];
+                          "salas",
+                          /* reunión Elevate 7-ago-2026: interruptores por academia */
+                          "interbank_cuenta", "interbank_cci", "mp_solo_tarjeta", "espera_auto",
+                          "portal_fija_off", "portal_chat_off", "portal_sin_profe"];
           const stmts = [];
           for (const k of claves){
             if (k in b){

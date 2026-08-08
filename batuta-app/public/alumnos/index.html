@@ -259,6 +259,12 @@
   .chat-fab{position:fixed;right:16px;bottom:84px;width:52px;height:52px;border-radius:50%;background:var(--accent);border:1px solid var(--accent);font-size:22px;display:none;align-items:center;justify-content:center;z-index:70;box-shadow:0 4px 14px rgba(0,0,0,.45);cursor:pointer;}
   .chat-dot{position:absolute;top:6px;right:6px;width:11px;height:11px;border-radius:50%;background:var(--accent);border:2px solid var(--panel);}
   .chat-fab .chat-dot{background:#fff;border-color:var(--accent);top:4px;right:4px;}
+  /* Chat apagado por la academia (7-ago-2026): desaparece todo el chat y aparece el botón de WhatsApp */
+  body.sin-chat .chat,body.sin-chat .chat-strip,body.sin-chat .chat-fab{display:none!important;}
+  body.sin-chat .main{margin-right:0!important;}
+  .wa-fab{position:fixed;right:16px;bottom:84px;width:52px;height:52px;border-radius:50%;background:#25d366;border:1px solid #25d366;display:flex;align-items:center;justify-content:center;z-index:70;box-shadow:0 4px 14px rgba(0,0,0,.45);cursor:pointer;}
+  .wa-fab.hidden{display:none;}
+  .wa-fab svg{width:26px;height:26px;fill:#fff;}
   @media (min-width:1100px){
     .main{margin-right:316px;}
     body.chat-cerrado .main{margin-right:54px;}
@@ -440,7 +446,7 @@
           <div id="iPausaForm" class="hidden" style="margin-top:10px;">
             <div class="field"><label for="pausa_motivo">Motivo</label>
               <select id="pausa_motivo"><option value="viaje">Viaje</option><option value="salud">Salud</option></select></div>
-            <div class="field"><label for="pausa_dias">Días que necesitas (máx 14 por mes)</label>
+            <div class="field"><label for="pausa_dias" id="pausaDiasLab">Días que necesitas</label>
               <input id="pausa_dias" type="number" min="1" max="14" value="7" /></div>
             <div class="err" id="pausaErr"></div>
             <button class="btn sm" id="btnConfirmarPausa" type="button">Confirmar pausa</button>
@@ -640,6 +646,7 @@
   </aside>
   <button class="chat-strip" id="chatStrip" title="Abrir chat">💬<span class="chat-dot hidden" id="chatDotStrip"></span></button>
   <button class="chat-fab" id="chatFab" aria-label="Abrir chat">💬<span class="chat-dot hidden" id="chatDotFab"></span></button>
+  <a class="wa-fab hidden" id="waFab" target="_blank" rel="noopener" aria-label="Escríbenos por WhatsApp"><svg viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg"><path d="M16 3C9.4 3 4 8.3 4 14.9c0 2.6.8 5 2.3 7L4.6 27.4l5.7-1.6c1.9 1.1 4 1.6 6 1.6h.1c6.6 0 11.9-5.3 11.9-11.9C28.3 8.3 22.6 3 16 3zm5.9 16.9c-.3.8-1.6 1.5-2.3 1.6-.6.1-1.3.2-2.1-.1-.5-.2-1.1-.4-1.9-.7-3.4-1.5-5.6-4.9-5.8-5.1-.2-.2-1.4-1.8-1.4-3.5s.9-2.5 1.2-2.8c.3-.3.7-.4 1-.4h.7c.2 0 .5-.1.8.6.3.8 1.1 2.6 1.2 2.8.1.2.2.4 0 .7-.1.2-.2.4-.4.6l-.6.7c-.2.2-.4.4-.2.8.2.4 1 1.7 2.2 2.7 1.5 1.3 2.8 1.7 3.2 1.9.4.2.6.2.9-.1.2-.3 1-1.2 1.3-1.6.3-.4.5-.3.9-.2.4.1 2.3 1.1 2.7 1.3.4.2.6.3.7.5.1.1.1.9-.1 1.7z"/></svg></a>
 </div>
 
 <!-- ============ MODAL COMPRA (wizard) ============ -->
@@ -685,6 +692,7 @@
             <optgroup label="Pago manual">
               <option value="Yape/Plin/Sip">Yape / Plin / Sip</option>
               <option value="Transferencia BCP">Transferencia BCP</option>
+              <option value="Transferencia Interbank">Transferencia Interbank</option>
               <option value="Transferencia Scotiabank">Transferencia Scotiabank</option>
               <option value="Crypto USDT">Crypto (USDT)</option>
             </optgroup>
@@ -879,9 +887,22 @@ function aplicarModulosAlumno(){
   if(box) box.style.display=sinMaterial?"none":"";
   if(sinMaterial && vistaActual()==="recursos"){ location.hash="#inicio"; }
 }
+/* Chat apagable por academia (7-ago-2026, reunión Elevate): sin chat, y en su lugar un
+   botón flotante que abre el WhatsApp de la academia (si configuró su número). */
+function aplicarChatPortal(){
+  var off = !!(ME && ME.portal && ME.portal.chat_off);
+  document.body.classList.toggle("sin-chat", off);
+  var fab=$("waFab");
+  if(fab){
+    var num=(ME && ME.portal && ME.portal.whatsapp)||"";
+    if(off && num){ fab.href="https://wa.me/"+num; fab.classList.remove("hidden"); }
+    else fab.classList.add("hidden");
+  }
+}
 function renderActive(){
   if(!ME) return;
   aplicarModulosAlumno();
+  aplicarChatPortal();
   var v=vistaActual();
   document.querySelectorAll(".side nav a").forEach(function(a){
     var on = a.dataset.v===v;
@@ -1124,7 +1145,11 @@ var METODOS_AUTO=[
 function esMetodoAuto(m){ for(var i=0;i<METODOS_AUTO.length;i++) if(METODOS_AUTO[i].v===m) return true; return false; }
 function metodosAutoActivos(){
   var cf=(ME&&ME.config)||{};
-  return METODOS_AUTO.filter(function(a){ return !!cf[a.flag]; });
+  return METODOS_AUTO.filter(function(a){ return !!cf[a.flag]; }).map(function(a){
+    /* mp_solo_tarjeta (7-ago-2026): MP ya no ofrece Yape adentro; la etiqueta no debe prometerlo */
+    if(a.v==="Tarjeta (Mercado Pago)" && cf.mp_solo_tarjeta) return {v:a.v, t:"Tarjeta (se confirma sola)", flag:a.flag};
+    return a;
+  });
 }
 function ensureOpcionTarjeta(){
   var sel=$("c_metodo"); if(!sel) return;
@@ -1156,6 +1181,7 @@ function ajustarMetodosPago(){
   }
   setOp("Yape/Plin/Sip", !!cf.pago_numero);
   setOp("Transferencia BCP", !!cf.bcp_cuenta);
+  setOp("Transferencia Interbank", !!cf.interbank_cuenta);
   setOp("Transferencia Scotiabank", !!cf.scotia_cuenta);
   setOp("Crypto USDT", !!cf.crypto_wallet);
   metodosAutoActivos().slice().reverse().forEach(function(a){
@@ -1303,6 +1329,8 @@ function renderPaybox(){
     html = cf.pago_numero ? ('<div class="lab">Yape, Plin o Sip a</div><div class="num">'+esc(cf.pago_numero)+'</div>'+titular) : '<div class="note">Aún no configurado.</div>';
   } else if(m === "Transferencia BCP"){
     html = '<div class="lab">Transferencia BCP (Soles)</div><div class="num">'+esc(cf.bcp_cuenta||"-")+'</div><div class="note">CCI: '+esc(cf.bcp_cci||"-")+'</div>'+titular;
+  } else if(m === "Transferencia Interbank"){
+    html = '<div class="lab">Transferencia Interbank (Soles)</div><div class="num">'+esc(cf.interbank_cuenta||"-")+'</div><div class="note">CCI: '+esc(cf.interbank_cci||"-")+'</div>'+titular;
   } else if(m === "Transferencia Scotiabank"){
     html = '<div class="lab">Transferencia Scotiabank (Soles)</div><div class="num">'+esc(cf.scotia_cuenta||"-")+'</div><div class="note">CCI: '+esc(cf.scotia_cci||"-")+'</div>'+titular;
   } else if(m === "Crypto USDT"){
@@ -1311,10 +1339,12 @@ function renderPaybox(){
     var pk = $("c_paquete").value;
     if(pk){
       var cc = calc(pk);
-      var lab = (m === "Tarjeta (Stripe)") ? "Tarjeta internacional" : "Tarjeta o Yape";
+      var soloTarjMP = (m === "Tarjeta (Mercado Pago)") && !!cf.mp_solo_tarjeta;
+      var lab = (m === "Tarjeta (Stripe)") ? "Tarjeta internacional" : (soloTarjMP ? "Tarjeta" : "Tarjeta o Yape");
       var nota = (m === "Tarjeta (Stripe)") ? "Te llevamos al checkout seguro de Stripe. Al terminar, tu paquete se activa solo."
         : (m === "Tarjeta/Yape (Culqi)") ? "Paga con tarjeta o Yape sin salir de aquí. Se confirma solo."
-        : "Te llevamos a Mercado Pago (tarjeta o Yape). Al terminar, tu paquete se activa solo.";
+        : (soloTarjMP ? "Te llevamos a Mercado Pago (solo tarjeta). Al terminar, tu paquete se activa solo."
+        : "Te llevamos a Mercado Pago (tarjeta o Yape). Al terminar, tu paquete se activa solo.");
       html = '<div class="lab">'+lab+'</div>'
         + '<button type="button" class="btn" id="btnPagarTarjeta" data-metodo="'+esc(m)+'" style="width:100%;justify-content:center;margin:4px 0 2px;">Pagar S/ '+cc.final+' →</button>'
         + '<div class="note">'+nota+'</div>';
@@ -1741,6 +1771,16 @@ function diasHasta(fechaYmd){
 }
 function renderVencePausa(a){
   if(!a.vence){ hide("iPausaWrap"); return; }
+  /* Congelamiento POR PLAN (7-ago-2026): el servidor manda las reglas del plan del alumno.
+     Plan que no congela, o que ya agotó sus días o bloques del ciclo -> el botón no existe. */
+  var cg=a.congela||null;
+  if(cg){
+    var quedanD=Math.max(0,(cg.max_dias||0)-(cg.dias_usados||0));
+    var quedanB=cg.max_bloques?Math.max(0,cg.max_bloques-(cg.bloques_usados||0)):1;
+    if(!cg.permitido || quedanD<1 || quedanB<1){ hide("iPausaWrap"); return; }
+    var inp=$("pausa_dias"); if(inp){ inp.max=quedanD; if(Number(inp.value)>quedanD) inp.value=quedanD; }
+    var lab=$("pausaDiasLab"); if(lab) lab.textContent="Días que necesitas (te quedan "+quedanD+(cg.max_bloques?(" en "+quedanB+" bloque"+(quedanB===1?"":"s")):"")+")";
+  }
   show("iPausaWrap");
   hide("iPausaForm");
   $("pausaErr").textContent="";
@@ -1752,7 +1792,9 @@ $("btnConfirmarPausa").addEventListener("click",function(){
   var motivo = $("pausa_motivo").value;
   var dias = parseInt($("pausa_dias").value,10);
   $("pausaErr").textContent="";
-  if(!dias || dias<1 || dias>14){ $("pausaErr").textContent="Elige entre 1 y 14 días."; return; }
+  var cgC=(ME.alumno&&ME.alumno.congela)||null;
+  var maxDC=cgC?Math.max(0,(cgC.max_dias||0)-(cgC.dias_usados||0)):14;
+  if(!dias || dias<1 || dias>maxDC){ $("pausaErr").textContent="Elige entre 1 y "+maxDC+" días."; return; }
   if(!confirm("¿Congelar tu plazo "+dias+" día(s) por "+motivo+"?")) return;
   $("btnConfirmarPausa").disabled=true;
   api("/app/api/agenda/pausar",{method:"POST",body:JSON.stringify({motivo:motivo,dias:dias})})
@@ -1807,13 +1849,21 @@ function renderAgenda(){
 }
 
 function setTipoReserva(t){
+  /* portal_fija_off (7-ago-2026, reunión Elevate): la academia puede apagar el horario fijo
+     semanal — todo se reserva clase por clase y el botón ni aparece. */
+  var fijaOff = !!(ME.portal && ME.portal.fija_off);
+  if(fijaOff) t = "suelta";
   AG_TIPO = t==="fija" ? "fija" : "suelta";
   document.querySelectorAll("#v-agenda .agtipo [data-tipo]").forEach(function(b){
+    if(fijaOff && b.dataset.tipo==="fija"){ b.style.display="none"; return; }
     b.classList.toggle("ghost", b.dataset.tipo!==AG_TIPO);
   });
-  $("agTipoNota").textContent = AG_TIPO==="fija"
-    ? "Reservas el mismo día y hora las próximas 4 semanas. Si tu plan tiene más horas, puedes elegir varios horarios fijos."
-    : "Reservas una sola clase en el horario que elijas.";
+  if(fijaOff){ var st=document.querySelector("#v-agenda .agtipo [data-tipo='suelta']"); if(st) st.style.display=""; }
+  $("agTipoNota").textContent = fijaOff
+    ? "Elige la clase que quieres y resérvala. ¿Quieres la misma hora varias semanas? Reserva cada una, clase por clase."
+    : (AG_TIPO==="fija"
+      ? "Reservas el mismo día y hora las próximas 4 semanas. Si tu plan tiene más horas, puedes elegir varios horarios fijos."
+      : "Reservas una sola clase en el horario que elijas.");
 }
 
 function cargarSlots(){
@@ -1842,6 +1892,14 @@ function cargarSlots(){
 // Muestra a quién le reservas + su foto (dato que pidió Elevate: "ver quién da la clase").
 function pintarProfe(){
   var box=$("agProfe"); if(!box) return;
+  /* portal_sin_profe (7-ago-2026, también Elevate): clases grupales sin profe fijo.
+     En vez de "Tu clase con José", se muestra "Tu clase en {academia}". */
+  if(ME.portal && ME.portal.sin_profe){
+    box.style.display="";
+    box.innerHTML = '<div><div class="note" style="margin:0;font-size:12px;">Tu clase en</div>'+
+      '<div style="font-weight:700;">'+esc(ME.academia||"tu academia")+'</div></div>';
+    return;
+  }
   if(!AG_PROFE || !AG_PROFE.nombre){ box.innerHTML=""; box.style.display="none"; return; }
   box.style.display="";
   var ini = (AG_PROFE.nombre||"?").trim().slice(0,1).toUpperCase();
