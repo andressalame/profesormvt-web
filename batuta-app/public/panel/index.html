@@ -1703,7 +1703,7 @@
       <div style="margin-top:8px;"><button class="btn" id="btnImpPegar">Ver cómo quedaría</button></div>
       <div style="text-align:center;color:var(--muted);font-size:12px;margin:18px 0 12px;">— o, si ya tienes el archivo —</div>
       <div class="field"><label>Subir un archivo .csv</label><input id="impFile" type="file" accept=".csv,text/csv" />
-        <p class="hint" style="margin:5px 0 0;">Una fila por alumno. La única columna obligatoria es <b>Nombre</b>; opcionales: Apellido, Correo, WhatsApp, Nacimiento, Curso, Paquete, <b>Clases restantes</b>, <b>Vence</b>, <b>Reservas</b> (los horarios que ya tenía agendados, ej. <code>20/08/2026 19:00; 27/08/2026 19:00</code>) , Notas, Profesor. Desde Excel: Archivo → Guardar como → CSV UTF-8.</p></div>
+        <p class="hint" style="margin:5px 0 0;"><b>Sube (o pega) el export de tu sistema anterior TAL CUAL</b> — Batuta reconoce las columnas por su nombre, también en inglés (Punchpass, Excel, Sheets, con comas, punto y coma o tabs). La única obligatoria es <b>Nombre</b>; también entiende Apellido, Correo, WhatsApp, Nacimiento, Curso, Paquete, <b>Clases restantes</b>, <b>Vence</b> y <b>Reservas</b> (los horarios que ya tenía agendados, ej. <code>20/08/2026 19:00; 27/08/2026 19:00</code>). Lo que no reconozca, simplemente lo ignora, y antes de importar te muestra TODO en una previsualización. La plantilla de abajo es solo por si prefieres armarlo tú.</p></div>
       <div style="margin:0 0 4px;"><button class="btn ghost sm" id="btnPlantillaCsv">&#8595; Descargar una plantilla de ejemplo</button></div>
       <div id="impErr" style="display:none;color:var(--amber,#E8A13D);margin-top:10px;font-size:13px;"></div>
     </div>
@@ -5732,7 +5732,9 @@ function impNorm(s){ return String(s==null?"":s).trim().toLowerCase().normalize(
 function parseCsv(text){
   text=String(text||"").replace(/^\ufeff/,"");
   var l0=text.split(/\r?\n/)[0]||"";
-  var delim=((l0.split(";").length-1)>(l0.split(",").length-1))?";":",";
+  /* tambi\u00e9n TSV (7-ago-2026): lo copiado de Excel/Sheets viene con tabs */
+  var nT=(l0.split("\t").length-1),nS=(l0.split(";").length-1),nC=(l0.split(",").length-1);
+  var delim=(nT>0&&nT>=nS&&nT>=nC)?"\t":(nS>nC?";":",");
   var rows=[],row=[],cur="",q=false;
   for(var i=0;i<text.length;i++){var c=text[i];
     if(q){ if(c=='"'){ if(text[i+1]=='"'){cur+='"';i++;} else q=false; } else cur+=c; }
@@ -5745,18 +5747,18 @@ function parseCsv(text){
   if(cur!==""||row.length){ row.push(cur); rows.push(row); }
   return rows.filter(function(r){ return r.some(function(v){ return String(v).trim()!==""; }); });
 }
-var IMP_ALIAS={ nombre:["nombre","alumno","alumna","name","nombre completo","nombres","estudiante","first name"],
+var IMP_ALIAS={ nombre:["nombre","alumno","alumna","name","nombre completo","nombres","estudiante","first name","full name","customer","customer name","client","client name"],
   apellido:["apellido","apellidos","last name","surname","apellido paterno"],
-  email:["correo","email","e-mail","mail","correo electronico","gmail"],
-  nacimiento:["nacimiento","fecha de nacimiento","cumpleanos","cumple","birthday","fecha nac","nac","birth date","dob"],
+  email:["correo","email","e-mail","mail","correo electronico","gmail","email address"],
+  nacimiento:["nacimiento","fecha de nacimiento","cumpleanos","cumple","birthday","fecha nac","nac","birth date","date of birth","dob"],
   curso:["curso","cursos","materia","materias","clase","instrumento","asignatura"],
-  whatsapp:["whatsapp","wsp","celular","telefono","movil","phone","numero","contacto"],
-  paquete:["paquete","plan","package","clases","membresia","pase","pass"],
-  restantes:["clases restantes","restantes","clases que le quedan","le quedan","saldo","saldo de clases","clases pendientes","pendientes","credits","clases disponibles","disponibles","remaining"],
-  vence:["vence","vencimiento","fecha de vencimiento","valido hasta","vigencia","expira","expiracion","expires"],
-  reservas:["reservas","clases reservadas","horarios reservados","reservado","reservados","proximas clases","bookings","registrations","schedule"],
-  notas:["notas","nota","observaciones","observacion","comentario","comentarios"],
-  profesor:["profesor","profesora","profe","docente","maestro","maestra","teacher","tutor"] };
+  whatsapp:["whatsapp","wsp","celular","telefono","movil","phone","numero","contacto","phone number","mobile","mobile phone","cell phone"],
+  paquete:["paquete","plan","package","clases","membresia","pase","pass","pass name","pass type","membership","current pass"],
+  restantes:["clases restantes","restantes","clases que le quedan","le quedan","saldo","saldo de clases","clases pendientes","pendientes","credits","clases disponibles","disponibles","remaining","classes remaining","remaining classes","credits remaining","visits remaining","punches remaining","classes left"],
+  vence:["vence","vencimiento","fecha de vencimiento","valido hasta","vigencia","expira","expiracion","expires","expires on","expiration","expiration date","expiry","expiry date","valid until"],
+  reservas:["reservas","clases reservadas","horarios reservados","reservado","reservados","proximas clases","bookings","registrations","schedule","upcoming registrations","upcoming classes","upcoming bookings"],
+  notas:["notas","nota","observaciones","observacion","comentario","comentarios","notes"],
+  profesor:["profesor","profesora","profe","docente","maestro","maestra","teacher","tutor","instructor"] };
 /* "Reservas" migradas (7-ago-2026, reunión Elevate): los horarios que el alumno YA tenía
    agendados en el sistema anterior. Formato por celda: fechas+hora separadas por ";" o "|",
    ej. "20/08/2026 19:00; 27/08/2026 19:00" (hora de Lima, 24h). */
@@ -5782,6 +5784,14 @@ function impMapHeader(cells){
     for(var k in IMP_ALIAS){ if(IMP_ALIAS[k].indexOf(n)>=0 && map[k]==null){ map[k]=idx; known=true; } } });
   return known?map:null;
 }
+/* Si el paquete viene con otra capitalización o sin tildes ("8 clases de maquinas"),
+   se corrige solo al nombre canónico del plan (7-ago-2026). Nombres realmente distintos
+   siguen bloqueando la fila con el mensaje claro de siempre. */
+function impCanonPaquete(txt){
+  var n=impNorm(txt); if(!n) return txt;
+  var m=pkNombres().find(function(p){ return impNorm(p)===n; });
+  return m||txt;
+}
 function impResolveProfe(txt){
   if(!txt) return undefined;
   var n=impNorm(txt);
@@ -5789,16 +5799,14 @@ function impResolveProfe(txt){
   return m?m.id:undefined;
 }
 function impError(msg){ var e=el("impErr"); e.textContent=msg; e.style.display=""; }
-el("impFile").addEventListener("change",function(){
-  var f=this.files&&this.files[0]; if(!f) return;
-  var fr=new FileReader();
-  fr.onload=function(){
-    try{
-      var rows=parseCsv(fr.result);
+/* Procesador ÚNICO de filas (7-ago-2026): lo usan el archivo CSV y el pegado con cabecera.
+   Reconoce las columnas por su nombre (español o inglés, ver IMP_ALIAS) — la idea es que el
+   dueño suba o pegue el export de su sistema anterior TAL CUAL, sin rearmar nada a mano. */
+function impProcesarFilas(rows){
       if(!rows.length){ impError("El archivo está vacío."); return; }
       var map=impMapHeader(rows[0]),start=0;
       if(map){ start=1; } else { map={nombre:0,curso:1,whatsapp:2,paquete:3,notas:4,profesor:5}; }
-      if(map.nombre==null){ impError("No encontré una columna de Nombre. Pon 'Nombre' como título de la primera columna."); return; }
+      if(map.nombre==null){ impError("No encontré una columna de Nombre. Pon 'Nombre' (o 'Name') como título de la primera columna."); return; }
       var existe={}; (db.alumnos||[]).forEach(function(a){ existe[impNorm(a.nombre)]=true; });
       var out=[],dup=0,vacios=0,vistos={};
       for(var i=start;i<rows.length;i++){ var r=rows[i];
@@ -5808,7 +5816,7 @@ el("impFile").addEventListener("change",function(){
         if(existe[key]||vistos[key]){ dup++; continue; }
         vistos[key]=true;
         var profTxt=map.profesor!=null?String(r[map.profesor]||"").trim():"";
-        var paqFila=(map.paquete!=null?String(r[map.paquete]||"").trim():"")||"Paquete 4";
+        var paqFila=impCanonPaquete((map.paquete!=null?String(r[map.paquete]||"").trim():"")||"Paquete 4");
         /* saldo migrado: "Clases restantes" y "Vence" (28-jul-2026). Ausentes = alumno nuevo
            con su paquete completo, exactamente como antes de existir estas columnas. */
         var sal=impSaldo(map.restantes!=null?r[map.restantes]:"", paqFila);
@@ -5838,7 +5846,13 @@ el("impFile").addEventListener("change",function(){
           profTxt:profTxt, profesor_id:impResolveProfe(profTxt) });
       }
       IMP_ROWS=out; impPreview(out,dup,vacios);
-    }catch(e){ impError("No pude leer el archivo. Asegúrate de que sea un CSV."); }
+}
+el("impFile").addEventListener("change",function(){
+  var f=this.files&&this.files[0]; if(!f) return;
+  var fr=new FileReader();
+  fr.onload=function(){
+    try{ impProcesarFilas(parseCsv(fr.result)); }
+    catch(e){ impError("No pude leer el archivo. Asegúrate de que sea un CSV."); }
   };
   fr.readAsText(f,"utf-8");
 });
@@ -5866,6 +5880,16 @@ el("btnImpPegar").addEventListener("click",function(){
   var txt=el("impPega").value||"";
   var lineas=txt.split(/\r?\n/).map(function(l){return l.trim();}).filter(Boolean);
   if(!lineas.length){ impError("Pega al menos una línea con un nombre."); return; }
+  /* ¿La primera línea es una CABECERA? (7-ago-2026) → mismo camino que el archivo: columnas
+     por nombre (español o inglés), con apellido, correo, nacimiento y RESERVAS incluidos.
+     Así el dueño copia la tabla entera de su sistema anterior y la pega TAL CUAL.
+     OJO: en este camino NO se botan las celdas vacías (correrían las columnas). */
+  var d0=(lineas[0].indexOf("\t")>=0)?"\t":((lineas[0].split(";").length-1)>(lineas[0].split(",").length-1)?";":",");
+  var cab=impMapHeader(lineas[0].split(d0).map(function(c){return c.trim();}));
+  if(cab && cab.nombre!=null){
+    impProcesarFilas(lineas.map(function(l){ return l.split(d0).map(function(c){return c.trim();}); }));
+    return;
+  }
   var existe={}; (db.alumnos||[]).forEach(function(a){ existe[impNorm(a.nombre)]=true; });
   var out=[],dup=0,vistos={};
   lineas.forEach(function(linea){
