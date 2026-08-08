@@ -5672,7 +5672,7 @@ function downloadBlob(blob,name){
 }
 
 /* ---------- Importar alumnos por CSV (client-side; reusa el guardado admin/data) ---------- */
-var IMP_ROWS=[],IMP_DUP=0,IMP_VACIOS=0;
+var IMP_ROWS=[],IMP_DUP=0,IMP_VACIOS=0,IMP_COLS_EXTRA=[];
 el("btnImportCsv").addEventListener("click",function(){
   IMP_ROWS=[]; el("impFile").value="";
   el("impPaso1").style.display=""; el("impPaso2").style.display="none";
@@ -5823,6 +5823,14 @@ function impProcesarFilas(rows){
       var map=impMapHeader(rows[0]),start=0;
       if(map){ start=1; } else { map={nombre:0,curso:1,whatsapp:2,paquete:3,notas:4,profesor:5}; }
       if(map.nombre==null){ impError("No encontré una columna de Nombre. Pon 'Nombre' (o 'Name') como título de la primera columna."); return; }
+      /* NADA se pierde en silencio (7-ago-2026, regla de Andrés): las columnas que no
+         reconozco van COMPLETAS a las Notas del alumno, etiquetadas con su título, y la
+         previsualización dice cuáles fueron. */
+      var cab=start?rows[0]:null;
+      var usadosIx={}; for(var kM in map){ if(map[kM]!=null) usadosIx[map[kM]]=1; }
+      var extrasIx=[];
+      if(cab){ cab.forEach(function(h,ix){ if(!usadosIx[ix] && String(h).trim()) extrasIx.push(ix); }); }
+      IMP_COLS_EXTRA=cab?extrasIx.map(function(ix){ return String(cab[ix]).trim(); }):[];
       var existe={}; (db.alumnos||[]).forEach(function(a){ existe[impNorm(a.nombre)]=true; });
       var out=[],dup=0,vacios=0,vistos={};
       for(var i=start;i<rows.length;i++){ var r=rows[i];
@@ -5858,7 +5866,11 @@ function impProcesarFilas(rows){
           curso:(map.curso!=null?String(r[map.curso]||"").trim():"")||MARCA.cursoDefault,
           whatsapp:(map.whatsapp!=null?String(r[map.whatsapp]||"").trim():"").replace(/[^\d+]/g,""),
           paquete:paqFila,
-          notas:map.notas!=null?String(r[map.notas]||"").trim():"",
+          notas:(function(){
+            var nb=map.notas!=null?String(r[map.notas]||"").trim():"";
+            var ex=extrasIx.map(function(ix){ var v=String(r[ix]==null?"":r[ix]).trim(); return v?(String(cab[ix]).trim()+": "+v):""; }).filter(Boolean).join(" · ");
+            return [nb,ex].filter(Boolean).join(" · ").slice(0,400);
+          })(),
           restantes:sal.restantes, migrado_usadas:sal.usadas, saldoNota:sal.nota||"",
           vence:vIso||"", venceTxt:vTxt,
           reservas:rsv.isos,
@@ -5941,6 +5953,7 @@ el("btnImpPegar").addEventListener("click",function(){
       error:salL.error||((venTxt&&!venIso)?('no entiendo la fecha "'+venTxt+'" (usa 20/08/2026 o 2026-08-20)'):""),
       profTxt:profTxt, profesor_id:undefined });
   });
+  IMP_COLS_EXTRA=[];   // el pegado sin cabecera ya manda los sobrantes a notas por celda
   IMP_ROWS=out; impPreview(out,dup,0);
 });
 function impPreview(rows,dup,vacios){
@@ -5970,7 +5983,9 @@ function impPreview(rows,dup,vacios){
   if(conRes) extra.push(conRes+" con reservas ya agendadas que se migran");
   var conMail=rows.filter(function(a){ return !a.error && a.email; }).length;
   if(conMail) extra.push(conMail+" con correo");
-  el("impResumen").innerHTML="<b>"+rows.length+" alumno"+(rows.length!=1?"s":"")+"</b> list"+(rows.length!=1?"os":"o")+" para importar"+(extra.length?(" · "+extra.join(" · ")):"")+(rows.length>50?" · se muestran los primeros 50":"")+".";
+  el("impResumen").innerHTML="<b>"+rows.length+" alumno"+(rows.length!=1?"s":"")+"</b> list"+(rows.length!=1?"os":"o")+" para importar"+(extra.length?(" · "+extra.join(" · ")):"")+(rows.length>50?" · se muestran los primeros 50":"")+"."+
+    /* transparencia total (7-ago-2026): nada se bota en silencio */
+    ((IMP_COLS_EXTRA&&IMP_COLS_EXTRA.length)?('<br><span class="mini">📝 Columnas que no reconocí — <b>no se pierden</b>: van completas a las Notas de cada alumno, con su título: <b>'+IMP_COLS_EXTRA.map(esc).join(", ")+'</b></span>'):"");
   var multi=(ROL||"dueno")==="dueno" && (EQUIPO||[]).filter(function(p){return p.estado!=="suspendido";}).length>1;
   var noRec=rows.filter(function(a){ return a.profTxt && !a.profesor_id; });
   var w=el("impProfeWrap");
