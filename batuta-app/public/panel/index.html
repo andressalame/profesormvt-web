@@ -5672,7 +5672,7 @@ function downloadBlob(blob,name){
 }
 
 /* ---------- Importar alumnos por CSV (client-side; reusa el guardado admin/data) ---------- */
-var IMP_ROWS=[];
+var IMP_ROWS=[],IMP_DUP=0,IMP_VACIOS=0;
 el("btnImportCsv").addEventListener("click",function(){
   IMP_ROWS=[]; el("impFile").value="";
   el("impPaso1").style.display=""; el("impPaso2").style.display="none";
@@ -5703,9 +5703,21 @@ function impFecha(txt){
   if(m){ y=+m[1]; mes=+m[2]; d=+m[3]; }
   else{
     m=s.match(/^(\d{1,2})[-\/.](\d{1,2})[-\/.](\d{2,4})$/);
-    if(!m) return "";
-    d=+m[1]; mes=+m[2]; y=+m[3];
-    if(y<100) y+=2000;              // "26" -> 2026
+    if(m){ d=+m[1]; mes=+m[2]; y=+m[3]; if(y<100) y+=2000; }   // "26" -> 2026
+    else{
+      /* Mes con nombre (7-ago-2026, exports gringos): "Aug 20, 2026" / "20 Aug 2026" /
+         "20 de agosto de 2026". En español o inglés, con o sin coma. */
+      var MES_TXT={ene:1,enero:1,feb:2,febrero:2,mar:3,marzo:3,abr:4,abril:4,may:5,mayo:5,jun:6,junio:6,jul:7,julio:7,ago:8,agosto:8,sep:9,set:9,sept:9,septiembre:9,setiembre:9,oct:10,octubre:10,nov:11,noviembre:11,dic:12,diciembre:12,jan:1,january:1,february:2,march:3,april:4,june:6,july:7,aug:8,august:8,september:9,october:10,november:11,dec:12,december:12};
+      var toks=impNorm(s).replace(/,/g," ").split(/\s+/).filter(function(t){return t&&t!=="de"&&t!=="del";});
+      var td=null,tm=null,ty=null;
+      toks.forEach(function(t){
+        if(MES_TXT[t]!=null){ if(tm==null) tm=MES_TXT[t]; }
+        else if(/^\d{4}$/.test(t)){ if(ty==null) ty=+t; }
+        else if(/^\d{1,2}$/.test(t)){ if(td==null) td=+t; }
+      });
+      if(tm==null||td==null||ty==null) return "";
+      d=td; mes=tm; y=ty;
+    }
   }
   if(!(y>=2000&&y<=2100)||!(mes>=1&&mes<=12)||!(d>=1&&d<=31)) return "";
   var iso=y+"-"+String(mes).padStart(2,"0")+"-"+String(d).padStart(2,"0");
@@ -5768,9 +5780,13 @@ function impReservas(txt){
   var partes=s.split(/[;|\n]+/).map(function(x){return x.trim();}).filter(Boolean);
   var isos=[],malas=[];
   partes.forEach(function(p){
-    var m=p.match(/^(.+?)\s+(\d{1,2}):(\d{2})\s*$/);
+    /* acepta 24h, AM/PM y el formato ISO con "T" (7-ago-2026: exports gringos) */
+    var m=p.match(/^(.+?)[T\s]+(\d{1,2}):(\d{2})(?::\d{2})?\s*([ap]\.?\s?m\.?)?\s*$/i);
     var f=m?impFecha(m[1].trim()):"";
     var hh=m?parseInt(m[2],10):NaN, mi=m?parseInt(m[3],10):NaN;
+    var ap=(m&&m[4])?m[4].toLowerCase():"";
+    if(ap.charAt(0)==="p"&&hh<12) hh+=12;
+    if(ap.charAt(0)==="a"&&hh===12) hh=0;
     if(!m||!f||!(hh>=0&&hh<=23)||!(mi>=0&&mi<=59)){ malas.push(p); return; }
     var d=new Date(f+"T"+String(hh).padStart(2,"0")+":"+String(mi).padStart(2,"0")+":00-05:00"); // Lima = UTC-5 fijo
     if(isNaN(d.getTime())){ malas.push(p); return; }
@@ -5827,10 +5843,14 @@ function impProcesarFilas(rows){
         var nTxt=map.nacimiento!=null?String(r[map.nacimiento]||"").trim():"";
         var nIso=impFecha(nTxt);
         var rsv=map.reservas!=null?impReservas(r[map.reservas]):{isos:[],error:""};
-        var errFila=sal.error
-          ||((vIso==="")?('no entiendo la fecha "'+vTxt+'" (usa 20/08/2026 o 2026-08-20)'):"")
+        var errOtros=((vIso==="")?('no entiendo la fecha "'+vTxt+'" (usa 20/08/2026 o 2026-08-20)'):"")
           ||((nIso==="")?('no entiendo la fecha de nacimiento "'+nTxt+'"'):"")
           ||rsv.error;
+        /* pase que no existe en Batuta (7-ago-2026): se marca SIEMPRE (antes solo si traía
+           saldo) y la previsualización ofrece mapearlo a un plan tuyo con un clic. */
+        var pkChk=pkDe(paqFila);
+        var paqDesc=(!pkChk.ilim && !(pkChk.clases>0));
+        var errFila=(paqDesc?('no reconozco el paquete "'+paqFila+'"'):"")||sal.error||errOtros;
         out.push({ nombre:nombre,
           apellido:map.apellido!=null?String(r[map.apellido]||"").trim().slice(0,80):"",
           email:map.email!=null?String(r[map.email]||"").trim().slice(0,120):"",
@@ -5842,7 +5862,7 @@ function impProcesarFilas(rows){
           restantes:sal.restantes, migrado_usadas:sal.usadas, saldoNota:sal.nota||"",
           vence:vIso||"", venceTxt:vTxt,
           reservas:rsv.isos,
-          error:errFila,
+          error:errFila, errOtros:errOtros,
           profTxt:profTxt, profesor_id:impResolveProfe(profTxt) });
       }
       IMP_ROWS=out; impPreview(out,dup,vacios);
@@ -5924,6 +5944,7 @@ el("btnImpPegar").addEventListener("click",function(){
   IMP_ROWS=out; impPreview(out,dup,0);
 });
 function impPreview(rows,dup,vacios){
+  IMP_DUP=dup; IMP_VACIOS=vacios;   // para repintar tras mapear un pase (7-ago-2026)
   el("impErr").style.display="none";
   if(!rows.length){ impError("No hay alumnos nuevos para importar"+(dup?(" ("+dup+" ya estaban en tu lista)"):"")+"."); return; }
   var tb=el("impTabla").querySelector("tbody");
@@ -5969,12 +5990,46 @@ function impPreview(rows,dup,vacios){
       (malas.length>6?"<li>… y "+(malas.length-6)+" más</li>":"")+"</ul>"+
       '<p class="hint" style="margin:8px 0 0;">Corrige tu archivo (o la lista pegada) y vuelve a subirlo. Nadie se importa hasta que cuadre.</p></div>';
   } else { box.style.display="none"; box.innerHTML=""; }
+  /* Mapeo de pases desconocidos (7-ago-2026): si el sistema anterior llama distinto a los
+     planes ("8 Class Pack"), acá se elige a cuál plan de Batuta corresponde cada uno y
+     TODAS sus filas se corrigen solas — sin tocar el archivo. */
+  var desconocidos={};
+  rows.forEach(function(a){ if(a.error && a.error.indexOf('no reconozco el paquete')===0){ desconocidos[a.paquete]=(desconocidos[a.paquete]||0)+1; } });
+  var mapBox=el("impMapPaq");
+  if(!mapBox){ mapBox=document.createElement("div"); mapBox.id="impMapPaq"; box.parentNode.insertBefore(mapBox, box); }
+  var descK=Object.keys(desconocidos);
+  if(descK.length){
+    mapBox.style.display="";
+    mapBox.innerHTML='<div style="border:1px solid var(--amber,#E8A13D);border-radius:8px;padding:10px 12px;margin:0 0 10px;">'+
+      '<b style="color:var(--amber,#E8A13D);">Tu sistema anterior llama distinto a '+descK.length+' pase'+(descK.length===1?'':'s')+'. Dime cuál plan tuyo es cada uno:</b>'+
+      descK.map(function(k){ return '<div style="display:flex;gap:8px;align-items:center;margin-top:8px;flex-wrap:wrap;">'+
+        '<span class="mini">«'+esc(k)+'» ('+desconocidos[k]+' alumno'+(desconocidos[k]===1?'':'s')+') →</span>'+
+        '<select data-mapdesde="'+esc(k)+'" style="width:auto;min-width:200px;"><option value="">— elige tu plan —</option>'+
+        pkNombres().map(function(p){return '<option value="'+esc(p)+'">'+esc(p)+'</option>';}).join("")+'</select></div>'; }).join("")+
+      '<p class="hint" style="margin:8px 0 0;">Al elegir, sus filas se corrigen solas. (Si es un plan que aún no existe, créalo en Ajustes → Clases y planes y vuelve a subir el archivo.)</p></div>';
+  } else { mapBox.style.display="none"; mapBox.innerHTML=""; }
   el("impPaso1").style.display="none"; el("impPaso2").style.display="";
   var btn=el("btnImpConfirmar"); btn.style.display="";
   btn.disabled=malas.length>0;
   btn.textContent=malas.length?("Corrige "+malas.length+" fila"+(malas.length!=1?"s":"")+" para importar")
                               :("Importar "+rows.length+" alumno"+(rows.length!=1?"s":""));
 }
+/* Re-mapea un pase desconocido a un plan real de Batuta y repinta la previsualización. */
+function reMapPaquete(desde,hacia){
+  if(!hacia||!IMP_ROWS.length) return;
+  IMP_ROWS.forEach(function(a){
+    if(a.paquete!==desde) return;
+    a.paquete=hacia;
+    var sal=impSaldo(a.restantes!=null?String(a.restantes):"", hacia);
+    a.migrado_usadas=sal.usadas; a.restantes=sal.restantes; a.saldoNota=sal.nota||"";
+    a.error=sal.error||a.errOtros||"";
+  });
+  impPreview(IMP_ROWS, IMP_DUP, IMP_VACIOS);
+}
+document.addEventListener("change",function(e){
+  var s=(e.target&&e.target.closest)?e.target.closest("[data-mapdesde]"):null;
+  if(s&&s.value) reMapPaquete(s.getAttribute("data-mapdesde"), s.value);
+});
 el("btnImpConfirmar").addEventListener("click",function(){
   if(!IMP_ROWS.length){ closeOv("ovImport"); return; }
   /* cinturón: el botón ya está deshabilitado si hay filas malas, pero no se importa
