@@ -148,6 +148,8 @@
   .overlay{position:fixed;inset:0;background:rgba(0,0,0,.78);display:none;align-items:flex-start;justify-content:center;padding:30px 16px;z-index:50;overflow-y:auto;}
   .overlay.open{display:flex;}
   .modal{background:var(--panel);border:1px solid var(--accent);border-radius:4px;max-width:560px;width:100%;padding:26px;}
+  /* resalte al arrastrar un archivo sobre el panel (9-ago-2026: importador drag & drop) */
+  #ovImport .modal.arrastrando{outline:3px dashed var(--accent);outline-offset:6px;}
   .modal h3{font-family:var(--display);font-size:24px;margin:0 0 4px;}
   .modal h3 em{font-style:italic;color:var(--accent);}
   .modal .mlab{font-family:var(--mono);text-transform:uppercase;letter-spacing:.1em;font-size:10.5px;color:var(--accent);margin-bottom:18px;}
@@ -1702,7 +1704,7 @@
         <p class="hint" style="margin:5px 0 0;">¿Vienes de otro sistema y tus alumnos ya usaron parte de su paquete? Pon las <b>clases que le quedan</b> y, si quieres, hasta cuándo le vence: <span class="mini" style="font-family:inherit;">María Fernández, Paquete 8, 3 clases, vence 20/08/2026</span></p></div>
       <div style="margin-top:8px;"><button class="btn" id="btnImpPegar">Ver cómo quedaría</button></div>
       <div style="text-align:center;color:var(--muted);font-size:12px;margin:18px 0 12px;">— o, si ya tienes el archivo —</div>
-      <div class="field"><label>Subir un archivo .csv</label><input id="impFile" type="file" accept=".csv,text/csv" />
+      <div class="field"><label>Subir un archivo .csv (o arrástralo aquí)</label><input id="impFile" type="file" accept=".csv,text/csv" />
         <p class="hint" style="margin:5px 0 0;"><b>Sube (o pega) el export de tu sistema anterior TAL CUAL</b> — Batuta reconoce las columnas por su nombre, también en inglés (Punchpass, Excel, Sheets, con comas, punto y coma o tabs). La única obligatoria es <b>Nombre</b>; también entiende Apellido, Correo, WhatsApp, Nacimiento, Curso, Paquete, <b>Clases restantes</b>, <b>Vence</b> y <b>Reservas</b> (los horarios que ya tenía agendados, ej. <code>20/08/2026 19:00; 27/08/2026 19:00</code>). Lo que no reconozca, simplemente lo ignora, y antes de importar te muestra TODO en una previsualización. La plantilla de abajo es solo por si prefieres armarlo tú.</p></div>
       <div style="margin:0 0 4px;"><button class="btn ghost sm" id="btnPlantillaCsv">&#8595; Descargar una plantilla de ejemplo</button></div>
       <div id="impErr" style="display:none;color:var(--amber,#E8A13D);margin-top:10px;font-size:13px;"></div>
@@ -5879,14 +5881,46 @@ function impProcesarFilas(rows){
       }
       IMP_ROWS=out; impPreview(out,dup,vacios);
 }
-el("impFile").addEventListener("change",function(){
-  var f=this.files&&this.files[0]; if(!f) return;
+function impLeerArchivo(f){
+  if(!f) return;
+  if(/\.(xlsx?|numbers|ods)$/i.test(f.name||"")){
+    impError('Ese es un archivo de Excel. Ábrelo y usa Archivo → Guardar como → "CSV UTF-8", y súbeme ese.');
+    return;
+  }
   var fr=new FileReader();
   fr.onload=function(){
     try{ impProcesarFilas(parseCsv(fr.result)); }
     catch(e){ impError("No pude leer el archivo. Asegúrate de que sea un CSV."); }
   };
   fr.readAsText(f,"utf-8");
+}
+el("impFile").addEventListener("change",function(){ impLeerArchivo(this.files&&this.files[0]); });
+/* Arrastrar y soltar (9-ago-2026, pedido de Andrés: "descarga el CSV, arrástralo y listo").
+   El guard de window evita el clásico desastre: soltar el archivo fuera del recuadro y que
+   el navegador abandone el panel para abrir el CSV. Soltar un archivo en CUALQUIER parte
+   del panel abre el importador solo y lo procesa. */
+window.addEventListener("dragover",function(e){
+  e.preventDefault();
+  if(e.dataTransfer&&Array.prototype.indexOf.call(e.dataTransfer.types||[],"Files")>=0){
+    var mI=el("ovImport")&&el("ovImport").querySelector(".modal");
+    if(mI) mI.classList.add("arrastrando");
+  }
+});
+window.addEventListener("dragleave",function(e){
+  if(e.relatedTarget) return;   // solo cuando el cursor sale de la ventana
+  var mI=el("ovImport")&&el("ovImport").querySelector(".modal");
+  if(mI) mI.classList.remove("arrastrando");
+});
+window.addEventListener("drop",function(e){
+  e.preventDefault();
+  var mI=el("ovImport")&&el("ovImport").querySelector(".modal");
+  if(mI) mI.classList.remove("arrastrando");
+  var f=e.dataTransfer&&e.dataTransfer.files&&e.dataTransfer.files[0];
+  if(!f) return;
+  openOv("ovImport");
+  el("impPaso1").style.display=""; el("impPaso2").style.display="none";
+  el("btnImpConfirmar").style.display="none";
+  impLeerArchivo(f);
 });
 /* ¿La celda pegada es el nombre de un paquete? Antes solo se reconocía si decía "paquete",
    así que una academia con planes tipo "Mensual ilimitado" o "Plan Pro" los perdía y caían
