@@ -435,6 +435,13 @@
   }
   /* ---------- IA de onboarding (Claude Haiku, tope 10 mensajes) ---------- */
   .oia-fab{position:fixed;bottom:24px;right:24px;z-index:300;width:54px;height:54px;border-radius:50%;border:1px solid var(--accent);cursor:pointer;background:var(--accent);color:var(--bg);font-family:var(--mono);font-weight:700;font-size:18px;box-shadow:0 6px 24px rgba(232,80,31,.35);}
+  /* Botón "+" global (fase 3, 10-ago-2026): los 4 verbos del día a día, desde cualquier pantalla */
+  .mas-fab{position:fixed;bottom:88px;right:24px;z-index:300;width:54px;height:54px;border-radius:50%;border:1px solid var(--line,rgba(255,255,255,.2));cursor:pointer;background:var(--panel);color:var(--cream);font-size:26px;line-height:1;box-shadow:0 6px 24px rgba(0,0,0,.4);transition:transform .15s;}
+  .mas-fab:hover{transform:scale(1.06);}
+  .mas-menu{position:fixed;bottom:150px;right:24px;z-index:300;display:flex;flex-direction:column;gap:6px;background:var(--panel);border:1px solid var(--line,rgba(255,255,255,.15));border-radius:12px;padding:10px;box-shadow:0 18px 50px rgba(0,0,0,.55);}
+  .mas-menu[hidden]{display:none;}
+  .mas-menu button{background:transparent;border:0;border-radius:8px;padding:11px 14px;cursor:pointer;font-family:var(--body);font-size:14px;color:var(--cream);text-align:left;min-height:44px;}
+  .mas-menu button:hover{background:var(--panel2);color:var(--accent);}
   .oia-panel{position:fixed;bottom:88px;right:24px;z-index:300;width:340px;max-width:calc(100vw - 32px);height:440px;max-height:calc(100vh - 130px);display:flex;flex-direction:column;overflow:hidden;background:var(--panel);border:1px solid var(--line);border-radius:8px;box-shadow:0 18px 50px rgba(0,0,0,.55);}
   .oia-panel[hidden]{display:none;}
   .oia-head{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:12px 14px;border-bottom:1px solid var(--line);background:var(--accent);flex:0 0 auto;}
@@ -4732,6 +4739,24 @@ function pintarNav(tab){
   pest.classList.toggle("show",!!h);
   espejarDotsNav();
 }
+/* Botón "+" global (fase 3, 10-ago-2026): abre/cierra el menú de los 4 verbos; elegir uno
+   navega con el data-ira de siempre y el menú se cierra solo. TODO delegado a nivel documento:
+   el fab vive al FINAL del HTML, después de este script, así que registrar directo daba null
+   (mismo tipo de trampa que el activation-behavior de los <details>). */
+document.addEventListener("click",function(e){
+  var m=el("masMenu"); if(!m) return;
+  var fab=e.target.closest?e.target.closest("#masFab"):null;
+  if(fab){
+    m.hidden=!m.hidden;
+    fab.setAttribute("aria-expanded", m.hidden?"false":"true");
+    return;
+  }
+  if(!m.hidden){
+    /* clic en una opción (que ya navega por data-ira) o clic fuera: en ambos casos se cierra */
+    m.hidden=true;
+    var f=el("masFab"); if(f) f.setAttribute("aria-expanded","false");
+  }
+});
 /* Los 5 botones grandes: clic = clic al tab primario del grupo (la maquinaria vieja intacta). */
 document.querySelectorAll(".navbig").forEach(function(b){
   b.addEventListener("click",function(){
@@ -7391,6 +7416,14 @@ window.batutaInit = batutaInit;
 </script>
 
 <!-- Soporte con IA (Claude Haiku + fallback Workers AI). Antes "Guía del panel". -->
+<!-- "+" global (fase 3, 10-ago-2026): agregar lo de todos los días sin buscar la pantalla -->
+<button class="mas-fab" id="masFab" aria-label="Agregar" aria-expanded="false" title="Agregar (alumno, pago, clase, asistencia)">+</button>
+<div class="mas-menu" id="masMenu" hidden>
+  <button type="button" data-ira="alumnos" data-iract="btnNuevoAlumno">👤 Agregar un alumno</button>
+  <button type="button" data-ira="pagos">💵 Anotar un pago</button>
+  <button type="button" data-ira="agenda">📅 Programar una clase</button>
+  <button type="button" data-ira="registro" data-iract="btnNuevoRegistro">✔️ Anotar asistencia</button>
+</div>
 <button class="oia-fab" id="oiaFab" aria-label="Abrir soporte" aria-expanded="false">?</button>
 <div class="oia-panel" id="oiaPanel" role="dialog" aria-label="Soporte" hidden>
   <div class="oia-head">
