@@ -915,6 +915,29 @@ function renderActive(){
 window.addEventListener("hashchange", renderActive);
 
 /* ---------- VISTA: INICIO ---------- */
+/* Beneficios / convenios de la academia (10-ago-2026, reunión Elevate): tarjeta en el
+   inicio del portal. Solo llegan del servidor si la cuenta está activa. */
+function renderBeneficios(){
+  var card=$("iBenef");
+  if(!card){
+    card=document.createElement("div");
+    card.className="card hidden"; card.id="iBenef";
+    var pkg=$("iPkg");
+    if(pkg) pkg.insertAdjacentElement("afterend",card); else return;
+  }
+  var bs=(ME&&ME.beneficios)||[];
+  if(!bs.length){ card.classList.add("hidden"); return; }
+  card.innerHTML='<span class="pill amber">Beneficios para ti</span>'+
+    '<p class="hint" style="margin:10px 0 12px;">Por ser alumno activo de '+esc(ME.academia||"la academia")+', tienes estos convenios:</p>'+
+    bs.map(function(b){
+      return '<div style="padding:9px 0;border-top:1px solid var(--line,rgba(255,255,255,.1));">'+
+        '<b>'+esc(b.t||"")+'</b>'+
+        (b.d?'<div class="hint" style="margin:3px 0 0;">'+esc(b.d)+'</div>':'')+
+        (b.l?'<a href="'+esc(b.l)+'" target="_blank" rel="noopener" style="font-size:12.5px;">Ver más →</a>':'')+
+      '</div>';
+    }).join("");
+  card.classList.remove("hidden");
+}
 function renderInicio(){
   $("iHola").innerHTML = 'Hola, <em>'+esc((ME.cuenta.nombre||"").split(" ")[0])+'</em>';
   /* multi-profesor: "vas con [profe]" bajo el saludo */
@@ -961,6 +984,8 @@ function renderInicio(){
       if($("iStubCap")) $("iStubCap").style.display = "";
     }
     if(ME.estado==="Renovar pronto" && !ME.compraPendiente) show("iRenov"); else hide("iRenov");
+    /* Beneficios (10-ago-2026, Elevate): el servidor solo los manda con cuenta activa. */
+    try{ renderBeneficios(); }catch(e){}
     $("iPlan").innerHTML =
       (a.ilim ? kv("Tu mensualidad", "Clases sin límite hasta el "+esc(fechaBonita(a.vence)))
               : kv("Reprogramaciones disponibles", (Number(a.reprogRestantes)>=9999) ? '∞' : (a.reprogRestantes+' <small>de '+a.reprogPermitidas+'</small>')))+
@@ -972,6 +997,7 @@ function renderInicio(){
   } else {
     hide("iPkg"); show("iVacio");
     $("iPlanLine").textContent = "Sin paquete activo";
+    try{ renderBeneficios(); }catch(e){} // sin alumno el servidor no manda beneficios: esconde la tarjeta
   }
 
   if(a){

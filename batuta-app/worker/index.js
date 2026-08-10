@@ -714,6 +714,10 @@ async function loadConfig(env, tenantId){
               interbank_cuenta: "", interbank_cci: "",
               mp_solo_tarjeta: "", espera_auto: "",
               portal_fija_off: "", portal_chat_off: "", portal_sin_profe: "",
+              /* Beneficios / convenios (10-ago-2026, reunión Elevate): JSON [{t,d,l}] con los
+                 convenios de la academia (ej. descuento en X). Los ven los alumnos con cuenta
+                 activa en su portal. Vacío = la sección no existe. */
+              beneficios: "",
               brand_color: "", brand_font: "", brand_logo: "", agenda_cupo: "",
               /* "Mi web" (editor visual de la página pública de la academia). Vacío = la
                  landing por defecto armada con los datos de la academia. web_version cambia
@@ -2951,7 +2955,9 @@ async function alertaCorreoAndres(env, asunto, cuerpo){
    ═══════════════════════════════════════════════════════════════════════════ */
 const LIMA_OFFSET_MS = 5 * 3600 * 1000;
 const CLASE_MIN = 60;
-const HORIZONTE_SEMANAS = 4;
+/* 4→5 el 10-ago-2026 (reunión Elevate): José pidió que sus alumnos puedan reservar con
+   30 días de anticipación; 4 semanas eran 28 días y se quedaba corto. 5 = 35 días. */
+const HORIZONTE_SEMANAS = 5;
 const SERIE_SEMANAS = 4;
 const ANTICIPACION_MIN_H = 12;
 const CANCELA_MIN_H = 4; /* default; cada academia puede cambiarlo en Ajustes (reprog_min_h) */
@@ -7743,13 +7749,24 @@ export default {
           whatsapp: String(config.whatsapp_profe || "").replace(/\D/g, "")
         };
         const tRowMe = await env.DB.prepare("SELECT academia FROM tenants WHERE id = ?1").bind(tid).first().catch(() => null);
+        /* Beneficios / convenios (10-ago-2026, Elevate): solo para cuentas ACTIVAS
+           (activo o por renovar); el vencido/caducado no los ve, por diseño de José. */
+        const estadoMe = estadoAlumno(computed, alumno && alumno.vence);
+        let beneficiosMe = [];
+        if (estadoMe === "Activo" || estadoMe === "Renovar pronto"){
+          try {
+            const arrB = JSON.parse(config.beneficios || "[]");
+            if (Array.isArray(arrB)) beneficiosMe = arrB.filter(x => x && x.t).slice(0, 20);
+          } catch (e) {}
+        }
         return json({
           cuenta: { nombre: cu.nombre, email: cu.email, whatsapp: cu.whatsapp || "" },
           profesor: portalFlags.sin_profe ? null : miProfe,
           academia: (tRowMe && tRowMe.academia) || "",
           portal: portalFlags,
           sede: miSede,
-          estado: estadoAlumno(computed, alumno && alumno.vence),
+          beneficios: beneficiosMe,
+          estado: estadoMe,
           alumno: (alumno && computed) ? {
             curso: alumno.curso || "", paquete: alumno.paquete || "",
             horario: alumno.horario || "", horarioFijo: horarioFijo, pago: alumno.pago || "",
@@ -10461,6 +10478,8 @@ export default {
                           "campos_alumno",
                           /* salas o espacios fisicos: N clases en paralelo (03-ago-2026, Elevate) */
                           "salas",
+                          /* beneficios / convenios para alumnos activos (10-ago-2026, Elevate) */
+                          "beneficios",
                           /* reunión Elevate 7-ago-2026: interruptores por academia */
                           "interbank_cuenta", "interbank_cci", "mp_solo_tarjeta", "espera_auto",
                           "portal_fija_off", "portal_chat_off", "portal_sin_profe",
@@ -10527,6 +10546,23 @@ export default {
                 }
                 valor = Object.keys(limpio).length ? JSON.stringify(limpio) : "";
               }
+              /* beneficios: JSON [{t,d,l}] validado y reescrito canónico (máx 20; link solo http/https) */
+              if (k === "beneficios" && valor !== ""){
+                let arrB = null;
+                try { arrB = JSON.parse(valor); } catch (e) { arrB = null; }
+                const limpiosB = [];
+                if (Array.isArray(arrB)){
+                  for (const it of arrB.slice(0, 20)){
+                    if (!it || typeof it !== "object") continue;
+                    const tB = String(it.t || "").trim().slice(0, 60);
+                    const dB = String(it.d || "").trim().slice(0, 240);
+                    let lB = String(it.l || "").trim().slice(0, 300);
+                    if (lB){ try { const uB = new URL(lB); if (uB.protocol !== "https:" && uB.protocol !== "http:") lB = ""; } catch (e) { lB = ""; } }
+                    if (tB) limpiosB.push({ t: tB, d: dB, l: lB });
+                  }
+                }
+                valor = limpiosB.length ? JSON.stringify(limpiosB) : "";
+              }
               if (k === "brand_color" && valor && !/^#[0-9a-fA-F]{6}$/.test(valor)) valor = "";
               if (k === "brand_font" && valor && BRAND_FONTS.indexOf(valor) === -1) valor = "";
               if (k === "agenda_cupo"){
@@ -10584,6 +10620,17 @@ export default {
             if (nombreDueno){
               try { await env.DB.prepare("UPDATE tenants SET profe_nombre = ?1 WHERE id = ?2").bind(nombreDueno, tid).run(); } catch (e) {}
               try { await env.DB.prepare("UPDATE profesores SET nombre = ?1 WHERE tenant_id = ?2 AND rol = 'dueno'").bind(nombreDueno, tid).run(); } catch (e) {}
+            }
+          }
+          /* Sincronía del WhatsApp de la academia (10-ago-2026, reunión Elevate): el número vive
+             en DOS sitios — config.whatsapp_profe (lo edita Ajustes; lo usa la burbuja del portal)
+             y tenants.whatsapp (nace en el registro y NUNCA se actualizaba; lo usan /app/api/publico,
+             el "avisar que pagué" del portal y la web pública). José cambiaba su número en Ajustes
+             y el portal seguía mandando a los alumnos al número viejo del alta. */
+          if ("whatsapp_profe" in b){
+            const waAcademia = String(b.whatsapp_profe || "").replace(/\D/g, "").slice(0, 15);
+            if (waAcademia){
+              try { await env.DB.prepare("UPDATE tenants SET whatsapp = ?1 WHERE id = ?2").bind(waAcademia, tid).run(); } catch (e) {}
             }
           }
           return json({ ok: true });
@@ -10712,6 +10759,39 @@ export default {
             "INSERT INTO config (tenant_id, clave, valor) VALUES (?1, 'profe_foto', ?2) ON CONFLICT(tenant_id, clave) DO UPDATE SET valor = ?2"
           ).bind(tid, fotoUrl).run();
           return json({ ok: true, url: fotoUrl });
+        }
+
+        /* Foto de UN profesor puesta por el DUEÑO (10-ago-2026, reunión Elevate): cada profe ya
+           podía auto-subirse la suya, pero José quiere ponerlas él desde su cuenta. Mismo patrón
+           R2 que perfil/foto; escribe profesores.foto (lo que pintan portal y web pública). */
+        if (path === "/app/api/admin/profesores/foto" && request.method === "POST"){
+          if (!esDueno) return json({ error: "Las fotos del equipo las maneja el dueno." }, 403);
+          if (!env.RECURSOS_R2) return json({ error: "No disponible en el trial." }, 501);
+          const form = await request.formData().catch(() => null);
+          if (!form) return json({ error: "Formulario invalido" }, 400);
+          const pidFoto = String(form.get("profesor_id") || "").trim();
+          const profFila = pidFoto ? await env.DB.prepare(
+            "SELECT id, foto FROM profesores WHERE id = ?1 AND tenant_id = ?2"
+          ).bind(pidFoto, tid).first() : null;
+          if (!profFila) return json({ error: "Ese profesor no existe." }, 404);
+          const archivo = form.get("archivo");
+          const esArchivo = archivo && typeof archivo !== "string" && typeof archivo.arrayBuffer === "function";
+          const ext = esArchivo ? extArchivo(archivo.name) : null;
+          if (!ext || !/^(png|jpg|jpeg)$/.test(ext) || archivo.size > 8 * 1024 * 1024){
+            return json({ error: "Solo imagenes (png/jpg) de hasta 8 MB." }, 400);
+          }
+          const key = crypto.randomUUID() + "." + ext;
+          await env.RECURSOS_R2.put(key, archivo, {
+            httpMetadata: { contentType: MIME_ARCHIVO[ext], contentDisposition: "inline" }
+          });
+          if (profFila.foto && String(profFila.foto).startsWith("/app/api/recurso/archivo/")){
+            const oldKey = String(profFila.foto).slice("/app/api/recurso/archivo/".length);
+            try { await env.RECURSOS_R2.delete(oldKey); } catch (e) {}
+          }
+          const fotoUrlP = "/app/api/recurso/archivo/" + key;
+          await env.DB.prepare("UPDATE profesores SET foto = ?1 WHERE id = ?2 AND tenant_id = ?3")
+            .bind(fotoUrlP, pidFoto, tid).run();
+          return json({ ok: true, url: fotoUrlP });
         }
 
         /* Logo de la academia (branding del portal): mismo patron que la foto de perfil. Con valor vacio, lo quita. */

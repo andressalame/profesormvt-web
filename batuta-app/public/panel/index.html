@@ -356,6 +356,18 @@
   .acadcard span{font-size:12.5px;color:var(--muted);line-height:1.45;}
   .acadcard .ac-ico{display:inline-flex;margin-bottom:2px;}
   .acadcard .ac-ico svg{width:20px;height:20px;stroke:var(--accent);stroke-width:1.8;fill:none;stroke-linecap:round;stroke-linejoin:round;}
+  /* Calendario del mes de la Agenda (10-ago-2026) */
+  .calmes{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;}
+  .calmes .cm-h{font-family:var(--mono);font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);text-align:center;padding:4px 0;}
+  .calmes .cm-d{min-height:64px;border:1px solid var(--line,rgba(255,255,255,.1));border-radius:8px;padding:6px 7px;background:transparent;cursor:pointer;text-align:left;display:flex;flex-direction:column;gap:3px;font-family:var(--body);color:var(--cream);transition:border-color .12s;}
+  .calmes .cm-d:hover{border-color:var(--accent);}
+  .calmes .cm-d.off{opacity:.35;cursor:default;}
+  .calmes .cm-d.hoy{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent) inset;}
+  .calmes .cm-d.sel{background:rgba(232,161,61,.10);border-color:var(--accent);}
+  .calmes .cm-n{font-size:12.5px;font-weight:700;}
+  .calmes .cm-b{font-size:10.5px;color:var(--muted);line-height:1.35;}
+  .calmes .cm-b b{color:var(--accent);font-weight:700;}
+  @media (max-width:760px){ .calmes .cm-d{min-height:48px;padding:4px 5px;} .calmes .cm-b{display:none;} .calmes .cm-d.condata::after{content:"•";color:var(--accent);font-size:14px;line-height:.5;} }
   .navgroup{margin-bottom:4px;}
   .navgroup-h{display:flex;align-items:center;gap:9px;width:100%;background:transparent;border:1px solid transparent;border-radius:3px;padding:9px 11px;cursor:pointer;font-family:var(--mono);text-transform:uppercase;letter-spacing:.1em;font-size:10.5px;color:var(--muted);font-weight:700;transition:color .12s,background .12s;}
   .navgroup-h::before{content:none;}
@@ -1130,6 +1142,20 @@
 
   <section class="panel" id="panel-agenda">
     <p class="hint quees">📅 <b>Esto es el FUTURO: tu horario y lo que ya está reservado.</b> Aquí armas en qué días y horas dictas, con qué tipo de clase y cuánta gente entra. ¿Buscas anotar una clase que YA diste? Eso es <b><a href="#" data-ira="registro">Asistencia</a></b>.</p>
+    <!-- Calendario del mes (10-ago-2026, reunión Elevate): la vista mensual que José extraña
+         de Punchpass. Día a día: cuántas clases del horario + cuántas reservas. Clic en un
+         día = detalle con la gente, y desde ahí se bloquea o siembra con la fecha puesta. -->
+    <div class="group">
+      <h2>Calendario del mes</h2>
+      <p class="hint">La foto de tu mes, día por día: tus clases del horario y las reservas que ya cayeron. <b>Toca un día</b> para ver quiénes vienen y para bloquear o sembrar directo en esa fecha.</p>
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
+        <button class="btn ghost sm" id="calPrev" type="button" title="Mes anterior">‹</button>
+        <b id="calMesTitulo" style="min-width:170px;text-align:center;text-transform:capitalize;"></b>
+        <button class="btn ghost sm" id="calNext" type="button" title="Mes siguiente">›</button>
+      </div>
+      <div id="calMes"></div>
+      <div id="calDia" style="margin-top:12px;"></div>
+    </div>
     <div class="group">
       <h2>Próximas clases reservadas</h2>
       <p class="hint">Lo que los alumnos reservaron desde su portal, más lo que bloquees aquí. Marca asistencia para cerrar la clase (Asistió y Falta consumen 1 clase del paquete).</p>
@@ -1308,6 +1334,14 @@
         </select>
       </div>
       <p class="hint">El color y la tipografía se guardan con "Guardar ajustes". El logo se sube al instante y aparece en el portal de tus alumnos.</p>
+    </div>
+    <!-- Beneficios / convenios (10-ago-2026, reunión Elevate): descuentos y convenios de la
+         academia con otras empresas. Los ven SOLO los alumnos con cuenta activa, en su portal. -->
+    <div class="group" data-aj="academia">
+      <h2>Beneficios para tus alumnos</h2>
+      <p class="hint">¿Tu academia tiene <b>convenios o descuentos</b> con otras empresas? Anótalos aquí y tus alumnos <b>con cuenta activa</b> los verán en su portal (quien dejó de pagar, no los ve). El link es opcional.</p>
+      <div id="benefBox"></div>
+      <button type="button" class="btn ghost sm" id="btnAddBenef" style="margin-top:8px;">+ Agregar beneficio</button>
     </div>
     <!-- Precios PRIMERO (10-ago-2026): las 3 academias fundadoras se trabaron exactamente
          aquí — el grupo vivía tercero, detrás de aforo y salas, y nadie lo encontraba. -->
@@ -1813,6 +1847,9 @@
   <div class="modal">
     <h3>Esta <em>franja</em></h3>
     <div class="mlab" id="franjaCuando">—</div>
+    <!-- Reunión Elevate 10-ago-2026: al clickear un horario, ver quiénes reservaron ESA
+         clase+hora, sin bucear en la tabla grande. Lo pinta pintarReservasFranja(). -->
+    <div id="frReservas" style="margin:0 0 14px;"></div>
     <div class="field"><label>Tipo de clase</label>
       <select id="fr_tipo"></select>
       <p class="hint" style="margin:5px 0 0;" id="fr_tipoHint">Sale como etiqueta en el portal de tus alumnos y decide qué planes pueden reservarla.</p></div>
@@ -2916,6 +2953,36 @@ function leerMensajesEditor(){
   return out;
 }
 
+/* ---------- Beneficios / convenios (10-ago-2026, reunión Elevate) ---------- */
+function beneficiosTenant(){
+  try{ var a=JSON.parse((db.config&&db.config.beneficios)||"[]"); return Array.isArray(a)?a:[]; }catch(e){ return []; }
+}
+function filaBenefHTML(b){
+  b=b||{};
+  return '<div class="benefrow" style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-start;border:1px solid var(--line,rgba(255,255,255,.12));border-radius:8px;padding:10px;margin-bottom:8px;">'+
+    '<input class="bn-t" placeholder="Nombre del beneficio (ej. 2x1 en Cine Star)" value="'+esc(b.t||"")+'" style="flex:1 1 220px;" maxlength="60" />'+
+    '<input class="bn-d" placeholder="Cómo se usa (ej. muestra tu portal en caja)" value="'+esc(b.d||"")+'" style="flex:2 1 260px;" maxlength="240" />'+
+    '<input class="bn-l" placeholder="Link (opcional)" value="'+esc(b.l||"")+'" style="flex:1 1 180px;" maxlength="300" />'+
+    '<button type="button" class="btn ghost sm bn-x" title="Quitar este beneficio" style="flex:0 0 auto;">×</button>'+
+  '</div>';
+}
+function pintarBeneficios(){
+  var box=el("benefBox"); if(!box) return;
+  var bs=beneficiosTenant();
+  box.innerHTML=bs.length?bs.map(filaBenefHTML).join("")
+    :'<div class="hint" style="border:1px dashed var(--line);border-radius:8px;padding:12px;margin:0;">Aún no tienes beneficios. Agrega el primero: tus alumnos activos lo verán en su portal.</div>';
+}
+if(el("btnAddBenef")) el("btnAddBenef").addEventListener("click",function(){
+  var box=el("benefBox"); if(!box) return;
+  if(box.querySelector(".hint")) box.innerHTML="";
+  box.insertAdjacentHTML("beforeend",filaBenefHTML({}));
+  var last=box.querySelector(".benefrow:last-child .bn-t"); if(last) last.focus();
+});
+if(el("benefBox")) el("benefBox").addEventListener("click",function(e){
+  var x=e.target.closest(".bn-x"); if(!x) return;
+  x.closest(".benefrow").remove();
+  if(!el("benefBox").querySelector(".benefrow")) pintarBeneficios();
+});
 function renderAjustes(){
   renderClases();
   renderMensajes();
@@ -2932,6 +2999,7 @@ function renderAjustes(){
   if(el("cfg_cursos")) el("cfg_cursos").value=(db.config&&db.config.cursos)||MARCA.cursos.join(", ");
   if(el("cfg_brand_color")) el("cfg_brand_color").value=(db.config&&db.config.brand_color)||"#E8A13D";
   if(el("cfg_brand_font")) el("cfg_brand_font").value=(db.config&&db.config.brand_font)||"";
+  pintarBeneficios();
   var blp=el("brandLogoPrev");
   if(blp){ var lg=(db.config&&db.config.brand_logo)||""; if(lg){ blp.src=lg; blp.style.display="block"; } else { blp.style.display="none"; } }
   el("cfg_pago_numero").value=(db.config&&db.config.pago_numero)||"";
@@ -3643,6 +3711,8 @@ function renderAgendaAdmin(){
   var conSalas = salasGrilla().length>0;
   if(el("thAgClase")) el("thAgClase").classList.toggle("hidden", !conSalas);
 
+  /* calendario del mes (10-ago-2026): se repinta con cada recarga de la agenda */
+  try{ renderCalMes(); }catch(e){}
   var tb = el("tablaAgenda").querySelector("tbody");
   if(AG_RESERVAS.length===0){ tb.innerHTML=""; el("agAdminVacio").classList.remove("hidden"); return; }
   el("agAdminVacio").classList.add("hidden");
@@ -3657,6 +3727,135 @@ function renderAgendaAdmin(){
     return '<tr><td style="white-space:nowrap;">'+esc(fmtLima(r.inicio_utc))+'</td><td>'+quien+'</td><td>'+esc(r.tipo)+'</td>'+(conSalas?('<td>'+esc(r.sala||"—")+'</td>'):'')+'<td>'+esc(r.estado)+'</td><td style="white-space:nowrap;">'+acc+'</td></tr>';
   }).join("");
 }
+/* ---------- Calendario del mes (10-ago-2026, reunión Elevate) ----------
+   La foto mensual que José extraña de Punchpass. Se pinta con lo mismo que ya carga
+   cargarAgenda (AG_DISP + AG_RESERVAS): sin viajes extra al servidor. Lima = UTC-5 fijo. */
+var CAL_ANCLA=null, CAL_SEL=null;
+function calFechaKeyLima(t){
+  var d=new Date(t-5*3600000);
+  return d.getUTCFullYear()+"-"+String(d.getUTCMonth()+1).padStart(2,"0")+"-"+String(d.getUTCDate()).padStart(2,"0");
+}
+function calHoraLima(t){
+  var d=new Date(t-5*3600000);
+  return String(d.getUTCHours()).padStart(2,"0")+":"+String(d.getUTCMinutes()).padStart(2,"0");
+}
+function calFranjasDeDow(dow){
+  /* TODAS las salas (a diferencia de la grilla, que edita una): la foto del día completo */
+  return (AG_DISP||[]).filter(function(r){ return r.activo!==0 && r.activo!==false && Number(r.dia_semana)===dow; });
+}
+function calResumenDia(fkey,dow){
+  var franjas=calFranjasDeDow(dow).length, res=0, bloq=0;
+  (AG_RESERVAS||[]).forEach(function(r){
+    var t=Date.parse(r.inicio_utc); if(!isFinite(t)) return;
+    if(calFechaKeyLima(t)!==fkey) return;
+    if(r.tipo==="bloqueo"){ bloq++; return; }
+    if(r.estado==="reservada"||r.estado==="completada") res++;
+  });
+  return {franjas:franjas,res:res,bloq:bloq};
+}
+function renderCalMes(){
+  var box=el("calMes"); if(!box) return;
+  if(!CAL_ANCLA){ var hoy0=new Date(Date.now()-5*3600000); CAL_ANCLA=new Date(Date.UTC(hoy0.getUTCFullYear(),hoy0.getUTCMonth(),1)); }
+  var y=CAL_ANCLA.getUTCFullYear(), m=CAL_ANCLA.getUTCMonth();
+  var tit=el("calMesTitulo");
+  if(tit) tit.textContent=new Date(Date.UTC(y,m,15)).toLocaleDateString("es-PE",{timeZone:"UTC",month:"long",year:"numeric"});
+  var hoyKey=calFechaKeyLima(Date.now());
+  var primero=new Date(Date.UTC(y,m,1));
+  var offset=(primero.getUTCDay()+6)%7; // columna Lun
+  var dias=new Date(Date.UTC(y,m+1,0)).getUTCDate();
+  var h=["Lun","Mar","Mié","Jue","Vie","Sáb","Dom"].map(function(n){return '<div class="cm-h">'+n+'</div>';}).join("");
+  for(var i=0;i<offset;i++) h+='<div></div>';
+  for(var d=1;d<=dias;d++){
+    var fkey=y+"-"+String(m+1).padStart(2,"0")+"-"+String(d).padStart(2,"0");
+    var dow=new Date(Date.UTC(y,m,d)).getUTCDay();
+    var rsm=calResumenDia(fkey,dow);
+    var pasado=fkey<hoyKey;
+    var badges="";
+    if(rsm.franjas) badges+='<span class="cm-b">'+rsm.franjas+' clase'+(rsm.franjas===1?"":"s")+'</span>';
+    if(rsm.res) badges+='<span class="cm-b"><b>'+rsm.res+' reserva'+(rsm.res===1?"":"s")+'</b></span>';
+    if(rsm.bloq) badges+='<span class="cm-b">'+rsm.bloq+' bloqueo'+(rsm.bloq===1?"":"s")+'</span>';
+    h+='<button type="button" class="cm-d'+(pasado?" off":"")+(fkey===hoyKey?" hoy":"")+(fkey===CAL_SEL?" sel":"")+((rsm.res||rsm.bloq)?" condata":"")+'" data-calfecha="'+fkey+'" data-caldow="'+dow+'">'+
+       '<span class="cm-n">'+d+'</span>'+badges+'</button>';
+  }
+  box.className="calmes";
+  box.innerHTML=h;
+  if(CAL_SEL) renderCalDia(CAL_SEL);
+}
+function renderCalDia(fkey){
+  var box=el("calDia"); if(!box) return;
+  CAL_SEL=fkey;
+  var parts=fkey.split("-").map(Number);
+  var dow=new Date(Date.UTC(parts[0],parts[1]-1,parts[2])).getUTCDay();
+  var bonita=new Date(Date.UTC(parts[0],parts[1]-1,parts[2],12)).toLocaleDateString("es-PE",{timeZone:"UTC",weekday:"long",day:"numeric",month:"long"});
+  var conSalas=salasGrilla().length>0;
+  /* reservas y bloqueos reales de ESA fecha, agrupados por hora */
+  var porHora={};
+  (AG_RESERVAS||[]).forEach(function(r){
+    var t=Date.parse(r.inicio_utc); if(!isFinite(t)) return;
+    if(calFechaKeyLima(t)!==fkey) return;
+    var hh=calHoraLima(t);
+    (porHora[hh]=porHora[hh]||[]).push(r);
+  });
+  /* franjas del horario de ese día de la semana (todas las salas) */
+  var franjas=calFranjasDeDow(dow).slice().sort(function(a,b){return String(a.hora).localeCompare(String(b.hora));});
+  var filas=[];
+  var vistasHoras={};
+  franjas.forEach(function(f){
+    vistasHoras[f.hora]=1;
+    var rs=(porHora[f.hora]||[]).filter(function(r){ return !conSalas || String(r.sala||"")===String(f.sala||""); });
+    var gente=rs.filter(function(r){return r.tipo!=="bloqueo" && (r.estado==="reservada"||r.estado==="completada");}).map(function(r){return r.alumno_nombre||"(sin nombre)";});
+    var bloqs=rs.filter(function(r){return r.tipo==="bloqueo";}).length;
+    filas.push('<div style="padding:8px 0;border-top:1px solid var(--line,rgba(255,255,255,.1));display:flex;gap:10px;flex-wrap:wrap;align-items:baseline;">'+
+      '<b style="font-family:var(--mono);font-size:12.5px;flex:0 0 auto;">'+esc(f.hora)+'</b>'+
+      '<span style="font-size:13px;flex:1 1 auto;">'+esc(f.curso||"Clase")+(f.sala?(' · '+esc(f.sala)):'')+(f.profe?(' · '+esc(nombreProfe(f.profe)||"")):'')+'</span>'+
+      '<span class="hint" style="margin:0;flex:1 1 100%;">'+
+        (gente.length?('<b style="color:var(--accent);">'+gente.length+'</b> — '+gente.map(esc).join(" · ")):"Sin reservas aún")+
+        (bloqs?(' · '+bloqs+' bloqueo(s)'):'')+
+      '</span></div>');
+  });
+  /* reservas sueltas en horas que no están en el horario semanal (siembras puntuales) */
+  Object.keys(porHora).sort().forEach(function(hh){
+    if(vistasHoras[hh]) return;
+    var rs=porHora[hh];
+    var gente=rs.filter(function(r){return r.tipo!=="bloqueo" && (r.estado==="reservada"||r.estado==="completada");}).map(function(r){return r.alumno_nombre||"(sin nombre)";});
+    var bloqs=rs.filter(function(r){return r.tipo==="bloqueo";}).length;
+    if(!gente.length && !bloqs) return;
+    filas.push('<div style="padding:8px 0;border-top:1px solid var(--line,rgba(255,255,255,.1));display:flex;gap:10px;flex-wrap:wrap;align-items:baseline;">'+
+      '<b style="font-family:var(--mono);font-size:12.5px;flex:0 0 auto;">'+esc(hh)+'</b>'+
+      '<span style="font-size:13px;flex:1 1 auto;">Fuera del horario semanal</span>'+
+      '<span class="hint" style="margin:0;flex:1 1 100%;">'+
+        (gente.length?('<b style="color:var(--accent);">'+gente.length+'</b> — '+gente.map(esc).join(" · ")):'')+
+        (bloqs?((gente.length?' · ':'')+bloqs+' bloqueo(s)'):'')+
+      '</span></div>');
+  });
+  box.innerHTML='<div class="card" style="max-width:640px;">'+
+    '<div class="mlab" style="margin-bottom:2px;text-transform:capitalize;">'+esc(bonita)+'</div>'+
+    (filas.length?filas.join(""):'<p class="hint" style="margin:8px 0 0;">Este día no tiene clases en el horario ni reservas.</p>')+
+    '<button type="button" class="btn ghost sm" id="btnCalSembrar" data-calfecha="'+fkey+'" style="margin-top:10px;">Bloquear o sembrar en este día</button>'+
+  '</div>';
+  renderCalMes._skipDia=true;
+  /* re-pinta el mes solo para mover el resaltado del día elegido */
+  var botones=document.querySelectorAll("#calMes .cm-d");
+  botones.forEach(function(b){ b.classList.toggle("sel",b.dataset.calfecha===fkey); });
+}
+if(el("calPrev")) el("calPrev").addEventListener("click",function(){
+  if(!CAL_ANCLA) return; CAL_ANCLA=new Date(Date.UTC(CAL_ANCLA.getUTCFullYear(),CAL_ANCLA.getUTCMonth()-1,1)); CAL_SEL=null; el("calDia").innerHTML=""; renderCalMes();
+});
+if(el("calNext")) el("calNext").addEventListener("click",function(){
+  if(!CAL_ANCLA) return; CAL_ANCLA=new Date(Date.UTC(CAL_ANCLA.getUTCFullYear(),CAL_ANCLA.getUTCMonth()+1,1)); CAL_SEL=null; el("calDia").innerHTML=""; renderCalMes();
+});
+if(el("calMes")) el("calMes").addEventListener("click",function(e){
+  var b=e.target.closest(".cm-d"); if(!b||b.classList.contains("off")) return;
+  renderCalDia(b.dataset.calfecha);
+});
+if(el("calDia")) el("calDia").addEventListener("click",function(e){
+  var b=e.target.closest("#btnCalSembrar"); if(!b) return;
+  /* precarga la fecha en "Bloquear o sembrar" y lleva ahí: el flujo que ya existe */
+  var dt=el("ag_dt"); if(dt) dt.value=b.dataset.calfecha+"T09:00";
+  var grupo=el("btnBloquearSlot") && el("btnBloquearSlot").closest(".group");
+  if(grupo){ grupo.scrollIntoView({behavior:"smooth",block:"start"}); }
+  toast("Fecha puesta en \"Bloquear o sembrar\": elige alumno u hora y aparta.");
+});
 function pintarDcell(cell){
   var on=cell.classList.contains("on");
   var cupo=parseInt(cell.dataset.cupo,10)||0;
@@ -3695,11 +3894,49 @@ function pintarAforoHint(){
     ? ('Vacío = <b>'+a+'</b>, el aforo de "'+esc(String(t).split("·")[0].trim())+'".')
     : 'Vacío = el "Cupo por horario" general de Ajustes → Reservas.';
 }
+/* Quiénes reservaron esta franja (10-ago-2026, reunión Elevate): las próximas fechas de
+   este día+hora(+sala) con sus alumnos, dentro del modal — ya no hay que bucear en la
+   tabla grande de reservas. Lima es UTC-5 fijo, sin depender del reloj del navegador. */
+function pintarReservasFranja(dow,hora,sala){
+  var box=el("frReservas"); if(!box) return;
+  var conSalas=salasGrilla().length>0;
+  var ahora=Date.now();
+  var porFecha={}, orden=[];
+  (AG_RESERVAS||[]).forEach(function(r){
+    if(r.tipo==="bloqueo") return;
+    if(r.estado!=="reservada" && r.estado!=="completada") return;
+    var t=Date.parse(r.inicio_utc); if(!isFinite(t)) return;
+    if(t<ahora-3600000) return; // solo lo que viene (con 1h de gracia)
+    var lima=new Date(t-5*3600000);
+    var hh=String(lima.getUTCHours()).padStart(2,"0")+":"+String(lima.getUTCMinutes()).padStart(2,"0");
+    if(lima.getUTCDay()!==dow || hh!==hora) return;
+    if(conSalas && String(r.sala||"")!==String(sala||"")) return;
+    var fkey=lima.getUTCFullYear()+"-"+String(lima.getUTCMonth()+1).padStart(2,"0")+"-"+String(lima.getUTCDate()).padStart(2,"0");
+    if(!porFecha[fkey]){ porFecha[fkey]={t:t,gente:[]}; orden.push(fkey); }
+    porFecha[fkey].gente.push(r.alumno_nombre||"(sin nombre)");
+  });
+  if(!orden.length){
+    box.innerHTML='<p class="hint" style="margin:0;">Nadie ha reservado esta franja todavía.</p>';
+    return;
+  }
+  orden.sort();
+  var h='<div class="mlab" style="margin-bottom:6px;">Ya reservaron aquí</div>';
+  orden.slice(0,5).forEach(function(fk){
+    var g=porFecha[fk];
+    var fecha=new Date(g.t).toLocaleDateString("es-PE",{timeZone:"America/Lima",weekday:"short",day:"numeric",month:"short"});
+    h+='<div style="padding:7px 10px;border:1px solid var(--line,rgba(255,255,255,.12));border-radius:8px;margin-bottom:6px;">'+
+       '<b style="font-size:12.5px;">'+esc(fecha)+'</b> · '+g.gente.length+(g.gente.length===1?" reserva":" reservas")+
+       '<div class="hint" style="margin:3px 0 0;">'+g.gente.map(esc).join(" · ")+'</div></div>';
+  });
+  if(orden.length>5) h+='<p class="hint" style="margin:0;">…y '+(orden.length-5)+' fecha(s) más en la tabla de abajo.</p>';
+  box.innerHTML=h;
+}
 function abrirFranja(cell){
   FRANJA_CELDA=cell;
   var dow=Number(cell.dataset.dow), hora=cell.dataset.hora;
   var d=AG_DOW.find(function(x){return x.d===dow;});
   el("franjaCuando").textContent=((d&&d.n)||"")+" "+hora+(cell.dataset.sala?(" · "+cell.dataset.sala):"");
+  try{ pintarReservasFranja(dow,hora,cell.dataset.sala||""); }catch(e){ if(el("frReservas")) el("frReservas").innerHTML=""; }
   el("fr_tipo").innerHTML=opcionesDeTipo(cell.dataset.curso||"");
   el("fr_tipo").value=cell.dataset.curso||"";
   el("fr_aforo").value=(parseInt(cell.dataset.cupo,10)||"")||"";
@@ -4186,6 +4423,9 @@ function cargarProfesores(){
          pueden hacer los profesores"). El dueño siempre puede todo, así que no se le ofrece. */
       if(p.rol!=="dueno"){
         acts.push('<button class="btn ghost sm" data-pfpermisos="'+p.id+'" data-pfnombre="'+esc(p.nombre)+'" data-pfperm="'+esc(p.permisos||"")+'">Permisos</button>');
+        /* Foto puesta por el dueño (10-ago-2026, reunión Elevate): antes solo cada profe
+           podía auto-subirse la suya desde su propio acceso. */
+        acts.push('<button class="btn ghost sm" data-pffoto="'+p.id+'" data-pfnombre="'+esc(p.nombre)+'">'+(p.foto?"Cambiar foto":"Foto")+'</button>');
       }
       if(p.rol!=="dueno"){
         /* Editar y Borrar SIEMPRE visibles (7-ago-2026, reunión Elevate: José tenía un profe
@@ -4209,8 +4449,11 @@ function cargarProfesores(){
         var so='<option value="">Sin sede</option>'+(db.sedes||[]).map(function(s){return '<option value="'+esc(s.id)+'"'+(p.sede_id===s.id?' selected':'')+'>'+esc(s.nombre)+'</option>';}).join("");
         sedeCell='<select data-pfsede="'+p.id+'" style="width:auto;min-width:110px;">'+so+'</select>';
       } else sedeCell='<span class="mini">—</span>';
+      var avatarP=p.foto
+        ? '<img src="'+esc(p.foto)+'" alt="" style="width:26px;height:26px;border-radius:50%;object-fit:cover;vertical-align:middle;margin-right:7px;flex:0 0 auto;">'
+        : '<span style="display:inline-flex;width:26px;height:26px;border-radius:50%;background:var(--panel2);border:1px solid var(--line,rgba(255,255,255,.15));align-items:center;justify-content:center;font-size:11px;color:var(--muted);vertical-align:middle;margin-right:7px;flex:0 0 auto;">'+esc((p.nombre||"?").trim().charAt(0).toUpperCase())+'</span>';
       return '<tr>'+
-        '<td class="name">'+esc(p.nombre)+(p.rol==="dueno"?' <span class="pill profe">Dueño</span>':'')+'</td>'+
+        '<td class="name">'+avatarP+esc(p.nombre)+(p.rol==="dueno"?' <span class="pill profe">Dueño</span>':'')+'</td>'+
         '<td><span class="mini">'+esc(p.email)+'</span></td>'+
         '<td>'+(p.n_alumnos||0)+'</td>'+
         '<td>'+sedeCell+'</td>'+
@@ -4348,6 +4591,25 @@ document.body.addEventListener("click",function(e){
   }
   var pm=e.target.closest?e.target.closest("[data-pfpermisos]"):null;
   if(pm){ abrirPermisos(pm.dataset.pfpermisos, pm.dataset.pfnombre, pm.dataset.pfperm); return; }
+  /* Foto de un profesor subida por el dueño (10-ago-2026, reunión Elevate) */
+  var ftP=e.target.closest?e.target.closest("[data-pffoto]"):null;
+  if(ftP){
+    var pidF=ftP.dataset.pffoto, nomF=ftP.dataset.pfnombre||"el profesor";
+    var inpF=document.createElement("input");
+    inpF.type="file"; inpF.accept="image/png,image/jpeg";
+    inpF.onchange=function(){
+      var f=inpF.files&&inpF.files[0]; if(!f) return;
+      if(f.size>8*1024*1024){ toast("La foto pesa más de 8 MB. Usa una más liviana."); return; }
+      var fd=new FormData(); fd.append("archivo",f); fd.append("profesor_id",pidF);
+      toast("Subiendo la foto de "+nomF+"…");
+      fetch("/app/api/admin/profesores/foto",{method:"POST",headers:{"authorization":"Bearer "+token},body:fd})
+        .then(function(r){ return r.json().catch(function(){return {};}).then(function(d){ if(!r.ok) throw new Error(d.error||("HTTP "+r.status)); return d; }); })
+        .then(function(){ toast("Foto de "+nomF+" actualizada ✓"); cargarProfesores(); })
+        .catch(function(err){ toast((err&&err.message)||"No se pudo subir la foto."); });
+    };
+    inpF.click();
+    return;
+  }
   var acc=function(body,msg){ apiPost("/app/api/admin/profesores",body).then(function(){ toast(msg); cargarProfesores(); recargar(); }).catch(function(err){ toast((err&&err.message)||"No se pudo"); }); };
   if(cp){ var lk=cp.dataset.pfcopiar||""; if(lk){ navigator.clipboard&&navigator.clipboard.writeText(lk); toast("Link copiado ✓ Mándaselo por WhatsApp"); } return; }
   if(rv){ acc({accion:"reenviar",id:rv.dataset.pfreenviar},"Invitación reenviada ✓"); return; }
@@ -5263,6 +5525,16 @@ el("btnGuardarAjustes").addEventListener("click",function(){
             asistencia_auto:(el("cfg_asistencia_auto")?el("cfg_asistencia_auto").value:""),
             asistencia_horas:(el("cfg_asistencia_horas")?el("cfg_asistencia_horas").value.trim():""),
             mensajes: Object.keys(msgRows).length?JSON.stringify(msgRows):"",
+            beneficios: (function(){
+              var arr=[];
+              Array.prototype.forEach.call(document.querySelectorAll("#benefBox .benefrow"),function(row){
+                var t=(row.querySelector(".bn-t").value||"").trim();
+                if(!t) return;
+                arr.push({t:t.slice(0,60), d:(row.querySelector(".bn-d").value||"").trim().slice(0,240),
+                          l:(row.querySelector(".bn-l").value||"").trim().slice(0,300)});
+              });
+              return arr.length?JSON.stringify(arr):"";
+            })(),
             nubefact_ruta:(el("cfg_nubefact_ruta")?el("cfg_nubefact_ruta").value.trim():""),
             nubefact_token:(el("cfg_nubefact_token")?el("cfg_nubefact_token").value.trim():""),
             fact_serie_boleta:(el("cfg_fact_serie_boleta")?el("cfg_fact_serie_boleta").value.trim():""),
