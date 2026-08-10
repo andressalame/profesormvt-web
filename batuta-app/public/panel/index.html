@@ -1859,6 +1859,15 @@
     <div class="field" id="fr_profeWrap"><label>La dicta</label>
       <select id="fr_profe"></select>
       <p class="hint" style="margin:5px 0 0;" id="fr_profeHint">Opcional: tus alumnos lo ven al reservar ("con Fiorella"). Crea a tu equipo en <b>Personas → Profesores</b>.</p></div>
+    <!-- Vigencia por fechas (10-ago-2026, pedido de Elevate: "horarios distintos cada
+         cierto tiempo, programados con meses de anticipación") -->
+    <div class="field"><label>¿Cuándo corre esta franja?</label>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+        <input id="fr_vdesde" type="date" style="flex:1;min-width:132px;" />
+        <span class="hint" style="margin:0;flex:0 0 auto;">hasta</span>
+        <input id="fr_vhasta" type="date" style="flex:1;min-width:132px;" />
+      </div>
+      <p class="hint" style="margin:5px 0 0;">Vacío = <b>todas las semanas, como siempre</b>. Con fechas, la franja solo existe en ese rango: sirve para horarios de temporada o para <b>estrenar tu horario nuevo desde un día exacto</b> (puedes dejar armadas las semanas futuras desde ya).</p></div>
     <div class="field"><label>Aplicar también a…</label>
       <select id="fr_aplicar">
         <option value="una">Solo esta franja</option>
@@ -3686,15 +3695,17 @@ function renderAgendaAdmin(){
   };
   var cursoDeCelda=function(dow,hora){ var r=filaDe(dow,hora); return (r&&r.curso)?String(r.curso):""; };
   var profeDeCelda=function(dow,hora){ var r=filaDe(dow,hora); return (r&&r.profe)?String(r.profe):""; };
+  var vigDeCelda=function(dow,hora){ var r=filaDe(dow,hora); return [ (r&&r.vdesde)||"", (r&&r.vhasta)||"" ]; };
   AG_HORAS.forEach(function(h){
     html += '<tr><td style="font-weight:600;font-family:var(--mono);font-size:12px;">'+h+'</td>'+AG_DOW.map(function(d){
       var on = dispActiva(d.d,h);
       var cupo = cupoDeCelda(d.d,h);
       var curso = cursoDeCelda(d.d,h);
       var profe = profeDeCelda(d.d,h);
-      var badge = on ? ((curso?('<span class="dc-t">'+esc(abrevTipo(curso))+'</span>'):"✓")+(cupo?('<span class="dc-n">'+cupo+'</span>'):"")) : "";
-      var ttl = on ? ((curso||"Sin tipo de clase")+(profe?(" · la dicta "+nombreProfe(profe)):"")+" · aforo "+(cupo?cupo:"el del tipo")+" · clic para cambiarlo") : "Clic para prender esta franja";
-      return '<td><button class="dcell'+(on?" on":"")+'" data-dow="'+d.d+'" data-hora="'+h+'" data-cupo="'+cupo+'" data-curso="'+esc(curso)+'" data-sala="'+esc(AG_SALA)+'" data-profe="'+esc(profe)+'" title="'+esc(ttl)+'">'+badge+'</button></td>';
+      var vig = vigDeCelda(d.d,h);
+      var badge = on ? ((curso?('<span class="dc-t">'+esc(abrevTipo(curso))+'</span>'):"✓")+(cupo?('<span class="dc-n">'+cupo+'</span>'):"")+((vig[0]||vig[1])?'<span class="dc-n" title="Solo entre fechas">📅</span>':"")) : "";
+      var ttl = on ? ((curso||"Sin tipo de clase")+(profe?(" · la dicta "+nombreProfe(profe)):"")+" · aforo "+(cupo?cupo:"el del tipo")+((vig[0]||vig[1])?(" · corre "+(vig[0]||"…")+" a "+(vig[1]||"…")):"")+" · clic para cambiarlo") : "Clic para prender esta franja";
+      return '<td><button class="dcell'+(on?" on":"")+'" data-dow="'+d.d+'" data-hora="'+h+'" data-cupo="'+cupo+'" data-curso="'+esc(curso)+'" data-sala="'+esc(AG_SALA)+'" data-profe="'+esc(profe)+'" data-vdesde="'+esc(vig[0])+'" data-vhasta="'+esc(vig[1])+'" title="'+esc(ttl)+'">'+badge+'</button></td>';
     }).join("")+'</tr>';
   });
   el("dispGrid").innerHTML = html + '</tbody></table>'+
@@ -3739,12 +3750,20 @@ function calHoraLima(t){
   var d=new Date(t-5*3600000);
   return String(d.getUTCHours()).padStart(2,"0")+":"+String(d.getUTCMinutes()).padStart(2,"0");
 }
-function calFranjasDeDow(dow){
-  /* TODAS las salas (a diferencia de la grilla, que edita una): la foto del día completo */
-  return (AG_DISP||[]).filter(function(r){ return r.activo!==0 && r.activo!==false && Number(r.dia_semana)===dow; });
+function calVigCubre(r,fkey){
+  /* vigencia por fechas (10-ago-2026): '' = corre siempre; comparación lexicográfica basta */
+  var d=String(r.vdesde||""), h=String(r.vhasta||"");
+  if(d&&fkey<d) return false;
+  if(h&&fkey>h) return false;
+  return true;
+}
+function calFranjasDeDow(dow,fkey){
+  /* TODAS las salas (a diferencia de la grilla, que edita una): la foto del día completo.
+     Con fkey, además respeta la vigencia por fechas de cada franja. */
+  return (AG_DISP||[]).filter(function(r){ return r.activo!==0 && r.activo!==false && Number(r.dia_semana)===dow && (!fkey||calVigCubre(r,fkey)); });
 }
 function calResumenDia(fkey,dow){
-  var franjas=calFranjasDeDow(dow).length, res=0, bloq=0;
+  var franjas=calFranjasDeDow(dow,fkey).length, res=0, bloq=0;
   (AG_RESERVAS||[]).forEach(function(r){
     var t=Date.parse(r.inicio_utc); if(!isFinite(t)) return;
     if(calFechaKeyLima(t)!==fkey) return;
@@ -3796,8 +3815,8 @@ function renderCalDia(fkey){
     var hh=calHoraLima(t);
     (porHora[hh]=porHora[hh]||[]).push(r);
   });
-  /* franjas del horario de ese día de la semana (todas las salas) */
-  var franjas=calFranjasDeDow(dow).slice().sort(function(a,b){return String(a.hora).localeCompare(String(b.hora));});
+  /* franjas del horario de ese día de la semana (todas las salas, respetando vigencias) */
+  var franjas=calFranjasDeDow(dow,fkey).slice().sort(function(a,b){return String(a.hora).localeCompare(String(b.hora));});
   var filas=[];
   var vistasHoras={};
   franjas.forEach(function(f){
@@ -3861,8 +3880,9 @@ function pintarDcell(cell){
   var cupo=parseInt(cell.dataset.cupo,10)||0;
   var curso=cell.dataset.curso||"";
   var profe=cell.dataset.profe||"";
-  cell.innerHTML=on?((curso?('<span class="dc-t">'+esc(abrevTipo(curso))+'</span>'):"✓")+(cupo?('<span class="dc-n">'+cupo+'</span>'):"")):"";
-  cell.title=on?((curso||"Sin tipo de clase")+(profe?(" · la dicta "+nombreProfe(profe)):"")+" · aforo "+(cupo?cupo:"el del tipo")+" · clic para cambiarlo"):"Clic para prender esta franja";
+  var vd=cell.dataset.vdesde||"", vh=cell.dataset.vhasta||"";
+  cell.innerHTML=on?((curso?('<span class="dc-t">'+esc(abrevTipo(curso))+'</span>'):"✓")+(cupo?('<span class="dc-n">'+cupo+'</span>'):"")+((vd||vh)?'<span class="dc-n" title="Solo entre fechas">📅</span>':"")):"";
+  cell.title=on?((curso||"Sin tipo de clase")+(profe?(" · la dicta "+nombreProfe(profe)):"")+" · aforo "+(cupo?cupo:"el del tipo")+((vd||vh)?(" · corre "+(vd||"…")+" a "+(vh||"…")):"")+" · clic para cambiarlo"):"Clic para prender esta franja";
 }
 
 /* ---------- Modal de franja: tipo de clase + aforo (27-jul-2026) ---------- */
@@ -3936,6 +3956,8 @@ function abrirFranja(cell){
   var dow=Number(cell.dataset.dow), hora=cell.dataset.hora;
   var d=AG_DOW.find(function(x){return x.d===dow;});
   el("franjaCuando").textContent=((d&&d.n)||"")+" "+hora+(cell.dataset.sala?(" · "+cell.dataset.sala):"");
+  if(el("fr_vdesde")) el("fr_vdesde").value=cell.dataset.vdesde||"";
+  if(el("fr_vhasta")) el("fr_vhasta").value=cell.dataset.vhasta||"";
   try{ pintarReservasFranja(dow,hora,cell.dataset.sala||""); }catch(e){ if(el("frReservas")) el("frReservas").innerHTML=""; }
   el("fr_tipo").innerHTML=opcionesDeTipo(cell.dataset.curso||"");
   el("fr_tipo").value=cell.dataset.curso||"";
@@ -4009,12 +4031,15 @@ if(el("btnFranjaOk")) el("btnFranjaOk").addEventListener("click",function(){
     });
   }
   var profeFr=(el("fr_profe")&&el("fr_profeWrap")&&el("fr_profeWrap").style.display!=="none")?(el("fr_profe").value||""):(FRANJA_CELDA.dataset.profe||"");
-  objetivo.forEach(function(c){ c.classList.add("on"); c.dataset.curso=tipo; c.dataset.cupo=cupo; c.dataset.profe=profeFr; pintarDcell(c); });
+  /* vigencia por fechas (10-ago-2026): rango invertido se avisa y NO se aplica */
+  var vd=(el("fr_vdesde")&&el("fr_vdesde").value)||"", vh=(el("fr_vhasta")&&el("fr_vhasta").value)||"";
+  if(vd&&vh&&vd>vh){ toast("El rango de fechas está al revés (desde > hasta). Corrígelo y vuelve a guardar."); return; }
+  objetivo.forEach(function(c){ c.classList.add("on"); c.dataset.curso=tipo; c.dataset.cupo=cupo; c.dataset.profe=profeFr; c.dataset.vdesde=vd; c.dataset.vhasta=vh; pintarDcell(c); });
   closeOv("ovFranja");
   toast(objetivo.length>1?("Aplicado a "+objetivo.length+" franjas — dale Guardar horario"):'Listo — dale "Guardar horario"');
 });
 if(el("btnFranjaApagar")) el("btnFranjaApagar").addEventListener("click",function(){
-  if(FRANJA_CELDA){ FRANJA_CELDA.classList.remove("on"); FRANJA_CELDA.dataset.curso=""; FRANJA_CELDA.dataset.cupo=0; FRANJA_CELDA.dataset.profe=""; pintarDcell(FRANJA_CELDA); }
+  if(FRANJA_CELDA){ FRANJA_CELDA.classList.remove("on"); FRANJA_CELDA.dataset.curso=""; FRANJA_CELDA.dataset.cupo=0; FRANJA_CELDA.dataset.profe=""; FRANJA_CELDA.dataset.vdesde=""; FRANJA_CELDA.dataset.vhasta=""; pintarDcell(FRANJA_CELDA); }
   closeOv("ovFranja");
 });
 
@@ -4064,7 +4089,7 @@ function sincronizarGrillaEnMemoria(){
   var otras=(AG_DISP||[]).filter(function(r){ return String(r.sala||"")!==AG_SALA; });
   var vivos=[];
   Array.prototype.forEach.call(el("dispGrid").querySelectorAll(".dcell.on"),function(c){
-    vivos.push({dia_semana:Number(c.dataset.dow), hora:c.dataset.hora, activo:1, cupo:parseInt(c.dataset.cupo,10)||0, curso:c.dataset.curso||"", sala:AG_SALA, profe:c.dataset.profe||""});
+    vivos.push({dia_semana:Number(c.dataset.dow), hora:c.dataset.hora, activo:1, cupo:parseInt(c.dataset.cupo,10)||0, curso:c.dataset.curso||"", sala:AG_SALA, profe:c.dataset.profe||"", vdesde:c.dataset.vdesde||"", vhasta:c.dataset.vhasta||""});
   });
   AG_DISP=otras.concat(vivos);
 }
@@ -4116,7 +4141,7 @@ el("btnGuardarDisp").addEventListener("click",function(){
   sincronizarGrillaEnMemoria();
   var activos = [];
   (AG_DISP||[]).forEach(function(r){
-    if(r && r.activo!==0) activos.push({dia_semana:Number(r.dia_semana), hora:r.hora, cupo:parseInt(r.cupo,10)||0, curso:r.curso||"", sala:String(r.sala||""), profe:r.profe||""});
+    if(r && r.activo!==0) activos.push({dia_semana:Number(r.dia_semana), hora:r.hora, cupo:parseInt(r.cupo,10)||0, curso:r.curso||"", sala:String(r.sala||""), profe:r.profe||"", vdesde:r.vdesde||"", vhasta:r.vhasta||""});
   });
   apiPost("/app/api/admin/disponibilidad",{activos:activos, profe: AG_PROFE||undefined})
     .then(function(){ toast("Horario guardado"); cargarAgenda(); })

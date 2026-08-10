@@ -3151,12 +3151,36 @@ async function slotValido(env, tenantId, iso, opts, prof){
      disponibilidad, asi una academia puede dictar 7:15, 8:45 o cada 30 minutos. */
   const pid = prof && prof.id ? prof.id : "";
   const esD = !!(prof && prof.esDueno);
-  const row = await env.DB.prepare(
-    "SELECT 1 AS ok FROM disponibilidad WHERE tenant_id = ?1 AND dia_semana = ?2 AND hora = ?3 AND activo = 1 " +
-    "AND (profesor_id = ?4 OR (?5 = 1 AND (profesor_id IS NULL OR profesor_id = '')))"
-  ).bind(tenantId, p.dow, hhmm(p), pid, esD ? 1 : 0).first();
-  if (!row) return false;
+  /* vigencia por fechas (10-ago-2026): basta con que UNA franja de esa hora cubra la fecha.
+     Fallback al query viejo si la D1 aun no tiene las columnas. */
+  let filasV = null;
+  try {
+    filasV = ((await env.DB.prepare(
+      "SELECT COALESCE(vigente_desde,'') AS vdesde, COALESCE(vigente_hasta,'') AS vhasta FROM disponibilidad WHERE tenant_id = ?1 AND dia_semana = ?2 AND hora = ?3 AND activo = 1 " +
+      "AND (profesor_id = ?4 OR (?5 = 1 AND (profesor_id IS NULL OR profesor_id = '')))"
+    ).bind(tenantId, p.dow, hhmm(p), pid, esD ? 1 : 0).all()).results) || [];
+  } catch (e) {
+    const row = await env.DB.prepare(
+      "SELECT 1 AS ok FROM disponibilidad WHERE tenant_id = ?1 AND dia_semana = ?2 AND hora = ?3 AND activo = 1 " +
+      "AND (profesor_id = ?4 OR (?5 = 1 AND (profesor_id IS NULL OR profesor_id = '')))"
+    ).bind(tenantId, p.dow, hhmm(p), pid, esD ? 1 : 0).first();
+    return !!row;
+  }
+  const fLimaV = fechaLimaDeParts(p);
+  return filasV.some(r => vigenciaCubre(r.vdesde, r.vhasta, fLimaV));
+}
+
+/* Vigencia por fechas de una franja (10-ago-2026, Elevate): '' en ambos extremos = corre
+   siempre. fechaLima viene como "YYYY-MM-DD"; la comparacion lexicografica basta. */
+function vigenciaCubre(vdesde, vhasta, fechaLima){
+  const d = String(vdesde || ""), h = String(vhasta || "");
+  if (d && fechaLima < d) return false;
+  if (h && fechaLima > h) return false;
   return true;
+}
+function fechaLimaDeParts(p){
+  /* limaParts trae m 0-based (convencion Date): aqui se vuelve calendario humano */
+  return p.y + "-" + String(p.m + 1).padStart(2, "0") + "-" + String(p.d).padStart(2, "0");
 }
 
 /* Version rica: ademas de los slots libres, devuelve los LLENOS (para ofrecer lista de espera)
@@ -3170,7 +3194,7 @@ async function generarSlotsDetalle(env, tenantId, prof, opts){
   let disp = [];
   try {
     disp = ((await env.DB.prepare(
-      "SELECT dia_semana, hora, COALESCE(cupo,0) AS cupo, COALESCE(curso,'') AS curso, COALESCE(sala,'') AS sala, COALESCE(profe,'') AS profe FROM disponibilidad WHERE tenant_id = ?1 AND activo = 1 " +
+      "SELECT dia_semana, hora, COALESCE(cupo,0) AS cupo, COALESCE(curso,'') AS curso, COALESCE(sala,'') AS sala, COALESCE(profe,'') AS profe, COALESCE(vigente_desde,'') AS vdesde, COALESCE(vigente_hasta,'') AS vhasta FROM disponibilidad WHERE tenant_id = ?1 AND activo = 1 " +
       "AND (profesor_id = ?2 OR (?3 = 1 AND (profesor_id IS NULL OR profesor_id = '')))"
     ).bind(tenantId, pid, esD ? 1 : 0).all()).results) || [];
   } catch (e) {
@@ -3187,7 +3211,7 @@ async function generarSlotsDetalle(env, tenantId, prof, opts){
     }
   }
   const porDia = {};
-  for (const r of (disp || [])){ (porDia[r.dia_semana] = porDia[r.dia_semana] || []).push({ hora: r.hora, cupo: parseInt(r.cupo, 10) || 0, curso: r.curso || "", sala: r.sala || "", profe: r.profe || "" }); }
+  for (const r of (disp || [])){ (porDia[r.dia_semana] = porDia[r.dia_semana] || []).push({ hora: r.hora, cupo: parseInt(r.cupo, 10) || 0, curso: r.curso || "", sala: r.sala || "", profe: r.profe || "", vdesde: r.vdesde || "", vhasta: r.vhasta || "" }); }
 
   /* Nombres de los profes que dictan franjas ("La dicta Fiorella"): un solo query. */
   const profeNombres = new Map();
@@ -3254,7 +3278,10 @@ async function generarSlotsDetalle(env, tenantId, prof, opts){
   for (let i = 0; i <= HORIZONTE_SEMANAS * 7; i++){
     const p = limaParts(new Date(medianocheHoy + i * 86400000));
     const horas = porDia[p.dow] || [];
+    const fLima = fechaLimaDeParts(p);
     for (const h of horas){
+      /* vigencia por fechas (10-ago-2026): la franja solo existe dentro de su rango */
+      if (!vigenciaCubre(h.vdesde, h.vhasta, fLima)) continue;
       const ms = limaToUtc(p.y, p.m, p.d, h.hora).getTime();
       const reg = reglasDe(h.curso);
       /* muy pronto (no llega la anticipacion minima) o demasiado lejos (tope de la categoria) */
@@ -4033,6 +4060,11 @@ async function ensureErpSchema(env){
      D1 sin reconstruir, la segunda sala de una hora se pierde por el INSERT OR IGNORE. */
   try { await env.DB.prepare("ALTER TABLE disponibilidad ADD COLUMN sala TEXT DEFAULT ''").run(); } catch (e) {}
   try { await env.DB.prepare("ALTER TABLE disponibilidad ADD COLUMN profe TEXT DEFAULT ''").run(); } catch (e) {}
+  /* Vigencia por fechas de una franja (10-ago-2026, pedido de Elevate "horarios distintos
+     por semana"): '' = corre siempre (todo lo existente); con fechas, la franja solo genera
+     slots entre vigente_desde y vigente_hasta (inclusive, fecha-Lima). Ya aplicado en prod. */
+  try { await env.DB.prepare("ALTER TABLE disponibilidad ADD COLUMN vigente_desde TEXT DEFAULT ''").run(); } catch (e) {}
+  try { await env.DB.prepare("ALTER TABLE disponibilidad ADD COLUMN vigente_hasta TEXT DEFAULT ''").run(); } catch (e) {}
   try { await env.DB.prepare("ALTER TABLE reservas ADD COLUMN sala TEXT DEFAULT ''").run(); } catch (e) {}
   try { await env.DB.prepare("ALTER TABLE espera ADD COLUMN sala TEXT DEFAULT ''").run(); } catch (e) {}
   /* Auditoria de cancelaciones: cuando y quien cancelo una reserva (para que un bug de saldo
@@ -4265,8 +4297,11 @@ async function franjasDeSlot(env, tenantId, iso, prof){
   const base = "FROM disponibilidad WHERE tenant_id = ?1 AND dia_semana = ?2 AND hora = ?3 AND activo = 1 " +
     "AND (profesor_id = ?4 OR (?5 = 1 AND (profesor_id IS NULL OR profesor_id = '')))";
   const bindear = (q) => env.DB.prepare(q).bind(tenantId, p.dow, hhmm(p), pid, esD ? 1 : 0);
+  const fLimaF = fechaLimaDeParts(p);
   try {
-    return ((await bindear("SELECT COALESCE(sala,'') AS sala, COALESCE(curso,'') AS curso, COALESCE(cupo,0) AS cupo, COALESCE(profe,'') AS profe " + base).all()).results) || [];
+    const rows = ((await bindear("SELECT COALESCE(sala,'') AS sala, COALESCE(curso,'') AS curso, COALESCE(cupo,0) AS cupo, COALESCE(profe,'') AS profe, COALESCE(vigente_desde,'') AS vdesde, COALESCE(vigente_hasta,'') AS vhasta " + base).all()).results) || [];
+    /* vigencia (10-ago-2026): una franja fuera de su rango de fechas no existe para este slot */
+    return rows.filter(r => vigenciaCubre(r.vdesde, r.vhasta, fLimaF));
   } catch (e) {
     try {
       const rows = ((await bindear("SELECT COALESCE(curso,'') AS curso, COALESCE(cupo,0) AS cupo " + base).all()).results) || [];
@@ -9779,7 +9814,7 @@ export default {
           let rows = [];
           try {
             rows = (await env.DB.prepare(
-              "SELECT dia_semana, hora, activo, COALESCE(cupo,0) AS cupo, COALESCE(curso,'') AS curso, COALESCE(sala,'') AS sala, COALESCE(profe,'') AS profe FROM disponibilidad WHERE tenant_id = ?1 " +
+              "SELECT dia_semana, hora, activo, COALESCE(cupo,0) AS cupo, COALESCE(curso,'') AS curso, COALESCE(sala,'') AS sala, COALESCE(profe,'') AS profe, COALESCE(vigente_desde,'') AS vdesde, COALESCE(vigente_hasta,'') AS vhasta FROM disponibilidad WHERE tenant_id = ?1 " +
               "AND (profesor_id = ?2 OR (?3 = 1 AND (profesor_id IS NULL OR profesor_id = ''))) ORDER BY dia_semana, hora"
             ).bind(tid, target.id, target.esDueno ? 1 : 0).all()).results || [];
           } catch (e) {
@@ -9816,14 +9851,16 @@ export default {
           let cuposPrevios = new Map();
           let cursosPrevios = new Map();
           let profesPrevios = new Map();
+          let vigPrevios = new Map();
           if (!esDueno){
             try {
               const { results: prevC } = await env.DB.prepare(
-                "SELECT dia_semana, hora, COALESCE(cupo,0) AS cupo, COALESCE(curso,'') AS curso, COALESCE(sala,'') AS sala, COALESCE(profe,'') AS profe FROM disponibilidad WHERE tenant_id = ?1 AND profesor_id = ?2"
+                "SELECT dia_semana, hora, COALESCE(cupo,0) AS cupo, COALESCE(curso,'') AS curso, COALESCE(sala,'') AS sala, COALESCE(profe,'') AS profe, COALESCE(vigente_desde,'') AS vdesde, COALESCE(vigente_hasta,'') AS vhasta FROM disponibilidad WHERE tenant_id = ?1 AND profesor_id = ?2"
               ).bind(tid, target.id).all();
               cuposPrevios = new Map((prevC || []).map(r => [r.dia_semana + "|" + r.hora + "|" + (r.sala || ""), parseInt(r.cupo, 10) || 0]));
               cursosPrevios = new Map((prevC || []).map(r => [r.dia_semana + "|" + r.hora + "|" + (r.sala || ""), r.curso || ""]));
               profesPrevios = new Map((prevC || []).map(r => [r.dia_semana + "|" + r.hora + "|" + (r.sala || ""), r.profe || ""]));
+              vigPrevios = new Map((prevC || []).map(r => [r.dia_semana + "|" + r.hora + "|" + (r.sala || ""), [r.vdesde || "", r.vhasta || ""]]));
             } catch (e) {}
           }
           /* BLINDADO multi-profesor: el DELETE va scoped al profesor objetivo, nunca
@@ -9840,14 +9877,22 @@ export default {
             let cursoF = String(s.curso || "").trim().slice(0, 90);   /* "Categoria · Variante" (ej. "Pilates Maquinas · Reformer") */
             let profeF = String(s.profe || "").trim();
             if (profeF && !profesValidos.has(profeF)) profeF = "";
+            /* vigencia por fechas (10-ago-2026, Elevate): solo YYYY-MM-DD o vacio; y si el
+               rango viene invertido, se ignora entero (mejor "corre siempre" que una franja
+               invisible que nadie entiende por que no aparece). */
+            const fOk = (v) => (/^\d{4}-\d{2}-\d{2}$/.test(String(v || "")) ? String(v) : "");
+            let vdF = fOk(s.vdesde), vhF = fOk(s.vhasta);
+            if (vdF && vhF && vdF > vhF){ vdF = ""; vhF = ""; }
             if (!esDueno){
               const kPrev = dia + "|" + h + "|" + salaF;
               cupoF = cuposPrevios.get(kPrev) || 0;
               cursoF = cursosPrevios.get(kPrev) || "";
               profeF = profesPrevios.get(kPrev) || "";
+              const vPrev = vigPrevios.get(kPrev) || ["", ""];
+              vdF = vPrev[0]; vhF = vPrev[1];
             }
             if (dia >= 0 && dia <= 6 && /^\d{2}:\d{2}$/.test(h)){
-              stmts.push(env.DB.prepare("INSERT OR IGNORE INTO disponibilidad (tenant_id,profesor_id,dia_semana,hora,activo,cupo,curso,sala,profe) VALUES (?1,?2,?3,?4,1,?5,?6,?7,?8)").bind(tid, target.id, dia, h, cupoF, cursoF, salaF, profeF));
+              stmts.push(env.DB.prepare("INSERT OR IGNORE INTO disponibilidad (tenant_id,profesor_id,dia_semana,hora,activo,cupo,curso,sala,profe,vigente_desde,vigente_hasta) VALUES (?1,?2,?3,?4,1,?5,?6,?7,?8,?9,?10)").bind(tid, target.id, dia, h, cupoF, cursoF, salaF, profeF, vdF, vhF));
             }
           }
           await env.DB.batch(stmts);
