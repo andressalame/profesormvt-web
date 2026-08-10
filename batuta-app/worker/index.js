@@ -1396,6 +1396,201 @@ function correoNurtureTrial(tenant, etapa, extras){
   };
 }
 
+/* ---------- Activación: paso EXACTO del funnel (fase 3 del plan "para dummies", 10-ago-2026) ----------
+   registrado → alumno → precio → cobro → primer_cobro → completo. Devuelve el PRIMER paso
+   que falta, en el orden en que matan (las 3 fundadoras murieron en precio/cobro).
+   Mismas fuentes de verdad que /app/api/t/activacion: tabla precios con precio > 0 (nunca
+   loadPrecios, que rellena defaults) y la fórmula cobroConectado de armarWebCtx. */
+async function pasoActivacionExacto(env, t){
+  try {
+    const [nAl, nPre, nComp] = await Promise.all([
+      env.DB.prepare("SELECT COUNT(*) AS n FROM alumnos WHERE tenant_id = ?1").bind(t.id).first(),
+      env.DB.prepare("SELECT COUNT(*) AS n FROM precios WHERE tenant_id = ?1 AND precio > 0").bind(t.id).first(),
+      env.DB.prepare("SELECT COUNT(*) AS n FROM compras WHERE tenant_id = ?1 AND estado != 'iniciada'").bind(t.id).first(),
+    ]);
+    const cfg = await loadConfig(env, t.id);
+    const mpOn = !!(t.mp_access_token) && (!(Number(t.mp_expires_at) || 0) || Number(t.mp_expires_at) > Date.now());
+    const cobroOn = !!(mpOn || cfg.pago_numero || cfg.bcp_cuenta || cfg.interbank_cuenta || cfg.scotia_cuenta || cfg.crypto_wallet);
+    if (!(Number(nAl && nAl.n) > 0)) return "alumno";
+    if (!(Number(nPre && nPre.n) > 0)) return "precio";
+    if (!cobroOn) return "cobro";
+    if (!(Number(nComp && nComp.n) > 0)) return "primer_cobro";
+    return "completo";
+  } catch (e) { return "alumno"; }
+}
+
+/* Tenants que NUNCA reciben nurture ni telemetría: la demo, las cuentas de prueba y
+   Park Kids (orden permanente de Andrés: NO contactar). */
+function tenantExcluidoNurture(t){
+  const em = String(t.email || "").toLowerCase();
+  if (!em || em === DEMO_EMAIL) return true;
+  if (em === "lisilvamendoza@gmail.com") return true; // Park Kids: no contactar
+  if (em === "andressalame@gmail.com") return true; // cuentas propias de Andrés (profedeprueba)
+  if (em.endsWith("@example.com") || em.endsWith("@batuta.lat")) return true; // cuentas de prueba/internas
+  return false;
+}
+
+/* ---------- Nurture del DUEÑO TRABADO (día 2 y día 7, según lo que FALTA en D1) ----------
+   Fase 3 del plan "para dummies": el producto persigue al dueño, no al revés. La única
+   fundadora que se destrabó (José) fue la que tuvo intervención humana; esto empaqueta esa
+   intervención. Distinto del nurture de trial (día 1/3/6, genérico): este es CAUSAL — dice
+   exactamente qué falta y qué consecuencia tiene. El paso vive en tenants.nurture_trabado:
+   0 = nada · 1 = salió el de día 2 · 2 = salió el de día 7 (o el track se cerró). */
+function correoNurtureTrabado(tenant, etapa, paso){
+  const nombre = ((tenant.profe_nombre || "").trim().split(/\s+/)[0]) || "";
+  const hola = "Hola" + (nombre ? " " + nombre : "") + ".";
+  const panel = MARCA.dominio + "/app/panel";
+  const wa = "https://wa.me/" + MARCA.whatsapp;
+  const wrap = (inner) =>
+    '<div style="font-family:Arial,Helvetica,sans-serif;max-width:480px;margin:0 auto;color:#1a1a1a;font-size:15px;line-height:1.6">' +
+    inner +
+    '<p>Andres, de Batuta. Si algo no te sale, <a href="' + wa + '">escribeme por WhatsApp</a> y lo resolvemos en 2 minutos.</p></div>';
+  const CAUSA = {
+    alumno: {
+      falta: "agregar tu primer alumno",
+      consecuencia: "sin alumnos, el portal no tiene a quien atender",
+      como: 'Entra a tu panel, toca <b>Alumnos</b> y usa <b>Agregar alumno</b> (o <b>Traer mi lista de Excel</b>: pegas tu lista tal cual y listo).'
+    },
+    precio: {
+      falta: "ponerle precio a tus clases",
+      consecuencia: "mientras tus paquetes esten en S/0, <b>tu pagina web esconde la seccion de precios</b> y nadie puede comprarte",
+      como: 'Entra a tu panel, ve a <b>Ajustes &rarr; Clases y planes</b> y escribe tu precio real en cada paquete. Son 2 minutos.'
+    },
+    cobro: {
+      falta: "decirme como te pagan tus alumnos",
+      consecuencia: "sin un Yape, cuenta o tarjeta conectada, <b>tu pagina web no puede recibir pedidos</b>",
+      como: 'Entra a tu panel, ve a <b>Ajustes &rarr; Cobros</b> y pon tu numero de Yape o Plin (la opcion recomendada: tus alumnos te pagan ahi y tu confirmas cada pago en un clic).'
+    },
+    primer_cobro: {
+      falta: "registrar tu primer cobro",
+      consecuencia: "todo esta listo, solo falta verlo funcionar de verdad",
+      como: 'Anota el proximo pago que te haga un alumno (aunque sea en efectivo) en <b>Pagos</b>. Desde ese momento las renovaciones se persiguen solas.'
+    }
+  };
+  const c = CAUSA[paso] || CAUSA.alumno;
+  if (etapa === "dia2") return {
+    subject: "Te falta una sola cosa: " + c.falta,
+    html: wrap(
+      '<p>' + hola + '</p>' +
+      '<p>Vi tu academia en Batuta y esta a un paso de quedar andando: te falta <b>' + c.falta + '</b>. Te lo digo porque ' + c.consecuencia + '.</p>' +
+      '<p>' + c.como + '</p>' +
+      '<p><a href="' + panel + '"><b>Entrar a mi panel</b></a></p>')
+  };
+  return {
+    subject: "Sigue pendiente: " + c.falta + " (2 minutos)",
+    html: wrap(
+      '<p>' + hola + '</p>' +
+      '<p>Una semana despues, a tu academia le sigue faltando lo mismo: <b>' + c.falta + '</b>. Y ' + c.consecuencia + '.</p>' +
+      '<p>' + c.como + '</p>' +
+      '<p>Si te trabaste en algun punto, no eres tu: es que ese paso nos falta pulir. Cuentame donde te quedaste (respondiendo este correo o <a href="' + wa + '">por WhatsApp</a>) y te lo dejo resuelto.</p>' +
+      '<p><a href="' + panel + '"><b>Entrar a mi panel</b></a></p>')
+  };
+}
+
+async function nurtureDuenoTrabado(env){
+  try { await env.DB.prepare("ALTER TABLE tenants ADD COLUMN nurture_trabado INTEGER DEFAULT 0").run(); } catch (e) { /* ya existe */ }
+  const ahora = Date.now();
+  let filas = [];
+  try {
+    const r = await env.DB.prepare(
+      "SELECT id, academia, profe_nombre, email, creado, estado, mp_access_token, mp_expires_at, COALESCE(nurture_trabado, 0) AS paso_n FROM tenants WHERE estado IN ('trial', 'activo')"
+    ).all();
+    filas = r.results || [];
+  } catch (e) { return; }
+  for (const t of filas){
+    if (tenantExcluidoNurture(t)) continue;
+    const dias = Math.floor((ahora - (Date.parse(t.creado) || ahora)) / 86400000);
+    /* Ventanas duras: día 2 solo entre el día 2 y el 6; día 7 solo entre el 7 y el 13.
+       Un tenant viejo (Lisi, Kelly, Elevate) NUNCA recibe esto retroactivamente. */
+    let etapa = null, pasoNuevo = t.paso_n | 0;
+    if ((t.paso_n | 0) === 0 && dias >= 2 && dias < 7){ etapa = "dia2"; pasoNuevo = 1; }
+    else if ((t.paso_n | 0) < 2 && dias >= 7 && dias < 14){ etapa = "dia7"; pasoNuevo = 2; }
+    else if (dias >= 14 && (t.paso_n | 0) < 2){
+      // Fuera de ventana para siempre: se cierra el track sin enviar nada.
+      try { await env.DB.prepare("UPDATE tenants SET nurture_trabado = 2 WHERE id = ?1").bind(t.id).run(); } catch (e) {}
+      continue;
+    }
+    if (!etapa) continue;
+    const paso = await pasoActivacionExacto(env, t);
+    if (paso === "completo"){
+      // Nada que perseguir: el track avanza mudo para no re-evaluar cada mañana.
+      try { await env.DB.prepare("UPDATE tenants SET nurture_trabado = ?1 WHERE id = ?2").bind(pasoNuevo, t.id).run(); } catch (e) {}
+      continue;
+    }
+    if (paso === "primer_cobro" && etapa === "dia2"){
+      /* En el día 2 "aún sin primer cobro" no es traba (recién arranca). Avanza el track
+         mudo; si al día 7 sigue sin cobro, ahí sí le llega el correo. */
+      try { await env.DB.prepare("UPDATE tenants SET nurture_trabado = 1 WHERE id = ?1").bind(t.id).run(); } catch (e) {}
+      continue;
+    }
+    const mail = correoNurtureTrabado(t, etapa, paso);
+    const ok = await enviarCorreo(env, { to: t.email, subject: mail.subject, html: mail.html });
+    if (ok){
+      try { await env.DB.prepare("UPDATE tenants SET nurture_trabado = ?1 WHERE id = ?2").bind(pasoNuevo, t.id).run(); } catch (e) {}
+    }
+  }
+}
+
+/* ---------- Telemetría de activación + alerta 48h (fase 3, 10-ago-2026) ----------
+   Guarda el paso exacto de cada tenant reciente y DESDE CUÁNDO está ahí. Si un tenant
+   lleva >=48h clavado en el mismo paso (y no es 'completo'), alerta a Andrés UNA vez por
+   tenant+paso con el paso exacto y el wa.me listo: el rescate deja de ser a ciegas. */
+async function telemetriaActivacion(env){
+  try {
+    await env.DB.prepare(
+      "CREATE TABLE IF NOT EXISTS activacion_telemetria (tenant_id TEXT PRIMARY KEY, paso TEXT DEFAULT '', desde TEXT DEFAULT '', alertado TEXT DEFAULT '')"
+    ).run();
+  } catch (e) { return; }
+  const ahora = Date.now();
+  const desde45 = new Date(ahora - 45 * 86400000).toISOString();
+  let tenants = [];
+  try {
+    const r = await env.DB.prepare(
+      "SELECT id, academia, email, whatsapp, creado, estado, plan, mp_access_token, mp_expires_at FROM tenants WHERE creado >= ?1 AND estado IN ('trial', 'activo')"
+    ).bind(desde45).all();
+    tenants = r.results || [];
+  } catch (e) { return; }
+  const NOMBRE_PASO = {
+    alumno: "agregar su primer alumno",
+    precio: "ponerle precio a sus clases (su web esconde los precios)",
+    cobro: "conectar como le pagan (su web no puede vender)",
+    primer_cobro: "registrar su primer cobro"
+  };
+  for (const t of tenants){
+    if (tenantExcluidoNurture(t)) continue;
+    const paso = await pasoActivacionExacto(env, t);
+    let fila = null;
+    try { fila = await env.DB.prepare("SELECT paso, desde, alertado FROM activacion_telemetria WHERE tenant_id = ?1").bind(t.id).first(); } catch (e) {}
+    if (!fila || fila.paso !== paso){
+      // Cambió de paso (o primera vez): se resetea el reloj del atasco.
+      try {
+        await env.DB.prepare(
+          "INSERT INTO activacion_telemetria (tenant_id, paso, desde, alertado) VALUES (?1, ?2, ?3, '') " +
+          "ON CONFLICT(tenant_id) DO UPDATE SET paso = ?2, desde = ?3, alertado = ''"
+        ).bind(t.id, paso, new Date(ahora).toISOString()).run();
+      } catch (e) {}
+      continue;
+    }
+    if (paso === "completo") continue;
+    const desdeMs = Date.parse(fila.desde) || ahora;
+    if (ahora - desdeMs < 48 * 3600000) continue;
+    if (fila.alertado === paso) continue; // ya se avisó de ESTE atasco
+    const horas = Math.round((ahora - desdeMs) / 3600000);
+    const waT = t.whatsapp ? "https://wa.me/" + String(t.whatsapp).replace(/\D/g, "") : "";
+    try {
+      await alertaCorreoAndres(env,
+        "🔴 Trabado " + horas + "h: " + (t.academia || t.email) + " — le falta " + (NOMBRE_PASO[paso] || paso),
+        "Tenant: " + (t.academia || "?") + " (" + (t.plan || "profe") + ", " + (t.estado || "") + ")\n" +
+        "Creado: " + String(t.creado).slice(0, 10) + "\n" +
+        "Paso exacto en el que lleva " + horas + "h clavado: " + (NOMBRE_PASO[paso] || paso) + "\n" +
+        (waT ? "WhatsApp directo: " + waT + "\n" : "Sin WhatsApp; correo: " + t.email + "\n") +
+        "\nJugada: una pregunta, cero tarea (regla de las fundadoras): \"¿que fue lo que te trabo en ese paso?\"\n" +
+        "El nurture automatico (dia 2/7) ya le escribio si estaba en ventana; esta alerta es para el toque humano.");
+      try { await env.DB.prepare("UPDATE activacion_telemetria SET alertado = ?1 WHERE tenant_id = ?2").bind(paso, t.id).run(); } catch (e) {}
+    } catch (e) {}
+  }
+}
+
 /* ---------- Nurture del lead magnet (Excel descargado → trial) y del registro abandonado. ----------
    Lo dispara scheduled(). Dia 2 = caso de estudio real · dia 5 = CTA al registro.
    Para origen='registro-abandonado' el copy parte de "empezaste a crear tu academia"
@@ -5429,6 +5624,27 @@ export default {
           const idDemo = await resetDemo(env);
           return json({ ok: true, tenant_id: idDemo });
         }
+        /* Fase 3 (10-ago-2026): corre a demanda el nurture del dueño trabado + la telemetría
+           de activación (lo mismo que hace el cron diario), y devuelve la foto de la tabla.
+           Para probar sin esperar las 9am y para inspeccionar atascos en vivo. */
+        if (path === "/app/api/su/activacion-tick" && request.method === "POST"){
+          await nurtureDuenoTrabado(env);
+          await telemetriaActivacion(env);
+          const { results: telem } = await env.DB.prepare(
+            "SELECT at.tenant_id, t.academia, t.email, at.paso, at.desde, at.alertado FROM activacion_telemetria at LEFT JOIN tenants t ON t.id = at.tenant_id ORDER BY at.desde"
+          ).all();
+          return json({ ok: true, telemetria: telem || [] });
+        }
+        if (path === "/app/api/su/activacion-telemetria" && request.method === "GET"){
+          let telemG = [];
+          try {
+            const rG = await env.DB.prepare(
+              "SELECT at.tenant_id, t.academia, t.email, at.paso, at.desde, at.alertado FROM activacion_telemetria at LEFT JOIN tenants t ON t.id = at.tenant_id ORDER BY at.desde"
+            ).all();
+            telemG = rG.results || [];
+          } catch (e) { /* tabla aún no creada: [] */ }
+          return json({ telemetria: telemG });
+        }
         /* Libro de Reclamaciones: listar y responder (la respuesta queda registrada y va por correo). */
         if (path === "/app/api/su/reclamos" && request.method === "GET"){
           await ensureLibroSchema(env);
@@ -6019,11 +6235,13 @@ export default {
           try {
             const desde45 = new Date(Date.now() - 45 * 86400000).toISOString();
             const { results: tsAct } = await env.DB.prepare(
-              "SELECT id, academia, email, creado, estado, plan FROM tenants WHERE creado >= ?1 AND email != ?2 ORDER BY creado DESC"
+              "SELECT id, academia, email, creado, estado, plan, mp_access_token, mp_expires_at FROM tenants WHERE creado >= ?1 AND email != ?2 ORDER BY creado DESC"
             ).bind(desde45, DEMO_EMAIL).all();
             for (const tA of (tsAct || [])){
               const a = await tenantActivado(env, tA.id);
-              activacion.push({ academia: tA.academia, plan: tA.plan, estado: tA.estado, creado: tA.creado, alumnos: a.alumnos, cobros: a.cobros, activado: a.activado });
+              /* paso exacto del funnel (fase 3): dónde está clavado cada uno, no solo si activó */
+              const pasoA = await pasoActivacionExacto(env, tA);
+              activacion.push({ academia: tA.academia, plan: tA.plan, estado: tA.estado, creado: tA.creado, alumnos: a.alumnos, cobros: a.cobros, activado: a.activado, paso: pasoA });
             }
           } catch (e) {}
           return json({
@@ -10802,6 +11020,11 @@ export default {
     try { await winbackAlumnos(env); } catch (e) { console.error("winback alumnos", e); }
     try { await caducarPlanesSinArrancar(env); } catch (e) { console.error("caducar planes", e); }
     try { await seguimientoLeadsDueno(env); } catch (e) { console.error("seguimiento leads dueno", e); }
+    /* Fase 3 "para dummies" (10-ago-2026): el producto persigue al dueño trabado (día 2/7)
+       y la telemetría avisa a Andrés del atasco exacto a las 48h. Orden importa: primero
+       el correo automático, después la foto de telemetría del día. */
+    try { await nurtureDuenoTrabado(env); } catch (e) { console.error("nurture dueno trabado", e); }
+    try { await telemetriaActivacion(env); } catch (e) { console.error("telemetria activacion", e); }
     try { await recalcularPorAlumno(env); } catch (e) { console.error("recalcular por alumno", e); }
     /* Afiliados: credito automatico (diario) + riel PayPal (mes vencido, dia 1; con flag OFF solo avisa). */
     try { await aplicarCreditosAfiliados(env); } catch (e) { console.error("creditos afiliados", e); }
