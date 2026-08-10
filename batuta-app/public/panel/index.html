@@ -333,6 +333,29 @@
   .brand-name{font-family:var(--display);font-size:18px;line-height:1.04;color:var(--cream);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
   .brand-sub{font-family:var(--mono);font-size:9px;text-transform:uppercase;letter-spacing:.16em;color:var(--accent);margin-top:3px;}
   .nav{flex:1;padding:12px 10px 6px;}
+  /* ====== Menú plano de 5 (fase 3, 10-ago-2026): targets 48px, letra grande, cero acordeón ====== */
+  .navbig{display:flex;align-items:center;gap:11px;width:100%;min-height:48px;background:transparent;border:1px solid transparent;border-radius:var(--r-sm,6px);padding:11px 12px;cursor:pointer;font-family:var(--body);font-size:14.5px;font-weight:600;color:var(--muted);text-align:left;transition:color .12s,background .12s;}
+  .navbig:hover{color:var(--cream);background:var(--panel2);}
+  .navbig.active{color:var(--accent);background:var(--panel2);}
+  .navbig .nb-ico{flex:0 0 20px;display:inline-flex;align-items:center;justify-content:center;}
+  .navbig .nb-ico svg{width:18px;height:18px;stroke:currentColor;stroke-width:1.8;fill:none;stroke-linecap:round;stroke-linejoin:round;}
+  .navbig .dot{margin-left:auto;}
+  .navsep{height:1px;background:var(--line,rgba(255,255,255,.08));margin:10px 4px;}
+  /* Pestañas del grupo activo (sub-navegación visible, sin adivinar) */
+  .pestanas{display:none;gap:6px;flex-wrap:wrap;margin:2px 0 16px;}
+  .pestanas.show{display:flex;}
+  .pestanas button{background:transparent;border:1px solid var(--line,rgba(255,255,255,.14));border-radius:18px;padding:7px 14px;cursor:pointer;font-family:var(--body);font-size:13px;color:var(--muted);display:inline-flex;align-items:center;gap:6px;transition:color .12s,border-color .12s,background .12s;}
+  .pestanas button:hover{color:var(--cream);}
+  .pestanas button.on{color:var(--accent);border-color:var(--accent);background:rgba(232,161,61,.08);}
+  .pestanas .dot{position:static;}
+  /* Índice "Mi academia": tarjetas grandes, verbo + beneficio */
+  .acadgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:12px;}
+  .acadcard{display:flex;flex-direction:column;align-items:flex-start;gap:6px;background:var(--panel2);border:1px solid var(--line,rgba(255,255,255,.1));border-radius:var(--r,10px);padding:16px;cursor:pointer;text-align:left;font-family:var(--body);color:var(--cream);transition:border-color .12s,transform .12s;}
+  .acadcard:hover{border-color:var(--accent);transform:translateY(-1px);}
+  .acadcard b{font-size:15px;}
+  .acadcard span{font-size:12.5px;color:var(--muted);line-height:1.45;}
+  .acadcard .ac-ico{display:inline-flex;margin-bottom:2px;}
+  .acadcard .ac-ico svg{width:20px;height:20px;stroke:var(--accent);stroke-width:1.8;fill:none;stroke-linecap:round;stroke-linejoin:round;}
   .navgroup{margin-bottom:4px;}
   .navgroup-h{display:flex;align-items:center;gap:9px;width:100%;background:transparent;border:1px solid transparent;border-radius:3px;padding:9px 11px;cursor:pointer;font-family:var(--mono);text-transform:uppercase;letter-spacing:.1em;font-size:10.5px;color:var(--muted);font-weight:700;transition:color .12s,background .12s;}
   .navgroup-h::before{content:none;}
@@ -628,54 +651,41 @@
       </div>
     </div>
     <nav class="nav">
-      <!-- Inicio va SUELTO (sin .navgroup): ese wrapper viejo usaba .navgroup-items,
-           que es display:none por defecto -> el botón era invisible. Bug cazado por Andrés. -->
-      <div style="display:block;padding:2px 0 4px;">
-        <button class="tab active" data-tab="resumen" style="display:flex;align-items:center;gap:8px;"><svg viewBox="0 0 24 24" style="width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:2;flex:0 0 auto;"><path d="M3 11l9-8 9 8"/><path d="M5 9.5V21h14V9.5"/></svg>Inicio</button>
-      </div>
-      <div class="navgroup" data-tour="personas">
-        <button class="navgroup-h" type="button"><span class="ng-ico"><svg viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span><span class="ng-tx">Personas</span><span class="ng-chev"><svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg></span></button>
-        <div class="navgroup-items">
-          <button class="tab" data-tab="alumnos">Alumnos</button>
-          <button class="tab" data-tab="grupos">Grupos</button>
-          <button class="tab solo-dueno" data-tab="profesores">Profesores</button>
-          <button class="tab" data-tab="cuentas">Cuentas de alumnos</button>
-          <button class="tab solo-dueno" data-tab="leads">Interesados<span class="dot hidden" id="dotLeads">0</span></button>
-        </div>
-      </div>
-      <div class="navgroup">
-        <button class="navgroup-h" type="button"><span class="ng-ico"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></span><span class="ng-tx">Clases</span><span class="ng-chev"><svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg></span></button>
-        <div class="navgroup-items">
-          <button class="tab" data-tab="registro">Asistencia</button>
-          <button class="tab" data-tab="agenda">Agenda</button>
-          <button class="tab" data-tab="chat">Chat</button>
-        </div>
-      </div>
-      <div class="navgroup" data-tour="cobros">
-        <button class="navgroup-h" type="button"><span class="ng-ico"><svg viewBox="0 0 24 24"><rect x="2" y="5" width="20" height="14" rx="2"/><circle cx="12" cy="12" r="3"/><line x1="6" y1="12" x2="6.01" y2="12"/><line x1="18" y1="12" x2="18.01" y2="12"/></svg></span><span class="ng-tx">Cobros</span><span class="ng-chev"><svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg></span></button>
-        <div class="navgroup-items">
-          <button class="tab" data-tab="pagos">Pagos<span class="dot hidden" id="dotPagos">0</span></button>
-          <button class="tab solo-dueno" data-tab="caja">Caja</button>
-          <button class="tab" data-tab="reportes">Reportes</button>
-        </div>
-      </div>
-      <div class="navgroup">
-        <button class="navgroup-h" type="button"><span class="ng-ico"><svg viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg></span><span class="ng-tx">Material</span><span class="ng-chev"><svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg></span></button>
-        <div class="navgroup-items">
-          <button class="tab" data-tab="recursos">Para tus alumnos</button>
-          <button class="tab" data-tab="ejercicios">Tu biblioteca</button>
-        </div>
-      </div>
-      <div class="navgroup">
-        <button class="navgroup-h" type="button"><span class="ng-ico"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></span><span class="ng-tx">Configuración</span><span class="ng-chev"><svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg></span></button>
-        <div class="navgroup-items">
-          <button class="tab solo-dueno" data-tab="web">Mi web</button>
-          <button class="tab solo-dueno" data-tab="perfil">Perfil</button>
-          <button class="tab solo-dueno" data-tab="ajustes">Ajustes</button>
-          <button class="tab solo-dueno" data-tab="campanas">Campañas</button>
-          <button class="tab solo-dueno" data-tab="servicios">Servicios</button>
-          <button class="tab" data-tab="feedback">Ideas y errores</button>
-        </div>
+      <!-- ====== MENÚ PLANO DE 5 (fase 3 "para dummies", 10-ago-2026) ======
+           5 botones siempre visibles, cero acordeones, palabras de señora de 50.
+           Las 20 secciones viejas SIGUEN EXISTIENDO: sus botones .tab viven ocultos en
+           #tabsLegacy (toda la maquinaria — data-ira, buscador, dots, tours — los usa por
+           .click() programático) y se llega a ellas por las pestañas de cada grupo o por
+           el índice de "Mi academia". -->
+      <button class="navbig active" type="button" data-nav="hoy" data-tabgo="resumen"><span class="nb-ico"><svg viewBox="0 0 24 24"><path d="M3 11l9-8 9 8"/><path d="M5 9.5V21h14V9.5"/></svg></span>Hoy</button>
+      <button class="navbig" type="button" data-nav="alumnos" data-tabgo="alumnos" data-tour="personas"><span class="nb-ico"><svg viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span>Mis alumnos<span class="dot hidden" id="dotNavAlumnos">0</span></button>
+      <button class="navbig" type="button" data-nav="clases" data-tabgo="agenda"><span class="nb-ico"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></span>Mis clases</button>
+      <button class="navbig" type="button" data-nav="cobros" data-tabgo="pagos" data-tour="cobros"><span class="nb-ico"><svg viewBox="0 0 24 24"><rect x="2" y="5" width="20" height="14" rx="2"/><circle cx="12" cy="12" r="3"/><line x1="6" y1="12" x2="6.01" y2="12"/><line x1="18" y1="12" x2="18.01" y2="12"/></svg></span>Cobros<span class="dot hidden" id="dotNavCobros">0</span></button>
+      <div class="navsep"></div>
+      <button class="navbig" type="button" data-nav="academia" data-tabgo="academia"><span class="nb-ico"><svg viewBox="0 0 24 24"><path d="M3 21h18"/><path d="M5 21V7l7-4 7 4v14"/><path d="M9 21v-6h6v6"/></svg></span>Mi academia</button>
+      <!-- tabs reales, ocultos: NO borrar ninguno (data-ira/buscador dependen de ellos) -->
+      <div id="tabsLegacy" hidden>
+        <button class="tab active" data-tab="resumen">Hoy</button>
+        <button class="tab" data-tab="alumnos">Alumnos</button>
+        <button class="tab" data-tab="grupos">Grupos</button>
+        <button class="tab solo-dueno" data-tab="profesores">Profesores</button>
+        <button class="tab" data-tab="cuentas">Cuentas de alumnos</button>
+        <button class="tab solo-dueno" data-tab="leads">Interesados<span class="dot hidden" id="dotLeads">0</span></button>
+        <button class="tab" data-tab="registro">Asistencia</button>
+        <button class="tab" data-tab="agenda">Agenda</button>
+        <button class="tab" data-tab="chat">Chat</button>
+        <button class="tab" data-tab="pagos">Pagos<span class="dot hidden" id="dotPagos">0</span></button>
+        <button class="tab solo-dueno" data-tab="caja">Caja</button>
+        <button class="tab" data-tab="reportes">Reportes</button>
+        <button class="tab" data-tab="recursos">Para tus alumnos</button>
+        <button class="tab" data-tab="ejercicios">Tu biblioteca</button>
+        <button class="tab" data-tab="academia">Mi academia</button>
+        <button class="tab solo-dueno" data-tab="web">Mi web</button>
+        <button class="tab solo-dueno" data-tab="perfil">Perfil</button>
+        <button class="tab solo-dueno" data-tab="ajustes">Ajustes</button>
+        <button class="tab solo-dueno" data-tab="campanas">Campañas</button>
+        <button class="tab solo-dueno" data-tab="servicios">Servicios</button>
+        <button class="tab" data-tab="feedback">Ideas y errores</button>
       </div>
     </nav>
     <div class="sb-tools">
@@ -697,7 +707,7 @@
     <header class="topbar">
       <button class="hamb" id="btnMenu" aria-label="Mostrar u ocultar el menú">&#9776;</button>
       <span class="hamb-tx" id="menuTxt">Menú</span>
-      <div class="eyebrow" id="topTitle">Inicio</div>
+      <div class="eyebrow" id="topTitle">Hoy</div>
       <button class="buscador" id="btnBuscar" type="button" title="Buscar en el panel (Ctrl+K)">
         <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
         <span class="bs-tx">Buscar…</span><kbd class="bs-kbd">Ctrl K</kbd>
@@ -706,9 +716,11 @@
     <div class="content">
       <div class="pagehead">
         <div class="eyebrow" id="pageEyebrow">Batuta</div>
-        <h1 id="pageTitle">Inicio</h1>
+        <h1 id="pageTitle">Hoy</h1>
         <hr class="rule" />
       </div>
+      <!-- pestañas del grupo activo (fase 3): las hermanas de la sección actual, a un clic -->
+      <div class="pestanas" id="pestanas"></div>
 
     <!-- Aviso de web sin precios (03-ago-2026; GLOBAL desde 10-ago-2026): la web pública
          esconde la sección de precios EN SILENCIO si los paquetes están en S/0 o no hay
@@ -765,6 +777,16 @@
     <div class="group"><h2>Alumnos</h2><div class="grid cards" id="resAlumnos"></div></div>
     <div class="group"><h2>Este mes</h2><div class="grid cards" id="resMes"></div></div>
     <div class="group"><h2>Histórico</h2><div class="grid cards" id="resHist"></div></div>
+  </section>
+
+  <!-- ====== MI ACADEMIA (fase 3, 10-ago-2026): pantalla-índice de tarjetas ======
+       La "plomería" (web, precios, cobros, perfil, profesores, material, campañas,
+       servicios) vive tras esta puerta, en lenguaje de resultado. Lo pinta
+       renderAcademia() para respetar rol y módulos apagados en cada entrada. -->
+  <section class="panel" id="panel-academia">
+    <p class="hint quees">🏛️ <b>Todo lo que configura tu academia, en un solo lugar.</b> Lo del día a día (alumnos, clases, cobros) vive en el menú de la izquierda; aquí está el resto.</p>
+    <div class="acadgrid" id="acadGrid"></div>
+    <p class="hint" style="margin-top:18px;">¿Algo no funciona o se te ocurrió una mejora? <a href="#" data-ira="feedback">Cuéntamelo aquí</a> (el primer aporte del mes te regala +7 días).</p>
   </section>
 
   <section class="panel" id="panel-alumnos">
@@ -2186,6 +2208,8 @@ function aplicarRol(){
       var home=document.querySelector('.tab[data-tab="resumen"]'); if(home) home.click();
     }
   }
+  /* fase 3: el rol cambia qué pestañas y tarjetas se ven — repintar el menú de 5 */
+  try{ var actR=document.querySelector(".tab.active"); pintarNav(actR?actR.dataset.tab:"resumen"); }catch(e){}
 }
 
 /* ---------- Modulos apagables (config.modulos_off): el panel a la medida del rubro ---------- */
@@ -2225,6 +2249,8 @@ function aplicarModulos(){
   if(act && act.classList.contains("mod-off")){
     var home=document.querySelector('.tab[data-tab="resumen"]'); if(home) home.click();
   }
+  /* fase 3: los módulos apagados cambian las pestañas visibles — repintar el menú de 5 */
+  try{ var actM=document.querySelector(".tab.active"); pintarNav(actM?actM.dataset.tab:"resumen"); }catch(e){}
 }
 
 /* ---------- Trial / paywall ---------- */
@@ -2514,6 +2540,7 @@ function renderResumen(){
 
   var dot=el("dotPagos");
   if(pend>0){ dot.textContent=pend; dot.classList.remove("hidden"); } else dot.classList.add("hidden");
+  try{ espejarDotsNav(); }catch(e){}
 
   renderTuDia({pend:pend, ultima:ultima, compl:compl});
 }
@@ -2548,6 +2575,13 @@ function renderTuDia(x){
   h += sinAcceso>0
     ? tarjetaDia(sinAcceso,"alumnos sin acceso al portal: no pueden reservar ni pagar solos","Darles acceso","cuentas",true)
     : tarjetaDia((db.alumnos||[]).length,"alumnos, todos con acceso al portal ✓","","cuentas",false);
+  /* fase 3: interesados esperando respuesta (bloque 3 de la pantalla "Hoy" del spec) */
+  if(tabVisiblePorReglas("leads")){
+    var nLeadsHoy=0; try{ nLeadsHoy=leadsPorSeguirHoy(); }catch(e){}
+    h += nLeadsHoy>0
+      ? tarjetaDia(nLeadsHoy,"interesados esperando tu respuesta hoy","Responderles","leads",true)
+      : tarjetaDia(0,"interesados por responder hoy ✓","","leads",false);
+  }
   box.innerHTML=h;
 
   /* cuántas clases hay hoy: una sola consulta por sesión, y jamás rompe el Inicio */
@@ -3204,6 +3238,7 @@ function renderLeads(){
   var nHoy=leadsPorSeguirHoy();
   var dot=el("dotLeads");
   if(dot){ dot.textContent=nHoy; dot.classList.toggle("hidden", !nHoy); dot.style.display=nHoy?"":"none"; }
+  try{ espejarDotsNav(); }catch(e){}
   var sh=el("leadSeguirHoy");
   if(sh) sh.textContent=nHoy?("🔔 "+nHoy+" por seguir hoy"):"";
   /* pills de etapas con conteo (filtran) */
@@ -4339,7 +4374,7 @@ document.body.addEventListener("click",function(e){
 });
 
 /* ---------- Tabs / modales ---------- */
-var TITULOS={resumen:"Inicio",alumnos:"Alumnos",grupos:"Grupos",profesores:"Profesores",registro:"Asistencia",agenda:"Agenda",pagos:"Pagos",caja:"Caja",reportes:"Reportes",cuentas:"Cuentas de alumnos",leads:"Interesados",recursos:"Para tus alumnos",ejercicios:"Tu biblioteca",ajustes:"Ajustes",perfil:"Perfil",servicios:"Servicios",campanas:"Campañas",chat:"Chat",feedback:"Ideas y errores",web:"Mi web"};
+var TITULOS={resumen:"Hoy",academia:"Mi academia",alumnos:"Alumnos",grupos:"Grupos",profesores:"Profesores",registro:"Asistencia",agenda:"Agenda",pagos:"Pagos",caja:"Caja",reportes:"Reportes",cuentas:"Cuentas de alumnos",leads:"Interesados",recursos:"Para tus alumnos",ejercicios:"Tu biblioteca",ajustes:"Ajustes",perfil:"Perfil",servicios:"Servicios",campanas:"Campañas",chat:"Chat",feedback:"Ideas y errores",web:"Mi web"};
 document.querySelectorAll(".tab").forEach(function(t){
   t.addEventListener("click",function(){
     document.querySelectorAll(".tab").forEach(function(x){x.classList.remove("active");});
@@ -4359,8 +4394,99 @@ document.querySelectorAll(".tab").forEach(function(t){
     if(t.dataset.tab==="caja"){ renderCaja(); if(el("g_fecha")&&!el("g_fecha").value) el("g_fecha").value=hoyLima(); }
     if(t.dataset.tab==="campanas") cargarCampanas();
     if(t.dataset.tab==="web") abrirEditorWeb();
+    if(t.dataset.tab==="academia") renderAcademia();
+    pintarNav(t.dataset.tab);
     cerrarDrawer();
   });
+});
+/* ====== Menú plano de 5 + pestañas + índice "Mi academia" (fase 3, 10-ago-2026) ======
+   Cada sección vieja pertenece a UNO de los 5 grupos. El botón grande del grupo se
+   ilumina y las hermanas de la sección salen como pestañas bajo el título. */
+var GRUPO_DE={resumen:"hoy",
+  alumnos:"alumnos",leads:"alumnos",grupos:"alumnos",cuentas:"alumnos",
+  agenda:"clases",registro:"clases",chat:"clases",
+  pagos:"cobros",caja:"cobros",reportes:"cobros",
+  academia:"academia",web:"academia",perfil:"academia",ajustes:"academia",campanas:"academia",
+  servicios:"academia",profesores:"academia",recursos:"academia",ejercicios:"academia",feedback:"academia"};
+var PESTANAS_DE={
+  alumnos:[["alumnos","Alumnos"],["leads","Interesados"],["grupos","Grupos"],["cuentas","Cuentas de alumnos"]],
+  clases:[["agenda","Agenda"],["registro","Asistencia"],["chat","Chat"]],
+  cobros:[["pagos","Pagos"],["caja","Caja"],["reportes","Reportes"]]
+};
+/* Disponibilidad SIN geometría (los .tab viven ocultos): módulos apagados y rol profesor. */
+function tabVisiblePorReglas(nombre){
+  var b=document.querySelector('.tab[data-tab="'+nombre+'"]');
+  if(!b) return false;
+  if(b.classList.contains("mod-off")) return false;
+  if(document.body.classList.contains("rol-profesor")&&b.classList.contains("solo-dueno")) return false;
+  return true;
+}
+function dotPestana(idDot){
+  var s=el(idDot); if(!s||s.classList.contains("hidden")) return "";
+  return '<span class="dot">'+esc(s.textContent)+'</span>';
+}
+function pintarNav(tab){
+  var g=GRUPO_DE[tab]||"hoy";
+  document.querySelectorAll(".navbig").forEach(function(b){ b.classList.toggle("active",b.dataset.nav===g); });
+  var pest=el("pestanas"); if(!pest) return;
+  var defs=PESTANAS_DE[g], h="";
+  if(defs){
+    defs.forEach(function(d){
+      if(!tabVisiblePorReglas(d[0])) return;
+      var extra=d[0]==="leads"?dotPestana("dotLeads"):(d[0]==="pagos"?dotPestana("dotPagos"):"");
+      h+='<button type="button" class="'+(d[0]===tab?"on":"")+'" data-ira="'+d[0]+'">'+d[1]+extra+'</button>';
+    });
+  } else if(g==="academia"&&tab!=="academia"){
+    /* dentro de una sección de la puerta "Mi academia": migaja de regreso + dónde estoy */
+    h='<button type="button" data-ira="academia">&larr; Mi academia</button>'+
+      '<button type="button" class="on">'+esc(TITULOS[tab]||"")+'</button>';
+  }
+  pest.innerHTML=h;
+  pest.classList.toggle("show",!!h);
+  espejarDotsNav();
+}
+/* Los 5 botones grandes: clic = clic al tab primario del grupo (la maquinaria vieja intacta). */
+document.querySelectorAll(".navbig").forEach(function(b){
+  b.addEventListener("click",function(){
+    var t=document.querySelector('.tab[data-tab="'+b.dataset.tabgo+'"]');
+    if(t) t.click();
+  });
+});
+/* Los badges viejos (dotLeads/dotPagos) viven en tabs ocultos: se espejan al menú visible. */
+function espejarDotsNav(){
+  [["dotLeads","dotNavAlumnos"],["dotPagos","dotNavCobros"]].forEach(function(par){
+    var src=el(par[0]),dst=el(par[1]); if(!src||!dst) return;
+    dst.textContent=src.textContent;
+    dst.classList.toggle("hidden",src.classList.contains("hidden"));
+  });
+}
+/* Índice "Mi academia": tarjetas en lenguaje de resultado, filtradas por rol y módulos. */
+function renderAcademia(){
+  var g=el("acadGrid"); if(!g) return;
+  var IA=function(p){ return '<span class="ac-ico"><svg viewBox="0 0 24 24">'+p+'</svg></span>'; };
+  var cards=[];
+  if(tabVisiblePorReglas("web")) cards.push({ira:"web",i:IA('<circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>'),t:"Mi página web",d:"Cómo te ven tus alumnos e interesados en internet. Edítala y compártela."});
+  if(tabVisiblePorReglas("ajustes")){
+    cards.push({ira:"ajustes",aj:"clases",i:IA('<line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>'),t:"Mis precios y planes",d:"Lo que cobras al mes por cada clase o paquete."});
+    cards.push({ira:"ajustes",aj:"cobros",i:IA('<rect x="2" y="5" width="20" height="14" rx="2"/><circle cx="12" cy="12" r="3"/>'),t:"Cómo me pagan",d:"Tu Yape, Plin, cuenta o tarjeta: por dónde te llega la plata."});
+    cards.push({ira:"ajustes",aj:"wa",i:IA('<path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/>'),t:"Mi asistente de WhatsApp",d:"El que responde a tus alumnos por ti, las 24 horas."});
+    cards.push({ira:"ajustes",aj:"academia",i:IA('<circle cx="12" cy="12" r="3"/><path d="M12 1v4m0 14v4M4.2 4.2l2.8 2.8m10 10 2.8 2.8M1 12h4m14 0h4M4.2 19.8l2.8-2.8m10-10 2.8-2.8"/>'),t:"Todos los ajustes",d:"Nombre, horarios, mensajes, avanzado: la sala de máquinas."});
+  }
+  if(tabVisiblePorReglas("profesores")) cards.push({ira:"profesores",i:IA('<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>'),t:"Mis profesores",d:"Invita a tu equipo: cada uno entra y ve solo lo suyo."});
+  if(tabVisiblePorReglas("perfil")) cards.push({ira:"perfil",i:IA('<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>'),t:"Mi cuenta y mi plan",d:"Tu nombre, tu foto, tu contraseña y el plan que tienes."});
+  if(tabVisiblePorReglas("recursos")) cards.push({ira:"recursos",i:IA('<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>'),t:"Material para tus alumnos",d:"Partituras, audios y tareas que ellos SÍ ven en su portal."});
+  if(tabVisiblePorReglas("ejercicios")) cards.push({ira:"ejercicios",i:IA('<rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>'),t:"Tu biblioteca privada",d:"Tu material de trabajo. Esto no lo ve nadie más que tú."});
+  if(tabVisiblePorReglas("campanas")) cards.push({ira:"campanas",i:IA('<path d="M3 11l18-5v12L3 14v-3z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/>'),t:"Anuncios en Facebook e Instagram",d:"Campañas para atraer alumnos nuevos."});
+  if(tabVisiblePorReglas("servicios")) cards.push({ira:"servicios",i:IA('<polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>'),t:"Servicios extra",d:"Cosas puntuales que puedes pedirnos aparte del plan."});
+  g.innerHTML=cards.map(function(c){
+    return '<button type="button" class="acadcard" data-ira="'+c.ira+'"'+(c.aj?' data-ajgo="'+c.aj+'"':'')+'>'+c.i+'<b>'+esc(c.t)+'</b><span>'+esc(c.d)+'</span></button>';
+  }).join("");
+}
+/* Tarjeta con sub-pestaña de Ajustes: tras el salto (data-ira), aterrizar en la pestaña exacta. */
+document.addEventListener("click",function(e){
+  var b=e.target.closest?e.target.closest("[data-ajgo]"):null; if(!b) return;
+  var aj=b.dataset.ajgo;
+  setTimeout(function(){ try{ ajTab(aj); }catch(err){} },90);
 });
 function openOv(id){ el(id).classList.add("open"); }
 function closeOv(id){ el(id).classList.remove("open"); }
@@ -5276,8 +5402,9 @@ function bsIndicePropio(){
   return out;
 }
 function bsDisponible(it){
-  var t=document.querySelector('.tab[data-tab="'+it.tab+'"]');
-  return !!(t && t.getBoundingClientRect().height>0);   // respeta módulos apagados y rol profesor
+  /* fase 3: los .tab viven ocultos en #tabsLegacy (miden 0 siempre), así que la
+     disponibilidad se decide por reglas (mod-off / rol), no por geometría */
+  return tabVisiblePorReglas(it.tab);
 }
 function bsBuscar(q){
   var n=bsNorm(q).trim();
