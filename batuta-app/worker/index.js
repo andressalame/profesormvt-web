@@ -6320,7 +6320,9 @@ export default {
            conectado nunca Yape/MP, y la web publica seguia sin poder vender (03-ago-2026). */
         const cfgAct = await loadConfig(env, t.id);
         const mpOnAct = !!(t.mp_access_token) && (!(Number(t.mp_expires_at) || 0) || Number(t.mp_expires_at) > Date.now());
-        const cobroConectado = !!(mpOnAct || cfgAct.pago_numero || cfgAct.bcp_cuenta || cfgAct.scotia_cuenta || cfgAct.crypto_wallet);
+        /* 10-ago-2026: se suma interbank_cuenta — la web pública ya lo contaba (armarWebCtx)
+           pero este checklist no: un tenant solo-Interbank vendía y aquí se le decía que no. */
+        const cobroConectado = !!(mpOnAct || cfgAct.pago_numero || cfgAct.bcp_cuenta || cfgAct.interbank_cuenta || cfgAct.scotia_cuenta || cfgAct.crypto_wallet);
         return json({
           pasos: {
             precios: preciosPropios,
@@ -9818,7 +9820,7 @@ export default {
              profe aunque la academia si cobre. Lo consume el editor de "Mi web" para avisar
              que la seccion de Precios no sale sin un medio de cobro conectado. */
           const mpVivo = !!(t && t.mp_access_token) && (!(Number(t && t.mp_expires_at) || 0) || Number(t.mp_expires_at) > Date.now());
-          const cobroOnPanel = !!(mpVivo || config.pago_numero || config.bcp_cuenta || config.scotia_cuenta || config.crypto_wallet);
+          const cobroOnPanel = !!(mpVivo || config.pago_numero || config.bcp_cuenta || config.interbank_cuenta || config.scotia_cuenta || config.crypto_wallet);
           /* HALLAZGO del review: el rol profesor NO recibe secretos del tenant (con el token
              de Nubefact podria emitir comprobantes por fuera saltandose el guard del dueno). */
           if (!esDueno){

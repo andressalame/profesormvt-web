@@ -607,6 +607,11 @@
   /* Movimiento suave, corto, sin rebotes: como una app nativa */
   .panel.active{animation:fadeUp .28s var(--ease) both;}
   .cards .card{animation:fadeUp .3s var(--ease) both;}
+/* ====== PUNTO PULSANTE DE SETUP PENDIENTE (10-ago-2026) ======
+   Late en ámbar sobre "Ajustes" mientras falte precio o medio de cobro
+   (los 2 pasos donde se trabaron las 3 academias fundadoras). */
+.nav .tab .dot.pulse{width:8px;height:8px;min-width:8px;padding:0;border-radius:999px;background:var(--amber,#d99a3c);animation:bt-pulse 1.6s ease-in-out infinite;}
+@keyframes bt-pulse{0%,100%{opacity:.45;transform:scale(.9);}50%{opacity:1;transform:scale(1.15);}}
 </style>
 </head>
 <body>
@@ -634,14 +639,14 @@
           <button class="tab" data-tab="alumnos">Alumnos</button>
           <button class="tab" data-tab="grupos">Grupos</button>
           <button class="tab solo-dueno" data-tab="profesores">Profesores</button>
-          <button class="tab" data-tab="cuentas">Accesos al portal</button>
+          <button class="tab" data-tab="cuentas">Cuentas de alumnos</button>
           <button class="tab solo-dueno" data-tab="leads">Interesados<span class="dot hidden" id="dotLeads">0</span></button>
         </div>
       </div>
       <div class="navgroup">
         <button class="navgroup-h" type="button"><span class="ng-ico"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></span><span class="ng-tx">Clases</span><span class="ng-chev"><svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg></span></button>
         <div class="navgroup-items">
-          <button class="tab" data-tab="registro">Registro de clases</button>
+          <button class="tab" data-tab="registro">Asistencia</button>
           <button class="tab" data-tab="agenda">Agenda</button>
           <button class="tab" data-tab="chat">Chat</button>
         </div>
@@ -705,13 +710,16 @@
         <hr class="rule" />
       </div>
 
-  <section class="panel active" id="panel-resumen">
-    <!-- Aviso de web sin precios (03-ago-2026): la web pública esconde la sección de
-         precios EN SILENCIO si los paquetes están en S/0 o no hay cobro conectado.
-         Este banner hace visible la consecuencia; lo pinta cargarActivacion(). -->
+    <!-- Aviso de web sin precios (03-ago-2026; GLOBAL desde 10-ago-2026): la web pública
+         esconde la sección de precios EN SILENCIO si los paquetes están en S/0 o no hay
+         cobro conectado. Vive FUERA de los <section.panel> para verse en TODAS las
+         pantallas: José pasó 10 días sin enterarse porque solo salía en Inicio.
+         Lo pinta cargarActivacion(). -->
     <div class="group" id="grpAvisoWeb" style="display:none;">
       <div class="card" id="avisoWebCard" style="max-width:560px;border:1px solid var(--amber,#d99a3c);"></div>
     </div>
+
+  <section class="panel active" id="panel-resumen">
     <div class="group" id="grpActivacion" style="display:none;">
       <h2>Pon tu academia a andar</h2>
       <div class="card" style="max-width:560px;">
@@ -761,7 +769,7 @@
 
   <section class="panel" id="panel-alumnos">
     <div style="margin-bottom:10px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;"><button class="btn" id="btnNuevoAlumno">+ Nuevo alumno</button><button class="btn ghost" id="btnImportCsv" title="Trae toda tu lista de alumnos de golpe desde tu Excel o Google Sheets">&#8681; Traer mi lista de Excel</button><select id="alFiltroSede" title="Filtrar por sede" style="display:none;width:auto;"></select><button class="btn ghost sm" type="button" onclick="lanzarTourModulo('alumnos')">? Cómo funciona</button></div>
-    <p class="hint quees">👤 <b>Tu lista de alumnos y cómo va cada uno.</b> "Le quedan" son las clases que le sobran de su paquete; el <b>Estado</b> te avisa a quién le toca renovar. ¿Te equivocaste al anotar una clase? Se arregla en <b><a href="#" data-ira="registro">Registro de clases</a></b> y el saldo se recalcula solo.</p>
+    <p class="hint quees">👤 <b>Tu lista de alumnos y cómo va cada uno.</b> "Le quedan" son las clases que le sobran de su paquete; el <b>Estado</b> te avisa a quién le toca renovar. ¿Te equivocaste al anotar una clase? Se arregla en <b><a href="#" data-ira="registro">Asistencia</a></b> y el saldo se recalcula solo.</p>
     <div class="tablewrap">
       <table id="tablaAlumnos">
         <thead><tr>
@@ -1099,7 +1107,7 @@
   </section>
 
   <section class="panel" id="panel-agenda">
-    <p class="hint quees">📅 <b>Esto es el FUTURO: tu horario y lo que ya está reservado.</b> Aquí armas en qué días y horas dictas, con qué tipo de clase y cuánta gente entra. ¿Buscas anotar una clase que YA diste? Eso es <b><a href="#" data-ira="registro">Registro de clases</a></b>.</p>
+    <p class="hint quees">📅 <b>Esto es el FUTURO: tu horario y lo que ya está reservado.</b> Aquí armas en qué días y horas dictas, con qué tipo de clase y cuánta gente entra. ¿Buscas anotar una clase que YA diste? Eso es <b><a href="#" data-ira="registro">Asistencia</a></b>.</p>
     <div class="group">
       <h2>Próximas clases reservadas</h2>
       <p class="hint">Lo que los alumnos reservaron desde su portal, más lo que bloquees aquí. Marca asistencia para cerrar la clase (Asistió y Falta consumen 1 clase del paquete).</p>
@@ -1279,8 +1287,17 @@
       </div>
       <p class="hint">El color y la tipografía se guardan con "Guardar ajustes". El logo se sube al instante y aparece en el portal de tus alumnos.</p>
     </div>
+    <!-- Precios PRIMERO (10-ago-2026): las 3 academias fundadoras se trabaron exactamente
+         aquí — el grupo vivía tercero, detrás de aforo y salas, y nadie lo encontraba. -->
     <div class="group" data-aj="clases">
-      <h2>Tus clases y su aforo</h2>
+      <h2>Tus paquetes y precios</h2>
+      <p class="hint">Define los planes que vendes: <b>nombre libre</b>, cuántas <b>clases</b> incluye y su <b>precio</b>. Cada clase que registras le descuenta 1 al alumno. Marca <b>mensual</b> para una mensualidad sin límite de clases (no descuenta; vence por fecha). Estos paquetes salen en tu portal y en la ficha de cada alumno.</p>
+      <p class="hint"><b>Incluye:</b> marca a qué clases da acceso el paquete. El alumno con ese plan <b>solo verá y solo podrá reservar esas</b>. Sin marcar nada = acceso a todo.</p>
+      <div id="preciosBox"></div>
+      <button type="button" class="btn ghost sm" id="btnAddPaquete" style="margin-top:8px;">+ Agregar paquete</button>
+    </div>
+    <div class="group" data-aj="clases">
+      <h2>Tus clases y cuántos entran</h2>
       <p class="hint">Una fila por <b>tipo de clase</b>. El <b>aforo</b> es cuánta gente entra a esa clase (Máquinas 3, Mat 8, clase 1 a 1 = 1) y se aplica solo cuando pongas ese tipo en un horario. Las <b>variantes</b> son las versiones de esa misma clase (Reformer, Tower / Max, Roller, Sculpt): son opcionales y salen como opción al armar tu horario.</p>
       <p class="hint"><b>El orden manda:</b> la primera de la lista es tu clase principal — sale primera en tu web y en el portal de tus alumnos. Arrástrala arriba lo que quieras destacar.</p>
       <div id="clasesBox"></div>
@@ -1311,13 +1328,6 @@
       <div class="cfgrow"><span class="pk">Interesados (seguimiento de ventas)</span><select id="cfg_mod_leads"><option value="">Visible</option><option value="off">Oculto</option></select></div>
       <div class="cfgrow"><span class="pk">Caja (gastos y neto)</span><select id="cfg_mod_caja"><option value="">Visible</option><option value="off">Oculto</option></select></div>
       <div class="cfgrow"><span class="pk">Reportes</span><select id="cfg_mod_reportes"><option value="">Visible</option><option value="off">Oculto</option></select></div>
-    </div>
-    <div class="group" data-aj="clases">
-      <h2>Tus paquetes y precios</h2>
-      <p class="hint">Define los planes que vendes: <b>nombre libre</b>, cuántas <b>clases</b> incluye y su <b>precio</b>. Cada clase que registras le descuenta 1 al alumno. Marca <b>mensual</b> para una mensualidad sin límite de clases (no descuenta; vence por fecha). Estos paquetes salen en tu portal y en la ficha de cada alumno.</p>
-      <p class="hint"><b>Incluye:</b> marca a qué clases da acceso el paquete. El alumno con ese plan <b>solo verá y solo podrá reservar esas</b>. Sin marcar nada = acceso a todo.</p>
-      <div id="preciosBox"></div>
-      <button type="button" class="btn ghost sm" id="btnAddPaquete" style="margin-top:8px;">+ Agregar paquete</button>
     </div>
     <div class="group" data-aj="reservas">
       <h2>Cómo reservan tus alumnos</h2>
@@ -1367,7 +1377,8 @@
       <p class="hint" id="msgCampos" style="margin-top:10px;"></p>
     </div>
     <div class="group" data-aj="cobros">
-      <h2>Yape, Plin y transferencia</h2>
+      <h2>Cómo te pagan tus alumnos (Yape, Plin o transferencia)</h2>
+      <p class="hint"><b>Recomendado para empezar:</b> pon tu número de Yape y listo — tus alumnos te pagan como siempre y tú confirmas cada pago en <b>Pagos</b>. Que paguen solos por internet con tarjeta es <b>opcional</b> y está más abajo.</p>
       <div class="cfgrow"><span class="pk">Número Yape / Plin</span><input id="cfg_pago_numero" type="text" placeholder="999 999 999" /></div>
       <div class="cfgrow"><span class="pk">Titular (como sale en Yape)</span><input id="cfg_pago_titular" type="text" placeholder="Nombre Apellido" /></div>
       <p class="hint">Hasta que llenes el número, el portal manda a los alumnos a coordinarte el pago por WhatsApp.</p>
@@ -1441,8 +1452,8 @@
       </div>
     </div>
     <div class="group" data-aj="cobros">
-      <h2>Pago con tarjeta (Mercado Pago)</h2>
-      <p class="hint">Conecta TU cuenta de Mercado Pago y tus alumnos podrán pagarte con tarjeta desde el portal: el dinero cae directo en tu cuenta de MP y el paquete se activa solo al confirmarse el pago. Si no tienes cuenta de Mercado Pago, créala gratis en mercadopago.com.pe y vuelve aquí.</p>
+      <h2>Que paguen solos por internet: tarjeta (Mercado Pago)</h2>
+      <p class="hint"><b>Opcional — un plus para cuando ya estés andando; con tu Yape de arriba ya puedes cobrar.</b> Conecta TU cuenta de Mercado Pago y tus alumnos podrán pagarte con tarjeta desde el portal: el dinero cae directo en tu cuenta de MP y el paquete se activa solo al confirmarse el pago. Si no tienes cuenta de Mercado Pago, créala gratis en mercadopago.com.pe y vuelve aquí.</p>
       <div class="rowact" style="margin-top:8px;">
         <span class="pill gray" id="mpEstado">—</span>
         <button class="btn ghost" id="btnMpConectar">Conectar Mercado Pago</button>
@@ -2578,7 +2589,7 @@ function renderAlumnos(){
       fsel.style.display="";
     } else { fsel.style.display="none"; fsel.value=""; }
   }
-  if(db.alumnos.length===0){ tb.innerHTML='<tr><td colspan="9" class="empty">Sin alumnos todavía</td></tr>'; return; }
+  if(db.alumnos.length===0){ tb.innerHTML='<tr><td colspan="9"><div class="hint" style="border:1px dashed var(--line);border-radius:8px;padding:18px 14px;margin:8px 0;text-align:center;">Aún no tienes alumnos. Agrega el primero y su portal se crea solo.<br /><button class="btn" style="margin-top:10px;" onclick="el(\'btnNuevoAlumno\').click()">+ Agregar mi primer alumno</button> <button class="btn ghost" style="margin-top:10px;" onclick="el(\'btnImportCsv\').click()">Traer mi lista de Excel</button></div></td></tr>'; return; }
   var fs=(fsel&&fsel.value)||"";
   var listaAl=fs?db.alumnos.filter(function(a){return (a.sede_id||"")===fs;}):db.alumnos;
   if(!listaAl.length){ tb.innerHTML='<tr><td colspan="9" class="empty">Sin alumnos en esa sede</td></tr>'; return; }
@@ -2657,7 +2668,7 @@ function renderRegistro(){
   }
   var cont=el("regContador");
   if(db.registro.length===0){
-    tb.innerHTML='<tr><td colspan="8" class="empty">Sin clases registradas todavía</td></tr>';
+    tb.innerHTML='<tr><td colspan="8" class="empty">Aún no anotas ninguna clase. Se anotan solas cuando marcas Asistió o Falta en la Agenda.</td></tr>';
     if(cont) cont.textContent="";
     return;
   }
@@ -2724,7 +2735,7 @@ function renderPagos(){
         '</tr>';
       }).join("");
   el("tbProcesadas").innerHTML = proc.length===0
-    ? '<tr><td colspan="6" class="empty">Aún sin compras procesadas</td></tr>'
+    ? '<tr><td colspan="6"><div class="hint" style="border:1px dashed var(--line);border-radius:8px;padding:14px;margin:8px 0;text-align:center;">Cuando un alumno pague desde su portal, aparece aquí solo.<br />¿Tus alumnos aún no pueden pagarte por el portal? <button class="btn ghost sm" style="margin-top:8px;" onclick="window.irACobros&&window.irACobros()">Revisar cómo te pagan</button></div></td></tr>'
     : proc.map(function(c){
         var p=c.estado==="confirmada"?'<span class="pill green">Confirmada</span>':'<span class="pill red">Rechazada</span>';
         return '<tr><td class="mini">'+esc(c.fecha||'')+'</td><td class="name">'+esc(nombreCuenta(c.cuenta_id))+infoReferido(c,false)+'</td>'+
@@ -3836,7 +3847,7 @@ el("btnGuardarDisp").addEventListener("click",function(){
     if(r && r.activo!==0) activos.push({dia_semana:Number(r.dia_semana), hora:r.hora, cupo:parseInt(r.cupo,10)||0, curso:r.curso||"", sala:String(r.sala||""), profe:r.profe||""});
   });
   apiPost("/app/api/admin/disponibilidad",{activos:activos, profe: AG_PROFE||undefined})
-    .then(function(){ toast("Disponibilidad guardada"); cargarAgenda(); })
+    .then(function(){ toast("Horario guardado"); cargarAgenda(); })
     .catch(function(e){ toast(e.message||"No se pudo guardar"); });
 });
 /* Con 2+ clases en la misma hora (salas en paralelo), el admin ELIGE a cuál siembra.
@@ -4328,7 +4339,7 @@ document.body.addEventListener("click",function(e){
 });
 
 /* ---------- Tabs / modales ---------- */
-var TITULOS={resumen:"Inicio",alumnos:"Alumnos",grupos:"Grupos",profesores:"Profesores",registro:"Clases",agenda:"Agenda",pagos:"Pagos",caja:"Caja",reportes:"Reportes",cuentas:"Accesos",leads:"Interesados",recursos:"Para tus alumnos",ejercicios:"Tu biblioteca",ajustes:"Ajustes",perfil:"Perfil",servicios:"Servicios",campanas:"Campañas",chat:"Chat",feedback:"Ideas y errores",web:"Mi web"};
+var TITULOS={resumen:"Inicio",alumnos:"Alumnos",grupos:"Grupos",profesores:"Profesores",registro:"Asistencia",agenda:"Agenda",pagos:"Pagos",caja:"Caja",reportes:"Reportes",cuentas:"Cuentas de alumnos",leads:"Interesados",recursos:"Para tus alumnos",ejercicios:"Tu biblioteca",ajustes:"Ajustes",perfil:"Perfil",servicios:"Servicios",campanas:"Campañas",chat:"Chat",feedback:"Ideas y errores",web:"Mi web"};
 document.querySelectorAll(".tab").forEach(function(t){
   t.addEventListener("click",function(){
     document.querySelectorAll(".tab").forEach(function(x){x.classList.remove("active");});
@@ -5162,7 +5173,13 @@ el("btnGuardarAjustes").addEventListener("click",function(){
             gcal_client_secret:el("cfg_gcal_client_secret").value.trim(),
             gcal_calendar_id:el("cfg_gcal_calendar_id").value.trim()||"primary" };
   Promise.all([ apiPut(), apiPost("/app/api/admin/config",cfg) ])
-    .then(function(){ AJ_DIRTY=false; db.config=Object.assign(db.config||{},cfg); renderAll(); toast("Ajustes guardados"); })
+    .then(function(){
+      AJ_DIRTY=false; db.config=Object.assign(db.config||{},cfg); renderAll(); toast("Ajustes guardados");
+      /* 10-ago-2026: refresca el banner causal, el checklist y el punto pulsante SIN
+         recargar — antes se calculaban solo al arrancar y el aviso quedaba mintiendo
+         después de que el dueño ponía sus precios. */
+      try{ cargarActivacion(); }catch(e){}
+    })
     .catch(function(){ toast("No se pudieron guardar los ajustes"); });
 });
 
@@ -5206,11 +5223,11 @@ var BS_INDICE=[
   {t:"Quién está por vencer o ya sin clases", tab:"alumnos", k:"vencer vence vencimiento vencidos renovar renovacion caducar acabar sin clases deben deudor moroso retencion recuperar"},
   {t:"Grupos — clases grupales", tab:"grupos", k:"grupos grupales coro banda equipo"},
   {t:"Profesores — asientos y comisiones", tab:"profesores", k:"profesores profes staff equipo asientos comisiones instructores"},
-  {t:"Accesos al portal — la cuenta de cada alumno", tab:"cuentas", k:"acceso accesos cuenta clave contrasena portal login entrar alumno password"},
+  {t:"Cuentas de alumnos — la entrada de cada uno a su portal", tab:"cuentas", k:"acceso accesos cuenta cuentas clave contrasena portal login entrar alumno password"},
   {t:"Interesados — los que preguntaron y no compraron", tab:"leads", k:"interesados leads prospectos crm ventas seguimiento"},
   {t:"Agenda — tu horario y las reservas por venir", tab:"agenda", k:"agenda horario disponibilidad reservas calendario franjas futuro proximas bloquear"},
   {t:"Aforo y cupos de una franja", tab:"agenda", k:"aforo cupo cupos capacidad cuantos entran maximo personas limite cabida salas sala clases en paralelo dos clases misma hora"},
-  {t:"Registro de clases — lo que YA dictaste", tab:"registro", k:"registro historial bitacora dictadas pasado asistencia faltas"},
+  {t:"Asistencia — las clases que YA dictaste", tab:"registro", k:"asistencia registro historial bitacora dictadas pasado faltas"},
   {t:"Chat con tus alumnos", tab:"chat", k:"chat mensajes conversacion hablar escribir"},
   {t:"Pagos — confirmar y ver comprobantes", tab:"pagos", k:"pagos cobros confirmar comprobante voucher recibo boleta pagar cobrar plata dinero"},
   {t:"Caja — gastos y neto del mes", tab:"caja", k:"caja gastos egresos neto ganancia utilidad balance"},
@@ -5285,7 +5302,7 @@ function bsPintar(){
   var box=el("bsList");
   if(!BS_RES.length){ box.innerHTML='<div class="bsvacio">Nada con eso. Prueba con "precio", "aforo", "yape" o "alumno".</div>'; return; }
   box.innerHTML=BS_RES.map(function(it,i){
-    var donde=it.aj?("Ajustes · "+({academia:"Academia",clases:"Clases y planes",reservas:"Reservas",cobros:"Cobros",wa:"WhatsApp",avanzado:"Avanzado"}[it.aj]||"")):(TITULOS[it.tab]||"");
+    var donde=it.aj?("Ajustes · "+({academia:"Academia",clases:"Clases y planes",reservas:"Reservas",cobros:"Cobros",wa:"WhatsApp e IA",avanzado:"Avanzado"}[it.aj]||"")):(TITULOS[it.tab]||"");
     return '<div class="bsit'+(i===BS_SEL?" sel":"")+'" data-i="'+i+'"><span class="bsit-t">'+esc(it.t)+'</span><span class="bsit-s">'+esc(donde)+'</span></div>';
   }).join("");
   var sel=box.querySelector(".bsit.sel"); if(sel) sel.scrollIntoView({block:"nearest"});
@@ -6514,6 +6531,22 @@ function pintarAvisoWeb(p){
   wireIrPantalla(card);
   gW.style.display="";
 }
+/* Punto pulsante (10-ago-2026): los 2 pasos donde se trabaron las 3 academias fundadoras
+   (precio y medio de cobro) laten en ámbar sobre "Ajustes" hasta quedar configurados.
+   Solo un punto: más puntos = ruido para quien no lee. */
+function marcarMenuPendiente(p){
+  var tab=document.querySelector('.tab[data-tab="ajustes"]');
+  if(!tab) return;
+  var falta=(!p.precios)||(("cobro_conectado" in p)&&!p.cobro_conectado);
+  var dot=tab.querySelector(".dot.pulse");
+  if(!falta){ if(dot) dot.remove(); return; }
+  if(!dot){
+    dot=document.createElement("span");
+    dot.className="dot pulse";
+    dot.title="Te falta poner precios o elegir cómo te pagan";
+    tab.appendChild(dot);
+  }
+}
 function cargarActivacion(){
   fetch("/app/api/t/activacion",{headers:hdr()}).then(function(r){
     if(!r.ok) throw new Error("HTTP "+r.status);
@@ -6521,6 +6554,7 @@ function cargarActivacion(){
   }).then(function(d){
     var p=(d&&d.pasos)||{};
     try{ pintarAvisoWeb(p); }catch(e){}
+    try{ marcarMenuPendiente(p); }catch(e){}
     /* Ajustes aterriza en lo pendiente (03-ago-2026): sin precios → "Clases y planes";
        con precios pero sin cobro → "Cobros". Antes aterrizaba en "Academia" (marca/logo)
        y el dueño se perdía antes de llegar a lo importante. Si no falta nada, se respeta
@@ -6573,7 +6607,10 @@ function batutaInit(){
     // ve el tour de los momentos de plata (f=demo-tour); el brazo "bar" solo la barra (f=demo-panel).
     try{
       if(db && db.demo){ if(typeof window.lanzarTourDemo==="function" && demoArm()==="tour") window.lanzarTourDemo(); }
-      else if(typeof window.lanzarTourBienvenida==="function") window.lanzarTourBienvenida(false);
+      /* 10-ago-2026: el tour de bienvenida automático MURIÓ. En el primer minuto competían
+         4 ayudas (tour + checklist + banner + fab) y ninguna configuraba nada: para quien
+         no lee, cuatro carteles = cero carteles. Queda UNA (el checklist). Los tours por
+         módulo ("? Cómo funciona") siguen vivos a demanda. */
     }catch(e){}
   }).catch(function(e){
     if(e&&e.auth){ irALogin(); return; }
@@ -7222,7 +7259,7 @@ window.batutaInit = batutaInit;
       {sel:'#btnNuevoAlumno', t:"Alta en 20 segundos", b:"Nombre, curso y plan, y listo. Con «Guardar y agregar otro» encadenas varios sin salir del formulario."},
       {sel:'#btnImportCsv', t:"O trae tu lista entera", b:"Lo más fácil: copias tu lista de Excel, WhatsApp o una nota y la pegas. Con el nombre basta. Ves cómo quedaría antes de confirmar y los repetidos se saltan solos."},
       {sel:null, t:"Léela de un vistazo", b:"«Le quedan» son las clases que le sobran de su paquete. El «Estado» te avisa a quién le toca renovar: Última clase y Completado son tus dos alertas."},
-      {sel:'[data-tour="personas"]', t:"Dales su acceso", b:"En Accesos al portal le creas su entrada a cada alumno, o les compartes tu link de Inicio y se registran solos. Sin acceso no pueden reservar ni pagar solos."}
+      {sel:'[data-tour="personas"]', t:"Dales su acceso", b:"En Cuentas de alumnos le creas su entrada a cada alumno, o les compartes tu link de Inicio y se registran solos. Sin acceso no pueden reservar ni pagar solos."}
     ],
     agenda:[
       {sel:'.dispcfg', t:"Primero, la vista", b:"«Mostrar de … a … cada …» ajusta la grilla a TU horario. ¿Tus clases son 7:15 u 8:30? Pon el paso en 30 o 15 minutos. Esto es solo tu vista: nunca borra un horario ya guardado."},
