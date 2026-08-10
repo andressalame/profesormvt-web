@@ -4486,7 +4486,8 @@ export default {
           for (const p of ((await env.DB.prepare(
             "SELECT id, vence, origen, recordatorio_ciclo, recordatorio_fecha, aviso_vence_ciclo, " +
             "winback_ciclo, resena_pedida, nudge_ciclo, referido_nudge_ciclo, " +
-            "COALESCE(migrado_usadas,0) AS migrado_usadas, COALESCE(migrado_ciclo,0) AS migrado_ciclo FROM alumnos"
+            "COALESCE(migrado_usadas,0) AS migrado_usadas, COALESCE(migrado_ciclo,0) AS migrado_ciclo, " +
+            "COALESCE(bono_clases,0) AS bono_clases, COALESCE(bono_ciclo,0) AS bono_ciclo FROM alumnos"
           ).all()).results || [])) estadoPrevio.set(p.id, p);
 
           const stmts = [
@@ -4515,8 +4516,8 @@ export default {
             stmts.push(env.DB.prepare(
               "INSERT INTO alumnos (id,codigo,nombre,whatsapp,curso,paquete,fecha,pago,horario,notas,ciclo," +
               "vence,recordatorio_ciclo,recordatorio_fecha,aviso_vence_ciclo,winback_ciclo,resena_pedida," +
-              "nudge_ciclo,referido_nudge_ciclo,origen,migrado_usadas,migrado_ciclo) " +
-              "VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,?22)"
+              "nudge_ciclo,referido_nudge_ciclo,origen,migrado_usadas,migrado_ciclo,bono_clases,bono_ciclo) " +
+              "VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,?22,?23,?24)"
             ).bind(
               a.id, String(a.codigo || "").toUpperCase() || randHex(3).toUpperCase(), a.nombre,
               a.whatsapp || "", a.curso || "", a.paquete || "",
@@ -4530,7 +4531,12 @@ export default {
               prev.nudge_ciclo ?? 0,
               prev.referido_nudge_ciclo ?? 0,
               origen,
-              migUsadas, migCiclo
+              migUsadas, migCiclo,
+              /* Bono de cortesía (0f04a94): es estado de máquina como vence — el CRM no lo
+                 edita ni lo manda, así que SIEMPRE gana la base. Sin esto, cada "Guardar"
+                 del CRM lo reseteaba a 0 en silencio (así se esfumó el bono de Yaritza). */
+              prev.bono_clases ?? 0,
+              prev.bono_ciclo ?? 0
             ));
           }
           for (const r of body.registro){
