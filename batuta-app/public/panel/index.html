@@ -1374,7 +1374,7 @@
     </div>
     <div class="group solo-dueno" data-aj="academia">
       <h2>Sedes de tu academia</h2>
-      <p class="hint">¿Tienes más de un local? Crea tus sedes y asígnalas a tus profesores, alumnos y grupos (en Personas y Grupos). Todo se filtra por sede en un solo panel. Si tienes un solo local, ignora esta sección.</p>
+      <p class="hint">¿Tienes más de un local? Crea tus sedes y asígnalas a tus profesores, alumnos y grupos (en Mis alumnos y Mi academia → Mis profesores). Todo se filtra por sede en un solo panel. Si tienes un solo local, ignora esta sección.</p>
       <div id="sedesLista" style="display:flex;flex-direction:column;gap:8px;"></div>
       <div class="cfgrow" style="margin-top:8px;"><span class="pk">Nueva sede</span>
         <input id="sd_nombre" type="text" placeholder="Sede Miraflores" style="flex:1;min-width:140px;" />
@@ -1865,7 +1865,7 @@
       <p class="hint" style="margin:5px 0 0;" id="fr_aforoHint">&nbsp;</p></div>
     <div class="field" id="fr_profeWrap"><label>La dicta</label>
       <select id="fr_profe"></select>
-      <p class="hint" style="margin:5px 0 0;" id="fr_profeHint">Opcional: tus alumnos lo ven al reservar ("con Fiorella"). Crea a tu equipo en <b>Personas → Profesores</b>.</p></div>
+      <p class="hint" style="margin:5px 0 0;" id="fr_profeHint">Opcional: tus alumnos lo ven al reservar ("con Fiorella"). Crea a tu equipo en <b>Mi academia → Mis profesores</b>.</p></div>
     <!-- Vigencia por fechas (10-ago-2026, pedido de Elevate: "horarios distintos cada
          cierto tiempo, programados con meses de anticipación") -->
     <div class="field"><label>¿Cuándo corre esta franja?</label>
@@ -4003,7 +4003,7 @@ if(el("fr_tipo")) el("fr_tipo").addEventListener("change",function(){
   if(!el("fr_aforo").value){ /* nada que hacer: vacío ya hereda el aforo del tipo */ }
 });
 /* Hint de "La dicta": si el elegido está pendiente de activar, lo dice y ofrece reenviar
-   la invitación AHÍ MISMO (sin ir a Personas → Profesores). Asignarlo funciona igual. */
+   la invitación AHÍ MISMO (sin ir a Mi academia → Mis profesores). Asignarlo funciona igual. */
 function pintarProfeHint(){
   var h=el("fr_profeHint"); if(!h) return;
   var id=el("fr_profe")?el("fr_profe").value:"";
@@ -4012,7 +4012,7 @@ function pintarProfeHint(){
     h.innerHTML='<b>'+esc((p.nombre||"").split(" ")[0])+' aún no activa su cuenta</b> — igual puedes asignarle clases; activar es solo para que entre a su propio panel. '+
       '<button type="button" class="btn ghost sm" id="fr_reenviar" data-pid="'+esc(p.id)+'">Reenviar invitación</button>';
   } else {
-    h.innerHTML='Opcional: tus alumnos lo ven al reservar ("con Fiorella"). Crea a tu equipo en <b>Personas → Profesores</b>.';
+    h.innerHTML='Opcional: tus alumnos lo ven al reservar ("con Fiorella"). Crea a tu equipo en <b>Mi academia → Mis profesores</b>.';
   }
 }
 if(el("fr_profe")) el("fr_profe").addEventListener("change",pintarProfeHint);
@@ -4020,7 +4020,7 @@ if(el("fr_profeHint")) el("fr_profeHint").addEventListener("click",function(e){
   var b=e.target.closest("#fr_reenviar"); if(!b) return;
   b.disabled=true;
   apiPost("/app/api/admin/profesores",{accion:"reenviar",id:b.dataset.pid})
-    .then(function(r){ toast(r.correo_enviado?"Invitación reenviada ✓":"Link listo (el correo no salió; cópialo de Personas → Profesores)"); b.disabled=false; })
+    .then(function(r){ toast(r.correo_enviado?"Invitación reenviada ✓":"Link listo (el correo no salió; cópialo de Mi academia → Mis profesores)"); b.disabled=false; })
     .catch(function(err){ toast(err.message||"No se pudo reenviar"); b.disabled=false; });
 });
 if(el("btnFranjaOk")) el("btnFranjaOk").addEventListener("click",function(){
@@ -7647,7 +7647,7 @@ window.batutaInit = batutaInit;
     {sel:null, t:"Bienvenido a tu academia", b:"Este es tu panel. En 6 pasos rápidos te muestro lo esencial para que arranque hoy. Toma 40 segundos."},
     {sel:'#tuDia', t:"Empieza siempre por acá", b:"«Tu día» te dice qué te toca hoy: clases reservadas, pagos por confirmar, a quién le toca renovar. Si las cuatro tarjetas están en cero, no tienes nada pendiente."},
     {sel:'#btnBuscar', t:"Si no encuentras algo, Ctrl+K", b:"Escribe lo que quieres hacer («aforo», «precios», «yape») y te lleva a la pantalla exacta. También entiende los nombres de TUS clases. Es tu seguro contra perderte."},
-    {sel:'[data-tour="personas"]', t:"Tus alumnos viven en Personas", b:"Acá los agregas (uno por uno o pegando tu lista entera) y les das su acceso al portal. Sin acceso no pueden reservar ni pagar solos."},
+    {sel:'[data-tour="personas"]', t:"Tus alumnos viven en Mis alumnos", b:"Acá los agregas (uno por uno o pegando tu lista entera) y les das su acceso al portal. Sin acceso no pueden reservar ni pagar solos."},
     {sel:'[data-tour="link-alumnos"]', t:"Tu link para alumnos", b:"Compártelo y se registran solos: ven sus clases, su material y sus pagos sin que les escribas."},
     {sel:'[data-tour="cobros"]', t:"Cobros sin perseguir a nadie", b:"Acá confirmas los pagos por Yape en un clic; con tarjeta se confirma solo. Tu número de Yape y Mercado Pago se ponen en Ajustes → Cobros."},
     {sel:'#oiaFab', t:"Tu guía siempre a la mano", b:"Si te trabas, este botón abre un asistente que responde cómo hacer cualquier cosa del panel. ¡Listo, ya puedes empezar!"}
