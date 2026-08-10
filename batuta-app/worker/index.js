@@ -5676,6 +5676,23 @@ export default {
           ).all();
           return json({ ok: true, telemetria: telem || [] });
         }
+        /* Serie del funnel SIN laptop (propuesta 7-ago, pieza 1 ejecutada 10-ago): la única
+           consulta de la serie que dependía del `wrangler d1 execute` logueado de la Mac,
+           ahora como endpoint con el binding D1 directo. La Action de ~/Code/batuta podrá
+           llamar su/tenants + su/funnel + este, y comitear el JSON del día (esa mitad
+           espera la decisión de Andrés sobre pasar ADMIN_TOKEN a un secret de GitHub). */
+        if (path === "/app/api/su/magnet-daily" && request.method === "GET"){
+          let magnet = [];
+          try {
+            const rM = await env.DB.prepare(
+              "SELECT COALESCE(origen,'') AS origen, COUNT(*) AS n FROM lead_magnet GROUP BY origen ORDER BY n DESC"
+            ).all();
+            magnet = rM.results || [];
+          } catch (e) { /* tabla aún no creada: [] */ }
+          let totalM = 0;
+          for (const r of magnet) totalM += Number(r.n) || 0;
+          return json({ fecha: new Date().toISOString().slice(0, 10), total: totalM, por_origen: magnet });
+        }
         if (path === "/app/api/su/activacion-telemetria" && request.method === "GET"){
           let telemG = [];
           try {
