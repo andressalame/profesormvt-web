@@ -10245,7 +10245,9 @@ export default {
                           "salas",
                           /* reunión Elevate 7-ago-2026: interruptores por academia */
                           "interbank_cuenta", "interbank_cci", "mp_solo_tarjeta", "espera_auto",
-                          "portal_fija_off", "portal_chat_off", "portal_sin_profe"];
+                          "portal_fija_off", "portal_chat_off", "portal_sin_profe",
+                          /* wizard de primer ingreso (10-ago-2026): "1" = completado, no re-mostrar */
+                          "wizard_hecho"];
           const stmts = [];
           for (const k of claves){
             if (k in b){

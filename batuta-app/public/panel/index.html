@@ -6611,6 +6611,10 @@ function batutaInit(){
          4 ayudas (tour + checklist + banner + fab) y ninguna configuraba nada: para quien
          no lee, cuatro carteles = cero carteles. Queda UNA (el checklist). Los tours por
          módulo ("? Cómo funciona") siguen vivos a demanda. */
+      /* Wizard de primer ingreso (10-ago-2026): SOLO dueño, sin demo, cuenta sin activar
+         (cero precios reales y sin cobro). Corre aquí y no en recargar() porque el
+         refresco periódico lo reabriría. */
+      if(typeof window.abrirWizardPrimerIngreso==="function") window.abrirWizardPrimerIngreso();
     }catch(e){}
   }).catch(function(e){
     if(e&&e.auth){ irALogin(); return; }
@@ -7309,6 +7313,255 @@ window.batutaInit = batutaInit;
     try{ if(!force && localStorage.getItem(SEEN_ACTUAL)) return; }catch(e){}
     setTimeout(abrir, force?0:1600);
   };
+})();
+</script>
+
+<!-- ====== WIZARD DE PRIMER INGRESO (10-ago-2026) ======
+     Corre UNA vez, en el primer login del dueño (o en cuentas trabadas sin precio ni
+     cobro, como las fundadoras que se quedaron a mitad). Una pregunta por pantalla,
+     un botón primario, cero jerga. Deja resueltos los 2 pasos donde murieron las 3
+     academias fundadoras: PRECIO y CÓMO TE PAGAN. Spec completa: vault
+     "Batuta para dummies - plan maestro UX (2026-08-10)". Se desactiva con
+     config.wizard_hecho="1" (whitelist del worker) + localStorage batuta_wizard_v1. -->
+<style>
+/* capa del wizard: al final a propósito, gana por cascada y se borra entera sin riesgo */
+#wzVeil{position:fixed;inset:0;z-index:9002;background:rgba(8,8,10,.92);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);overflow-y:auto;display:flex;padding:24px 16px;}
+#wzVeil[hidden]{display:none;}
+.wz-card{margin:auto;width:100%;max-width:640px;background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:28px 26px;}
+.wz-paso{font-family:var(--mono,monospace);font-size:.72rem;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);margin-bottom:6px;display:flex;justify-content:space-between;align-items:center;gap:10px;}
+.wz-salir{color:var(--muted);font-size:.78rem;text-decoration:underline;cursor:pointer;text-transform:none;letter-spacing:0;}
+.wz-card h2{margin:.1em 0 .35em;font-size:1.5rem;line-height:1.15;}
+.wz-sub{color:var(--muted);font-size:.95rem;margin:0 0 18px;}
+.wz-chips{display:flex;flex-wrap:wrap;gap:10px;margin:6px 0 4px;}
+.wz-chip{border:1px solid var(--line);background:var(--panel2,#232120);border-radius:12px;padding:14px 18px;font-size:1.02rem;cursor:pointer;color:inherit;min-height:48px;}
+.wz-chip.on{border-color:var(--amber,#d99a3c);background:rgba(217,154,60,.14);font-weight:700;}
+.wz-fila{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px dashed var(--line);flex-wrap:wrap;}
+.wz-fila b{flex:1;min-width:150px;font-size:1rem;}
+.wz-fila input[type=number]{width:110px;font-size:1.05rem;padding:10px;}
+.wz-minichips{display:flex;gap:6px;}
+.wz-minichip{border:1px solid var(--line);border-radius:999px;padding:5px 11px;font-size:.82rem;cursor:pointer;background:transparent;color:var(--muted);}
+.wz-minichip:hover{border-color:var(--amber,#d99a3c);color:inherit;}
+.wz-op{display:block;width:100%;text-align:left;border:1px solid var(--line);background:var(--panel2,#232120);border-radius:12px;padding:16px;margin-bottom:10px;cursor:pointer;color:inherit;}
+.wz-op.on{border-color:var(--amber,#d99a3c);background:rgba(217,154,60,.12);}
+.wz-op b{display:block;font-size:1.05rem;margin-bottom:2px;}
+.wz-op span{color:var(--muted);font-size:.88rem;}
+.wz-acciones{display:flex;gap:10px;margin-top:20px;align-items:center;flex-wrap:wrap;}
+.wz-btn{flex:1;min-width:200px;font-size:1.05rem;font-weight:800;padding:14px 18px;border-radius:12px;border:0;cursor:pointer;background:var(--amber,#d99a3c);color:#151310;min-height:52px;}
+.wz-btn[disabled]{opacity:.45;cursor:default;}
+.wz-atras{background:transparent;border:1px solid var(--line);color:var(--muted);flex:0 0 auto;min-width:0;padding:14px 16px;border-radius:12px;cursor:pointer;min-height:52px;}
+.wz-err{color:#e07777;font-size:.88rem;margin-top:10px;min-height:1.2em;}
+.wz-agregar{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;}
+.wz-agregar input{flex:1;min-width:180px;padding:10px;}
+.wz-web{width:100%;height:400px;border:1px solid var(--line);border-radius:12px;background:#fff;}
+.wz-link{font-family:var(--mono,monospace);font-size:.85rem;color:var(--amber,#d99a3c);word-break:break-all;}
+</style>
+<div id="wzVeil" hidden><div class="wz-card">
+  <div class="wz-paso"><span id="wzPaso"></span><span class="wz-salir hidden" id="wzSalir">Lo termino después</span></div>
+  <div id="wzBody"></div>
+</div></div>
+<script>
+(function(){
+"use strict";
+/* espejo de CURSOS_POR_RUBRO del worker + "Otra cosa" (el registro deja rubro vacío con Google) */
+var WZ_RUBROS=[
+  ["Danza","Ballet, Danza urbana, Salsa"],
+  ["Musica","Canto, Piano, Guitarra"],
+  ["Idiomas","Inglés, Portugués, Francés"],
+  ["Deporte","Entrenamiento 1 a 1, Entrenamiento grupal"],
+  ["Refuerzo escolar","Matemática, Comunicación, Ciencias"],
+  ["Arte","Dibujo, Pintura, Acuarela"],
+  ["Ajedrez","Ajedrez principiantes, Ajedrez intermedio"],
+  ["Otra cosa",""]
+];
+var WZ={paso:1, rubro:"", sugeridas:[], marcadas:{}, filas:[], cobro:"yape"};
+
+function wzClasesExistentes(){
+  try{ var cl=JSON.parse(db.config.clases||"[]"); if(cl.length) return cl.map(function(c){return String(c.n||"").trim();}).filter(Boolean); }catch(e){}
+  return String(db.config.cursos||"").split(",").map(function(s){return s.trim();}).filter(Boolean);
+}
+function wzPaquetesExistentes(){
+  try{ var p=JSON.parse(db.config.paquetes||"[]"); return (p||[]).map(function(x){return String(x.n||"").trim();}).filter(Boolean); }catch(e){ return []; }
+}
+function wzSinPrecios(){
+  var pr=db.precios||{}; return !Object.keys(pr).some(function(k){ return Number(pr[k])>0; });
+}
+
+window.abrirWizardPrimerIngreso=function(){
+  try{
+    if(ROL!=="dueno" || (db&&db.demo)) return;
+    if((db.config&&db.config.wizard_hecho)==="1") return;
+    try{ if(localStorage.getItem("batuta_wizard_v1")) return; }catch(e){}
+    /* solo cuentas SIN activar: sin un solo precio real Y sin cobro conectado —
+       exactamente el pantano donde se quedaron las fundadoras */
+    if(!wzSinPrecios() || db.cobro_on) return;
+    try{ if(localStorage.getItem("bt_wz_resume")==="cierre"){ localStorage.removeItem("bt_wz_resume"); wzIr(5); el("wzVeil").hidden=false; return; } }catch(e){}
+    wzIr(1); el("wzVeil").hidden=false;
+  }catch(e){}
+};
+
+function wzIr(n){ WZ.paso=n; wzPintar(); var c=document.querySelector(".wz-card"); if(c) c.scrollIntoView({block:"start"}); }
+function wzTitulo(){
+  var t={1:"Paso 1 de 4",2:"Paso 2 de 4",3:"Paso 3 de 4",4:"Paso 4 de 4",5:"¡Listo!"};
+  el("wzPaso").textContent=t[WZ.paso]||"";
+  /* escape discreto SOLO en los pasos 1-2: de precio y cobro no se escapa (ahí murieron las 3) */
+  el("wzSalir").classList.toggle("hidden", WZ.paso>2);
+}
+function wzPintar(){
+  wzTitulo();
+  var b=el("wzBody");
+  if(WZ.paso===1){
+    b.innerHTML='<h2>¿Qué se enseña en tu academia?</h2>'+
+      '<p class="wz-sub">Con esto te dejo el panel armado a tu medida. Un toque y seguimos.</p>'+
+      '<div class="wz-chips">'+WZ_RUBROS.map(function(r){
+        return '<button type="button" class="wz-chip'+(WZ.rubro===r[0]?" on":"")+'" data-rubro="'+esc(r[0])+'">'+esc(r[0])+'</button>';
+      }).join("")+'</div><div class="wz-err" id="wzErr"></div>'+
+      '<div class="wz-acciones"><button class="wz-btn" id="wzSig">Continuar</button></div>';
+    b.querySelectorAll("[data-rubro]").forEach(function(ch){ ch.onclick=function(){ WZ.rubro=this.dataset.rubro; wzPintar(); }; });
+    el("wzSig").onclick=function(){
+      if(!WZ.rubro){ el("wzErr").textContent="Toca el rubro de tu academia para seguir."; return; }
+      var sug=(WZ_RUBROS.filter(function(r){return r[0]===WZ.rubro;})[0]||["",""])[1];
+      WZ.sugeridas=sug?sug.split(",").map(function(s){return s.trim();}):[];
+      var exist=wzClasesExistentes();
+      WZ.marcadas={};
+      exist.forEach(function(c){ WZ.marcadas[c]=true; });
+      if(!exist.length) WZ.sugeridas.forEach(function(c){ WZ.marcadas[c]=true; });
+      wzIr(2);
+    };
+  }
+  else if(WZ.paso===2){
+    var todas=[]; var vistas={};
+    wzClasesExistentes().concat(WZ.sugeridas).concat(Object.keys(WZ.marcadas)).forEach(function(c){ if(c&&!vistas[c]){ vistas[c]=1; todas.push(c);} });
+    b.innerHTML='<h2>Marca las clases que dictas</h2>'+
+      '<p class="wz-sub">Toca para prender o apagar. Puedes agregar las tuyas — luego se afinan en Ajustes.</p>'+
+      '<div class="wz-chips" id="wzCl">'+todas.map(function(c){
+        return '<button type="button" class="wz-chip'+(WZ.marcadas[c]?" on":"")+'" data-clase="'+esc(c)+'">'+esc(c)+'</button>';
+      }).join("")+'</div>'+
+      '<div class="wz-agregar"><input id="wzNueva" type="text" maxlength="40" placeholder="Otra clase (ej. Marinera adultos)"><button type="button" class="wz-minichip" id="wzAdd" style="min-height:44px;padding:0 16px;">+ Agregar</button></div>'+
+      '<div class="wz-err" id="wzErr"></div>'+
+      '<div class="wz-acciones"><button class="wz-atras" id="wzAtras">Atrás</button><button class="wz-btn" id="wzSig">Continuar</button></div>';
+    b.querySelectorAll("[data-clase]").forEach(function(ch){ ch.onclick=function(){ var c=this.dataset.clase; WZ.marcadas[c]=!WZ.marcadas[c]; this.classList.toggle("on",WZ.marcadas[c]); }; });
+    el("wzAdd").onclick=function(){ var v=el("wzNueva").value.trim().slice(0,40); if(!v) return; WZ.marcadas[v]=true; wzPintar(); };
+    el("wzAtras").onclick=function(){ wzIr(1); };
+    el("wzSig").onclick=function(){
+      var elegidas=Object.keys(WZ.marcadas).filter(function(c){return WZ.marcadas[c];});
+      if(!elegidas.length){ el("wzErr").textContent="Marca al menos una clase (es lo que tus alumnos van a reservar)."; return; }
+      /* guardar clases: conserva aforos/variantes de las existentes, agrega las nuevas con defaults */
+      var prev={}; try{ (JSON.parse(db.config.clases||"[]")||[]).forEach(function(c){ prev[c.n]=c; }); }catch(e){}
+      var clases=elegidas.map(function(n){ return prev[n]||{n:n,a:0,v:[]}; });
+      var body={clases:JSON.stringify(clases), cursos:elegidas.join(", ")};
+      el("wzSig").disabled=true;
+      apiPost("/app/api/admin/config",body).then(function(){
+        db.config.clases=body.clases; db.config.cursos=body.cursos;
+        /* filas de precio: los paquetes ya existentes (caso fundadoras con paquetes en S/0)
+           o, si no hay ninguno, una mensualidad por clase elegida */
+        var paqs=wzPaquetesExistentes();
+        WZ.filas=paqs.length
+          ? paqs.map(function(n){ return {n:n, precio:Number((db.precios||{})[n])>0?Number(db.precios[n]):"", nuevo:false}; })
+          : elegidas.map(function(c){ return {n:"Mensualidad · "+c, clase:c, precio:"", nuevo:true}; });
+        wzIr(3);
+      }).catch(function(e){ el("wzSig").disabled=false; el("wzErr").textContent="No se pudo guardar ("+((e&&e.message)||"revisa tu conexión")+"). Intenta de nuevo."; });
+    };
+  }
+  else if(WZ.paso===3){
+    b.innerHTML='<h2>¿Cuánto cobras al mes por cada una?</h2>'+
+      '<p class="wz-sub">Toca un monto o escribe el tuyo. Sin precio, tu página web no puede vender — por eso este paso no se salta. Lo cambias cuando quieras en Ajustes.</p>'+
+      '<div id="wzPrecios">'+WZ.filas.map(function(f,i){
+        return '<div class="wz-fila"><b>'+esc(f.n)+'</b>'+
+          '<div class="wz-minichips">'+[150,250,350].map(function(m){ return '<button type="button" class="wz-minichip" data-fila="'+i+'" data-monto="'+m+'">S/'+m+'</button>'; }).join("")+'</div>'+
+          '<span>S/ <input type="number" min="1" max="20000" step="1" inputmode="numeric" data-precio="'+i+'" value="'+(f.precio||"")+'" placeholder="—"></span></div>';
+      }).join("")+'</div>'+
+      '<div class="wz-err" id="wzErr"></div>'+
+      '<div class="wz-acciones"><button class="wz-atras" id="wzAtras">Atrás</button><button class="wz-btn" id="wzSig">Guardar precios y continuar</button></div>';
+    b.querySelectorAll("[data-monto]").forEach(function(mc){ mc.onclick=function(){ var inp=b.querySelector('[data-precio="'+this.dataset.fila+'"]'); inp.value=this.dataset.monto; }; });
+    el("wzAtras").onclick=function(){ wzIr(2); };
+    el("wzSig").onclick=function(){
+      var faltan=[];
+      b.querySelectorAll("[data-precio]").forEach(function(inp){
+        var i=Number(inp.dataset.precio), v=Math.round(Number(inp.value)||0);
+        WZ.filas[i].precio=v; if(!(v>0)) faltan.push(WZ.filas[i].n);
+      });
+      if(faltan.length){ el("wzErr").textContent="Ponle precio a: "+faltan.join(", ")+". Si aún no lo decides, pon un estimado — lo ajustas luego."; return; }
+      el("wzSig").disabled=true;
+      var cadena=Promise.resolve();
+      var nuevos=WZ.filas.filter(function(f){return f.nuevo;});
+      if(nuevos.length){
+        /* mensualidad simple por clase: ilimitada (u), vence a 30 días, habilita solo su clase */
+        var paquetes=nuevos.map(function(f){ return {n:f.n,c:0,r:0,u:true,t:f.clase?[f.clase]:[],d:30,i:"compra"}; });
+        var pstr=JSON.stringify(paquetes);
+        cadena=apiPost("/app/api/admin/config",{paquetes:pstr}).then(function(){ db.config.paquetes=pstr; });
+      }
+      cadena.then(function(){
+        db.precios=db.precios||{};
+        WZ.filas.forEach(function(f){ db.precios[f.n]=f.precio; });
+        return apiPut();
+      }).then(function(){ wzIr(4); })
+      .catch(function(e){ el("wzSig").disabled=false; el("wzErr").textContent="No se pudo guardar ("+((e&&e.message)||"conexión")+"). Intenta de nuevo."; });
+    };
+  }
+  else if(WZ.paso===4){
+    b.innerHTML='<h2>¿Cómo te pagan tus alumnos?</h2>'+
+      '<p class="wz-sub">Elige lo tuyo de hoy. Nada de esto te amarra: se cambia en Ajustes.</p>'+
+      '<button type="button" class="wz-op'+(WZ.cobro==="yape"?" on":"")+'" data-cobro="yape"><b>Por Yape, Plin o transferencia</b><span>Recomendado para empezar: pones tu número, tu web muestra los precios y tú confirmas cada pago.</span></button>'+
+      '<div id="wzYape" style="'+(WZ.cobro==="yape"?"":"display:none;")+'padding:0 4px 10px;">'+
+        '<div class="wz-fila" style="border:0;"><b style="min-width:120px;">Número Yape/Plin</b><input id="wzNum" type="text" inputmode="numeric" maxlength="12" placeholder="999 999 999" value="'+esc(db.config.pago_numero||"")+'" style="flex:1;min-width:140px;padding:10px;"></div>'+
+        '<div class="wz-fila" style="border:0;"><b style="min-width:120px;">Titular (como sale en Yape)</b><input id="wzTit" type="text" maxlength="60" placeholder="Nombre Apellido" value="'+esc(db.config.pago_titular||"")+'" style="flex:1;min-width:140px;padding:10px;"></div>'+
+      '</div>'+
+      '<button type="button" class="wz-op'+(WZ.cobro==="tarjeta"?" on":"")+'" data-cobro="tarjeta"><b>Que paguen solos por internet, con tarjeta</b><span>Te llevo a conectar tu cuenta de Mercado Pago (gratis de crear) y vuelves aquí solito.</span></button>'+
+      '<button type="button" class="wz-op'+(WZ.cobro==="efectivo"?" on":"")+'" data-cobro="efectivo"><b>En efectivo, yo lo anoto</b><span>Funciona, pero ojo: sin un Yape o tarjeta, tu página web no muestra los precios ni puede recibir pedidos.</span></button>'+
+      '<div class="wz-err" id="wzErr"></div>'+
+      '<div class="wz-acciones"><button class="wz-atras" id="wzAtras">Atrás</button><button class="wz-btn" id="wzSig">Continuar</button></div>';
+    b.querySelectorAll("[data-cobro]").forEach(function(op){ op.onclick=function(){ WZ.cobro=this.dataset.cobro; wzPintar(); }; });
+    el("wzAtras").onclick=function(){ wzIr(3); };
+    el("wzSig").onclick=function(){
+      el("wzErr").textContent="";
+      if(WZ.cobro==="yape"){
+        var num=el("wzNum").value.trim(), tit=el("wzTit").value.trim();
+        if(!/^\d[\d\s]{7,}$/.test(num)){ el("wzErr").textContent="Escribe tu número de Yape o Plin (9 dígitos)."; return; }
+        el("wzSig").disabled=true;
+        apiPost("/app/api/admin/config",{pago_numero:num,pago_titular:tit}).then(function(){
+          db.config.pago_numero=num; db.config.pago_titular=tit; db.cobro_on=true; wzIr(5);
+        }).catch(function(e){ el("wzSig").disabled=false; el("wzErr").textContent="No se pudo guardar ("+((e&&e.message)||"conexión")+")."; });
+      } else if(WZ.cobro==="tarjeta"){
+        el("wzSig").disabled=true;
+        try{ localStorage.setItem("bt_wz_resume","cierre"); }catch(e){}
+        apiPost("/app/api/admin/mp/conectar",{}).then(function(d){
+          if(d&&d.url){ location.href=d.url; }
+          else { el("wzSig").disabled=false; el("wzErr").textContent="Mercado Pago no respondió. Prueba con Yape por ahora — la tarjeta se conecta luego en Ajustes."; }
+        }).catch(function(){ el("wzSig").disabled=false; el("wzErr").textContent="Mercado Pago no respondió. Prueba con Yape por ahora — la tarjeta se conecta luego en Ajustes."; });
+      } else { wzIr(5); }
+    };
+  }
+  else {
+    var linkPub="https://"+TENANT_SLUG+".batuta.lat";
+    var sinCobro=!db.cobro_on;
+    b.innerHTML='<h2>¡Lista tu academia! Así la ven tus alumnos</h2>'+
+      '<p class="wz-sub">Esta es tu página real, ya publicada: <span class="wz-link">'+esc(linkPub)+'</span></p>'+
+      '<iframe class="wz-web" src="/app/a/'+encodeURIComponent(TENANT_SLUG)+'/web" loading="lazy" title="Tu página web"></iframe>'+
+      (sinCobro?'<p class="wz-sub" style="margin-top:10px;color:var(--amber,#d99a3c);">Tu web mostrará los precios cuando pongas tu Yape o conectes tarjeta (Ajustes → Cobros, 1 minuto).</p>':"")+
+      '<div class="wz-acciones">'+
+        '<button class="wz-btn" id="wzCompartir">Compartir mi página por WhatsApp</button>'+
+        '<button class="wz-atras" id="wzFin">Entrar a mi panel</button>'+
+      '</div>';
+    el("wzCompartir").onclick=function(){
+      var msg="¡Ya puedes ver los cursos de "+(db.academia||"mi academia")+" y reservar en línea! "+linkPub;
+      window.open("https://wa.me/?text="+encodeURIComponent(msg),"_blank");
+    };
+    el("wzFin").onclick=wzFinalizar;
+  }
+}
+function wzFinalizar(){
+  try{ localStorage.setItem("batuta_wizard_v1","1"); }catch(e){}
+  apiPost("/app/api/admin/config",{wizard_hecho:"1"}).then(function(){ db.config.wizard_hecho="1"; }).catch(function(){});
+  el("wzVeil").hidden=true;
+  try{ renderAll(); }catch(e){}
+  try{ cargarActivacion(); }catch(e){}
+  toast("Tu academia quedó lista. Bienvenida a Batuta 🎉");
+}
+el("wzSalir").onclick=function(){
+  /* salir SIN marcar hecho: el wizard vuelve a aparecer en el próximo ingreso */
+  el("wzVeil").hidden=true;
+  toast("Tranquila, lo retomamos la próxima vez que entres.");
+};
 })();
 </script>
 </body>
