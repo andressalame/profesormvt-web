@@ -9621,7 +9621,7 @@ export default {
           const desde = new Date(Date.now() - 7 * 86400000).toISOString();
           // Profesor: solo SU agenda. Dueno: toda la academia (profesor_id viaja para pintar/filtrar).
           const rows = (await env.DB.prepare(
-            "SELECT r.id, r.alumno_id, r.profesor_id, r.inicio_utc, r.fin_utc, r.tipo, r.serie_id, r.estado, r.curso, r.nota, a.nombre AS alumno_nombre " +
+            "SELECT r.id, r.alumno_id, r.profesor_id, r.inicio_utc, r.fin_utc, r.tipo, r.serie_id, r.estado, r.curso, r.nota, COALESCE(r.sala,'') AS sala, a.nombre AS alumno_nombre " +
             "FROM reservas r LEFT JOIN alumnos a ON a.id = r.alumno_id AND a.tenant_id = r.tenant_id " +
             "WHERE r.tenant_id = ?1 AND r.inicio_utc >= ?2 AND (?3 = 1 OR r.profesor_id = ?4) ORDER BY r.inicio_utc ASC"
           ).bind(tid, desde, esDueno ? 1 : 0, profeActorId || "").all()).results || [];
@@ -9653,12 +9653,16 @@ export default {
           const nowIso = new Date().toISOString();
           let creadas = 0;
           /* Multi-sala (03-ago-2026): un BLOQUEO cierra la hora entera (sala ''); apartar a un
-             alumno cae en UNA franja: la de b.sala, o la unica de esa hora, o la primera. */
+             alumno cae en UNA franja: la de b.sala, o la unica de esa hora.
+             10-ago-2026: con 2+ clases en paralelo YA NO se adivina la primera (en Elevate
+             siempre ganaba una sala y pisaba el curso): ambiguo = 400, igual que el portal. */
           let salaB = "";
           if (alumnoId){
-            const { franja: frB, ambigua: ambB } = await resolverFranja(env, tid, new Date(t0).toISOString(), targetB, String(b.sala || "").trim().slice(0, 40));
-            const frUsar = frB || (ambB ? (await franjasDeSlot(env, tid, new Date(t0).toISOString(), targetB))[0] : null);
-            if (frUsar){ salaB = frUsar.sala || ""; if (frUsar.curso) curso = frUsar.curso; }
+            const salaPedida = String(b.sala || "").trim().slice(0, 40);
+            const { franja: frB, ambigua: ambB } = await resolverFranja(env, tid, new Date(t0).toISOString(), targetB, salaPedida);
+            if (ambB) return json({ error: "A esa hora hay más de una clase. Elige en 'Clase' a cuál lo estás metiendo." }, 400);
+            if (salaPedida && !frB) return json({ error: "Esa clase ya no existe a esa hora. Refresca la página y vuelve a elegir." }, 400);
+            if (frB){ salaB = frB.sala || ""; if (frB.curso) curso = frB.curso; }
           }
           /* cupo por franja (la serie fija repite el mismo slot semanal: basta calcularlo una vez) */
           const cupoB = await cupoDeSlot(env, tid, new Date(t0).toISOString(), targetB, await loadConfig(env, tid), salaB);

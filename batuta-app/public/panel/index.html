@@ -1103,7 +1103,7 @@
     <div class="group">
       <h2>Próximas clases reservadas</h2>
       <p class="hint">Lo que los alumnos reservaron desde su portal, más lo que bloquees aquí. Marca asistencia para cerrar la clase (Asistió y Falta consumen 1 clase del paquete).</p>
-      <div class="tablewrap"><table id="tablaAgenda"><thead><tr><th>Cuándo (Lima)</th><th>Alumno</th><th>Tipo</th><th>Estado</th><th></th></tr></thead><tbody></tbody></table></div>
+      <div class="tablewrap"><table id="tablaAgenda"><thead><tr><th>Cuándo (Lima)</th><th>Alumno</th><th>Tipo</th><th id="thAgClase" class="hidden">Clase</th><th>Estado</th><th></th></tr></thead><tbody></tbody></table></div>
       <div class="empty hidden" id="agAdminVacio">No hay clases próximas todavía.</div>
     </div>
 
@@ -1111,6 +1111,7 @@
       <h2>Bloquear o sembrar una clase existente</h2>
       <p class="hint">Aparta un horario que ya está tomado (tu clase fija de hoy, o un bloqueo personal) para que nadie reserve encima. Si eliges un alumno y marcas "cada semana", le creas su horario fijo. Hora de Lima.</p>
       <div class="cfgrow"><span class="pk">Día y hora</span><input id="ag_dt" type="datetime-local" /></div>
+      <div class="cfgrow hidden" id="ag_claseWrap"><span class="pk">Clase</span><select id="ag_clase"></select></div>
       <div class="cfgrow"><span class="pk">Alumno (opcional)</span><select id="ag_alumno"><option value="">— Solo bloquear (sin alumno) —</option></select></div>
       <div class="cfgrow"><span class="pk">Repetir</span><label style="display:flex;align-items:center;gap:8px;font-size:13px;"><input id="ag_fija" type="checkbox" style="flex:0 0 auto;min-width:0;width:auto;" /> Cada semana (horario fijo)</label></div>
       <div class="cfgrow"><span class="pk">Nota (opcional)</span><input id="ag_nota" type="text" placeholder="Ej: clase fija de Juan" /></div>
@@ -3590,6 +3591,11 @@ function renderAgendaAdmin(){
     (db.alumnos||[]).slice().sort(function(a,b){return (a.nombre||"").localeCompare(b.nombre||"");})
       .map(function(a){return '<option value="'+esc(a.id)+'">'+esc(a.nombre)+'</option>';}).join("");
   sel.value = actual;
+  refrescarClaseSelect();
+
+  /* Con salas, la tabla dice a QUÉ clase cayó cada reserva (sin esto el admin siembra a ciegas). */
+  var conSalas = salasGrilla().length>0;
+  if(el("thAgClase")) el("thAgClase").classList.toggle("hidden", !conSalas);
 
   var tb = el("tablaAgenda").querySelector("tbody");
   if(AG_RESERVAS.length===0){ tb.innerHTML=""; el("agAdminVacio").classList.remove("hidden"); return; }
@@ -3602,7 +3608,7 @@ function renderAgendaAdmin(){
             '<button class="btn ghost sm" data-ag-marcar="falta" data-id="'+esc(r.id)+'">Falta</button> '+
             '<button class="btn ghost sm" data-ag-marcar="cancelada" data-id="'+esc(r.id)+'">Cancelar</button>';
     }
-    return '<tr><td style="white-space:nowrap;">'+esc(fmtLima(r.inicio_utc))+'</td><td>'+quien+'</td><td>'+esc(r.tipo)+'</td><td>'+esc(r.estado)+'</td><td style="white-space:nowrap;">'+acc+'</td></tr>';
+    return '<tr><td style="white-space:nowrap;">'+esc(fmtLima(r.inicio_utc))+'</td><td>'+quien+'</td><td>'+esc(r.tipo)+'</td>'+(conSalas?('<td>'+esc(r.sala||"—")+'</td>'):'')+'<td>'+esc(r.estado)+'</td><td style="white-space:nowrap;">'+acc+'</td></tr>';
   }).join("");
 }
 function pintarDcell(cell){
@@ -3833,12 +3839,41 @@ el("btnGuardarDisp").addEventListener("click",function(){
     .then(function(){ toast("Disponibilidad guardada"); cargarAgenda(); })
     .catch(function(e){ toast(e.message||"No se pudo guardar"); });
 });
+/* Con 2+ clases en la misma hora (salas en paralelo), el admin ELIGE a cuál siembra.
+   Antes el server tomaba la primera en silencio: en Elevate siempre ganaba una sala
+   y encima pisaba el curso del alumno (queja real de José, 10-ago-2026). */
+function dowHoraDeInput(v){
+  var m=/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/.exec(String(v||"")); if(!m) return null;
+  /* la fecha del input ES la fecha Lima: el día de semana sale del calendario pelado
+     (mediodía UTC esquiva cualquier corrimiento). Convención 0=Dom, igual que limaParts. */
+  return { dow: new Date(Date.UTC(+m[1], +m[2]-1, +m[3], 12)).getUTCDay(), hora: m[4]+":"+m[5] };
+}
+function refrescarClaseSelect(){
+  var wrap=el("ag_claseWrap"); if(!wrap) return;
+  var p=dowHoraDeInput(el("ag_dt").value);
+  var franjas=p ? (AG_DISP||[]).filter(function(r){
+    return r.activo!==0 && Number(r.dia_semana)===p.dow && r.hora===p.hora;
+  }) : [];
+  if(franjas.length<2){ wrap.classList.add("hidden"); el("ag_clase").innerHTML=""; return; }
+  el("ag_clase").innerHTML=franjas.map(function(f){
+    var lbl=(String(f.sala||"")||"Sin sala")+(f.curso?(" · "+f.curso):"")+
+      (f.profe?(" · la dicta "+nombreProfe(f.profe)):"")+(f.cupo?(" · aforo "+f.cupo):"");
+    return '<option value="'+esc(String(f.sala||""))+'">'+esc(lbl)+'</option>';
+  }).join("");
+  wrap.classList.remove("hidden");
+}
+if(el("ag_dt")){
+  el("ag_dt").addEventListener("change",refrescarClaseSelect);
+  el("ag_dt").addEventListener("input",refrescarClaseSelect);
+}
 el("btnBloquearSlot").addEventListener("click",function(){
   var iso = limaInputToUtc(el("ag_dt").value);
   if(!iso){ toast("Elige día y hora"); return; }
+  var claseVisible = el("ag_claseWrap") && !el("ag_claseWrap").classList.contains("hidden");
   apiPost("/app/api/admin/agenda/bloquear",{
     inicio_utc: iso,
     alumno_id: el("ag_alumno").value || undefined,
+    sala: claseVisible ? el("ag_clase").value : undefined,
     fija: el("ag_fija").checked,
     nota: el("ag_nota").value.trim()
   }).then(function(r){
