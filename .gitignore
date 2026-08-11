@@ -5,3 +5,4 @@ src/env.d.ts
 *.log
 .DS_Store
 .admin-token.local
+batuta-app/.wrangler/

@@ -6901,7 +6901,7 @@ function downloadBlob(blob,name){
 }
 
 /* ---------- Importar alumnos por CSV (client-side; reusa el guardado admin/data) ---------- */
-var IMP_ROWS=[],IMP_DUP=0,IMP_VACIOS=0,IMP_DUPARCH=0,IMP_COMPLETADOS=0,IMP_COLS_EXTRA=[];
+var IMP_ROWS=[],IMP_DUP=0,IMP_VACIOS=0,IMP_DUPARCH=0,IMP_SINCRUCE=0,IMP_COMPLETADOS=0,IMP_COLS_EXTRA=[];
 el("btnImportCsv").addEventListener("click",function(){
   IMP_ROWS=[]; el("impFile").value="";
   el("impPaso1").style.display=""; el("impPaso2").style.display="none";
@@ -6975,13 +6975,122 @@ function impSaldo(txtRestantes, paquete){
   if(rest>pk.clases) return {usadas:0,restantes:rest,error:"le quedan "+rest+" clases pero "+paquete+" trae "+pk.clases};
   return {usadas:pk.clases-rest,restantes:rest,error:""};
 }
-function impNorm(s){ return String(s==null?"":s).replace(/\s+/g," ").trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,""); }
+/* ---------- Normalizaci\u00f3n \u00daNICA del importador (11-ago-2026) ----------
+   TODO lo que compare textos del archivo contra los nombres de la academia pasa por ac\u00e1.
+   Hubo drift antes (una funci\u00f3n normalizaba y otra no) y de ah\u00ed salieron bugs, as\u00ed que
+   estas dos son las \u00fanicas y la segunda se construye SOBRE la primera.
+   impNorm      = quita tildes, may\u00fasculas, espacios de m\u00e1s, de borde y los espacios raros
+                  que meten Excel/Sheets/Word (NBSP y compa\u00f1\u00eda).
+   impNormForma = adem\u00e1s borra puntuaci\u00f3n y separadores (\u00b7 - / , : &), para comparar SOLO
+                  la forma: "Pilates M\u00e1quinas - Reformer" == "Pilates M\u00e1quinas \u00b7 Reformer". */
+function impNorm(s){ return String(s==null?"":s).replace(/[\u00a0\u1680\u2000-\u200d\u2028\u2029\u202f\u205f\u3000\ufeff]/g," ").replace(/\s+/g," ").trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,""); }
+function impNormForma(s){ return impNorm(s).replace(/[.,;:!?\u00a1\u00bf"'`\u00b4^~*_|/\\()\[\]{}<>+&@#$%\u00b0\u00ba\u00aa\u00b7\u2022\u2013\u2014-]+/g," ").replace(/\s+/g," ").trim(); }
+/* Cu\u00e1ntas letras hay que cambiar para pasar de un texto al otro (Levenshtein con tope:
+   apenas se pasa del tope, corta y devuelve tope+1 \u2014 con 1400 filas eso importa). */
+function impDist(a,b,max){
+  if(a===b) return 0;
+  if(Math.abs(a.length-b.length)>max) return max+1;
+  var prev=[],cur=[],i,j;
+  for(j=0;j<=b.length;j++) prev[j]=j;
+  for(i=1;i<=a.length;i++){
+    cur=[i]; var mejor=i;
+    for(j=1;j<=b.length;j++){
+      cur[j]=Math.min(prev[j]+1, cur[j-1]+1, prev[j-1]+(a.charAt(i-1)===b.charAt(j-1)?0:1));
+      if(cur[j]<mejor) mejor=cur[j];
+    }
+    if(mejor>max) return max+1;
+    prev=cur;
+  }
+  return prev[b.length];
+}
+/* Los n\u00fameros de un nombre son su parte que M\u00c1S pesa: "Paquete 4" y "Paquete 8" se
+   parecen en letras y son planes distintos. Si los n\u00fameros no calzan, no hay sugerencia. */
+function impDigitos(s){ return (String(s).match(/\d+/g)||[]).join("-"); }
+/* \u00bf"largo" contiene a "corto" en palabras completas? ("barre" s\u00ed est\u00e1 en "barre intermedio";
+   "ana" NO est\u00e1 en "banana"). M\u00ednimo 4 letras para no disparar con pedacitos. */
+function impContiene(largo,corto){
+  if(!corto||corto.length<4||largo.length<=corto.length) return false;
+  return (" "+largo+" ").indexOf(" "+corto+" ")>=0;
+}
+/* ¿Uno EMPIEZA como el otro? ("barre inter" y "barre intermedio"). Existe para detectar
+   DUDA: sin esto, "Barré Inter" proponía "Barré" a ciegas teniendo "Barré Intermedio" al
+   lado. Con los dos como candidatos hay empate y el importador prefiere no sugerir nada. */
+function impEmpieza(a,b){
+  if(!a||!b||a.length<4||b.length<4||a===b) return false;
+  return a.indexOf(b)===0||b.indexOf(a)===0;
+}
+/* ---------- EL matcher del importador (11-ago-2026) ----------
+   Pedido de Andr\u00e9s: que el due\u00f1o no tenga que escribir el nombre EXACTO de sus clases y
+   planes en el Excel ("Barre" tiene que encontrar a "Barr\u00e9"). Tres niveles, del m\u00e1s seguro
+   al menos seguro, y nunca se adivina de m\u00e1s:
+     1 = mismo nombre escrito distinto (tildes, may\u00fasculas, espacios, puntuaci\u00f3n) \u2192 se aplica solo.
+     2 = se PARECE (una o dos letras, o uno contiene al otro) \u2192 se PROPONE, la aplica el due\u00f1o.
+     3 = no hay a qu\u00e9 mapear \u2192 queda vac\u00edo y el texto original va a las Notas.
+   Devuelve {nivel, valor (solo en nivel 1), sugerencia (solo en nivel 2), crudo}. */
+function impMatch(txt, lista){
+  var crudo=String(txt==null?"":txt).trim();
+  var res={nivel:0,valor:"",sugerencia:"",crudo:crudo};
+  if(!crudo) return res;
+  if(!lista||!lista.length){ res.nivel=3; return res; }
+  var n=impNorm(crudo), f=impNormForma(crudo);
+  if(!f){ res.nivel=3; return res; }
+  var i,exacto=null;
+  /* --- Nivel 1: es el mismo nombre, escrito distinto --- */
+  for(i=0;i<lista.length;i++){ if(impNorm(lista[i])===n){ exacto=lista[i]; break; } }
+  if(!exacto){ for(i=0;i<lista.length;i++){ if(impNormForma(lista[i])===f){ exacto=lista[i]; break; } } }
+  if(exacto){ res.nivel=1; res.valor=exacto; return res; }
+  /* --- Nivel 2: se parece, pero decide el due\u00f1o --- */
+  var dig=impDigitos(f), cands=[];
+  for(i=0;i<lista.length;i++){
+    var fp=impNormForma(lista[i]); if(!fp) continue;
+    if(impDigitos(fp)!==dig) continue;                       // candado de n\u00fameros
+    var min=Math.min(f.length,fp.length);
+    var tope=min>=8?2:(min>=4?1:0);                          // nombres cortos: cero tolerancia
+    if(tope>0){ var d=impDist(f,fp,tope); if(d<=tope){ cands.push({n:lista[i],score:d}); continue; } }
+    if(impContiene(f,fp)||impContiene(fp,f)||impEmpieza(f,fp)) cands.push({n:lista[i],score:10});
+  }
+  if(!cands.length){ res.nivel=3; return res; }
+  cands.sort(function(a,b){ return a.score-b.score; });
+  /* empate = duda ("Barr\u00e9" con "Barr\u00e9 Inicial" Y "Barr\u00e9 Avanzado"): mejor no sugerir nada */
+  if(cands.length>1 && cands[1].score===cands[0].score){ res.nivel=3; return res; }
+  res.nivel=2; res.sugerencia=cands[0].n; return res;
+}
+/* Las clases que la academia S\u00cd tiene (las mismas que salen en la ficha del alumno). */
+function impCursosLista(){ try{ return cursosActivos()||[]; }catch(e){ return []; } }
+/* Una celda de curso puede traer varios separados por coma ("Canto, Piano"), que es como
+   el sistema los guarda. Cada pedazo pasa por el matcher por su cuenta. */
+function impCurso(txt){
+  var partes=String(txt==null?"":txt).split(",").map(function(s){return s.trim();}).filter(Boolean);
+  var lista=impCursosLista(), ok=[], pend=[];
+  partes.forEach(function(p){
+    var m=impMatch(p,lista);
+    if(m.nivel===1){ if(ok.indexOf(m.valor)<0) ok.push(m.valor); }
+    else if(m.nivel>=2){ if(!pend.some(function(x){return x.crudo===p;})) pend.push({crudo:p,sug:m.nivel===2?m.sugerencia:""}); }
+  });
+  return {valor:ok.join(", "), pend:pend, crudo:partes.join(", ")};
+}
 /* Quien es "la misma persona" al importar (11-ago-2026). Antes bastaba el nombre y eso hizo
    estragos con los exports que separan "First Name" de "Last Name": el nombre era el de pila
    a secas, asi que dos "Maria" distintas contaban como una sola y la segunda se tiraba en
    silencio. La identidad es nombre + apellido + correo: dos homonimos con correos distintos
    son dos personas, y el mismo correo repetido si es la misma. */
 function impClave(nom,ape,mail){ return impNorm(nom)+"|"+impNorm(ape)+"|"+impNorm(mail); }
+/* ---- Cruce por el ID del sistema anterior (11-ago-2026, migración de Elevate) ----
+   El export de CLIENTES de Punchpass no trae el pase: ese viene en OTRO reporte, y ese otro
+   identifica a la persona por su "Customer Id", no por su nombre. Como al importar el primer
+   archivo la columna del id no se reconoce y por eso viaja COMPLETA a las Notas ("Customer Id:
+   12345"), el segundo archivo se puede cruzar por ese mismo id — más fiable que el nombre
+   (homónimos, apellidos al revés, tildes). Orden: id primero, nombre+apellido+correo después. */
+var IMP_ID_CAB=["customer id","customerid","customer id number","customer number","cliente id","id cliente","id del cliente","client id","member id","student id","punchpass id","id"];
+function impEsCabId(h){ return IMP_ID_CAB.indexOf(impNormForma(h))>=0; }
+function impIdDeNotas(notas){
+  var partes=String(notas||"").split(" · ");
+  for(var i=0;i<partes.length;i++){
+    var ix=partes[i].indexOf(":"); if(ix<1) continue;
+    if(impEsCabId(partes[i].slice(0,ix))){ var v=impNorm(partes[i].slice(ix+1)); if(v) return v; }
+  }
+  return "";
+}
 function parseCsv(text){
   text=String(text||"").replace(/^\ufeff/,"");
   var l0=text.split(/\r?\n/)[0]||"";
@@ -7010,7 +7119,10 @@ var IMP_ALIAS={ nombre:["nombre","alumno","alumna","name","nombre completo","nom
      todas las que usa su reporte de pases ("Active Pass", "Passes", "Pass Type"...), porque
      una cabecera no reconocida = el alumno entra sin plan y el dueño cree que se perdio. */
   paquete:["paquete","plan","package","clases","membresia","pase","pass","pass name","pass type","membership","current pass","active pass","active passes","passes","pase activo","plan activo","membership name","membership type","pass purchased","product","producto"],
-  restantes:["clases restantes","restantes","clases que le quedan","le quedan","saldo","saldo de clases","clases pendientes","pendientes","credits","clases disponibles","disponibles","remaining","classes remaining","remaining classes","credits remaining","visits remaining","punches remaining","classes left"],
+  /* 11-ago-2026: el "Expired & Full Passes Report" de Punchpass titula esta columna
+     "Number of punches left" — sin estos alias el saldo se perdía y el alumno entraba con
+     su paquete completo (le regalábamos clases que ya usó). */
+  restantes:["clases restantes","restantes","clases que le quedan","le quedan","saldo","saldo de clases","clases pendientes","pendientes","credits","clases disponibles","disponibles","remaining","classes remaining","remaining classes","credits remaining","visits remaining","punches remaining","classes left","punches left","number of punches left","punches","uses left","uses remaining","sessions left","sessions remaining"],
   vence:["vence","vencimiento","fecha de vencimiento","valido hasta","vigencia","expira","expiracion","expires","expires on","expiration","expiration date","expiry","expiry date","valid until"],
   reservas:["reservas","clases reservadas","horarios reservados","reservado","reservados","proximas clases","bookings","registrations","schedule","upcoming registrations","upcoming classes","upcoming bookings"],
   notas:["notas","nota","observaciones","observacion","comentario","comentarios","notes"],
@@ -7045,14 +7157,10 @@ function impMapHeader(cells){
     for(var k in IMP_ALIAS){ if(IMP_ALIAS[k].indexOf(n)>=0 && map[k]==null){ map[k]=idx; known=true; } } });
   return known?map:null;
 }
-/* Si el paquete viene con otra capitalización o sin tildes ("8 clases de maquinas"),
-   se corrige solo al nombre canónico del plan (7-ago-2026). Nombres realmente distintos
-   siguen bloqueando la fila con el mensaje claro de siempre. */
-function impCanonPaquete(txt){
-  var n=impNorm(txt); if(!n) return txt;
-  var m=pkNombres().find(function(p){ return impNorm(p)===n; });
-  return m||txt;
-}
+/* Si el plan viene con otra capitalización, sin tildes o con otra puntuación ("Paquete-8",
+   "8 clases de maquinas"), se corrige solo al nombre canónico (7-ago-2026; matcher de 3
+   niveles el 11-ago-2026). Lo que solo SE PARECE no se toca acá: se propone en pantalla. */
+function impCanonPaquete(txt){ var m=impMatch(txt,pkNombres()); return m.nivel===1?m.valor:String(txt==null?"":txt).trim(); }
 function impResolveProfe(txt){
   if(!txt) return undefined;
   var n=impNorm(txt);
@@ -7067,21 +7175,46 @@ function impProcesarFilas(rows){
       if(!rows.length){ impError("El archivo está vacío."); return; }
       var map=impMapHeader(rows[0]),start=0;
       if(map){ start=1; } else { map={nombre:0,curso:1,whatsapp:2,paquete:3,notas:4,profesor:5}; }
-      if(map.nombre==null){ impError("No encontré una columna de Nombre. Pon 'Nombre' (o 'Name') como título de la primera columna."); return; }
       /* NADA se pierde en silencio (7-ago-2026, regla de Andrés): las columnas que no
          reconozco van COMPLETAS a las Notas del alumno, etiquetadas con su título, y la
          previsualización dice cuáles fueron. */
       var cab=start?rows[0]:null;
+      /* El reporte de pases puede venir SIN columna de nombre: identifica a la persona por
+         su id del sistema anterior y nada más (11-ago-2026). Antes eso moría en "no encontré
+         una columna de Nombre" y no había forma de traer los planes. Ahora, con id que cruce
+         contra alguien de la lista, el archivo entra igual (solo completa, no crea). */
+      var colId=null;
+      if(cab) cab.forEach(function(h,ix){ if(colId==null && impEsCabId(h)) colId=ix; });
+      if(map.nombre==null && colId==null){ impError("No encontré una columna de Nombre. Pon 'Nombre' (o 'Name') como título de la primera columna."); return; }
       var usadosIx={}; for(var kM in map){ if(map[kM]!=null) usadosIx[map[kM]]=1; }
       var extrasIx=[];
       if(cab){ cab.forEach(function(h,ix){ if(!usadosIx[ix] && String(h).trim()) extrasIx.push(ix); }); }
       IMP_COLS_EXTRA=cab?extrasIx.map(function(ix){ return String(cab[ix]).trim(); }):[];
       var existe={}; (db.alumnos||[]).forEach(function(a){ existe[impClave(a.nombre,a.apellido,a.email)]=a; });
-      var out=[],dup=0,dupArchivo=0,vacios=0,vistos={};
+      /* ---- Cómo se reconoce a quien YA ESTÁ, en orden de más fiable a menos (11-ago-2026) ----
+         El reporte de pases de Punchpass NO viene como el de clientes: identifica a la persona
+         con su nombre COMPLETO en una sola columna ("Customer name"), mientras que el de
+         clientes trae First Name y Last Name separados. Cruzando solo por nombre+apellido, el
+         segundo archivo no encontraba a nadie y duplicaba a los 1,445. Por eso: id → correo →
+         nombre+apellido+correo → nombre completo. El nombre completo solo vale si es ÚNICO:
+         con dos alumnos que se llamen igual, no se adivina (se trata como persona nueva). */
+      var existeId={},existeMail={},existeNom={};
+      (db.alumnos||[]).forEach(function(a){
+        if(colId!=null){ var i=impIdDeNotas(a.notas); if(i&&!existeId[i]) existeId[i]=a; }
+        var m=impNorm(a.email); if(m&&!existeMail[m]) existeMail[m]=a;
+        var nn=impNormForma((a.nombre||"")+" "+(a.apellido||""));
+        if(nn) existeNom[nn]=existeNom[nn]?"varios":a;
+      });
+      var out=[],dup=0,dupArchivo=0,vacios=0,sinCruce=0,vistos={};
       for(var i=start;i<rows.length;i++){ var r=rows[i];
         /* el nombre se normaliza de espacios: Excel mete saltos de linea dentro de la celda */
-        var nombre=String(r[map.nombre]!=null?r[map.nombre]:"").replace(/\s+/g," ").trim();
-        if(!nombre){ vacios++; continue; }
+        var nombre=map.nombre!=null?String(r[map.nombre]!=null?r[map.nombre]:"").replace(/\s+/g," ").trim():"";
+        var idSolo=colId!=null?impNorm(r[colId]):"";
+        /* fila que solo trae el id (reporte de pases): se le pone el nombre del alumno que
+           ya está. Si ese id no le corresponde a nadie, no hay a quién completar: se cuenta
+           aparte y se dice en pantalla, nunca se crea un alumno sin nombre. */
+        if(!nombre && idSolo && existeId[idSolo]) nombre=existeId[idSolo].nombre;
+        if(!nombre){ if(idSolo) sinCruce++; else vacios++; continue; }
         var apeFila=map.apellido!=null?String(r[map.apellido]||"").replace(/\s+/g," ").trim().slice(0,80):"";
         var mailFila=map.email!=null?String(r[map.email]||"").trim().slice(0,120):"";
         /* 11-ago-2026, migracion de Elevate: la clave de duplicado era SOLO el nombre. Punchpass
@@ -7090,15 +7223,32 @@ function impProcesarFilas(rows){
            demas se descartaron en silencio como "ya estaban". Ahora la clave es nombre+apellido
            +correo, que es lo que de verdad identifica a una persona. */
         var key=impClave(nombre,apeFila,mailFila);
-        var yaEsta=existe[key];
-        if(vistos[key]){ dupArchivo++; continue; }
-        vistos[key]=true;
+        /* id del sistema anterior: manda sobre el nombre, tanto para reconocer a quien ya
+           está como para no contar dos veces a la misma persona dentro del archivo */
+        var idFila=idSolo;
+        var nomFull=impNormForma(nombre+" "+apeFila);
+        /* solo si la fila NO trae correo: con correo distinto son dos personas distintas
+           (eso arregló lo de las dos "María" y no se toca). Cubre igual el caso de Punchpass:
+           su reporte de pases no trae correo y manda el nombre completo en una sola celda. */
+        var porNom=(!mailFila&&nomFull&&existeNom[nomFull]!=="varios")?existeNom[nomFull]:null;
+        var yaEsta=(idFila&&existeId[idFila])||(mailFila&&existeMail[impNorm(mailFila)])||existe[key]||porNom||null;
+        var keyDup=idFila?("id:"+idFila):key;
+        if(vistos[keyDup]){ dupArchivo++; continue; }
+        vistos[keyDup]=true;
         var profTxt=map.profesor!=null?String(r[map.profesor]||"").trim():"";
         /* 11-ago-2026: NO inventar paquete. Antes, si el export no traia columna de pase, se le
            encajaba "Paquete 4" a todo el mundo: a Jose le pinto 802 alumnos con un plan que no
            existe en su academia y con un saldo falso de "4/4 clases". Sin dato = sin paquete. */
         var paqTxt=map.paquete!=null?String(r[map.paquete]||"").trim():"";
-        var paqFila=paqTxt?impCanonPaquete(paqTxt):"";
+        /* matcher de 3 niveles (11-ago-2026): nivel 1 se aplica solo, nivel 2 se PROPONE
+           (queda el texto del archivo hasta que el dueño confirme), nivel 3 sin match. */
+        var paqM=impMatch(paqTxt,pkNombres());
+        var paqFila=paqM.nivel===1?paqM.valor:paqTxt;
+        var paqSug=paqM.nivel===2?paqM.sugerencia:"";
+        /* la clase del archivo pasa por el MISMO matcher. Antes entraba cruda: una clase mal
+           escrita quedaba como texto que no existe en la academia, no salía en ningún filtro
+           y al abrir la ficha del alumno se borraba sola (los checkboxes no la encontraban). */
+        var cuM=impCurso(map.curso!=null?r[map.curso]:"");
         /* saldo migrado: "Clases restantes" y "Vence" (28-jul-2026). Ausentes = alumno nuevo
            con su paquete completo, exactamente como antes de existir estas columnas. */
         var sal=impSaldo(map.restantes!=null?r[map.restantes]:"", paqFila);
@@ -7129,7 +7279,9 @@ function impProcesarFilas(rows){
         if(vIso==="") avisos.push('no entendí el vencimiento "'+vTxt+'"');
         if(rsv.error) avisos.push(rsv.error);
         if(!mailOk) avisos.push('"'+mailFila+'" no parece un correo');
-        if(paqDesc) avisos.push('no reconozco el paquete "'+paqFila+'"');
+        /* el pase que no reconozco YA NO va acá (11-ago-2026): tiene su propio bloque con
+           el selector para arreglarlo. Decir lo mismo en dos cajas distintas, una sin botón,
+           solo confunde — una ayuda a la vez. */
         var errFila=sal.error;
         /* ---- COMPLETAR a los que ya están (11-ago-2026, Elevate) ----
            El export de clientes de Punchpass no trae el plan: viene en OTRO reporte. Antes, ese
@@ -7140,8 +7292,8 @@ function impProcesarFilas(rows){
         if(yaEsta){
           var faltantes=[];
           if(paqFila && !yaEsta.paquete) faltantes.push("plan");
-          var cursoNuevo=map.curso!=null?String(r[map.curso]||"").trim():"";
-          if(cursoNuevo && !yaEsta.curso) faltantes.push("curso");
+          var cursoNuevo=cuM.valor;   // solo lo reconocido; lo dudoso se confirma en pantalla
+          if((cursoNuevo||cuM.pend.length) && !yaEsta.curso) faltantes.push("clase");
           if(mailOk && mailFila && !yaEsta.email) faltantes.push("correo");
           var waNuevo=(map.whatsapp!=null?String(r[map.whatsapp]||"").trim():"").replace(/[^\d+]/g,"");
           if(waNuevo && !yaEsta.whatsapp) faltantes.push("WhatsApp");
@@ -7150,7 +7302,8 @@ function impProcesarFilas(rows){
           if(!faltantes.length){ dup++; continue; }
           out.push({ completaA:yaEsta.id, completaQue:faltantes,
             nombre:nombre, apellido:apeFila, email:mailOk?mailFila:"", nacimiento:nIso||"",
-            curso:cursoNuevo, whatsapp:waNuevo, paquete:paqFila,
+            curso:cursoNuevo, cursoPend:cuM.pend, cursoCrudo:cuM.crudo, paqSug:paqSug,
+            whatsapp:waNuevo, paquete:paqFila,
             restantes:sal.restantes, migrado_usadas:sal.usadas, saldoNota:sal.nota||"",
             vence:vIso||"", venceTxt:vTxt, reservas:rsv.isos,
             error:errFila, errOtros:"", avisos:avisos, paqDesc:paqDesc,
@@ -7162,8 +7315,10 @@ function impProcesarFilas(rows){
           email:mailOk?mailFila:"",
           nacimiento:nIso||"",
           /* sin columna de curso = SIN curso. Antes caia en MARCA.cursoDefault y a una academia
-             de pilates y danza le marcaba "Canto" a los 802 alumnos (Jose, 11-ago-2026). */
-          curso:map.curso!=null?String(r[map.curso]||"").trim():"",
+             de pilates y danza le marcaba "Canto" a los 802 alumnos (Jose, 11-ago-2026).
+             Y lo que la academia no tiene tampoco se inventa: solo entra la clase reconocida
+             (nivel 1); lo dudoso espera confirmacion y el texto crudo viaja a las Notas. */
+          curso:cuM.valor, cursoPend:cuM.pend, cursoCrudo:cuM.crudo, paqSug:paqSug,
           whatsapp:(map.whatsapp!=null?String(r[map.whatsapp]||"").trim():"").replace(/[^\d+]/g,""),
           paquete:paqFila,
           notas:(function(){
@@ -7177,6 +7332,9 @@ function impProcesarFilas(rows){
             if(rsv.crudo) sueltos.push("Reservas que no pude leer: "+rsv.crudo);
             if(!mailOk) sueltos.push("Correo del sistema anterior: "+mailFila);
             if(paqDesc) sueltos.push("Pase del sistema anterior: "+paqFila);
+            /* la clase que no reconocí NO se inventa, pero tampoco se pierde: el texto tal
+               cual venía queda acá aunque después el dueño la mapee (11-ago-2026). */
+            if(cuM.pend.length) sueltos.push("Clase del sistema anterior: "+cuM.pend.map(function(x){return x.crudo;}).join(", "));
             var todo=[nb,ex].concat(sueltos).filter(Boolean).join(" · ");
             /* el tope era 400 y cortaba a media palabra 7 de cada 10 fichas de un export ancho
                (se perdian las ultimas columnas) mientras la pantalla prometia "van completas".
@@ -7189,7 +7347,7 @@ function impProcesarFilas(rows){
           error:errFila, errOtros:"", avisos:avisos, paqDesc:paqDesc,
           profTxt:profTxt, profesor_id:impResolveProfe(profTxt) });
       }
-      IMP_ROWS=out; impPreview(out,dup,vacios,dupArchivo);
+      IMP_ROWS=out; impPreview(out,dup,vacios,dupArchivo,sinCruce);
 }
 function impLeerArchivo(f){
   if(!f) return;
@@ -7237,9 +7395,10 @@ window.addEventListener("drop",function(e){
    en notas. Molestaba poco cuando el paquete era decorativo; con el saldo migrado (28-jul)
    pasa a ser grave: el saldo se mediría contra el paquete equivocado. */
 function impEsPaquete(c){
-  var n=impNorm(c);
-  if(!n) return false;
-  if(pkNombres().some(function(p){ return impNorm(p)===n; })) return true;
+  if(!impNorm(c)) return false;
+  /* solo NIVEL 1 (el mismo nombre escrito distinto): acá se decide si la celda es el plan o
+     la clase del alumno, y adivinar de más le robaría la celda del curso (11-ago-2026). */
+  if(impMatch(c,pkNombres()).nivel===1) return true;
   return /paquete/i.test(c);
 }
 /* ¿La celda pegada tiene pinta de fecha? (28-jul: para no confundir "20-08-2026" con un
@@ -7288,14 +7447,20 @@ el("btnImpPegar").addEventListener("click",function(){
       else if(!curso){ curso=c; }
       else { notas.push(c); }
     });
-    var paqL=paq||"";   // 11-ago-2026: sin dato = sin paquete, no "Paquete 4" inventado
+    /* 11-ago-2026: sin dato = sin paquete, no "Paquete 4" inventado. Y el mismo matcher de
+       3 niveles que el archivo, para que pegar "paquete-8" o "Barre" funcione igual acá. */
+    var paqML=impMatch(paq||"",pkNombres());
+    var paqL=paqML.nivel===1?paqML.valor:(paq||"");
+    var cuL=impCurso(curso);
     var salL=impSaldo(restTxt,paqL);
     var pkL=pkDe(paqL);
     var avisosL=[];
     if(venTxt&&!venIso) avisosL.push('no entendí el vencimiento "'+venTxt+'"');
-    if(paqL && !pkL.ilim && !(pkL.clases>0)) avisosL.push('no reconozco el paquete "'+paqL+'"');
-    out.push({ nombre:nombre, curso:curso, whatsapp:wsp,
-      paquete:paqL, notas:notas.concat(venTxt&&!venIso?["Vencimiento del sistema anterior: "+venTxt]:[]).join(" · "),
+    /* el pase desconocido se resuelve en su bloque con selector, no como aviso suelto */
+    out.push({ nombre:nombre, curso:cuL.valor, cursoPend:cuL.pend, cursoCrudo:cuL.crudo,
+      paqSug:paqML.nivel===2?paqML.sugerencia:"", whatsapp:wsp,
+      paquete:paqL, notas:notas.concat(venTxt&&!venIso?["Vencimiento del sistema anterior: "+venTxt]:[])
+        .concat(cuL.pend.length?["Clase del sistema anterior: "+cuL.pend.map(function(x){return x.crudo;}).join(", ")]:[]).join(" · "),
       restantes:salL.restantes, migrado_usadas:salL.usadas, saldoNota:salL.nota||"",
       vence:venIso||"", venceTxt:venTxt,
       error:salL.error, errOtros:"", avisos:avisosL,
@@ -7305,10 +7470,16 @@ el("btnImpPegar").addEventListener("click",function(){
   IMP_COLS_EXTRA=[];   // el pegado sin cabecera ya manda los sobrantes a notas por celda
   IMP_ROWS=out; impPreview(out,dup,0,0);
 });
-function impPreview(rows,dup,vacios,dupArchivo){
-  IMP_DUP=dup; IMP_VACIOS=vacios; IMP_DUPARCH=dupArchivo||0;   // para repintar tras mapear un pase (7-ago-2026)
+function impPreview(rows,dup,vacios,dupArchivo,sinCruce){
+  IMP_DUP=dup; IMP_VACIOS=vacios; IMP_DUPARCH=dupArchivo||0; IMP_SINCRUCE=sinCruce||0;   // para repintar tras mapear un pase (7-ago-2026)
   el("impErr").style.display="none";
-  if(!rows.length){ impError("No hay alumnos nuevos para importar"+(dup?(" ("+dup+" ya estaban en tu lista)"):"")+"."); return; }
+  if(!rows.length){
+    /* sin filas no queda nada que decidir: las cajas del intento anterior se esconden,
+       si no el dueño ve un "confirma tu clase" de un archivo que ya no está */
+    ["impRecon","impMapPaq","impAvisos","impSaldoErr"].forEach(function(id){ var b=el(id); if(b){ b.style.display="none"; b.innerHTML=""; } });
+    impError("No hay alumnos nuevos para importar"+(dup?(" ("+dup+" ya estaban en tu lista)"):"")+".");
+    return;
+  }
   var tb=el("impTabla").querySelector("tbody");
   /* las filas con problema van primero: con 200 alumnos la mala se escondía en la fila 137
      (solo se pintan las primeras 50) y el profe veía un botón apagado sin saber por qué */
@@ -7326,10 +7497,14 @@ function impPreview(rows,dup,vacios,dupArchivo){
     else if(a.paqDesc){ saldo='<span class="mini" style="color:var(--amber,#d99a3c);">pase que no reconozco<br>entra igual, sin saldo</span>'; }
     else if(a.restantes!=null){ saldo='<span class="big">'+a.restantes+'</span> <span class="mini">/ '+pk.clases+'</span>'+(a.vence?'<br><span class="mini">vence '+esc(fechaBonita(a.vence))+'</span>':''); }
     else { saldo='<span class="big">'+(pk.clases||0)+'</span> <span class="mini">/ '+(pk.clases||0)+' (completo)</span>'+(a.vence?'<br><span class="mini">vence '+esc(fechaBonita(a.vence))+'</span>':''); }
+    /* la clase que falta confirmar se ve EN SU FILA, no solo en el resumen: así el dueño
+       entiende de dónde sale el «por confirmar» de arriba (11-ago-2026) */
+    var cuCel=esc(a.curso||"—")+((a.cursoPend&&a.cursoPend.length)?('<br><span class="mini" style="color:var(--amber,#d99a3c);">«'+esc(a.cursoPend[0].crudo)+'» '+(a.cursoPend[0].sug?"por confirmar":"sin reconocer")+'</span>'):"");
+    var compQue=(a.completaQue||[]).filter(function(q){ return q!=="clase"||!!a.curso; });
     var nomCel=esc(a.nombre)+(a.apellido?(" "+esc(a.apellido)):"")+
-      (a.completaA?('<br><span class="mini" style="color:var(--accent);">ya está en tu lista: se le completa '+esc((a.completaQue||[]).join(", "))+'</span>'):"")+
+      (a.completaA?('<br><span class="mini" style="color:var(--accent);">ya está en tu lista: '+(compQue.length?("se le completa "+esc(compQue.join(", "))):"confirma su clase abajo")+'</span>'):"")+
       ((a.avisos&&a.avisos.length)?('<br><span class="mini" style="color:var(--amber,#d99a3c);">'+esc(a.avisos[0])+(a.avisos.length>1?(" (+"+(a.avisos.length-1)+")"):"")+'</span>'):"");
-    return "<tr"+(a.error?' style="background:rgba(217,83,79,.08);"':'')+"><td>"+nomCel+"</td><td>"+esc(a.curso||"—")+"</td><td>"+esc(a.whatsapp)+"</td><td>"+esc(a.paquete||"—")+"</td><td>"+saldo+"</td><td>"+pf+"</td></tr>";
+    return "<tr"+(a.error?' style="background:rgba(217,83,79,.08);"':'')+"><td>"+nomCel+"</td><td>"+cuCel+"</td><td>"+esc(a.whatsapp)+"</td><td>"+esc(a.paquete||"—")+"</td><td>"+saldo+"</td><td>"+pf+"</td></tr>";
   }).join("");
   var completar=rows.filter(function(a){ return a.completaA; });
   var nuevos=rows.length-completar.length;
@@ -7338,6 +7513,9 @@ function impPreview(rows,dup,vacios,dupArchivo){
   if(dup)extra.push(dup+" ya estaban completos (omitidos)");
   if(IMP_DUPARCH)extra.push(IMP_DUPARCH+" repetidos dentro del archivo (omitidos)");
   if(vacios)extra.push(vacios+" sin nombre (omitidos)");
+  /* filas del reporte de pases cuyo id no le corresponde a nadie de la lista: hay que
+     decirlo, si no el dueño cree que se le migraron todos los pases (11-ago-2026) */
+  if(IMP_SINCRUCE)extra.push(IMP_SINCRUCE+" con un id que no está en tu lista (omitidos: sube primero tu lista de clientes)");
   var conSaldo=rows.filter(function(a){ return !a.error && a.restantes!=null; }).length;
   if(conSaldo) extra.push(conSaldo+" con saldo traído de tu sistema anterior");
   var conRes=rows.filter(function(a){ return !a.error && a.reservas && a.reservas.length; }).length;
@@ -7401,24 +7579,75 @@ function impPreview(rows,dup,vacios,dupArchivo){
       Object.keys(tipos).map(function(k){ return "<li>"+tipos[k]+" · "+esc(k)+"</li>"; }).join("")+"</ul>"+
       '<p class="hint" style="margin:8px 0 0;">Esto <b>no frena nada</b>: se importan igual y el texto original queda guardado en las Notas de cada uno, tal cual venía.</p></div>';
   } else { avBox.style.display="none"; avBox.innerHTML=""; }
-  /* Mapeo de pases desconocidos (7-ago-2026): si el sistema anterior llama distinto a los
-     planes ("8 Class Pack"), acá se elige a cuál plan de Batuta corresponde cada uno y
-     TODAS sus filas se corrigen solas — sin tocar el archivo. */
-  var desconocidos={};
-  rows.forEach(function(a){ if(a.paqDesc && a.paquete){ desconocidos[a.paquete]=(desconocidos[a.paquete]||0)+1; } });
+  /* ---- Nombres del archivo vs. nombres de la academia (7-ago-2026; 3 niveles el 11-ago) ----
+     Nivel 1 (mismo nombre escrito distinto) ya se aplicó solo y acá solo se CUENTA.
+     Nivel 2 (se parece) se PROPONE con un "Sí, es ese" — jamás se aplica sin el clic.
+     Nivel 3 (no se parece a nada) queda en blanco: el alumno entra sin eso y el texto
+     original vive en sus Notas. Vale igual para clases y para planes. */
+  var pend={};   // clave "tipo texto" -> {tipo, crudo, n, sug}
+  var apunta=function(tipo,crudo,sug){
+    if(!crudo) return;
+    var k=tipo+" "+crudo;
+    if(!pend[k]) pend[k]={tipo:tipo,crudo:crudo,n:0,sug:sug||""};
+    if(sug&&!pend[k].sug) pend[k].sug=sug;
+    pend[k].n++;
+  };
+  var autoC={},autoP={};
+  rows.forEach(function(a){
+    if(a.paqDesc && a.paquete) apunta("paquete",a.paquete,a.paqSug);
+    else if(a.paquete) autoP[a.paquete]=1;
+    (a.cursoPend||[]).forEach(function(x){ apunta("curso",x.crudo,x.sug); });
+    cursosDe(a.curso).forEach(function(c){ autoC[c]=1; });
+  });
+  var pendK=Object.keys(pend);
+  var porConf=pendK.filter(function(k){ return !!pend[k].sug; });
+  var sinRec=pendK.filter(function(k){ return !pend[k].sug; });
+  var nAuto=Object.keys(autoC).length+Object.keys(autoP).length;
+  /* El resumen que pidió Andrés: "3 reconocidas · 2 por confirmar · 1 sin reconocer",
+     ANTES de importar y en una sola línea. */
+  var recBox=el("impRecon");
+  if(!recBox){ recBox=document.createElement("div"); recBox.id="impRecon"; box.parentNode.insertBefore(recBox, box); }
+  var trozos=[];
+  if(nAuto) trozos.push('<b>'+nAuto+'</b> reconocida'+(nAuto!=1?'s':'')+' sola'+(nAuto!=1?'s':''));
+  if(porConf.length) trozos.push('<b style="color:var(--amber,#E8A13D);">'+porConf.length+'</b> por confirmar');
+  if(sinRec.length) trozos.push('<b>'+sinRec.length+'</b> sin reconocer');
+  recBox.innerHTML=trozos.length?('<p class="hint" style="margin:0 0 10px;">Nombres de clases y planes de tu archivo: '+trozos.join(" · ")+".</p>"):"";
+  recBox.style.display=trozos.length?"":"none";
+  var opcs=function(tipo,sel){
+    var lista=tipo==="curso"?impCursosLista():pkNombres();
+    return lista.map(function(p){ return '<option value="'+esc(p)+'"'+(p===sel?" selected":"")+'>'+esc(p)+'</option>'; }).join("");
+  };
+  var fila=function(k){
+    var p=pend[k], quees=p.tipo==="curso"?"clase":"plan", esaese=p.tipo==="curso"?"esa":"ese";
+    var cuantos=p.n+" alumno"+(p.n===1?"":"s");
+    var attr=' data-maptipo="'+p.tipo+'" data-mapdesde="'+esc(p.crudo)+'"';
+    if(p.sug){
+      /* la sugerencia se ve y es la respuesta por defecto, pero NO se aplica sin el clic:
+         un mapeo equivocado en masa es peor que ninguno */
+      return '<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--line,#e6e6e6);">'+
+        '<div style="font-size:14px;">En tu archivo dice <b>«'+esc(p.crudo)+'»</b> <span class="mini">('+cuantos+')</span>. ¿Es tu '+quees+' <b>"'+esc(p.sug)+'"</b>?</div>'+
+        '<div style="display:flex;gap:8px;align-items:center;margin-top:6px;flex-wrap:wrap;">'+
+        '<button type="button" class="btn sm"'+attr+' data-maphacia="'+esc(p.sug)+'">Sí, es '+esaese+'</button>'+
+        '<select'+attr+' style="width:auto;min-width:190px;"><option value="">— es otr'+(esaese==="esa"?"a":"o")+' —</option>'+opcs(p.tipo,"")+'</select></div></div>';
+    }
+    return '<div style="display:flex;gap:8px;align-items:center;margin-top:10px;padding-top:10px;border-top:1px solid var(--line,#e6e6e6);flex-wrap:wrap;">'+
+      '<span style="font-size:14px;">«'+esc(p.crudo)+'» <span class="mini">('+cuantos+')</span> no se parece a ninguna tuya →</span>'+
+      '<select'+attr+' style="width:auto;min-width:190px;"><option value="">— elige tu '+quees+' —</option>'+opcs(p.tipo,"")+'</select></div>';
+  };
   var mapBox=el("impMapPaq");
   if(!mapBox){ mapBox=document.createElement("div"); mapBox.id="impMapPaq"; box.parentNode.insertBefore(mapBox, box); }
-  var descK=Object.keys(desconocidos);
-  if(descK.length){
+  if(pendK.length){
     mapBox.style.display="";
     mapBox.innerHTML='<div style="border:1px solid var(--amber,#E8A13D);border-radius:8px;padding:10px 12px;margin:0 0 10px;">'+
-      '<b style="color:var(--amber,#E8A13D);">Tu sistema anterior llama distinto a '+descK.length+' pase'+(descK.length===1?'':'s')+'. Dime cuál plan tuyo es cada uno:</b>'+
-      descK.map(function(k){ return '<div style="display:flex;gap:8px;align-items:center;margin-top:8px;flex-wrap:wrap;">'+
-        '<span class="mini">«'+esc(k)+'» ('+desconocidos[k]+' alumno'+(desconocidos[k]===1?'':'s')+') →</span>'+
-        '<select data-mapdesde="'+esc(k)+'" style="width:auto;min-width:200px;"><option value="">— elige tu plan —</option>'+
-        pkNombres().map(function(p){return '<option value="'+esc(p)+'">'+esc(p)+'</option>';}).join("")+'</select></div>'; }).join("")+
-      '<p class="hint" style="margin:8px 0 0;">Al elegir, sus filas se corrigen solas. <b>No es obligatorio</b>: si lo dejas así, esos alumnos entran igual con el nombre de su pase guardado en las Notas y les pones el plan después.</p></div>';
+      '<b style="color:var(--amber,#E8A13D);">Tu sistema anterior llama distinto a '+pendK.length+' nombre'+(pendK.length===1?'':'s')+'. Dime cuál es cuál:</b>'+
+      porConf.map(fila).join("")+sinRec.map(fila).join("")+
+      '<p class="hint" style="margin:10px 0 0;">Nada de esto se aplica solo: <b>hasta que no toques nada, no se les pone</b>. Al elegir, todas sus filas se corrigen de una. <b>No es obligatorio</b>: si lo dejas así, esos alumnos entran igual y el nombre original queda guardado en sus Notas para que se lo pongas después.</p></div>';
   } else { mapBox.style.display="none"; mapBox.innerHTML=""; }
+  /* Orden fijo de las cajas: primero la cuenta, luego lo que hay que decidir, y al final
+     lo informativo. Se reordena en cada pintada porque los nodos se crean una sola vez. */
+  box.parentNode.insertBefore(recBox, box);
+  box.parentNode.insertBefore(mapBox, box);
+  box.parentNode.insertBefore(avBox, box);
   el("impPaso1").style.display="none"; el("impPaso2").style.display="";
   var btn=el("btnImpConfirmar"); btn.style.display="";
   btn.disabled=malas.length>0;
@@ -7443,11 +7672,36 @@ function reMapPaquete(desde,hacia){
     a.avisos=(a.avisos||[]).filter(function(x){ return x.indexOf("no reconozco el paquete")!==0; });
     if(a.paqDesc) a.avisos.push('no reconozco el paquete "'+hacia+'"');
   });
-  impPreview(IMP_ROWS, IMP_DUP, IMP_VACIOS, IMP_DUPARCH);
+  impPreview(IMP_ROWS, IMP_DUP, IMP_VACIOS, IMP_DUPARCH, IMP_SINCRUCE);
+}
+/* Igual que el de pases pero para las CLASES (11-ago-2026): el nombre del archivo pasa a
+   ser la clase real de la academia en TODAS sus filas. El texto crudo se queda en las Notas. */
+function reMapCurso(desde,hacia){
+  if(!hacia||!IMP_ROWS.length) return;
+  IMP_ROWS.forEach(function(a){
+    var pnd=a.cursoPend||[];
+    if(!pnd.some(function(x){ return x.crudo===desde; })) return;
+    a.cursoPend=pnd.filter(function(x){ return x.crudo!==desde; });
+    var act=cursosDe(a.curso);
+    if(act.indexOf(hacia)<0) act.push(hacia);
+    a.curso=act.join(", ");
+  });
+  impPreview(IMP_ROWS, IMP_DUP, IMP_VACIOS, IMP_DUPARCH, IMP_SINCRUCE);
+}
+function impAplicaMapeo(tipo,desde,hacia){
+  if(tipo==="curso") reMapCurso(desde,hacia); else reMapPaquete(desde,hacia);
 }
 document.addEventListener("change",function(e){
-  var s=(e.target&&e.target.closest)?e.target.closest("[data-mapdesde]"):null;
-  if(s&&s.value) reMapPaquete(s.getAttribute("data-mapdesde"), s.value);
+  var s=(e.target&&e.target.closest)?e.target.closest("select[data-mapdesde]"):null;
+  if(s&&s.value) impAplicaMapeo(s.getAttribute("data-maptipo")||"paquete", s.getAttribute("data-mapdesde"), s.value);
+});
+/* "Sí, es esa": el ÚNICO camino por el que se aplica una sugerencia (nivel 2). Sin este
+   clic no se le pone nada a nadie — un mapeo errado en masa es peor que ninguno. */
+document.addEventListener("click",function(e){
+  var b=(e.target&&e.target.closest)?e.target.closest("button[data-maphacia]"):null;
+  if(!b) return;
+  e.preventDefault();
+  impAplicaMapeo(b.getAttribute("data-maptipo")||"paquete", b.getAttribute("data-mapdesde"), b.getAttribute("data-maphacia"));
 });
 el("btnImpConfirmar").addEventListener("click",function(){
   if(!IMP_ROWS.length){ closeOv("ovImport"); return; }
