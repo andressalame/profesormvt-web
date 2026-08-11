@@ -4409,6 +4409,79 @@ async function ensureAlumnoExtraSchema(env){
 }
 
 /* ============================================================
+   ¿ESTA CUENTA ELIGIO ALGUNA VEZ SU CONTRASENA? (11-ago-2026)
+   El alumno que entra por su link de invitacion NUNCA escribe una contrasena: la cuenta le
+   nace con una aleatoria que el jamas ve (a proposito, esa es la gracia del link — entra sin
+   friccion). El problema aparece despues: cierra sesion, cambia de celular o se le vence la
+   sesion, y su UNICA forma de volver es rebuscar el correo viejo. Con 1,400 alumnos eso
+   convierte al dueno en la mesa de ayuda de contrasenas de su propia academia.
+   Esta bandera separa "clave aleatoria que nadie eligio" de "clave que el alumno puso", y es
+   lo que habilita ponerla por primera vez SIN pedir la anterior (no la tiene). Cuando ya la
+   eligio, cambiarla vuelve a exigir la actual, como siempre.
+   La columna nace en 0, pero a las cuentas que YA existian se les marca 1 de una sola vez:
+   ante la duda, se asume que su clave es suya y nadie se la puede pisar sin la anterior.
+   ============================================================ */
+let PASS_PUESTA_OK = false;
+async function ensurePassPuestaSchema(env){
+  if (PASS_PUESTA_OK) return;
+  try {
+    await env.DB.prepare("ALTER TABLE cuentas ADD COLUMN pass_puesta INTEGER DEFAULT 0").run();
+    /* Solo corre la vez que la columna se crea: si el ALTER no revienta es porque no existia.
+       Backfill conservador — toda cuenta anterior a hoy queda como "ya tiene la suya". */
+    try { await env.DB.prepare("UPDATE cuentas SET pass_puesta = 1").run(); } catch (e) {}
+  } catch (e) { /* ya existe: no se re-marca nada */ }
+  PASS_PUESTA_OK = true;
+}
+/* Marca que la clave de esta cuenta la eligio su dueno. Best effort a proposito: si falla,
+   lo unico que pasa es que se le sigue ofreciendo ponerla, nunca que pierde el acceso. */
+async function marcarPassPuesta(env, cuentaId){
+  try {
+    await ensurePassPuestaSchema(env);
+    await env.DB.prepare("UPDATE cuentas SET pass_puesta = 1 WHERE id = ?1").bind(cuentaId).run();
+  } catch (e) {}
+}
+
+/* ============================================================
+   VINCULAR LA CUENTA NUEVA CON SU FICHA, POR CORREO (11-ago-2026)
+   `alumnos` (la ficha que carga el dueno: saldo, clases, plan) y `cuentas` (el acceso al
+   portal) son tablas distintas. Toda cuenta que nacia con alumno_id NULL era una cuenta
+   MUDA: el alumno entraba y no veia ni sus clases, ni su saldo, ni podia reservar, y el
+   dueno tenia que vincularla a mano una por una. Con una academia que importa 1,400
+   alumnos y les avisa a todos el mismo dia, eso no es una molestia: es imposible.
+   Esta funcion es el enganche automatico. Devuelve el id de la ficha SOLO cuando no hay
+   ninguna duda; en cualquier otro caso devuelve null y la cuenta nace suelta (que es
+   exactamente como nacia antes: no se pierde nada, no se rompe nada).
+   Las DOS reglas, y las dos son duras:
+     1) La ficha no puede tener ya una cuenta. Vincular una segunda cuenta a la misma ficha
+        seria darle a un desconocido el saldo y el historial de otro alumno.
+     2) El correo tiene que apuntar a UNA sola ficha. Dos hermanos con el correo de la mama
+        es el caso normal en una academia de ninos: ahi no hay forma de saber cual de los
+        dos se esta registrando, asi que no se toca ninguno y decide el dueno. Un enlace
+        equivocado es peor que ningun enlace: el saldo mal enlazado se cobra dos veces.
+   La comparacion va normalizada (LOWER + TRIM) a proposito: el importador guarda el correo
+   tal cual venia del Excel ("  Jose.Perez@Gmail.com  ") y el registro lo baja a minusculas,
+   asi que sin normalizar las dos puntas el enganche no pegaba casi nunca.
+   ============================================================ */
+async function fichaLibrePorCorreo(env, tenantId, email){
+  const mail = String(email || "").trim().toLowerCase();
+  if (!mail || !emailOk(mail)) return null;
+  try {
+    await ensureAlumnoExtraSchema(env);   /* alumnos.email lo agrega este mismo ensure */
+    /* LIMIT 2 a proposito: no interesa cuantas fichas comparten el correo, solo si es una
+       o mas de una. Con 2 filas ya sabemos que es ambiguo y cortamos. */
+    const { results } = await env.DB.prepare(
+      "SELECT a.id AS id, " +
+      "(SELECT COUNT(*) FROM cuentas c WHERE c.tenant_id = a.tenant_id AND c.alumno_id = a.id) AS tiene_cuenta " +
+      "FROM alumnos a WHERE a.tenant_id = ?1 AND LOWER(TRIM(COALESCE(a.email,''))) = ?2 LIMIT 2"
+    ).bind(tenantId, mail).all();
+    const filas = results || [];
+    if (filas.length !== 1) return null;                  // 0 = no tiene ficha · 2+ = ambiguo
+    if (Number(filas[0].tiene_cuenta) > 0) return null;   // ya tiene su portal: no se le roba
+    return filas[0].id;
+  } catch (e) { return null; }   /* ante la duda, cuenta suelta: nunca peor que antes */
+}
+
+/* ============================================================
    INVITACIONES AL PORTAL (11-ago-2026) — el cuello de Elevate.
    Una academia importa 801 alumnos y los 801 quedan afuera: `alumnos` (la ficha que
    importa el dueno) y `cuentas` (el acceso al portal) son tablas distintas y NADA las
@@ -4423,6 +4496,11 @@ async function ensureAlumnoExtraSchema(env){
 const INVITACION_DIAS = 45;      // el de WhatsApp lee tarde; 45 dias cubre sin volverse eterno
 const INVITACION_TANDA = 30;     // tope por tanda: protege el dominio y hace el envio revisable
 const INVITACION_TOPE_DIA = 120; // tope diario por academia: calienta el dominio en vez de quemarlo
+/* El CSV es un envio MASIVO de una migracion: sale de golpe a cientos de personas y una
+   buena parte abre el correo semanas despues (o cuando vuelve de vacaciones). 90 dias para
+   que ninguno se estrelle con "tu enlace vencio" y termine escribiendole a su academia. */
+const INVITACION_DIAS_CSV = 90;
+const INVITACION_CSV_TOPE = 5000;  // techo de cordura por descarga (una academia real no pasa de aca)
 let INVITACIONES_SCHEMA_OK = false;
 async function ensureInvitacionesSchema(env){
   if (INVITACIONES_SCHEMA_OK) return;
@@ -6886,9 +6964,13 @@ export default {
             const nombre = (perfil.name || perfil.email.split("@")[0]).slice(0, 80);
             const salt = randHex(16); const hash = await hashPass(randHex(24), salt);
             const refCode = await genRefCode(env, t.id);
+            /* "Entrar con Google" es el tercer camino por el que el alumno se crea la cuenta
+               solo: mismo enganche por correo que el registro y la compra. */
+            const alumnoVincG = await fichaLibrePorCorreo(env, t.id, perfil.email);
+            await ensurePassPuestaSchema(env);   /* clave aleatoria: ver comentario en canjear */
             await env.DB.prepare(
-              "INSERT INTO cuentas (id,tenant_id,email,nombre,whatsapp,pass_hash,pass_salt,marketing,alumno_id,creada,ref_code,ref_por,credito,google_id) VALUES (?1,?2,?3,?4,'',?5,?6,0,NULL,?7,?8,'',0,'g')"
-            ).bind(id, t.id, perfil.email, nombre, hash, salt, hoy(), refCode).run();
+              "INSERT INTO cuentas (id,tenant_id,email,nombre,whatsapp,pass_hash,pass_salt,marketing,alumno_id,creada,ref_code,ref_por,credito,google_id) VALUES (?1,?2,?3,?4,'',?5,?6,0,?7,?8,?9,'',0,'g')"
+            ).bind(id, t.id, perfil.email, nombre, hash, salt, alumnoVincG, hoy(), refCode).run();
             cu = { id };
           }
           const token = await crearSesion(env, cu.id);
@@ -7921,6 +8003,7 @@ export default {
           env.DB.prepare("UPDATE reset_tokens SET usado = 1 WHERE token_hash = ?1").bind(tokenHash),
           env.DB.prepare("DELETE FROM sesiones WHERE cuenta_id = ?1").bind(rt.cuenta_id)
         ]);
+        await marcarPassPuesta(env, rt.cuenta_id);   /* la eligio el, ya es suya */
         /* Entra de una: llego aca desde SU correo, ya probo que la cuenta es suya.
            Sin esto tenia que volver a escribir correo y contrasena recien puestos. */
         const tR = await env.DB.prepare("SELECT slug FROM tenants WHERE id = ?1").bind(rt.tenant_id).first();
@@ -7986,6 +8069,10 @@ export default {
         const hashPI = await hashPass(randHex(24), saltI);
         const idCuI = crypto.randomUUID();
         const refCodeI = await genRefCode(env, tI.id);
+        /* ANTES del INSERT a proposito: si la columna pass_puesta se creara despues, el
+           backfill de "las cuentas viejas ya tienen su clave" marcaria tambien a esta, que
+           nace con una aleatoria, y el portal nunca le ofreceria poner la suya. */
+        await ensurePassPuestaSchema(env);
         await env.DB.prepare(
           "INSERT INTO cuentas (id,tenant_id,email,nombre,whatsapp,pass_hash,pass_salt,marketing,alumno_id,creada,ref_code,ref_por,credito) VALUES (?1,?2,?3,?4,?5,?6,?7,0,?8,?9,?10,'',0)"
         ).bind(idCuI, tI.id, emailI, alI.nombre || "", String(alI.whatsapp || ""), hashPI, saltI, alI.id, hoy(), refCodeI).run();
@@ -8154,12 +8241,23 @@ export default {
         const refPor = await buscarRefCode(env, t.id, b.ref);
         const refCode = await genRefCode(env, t.id);
 
+        /* La cuenta NACE vinculada a su ficha si el correo la identifica sin ambiguedad.
+           Antes nacia siempre con alumno_id NULL y el alumno entraba a un portal vacio:
+           sin sus clases, sin su saldo y sin poder reservar. Es el camino por el que entra
+           el alumno de una academia que acaba de migrar su lista y le mando el link a todos.
+           Si no hay ficha, o hay dos con el mismo correo, o la ficha ya tiene cuenta ->
+           null, y la cuenta queda suelta igual que siempre (el dueno la vincula desde su
+           panel). Ver fichaLibrePorCorreo() para el detalle de las dos reglas. */
+        const alumnoVinc = await fichaLibrePorCorreo(env, t.id, email);
+
         const salt = randHex(16);
         const hash = await hashPass(password, salt);
         const id = crypto.randomUUID();
         await env.DB.prepare(
-          "INSERT INTO cuentas (id,tenant_id,email,nombre,whatsapp,pass_hash,pass_salt,marketing,alumno_id,creada,ref_code,ref_por,credito) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,NULL,?9,?10,?11,0)"
-        ).bind(id, t.id, email, nombre, whatsapp, hash, salt, marketing, hoy(), refCode, refPor || "").run();
+          "INSERT INTO cuentas (id,tenant_id,email,nombre,whatsapp,pass_hash,pass_salt,marketing,alumno_id,creada,ref_code,ref_por,credito) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,0)"
+        ).bind(id, t.id, email, nombre, whatsapp, hash, salt, marketing, alumnoVinc, hoy(), refCode, refPor || "").run();
+        /* La escribio el mismo en el formulario: es SUYA y cambiarla exige la actual. */
+        await marcarPassPuesta(env, id);
 
         const token = await crearSesion(env, id);
         return json({ token });
@@ -8376,6 +8474,37 @@ export default {
           env.DB.prepare("UPDATE cuentas SET pass_hash = ?1, pass_salt = ?2 WHERE id = ?3 AND tenant_id = ?4").bind(nuevoHash, salt, cu.id, cu.tenant_id),
           env.DB.prepare("DELETE FROM sesiones WHERE cuenta_id = ?1 AND token <> ?2").bind(cu.id, cu._token)
         ]);
+        await marcarPassPuesta(env, cu.id);
+        return json({ ok: true });
+      }
+
+      /* PONER la contrasena por PRIMERA vez, ya estando adentro (11-ago-2026).
+         Para el alumno que entro con su link de invitacion: su clave es un aleatorio que
+         nunca vio, asi que /cuenta/password (que pide la actual) le es inservible y su unica
+         forma de volver es rebuscar el correo. Aca la pone y se acabo el problema.
+         NO pide la clave anterior porque no existe una que el conozca — y por eso mismo esto
+         solo corre con pass_puesta = 0. En cuanto tiene la suya, este camino se cierra y
+         cambiarla vuelve a exigir la actual. Autenticado por sesion viva, que es la misma
+         prueba de identidad con la que ya esta viendo sus clases y su saldo. */
+      if (path === "/app/api/cuenta/password-inicial" && request.method === "POST"){
+        const cu = await cuentaDeSesion(env, request);
+        if (!cu) return json({ error: "Sesion expirada" }, 401);
+        await ensurePassPuestaSchema(env);
+        const yaTiene = await env.DB.prepare("SELECT COALESCE(pass_puesta,0) AS p FROM cuentas WHERE id = ?1").bind(cu.id).first().catch(() => null);
+        if (yaTiene && Number(yaTiene.p) === 1){
+          return json({ error: "Ya tienes una contrasena. Para cambiarla necesitamos la actual." }, 409);
+        }
+        const b = await request.json().catch(() => ({}));
+        const nueva = String(b.nueva || "");
+        if (nueva.length < 8) return json({ error: "La contrasena necesita minimo 8 caracteres." }, 400);
+        const saltN = randHex(16);
+        const hashN = await hashPass(nueva, saltN);
+        await env.DB.batch([
+          env.DB.prepare("UPDATE cuentas SET pass_hash = ?1, pass_salt = ?2, pass_puesta = 1 WHERE id = ?3 AND tenant_id = ?4").bind(hashN, saltN, cu.id, cu.tenant_id),
+          /* se cierran las OTRAS sesiones, nunca la de este momento: si se cerrara la suya,
+             poner la clave lo patearia afuera justo despues de ponerla */
+          env.DB.prepare("DELETE FROM sesiones WHERE cuenta_id = ?1 AND token <> ?2").bind(cu.id, cu._token)
+        ]);
         return json({ ok: true });
       }
 
@@ -8406,6 +8535,11 @@ export default {
         const cu = await cuentaDeSesion(env, request);
         if (!cu) return json({ error: "Sesion expirada" }, 401);
         const tid = cu.tenant_id;
+        /* Se pregunta DESPUES del ensure y no se lee de `cu`: la primera vez que corre, la
+           columna se crea recien aca, o sea despues de que `cu` ya se leyo. */
+        await ensurePassPuestaSchema(env);
+        const ppMe = await env.DB.prepare("SELECT COALESCE(pass_puesta,0) AS p FROM cuentas WHERE id = ?1").bind(cu.id).first().catch(() => null);
+        const sinClaveMe = !(ppMe && Number(ppMe.p) === 1);
 
         const precios = await loadPrecios(env, tid);
         const config = await loadConfig(env, tid);
@@ -8527,7 +8661,10 @@ export default {
           } catch (e) {}
         }
         return json({
-          cuenta: { nombre: cu.nombre, email: cu.email, whatsapp: cu.whatsapp || "" },
+          /* sin_clave = entro por su link y nunca eligio contrasena. El portal usa esto para
+             OFRECERLE ponerla (aviso cerrable, jamas un muro): si no la pone, su unica forma
+             de volver despues es rebuscar el correo de la invitacion. */
+          cuenta: { nombre: cu.nombre, email: cu.email, whatsapp: cu.whatsapp || "", sin_clave: sinClaveMe },
           profesor: portalFlags.sin_profe ? null : miProfe,
           academia: (tRowMe && tRowMe.academia) || "",
           portal: portalFlags,
@@ -8657,9 +8794,16 @@ export default {
           const idCu = crypto.randomUUID();
           const refCode = await genRefCode(env, t.id);
           await ensureAlumnoExtraSchema(env);   /* cuentas.apellido / cuentas.nacimiento */
+          /* Mismo enganche que en el registro, y aca importa el doble: si el que paga YA
+             tenia ficha (el alumno de siempre que renueva por la web), sin vincular se le
+             creaba una ficha NUEVA al confirmar el pago — el alumno duplicado, su historial
+             partido en dos y su saldo viejo huerfano. Vinculado, procesarCompra() entra por
+             la rama de RENOVACION y le sube el ciclo a la ficha que ya tenia. */
+          const alumnoVincPd = await fichaLibrePorCorreo(env, t.id, email);
+          await ensurePassPuestaSchema(env);   /* clave aleatoria: ver comentario en canjear */
           await env.DB.prepare(
-            "INSERT INTO cuentas (id,tenant_id,email,nombre,whatsapp,pass_hash,pass_salt,marketing,alumno_id,creada,ref_code,ref_por,credito,apellido,nacimiento) VALUES (?1,?2,?3,?4,?5,?6,?7,0,NULL,?8,?9,'',0,?10,?11)"
-          ).bind(idCu, t.id, email, nombre, whatsapp, hash, salt, hoy(), refCode, apellidoPd, nacimientoPd).run();
+            "INSERT INTO cuentas (id,tenant_id,email,nombre,whatsapp,pass_hash,pass_salt,marketing,alumno_id,creada,ref_code,ref_por,credito,apellido,nacimiento) VALUES (?1,?2,?3,?4,?5,?6,?7,0,?8,?9,?10,'',0,?11,?12)"
+          ).bind(idCu, t.id, email, nombre, whatsapp, hash, salt, alumnoVincPd, hoy(), refCode, apellidoPd, nacimientoPd).run();
           cu = await env.DB.prepare("SELECT * FROM cuentas WHERE id = ?1").bind(idCu).first();
         }
 
@@ -10137,6 +10281,68 @@ export default {
           if (!alL) return json({ error: "Alumno no encontrado" }, 404);
           const inv = await crearInvitacion(env, t, alL.id, String(bL.canal || "wa"));
           return json({ ok: true, url: inv.url, nombre: alL.nombre, whatsapp: alL.whatsapp || "", academia: t.academia || "" });
+        }
+
+        /* La lista COMPLETA con el enlace personal de cada alumno, para que el dueno mande SU
+           correo con SU herramienta (combinar correspondencia de Gmail, Mailchimp, lo que use).
+           Es el camino de la academia que migra 1,400 alumnos y les avisa a todos el mismo dia:
+           la tanda de Batuta sale de a 30 y tope 120 al dia para no quemar el dominio, y eso
+           son SEMANAS. Su propia herramienta ya tiene reputacion de envio; lo unico que le
+           falta es el enlace de cada alumno, y eso si se lo podemos dar en un archivo.
+           Los tokens se crean TODOS de una: por eso no se llama a crearInvitacion() alumno por
+           alumno (3 statements cada uno = ~4,300 escrituras sueltas y el Worker se cae a la
+           mitad, dejando media lista con enlace y media sin). Un barrido de vencidos + INSERTs
+           en lotes + el marcado en lotes. */
+        if (path === "/app/api/admin/invitaciones/csv" && request.method === "POST"){
+          if (!esDueno) return json({ error: "Las invitaciones las manda el dueno de la academia." }, 403);
+          await ensureAlumnoExtraSchema(env);
+          await ensureInvitacionesSchema(env);
+          /* no_email = 0: el que pidio no recibir correos NO entra en un envio masivo (Ley 29733).
+             Se piden solo los que tienen correo: el archivo es para combinar correspondencia y
+             una fila sin destinatario rompe el envio del dueno. Los que no tienen correo siguen
+             saliendo por el riel de WhatsApp, que ya existe arriba en la misma pantalla. */
+          const { results: filasC } = await env.DB.prepare(
+            "SELECT id, nombre, COALESCE(email,'') AS email, COALESCE(whatsapp,'') AS whatsapp " +
+            "FROM alumnos WHERE tenant_id = ?1 AND COALESCE(no_email,0) = 0 AND COALESCE(email,'') != '' ORDER BY nombre"
+          ).bind(tid).all();
+          const candC = (filasC || []).filter(a => emailOk(String(a.email || "").trim().toLowerCase())).slice(0, INVITACION_CSV_TOPE);
+          if (!candC.length){
+            return json({ error: "Ninguno de tus alumnos tiene correo en su ficha todavía, así que no hay a quién mandarle nada. Agrégales el correo (o avísales por WhatsApp con el botón de abajo)." }, 400);
+          }
+          const ahoraC = new Date();
+          const creadaC = ahoraC.toISOString();
+          const expiraC = new Date(ahoraC.getTime() + INVITACION_DIAS_CSV * 86400000).toISOString();
+          try { await env.DB.prepare("DELETE FROM invitaciones WHERE tenant_id = ?1 AND expira < ?2").bind(tid, creadaC).run(); } catch (e) {}
+          const filasCsv = [];
+          const stmtsC = [];
+          for (const a of candC){
+            const tkC = randHex(24);
+            stmtsC.push(env.DB.prepare(
+              "INSERT INTO invitaciones (token_hash, tenant_id, alumno_id, canal, creada, expira, usada_el) VALUES (?1,?2,?3,'csv',?4,?5,'')"
+            ).bind(await sha256Hex(tkC), tid, a.id, creadaC, expiraC));
+            filasCsv.push({
+              nombre: a.nombre || "", email: String(a.email || "").trim(), whatsapp: a.whatsapp || "",
+              url: MARCA.dominio + "/app/a/" + t.slug + "?inv=" + tkC
+            });
+          }
+          for (let i = 0; i < stmtsC.length; i += 60){
+            await env.DB.batch(stmtsC.slice(i, i + 60));
+          }
+          /* Quedan marcados como avisados: el dueno los va a mandar hoy mismo y el contador de
+             la pantalla tiene que reflejarlo. Canal 'csv' y NO 'email' a proposito: asi siguen
+             visibles en la cola de la tanda de Batuta por si su envio se le cae y quiere volver
+             a este camino. El IN va de a 80 ids: D1 admite 100 parametros por consulta. */
+          const hoyC = hoyLima();
+          for (let i = 0; i < candC.length; i += 80){
+            const trozoC = candC.slice(i, i + 80);
+            const marcasC = trozoC.map((_, k) => "?" + (k + 3)).join(",");
+            try {
+              await env.DB.prepare(
+                "UPDATE alumnos SET invitado_el = ?1, invitado_canal = 'csv' WHERE tenant_id = ?2 AND id IN (" + marcasC + ")"
+              ).bind(hoyC, tid, ...trozoC.map(a => a.id)).run();
+            } catch (e) {}
+          }
+          return json({ ok: true, total: filasCsv.length, dias: INVITACION_DIAS_CSV, filas: filasCsv });
         }
 
         /* Tanda de correos. Tope por tanda + tope por dia + apagado por defecto.

@@ -393,7 +393,16 @@
     <div class="field"><label for="l_pass">Contraseña</label><input id="l_pass" type="password" autocomplete="current-password" /></div>
     <button class="btn full" id="btnLogin">Ingresar</button>
     <div class="err" id="loginErr"></div>
-    <p class="auth-hint" id="authHint">¿Olvidaste tu contraseña? Escríbele a tu profesor para restablecerla.</p>
+    <!-- Antes esto era un texto muerto ("escríbele a tu profesor"): con una academia de
+         cientos de alumnos, eso convierte al dueño en la mesa de ayuda de contraseñas.
+         El endpoint /app/api/password/olvide ya existía; lo único que faltaba era el botón. -->
+    <p class="auth-hint" id="authHint"><a href="#" id="linkOlvide">¿Olvidaste tu contraseña?</a></p>
+    <div id="olvideBox" class="hidden">
+      <hr class="rule" />
+      <div class="field"><label for="o_email">Tu correo</label><input id="o_email" type="email" autocomplete="email" placeholder="tucorreo@gmail.com" /></div>
+      <button class="btn full" id="btnOlvide">Mándame el enlace</button>
+      <p class="auth-hint" id="olvideMsg" style="margin-top:10px">Te llega un enlace para poner una contraseña nueva. Dura 30 minutos.</p>
+    </div>
   </div>
 
   <div id="formReg" class="hidden">
@@ -467,6 +476,10 @@
       <div class="sub" id="iPlanLine"></div>
       <hr class="rule" />
       <div class="banner naranja hidden" id="iPend"></div>
+      <!-- Ofrecerle poner su contraseña al que entró con su link de invitación. AVISO, no
+           muro: la gracia del link es entrar sin fricción, y un modal bloqueante en el primer
+           segundo mata justo eso. Se puede cerrar y la opción le queda en Mi cuenta. -->
+      <div class="banner hidden" id="iClave"></div>
 
       <div class="card hidden" id="iPkg">
         <span class="pill" id="iEstado"></span>
@@ -642,8 +655,11 @@
         <p class="note hidden" id="avisosNoSop" style="margin-top:10px;">Tu navegador no soporta avisos. En iPhone: abre desde "Agregar a inicio".</p>
       </div>
       <div class="card hidden" id="ctaPassCard">
-        <h3>// CAMBIAR CONTRASEÑA</h3>
-        <div class="field"><label for="p_actual">Contraseña actual</label><input id="p_actual" type="password" autocomplete="current-password" /></div>
+        <!-- El que entró por su link de invitación nunca eligió clave, así que pedirle la
+             "actual" lo deja trabado para siempre: para él la tarjeta se vuelve "poner" y el
+             campo de la actual desaparece. -->
+        <h3 id="ctaPassTit">// CAMBIAR CONTRASEÑA</h3>
+        <div class="field" id="ctaPassActual"><label for="p_actual">Contraseña actual</label><input id="p_actual" type="password" autocomplete="current-password" /></div>
         <div class="field"><label for="p_nueva">Nueva contraseña (mínimo 8)</label><input id="p_nueva" type="password" autocomplete="new-password" /></div>
         <div class="field"><label for="p_conf">Confirmar nueva contraseña</label><input id="p_conf" type="password" autocomplete="new-password" /></div>
         <button class="btn sm" id="btnPass">Actualizar contraseña</button>
@@ -851,10 +867,9 @@ function aplicarVozPortal(){
   try{
     var g = esGrupal(), sp = sinProfeFijo();
 
-    var hint = $("authHint");
-    if(hint) hint.textContent = sp
-      ? "¿Olvidaste tu contraseña? Escríbele a tu academia para restablecerla."
-      : "¿Olvidaste tu contraseña? Escríbele a tu profesor para restablecerla.";
+    /* authHint ya no se repinta: dejó de ser un texto y pasó a ser el enlace que abre el
+       recupero por correo. Sobreescribirlo con textContent mataba el <a> y el alumno se
+       quedaba otra vez sin salida. */
 
     var p2 = $("onbPaso2");
     if(p2) p2.innerHTML = g
@@ -1038,6 +1053,38 @@ if($("btnReset")){
   $("rs_pass").addEventListener("keydown",function(e){ if(e.key==="Enter") $("btnReset").click(); });
 }
 
+/* ---------- ¿Olvidaste tu contraseña? (11-ago-2026) ----------
+   La salida de emergencia del alumno. El servidor SIEMPRE responde ok (así nadie puede usar
+   esto para averiguar qué correos tienen cuenta en la academia), así que el mensaje es
+   neutro a propósito: no confirma ni desmiente que el correo exista. */
+if($("linkOlvide")){
+  $("linkOlvide").addEventListener("click",function(e){
+    e.preventDefault();
+    $("olvideBox").classList.remove("hidden");
+    $("linkOlvide").parentNode.classList.add("hidden");
+    var ya = ($("l_email").value || "").trim();
+    if(ya) $("o_email").value = ya;    /* si ya escribió su correo arriba, no se lo pedimos dos veces */
+    $("o_email").focus();
+  });
+}
+if($("btnOlvide")){
+  $("btnOlvide").addEventListener("click",function(){
+    var em = ($("o_email").value || "").trim();
+    if(!em){ $("olvideMsg").textContent = "Escribe tu correo para mandarte el enlace."; return; }
+    $("btnOlvide").disabled = true;
+    $("olvideMsg").textContent = "Enviando…";
+    api("/app/api/password/olvide",{method:"POST",body:JSON.stringify({slug:SLUG,email:em})})
+      .then(function(){
+        $("olvideMsg").innerHTML = "<b>Listo.</b> Si ese correo tiene cuenta acá, te acabamos de mandar el enlace "+
+          "para poner una contraseña nueva. Revisa tu bandeja y también el spam. El enlace dura 30 minutos.";
+        $("btnOlvide").classList.add("hidden");
+      })
+      .catch(function(){ $("olvideMsg").textContent = "No pudimos enviarlo. Revisa tu conexión e intenta de nuevo."; })
+      .finally(function(){ $("btnOlvide").disabled = false; });
+  });
+  $("o_email").addEventListener("keydown",function(e){ if(e.key==="Enter") $("btnOlvide").click(); });
+}
+
 $("btnLogin").addEventListener("click",function(){
   $("loginErr").textContent="";
   var email=$("l_email").value.trim(), pass=$("l_pass").value;
@@ -1141,8 +1188,55 @@ function renderBeneficios(){
     }).join("");
   card.classList.remove("hidden");
 }
+/* ---------- "Ponle una contraseña" (11-ago-2026) ----------
+   Solo lo ve el que entró por su link y nunca eligió clave (ME.cuenta.sin_clave). Sin esto,
+   el día que cierre sesión o cambie de celular su única forma de volver es rebuscar el correo
+   de la invitación. Se cierra y no vuelve a aparecer en ese equipo: insistirle cada vez que
+   abre su portal es exactamente el tipo de aviso que la gente aprende a ignorar. */
+var CLAVE_OMITIDA = "batuta_clave_omitida";
+function renderAvisoClave(){
+  var box = $("iClave"); if(!box) return;
+  var toca = ME && ME.cuenta && ME.cuenta.sin_clave;
+  var omitido = false;
+  try{ omitido = localStorage.getItem(CLAVE_OMITIDA) === (ME.cuenta.email||"1"); }catch(e){}
+  if(!toca || omitido){ hide("iClave"); return; }
+  box.innerHTML =
+    '<strong>// TU CONTRASEÑA</strong><br>'+
+    '<p style="margin:6px 0 10px;">Entraste con tu enlace, que es de un solo uso cómodo. '+
+    '<b>Ponle una contraseña</b> y así vuelves a entrar cuando quieras, desde cualquier teléfono, sin buscar el correo.</p>'+
+    '<div class="field" style="max-width:340px;margin-bottom:10px;">'+
+      '<label for="k_pass">Contraseña (mínimo 8 caracteres)</label>'+
+      '<input id="k_pass" type="password" autocomplete="new-password" />'+
+    '</div>'+
+    '<button class="btn sm" id="btnClaveOk">Guardar mi contraseña</button> '+
+    '<button class="btn ghost sm" id="btnClaveNo">Ahora no</button>'+
+    '<div class="err" id="claveErr"></div>';
+  show("iClave");
+  $("btnClaveNo").addEventListener("click",function(){
+    try{ localStorage.setItem(CLAVE_OMITIDA, ME.cuenta.email||"1"); }catch(e){}
+    hide("iClave");
+    toast("Cuando quieras la pones desde Mi cuenta");
+  });
+  $("btnClaveOk").addEventListener("click",function(){
+    var p = $("k_pass").value || "";
+    $("claveErr").textContent = "";
+    if(p.length < 8){ $("claveErr").textContent = "La contraseña necesita mínimo 8 caracteres."; return; }
+    $("btnClaveOk").disabled = true;
+    api("/app/api/cuenta/password-inicial",{method:"POST",body:JSON.stringify({nueva:p})})
+      .then(function(){
+        if(ME && ME.cuenta) ME.cuenta.sin_clave = false;
+        hide("iClave");
+        toast("Listo. Ya puedes entrar con tu correo y tu contraseña");
+        renderCuenta();
+      })
+      .catch(function(e){ $("claveErr").textContent = (e && e.message) || "No se pudo guardar."; })
+      .finally(function(){ if($("btnClaveOk")) $("btnClaveOk").disabled = false; });
+  });
+  $("k_pass").addEventListener("keydown",function(e){ if(e.key==="Enter") $("btnClaveOk").click(); });
+}
 function renderInicio(){
   $("iHola").innerHTML = 'Hola, <em>'+esc((ME.cuenta.nombre||"").split(" ")[0])+'</em>';
+  renderAvisoClave();
   /* multi-profesor: "vas con [profe]" bajo el saludo */
   var hp=$("iProfe");
   if(!hp){
@@ -1793,6 +1887,10 @@ function renderCuenta(){
     kv("Nombre", esc(ME.cuenta.nombre||"—"))+
     kv("Correo", esc(ME.cuenta.email||"—"))+
     kv("WhatsApp", esc(ME.cuenta.whatsapp||"—"));
+  var sinClaveC = !!(ME.cuenta && ME.cuenta.sin_clave);
+  $("ctaPassTit").textContent = sinClaveC ? "// PONER MI CONTRASEÑA" : "// CAMBIAR CONTRASEÑA";
+  $("ctaPassActual").classList.toggle("hidden", sinClaveC);
+  $("btnPass").textContent = sinClaveC ? "Guardar mi contraseña" : "Actualizar contraseña";
   show("ctaPassCard");
 
   var pagos = ME.pagos || [];
@@ -1860,15 +1958,21 @@ $("btnAvisosOn").addEventListener("click", avisosOn);
 $("btnAvisosOff").addEventListener("click", avisosOff);
 $("btnPass").addEventListener("click",function(){
   $("passErr").textContent="";
+  var primeraVez = !!(ME && ME.cuenta && ME.cuenta.sin_clave);
   var actual=$("p_actual").value, nueva=$("p_nueva").value, conf=$("p_conf").value;
-  if(!actual || !nueva){ $("passErr").textContent="Completa los campos."; return; }
+  if((!primeraVez && !actual) || !nueva){ $("passErr").textContent="Completa los campos."; return; }
   if(nueva.length<8){ $("passErr").textContent="La nueva contraseña necesita mínimo 8 caracteres."; return; }
   if(nueva!==conf){ $("passErr").textContent="Las contraseñas no coinciden."; return; }
   $("btnPass").disabled=true;
-  api("/app/api/cuenta/password",{method:"POST",body:JSON.stringify({actual:actual,nueva:nueva})})
-    .then(function(){
-      toast("Contraseña actualizada");
+  /* Nunca eligió una: la pone sin la anterior (no tiene). Ya tiene la suya: se exige, igual
+     que siempre. El servidor revalida las dos cosas, esto solo arma la petición correcta. */
+  var pet = primeraVez
+    ? api("/app/api/cuenta/password-inicial",{method:"POST",body:JSON.stringify({nueva:nueva})})
+    : api("/app/api/cuenta/password",{method:"POST",body:JSON.stringify({actual:actual,nueva:nueva})});
+  pet.then(function(){
+      toast(primeraVez?"Listo. Ya puedes entrar con tu correo y tu contraseña":"Contraseña actualizada");
       $("p_actual").value=""; $("p_nueva").value=""; $("p_conf").value="";
+      if(primeraVez && ME && ME.cuenta){ ME.cuenta.sin_clave=false; renderCuenta(); renderAvisoClave(); }
     })
     .catch(function(e){ $("passErr").textContent = e.message || "No se pudo actualizar."; })
     .finally(function(){ $("btnPass").disabled=false; });

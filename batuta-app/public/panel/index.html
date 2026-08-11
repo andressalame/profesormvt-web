@@ -6170,9 +6170,27 @@ function renderInvitar(){
     '</div>';
 
   var h="";
+  /* ---- 0. Mandar el correo él mismo: la lista con los enlaces ----
+     La academia que acaba de migrar cientos de alumnos no puede esperar semanas a que salgan
+     las tandas de 30. Su Gmail o su Mailchimp ya tienen reputación de envío y él ya sabe
+     usarlos: lo único que le falta es el enlace personal de cada alumno. Se lo damos en un
+     archivo y manda su correo el mismo día. Va PRIMERO porque para el que está migrando es
+     la respuesta, no una alternativa. */
+  h+='<div style="border:1px solid var(--line);border-radius:8px;padding:14px 16px;margin:0 0 14px;">'+
+       '<b style="font-size:16px;">Mandar el correo tú mismo</b>'+
+       '<p class="hint" style="margin:6px 0 10px;">Descarga la lista con el <b>enlace personal de cada alumno</b> y úsala en tu propio envío '+
+         '(combinar correspondencia de Gmail, Mailchimp, el que uses). El archivo trae una fila por alumno con '+
+         '<b>nombre, correo, whatsapp y enlace</b>. Los enlaces duran <b>90 días</b>, así que no pasa nada si alguien '+
+         'abre tu correo semanas después.</p>'+
+       '<button class="btn" id="btnInvCsv">Descargar la lista con sus links</button>'+
+       '<p class="hint" style="margin:9px 0 0;">Solo entran los alumnos que tienen correo en su ficha'+
+         ((INV.bajas||0)?(' y no pidieron dejar de recibirlos'):'')+'. '+
+         '<b>Cada enlace abre la cuenta de ESE alumno</b>, así que no publiques el archivo ni lo reenvíes completo.</p>'+
+     '</div>';
+
   /* ---- 1. Los que tienen correo: tandas ---- */
   h+='<div style="border:1px solid var(--line);border-radius:8px;padding:14px 16px;margin:0 0 14px;">'+
-       '<b style="font-size:16px;">Por correo · '+(INV.por_correo||0)+' alumnos</b>';
+       '<b style="font-size:16px;">Que los mande Batuta · '+(INV.por_correo||0)+' alumnos con correo</b>';
   if(!INV.envio_real){
     /* Aviso causal con UN botón de arreglo: decirle "escríbenos" y dejarlo buscando el
        número es como no decirle nada. El chat se abre con el pedido ya escrito. */
@@ -6253,9 +6271,28 @@ function renderInvitar(){
     var p=el("invPreview"); p.style.display=(p.style.display==="none")?"":"none";
   });
   if(el("btnInvTanda")) el("btnInvTanda").addEventListener("click",invEnviarTanda);
+  if(el("btnInvCsv")) el("btnInvCsv").addEventListener("click",invDescargarCsv);
   Array.prototype.forEach.call(document.querySelectorAll("[data-invwa]"),function(b){
     b.addEventListener("click",function(){ invWhatsApp(b.getAttribute("data-invwa")); });
   });
+}
+/* Baja el CSV con el enlace personal de cada alumno. El servidor crea los tokens de toda la
+   lista de una sola vez, así que con cientos de alumnos puede tardar unos segundos: el botón
+   se bloquea y lo dice, porque el dueño que no ve nada moviéndose vuelve a apretar. */
+function invDescargarCsv(){
+  var btn=el("btnInvCsv"); if(!btn) return;
+  btn.disabled=true; btn.textContent="Armando la lista…";
+  apiPost("/app/api/admin/invitaciones/csv",{})
+    .then(function(d){
+      var rows=(d.filas||[]).map(function(f){ return [f.nombre,f.email,f.whatsapp,f.url]; });
+      descargaCsv(["nombre","correo","whatsapp","link"],rows,"enlaces-portal-"+new Date().toISOString().slice(0,10)+".csv");
+      toast("Listo: "+rows.length+" alumnos con su enlace personal");
+      abrirInvitar();   /* el contador de "ya avisaste" tiene que reflejarlo */
+    })
+    .catch(function(e){ toast((e&&e.message)||"No pude armar la lista"); })
+    .finally(function(){
+      if(el("btnInvCsv")){ el("btnInvCsv").disabled=false; el("btnInvCsv").textContent="Descargar la lista con sus links"; }
+    });
 }
 function invEnviarTanda(){
   var btn=el("btnInvTanda"); btn.disabled=true; btn.textContent="Enviando…";
