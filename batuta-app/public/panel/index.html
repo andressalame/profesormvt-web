@@ -699,6 +699,39 @@
   /* La previsualización del importador tiene 6 columnas (28-jul: entró "Le queda"): en 560px
      el saldo quedaba cortado justo cuando es lo que hay que revisar antes de confirmar. */
   #ovImport .modal{max-width:720px;}
+  /* ---- Paso 0 del importador: "¿de dónde traes a tus alumnos?" (11-ago-2026) ----
+     Nace del caso de José (Elevate): subió el reporte de CLIENTES de Punchpass y sus 1,445
+     alumnos entraron SIN plan ni saldo, o sea sin poder reservar. Punchpass reparte esa
+     información en dos exports distintos y el producto nunca se lo dijo. Preguntar de dónde
+     viene es lo que permite decirle cuántos archivos necesita y de qué menú salen.
+     Targets grandes (≥48px) y letra ≥17px: el usuario es una dueña de academia de 50. */
+  .plat-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;margin:6px 0 4px;}
+  .plat-b{display:flex;align-items:center;gap:11px;width:100%;min-height:60px;padding:12px 14px;text-align:left;
+    border:1px solid var(--line);border-radius:var(--r);background:var(--panel2);color:var(--cream);
+    font-family:var(--body);font-size:17px;font-weight:600;cursor:pointer;transition:border-color .12s,background .12s;}
+  .plat-b:hover,.plat-b:focus-visible{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 9%,var(--panel2));outline:none;}
+  .plat-b svg{width:26px;height:26px;flex:0 0 26px;fill:none;stroke:var(--accent);stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;}
+  .plat-b .plat-sub{display:block;font-size:12.5px;font-weight:400;color:var(--muted);margin-top:2px;line-height:1.3;}
+  /* Guía de export: los pasos exactos del menú del sistema anterior. Se lee como receta. */
+  .plat-guia{border:1px solid var(--line);border-left:4px solid var(--accent);border-radius:var(--r-sm);
+    background:color-mix(in srgb,var(--accent) 6%,transparent);padding:14px 16px;margin:0 0 14px;}
+  .plat-guia h4{margin:0 0 6px;font-family:var(--display);font-size:18px;font-weight:700;letter-spacing:-.01em;}
+  .plat-guia ol{margin:8px 0 0;padding-left:20px;}
+  .plat-guia li{margin:0 0 6px;font-size:14.5px;line-height:1.45;}
+  .plat-guia .ruta{font-family:var(--mono);font-size:13px;background:var(--panel2);border:1px solid var(--line);
+    border-radius:4px;padding:2px 7px;display:inline-block;color:var(--cream);white-space:nowrap;}
+  /* Progreso "1 de 2": que se vea cuántos archivos faltan, no que se descubra al final. */
+  .plat-pasos{display:flex;gap:8px;align-items:center;margin:0 0 12px;flex-wrap:wrap;}
+  .plat-pip{display:flex;align-items:center;gap:7px;font-family:var(--mono);font-size:11px;text-transform:uppercase;
+    letter-spacing:.05em;color:var(--muted);border:1px solid var(--line);border-radius:var(--r-pill);padding:6px 12px;}
+  .plat-pip.on{color:var(--accent);border-color:var(--accent);background:color-mix(in srgb,var(--accent) 10%,transparent);}
+  .plat-pip.ok{color:var(--green);border-color:var(--green);}
+  .plat-pip .n{display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;
+    border:1px solid currentColor;font-size:11px;font-weight:700;}
+  /* Volver a elegir el sistema: link discreto, nunca compite con el botón primario. */
+  .plat-volver{background:none;border:0;color:var(--muted);font-family:var(--body);font-size:13.5px;
+    cursor:pointer;padding:4px 0;text-decoration:underline;}
+  .plat-volver:hover{color:var(--accent);}
   /* Centrado seguro (6-ago-2026, bug Elevate): align-items:center recortaba la parte de arriba
      de un modal más alto que la pantalla (el título y Nombre/Apellido quedaban inalcanzables en
      laptops chicas). Los márgenes auto centran cuando sobra sitio y ceden a scroll cuando no. */
@@ -884,10 +917,14 @@
   </section>
 
   <section class="panel" id="panel-alumnos">
-    <div style="margin-bottom:10px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;"><button class="btn" id="btnNuevoAlumno">+ Nuevo alumno</button><button class="btn ghost" id="btnImportCsv" title="Trae toda tu lista de alumnos de golpe desde tu Excel o Google Sheets">&#8681; Traer mi lista de Excel</button><select id="alFiltroSede" title="Filtrar por sede" style="display:none;width:auto;"></select><button class="btn ghost sm" type="button" onclick="lanzarTourModulo('alumnos')">? Cómo funciona</button></div>
+    <div style="margin-bottom:10px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;"><button class="btn" id="btnNuevoAlumno">+ Nuevo alumno</button><button class="btn ghost" id="btnImportCsv" title="Trae toda tu lista de golpe desde tu sistema anterior, tu Excel o Google Sheets">&#8681; Traer mis alumnos</button><select id="alFiltroSede" title="Filtrar por sede" style="display:none;width:auto;"></select><button class="btn ghost sm" type="button" onclick="lanzarTourModulo('alumnos')">? Cómo funciona</button></div>
     <p class="hint quees"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg><b>Tu lista de alumnos y cómo va cada uno.</b> "Le quedan" son las clases que le sobran de su paquete; el <b>Estado</b> te avisa a quién le toca renovar. ¿Te equivocaste al anotar una clase? Se arregla en <b><a href="#" data-ira="registro">Asistencia</a></b> y el saldo se recalcula solo.</p>
     <!-- Aviso causal: alumnos importados que todavía no saben que tienen portal. Un solo
          botón primario; el detalle vive dentro. Se esconde solo cuando no falta nadie. -->
+    <!-- Aviso causal (11-ago-2026): alumnos que entraron SIN plan. Sin plan no hay saldo y
+         sin saldo no pueden reservar, así que la migración se ve completa y no lo está.
+         Es exactamente lo que le pasó a José con sus 1,445 de Punchpass. -->
+    <div id="sinPlanBanner" style="display:none;"></div>
     <div id="invBanner" style="display:none;"></div>
     <!-- Buscador de alumnos (11-ago-2026, pedido de José con 1,400 alumnos): con una lista
          larga, encontrar a una persona a ojo es imposible. Filtra al tipear por nombre,
@@ -1880,8 +1917,8 @@
 <!-- Modal importar alumnos por CSV -->
 <div class="overlay" id="ovImport">
   <div class="modal">
-    <h3>Trae tu <em>lista</em> de alumnos</h3>
-    <div class="mlab">De una sola vez, sin escribirlos uno por uno</div>
+    <h3 id="impTitulo">Trae tu <em>lista</em> de alumnos</h3>
+    <div class="mlab" id="impSubtitulo">De una sola vez, sin escribirlos uno por uno</div>
     <!-- Demo pública (11-ago-2026): el aviso va ACÁ, pegado al importador, porque acá es
          donde alguien sube el export real de su academia. Lo pinta demoAvisoImport(). -->
     <div id="impAvisoDemo" style="display:none;">
@@ -1891,20 +1928,39 @@
       guardo hasta 25 y no guardo correos, teléfonos ni fechas de nacimiento.
       <a href="/app/registro?f=demo-import">Crea tu academia gratis</a> y ahí sí entra tu lista completa, privada y solo tuya.
     </div>
+    <!-- ===== PASO 0 (11-ago-2026): ¿de dónde vienen? =====
+         Sin esta pregunta no hay forma de saber que a un export de Punchpass le falta el
+         segundo archivo. Es UNA pregunta, con botones grandes, y se responde en un clic.
+         Los botones los pinta impPintarPlataformas() desde IMP_PLATAFORMAS. -->
+    <div id="impPaso0" style="display:none;">
+      <div class="plat-grid" id="impPlatGrid"></div>
+      <p class="hint" style="margin:12px 0 0;">Te lo pregunto para decirte <b>exactamente qué archivos exportar</b> y de qué menú salen. Varios sistemas guardan a tus alumnos en un archivo y sus planes en OTRO: si subes solo el primero, tus alumnos entran sin plan y no pueden reservar.</p>
+    </div>
     <div id="impPaso1">
+      <!-- La guía del sistema elegido (pasos exactos del menú) + el progreso "1 de 2".
+           Vacío cuando se viene de Excel o de "otro": ahí no hay peaje nuevo. -->
+      <div id="impGuia"></div>
       <!-- 27-jul-2026: antes esto abría con "sube un .csv UTF-8" y escondía abajo lo fácil.
            Ahora manda COPIAR Y PEGAR, que es lo que cualquiera sabe hacer; el archivo queda
            como segunda opción para quien ya tenga el CSV. -->
-      <div class="field"><label>Copia tu lista y pégala aquí (un alumno por línea)</label>
-        <textarea id="impPega" rows="6" placeholder="María Fernández, Piano, 987654321&#10;José Ramírez&#10;Lucía Torres, Canto"></textarea>
-        <p class="hint" style="margin:5px 0 0;">Vale pegar directo desde Excel, Google Sheets, WhatsApp o una nota. <b>Con el nombre basta</b>; si pones más datos (curso, celular) los reconozco solo. Ves todo antes de confirmar y los repetidos se saltan.</p>
-        <p class="hint" style="margin:5px 0 0;">¿Vienes de otro sistema y tus alumnos ya usaron parte de su paquete? Pon las <b>clases que le quedan</b> y, si quieres, hasta cuándo le vence: <span class="mini" style="font-family:inherit;">María Fernández, Paquete 8, 3 clases, vence 20/08/2026</span></p></div>
-      <div style="margin-top:8px;"><button class="btn" id="btnImpPegar">Ver cómo quedaría</button></div>
-      <div style="text-align:center;color:var(--muted);font-size:12px;margin:18px 0 12px;">— o, si ya tienes el archivo —</div>
-      <div class="field"><label>Subir un archivo .csv (o arrástralo aquí)</label><input id="impFile" type="file" accept=".csv,text/csv" />
+      <!-- Copiar y pegar: es lo natural para quien viene de Excel o de una libreta. Para quien
+           viene de una plataforma (Punchpass y compañía) estorba — tiene un archivo, no una
+           lista para copiar — así que el bloque entero se esconde en ese camino. -->
+      <div id="impPegaWrap">
+        <div class="field"><label>Copia tu lista y pégala aquí (un alumno por línea)</label>
+          <textarea id="impPega" rows="6" placeholder="María Fernández, Piano, 987654321&#10;José Ramírez&#10;Lucía Torres, Canto"></textarea>
+          <p class="hint" style="margin:5px 0 0;">Vale pegar directo desde Excel, Google Sheets, WhatsApp o una nota. <b>Con el nombre basta</b>; si pones más datos (curso, celular) los reconozco solo. Ves todo antes de confirmar y los repetidos se saltan.</p>
+          <p class="hint" style="margin:5px 0 0;">¿Vienes de otro sistema y tus alumnos ya usaron parte de su paquete? Pon las <b>clases que le quedan</b> y, si quieres, hasta cuándo le vence: <span class="mini" style="font-family:inherit;">María Fernández, Paquete 8, 3 clases, vence 20/08/2026</span></p></div>
+        <div style="margin-top:8px;"><button class="btn" id="btnImpPegar">Ver cómo quedaría</button></div>
+        <div style="text-align:center;color:var(--muted);font-size:12px;margin:18px 0 12px;">— o, si ya tienes el archivo —</div>
+      </div>
+      <div class="field"><label id="impFileLab">Subir un archivo .csv (o arrástralo aquí)</label><input id="impFile" type="file" accept=".csv,text/csv" />
         <p class="hint" style="margin:5px 0 0;"><b>Sube (o pega) el export de tu sistema anterior TAL CUAL</b> — Batuta reconoce las columnas por su nombre, también en inglés (Punchpass, Excel, Sheets, con comas, punto y coma o tabs). La única obligatoria es <b>Nombre</b>; también entiende Apellido, Correo, WhatsApp, Nacimiento, Curso, Paquete, <b>Clases restantes</b>, <b>Vence</b> y <b>Reservas</b> (los horarios que ya tenía agendados, ej. <code>20/08/2026 19:00; 27/08/2026 19:00</code>). Lo que no reconozca, simplemente lo ignora, y antes de importar te muestra TODO en una previsualización. La plantilla de abajo es solo por si prefieres armarlo tú.</p>
-        <p class="hint" style="margin:8px 0 0;"><b>¿Los planes vienen en otro archivo?</b> Pasa mucho: el export de clientes trae los datos de contacto y el de pases trae el plan de cada uno. Sube el segundo archivo aquí mismo (con su nombre, apellido y su plan) y a cada alumno que ya esté en tu lista <b>se le completa lo que le falte</b>. Nunca se pisa un dato que ya tengas, y nadie se duplica.</p></div>
-      <div style="margin:0 0 4px;"><button class="btn ghost sm" id="btnPlantillaCsv">&#8595; Descargar una plantilla de ejemplo</button></div>
+        <p class="hint" id="impHint2Arch" style="margin:8px 0 0;"><b>¿Los planes vienen en otro archivo?</b> Pasa mucho: el export de clientes trae los datos de contacto y el de pases trae el plan de cada uno. Sube el segundo archivo aquí mismo (con su nombre, apellido y su plan) y a cada alumno que ya esté en tu lista <b>se le completa lo que le falte</b>. Nunca se pisa un dato que ya tengas, y nadie se duplica.</p></div>
+      <div style="margin:0 0 4px;display:flex;gap:14px;align-items:center;flex-wrap:wrap;">
+        <button class="btn ghost sm" id="btnPlantillaCsv">&#8595; Descargar una plantilla de ejemplo</button>
+        <button type="button" class="plat-volver" id="btnImpOtroSistema" style="display:none;">Elegir otro sistema</button>
+      </div>
       <div id="impErr" style="display:none;color:var(--amber,#E8A13D);margin-top:10px;font-size:13px;"></div>
     </div>
     <div id="impPaso2" style="display:none;">
@@ -1916,7 +1972,9 @@
       <div id="impProfeWrap" style="display:none;margin-top:10px;"></div>
     </div>
     <div class="modal-actions">
-      <button class="btn ghost" data-close>Cancelar</button>
+      <!-- En el paso del segundo archivo este botón dice "Lo subo después": saltarse el paso
+           tiene que ser una salida visible, no un abandono (el pendiente queda en Alumnos). -->
+      <button class="btn ghost" id="btnImpCerrar" data-close>Cancelar</button>
       <button class="btn" id="btnImpConfirmar" style="display:none;">Importar</button>
     </div>
   </div>
@@ -2863,7 +2921,7 @@ function renderAlumnos(){
       fsel.style.display="";
     } else { fsel.style.display="none"; fsel.value=""; }
   }
-  if(db.alumnos.length===0){ tb.innerHTML='<tr><td colspan="9"><div class="hint" style="border:1px dashed var(--line);border-radius:8px;padding:18px 14px;margin:8px 0;text-align:center;">Aún no tienes alumnos. Agrega el primero y su portal se crea solo.<br /><button class="btn" style="margin-top:10px;" onclick="el(\'btnNuevoAlumno\').click()">+ Agregar mi primer alumno</button> <button class="btn ghost" style="margin-top:10px;" onclick="el(\'btnImportCsv\').click()">Traer mi lista de Excel</button></div></td></tr>'; return; }
+  if(db.alumnos.length===0){ tb.innerHTML='<tr><td colspan="9"><div class="hint" style="border:1px dashed var(--line);border-radius:8px;padding:18px 14px;margin:8px 0;text-align:center;">Aún no tienes alumnos. Agrega el primero y su portal se crea solo.<br /><button class="btn" style="margin-top:10px;" onclick="el(\'btnNuevoAlumno\').click()">+ Agregar mi primer alumno</button> <button class="btn ghost" style="margin-top:10px;" onclick="el(\'btnImportCsv\').click()">Traer mis alumnos</button></div></td></tr>'; return; }
   var fs=(fsel&&fsel.value)||"";
   var listaAl=fs?db.alumnos.filter(function(a){return (a.sede_id||"")===fs;}):db.alumnos;
   if(!listaAl.length){ tb.innerHTML='<tr><td colspan="9" class="empty">Sin alumnos en esa sede</td></tr>'; return; }
@@ -3782,7 +3840,7 @@ function renderReportes(){
   }
 }
 
-function renderAll(){ aplicarBrandTenant(); aplicarModulos(); aplicarMarcaCursos(); renderResumen(); renderAlumnos(); try{ renderInvBanner(); }catch(e){} renderGrupos(); renderRegistro(); renderPagos(); renderReportes(); renderCuentas(); renderLeads(); renderCaja(); renderRecursos(); renderEjercicios(); renderAjustes(); renderSedes(); renderPerfil(); fillSelects(); try{ arreglarTablas(); }catch(e){} }
+function renderAll(){ aplicarBrandTenant(); aplicarModulos(); aplicarMarcaCursos(); renderResumen(); renderAlumnos(); try{ renderSinPlanBanner(); }catch(e){} try{ renderInvBanner(); }catch(e){} renderGrupos(); renderRegistro(); renderPagos(); renderReportes(); renderCuentas(); renderLeads(); renderCaja(); renderRecursos(); renderEjercicios(); renderAjustes(); renderSedes(); renderPerfil(); fillSelects(); try{ arreglarTablas(); }catch(e){} }
 
 /* ---------- AGENDA (admin) ---------- */
 var AG_DISP = [], AG_RESERVAS = [];
@@ -6437,7 +6495,7 @@ var BS_INDICE=[
   {t:"Inicio — tu día de un vistazo", tab:"resumen", k:"home resumen inicio dashboard tablero hoy"},
   /* acciones directas: hacen la cosa, no solo llevan a la pantalla */
   {t:"Dar de alta un alumno nuevo", tab:"alumnos", act:"btnNuevoAlumno", k:"nuevo alumno crear agregar inscribir matricular registrar persona"},
-  {t:"Importar mi lista de alumnos (Excel/CSV)", tab:"alumnos", act:"btnImportCsv", k:"importar csv excel lista migrar traer masivo subir"},
+  {t:"Traer mis alumnos de otro sistema (o de Excel)", tab:"alumnos", act:"btnImportCsv", k:"importar csv excel lista migrar traer masivo subir punchpass mindbody glofox zen planner trainingym mudar cambiar de sistema planes pases saldo"},
   {t:"Registrar una clase dictada", tab:"registro", act:"btnNuevoRegistro", k:"registrar clase dictada asistencia marcar pasar lista bitacora dictar"},
   {t:"Crear un grupo", tab:"grupos", act:"btnNuevoGrupo", k:"grupo grupal crear clase grupal"},
   /* secciones */
@@ -6950,13 +7008,334 @@ function downloadBlob(blob,name){
 
 /* ---------- Importar alumnos por CSV (client-side; reusa el guardado admin/data) ---------- */
 var IMP_ROWS=[],IMP_DUP=0,IMP_VACIOS=0,IMP_DUPARCH=0,IMP_SINCRUCE=0,IMP_COMPLETADOS=0,IMP_COLS_EXTRA=[];
-el("btnImportCsv").addEventListener("click",function(){
-  IMP_ROWS=[]; el("impFile").value="";
+/* ================= ¿DE DÓNDE TRAES A TUS ALUMNOS? (11-ago-2026) =================
+   El caso que lo destapó: José (Elevate) exportó de Punchpass el reporte de CLIENTES y subió
+   eso. Entraron sus 1,445 alumnos con nombre, apellido y correo, pero SIN plan ni saldo — o
+   sea, sin poder reservar una sola clase. Punchpass reparte esa información en DOS exports
+   distintos y el producto nunca se lo dijo: la promesa "arrastra tu archivo y listo" es
+   falsa para varias plataformas.
+   La respuesta a esa pregunta es lo único que permite decirle CUÁNTOS archivos necesita y de
+   qué menú exacto salen. Excel y "otro" siguen igual que siempre: un archivo y a correr.
+
+   REGLA DE HONESTIDAD (no negociable): acá NO se inventan rutas de menú. Cada `pasos` de
+   abajo salió de la documentación oficial de soporte de esa plataforma. La que no se pudo
+   verificar va con `verificado:false` y la interfaz LO DICE ("no tenemos el paso a paso de
+   esta") en vez de mandar a la dueña a un menú que no existe, que es peor que no decir nada. */
+var IMP_ICONOS={
+  app:'<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>',
+  hoja:'<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/><path d="M3 15h18"/><path d="M9 3v18"/></svg>',
+  duda:'<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9.2 9.3a2.9 2.9 0 0 1 5.6 1c0 1.9-2.8 2.4-2.8 4"/><path d="M12 17.5h.01"/></svg>'
+};
+/* Cada entrada: nombre visible · cuántos archivos hace falta · los pasos exactos.
+   `pasos[n].ruta` se pinta en monoespaciada porque es el menú literal que ella tiene que
+   encontrar en su pantalla; `alt` es el camino alternativo cuando existe uno mejor. */
+var IMP_PLATAFORMAS=[
+  /* Primero las que de verdad se usan en LATAM (una academia de Lima empieza mirando acá),
+     después las internacionales, y al final "mi propia lista" y "no sé".
+     FITCO — peruana. Los nombres de los reportes salen de la lista oficial de "Reportes
+     básicos" de soporte.fitcolatam.com; la ruta se compone de dos artículos suyos, no de
+     una cita única, así que se avisa que el menú puede verse distinto. */
+  { id:"fitco", nombre:"Fitco", icono:"app", verificado:true, sub:"son 2 archivos",
+    pasos:[
+      { titulo:"Tus alumnos", ruta:"Reportes → Reportes básicos", formato:"Excel",
+        nota:'De la lista de reportes elige <b>Información de clientes</b> y dale a <b>Descargar</b>.' },
+      { titulo:"Sus planes", ruta:"Reportes → Reportes básicos", formato:"Excel",
+        nota:'Mismo sitio, pero eligiendo <b>Venta de membresías</b> (o <b>Ventas por plan</b>). De ahí sale qué compró cada alumno.' } ],
+    aviso:'Dos cosas honestas de Fitco: los reportes salen en <b>Excel</b>, así que guárdalos como <b>CSV</b> antes de subirlos; y <b>las sesiones que le quedan a cada alumno no salen en ningún reporte</b> — en Fitco eso se ve entrando cliente por cliente. Sube lo que tengas y ese saldo se lo pones tú acá, que es rápido.' },
+  /* BEWE — de su centro de ayuda solo se pudo verificar cómo sacar los CONTACTOS. Buscar
+     "exportar bono" en su propia ayuda devuelve cero resultados, así que no se inventa una
+     ruta de planes: se dice que no la tenemos. */
+  { id:"bewe", nombre:"Bewe", icono:"app", verificado:true, sub:"empieza por tus contactos",
+    pasos:[
+      { titulo:"Tus alumnos", ruta:"Contactos → Exportar",
+        nota:'Entra al módulo de <b>Contactos</b> y dale al botón de exportar.' } ],
+    introUnico:'De Bewe solo tenemos verificado cómo sacar tus contactos. <b>Cómo exportar los bonos y planes no está en su ayuda</b>, así que no te vamos a mandar a un menú inventado.',
+    aviso:'Si encuentras dónde exportar los bonos de tus alumnos, súbelo después como segundo archivo y a cada uno se le completa su plan. Si no, se los pones acá a mano.' },
+  /* AGENDAPRO — la mejor documentada de las tres de LATAM: las dos rutas son cita literal
+     de ayuda.agendapro.com. Lo que NO está documentado es si el archivo de planes trae el
+     saldo de sesiones, así que eso no se promete. */
+  { id:"agendapro", nombre:"AgendaPro", icono:"app", verificado:true, sub:"son 2 archivos",
+    pasos:[
+      { titulo:"Tus alumnos", ruta:"Clientes → Base de clientes → Acciones",
+        nota:'Dentro de <b>Acciones</b> elige <b>Descargar este listado de clientes</b>. Se abre otra pestaña, se arma el archivo y se descarga solo. Ojo: esto lo puede hacer únicamente un <b>administrador</b>.' },
+      { titulo:"Sus planes", ruta:"Ventas → Planes → Exportar", formato:"Excel",
+        nota:'Aplica los filtros que quieras, dale a <b>Exportar</b> y después a <b>Descargar</b>. De ahí sale el plan que compró cada alumno.' } ],
+    aviso:'AgendaPro no documenta si el archivo de planes trae <b>cuántas sesiones le quedan</b> a cada alumno. Si no vienen, súbelo igual: entra el plan y el saldo se lo ajustas tú.' },
+  /* PUNCHPASS — el caso de Elevate, y el que originó todo esto.
+     Rutas verificadas contra support.punchpass.com (11-ago-2026). OJO: la ruta que teníamos
+     anotada, "Reports → Active Customers", NO EXISTE — el listado de clientes vive en la
+     página Customers, no en Reports. Se corrigió antes de escribirla en pantalla. */
+  { id:"punchpass", nombre:"Punchpass", icono:"app", verificado:true,
+    sub:"son 2 archivos",
+    pasos:[
+      { titulo:"Tus alumnos", ruta:"Customers → Export", formato:"CSV",
+        nota:'Entra a <b>Customers</b>, elige la lista (por ejemplo <i>All Customers</i>), marca a todos con <i>Select All</i> y aprieta <b>Export</b>. Trae nombre, apellido, correo y teléfono. <b>Todavía no trae sus planes</b>: eso es el segundo archivo.' },
+      { titulo:"Sus planes", ruta:"Reports → Sales Details", formato:"CSV",
+        alt:"la página All Pass Purchases", altPor:"tiene su propio botón de exportar",
+        nota:'Dentro del reporte busca la sección <b>Tracking Pass Purchases</b>: ahí están el pase de cada alumno y las clases que le quedan. Si el archivo trae la columna <b>Customer Id</b>, mejor todavía: cruzo por ese número en vez de por el nombre, así no se me confunden dos personas que se llaman parecido.' } ],
+    /* Detalle operativo que ahorra un susto: Punchpass no descarga el archivo al toque. */
+    aviso:'En Punchpass el archivo <b>no se descarga al instante: te llega por correo</b> con un enlace para bajarlo. Si no lo ves en un par de minutos, revisa tu bandeja de spam. Y necesitas entrar como <b>Admin</b>.' },
+  /* GLOFOX — el mejor caso: UN archivo trae contacto, plan, vencimiento y créditos.
+     Verificado contra el artículo vivo de support.glofox.com (leído literal). */
+  { id:"glofox", nombre:"Glofox", icono:"app", verificado:true, sub:"un solo archivo",
+    pasos:[
+      { titulo:"Tus alumnos y sus planes", ruta:"Manage → Clients → Actions → Download", formato:"CSV",
+        nota:'Este archivo viene completo: trae el correo y el teléfono de cada alumno <b>y también</b> su plan, hasta cuándo le vence y las clases que le quedan. Con este solo terminas.' } ],
+    aviso:'Si tu plan de Glofox no te muestra los filtros de clientes, no pasa nada: descarga la lista completa igual.' },
+  /* MINDBODY — el peor caso real: la información vive en TRES reportes distintos.
+     Las rutas salen de la documentación oficial (parte de ella archivada) cruzada con tres
+     guías de migración independientes. Mindbody renombró menús, así que se avisa. */
+  { id:"mindbody", nombre:"Mindbody", icono:"app", verificado:true, sub:"son 3 archivos",
+    pasos:[
+      { titulo:"Tus alumnos", ruta:"Reports → Clients → Mailing Lists", formato:"Excel",
+        nota:'Elige <b>Email List</b>, pon <i>All Clients</i> en los dos filtros y dale a <b>Generate</b>. De ahí sale el botón para exportar.' },
+      { titulo:"Sus planes", ruta:"Reports → Clients → Membership", formato:"Excel",
+        nota:'Pon la fecha de hoy, <i>All Memberships</i> y la vista <b>Detail View</b> antes de exportar.' },
+      { titulo:"Su saldo", ruta:"Reports → Clients → Visits Remaining", formato:"Excel",
+        nota:'Este es el que trae <b>cuántas clases le quedan</b> a cada uno. Pon un rango de fechas largo (un año o más) y los filtros en <i>All</i>. Ojo que este reporte no trae correo, así que los cruzo por su nombre.' } ],
+    aviso:'Mindbody exporta en <b>Excel</b>: ábrelo y usa <b>Archivo → Guardar como → CSV UTF-8</b> antes de subirlo. Y cambiaron nombres de menú hace poco, así que si no ves <i>Membership</i> busca <i>Members</i>, y si los reportes te aparecen dentro de <i>Insights</i> es el mismo camino.' },
+  /* ZEN PLANNER — dos reportes que se arman con "+ New Report". Confianza media-alta: su
+     centro de ayuda se mudó al hub de Daxko y lo verificable hoy es la versión archivada. */
+  { id:"zenplanner", nombre:"Zen Planner", icono:"app", verificado:true, sub:"son 2 archivos",
+    pasos:[
+      { titulo:"Tus alumnos", ruta:"+ New Report → People", formato:"CSV",
+        nota:'Desde el tablero, <b>+ New Report</b> y elige el tipo <b>People</b>. Con <i>Edit Report Settings</i> eliges qué columnas van; asegúrate de incluir correo y teléfono. Se exporta con la flechita que está al lado del número de resultados.' },
+      { titulo:"Sus planes", ruta:"+ New Report → Memberships", formato:"CSV",
+        nota:'Mismo camino pero eligiendo <b>Memberships</b>. Acá vive el saldo: busca la columna <b>Attendance Remaining</b> y actívala en <i>Edit Report Settings</i>.' } ],
+    aviso:'Zen Planner cambió su centro de ayuda hace poco. Si algún menú te aparece con otro nombre, el camino es siempre el mismo: crear un reporte nuevo y exportarlo.' },
+  /* TRAININGYM — verificado contra help.trainingym.com: un SOLO archivo trae al socio y su
+     membresía. Lo que NO está documentado es que traiga las sesiones que le quedan, así que
+     eso no se promete: se avisa que capaz haya que ponerlo a mano. */
+  { id:"trainingym", nombre:"Trainingym", icono:"app", verificado:true,
+    sub:"un solo archivo",
+    pasos:[
+      { titulo:"Tus alumnos y sus planes", ruta:"Socios → Socios (Activos, Potenciales y Baja)", formato:"Excel",
+        nota:'Al lado de <b>Filtrar</b> hay tres puntitos <b>[...]</b>: ahí adentro está <b>Exportar listado</b>. El archivo sale con el socio Y su membresía, así que con este solo alcanza. <b>Ojo:</b> las sesiones que le quedan a cada uno puede que no vengan en el archivo; si no están, se las pones tú después.' } ],
+    aviso:'Trainingym exporta en <b>Excel</b>: ábrelo y usa <b>Archivo → Guardar como → CSV UTF-8</b> antes de subirlo acá.' },
+  /* Estas dos van al final y `simple` las deja EXACTAMENTE como estaban antes del paso 0:
+     pegar o subir, sin peaje nuevo. El subtítulo de Excel dice "hecha por mí" a propósito:
+     quien exportó de Punchpass también tiene un Excel en la mano y, sin esa aclaración,
+     apretaría acá y volveríamos al problema que este paso vino a arreglar. */
+  { id:"excel", nombre:"Excel o Google Sheets", icono:"hoja", verificado:true,
+    simple:true, sub:"mi propia lista, hecha por mí" },
+  { id:"otro", nombre:"Otro sistema, o no sé", icono:"duda", verificado:true,
+    simple:true, sub:"sube lo que tengas y lo revisamos" }
+];
+var IMP_PLAT=null;        /* la plataforma elegida en esta sesión de importación */
+var IMP_ARCHIVO_N=1;      /* 1 = el de los alumnos · 2 = el de sus planes */
+var IMP_MSG_RESULTADO=""; /* HTML del aviso "entraron sin plan", cuando se vuelve a abrir */
+function impPlatKey(){ return "bt_imp_plat_"+(TENANT_SLUG||"x"); }
+/* Cuántos archivos hace falta = cuántos pasos tiene la receta. Un solo sitio de verdad, para
+   que no se pueda desincronizar un contador con la lista de pasos. */
+function impNumArchivos(p){ return (p&&p.pasos&&p.pasos.length)||0; }
+function impPlatDe(id){
+  for(var i=0;i<IMP_PLATAFORMAS.length;i++){ if(IMP_PLATAFORMAS[i].id===id) return IMP_PLATAFORMAS[i]; }
+  return null;
+}
+function impPlatGuardada(){
+  var id=""; try{ id=localStorage.getItem(impPlatKey())||""; }catch(e){}
+  return id?impPlatDe(id):null;
+}
+function impPintarPlataformas(){
+  var g=el("impPlatGrid"); if(!g) return;
+  g.innerHTML=IMP_PLATAFORMAS.map(function(p){
+    return '<button type="button" class="plat-b" data-plat="'+esc(p.id)+'">'+
+      (IMP_ICONOS[p.icono]||IMP_ICONOS.app)+
+      '<span>'+esc(p.nombre)+(p.sub?'<span class="plat-sub">'+esc(p.sub)+'</span>':'')+'</span></button>';
+  }).join("");
+  Array.prototype.forEach.call(g.querySelectorAll(".plat-b"),function(b){
+    b.addEventListener("click",function(){ impElegirPlat(b.getAttribute("data-plat")); });
+  });
+}
+function impElegirPlat(id){
+  IMP_PLAT=impPlatDe(id); IMP_ARCHIVO_N=1;
+  try{ localStorage.setItem(impPlatKey(),id); }catch(e){}
+  impIrPaso1();
+}
+/* Muestra el paso de subir/pegar, con la guía del sistema elegido arriba. */
+function impIrPaso1(){
+  el("impPaso0").style.display="none";
   el("impPaso1").style.display=""; el("impPaso2").style.display="none";
+  el("btnImpConfirmar").style.display="none"; el("impErr").style.display="none";
+  var titulo=el("impTitulo"), sub=el("impSubtitulo");
+  var nTot=impNumArchivos(IMP_PLAT);
+  if(IMP_PLAT && IMP_ARCHIVO_N>1 && nTot>1){
+    /* El título nombra el archivo que toca (Mindbody llega hasta el tercero, "su saldo"), y
+       el subtítulo dice si es el último o cuántos faltan: nadie avanza a ciegas. */
+    var pa=IMP_PLAT.pasos[Math.min(IMP_ARCHIVO_N,nTot)-1]||{};
+    titulo.innerHTML='Ahora el archivo de <em>'+esc((pa.titulo||"lo que falta").toLowerCase())+'</em>';
+    sub.textContent=(IMP_ARCHIVO_N>=nTot)?"Es el último":("Es el "+IMP_ARCHIVO_N+" de "+nTot);
+  }else{
+    titulo.innerHTML='Trae tu <em>lista</em> de alumnos';
+    sub.textContent="De una sola vez, sin escribirlos uno por uno";
+  }
+  /* Quien viene de una plataforma tiene un ARCHIVO, no una lista para copiar: el bloque de
+     pegar solo estorba ahí. Para Excel, "otro" y quien no eligió nada, todo sigue igual. */
+  /* Quien viene de una plataforma con ruta verificada tiene un ARCHIVO recién descargado, no
+     una lista para copiar: ahí el bloque de pegar solo estorba. Si NO sabemos su ruta, se
+     le deja igual, porque capaz termine copiando de la pantalla. Y para Excel, Sheets y
+     "otro" no cambia absolutamente nada respecto de como funcionaba hasta hoy. */
+  var conRuta=!!(IMP_PLAT && !IMP_PLAT.simple && IMP_PLAT.verificado && impNumArchivos(IMP_PLAT));
+  el("impPegaWrap").style.display=conRuta?"none":"";
+  el("impHint2Arch").style.display=conRuta?"none":"";   // la guía ya lo explica mejor y a medida
+  el("btnImpOtroSistema").style.display=IMP_PLAT?"":"none";
+  el("btnImpCerrar").textContent=(IMP_PLAT&&IMP_ARCHIVO_N>1)?"Lo subo después":"Cancelar";
+  var pasoAhora=conRuta?IMP_PLAT.pasos[Math.min(IMP_ARCHIVO_N,IMP_PLAT.pasos.length)-1]:null;
+  el("impFileLab").textContent=conRuta
+    ? ("Sube aquí el archivo que descargaste"+((pasoAhora&&pasoAhora.titulo&&IMP_PLAT.pasos.length>1)?(" ("+pasoAhora.titulo.toLowerCase()+")"):""))
+    : "Subir un archivo .csv (o arrástralo aquí)";
+  impPintarGuia();
+}
+/* La receta: qué exportar, de qué menú, y cuántos archivos van. */
+function impPintarGuia(){
+  var box=el("impGuia"); if(!box) return;
+  /* El aviso de "entraron sin plan" se pinta ANTES que la guía y sobrevive aunque la
+     plataforma no tenga pasos (Excel, "otro"): es la parte que no se puede perder. */
+  var res=IMP_MSG_RESULTADO||"";
+  /* `simple` = Excel, Sheets y "otro": ahí no hay nada que explicar y la pantalla queda
+     EXACTAMENTE como siempre. Una plataforma sin ruta verificada NO es simple: se le debe
+     una explicación honesta, que es distinto de no decir nada. */
+  if(!IMP_PLAT || IMP_PLAT.simple){ box.innerHTML=res; return; }
+  var p=IMP_PLAT, pasos=p.pasos||[], total=pasos.length, dos=total>1, n=Math.min(IMP_ARCHIVO_N,total||1);
+  var h=res;
+  /* El progreso va ARRIBA de todo: que se sepa desde el minuto uno cuántos archivos son, no
+     que se entere después de subir el primero (que es como se quemó José). Se pinta uno por
+     paso — Mindbody de verdad reparte esto en TRES reportes — y solo si la ruta está
+     verificada: prometer "1 de 2" sin haberlo comprobado sería inventar. */
+  if(dos && p.verificado){
+    h+='<div class="plat-pasos">'+pasos.map(function(pa,ix){
+      var i=ix+1, cls=(i===n)?"on":((i<n)?"ok":"");
+      return '<span class="plat-pip '+cls+'"><span class="n">'+((i<n)?"&#10003;":i)+'</span> '+esc(pa.titulo||("Archivo "+i))+'</span>';
+    }).join("")+'</div>';
+  }
+  var paso=total?(pasos[n-1]||pasos[0]):null;
+  h+='<div class="plat-guia">';
+  if(!p.verificado || !paso){
+    h+='<h4>De '+esc(p.nombre)+' no tenemos el paso a paso</h4>'+
+       '<p class="hint" style="margin:0;">Te decimos la verdad en vez de mandarte a un menú que capaz no existe. Busca en su sección de reportes un export de <b>tus clientes</b> y, si lo tiene, otro de <b>sus planes o bonos</b>. Sube lo que tengas: te muestro todo antes de importar y no entra nadie sin que lo confirmes.</p>';
+  }else{
+    var NUM=["","un","dos","tres","cuatro"];
+    if(dos && n===1){
+      h+='<h4>En '+esc(p.nombre)+' tu información está partida en '+(NUM[total]||total)+' archivos</h4>'+
+         '<p class="hint" style="margin:0 0 2px;">El primero trae a tus alumnos; '+(total>2?'los otros dos traen su plan y cuántas clases les quedan':'el otro trae el plan de cada uno')+'. Con el primero solo entran los nombres: <b>sin plan no pueden reservar</b>. Vamos por partes, uno a la vez.</p>';
+    }else if(dos){
+      h+='<h4>Archivo '+n+' de '+total+': '+esc(paso.titulo||"el que falta")+'</h4>'+
+         '<p class="hint" style="margin:0 0 2px;">Se cruza solo con la gente que ya subiste: <b>nadie se duplica y no se pisa ningún dato que ya tengas</b>.</p>';
+    }else{
+      /* `introUnico` existe para no mentir: hay sistemas (Bewe) de los que solo conocemos la
+         ruta de los contactos, y ahí NO se puede decir "con un archivo alcanza". */
+      h+='<h4>Cómo sacar tu lista de '+esc(p.nombre)+'</h4>'+
+         '<p class="hint" style="margin:0 0 2px;">'+(p.introUnico||('Con un solo archivo alcanza: el de '+esc(p.nombre)+' ya trae a tus alumnos <b>y</b> el plan de cada uno.'))+'</p>';
+    }
+    h+='<ol>';
+    h+='<li>En '+esc(p.nombre)+', anda a <span class="ruta">'+esc(paso.ruta)+'</span></li>';
+    if(paso.alt) h+='<li class="hint" style="list-style:none;margin-left:-20px;">También sirve <span class="ruta">'+esc(paso.alt)+'</span>'+(paso.altPor?' — '+esc(paso.altPor):'')+'</li>';
+    /* Si el sistema exporta en Excel, el paso de guardarlo como CSV va ACÁ, en la receta, no
+       escondido abajo: si no, se descarga el .xlsx, se sube y rebota. */
+    h+=(/excel/i.test(paso.formato||""))
+      ? '<li>Sale en Excel: ábrelo, guárdalo como <b>CSV</b> y sube ese</li>'
+      : ('<li>Descárgalo'+(paso.formato?(" en "+esc(paso.formato)):"")+' y súbelo aquí abajo</li>');
+    h+='</ol>';
+    if(paso.nota) h+='<p class="hint" style="margin:8px 0 0;">'+paso.nota+'</p>';
+    /* `aviso` es del sistema entero (llega por correo, viene en Excel, el menú puede llamarse
+       distinto): va al final y en tono de advertencia amable, no de letra chica. */
+    if(p.aviso) h+='<p class="hint" style="margin:8px 0 0;border-top:1px solid var(--line);padding-top:8px;">'+p.aviso+'</p>';
+  }
+  h+='</div>';
+  box.innerHTML=h;
+}
+/* Punto de entrada ÚNICO del importador. `opts.archivo:2` lo abre directo en el paso del
+   archivo de planes (lo usan el banner de Alumnos y el aviso de después de importar). */
+function abrirImportador(opts){
+  opts=opts||{};
+  IMP_MSG_RESULTADO=opts.resultado||"";
+  IMP_ROWS=[]; el("impFile").value="";
   el("btnImpConfirmar").style.display="none"; el("impErr").style.display="none";
   el("impProfeWrap").style.display="none";
   el("impSaldoErr").style.display="none"; el("impSaldoErr").innerHTML="";
+  el("impGuia").innerHTML="";
+  IMP_PLAT=IMP_PLAT||impPlatGuardada();
+  /* Al paso del segundo archivo se entra derecho: quien llega acá ya importó y le faltan los
+     planes. Si su sistema es de un solo archivo (Excel) o no sabemos cuál es, igual se abre
+     el paso de subir — con el aviso arriba, que es lo que no se puede perder — pero sin
+     inventarle un "archivo 2 de 2" que en su caso no existe. */
+  var nTotAbrir=impNumArchivos(IMP_PLAT);
+  IMP_ARCHIVO_N=(opts.archivo>1 && nTotAbrir>1)?Math.min(opts.archivo,nTotAbrir):1;
+  if(IMP_PLAT || opts.resultado){ impIrPaso1(); }   // ya nos dijo de dónde viene: no se pregunta dos veces
+  else{
+    el("impPaso0").style.display=""; el("impPaso1").style.display="none"; el("impPaso2").style.display="none";
+    el("impTitulo").innerHTML='¿De dónde traes a tus <em>alumnos</em>?';
+    el("impSubtitulo").textContent="Elige tu sistema anterior y te digo qué exportar";
+    el("btnImpCerrar").textContent="Cancelar";
+    impPintarPlataformas();
+  }
   openOv("ovImport");
+}
+el("btnImportCsv").addEventListener("click",function(){ abrirImportador(); });
+/* ---------- Lo que cierra el círculo: decirlo EN EL MOMENTO (11-ago-2026) ----------
+   José descubrió tres días después que sus 1,445 alumnos no podían reservar. El importador
+   sabe al instante que entraron sin plan: callarlo es el bug. */
+function impAlumnosSinPlan(){
+  return (db.alumnos||[]).filter(function(a){ return !String(a.paquete||"").trim(); });
+}
+function impDespuesDeImportar(nNuevos,nComp){
+  if(!(nNuevos||nComp)) return;
+  var sinPlan=impAlumnosSinPlan().length, total=(db.alumnos||[]).length;
+  if(!sinPlan || !total) return;
+  /* Con uno o dos sueltos no se arma un escándalo: eso es una ficha a medio llenar, no una
+     migración rota. El aviso es para cuando de verdad quedó gente sin poder reservar. */
+  if(sinPlan<3) return;
+  /* Si ya dijo "ya lo sé, no me avises" y la cosa no empeoró, no se le vuelve a saltar
+     encima: una academia puede tener gente sin plan a propósito. */
+  var ok=0; try{ ok=parseInt(localStorage.getItem(sinPlanKey())||"0",10)||0; }catch(e){}
+  if(ok && sinPlan<=ok+4) return;
+  var todos=(sinPlan===total);
+  var falta=!!(IMP_PLAT&&IMP_PLAT.verificado&&impNumArchivos(IMP_PLAT)>1);
+  var h='<div class="plat-guia" style="border-left-color:var(--amber);background:color-mix(in srgb,var(--amber) 8%,transparent);">'+
+    '<h4>'+(nNuevos?(nNuevos+" alumno"+(nNuevos!=1?"s":"")+" entr"+(nNuevos!=1?"aron":"ó")):"Listo")+', pero les falta su plan</h4>'+
+    /* OJO con la concordancia: "4 de tus 9 alumnos TIENE plan" decía justo lo contrario de
+       lo que pasa. La frase entera cambia según el caso, no solo el sujeto. */
+    '<p class="hint" style="margin:0;"><b>'+(todos
+      ? ("Ninguno de tus "+total+" alumnos tiene plan todavía")
+      : (sinPlan+" de tus "+total+" alumnos no tienen plan todavía"))+', así que aún no pueden reservar.</b> '+
+    'El plan es lo que les da sus clases: sin él, su ficha existe pero no tienen saldo que usar.'+
+    (falta?' En '+esc(IMP_PLAT.nombre)+' ese dato vive en otro archivo.':' Súbelo en un archivo con el nombre de cada alumno y su plan, y a cada uno se le completa lo que le falte.')+'</p></div>';
+  /* Avanza al SIGUIENTE archivo, no siempre al segundo: en Mindbody son tres. */
+  abrirImportador({archivo:(IMP_ARCHIVO_N||1)+1, resultado:h});
+}
+/* Banner causal en Alumnos: el mismo problema, pero para el que cerró el aviso y siguió.
+   Se puede apagar; si más adelante el hueco crece de verdad, vuelve a aparecer. */
+function sinPlanKey(){ return "bt_sinplan_ok_"+(TENANT_SLUG||"x"); }
+function renderSinPlanBanner(){
+  var box=el("sinPlanBanner"); if(!box) return;
+  box.style.display="none"; box.innerHTML="";
+  if(ROL!=="dueno") return;
+  var sinPlan=impAlumnosSinPlan().length, total=(db.alumnos||[]).length;
+  if(total<3 || sinPlan<3) return;
+  var ok=0; try{ ok=parseInt(localStorage.getItem(sinPlanKey())||"0",10)||0; }catch(e){}
+  if(ok && sinPlan<=ok+4) return;              // ya lo vio y no ha empeorado
+  box.style.display="";
+  box.innerHTML='<div style="border:1px solid var(--line);border-left:4px solid var(--amber);border-radius:8px;padding:14px 16px;margin:10px 0 14px;display:flex;gap:14px;align-items:center;flex-wrap:wrap;">'+
+    '<div style="flex:1;min-width:260px;">'+
+      '<b style="font-size:16px;">'+(sinPlan===total
+        ? ("Ninguno de tus "+total+" alumnos tiene plan")
+        : (sinPlan+" de tus "+total+" alumnos no tienen plan"))+', así que no pueden reservar.</b>'+
+      '<div class="hint" style="margin:4px 0 0;">Su ficha está, pero sin plan no tienen clases que gastar. Si vienes de otro sistema, el plan suele venir en un segundo archivo.</div>'+
+    '</div>'+
+    '<button class="btn" id="btnSubirPlanes" style="white-space:nowrap;">Subir el archivo de sus planes</button>'+
+    '<button type="button" class="plat-volver" id="btnSinPlanOk">Ya lo sé, no me avises</button>'+
+  '</div>';
+  el("btnSubirPlanes").addEventListener("click",function(){ abrirImportador({archivo:2}); });
+  el("btnSinPlanOk").addEventListener("click",function(){
+    try{ localStorage.setItem(sinPlanKey(),String(sinPlan)); }catch(e){}
+    renderSinPlanBanner();
+    toast("Listo. Te aviso solo si crece.");
+  });
+}
+el("btnImpOtroSistema").addEventListener("click",function(){
+  try{ localStorage.removeItem(impPlatKey()); }catch(e){}
+  IMP_PLAT=null; IMP_ARCHIVO_N=1;
+  abrirImportador();
 });
 el("btnPlantillaCsv").addEventListener("click",function(){
   /* "Clases restantes" y "Vence" (28-jul-2026) son para migrar de otro sistema con el saldo
@@ -7509,6 +7888,9 @@ window.addEventListener("drop",function(e){
   var f=e.dataTransfer&&e.dataTransfer.files&&e.dataTransfer.files[0];
   if(!f) return;
   openOv("ovImport");
+  /* Soltar un archivo salta la pregunta de "¿de dónde vienes?" a propósito: quien arrastra ya
+     tiene su archivo. Pero hay que ESCONDER el paso 0 o quedan los dos a la vez en pantalla. */
+  el("impPaso0").style.display="none";
   el("impPaso1").style.display=""; el("impPaso2").style.display="none";
   el("btnImpConfirmar").style.display="none";
   impLeerArchivo(f);
@@ -7925,6 +8307,8 @@ el("btnImpConfirmar").addEventListener("click",function(){
     if(rr&&rr.saltadas&&rr.saltadas.length){
       alert("Estas reservas no se pudieron migrar:\n\n"+rr.saltadas.slice(0,15).map(function(s){return "· "+(s.alumno||"?")+" — "+(s.iso?new Date(s.iso).toLocaleString("es-PE",{timeZone:"America/Lima"})+" — ":"")+(s.motivo||"");}).join("\n")+(rr.saltadas.length>15?"\n… y "+(rr.saltadas.length-15)+" más":"")+"\n\nRevisa que el horario exista en tu Agenda y tenga cupo, y agéndalas a mano.");
     }
+    /* Y acá se cierra el círculo: si entraron sin plan, se dice AHORA (no tres días después). */
+    try{ impDespuesDeImportar(nNuevos,nComp); }catch(e){}
   })
     .catch(function(e){
       /* Si el rechazo lo explicó el servidor (p.ej. el tope de la demo pública), se muestra ESO
