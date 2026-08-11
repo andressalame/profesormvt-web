@@ -7698,13 +7698,13 @@ export default {
             grupal: academiaEsGrupal(cfg),
             sin_profe: String(cfg.portal_sin_profe || "") === "1"
           },
-          marca: { color: cfg.brand_color || "", font: cfg.brand_font || "", logo: cfg.brand_logo || "" },
-          pago: {
-            pago_numero: cfg.pago_numero, pago_titular: cfg.pago_titular,
-            bcp_cuenta: cfg.bcp_cuenta, bcp_cci: cfg.bcp_cci,
-            scotia_cuenta: cfg.scotia_cuenta, scotia_cci: cfg.scotia_cci,
-            crypto_moneda: cfg.crypto_moneda, crypto_red: cfg.crypto_red, crypto_wallet: cfg.crypto_wallet
-          }
+          marca: { color: cfg.brand_color || "", font: cfg.brand_font || "", logo: cfg.brand_logo || "" }
+          /* FUGA CERRADA (11-ago-2026): aqui viajaba el bloque `pago` — numero de Yape, titular,
+             cuenta BCP/Scotia, CCI y wallet — a cualquiera que pasara el slug, que es publico.
+             Nadie lo consumia: el portal pinta el recuadro de pago con `ME.config`, que sale de
+             /app/api/me y exige sesion (ver renderPaybox y ajustarMetodosPago en
+             public/alumnos/index.html). Era exposicion pura, sin funcion. Si algun dia hace falta
+             mostrar metodos de pago ANTES del login, mandar banderas booleanas, nunca los numeros. */
         });
       }
 
@@ -8015,6 +8015,17 @@ export default {
       if (path === "/app/api/chat" && request.method === "GET"){
         const who = await authChat(env, request);
         if (!who) return json({ error: "Sesion expirada" }, 401);
+        /* FUGA CERRADA (11-ago-2026): el registro por slug es abierto A PROPOSITO (asi se da de
+           alta el alumno nuevo sin que el dueno lo cargue), pero el slug es PUBLICO: esta en la
+           URL del portal. Sin este candado, cualquier desconocido se registraba en la academia
+           que quisiera y leia el chat grupal — nombres y mensajes de los alumnos reales.
+           Confirmado en produccion contra la demo antes de arreglarlo.
+           El POST de este mismo chat YA exigia `alumno_id` ("el chat se abre cuando activas tu
+           primer paquete") y el GET de /chat/privado tambien; el GET del grupal era el unico que
+           no lo pedia. Esto no agrega una regla nueva: restaura la que el producto ya tenia.
+           No rompe el alta legitima (la cuenta se crea igual, solo no lee el chat hasta estar
+           vinculada) ni el riel de invitaciones, que nace con `alumno_id` puesto. */
+        if (!who.admin && !who.cu.alumno_id) return json({ mensajes: [], max: 0 });
         const tid = who.admin ? who.tenant.id : who.cu.tenant_id;
         let desde = parseInt(url.searchParams.get("desde") || "0", 10);
         if (!Number.isFinite(desde) || desde < 0) desde = 0;
