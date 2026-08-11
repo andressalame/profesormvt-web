@@ -4052,6 +4052,69 @@ async function assetConSeguridad(resp){
 const DEMO_EMAIL = "demo@batuta.lat";
 
 /* ═══════════════════════════════════════════════════════════════════════════
+   DEMO PÚBLICA — FRENO DE DATOS REALES (11-ago-2026, incidente Elevate)
+   ───────────────────────────────────────────────────────────────────────────
+   Qué pasó: /app/demo le entrega a CUALQUIER visitante anónimo una sesión de
+   DUEÑO sobre este tenant. O sea que el importador del panel escribe en la D1
+   real del tenant demo, con los mismos permisos que un cliente que paga. Como
+   el demo corre en plan 'academia' (ALUM_CAP = 1.000.000), no había ningún
+   tope: alguien probó el importador con el export real de su academia y
+   quedaron 1.465 personas (correos, teléfonos, fechas de nacimiento y
+   contactos de emergencia) legibles para el siguiente que entrara a la demo,
+   hasta el reset de las 9am. ~21 horas expuestas.
+
+   El arreglo NO es "resetear más seguido" (eso solo achica la ventana): es que
+   la demo no pueda GUARDAR un dato personal real, aunque se lo manden.
+     1) Tope duro de alumnos (DEMO_ALUM_CAP): un import masivo se corta en seco.
+     2) Saneo de lo que se escribe: correo, WhatsApp, nacimiento y apellido se
+        vacían, y notas/nombre pasan por un redactor que tapa correos y números
+        de teléfono (el importador vuelca a Notas las columnas que no reconoce
+        — ahí caían los contactos de emergencia).
+   Las filas sembradas por resetDemo (ids `demo-*`) pasan intactas: son de
+   mentira y son las que hacen que la demo se vea viva. Lo que escribe el
+   visitante es lo desechable.
+   ═══════════════════════════════════════════════════════════════════════════ */
+const DEMO_ALUM_CAP = 25;          // alumnos máximos que puede tener el tenant demo
+const DEMO_REGISTRO_CAP = 500;     // clases registradas máximas (freno de escritura masiva)
+
+/* Tapa correos y teléfonos dentro de texto libre. Va sobre notas y nombre: el
+   importador manda a Notas todo lo que no reconoce ("Emergency Contact: mamá
+   987654321"), y nadie impide pegar un correo en el campo del nombre. */
+function redactarTextoDemo(s){
+  return String(s == null ? "" : s)
+    .replace(/[^\s@]+@[^\s@]+\.[a-zA-Z]{2,}/g, "[oculto]")
+    .replace(/\+?\d[\d\s().\-]{6,}\d/g, "[oculto]")
+    .slice(0, 200);
+}
+
+/* Los 5 alumnos de mentira que siembra resetDemo. Lista CERRADA a propósito: si la
+   excepción fuera "el id empieza con demo-", cualquiera se la salta mandando desde un
+   curl un alumno con id "demo-al-999" y sus datos reales intactos. */
+const RE_DEMO_SEED_AL = /^demo-al-[1-5]$/;
+
+/* Deja al alumno sin un solo dato con el que se pueda contactar o identificar a
+   una persona real. El nombre se conserva (si escribes "María" a mano quieres
+   ver "María": la demo tiene que seguir sintiéndose de verdad), pero un nombre
+   suelto, sin apellido, correo, teléfono ni fecha de nacimiento, y topado en 25,
+   no es la base de datos de nadie. */
+function sanearAlumnoDemo(a){
+  if (!a || typeof a !== "object") return a;
+  /* La redacción de texto libre va SIEMPRE, también sobre los sembrados: es inocua para
+     ellos (sus notas no traen correos ni teléfonos) y así no hay id que la esquive. */
+  a.nombre = redactarTextoDemo(a.nombre).slice(0, 60);
+  a.notas = redactarTextoDemo(a.notas);
+  a.horario = redactarTextoDemo(a.horario).slice(0, 60);
+  /* El contacto solo sobrevive en los 5 de muestra: son inventados y la demo los luce
+     (la columna WhatsApp, el botón de escribirle). Todo lo demás va vacío. */
+  if (RE_DEMO_SEED_AL.test(String(a.id || ""))) return a;
+  a.apellido = "";
+  a.email = "";
+  a.whatsapp = "";
+  a.nacimiento = "";
+  return a;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
    MULTI-PROFESOR — Fase 0: migración ADDITIVA (07-jul-2026).
    Crea la tabla `profesores` y las columnas `profesor_id` (nullable, default NULL).
    NO cambia ningún endpoint: mientras profesor_id sea NULL en todas las filas,
@@ -10199,12 +10262,19 @@ export default {
             return json({ ok: true });
           }
           if (accion === "crear" || accion === "editar"){
-            const nombreL = String(b.nombre || "").trim().slice(0, 80);
-            const emailL = String(b.email || "").trim().toLowerCase().slice(0, 120);
-            const waL = String(b.whatsapp || "").replace(/[^\d+]/g, "").slice(0, 20);
+            /* Demo pública (11-ago-2026): un "interesado" del CRM es una persona real igual que
+               un alumno, y el formulario público de la academia demo también crea leads. Mismo
+               criterio: se guarda el nombre, el contacto no se guarda. */
+            const esDemoLead = t.email === DEMO_EMAIL;
+            const nombreL = (esDemoLead ? redactarTextoDemo(b.nombre) : String(b.nombre || "")).trim().slice(0, 80);
+            const emailL = esDemoLead ? "" : String(b.email || "").trim().toLowerCase().slice(0, 120);
+            const waL = esDemoLead ? "" : String(b.whatsapp || "").replace(/[^\d+]/g, "").slice(0, 20);
             const interesL = String(b.interes || "").trim().slice(0, 60);
             const softwareL = String(b.software_actual || "").trim().slice(0, 80);
-            const notaL = String(b.nota || "").trim().slice(0, 500);
+            const notaL = (esDemoLead ? redactarTextoDemo(b.nota) : String(b.nota || "")).trim().slice(0, 500);
+            if (esDemoLead && !nombreL && (String(b.email || "").trim() || String(b.whatsapp || "").trim())){
+              return json({ error: "En la demo pública no guardo correos ni teléfonos: los ve cualquiera que entre. Ponle un nombre y listo." }, 400);
+            }
             const seguirL = /^\d{4}-\d{2}-\d{2}$/.test(String(b.seguir_el || "")) ? String(b.seguir_el) : "";
             const etapaL = ETAPAS_LEAD.indexOf(String(b.etapa || "")) !== -1 ? String(b.etapa) : "nuevo";
             if (!nombreL && !emailL && !waL) return json({ error: "Pon al menos un nombre, correo o WhatsApp." }, 400);
@@ -10821,6 +10891,27 @@ export default {
           const body = await request.json().catch(() => null);
           if (!body || !Array.isArray(body.alumnos) || !Array.isArray(body.registro)){
             return json({ error: "Cuerpo inválido" }, 400);
+          }
+          /* ---- DEMO PÚBLICA: tope + saneo (11-ago-2026) ----
+             Va ANTES que todo lo demás porque es la única defensa que no depende de que el
+             panel se porte bien: /app/demo entrega sesión de dueño a un anónimo, así que
+             este endpoint es alcanzable con un curl. Ver el bloque DEMO_ALUM_CAP. */
+          if (t.email === DEMO_EMAIL){
+            if (body.alumnos.length > DEMO_ALUM_CAP){
+              return json({
+                error: "Esta es la demo pública de Batuta: entra cualquiera y ve lo que subas, "
+                     + "así que aquí caben " + DEMO_ALUM_CAP + " alumnos de ejemplo y sin datos de contacto. "
+                     + "Tu lista completa va en tu propia academia: créala gratis en 2 minutos y es solo tuya.",
+                demo_cap: DEMO_ALUM_CAP
+              }, 400);
+            }
+            body.alumnos.forEach(sanearAlumnoDemo);
+            if (body.registro.length > DEMO_REGISTRO_CAP) body.registro = body.registro.slice(0, DEMO_REGISTRO_CAP);
+            body.registro.forEach(r => {
+              if (!r || typeof r !== "object") return;
+              r.trabajo = redactarTextoDemo(r.trabajo);
+              r.tarea = redactarTextoDemo(r.tarea);
+            });
           }
           /* Permisos por profesor (28-jul-2026, Elevate). El panel ya esconde los botones que
              el profe no tiene, pero esconder no es impedir: aca se compara el snapshot que

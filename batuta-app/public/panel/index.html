@@ -214,6 +214,13 @@
   .hoycard .hc-b{align-self:flex-start;}
   .accrap{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 14px;}
   /* "qué es esta pantalla": la línea que corta la duda Agenda (futuro) vs Registro (pasado) */
+  /* Aviso de la demo pública (11-ago-2026): ámbar, no acento, porque advierte en vez de
+     informar. Mismo patrón de icono dibujado inline-block que .quees. */
+  #impAvisoDemo{border:1px solid var(--amber);border-radius:var(--r-sm,8px);background:rgba(217,154,60,.12);
+    padding:12px 14px;margin:0 0 16px;font-size:15px;line-height:1.5;color:var(--cream);}
+  #impAvisoDemo>svg{width:20px;height:20px;display:inline-block;vertical-align:-4px;margin-right:8px;
+    stroke:var(--amber);stroke-width:1.8;fill:none;stroke-linecap:round;stroke-linejoin:round;}
+  #impAvisoDemo a{color:var(--amber);}
   .quees{border-left:2px solid var(--accent);padding:9px 0 9px 12px;margin:0 0 16px;max-width:760px;}
   .quees a{color:var(--accent);}
   /* Regla de la casa: iconos DIBUJADOS, nunca emoji (11-ago-2026). Los avisos "qué es esta
@@ -1875,6 +1882,15 @@
   <div class="modal">
     <h3>Trae tu <em>lista</em> de alumnos</h3>
     <div class="mlab">De una sola vez, sin escribirlos uno por uno</div>
+    <!-- Demo pública (11-ago-2026): el aviso va ACÁ, pegado al importador, porque acá es
+         donde alguien sube el export real de su academia. Lo pinta demoAvisoImport(). -->
+    <div id="impAvisoDemo" style="display:none;">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 9v4"/><path d="M12 17h.01"/><path d="M10.3 3.9 2.4 17.5A2 2 0 0 0 4.1 20.5h15.8a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg>
+      <b>Estás en la demo pública: cualquiera que entre a batuta.lat/app/demo ve lo que subas aquí.</b>
+      No cargues la lista real de tus alumnos. Para probar, sube unos pocos con nombres inventados:
+      guardo hasta 25 y no guardo correos, teléfonos ni fechas de nacimiento.
+      <a href="/app/registro?f=demo-import">Crea tu academia gratis</a> y ahí sí entra tu lista completa, privada y solo tuya.
+    </div>
     <div id="impPaso1">
       <!-- 27-jul-2026: antes esto abría con "sube un .csv UTF-8" y escondía abajo lo fácil.
            Ahora manda COPIAR Y PEGAR, que es lo que cualquiera sabe hacer; el archivo queda
@@ -2199,6 +2215,13 @@ function filaClaseHTML(c){
     '<input type="number" class="cl-a" min="0" max="60" placeholder="aforo" title="Cuánta gente entra. Vacío = usa el cupo general." value="'+(c.a||"")+'" />'+
     '<input type="text" class="cl-v" maxlength="240" placeholder="Variantes, separadas por coma (opcional)" value="'+esc((c.v||[]).join(", "))+'" />'+
     '<button type="button" class="btn ghost sm cl-x" title="Quitar tipo de clase">×</button>'+
+    /* "Pendiente de configurar" (11-ago-2026): una clase sin aforo propio Y sin cupo general
+       acepta 1 persona sin que nadie lo haya elegido — la fuga silenciosa de esta mañana.
+       Se dice acá, en su fila, para que el dueño lo vea después sin tener que acordarse
+       (pasa sobre todo con las clases creadas de una desde el importador). */
+    ((c.n && !(c.a>0) && !cupoGeneralReservas())
+      ? '<p class="hint" style="grid-column:1/-1;margin:2px 0 0;color:var(--amber,#E8A13D);">Falta decir cuánta gente entra a <b>'+esc(c.n)+'</b>: hoy acepta <b>1 sola persona</b>. Ponle su aforo acá arriba, o uno general en Ajustes → Reservas.</p>'
+      : "")+
     /* Reglas de reserva propias de ESTA clase (28-jul-2026, pedido de Elevate). Van en un
        desplegable: quien no las use no ve nada, y quien las use las tiene por curso. */
     '<details class="cl-reg" style="grid-column:1/-1;margin:2px 0 8px;">'+
@@ -2286,6 +2309,13 @@ function filaPaqHTML(p){
         '<p class="hint" style="margin:6px 0 0;font-size:11px;">Para planes especiales de clientes puntuales. Se lo asignas tú desde el panel, o le pasas su link directo de compra: tu link de Pagos + <b>?p=NombreDelPlan</b>. El que ya lo tiene puede renovarlo normal.</p>'+
       '</div></div></details>'+
     '<button type="button" class="btn ghost sm pq-x" title="Quitar paquete">×</button>'+
+    /* "Pendiente de configurar" (11-ago-2026): un plan en S/0 no sale en la web ni se puede
+       cobrar. Ya se avisaba al GUARDAR (un confirm que se lee y se olvida); acá se ve en su
+       propia fila cada vez que entra a Ajustes. Es el estado en el que nace un plan creado
+       desde el importador, que trae el nombre y las clases pero nunca el precio. */
+    ((p.n && !(Number(db.precios[p.n])>0))
+      ? '<p class="hint" style="grid-column:1/-1;margin:2px 0 0;color:var(--amber,#E8A13D);">Falta ponerle precio a <b>'+esc(p.n)+'</b>: en S/0 no sale en tu web ni en el portal, y no te puedo cobrar por él.</p>'
+      : "")+
   '</div>';
 }
 var TOKEN_KEY = "batuta_t";
@@ -2345,7 +2375,14 @@ function apiPut(){
     .then(function(r){
       if(r.status===401){ irALogin(); throw {auth:true}; }
       if(r.status===402){ mostrarPaywall(); throw {paywall:true}; }
-      if(!r.ok) throw new Error("HTTP "+r.status);
+      /* 11-ago-2026: el motivo del rechazo se pierde si tiramos "HTTP 400" a secas. El server
+         manda explicaciones que el dueño necesita leer (p.ej. el tope de la demo pública), así
+         que el mensaje viaja en el Error y el caller decide cómo mostrarlo. */
+      if(!r.ok){
+        return r.json().catch(function(){ return {}; }).then(function(d){
+          var e=new Error((d&&d.error)||("HTTP "+r.status)); e.servidor=!!(d&&d.error); throw e;
+        });
+      }
       setSync("Guardado ✓","ok");
     })
     .catch(function(e){
@@ -2509,13 +2546,22 @@ function demoArm(){
     return a;
   }catch(e){ return "bar"; }
 }
+/* Enciende el aviso de la demo dentro del importador. Se llama desde pintarTrialBar, que es
+   lo único que corre SIEMPRE y sabe si el tenant es el demo (viene de /app/api/t/me). */
+function demoAvisoImport(on){
+  var a=el("impAvisoDemo"); if(a) a.style.display=on?"block":"none";
+}
 function pintarTrialBar(d){
   var bar=el("trialBar"); if(!bar) return;
   if(d && d.demo){
     // Modo demo: el puente de conversión (la demo no puede ser un callejón sin salida).
+    // 11-ago-2026: manda la ADVERTENCIA, después el CTA. La demo es un tenant compartido y
+    // público; quien no lo sabe sube la lista real de su academia (pasó, 1.465 personas).
     var f=(demoArm()==="tour")?"demo-tour":"demo-panel";
-    bar.innerHTML='Estás en la demo de Batuta · <a href="/app/registro?f='+f+'">Crea tu academia gratis en 2 minutos</a>';
+    bar.innerHTML='Demo pública: cualquiera que entre ve lo que subas. No cargues datos reales de tus alumnos.'
+      +' · <a href="/app/registro?f='+f+'">Crea tu academia gratis en 2 minutos</a>';
     bar.classList.add("show");
+    demoAvisoImport(true);
     var p1=el("btnPushOn"); if(p1) p1.style.display="none";
     var p2=el("btnPushTest"); if(p2) p2.style.display="none";
     return;
@@ -6971,7 +7017,9 @@ function impSaldo(txtRestantes, paquete){
   var pk=pkDe(paquete);
   if(pk.ilim) return {usadas:0,restantes:null,error:"",nota:"mensualidad ilimitada: no lleva saldo de clases"};
   if(!paquete) return {usadas:0,restantes:null,error:'dice que le quedan '+rest+' clases pero la fila no dice de qué paquete (agrega una columna "Paquete")'};
-  if(!pk.clases) return {usadas:0,restantes:null,error:'no reconozco el paquete "'+paquete+'" (créalo en Ajustes → Clases y paquetes, o corrige el nombre)'};
+  /* 11-ago-2026: antes lo mandaba a Ajustes a crearlo y a volver a subir el archivo. Ahora
+     el plan se crea (o se elige) en la misma pantalla, así que el mensaje apunta ahí. */
+  if(!pk.clases) return {usadas:0,restantes:null,error:'no reconozco el plan "'+paquete+'" — créalo o elige el tuyo acá abajo'};
   if(rest>pk.clases) return {usadas:0,restantes:rest,error:"le quedan "+rest+" clases pero "+paquete+" trae "+pk.clases};
   return {usadas:pk.clases-rest,restantes:rest,error:""};
 }
@@ -7068,6 +7116,78 @@ function impCurso(txt){
     else if(m.nivel>=2){ if(!pend.some(function(x){return x.crudo===p;})) pend.push({crudo:p,sug:m.nivel===2?m.sugerencia:""}); }
   });
   return {valor:ok.join(", "), pend:pend, crudo:partes.join(", ")};
+}
+/* ---------- CREAR la clase o el plan que no existe, sin salir del importador ----------
+   (11-ago-2026, pedido de Andrés). Antes el nivel 3 era un callejón sin salida: el dueño
+   tenía que irse a Ajustes, crearla a mano, volver y subir el archivo de nuevo. Ahora se
+   le ofrece crearla acá mismo. Reglas: UNA por vez y con clic explícito — si un archivo
+   trae 30 variantes raras, crearlas todas solas le ensucia la academia para siempre. */
+
+/* ¿Con cuánta gente nace una clase creada acá? NUNCA con el 1 por omisión: esa es la fuga
+   silenciosa que se cerró la mañana del 11-ago y no se reabre por esta puerta.
+   1º el cupo general de la academia (a:0 = lo hereda y lo sigue si él lo cambia).
+   2º si no hay general, el aforo que más se repite en sus otras clases, puesto explícito.
+   3º si nunca dijo cuánta gente entra, se lo decimos en la cara antes de crear nada. */
+function impAforoNuevaClase(){
+  var g=0; try{ g=cupoGeneralReservas(); }catch(e){ g=0; }
+  if(g) return {a:0, n:g, de:"general"};
+  var cnt={},mejor=0,nMejor=0;
+  try{ clasesTenant().forEach(function(c){ var k=parseInt(c.a,10)||0; if(k>0){ cnt[k]=(cnt[k]||0)+1; if(cnt[k]>nMejor){ nMejor=cnt[k]; mejor=k; } } }); }catch(e){}
+  if(mejor) return {a:mejor, n:mejor, de:"otras"};
+  return {a:0, n:0, de:"sin-definir"};
+}
+function impAforoTexto(){
+  var f=impAforoNuevaClase();
+  if(f.de==="general") return "Va a aceptar "+f.n+" persona"+(f.n===1?"":"s")+", como el resto de tus clases.";
+  if(f.de==="otras") return "Va a aceptar "+f.n+" persona"+(f.n===1?"":"s")+", como la mayoría de tus clases.";
+  return "Ojo: todavía no has dicho cuánta gente entra a tus clases, así que va a aceptar 1 sola. Se lo cambias en Ajustes → Clases y paquetes.";
+}
+/* Crea la clase en la academia y deja a sus alumnos con ella puesta. */
+function impCrearClase(nombre){
+  nombre=String(nombre||"").trim().slice(0,40);
+  if(!nombre) return;
+  var lista=[]; try{ lista=clasesTenant().slice(); }catch(e){ lista=[]; }
+  if(lista.some(function(c){ return impNorm(c.n)===impNorm(nombre); })){ reMapCurso(nombre,nombre); return; }
+  if(lista.length>=12){ toast("Ya tienes 12 clases, que es el máximo. Junta o borra alguna en Ajustes."); return; }
+  var af=impAforoNuevaClase();
+  lista.push({n:nombre, a:af.a, v:[], ah:-1, am:-1, ch:-1});
+  var cursos=lista.map(function(c){ return c.n; }).join(", ");
+  apiPost("/app/api/admin/config",{clases:JSON.stringify(lista), cursos:cursos})
+    .then(function(){
+      db.config=db.config||{}; db.config.clases=JSON.stringify(lista); db.config.cursos=cursos;
+      try{ aplicarMarcaCursos(); renderClases(); }catch(e){}
+      reMapCurso(nombre,nombre);                       // sus filas quedan con la clase puesta
+      toast('Clase "'+nombre+'" creada ✓');
+    })
+    .catch(function(){ toast("No se pudo crear la clase. Revisa tu conexión."); });
+}
+/* Crea el plan. El número de clases NO es opcional: un plan de 0 clases el servidor lo
+   descarta, y sin él no hay saldo que migrar (que es para lo que existe el importador).
+   El precio sí queda para después, y el panel lo reclama solo mientras esté en S/0. */
+function impCrearPlan(nombre,clases,ilim){
+  nombre=String(nombre||"").trim().slice(0,40);
+  if(!nombre) return;
+  var c=Math.max(0,Math.min(500,parseInt(clases,10)||0));
+  if(!ilim && c<1){ toast("Dime de cuántas clases es «"+nombre+"» y lo creo."); return; }
+  var lista=[]; try{ lista=paquetesTenant().slice(); }catch(e){ lista=[]; }
+  if(lista.some(function(p){ return impNorm(p.n)===impNorm(nombre); })){ reMapPaquete(nombre,nombre); return; }
+  if(lista.length>=12){ toast("Ya tienes 12 planes, que es el máximo."); return; }
+  lista.push({n:nombre, c:ilim?0:c, r:(!ilim&&c>=2)?Math.round(c/4)+1:0, u:!!ilim, t:[], d:0, i:"compra"});
+  apiPost("/app/api/admin/config",{paquetes:JSON.stringify(lista.map(function(p){ return {n:p.n,c:p.c,r:p.r,u:p.u,t:p.t||[],d:p.d||0,i:p.i||"compra"}; }))})
+    .then(function(){
+      db.config=db.config||{}; db.config.paquetes=JSON.stringify(lista);
+      if(db.precios && db.precios[nombre]===undefined) db.precios[nombre]=0;   // nace sin precio, y se dice
+      reMapPaquete(nombre,nombre);
+      toast('Plan "'+nombre+'" creado ✓ — ponle su precio en Ajustes');
+    })
+    .catch(function(){ toast("No se pudo crear el plan. Revisa tu conexión."); });
+}
+/* Si el nombre del pase trae un número ("8 Class Pack", "Paquete 12"), ese es casi seguro
+   cuántas clases son: se propone escrito para que el dueño lo confirme o lo corrija. */
+function impClasesDelNombre(txt){
+  var m=String(txt||"").match(/\d{1,3}/);
+  var n=m?parseInt(m[0],10):0;
+  return (n>=1&&n<=500)?n:"";
 }
 /* Quien es "la misma persona" al importar (11-ago-2026). Antes bastaba el nombre y eso hizo
    estragos con los exports que separan "First Name" de "Last Name": el nombre era el de pila
@@ -7545,7 +7665,7 @@ function impPreview(rows,dup,vacios,dupArchivo,sinCruce){
       var c={};
       malas.forEach(function(a){
         var e=String(a.error||"");
-        var k=/no reconozco el paquete/.test(e)?"paquete":
+        var k=/no reconozco el plan/.test(e)?"paquete":
               /fecha/.test(e)?"fecha":
               /reserva/i.test(e)?"reserva":"saldo";
         c[k]=(c[k]||0)+1;
@@ -7610,7 +7730,7 @@ function impPreview(rows,dup,vacios,dupArchivo,sinCruce){
   var trozos=[];
   if(nAuto) trozos.push('<b>'+nAuto+'</b> reconocida'+(nAuto!=1?'s':'')+' sola'+(nAuto!=1?'s':''));
   if(porConf.length) trozos.push('<b style="color:var(--amber,#E8A13D);">'+porConf.length+'</b> por confirmar');
-  if(sinRec.length) trozos.push('<b>'+sinRec.length+'</b> sin reconocer');
+  if(sinRec.length) trozos.push('<b>'+sinRec.length+'</b> sin reconocer <span class="mini">(puedes crearl'+(pend[sinRec[0]].tipo==="curso"&&sinRec.length===1?"a":"as")+' abajo)</span>');
   recBox.innerHTML=trozos.length?('<p class="hint" style="margin:0 0 10px;">Nombres de clases y planes de tu archivo: '+trozos.join(" · ")+".</p>"):"";
   recBox.style.display=trozos.length?"":"none";
   var opcs=function(tipo,sel){
@@ -7630,16 +7750,36 @@ function impPreview(rows,dup,vacios,dupArchivo,sinCruce){
         '<button type="button" class="btn sm"'+attr+' data-maphacia="'+esc(p.sug)+'">Sí, es '+esaese+'</button>'+
         '<select'+attr+' style="width:auto;min-width:190px;"><option value="">— es otr'+(esaese==="esa"?"a":"o")+' —</option>'+opcs(p.tipo,"")+'</select></div></div>';
     }
-    return '<div style="display:flex;gap:8px;align-items:center;margin-top:10px;padding-top:10px;border-top:1px solid var(--line,#e6e6e6);flex-wrap:wrap;">'+
-      '<span style="font-size:14px;">«'+esc(p.crudo)+'» <span class="mini">('+cuantos+')</span> no se parece a ninguna tuya →</span>'+
-      '<select'+attr+' style="width:auto;min-width:190px;"><option value="">— elige tu '+quees+' —</option>'+opcs(p.tipo,"")+'</select></div>';
+    /* Sin parecido a nada: en vez del callejón sin salida ("no la reconozco, arréglatelas"),
+       se le ofrece CREARLA acá mismo (11-ago-2026, pedido de Andrés). El conteo de alumnos
+       va al lado a propósito: crear una clase que usan 12 personas no es lo mismo que una
+       que usa 1, que casi siempre es un error de tipeo del sistema viejo. */
+    var esClase=p.tipo==="curso";
+    var laEl=esClase?"la":"el", unaUn=esClase?"una":"uno", tuya=esClase?"tuya":"tuyo";
+    var cab='<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--line,#e6e6e6);">'+
+      '<div style="font-size:14px;"><b>«'+esc(p.crudo)+'»</b> no está en tus '+(esClase?"clases":"planes")+
+      '. <span class="mini">Lo traen '+cuantos+'.</span></div>';
+    var elegir='<select'+attr+' style="width:auto;min-width:170px;"><option value="">— o elige '+unaUn+' '+tuya+' —</option>'+opcs(p.tipo,"")+'</select>';
+    var crear='<button type="button" class="btn sm" data-creartipo="'+p.tipo+'" data-crear="'+esc(p.crudo)+'">Sí, crear "'+esc(p.crudo)+'"</button>';
+    if(esClase){
+      return cab+'<div style="display:flex;gap:8px;align-items:center;margin-top:6px;flex-wrap:wrap;">'+crear+elegir+'</div>'+
+        '<p class="hint" style="margin:4px 0 0;">'+esc(impAforoTexto())+' Si prefieres, déjalo así y esos alumnos entran sin clase.</p></div>';
+    }
+    /* El plan necesita UN dato para existir: de cuántas clases es (el servidor descarta un
+       plan de 0 clases). Se propone el número que trae su propio nombre y el dueño lo corrige. */
+    var sugC=impClasesDelNombre(p.crudo);
+    return cab+'<div style="display:flex;gap:8px;align-items:center;margin-top:6px;flex-wrap:wrap;">'+
+      '<label style="font-size:13px;display:flex;gap:6px;align-items:center;">¿De cuántas clases es?'+
+      '<input type="number" class="imp-cr-c" min="0" max="500" style="width:80px;" value="'+esc(String(sugC))+'" data-crear="'+esc(p.crudo)+'" /></label>'+
+      crear+elegir+'</div>'+
+      '<p class="hint" style="margin:4px 0 0;">Si es una mensualidad sin límite de clases, escribe <b>0</b>. <b>El precio se lo pones después</b>, en Ajustes → Clases y paquetes: mientras esté en S/0 no sale en tu web ni te puedo cobrar por él. Si prefieres, déjalo así y esos alumnos entran sin plan.</p></div>';
   };
   var mapBox=el("impMapPaq");
   if(!mapBox){ mapBox=document.createElement("div"); mapBox.id="impMapPaq"; box.parentNode.insertBefore(mapBox, box); }
   if(pendK.length){
     mapBox.style.display="";
     mapBox.innerHTML='<div style="border:1px solid var(--amber,#E8A13D);border-radius:8px;padding:10px 12px;margin:0 0 10px;">'+
-      '<b style="color:var(--amber,#E8A13D);">Tu sistema anterior llama distinto a '+pendK.length+' nombre'+(pendK.length===1?'':'s')+'. Dime cuál es cuál:</b>'+
+      '<b style="color:var(--amber,#E8A13D);">Hay '+pendK.length+' nombre'+(pendK.length===1?'':'s')+' de tu archivo que no '+(pendK.length===1?'calza':'calzan')+' con los tuyos. Dime qué hago con '+(pendK.length===1?'él':'cada uno')+':</b>'+
       porConf.map(fila).join("")+sinRec.map(fila).join("")+
       '<p class="hint" style="margin:10px 0 0;">Nada de esto se aplica solo: <b>hasta que no toques nada, no se les pone</b>. Al elegir, todas sus filas se corrigen de una. <b>No es obligatorio</b>: si lo dejas así, esos alumnos entran igual y el nombre original queda guardado en sus Notas para que se lo pongas después.</p></div>';
   } else { mapBox.style.display="none"; mapBox.innerHTML=""; }
@@ -7703,6 +7843,20 @@ document.addEventListener("click",function(e){
   e.preventDefault();
   impAplicaMapeo(b.getAttribute("data-maptipo")||"paquete", b.getAttribute("data-mapdesde"), b.getAttribute("data-maphacia"));
 });
+/* "Sí, crear X": crea la clase o el plan que no existía, de a UNO y con clic explícito. */
+document.addEventListener("click",function(e){
+  var b=(e.target&&e.target.closest)?e.target.closest("button[data-crear]"):null;
+  if(!b) return;
+  e.preventDefault();
+  var nom=b.getAttribute("data-crear");
+  b.disabled=true;   // sin doble clic: crearía el mismo nombre dos veces
+  setTimeout(function(){ if(b) b.disabled=false; },1500);
+  if(b.getAttribute("data-creartipo")==="curso"){ impCrearClase(nom); return; }
+  var inp=document.querySelector('.imp-cr-c[data-crear="'+(window.CSS&&CSS.escape?CSS.escape(nom):nom.replace(/"/g,'\\"'))+'"]');
+  var n=inp?parseInt(inp.value,10):NaN;
+  if(!isFinite(n)||n<0){ toast("Dime de cuántas clases es «"+nom+"» y lo creo."); if(inp) inp.focus(); return; }
+  impCrearPlan(nom, n, n===0);   // 0 = mensualidad sin límite de clases
+});
 el("btnImpConfirmar").addEventListener("click",function(){
   if(!IMP_ROWS.length){ closeOv("ovImport"); return; }
   /* cinturón: el botón ya está deshabilitado si hay filas malas, pero no se importa
@@ -7765,7 +7919,15 @@ el("btnImpConfirmar").addEventListener("click",function(){
       alert("Estas reservas no se pudieron migrar:\n\n"+rr.saltadas.slice(0,15).map(function(s){return "· "+(s.alumno||"?")+" — "+(s.iso?new Date(s.iso).toLocaleString("es-PE",{timeZone:"America/Lima"})+" — ":"")+(s.motivo||"");}).join("\n")+(rr.saltadas.length>15?"\n… y "+(rr.saltadas.length-15)+" más":"")+"\n\nRevisa que el horario exista en tu Agenda y tenga cupo, y agéndalas a mano.");
     }
   })
-    .catch(function(){ toast("No se pudo importar. Revisa tu conexión e intenta de nuevo."); btn.disabled=false; })
+    .catch(function(e){
+      /* Si el rechazo lo explicó el servidor (p.ej. el tope de la demo pública), se muestra ESO
+         y no un "revisa tu conexión" que miente. Y se recarga desde el server: el importador ya
+         había metido las filas en db.alumnos en memoria, y si no se guardaron no pueden quedar
+         ahí colgadas — mucho menos en la demo, que es justo lo que no debe conservarlas. */
+      if(e && e.servidor && e.message){ alert(e.message); recargar().catch(function(){}); }
+      else { toast("No se pudo importar. Revisa tu conexión e intenta de nuevo."); }
+      btn.disabled=false;
+    })
     .finally(function(){ IMP_ROWS=[]; });
 });
 
