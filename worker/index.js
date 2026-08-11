@@ -1391,7 +1391,11 @@ const NOMBRES_PAQUETE = { "Paquete 4": "Plan Esencial", "Paquete 8": "Plan Inten
    no hay sorteo vigente y el endpoint deja de listar). El ganador queda guardado en config.
    ═══════════════════════════════════════════════════════════════════════════ */
 const SORTEO = {
-  activo: true,
+  /* APAGADO el 11-ago-2026 por orden de Andrés: cerró el 5-ago y ya tiene ganadora (Yaritza,
+     premio entregado como 4 clases de bono). Con esto se bajan los banners de /pagar y del portal,
+     y deja de publicarse la lista de boletos POR PERSONA, de la que se deducía cuánto pagó cada
+     alumno (los boletos son 1:1 con el paquete). El ganador queda guardado en `config`. */
+  activo: false,
   id: "cumple-2026",
   titulo: "Sorteo de cumpleaños",
   premio: "1 mes de clases gratis de Canto + Composición",
