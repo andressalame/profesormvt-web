@@ -10997,6 +10997,18 @@ export default {
               }
               const vImp = String(a.vence || "").trim();
               if (/^\d{4}-\d{2}-\d{2}$/.test(vImp) && !isNaN(Date.parse(vImp + "T00:00:00Z"))) venceAl = vImp;
+            } else if (a.migrado_set === true && !migUsadas){
+              /* 11-ago-2026: el importador COMPLETANDO a un alumno que ya existe (el export de
+                 clientes de Punchpass no trae el plan; viene en un 2do archivo). Solo se acepta
+                 con la marca explicita que pone el importador Y si el alumno no traia saldo, asi
+                 un guardado normal del panel sigue sin poder tocar el arrastre. */
+              const mu2 = Math.floor(Number(a.migrado_usadas));
+              if (Number.isFinite(mu2) && mu2 > 0){
+                migUsadas = Math.min(mu2, 9999);
+                migCiclo = cicloAl;
+              }
+              const vImp2 = String(a.vence || "").trim();
+              if (!venceAl && /^\d{4}-\d{2}-\d{2}$/.test(vImp2) && !isNaN(Date.parse(vImp2 + "T00:00:00Z"))) venceAl = vImp2;
             }
             /* sede (multisede): undefined = preservar la previa (JS viejo en cache); con valor,
                validar contra las sedes del tenant (invalida = sin sede) */

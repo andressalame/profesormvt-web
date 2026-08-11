@@ -1886,7 +1886,8 @@
       <div style="margin-top:8px;"><button class="btn" id="btnImpPegar">Ver cómo quedaría</button></div>
       <div style="text-align:center;color:var(--muted);font-size:12px;margin:18px 0 12px;">— o, si ya tienes el archivo —</div>
       <div class="field"><label>Subir un archivo .csv (o arrástralo aquí)</label><input id="impFile" type="file" accept=".csv,text/csv" />
-        <p class="hint" style="margin:5px 0 0;"><b>Sube (o pega) el export de tu sistema anterior TAL CUAL</b> — Batuta reconoce las columnas por su nombre, también en inglés (Punchpass, Excel, Sheets, con comas, punto y coma o tabs). La única obligatoria es <b>Nombre</b>; también entiende Apellido, Correo, WhatsApp, Nacimiento, Curso, Paquete, <b>Clases restantes</b>, <b>Vence</b> y <b>Reservas</b> (los horarios que ya tenía agendados, ej. <code>20/08/2026 19:00; 27/08/2026 19:00</code>). Lo que no reconozca, simplemente lo ignora, y antes de importar te muestra TODO en una previsualización. La plantilla de abajo es solo por si prefieres armarlo tú.</p></div>
+        <p class="hint" style="margin:5px 0 0;"><b>Sube (o pega) el export de tu sistema anterior TAL CUAL</b> — Batuta reconoce las columnas por su nombre, también en inglés (Punchpass, Excel, Sheets, con comas, punto y coma o tabs). La única obligatoria es <b>Nombre</b>; también entiende Apellido, Correo, WhatsApp, Nacimiento, Curso, Paquete, <b>Clases restantes</b>, <b>Vence</b> y <b>Reservas</b> (los horarios que ya tenía agendados, ej. <code>20/08/2026 19:00; 27/08/2026 19:00</code>). Lo que no reconozca, simplemente lo ignora, y antes de importar te muestra TODO en una previsualización. La plantilla de abajo es solo por si prefieres armarlo tú.</p>
+        <p class="hint" style="margin:8px 0 0;"><b>¿Los planes vienen en otro archivo?</b> Pasa mucho: el export de clientes trae los datos de contacto y el de pases trae el plan de cada uno. Sube el segundo archivo aquí mismo (con su nombre, apellido y su plan) y a cada alumno que ya esté en tu lista <b>se le completa lo que le falte</b>. Nunca se pisa un dato que ya tengas, y nadie se duplica.</p></div>
       <div style="margin:0 0 4px;"><button class="btn ghost sm" id="btnPlantillaCsv">&#8595; Descargar una plantilla de ejemplo</button></div>
       <div id="impErr" style="display:none;color:var(--amber,#E8A13D);margin-top:10px;font-size:13px;"></div>
     </div>
@@ -6900,7 +6901,7 @@ function downloadBlob(blob,name){
 }
 
 /* ---------- Importar alumnos por CSV (client-side; reusa el guardado admin/data) ---------- */
-var IMP_ROWS=[],IMP_DUP=0,IMP_VACIOS=0,IMP_DUPARCH=0,IMP_COLS_EXTRA=[];
+var IMP_ROWS=[],IMP_DUP=0,IMP_VACIOS=0,IMP_DUPARCH=0,IMP_COMPLETADOS=0,IMP_COLS_EXTRA=[];
 el("btnImportCsv").addEventListener("click",function(){
   IMP_ROWS=[]; el("impFile").value="";
   el("impPaso1").style.display=""; el("impPaso2").style.display="none";
@@ -7005,7 +7006,10 @@ var IMP_ALIAS={ nombre:["nombre","alumno","alumna","name","nombre completo","nom
   nacimiento:["nacimiento","fecha de nacimiento","cumpleanos","cumple","birthday","fecha nac","nac","birth date","date of birth","dob"],
   curso:["curso","cursos","materia","materias","clase","instrumento","asignatura"],
   whatsapp:["whatsapp","wsp","celular","telefono","movil","phone","numero","contacto","phone number","mobile","mobile phone","cell phone"],
-  paquete:["paquete","plan","package","clases","membresia","pase","pass","pass name","pass type","membership","current pass"],
+  /* 11-ago-2026: el export de Punchpass de Elevate llama al pase de otras formas. Se agregan
+     todas las que usa su reporte de pases ("Active Pass", "Passes", "Pass Type"...), porque
+     una cabecera no reconocida = el alumno entra sin plan y el dueño cree que se perdio. */
+  paquete:["paquete","plan","package","clases","membresia","pase","pass","pass name","pass type","membership","current pass","active pass","active passes","passes","pase activo","plan activo","membership name","membership type","pass purchased","product","producto"],
   restantes:["clases restantes","restantes","clases que le quedan","le quedan","saldo","saldo de clases","clases pendientes","pendientes","credits","clases disponibles","disponibles","remaining","classes remaining","remaining classes","credits remaining","visits remaining","punches remaining","classes left"],
   vence:["vence","vencimiento","fecha de vencimiento","valido hasta","vigencia","expira","expiracion","expires","expires on","expiration","expiration date","expiry","expiry date","valid until"],
   reservas:["reservas","clases reservadas","horarios reservados","reservado","reservados","proximas clases","bookings","registrations","schedule","upcoming registrations","upcoming classes","upcoming bookings"],
@@ -7072,7 +7076,7 @@ function impProcesarFilas(rows){
       var extrasIx=[];
       if(cab){ cab.forEach(function(h,ix){ if(!usadosIx[ix] && String(h).trim()) extrasIx.push(ix); }); }
       IMP_COLS_EXTRA=cab?extrasIx.map(function(ix){ return String(cab[ix]).trim(); }):[];
-      var existe={}; (db.alumnos||[]).forEach(function(a){ existe[impClave(a.nombre,a.apellido,a.email)]=true; });
+      var existe={}; (db.alumnos||[]).forEach(function(a){ existe[impClave(a.nombre,a.apellido,a.email)]=a; });
       var out=[],dup=0,dupArchivo=0,vacios=0,vistos={};
       for(var i=start;i<rows.length;i++){ var r=rows[i];
         /* el nombre se normaliza de espacios: Excel mete saltos de linea dentro de la celda */
@@ -7086,7 +7090,7 @@ function impProcesarFilas(rows){
            demas se descartaron en silencio como "ya estaban". Ahora la clave es nombre+apellido
            +correo, que es lo que de verdad identifica a una persona. */
         var key=impClave(nombre,apeFila,mailFila);
-        if(existe[key]){ dup++; continue; }
+        var yaEsta=existe[key];
         if(vistos[key]){ dupArchivo++; continue; }
         vistos[key]=true;
         var profTxt=map.profesor!=null?String(r[map.profesor]||"").trim():"";
@@ -7104,6 +7108,13 @@ function impProcesarFilas(rows){
            las reservas que el alumno ya tenía agendadas en el sistema anterior. */
         var nTxt=map.nacimiento!=null?String(r[map.nacimiento]||"").trim():"";
         var nIso=impFecha(nTxt,1900);   // nacimiento: desde 1900, no desde 2000
+        /* Cumpleaños SIN año (11-ago-2026): Punchpass guarda "año 0001" cuando la persona
+           solo puso día y mes. No es una fecha rota: es un dato incompleto en el origen. Se
+           anota legible y NO se cuenta como "no pude leerlo", que asustaba de gratis. */
+        var cumpleSinAnio=/^0{3}[01]-(\d{1,2})-(\d{1,2})$/.test(nTxt)?(function(){
+          var p=nTxt.split("-"), M=["","enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"];
+          return parseInt(p[2],10)+" de "+(M[parseInt(p[1],10)]||"");
+        })():"";
         var rsv=map.reservas!=null?impReservas(r[map.reservas]):{isos:[],error:""};
         var mailOk=!mailFila||/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(mailFila);
         /* ---- Regla del 11-ago-2026 (migracion de Elevate, 1400 alumnos de Punchpass) ----
@@ -7114,12 +7125,38 @@ function impProcesarFilas(rows){
         var pkChk=pkDe(paqFila);
         var paqDesc=!!paqFila && !pkChk.ilim && !(pkChk.clases>0);
         var avisos=[];
-        if(nIso==="") avisos.push('no entendí la fecha de nacimiento "'+nTxt+'"');
+        if(nIso==="" && !cumpleSinAnio) avisos.push('no entendí la fecha de nacimiento "'+nTxt+'"');
         if(vIso==="") avisos.push('no entendí el vencimiento "'+vTxt+'"');
         if(rsv.error) avisos.push(rsv.error);
         if(!mailOk) avisos.push('"'+mailFila+'" no parece un correo');
         if(paqDesc) avisos.push('no reconozco el paquete "'+paqFila+'"');
         var errFila=sal.error;
+        /* ---- COMPLETAR a los que ya están (11-ago-2026, Elevate) ----
+           El export de clientes de Punchpass no trae el plan: viene en OTRO reporte. Antes, ese
+           segundo archivo se descartaba entero ("ya estaban") y no había forma de traer los
+           planes sin borrar todo y empezar de nuevo. Ahora, si la fila es de alguien que ya
+           existe y trae algo que su ficha NO tiene, se le completa. Regla dura: solo se rellena
+           lo que está VACÍO; jamás se pisa un dato que ya estaba. */
+        if(yaEsta){
+          var faltantes=[];
+          if(paqFila && !yaEsta.paquete) faltantes.push("plan");
+          var cursoNuevo=map.curso!=null?String(r[map.curso]||"").trim():"";
+          if(cursoNuevo && !yaEsta.curso) faltantes.push("curso");
+          if(mailOk && mailFila && !yaEsta.email) faltantes.push("correo");
+          var waNuevo=(map.whatsapp!=null?String(r[map.whatsapp]||"").trim():"").replace(/[^\d+]/g,"");
+          if(waNuevo && !yaEsta.whatsapp) faltantes.push("WhatsApp");
+          if(nIso && !yaEsta.nacimiento) faltantes.push("nacimiento");
+          if(apeFila && !yaEsta.apellido) faltantes.push("apellido");
+          if(!faltantes.length){ dup++; continue; }
+          out.push({ completaA:yaEsta.id, completaQue:faltantes,
+            nombre:nombre, apellido:apeFila, email:mailOk?mailFila:"", nacimiento:nIso||"",
+            curso:cursoNuevo, whatsapp:waNuevo, paquete:paqFila,
+            restantes:sal.restantes, migrado_usadas:sal.usadas, saldoNota:sal.nota||"",
+            vence:vIso||"", venceTxt:vTxt, reservas:rsv.isos,
+            error:errFila, errOtros:"", avisos:avisos, paqDesc:paqDesc,
+            profTxt:profTxt, profesor_id:impResolveProfe(profTxt) });
+          continue;
+        }
         out.push({ nombre:nombre,
           apellido:apeFila,
           email:mailOk?mailFila:"",
@@ -7134,7 +7171,8 @@ function impProcesarFilas(rows){
             var ex=extrasIx.map(function(ix){ var v=String(r[ix]==null?"":r[ix]).trim(); return v?(String(cab[ix]).trim()+": "+v):""; }).filter(Boolean).join(" · ");
             /* todo lo que no se pudo leer viaja CRUDO a las Notas: el dato no se pierde */
             var sueltos=[];
-            if(nIso==="" && nTxt) sueltos.push("Fecha de nacimiento del sistema anterior: "+nTxt);
+            if(cumpleSinAnio) sueltos.push("Cumpleaños (sin año): "+cumpleSinAnio);
+            else if(nIso==="" && nTxt) sueltos.push("Fecha de nacimiento del sistema anterior: "+nTxt);
             if(vIso==="" && vTxt) sueltos.push("Vencimiento del sistema anterior: "+vTxt);
             if(rsv.crudo) sueltos.push("Reservas que no pude leer: "+rsv.crudo);
             if(!mailOk) sueltos.push("Correo del sistema anterior: "+mailFila);
@@ -7289,11 +7327,15 @@ function impPreview(rows,dup,vacios,dupArchivo){
     else if(a.restantes!=null){ saldo='<span class="big">'+a.restantes+'</span> <span class="mini">/ '+pk.clases+'</span>'+(a.vence?'<br><span class="mini">vence '+esc(fechaBonita(a.vence))+'</span>':''); }
     else { saldo='<span class="big">'+(pk.clases||0)+'</span> <span class="mini">/ '+(pk.clases||0)+' (completo)</span>'+(a.vence?'<br><span class="mini">vence '+esc(fechaBonita(a.vence))+'</span>':''); }
     var nomCel=esc(a.nombre)+(a.apellido?(" "+esc(a.apellido)):"")+
+      (a.completaA?('<br><span class="mini" style="color:var(--accent);">ya está en tu lista: se le completa '+esc((a.completaQue||[]).join(", "))+'</span>'):"")+
       ((a.avisos&&a.avisos.length)?('<br><span class="mini" style="color:var(--amber,#d99a3c);">'+esc(a.avisos[0])+(a.avisos.length>1?(" (+"+(a.avisos.length-1)+")"):"")+'</span>'):"");
     return "<tr"+(a.error?' style="background:rgba(217,83,79,.08);"':'')+"><td>"+nomCel+"</td><td>"+esc(a.curso||"—")+"</td><td>"+esc(a.whatsapp)+"</td><td>"+esc(a.paquete||"—")+"</td><td>"+saldo+"</td><td>"+pf+"</td></tr>";
   }).join("");
+  var completar=rows.filter(function(a){ return a.completaA; });
+  var nuevos=rows.length-completar.length;
   var extra=[];
-  if(dup)extra.push(dup+" ya estaban en tu lista (omitidos)");
+  if(completar.length)extra.push(completar.length+" ya estaban y se les COMPLETA lo que les falta");
+  if(dup)extra.push(dup+" ya estaban completos (omitidos)");
   if(IMP_DUPARCH)extra.push(IMP_DUPARCH+" repetidos dentro del archivo (omitidos)");
   if(vacios)extra.push(vacios+" sin nombre (omitidos)");
   var conSaldo=rows.filter(function(a){ return !a.error && a.restantes!=null; }).length;
@@ -7302,7 +7344,7 @@ function impPreview(rows,dup,vacios,dupArchivo){
   if(conRes) extra.push(conRes+" con reservas ya agendadas que se migran");
   var conMail=rows.filter(function(a){ return !a.error && a.email; }).length;
   if(conMail) extra.push(conMail+" con correo");
-  el("impResumen").innerHTML="<b>"+rows.length+" alumno"+(rows.length!=1?"s":"")+"</b> list"+(rows.length!=1?"os":"o")+" para importar"+(extra.length?(" · "+extra.join(" · ")):"")+(rows.length>50?" · se muestran los primeros 50":"")+"."+
+  el("impResumen").innerHTML="<b>"+nuevos+" alumno"+(nuevos!=1?"s":"")+" nuevo"+(nuevos!=1?"s":"")+"</b>"+(extra.length?(" · "+extra.join(" · ")):"")+(rows.length>50?" · se muestran los primeros 50":"")+"."+
     /* transparencia total (7-ago-2026): nada se bota en silencio */
     ((IMP_COLS_EXTRA&&IMP_COLS_EXTRA.length)?('<br><span class="mini">Columnas que no reconocí — <b>no se pierden</b>: van completas a las Notas de cada alumno, con su título: <b>'+IMP_COLS_EXTRA.map(esc).join(", ")+'</b></span>'):"");
   var multi=(ROL||"dueno")==="dueno" && (EQUIPO||[]).filter(function(p){return p.estado!=="suspendido";}).length>1;
@@ -7381,7 +7423,9 @@ function impPreview(rows,dup,vacios,dupArchivo){
   var btn=el("btnImpConfirmar"); btn.style.display="";
   btn.disabled=malas.length>0;
   btn.textContent=malas.length?("Corrige "+malas.length+" fila"+(malas.length!=1?"s":"")+" para importar")
-                              :("Importar "+rows.length+" alumno"+(rows.length!=1?"s":""));
+    :(completar.length&&!nuevos)?("Completar "+completar.length+" alumno"+(completar.length!=1?"s":""))
+    :(completar.length)?("Importar "+nuevos+" y completar "+completar.length)
+    :("Importar "+nuevos+" alumno"+(nuevos!=1?"s":""));
 }
 /* Re-mapea un pase desconocido a un plan real de Batuta y repinta la previsualización. */
 function reMapPaquete(desde,hacia){
@@ -7413,6 +7457,23 @@ el("btnImpConfirmar").addEventListener("click",function(){
   var hoy=new Date().toISOString().slice(0,10);
   var resPend=[];   // reservas migradas (7-ago-2026): se crean DESPUÉS de guardar los alumnos
   IMP_ROWS.forEach(function(a){
+    /* fila que COMPLETA a un alumno que ya existe: solo rellena lo vacío, nunca pisa */
+    if(a.completaA){
+      var ex=(db.alumnos||[]).find(function(x){ return x.id===a.completaA; });
+      if(!ex) return;
+      if(a.paquete && !ex.paquete){ ex.paquete=a.paquete;
+        /* el saldo que traiga el archivo solo se aplica junto con el plan que lo da sentido */
+        if((Number(a.migrado_usadas)||0)>0){ ex.migrado_usadas=Number(a.migrado_usadas)||0; ex.migrado_ciclo=Number(ex.ciclo)||1; ex.migrado_set=true; }
+        if(a.vence) ex.vence=a.vence;
+      }
+      if(a.curso && !ex.curso) ex.curso=a.curso;
+      if(a.email && !ex.email) ex.email=a.email;
+      if(a.whatsapp && !ex.whatsapp) ex.whatsapp=a.whatsapp;
+      if(a.nacimiento && !ex.nacimiento) ex.nacimiento=a.nacimiento;
+      if(a.apellido && !ex.apellido) ex.apellido=a.apellido;
+      if(a.reservas && a.reservas.length) resPend.push({alumno_id:ex.id, isos:a.reservas});
+      return;
+    }
     var idNuevo=uid();
     db.alumnos.push({ id:idNuevo, codigo:uid().slice(-6).toUpperCase(), ciclo:1,
       nombre:a.nombre, apellido:a.apellido||"", email:a.email||"", nacimiento:a.nacimiento||"",
@@ -7427,6 +7488,7 @@ el("btnImpConfirmar").addEventListener("click",function(){
     if(a.reservas && a.reservas.length) resPend.push({alumno_id:idNuevo, isos:a.reservas});
   });
   var n=IMP_ROWS.length,btn=el("btnImpConfirmar"); btn.disabled=true;
+  IMP_COMPLETADOS=IMP_ROWS.filter(function(a){ return a.completaA; }).length;
   apiPut().then(function(){
     if(!resPend.length) return null;
     return apiPost("/app/api/admin/importar-reservas",{filas:resPend}).catch(function(){ return {creadas:0,saltadas:[{motivo:"error de conexión"}]}; });
@@ -7434,7 +7496,9 @@ el("btnImpConfirmar").addEventListener("click",function(){
     renderAll(); closeOv("ovImport");
     /* la cuenta clara (11-ago-2026): cuántos entraron y cuántos NO, con el motivo. Antes el
        aviso solo cantaba los que entraron y el dueño no tenía cómo saber que faltaba gente. */
-    var msg=n+" de "+(n+IMP_DUP+IMP_DUPARCH+IMP_VACIOS)+" alumno"+((n+IMP_DUP+IMP_DUPARCH+IMP_VACIOS)!=1?"s":"")+" importado"+(n!=1?"s":"")+" ✓";
+    var nComp=IMP_COMPLETADOS, nNuevos=n-nComp;
+    var msg=(nNuevos?(nNuevos+" alumno"+(nNuevos!=1?"s":"")+" importado"+(nNuevos!=1?"s":"")):"")+
+      (nComp?((nNuevos?" · ":"")+nComp+" completado"+(nComp!=1?"s":"")):"")+" ✓";
     var om=[];
     if(IMP_DUP) om.push(IMP_DUP+" ya estaban");
     if(IMP_DUPARCH) om.push(IMP_DUPARCH+" repetidos en el archivo");
