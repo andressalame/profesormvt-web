@@ -216,6 +216,17 @@
   /* "qué es esta pantalla": la línea que corta la duda Agenda (futuro) vs Registro (pasado) */
   .quees{border-left:2px solid var(--accent);padding:9px 0 9px 12px;margin:0 0 16px;max-width:760px;}
   .quees a{color:var(--accent);}
+  /* Regla de la casa: iconos DIBUJADOS, nunca emoji (11-ago-2026). Los avisos "qué es esta
+     pantalla" abren con un SVG del mismo set que la barra lateral. inline-block (no flex)
+     a propósito: así el texto sigue fluyendo y envolviendo igual que envolvía con el emoji. */
+  .quees>svg{width:16px;height:16px;display:inline-block;vertical-align:-3px;margin-right:7px;
+             color:var(--accent);stroke:currentColor;stroke-width:1.8;fill:none;
+             stroke-linecap:round;stroke-linejoin:round;}
+  /* icono que encabeza una linea de texto o un boton */
+  .ico-tx{width:15px;height:15px;display:inline-block;vertical-align:-2.5px;margin-right:6px;
+          stroke:currentColor;stroke-width:1.8;fill:none;stroke-linecap:round;stroke-linejoin:round;}
+  .ico-mini{width:13px;height:13px;display:inline-block;vertical-align:-2px;
+            stroke:currentColor;stroke-width:1.9;fill:none;stroke-linecap:round;stroke-linejoin:round;}
 
   /* ---------- AJUSTES en sub-pestañas (27-jul-2026) ----------
      .ajhide gana sobre el display inline que otros scripts ponen en grpStripe/grpCulqi/grpWaSug:
@@ -860,14 +871,14 @@
        servicios) vive tras esta puerta, en lenguaje de resultado. Lo pinta
        renderAcademia() para respetar rol y módulos apagados en cada entrada. -->
   <section class="panel" id="panel-academia">
-    <p class="hint quees">🏛️ <b>Todo lo que configura tu academia, en un solo lugar.</b> Lo del día a día (alumnos, clases, cobros) vive en el menú de la izquierda; aquí está el resto.</p>
+    <p class="hint quees"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 21h18"/><path d="M5 21V7l7-4 7 4v14"/><path d="M9 21v-6h6v6"/></svg><b>Todo lo que configura tu academia, en un solo lugar.</b> Lo del día a día (alumnos, clases, cobros) vive en el menú de la izquierda; aquí está el resto.</p>
     <div class="acadgrid" id="acadGrid"></div>
     <p class="hint" style="margin-top:18px;">¿Algo no funciona o se te ocurrió una mejora? <a href="#" data-ira="feedback">Cuéntamelo aquí</a> (el primer aporte del mes te regala +7 días).</p>
   </section>
 
   <section class="panel" id="panel-alumnos">
     <div style="margin-bottom:10px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;"><button class="btn" id="btnNuevoAlumno">+ Nuevo alumno</button><button class="btn ghost" id="btnImportCsv" title="Trae toda tu lista de alumnos de golpe desde tu Excel o Google Sheets">&#8681; Traer mi lista de Excel</button><select id="alFiltroSede" title="Filtrar por sede" style="display:none;width:auto;"></select><button class="btn ghost sm" type="button" onclick="lanzarTourModulo('alumnos')">? Cómo funciona</button></div>
-    <p class="hint quees">👤 <b>Tu lista de alumnos y cómo va cada uno.</b> "Le quedan" son las clases que le sobran de su paquete; el <b>Estado</b> te avisa a quién le toca renovar. ¿Te equivocaste al anotar una clase? Se arregla en <b><a href="#" data-ira="registro">Asistencia</a></b> y el saldo se recalcula solo.</p>
+    <p class="hint quees"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg><b>Tu lista de alumnos y cómo va cada uno.</b> "Le quedan" son las clases que le sobran de su paquete; el <b>Estado</b> te avisa a quién le toca renovar. ¿Te equivocaste al anotar una clase? Se arregla en <b><a href="#" data-ira="registro">Asistencia</a></b> y el saldo se recalcula solo.</p>
     <!-- Aviso causal: alumnos importados que todavía no saben que tienen portal. Un solo
          botón primario; el detalle vive dentro. Se esconde solo cuando no falta nadie. -->
     <div id="invBanner" style="display:none;"></div>
@@ -898,7 +909,7 @@
 
   <section class="panel" id="panel-grupos">
     <div style="margin-bottom:10px;"><button class="btn" id="btnNuevoGrupo">+ Nuevo grupo</button></div>
-    <p class="hint quees">👥 <b>Un grupo es un atajo para pasar asistencia.</b> Le pones nombre, alumnos y horario, y con "Registrar clase" los marcas a todos de un clic (cada uno consume 1 clase de su propio paquete). Para que varios reserven el MISMO horario desde el portal no necesitas grupos: eso es el <b>aforo</b> de la hora, en <b><a href="#" data-ira="agenda">Mis clases</a></b>.</p>
+    <p class="hint quees"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="7.6" r="3.2"/><path d="M6.4 19.6a5.6 5.6 0 0 1 11.2 0"/><circle cx="4.5" cy="10.4" r="2.1"/><path d="M1.2 17.8A3.8 3.8 0 0 1 4.5 14.6"/><circle cx="19.5" cy="10.4" r="2.1"/><path d="M22.8 17.8a3.8 3.8 0 0 0-3.3-3.2"/></svg><b>Un grupo es un atajo para pasar asistencia.</b> Le pones nombre, alumnos y horario, y con "Registrar clase" los marcas a todos de un clic (cada uno consume 1 clase de su propio paquete). Para que varios reserven el MISMO horario desde el portal no necesitas grupos: eso es el <b>aforo</b> de la hora, en <b><a href="#" data-ira="agenda">Mis clases</a></b>.</p>
     <div class="tablewrap">
       <table id="tablaGrupos">
         <thead><tr><th>Grupo</th><th>Curso</th><th>Horario</th><th>Alumnos</th><th></th></tr></thead>
@@ -908,7 +919,7 @@
   </section>
 
   <section class="panel" id="panel-profesores">
-    <p class="hint quees">🎓 <b>Tu equipo.</b> Invita a un profesor y le llega un link para crear su clave; entra a este mismo panel pero solo ve SUS alumnos y SU horario. Cada profe tiene su propia agenda, así dos pueden dictar a la misma hora sin chocar. Cuántos profes te caben depende de tu plan (lo ves en <b><a href="#" data-ira="perfil">Perfil</a></b>).</p>
+    <p class="hint quees"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.8 1.6 8.6 12 13.4l10.4-4.8z"/><path d="M5.6 10.9v5.2c0 1.7 2.9 3.1 6.4 3.1s6.4-1.4 6.4-3.1v-5.2"/><path d="M22.4 8.6v5.6"/></svg><b>Tu equipo.</b> Invita a un profesor y le llega un link para crear su clave; entra a este mismo panel pero solo ve SUS alumnos y SU horario. Cada profe tiene su propia agenda, así dos pueden dictar a la misma hora sin chocar. Cuántos profes te caben depende de tu plan (lo ves en <b><a href="#" data-ira="perfil">Perfil</a></b>).</p>
     <div style="display:flex;align-items:center;gap:14px;margin-bottom:10px;flex-wrap:wrap;">
       <button class="btn" id="btnInvitarProfe">+ Invitar profesor</button>
       <span class="hint" id="profeAsientos"></span>
@@ -1025,7 +1036,7 @@
   </section>
 
   <section class="panel" id="panel-registro">
-    <p class="hint quees">📕 <b>Esto es el PASADO: las clases que ya dictaste.</b> Anotas qué se trabajó, la tarea y si el alumno asistió — y se le descuenta 1 clase de su paquete. ¿Buscas los horarios y las reservas que vienen? Eso es <b><a href="#" data-ira="agenda">Mis clases</a></b>.</p>
+    <p class="hint quees"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg><b>Esto es el PASADO: las clases que ya dictaste.</b> Anotas qué se trabajó, la tarea y si el alumno asistió — y se le descuenta 1 clase de su paquete. ¿Buscas los horarios y las reservas que vienen? Eso es <b><a href="#" data-ira="agenda">Mis clases</a></b>.</p>
     <!-- Dos puertas separadas (1-ago-2026): la individual no carga la pantalla con los nombres
          de todos los demás alumnos, que es lo que la hacía pesada para el 90% de las clases. -->
     <div style="margin-bottom:14px;display:flex;gap:8px;flex-wrap:wrap;"><button class="btn" id="btnNuevoRegistro">+ Registrar clase individual</button><button class="btn ghost" id="btnNuevoRegistroGrupal">+ Registrar clase grupal</button><button class="btn ghost sm" type="button" onclick="lanzarTourModulo('registro')">? Cómo funciona</button></div>
@@ -1053,7 +1064,7 @@
   </section>
 
   <section class="panel" id="panel-pagos">
-    <p class="hint quees">💳 <b>Aquí confirmas la plata que entra.</b> Cuando un alumno paga por su portal, su comprobante te llega acá: le das <b>Confirmar</b> y su paquete se activa solo. También puedes anotar a mano lo que te pagaron en efectivo o por Yape. Cada pago confirmado tiene su botón <b>Recibo</b>.</p>
+    <p class="hint quees"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="5" width="20" height="14" rx="2"/><circle cx="12" cy="12" r="3"/><line x1="6" y1="12" x2="6.01" y2="12"/><line x1="18" y1="12" x2="18.01" y2="12"/></svg><b>Aquí confirmas la plata que entra.</b> Cuando un alumno paga por su portal, su comprobante te llega acá: le das <b>Confirmar</b> y su paquete se activa solo. También puedes anotar a mano lo que te pagaron en efectivo o por Yape. Cada pago confirmado tiene su botón <b>Recibo</b>.</p>
     <div class="group">
       <h2>Pendientes de confirmar <button class="btn ghost sm" type="button" style="margin-left:8px;" onclick="lanzarTourModulo('pagos')">? Cómo funciona</button></h2>
       <p class="hint">Verifica en tu app de Yape/Plin que el monto llegó y dale Confirmar: el paquete se activa solo (primera compra crea al alumno; renovación abre nuevo ciclo).</p>
@@ -1072,7 +1083,7 @@
   </section>
 
   <section class="panel" id="panel-reportes">
-    <p class="hint quees">📊 <b>Los números de tu academia, ya calculados.</b> Cuánto cobraste cada mes, cuántos alumnos nuevos entraron y cuántas clases se dictaron. No hay nada que configurar: se arma solo con lo que vas registrando.</p>
+    <p class="hint quees"><svg viewBox="0 0 24 24" aria-hidden="true"><line x1="3" y1="20.5" x2="21" y2="20.5"/><line x1="6.6" y1="20.5" x2="6.6" y2="13"/><line x1="12" y1="20.5" x2="12" y2="6.5"/><line x1="17.4" y1="20.5" x2="17.4" y2="10"/></svg><b>Los números de tu academia, ya calculados.</b> Cuánto cobraste cada mes, cuántos alumnos nuevos entraron y cuántas clases se dictaron. No hay nada que configurar: se arma solo con lo que vas registrando.</p>
     <div class="group">
       <h2>Ingresos cobrados por mes</h2>
       <p class="hint">Compras confirmadas (portal + las que confirmas a mano), agrupadas por mes. Histórico completo.</p>
@@ -1102,7 +1113,7 @@
   </section>
 
   <section class="panel" id="panel-cuentas">
-    <p class="hint quees">🔑 <b>Aquí vive la llave de cada alumno para entrar a su portal.</b> Sin acceso vinculado a su ficha, el alumno no puede reservar ni pagar solo. Toda persona que se registra en tu portal aparece acá; vincúlala a su ficha de <b><a href="#" data-ira="alumnos">Alumnos</a></b>. "Promos ✓" = aceptó recibir publicidad.</p>
+    <p class="hint quees"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="7.6" cy="15.6" r="4.6"/><path d="M10.9 12.3 21 2.2"/><path d="M16.6 6.6 20 10"/></svg><b>Aquí vive la llave de cada alumno para entrar a su portal.</b> Sin acceso vinculado a su ficha, el alumno no puede reservar ni pagar solo. Toda persona que se registra en tu portal aparece acá; vincúlala a su ficha de <b><a href="#" data-ira="alumnos">Alumnos</a></b>. "Promos ✓" = aceptó recibir publicidad.</p>
     <div class="tablewrap">
       <table><thead><tr><th>Nombre</th><th>Correo</th><th>WhatsApp</th><th>Promos</th><th>Alumno vinculado</th><th>Creada</th><th></th></tr></thead>
       <tbody id="tbCuentas"></tbody></table>
@@ -1110,7 +1121,7 @@
   </section>
 
   <section class="panel" id="panel-leads">
-    <p class="hint quees">🌱 <b>Los que preguntaron pero todavía no son alumnos.</b> Muévelos por las etapas (Nuevo → Contactado → Prueba agendada → Alumno) para que no se te enfríe ninguno. Los que llegan por tu web o por WhatsApp entran solos acá. Cuando uno cierre, dalo de alta en <b><a href="#" data-ira="alumnos">Alumnos</a></b>.</p>
+    <p class="hint quees"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21.2v-7.6"/><path d="M12 13.6C12 9.9 9 6.9 5.3 6.9c0 3.7 3 6.7 6.7 6.7z"/><path d="M12 13.6c0-3.1 2.5-5.6 5.6-5.6 0 3.1-2.5 5.6-5.6 5.6z"/></svg><b>Los que preguntaron pero todavía no son alumnos.</b> Muévelos por las etapas (Nuevo → Contactado → Prueba agendada → Alumno) para que no se te enfríe ninguno. Los que llegan por tu web o por WhatsApp entran solos acá. Cuando uno cierre, dalo de alta en <b><a href="#" data-ira="alumnos">Alumnos</a></b>.</p>
     <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px;flex-wrap:wrap;">
       <button class="btn" id="btnNuevoLead">+ Interesado</button>
       <span class="hint" id="leadSeguirHoy"></span>
@@ -1124,7 +1135,7 @@
   </section>
 
   <section class="panel" id="panel-caja">
-    <p class="hint quees">🧾 <b>Lo que sale, para saber cuánto te queda de verdad.</b> Anota tus gastos del mes (alquiler, luz, profes) y Batuta te muestra el neto: lo cobrado menos lo gastado. Lo que ENTRA se registra solo desde <b><a href="#" data-ira="pagos">Pagos</a></b>.</p>
+    <p class="hint quees"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 2.5h12v19.1l-3-1.8-3 1.8-3-1.8-3 1.8z"/><line x1="8.8" y1="7.4" x2="15.2" y2="7.4"/><line x1="8.8" y1="11.2" x2="15.2" y2="11.2"/><line x1="8.8" y1="15" x2="12.6" y2="15"/></svg><b>Lo que sale, para saber cuánto te queda de verdad.</b> Anota tus gastos del mes (alquiler, luz, profes) y Batuta te muestra el neto: lo cobrado menos lo gastado. Lo que ENTRA se registra solo desde <b><a href="#" data-ira="pagos">Pagos</a></b>.</p>
     <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px;flex-wrap:wrap;">
       <label class="hint" style="margin:0;">Mes</label>
       <input id="cajaMes" type="month" style="width:auto;" />
@@ -1157,7 +1168,7 @@
   </section>
 
   <section class="panel" id="panel-recursos">
-    <p class="hint quees">📤 <b>Esto SÍ lo ven tus alumnos.</b> Lo que publiques acá aparece en el portal de todos (o del curso que elijas). Tu material privado, el que solo mandas como tarea a una persona, va en <b><a href="#" data-ira="ejercicios">Tu biblioteca</a></b>.</p>
+    <p class="hint quees"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg><b>Esto SÍ lo ven tus alumnos.</b> Lo que publiques acá aparece en el portal de todos (o del curso que elijas). Tu material privado, el que solo mandas como tarea a una persona, va en <b><a href="#" data-ira="ejercicios">Tu biblioteca</a></b>.</p>
     <div class="group">
       <h2>Publicar recurso</h2>
       <div class="frow">
@@ -1183,7 +1194,7 @@
   </section>
 
   <section class="panel" id="panel-ejercicios">
-    <p class="hint quees">🔒 <b>Esto NO lo ve nadie hasta que tú lo mandes.</b> Es tu banco privado: eliges un ejercicio al registrar una clase y solo le llega a ese alumno como tarea. Lo que quieras publicar para todos va en <b><a href="#" data-ira="recursos">Para tus alumnos</a></b>.</p>
+    <p class="hint quees"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg><b>Esto NO lo ve nadie hasta que tú lo mandes.</b> Es tu banco privado: eliges un ejercicio al registrar una clase y solo le llega a ese alumno como tarea. Lo que quieras publicar para todos va en <b><a href="#" data-ira="recursos">Para tus alumnos</a></b>.</p>
     <div class="group">
       <h2>Subir a tu biblioteca</h2>
       <div class="frow">
@@ -1222,7 +1233,7 @@
   </section>
 
   <section class="panel" id="panel-agenda">
-    <p class="hint quees">📅 <b>Esto es el FUTURO: tu horario y lo que ya está reservado.</b> Aquí armas en qué días y horas dictas, con qué tipo de clase y cuánta gente entra. ¿Buscas anotar una clase que YA diste? Eso es <b><a href="#" data-ira="registro">Asistencia</a></b>.</p>
+    <p class="hint quees"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg><b>Esto es el FUTURO: tu horario y lo que ya está reservado.</b> Aquí armas en qué días y horas dictas, con qué tipo de clase y cuánta gente entra. ¿Buscas anotar una clase que YA diste? Eso es <b><a href="#" data-ira="registro">Asistencia</a></b>.</p>
     <!-- Calendario del mes (10-ago-2026, reunión Elevate): la vista mensual que José extraña
          de Punchpass. Día a día: cuántas clases del horario + cuántas reservas. Clic en un
          día = detalle con la gente, y desde ahí se bloquea o siembra con la fecha puesta. -->
@@ -1342,7 +1353,7 @@
   </section>
 
   <section class="panel" id="panel-perfil">
-    <p class="hint quees">⚙️ <b>Tu cuenta y tu plan de Batuta.</b> Acá cambias tu foto y tu nombre, subes o bajas de plan cuando quieras, y encuentras tu link para recomendar Batuta. Ojo: los datos de tu ACADEMIA (logo, clases, precios, cobros) están en <b><a href="#" data-ira="ajustes">Ajustes</a></b>.</p>
+    <p class="hint quees"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg><b>Tu cuenta y tu plan de Batuta.</b> Acá cambias tu foto y tu nombre, subes o bajas de plan cuando quieras, y encuentras tu link para recomendar Batuta. Ojo: los datos de tu ACADEMIA (logo, clases, precios, cobros) están en <b><a href="#" data-ira="ajustes">Ajustes</a></b>.</p>
     <div class="group">
       <h2>Tu perfil</h2>
       <p class="hint">Tu nombre y foto aparecen en el menú y, más adelante, en el portal de tus alumnos. Es la cara de tu academia.</p>
@@ -1375,7 +1386,7 @@
       </div>
       <p class="hint" id="porAlumnoHint" style="margin-top:6px;display:none;">Con tus <strong id="paCount">—</strong> alumnos activos hoy, tu cobro sería <strong id="paMonto">—</strong>/mes. Se recalcula solo cada mes según cuántos tengas. Ideal para academias grandes.</p>
       <div class="rowact" style="margin-top:10px;flex-wrap:wrap;">
-        <button class="btn ghost sm" id="btnPlanAnualPerfil" type="button">💡 Pagar 1 año de mi plan (2 meses gratis)</button>
+        <button class="btn ghost sm" id="btnPlanAnualPerfil" type="button"><svg viewBox="0 0 24 24" aria-hidden="true" class="ico-tx"><path d="M9.3 18h5.4"/><path d="M10.2 21.3h3.6"/><path d="M12 2.7a5.9 5.9 0 0 0-3.4 10.7c.6.4 1 1.1 1 1.9V18h4.8v-2.7c0-.8.4-1.5 1-1.9A5.9 5.9 0 0 0 12 2.7z"/></svg>Pagar 1 año de mi plan (2 meses gratis)</button>
         <span class="hint" style="margin:0;">Profe S/490 · Dúo S/780 · Trío S/1,070 · Academia S/1,490 · XL S/2,990. Un solo pago, cero cobros mensuales.</span>
       </div>
     </div>
@@ -1566,7 +1577,7 @@
     <div class="group" data-aj="wa">
       <h2>WhatsApp</h2>
       <p class="hint"><b>Ya funciona, sin conectar nada.</b> En <b>Interesados</b> y en <b>Alumnos</b>, cada fila tiene un botón <b>WhatsApp</b> que abre tu propio WhatsApp con el mensaje ya escrito (bienvenida, seguimiento, recordatorio de pago). Tú solo revisas y le das enviar: sale desde TU número de siempre y nadie pierde su WhatsApp.</p>
-      <p class="hint" style="margin-top:8px;"><b>🤖 Respuesta con IA 24/7:</b> cada persona que te escriba por WhatsApp recibe respuesta al instante (aunque estés durmiendo) con los cursos, precios y horarios de tu academia, la invita a agendar una clase de prueba y la guarda sola en <b>Interesados</b>. Nunca promete resultados ni cierra pagos: eso lo cierras tú. Para que salga por tu número hay que conectarlo a Batuta con el proveedor oficial de Meta (<b>escríbenos y lo dejamos andando</b>). Mientras tanto puedes ajustar y <b>probar</b> tu asistente aquí abajo.</p>
+      <p class="hint" style="margin-top:8px;"><b><svg viewBox="0 0 24 24" aria-hidden="true" class="ico-tx"><rect x="3.6" y="8.2" width="16.8" height="12" rx="3.2"/><path d="M12 8.2V5.4"/><circle cx="12" cy="3.7" r="1.6"/><line x1="9" y1="13" x2="9" y2="14.8"/><line x1="15" y1="13" x2="15" y2="14.8"/><path d="M1.3 12.6v3.4"/><path d="M22.7 12.6v3.4"/></svg>Respuesta con IA 24/7:</b> cada persona que te escriba por WhatsApp recibe respuesta al instante (aunque estés durmiendo) con los cursos, precios y horarios de tu academia, la invita a agendar una clase de prueba y la guarda sola en <b>Interesados</b>. Nunca promete resultados ni cierra pagos: eso lo cierras tú. Para que salga por tu número hay que conectarlo a Batuta con el proveedor oficial de Meta (<b>escríbenos y lo dejamos andando</b>). Mientras tanto puedes ajustar y <b>probar</b> tu asistente aquí abajo.</p>
       <div id="waCupoBox" class="hint" style="margin:10px 0;padding:9px 11px;border:1px solid var(--line,#2a2a2a);border-radius:8px;">Cupo de conversaciones: —</div>
       <div class="cfgrow"><span class="pk">Asistente con IA</span><select id="cfg_wa_enabled"><option value="">Apagado — solo yo respondo</option><option value="on">Encendido</option></select></div>
       <div class="cfgrow"><span class="pk">Cuando está encendido</span><select id="cfg_wa_modo"><option value="auto">Automático — la IA responde sola</option><option value="sugerencias">Sugerencias — la IA propone, tú envías</option></select></div>
@@ -1677,7 +1688,7 @@
   </section>
 
   <section class="panel" id="panel-chat">
-    <p class="hint quees">💬 <b>Mensajes dentro de Batuta, no por WhatsApp.</b> Tus alumnos lo leen desde su portal. <b>Grupal</b> = un aviso que ven todos (ej. "el lunes no hay clases"). <b>Privado</b> = 1 a 1, solo tú y ese alumno.</p>
+    <p class="hint quees"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 14.6a2 2 0 0 1-2 2H8.2L4 20.4V5a2 2 0 0 1 2-2h13a2 2 0 0 1 2 2z"/></svg><b>Mensajes dentro de Batuta, no por WhatsApp.</b> Tus alumnos lo leen desde su portal. <b>Grupal</b> = un aviso que ven todos (ej. "el lunes no hay clases"). <b>Privado</b> = 1 a 1, solo tú y ese alumno.</p>
     <div class="group">
       <h2>Chat</h2>
       <p class="hint">Grupal = todos los alumnos lo leen. Privado = 1 a 1 con un alumno (solo tú y él lo ven). El × borra un mensaje.</p>
@@ -1713,7 +1724,7 @@
       <div class="card" style="padding:14px 16px;"><strong>Profe</strong> — S/49/mes (US$14.95) · 1 profesor · alumnos ilimitados</div>
       <div class="card" style="padding:14px 16px;"><strong>Academia</strong> — S/149/mes (US$43.95) · 5 profesores · hasta 150 alumnos</div>
       <div class="card" style="padding:14px 16px;"><strong>Academia XL</strong> — S/299/mes (US$87.95) · 20 profesores · hasta 400 alumnos</div>
-      <div class="card" style="padding:14px 16px;">💡 <strong>Paga el año y llévate 2 meses gratis</strong> (Profe S/490 · Academia S/1,490 · XL S/2,990), desde "Activar mi plan".</div>
+      <div class="card" style="padding:14px 16px;"><svg viewBox="0 0 24 24" aria-hidden="true" class="ico-tx"><path d="M9.3 18h5.4"/><path d="M10.2 21.3h3.6"/><path d="M12 2.7a5.9 5.9 0 0 0-3.4 10.7c.6.4 1 1.1 1 1.9V18h4.8v-2.7c0-.8.4-1.5 1-1.9A5.9 5.9 0 0 0 12 2.7z"/></svg><strong>Paga el año y llévate 2 meses gratis</strong> (Profe S/490 · Academia S/1,490 · XL S/2,990), desde "Activar mi plan".</div>
     </div>
     <div class="modal-actions">
       <a class="btn" href="/app/suscribir">Activar mi plan</a>
@@ -2950,7 +2961,7 @@ function renderRegistro(){
       '<td class="notes">'+esc(r.trabajo||'')+'</td>'+
       '<td class="notes">'+esc(r.tarea||'')+'</td>'+
       planTd+
-      '<td><div class="rowact"><button class="btn ghost sm" data-editreg="'+r.id+'" title="Editar esta clase">✎</button>'+adjHtml+(r.tarea?'<button class="btn ghost sm" data-avisartarea="'+esc(r.alumnoId||r.alumno_id)+'" data-tareatxt="'+esc(r.tarea)+'" title="Avisar al alumno por push"><svg viewBox=\"0 0 24 24\" style=\"width:12px;height:12px;stroke:currentColor;stroke-width:1.8;fill:none;stroke-linecap:round;stroke-linejoin:round;vertical-align:-1px;margin-right:3px\"><path d=\"M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9\"/><path d=\"M13.7 21a2 2 0 0 1-3.4 0\"/></svg>Avisar</button>':'')+'<button class="btn ghost sm" data-delreg="'+r.id+'">×</button></div></td>'+
+      '<td><div class="rowact"><button class="btn ghost sm" data-editreg="'+r.id+'" title="Editar esta clase"><svg viewBox="0 0 24 24" aria-hidden="true" class="ico-mini"><path d="M16.8 3.1a2.83 2.83 0 1 1 4 4L7.4 20.6 2 22l1.4-5.4z"/></svg></button>'+adjHtml+(r.tarea?'<button class="btn ghost sm" data-avisartarea="'+esc(r.alumnoId||r.alumno_id)+'" data-tareatxt="'+esc(r.tarea)+'" title="Avisar al alumno por push"><svg viewBox=\"0 0 24 24\" style=\"width:12px;height:12px;stroke:currentColor;stroke-width:1.8;fill:none;stroke-linecap:round;stroke-linejoin:round;vertical-align:-1px;margin-right:3px\"><path d=\"M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9\"/><path d=\"M13.7 21a2 2 0 0 1-3.4 0\"/></svg>Avisar</button>':'')+'<button class="btn ghost sm" data-delreg="'+r.id+'">×</button></div></td>'+
     '</tr>';
   }).join("");
 }
@@ -4804,7 +4815,7 @@ function cargarCampanas(){
     CAMPA=d;
     if(!d||d.error){ box.innerHTML='<p class="hint">No disponible ahora mismo.</p>'; return; }
     if(!d.configurado){
-      box.innerHTML='<div class="card" style="padding:16px"><b>🚧 En preparación.</b><p class="hint" style="margin:8px 0 0">Estamos habilitando la conexión con Meta para que puedas crear anuncios de Facebook e Instagram desde aquí, apuntando a tu propia cuenta publicitaria. Te avisamos apenas esté listo. Mientras, si quieres lanzar una campaña te damos una mano: escríbenos.</p></div>';
+      box.innerHTML='<div class="card" style="padding:16px"><b><svg viewBox="0 0 24 24" aria-hidden="true" class="ico-tx"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>En preparación.</b><p class="hint" style="margin:8px 0 0">Estamos habilitando la conexión con Meta para que puedas crear anuncios de Facebook e Instagram desde aquí, apuntando a tu propia cuenta publicitaria. Te avisamos apenas esté listo. Mientras, si quieres lanzar una campaña te damos una mano: escríbenos.</p></div>';
       return;
     }
     if(!d.conectado){ renderCampConectar(box,d); return; }

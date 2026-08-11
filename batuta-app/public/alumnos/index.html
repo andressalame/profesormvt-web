@@ -257,6 +257,9 @@
   .chat-vacio{color:var(--muted);font-family:var(--mono);font-size:11px;text-transform:uppercase;letter-spacing:.08em;text-align:center;padding:18px 0;}
   .chat-strip{position:fixed;top:0;right:0;bottom:0;width:38px;background:var(--panel);border:0;border-left:1px solid var(--line);display:none;align-items:center;justify-content:center;cursor:pointer;z-index:70;font-size:17px;}
   .chat-fab{position:fixed;right:16px;bottom:84px;width:52px;height:52px;border-radius:50%;background:var(--accent);border:1px solid var(--accent);font-size:22px;display:none;align-items:center;justify-content:center;z-index:70;box-shadow:0 4px 14px rgba(0,0,0,.45);cursor:pointer;}
+  .chat-strip svg,.chat-fab svg{stroke:currentColor;stroke-width:1.9;fill:none;stroke-linecap:round;stroke-linejoin:round;}
+  .chat-strip svg{width:19px;height:19px;color:var(--cream);}
+  .chat-fab svg{width:24px;height:24px;color:var(--bg);}
   .chat-dot{position:absolute;top:6px;right:6px;width:11px;height:11px;border-radius:50%;background:var(--accent);border:2px solid var(--panel);}
   .chat-fab .chat-dot{background:#fff;border-color:var(--accent);top:4px;right:4px;}
   /* Chat apagado por la academia (7-ago-2026): desaparece todo el chat y aparece el botón de WhatsApp */
@@ -676,8 +679,8 @@
     </div>
     <div class="chat-bloqueado hidden" id="chatBloqueado"></div>
   </aside>
-  <button class="chat-strip" id="chatStrip" title="Abrir chat">💬<span class="chat-dot hidden" id="chatDotStrip"></span></button>
-  <button class="chat-fab" id="chatFab" aria-label="Abrir chat">💬<span class="chat-dot hidden" id="chatDotFab"></span></button>
+  <button class="chat-strip" id="chatStrip" title="Abrir chat"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 14.6a2 2 0 0 1-2 2H8.2L4 20.4V5a2 2 0 0 1 2-2h13a2 2 0 0 1 2 2z"/></svg><span class="chat-dot hidden" id="chatDotStrip"></span></button>
+  <button class="chat-fab" id="chatFab" aria-label="Abrir chat"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 14.6a2 2 0 0 1-2 2H8.2L4 20.4V5a2 2 0 0 1 2-2h13a2 2 0 0 1 2 2z"/></svg><span class="chat-dot hidden" id="chatDotFab"></span></button>
   <a class="wa-fab hidden" id="waFab" target="_blank" rel="noopener" aria-label="Escríbenos por WhatsApp"><svg viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg"><path d="M16 3C9.4 3 4 8.3 4 14.9c0 2.6.8 5 2.3 7L4.6 27.4l5.7-1.6c1.9 1.1 4 1.6 6 1.6h.1c6.6 0 11.9-5.3 11.9-11.9C28.3 8.3 22.6 3 16 3zm5.9 16.9c-.3.8-1.6 1.5-2.3 1.6-.6.1-1.3.2-2.1-.1-.5-.2-1.1-.4-1.9-.7-3.4-1.5-5.6-4.9-5.8-5.1-.2-.2-1.4-1.8-1.4-3.5s.9-2.5 1.2-2.8c.3-.3.7-.4 1-.4h.7c.2 0 .5-.1.8.6.3.8 1.1 2.6 1.2 2.8.1.2.2.4 0 .7-.1.2-.2.4-.4.6l-.6.7c-.2.2-.4.4-.2.8.2.4 1 1.7 2.2 2.7 1.5 1.3 2.8 1.7 3.2 1.9.4.2.6.2.9-.1.2-.3 1-1.2 1.3-1.6.3-.4.5-.3.9-.2.4.1 2.3 1.1 2.7 1.3.4.2.6.3.7.5.1.1.1.9-.1 1.7z"/></svg></a>
 </div>
 
