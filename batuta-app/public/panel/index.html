@@ -6649,7 +6649,12 @@ el("btnPlantillaCsv").addEventListener("click",function(){
 });
 /* Fecha flexible del importador: acepta 2026-08-20, 20/08/2026, 20-8-26 y 20.08.2026.
    Devuelve ISO (aaaa-mm-dd) o "" si no se puede leer; null si venía vacía (no es error). */
-function impFecha(txt){
+/* minAnio (11-ago-2026): el rango 2000-2100 servia para un VENCIMIENTO de paquete, pero
+   rechazaba toda fecha de NACIMIENTO anterior al 2000. A Jose (Elevate) le tumbo la
+   importacion de 801 alumnos: 368 filas "malas" cuyas fechas ("1962-05-01", "1990-11-16")
+   estaban perfectas. Un alumno adulto nacio antes del 2000 casi siempre. */
+function impFecha(txt, minAnio){
+  var ANIO_MIN=minAnio||2000;
   var s=String(txt==null?"":txt).trim();
   if(!s) return null;
   var m=s.match(/^(\d{4})[-\/.](\d{1,2})[-\/.](\d{1,2})$/);
@@ -6673,7 +6678,7 @@ function impFecha(txt){
       d=td; mes=tm; y=ty;
     }
   }
-  if(!(y>=2000&&y<=2100)||!(mes>=1&&mes<=12)||!(d>=1&&d<=31)) return "";
+  if(!(y>=ANIO_MIN&&y<=2100)||!(mes>=1&&mes<=12)||!(d>=1&&d<=31)) return "";
   var iso=y+"-"+String(mes).padStart(2,"0")+"-"+String(d).padStart(2,"0");
   var dt=new Date(iso+"T00:00:00Z");
   /* atrapa 31/02: el Date rebota al mes siguiente y el ISO ya no coincide */
@@ -6803,10 +6808,13 @@ function impProcesarFilas(rows){
         /* datos completos de la migración (7-ago-2026): apellido, correo, nacimiento y
            las reservas que el alumno ya tenía agendadas en el sistema anterior. */
         var nTxt=map.nacimiento!=null?String(r[map.nacimiento]||"").trim():"";
-        var nIso=impFecha(nTxt);
+        var nIso=impFecha(nTxt,1900);   // nacimiento: desde 1900, no desde 2000
         var rsv=map.reservas!=null?impReservas(r[map.reservas]):{isos:[],error:""};
+        /* 11-ago-2026: el nacimiento ya NO bloquea. Es un dato opcional y de adorno;
+           tumbar la migracion entera de 801 alumnos por una fecha rara es desproporcionado.
+           Si no se entiende, el alumno entra sin ella y queda el aviso en su ficha. */
+        var avisoNac=(nIso==="")?('no entendi la fecha de nacimiento "'+nTxt+'", el alumno entra sin ella'):"";
         var errOtros=((vIso==="")?('no entiendo la fecha "'+vTxt+'" (usa 20/08/2026 o 2026-08-20)'):"")
-          ||((nIso==="")?('no entiendo la fecha de nacimiento "'+nTxt+'"'):"")
           ||rsv.error;
         /* pase que no existe en Batuta (7-ago-2026): se marca SIEMPRE (antes solo si traía
            saldo) y la previsualización ofrece mapearlo a un plan tuyo con un clic. */
@@ -6823,7 +6831,9 @@ function impProcesarFilas(rows){
           notas:(function(){
             var nb=map.notas!=null?String(r[map.notas]||"").trim():"";
             var ex=extrasIx.map(function(ix){ var v=String(r[ix]==null?"":r[ix]).trim(); return v?(String(cab[ix]).trim()+": "+v):""; }).filter(Boolean).join(" · ");
-            return [nb,ex].filter(Boolean).join(" · ").slice(0,400);
+            /* el nacimiento que no se pudo leer viaja a las Notas: el dato no se pierde */
+            var nn=(nIso==="" && nTxt)?("Fecha de nacimiento del sistema anterior: "+nTxt):"";
+            return [nb,ex,nn].filter(Boolean).join(" · ").slice(0,400);
           })(),
           restantes:sal.restantes, migrado_usadas:sal.usadas, saldoNota:sal.nota||"",
           vence:vIso||"", venceTxt:vTxt,
@@ -6984,9 +6994,26 @@ function impPreview(rows,dup,vacios){
   var box=el("impSaldoErr");
   if(malas.length){
     var lista=malas.slice(0,6).map(function(a){ return "<li><b>"+esc(a.nombre)+"</b>: "+esc(a.error)+"</li>"; }).join("");
+    /* 11-ago-2026: el titulo decia SIEMPRE "un saldo que no cuadra", aunque el problema
+       fuera otro. A Jose le mostro 368 filas "de saldo" que en realidad eran fechas de
+       nacimiento. Un error que miente sobre su causa manda al dueno a revisar la columna
+       equivocada. Ahora el titulo sale de lo que de verdad falla. */
+    var motivo=(function(){
+      var c={};
+      malas.forEach(function(a){
+        var e=String(a.error||"");
+        var k=/no reconozco el paquete/.test(e)?"paquete":
+              /fecha/.test(e)?"fecha":
+              /reserva/i.test(e)?"reserva":"saldo";
+        c[k]=(c[k]||0)+1;
+      });
+      var top=Object.keys(c).sort(function(a,b){return c[b]-c[a];})[0];
+      return { paquete:"un paquete que no reconozco", fecha:"una fecha que no entiendo",
+               reserva:"una reserva que no entiendo", saldo:"un saldo que no cuadra" }[top];
+    })();
     box.style.display="";
     box.innerHTML='<div style="border:1px solid var(--red,#D9534F);border-radius:8px;padding:10px 12px;">'+
-      '<b style="color:var(--red,#D9534F);">Hay '+malas.length+" fila"+(malas.length!=1?"s":"")+" con un saldo que no cuadra.</b>"+
+      '<b style="color:var(--red,#D9534F);">Hay '+malas.length+" fila"+(malas.length!=1?"s":"")+" con "+motivo+".</b>"+
       '<ul style="margin:6px 0 0 16px;padding:0;font-size:13px;">'+lista+
       (malas.length>6?"<li>… y "+(malas.length-6)+" más</li>":"")+"</ul>"+
       '<p class="hint" style="margin:8px 0 0;">Corrige tu archivo (o la lista pegada) y vuelve a subirlo. Nadie se importa hasta que cuadre.</p></div>';
