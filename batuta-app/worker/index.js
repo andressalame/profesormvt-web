@@ -5676,11 +5676,11 @@ export default {
           ).all();
           return json({ ok: true, telemetria: telem || [] });
         }
-        /* Serie del funnel SIN laptop (propuesta 7-ago, pieza 1 ejecutada 10-ago): la única
+        /* Serie del funnel SIN laptop (propuesta 7-ago, COMPLETA el 10-ago-2026): la única
            consulta de la serie que dependía del `wrangler d1 execute` logueado de la Mac,
-           ahora como endpoint con el binding D1 directo. La Action de ~/Code/batuta podrá
-           llamar su/tenants + su/funnel + este, y comitear el JSON del día (esa mitad
-           espera la decisión de Andrés sobre pasar ADMIN_TOKEN a un secret de GitHub). */
+           ahora como endpoint con el binding D1 directo. La Action `funnel-serie.yml` de
+           ~/Code/batuta llama su/tenants + su/funnel + este a las 5am Lima con el secret
+           BATUTA_ADMIN_TOKEN (SÍ de Andrés, 10-ago) y comitea datos/funnel/<fecha>.json. */
         if (path === "/app/api/su/magnet-daily" && request.method === "GET"){
           let magnet = [];
           try {
