@@ -2347,7 +2347,9 @@ function parseAudios(v){
   return [{u:v,n:'Audio'}];
 }
 function tipoAdjunto(u){
-  var m=String(u||'').toLowerCase().match(/\.(pdf|mp3|m4a|ogg|wav|png|jpg|jpeg)$/);
+  /* 11-ago-2026: las URLs de archivo vienen firmadas (?exp=&s=&sig=). Cortamos el query
+     antes de mirar la extension, o un PDF caeria en el default y se pintaria como audio. */
+  var m=String(u||'').toLowerCase().split('?')[0].match(/\.(pdf|mp3|m4a|ogg|wav|png|jpg|jpeg)$/);
   if(!m) return 'AUDIO';
   if(m[1]==='pdf') return 'PDF';
   if(m[1]==='png'||m[1]==='jpg'||m[1]==='jpeg') return 'IMG';

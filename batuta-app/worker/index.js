@@ -580,6 +580,68 @@ function parseAudios(valor){
   return [{ u: v, n: "Audio" }];
 }
 
+/* ============ FIRMA DE ARCHIVOS DE R2 (11-ago-2026) ============================
+   Antes, /app/api/recurso/archivo/{uuid} solo comprobaba que la key estuviera
+   referenciada por ALGUNA fila de CUALQUIER tenant: no pedia sesion, asi que el
+   material de clase de una academia se lo bajaba cualquiera con la URL, incluido otro
+   tenant. Mismo criterio que MVT: gate por TIPO de archivo.
+
+   Por que firma y no solo sesion: el panel y el portal sirven estos archivos con
+   <audio src> y <a href>, peticiones que el navegador hace SIN el header Authorization
+   (el token vive en localStorage, no hay cookie). La firma la emite un endpoint YA
+   autenticado y es HMAC-SHA256 con secreto del servidor, caducidad y alcance. ======= */
+const FIRMA_TTL_S = { m: 7 * 86400, c: 30 * 86400 };
+let _claveFirma = null;
+async function claveFirma(env){
+  if (_claveFirma) return _claveFirma;
+  const base = env.FIRMA_ARCHIVOS || env.ADMIN_TOKEN || "";
+  if (!base) return null;
+  _claveFirma = await crypto.subtle.importKey(
+    "raw", enc.encode("firma-archivos-v1|" + base), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]
+  );
+  return _claveFirma;
+}
+async function firmaHex(env, key, exp, scope){
+  const k = await claveFirma(env);
+  if (!k) return null;
+  return hex(await crypto.subtle.sign("HMAC", k, enc.encode(key + "|" + exp + "|" + scope))).slice(0, 32);
+}
+async function firmarRuta(env, ruta, scope){
+  const r = String(ruta || "");
+  if (r.indexOf("/app/api/recurso/archivo/") !== 0) return r;
+  const key = r.slice("/app/api/recurso/archivo/".length).split("?")[0];
+  const sc = (scope === "c") ? "c" : "m";
+  /* exp redondeado a la hora: misma URL durante una hora -> el navegador cachea y el
+     panel puede seguir comparando URLs entre si para no duplicar adjuntos. */
+  const exp = Math.ceil((Math.floor(Date.now() / 1000) + FIRMA_TTL_S[sc]) / 3600) * 3600;
+  const sig = await firmaHex(env, key, exp, sc);
+  if (!sig) return r;
+  return "/app/api/recurso/archivo/" + key + "?exp=" + exp + "&s=" + sc + "&sig=" + sig;
+}
+async function verificarFirma(env, key, url){
+  const exp = parseInt(url.searchParams.get("exp") || "0", 10);
+  const sig = String(url.searchParams.get("sig") || "");
+  const scope = url.searchParams.get("s") === "c" ? "c" : "m";
+  if (!Number.isFinite(exp) || exp <= 0 || exp * 1000 < Date.now()) return null;
+  if (!/^[a-f0-9]{32}$/.test(sig)) return null;
+  const esperada = await firmaHex(env, key, exp, scope);
+  if (!esperada || !safeEq(sig, esperada)) return null;
+  return scope;
+}
+async function firmarAudios(env, valor, scope){
+  const out = [];
+  for (const a of parseAudios(valor)) out.push(Object.assign({}, a, { u: await firmarRuta(env, a.u, scope) }));
+  return out;
+}
+function rutaCanonica(u){ return String(u || "").split("?")[0]; }
+/* tarea_audio que vuelve del panel -> siempre pelado antes de guardarlo: el panel adjunta
+   ejercicios copiando la url que le mandamos (ya firmada) y hace PUT de todo el registro.
+   Sin esto la D1 guardaria URLs con caducidad. */
+function desfirmarAudios(valor){
+  const lista = parseAudios(valor).map(a => Object.assign({}, a, { u: rutaCanonica(a.u) }));
+  return lista.length ? JSON.stringify(lista) : "";
+}
+
 /* base64url -> bytes */
 function b64uBytes(s){
   s = String(s || "").replace(/-/g, "+").replace(/_/g, "/");
@@ -7946,12 +8008,62 @@ export default {
         const m = key.match(/^[a-f0-9-]{36}\.(pdf|mp3|m4a|ogg|wav|png|jpg|jpeg)$/);
         if (!m) return json({ error: "Archivo no encontrado" }, 404);
         const rutaRelativa = "/app/api/recurso/archivo/" + key;
-        let hallado = await env.DB.prepare("SELECT tenant_id FROM recursos WHERE url = ?1").bind(rutaRelativa).first();
-        if (!hallado) hallado = await env.DB.prepare("SELECT tenant_id FROM ejercicios WHERE url = ?1").bind(rutaRelativa).first();
-        /* foto de perfil y logo de marca viven en config; adjuntos de clases en registro.tarea_audio (JSON) */
-        if (!hallado) hallado = await env.DB.prepare("SELECT tenant_id FROM config WHERE clave IN ('profe_foto','brand_logo') AND valor = ?1").bind(rutaRelativa).first();
-        if (!hallado) hallado = await env.DB.prepare("SELECT tenant_id FROM registro WHERE tarea_audio LIKE ?1 LIMIT 1").bind("%" + rutaRelativa + "%").first();
-        if (!hallado) return json({ error: "Archivo no encontrado" }, 404);
+
+        /* Que es este archivo y de que tenant. Lo que no esta referenciado en la D1 no
+           existe para este endpoint (mata huerfanos y deja fuera los backups del bucket). */
+        let clase = null, tenantArchivo = "", duenoCuenta = "";
+        let fila = await env.DB.prepare("SELECT tenant_id FROM recursos WHERE url = ?1").bind(rutaRelativa).first();
+        if (fila) clase = "material";
+        if (!clase){
+          fila = await env.DB.prepare("SELECT tenant_id FROM ejercicios WHERE url = ?1").bind(rutaRelativa).first();
+          if (fila) clase = "material";
+        }
+        if (!clase){
+          /* instr() y no LIKE: D1 revienta con "LIKE or GLOB pattern too complex" apenas el
+             patron pasa de ~50 caracteres, y esta ruta mide mas de 60. Con LIKE, este
+             endpoint tiraba 500 para todo archivo que no fuera recurso ni ejercicio. */
+          fila = await env.DB.prepare("SELECT tenant_id FROM registro WHERE instr(COALESCE(tarea_audio,''), ?1) > 0 LIMIT 1").bind(rutaRelativa).first();
+          if (fila) clase = "material";
+        }
+        if (!clase){
+          /* foto del profe y logo de la marca: se pintan en la web publica de la academia */
+          fila = await env.DB.prepare("SELECT tenant_id FROM config WHERE clave IN ('profe_foto','brand_logo') AND valor = ?1").bind(rutaRelativa).first();
+          if (fila) clase = "publico";
+        }
+        if (!clase){
+          fila = await env.DB.prepare("SELECT tenant_id, cuenta_id FROM compras WHERE comprobante = ?1").bind(key).first();
+          if (fila){ clase = "comprobante"; duenoCuenta = fila.cuenta_id || ""; }
+        }
+        if (!clase) return json({ error: "Archivo no encontrado" }, 404);
+        tenantArchivo = (fila && fila.tenant_id) || "";
+
+        let permitido = (clase === "publico");
+        if (!permitido){
+          const firma = await verificarFirma(env, key, url);
+          if (clase === "material"){
+            if (firma) permitido = true;
+            else {
+              const act = await actorDeSesion(env, request);
+              if (act && act.tenant && act.tenant.id === tenantArchivo) permitido = true;
+              else {
+                const cu = await cuentaDeSesion(env, request);
+                permitido = !!(cu && cu.alumno_id && cu.tenant_id === tenantArchivo);
+              }
+            }
+          } else {                                    /* comprobante de pago */
+            if (firma === "c") permitido = true;
+            else {
+              const act = await actorDeSesion(env, request);
+              if (act && act.tenant && act.tenant.id === tenantArchivo) permitido = true;
+              else {
+                const cu = await cuentaDeSesion(env, request);
+                permitido = !!(cu && duenoCuenta && cu.id === duenoCuenta);
+              }
+            }
+          }
+        }
+        if (!permitido) return json({ error: "No autorizado" }, 401);
+
         const obj = await env.RECURSOS_R2.get(key);
         if (!obj) return json({ error: "Archivo no encontrado" }, 404);
         const ct = (obj.httpMetadata && obj.httpMetadata.contentType) || MIME_ARCHIVO[m[1]] || "application/octet-stream";
@@ -7959,7 +8071,9 @@ export default {
           headers: {
             "content-type": ct,
             "content-disposition": (obj.httpMetadata && obj.httpMetadata.contentDisposition) || "inline",
-            "cache-control": "public, max-age=3600",
+            /* "private": con URL firmada, un cache compartido no debe guardar una copia
+               que luego sirva a otro. El logo publico si puede cachearse. */
+            "cache-control": clase === "publico" ? "public, max-age=3600" : "private, max-age=300",
             "x-content-type-options": "nosniff"
           }
         });
@@ -8315,7 +8429,11 @@ export default {
             const { results } = await env.DB.prepare(
               "SELECT fecha, estado, trabajo, tarea, COALESCE(plan,'') AS plan, COALESCE(tarea_audio,'') AS tarea_audio FROM registro WHERE tenant_id = ?1 AND alumno_id = ?2 AND COALESCE(ciclo,1) = ?3 ORDER BY fecha ASC, id ASC"
             ).bind(tid, alumno.id, ciclo).all();
-            historial = (results || []).map(r => Object.assign({}, r, { tarea_audios: parseAudios(r.tarea_audio) }));
+            /* adjuntos FIRMADOS: el portal los pinta como <audio src>, sin Authorization */
+            historial = [];
+            for (const r of (results || [])){
+              historial.push(Object.assign({}, r, { tarea_audios: await firmarAudios(env, r.tarea_audio, "m") }));
+            }
             const rUsadas = await reservasUsadasCount(env, tid, alumno.id, ciclo);
             const paqMap = (await loadPaquetes(env, tid)).map;
             computed = compute(alumno, historial, precios, rUsadas, resolverPk(paqMap, alumno.paquete));
@@ -8357,9 +8475,14 @@ export default {
         const cursoAl = alumno ? (alumno.curso || "") : "";
         const cursosAl = cursoAl.split(",").map(s => s.trim()).filter(Boolean);
         const esAlumnoOEx = !!cu.alumno_id;
-        const recursos = esAlumnoOEx ? (((await env.DB.prepare(
-          "SELECT id, titulo, descripcion, url, curso, fecha FROM recursos WHERE tenant_id = ?1 ORDER BY fecha DESC, rowid DESC"
-        ).bind(tid).all()).results || []).filter(r => r.curso === "Todos" || cursosAl.indexOf(r.curso) >= 0)) : [];
+        const recursos = [];
+        if (esAlumnoOEx){
+          const filasRec = ((await env.DB.prepare(
+            "SELECT id, titulo, descripcion, url, curso, fecha FROM recursos WHERE tenant_id = ?1 ORDER BY fecha DESC, rowid DESC"
+          ).bind(tid).all()).results || []).filter(r => r.curso === "Todos" || cursosAl.indexOf(r.curso) >= 0);
+          /* URL firmada: el portal abre el PDF con <a href>, sin header Authorization. */
+          for (const r of filasRec) recursos.push(Object.assign({}, r, { url: await firmarRuta(env, r.url, "m") }));
+        }
 
         const pagos = (await env.DB.prepare(
           "SELECT fecha, curso, paquete, monto, COALESCE(descuento,0) AS descuento, estado FROM compras WHERE tenant_id = ?1 AND cuenta_id = ?2 ORDER BY fecha DESC, rowid DESC LIMIT 20"
@@ -10836,6 +10959,16 @@ export default {
           const compras = esDueno ? comprasAll : comprasAll.filter(c => c.profesor_id === profeActorId || idsCuentasScope.has(c.cuenta_id));
           const recursos = (await env.DB.prepare("SELECT * FROM recursos WHERE tenant_id = ?1 ORDER BY fecha DESC, rowid DESC").bind(tid).all()).results || [];
           const ejercicios = (await env.DB.prepare("SELECT * FROM ejercicios WHERE tenant_id = ?1 ORDER BY fecha DESC, rowid DESC").bind(tid).all()).results || [];
+          /* URLs firmadas para el panel (11-ago-2026): tambien pinta <audio src> y <a href>,
+             que van sin header Authorization. Aqui ya se comprobo quien pregunta. */
+          for (const r of recursos) r.url = await firmarRuta(env, r.url, "m");
+          for (const e of ejercicios) e.url = await firmarRuta(env, e.url, "m");
+          for (const g of registro){
+            if (g.tarea_audio) g.tarea_audio = JSON.stringify(await firmarAudios(env, g.tarea_audio, "m"));
+          }
+          for (const c of compras){
+            c.comprobante_url = c.comprobante ? await firmarRuta(env, "/app/api/recurso/archivo/" + c.comprobante, "c") : "";
+          }
           /* leads (interesados del marketing) son de la academia: solo el dueno.
              CRM: columnas de pipeline con fallback si el ALTER aun no corrio. */
           let leads = [];
@@ -11243,7 +11376,7 @@ export default {
             ).bind(
               r.id, tid, r.fecha || "", aid,
               r.curso || "", r.estado || "", r.trabajo || "", r.tarea || "", r.ciclo || 1,
-              r.tarea_audio || "", r.plan || ""
+              desfirmarAudios(r.tarea_audio), r.plan || ""
             ));
           }
           if (esDueno){
@@ -11783,8 +11916,9 @@ export default {
           };
 
           if (form.get("accion") === "borrar"){
-            const urlB = String(form.get("url") || "");
-            const idx = lista.findIndex(a => a.u === urlB);
+            /* el panel devuelve la URL FIRMADA que le pintamos; la D1 guarda la pelada */
+            const urlB = rutaCanonica(form.get("url") || "");
+            const idx = lista.findIndex(a => rutaCanonica(a.u) === urlB);
             if (idx < 0) return json({ error: "Audio no encontrado" }, 404);
             if (urlB.startsWith("/app/api/recurso/archivo/")){
               const oldKey = urlB.slice("/app/api/recurso/archivo/".length);
@@ -11792,7 +11926,7 @@ export default {
             }
             lista.splice(idx, 1);
             await guardarLista(lista);
-            return json({ ok: true, audios: lista });
+            return json({ ok: true, audios: await firmarAudios(env, JSON.stringify(lista), "m") });
           }
 
           if (lista.length >= 8){
@@ -11812,7 +11946,7 @@ export default {
           });
           lista.push({ u: "/app/api/recurso/archivo/" + key, n: nombre });
           await guardarLista(lista);
-          return json({ ok: true, audios: lista });
+          return json({ ok: true, audios: await firmarAudios(env, JSON.stringify(lista), "m") });
         }
 
         /* -------- Chat: borrar mensaje / listar hilos -------- */
