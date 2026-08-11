@@ -1318,6 +1318,15 @@
       <button class="webpg" data-aj="avanzado" type="button">Avanzado</button>
       <button class="btn ghost sm" type="button" style="margin-left:auto;" onclick="lanzarTourModulo('ajustes')">? Cómo funciona</button>
     </div>
+    <!-- Tu WhatsApp PRIMERO (10-ago-2026): José (Elevate) no lo encontraba porque el campo
+         no existía en ninguna pantalla — el backend ya lo aceptaba y lo espejaba, pero nadie
+         podía escribirlo. Va arriba de todo: es lo primero que un dueño busca. -->
+    <div class="group" data-aj="academia">
+      <h2>Tu WhatsApp</h2>
+      <p class="hint">El número donde te escriben tus alumnos. Es el que se abre desde el <b>botón verde de tu web</b> y el que usan los mensajes del portal. Ponlo con el 51 adelante, sin espacios ni guiones.</p>
+      <div class="cfgrow"><span class="pk">Mi WhatsApp</span><input id="cfg_whatsapp_profe" type="text" inputmode="numeric" placeholder="51999888777" /></div>
+      <p class="hint" style="margin-top:-4px;">Se guarda con el botón <b>Guardar ajustes</b> del final de la página.</p>
+    </div>
     <div class="group" data-aj="academia">
       <h2>Tu marca</h2>
       <p class="hint">Tu logo, tu color y tu tipografía. Se aplican a este panel y al portal de tus alumnos, para que se sienta TU academia.</p>
@@ -3013,6 +3022,7 @@ function renderAjustes(){
   if(el("cfg_asistencia_auto")) el("cfg_asistencia_auto").value=(db.config&&db.config.asistencia_auto)||"";
   if(el("cfg_asistencia_horas")) el("cfg_asistencia_horas").value=(db.config&&db.config.asistencia_horas)||"";
   if(el("cfg_cursos")) el("cfg_cursos").value=(db.config&&db.config.cursos)||MARCA.cursos.join(", ");
+  if(el("cfg_whatsapp_profe")) el("cfg_whatsapp_profe").value=(db.config&&db.config.whatsapp_profe)||"";
   if(el("cfg_brand_color")) el("cfg_brand_color").value=(db.config&&db.config.brand_color)||"#E8A13D";
   if(el("cfg_brand_font")) el("cfg_brand_font").value=(db.config&&db.config.brand_font)||"";
   pintarBeneficios();
@@ -5561,6 +5571,7 @@ el("btnGuardarAjustes").addEventListener("click",function(){
             salas: salasRows.length?JSON.stringify(salasRows):"",
             cursos: clasesRows.length?clasesRows.map(function(c){return c.n;}).join(", "):el("cfg_cursos").value.trim(),
             anticipacion_h:(el("cfg_anticipacion_h")?el("cfg_anticipacion_h").value.trim():""),
+            whatsapp_profe:(el("cfg_whatsapp_profe")?el("cfg_whatsapp_profe").value.replace(/\D/g,"").slice(0,15):""),
             brand_color:(el("cfg_brand_color")?el("cfg_brand_color").value.trim():""),
             brand_font:(el("cfg_brand_font")?el("cfg_brand_font").value:""),
             agenda_cupo:(el("cfg_agenda_cupo")?el("cfg_agenda_cupo").value.trim():""),
@@ -5620,6 +5631,10 @@ el("btnGuardarAjustes").addEventListener("click",function(){
             gcal_client_id:el("cfg_gcal_client_id").value.trim(),
             gcal_client_secret:el("cfg_gcal_client_secret").value.trim(),
             gcal_calendar_id:el("cfg_gcal_calendar_id").value.trim()||"primary" };
+  /* 10-ago-2026: si el campo de WhatsApp quedó vacío NO se manda la clave, para que el
+     worker no pise (ni espeje en blanco) un número que la cuenta ya tenía cargado desde
+     el alta. Vaciarlo a propósito no es un caso real; perderlo en silencio, sí lo era. */
+  if(!cfg.whatsapp_profe) delete cfg.whatsapp_profe;
   Promise.all([ apiPut(), apiPost("/app/api/admin/config",cfg) ])
     .then(function(){
       AJ_DIRTY=false; db.config=Object.assign(db.config||{},cfg); renderAll(); toast("Ajustes guardados");
