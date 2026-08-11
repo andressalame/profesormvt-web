@@ -2989,6 +2989,17 @@ export default {
       if (url.pathname === "/api/chat" && request.method === "GET"){
         const who = await authChat(env, request);
         if (!who) return json({ error: "Sesión expirada" }, 401);
+        /* FUGA CERRADA (11-ago-2026): el registro por /api/registro es abierto A PROPÓSITO (así
+           el interesado se crea su cuenta, ve precios y compra sin que Andrés lo cargue a mano),
+           y MVT es mono-tenant: no hace falta ni adivinar un slug. Sin este candado, cualquier
+           desconocido se registraba y leía el chat grupal — nombres y mensajes de los alumnos
+           reales. Confirmado en producción con una cuenta desechable antes de arreglarlo.
+           El POST de este mismo chat YA exigía `alumno_id` ("el chat se abre cuando activas tu
+           primer paquete") y el GET de /api/chat/privado también; el GET del grupal era el único
+           que no lo pedía. Esto no agrega una regla nueva: restaura la que el producto ya tenía.
+           No rompe el alta legítima (la cuenta se crea igual, solo no lee el chat hasta estar
+           vinculada a su ficha de alumno). Mismo criterio que Batuta (commit 401d501). */
+        if (!who.admin && !who.cu.alumno_id) return json({ mensajes: [], max: 0 });
         let desde = parseInt(url.searchParams.get("desde") || "0", 10);
         if (!Number.isFinite(desde) || desde < 0) desde = 0;
         let rows;

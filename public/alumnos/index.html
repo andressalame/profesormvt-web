@@ -1583,9 +1583,14 @@ function chatSetCanal(canal){
   chatMax = 0; $("chatMsgs").innerHTML="";
   document.querySelectorAll(".chat-tab").forEach(function(b){ b.classList.toggle("active", b.dataset.canal===chatCanal); });
   show("chatInputWrap"); hide("chatBloqueado");
-  if(chatCanal==="privado" && (!ME || !ME.alumno)){
+  /* Los DOS canales se abren al activar el primer paquete. Antes solo se avisaba en el privado
+     y el grupal quedaba abierto: una cuenta recién creada leía los mensajes de los alumnos.
+     Desde el 11-ago-2026 el servidor tampoco los entrega, así que aquí se explica por qué. */
+  if(!ME || !ME.alumno){
     hide("chatInputWrap");
-    $("chatBloqueado").textContent = "El chat con el profe se abre cuando actives tu primer paquete 🙂";
+    $("chatBloqueado").textContent = chatCanal==="privado"
+      ? "El chat con el profe se abre cuando actives tu primer paquete 🙂"
+      : "El chat del grupo se abre cuando actives tu primer paquete 🙂";
     show("chatBloqueado");
   }
   chatPoll();
