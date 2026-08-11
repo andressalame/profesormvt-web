@@ -3082,7 +3082,9 @@ export default {
         let clase = null, duenoCuenta = "";
         if (await env.DB.prepare("SELECT 1 AS x FROM recursos WHERE url = ?1").bind(ruta).first()) clase = "material";
         if (!clase && await env.DB.prepare("SELECT 1 AS x FROM ejercicios WHERE url = ?1").bind(ruta).first()) clase = "material";
-        if (!clase && await env.DB.prepare("SELECT 1 AS x FROM registro WHERE tarea_audio LIKE ?1 LIMIT 1").bind("%" + ruta + "%").first()) clase = "material";
+        /* instr() y no LIKE: D1 revienta con "LIKE or GLOB pattern too complex" en cuanto el
+           patrón pasa de ~50 caracteres, y una ruta de archivo mide más de 60. */
+        if (!clase && await env.DB.prepare("SELECT 1 AS x FROM registro WHERE instr(COALESCE(tarea_audio,''), ?1) > 0 LIMIT 1").bind(ruta).first()) clase = "material";
         if (!clase && await env.DB.prepare("SELECT 1 AS x FROM config WHERE clave = 'profe_foto' AND valor = ?1").bind(ruta).first()) clase = "publico";
         if (!clase){
           const compra = await env.DB.prepare("SELECT cuenta_id FROM compras WHERE comprobante = ?1").bind(key).first();
@@ -5068,7 +5070,10 @@ export default {
             await env.DB.prepare("DELETE FROM ejercicios WHERE id = ?1").bind(idEj).run();
             // borra el objeto en R2 solo si ninguna clase lo tiene adjunto (no romper tareas ya enviadas)
             if (ej && typeof ej.url === "string" && ej.url.startsWith("/api/recurso/archivo/")){
-              const ref = await env.DB.prepare("SELECT COUNT(*) AS n FROM registro WHERE tarea_audio LIKE ?1").bind("%" + ej.url + "%").first();
+              /* instr() y no LIKE: con LIKE esto tiraba "pattern too complex" (la ruta pasa
+                 de 60 caracteres y D1 corta como en ~50), o sea borrar un ejercicio de la
+                 biblioteca reventaba con 500. Descubierto el 11-ago-2026. */
+              const ref = await env.DB.prepare("SELECT COUNT(*) AS n FROM registro WHERE instr(COALESCE(tarea_audio,''), ?1) > 0").bind(ej.url).first();
               if (!ref || !ref.n){
                 const k = ej.url.slice("/api/recurso/archivo/".length);
                 try { await env.RECURSOS_R2.delete(k); } catch (e) { /* un huérfano no bloquea el borrado */ }
