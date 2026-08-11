@@ -2215,13 +2215,6 @@ function filaClaseHTML(c){
     '<input type="number" class="cl-a" min="0" max="60" placeholder="aforo" title="Cuánta gente entra. Vacío = usa el cupo general." value="'+(c.a||"")+'" />'+
     '<input type="text" class="cl-v" maxlength="240" placeholder="Variantes, separadas por coma (opcional)" value="'+esc((c.v||[]).join(", "))+'" />'+
     '<button type="button" class="btn ghost sm cl-x" title="Quitar tipo de clase">×</button>'+
-    /* "Pendiente de configurar" (11-ago-2026): una clase sin aforo propio Y sin cupo general
-       acepta 1 persona sin que nadie lo haya elegido — la fuga silenciosa de esta mañana.
-       Se dice acá, en su fila, para que el dueño lo vea después sin tener que acordarse
-       (pasa sobre todo con las clases creadas de una desde el importador). */
-    ((c.n && !(c.a>0) && !cupoGeneralReservas())
-      ? '<p class="hint" style="grid-column:1/-1;margin:2px 0 0;color:var(--amber,#E8A13D);">Falta decir cuánta gente entra a <b>'+esc(c.n)+'</b>: hoy acepta <b>1 sola persona</b>. Ponle su aforo acá arriba, o uno general en Ajustes → Reservas.</p>'
-      : "")+
     /* Reglas de reserva propias de ESTA clase (28-jul-2026, pedido de Elevate). Van en un
        desplegable: quien no las use no ve nada, y quien las use las tiene por curso. */
     '<details class="cl-reg" style="grid-column:1/-1;margin:2px 0 8px;">'+
@@ -2237,7 +2230,14 @@ function filaClaseHTML(c){
 }
 function renderClases(){
   var box=el("clasesBox"); if(!box) return;
-  box.innerHTML=clasesTenant().map(function(c){ return filaClaseHTML(c); }).join("");
+  /* "Pendiente de configurar" (11-ago-2026): si la academia nunca dijo cuánta gente entra,
+     TODAS sus clases aceptan 1 sola persona sin que nadie lo haya elegido — la fuga
+     silenciosa de esta mañana. Se dice UNA vez acá arriba (no una por fila, que era ruido)
+     y con la misma pregunta que ya existe en la agenda, no con un aviso nuevo. Es sobre
+     todo para las clases creadas de una desde el importador, que nacen sin aforo propio. */
+  var falta=(function(){ try{ return aforoSinDefinir(); }catch(e){ return false; } })();
+  box.innerHTML=(falta?('<p class="hint" style="margin:0 0 8px;color:var(--amber,#E8A13D);">Todavía no has dicho cuánta gente entra a tus clases, así que <b>cada una acepta 1 sola persona</b>. Ponle su aforo a cada una acá abajo (la casilla del medio), o uno general para todas en <b>Ajustes → Reservas</b>.</p>'):"")+
+    clasesTenant().map(function(c){ return filaClaseHTML(c); }).join("");
 }
 /* Lee el editor de clases sin guardarlo (lo usan los paquetes y la agenda para ofrecer opciones) */
 function leerClasesEditor(){
@@ -7371,7 +7371,8 @@ function impProcesarFilas(rows){
         var cuM=impCurso(map.curso!=null?r[map.curso]:"");
         /* saldo migrado: "Clases restantes" y "Vence" (28-jul-2026). Ausentes = alumno nuevo
            con su paquete completo, exactamente como antes de existir estas columnas. */
-        var sal=impSaldo(map.restantes!=null?r[map.restantes]:"", paqFila);
+        var restCrudo=map.restantes!=null?String(r[map.restantes]==null?"":r[map.restantes]).trim():"";
+        var sal=impSaldo(restCrudo, paqFila);
         var vTxt=map.vence!=null?String(r[map.vence]||"").trim():"";
         var vIso=impFecha(vTxt);
         /* datos completos de la migración (7-ago-2026): apellido, correo, nacimiento y
@@ -7424,7 +7425,7 @@ function impProcesarFilas(rows){
             nombre:nombre, apellido:apeFila, email:mailOk?mailFila:"", nacimiento:nIso||"",
             curso:cursoNuevo, cursoPend:cuM.pend, cursoCrudo:cuM.crudo, paqSug:paqSug,
             whatsapp:waNuevo, paquete:paqFila,
-            restantes:sal.restantes, migrado_usadas:sal.usadas, saldoNota:sal.nota||"",
+            restantes:sal.restantes, restCrudo:restCrudo, migrado_usadas:sal.usadas, saldoNota:sal.nota||"",
             vence:vIso||"", venceTxt:vTxt, reservas:rsv.isos,
             error:errFila, errOtros:"", avisos:avisos, paqDesc:paqDesc,
             profTxt:profTxt, profesor_id:impResolveProfe(profTxt) });
@@ -7461,7 +7462,7 @@ function impProcesarFilas(rows){
                2000 cubre un export ancho; si aun asi topa, se DICE en vez de callarlo. */
             return todo.length>2000?(todo.slice(0,1984)+" …(recortado)"):todo;
           })(),
-          restantes:sal.restantes, migrado_usadas:sal.usadas, saldoNota:sal.nota||"",
+          restantes:sal.restantes, restCrudo:restCrudo, migrado_usadas:sal.usadas, saldoNota:sal.nota||"",
           vence:vIso||"", venceTxt:vTxt,
           reservas:rsv.isos,
           error:errFila, errOtros:"", avisos:avisos, paqDesc:paqDesc,
@@ -7581,7 +7582,7 @@ el("btnImpPegar").addEventListener("click",function(){
       paqSug:paqML.nivel===2?paqML.sugerencia:"", whatsapp:wsp,
       paquete:paqL, notas:notas.concat(venTxt&&!venIso?["Vencimiento del sistema anterior: "+venTxt]:[])
         .concat(cuL.pend.length?["Clase del sistema anterior: "+cuL.pend.map(function(x){return x.crudo;}).join(", ")]:[]).join(" · "),
-      restantes:salL.restantes, migrado_usadas:salL.usadas, saldoNota:salL.nota||"",
+      restantes:salL.restantes, restCrudo:restTxt||"", migrado_usadas:salL.usadas, saldoNota:salL.nota||"",
       vence:venIso||"", venceTxt:venTxt,
       error:salL.error, errOtros:"", avisos:avisosL,
       paqDesc:!!(paqL && !pkL.ilim && !(pkL.clases>0)),
@@ -7763,7 +7764,7 @@ function impPreview(rows,dup,vacios,dupArchivo,sinCruce){
     var crear='<button type="button" class="btn sm" data-creartipo="'+p.tipo+'" data-crear="'+esc(p.crudo)+'">Sí, crear "'+esc(p.crudo)+'"</button>';
     if(esClase){
       return cab+'<div style="display:flex;gap:8px;align-items:center;margin-top:6px;flex-wrap:wrap;">'+crear+elegir+'</div>'+
-        '<p class="hint" style="margin:4px 0 0;">'+esc(impAforoTexto())+' Si prefieres, déjalo así y esos alumnos entran sin clase.</p></div>';
+        '<p class="hint" style="margin:4px 0 0;">'+esc(impAforoTexto())+' O déjalo así: entran sin clase.</p></div>';
     }
     /* El plan necesita UN dato para existir: de cuántas clases es (el servidor descarta un
        plan de 0 clases). Se propone el número que trae su propio nombre y el dueño lo corrige. */
@@ -7772,7 +7773,7 @@ function impPreview(rows,dup,vacios,dupArchivo,sinCruce){
       '<label style="font-size:13px;display:flex;gap:6px;align-items:center;">¿De cuántas clases es?'+
       '<input type="number" class="imp-cr-c" min="0" max="500" style="width:80px;" value="'+esc(String(sugC))+'" data-crear="'+esc(p.crudo)+'" /></label>'+
       crear+elegir+'</div>'+
-      '<p class="hint" style="margin:4px 0 0;">Si es una mensualidad sin límite de clases, escribe <b>0</b>. <b>El precio se lo pones después</b>, en Ajustes → Clases y paquetes: mientras esté en S/0 no sale en tu web ni te puedo cobrar por él. Si prefieres, déjalo así y esos alumnos entran sin plan.</p></div>';
+      '<p class="hint" style="margin:4px 0 0;">Si es mensualidad sin límite, escribe <b>0</b>. <b>El precio se lo pones después</b>, en Ajustes: mientras esté en S/0 no sale en tu web. O déjalo así: entran sin plan.</p></div>';
   };
   var mapBox=el("impMapPaq");
   if(!mapBox){ mapBox=document.createElement("div"); mapBox.id="impMapPaq"; box.parentNode.insertBefore(mapBox, box); }
@@ -7802,7 +7803,11 @@ function reMapPaquete(desde,hacia){
   IMP_ROWS.forEach(function(a){
     if(a.paquete!==desde) return;
     a.paquete=hacia;
-    var sal=impSaldo(a.restantes!=null?String(a.restantes):"", hacia);
+    /* 11-ago-2026: se re-lee el texto ORIGINAL del archivo, no a.restantes. Con un plan que
+       todavía no existía, impSaldo devolvía restantes=null (no sabía contra qué medir), así
+       que al mapearlo o crearlo el saldo migrado se perdía: quien tenía 4 de 10 entraba con
+       10 de 10, o sea 6 clases regaladas, y en silencio. */
+    var sal=impSaldo((a.restCrudo!=null&&a.restCrudo!=="")?a.restCrudo:(a.restantes!=null?String(a.restantes):""), hacia);
     a.migrado_usadas=sal.usadas; a.restantes=sal.restantes; a.saldoNota=sal.nota||"";
     a.error=sal.error||a.errOtros||"";
     var pkN=pkDe(hacia);
