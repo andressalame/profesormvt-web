@@ -406,6 +406,38 @@
   </div>
 </section>
 
+<!-- ============ INVITACION: el alumno llego con SU link (correo o WhatsApp) ============
+     Una sola pregunta por pantalla. El que ya tiene correo en su ficha no ve NADA: entra
+     directo. Al que le falta correo se le pide uno solo, y nunca una contraseña. -->
+<section id="viewInv" class="auth-card hidden">
+  <div id="invLogo"></div>
+  <div class="eyebrow" id="invEyebrow">// TU PORTAL</div>
+  <h1 id="invTitulo">Entrando a tu <em>portal</em></h1>
+  <div class="sub" id="invSub">Un segundo…</div>
+  <div id="invForm" class="hidden">
+    <hr class="rule" />
+    <div class="field"><label for="i_email">Tu correo</label><input id="i_email" type="email" autocomplete="email" placeholder="tucorreo@gmail.com" /></div>
+    <p class="auth-hint" style="margin:-4px 0 12px">Lo usamos para avisarte de tus clases. Nada de contraseñas.</p>
+    <button class="btn full" id="btnInv">Entrar a mi portal</button>
+  </div>
+  <div class="err" id="invErr"></div>
+  <p class="auth-hint hidden" id="invSalida">¿Ya tienes tu cuenta? <a href="#" id="invLogin">Ingresa con tu correo y contraseña</a>.</p>
+</section>
+
+<!-- ============ ELEGIR CONTRASEÑA (link ?reset= del correo) ============
+     Existia el correo con el boton "Crear mi contraseña" y el endpoint del servidor, pero
+     NINGUNA pantalla leia el ?reset=: el alumno caia en el login sin poder hacer nada. -->
+<section id="viewReset" class="auth-card hidden">
+  <div id="rsLogo"></div>
+  <div class="eyebrow">// TU CONTRASEÑA</div>
+  <h1>Elige tu <em>contraseña</em></h1>
+  <div class="sub">La usarás para entrar a tu portal.</div>
+  <hr class="rule" />
+  <div class="field"><label for="rs_pass">Contraseña (mínimo 8 caracteres)</label><input id="rs_pass" type="password" autocomplete="new-password" /></div>
+  <button class="btn full" id="btnReset">Guardar y entrar</button>
+  <div class="err" id="resetErr"></div>
+</section>
+
 <!-- ============ APP (SPA con sidebar) ============ -->
 <div id="app" class="app hidden">
   <aside class="side">
@@ -768,7 +800,7 @@ function getTok(){ try{ return localStorage.getItem(KEY); }catch(e){ return null
 function setTok(t){ try{ if(t) localStorage.setItem(KEY,t); else localStorage.removeItem(KEY); }catch(e){} }
 var toastT;
 function toast(msg){ var t=$("toast"); t.textContent=msg; t.classList.add("show"); clearTimeout(toastT); toastT=setTimeout(function(){t.classList.remove("show");},2600); }
-function setPantalla(p){ ["viewLoading","viewAuth","app"].forEach(hide); show(p); }
+function setPantalla(p){ ["viewLoading","viewAuth","viewInv","viewReset","app"].forEach(hide); show(p); }
 function kv(lab,vHtml){ return '<div class="kv"><div class="lab">'+lab+'</div><div class="v">'+vHtml+'</div></div>'; }
 
 /* ================= VOZ DEL PORTAL (11-ago-2026) =================
@@ -920,8 +952,86 @@ function setAuthTab(which){
 $("tabLogin").addEventListener("click",function(){ setAuthTab("login"); });
 $("tabReg").addEventListener("click",function(){ setAuthTab("reg"); });
 
-/* ---------- OLVIDÉ MI CONTRASEÑA: v0 = self-service apagado, escribele a tu profesor (SPEC) ---------- */
+/* ================= INVITACION Y CONTRASEÑA POR LINK (11-ago-2026) =================
+   Dos links que le llegan al alumno por correo o WhatsApp:
+     ?inv=TOKEN    invitacion de su academia -> entra sin contraseña (la manda el dueño).
+     ?reset=TOKEN  eligir/cambiar contraseña -> entra al guardarla.
+   El token sale de la barra de direcciones apenas se usa (history.replaceState): no queda
+   a la vista ni se comparte sin querer al copiar la URL. */
 var RESET_TOKEN = "";
+var INV_TOKEN = "";
+try{
+  var qsA = new URLSearchParams(location.search);
+  INV_TOKEN = (qsA.get("inv") || "").trim();
+  RESET_TOKEN = (qsA.get("reset") || "").trim();
+}catch(e){}
+function limpiarUrlToken(){
+  try{
+    var u = new URL(location.href);
+    u.searchParams.delete("inv"); u.searchParams.delete("reset");
+    history.replaceState(null, "", u.pathname + (u.search || "") + (u.hash || ""));
+  }catch(e){}
+}
+function entrarConSesion(tk){ setTok(tk); limpiarUrlToken(); cargarMe(); }
+
+/* Canjea la invitacion. Sin correo en su ficha, el servidor responde necesita_email
+   y recien ahi se le pide UNO (nunca una contraseña). */
+function canjearInvitacion(email){
+  $("invErr").textContent = "";
+  var btn = $("btnInv"); if(btn) btn.disabled = true;
+  var cuerpo = { token: INV_TOKEN };
+  if(email) cuerpo.email = email;
+  api("/app/api/invitacion/canjear",{method:"POST",body:JSON.stringify(cuerpo)})
+    .then(function(d){
+      if(d && d.necesita_email){
+        $("invTitulo").innerHTML = "Hola" + (d.nombre ? ", <em>" + esc(String(d.nombre).split(" ")[0]) + "</em>" : "");
+        $("invSub").textContent = "Este es tu portal de " + (d.academia || "tu academia") + ". Déjanos tu correo y entras.";
+        if(d.academia) $("invEyebrow").textContent = "// " + String(d.academia).toUpperCase();
+        $("invForm").classList.remove("hidden");
+        $("i_email").focus();
+        if(btn) btn.disabled = false;
+        return;
+      }
+      entrarConSesion(d.token);
+    })
+    .catch(function(e){
+      $("invErr").textContent = (e && e.message) || "No pudimos abrir tu portal. Pídele otro enlace a tu academia.";
+      $("invSalida").classList.remove("hidden");
+      if(btn) btn.disabled = false;
+    });
+}
+if($("btnInv")){
+  $("btnInv").addEventListener("click",function(){
+    var em = ($("i_email").value || "").trim();
+    if(!em){ $("invErr").textContent = "Escribe tu correo para entrar."; return; }
+    canjearInvitacion(em);
+  });
+  $("i_email").addEventListener("keydown",function(e){ if(e.key==="Enter") $("btnInv").click(); });
+}
+if($("invLogin")){
+  $("invLogin").addEventListener("click",function(e){
+    e.preventDefault(); limpiarUrlToken(); setAuthTab("login"); setPantalla("viewAuth");
+  });
+}
+if($("btnReset")){
+  $("btnReset").addEventListener("click",function(){
+    $("resetErr").textContent = "";
+    var p = $("rs_pass").value || "";
+    if(p.length < 8){ $("resetErr").textContent = "La contraseña necesita mínimo 8 caracteres."; return; }
+    $("btnReset").disabled = true;
+    api("/app/api/password/reset",{method:"POST",body:JSON.stringify({token:RESET_TOKEN,nueva:p})})
+      .then(function(d){
+        if(d && d.token){ entrarConSesion(d.token); return; }
+        limpiarUrlToken(); setAuthTab("login"); setPantalla("viewAuth");
+        $("loginErr").textContent = "Listo. Entra con tu correo y tu contraseña nueva.";
+      })
+      .catch(function(e){
+        $("resetErr").textContent = (e && e.message) || "Ese enlace ya no sirve. Pídele otro a tu academia.";
+      })
+      .finally(function(){ $("btnReset").disabled = false; });
+  });
+  $("rs_pass").addEventListener("keydown",function(e){ if(e.key==="Enter") $("btnReset").click(); });
+}
 
 $("btnLogin").addEventListener("click",function(){
   $("loginErr").textContent="";
@@ -2503,13 +2613,21 @@ function initAlumno(){
         if(d.marca.logo && d.marca.logo.indexOf("/app/api/recurso/archivo/") === 0){
           $("logoSidebar").innerHTML = '<img src="' + esc(d.marca.logo) + '" alt="' + esc(MARCA.nombre) + '" style="max-height:34px;max-width:150px;display:block;" />';
           /* mismo logo en la pantalla de ingreso: es lo primero que ve el alumno */
-          if($("authLogo")) $("authLogo").innerHTML = '<img src="' + esc(d.marca.logo) + '" alt="' + esc(MARCA.nombre) + '" />';
+          /* el mismo logo en las pantallas de link (invitacion y contraseña): el alumno
+             tiene que ver a SU academia, no a Batuta, cuando abre el correo */
+          ["authLogo","invLogo","rsLogo"].forEach(function(idL){
+            if($(idL)) $(idL).innerHTML = '<img src="' + esc(d.marca.logo) + '" alt="' + esc(MARCA.nombre) + '" />';
+          });
         }
       }
     }).catch(function(){});
   }
   try{
-    if(getTok()){ cargarMe(); }
+    /* Los links del correo/WhatsApp mandan sobre la sesion guardada: si el alumno abre SU
+       invitacion, entra como el, aunque en ese navegador quedara abierta otra cuenta. */
+    if(INV_TOKEN){ setPantalla("viewInv"); canjearInvitacion(""); }
+    else if(RESET_TOKEN){ setPantalla("viewReset"); setTimeout(function(){ try{ $("rs_pass").focus(); }catch(e){} }, 60); }
+    else if(getTok()){ cargarMe(); }
     else { setAuthTab(REF_URL ? "reg" : "login"); setPantalla("viewAuth"); }
   }catch(e){ try{ setPantalla("viewAuth"); }catch(_){} }
 }

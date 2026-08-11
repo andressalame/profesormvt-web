@@ -864,6 +864,9 @@
   <section class="panel" id="panel-alumnos">
     <div style="margin-bottom:10px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;"><button class="btn" id="btnNuevoAlumno">+ Nuevo alumno</button><button class="btn ghost" id="btnImportCsv" title="Trae toda tu lista de alumnos de golpe desde tu Excel o Google Sheets">&#8681; Traer mi lista de Excel</button><select id="alFiltroSede" title="Filtrar por sede" style="display:none;width:auto;"></select><button class="btn ghost sm" type="button" onclick="lanzarTourModulo('alumnos')">? Cómo funciona</button></div>
     <p class="hint quees">👤 <b>Tu lista de alumnos y cómo va cada uno.</b> "Le quedan" son las clases que le sobran de su paquete; el <b>Estado</b> te avisa a quién le toca renovar. ¿Te equivocaste al anotar una clase? Se arregla en <b><a href="#" data-ira="registro">Asistencia</a></b> y el saldo se recalcula solo.</p>
+    <!-- Aviso causal: alumnos importados que todavía no saben que tienen portal. Un solo
+         botón primario; el detalle vive dentro. Se esconde solo cuando no falta nadie. -->
+    <div id="invBanner" style="display:none;"></div>
     <div class="tablewrap">
       <table id="tablaAlumnos">
         <thead><tr>
@@ -2074,6 +2077,22 @@
   </div>
 </div>
 
+<!-- ============ INVITAR A MIS ALUMNOS A SU PORTAL (11-ago-2026) ============
+     El dueño trae su lista y sus alumnos no saben que existe el portal. Acá ve de un vistazo
+     cuántos faltan, manda por tandas a los que tienen correo y abre WhatsApp con el mensaje
+     ya escrito para los que no. Siempre queda registrado a quién ya se le avisó. -->
+<div class="overlay" id="ovInvitar">
+  <div class="modal" style="max-width:720px;">
+    <h3>Invitar a mis <em>alumnos</em></h3>
+    <div class="mlab">Cada uno recibe SU enlace y entra a su portal sin inventar contraseñas.</div>
+    <div id="invResumen"></div>
+    <div id="invCuerpo"></div>
+    <div class="modal-actions">
+      <button class="btn ghost" data-close>Cerrar</button>
+    </div>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script>
@@ -2708,8 +2727,11 @@ function renderTuDia(x){
   h += porRenovar>0
     ? tarjetaDia(porRenovar,"alumnos en su última clase o ya sin clases: toca renovar","Ver quiénes son","alumnos",true)
     : tarjetaDia(0,"alumnos por renovar. Nadie se te cae ✓","","alumnos",false);
+  /* El botón abre el riel de invitaciones (Alumnos → "Invitarlos a su portal"), NO la
+     pestaña Cuentas: ahí solo se vinculan de a uno a mano, que es justo lo que no sirve
+     cuando el dueño acaba de traer su lista entera y tiene cientos sin avisar. */
   h += sinAcceso>0
-    ? tarjetaDia(sinAcceso,"alumnos sin acceso al portal: no pueden reservar ni pagar solos","Darles acceso","cuentas",true)
+    ? tarjetaDia(sinAcceso,"alumnos sin acceso al portal: no pueden reservar ni pagar solos","Invitarlos a su portal","alumnos",true,"btnInvitarAlumnos")
     : tarjetaDia((db.alumnos||[]).length,"alumnos, todos con acceso al portal ✓","","cuentas",false);
   /* fase 3: interesados esperando respuesta (bloque 3 de la pantalla "Hoy" del spec) */
   if(tabVisiblePorReglas("leads")){
@@ -3633,7 +3655,7 @@ function renderReportes(){
   }
 }
 
-function renderAll(){ aplicarBrandTenant(); aplicarModulos(); aplicarMarcaCursos(); renderResumen(); renderAlumnos(); renderGrupos(); renderRegistro(); renderPagos(); renderReportes(); renderCuentas(); renderLeads(); renderCaja(); renderRecursos(); renderEjercicios(); renderAjustes(); renderSedes(); renderPerfil(); fillSelects(); try{ arreglarTablas(); }catch(e){} }
+function renderAll(){ aplicarBrandTenant(); aplicarModulos(); aplicarMarcaCursos(); renderResumen(); renderAlumnos(); try{ renderInvBanner(); }catch(e){} renderGrupos(); renderRegistro(); renderPagos(); renderReportes(); renderCuentas(); renderLeads(); renderCaja(); renderRecursos(); renderEjercicios(); renderAjustes(); renderSedes(); renderPerfil(); fillSelects(); try{ arreglarTablas(); }catch(e){} }
 
 /* ---------- AGENDA (admin) ---------- */
 var AG_DISP = [], AG_RESERVAS = [];
@@ -5914,6 +5936,180 @@ el("chatAdmTexto").addEventListener("keydown",function(e){ if(e.key==="Enter") c
 /* ---------- Mensaje de renovación por WhatsApp ---------- */
 var MSG_RENOVACION_DEFAULT = "Hola {nombre}! Vamos cerrando tu paquete de {curso} y no quiero que pierdas el ritmo que llevas. "+
   "¿Cuadramos la renovación para que reserves tus horarios fijos? :)";
+/* ================= INVITAR A MIS ALUMNOS A SU PORTAL (11-ago-2026) =================
+   El cuello real de una academia que migra su lista: importa 800 alumnos y los 800 quedan
+   sin saber que existe el portal. Acá el dueño ve cuántos faltan y los avisa por tandas.
+   El banner se calcula con lo que YA está cargado (alumnos + cuentas): cero requests extra. */
+var INV = null;              // resumen del servidor (solo mientras la pantalla está abierta)
+var INV_TANDA_OUT = "";      // resultado de la última tanda: sobrevive a los repintados
+function invFaltantes(){
+  return (db.alumnos||[]).filter(function(a){ return !cuentaDeAlumno(a.id); });
+}
+function renderInvBanner(){
+  var box=el("invBanner"); if(!box) return;
+  if(ROL!=="dueno"){ box.style.display="none"; return; }
+  var faltan=invFaltantes(), total=(db.alumnos||[]).length;
+  if(!faltan.length || !total){ box.style.display="none"; return; }
+  box.style.display="";
+  box.innerHTML='<div style="border:1px solid var(--line);border-left:4px solid var(--accent);border-radius:8px;padding:14px 16px;margin:10px 0 14px;display:flex;gap:14px;align-items:center;flex-wrap:wrap;">'+
+    '<div style="flex:1;min-width:260px;">'+
+      '<b style="font-size:16px;">'+faltan.length+' de tus '+total+' alumnos todavía no entran a su portal.</b>'+
+      '<div class="hint" style="margin:4px 0 0;">Sin portal no pueden reservar su clase ni ver cuántas les quedan. Ya tienen su ficha: solo falta avisarles.</div>'+
+    '</div>'+
+    '<button class="btn" id="btnInvitarAlumnos" style="white-space:nowrap;">Invitarlos a su portal</button>'+
+  '</div>';
+  el("btnInvitarAlumnos").addEventListener("click", abrirInvitar);
+}
+function abrirInvitar(){
+  openOv("ovInvitar");
+  el("invResumen").innerHTML='<p class="hint">Cargando tu lista…</p>';
+  el("invCuerpo").innerHTML="";
+  fetch("/app/api/admin/invitaciones",{headers:hdr()}).then(function(r){ return r.json(); })
+    .then(function(d){
+      if(d.error){ el("invResumen").innerHTML='<p class="hint">'+esc(d.error)+'</p>'; return; }
+      INV=d; renderInvitar();
+    })
+    .catch(function(){ el("invResumen").innerHTML='<p class="hint">No pude cargar tu lista. Revisa tu conexión.</p>'; });
+}
+function renderInvitar(){
+  if(!INV) return;
+  var avisados=INV.avisados||0, faltan=INV.faltan||0;
+  var pct=faltan?Math.round((avisados/faltan)*100):0;
+  el("invResumen").innerHTML=
+    '<div style="border:1px solid var(--line);border-radius:8px;padding:14px 16px;margin:0 0 16px;">'+
+      '<div style="font-size:22px;font-weight:800;">Ya avisaste a '+avisados+' de '+faltan+'</div>'+
+      '<div style="height:8px;background:var(--line);border-radius:99px;margin:8px 0 6px;overflow:hidden;">'+
+        '<div style="height:100%;width:'+pct+'%;background:var(--accent);"></div></div>'+
+      '<div class="hint">'+(INV.con_portal||0)+' ya tienen su portal abierto'+
+        ((INV.bajas||0)?(' · '+INV.bajas+' pidieron no recibir correos'):'')+'</div>'+
+    '</div>';
+
+  var h="";
+  /* ---- 1. Los que tienen correo: tandas ---- */
+  h+='<div style="border:1px solid var(--line);border-radius:8px;padding:14px 16px;margin:0 0 14px;">'+
+       '<b style="font-size:16px;">Por correo · '+(INV.por_correo||0)+' alumnos</b>';
+  if(!INV.envio_real){
+    /* Aviso causal con UN botón de arreglo: decirle "escríbenos" y dejarlo buscando el
+       número es como no decirle nada. El chat se abre con el pedido ya escrito. */
+    var pedir="Hola! Soy de "+((db.config&&db.config.profe_marca)||"mi academia")+
+              ". Quiero prender el envío de invitaciones por correo para mis alumnos.";
+    h+='<div style="background:#fff6e5;border:1px solid #f0c36d;color:#7a5200;border-radius:6px;padding:10px 12px;margin:10px 0;font-size:13px;">'+
+         '<b>Todavía no está prendido el envío por correo.</b> El botón te muestra a quién le tocaría, '+
+         'pero no sale nada de verdad. Lo prendemos nosotros y ahí empiezan a salir: '+
+         '<a href="https://wa.me/51989077928?text='+encodeURIComponent(pedir)+'" target="_blank" style="color:#7a5200;font-weight:700;">pídelo por WhatsApp</a>.'+
+       '</div>';
+  }
+  if(INV.por_correo){
+    h+='<p class="hint" style="margin:8px 0 10px;">Salen de a '+(INV.tanda||30)+' por tanda y hasta '+(INV.tope_dia||120)+' al día. '+
+       'No es capricho: mandar cientos de golpe hace que los correos caigan en spam y ahí no los lee nadie.'+
+       ((INV.enviados_hoy||0)?(' Hoy ya salieron '+INV.enviados_hoy+'.'):'')+'</p>'+
+       '<button class="btn" id="btnInvTanda">'+(INV.envio_real?('Enviar los siguientes '+Math.min(INV.tanda||30,INV.por_correo)):'Ver la tanda de prueba')+'</button>'+
+       ' <button class="btn ghost" id="btnInvPreview">Ver el correo que les llega</button>'+
+       '<div id="invTandaOut"></div>'+
+       '<div id="invPreview" style="display:none;margin-top:12px;border:1px solid var(--line);border-radius:8px;padding:12px;background:#fff;">'+
+         '<div class="hint" style="margin:0 0 8px;">De: <b>'+esc(INV.remitente||"")+'</b>'+(INV.responde_a?(' · las respuestas te llegan a <b>'+esc(INV.responde_a)+'</b>'):'')+'</div>'+
+         '<div class="hint" style="margin:0 0 10px;">Asunto: <b>'+esc((INV.preview&&INV.preview.asunto)||"")+'</b></div>'+
+         '<div style="color:#1a1a1a;">'+((INV.preview&&INV.preview.html)||"")+'</div>'+
+         '<p class="hint" style="margin:10px 0 0;">Este texto lo cambias en <b>Mi academia → Mensajes automáticos</b>, en "Invitación al portal".</p>'+
+       '</div>';
+  } else {
+    h+='<p class="hint" style="margin:8px 0 0;">Ninguno pendiente con correo. Los que tienen correo ya recibieron su invitación.</p>';
+  }
+  h+='</div>';
+
+  /* ---- 2. Los que solo tienen WhatsApp: de a UNO, en fila ----
+     Son cientos. Una lista de 378 nombres para buscar a mano es exactamente donde el dueño
+     abandona: pierde el hilo, no sabe por quién iba y no vuelve. Así que manda UN botón
+     grande con el siguiente de la fila (los pendientes van primero) y la lista queda abajo
+     como consulta, para el que quiera saltarse a alguien. */
+  var waPend=(INV.lista_wa||[]).filter(function(a){ return !a.invitado_el; });
+  h+='<div style="border:1px solid var(--line);border-radius:8px;padding:14px 16px;margin:0 0 14px;">'+
+       '<b style="font-size:16px;">Por WhatsApp · '+(INV.por_wa||0)+' alumnos</b>';
+  if(INV.por_wa){
+    h+='<p class="hint" style="margin:6px 0 10px;">No tienen correo. Aprieta el botón: se abre su chat con el mensaje y SU enlace ya escritos. Tú solo le das enviar y vuelves acá, que el siguiente ya te espera.</p>';
+    if(waPend.length){
+      var sig=waPend[0];
+      h+='<button class="btn" data-invwa="'+esc(sig.id)+'" style="font-size:15px;padding:12px 18px;">Abrir el WhatsApp de '+esc(String(sig.nombre||"").split(/\s+/)[0])+'</button>'+
+         '<p class="hint" style="margin:8px 0 0;">'+
+           (waPend.length>1?('Después de este te quedan '+(waPend.length-1)+'.'):'Es el último que te falta por WhatsApp.')+'</p>';
+    } else {
+      h+='<p class="hint" style="margin:6px 0 0;">Ya les avisaste a todos por WhatsApp.</p>';
+    }
+    h+='<div id="invWaLista" style="max-height:280px;overflow:auto;border-top:1px solid var(--line);margin-top:12px;">'+
+       waPend.concat((INV.lista_wa||[]).filter(function(a){ return a.invitado_el; })).map(function(a){
+         return '<div style="display:flex;gap:10px;align-items:center;justify-content:space-between;padding:9px 2px;border-bottom:1px solid var(--line);">'+
+           '<div><b>'+esc(a.nombre)+'</b><br><span class="mini">'+esc(a.whatsapp||"")+
+             (a.invitado_el?(' · <span style="color:var(--accent);">ya le avisaste el '+esc(a.invitado_el)+'</span>'):'')+'</span></div>'+
+           '<button class="btn '+(a.invitado_el?'ghost ':'')+'sm" data-invwa="'+esc(a.id)+'" style="white-space:nowrap;">'+(a.invitado_el?'Reenviar':'Abrir WhatsApp')+'</button>'+
+         '</div>';
+       }).join("")+'</div>';
+  } else {
+    h+='<p class="hint" style="margin:6px 0 0;">Ninguno pendiente sin correo.</p>';
+  }
+  h+='</div>';
+
+  /* ---- 3. Los que no tienen ni correo ni WhatsApp: honestidad, no magia ---- */
+  if(INV.sin_contacto){
+    h+='<div style="border:1px solid var(--line);border-radius:8px;padding:14px 16px;">'+
+         '<b>Sin forma de avisarles · '+INV.sin_contacto+'</b>'+
+         '<p class="hint" style="margin:6px 0 0;">No tienen correo ni WhatsApp en su ficha. Agrégaselo en su ficha (Editar) y aparecen arriba.</p>'+
+       '</div>';
+  }
+  /* La lista se repinta después de CADA envío. Sin guardar el scroll, el dueño volvía
+     arriba del todo en cada alumno y perdía por dónde iba. */
+  var scrollPrev=(el("invWaLista")||{}).scrollTop||0;
+  el("invCuerpo").innerHTML=h;
+  if(el("invWaLista")) el("invWaLista").scrollTop=scrollPrev;
+  /* El resultado de la última tanda sobrevive al repintado: confirmar y borrar la
+     confirmación en el mismo instante dejaba al dueño sin saber si salió o no. */
+  if(INV_TANDA_OUT && el("invTandaOut")) el("invTandaOut").innerHTML=INV_TANDA_OUT;
+
+  if(el("btnInvPreview")) el("btnInvPreview").addEventListener("click",function(){
+    var p=el("invPreview"); p.style.display=(p.style.display==="none")?"":"none";
+  });
+  if(el("btnInvTanda")) el("btnInvTanda").addEventListener("click",invEnviarTanda);
+  Array.prototype.forEach.call(document.querySelectorAll("[data-invwa]"),function(b){
+    b.addEventListener("click",function(){ invWhatsApp(b.getAttribute("data-invwa")); });
+  });
+}
+function invEnviarTanda(){
+  var btn=el("btnInvTanda"); btn.disabled=true; btn.textContent="Enviando…";
+  apiPost("/app/api/admin/invitaciones/enviar",{})
+    .then(function(d){
+      var quienes=(d.detalle||[]).map(function(x){ return esc(x.nombre)+' <span class="mini">'+esc(x.email)+'</span>'; }).join("<br>");
+      INV_TANDA_OUT='<div style="margin-top:12px;border:1px solid var(--line);border-radius:8px;padding:12px;">'+
+        '<b>'+(d.simulado?'Así saldría esta tanda ('+d.enviados+' alumnos)':'Salieron '+d.enviados+' invitaciones')+'</b>'+
+        (d.fallidos?('<div class="hint" style="color:#b45309;">'+d.fallidos+' no salieron (correo rebotado). Vuelven a la cola de mañana.</div>'):'')+
+        '<div class="hint" style="margin:8px 0 0;max-height:150px;overflow:auto;">'+quienes+'</div>'+
+        '<div class="hint" style="margin:8px 0 0;">Quedan '+d.restantes+' por avisar por correo.</div>'+
+      '</div>';
+      if(el("invTandaOut")) el("invTandaOut").innerHTML=INV_TANDA_OUT;
+      toast(d.simulado?"Modo prueba: no salió ningún correo":("Invitaciones enviadas: "+d.enviados));
+      if(!d.simulado){ abrirInvitar(); recargar().then(renderAll).catch(function(){}); }
+    })
+    .catch(function(e){ toast((e&&e.message)||"No se pudo enviar la tanda"); })
+    .finally(function(){ if(el("btnInvTanda")){ el("btnInvTanda").disabled=false; renderInvitar(); } });
+}
+function invWhatsApp(alumnoId){
+  var a=(db.alumnos||[]).find(function(x){ return x.id===alumnoId; });
+  apiPost("/app/api/admin/invitaciones/link",{alumno_id:alumnoId,canal:"wa"})
+    .then(function(d){
+      var num=(d.whatsapp||(a&&a.whatsapp)||"").replace(/\D/g,"");
+      if(num.length===9) num="51"+num;
+      if(!num){ toast("Este alumno no tiene WhatsApp guardado"); return; }
+      var academia=d.academia||(db.config&&db.config.profe_marca)||"la academia";
+      var corto=String(d.nombre||"").trim().split(/\s+/)[0]||"";
+      var msg="Hola "+corto+"! Te escribo de "+academia+". Ya puedes ver tus clases y reservar desde tu portal, "+
+              "sin instalar nada. Entra con tu enlace: "+d.url+" (es solo tuyo, no lo compartas).";
+      window.open("https://wa.me/"+num+"?text="+encodeURIComponent(msg),"_blank");
+      if(INV){
+        (INV.lista_wa||[]).forEach(function(x){ if(x.id===alumnoId && !x.invitado_el){ x.invitado_el=hoyLima(); INV.avisados=(INV.avisados||0)+1; } });
+        renderInvitar();
+      }
+    })
+    .catch(function(e){ toast((e&&e.message)||"No pude armar el enlace"); });
+}
+
 function renovar(a){
   var num=(a.whatsapp||"").replace(/\D/g,"");
   if(num.length===9) num="51"+num;

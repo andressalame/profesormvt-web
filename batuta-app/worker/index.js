@@ -959,6 +959,16 @@ const MSG_DEF = {
     asunto: "Pago registrado — {academia}",
     cuerpo: "{alumno}, registramos tu pago en {academia}. Puedes verlo en tu portal cuando quieras."
   },
+  /* Invitacion al portal (11-ago-2026): el correo que le avisa al alumno que YA ES tu alumno
+     que ahora tiene portal. Lo manda la academia con su nombre, nunca Batuta: el alumno no
+     sabe que Batuta existe. El link, el pie de "por que recibes esto" y la baja los pone el
+     sistema aunque la academia reescriba el texto. */
+  invitacion: {
+    nombre: "Invitación al portal (tus alumnos de siempre)",
+    cuando: "Sale cuando invitas a tus alumnos a su portal desde Personas → Alumnos.",
+    asunto: "{alumno}, tu portal de {academia} ya está listo",
+    cuerpo: "{alumno}, en {academia} ahora llevamos tus clases por internet.\n\nEn tu portal ves tus horarios, reservas tu clase y revisas cuántas te quedan. Tu acceso ya está creado a tu nombre: entra con el botón de abajo, sin inventar contraseñas."
+  },
   winback: {
     nombre: "Te extrañamos (alumno inactivo)",
     cuando: "Sale cuando el alumno lleva varios días sin venir y todavía le quedan clases.",
@@ -1161,10 +1171,13 @@ async function enviarWhatsApp(env, phoneId, to, text){
   } catch (e) { return false; }
 }
 
-async function enviarCorreo(env, { to, subject, html, text, from }){
+async function enviarCorreo(env, { to, subject, html, text, from, replyTo }){
   if (!env.RESEND_API_KEY || !to || !subject) return false;
+  /* El NOMBRE del remitente puede ser el de la academia (invitaciones a alumnos: el alumno
+     conoce a su academia, no a Batuta), pero el DOMINIO sigue siendo el verificado en Resend.
+     replyTo manda las respuestas al correo real de la academia. */
   const remitente = (from && from.email)
-    ? ((from.name ? from.name + " " : "") + "<" + from.email + ">")
+    ? ((from.name ? '"' + String(from.name).replace(/"/g, "") + '" ' : "") + "<" + from.email + ">")
     : (MARCA.nombre + " <hola@" + MARCA.dominio.replace(/^https?:\/\//, "") + ">");
   try {
     const r = await fetch("https://api.resend.com/emails", {
@@ -1173,6 +1186,7 @@ async function enviarCorreo(env, { to, subject, html, text, from }){
       body: JSON.stringify({
         from: remitente,
         to: Array.isArray(to) ? to : [to],
+        reply_to: (replyTo && emailOk(String(replyTo))) ? String(replyTo) : undefined,
         subject: subject,
         html: html || undefined,
         text: text || (html ? html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim() : undefined)
@@ -4250,6 +4264,91 @@ async function ensureAlumnoExtraSchema(env){
   }
   ELEVATE_SCHEMA_OK = true;
 }
+
+/* ============================================================
+   INVITACIONES AL PORTAL (11-ago-2026) — el cuello de Elevate.
+   Una academia importa 801 alumnos y los 801 quedan afuera: `alumnos` (la ficha que
+   importa el dueno) y `cuentas` (el acceso al portal) son tablas distintas y NADA las
+   unia. El unico camino era que el alumno adivinara la URL, se registrara con una
+   contrasena nueva y que el dueno lo vinculara a mano, uno por uno.
+   La invitacion es un token por ALUMNO (no por cuenta) porque el que solo tiene WhatsApp
+   todavia no puede tener cuenta: `cuentas.email` es NOT NULL y unico por tenant.
+   Al canjearlo: si ya tiene cuenta -> entra; si tiene correo en su ficha -> se le crea la
+   cuenta ya vinculada y entra; si no tiene correo -> se le pide UNO solo y entra.
+   Nunca se le pide inventar una contrasena (principio: entrar sin trabas; la clave es
+   opcional y se pone despues desde su portal). */
+const INVITACION_DIAS = 45;      // el de WhatsApp lee tarde; 45 dias cubre sin volverse eterno
+const INVITACION_TANDA = 30;     // tope por tanda: protege el dominio y hace el envio revisable
+const INVITACION_TOPE_DIA = 120; // tope diario por academia: calienta el dominio en vez de quemarlo
+let INVITACIONES_SCHEMA_OK = false;
+async function ensureInvitacionesSchema(env){
+  if (INVITACIONES_SCHEMA_OK) return;
+  try {
+    await env.DB.prepare(
+      "CREATE TABLE IF NOT EXISTS invitaciones (token_hash TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, " +
+      "alumno_id TEXT NOT NULL, canal TEXT DEFAULT '', creada TEXT DEFAULT '', expira TEXT DEFAULT '', usada_el TEXT DEFAULT '')"
+    ).run();
+  } catch (e) {}
+  try { await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_invitaciones_alumno ON invitaciones (tenant_id, alumno_id)").run(); } catch (e) {}
+  /* invitado_el / invitado_canal = el registro de a quien YA se le aviso (lo que el dueno
+     necesita ver para no repetirse). no_email = se dio de baja de los correos (Ley 29733). */
+  for (const [c, tipo] of [["invitado_el", "TEXT DEFAULT ''"], ["invitado_canal", "TEXT DEFAULT ''"], ["no_email", "INTEGER DEFAULT 0"]]){
+    try { await env.DB.prepare("ALTER TABLE alumnos ADD COLUMN " + c + " " + tipo).run(); } catch (e) { /* ya existe */ }
+  }
+  INVITACIONES_SCHEMA_OK = true;
+}
+
+/* Crea (o renueva) el link personal de un alumno. Los tokens viejos NO se matan: el dueno
+   puede haber mandado el correo y despues el WhatsApp, y el alumno abre cualquiera de los dos.
+   Solo se limpian los ya vencidos de ese alumno. Se guarda el HASH, nunca el token. */
+async function crearInvitacion(env, tenant, alumnoId, canal){
+  await ensureInvitacionesSchema(env);
+  const token = randHex(24);
+  const tokenHash = await sha256Hex(token);
+  const ahora = new Date();
+  const expira = new Date(ahora.getTime() + INVITACION_DIAS * 86400000).toISOString();
+  try { await env.DB.prepare("DELETE FROM invitaciones WHERE tenant_id = ?1 AND alumno_id = ?2 AND expira < ?3").bind(tenant.id, alumnoId, ahora.toISOString()).run(); } catch (e) {}
+  await env.DB.prepare(
+    "INSERT INTO invitaciones (token_hash, tenant_id, alumno_id, canal, creada, expira, usada_el) VALUES (?1,?2,?3,?4,?5,?6,'')"
+  ).bind(tokenHash, tenant.id, alumnoId, String(canal || ""), ahora.toISOString(), expira).run();
+  try {
+    /* La fecha va en dia de LIMA, no UTC: el tope diario se cuenta contra hoyLima(), asi que
+       con la fecha UTC toda invitacion mandada despues de las 7pm quedaba fechada "manana"
+       y el contador del dia volvia a cero -> el tope se podia pasar de largo justo de noche. */
+    await env.DB.prepare("UPDATE alumnos SET invitado_el = ?1, invitado_canal = ?2 WHERE id = ?3 AND tenant_id = ?4")
+      .bind(hoyLima(), String(canal || ""), alumnoId, tenant.id).run();
+  } catch (e) {}
+  return { token, url: MARCA.dominio + "/app/a/" + tenant.slug + "?inv=" + token };
+}
+
+/* El correo de invitacion, armado. Sale a nombre de la ACADEMIA (el alumno no conoce Batuta)
+   con Reply-To al correo real del dueno. El pie es del sistema, no del texto editable: quien
+   escribe, por que le llega y como se da de baja son obligatorios (Ley 29733) y no pueden
+   depender de que la academia no los borre al reescribir su mensaje. */
+function correoInvitacionAlumno(tenant, alumno, cfg, url, urlBaja){
+  const msgs = mensajesDeCfg(cfg || {});
+  const academia = tenant.academia || "tu academia";
+  const datos = {
+    alumno: (String(alumno.nombre || "").trim().split(/\s+/)[0]) || "Hola",
+    academia: academia, curso: alumno.curso || "",
+    curso_de: alumno.curso ? " de " + alumno.curso : "", con_profe: "", vence_frase: ""
+  };
+  const pie =
+    '<hr style="border:none;border-top:1px solid #e5e5e5;margin:22px 0 12px">' +
+    '<p style="color:#777;font-size:12px;line-height:1.6;margin:0">' +
+      'Recibes este correo porque eres alumno de <b>' + esc(academia) + '</b> y es ahi donde ' +
+      'llevamos tus clases. Puedes responder a este correo para hablar con la academia.<br>' +
+      'Si prefieres que no te escribamos mas: <a href="' + urlBaja + '" style="color:#777">darme de baja</a>.' +
+    '</p>';
+  return {
+    subject: msgAsunto(msgs.invitacion.asunto, datos),
+    html: '<div style="font-family:Arial,Helvetica,sans-serif;max-width:480px;margin:0 auto;color:#1a1a1a;font-size:15px;line-height:1.6">' +
+          msgHtml(msgs.invitacion.cuerpo, datos, { url: url, texto: "Entrar a mi portal" }) +
+          '<p style="color:#777;font-size:13px;margin-top:18px">Este enlace es tuyo y funciona por ' + INVITACION_DIAS + ' dias. Si se te vence, pidenos otro.</p>' +
+          pie +
+          '</div>'
+  };
+}
 /* ---------- Datos de menores en el formulario publico (Ley 29733 + DS 016-2024-JUS) ----------
    El reglamento vigente desde el 30-mar-2025 divide asi el consentimiento:
      - 14 a 18 anios: consiente el propio adolescente, si la informacion esta en lenguaje
@@ -5550,6 +5649,32 @@ export default {
       return htmlResponse(html);
     }
 
+    /* Baja de los correos de la academia (Ley 29733: derecho de oposicion, en un clic).
+       Va ARRIBA del corte de abajo a proposito: es una PAGINA, no un /app/api/, asi que
+       puesta mas abajo caia en el asset handler y el link de baja de cada correo daba 404
+       -- justo el link que la ley obliga a que funcione.
+       El GET solo PREGUNTA: los antivirus de correo abren los links solos y darian de baja
+       a gente que nunca lo pidio; la baja de verdad la ejecuta el POST del boton. */
+    if (path === "/app/inv/baja" && (request.method === "GET" || request.method === "POST")){
+      const tkB = String(url.searchParams.get("t") || "").trim();
+      if (!/^[0-9a-f]{32,64}$/.test(tkB)) return htmlResponse(paginaBase("Baja de correos", "<h1>Ese enlace no es válido</h1><p class=\"sub\">Escríbele a tu academia y ellos te dan de baja.</p>"));
+      await ensureInvitacionesSchema(env);
+      const hashB = await sha256Hex(tkB);
+      const invB = await env.DB.prepare("SELECT * FROM invitaciones WHERE token_hash = ?1").bind(hashB).first();
+      const tB = invB ? await env.DB.prepare("SELECT academia FROM tenants WHERE id = ?1").bind(invB.tenant_id).first() : null;
+      if (!invB || !tB) return htmlResponse(paginaBase("Baja de correos", "<h1>Ese enlace ya no sirve</h1><p class=\"sub\">Escríbele a tu academia y ellos te dan de baja.</p>"));
+      const academiaB = esc(tB.academia || "tu academia");
+      if (request.method === "POST"){
+        await ensureAlumnoExtraSchema(env);
+        try { await env.DB.prepare("UPDATE alumnos SET no_email = 1 WHERE id = ?1 AND tenant_id = ?2").bind(invB.alumno_id, invB.tenant_id).run(); } catch (e) {}
+        return htmlResponse(paginaBase("Listo", "<h1>Listo</h1><p class=\"sub\">" + academiaB + " ya no te va a escribir por correo. Si cambias de idea, díselo y te vuelven a incluir.</p>"));
+      }
+      return htmlResponse(paginaBase("Baja de correos",
+        "<h1>¿Ya no quieres correos de " + academiaB + "?</h1>" +
+        "<p class=\"sub\">Dejarías de recibir los avisos de tus clases y de tus pagos.</p>" +
+        "<form method=\"POST\"><button type=\"submit\" class=\"btn\">Sí, no me escriban más</button></form>"));
+    }
+
     if (!path.startsWith("/app/api/")){
       return env.ASSETS ? env.ASSETS.fetch(request) : json({ error: "No encontrado" }, 404);
     }
@@ -5795,6 +5920,23 @@ export default {
         if (!env.ADMIN_TOKEN || !safeEq(auth, "Bearer " + env.ADMIN_TOKEN)){
           return json({ error: "No autorizado" }, 401);
         }
+        /* Prende (o apaga) el envio REAL de invitaciones por correo de UNA academia.
+           Nace apagado en todas: mandar cientos de correos a nombre de un tercero se
+           autoriza a mano, no se hereda. Apagado, el panel simula la tanda.
+           curl -X POST .../app/api/su/invitaciones -H "Authorization: Bearer $ADMIN_TOKEN" \
+                -H "content-type: application/json" -d '{"slug":"elevate-studio","on":true}' */
+        if (path === "/app/api/su/invitaciones" && request.method === "POST"){
+          const bSI = await request.json().catch(() => ({}));
+          const slugSI = String(bSI.slug || "").trim();
+          const tSI = slugSI ? await env.DB.prepare("SELECT id, slug, academia, email FROM tenants WHERE slug = ?1").bind(slugSI).first() : null;
+          if (!tSI) return json({ error: "No encontre esa academia (pasa el slug)." }, 404);
+          const valSI = bSI.on ? "on" : "";
+          await env.DB.prepare(
+            "INSERT INTO config (tenant_id, clave, valor) VALUES (?1,'invitaciones_envio',?2) ON CONFLICT(tenant_id, clave) DO UPDATE SET valor = ?2"
+          ).bind(tSI.id, valSI).run();
+          return json({ ok: true, academia: tSI.academia, slug: tSI.slug, envio_real: valSI === "on" });
+        }
+
         if (path === "/app/api/su/demo-reset" && request.method === "POST"){
           const idDemo = await resetDemo(env);
           return json({ ok: true, tenant_id: idDemo });
@@ -7572,7 +7714,80 @@ export default {
           env.DB.prepare("UPDATE reset_tokens SET usado = 1 WHERE token_hash = ?1").bind(tokenHash),
           env.DB.prepare("DELETE FROM sesiones WHERE cuenta_id = ?1").bind(rt.cuenta_id)
         ]);
-        return json({ ok: true });
+        /* Entra de una: llego aca desde SU correo, ya probo que la cuenta es suya.
+           Sin esto tenia que volver a escribir correo y contrasena recien puestos. */
+        const tR = await env.DB.prepare("SELECT slug FROM tenants WHERE id = ?1").bind(rt.tenant_id).first();
+        return json({ ok: true, token: await crearSesion(env, rt.cuenta_id), slug: tR ? tR.slug : "" });
+      }
+
+      /* ============================================================
+         INVITACION AL PORTAL: el alumno canjea SU link y entra.
+         Sin contrasena: el link se lo mando su academia, que es quien lo conoce.
+         Publico a proposito (va antes del gate de trial): un alumno no tiene por que
+         quedarse afuera porque a su academia se le vencio la prueba.
+         ============================================================ */
+      if (path === "/app/api/invitacion/canjear" && request.method === "POST"){
+        const ipInv = clientIp(request);
+        if (ipInv && await chatbotPasoTope(env, "inv:" + ipInv, 20)){
+          return json({ error: "Demasiados intentos. Espera un rato." }, 429);
+        }
+        const bI = await request.json().catch(() => ({}));
+        const tkI = String(bI.token || "").trim();
+        if (!/^[0-9a-f]{32,64}$/.test(tkI)) return json({ error: "Ese enlace no es válido. Pídele otro a tu academia." }, 400);
+        await ensureInvitacionesSchema(env);
+        const hashI = await sha256Hex(tkI);
+        const invRow = await env.DB.prepare("SELECT * FROM invitaciones WHERE token_hash = ?1").bind(hashI).first();
+        if (!invRow) return json({ error: "Ese enlace no es válido. Pídele otro a tu academia." }, 400);
+        if (invRow.expira && Date.parse(invRow.expira) < Date.now()){
+          return json({ error: "Tu enlace venció. Pídele otro a tu academia y entras al toque." }, 400);
+        }
+        const tI = await env.DB.prepare("SELECT * FROM tenants WHERE id = ?1").bind(invRow.tenant_id).first();
+        const alI = await env.DB.prepare("SELECT * FROM alumnos WHERE id = ?1 AND tenant_id = ?2").bind(invRow.alumno_id, invRow.tenant_id).first();
+        if (!tI || !alI) return json({ error: "Ese enlace ya no corresponde a nadie. Escríbele a tu academia." }, 400);
+        const marcarUsada = async () => {
+          try { await env.DB.prepare("UPDATE invitaciones SET usada_el = ?1 WHERE token_hash = ?2").bind(new Date().toISOString(), hashI).run(); } catch (e) {}
+        };
+        // 1) Ya tiene cuenta vinculada -> adentro, sin preguntar nada.
+        const cuYa = await env.DB.prepare("SELECT * FROM cuentas WHERE tenant_id = ?1 AND alumno_id = ?2").bind(tI.id, alI.id).first();
+        if (cuYa){
+          await marcarUsada();
+          return json({ ok: true, token: await crearSesion(env, cuYa.id), slug: tI.slug, nombre: cuYa.nombre || alI.nombre });
+        }
+        // 2) Correo: el de su ficha, o el que acaba de escribir. Sin correo no hay cuenta
+        //    posible (cuentas.email es obligatorio), asi que se le pide UNO solo.
+        await ensureAlumnoExtraSchema(env);
+        const emailFicha = String(alI.email || "").trim().toLowerCase();
+        const emailDado = String(bI.email || "").trim().toLowerCase();
+        const emailI = emailOk(emailDado) ? emailDado : (emailOk(emailFicha) ? emailFicha : "");
+        if (!emailI){
+          if (emailDado) return json({ error: "Ese correo no parece válido. Revísalo." }, 400);
+          return json({ necesita_email: true, nombre: alI.nombre || "", academia: tI.academia || "", slug: tI.slug });
+        }
+        // 3) Si ya existe una cuenta con ese correo, se reusa (y se vincula si estaba suelta).
+        const cuMail = await env.DB.prepare("SELECT * FROM cuentas WHERE tenant_id = ?1 AND email = ?2").bind(tI.id, emailI).first();
+        if (cuMail){
+          if (!cuMail.alumno_id){
+            try { await env.DB.prepare("UPDATE cuentas SET alumno_id = ?1 WHERE id = ?2 AND tenant_id = ?3").bind(alI.id, cuMail.id, tI.id).run(); } catch (e) {}
+          }
+          await marcarUsada();
+          return json({ ok: true, token: await crearSesion(env, cuMail.id), slug: tI.slug, nombre: cuMail.nombre || alI.nombre });
+        }
+        /* Cuenta nueva YA VINCULADA a su ficha: esa vinculacion es la que hace que vea SUS
+           clases y SU saldo. La contrasena nace aleatoria y el alumno nunca la necesita;
+           si algun dia quiere una, la pone desde su portal. */
+        const saltI = randHex(16);
+        const hashPI = await hashPass(randHex(24), saltI);
+        const idCuI = crypto.randomUUID();
+        const refCodeI = await genRefCode(env, tI.id);
+        await env.DB.prepare(
+          "INSERT INTO cuentas (id,tenant_id,email,nombre,whatsapp,pass_hash,pass_salt,marketing,alumno_id,creada,ref_code,ref_por,credito) VALUES (?1,?2,?3,?4,?5,?6,?7,0,?8,?9,?10,'',0)"
+        ).bind(idCuI, tI.id, emailI, alI.nombre || "", String(alI.whatsapp || ""), hashPI, saltI, alI.id, hoy(), refCodeI).run();
+        /* si el correo lo escribio recien, queda tambien en su ficha (el dueno lo ve) */
+        if (!emailFicha && emailI){
+          try { await env.DB.prepare("UPDATE alumnos SET email = ?1 WHERE id = ?2 AND tenant_id = ?3").bind(emailI, alI.id, tI.id).run(); } catch (e) {}
+        }
+        await marcarUsada();
+        return json({ ok: true, token: await crearSesion(env, idCuI), slug: tI.slug, nombre: alI.nombre || "" });
       }
 
       /* ============================================================
@@ -9565,6 +9780,149 @@ export default {
             }
           }
           return json({ ok: true, creadas: creadasIR, saltadas: saltadasIR });
+        }
+
+        /* ============================================================
+           INVITAR A MIS ALUMNOS A SU PORTAL (11-ago-2026)
+           El dueno importa su lista y sus alumnos quedan sin saber que existe el portal.
+           Aca vive el riel: resumen honesto (cuantos faltan, a quien ya se le aviso),
+           envio por tandas a los que tienen correo, y link personal por alumno para los
+           que solo tienen WhatsApp. Los dos caminos usan el MISMO token.
+           ============================================================ */
+        if (path === "/app/api/admin/invitaciones" && request.method === "GET"){
+          if (!esDueno) return json({ error: "Las invitaciones las manda el dueno de la academia." }, 403);
+          await ensureAlumnoExtraSchema(env);
+          await ensureInvitacionesSchema(env);
+          const { results: filas } = await env.DB.prepare(
+            "SELECT a.id, a.nombre, COALESCE(a.email,'') AS email, COALESCE(a.whatsapp,'') AS whatsapp, " +
+            "COALESCE(a.invitado_el,'') AS invitado_el, COALESCE(a.invitado_canal,'') AS invitado_canal, " +
+            "COALESCE(a.no_email,0) AS no_email, " +
+            "(SELECT COUNT(*) FROM cuentas c WHERE c.tenant_id = a.tenant_id AND c.alumno_id = a.id) AS tiene_cuenta " +
+            "FROM alumnos a WHERE a.tenant_id = ?1 ORDER BY a.nombre"
+          ).bind(tid).all();
+          const todos = filas || [];
+          const conPortal = todos.filter(a => Number(a.tiene_cuenta) > 0);
+          const faltan = todos.filter(a => !(Number(a.tiene_cuenta) > 0));
+          const porCorreo = faltan.filter(a => emailOk(a.email) && !Number(a.no_email));
+          const porWa = faltan.filter(a => !(emailOk(a.email) && !Number(a.no_email)) && String(a.whatsapp || "").replace(/\D/g, "").length >= 9);
+          const sinContacto = faltan.filter(a => !porCorreo.includes(a) && !porWa.includes(a));
+          const hoyL = hoyLima();
+          const enviadosHoy = todos.filter(a => String(a.invitado_el || "") === hoyL && a.invitado_canal === "email").length;
+          const cfgInv = await loadConfig(env, tid);
+          /* El envio REAL de correo nace apagado: se prende por tenant desde superadmin
+             (POST /app/api/su/invitaciones). Apagado, el boton simula la tanda y muestra
+             exactamente lo que saldria, sin tocar Resend. La demo nunca manda de verdad. */
+          const envioReal = String(cfgInv.invitaciones_envio || "") === "on" && t.email !== DEMO_EMAIL;
+          const ejemplo = porCorreo[0] || faltan[0] || todos[0] || { nombre: "Maria", email: "", curso: "" };
+          const prev = correoInvitacionAlumno(t, ejemplo, cfgInv, MARCA.dominio + "/app/a/" + t.slug + "?inv=EJEMPLO", MARCA.dominio + "/app/inv/baja?t=EJEMPLO");
+          const liviano = a => ({ id: a.id, nombre: a.nombre, email: a.email, whatsapp: a.whatsapp, invitado_el: a.invitado_el, canal: a.invitado_canal });
+          return json({
+            total: todos.length,
+            con_portal: conPortal.length,
+            faltan: faltan.length,
+            avisados: faltan.filter(a => a.invitado_el).length,
+            por_correo: porCorreo.length,
+            por_wa: porWa.length,
+            sin_contacto: sinContacto.length,
+            bajas: todos.filter(a => Number(a.no_email)).length,
+            enviados_hoy: enviadosHoy,
+            tanda: INVITACION_TANDA,
+            tope_dia: INVITACION_TOPE_DIA,
+            envio_real: envioReal,
+            remitente: (t.academia || "Tu academia") + " <hola@batuta.lat>",
+            responde_a: t.email || "",
+            preview: { asunto: prev.subject, html: prev.html },
+            lista_correo: porCorreo.slice(0, 600).map(liviano),
+            lista_wa: porWa.slice(0, 600).map(liviano),
+            lista_sin: sinContacto.slice(0, 200).map(liviano)
+          });
+        }
+
+        /* Link personal de UN alumno (el camino WhatsApp: el dueno aprieta y se abre el chat
+           con el mensaje ya escrito). Devolver el token al dueno es correcto: es SU alumno. */
+        if (path === "/app/api/admin/invitaciones/link" && request.method === "POST"){
+          if (!esDueno) return json({ error: "Las invitaciones las manda el dueno de la academia." }, 403);
+          const bL = await request.json().catch(() => ({}));
+          const alL = await env.DB.prepare("SELECT id, nombre, whatsapp FROM alumnos WHERE id = ?1 AND tenant_id = ?2").bind(String(bL.alumno_id || ""), tid).first();
+          if (!alL) return json({ error: "Alumno no encontrado" }, 404);
+          const inv = await crearInvitacion(env, t, alL.id, String(bL.canal || "wa"));
+          return json({ ok: true, url: inv.url, nombre: alL.nombre, whatsapp: alL.whatsapp || "", academia: t.academia || "" });
+        }
+
+        /* Tanda de correos. Tope por tanda + tope por dia + apagado por defecto.
+           Devuelve SIEMPRE a quien le toco, simulado o no, para que el dueno lo vea. */
+        if (path === "/app/api/admin/invitaciones/enviar" && request.method === "POST"){
+          if (!esDueno) return json({ error: "Las invitaciones las manda el dueno de la academia." }, 403);
+          await ensureAlumnoExtraSchema(env);
+          await ensureInvitacionesSchema(env);
+          const bE = await request.json().catch(() => ({}));
+          const cfgE = await loadConfig(env, tid);
+          const envioReal = String(cfgE.invitaciones_envio || "") === "on" && t.email !== DEMO_EMAIL;
+          const hoyE = hoyLima();
+          const { results: yaHoy } = await env.DB.prepare(
+            "SELECT COUNT(*) AS n FROM alumnos WHERE tenant_id = ?1 AND COALESCE(invitado_el,'') = ?2 AND COALESCE(invitado_canal,'') = 'email'"
+          ).bind(tid, hoyE).all();
+          const usadosHoy = Number((yaHoy && yaHoy[0] && yaHoy[0].n) || 0);
+          const margen = Math.max(0, INVITACION_TOPE_DIA - usadosHoy);
+          if (margen <= 0){
+            return json({ error: "Por hoy ya salieron " + usadosHoy + " invitaciones. Sigue mañana: mandar todo de golpe hace que los correos caigan en spam.", tope_dia: INVITACION_TOPE_DIA }, 429);
+          }
+          const cupo = Math.min(INVITACION_TANDA, margen);
+          const idsPedidos = Array.isArray(bE.ids) ? bE.ids.map(String).slice(0, INVITACION_TANDA) : null;
+          let candidatos;
+          if (idsPedidos && idsPedidos.length){
+            const marcas = idsPedidos.map((_, i) => "?" + (i + 3)).join(",");
+            candidatos = (await env.DB.prepare(
+              "SELECT a.id, a.nombre, COALESCE(a.email,'') AS email, COALESCE(a.curso,'') AS curso FROM alumnos a " +
+              "WHERE a.tenant_id = ?1 AND COALESCE(a.no_email,0) = 0 AND a.id IN (" + marcas + ") " +
+              "AND NOT EXISTS (SELECT 1 FROM cuentas c WHERE c.tenant_id = a.tenant_id AND c.alumno_id = a.id) LIMIT ?2"
+            ).bind(tid, cupo, ...idsPedidos).all()).results || [];
+          } else {
+            candidatos = (await env.DB.prepare(
+              "SELECT a.id, a.nombre, COALESCE(a.email,'') AS email, COALESCE(a.curso,'') AS curso FROM alumnos a " +
+              "WHERE a.tenant_id = ?1 AND COALESCE(a.no_email,0) = 0 AND COALESCE(a.email,'') != '' AND COALESCE(a.invitado_canal,'') != 'email' " +
+              "AND NOT EXISTS (SELECT 1 FROM cuentas c WHERE c.tenant_id = a.tenant_id AND c.alumno_id = a.id) ORDER BY a.nombre LIMIT ?2"
+            ).bind(tid, cupo).all()).results || [];
+          }
+          const validos = candidatos.filter(a => emailOk(a.email));
+          const enviados = [], fallidos = [];
+          /* SIMULACRO: se lista a quien le tocaria y NADA MAS. Nada de crear el token ni de
+             marcar `invitado_el`: marcar sin mandar los sacaba de la cola para siempre, asi
+             que el dia que se prendiera el envio de verdad esos alumnos ya no recibirian su
+             invitacion nunca. El modo prueba no puede gastar alumnos. */
+          if (!envioReal){
+            for (const a of validos) enviados.push({ nombre: a.nombre, email: a.email });
+          } else {
+            for (const a of validos){
+              const inv = await crearInvitacion(env, t, a.id, "email");
+              const urlBaja = MARCA.dominio + "/app/inv/baja?t=" + inv.token;
+              const mail = correoInvitacionAlumno(t, a, cfgE, inv.url, urlBaja);
+              let ok = false;
+              try {
+                ok = await enviarCorreo(env, {
+                  to: a.email, subject: mail.subject, html: mail.html,
+                  from: { name: t.academia || MARCA.nombre, email: "hola@batuta.lat" },
+                  replyTo: t.email || ""
+                });
+              } catch (e) { ok = false; }
+              if (ok) enviados.push({ nombre: a.nombre, email: a.email });
+              else {
+                fallidos.push({ nombre: a.nombre, email: a.email });
+                /* si no salio, no se queda marcado como invitado: mañana vuelve a la cola */
+                try { await env.DB.prepare("UPDATE alumnos SET invitado_el = '', invitado_canal = '' WHERE id = ?1 AND tenant_id = ?2").bind(a.id, tid).run(); } catch (e) {}
+              }
+            }
+          }
+          const restan = await env.DB.prepare(
+            "SELECT COUNT(*) AS n FROM alumnos a WHERE a.tenant_id = ?1 AND COALESCE(a.no_email,0) = 0 AND COALESCE(a.email,'') != '' " +
+            "AND COALESCE(a.invitado_canal,'') != 'email' AND NOT EXISTS (SELECT 1 FROM cuentas c WHERE c.tenant_id = a.tenant_id AND c.alumno_id = a.id)"
+          ).bind(tid).first();
+          return json({
+            ok: true, simulado: !envioReal, enviados: enviados.length, fallidos: fallidos.length,
+            detalle: enviados.slice(0, 40), fallos: fallidos.slice(0, 20),
+            restantes: Number((restan && restan.n) || 0),
+            enviados_hoy: usadosHoy + (envioReal ? enviados.length : 0), tope_dia: INVITACION_TOPE_DIA
+          });
         }
 
         /* -------- "Mi web": editor visual de la página pública de la academia -------- */
