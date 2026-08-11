@@ -5898,15 +5898,18 @@ export default {
           const nombre = String(b.nombre || "").trim().slice(0, 80);
           const phoneId = String(b.phone_id || "").replace(/\D/g, "");
           if (!nombre || !phoneId) return json({ error: "manda nombre y phone_id (phone_number_id de la WABA, solo digitos)" }, 400);
-          let kbStr = "";
+          /* Campo OMITIDO = se PRESERVA lo que ya tiene el negocio (10-ago-2026): antes un upsert
+             sin kb la borraba y sin enabled lo apagaba. Clave para el dia del corte 3402: basta
+             {id, nombre, phone_id} para escribir el phone_number_id real sin tocar el resto. */
+          const existe = await env.DB.prepare("SELECT id, kb, enabled, cap_mes FROM wa_negocio WHERE phone_id = ?1 OR id = ?2").bind(phoneId, String(b.id || "")).first().catch(() => null);
+          let kbStr = (existe && existe.kb) || "";
           if (b.kb != null){
             if (typeof b.kb === "string"){ try { JSON.parse(b.kb); kbStr = b.kb; } catch (e) { return json({ error: "kb debe ser JSON valido" }, 400); } }
             else kbStr = JSON.stringify(b.kb);
           }
-          const cap = (Number.isFinite(Number(b.cap_mes)) && Number(b.cap_mes) > 0) ? Math.floor(Number(b.cap_mes)) : 1000;
-          const enabled = (String(b.enabled || "") === "on" || b.enabled === true) ? "on" : "off";
+          const cap = (Number.isFinite(Number(b.cap_mes)) && Number(b.cap_mes) > 0) ? Math.floor(Number(b.cap_mes)) : ((existe && Number(existe.cap_mes) > 0) ? Number(existe.cap_mes) : 1000);
+          const enabled = (b.enabled == null && existe) ? String(existe.enabled || "off") : ((String(b.enabled || "") === "on" || b.enabled === true) ? "on" : "off");
           const ahora = new Date().toISOString();
-          const existe = await env.DB.prepare("SELECT id FROM wa_negocio WHERE phone_id = ?1").bind(phoneId).first().catch(() => null);
           const id = (b.id && String(b.id)) || (existe && existe.id) || crypto.randomUUID();
           try {
             await env.DB.prepare(
