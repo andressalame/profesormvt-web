@@ -3100,10 +3100,41 @@ async function horarioFijoDerivado(env, tenantId, alumnoId){
    config.agenda_cupo (1-60, default 1 = individual). Un "bloqueo" cierra el slot completo.
    Es el ULTIMO recurso: manda el aforo de la franja, luego el del tipo de clase, luego este. */
 const CUPO_MAX = 60;
+/* ── LA FUGA SILENCIOSA DEL AFORO 1 (11-ago-2026) ───────────────────────────
+   Cuando NADIE definio el aforo (ni la franja, ni el tipo de clase, ni el cupo general),
+   el servidor caia a 1 sin decirselo a nadie. Una academia grupal que se registra sola,
+   arma su horario y no le pone tipo a una franja, la deja aceptando UNA persona: se llena
+   con el primer alumno, los demas ven "sin cupos" y no salta ningun error. Fuga de ventas
+   invisible en cada registro nuevo.
+   El NUMERO por defecto no cambia (subirlo por las buenas sobrevenderia a los profes 1-a-1
+   de verdad, que son la mitad del padron). Lo que cambia es que deja de ser MUDO:
+   aforoResuelto() devuelve el numero Y de donde sale, y la fuente "default" significa
+   exactamente "nadie lo definio nunca". El panel usa esa distincion para preguntarlo
+   en cristiano en vez de dejar que el dueno lo descubra por una venta perdida. */
+const CUPO_DEFAULT_SIN_DEFINIR = 1;
 function cupoDeCfg(cfg){
   const c = parseInt(cfg && cfg.agenda_cupo, 10);
-  return (Number.isFinite(c) && c >= 1 && c <= CUPO_MAX) ? c : 1;
+  return (Number.isFinite(c) && c >= 1 && c <= CUPO_MAX) ? c : CUPO_DEFAULT_SIN_DEFINIR;
 }
+/* ¿El dueno escribio un cupo general alguna vez? (vacio o basura = no) */
+function tieneCupoGeneral(cfg){
+  const c = parseInt(cfg && cfg.agenda_cupo, 10);
+  return Number.isFinite(c) && c >= 1 && c <= CUPO_MAX;
+}
+/* UNA sola cascada de aforo para todo el worker (vivia duplicada en slotsLibres y en
+   cupoDeSlot, que es como el default se volvio invisible: nadie lo veia entero).
+   fuente: "franja" | "tipo" | "general" | "default". */
+function aforoResuelto(cfg, cupoFranja, etiqueta){
+  const c = parseInt(cupoFranja, 10);
+  if (Number.isFinite(c) && c >= 1 && c <= CUPO_MAX) return { n: c, fuente: "franja" };
+  const porTipo = aforoDeTipo(cfg, etiqueta);
+  if (porTipo) return { n: porTipo, fuente: "tipo" };
+  if (tieneCupoGeneral(cfg)) return { n: cupoDeCfg(cfg), fuente: "general" };
+  return { n: CUPO_DEFAULT_SIN_DEFINIR, fuente: "default" };
+}
+/* Nota: "la academia nunca dijo cuanta gente entra" (= !tieneCupoGeneral && ningun tipo con
+   aforo) lo evalua el PANEL, que es quien pregunta: ver aforoSinDefinir() en
+   public/panel/index.html. Aca solo vive la cascada, que es la que manda. */
 /* ¿La academia sienta a VARIOS alumnos en el MISMO horario? (11-ago-2026)
    Batuta nacio para el profe 1-a-1 y hoy tiene academias grupales de clientes (Elevate
    Studio: Pilates Maquinas aforo 3, Mat 8, 64 franjas). El portal del alumno usa esto
@@ -3301,14 +3332,10 @@ async function generarSlotsDetalle(env, tenantId, prof, opts){
     conteo.set(k, (conteo.get(k) || 0) + 1);
   }
   const cfgT = await loadConfig(env, tenantId);
-  const cupoGlobal = cupoDeCfg(cfgT);
   /* Aforo efectivo, en orden: el de la celda (1-60) > el AFORO DEL TIPO DE CLASE
-     (Maquinas 3 / Mat 8, definido una sola vez en Ajustes) > el cupo general. */
-  const cupoEff = (cupoFranja, etiqueta) => {
-    if (cupoFranja >= 1 && cupoFranja <= 60) return cupoFranja;
-    const porTipo = aforoDeTipo(cfgT, etiqueta);
-    return porTipo || cupoGlobal;
-  };
+     (Maquinas 3 / Mat 8, definido una sola vez en Ajustes) > el cupo general > 1 sin definir.
+     Una sola fuente: aforoResuelto(). */
+  const cupoEff = (cupoFranja, etiqueta) => aforoResuelto(cfgT, cupoFranja, etiqueta).n;
   const pk = opts && opts.pk;
   /* Anticipacion POR CURSO (28-jul-2026, Elevate): cada categoria puede tener su minimo de
      horas y su tope de dias hacia el futuro. Se resuelve por franja (cada una trae su curso),
@@ -4380,15 +4407,12 @@ async function resolverFranja(env, tenantId, iso, prof, sala){
   if (rows.length === 1) return { franja: rows[0], ambigua: false };
   return { franja: null, ambigua: true };
 }
-/* Cupo efectivo de UN slot: el de la franja si es >0, si no el aforo del tipo, si no el global. */
+/* Cupo efectivo de UN slot: el de la franja si es >0, si no el aforo del tipo, si no el
+   global, si no 1 (nadie lo definio). Misma cascada que la grilla del panel: aforoResuelto(). */
 async function cupoDeSlot(env, tenantId, iso, prof, cfg, sala){
   try {
     const { franja } = await resolverFranja(env, tenantId, iso, prof, sala);
-    const c = franja ? parseInt(franja.cupo, 10) : 0;
-    if (Number.isFinite(c) && c >= 1 && c <= CUPO_MAX) return c;
-    /* sin aforo propio: el del TIPO de clase de esa franja (Maquinas 3 / Mat 8) */
-    const porTipo = aforoDeTipo(cfg, franja && franja.curso);
-    if (porTipo) return porTipo;
+    return aforoResuelto(cfg, franja && franja.cupo, franja && franja.curso).n;
   } catch (e) { /* columna aun no existe -> cae al global */ }
   return cupoDeCfg(cfg);
 }

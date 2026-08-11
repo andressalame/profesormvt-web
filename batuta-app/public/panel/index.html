@@ -296,6 +296,28 @@
   .dcell:hover{border-color:var(--accent);}
   .dc-t{font-size:12.5px;font-weight:700;line-height:1.1;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
   .dc-n{font-size:11px;font-weight:600;opacity:.9;line-height:1;display:inline-flex;align-items:center;gap:3px;}
+  /* aforo que NADIE definió (cae a 1 en silencio): pill delineada con currentColor, se lee
+     igual sobre la celda prendida y sobre la apagada, en claro y en oscuro. */
+  .dc-af.ojo{border:1px solid currentColor;border-radius:999px;padding:0 5px;font-weight:800;opacity:1;}
+  /* Cartel "nadie definió el aforo": en el modal de la franja y en la tarjeta de la Agenda.
+     Ámbar y con el arreglo dentro — nunca en gris ni en letra chica. */
+  #fr_aforoAviso{border:1px solid var(--amber);border-radius:var(--r-sm,8px);background:rgba(217,154,60,.12);padding:12px 14px;margin:8px 0 10px;font-size:14px;line-height:1.45;color:var(--cream);}
+  #fr_aforoAviso .fr-ask{font-weight:800;margin-top:8px;}
+  .fr-chips{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:8px;}
+  .fr-chip{min-width:48px;min-height:40px;padding:0 14px;border:1px solid var(--amber);border-radius:var(--r-pill,999px);background:transparent;color:var(--cream);font-family:var(--body);font-size:15px;font-weight:700;cursor:pointer;}
+  .fr-chip:hover{background:var(--amber);color:#151310;}
+  .fr-chip-nota{font-size:12.5px;color:var(--muted);}
+  .aforo-ask{border-color:var(--amber)!important;}
+  .aforo-ask .aa-ops{display:flex;flex-wrap:wrap;gap:10px;margin-top:12px;}
+  .aforo-ask .aa-op{flex:1;min-width:230px;text-align:left;border:1px solid var(--line);background:var(--panel2);border-radius:var(--r,12px);padding:14px 16px;cursor:pointer;color:var(--cream);font-family:var(--body);min-height:52px;}
+  .aforo-ask .aa-op:hover,.aforo-ask .aa-op.on{border-color:var(--amber);background:rgba(217,154,60,.12);}
+  .aforo-ask .aa-op b{display:block;font-size:15px;margin-bottom:2px;}
+  .aforo-ask .aa-op span{font-size:12.5px;color:var(--muted);}
+  .aforo-ask .aa-num{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:12px;}
+  /* el display:flex de arriba le gana al [hidden] del navegador: hay que decirlo explícito
+     o la pregunta del número sale antes de que elija "Grupales" */
+  .aforo-ask .aa-num[hidden]{display:none;}
+  .aforo-ask .aa-num input{width:96px;font-size:16px;padding:10px;}
   .dc-cal{width:11px;height:11px;stroke:currentColor;stroke-width:2;fill:none;stroke-linecap:round;stroke-linejoin:round;flex:0 0 auto;}
   .dispcfg{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:0 0 10px;}
   .dispcfg input[type=time]{flex:0 0 auto;width:auto;min-width:0;}
@@ -1913,7 +1935,11 @@
       <select id="fr_tipo"></select>
       <p class="hint" style="margin:5px 0 0;" id="fr_tipoHint">Sale como etiqueta en el portal de tus alumnos y decide qué planes pueden reservarla.</p></div>
     <div class="field"><label>Aforo (cuántos entran)</label>
-      <input id="fr_aforo" type="number" min="0" max="60" placeholder="Vacío = el del tipo de clase" />
+      <input id="fr_aforo" type="number" min="0" max="60" placeholder="1" />
+      <!-- Cartel de la fuga (11-ago-2026): sale cuando esta franja no tiene tipo NI aforo
+           propio y la academia tampoco fijó un cupo general -> el servidor la deja en 1
+           persona sin avisar. Va aquí, pegado al campo que lo arregla, no en letra chica. -->
+      <div id="fr_aforoAviso" hidden></div>
       <p class="hint" style="margin:5px 0 0;" id="fr_aforoHint">&nbsp;</p></div>
     <div class="field" id="fr_profeWrap"><label>La dicta</label>
       <select id="fr_profe"></select>
@@ -3748,29 +3774,52 @@ function cupoGeneralReservas(){
   try{ v=parseInt((db&&db.config&&db.config.agenda_cupo)||0,10); }catch(e){ v=0; }
   return (v>=1&&v<=60)?v:0;
 }
-function aforoEfectivo(curso,cupo){
+/* Espejo EXACTO de aforoResuelto() del worker: el número que ve el dueño tiene que ser el
+   MISMO que el servidor va a hacer cumplir. Si cambia allá, cambia acá.
+   fuente: "franja" | "tipo" | "general" | "default".
+   "default" = nadie lo definió nunca y esa clase acepta 1 persona por omisión — la fuga
+   silenciosa que este panel ahora dice en voz alta en vez de esconder. */
+function aforoResuelto(curso,cupo){
   var c=parseInt(cupo,10)||0;
-  if(c>=1&&c<=60) return c;
-  return aforoDelTipo(curso)||cupoGeneralReservas();
+  if(c>=1&&c<=60) return {n:c, fuente:"franja"};
+  var t=aforoDelTipo(curso);
+  if(t) return {n:t, fuente:"tipo"};
+  var g=cupoGeneralReservas();
+  if(g) return {n:g, fuente:"general"};
+  return {n:1, fuente:"default"};
+}
+function aforoEfectivo(curso,cupo){ return aforoResuelto(curso,cupo).n; }
+/* La academia NUNCA dijo cuánta gente entra: ni cupo general, ni un solo tipo de clase con
+   aforo. Con horarios prendidos, TODOS aceptan 1 persona sin que nadie lo haya elegido. */
+function aforoSinDefinir(){
+  return !cupoGeneralReservas() && !clasesTenant().some(function(c){ return c.a>0; });
 }
 var SVG_CAL_DCELL='<svg class="dc-cal" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>';
 /* UN solo constructor del contenido de la celda, usado por la grilla y por pintarDcell(). */
 function contenidoDcell(curso,cupo,vd,vh){
   var nom=nombreCortoTipo(curso);
-  var af=aforoEfectivo(curso,cupo);
+  var r=aforoResuelto(curso,cupo);
   /* "Sin tipo" solo es un aviso útil si la academia YA creó tipos de clase; si no tiene
      ninguno, repetirlo en 60 casillas es ruido, no información. */
   var vacio=(clasesTenant().length?"Sin tipo":"Dictas");
   var h='<span class="dc-t">'+(nom?esc(nom):vacio)+'</span>';
-  var abajo=(af?(af+(af===1?" cupo":" cupos")):"")+((vd||vh)?SVG_CAL_DCELL:"");
-  if(abajo) h+='<span class="dc-n">'+abajo+'</span>';
+  /* El número va SIEMPRE (11-ago-2026). Antes se escondía justo cuando nadie lo había
+     definido, así que la casilla mentía por omisión: se veía neutra y aceptaba 1 persona.
+     Sin definir se pinta en ámbar con un "?" — se ve que nadie lo eligió. */
+  var aOjo=(r.fuente==="default");
+  var abajo='<span class="dc-af'+(aOjo?" ojo":"")+'">'+r.n+(r.n===1?" cupo":" cupos")+(aOjo?"?":"")+'</span>'+
+            ((vd||vh)?SVG_CAL_DCELL:"");
+  h+='<span class="dc-n">'+abajo+'</span>';
   return h;
 }
 function tituloDcell(on,curso,cupo,profe,vd,vh){
   if(!on) return "Clic para prender esta hora";
-  var af=aforoEfectivo(curso,cupo);
+  var r=aforoResuelto(curso,cupo);
+  var gente=(r.fuente==="default")
+    ? "entra 1 SOLA persona: nadie definió cuánta gente cabe"
+    : ("entran "+r.n+" "+(r.n===1?"persona":"personas"));
   return (curso||"Sin tipo de clase")+(profe?(" · la dicta "+nombreProfe(profe)):"")+
-    " · entran "+(af?af:"los del cupo general")+
+    " · "+gente+
     ((vd||vh)?(" · solo se dicta del "+(vd||"…")+" al "+(vh||"…")):" · todas las semanas")+
     " · clic para cambiarlo";
 }
@@ -3801,6 +3850,27 @@ function renderAgendaAdmin(){
       '</strong> '+(quien
         ? ('Esta grilla vacía es la de '+esc(quien)+', no la tuya: no se borró nada. Prende aquí los días y horas en que dicta, y guarda.')
         : 'Prende abajo los días y horas en que dictas, y guarda: recién ahí podrán reservar desde su portal.')+'</div>';
+  }
+  /* 🔴 LA FUGA DEL AFORO 1 (11-ago-2026): la academia tiene horarios prendidos pero NUNCA
+     dijo cuánta gente entra (ni cupo general en Ajustes, ni un tipo de clase con aforo).
+     El servidor cae a 1 en silencio: cada clase se llena con el PRIMER alumno y el resto ve
+     "sin cupos", sin un solo error. No se adivina ni se le toca la data: se PREGUNTA, una
+     vez, aquí — que es donde duele. Al responder (de a uno o grupales) queda escrito el
+     cupo general y la tarjeta no vuelve a salir. */
+  if(!quien && ROL==="dueno" && aforoSinDefinir() && (AG_DISP||[]).some(function(r){return r.activo;})){
+    html += '<div class="card aforo-ask" id="aforoAsk" style="padding:16px 18px;margin:0 0 12px;">'+
+      '<strong style="font-size:16px;">¿Cómo son tus clases?</strong>'+
+      '<p class="hint" style="margin:6px 0 0;">Todavía no me lo has dicho, así que <b>cada hora de tu horario está aceptando 1 sola persona</b>. '+
+      'Si tus clases son grupales, se te llenan con el primer alumno y los demás ven «sin cupos».</p>'+
+      '<div class="aa-ops">'+
+        '<button type="button" class="aa-op" data-aforo-ask="uno"><b>De a uno, cada alumno con su horario</b><span>Clases particulares: una persona por hora. Queda como está.</span></button>'+
+        '<button type="button" class="aa-op" data-aforo-ask="grupo"><b>Grupales, varios alumnos a la vez</b><span>Todos entran a la misma hora y comparten la clase.</span></button>'+
+      '</div>'+
+      '<div class="aa-num" id="aforoAskNum" hidden>'+
+        '<b style="font-size:15px;">¿Cuántos entran a cada clase?</b>'+
+        '<input id="aforoAskN" type="number" min="1" max="60" value="10" inputmode="numeric" />'+
+        '<button type="button" class="btn" data-aforo-ask="guardar">Guardar</button>'+
+      '</div></div>';
   }
   /* Pestañas por sala (03-ago-2026): una grilla por espacio físico, clases en paralelo. */
   var salasTabs=salasGrilla();
@@ -4101,12 +4171,48 @@ function aforoDelTipo(t){
   var c=clasesTenant().find(function(x){return x.n===cat;});
   return (c&&c.a)||0;
 }
+/* NUNCA mostrar el aforo "vacío" (11-ago-2026). Antes decía "Vacío = el del tipo de clase"
+   / "Vacío = el general de Ajustes" y el dueño tenía que ejecutar una cascada de 3 niveles
+   en su cabeza para saber cuánta gente entra — y si la cascada no daba nada, nadie le decía
+   que quedaba en 1. Ahora se muestra el NÚMERO YA RESUELTO y de dónde sale. */
 function pintarAforoHint(){
-  var t=el("fr_tipo").value, a=aforoDelTipo(t);
-  el("fr_aforoHint").innerHTML = a
-    ? ('Vacío = <b>'+a+'</b>, el aforo de "'+esc(String(t).split("·")[0].trim())+'".')
-    : 'Vacío = el "Cupo por horario" general de Ajustes → Reservas.';
+  var t=el("fr_tipo").value;
+  var puesto=parseInt(el("fr_aforo").value,10);
+  var propio=(isFinite(puesto)&&puesto>=1&&puesto<=60)?puesto:0;
+  /* lo que heredaría si dejas el campo vacío: eso es lo que va de placeholder */
+  var heredado=aforoResuelto(t,0);
+  el("fr_aforo").placeholder=String(heredado.n);
+  var r=aforoResuelto(t,propio);
+  var cat=String(t).split("·")[0].trim();
+  var aviso=el("fr_aforoAviso"), hint=el("fr_aforoHint");
+  if(r.fuente==="default"){
+    /* La fuga, dicha en cristiano y con el arreglo al lado. */
+    hint.innerHTML="&nbsp;";
+    aviso.hidden=false;
+    aviso.innerHTML='<b>Esta clase acepta 1 sola persona</b> porque no le pusiste tipo de clase '+
+      'ni aforo. Se llena con el primer alumno y los demás verán «sin cupos».'+
+      '<div class="fr-ask">¿Cuánta gente entra?</div>'+
+      '<div class="fr-chips">'+[1,4,8,12,20].map(function(m){
+        return '<button type="button" class="fr-chip" data-aforo="'+m+'">'+m+'</button>';
+      }).join("")+'<span class="fr-chip-nota">o escríbelo abajo</span></div>';
+    return;
+  }
+  aviso.hidden=true; aviso.innerHTML="";
+  var de={
+    franja:"porque lo escribiste aquí",
+    tipo:'porque es el aforo de "'+esc(cat)+'" (Ajustes → Clases y planes)',
+    general:'por tu «Cupo por horario» general (Ajustes → Reservas)'
+  }[r.fuente]||"";
+  hint.innerHTML='<b>Entran '+r.n+' '+(r.n===1?"persona":"personas")+'</b> a esta clase, '+de+'.'+
+    (r.fuente==="franja"?"":" Escribe un número aquí solo si esta hora es la excepción.");
 }
+/* Los chips del cartel escriben el aforo en el campo de al lado y refrescan el texto. */
+if(el("fr_aforoAviso")) el("fr_aforoAviso").addEventListener("click",function(e){
+  var b=e.target.closest("[data-aforo]"); if(!b) return;
+  el("fr_aforo").value=b.dataset.aforo;
+  pintarAforoHint();
+});
+if(el("fr_aforo")) el("fr_aforo").addEventListener("input",pintarAforoHint);
 /* Quiénes reservaron esta franja (10-ago-2026, reunión Elevate): las próximas fechas de
    este día+hora(+sala) con sus alumnos, dentro del modal — ya no hay que bucear en la
    tabla grande de reservas. Lima es UTC-5 fijo, sin depender del reloj del navegador. */
@@ -4281,7 +4387,35 @@ if(el("btnFranjaApagar")) el("btnFranjaApagar").addEventListener("click",functio
   guardarHorario("Horario quitado ✓");
 });
 
+/* Respuesta a "¿Cómo son tus clases?" (tarjeta de la Agenda). Escribe el CUPO GENERAL:
+   "de a uno" → 1 EXPLÍCITO (deja de ser un default mudo y la tarjeta no vuelve a salir);
+   "grupales" → el número que ella diga. No le toca los horarios ni los tipos de clase. */
+function guardarAforoGeneral(v){
+  if(!(v>=1&&v<=60)){ toast("Escribe cuántas personas entran a cada clase (de 1 a 60)"); return; }
+  apiPost("/app/api/admin/config",{agenda_cupo:String(v)}).then(function(){
+    db.config.agenda_cupo=String(v);
+    /* preserva lo que estuviera tocado sin guardar antes de repintar */
+    try{ sincronizarGrillaEnMemoria(); }catch(e){}
+    renderAgendaAdmin();
+    toast(v===1?"Listo: cada hora acepta 1 persona. Tu horario queda igual ✓"
+               :("Listo: ahora entran "+v+" personas a cada clase ✓"),4200);
+  }).catch(function(err){ toast((err&&err.message)||"No se pudo guardar, revisa tu conexión"); });
+}
 el("panel-agenda").addEventListener("click",function(e){
+  var ask = e.target.closest("[data-aforo-ask]");
+  if(ask){
+    var q=ask.dataset.aforoAsk;
+    if(q==="uno"){ guardarAforoGeneral(1); return; }
+    if(q==="grupo"){
+      if(el("aforoAskNum")) el("aforoAskNum").hidden=false;
+      ask.classList.add("on");
+      var otro=el("aforoAsk")&&el("aforoAsk").querySelector('[data-aforo-ask="uno"]');
+      if(otro) otro.classList.remove("on");
+      if(el("aforoAskN")) el("aforoAskN").focus();
+      return;
+    }
+    if(q==="guardar"){ guardarAforoGeneral(parseInt(el("aforoAskN")?el("aforoAskN").value:"",10)); return; }
+  }
   var tab = e.target.closest("[data-disptab]");
   if(tab){
     /* cambiar de sala: primero guardar EN MEMORIA lo que el usuario tocó en la pestaña actual
@@ -8148,7 +8282,7 @@ var WZ_RUBROS=[
   ["Ajedrez","Ajedrez principiantes, Ajedrez intermedio"],
   ["Otra cosa",""]
 ];
-var WZ={paso:1, rubro:"", sugeridas:[], marcadas:{}, filas:[], cobro:"yape"};
+var WZ={paso:1, rubro:"", sugeridas:[], marcadas:{}, filas:[], cobro:"yape", forma:"", cuantos:10};
 
 function wzClasesExistentes(){
   try{ var cl=JSON.parse(db.config.clases||"[]"); if(cl.length) return cl.map(function(c){return String(c.n||"").trim();}).filter(Boolean); }catch(e){}
@@ -8169,17 +8303,17 @@ window.abrirWizardPrimerIngreso=function(){
     /* solo cuentas SIN activar: sin un solo precio real Y sin cobro conectado —
        exactamente el pantano donde se quedaron las fundadoras */
     if(!wzSinPrecios() || db.cobro_on) return;
-    try{ if(localStorage.getItem("bt_wz_resume")==="cierre"){ localStorage.removeItem("bt_wz_resume"); wzIr(5); el("wzVeil").hidden=false; return; } }catch(e){}
+    try{ if(localStorage.getItem("bt_wz_resume")==="cierre"){ localStorage.removeItem("bt_wz_resume"); wzIr(6); el("wzVeil").hidden=false; return; } }catch(e){}
     wzIr(1); el("wzVeil").hidden=false;
   }catch(e){}
 };
 
 function wzIr(n){ WZ.paso=n; wzPintar(); var c=document.querySelector(".wz-card"); if(c) c.scrollIntoView({block:"start"}); }
 function wzTitulo(){
-  var t={1:"Paso 1 de 4",2:"Paso 2 de 4",3:"Paso 3 de 4",4:"Paso 4 de 4",5:"¡Listo!"};
+  var t={1:"Paso 1 de 5",2:"Paso 2 de 5",3:"Paso 3 de 5",4:"Paso 4 de 5",5:"Paso 5 de 5",6:"¡Listo!"};
   el("wzPaso").textContent=t[WZ.paso]||"";
-  /* escape discreto SOLO en los pasos 1-2: de precio y cobro no se escapa (ahí murieron las 3) */
-  el("wzSalir").classList.toggle("hidden", WZ.paso>2);
+  /* escape discreto SOLO en los pasos 1-3: de precio y cobro no se escapa (ahí murieron las 3) */
+  el("wzSalir").classList.toggle("hidden", WZ.paso>3);
 }
 function wzPintar(){
   wzTitulo();
@@ -8237,7 +8371,51 @@ function wzPintar(){
       }).catch(function(e){ el("wzSig").disabled=false; el("wzErr").textContent="No se pudo guardar ("+((e&&e.message)||"revisa tu conexión")+"). Intenta de nuevo."; });
     };
   }
+  /* PASO 3 — ¿de a uno o grupales? (11-ago-2026, cierra la fuga silenciosa del aforo 1)
+     Sin esta respuesta el servidor deja cada hora del horario aceptando UNA persona, y una
+     academia grupal se llena con el primer alumno mientras el resto ve "sin cupos". Nadie
+     se entera: no hay error, solo ventas que no pasan. Una pregunta, dos botones, un toque. */
   else if(WZ.paso===3){
+    b.innerHTML='<h2>¿Cómo son tus clases?</h2>'+
+      '<p class="wz-sub">Esto decide cuánta gente puede reservar la misma hora. Es lo único que separa una clase particular de una grupal.</p>'+
+      '<button type="button" class="wz-op'+(WZ.forma==="uno"?" on":"")+'" data-forma="uno"><b>De a uno, cada alumno con su horario</b><span>Clases particulares: una persona por hora.</span></button>'+
+      '<button type="button" class="wz-op'+(WZ.forma==="grupo"?" on":"")+'" data-forma="grupo"><b>Grupales, varios alumnos a la vez</b><span>Todos entran a la misma hora y comparten la clase.</span></button>'+
+      '<div id="wzCuantos" style="'+(WZ.forma==="grupo"?"":"display:none;")+'padding:2px 4px 10px;">'+
+        '<div class="wz-fila" style="border:0;"><b style="min-width:150px;">¿Cuántos entran a cada clase?</b>'+
+        '<div class="wz-minichips">'+[6,10,15].map(function(m){ return '<button type="button" class="wz-minichip" data-cuantos="'+m+'">'+m+'</button>'; }).join("")+'</div>'+
+        '<input id="wzN" type="number" min="1" max="60" inputmode="numeric" value="'+(WZ.cuantos||10)+'"></div>'+
+        '<p class="wz-sub" style="margin:0;">Lo cambias cuando quieras, y cada tipo de clase puede tener el suyo.</p>'+
+      '</div>'+
+      '<div class="wz-err" id="wzErr"></div>'+
+      '<div class="wz-acciones"><button class="wz-atras" id="wzAtras">Atrás</button><button class="wz-btn" id="wzSig">Continuar</button></div>';
+    b.querySelectorAll("[data-forma]").forEach(function(op){ op.onclick=function(){ WZ.forma=this.dataset.forma; wzPintar(); }; });
+    b.querySelectorAll("[data-cuantos]").forEach(function(mc){ mc.onclick=function(){ el("wzN").value=this.dataset.cuantos; }; });
+    el("wzAtras").onclick=function(){ wzIr(2); };
+    el("wzSig").onclick=function(){
+      if(!WZ.forma){ el("wzErr").textContent="Toca una de las dos para seguir."; return; }
+      var body;
+      if(WZ.forma==="grupo"){
+        var n=Math.round(Number(el("wzN").value)||0);
+        if(!(n>=1&&n<=60)){ el("wzErr").textContent="Escribe cuántas personas entran a cada clase (de 1 a 60)."; return; }
+        WZ.cuantos=n;
+        /* Grupal: cupo general + fuera el "horario fijo semanal" del portal, que viene
+           encendido y es el caso raro en un estudio (ahí se reserva clase por clase). */
+        body={agenda_cupo:String(n), portal_fija_off:"1"};
+      } else {
+        /* De a uno: se escribe el 1 EXPLÍCITO. Mismo número que antes, pero ya no es un
+           default mudo: queda dicho por ella y el panel deja de preguntarlo.
+           portal_fija_off vuelve a "" a propósito: si tocó "Grupales", siguió y luego se
+           arrepintió, el interruptor del portal NO se puede quedar prendido a escondidas. */
+        body={agenda_cupo:"1", portal_fija_off:""};
+      }
+      el("wzSig").disabled=true;
+      apiPost("/app/api/admin/config",body).then(function(){
+        Object.keys(body).forEach(function(k){ db.config[k]=body[k]; });
+        wzIr(4);
+      }).catch(function(e){ el("wzSig").disabled=false; el("wzErr").textContent="No se pudo guardar ("+((e&&e.message)||"revisa tu conexión")+"). Intenta de nuevo."; });
+    };
+  }
+  else if(WZ.paso===4){
     b.innerHTML='<h2>¿Cuánto cobras al mes por cada una?</h2>'+
       '<p class="wz-sub">Toca un monto o escribe el tuyo. Sin precio, tu página web no puede vender — por eso este paso no se salta. Lo cambias cuando quieras en Ajustes.</p>'+
       '<div id="wzPrecios">'+WZ.filas.map(function(f,i){
@@ -8248,7 +8426,7 @@ function wzPintar(){
       '<div class="wz-err" id="wzErr"></div>'+
       '<div class="wz-acciones"><button class="wz-atras" id="wzAtras">Atrás</button><button class="wz-btn" id="wzSig">Guardar precios y continuar</button></div>';
     b.querySelectorAll("[data-monto]").forEach(function(mc){ mc.onclick=function(){ var inp=b.querySelector('[data-precio="'+this.dataset.fila+'"]'); inp.value=this.dataset.monto; }; });
-    el("wzAtras").onclick=function(){ wzIr(2); };
+    el("wzAtras").onclick=function(){ wzIr(3); };
     el("wzSig").onclick=function(){
       var faltan=[];
       b.querySelectorAll("[data-precio]").forEach(function(inp){
@@ -8269,11 +8447,11 @@ function wzPintar(){
         db.precios=db.precios||{};
         WZ.filas.forEach(function(f){ db.precios[f.n]=f.precio; });
         return apiPut();
-      }).then(function(){ wzIr(4); })
+      }).then(function(){ wzIr(5); })
       .catch(function(e){ el("wzSig").disabled=false; el("wzErr").textContent="No se pudo guardar ("+((e&&e.message)||"conexión")+"). Intenta de nuevo."; });
     };
   }
-  else if(WZ.paso===4){
+  else if(WZ.paso===5){
     b.innerHTML='<h2>¿Cómo te pagan tus alumnos?</h2>'+
       '<p class="wz-sub">Elige lo tuyo de hoy. Nada de esto te amarra: se cambia en Ajustes.</p>'+
       '<button type="button" class="wz-op'+(WZ.cobro==="yape"?" on":"")+'" data-cobro="yape"><b>Por Yape, Plin o transferencia</b><span>Recomendado para empezar: pones tu número, tu web muestra los precios y tú confirmas cada pago.</span></button>'+
@@ -8286,7 +8464,7 @@ function wzPintar(){
       '<div class="wz-err" id="wzErr"></div>'+
       '<div class="wz-acciones"><button class="wz-atras" id="wzAtras">Atrás</button><button class="wz-btn" id="wzSig">Continuar</button></div>';
     b.querySelectorAll("[data-cobro]").forEach(function(op){ op.onclick=function(){ WZ.cobro=this.dataset.cobro; wzPintar(); }; });
-    el("wzAtras").onclick=function(){ wzIr(3); };
+    el("wzAtras").onclick=function(){ wzIr(4); };
     el("wzSig").onclick=function(){
       el("wzErr").textContent="";
       if(WZ.cobro==="yape"){
@@ -8294,7 +8472,7 @@ function wzPintar(){
         if(!/^\d[\d\s]{7,}$/.test(num)){ el("wzErr").textContent="Escribe tu número de Yape o Plin (9 dígitos)."; return; }
         el("wzSig").disabled=true;
         apiPost("/app/api/admin/config",{pago_numero:num,pago_titular:tit}).then(function(){
-          db.config.pago_numero=num; db.config.pago_titular=tit; db.cobro_on=true; wzIr(5);
+          db.config.pago_numero=num; db.config.pago_titular=tit; db.cobro_on=true; wzIr(6);
         }).catch(function(e){ el("wzSig").disabled=false; el("wzErr").textContent="No se pudo guardar ("+((e&&e.message)||"conexión")+")."; });
       } else if(WZ.cobro==="tarjeta"){
         el("wzSig").disabled=true;
@@ -8303,7 +8481,7 @@ function wzPintar(){
           if(d&&d.url){ location.href=d.url; }
           else { el("wzSig").disabled=false; el("wzErr").textContent="Mercado Pago no respondió. Prueba con Yape por ahora — la tarjeta se conecta luego en Ajustes."; }
         }).catch(function(){ el("wzSig").disabled=false; el("wzErr").textContent="Mercado Pago no respondió. Prueba con Yape por ahora — la tarjeta se conecta luego en Ajustes."; });
-      } else { wzIr(5); }
+      } else { wzIr(6); }
     };
   }
   else {
