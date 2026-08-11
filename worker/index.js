@@ -911,9 +911,14 @@ async function procesarNurtureLeads(env){
   const cfg = await loadConfig(env);
   if (cfg.nurture_activo !== "1") return [];   // interruptor de seguridad: APAGADO por defecto
   const ultimoPaso = NURTURE_PASOS[NURTURE_PASOS.length - 1].paso;
+  // 'wa-...@wa.mvt' son correos sintéticos de los leads que entraron por WhatsApp: no existe ese
+  // buzón, cada envío es un rebote duro que castiga la reputación del dominio (y con ella los
+  // correos que SÍ importan). Se excluyen igual que ya lo hacía el blast de composición.
   const { results: leads } = await env.DB.prepare(
-    "SELECT id, email, fecha, nurture_paso FROM leads WHERE marca = 'MVT' AND COALESCE(nurture_paso,0) < ?1"
+    "SELECT id, email, fecha, nurture_paso, telefono FROM leads " +
+    "WHERE marca = 'MVT' AND COALESCE(nurture_paso,0) < ?1 AND email NOT LIKE 'wa-%@wa.mvt'"
   ).bind(ultimoPaso).all();
+  const telPagados = await telefonosAlumnosPagados(env);
   const ahora = Date.now();
   const enviados = []; let fallos = 0;
   for (const l of (leads || [])){
@@ -921,6 +926,13 @@ async function procesarNurtureLeads(env){
     // Si el lead ya se volvió cuenta (registró o compró), corta la secuencia: lo toman onboarding/renovación.
     const cuenta = await env.DB.prepare("SELECT id FROM cuentas WHERE LOWER(email) = ?1").bind(String(l.email).toLowerCase()).first();
     if (cuenta){
+      await env.DB.prepare("UPDATE leads SET nurture_paso = 99 WHERE id = ?1").bind(l.id).run();
+      continue;
+    }
+    /* MISMO CANDADO QUE EL RESCATE (11-ago-2026): el que paga por Yape y entra al CRM a mano puede
+       no tener cuenta del portal, así que el chequeo de arriba no lo ve y seguiría recibiendo
+       correos de "todavía no empiezas". Se corta cruzando su teléfono con los alumnos que pagan. */
+    if (telPagados.size && telPagados.has(telefono9(l.telefono))){
       await env.DB.prepare("UPDATE leads SET nurture_paso = 99 WHERE id = ?1").bind(l.id).run();
       continue;
     }
@@ -1026,15 +1038,17 @@ async function procesarPuenteWhatsApp(env){
   if (disponible <= 0) return [];
   const ultimoPaso = NURTURE_PASOS[NURTURE_PASOS.length - 1].paso;
   const corte = new Date(Date.now() - PUENTE_WA_DIA * 86400000).toISOString().slice(0, 10);
+  // Fuera los correos sintéticos 'wa-...@wa.mvt' (lead de WhatsApp sin correo real): ese buzón no
+  // existe y cada intento es un rebote duro contra la reputación del dominio.
   const q = blast
     ? env.DB.prepare(
-        "SELECT id, email FROM leads WHERE marca = 'MVT' AND COALESCE(puente_wa,0) = 0 " +
-        "AND email NOT LIKE '%andressalame%' ORDER BY fecha ASC LIMIT ?1"
+        "SELECT id, email, telefono FROM leads WHERE marca = 'MVT' AND COALESCE(puente_wa,0) = 0 " +
+        "AND email NOT LIKE '%andressalame%' AND email NOT LIKE 'wa-%@wa.mvt' ORDER BY fecha ASC LIMIT ?1"
       ).bind(disponible)
     : env.DB.prepare(
-        "SELECT id, email FROM leads WHERE marca = 'MVT' AND COALESCE(puente_wa,0) = 0 " +
+        "SELECT id, email, telefono FROM leads WHERE marca = 'MVT' AND COALESCE(puente_wa,0) = 0 " +
         "AND COALESCE(nurture_paso,0) != 99 AND (COALESCE(nurture_paso,0) >= ?1 OR fecha <= ?2) " +
-        "AND email NOT LIKE '%andressalame%' ORDER BY fecha ASC LIMIT ?3"
+        "AND email NOT LIKE '%andressalame%' AND email NOT LIKE 'wa-%@wa.mvt' ORDER BY fecha ASC LIMIT ?3"
       ).bind(ultimoPaso, corte, disponible);
   const { results: leads } = await q.all();
   // Backlog vacío: el blast terminó; apagar el flag para que quede solo el goteo normal.
@@ -1046,9 +1060,16 @@ async function procesarPuenteWhatsApp(env){
   // Una sola query por corrida (en vez de una por lead): emails que ya son cuenta.
   const { results: ctas } = await env.DB.prepare("SELECT LOWER(email) AS e FROM cuentas").all();
   const yaCuenta = new Set((ctas || []).map(function(c){ return c.e; }));
+  const telPagados = await telefonosAlumnosPagados(env);
   const enviados = []; let fallos = 0;
   for (const l of (leads || [])){
     if (yaCuenta.has(String(l.email).toLowerCase())){
+      await env.DB.prepare("UPDATE leads SET puente_wa = 2 WHERE id = ?1").bind(l.id).run();
+      continue;
+    }
+    /* MISMO CANDADO QUE EL RESCATE (11-ago-2026): sin esto, al que pagó por Yape y no tiene cuenta
+       del portal se le ofrecía S/50 de descuento en el primer mes DESPUÉS de haber pagado completo. */
+    if (telPagados.size && telPagados.has(telefono9(l.telefono))){
       await env.DB.prepare("UPDATE leads SET puente_wa = 2 WHERE id = ?1").bind(l.id).run();
       continue;
     }
@@ -1559,18 +1580,68 @@ async function correoRescateCompra(env, to, nombreCompleto, paquete){
   return enviarCorreo(env, { to: to, subject: "Tu compra quedó a medias, la retomamos en un minuto", html: html, text: text });
 }
 
+/* Últimos 9 dígitos de un teléfono (el largo de un móvil peruano), para comparar números
+   guardados con formatos distintos ("+51 999 888 777", "999888777", "51999888777"). */
+function telefono9(v){
+  const d = String(v || "").replace(/\D/g, "");
+  return d.length >= 9 ? d.slice(-9) : "";
+}
+
+/* Teléfonos de los alumnos que YA pagan, en un Set armado UNA vez por corrida (son ~30 filas).
+   Sirve de red de seguridad cuando la cuenta del portal no quedó ligada al alumno (cuentas.alumno_id
+   vacío), que es justo lo que pasa cuando Andrés da de alta a mano al que pagó por Yape. */
+async function telefonosAlumnosPagados(env){
+  const set = new Set();
+  try {
+    const { results } = await env.DB.prepare("SELECT whatsapp FROM alumnos WHERE pago = 'Pagado'").all();
+    for (const r of (results || [])){
+      const t = telefono9(r.whatsapp);
+      if (t) set.add(t);
+    }
+  } catch (e) {}
+  return set;
+}
+
+/* "2026-08-09" menos N días -> "2026-08-02". Si la fecha no parsea devuelve "", que en las
+   comparaciones de abajo actúa como "cualquier fecha": empuja al lado seguro (no mandar). */
+function fechaMenosDias(fechaStr, dias){
+  const t = Date.parse(String(fechaStr || "") + "T00:00:00Z");
+  if (!Number.isFinite(t)) return "";
+  return new Date(t - dias * 86400000).toISOString().slice(0, 10);
+}
+
+const RESCATE_VENTANA_CONFIRMADA = 7;   // días antes de la compra fallida en los que una confirmada del mismo paquete la anula
+const RESCATE_ESPERA_DIAS = 30;         // una misma CUENTA no vuelve a recibir rescate antes de este plazo
+
 async function procesarRescateCompras(env){
   const cfg = await loadConfig(env);
   if (cfg.rescate_activo !== "1") return [];   // encendido por defecto; '0' lo apaga
   // compras.fecha es solo fecha (YYYY-MM-DD): "más de 24h" se traduce a "de ayer o antes",
   // así ninguna compra iniciada HOY recibe rescate mientras el pago puede estar en vuelo.
   const hoyStr = hoy();
+  // El LEFT JOIN a alumnos es el candado del 11-ago-2026: sin él este motor solo veía `compras`
+  // y le pedía "completa tu pago" a gente que ya había pagado por Yape.
   const { results: compras } = await env.DB.prepare(
-    "SELECT co.id, co.cuenta_id, co.paquete, co.estado, co.fecha, c.email AS _email, c.nombre AS _nombre " +
+    "SELECT co.id, co.cuenta_id, co.paquete, co.estado, co.fecha, " +
+    "c.email AS _email, c.nombre AS _nombre, c.whatsapp AS _wa, a.pago AS _pago_alumno " +
     "FROM compras co JOIN cuentas c ON c.id = co.cuenta_id " +
+    "LEFT JOIN alumnos a ON a.id = c.alumno_id " +
     "WHERE COALESCE(co.rescate_enviado,0) = 0 AND " +
     "(co.estado = 'rechazada' OR (co.estado = 'iniciada' AND co.fecha < ?1))"
   ).bind(hoyStr).all();
+  const telPagados = await telefonosAlumnosPagados(env);
+  /* Cuentas rescatadas hace poco. El dedupe de `compras.rescate_enviado` no basta: cada reintento
+     de checkout borra la fila 'iniciada' y crea una nueva con el contador en 0, así que la misma
+     persona volvía a calificar al día siguiente (Genaro: 3 correos en 3 días). Esto cuelga de la
+     cuenta, que sobrevive a los reintentos. Defensivo: si la columna aún no existe (migración sin
+     correr), el Set queda vacío y el motor se comporta como antes. */
+  const rescatadasReciente = new Set();
+  try {
+    const { results: recientes } = await env.DB.prepare(
+      "SELECT id FROM cuentas WHERE COALESCE(rescate_fecha,'') > ?1"
+    ).bind(fechaMenosDias(hoyStr, RESCATE_ESPERA_DIAS)).all();
+    for (const r of (recientes || [])) rescatadasReciente.add(r.id);
+  } catch (e) {}
   const enviados = []; let fallos = 0;
   const yaRescatadas = new Set();   // una cuenta con varias compras abandonadas recibe UN solo correo
   for (const co of (compras || [])){
@@ -1579,11 +1650,31 @@ async function procesarRescateCompras(env){
       await env.DB.prepare("UPDATE compras SET rescate_enviado = 2 WHERE id = ?1").bind(co.id).run();
       continue;
     }
-    // Si la cuenta tiene una compra confirmada POSTERIOR (o del mismo día), compró por otra vía: no molestar.
+    /* CANDADO: la cuenta ya es un alumno que PAGÓ -> nunca pedirle que "complete" su compra.
+       El que paga por Yape/transferencia entra al CRM a mano y su compra del portal se queda
+       en 'iniciada'/'rechazada' para siempre; este motor la leía como abandonada. Le pasó a
+       Genaro Torres (pagó S/580 el 10-ago y el 11-ago el sistema le pidió retomar esa misma
+       compra) y antes a Molly Cerrón. Dos caminos porque el alta manual no siempre queda ligada:
+       1) cuentas.alumno_id -> alumnos.pago · 2) fallback por WhatsApp.
+       Al alumno que paga y necesita renovar ya lo atienden procesarRenovaciones y procesarWinBack,
+       así que excluirlo de aquí no pierde ninguna venta. */
+    if (co._pago_alumno === "Pagado" || (telPagados.size && telPagados.has(telefono9(co._wa)))){
+      await env.DB.prepare("UPDATE compras SET rescate_enviado = 2 WHERE id = ?1").bind(co.id).run();
+      continue;
+    }
+    /* Si la cuenta tiene una compra confirmada POSTERIOR (o del mismo día), compró por otra vía:
+       no molestar. Y si el MISMO paquete le quedó confirmado hasta 7 días ANTES, el checkout
+       fallido es un reintento duplicado, no una compra abandonada: tampoco se manda. */
     const conf = await env.DB.prepare(
-      "SELECT 1 AS ok FROM compras WHERE cuenta_id = ?1 AND estado = 'confirmada' AND fecha >= ?2 LIMIT 1"
-    ).bind(co.cuenta_id, co.fecha || "").first();
+      "SELECT 1 AS ok FROM compras WHERE cuenta_id = ?1 AND estado = 'confirmada' AND " +
+      "(fecha >= ?2 OR (paquete = ?3 AND fecha >= ?4)) LIMIT 1"
+    ).bind(co.cuenta_id, co.fecha || "", co.paquete || "", fechaMenosDias(co.fecha, RESCATE_VENTANA_CONFIRMADA)).first();
     if (conf){
+      await env.DB.prepare("UPDATE compras SET rescate_enviado = 2 WHERE id = ?1").bind(co.id).run();
+      continue;
+    }
+    // Ya se le rescató hace menos de RESCATE_ESPERA_DIAS: insistir es spam, no rescate.
+    if (rescatadasReciente.has(co.cuenta_id)){
       await env.DB.prepare("UPDATE compras SET rescate_enviado = 2 WHERE id = ?1").bind(co.id).run();
       continue;
     }
@@ -1594,7 +1685,10 @@ async function procesarRescateCompras(env){
     const ok = await correoRescateCompra(env, co._email, co._nombre, co.paquete);
     if (ok){
       await env.DB.prepare("UPDATE compras SET rescate_enviado = 1 WHERE id = ?1").bind(co.id).run();
+      // Sella la cuenta: sobrevive al borrado/recreado de la compra en el próximo checkout.
+      try { await env.DB.prepare("UPDATE cuentas SET rescate_fecha = ?1 WHERE id = ?2").bind(hoyStr, co.cuenta_id).run(); } catch (e) {}
       yaRescatadas.add(co.cuenta_id);
+      rescatadasReciente.add(co.cuenta_id);
       enviados.push({ nombre: co._nombre, email: co._email, paquete: co.paquete, estado: co.estado });
     } else { fallos++; }
   }
@@ -2701,6 +2795,14 @@ async function ensureSchema(env){
     // rescate_enviado: dedupe del rescate de compras abandonadas (0 pendiente, 1 enviado, 2 saltada).
     const tieneRescate = (infoCompras.results || []).some(c => c.name === "rescate_enviado");
     if (!tieneRescate) await env.DB.prepare("ALTER TABLE compras ADD COLUMN rescate_enviado INTEGER DEFAULT 0").run();
+    /* v23 (11-ago-2026): rescate_fecha en CUENTAS, no en compras. Por qué: cada intento de
+       checkout hace DELETE de la compra 'iniciada' y INSERT de una fila nueva, así que
+       rescate_enviado (que vive en la fila) volvía a 0 en cada reintento y el motor rescataba
+       a la misma persona un día tras otro. Le pasó a Genaro Torres (3 correos: 9, 10 y 11-ago)
+       y a Andrea V (11 y 17-jul). El dedupe real tiene que colgar de la CUENTA, que sí sobrevive. */
+    const infoCuentas = await env.DB.prepare("PRAGMA table_info(cuentas)").all();
+    const tieneRescateFecha = (infoCuentas.results || []).some(c => c.name === "rescate_fecha");
+    if (!tieneRescateFecha) await env.DB.prepare("ALTER TABLE cuentas ADD COLUMN rescate_fecha TEXT DEFAULT ''").run();
     // resena_pedida: dedupe del pedido de reseña de Google (una sola vez por alumno, de por vida).
     const tieneResena = (infoAlumnos.results || []).some(c => c.name === "resena_pedida");
     if (!tieneResena) await env.DB.prepare("ALTER TABLE alumnos ADD COLUMN resena_pedida INTEGER DEFAULT 0").run();
