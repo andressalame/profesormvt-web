@@ -2651,7 +2651,11 @@ function computeAlumno(a){
      vencido o caducado ya no da clases aunque le sobre saldo. No borra nada. */
   var vencido=venceVencidoPanel(a.vence), caduco=!!Number(a.caducado);
   var estado,clase;
-  if(caduco){estado="Plan caducado";clase="red";}
+  /* Sin plan asignado (11-ago-2026): un alumno migrado al que todavía no le pones paquete
+     tenía saldo 0 y salía "Completado — renovar" en rojo. Con 800 alumnos recién traídos eso
+     es una pared de alarmas falsas: no le toca renovar, le falta que le pongas su plan. */
+  if(!a.paquete){estado="Falta ponerle su plan";clase="gray";}
+  else if(caduco){estado="Plan caducado";clase="red";}
   else if(vencido){estado="Plan vencido";clase="red";}
   else if(saldo<=0){estado="Completado — renovar";clase="red";}
   else if(saldo===1){estado="⚠ Última clase";clase="amber";}
@@ -2828,7 +2832,8 @@ function renderAlumnos(){
   tb.innerHTML=listaAl.map(function(a){
     var c=computeAlumno(a);
     var cu=cuentaDeAlumno(a.id);
-    var renovBtn=(c.clase!=="green")?'<button class="btn sm" data-renovar="'+a.id+'">Enviar mensaje</button>':'';
+    /* sin plan no se le manda mensaje de renovación: no hay nada que renovar todavía */
+    var renovBtn=(c.clase!=="green"&&a.paquete)?'<button class="btn sm" data-renovar="'+a.id+'">Enviar mensaje</button>':'';
     var pago=a.pago==="Pagado"?'<span class="pill pago-ok">Pagado</span>':'<span class="pill pago-pend">Pendiente</span>';
     var pillPf=(ROL==="dueno"&&esEquipoMulti()&&a.profesor_id)?'<span class="pill profe">'+esc((nombreProfe(a.profesor_id)||"?").split(" ")[0])+'</span>':'';
     var pillSd=(a.sede_id&&nombreSede(a.sede_id))?'<span class="pill gray">'+esc(nombreSede(a.sede_id))+'</span>':'';
