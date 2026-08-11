@@ -5348,7 +5348,14 @@ async function resetDemo(env){
 export default {
   async fetch(request, env, ctx){
     const url = new URL(request.url);
-    const path = url.pathname;
+    /* Una barra de mas no puede botar a nadie: hasta el 11-ago-2026 "/app/panel/" daba 404
+       porque TODAS las rutas de abajo comparan con === contra el pathname pelado. El que
+       pegaba el link con la barra puesta veia un 404 sin explicacion (y el link personal
+       de un alumno vale una queja al dueno). Se normaliza aca, antes del router, en vez de
+       redirigir: asi tampoco se rompe un POST, que un 301 dejaria sin metodo ni cuerpo. */
+    const path = url.pathname.length > 4 && url.pathname.endsWith("/")
+      ? url.pathname.replace(/\/+$/, "")
+      : url.pathname;
 
     if (!path.startsWith("/app")){
       return json({ error: "No encontrado" }, 404);
