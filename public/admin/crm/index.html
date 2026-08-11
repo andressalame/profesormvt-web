@@ -911,7 +911,9 @@ function parseAudios(v){
   return [{u:v,n:'Audio'}];
 }
 function tipoAdjunto(u){
-  var m=String(u||'').toLowerCase().match(/\.(pdf|mp3|m4a|ogg|wav|png|jpg|jpeg)$/);
+  /* 11-ago-2026: las URLs de archivo vienen firmadas (?exp=&s=&sig=). Cortamos el query
+     antes de mirar la extensión, o un PDF caería en el default y se pintaría como audio. */
+  var m=String(u||'').toLowerCase().split('?')[0].match(/\.(pdf|mp3|m4a|ogg|wav|png|jpg|jpeg)$/);
   if(!m) return 'AUDIO';
   if(m[1]==='pdf') return 'PDF';
   if(m[1]==='png'||m[1]==='jpg'||m[1]==='jpeg') return 'IMG';
@@ -1242,7 +1244,8 @@ function renderPagos(){
           '<td>'+esc(c.curso||'')+'</td>'+
           '<td>'+esc(c.paquete)+'</td>'+
           '<td><span class="big">S/ '+(c.monto||0)+'</span>'+lineaDescuento(c)+'</td>'+
-          '<td class="mini">'+esc(c.op_numero||'—')+'</td>'+
+          '<td class="mini">'+esc(c.op_numero||'—')+
+            (c.comprobante_url?'<br><a href="'+esc(c.comprobante_url)+'" target="_blank" rel="noopener" style="color:var(--accent);text-decoration:none;white-space:nowrap" title="Captura que subió el alumno">Captura ↗</a>':'')+'</td>'+
           '<td><div class="rowact"><button class="btn ok sm" data-confirmar="'+c.id+'">Confirmar ✓</button><button class="btn no sm" data-rechazar="'+c.id+'">Rechazar</button></div></td>'+
         '</tr>';
       }).join("");
@@ -2003,7 +2006,10 @@ el("btnGuardarRegistro").addEventListener("click",function(){
     REG_EJ.forEach(function(eid){
       var ej=(db.ejercicios||[]).find(function(x){return x.id===eid;});
       if(!ej || !ej.url) return;
-      if(lista.some(function(x){return x.u===ej.url;}) || lista.length>=8) return;
+      /* comparar sin la firma (?exp=&s=&sig=): la misma pieza puede venir firmada en dos
+         llamadas distintas y no debe duplicarse */
+      var pelada=function(u){ return String(u||'').split('?')[0]; };
+      if(lista.some(function(x){return pelada(x.u)===pelada(ej.url);}) || lista.length>=8) return;
       lista.push({u:ej.url, n:ej.titulo||"Ejercicio"});
     });
     campos.tarea_audio=JSON.stringify(lista);

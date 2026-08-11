@@ -118,6 +118,81 @@ function parseAudios(valor){
   return [{ u: v, n: "Audio" }];
 }
 
+/* ============ FIRMA DE ARCHIVOS DE R2 (11-ago-2026) ============================
+   FUGA CERRADA: /api/recurso/archivo/{uuid} servía CUALQUIER objeto del bucket a quien
+   tuviera la URL, sin comprobar nada. Ahí caen las CAPTURAS DE COMPROBANTES DE PAGO que
+   suben los alumnos (nombre completo, banco, monto, a veces teléfono). Reproducido en
+   producción el 11-ago con curl pelado, sin cookie ni token: 200 + el JPG.
+
+   Por qué el gate es FIRMA y no solo sesión: el portal y el CRM sirven estos archivos con
+   <audio src="..."> y <a href="..." target="_blank">, y esas peticiones las hace el
+   navegador SIN el header Authorization (MVT guarda el token en localStorage, no hay
+   cookie de sesión). Gatear solo por Bearer dejaba a los 16 alumnos sin su material y a
+   Andrés sin el link del correo de "pago por confirmar", que hoy es su ÚNICA forma de ver
+   una captura. La firma la EMITE un endpoint YA autenticado (/api/me, /api/admin/data),
+   que es donde se decide quién puede ver qué; la URL solo transporta esa decisión hasta el
+   siguiente request del navegador. No es seguridad por oscuridad: es HMAC-SHA256 con
+   secreto del servidor, con caducidad y con ALCANCE — una firma de material NO abre un
+   comprobante. El Bearer se sigue aceptando para lo que va por fetch(). ================ */
+const FIRMA_TTL_S = { m: 7 * 86400, c: 30 * 86400 };   // material 7 días · comprobante 30
+let _claveFirma = null;
+async function claveFirma(env){
+  if (_claveFirma) return _claveFirma;
+  const base = env.FIRMA_ARCHIVOS || env.ADMIN_TOKEN || "";
+  if (!base) return null;   // sin secreto no se firma: el endpoint cae a sesión (falla cerrado)
+  _claveFirma = await crypto.subtle.importKey(
+    "raw", enc.encode("firma-archivos-v1|" + base), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]
+  );
+  return _claveFirma;
+}
+async function firmaHex(env, key, exp, scope){
+  const k = await claveFirma(env);
+  if (!k) return null;
+  return hex(await crypto.subtle.sign("HMAC", k, enc.encode(key + "|" + exp + "|" + scope))).slice(0, 32);
+}
+/* ruta = "/api/recurso/archivo/uuid.ext" tal como está guardada en la D1.
+   Los links externos (Spotify, Drive, YouTube) pasan intactos. */
+async function firmarRuta(env, ruta, scope){
+  const r = String(ruta || "");
+  if (r.indexOf("/api/recurso/archivo/") !== 0) return r;
+  const key = r.slice("/api/recurso/archivo/".length).split("?")[0];
+  const sc = (scope === "c") ? "c" : "m";
+  /* exp redondeado a la hora: dentro de una misma hora un archivo siempre da la MISMA URL.
+     Así el navegador aprovecha su caché y, sobre todo, el CRM puede seguir comparando URLs
+     entre sí (deduplica adjuntos por url) aunque las haya recibido en llamadas distintas. */
+  const exp = Math.ceil((Math.floor(Date.now() / 1000) + FIRMA_TTL_S[sc]) / 3600) * 3600;
+  const sig = await firmaHex(env, key, exp, sc);
+  if (!sig) return r;
+  return "/api/recurso/archivo/" + key + "?exp=" + exp + "&s=" + sc + "&sig=" + sig;
+}
+/* Alcance de una firma válida ("m" | "c") o null. */
+async function verificarFirma(env, key, url){
+  const exp = parseInt(url.searchParams.get("exp") || "0", 10);
+  const sig = String(url.searchParams.get("sig") || "");
+  const scope = url.searchParams.get("s") === "c" ? "c" : "m";
+  if (!Number.isFinite(exp) || exp <= 0 || exp * 1000 < Date.now()) return null;
+  if (!/^[a-f0-9]{32}$/.test(sig)) return null;
+  const esperada = await firmaHex(env, key, exp, scope);
+  if (!esperada || !safeEq(sig, esperada)) return null;
+  return scope;
+}
+/* tarea_audio (JSON [{u,n}] o string suelto) -> lista con las URLs ya firmadas */
+async function firmarAudios(env, valor, scope){
+  const out = [];
+  for (const a of parseAudios(valor)) out.push(Object.assign({}, a, { u: await firmarRuta(env, a.u, scope) }));
+  return out;
+}
+/* quita ?exp=&s=&sig= para volver a la ruta canónica que vive en la D1 */
+function rutaCanonica(u){ return String(u || "").split("?")[0]; }
+/* tarea_audio que vuelve del CRM -> siempre pelado antes de guardarlo.
+   El CRM adjunta ejercicios copiando la url que le mandamos (ya firmada) y hace PUT de todo
+   el registro. Sin esto la D1 terminaría guardando URLs con caducidad, que en 7 días dejan
+   de abrir y encima ensucian el cotejo de la D1 que autoriza el endpoint. */
+function desfirmarAudios(valor){
+  const lista = parseAudios(valor).map(a => Object.assign({}, a, { u: rutaCanonica(a.u) }));
+  return lista.length ? JSON.stringify(lista) : "";
+}
+
 /* base64url -> bytes (soporta unicode en el payload del JWT) */
 function b64uBytes(s){
   s = String(s || "").replace(/-/g, "+").replace(/_/g, "/");
@@ -2986,11 +3061,50 @@ export default {
         return json({ ok: true });
       }
 
-      /* ============ ARCHIVO DE RECURSO (PDF / audio servido desde R2) ============ */
+      /* ============ ARCHIVO DE RECURSO (PDF / audio / captura servido desde R2) ============
+         Gate por TIPO de archivo (ver el bloque "FIRMA DE ARCHIVOS DE R2" arriba):
+           1) la key tiene que estar REFERENCIADA en la D1. Lo que no está referenciado no
+              existe para este endpoint: mata huérfanos y, sobre todo, deja fuera los
+              backups completos de la D1 que viven en el mismo bucket bajo backups/.
+           2) la referencia dice de qué tipo es el archivo, y
+           3) cada tipo pide lo suyo:
+              · público     (foto del profe) -> cualquiera; se pinta en la web
+              · material    (recursos, ejercicios, adjuntos de tarea) -> alumno con cuenta
+                            vinculada, admin, o firma "m"
+              · comprobante (captura de pago) -> SOLO Andrés o la cuenta que lo subió, o
+                            firma "c". Una firma "m" no sirve acá. */
       if (url.pathname.startsWith("/api/recurso/archivo/") && request.method === "GET"){
         const key = url.pathname.slice("/api/recurso/archivo/".length);
         const m = key.match(/^[a-f0-9-]{36}\.(pdf|mp3|m4a|ogg|wav|png|jpg|jpeg)$/);
         if (!m) return json({ error: "Archivo no encontrado" }, 404);
+        const ruta = "/api/recurso/archivo/" + key;
+
+        let clase = null, duenoCuenta = "";
+        if (await env.DB.prepare("SELECT 1 AS x FROM recursos WHERE url = ?1").bind(ruta).first()) clase = "material";
+        if (!clase && await env.DB.prepare("SELECT 1 AS x FROM ejercicios WHERE url = ?1").bind(ruta).first()) clase = "material";
+        if (!clase && await env.DB.prepare("SELECT 1 AS x FROM registro WHERE tarea_audio LIKE ?1 LIMIT 1").bind("%" + ruta + "%").first()) clase = "material";
+        if (!clase && await env.DB.prepare("SELECT 1 AS x FROM config WHERE clave = 'profe_foto' AND valor = ?1").bind(ruta).first()) clase = "publico";
+        if (!clase){
+          const compra = await env.DB.prepare("SELECT cuenta_id FROM compras WHERE comprobante = ?1").bind(key).first();
+          if (compra){ clase = "comprobante"; duenoCuenta = compra.cuenta_id || ""; }
+        }
+        if (!clase) return json({ error: "Archivo no encontrado" }, 404);
+
+        let permitido = (clase === "publico");
+        if (!permitido){
+          const firma = await verificarFirma(env, key, url);
+          if (clase === "material"){
+            if (firma) permitido = true;                                  // "m" y "c" valen para material
+            else if (await esAdminAuth(env, request)) permitido = true;
+            else { const cu = await cuentaDeSesion(env, request); permitido = !!(cu && cu.alumno_id); }
+          } else {                                                        // comprobante
+            if (firma === "c") permitido = true;
+            else if (await esAdminAuth(env, request)) permitido = true;
+            else { const cu = await cuentaDeSesion(env, request); permitido = !!(cu && duenoCuenta && cu.id === duenoCuenta); }
+          }
+        }
+        if (!permitido) return json({ error: "No autorizado" }, 401);
+
         const obj = await env.RECURSOS_R2.get(key);
         if (!obj) return json({ error: "Archivo no encontrado" }, 404);
         const ct = (obj.httpMetadata && obj.httpMetadata.contentType) || MIME_ARCHIVO[m[1]] || "application/octet-stream";
@@ -2998,7 +3112,10 @@ export default {
           headers: {
             "content-type": ct,
             "content-disposition": (obj.httpMetadata && obj.httpMetadata.contentDisposition) || "inline",
-            "cache-control": "public, max-age=3600"
+            /* "private" a propósito: con URL firmada, un caché compartido no debe guardar
+               una copia que luego sirva a otro. La foto pública sí puede cachearse. */
+            "cache-control": clase === "publico" ? "public, max-age=3600" : "private, max-age=300",
+            "x-content-type-options": "nosniff"
           }
         });
       }
@@ -3325,7 +3442,12 @@ export default {
             const { results } = await env.DB.prepare(
               "SELECT fecha, estado, trabajo, tarea, COALESCE(plan,'') AS plan, COALESCE(tarea_audio,'') AS tarea_audio, COALESCE(ciclo,1) AS ciclo FROM registro WHERE alumno_id = ?1 ORDER BY fecha ASC, id ASC"
             ).bind(alumno.id).all();
-            historial = (results || []).map(r => Object.assign({}, r, { tarea_audios: parseAudios(r.tarea_audio) }));
+            /* Los adjuntos van FIRMADOS (11-ago-2026): el portal los pinta como <audio src>
+               y <a href>, peticiones sin header Authorization. Ver "FIRMA DE ARCHIVOS DE R2". */
+            historial = [];
+            for (const r of (results || [])){
+              historial.push(Object.assign({}, r, { tarea_audios: await firmarAudios(env, r.tarea_audio, "m") }));
+            }
             const histCiclo = historial.filter(r => Number(r.ciclo) === Number(ciclo));
             const rUsadas = await reservasUsadasCount(env, alumno.id, ciclo);
             computed = compute(alumno, histCiclo, precios, rUsadas);
@@ -3352,9 +3474,14 @@ export default {
         // Recursos SOLO para alumnos y ex-alumnos (cuentas vinculadas a un alumno via alumno_id). Cuentas gratis no reciben recursos.
         // Un alumno con varios cursos (ej. "Canto, Composición") recibe los recursos de TODOS sus cursos.
         const esAlumnoOEx = !!cu.alumno_id;
-        const recursos = esAlumnoOEx ? (((await env.DB.prepare(
-          "SELECT id, titulo, descripcion, url, curso, fecha FROM recursos ORDER BY fecha DESC, rowid DESC"
-        ).all()).results || []).filter(r => r.curso === "Todos" || cursosAl.indexOf(r.curso) >= 0)) : [];
+        const recursos = [];
+        if (esAlumnoOEx){
+          const filas = ((await env.DB.prepare(
+            "SELECT id, titulo, descripcion, url, curso, fecha FROM recursos ORDER BY fecha DESC, rowid DESC"
+          ).all()).results || []).filter(r => r.curso === "Todos" || cursosAl.indexOf(r.curso) >= 0);
+          /* URL firmada: el portal abre el PDF con <a href>, sin header Authorization. */
+          for (const r of filas) recursos.push(Object.assign({}, r, { url: await firmarRuta(env, r.url, "m") }));
+        }
 
         const pagos = (await env.DB.prepare(
           "SELECT fecha, curso, paquete, monto, COALESCE(descuento,0) AS descuento, estado FROM compras WHERE cuenta_id = ?1 ORDER BY fecha DESC, rowid DESC LIMIT 20"
@@ -3639,7 +3766,11 @@ export default {
         await env.DB.prepare(
           "INSERT INTO compras (id,cuenta_id,curso,paquete,monto,descuento,op_numero,estado,fecha,metodo,comprobante,slot_deseado) VALUES (?1,?2,?3,?4,?5,?6,?7,'pendiente',?8,?9,?10,'')"
         ).bind(crypto.randomUUID(), cu.id, cursoPd, paquete, montoPd, descuentoPd, String(b.op_numero || "").trim().slice(0, 40), hoy(), metodo, comprobanteKeyPd).run();
-        const comprobanteUrlPd = comprobanteKeyPd ? (MARCA.dominio + "/api/recurso/archivo/" + comprobanteKeyPd) : "";
+        /* FIRMADO con alcance "c" y 30 días (11-ago-2026): Andrés abre este link desde su
+           correo, donde el navegador no manda ningún token. Sin firma se quedaba fuera de
+           la única vista que tiene de la captura. */
+        const comprobanteUrlPd = comprobanteKeyPd
+          ? (MARCA.dominio + await firmarRuta(env, "/api/recurso/archivo/" + comprobanteKeyPd, "c")) : "";
         const infoPd = { nombre, email, curso: cursoPd, paquete, monto: montoPd, op: String(b.op_numero || "").trim().slice(0, 40), metodo, comprobanteUrl: comprobanteUrlPd };
         try { await avisarCompra(env, infoPd); } catch (e) {}
         try { await avisarPush(env, infoPd); } catch (e) {}
@@ -3701,7 +3832,9 @@ export default {
           "INSERT INTO compras (id,cuenta_id,curso,paquete,monto,descuento,op_numero,estado,fecha,metodo,comprobante,slot_deseado) VALUES (?1,?2,?3,?4,?5,?6,?7,'pendiente',?8,?9,?10,?11)"
         ).bind(crypto.randomUUID(), cu.id, curso, paquete, monto, descuento, op, hoy(), metodo, comprobanteKey, slotDeseado).run();
 
-        const comprobanteUrl = comprobanteKey ? (MARCA.dominio + "/api/recurso/archivo/" + comprobanteKey) : "";
+        /* mismo criterio que arriba: firma "c", 30 días, para el correo de aviso a Andrés */
+        const comprobanteUrl = comprobanteKey
+          ? (MARCA.dominio + await firmarRuta(env, "/api/recurso/archivo/" + comprobanteKey, "c")) : "";
         const info = { nombre: cu.nombre, email: cu.email, curso, paquete, monto, op, metodo, comprobanteUrl };
         try { await avisarCompra(env, info); } catch (e) {}
         try { await avisarPush(env, info); } catch (e) {}
@@ -4627,6 +4760,19 @@ export default {
           const compras  = (await env.DB.prepare("SELECT * FROM compras WHERE estado != 'iniciada' ORDER BY CASE estado WHEN 'pendiente' THEN 0 ELSE 1 END, fecha DESC").all()).results || [];
           const recursos = (await env.DB.prepare("SELECT * FROM recursos ORDER BY fecha DESC, rowid DESC").all()).results || [];
           const ejercicios = (await env.DB.prepare("SELECT * FROM ejercicios ORDER BY fecha DESC, rowid DESC").all()).results || [];
+          /* ---- URLs firmadas para el CRM (11-ago-2026) ----
+             El CRM también pinta <audio src> y <a href>, que van sin Authorization. Firmamos
+             aquí, que es donde ya se comprobó que quien pregunta es Andrés. El comprobante
+             se firma con alcance "c" y aparece como comprobante_url: antes NO había forma de
+             verlo desde el CRM (su único acceso era el link del correo de aviso). */
+          for (const r of recursos) r.url = await firmarRuta(env, r.url, "m");
+          for (const e of ejercicios) e.url = await firmarRuta(env, e.url, "m");
+          for (const g of registro){
+            if (g.tarea_audio) g.tarea_audio = JSON.stringify(await firmarAudios(env, g.tarea_audio, "m"));
+          }
+          for (const c of compras){
+            c.comprobante_url = c.comprobante ? await firmarRuta(env, "/api/recurso/archivo/" + c.comprobante, "c") : "";
+          }
           const leads    = (await env.DB.prepare("SELECT id,email,marca,fuente,interes,fecha FROM leads ORDER BY fecha DESC, rowid DESC LIMIT 1000").all()).results || [];
           const precios  = await loadPrecios(env);
           const config   = await loadConfig(env);
@@ -4739,7 +4885,7 @@ export default {
             ).bind(
               r.id, r.fecha || "", r.alumnoId || r.alumno_id,
               r.curso || "", r.estado || "", r.trabajo || "", r.tarea || "", r.ciclo || 1,
-              r.tarea_audio || "", r.plan || ""
+              desfirmarAudios(r.tarea_audio), r.plan || ""
             ));
           }
           const precios = body.precios || {};
@@ -4948,8 +5094,11 @@ export default {
           };
 
           if (form.get("accion") === "borrar"){
-            const urlB = String(form.get("url") || "");
-            const idx = lista.findIndex(a => a.u === urlB);
+            /* El CRM manda de vuelta la URL que pintó, y desde el 11-ago-2026 esa URL viene
+               FIRMADA (?exp=&s=&sig=). La D1 guarda la ruta pelada: normalizamos antes de
+               comparar y antes de borrar la key en R2, o "Quitar adjunto" dejaría de andar. */
+            const urlB = rutaCanonica(form.get("url") || "");
+            const idx = lista.findIndex(a => rutaCanonica(a.u) === urlB);
             if (idx < 0) return json({ error: "Audio no encontrado" }, 404);
             if (urlB.startsWith("/api/recurso/archivo/")){
               const oldKey = urlB.slice("/api/recurso/archivo/".length);
@@ -4957,7 +5106,7 @@ export default {
             }
             lista.splice(idx, 1);
             await guardarLista(lista);
-            return json({ ok: true, audios: lista });
+            return json({ ok: true, audios: await firmarAudios(env, JSON.stringify(lista), "m") });
           }
 
           if (lista.length >= 8){
@@ -4977,7 +5126,8 @@ export default {
           });
           lista.push({ u: "/api/recurso/archivo/" + key, n: nombre });
           await guardarLista(lista);
-          return json({ ok: true, audios: lista });
+          /* se guarda pelado en la D1, pero al CRM se le devuelve firmado para que lo pinte */
+          return json({ ok: true, audios: await firmarAudios(env, JSON.stringify(lista), "m") });
         }
 
         /* -------- Chat: borrar mensaje -------- */
