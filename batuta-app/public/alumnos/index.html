@@ -745,9 +745,13 @@ var MARCA = {
   logoHtml: 'batuta',      // se inyecta en el sidebar; se reemplaza por el nombre de la academia
   profe: "tu profesor",
   whatsapp: "",
-  cursos: ["Canto", "Piano", "Guitarra"],
+  /* 11-ago-2026: los cursos nacen VACIOS a proposito. Antes decian Canto/Piano/Guitarra
+     (herencia de MVT) y si /app/api/publico tardaba o fallaba, el alumno de un estudio de
+     pilates o de una tienda de cartas veia "Elige canto, piano o guitarra". Vacio = el copy
+     cae a la version neutra ("tu curso") hasta que llegan los cursos reales del tenant. */
+  cursos: [],
   referidoSoles: 50,                      // debe calzar con CREDITO_REFERIDO del worker
-  rubro: "música"
+  rubro: ""
 };
 var KEY = "batuta_sesion";
 var WA_PROFE = MARCA.whatsapp;
@@ -1566,7 +1570,7 @@ $("btnYaPague").addEventListener("click",function(){
   })
     .then(function(){
       if(WA_PROFE){
-        var aviso = "Hola "+MARCA.profe+", acabo de pagar S/ "+c.final+" por el "+paquete+" ("+curso+") via "+metodo+" 🎸 Soy "+ME.cuenta.nombre+" - "+ME.cuenta.email;
+        var aviso = "Hola "+MARCA.profe+", acabo de pagar S/ "+c.final+" por el "+paquete+" ("+curso+") via "+metodo+". Soy "+ME.cuenta.nombre+" - "+ME.cuenta.email;
         $("btnAvisar").href = "https://wa.me/"+WA_PROFE+"?text="+encodeURIComponent(aviso);
         show("btnAvisar");
       } else hide("btnAvisar");
@@ -1694,7 +1698,7 @@ function avisosOn(){
       if(perm!=='granted'){ toast("Permiso denegado"); return; }
       return reg.pushManager.subscribe({ userVisibleOnly:true, applicationServerKey: urlB64(vapid) })
         .then(function(sub){ return api('/api/push/suscribir',{method:"POST",body:JSON.stringify({subscription:sub.toJSON(),dispositivo:navigator.userAgent.slice(0,80)})}); })
-        .then(function(){ toast("Avisos activados 🎸"); renderAvisos(); });
+        .then(function(){ toast("Avisos activados"); renderAvisos(); });
     });
   }).catch(function(e){ toast("No se pudo activar: "+((e&&e.message)||"error")); })
     .finally(function(){ $("btnAvisosOn").disabled=false; });
@@ -1757,7 +1761,7 @@ function chatRender(msgs, append){
       '<div class="chat-texto">'+esc(m.texto)+'</div></div>';
   }).join("");
   if(append){ box.insertAdjacentHTML("beforeend", html); if(abajo) chatScrollFondo(); }
-  else { box.innerHTML = html || '<div class="chat-vacio">Sé el primero en escribir 🎸</div>'; chatScrollFondo(); }
+  else { box.innerHTML = html || '<div class="chat-vacio">Sé el primero en escribir</div>'; chatScrollFondo(); }
 }
 function chatBase(){ return chatCanal==="privado" ? "/app/api/chat/privado" : "/app/api/chat"; }
 function chatPoll(){
@@ -2187,14 +2191,14 @@ function reservarSlot(iso, sala){
   api("/app/api/agenda/reservar",{method:"POST",body:JSON.stringify({inicio_utc:iso, tipo:AG_TIPO, sala:sala||""})})
     .then(function(r){
       if(r.tipo==="fija"){
-        var m = vz("Listo, aparté ","Listo, apartamos ")+r.reservadas+" clase"+(r.reservadas===1?"":"s")+" 🎸";
+        var m = vz("Listo, aparté ","Listo, apartamos ")+r.reservadas+" clase"+(r.reservadas===1?"":"s");
         if(r.saltadas && r.saltadas.length){
           var fechas = r.saltadas.map(function(iso){ return fmtFechaLocal(iso); }).join(", ");
           m += ". No estaba libre: "+fechas+" (no se descuentan, resérvalas sueltas cuando quieras).";
         }
         toast(m);
       } else {
-        toast("Clase reservada 🎸");
+        toast("Clase reservada");
       }
       return api("/app/api/me");
     })
@@ -2257,7 +2261,7 @@ function manejarRetornoPago(){
         ME = d; renderActive();
         if(ME && !ME.compraPendiente && ME.alumno && ME.alumno.pago === "Pagado"){
           clearInterval(t);
-          toast("¡Listo! Tu paquete está activo 🎸 Ahora reserva tu primera clase.");
+          toast("¡Listo! Tu paquete está activo. Ahora reserva tu primera clase.");
           empujarAReservar();
         }
       }).catch(function(){});
@@ -2320,7 +2324,7 @@ var TOUR_STEPS = [
   { sel:'a[data-v="inicio"]', vista:"inicio", titulo:"Inicio",
     texto:"Tu resumen de un vistazo: el plan que tienes, cuántas clases te quedan y tus próximos horarios. Cuando actives un paquete, todo aparece aquí." },
   { sel:'a[data-v="comprar"]', vista:"comprar", titulo:"Activa tu paquete",
-    texto:"Eliges "+cursosOrLower()+" y pagas con Yape, Plin o tarjeta. Se activa el mismo día, casi siempre en minutos. Sin paquete no hay clases que reservar, así que parte por acá." },
+    texto:function(){ return "Eliges "+cursosOrLower()+" y pagas con Yape, Plin o tarjeta. Se activa el mismo día, casi siempre en minutos. Sin paquete no hay clases que reservar, así que parte por acá."; } },
   /* texto como funcion: se evalua al pintar el paso, cuando ME y los flags de voz ya llegaron */
   { sel:'a[data-v="agenda"]', vista:"agenda", titulo:"Reserva tus clases",
     texto:function(){ return esGrupal()
@@ -2411,7 +2415,19 @@ function startTour(){
 window.verTour = startTour;
 
 /* ---------- MARCA: aplica el bloque MARCA al DOM (white-label Batuta) ---------- */
-function cursosOrLower(){ return MARCA.cursos.join(", ").replace(/, ([^,]*)$/, " o $1").toLowerCase(); }
+/* Sin cursos cargados devuelve "tu curso": el copy sigue teniendo sentido en cualquier
+   rubro mientras /publico no haya respondido (y si nunca responde, tampoco miente). */
+function cursosOrLower(){
+  if(!MARCA.cursos || !MARCA.cursos.length) return "tu curso";
+  return MARCA.cursos.join(", ").replace(/, ([^,]*)$/, " o $1").toLowerCase();
+}
+/* "Elige canto, piano o guitarra (o combínalos)." vs "Elige tu curso." cuando aun no
+   sabemos cuales son: sin lista que combinar, el parentesis sobra. */
+function textoOnbPaso1(){
+  return (MARCA.cursos && MARCA.cursos.length)
+    ? "Elige " + cursosOrLower() + " (o combínalos)."
+    : "Elige tu curso.";
+}
 function aplicarMarca(){
   document.title = "Portal de alumno · " + MARCA.nombre;
   $("logoSidebar").innerHTML = MARCA.logoHtml + '<span class="dot"></span>';
@@ -2419,7 +2435,7 @@ function aplicarMarca(){
   $("eyebrowInicio").textContent = "// " + MARCA.nombre.toUpperCase() + " — PORTAL DE ALUMNO";
   $("txtMktCheck").textContent = "Quiero recibir novedades, tips y promociones por correo. (Opcional)";
   $("c_curso").innerHTML = MARCA.cursos.map(function(c){ return "<option>"+esc(c)+"</option>"; }).join("");
-  $("txtOnbPaso1").textContent = "Elige " + cursosOrLower() + " (o combínalos).";
+  $("txtOnbPaso1").textContent = textoOnbPaso1();
   $("txtOnbRef").textContent = "S/" + MARCA.referidoSoles;
   $("txtRefSoles").textContent = "S/" + MARCA.referidoSoles;
 }
@@ -2464,7 +2480,7 @@ function initAlumno(){
       if(Array.isArray(d.cursos) && d.cursos.length){
         MARCA.cursos = d.cursos;
         $("c_curso").innerHTML = MARCA.cursos.map(function(c){ return "<option>"+esc(c)+"</option>"; }).join("");
-        $("txtOnbPaso1").textContent = "Elige " + cursosOrLower() + " (o combínalos).";
+        $("txtOnbPaso1").textContent = textoOnbPaso1();
       }
       /* branding del tenant (logo + color + tipografía, editables en Ajustes del panel del profe) */
       if(d.marca){
