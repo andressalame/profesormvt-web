@@ -116,7 +116,11 @@
   td.name{font-weight:600;white-space:normal;min-width:130px;}
   /* Se acotan para que la fila entera quepa y las notas no se metan bajo la columna fija
      de acciones (se veía como si la tabla estuviera rota). Al pasar el mouse, el texto completo. */
+  /* Las notas de una migración traen el export entero del sistema viejo (dirección, contacto
+     de emergencia, etc.). Sin tope, UNA nota estiraba su fila a media pantalla. Se muestran
+     4 líneas y el resto vive en el tooltip y en la ficha del alumno (11-ago-2026). */
   td.notes{white-space:normal;color:var(--muted);font-size:13px;min-width:110px;max-width:160px;}
+  td.notes>span{display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden;}
   .mini{font-family:var(--mono);font-size:10.5px;color:var(--muted);}
   .pill{font-family:var(--mono);font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;padding:4px 9px;border-radius:2px;display:inline-block;}
   .pill.green{background:rgba(95,138,82,.16);color:var(--green);border:1px solid var(--green);}
@@ -867,6 +871,20 @@
     <!-- Aviso causal: alumnos importados que todavía no saben que tienen portal. Un solo
          botón primario; el detalle vive dentro. Se esconde solo cuando no falta nadie. -->
     <div id="invBanner" style="display:none;"></div>
+    <!-- Buscador de alumnos (11-ago-2026, pedido de José con 1,400 alumnos): con una lista
+         larga, encontrar a una persona a ojo es imposible. Filtra al tipear por nombre,
+         apellido, correo y teléfono. Sin botón y sin recargar: escribes y ya. -->
+    <div id="alBuscarWrap" style="display:none;margin:0 0 12px;">
+      <div style="position:relative;max-width:460px;">
+        <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" style="position:absolute;left:14px;top:50%;transform:translateY(-50%);pointer-events:none;fill:none;stroke:var(--muted);stroke-width:2;stroke-linecap:round;"><circle cx="11" cy="11" r="7"></circle><line x1="16.5" y1="16.5" x2="21" y2="21"></line></svg>
+        <input id="alBuscar" type="search" autocomplete="off" placeholder="Busca por nombre, correo o teléfono"
+               aria-label="Buscar un alumno por nombre, apellido, correo o teléfono"
+               style="width:100%;height:48px;font-size:18px;padding:0 44px 0 44px;" />
+        <button type="button" id="alBuscarLimpiar" title="Borrar la búsqueda" aria-label="Borrar la búsqueda"
+                style="display:none;position:absolute;right:6px;top:50%;transform:translateY(-50%);width:36px;height:36px;border:0;background:transparent;color:var(--muted);font-size:22px;line-height:1;cursor:pointer;border-radius:8px;">&times;</button>
+      </div>
+      <p class="hint" id="alBuscarCuenta" style="margin:6px 0 0;"></p>
+    </div>
     <div class="tablewrap">
       <table id="tablaAlumnos">
         <thead><tr>
@@ -2785,6 +2803,28 @@ function renderAlumnos(){
   var fs=(fsel&&fsel.value)||"";
   var listaAl=fs?db.alumnos.filter(function(a){return (a.sede_id||"")===fs;}):db.alumnos;
   if(!listaAl.length){ tb.innerHTML='<tr><td colspan="9" class="empty">Sin alumnos en esa sede</td></tr>'; return; }
+  /* Buscador (11-ago-2026): aparece solo cuando la lista ya es larga de verdad; con 8 alumnos
+     estorba. Busca en nombre, apellido, correo y teléfono a la vez. */
+  var wrapB=el("alBuscarWrap"), inpB=el("alBuscar");
+  if(wrapB) wrapB.style.display=(db.alumnos.length>=12)?"":"none";
+  var qB=(wrapB&&wrapB.style.display!=="none"&&inpB&&inpB.value||"").trim();
+  var totalAl=listaAl.length;
+  if(qB){
+    var claves=impNorm(qB).split(" ").filter(Boolean);
+    listaAl=listaAl.filter(function(a){
+      var heno=impNorm([a.nombre,a.apellido,a.email,a.whatsapp].filter(Boolean).join(" "));
+      return claves.every(function(k){ return heno.indexOf(k)>=0; });
+    });
+  }
+  var cuentaB=el("alBuscarCuenta");
+  if(cuentaB) cuentaB.textContent=qB?(listaAl.length+" de "+totalAl+" alumnos coinciden con «"+qB+"»"):(totalAl+" alumnos en tu lista");
+  var limpiaB=el("alBuscarLimpiar"); if(limpiaB) limpiaB.style.display=qB?"":"none";
+  if(qB && !listaAl.length){
+    tb.innerHTML='<tr><td colspan="9"><div class="hint" style="border:1px dashed var(--line);border-radius:8px;padding:18px 14px;margin:8px 0;text-align:center;">'+
+      'Ningún alumno se llama (ni tiene correo o teléfono) como <b>'+esc(qB)+'</b>.<br />Revisa cómo lo escribiste, o búscalo solo por su nombre.'+
+      '<br /><button class="btn ghost" style="margin-top:10px;" onclick="el(\'alBuscar\').value=\'\';renderAlumnos();">Ver mis '+totalAl+' alumnos</button></div></td></tr>';
+    return;
+  }
   tb.innerHTML=listaAl.map(function(a){
     var c=computeAlumno(a);
     var cu=cuentaDeAlumno(a.id);
@@ -2797,31 +2837,53 @@ function renderAlumnos(){
        bajo el nombre, los cambios de horario bajo "le quedan") para que TODO quepa: ahora
        Estado y las acciones se ven sin deslizar nada. */
     return '<tr>'+
-      '<td class="name">'+esc(a.nombre)+pillPf+pillSd+
+      /* 11-ago-2026: la tabla mostraba SOLO a.nombre. Con un export que separa nombre y
+         apellido (Punchpass), la lista quedaba en puros nombres de pila —"ALAN", "ALMENDRA"—
+         y el apellido, que sí estaba guardado, no se veía en ninguna pantalla. */
+      '<td class="name">'+esc(nombreCompleto(a))+pillPf+pillSd+
         '<br><span class="mini">'+esc(a.whatsapp||'')+'</span>'+
         (cu?'<br><span class="mini">'+esc(cu.email)+'</span>':'<br><span class="pill gray">Sin cuenta</span>')+'</td>'+
-      '<td>'+esc(a.curso)+'</td>'+
+      /* celda vacía = se ve roto. Si el alumno vino de una migración sin curso ni plan, se
+         dice que falta ponerlo, no se inventa uno (11-ago-2026). */
+      '<td>'+(a.curso?esc(a.curso):'<span class="mini">— sin curso —</span>')+'</td>'+
       /* "ciclo N" era jerga interna: se dice en castellano y solo cuando ya renovó */
-      '<td>'+esc(a.paquete)+'<br><span class="mini">S/ '+c.monto+((Number(a.ciclo)||1)>1?(' · '+((Number(a.ciclo)||1)-1)+'ª renovación'):'')+'</span></td>'+
+      '<td>'+(a.paquete?(esc(a.paquete)+'<br><span class="mini">S/ '+c.monto+((Number(a.ciclo)||1)>1?(' · '+((Number(a.ciclo)||1)-1)+'ª renovación'):'')+'</span>'):'<span class="mini">— sin plan —</span>')+'</td>'+
       '<td>'+pago+'</td>'+
       /* "(manual)" no le decía nada a nadie: es el horario que escribió el profe a mano */
       '<td>'+esc((a.horarioFijo&&a.horarioFijo.length)?a.horarioFijo.join(' · '):(a.horario||'—'))+
         ((!(a.horarioFijo&&a.horarioFijo.length)&&a.horario)?'<br><span class="mini">lo anotaste tú</span>':'')+'</td>'+
-      '<td>'+(c.ilim
+      '<td>'+(!a.paquete
+        ? '<span class="mini">—</span>'
+        : c.ilim
         ? '<span class="mini" style="font-weight:600;">Mensual</span><br><span class="mini">vence '+esc(fechaBonita(a.vence))+'</span>'
         : '<span class="big">'+c.restantes+'</span> <span class="mini">/ '+c.compradas+'</span>'+
           '<br><span class="mini" title="Veces que le quedan para cambiar de horario sin perder la clase">'+c.reprogRest+' de '+c.reprogPermit+' cambios</span>')+'</td>'+
       '<td><span class="pill '+c.clase+'">'+esc(c.estado)+'</span></td>'+
-      '<td class="notes" title="'+esc(a.notas||'')+'">'+esc(a.notas||'')+'</td>'+
+      '<td class="notes" title="'+esc(a.notas||'')+'"><span>'+esc(a.notas||'')+'</span></td>'+
       '<td><div class="rowact">'+renovBtn+'<button class="btn ghost sm" data-regrenovacion="'+a.id+'" title="Registrar un pago de renovación recibido fuera del portal">+ Renovar</button><button class="btn ghost sm" data-edit="'+a.id+'">Editar</button><button class="btn ghost sm" data-del="'+a.id+'">×</button></div></td>'+
     '</tr>';
   }).join("");
 }
 
+/* Nombre + apellido, que es como se llama la gente. El apellido llega de la migración o del
+   alta cuando el dueño prendió ese campo; si no hay, queda el nombre a secas (11-ago-2026). */
+function nombreCompleto(a){
+  if(!a) return "";
+  return String(a.nombre||"")+(a.apellido?(" "+a.apellido):"");
+}
 function nombreDe(alumnoId){
   var a=db.alumnos.find(function(x){return x.id===alumnoId;});
-  return a?a.nombre:"(alumno borrado)";
+  return a?nombreCompleto(a):"(alumno borrado)";
 }
+/* El buscador filtra al tipear. Se engancha una sola vez y repinta la tabla, nada más. */
+(function(){
+  var i=el("alBuscar"); if(!i) return;
+  var t=null;
+  i.addEventListener("input",function(){ clearTimeout(t); t=setTimeout(function(){ try{ renderAlumnos(); }catch(e){} },120); });
+  i.addEventListener("keydown",function(e){ if(e.key==="Escape"){ i.value=""; try{ renderAlumnos(); }catch(e2){} } });
+  var b=el("alBuscarLimpiar");
+  if(b) b.addEventListener("click",function(){ i.value=""; i.focus(); try{ renderAlumnos(); }catch(e){} });
+})();
 /* un adjunto: audio suena inline; PDF/imagen abre/descarga; × lo quita */
 function adjuntoChip(r,a){
   var tipo=tipoAdjunto(a.u);
@@ -6822,7 +6884,7 @@ function downloadBlob(blob,name){
 }
 
 /* ---------- Importar alumnos por CSV (client-side; reusa el guardado admin/data) ---------- */
-var IMP_ROWS=[],IMP_DUP=0,IMP_VACIOS=0,IMP_COLS_EXTRA=[];
+var IMP_ROWS=[],IMP_DUP=0,IMP_VACIOS=0,IMP_DUPARCH=0,IMP_COLS_EXTRA=[];
 el("btnImportCsv").addEventListener("click",function(){
   IMP_ROWS=[]; el("impFile").value="";
   el("impPaso1").style.display=""; el("impPaso2").style.display="none";
@@ -6891,11 +6953,18 @@ function impSaldo(txtRestantes, paquete){
   var rest=parseInt(n,10);
   var pk=pkDe(paquete);
   if(pk.ilim) return {usadas:0,restantes:null,error:"",nota:"mensualidad ilimitada: no lleva saldo de clases"};
+  if(!paquete) return {usadas:0,restantes:null,error:'dice que le quedan '+rest+' clases pero la fila no dice de qué paquete (agrega una columna "Paquete")'};
   if(!pk.clases) return {usadas:0,restantes:null,error:'no reconozco el paquete "'+paquete+'" (créalo en Ajustes → Clases y paquetes, o corrige el nombre)'};
   if(rest>pk.clases) return {usadas:0,restantes:rest,error:"le quedan "+rest+" clases pero "+paquete+" trae "+pk.clases};
   return {usadas:pk.clases-rest,restantes:rest,error:""};
 }
-function impNorm(s){ return String(s==null?"":s).trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,""); }
+function impNorm(s){ return String(s==null?"":s).replace(/\s+/g," ").trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,""); }
+/* Quien es "la misma persona" al importar (11-ago-2026). Antes bastaba el nombre y eso hizo
+   estragos con los exports que separan "First Name" de "Last Name": el nombre era el de pila
+   a secas, asi que dos "Maria" distintas contaban como una sola y la segunda se tiraba en
+   silencio. La identidad es nombre + apellido + correo: dos homonimos con correos distintos
+   son dos personas, y el mismo correo repetido si es la misma. */
+function impClave(nom,ape,mail){ return impNorm(nom)+"|"+impNorm(ape)+"|"+impNorm(mail); }
 function parseCsv(text){
   text=String(text||"").replace(/^\ufeff/,"");
   var l0=text.split(/\r?\n/)[0]||"";
@@ -6947,7 +7016,8 @@ function impReservas(txt){
     if(isNaN(d.getTime())){ malas.push(p); return; }
     isos.push(d.toISOString());
   });
-  return {isos:isos.slice(0,60),error:malas.length?('no entiendo la reserva "'+malas[0]+'" (usa 20/08/2026 19:00)'):""};
+  return {isos:isos.slice(0,60),crudo:malas.join("; "),
+    error:malas.length?('no entiendo la reserva "'+malas[0]+'"'+(malas.length>1?(" y "+(malas.length-1)+" más"):"")+' (usa 20/08/2026 19:00)'):""};
 }
 function impMapHeader(cells){
   var map={},known=false;
@@ -6986,16 +7056,29 @@ function impProcesarFilas(rows){
       var extrasIx=[];
       if(cab){ cab.forEach(function(h,ix){ if(!usadosIx[ix] && String(h).trim()) extrasIx.push(ix); }); }
       IMP_COLS_EXTRA=cab?extrasIx.map(function(ix){ return String(cab[ix]).trim(); }):[];
-      var existe={}; (db.alumnos||[]).forEach(function(a){ existe[impNorm(a.nombre)]=true; });
-      var out=[],dup=0,vacios=0,vistos={};
+      var existe={}; (db.alumnos||[]).forEach(function(a){ existe[impClave(a.nombre,a.apellido,a.email)]=true; });
+      var out=[],dup=0,dupArchivo=0,vacios=0,vistos={};
       for(var i=start;i<rows.length;i++){ var r=rows[i];
-        var nombre=String(r[map.nombre]!=null?r[map.nombre]:"").trim();
+        /* el nombre se normaliza de espacios: Excel mete saltos de linea dentro de la celda */
+        var nombre=String(r[map.nombre]!=null?r[map.nombre]:"").replace(/\s+/g," ").trim();
         if(!nombre){ vacios++; continue; }
-        var key=impNorm(nombre);
-        if(existe[key]||vistos[key]){ dup++; continue; }
+        var apeFila=map.apellido!=null?String(r[map.apellido]||"").replace(/\s+/g," ").trim().slice(0,80):"";
+        var mailFila=map.email!=null?String(r[map.email]||"").trim().slice(0,120):"";
+        /* 11-ago-2026, migracion de Elevate: la clave de duplicado era SOLO el nombre. Punchpass
+           exporta "First Name" y "Last Name" en columnas separadas, asi que el nombre era el de
+           pila a secas: de 1400 alumnos entraron 802 (uno por nombre de pila distinto) y los
+           demas se descartaron en silencio como "ya estaban". Ahora la clave es nombre+apellido
+           +correo, que es lo que de verdad identifica a una persona. */
+        var key=impClave(nombre,apeFila,mailFila);
+        if(existe[key]){ dup++; continue; }
+        if(vistos[key]){ dupArchivo++; continue; }
         vistos[key]=true;
         var profTxt=map.profesor!=null?String(r[map.profesor]||"").trim():"";
-        var paqFila=impCanonPaquete((map.paquete!=null?String(r[map.paquete]||"").trim():"")||"Paquete 4");
+        /* 11-ago-2026: NO inventar paquete. Antes, si el export no traia columna de pase, se le
+           encajaba "Paquete 4" a todo el mundo: a Jose le pinto 802 alumnos con un plan que no
+           existe en su academia y con un saldo falso de "4/4 clases". Sin dato = sin paquete. */
+        var paqTxt=map.paquete!=null?String(r[map.paquete]||"").trim():"";
+        var paqFila=paqTxt?impCanonPaquete(paqTxt):"";
         /* saldo migrado: "Clases restantes" y "Vence" (28-jul-2026). Ausentes = alumno nuevo
            con su paquete completo, exactamente como antes de existir estas columnas. */
         var sal=impSaldo(map.restantes!=null?r[map.restantes]:"", paqFila);
@@ -7006,38 +7089,53 @@ function impProcesarFilas(rows){
         var nTxt=map.nacimiento!=null?String(r[map.nacimiento]||"").trim():"";
         var nIso=impFecha(nTxt,1900);   // nacimiento: desde 1900, no desde 2000
         var rsv=map.reservas!=null?impReservas(r[map.reservas]):{isos:[],error:""};
-        /* 11-ago-2026: el nacimiento ya NO bloquea. Es un dato opcional y de adorno;
-           tumbar la migracion entera de 801 alumnos por una fecha rara es desproporcionado.
-           Si no se entiende, el alumno entra sin ella y queda el aviso en su ficha. */
-        var avisoNac=(nIso==="")?('no entendi la fecha de nacimiento "'+nTxt+'", el alumno entra sin ella'):"";
-        var errOtros=((vIso==="")?('no entiendo la fecha "'+vTxt+'" (usa 20/08/2026 o 2026-08-20)'):"")
-          ||rsv.error;
-        /* pase que no existe en Batuta (7-ago-2026): se marca SIEMPRE (antes solo si traía
-           saldo) y la previsualización ofrece mapearlo a un plan tuyo con un clic. */
+        var mailOk=!mailFila||/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(mailFila);
+        /* ---- Regla del 11-ago-2026 (migracion de Elevate, 1400 alumnos de Punchpass) ----
+           Un dato OPCIONAL nunca tumba la importacion entera. Nacimiento, vencimiento, reservas,
+           correo y el nombre del pase entran como AVISO: el alumno se importa igual, el dato
+           crudo viaja a sus Notas y la previsualizacion lo dice. Lo unico que sigue frenando es
+           lo que toca plata: un saldo de clases que no cuadra con su paquete. */
         var pkChk=pkDe(paqFila);
-        var paqDesc=(!pkChk.ilim && !(pkChk.clases>0));
-        var errFila=(paqDesc?('no reconozco el paquete "'+paqFila+'"'):"")||sal.error||errOtros;
+        var paqDesc=!!paqFila && !pkChk.ilim && !(pkChk.clases>0);
+        var avisos=[];
+        if(nIso==="") avisos.push('no entendí la fecha de nacimiento "'+nTxt+'"');
+        if(vIso==="") avisos.push('no entendí el vencimiento "'+vTxt+'"');
+        if(rsv.error) avisos.push(rsv.error);
+        if(!mailOk) avisos.push('"'+mailFila+'" no parece un correo');
+        if(paqDesc) avisos.push('no reconozco el paquete "'+paqFila+'"');
+        var errFila=sal.error;
         out.push({ nombre:nombre,
-          apellido:map.apellido!=null?String(r[map.apellido]||"").trim().slice(0,80):"",
-          email:map.email!=null?String(r[map.email]||"").trim().slice(0,120):"",
+          apellido:apeFila,
+          email:mailOk?mailFila:"",
           nacimiento:nIso||"",
-          curso:(map.curso!=null?String(r[map.curso]||"").trim():"")||MARCA.cursoDefault,
+          /* sin columna de curso = SIN curso. Antes caia en MARCA.cursoDefault y a una academia
+             de pilates y danza le marcaba "Canto" a los 802 alumnos (Jose, 11-ago-2026). */
+          curso:map.curso!=null?String(r[map.curso]||"").trim():"",
           whatsapp:(map.whatsapp!=null?String(r[map.whatsapp]||"").trim():"").replace(/[^\d+]/g,""),
           paquete:paqFila,
           notas:(function(){
             var nb=map.notas!=null?String(r[map.notas]||"").trim():"";
             var ex=extrasIx.map(function(ix){ var v=String(r[ix]==null?"":r[ix]).trim(); return v?(String(cab[ix]).trim()+": "+v):""; }).filter(Boolean).join(" · ");
-            /* el nacimiento que no se pudo leer viaja a las Notas: el dato no se pierde */
-            var nn=(nIso==="" && nTxt)?("Fecha de nacimiento del sistema anterior: "+nTxt):"";
-            return [nb,ex,nn].filter(Boolean).join(" · ").slice(0,400);
+            /* todo lo que no se pudo leer viaja CRUDO a las Notas: el dato no se pierde */
+            var sueltos=[];
+            if(nIso==="" && nTxt) sueltos.push("Fecha de nacimiento del sistema anterior: "+nTxt);
+            if(vIso==="" && vTxt) sueltos.push("Vencimiento del sistema anterior: "+vTxt);
+            if(rsv.crudo) sueltos.push("Reservas que no pude leer: "+rsv.crudo);
+            if(!mailOk) sueltos.push("Correo del sistema anterior: "+mailFila);
+            if(paqDesc) sueltos.push("Pase del sistema anterior: "+paqFila);
+            var todo=[nb,ex].concat(sueltos).filter(Boolean).join(" · ");
+            /* el tope era 400 y cortaba a media palabra 7 de cada 10 fichas de un export ancho
+               (se perdian las ultimas columnas) mientras la pantalla prometia "van completas".
+               2000 cubre un export ancho; si aun asi topa, se DICE en vez de callarlo. */
+            return todo.length>2000?(todo.slice(0,1984)+" …(recortado)"):todo;
           })(),
           restantes:sal.restantes, migrado_usadas:sal.usadas, saldoNota:sal.nota||"",
           vence:vIso||"", venceTxt:vTxt,
           reservas:rsv.isos,
-          error:errFila, errOtros:errOtros,
+          error:errFila, errOtros:"", avisos:avisos, paqDesc:paqDesc,
           profTxt:profTxt, profesor_id:impResolveProfe(profTxt) });
       }
-      IMP_ROWS=out; impPreview(out,dup,vacios);
+      IMP_ROWS=out; impPreview(out,dup,vacios,dupArchivo);
 }
 function impLeerArchivo(f){
   if(!f) return;
@@ -7136,20 +7234,25 @@ el("btnImpPegar").addEventListener("click",function(){
       else if(!curso){ curso=c; }
       else { notas.push(c); }
     });
-    var paqL=paq||"Paquete 4";
+    var paqL=paq||"";   // 11-ago-2026: sin dato = sin paquete, no "Paquete 4" inventado
     var salL=impSaldo(restTxt,paqL);
-    out.push({ nombre:nombre, curso:curso||MARCA.cursoDefault, whatsapp:wsp,
-      paquete:paqL, notas:notas.join(" · "),
+    var pkL=pkDe(paqL);
+    var avisosL=[];
+    if(venTxt&&!venIso) avisosL.push('no entendí el vencimiento "'+venTxt+'"');
+    if(paqL && !pkL.ilim && !(pkL.clases>0)) avisosL.push('no reconozco el paquete "'+paqL+'"');
+    out.push({ nombre:nombre, curso:curso, whatsapp:wsp,
+      paquete:paqL, notas:notas.concat(venTxt&&!venIso?["Vencimiento del sistema anterior: "+venTxt]:[]).join(" · "),
       restantes:salL.restantes, migrado_usadas:salL.usadas, saldoNota:salL.nota||"",
       vence:venIso||"", venceTxt:venTxt,
-      error:salL.error||((venTxt&&!venIso)?('no entiendo la fecha "'+venTxt+'" (usa 20/08/2026 o 2026-08-20)'):""),
+      error:salL.error, errOtros:"", avisos:avisosL,
+      paqDesc:!!(paqL && !pkL.ilim && !(pkL.clases>0)),
       profTxt:profTxt, profesor_id:undefined });
   });
   IMP_COLS_EXTRA=[];   // el pegado sin cabecera ya manda los sobrantes a notas por celda
-  IMP_ROWS=out; impPreview(out,dup,0);
+  IMP_ROWS=out; impPreview(out,dup,0,0);
 });
-function impPreview(rows,dup,vacios){
-  IMP_DUP=dup; IMP_VACIOS=vacios;   // para repintar tras mapear un pase (7-ago-2026)
+function impPreview(rows,dup,vacios,dupArchivo){
+  IMP_DUP=dup; IMP_VACIOS=vacios; IMP_DUPARCH=dupArchivo||0;   // para repintar tras mapear un pase (7-ago-2026)
   el("impErr").style.display="none";
   if(!rows.length){ impError("No hay alumnos nuevos para importar"+(dup?(" ("+dup+" ya estaban en tu lista)"):"")+"."); return; }
   var tb=el("impTabla").querySelector("tbody");
@@ -7162,13 +7265,21 @@ function impPreview(rows,dup,vacios){
        entero (lo de siempre), y se dice explícito para que nadie confirme a ciegas. */
     var pk=pkDe(a.paquete), saldo;
     if(a.error){ saldo='<span style="color:var(--red,#D9534F);font-weight:600;">revisar</span><br><span class="mini">'+esc(a.error)+'</span>'; }
+    /* sin paquete en el archivo: NO se le inventa uno ni se le pinta un "4/4" que no existe */
+    else if(!a.paquete){ saldo='<span class="mini">sin paquete<br>se lo pones tú después</span>'; }
     else if(pk.ilim){ saldo='<span class="mini">mensualidad</span>'+(a.vence?'<br><span class="mini">vence '+esc(fechaBonita(a.vence))+'</span>':'')+
       (a.saldoNota?'<br><span class="mini" style="color:var(--amber,#d99a3c);">sin saldo de clases: es ilimitada</span>':''); }
+    else if(a.paqDesc){ saldo='<span class="mini" style="color:var(--amber,#d99a3c);">pase que no reconozco<br>entra igual, sin saldo</span>'; }
     else if(a.restantes!=null){ saldo='<span class="big">'+a.restantes+'</span> <span class="mini">/ '+pk.clases+'</span>'+(a.vence?'<br><span class="mini">vence '+esc(fechaBonita(a.vence))+'</span>':''); }
     else { saldo='<span class="big">'+(pk.clases||0)+'</span> <span class="mini">/ '+(pk.clases||0)+' (completo)</span>'+(a.vence?'<br><span class="mini">vence '+esc(fechaBonita(a.vence))+'</span>':''); }
-    return "<tr"+(a.error?' style="background:rgba(217,83,79,.08);"':'')+"><td>"+esc(a.nombre)+"</td><td>"+esc(a.curso)+"</td><td>"+esc(a.whatsapp)+"</td><td>"+esc(a.paquete)+"</td><td>"+saldo+"</td><td>"+pf+"</td></tr>";
+    var nomCel=esc(a.nombre)+(a.apellido?(" "+esc(a.apellido)):"")+
+      ((a.avisos&&a.avisos.length)?('<br><span class="mini" style="color:var(--amber,#d99a3c);">'+esc(a.avisos[0])+(a.avisos.length>1?(" (+"+(a.avisos.length-1)+")"):"")+'</span>'):"");
+    return "<tr"+(a.error?' style="background:rgba(217,83,79,.08);"':'')+"><td>"+nomCel+"</td><td>"+esc(a.curso||"—")+"</td><td>"+esc(a.whatsapp)+"</td><td>"+esc(a.paquete||"—")+"</td><td>"+saldo+"</td><td>"+pf+"</td></tr>";
   }).join("");
-  var extra=[]; if(dup)extra.push(dup+" ya estaban (omitidos)"); if(vacios)extra.push(vacios+" sin nombre (omitidos)");
+  var extra=[];
+  if(dup)extra.push(dup+" ya estaban en tu lista (omitidos)");
+  if(IMP_DUPARCH)extra.push(IMP_DUPARCH+" repetidos dentro del archivo (omitidos)");
+  if(vacios)extra.push(vacios+" sin nombre (omitidos)");
   var conSaldo=rows.filter(function(a){ return !a.error && a.restantes!=null; }).length;
   if(conSaldo) extra.push(conSaldo+" con saldo traído de tu sistema anterior");
   var conRes=rows.filter(function(a){ return !a.error && a.reservas && a.reservas.length; }).length;
@@ -7177,7 +7288,7 @@ function impPreview(rows,dup,vacios){
   if(conMail) extra.push(conMail+" con correo");
   el("impResumen").innerHTML="<b>"+rows.length+" alumno"+(rows.length!=1?"s":"")+"</b> list"+(rows.length!=1?"os":"o")+" para importar"+(extra.length?(" · "+extra.join(" · ")):"")+(rows.length>50?" · se muestran los primeros 50":"")+"."+
     /* transparencia total (7-ago-2026): nada se bota en silencio */
-    ((IMP_COLS_EXTRA&&IMP_COLS_EXTRA.length)?('<br><span class="mini">📝 Columnas que no reconocí — <b>no se pierden</b>: van completas a las Notas de cada alumno, con su título: <b>'+IMP_COLS_EXTRA.map(esc).join(", ")+'</b></span>'):"");
+    ((IMP_COLS_EXTRA&&IMP_COLS_EXTRA.length)?('<br><span class="mini">Columnas que no reconocí — <b>no se pierden</b>: van completas a las Notas de cada alumno, con su título: <b>'+IMP_COLS_EXTRA.map(esc).join(", ")+'</b></span>'):"");
   var multi=(ROL||"dueno")==="dueno" && (EQUIPO||[]).filter(function(p){return p.estado!=="suspendido";}).length>1;
   var noRec=rows.filter(function(a){ return a.profTxt && !a.profesor_id; });
   var w=el("impProfeWrap");
@@ -7214,11 +7325,29 @@ function impPreview(rows,dup,vacios){
       (malas.length>6?"<li>… y "+(malas.length-6)+" más</li>":"")+"</ul>"+
       '<p class="hint" style="margin:8px 0 0;">Corrige tu archivo (o la lista pegada) y vuelve a subirlo. Nadie se importa hasta que cuadre.</p></div>';
   } else { box.style.display="none"; box.innerHTML=""; }
+  /* Avisos (11-ago-2026): lo que NO cuadra pero tampoco es motivo para frenar a nadie. Se
+     dice cuántos y de qué, el alumno entra igual y el dato crudo queda en sus Notas. */
+  var avBox=el("impAvisos");
+  if(!avBox){ avBox=document.createElement("div"); avBox.id="impAvisos"; box.parentNode.insertBefore(avBox, box); }
+  var conAviso=rows.filter(function(a){ return a.avisos && a.avisos.length; });
+  if(conAviso.length){
+    var tipos={};
+    conAviso.forEach(function(a){ a.avisos.forEach(function(x){
+      var k=/nacimiento/.test(x)?"fecha de nacimiento":/vencimiento/.test(x)?"fecha de vencimiento":
+            /reserva/.test(x)?"reservas":/correo/.test(x)?"correo":"nombre del paquete";
+      tipos[k]=(tipos[k]||0)+1; }); });
+    avBox.style.display="";
+    avBox.innerHTML='<div style="border:1px solid var(--amber,#E8A13D);border-radius:8px;padding:10px 12px;margin:0 0 10px;">'+
+      '<b style="color:var(--amber,#E8A13D);">'+conAviso.length+' alumno'+(conAviso.length!=1?'s entran':' entra')+' con un dato que no pude leer.</b>'+
+      '<ul style="margin:6px 0 0 16px;padding:0;font-size:13px;">'+
+      Object.keys(tipos).map(function(k){ return "<li>"+tipos[k]+" · "+esc(k)+"</li>"; }).join("")+"</ul>"+
+      '<p class="hint" style="margin:8px 0 0;">Esto <b>no frena nada</b>: se importan igual y el texto original queda guardado en las Notas de cada uno, tal cual venía.</p></div>';
+  } else { avBox.style.display="none"; avBox.innerHTML=""; }
   /* Mapeo de pases desconocidos (7-ago-2026): si el sistema anterior llama distinto a los
      planes ("8 Class Pack"), acá se elige a cuál plan de Batuta corresponde cada uno y
      TODAS sus filas se corrigen solas — sin tocar el archivo. */
   var desconocidos={};
-  rows.forEach(function(a){ if(a.error && a.error.indexOf('no reconozco el paquete')===0){ desconocidos[a.paquete]=(desconocidos[a.paquete]||0)+1; } });
+  rows.forEach(function(a){ if(a.paqDesc && a.paquete){ desconocidos[a.paquete]=(desconocidos[a.paquete]||0)+1; } });
   var mapBox=el("impMapPaq");
   if(!mapBox){ mapBox=document.createElement("div"); mapBox.id="impMapPaq"; box.parentNode.insertBefore(mapBox, box); }
   var descK=Object.keys(desconocidos);
@@ -7230,7 +7359,7 @@ function impPreview(rows,dup,vacios){
         '<span class="mini">«'+esc(k)+'» ('+desconocidos[k]+' alumno'+(desconocidos[k]===1?'':'s')+') →</span>'+
         '<select data-mapdesde="'+esc(k)+'" style="width:auto;min-width:200px;"><option value="">— elige tu plan —</option>'+
         pkNombres().map(function(p){return '<option value="'+esc(p)+'">'+esc(p)+'</option>';}).join("")+'</select></div>'; }).join("")+
-      '<p class="hint" style="margin:8px 0 0;">Al elegir, sus filas se corrigen solas. (Si es un plan que aún no existe, créalo en Ajustes → Clases y planes y vuelve a subir el archivo.)</p></div>';
+      '<p class="hint" style="margin:8px 0 0;">Al elegir, sus filas se corrigen solas. <b>No es obligatorio</b>: si lo dejas así, esos alumnos entran igual con el nombre de su pase guardado en las Notas y les pones el plan después.</p></div>';
   } else { mapBox.style.display="none"; mapBox.innerHTML=""; }
   el("impPaso1").style.display="none"; el("impPaso2").style.display="";
   var btn=el("btnImpConfirmar"); btn.style.display="";
@@ -7247,8 +7376,14 @@ function reMapPaquete(desde,hacia){
     var sal=impSaldo(a.restantes!=null?String(a.restantes):"", hacia);
     a.migrado_usadas=sal.usadas; a.restantes=sal.restantes; a.saldoNota=sal.nota||"";
     a.error=sal.error||a.errOtros||"";
+    var pkN=pkDe(hacia);
+    a.paqDesc=!!hacia && !pkN.ilim && !(pkN.clases>0);
+    /* el aviso del pase se va al mapearlo; la nota "Pase del sistema anterior: X" se queda,
+       que es el dato crudo del export y ese no se toca */
+    a.avisos=(a.avisos||[]).filter(function(x){ return x.indexOf("no reconozco el paquete")!==0; });
+    if(a.paqDesc) a.avisos.push('no reconozco el paquete "'+hacia+'"');
   });
-  impPreview(IMP_ROWS, IMP_DUP, IMP_VACIOS);
+  impPreview(IMP_ROWS, IMP_DUP, IMP_VACIOS, IMP_DUPARCH);
 }
 document.addEventListener("change",function(e){
   var s=(e.target&&e.target.closest)?e.target.closest("[data-mapdesde]"):null;
@@ -7281,7 +7416,14 @@ el("btnImpConfirmar").addEventListener("click",function(){
     return apiPost("/app/api/admin/importar-reservas",{filas:resPend}).catch(function(){ return {creadas:0,saltadas:[{motivo:"error de conexión"}]}; });
   }).then(function(rr){
     renderAll(); closeOv("ovImport");
-    var msg=n+" alumno"+(n!=1?"s":"")+" importado"+(n!=1?"s":"")+" ✓";
+    /* la cuenta clara (11-ago-2026): cuántos entraron y cuántos NO, con el motivo. Antes el
+       aviso solo cantaba los que entraron y el dueño no tenía cómo saber que faltaba gente. */
+    var msg=n+" de "+(n+IMP_DUP+IMP_DUPARCH+IMP_VACIOS)+" alumno"+((n+IMP_DUP+IMP_DUPARCH+IMP_VACIOS)!=1?"s":"")+" importado"+(n!=1?"s":"")+" ✓";
+    var om=[];
+    if(IMP_DUP) om.push(IMP_DUP+" ya estaban");
+    if(IMP_DUPARCH) om.push(IMP_DUPARCH+" repetidos en el archivo");
+    if(IMP_VACIOS) om.push(IMP_VACIOS+" sin nombre");
+    if(om.length) msg+=" · no entraron: "+om.join(", ");
     if(rr){ msg+=" · "+(rr.creadas||0)+" reserva"+(rr.creadas===1?"":"s")+" migrada"+(rr.creadas===1?"":"s");
       if(rr.saltadas&&rr.saltadas.length){ msg+=" · "+rr.saltadas.length+" no entraron"; console.warn("Reservas no migradas:",rr.saltadas); } }
     toast(msg);
