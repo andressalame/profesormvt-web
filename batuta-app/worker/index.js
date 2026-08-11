@@ -5497,14 +5497,15 @@ export default {
         return htmlResponse(paginaBase("Pagos — " + esc(tP.academia), "<h1>" + esc(tP.academia) + "</h1><p class=\"sub\">Tu profesor aún no configuró los pagos por aquí. Escríbele y lo coordinan directo.</p>", ""));
       }
       const camposP = camposPublicos(cfgP);
-      const infoPago = {
-        yape: { numero: cfgP.pago_numero || "", titular: cfgP.pago_titular || "" },
-        bcp: { cuenta: cfgP.bcp_cuenta || "", cci: cfgP.bcp_cci || "" },
-        interbank: { cuenta: cfgP.interbank_cuenta || "", cci: cfgP.interbank_cci || "" },
-        scotia: { cuenta: cfgP.scotia_cuenta || "", cci: cfgP.scotia_cci || "" },
-        crypto: { moneda: cfgP.crypto_moneda || "USDT", red: cfgP.crypto_red || "", wallet: cfgP.crypto_wallet || "" },
-        mpSoloTarjeta: mpSoloTarjetaP
-      };
+      /* FUGA CERRADA (11-ago-2026): aqui se serializaba al HTML el juego COMPLETO de datos de
+         cobro — Yape, titular, BCP, Interbank, Scotiabank y wallet, con sus CCI — para cualquiera
+         que abriera la pagina. Como es HTML publico, esos numeros quedaban ademas en el "ver
+         codigo fuente", en la cache del navegador y al alcance de cualquier crawler o archivador.
+         Cerrar solo /app/api/publico no servia de nada: esta era la misma fuga por otra puerta.
+         Ahora la pagina nace SIN un solo digito y los pide a /app/api/pago-datos cuando el alumno
+         elige su metodo: viaja UN riel, el que va a usar, y con tope por IP. La experiencia del
+         alumno es identica (un fetch al cambiar el select). */
+      const infoPago = { mpSoloTarjeta: mpSoloTarjetaP };
       const cuerpoP =
         "<h1>" + esc(tP.academia) + "</h1>" +
         "<p class=\"sub\">Elige tu paquete, paga y listo: tu cuenta se crea sola y te llega un correo para entrar a tu portal.</p>" +
@@ -5557,16 +5558,18 @@ export default {
         "if(box.style.display==='none'){var c=document.getElementById('tutor');if(c)c.checked=false;}}" +
         "if(fnEl) fnEl.addEventListener('change',chkMenor);" +
         "var mt=document.getElementById('mt'),pinfo=document.getElementById('pinfo'),manual=document.getElementById('manualbox'),btn=document.getElementById('btnp');" +
-        "function pintaInfo(){var v=mt.value,t='';" +
-        "if(v==='Tarjeta (Mercado Pago)'){t=INFO.mpSoloTarjeta?'Te llevamos al checkout de Mercado Pago (solo tarjeta). Al aprobar, tu paquete se activa solo.':'Te llevamos al checkout de Mercado Pago (tarjeta o Yape). Al aprobar, tu paquete se activa solo.';manual.style.display='none';btn.textContent='Pagar con tarjeta \\u2192';}" +
-        "else if(v==='Tarjeta (Stripe)'){t='Te llevamos al checkout seguro de Stripe. Al aprobar, tu paquete se activa solo.';manual.style.display='none';btn.textContent='Pagar con tarjeta \\u2192';}" +
-        "else{manual.style.display='';btn.textContent='Registrar mi pago';" +
-        "if(v==='Yape/Plin/Sip'){t='Yapea o Plinea a: '+INFO.yape.numero+(INFO.yape.titular?('\\nA nombre de: '+INFO.yape.titular):'');}" +
-        "else if(v==='Transferencia BCP'){t='BCP Soles: '+INFO.bcp.cuenta+(INFO.bcp.cci?('\\nCCI: '+INFO.bcp.cci):'');}" +
-        "else if(v==='Transferencia Interbank'){t='Interbank Soles: '+INFO.interbank.cuenta+(INFO.interbank.cci?('\\nCCI: '+INFO.interbank.cci):'');}" +
-        "else if(v==='Transferencia Scotiabank'){t='Scotiabank Soles: '+INFO.scotia.cuenta+(INFO.scotia.cci?('\\nCCI: '+INFO.scotia.cci):'');}" +
-        "else if(v==='Crypto USDT'){t=INFO.crypto.moneda+' por '+INFO.crypto.red+':\\n'+INFO.crypto.wallet;}}" +
-        "pinfo.textContent=t;}" +
+        /* Los datos de cobro ya NO viajan en el HTML: se piden al elegir metodo y solo el que
+           toca. Cache en memoria para no repetir el fetch si el alumno pasea por el select. */
+        "var CACHEP={};" +
+        "async function traeInfo(v){if(CACHEP[v]!==undefined)return CACHEP[v];" +
+        "try{var r=await fetch('/app/api/pago-datos',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({slug:SLUGP,metodo:v})});" +
+        "var d=await r.json();CACHEP[v]=r.ok?(d.texto||''):'';}catch(e){CACHEP[v]='';}return CACHEP[v];}" +
+        "async function pintaInfo(){var v=mt.value,t='';" +
+        "if(v==='Tarjeta (Mercado Pago)'){t=INFO.mpSoloTarjeta?'Te llevamos al checkout de Mercado Pago (solo tarjeta). Al aprobar, tu paquete se activa solo.':'Te llevamos al checkout de Mercado Pago (tarjeta o Yape). Al aprobar, tu paquete se activa solo.';manual.style.display='none';btn.textContent='Pagar con tarjeta \\u2192';pinfo.textContent=t;return;}" +
+        "if(v==='Tarjeta (Stripe)'){t='Te llevamos al checkout seguro de Stripe. Al aprobar, tu paquete se activa solo.';manual.style.display='none';btn.textContent='Pagar con tarjeta \\u2192';pinfo.textContent=t;return;}" +
+        "manual.style.display='';btn.textContent='Registrar mi pago';pinfo.textContent='Cargando los datos para pagar\\u2026';" +
+        "var pedido=v;var txt=await traeInfo(v);if(mt.value!==pedido)return;" +
+        "pinfo.textContent=txt||'No pudimos cargar los datos. Recarga la pagina o escribele a tu profesor.';}" +
         "mt.addEventListener('change',pintaInfo);pintaInfo();" +
         "function leerCap(){return new Promise(function(res){var f=document.getElementById('cap').files[0];if(!f)return res('');var r=new FileReader();r.onload=function(){res(String(r.result||''));};r.onerror=function(){res('');};r.readAsDataURL(f);});}" +
         "document.getElementById('fp').addEventListener('submit',async function(e){" +
@@ -7706,6 +7709,41 @@ export default {
              public/alumnos/index.html). Era exposicion pura, sin funcion. Si algun dia hace falta
              mostrar metodos de pago ANTES del login, mandar banderas booleanas, nunca los numeros. */
         });
+      }
+
+      /* Datos de cobro, UNO a la vez y al momento de pagar (11-ago-2026).
+         Reemplaza al bloque `pago` que /app/api/publico regalaba a cualquiera y al INFO que la
+         pagina /app/a/{slug}/pagar serializaba en su HTML. Sigue sin exigir sesion a proposito:
+         el que paga por el link publico todavia no tiene cuenta, y pedirsela mataria la venta.
+         Lo que cambia es que ya no se puede cosechar: viaja SOLO el riel elegido, nunca el juego
+         completo, no queda en el HTML ni en la cache, y hay tope por IP. */
+      if (path === "/app/api/pago-datos" && request.method === "POST"){
+        const ipPD = clientIp(request);
+        if (ipPD && await chatbotPasoTope(env, "pdat:" + ipPD, 30)){
+          return json({ error: "Demasiados intentos. Espera un rato." }, 429);
+        }
+        const bPD = await request.json().catch(() => ({}));
+        const slugPD = String(bPD.slug || "").trim();
+        const metodoPD = String(bPD.metodo || "").trim();
+        const tPD = slugPD ? await env.DB.prepare("SELECT id, estado FROM tenants WHERE slug = ?1").bind(slugPD).first() : null;
+        if (!tPD) return json({ error: "Academia no encontrada" }, 404);
+        if (tPD.estado === "vencido") return json({ error: "Pagos en pausa" }, 403);
+        const cPD = await loadConfig(env, tPD.id);
+        let textoPD = "";
+        if (metodoPD === "Yape/Plin/Sip" && cPD.pago_numero){
+          textoPD = "Yapea o Plinea a: " + cPD.pago_numero + (cPD.pago_titular ? "\nA nombre de: " + cPD.pago_titular : "");
+        } else if (metodoPD === "Transferencia BCP" && cPD.bcp_cuenta){
+          textoPD = "BCP Soles: " + cPD.bcp_cuenta + (cPD.bcp_cci ? "\nCCI: " + cPD.bcp_cci : "");
+        } else if (metodoPD === "Transferencia Interbank" && cPD.interbank_cuenta){
+          textoPD = "Interbank Soles: " + cPD.interbank_cuenta + (cPD.interbank_cci ? "\nCCI: " + cPD.interbank_cci : "");
+        } else if (metodoPD === "Transferencia Scotiabank" && cPD.scotia_cuenta){
+          textoPD = "Scotiabank Soles: " + cPD.scotia_cuenta + (cPD.scotia_cci ? "\nCCI: " + cPD.scotia_cci : "");
+        } else if (metodoPD === "Crypto USDT" && cPD.crypto_wallet){
+          textoPD = (cPD.crypto_moneda || "USDT") + " por " + (cPD.crypto_red || "Tron (TRC20)") + ":\n" + cPD.crypto_wallet;
+        } else {
+          return json({ error: "Ese metodo no esta disponible en esta academia." }, 404);
+        }
+        return json({ texto: textoPD });
       }
 
       if (path === "/app/api/agenda/slots-publicos" && request.method === "GET"){
