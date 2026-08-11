@@ -3104,6 +3104,29 @@ function cupoDeCfg(cfg){
   const c = parseInt(cfg && cfg.agenda_cupo, 10);
   return (Number.isFinite(c) && c >= 1 && c <= CUPO_MAX) ? c : 1;
 }
+/* ¿La academia sienta a VARIOS alumnos en el MISMO horario? (11-ago-2026)
+   Batuta nacio para el profe 1-a-1 y hoy tiene academias grupales de clientes (Elevate
+   Studio: Pilates Maquinas aforo 3, Mat 8, 64 franjas). El portal del alumno usa esto
+   para no hablarle de "clases 1 a 1" a quien entra a una clase de 8.
+
+   Mide el AFORO, que es lo unico que separa grupal de individual, en los dos niveles que
+   viven en config -- los mismos que usa cupoDeSlot():
+     1) aforo por TIPO de clase (config.clases[].a)   -> Elevate lo tiene, agenda_cupo NO
+     2) cupo GLOBAL (config.agenda_cupo)              -> otro tenant real lo tiene en 12, sin config.clases
+   Hace falta mirar los dos: en produccion cada academia grupal usa uno u otro, nunca ambos.
+   El tercer nivel (cupo por franja) no se consulta aca para no meterle una query a /api/me:
+   hoy es 0 en todos los tenants reales y el portal lo corrobora solo, con las franjas que
+   la agenda ya le manda.
+
+   Descartados a proposito:
+   - config.salas   -> mide PARALELISMO, no tamano: dos salas con aforo 1 son dos clases
+                       individuales a la vez (una academia de musica con 2 profes). Falso positivo.
+   - portal_fija_off -> es estilo de reserva (clase por clase vs. horario fijo), no tamano de clase.
+   - portal_sin_profe -> es otro eje: si hay UN profe que le habla al alumno. Se usa aparte. */
+function academiaEsGrupal(cfg){
+  if (cupoDeCfg(cfg) > 1) return true;
+  return clasesDeCfg(cfg).some(c => c && c.a > 1);
+}
 /* Salas o espacios fisicos (03-ago-2026, Elevate: "Sala grande" y "Sala chica"): la unidad
    de PARALELISMO de la agenda. Dos clases distintas a la misma hora = dos franjas de
    disponibilidad en salas distintas, cada una con su tipo de clase, su aforo y su profe.
@@ -7440,6 +7463,12 @@ export default {
           academia: t.academia, whatsapp: t.whatsapp || "", precios,
           profesores: profesoresPub,
           cursos: cursosDeCfg(cfg),
+          /* Voz del portal ANTES de entrar (11-ago-2026): la pantalla de login tambien dice
+             "escribele a tu profesor", y en una academia grupal sin profe fijo eso no aplica. */
+          portal: {
+            grupal: academiaEsGrupal(cfg),
+            sin_profe: String(cfg.portal_sin_profe || "") === "1"
+          },
           marca: { color: cfg.brand_color || "", font: cfg.brand_font || "", logo: cfg.brand_logo || "" },
           pago: {
             pago_numero: cfg.pago_numero, pago_titular: cfg.pago_titular,
@@ -7963,6 +7992,9 @@ export default {
           fija_off: String(config.portal_fija_off || "") === "1",
           chat_off: String(config.portal_chat_off || "") === "1",
           sin_profe: String(config.portal_sin_profe || "") === "1",
+          /* grupal (11-ago-2026): apaga el copy de "clases 1 a 1" del portal. Se deduce del
+             aforo, no se le pide nada nuevo al dueno. Ver academiaEsGrupal(). */
+          grupal: academiaEsGrupal(config),
           whatsapp: String(config.whatsapp_profe || "").replace(/\D/g, "")
         };
         const tRowMe = await env.DB.prepare("SELECT academia FROM tenants WHERE id = ?1").bind(tid).first().catch(() => null);

@@ -390,7 +390,7 @@
     <div class="field"><label for="l_pass">Contraseña</label><input id="l_pass" type="password" autocomplete="current-password" /></div>
     <button class="btn full" id="btnLogin">Ingresar</button>
     <div class="err" id="loginErr"></div>
-    <p class="auth-hint">¿Olvidaste tu contraseña? Escríbele a tu profesor para restablecerla.</p>
+    <p class="auth-hint" id="authHint">¿Olvidaste tu contraseña? Escríbele a tu profesor para restablecerla.</p>
   </div>
 
   <div id="formReg" class="hidden">
@@ -460,7 +460,7 @@
         <p>Este es tu portal: acá manejas tus clases, pagos y material. Para arrancar son 3 pasos:</p>
         <ol class="onb-steps">
           <li><b>1 · Compra tu paquete.</b> <span id="txtOnbPaso1">Elige canto, piano o composición (o combínalos).</span> Con tarjeta se activa al instante; con Yape, Plin o transferencia el mismo día.</li>
-          <li><b>2 · Elige tus horarios.</b> Coordinamos tus clases 1 a 1 a tu ritmo.</li>
+          <li id="onbPaso2"><b>2 · Elige tus horarios.</b> Coordinamos tus clases 1 a 1 a tu ritmo.</li>
           <li><b>3 · Aprende y avanza.</b> Aquí verás tus clases restantes, tu tarea de la semana y el material exclusivo.</li>
         </ol>
         <a class="btn full" href="#comprar">Comprar mi primer paquete →</a>
@@ -478,7 +478,7 @@
       </div>
 
       <div class="card hidden" id="iCalWrap">
-        <h3>// TUS HORARIOS</h3>
+        <h3 id="iCalTit">// TUS HORARIOS</h3>
         <p class="note" id="iCalNota" style="margin:0 0 12px;"></p>
         <a class="btn sm" href="#agenda">Reservar / ver mis clases →</a>
       </div>
@@ -633,7 +633,7 @@
     <div class="chat-head">
       <span style="display:flex;gap:6px;">
         <button class="chat-tab active" data-canal="grupal">Grupal</button>
-        <button class="chat-tab" data-canal="privado">Con el profe</button>
+        <button class="chat-tab" data-canal="privado" id="chatTabPriv">Con el profe</button>
       </span>
       <button id="chatToggle" aria-label="Cerrar chat">—</button>
     </div>
@@ -675,7 +675,7 @@
       <!-- Paso W2: Tu horario (solo Clase de prueba) -->
       <div id="wizP2" class="hidden">
         <div class="field" id="c_slotWrap">
-          <label>Elige tu horario (lo separamos apenas pagues)</label>
+          <label id="c_slotLab">Elige tu horario (lo separamos apenas pagues)</label>
           <div id="c_slots"><p class="note" style="margin:0">Cargando horarios…</p></div>
         </div>
         <div class="err" id="wizErr2"></div>
@@ -701,7 +701,7 @@
 
         <div class="paybox" id="payboxOk"></div>
         <div class="paybox hidden" id="payboxNo">
-          <div class="note">Para coordinar el pago, escríbeme directo por WhatsApp y lo cuadramos al toque.</div>
+          <div class="note" id="payboxNoTxt">Para coordinar el pago, escríbeme directo por WhatsApp y lo cuadramos al toque.</div>
         </div>
 
         <div class="field" style="margin-top:12px;"><label for="c_op">N° de operación o hash (opcional, ayuda a confirmar más rápido)</label>
@@ -720,8 +720,8 @@
     <div id="compraPaso2" class="hidden">
       <h3>¡Pago <em>registrado</em>!</h3>
       <div class="mlab">// En verificación</div>
-      <p style="font-size:14.5px;">Apenas vea tu yapeo/plineo activo tu paquete — suele ser el mismo día, casi siempre en minutos. Te aparecerá aquí mismo, en tu portal.</p>
-      <p class="note">¿Quieres acelerarlo? Avísame por WhatsApp y lo confirmo al toque.</p>
+      <p style="font-size:14.5px;" id="pagoRegTxt">Apenas vea tu yapeo/plineo activo tu paquete — suele ser el mismo día, casi siempre en minutos. Te aparecerá aquí mismo, en tu portal.</p>
+      <p class="note" id="pagoRegNota">¿Quieres acelerarlo? Avísame por WhatsApp y lo confirmo al toque.</p>
       <div class="modal-actions">
         <a class="btn ghost" id="btnAvisar" target="_blank" rel="noopener">Avisar por WhatsApp</a>
         <button class="btn" data-close>Listo</button>
@@ -766,6 +766,89 @@ var toastT;
 function toast(msg){ var t=$("toast"); t.textContent=msg; t.classList.add("show"); clearTimeout(toastT); toastT=setTimeout(function(){t.classList.remove("show");},2600); }
 function setPantalla(p){ ["viewLoading","viewAuth","app"].forEach(hide); show(p); }
 function kv(lab,vHtml){ return '<div class="kv"><div class="lab">'+lab+'</div><div class="v">'+vHtml+'</div></div>'; }
+
+/* ================= VOZ DEL PORTAL (11-ago-2026) =================
+   Batuta nacio para el profe 1-a-1 y hoy tiene academias GRUPALES de clientes (Elevate
+   Studio: pilates y danza, salas, aforos de 3 y 8, 64 franjas). El portal les hablaba a
+   todos como alumno de clase individual: "Coordinamos tus clases 1 a 1 a tu ritmo" no le
+   cuadra a quien entra a una clase de 8.
+
+   Dos ejes INDEPENDIENTES, los dos apagados por defecto -> el profe de canto sigue viendo
+   exactamente lo de siempre, letra por letra:
+
+   1) esGrupal()      la academia sienta a varios alumnos en el mismo horario. Lo deduce el
+                      worker del AFORO (academiaEsGrupal), sin pedirle nada nuevo al dueno.
+                      Cambia el copy de "clases 1 a 1" por el de "aparta tu lugar".
+   2) sinProfeFijo()  config.portal_sin_profe: no hay UN profesor que le hable al alumno,
+                      habla la academia. Cambia "escribeme / conmigo / tu profe" al plural.
+
+   Regla de la casa: si una frase sirve para los dos casos, se deja UNA sola frase neutra
+   en vez de dos variantes fragiles (por eso hay menos pares de los que parece). */
+var PUB_PORTAL = null;        // flags que llegan en /app/api/publico (sirven ANTES del login)
+var VOZ_GRUPAL_AGENDA = false; // corroboracion gratis: la agenda vio una franja con aforo > 1
+
+/* Precedencia (importa): con sesion abierta MANDA ME, que llega fresco en cada /api/me.
+   PUB_PORTAL es solo el fallback de la pantalla de login, donde todavia no hay sesion.
+   Si se dejara "PUB_PORTAL tambien puede prender el flag", un /publico cacheado por el
+   navegador dejaria pegado el copy grupal en una academia que volvio a ser individual:
+   el flag solo podria encender, nunca apagar. */
+function esGrupal(){
+  if(VOZ_GRUPAL_AGENDA) return true;               // la agenda vio un aforo > 1: evidencia dura
+  if(ME && ME.portal) return !!ME.portal.grupal;
+  return !!(PUB_PORTAL && PUB_PORTAL.grupal);
+}
+function sinProfeFijo(){
+  if(ME && ME.portal) return !!ME.portal.sin_profe;
+  return !!(PUB_PORTAL && PUB_PORTAL.sin_profe);
+}
+/* Elige entre la voz del profe que habla en primera persona y la de la academia. */
+function vz(profe, academia){ return sinProfeFijo() ? academia : profe; }
+/* Como se le dice al que responde: "tu profesor" o "tu academia". */
+function quienResponde(){ return sinProfeFijo() ? "tu academia" : "tu profesor"; }
+
+/* Repinta los textos que viven en el HTML estatico. Idempotente: se puede llamar
+   cada vez que cambie ME o lleguen los flags publicos. */
+function aplicarVozPortal(){
+  try{
+    var g = esGrupal(), sp = sinProfeFijo();
+
+    var hint = $("authHint");
+    if(hint) hint.textContent = sp
+      ? "¿Olvidaste tu contraseña? Escríbele a tu academia para restablecerla."
+      : "¿Olvidaste tu contraseña? Escríbele a tu profesor para restablecerla.";
+
+    var p2 = $("onbPaso2");
+    if(p2) p2.innerHTML = g
+      ? "<b>2 · Elige tus horarios.</b> Reservas tu lugar en las clases que quieras, desde tu agenda."
+      : "<b>2 · Elige tus horarios.</b> Coordinamos tus clases 1 a 1 a tu ritmo.";
+
+    var ct = $("iCalTit");
+    if(ct) ct.textContent = g ? "// TUS CLASES" : "// TUS HORARIOS";
+
+    var sl = $("c_slotLab");
+    if(sl) sl.textContent = g
+      ? "Elige tu horario (te apartamos el lugar apenas pagues)"
+      : "Elige tu horario (lo separamos apenas pagues)";
+
+    var tp = $("chatTabPriv");
+    if(tp) tp.textContent = sp ? "Con la academia" : "Con el profe";
+
+    var pn = $("payboxNoTxt");
+    if(pn) pn.textContent = sp
+      ? "Para coordinar el pago, escríbenos por WhatsApp y lo cuadramos."
+      : "Para coordinar el pago, escríbeme directo por WhatsApp y lo cuadramos al toque.";
+
+    var pr = $("pagoRegTxt");
+    if(pr) pr.textContent = sp
+      ? "Apenas veamos tu yapeo/plineo activamos tu paquete — suele ser el mismo día, casi siempre en minutos. Te aparecerá aquí mismo, en tu portal."
+      : "Apenas vea tu yapeo/plineo activo tu paquete — suele ser el mismo día, casi siempre en minutos. Te aparecerá aquí mismo, en tu portal.";
+
+    var pnn = $("pagoRegNota");
+    if(pnn) pnn.textContent = sp
+      ? "¿Quieres acelerarlo? Avísanos por WhatsApp y lo confirmamos."
+      : "¿Quieres acelerarlo? Avísame por WhatsApp y lo confirmo al toque.";
+  }catch(e){}
+}
 /* tarea_audio: JSON array [{u,n}] (nuevo) o string con un solo url (formato viejo) */
 function parseAudios(v){
   v=String(v==null?"":v).trim();
@@ -813,7 +896,7 @@ function api(path, opts){
       if(!res.ok){
         // Traduce códigos crudos a mensaje humano (el alumno nunca debe leer "trial_vencido").
         var msg = data.error || "Error";
-        if(msg === "trial_vencido" || res.status === 402){ msg = "Esta academia está inactiva por ahora. Escríbele a tu profesor para que la reactive."; }
+        if(msg === "trial_vencido" || res.status === 402){ msg = "Esta academia está inactiva por ahora. Escríbele a "+quienResponde()+" para que la reactive."; }
         var e = new Error(msg); e.status = res.status; e.data = data; e.code = data.error; throw e;
       }
       return data;
@@ -903,6 +986,7 @@ function renderActive(){
   if(!ME) return;
   aplicarModulosAlumno();
   aplicarChatPortal();
+  aplicarVozPortal();
   var v=vistaActual();
   document.querySelectorAll(".side nav a").forEach(function(a){
     var on = a.dataset.v===v;
@@ -956,7 +1040,7 @@ function renderInicio(){
   else hp.style.display="none";
   if(ME.compraPendiente){
     $("iPend").innerHTML = '<strong>// PAGO EN VERIFICACIÓN</strong><br>Tu pago de '+esc(ME.compraPendiente.paquete)+
-      ' está en verificación — te confirmo apenas lo vea.';
+      ' está en verificación — '+vz("te confirmo apenas lo vea.","te confirmamos apenas lo veamos.");
     show("iPend");
   } else hide("iPend");
 
@@ -1002,9 +1086,12 @@ function renderInicio(){
 
   if(a){
     var nProx = (ME.proximasClases||[]).length;
+    /* "(suelto o fijo semanal)" solo si el horario fijo existe: la academia que lo apago
+       (portal_fija_off, caso Elevate) reserva clase por clase y esa aclaracion la confunde. */
+    var comoReserva = (ME.portal && ME.portal.fija_off) ? "." : " (suelto o fijo semanal).";
     $("iCalNota").textContent = nProx>0
       ? "Tienes "+nProx+" clase"+(nProx===1?"":"s")+" agendada"+(nProx===1?"":"s")+". Reserva, mueve o agrega más desde tu agenda."
-      : "Tu paquete está activo. Reserva tu primera clase ahora (suelto o fijo semanal).";
+      : "Tu paquete está activo. Reserva tu primera clase ahora"+comoReserva;
     $("iCalWrap").classList.toggle("nudge", alumnoActivoSinReservar());
     show("iCalWrap");
   } else hide("iCalWrap");
@@ -1542,7 +1629,7 @@ $("btnCopiarLink").addEventListener("click",function(){
 /* ---------- VISTA: RECURSOS ---------- */
 function renderRecursos(){
   var rec = ME.recursos || [];
-  if(rec.length===0){ $("recList").innerHTML=""; $("recVacio").textContent = ME.recursosBloqueados ? "Los recursos exclusivos se desbloquean cuando activas tu primer paquete." : "Pronto subiré material aquí — atento al chat."; show("recVacio"); return; }
+  if(rec.length===0){ $("recList").innerHTML=""; $("recVacio").textContent = ME.recursosBloqueados ? "Los recursos exclusivos se desbloquean cuando activas tu primer paquete." : vz("Pronto subiré material aquí — atento al chat.","Pronto subiremos material aquí — atento al chat."); show("recVacio"); return; }
   hide("recVacio");
   $("recList").innerHTML = rec.map(function(r){
     var urlRec = String(r.url||"");
@@ -1587,7 +1674,7 @@ function urlB64(b){var p='='.repeat((4-b.length%4)%4);var s=(b+p).replace(/-/g,'
 function pushSoportado(){ return ('serviceWorker' in navigator) && ('PushManager' in window) && ('Notification' in window); }
 function mostrarAvisos(activos){
   if(activos){ hide("btnAvisosOn"); show("btnAvisosOff"); $("avisosTxt").textContent="Avisos activados en este dispositivo ✓"; }
-  else { show("btnAvisosOn"); hide("btnAvisosOff"); $("avisosTxt").textContent="Activa los avisos para enterarte de tus clases, tareas y respuestas del profe."; }
+  else { show("btnAvisosOn"); hide("btnAvisosOff"); $("avisosTxt").textContent=vz("Activa los avisos para enterarte de tus clases, tareas y respuestas del profe.","Activa los avisos para enterarte de tus clases, tareas y respuestas de tu academia."); }
 }
 function renderAvisos(){
   if(!pushSoportado()){ hide("btnAvisosOn"); hide("btnAvisosOff"); show("avisosNoSop"); return; }
@@ -1666,7 +1753,7 @@ function chatRender(msgs, append){
   var abajo = box.scrollTop + box.clientHeight >= box.scrollHeight - 40;
   var html = msgs.map(function(m){
     return '<div class="chat-msg'+(m.mio?' mio':'')+'">'+
-      '<div class="chat-meta">'+(m.es_admin?'<span class="chat-profe">PROFE</span>':'')+esc(m.nombre)+' · '+horaDe(m.fecha)+'</div>'+
+      '<div class="chat-meta">'+(m.es_admin?'<span class="chat-profe">'+vz("PROFE","ACADEMIA")+'</span>':'')+esc(m.nombre)+' · '+horaDe(m.fecha)+'</div>'+
       '<div class="chat-texto">'+esc(m.texto)+'</div></div>';
   }).join("");
   if(append){ box.insertAdjacentHTML("beforeend", html); if(abajo) chatScrollFondo(); }
@@ -1693,7 +1780,7 @@ function chatSetCanal(canal){
   show("chatInputWrap"); hide("chatBloqueado");
   if(chatCanal==="privado" && (!ME || !ME.alumno)){
     hide("chatInputWrap");
-    $("chatBloqueado").textContent = "El chat con el profe se abre cuando actives tu primer paquete 🙂";
+    $("chatBloqueado").textContent = vz("El chat con el profe se abre cuando actives tu primer paquete 🙂","El chat con la academia se abre cuando actives tu primer paquete 🙂");
     show("chatBloqueado");
   }
   chatPoll();
@@ -1955,6 +2042,14 @@ function itemsAgenda(){
     AG_LLENOS.forEach(function(iso){ out.push(lee(iso,"lleno")); });
     AG_FUERA.forEach(function(iso){ out.push(lee(iso,"fuera")); });
   }
+  /* Corroboracion GRATIS de "esto es grupal": el worker lo deduce del aforo que vive en
+     config, pero el aforo tambien se puede fijar franja por franja desde la agenda del
+     panel. Esos cupos ya vienen en esta misma respuesta, asi que si alguno pasa de 1 la
+     academia es grupal aunque config no lo diga, y sin una sola query extra. */
+  if(!VOZ_GRUPAL_AGENDA && out.some(function(it){ return (Number(it.cupo)||0) > 1; })){
+    VOZ_GRUPAL_AGENDA = true;
+    aplicarVozPortal();
+  }
   return out;
 }
 // Chips de la clase: tipo (Mat / Máquinas), sala, quién la dicta y cupos libres.
@@ -1994,7 +2089,7 @@ function pintarSlots(){
   var todos = AG_FILTRO ? reservables.filter(function(it){ return catDe(it.curso)===AG_FILTRO; }) : reservables;
   if(todos.length===0){
     $("agSlots").innerHTML = chipsDeTipo(reservables) + avisoFueraDePlan(items) +
-      '<p class="note" style="margin:0">'+(AG_FILTRO?"No hay horarios de ese tipo en las próximas semanas.":"No hay horarios en las próximas semanas. Escríbeme y lo cuadramos.")+'</p>';
+      '<p class="note" style="margin:0">'+(AG_FILTRO?"No hay horarios de ese tipo en las próximas semanas.":("No hay horarios en las próximas semanas. "+vz("Escríbeme y lo cuadramos.","Escríbenos y lo cuadramos.")))+'</p>';
     return;
   }
   // agrupo TODAS las clases (libres + llenas) por día
@@ -2092,7 +2187,7 @@ function reservarSlot(iso, sala){
   api("/app/api/agenda/reservar",{method:"POST",body:JSON.stringify({inicio_utc:iso, tipo:AG_TIPO, sala:sala||""})})
     .then(function(r){
       if(r.tipo==="fija"){
-        var m = "Listo, aparté "+r.reservadas+" clase"+(r.reservadas===1?"":"s")+" 🎸";
+        var m = vz("Listo, aparté ","Listo, apartamos ")+r.reservadas+" clase"+(r.reservadas===1?"":"s")+" 🎸";
         if(r.saltadas && r.saltadas.length){
           var fechas = r.saltadas.map(function(iso){ return fmtFechaLocal(iso); }).join(", ");
           m += ". No estaba libre: "+fechas+" (no se descuentan, resérvalas sueltas cuando quieras).";
@@ -2205,7 +2300,7 @@ function cargarMe(){
     if(e.status===402 || e.code==="trial_vencido"){
       setPantalla("viewAuth");
       setAuthTab(REF_URL ? "reg" : "login");
-      $("loginErr").textContent = "Esta academia está inactiva por ahora. Escríbele a tu profesor para que la reactive.";
+      $("loginErr").textContent = "Esta academia está inactiva por ahora. Escríbele a "+quienResponde()+" para que la reactive.";
       return;
     }
     setTok(null); ME=null;
@@ -2226,12 +2321,20 @@ var TOUR_STEPS = [
     texto:"Tu resumen de un vistazo: el plan que tienes, cuántas clases te quedan y tus próximos horarios. Cuando actives un paquete, todo aparece aquí." },
   { sel:'a[data-v="comprar"]', vista:"comprar", titulo:"Activa tu paquete",
     texto:"Eliges "+cursosOrLower()+" y pagas con Yape, Plin o tarjeta. Se activa el mismo día, casi siempre en minutos. Sin paquete no hay clases que reservar, así que parte por acá." },
+  /* texto como funcion: se evalua al pintar el paso, cuando ME y los flags de voz ya llegaron */
   { sel:'a[data-v="agenda"]', vista:"agenda", titulo:"Reserva tus clases",
-    texto:"Con tu paquete activo eliges horarios aquí. Una clase suelta cuando quieras, o un horario fijo semanal para no pensarlo más. También cancelas o reprogramas desde acá." },
+    texto:function(){ return esGrupal()
+      ? "Con tu paquete activo eliges tus clases aquí y apartas tu lugar. También cancelas o reprogramas desde acá."
+      : "Con tu paquete activo eliges horarios aquí. Una clase suelta cuando quieras, o un horario fijo semanal para no pensarlo más. También cancelas o reprogramas desde acá."; } },
   { sel:'a[data-v="recursos"]', vista:"recursos", titulo:"Tu material",
-    texto:"PDFs, audios y ejercicios que subo para ti. Se desbloquean apenas tu paquete esté activo. Tu tarea de la semana vive en Mis clases." },
-  { sel:".chat-head", selAlt:"#chatFab", vista:"inicio", titulo:"Habla conmigo",
-    texto:"Este es el chat directo. Tienes el canal grupal con la comunidad y un canal privado conmigo para tus dudas. Te respondo por acá." },
+    texto:function(){ return vz(
+      "PDFs, audios y ejercicios que subo para ti. Se desbloquean apenas tu paquete esté activo. Tu tarea de la semana vive en Mis clases.",
+      "PDFs, audios y ejercicios que subimos para ti. Se desbloquean apenas tu paquete esté activo. Tu tarea de la semana vive en Mis clases."); } },
+  { sel:".chat-head", selAlt:"#chatFab", vista:"inicio",
+    titulo:function(){ return vz("Habla conmigo","Habla con tu academia"); },
+    texto:function(){ return vz(
+      "Este es el chat directo. Tienes el canal grupal con la comunidad y un canal privado conmigo para tus dudas. Te respondo por acá.",
+      "Este es el chat directo. Tienes el canal grupal con la comunidad y un canal privado con la academia para tus dudas. Te respondemos por acá."); } },
   { sel:'a[data-v="referidos"]', vista:"referidos", titulo:"Trae a un amigo",
     texto:"Tu código es tuyo. Cuando alguien compra su primer paquete con él, ganas S/"+MARCA.referidoSoles+" de descuento para tu próxima compra. Listo, ya conoces tu portal. A darle." }
 ];
@@ -2279,8 +2382,10 @@ function pintarPasoTour(){
     '<h4></h4><p></p>'+
     '<div class="tour-actions"><button class="tour-skip" type="button">Saltar</button>'+
     '<button class="tour-next" type="button">'+(ultimo?"Empezar":"Siguiente")+'</button></div>';
-  pop.querySelector("h4").textContent = step.titulo;
-  pop.querySelector("p").textContent = step.texto;
+  /* titulo/texto pueden ser funcion (voz del portal: individual vs. academia grupal) */
+  var vtxt=function(x){ try{ return (typeof x==="function") ? x() : x; }catch(e){ return ""; } };
+  pop.querySelector("h4").textContent = vtxt(step.titulo);
+  pop.querySelector("p").textContent = vtxt(step.texto);
   pop.querySelector(".tour-skip").onclick = function(){ cerrarTour(true); };
   pop.querySelector(".tour-next").onclick = function(){ if(ultimo){ cerrarTour(true); } else { tourIdx++; irAPasoTour(); } };
   reposicionarTour();
@@ -2353,6 +2458,8 @@ function initAlumno(){
       $("eyebrowInicio").textContent = "// " + MARCA.nombre.toUpperCase() + " — PORTAL DE ALUMNO";
       /* multi-profesor: lista publica para elegir profe en la clase de prueba */
       if(Array.isArray(d.profesores)) PROFES_PUB = d.profesores;
+      /* voz del portal ya en la pantalla de login (aun no hay sesion, asi que ME es null) */
+      if(d.portal){ PUB_PORTAL = d.portal; aplicarVozPortal(); }
       /* cursos del tenant (editables en el panel del profe): repinta el select de compra y el texto del tour */
       if(Array.isArray(d.cursos) && d.cursos.length){
         MARCA.cursos = d.cursos;
@@ -2441,13 +2548,13 @@ window.initAlumno = initAlumno;
   function actualizarContador(){
     if(restantes==null) return;
     countEl.textContent=restantes+(limiteTotal?"/"+limiteTotal:"");
-    if(restantes<=0){ input.disabled=true; input.placeholder="Tope del mes: escríbele a tu profe por el chat"; }
+    if(restantes<=0){ input.disabled=true; input.placeholder="Tope del mes: "+vz("escríbele a tu profe por el chat","escríbele a tu academia por el chat"); }
   }
   function abrir(){
     panel.hidden=false; fab.setAttribute("aria-expanded","true");
     if(!iniciado){
       iniciado=true;
-      pintar("bot","Hola, soy la ayuda del portal. Pregúntame cómo hacer algo aquí (reservar, comprar tu paquete, ver tu tarea…). Lo de tus clases u horarios puntuales, escríbeselo a tu profe por el chat.");
+      pintar("bot","Hola, soy la ayuda del portal. Pregúntame cómo hacer algo aquí (reservar, comprar tu paquete, ver tu tarea…). Lo de tus clases u horarios puntuales, "+vz("escríbeselo a tu profe por el chat.","escríbeselo a tu academia por el chat."));
       api("/app/api/onboarding-ia").then(function(d){
         if(typeof d.limite==="number"){ limiteTotal=d.limite; }
         if(typeof d.restantes==="number"){ restantes=d.restantes; actualizarContador(); }
