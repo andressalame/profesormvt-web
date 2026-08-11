@@ -3371,12 +3371,19 @@ export default {
           clasesHistorico,
           proximasClases,
           reprog: (function(){ const rc = reprogCfg(config); return { activo: rc.activo, min_h: rc.minH }; })(),
+          /* FUGA CERRADA (11-ago-2026): aqui viajaba el juego COMPLETO de datos de cobro
+             (Yape + titular, BCP + CCI, Scotiabank + CCI, wallet USDT) a CUALQUIER sesion.
+             Y como el registro de MVT es abierto y gratuito, "cualquier sesion" es cualquiera
+             con un correo: el arreglo de la manana en /api/pagar-info quedaba de adorno porque
+             el atacante se registraba en 10 segundos y pedia lo mismo por aca.
+             Ahora solo viajan BANDERAS (que rieles existen) para pintar el selector. Los digitos
+             los sirve /api/pago-datos, de uno en uno y recien cuando el alumno elige como pagar
+             — el unico instante en que el dato hace falta. */
           config: {
-            pago_numero: config.pago_numero,
-            pago_titular: config.pago_titular,
-            bcp_cuenta: config.bcp_cuenta, bcp_cci: config.bcp_cci,
-            scotia_cuenta: config.scotia_cuenta, scotia_cci: config.scotia_cci,
-            crypto_moneda: config.crypto_moneda, crypto_red: config.crypto_red, crypto_wallet: config.crypto_wallet,
+            yape_on: !!config.pago_numero,
+            bcp_on: !!config.bcp_cuenta,
+            scotia_on: !!config.scotia_cuenta,
+            crypto_on: !!config.crypto_wallet,
             mp_on: !!mpToken(env),
             vapid_public: env.VAPID_PUBLIC_KEY || ""
           }
@@ -3458,19 +3465,31 @@ export default {
         const bPD = await request.json().catch(() => ({}));
         const metodoPD = String(bPD.metodo || "").trim();
         const cPD = await loadConfig(env).catch(() => ({}));
-        let textoPD = "";
+        /* `texto` es la version plana que consume la pagina publica /pagar desde el 11-ago.
+           `lab/num/sub/titular` se agregaron el mismo dia para que el PORTAL de alumnos pinte
+           su caja de siempre (numero grande en mono, titular abajo) sin tener que recibir el
+           bloque de config completo en /api/me. Es aditivo: /pagar sigue leyendo solo `texto`. */
+        let textoPD = "", labPD = "", numPD = "", subPD = "", titPD = "";
         if (metodoPD === "Yape/Plin/Sip" && cPD.pago_numero){
+          labPD = "Yape, Plin o Sip a"; numPD = cPD.pago_numero; titPD = cPD.pago_titular || "";
           textoPD = "Yapea o Plinea a: " + cPD.pago_numero + (cPD.pago_titular ? "\nA nombre de: " + cPD.pago_titular : "");
         } else if (metodoPD === "Transferencia BCP" && cPD.bcp_cuenta){
+          labPD = "Transferencia BCP (Soles)"; numPD = cPD.bcp_cuenta;
+          subPD = cPD.bcp_cci ? "CCI: " + cPD.bcp_cci : ""; titPD = cPD.pago_titular || "";
           textoPD = "BCP Soles: " + cPD.bcp_cuenta + (cPD.bcp_cci ? "\nCCI: " + cPD.bcp_cci : "");
         } else if (metodoPD === "Transferencia Scotiabank" && cPD.scotia_cuenta){
+          labPD = "Transferencia Scotiabank (Soles)"; numPD = cPD.scotia_cuenta;
+          subPD = cPD.scotia_cci ? "CCI: " + cPD.scotia_cci : ""; titPD = cPD.pago_titular || "";
           textoPD = "Scotiabank Soles: " + cPD.scotia_cuenta + (cPD.scotia_cci ? "\nCCI: " + cPD.scotia_cci : "");
         } else if (metodoPD === "Crypto USDT" && cPD.crypto_wallet){
+          labPD = (cPD.crypto_moneda || "USDT") + " por red " + (cPD.crypto_red || "Tron (TRC20)");
+          numPD = cPD.crypto_wallet;
+          subPD = "Envía el equivalente del total en " + (cPD.crypto_moneda || "USDT") + " por esa red.";
           textoPD = (cPD.crypto_moneda || "USDT") + " por " + (cPD.crypto_red || "Tron (TRC20)") + ":\n" + cPD.crypto_wallet;
         } else {
           return json({ error: "Ese metodo no esta disponible ahora." }, 404);
         }
-        return json({ texto: textoPD });
+        return json({ texto: textoPD, lab: labPD, num: numPD, sub: subPD, titular: titPD });
       }
 
       if (url.pathname === "/api/pagar-directo" && request.method === "POST"){

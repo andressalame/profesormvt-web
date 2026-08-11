@@ -7729,21 +7729,36 @@ export default {
         if (!tPD) return json({ error: "Academia no encontrada" }, 404);
         if (tPD.estado === "vencido") return json({ error: "Pagos en pausa" }, 403);
         const cPD = await loadConfig(env, tPD.id);
-        let textoPD = "";
+        /* `texto` es la version plana que consume la pagina publica /pagar desde el 11-ago.
+           `lab/num/sub/titular` se agregaron el mismo dia para que el PORTAL del alumno pinte
+           su caja de siempre (numero grande en mono, titular abajo) sin recibir el bloque de
+           config completo en /app/api/me. Es aditivo: /pagar sigue leyendo solo `texto`. */
+        let textoPD = "", labPD = "", numPD = "", subPD = "", titPD = "";
+        const titCfg = cPD.pago_titular || "";
         if (metodoPD === "Yape/Plin/Sip" && cPD.pago_numero){
+          labPD = "Yape, Plin o Sip a"; numPD = cPD.pago_numero; titPD = titCfg;
           textoPD = "Yapea o Plinea a: " + cPD.pago_numero + (cPD.pago_titular ? "\nA nombre de: " + cPD.pago_titular : "");
         } else if (metodoPD === "Transferencia BCP" && cPD.bcp_cuenta){
+          labPD = "Transferencia BCP (Soles)"; numPD = cPD.bcp_cuenta;
+          subPD = cPD.bcp_cci ? "CCI: " + cPD.bcp_cci : ""; titPD = titCfg;
           textoPD = "BCP Soles: " + cPD.bcp_cuenta + (cPD.bcp_cci ? "\nCCI: " + cPD.bcp_cci : "");
         } else if (metodoPD === "Transferencia Interbank" && cPD.interbank_cuenta){
+          labPD = "Transferencia Interbank (Soles)"; numPD = cPD.interbank_cuenta;
+          subPD = cPD.interbank_cci ? "CCI: " + cPD.interbank_cci : ""; titPD = titCfg;
           textoPD = "Interbank Soles: " + cPD.interbank_cuenta + (cPD.interbank_cci ? "\nCCI: " + cPD.interbank_cci : "");
         } else if (metodoPD === "Transferencia Scotiabank" && cPD.scotia_cuenta){
+          labPD = "Transferencia Scotiabank (Soles)"; numPD = cPD.scotia_cuenta;
+          subPD = cPD.scotia_cci ? "CCI: " + cPD.scotia_cci : ""; titPD = titCfg;
           textoPD = "Scotiabank Soles: " + cPD.scotia_cuenta + (cPD.scotia_cci ? "\nCCI: " + cPD.scotia_cci : "");
         } else if (metodoPD === "Crypto USDT" && cPD.crypto_wallet){
+          labPD = (cPD.crypto_moneda || "USDT") + " por red " + (cPD.crypto_red || "Tron (TRC20)");
+          numPD = cPD.crypto_wallet;
+          subPD = "Envía el equivalente del total en " + (cPD.crypto_moneda || "USDT") + " por esa red.";
           textoPD = (cPD.crypto_moneda || "USDT") + " por " + (cPD.crypto_red || "Tron (TRC20)") + ":\n" + cPD.crypto_wallet;
         } else {
           return json({ error: "Ese metodo no esta disponible en esta academia." }, 404);
         }
-        return json({ texto: textoPD });
+        return json({ texto: textoPD, lab: labPD, num: numPD, sub: subPD, titular: titPD });
       }
 
       if (path === "/app/api/agenda/slots-publicos" && request.method === "GET"){
@@ -8398,13 +8413,24 @@ export default {
           /* modulos que el profe oculto: el portal del alumno los respeta (14-jul: por ahora
              solo "material" toca al alumno; chat y agenda no son apagables). */
           modulos_off: String(config.modulos_off || "").split(",").map(s => s.trim()).filter(Boolean),
+          /* FUGA CERRADA (11-ago-2026): aqui viajaba el juego COMPLETO de datos de cobro del
+             DUENO de la academia (Yape + titular, BCP/Interbank/Scotiabank + CCI, wallet USDT)
+             a CUALQUIER sesion del tenant. Y registrarse en una academia es abierto y gratis
+             (POST /app/api/registro solo pide slug + nombre + correo + clave), asi que bastaba
+             conocer el slug para cosechar las cuentas bancarias del cliente.
+             Se dejo abierto a proposito en su momento porque gatearlo por `alumno_id` rompia la
+             PRIMERA venta: el alumno nuevo que va a comprar todavia no tiene ficha. La solucion
+             no era gatear por ficha sino no mandar los digitos de entrada: ahora solo viajan
+             BANDERAS (que rieles existen) para pintar el selector, y los digitos los sirve
+             /app/api/pago-datos cuando el alumno ya eligio como pagar. La primera compra sigue
+             viva porque el dato llega igual, solo que en el paso donde de verdad hace falta. */
           config: {
-            pago_numero: config.pago_numero, pago_titular: config.pago_titular,
-            bcp_cuenta: config.bcp_cuenta, bcp_cci: config.bcp_cci,
-            scotia_cuenta: config.scotia_cuenta, scotia_cci: config.scotia_cci,
-            interbank_cuenta: config.interbank_cuenta, interbank_cci: config.interbank_cci,
+            yape_on: !!config.pago_numero,
+            bcp_on: !!config.bcp_cuenta,
+            interbank_on: !!config.interbank_cuenta,
+            scotia_on: !!config.scotia_cuenta,
+            crypto_on: !!config.crypto_wallet,
             mp_solo_tarjeta: String(config.mp_solo_tarjeta || "") === "1",
-            crypto_moneda: config.crypto_moneda, crypto_red: config.crypto_red, crypto_wallet: config.crypto_wallet,
             vapid_public: env.VAPID_PUBLIC_KEY || "",
             // Tarjeta del alumno: si el profe conecto su cuenta de MP (el APP_SECRET solo hace falta para el OAuth)
             mp_tarjeta: !!(await env.DB.prepare("SELECT mp_access_token FROM tenants WHERE id = ?1").bind(tid).first().then(r => r && r.mp_access_token).catch(() => false)),
@@ -10818,8 +10844,14 @@ export default {
           const cobroOnPanel = !!(mpVivo || config.pago_numero || config.bcp_cuenta || config.interbank_cuenta || config.scotia_cuenta || config.crypto_wallet);
           /* HALLAZGO del review: el rol profesor NO recibe secretos del tenant (con el token
              de Nubefact podria emitir comprobantes por fuera saltandose el guard del dueno). */
+          /* 11-ago-2026: la lista se habia quedado corta. Tapaba BCP y Scotiabank pero dejaba
+             pasar el Yape con titular y la cuenta Interbank + CCI (Interbank se agrego a config
+             el 10-ago y nadie lo sumo aqui). Un profesor contratado leia los datos de cobro
+             personales del dueno de la academia. Van los rieles COMPLETOS. */
           if (!esDueno){
-            for (const kSec of ["nubefact_token", "nubefact_ruta", "fact_proximo_numero", "gcal_client_secret", "gcal_client_id", "bcp_cuenta", "bcp_cci", "scotia_cuenta", "scotia_cci", "crypto_wallet"]){
+            for (const kSec of ["nubefact_token", "nubefact_ruta", "fact_proximo_numero", "gcal_client_secret", "gcal_client_id",
+                                "pago_numero", "pago_titular", "bcp_cuenta", "bcp_cci", "interbank_cuenta", "interbank_cci",
+                                "scotia_cuenta", "scotia_cci", "crypto_moneda", "crypto_red", "crypto_wallet"]){
               if (kSec in config) delete config[kSec];
             }
           }

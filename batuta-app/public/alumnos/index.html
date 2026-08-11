@@ -1409,11 +1409,14 @@ function ajustarMetodosPago(){
     op.disabled=!on; op.hidden=!on;
     if(on) disponibles.push(val);
   }
-  setOp("Yape/Plin/Sip", !!cf.pago_numero);
-  setOp("Transferencia BCP", !!cf.bcp_cuenta);
-  setOp("Transferencia Interbank", !!cf.interbank_cuenta);
-  setOp("Transferencia Scotiabank", !!cf.scotia_cuenta);
-  setOp("Crypto USDT", !!cf.crypto_wallet);
+  /* Banderas, no digitos (11-ago-2026): /app/api/me ya no manda el numero de Yape ni las
+     cuentas del profe, solo dice QUE rieles existen. Los digitos llegan al elegir metodo
+     (ver renderPaybox). */
+  setOp("Yape/Plin/Sip", !!cf.yape_on);
+  setOp("Transferencia BCP", !!cf.bcp_on);
+  setOp("Transferencia Interbank", !!cf.interbank_on);
+  setOp("Transferencia Scotiabank", !!cf.scotia_on);
+  setOp("Crypto USDT", !!cf.crypto_on);
   metodosAutoActivos().slice().reverse().forEach(function(a){
     if(sel.querySelector('option[value="'+a.v+'"]')) disponibles.unshift(a.v);
   });
@@ -1550,21 +1553,42 @@ function pintarResumen(){
   if(esPruebaSel() && COMPRA_SLOT) partes.push(fmtFechaLocal(COMPRA_SLOT)+" "+fmtHoraLocal(COMPRA_SLOT));
   $("wizResumen").textContent = partes.join(" · ");
 }
+/* Los digitos de cobro ya NO vienen en /app/api/me (11-ago-2026): se piden aqui, UNO a la vez
+   y recien cuando el alumno eligio como pagar, que es el unico momento en que hacen falta.
+   Cache en memoria: pasear por el selector no repite el fetch. */
+var CACHE_PD = {};
+var PAYBOX_GEN = 0;   // corta la respuesta que llega tarde si ya cambio de metodo
+function traeDatosPago(v){
+  if(CACHE_PD[v] !== undefined) return Promise.resolve(CACHE_PD[v]);
+  return fetch('/app/api/pago-datos', {
+    method:'POST', headers:{'content-type':'application/json'},
+    body: JSON.stringify({ slug: SLUG, metodo: v })
+  }).then(function(r){ return r.json().then(function(d){ CACHE_PD[v] = r.ok ? d : null; return CACHE_PD[v]; }); })
+    .catch(function(){ CACHE_PD[v] = null; return null; });
+}
+function pintarDatosPago(m, gen){
+  traeDatosPago(m).then(function(d){
+    if(gen !== PAYBOX_GEN) return;              // el alumno ya cambio de metodo
+    var cont = document.getElementById("pbDatos");
+    if(!cont) return;
+    if(!d || !d.num){
+      cont.innerHTML = '<div class="note">No se pudieron cargar los datos. Recarga la página o escríbele a tu profe.</div>';
+      return;
+    }
+    var esCrypto = (m === "Crypto USDT");
+    cont.innerHTML = '<div class="lab">'+esc(d.lab||"Datos para pagar")+'</div>'
+      + '<div class="num"'+(esCrypto ? ' style="font-size:14px;word-break:break-all;"' : '')+'>'+esc(d.num)+'</div>'
+      + (d.sub ? '<div class="note">'+esc(d.sub)+'</div>' : '')
+      + (d.titular ? '<div class="note">A nombre de: '+esc(d.titular)+'</div>' : '');
+  });
+}
 function renderPaybox(){
   var cf = (ME && ME.config) || {};
   var m = $("c_metodo").value;
-  var titular = cf.pago_titular ? ('<div class="note">A nombre de: '+esc(cf.pago_titular)+'</div>') : '';
+  var gen = ++PAYBOX_GEN;
   var html = "";
-  if(m === "Yape/Plin/Sip"){
-    html = cf.pago_numero ? ('<div class="lab">Yape, Plin o Sip a</div><div class="num">'+esc(cf.pago_numero)+'</div>'+titular) : '<div class="note">Aún no configurado.</div>';
-  } else if(m === "Transferencia BCP"){
-    html = '<div class="lab">Transferencia BCP (Soles)</div><div class="num">'+esc(cf.bcp_cuenta||"-")+'</div><div class="note">CCI: '+esc(cf.bcp_cci||"-")+'</div>'+titular;
-  } else if(m === "Transferencia Interbank"){
-    html = '<div class="lab">Transferencia Interbank (Soles)</div><div class="num">'+esc(cf.interbank_cuenta||"-")+'</div><div class="note">CCI: '+esc(cf.interbank_cci||"-")+'</div>'+titular;
-  } else if(m === "Transferencia Scotiabank"){
-    html = '<div class="lab">Transferencia Scotiabank (Soles)</div><div class="num">'+esc(cf.scotia_cuenta||"-")+'</div><div class="note">CCI: '+esc(cf.scotia_cci||"-")+'</div>'+titular;
-  } else if(m === "Crypto USDT"){
-    html = '<div class="lab">'+esc(cf.crypto_moneda||"USDT")+' por red '+esc(cf.crypto_red||"Tron (TRC20)")+'</div><div class="num" style="font-size:14px;word-break:break-all;">'+esc(cf.crypto_wallet||"-")+'</div><div class="note">Envía el equivalente del total en '+esc(cf.crypto_moneda||"USDT")+' por esa red.</div>';
+  if(m === "Yape/Plin/Sip" || m === "Transferencia BCP" || m === "Transferencia Interbank" || m === "Transferencia Scotiabank" || m === "Crypto USDT"){
+    html = '<div id="pbDatos"><div class="note">Cargando los datos para pagar…</div></div>';
   } else if(m === "Tarjeta (Mercado Pago)" || m === "Tarjeta (Stripe)" || m === "Tarjeta/Yape (Culqi)"){
     var pk = $("c_paquete").value;
     if(pk){
@@ -1588,6 +1612,7 @@ function renderPaybox(){
   var ssF = $("c_screenshot") && $("c_screenshot").closest(".field"); if(ssF) ssF.style.display = esAuto ? "none" : "";
   if($("btnYaPague")) $("btnYaPague").style.display = esAuto ? "none" : "";
   $("payboxOk").innerHTML = html;
+  if(!esAuto) pintarDatosPago(m, gen);   // los digitos llegan aparte, ya con el metodo elegido
   var btnT = document.getElementById("btnPagarTarjeta");
   if(btnT) btnT.addEventListener("click", pagarConAuto);
   show("payboxOk"); hide("payboxNo");
