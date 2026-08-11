@@ -1832,8 +1832,11 @@ function sanearRespuestaIA(t){
     .replace(/\s{2,}/g, " ")
     .trim();
 }
-async function llamarClaudeOnboarding(env, system, mensajes, extraSystem){
+async function llamarClaudeOnboarding(env, system, mensajes, extraSystem, modelo){
   const extra = String(extraSystem || "").trim();
+  /* modelo opcional (10-ago-2026): la rama negocio puede pedir Sonnet para la linea PROPIA de
+     venta de Batuta (kb.modelo = "sonnet"); todo lo demas sigue en Haiku (el modelo de clientes). */
+  const modeloId = modelo === "sonnet" ? "claude-sonnet-4-5-20250929" : "claude-haiku-4-5-20251001";
   if (env.ANTHROPIC_API_KEY){
     try {
       /* system en 2 bloques: el manual largo y FIJO lleva cache_control (en conversaciones
@@ -1849,7 +1852,7 @@ async function llamarClaudeOnboarding(env, system, mensajes, extraSystem){
           "anthropic-version": "2023-06-01",
           "content-type": "application/json"
         },
-        body: JSON.stringify({ model: "claude-haiku-4-5-20251001", max_tokens: 350, system: sysBlocks, messages: mensajes })
+        body: JSON.stringify({ model: modeloId, max_tokens: 350, system: sysBlocks, messages: mensajes })
       });
       if (resp.ok){
         const data = await resp.json().catch(() => null);
@@ -2045,6 +2048,9 @@ async function ensureNegocioSchema(env){
     await env.DB.prepare(
       "CREATE TABLE IF NOT EXISTS wa_negocio_lead (negocio_id TEXT NOT NULL, telefono TEXT NOT NULL, nombre TEXT DEFAULT '', ultimo TEXT DEFAULT '', actualizado TEXT DEFAULT '', PRIMARY KEY (negocio_id, telefono))"
     ).run();
+    /* pausa por chat (bandeja 10-ago-2026): 'on' = la IA se calla en ese chat y responde Andres
+       a mano desde la bandeja. ALTER idempotente: falla en silencio si la columna ya existe. */
+    try { await env.DB.prepare("ALTER TABLE wa_negocio_lead ADD COLUMN pausa TEXT DEFAULT ''").run(); } catch (e) {}
     NEG_SCHEMA_OK = true;
   } catch (e) {}
 }
@@ -2166,8 +2172,30 @@ async function manejarNegocioWA(env, { phoneId, from, texto, nombre }){
   // freno de abuso: max ~12 respuestas por cliente por hora (misma ventana horaria)
   if (await chatbotPasoTope(env, "neg:" + neg.id + ":" + from, 12)) return true;
   const kb = negocioKbParse(neg.kb);
-  await negocioLeadUpsert(env, neg.id, from, nombre, texto);
   const synthTenant = "neg:" + neg.id;
+  /* Chat NUEVO (primera vez que este telefono escribe a este negocio) -> UN aviso a Andres por
+     correo, disparado por CODIGO (leccion 19-jul: nunca a criterio del modelo). No se repite
+     por mensaje: solo cuando la fila del lead no existia. */
+  let leadPrev = null;
+  try { leadPrev = await env.DB.prepare("SELECT telefono, pausa FROM wa_negocio_lead WHERE negocio_id = ?1 AND telefono = ?2").bind(neg.id, from).first(); } catch (e) {}
+  await negocioLeadUpsert(env, neg.id, from, nombre, texto);
+  if (!leadPrev){
+    try {
+      await alertaCorreoAndres(env,
+        "WhatsApp " + (neg.nombre || "negocio") + ": chat nuevo de " + (nombre || from),
+        "Chat nuevo en la linea Cloud API.\n\nNegocio: " + (neg.nombre || neg.id) +
+        "\nDe: " + (nombre ? nombre + " (" + from + ")" : from) +
+        "\nMensaje: " + String(texto || "").slice(0, 500) +
+        "\n\nBandeja (ver chat, responder a mano o pausar la IA):\nhttps://batuta.lat/app/su/bandeja");
+    } catch (e) {}
+  }
+  /* Pausa por chat (bandeja): si Andres pauso este chat, la IA se calla. El mensaje igual
+     queda en el historial para que la bandeja lo muestre. */
+  if (leadPrev && String(leadPrev.pausa || "") === "on"){
+    const previoP = await waHistorialCargar(env, synthTenant, from);
+    await waHistorialGuardar(env, synthTenant, from, previoP.concat([{ role: "user", content: texto }]));
+    return true;
+  }
   // cupo mensual: solo las conversaciones NUEVAS (ventana de 24h) consumen. Al agotarse, el lead
   // ya quedo registrado y el dueno responde a mano (no se llama a la IA).
   if (await waEsNuevaConversacion(env, synthTenant, from)){
@@ -2177,7 +2205,9 @@ async function manejarNegocioWA(env, { phoneId, from, texto, nombre }){
   const datos = contextoNegocioWA(neg, kb, nombre);
   const previo = await waHistorialCargar(env, synthTenant, from);
   const conversacion = previo.concat([{ role: "user", content: texto }]);
-  let reply = await llamarClaudeOnboarding(env, WA_NEGOCIO_SYS, conversacion, datos);
+  // guarda el turno del cliente YA (aunque el envio falle, la bandeja lo muestra)
+  await waHistorialGuardar(env, synthTenant, from, conversacion);
+  let reply = await llamarClaudeOnboarding(env, WA_NEGOCIO_SYS, conversacion, datos, kb.modelo === "sonnet" ? "sonnet" : "");
   if (reply) reply = negocioLimpiarEstilo(reply); // regla dura negocio: sin em dash ni markdown
   if (!reply){
     // sin IA disponible: primer-toque calido de respaldo (no deja al cliente sin respuesta)
@@ -5416,6 +5446,63 @@ export default {
       return new Response(html, { headers: { "content-type": "text/html; charset=utf-8" } });
     }
 
+    /* -------- Bandeja Cloud API de Andres (10-ago-2026): chats de la rama negocio (3402) --------
+       Shell publico SIN datos: todo sale de /app/api/su/negocio-* con el ADMIN_TOKEN que Andres
+       pega una vez (queda en localStorage). Responder a mano via Graph API + pausar la IA por chat. */
+    if (path === "/app/su/bandeja" && request.method === "GET"){
+      const html = "<!doctype html><html lang='es'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'><meta name='robots' content='noindex'><title>Bandeja WhatsApp · Batuta</title><style>" +
+        "*{box-sizing:border-box}body{font-family:system-ui,sans-serif;background:#0d1117;color:#e6edf3;margin:0;height:100vh;display:flex;flex-direction:column}" +
+        "header{padding:10px 16px;border-bottom:1px solid #30363d;display:flex;align-items:center;gap:10px}header b span{color:#e8a33d}" +
+        "#estado{font-size:12px;color:#8b949e;margin-left:auto}" +
+        "main{flex:1;display:flex;min-height:0}" +
+        "#lista{width:290px;border-right:1px solid #30363d;overflow-y:auto}" +
+        ".chat{padding:10px 12px;border-bottom:1px solid #21262d;cursor:pointer}.chat:hover,.chat.sel{background:#161b22}" +
+        ".chat .q{font-weight:600;font-size:14px}.chat .u{color:#8b949e;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}" +
+        ".pausado{color:#e8a33d;font-size:11px;font-weight:700}" +
+        "#conv{flex:1;display:flex;flex-direction:column;min-width:0}" +
+        "#msgs{flex:1;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:8px}" +
+        ".m{max-width:78%;padding:8px 12px;border-radius:12px;font-size:14px;line-height:1.45;white-space:pre-wrap;word-break:break-word}" +
+        ".m.user{background:#161b22;border:1px solid #30363d;align-self:flex-start}" +
+        ".m.assistant{background:#1a2f23;border:1px solid #2ea04326;align-self:flex-end}" +
+        "#barra{display:flex;gap:8px;padding:10px;border-top:1px solid #30363d}" +
+        "textarea{flex:1;background:#161b22;color:#e6edf3;border:1px solid #30363d;border-radius:10px;padding:10px;font:inherit;resize:none;height:64px}" +
+        "button{background:#e8a33d;color:#12100e;border:0;border-radius:10px;padding:0 16px;font-weight:700;cursor:pointer}button:disabled{opacity:.5}" +
+        "button.sec{background:#21262d;color:#e6edf3;border:1px solid #30363d}" +
+        "#login{padding:40px;max-width:420px;margin:0 auto}input{width:100%;background:#161b22;color:#e6edf3;border:1px solid #30363d;border-radius:10px;padding:10px;font:inherit;margin:10px 0}" +
+        ".vacio{color:#8b949e;padding:20px;font-size:14px}" +
+        "</style></head><body>" +
+        "<header><b><span>BATUTA</span> · Bandeja WhatsApp</b><span id='hchat'></span><span id='estado'></span><button class='sec' id='salir' style='display:none'>Salir</button></header>" +
+        "<div id='login'><p>Pega el token de administrador para entrar. Se guarda solo en este navegador.</p><input id='tok' type='password' placeholder='ADMIN_TOKEN'><button id='entrar'>Entrar</button><p id='loginerr' style='color:#f85149'></p></div>" +
+        "<main id='app' style='display:none'><div id='lista'></div><div id='conv'><div id='msgs'><div class='vacio'>Elige un chat de la izquierda.</div></div>" +
+        "<div id='barra' style='display:none'><textarea id='txt' placeholder='Escribe tu respuesta (sale por WhatsApp al instante)'></textarea><button id='enviar'>Enviar</button><button class='sec' id='pausa'></button></div></div></main>" +
+        "<script>" +
+        "var T=null,SEL=null,CHATS=[],TIMER=null;" +
+        "function api(p,opt){opt=opt||{};opt.headers=Object.assign({'Authorization':'Bearer '+T,'content-type':'application/json'},opt.headers||{});return fetch('/app/api/su/'+p,opt).then(function(r){if(r.status===401){throw new Error('token')}return r.json()});}" +
+        "function esc(s){var d=document.createElement('div');d.textContent=s==null?'':String(s);return d.innerHTML;}" +
+        "function pintaLista(){var L=document.getElementById('lista');if(!CHATS.length){L.innerHTML=\"<div class='vacio'>Sin chats todavia. Cuando alguien escriba a la linea Cloud API, aparece aqui.</div>\";return;}" +
+        "L.innerHTML=CHATS.map(function(c){var k=c.negocio_id+'|'+c.telefono;return \"<div class='chat\"+(SEL===k?' sel':'')+\"' data-k='\"+esc(k)+\"'><div class='q'>\"+esc(c.nombre||c.telefono)+(c.pausa==='on'?\" <span class='pausado'>IA EN PAUSA</span>\":'')+\"</div><div class='u'>\"+esc((c.negocio_nombre||c.negocio_id)+' · '+(c.ultimo||''))+\"</div></div>\";}).join('');" +
+        "Array.prototype.forEach.call(L.querySelectorAll('.chat'),function(el){el.onclick=function(){abrir(el.getAttribute('data-k'));};});}" +
+        "function pintaConv(hist,lead){var M=document.getElementById('msgs');if(!hist||!hist.length){M.innerHTML=\"<div class='vacio'>Sin historial en este chat.</div>\";}else{M.innerHTML=hist.map(function(m){return \"<div class='m \"+(m.role==='assistant'?'assistant':'user')+\"'>\"+esc(m.content)+\"</div>\";}).join('');}M.scrollTop=M.scrollHeight;" +
+        "var p=document.getElementById('pausa');var on=lead&&lead.pausa==='on';p.textContent=on?'Reanudar IA':'Pausar IA';p.dataset.on=on?'1':'';}" +
+        "function refresca(){api('negocio-chats').then(function(d){CHATS=d.chats||[];pintaLista();document.getElementById('estado').textContent='al dia '+new Date().toLocaleTimeString();if(SEL){cargaConv();}}).catch(function(e){if(String(e.message)==='token'){logout('Token rechazado.');}else{document.getElementById('estado').textContent='sin conexion';}});}" +
+        "function cargaConv(){var pp=SEL.split('|');api('negocio-chat?negocio='+encodeURIComponent(pp[0])+'&telefono='+encodeURIComponent(pp[1])).then(function(d){pintaConv(d.historial,d.lead);}).catch(function(){});}" +
+        "function abrir(k){SEL=k;var pp=k.split('|');var c=null;for(var i=0;i<CHATS.length;i++){if(CHATS[i].negocio_id+'|'+CHATS[i].telefono===k)c=CHATS[i];}" +
+        "document.getElementById('hchat').textContent=c?('· '+(c.nombre||pp[1])+' ('+pp[1]+')'):'';document.getElementById('barra').style.display='flex';pintaLista();cargaConv();}" +
+        "document.getElementById('enviar').onclick=function(){if(!SEL)return;var t=document.getElementById('txt');var v=t.value.trim();if(!v)return;var pp=SEL.split('|');var b=this;b.disabled=true;" +
+        "api('negocio-responder',{method:'POST',body:JSON.stringify({negocio:pp[0],telefono:pp[1],texto:v})}).then(function(d){b.disabled=false;if(d.ok){t.value='';cargaConv();}else{alert('No salio: revisa que el numero este activo en Meta.');}}).catch(function(){b.disabled=false;alert('Error de conexion.');});};" +
+        "document.getElementById('pausa').onclick=function(){if(!SEL)return;var pp=SEL.split('|');var on=this.dataset.on==='1';" +
+        "api('negocio-pausa',{method:'POST',body:JSON.stringify({negocio:pp[0],telefono:pp[1],pausa:on?'off':'on'})}).then(function(){refresca();});};" +
+        "document.getElementById('txt').addEventListener('keydown',function(e){if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();document.getElementById('enviar').click();}});" +
+        "function logout(msg){T=null;try{localStorage.removeItem('batuta_su_token');}catch(e){}clearInterval(TIMER);document.getElementById('app').style.display='none';document.getElementById('salir').style.display='none';document.getElementById('login').style.display='block';if(msg)document.getElementById('loginerr').textContent=msg;}" +
+        "document.getElementById('salir').onclick=function(){logout('');};" +
+        "function entra(tok){T=tok;api('negocio-chats').then(function(d){try{localStorage.setItem('batuta_su_token',tok);}catch(e){}" +
+        "document.getElementById('login').style.display='none';document.getElementById('app').style.display='flex';document.getElementById('salir').style.display='inline-block';CHATS=d.chats||[];pintaLista();TIMER=setInterval(refresca,8000);}).catch(function(){document.getElementById('loginerr').textContent='Token rechazado.';});}" +
+        "document.getElementById('entrar').onclick=function(){var v=document.getElementById('tok').value.trim();if(v)entra(v);};" +
+        "try{var g=localStorage.getItem('batuta_su_token');if(g)entra(g);}catch(e){}" +
+        "</script></body></html>";
+      return htmlResponse(html);
+    }
+
     if (!path.startsWith("/app/api/")){
       return env.ASSETS ? env.ASSETS.fetch(request) : json({ error: "No encontrado" }, 404);
     }
@@ -5859,8 +5946,83 @@ export default {
           const datos = contextoNegocioWA(neg, kb, b.nombre || "");
           const previo = (b.usar_historial && b.from) ? await waHistorialCargar(env, "neg:" + neg.id, String(b.from).replace(/\D/g, "")) : [];
           const conversacion = previo.concat([{ role: "user", content: texto }]);
-          const reply = await llamarClaudeOnboarding(env, WA_NEGOCIO_SYS, conversacion, datos);
-          return json({ ok: true, negocio: neg.nombre, enabled: neg.enabled, ia_disponible: reply != null, respuesta: reply, kb_datos: datos });
+          const reply = await llamarClaudeOnboarding(env, WA_NEGOCIO_SYS, conversacion, datos, kb.modelo === "sonnet" ? "sonnet" : "");
+          return json({ ok: true, negocio: neg.nombre, enabled: neg.enabled, ia_disponible: reply != null, respuesta: reply != null ? negocioLimpiarEstilo(reply) : null, kb_datos: datos });
+        }
+        /* ===== Bandeja Cloud API (10-ago-2026): chats de la rama negocio, respuesta a mano y pausa =====
+           Lo minimo para que Andres no quede sin manos el dia del corte 3402: la pagina
+           /app/su/bandeja consume estos 4 endpoints con el ADMIN_TOKEN. */
+        // Lista de chats (todos los negocios o uno): GET .../su/negocio-chats[?negocio=<id o phone_id>]
+        if (path === "/app/api/su/negocio-chats" && request.method === "GET"){
+          await ensureNegocioSchema(env);
+          const refC = String(url.searchParams.get("negocio") || "").trim();
+          let sql = "SELECT l.negocio_id, l.telefono, l.nombre, l.ultimo, l.actualizado, COALESCE(l.pausa,'') AS pausa, n.nombre AS negocio_nombre, n.phone_id " +
+            "FROM wa_negocio_lead l LEFT JOIN wa_negocio n ON n.id = l.negocio_id ";
+          let stmt;
+          if (refC){
+            sql += "WHERE l.negocio_id = ?1 OR n.phone_id = ?1 ORDER BY l.actualizado DESC LIMIT 200";
+            stmt = env.DB.prepare(sql).bind(refC);
+          } else {
+            sql += "ORDER BY l.actualizado DESC LIMIT 200";
+            stmt = env.DB.prepare(sql);
+          }
+          const { results: chats } = await stmt.all().catch(() => ({ results: [] }));
+          return json({ ok: true, chats: chats || [] });
+        }
+        // Historial de UN chat: GET .../su/negocio-chat?negocio=<id>&telefono=<digitos>
+        if (path === "/app/api/su/negocio-chat" && request.method === "GET"){
+          await ensureNegocioSchema(env);
+          const negId = String(url.searchParams.get("negocio") || "").trim();
+          const telH = String(url.searchParams.get("telefono") || "").replace(/\D/g, "");
+          if (!negId || !telH) return json({ error: "manda negocio y telefono" }, 400);
+          const historial = await waHistorialCargar(env, "neg:" + negId, telH);
+          const leadH = await env.DB.prepare("SELECT nombre, ultimo, actualizado, COALESCE(pausa,'') AS pausa FROM wa_negocio_lead WHERE negocio_id = ?1 AND telefono = ?2").bind(negId, telH).first().catch(() => null);
+          return json({ ok: true, historial, lead: leadH || null });
+        }
+        // Respuesta a MANO via Graph API (queda en el historial como turno del asistente):
+        // POST .../su/negocio-responder {"negocio":"<id>","telefono":"<digitos>","texto":"..."}
+        if (path === "/app/api/su/negocio-responder" && request.method === "POST"){
+          await ensureNegocioSchema(env);
+          const bR = await request.json().catch(() => ({}));
+          const negIdR = String(bR.negocio || "").trim();
+          const telR = String(bR.telefono || "").replace(/\D/g, "");
+          const textoR = String(bR.texto || "").trim().slice(0, 1000);
+          if (!negIdR || !telR || !textoR) return json({ error: "manda negocio, telefono y texto" }, 400);
+          const negR = await env.DB.prepare("SELECT id, nombre, phone_id FROM wa_negocio WHERE id = ?1").bind(negIdR).first().catch(() => null);
+          if (!negR) return json({ error: "negocio no encontrado" }, 404);
+          const enviadoR = await enviarWhatsApp(env, negR.phone_id, telR, textoR);
+          if (enviadoR){
+            const prevR = await waHistorialCargar(env, "neg:" + negR.id, telR);
+            await waHistorialGuardar(env, "neg:" + negR.id, telR, prevR.concat([{ role: "assistant", content: textoR }]));
+            try { await env.DB.prepare("UPDATE wa_negocio_lead SET actualizado = ?1 WHERE negocio_id = ?2 AND telefono = ?3").bind(new Date().toISOString(), negR.id, telR).run(); } catch (e) {}
+          }
+          return json({ ok: enviadoR, enviado: enviadoR }, enviadoR ? 200 : 502);
+        }
+        // Pausa de la IA por chat: POST .../su/negocio-pausa {"negocio":"<id>","telefono":"...","pausa":"on"|"off"}
+        if (path === "/app/api/su/negocio-pausa" && request.method === "POST"){
+          await ensureNegocioSchema(env);
+          const bP = await request.json().catch(() => ({}));
+          const negIdP = String(bP.negocio || "").trim();
+          const telP = String(bP.telefono || "").replace(/\D/g, "");
+          const pausaP = String(bP.pausa || "") === "on" ? "on" : "off";
+          if (!negIdP || !telP) return json({ error: "manda negocio y telefono" }, 400);
+          const ahoraP = new Date().toISOString();
+          await env.DB.prepare(
+            "INSERT INTO wa_negocio_lead (negocio_id, telefono, nombre, ultimo, actualizado, pausa) VALUES (?1,?2,'','',?3,?4) " +
+            "ON CONFLICT(negocio_id, telefono) DO UPDATE SET pausa = ?4"
+          ).bind(negIdP, telP, ahoraP, pausaP).run();
+          return json({ ok: true, negocio: negIdP, telefono: telP, pausa: pausaP });
+        }
+        // Borrar un chat de prueba (lead + historial): POST .../su/negocio-chat-borrar {"negocio":"<id>","telefono":"..."}
+        if (path === "/app/api/su/negocio-chat-borrar" && request.method === "POST"){
+          await ensureNegocioSchema(env);
+          const bB = await request.json().catch(() => ({}));
+          const negIdB = String(bB.negocio || "").trim();
+          const telB = String(bB.telefono || "").replace(/\D/g, "");
+          if (!negIdB || !telB) return json({ error: "manda negocio y telefono" }, 400);
+          await env.DB.prepare("DELETE FROM wa_negocio_lead WHERE negocio_id = ?1 AND telefono = ?2").bind(negIdB, telB).run().catch(() => {});
+          await env.DB.prepare("DELETE FROM wa_conv WHERE tenant_id = ?1 AND telefono = ?2").bind("neg:" + negIdB, telB).run().catch(() => {});
+          return json({ ok: true });
         }
 
         // Multi-profesor Fase 0: migración additiva + backfill. Idempotente. No cambia el panel.
