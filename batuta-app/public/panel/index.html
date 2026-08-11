@@ -288,11 +288,15 @@
   .dispt{border-collapse:collapse;}
   .dispt th{padding:4px 6px;font-family:var(--mono);font-size:11px;color:var(--muted);text-transform:uppercase;}
   .dispt td{padding:3px;text-align:center;}
-  .dcell{width:56px;height:32px;border:1px solid var(--line);background:var(--bg);border-radius:3px;cursor:pointer;color:var(--accent);font-weight:700;font-size:13px;display:inline-flex;align-items:center;justify-content:center;gap:3px;padding:0 2px;}
+  /* Celda de la grilla (10-ago-2026): antes 56x32 con texto de 9px y el tipo abreviado a
+     "MÁQ·REF" — ilegible para +45. Ahora 84x48 con el nombre corto legible y el aforo
+     EFECTIVO siempre visible (aunque venga heredado del tipo de clase). */
+  .dcell{width:84px;height:48px;border:1px solid var(--line);background:var(--bg);border-radius:3px;cursor:pointer;color:var(--accent);font-weight:700;font-size:13px;display:inline-flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;padding:2px 4px;overflow:hidden;}
   .dcell.on{background:var(--accent);color:var(--bg);border-color:var(--accent);}
   .dcell:hover{border-color:var(--accent);}
-  .dc-t{font-family:var(--mono);font-size:9px;letter-spacing:.02em;line-height:1;}
-  .dc-n{font-size:10px;font-weight:700;opacity:.85;border-left:1px solid currentColor;padding-left:3px;line-height:1;}
+  .dc-t{font-size:12.5px;font-weight:700;line-height:1.1;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .dc-n{font-size:11px;font-weight:600;opacity:.9;line-height:1;display:inline-flex;align-items:center;gap:3px;}
+  .dc-cal{width:11px;height:11px;stroke:currentColor;stroke-width:2;fill:none;stroke-linecap:round;stroke-linejoin:round;flex:0 0 auto;}
   .dispcfg{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:0 0 10px;}
   .dispcfg input[type=time]{flex:0 0 auto;width:auto;min-width:0;}
   .dispcfg select{flex:0 0 auto;width:auto;min-width:0;}
@@ -359,15 +363,30 @@
   /* Calendario del mes de la Agenda (10-ago-2026) */
   .calmes{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;}
   .calmes .cm-h{font-family:var(--mono);font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);text-align:center;padding:4px 0;}
-  .calmes .cm-d{min-height:64px;border:1px solid var(--line,rgba(255,255,255,.1));border-radius:8px;padding:6px 7px;background:transparent;cursor:pointer;text-align:left;display:flex;flex-direction:column;gap:3px;font-family:var(--body);color:var(--cream);transition:border-color .12s;}
+  .calmes .cm-d{min-height:74px;border:1px solid var(--line,rgba(255,255,255,.1));border-radius:8px;padding:6px 7px;background:transparent;cursor:pointer;text-align:left;display:flex;flex-direction:column;gap:3px;font-family:var(--body);color:var(--cream);transition:border-color .12s;}
   .calmes .cm-d:hover{border-color:var(--accent);}
-  .calmes .cm-d.off{opacity:.35;cursor:default;}
+  /* Días pasados: los que tuvieron gente SÍ se abren (en modo lectura); los vacíos no
+     fingen ser botones — sin mano, sin hover (10-ago-2026: medio mes no respondía al clic). */
+  .calmes .cm-d.off{opacity:.4;}
+  .calmes .cm-d.off.condata{opacity:.72;cursor:pointer;}
+  .calmes .cm-d.off:not(.condata){cursor:default;}
+  .calmes .cm-d.off:not(.condata):hover{border-color:var(--line,rgba(255,255,255,.1));}
   .calmes .cm-d.hoy{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent) inset;}
   .calmes .cm-d.sel{background:rgba(232,161,61,.10);border-color:var(--accent);}
   .calmes .cm-n{font-size:12.5px;font-weight:700;}
   .calmes .cm-b{font-size:10.5px;color:var(--muted);line-height:1.35;}
   .calmes .cm-b b{color:var(--accent);font-weight:700;}
-  @media (max-width:760px){ .calmes .cm-d{min-height:48px;padding:4px 5px;} .calmes .cm-b{display:none;} .calmes .cm-d.condata::after{content:"•";color:var(--accent);font-size:14px;line-height:.5;} }
+  .calleyenda{display:none;}
+  /* Celular: la etiqueta larga no entra en 45px de ancho, pero esconderla dejaba una grilla
+     de números con un punto naranja sin explicar. Queda UN contador compacto + su leyenda. */
+  @media (max-width:760px){
+    .calmes .cm-d{min-height:56px;padding:4px 5px;}
+    .calmes .cm-b{display:none;}
+    .calmes .cm-b.cb-res{display:block;font-size:14px;font-weight:700;color:var(--accent);line-height:1.1;}
+    .calmes .cb-w{display:none;}
+    .calmes .cm-d.solobloq::after{content:"•";color:var(--muted);font-size:15px;line-height:.6;}
+    .calleyenda{display:block;}
+  }
   .navgroup{margin-bottom:4px;}
   .navgroup-h{display:flex;align-items:center;gap:9px;width:100%;background:transparent;border:1px solid transparent;border-radius:3px;padding:9px 11px;cursor:pointer;font-family:var(--mono);text-transform:uppercase;letter-spacing:.1em;font-size:10.5px;color:var(--muted);font-weight:700;transition:color .12s,background .12s;}
   .navgroup-h::before{content:none;}
@@ -440,8 +459,20 @@
   .mas-fab:hover{transform:scale(1.06);}
   .mas-menu{position:fixed;bottom:150px;right:24px;z-index:300;display:flex;flex-direction:column;gap:6px;background:var(--panel);border:1px solid var(--line,rgba(255,255,255,.15));border-radius:12px;padding:10px;box-shadow:0 18px 50px rgba(0,0,0,.55);}
   .mas-menu[hidden]{display:none;}
-  .mas-menu button{background:transparent;border:0;border-radius:8px;padding:11px 14px;cursor:pointer;font-family:var(--body);font-size:14px;color:var(--cream);text-align:left;min-height:44px;}
+  .mas-menu button{background:transparent;border:0;border-radius:8px;padding:11px 14px;cursor:pointer;font-family:var(--body);font-size:14px;color:var(--cream);text-align:left;min-height:44px;display:flex;align-items:center;gap:10px;}
   .mas-menu button:hover{background:var(--panel2);color:var(--accent);}
+  .mas-menu button svg{width:17px;height:17px;flex:0 0 auto;stroke:currentColor;stroke-width:1.8;fill:none;stroke-linecap:round;stroke-linejoin:round;}
+  /* Barra de cambios sin guardar de la Agenda (10-ago-2026): "Aplicar" pintaba el HTML y
+     parecía guardado; al cambiar de pestaña o de profesor, cargarAgenda() lo borraba sin
+     avisar. Ahora nada queda pendiente en silencio. */
+  .sinsave{position:sticky;bottom:0;z-index:60;display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:12px;padding:12px 14px;border:1px solid var(--accent);border-radius:10px;background:var(--panel,#1b1a17);box-shadow:0 -8px 24px rgba(0,0,0,.45);}
+  .sinsave[hidden]{display:none;}
+  .sinsave .ss-tx{flex:1 1 auto;font-size:14px;font-weight:700;min-width:180px;}
+  /* Banner de "estoy editando UNA semana" (10-ago-2026) */
+  .semban{display:flex;align-items:flex-start;gap:12px;flex-wrap:wrap;margin:0 0 12px;padding:12px 14px;border:1px solid var(--accent);border-radius:10px;background:rgba(232,161,61,.09);}
+  .semban[hidden]{display:none;}
+  .semban .sb-tx{flex:1 1 240px;font-size:14px;line-height:1.45;}
+  .semban .sb-tx b{color:var(--accent);}
   .oia-panel{position:fixed;bottom:88px;right:24px;z-index:300;width:340px;max-width:calc(100vw - 32px);height:440px;max-height:calc(100vh - 130px);display:flex;flex-direction:column;overflow:hidden;background:var(--panel);border:1px solid var(--line);border-radius:8px;box-shadow:0 18px 50px rgba(0,0,0,.55);}
   .oia-panel[hidden]{display:none;}
   .oia-head{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:12px 14px;border-bottom:1px solid var(--line);background:var(--accent);flex:0 0 auto;}
@@ -691,7 +722,7 @@
         <button class="tab" data-tab="cuentas">Cuentas de alumnos</button>
         <button class="tab solo-dueno" data-tab="leads">Interesados<span class="dot hidden" id="dotLeads">0</span></button>
         <button class="tab" data-tab="registro">Asistencia</button>
-        <button class="tab" data-tab="agenda">Agenda</button>
+        <button class="tab" data-tab="agenda">Mis clases</button>
         <button class="tab" data-tab="chat">Chat</button>
         <button class="tab" data-tab="pagos">Pagos<span class="dot hidden" id="dotPagos">0</span></button>
         <button class="tab solo-dueno" data-tab="caja">Caja</button>
@@ -769,7 +800,7 @@
         <button class="btn" data-ira="alumnos" data-iract="btnNuevoAlumno">+ Alumno</button>
         <button class="btn ghost" data-ira="registro" data-iract="btnNuevoRegistro">Registrar una clase</button>
         <button class="btn ghost" data-ira="pagos">Cobros</button>
-        <button class="btn ghost" data-ira="agenda">Mi horario</button>
+        <button class="btn ghost" data-ira="agenda">Mis clases</button>
       </div>
       <div class="hoygrid" id="tuDia"></div>
     </div>
@@ -824,7 +855,7 @@
 
   <section class="panel" id="panel-grupos">
     <div style="margin-bottom:10px;"><button class="btn" id="btnNuevoGrupo">+ Nuevo grupo</button></div>
-    <p class="hint quees">👥 <b>Un grupo es un atajo para pasar asistencia.</b> Le pones nombre, alumnos y horario, y con "Registrar clase" los marcas a todos de un clic (cada uno consume 1 clase de su propio paquete). Para que varios reserven el MISMO horario desde el portal no necesitas grupos: eso es el <b>aforo</b> de la franja, en <b><a href="#" data-ira="agenda">Agenda</a></b>.</p>
+    <p class="hint quees">👥 <b>Un grupo es un atajo para pasar asistencia.</b> Le pones nombre, alumnos y horario, y con "Registrar clase" los marcas a todos de un clic (cada uno consume 1 clase de su propio paquete). Para que varios reserven el MISMO horario desde el portal no necesitas grupos: eso es el <b>aforo</b> de la hora, en <b><a href="#" data-ira="agenda">Mis clases</a></b>.</p>
     <div class="tablewrap">
       <table id="tablaGrupos">
         <thead><tr><th>Grupo</th><th>Curso</th><th>Horario</th><th>Alumnos</th><th></th></tr></thead>
@@ -951,7 +982,7 @@
   </section>
 
   <section class="panel" id="panel-registro">
-    <p class="hint quees">📕 <b>Esto es el PASADO: las clases que ya dictaste.</b> Anotas qué se trabajó, la tarea y si el alumno asistió — y se le descuenta 1 clase de su paquete. ¿Buscas los horarios y las reservas que vienen? Eso es <b><a href="#" data-ira="agenda">Agenda</a></b>.</p>
+    <p class="hint quees">📕 <b>Esto es el PASADO: las clases que ya dictaste.</b> Anotas qué se trabajó, la tarea y si el alumno asistió — y se le descuenta 1 clase de su paquete. ¿Buscas los horarios y las reservas que vienen? Eso es <b><a href="#" data-ira="agenda">Mis clases</a></b>.</p>
     <!-- Dos puertas separadas (1-ago-2026): la individual no carga la pantalla con los nombres
          de todos los demás alumnos, que es lo que la hacía pesada para el 90% de las clases. -->
     <div style="margin-bottom:14px;display:flex;gap:8px;flex-wrap:wrap;"><button class="btn" id="btnNuevoRegistro">+ Registrar clase individual</button><button class="btn ghost" id="btnNuevoRegistroGrupal">+ Registrar clase grupal</button><button class="btn ghost sm" type="button" onclick="lanzarTourModulo('registro')">? Cómo funciona</button></div>
@@ -1154,13 +1185,14 @@
          día = detalle con la gente, y desde ahí se bloquea o siembra con la fecha puesta. -->
     <div class="group">
       <h2>Calendario del mes</h2>
-      <p class="hint">La foto de tu mes, día por día: tus clases del horario y las reservas que ya cayeron. <b>Toca un día</b> para ver quiénes vienen y para bloquear o sembrar directo en esa fecha.</p>
+      <p class="hint">La foto de tu mes, día por día. <b>Toca un día</b> para ver quiénes vienen, apartar una hora o <b>cambiar el horario de esa semana</b> sin tocar el resto del mes. Los días que ya pasaron se abren solo para ver quiénes vinieron.</p>
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
         <button class="btn ghost sm" id="calPrev" type="button" title="Mes anterior">‹</button>
         <b id="calMesTitulo" style="min-width:170px;text-align:center;text-transform:capitalize;"></b>
         <button class="btn ghost sm" id="calNext" type="button" title="Mes siguiente">›</button>
       </div>
       <div id="calMes"></div>
+      <p class="hint calleyenda" style="margin:8px 0 0;">El <b style="color:var(--accent);">número naranja</b> = alumnos que vienen ese día. El <b>punto</b> = tienes una hora apartada. Toca el día para ver quiénes son y cuántos horarios tienes abiertos.</p>
       <div id="calDia" style="margin-top:12px;"></div>
     </div>
     <div class="group">
@@ -1182,8 +1214,14 @@
     </div>
 
     <div class="group">
-      <h2 id="dispTitulo">Tu horario semanal <button class="btn ghost sm" type="button" style="margin-left:8px;" onclick="lanzarTourModulo('agenda')">? Cómo funciona</button></h2>
-      <p class="hint">Prende las franjas en las que dictas. Un clic la prende o la apaga; clic en una franja prendida abre su <b>tipo de clase y aforo</b>. Los alumnos solo ven lo que esté prendido. Hora de Lima.</p>
+      <h2 id="dispTitulo">Tu horario de todas las semanas <button class="btn ghost sm" type="button" style="margin-left:8px;" onclick="lanzarTourModulo('agenda')">? Cómo funciona</button></h2>
+      <p class="hint">Este es el horario que se repite <b>todas las semanas</b>. Prende las horas en las que dictas: un clic la prende o la apaga; clic en una hora prendida abre su <b>tipo de clase y aforo</b>. Los alumnos solo ven lo que esté prendido. Hora de Lima. ¿Quieres cambiar <b>una sola semana</b>? Hazlo desde el calendario de arriba.</p>
+      <!-- Modo "una sola semana" (10-ago-2026, pedido de Elevate: "calendario editable, horarios
+           distintos por semana con meses de anticipación"). Entra desde renderCalDia(). -->
+      <div class="semban" id="semanaBanner" hidden>
+        <div class="sb-tx" id="semanaBannerTx"></div>
+        <button class="btn ghost sm" type="button" id="btnSalirSemana">Volver a mi horario de siempre</button>
+      </div>
       <!-- Horario POR PROFESOR (01-ago-2026, pedido de Elevate: "a las 7 hay 3 cursos distintos
            dictados por distintos profes"). El worker ya resolvía ?profe=<id>; el panel nunca lo
            mandaba, así que el dueño solo podía editar SU propio horario. Solo lo ve el dueño y
@@ -1206,6 +1244,11 @@
       <p class="hint" style="margin-top:-2px;">La grilla es solo tu vista: cambia el rango o el paso para poner clases a las 7:15 o cada media hora. Nunca borra franjas que ya guardaste fuera de este rango.</p>
       <div class="tablewrap" id="dispGrid"></div>
       <button class="btn" id="btnGuardarDisp" style="margin-top:12px;">Guardar horario</button>
+      <div class="sinsave" id="dispSinGuardar" hidden>
+        <span class="ss-tx" id="dispSinGuardarTx">Tienes cambios sin guardar</span>
+        <button class="btn" type="button" id="btnSinSaveGuardar">Guardar horario</button>
+        <button class="btn ghost" type="button" id="btnSinSaveDeshacer">Deshacer</button>
+      </div>
     </div>
   </section>
 
@@ -1861,7 +1904,7 @@
 <!-- Modal franja de horario: tipo de clase + aforo (27-jul-2026, reemplaza los dos prompt()) -->
 <div class="overlay" id="ovFranja">
   <div class="modal">
-    <h3>Esta <em>franja</em></h3>
+    <h3>Este <em>horario</em></h3>
     <div class="mlab" id="franjaCuando">—</div>
     <!-- Reunión Elevate 10-ago-2026: al clickear un horario, ver quiénes reservaron ESA
          clase+hora, sin bucear en la tabla grande. Lo pinta pintarReservasFranja(). -->
@@ -1876,25 +1919,30 @@
       <select id="fr_profe"></select>
       <p class="hint" style="margin:5px 0 0;" id="fr_profeHint">Opcional: tus alumnos lo ven al reservar ("con Fiorella"). Crea a tu equipo en <b>Mi academia → Mis profesores</b>.</p></div>
     <!-- Vigencia por fechas (10-ago-2026, pedido de Elevate: "horarios distintos cada
-         cierto tiempo, programados con meses de anticipación") -->
-    <div class="field"><label>¿Cuándo corre esta franja?</label>
+         cierto tiempo, programados con meses de anticipación").
+         ESCONDIDA tras un interruptor: 95 de cada 100 veces este modal se abre solo para
+         poner tipo o aforo, y tener dos casillas de fecha ahí arriba asustaba. Se abre sola
+         si el horario YA tiene fechas o si vienes del calendario editando una semana. -->
+    <button type="button" class="lnk" id="fr_vigToggle" aria-expanded="false" style="background:none;border:0;padding:0;margin:-4px 0 14px;color:var(--accent);text-decoration:underline;cursor:pointer;font-family:var(--body);font-size:13.5px;text-align:left;">Esta clase solo corre por un tiempo</button>
+    <div class="field" id="fr_vigWrap" hidden><label>¿Entre qué fechas se dicta?</label>
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
         <input id="fr_vdesde" type="date" style="flex:1;min-width:132px;" />
         <span class="hint" style="margin:0;flex:0 0 auto;">hasta</span>
         <input id="fr_vhasta" type="date" style="flex:1;min-width:132px;" />
       </div>
-      <p class="hint" style="margin:5px 0 0;">Vacío = <b>todas las semanas, como siempre</b>. Con fechas, la franja solo existe en ese rango: sirve para horarios de temporada o para <b>estrenar tu horario nuevo desde un día exacto</b> (puedes dejar armadas las semanas futuras desde ya).</p></div>
+      <p class="hint" style="margin:5px 0 0;">Vacío = <b>todas las semanas, como siempre</b>. Con fechas, esta clase <b>solo existe entre esas dos fechas</b> y desaparece del portal de tus alumnos el resto del año. Sirve para temporadas o para estrenar tu horario nuevo desde un día exacto.</p>
+      <button class="btn ghost sm" type="button" id="btnVigQuitar" style="margin-top:8px;">Quitar las fechas (que corra siempre)</button></div>
     <div class="field"><label>Aplicar también a…</label>
       <select id="fr_aplicar">
-        <option value="una">Solo esta franja</option>
-        <option value="dia">Todas las franjas prendidas de este día</option>
+        <option value="una">Solo esta hora</option>
+        <option value="dia">Todas las horas prendidas de este día</option>
         <option value="hora">Esta misma hora, toda la semana</option>
-        <option value="todo">Todas las franjas prendidas de la semana</option>
+        <option value="todo">Todas las horas prendidas de la semana</option>
       </select></div>
     <div class="modal-actions">
       <button class="btn ghost" data-close>Cancelar</button>
-      <button class="btn ghost" id="btnFranjaApagar">Apagar franja</button>
-      <button class="btn" id="btnFranjaOk">Aplicar</button>
+      <button class="btn ghost" id="btnFranjaApagar">Quitar este horario</button>
+      <button class="btn" id="btnFranjaOk">Guardar esta clase</button>
     </div>
   </div>
 </div>
@@ -3660,10 +3708,22 @@ function cargarAgenda(){
     AG_RESERVAS = (res[1] && res[1].reservas) || [];
     normalizarSalasDisp();
     renderAgendaAdmin();
+    /* Recién aquí sabemos qué hay guardado: esta es la foto contra la que se mide "sin guardar". */
+    try{ fijarSnapshotDisp(); }catch(e){}
   }).catch(function(){ toast("No pude cargar la agenda"); });
 }
 if(el("disp_profe")) el("disp_profe").addEventListener("change",function(){
-  AG_PROFE=this.value||""; cargarAgenda();
+  /* Cambiar de profesor refetchea: con cambios pendientes se pregunta antes (10-ago-2026). */
+  var v=this.value||"";
+  if(hayCambiosDisp()){
+    if(!confirm("Tienes cambios sin guardar en este horario.\n\nAceptar = los guardo antes de cambiar de profesor.\nCancelar = me quedo aquí.")){
+      this.value=AG_PROFE||"";
+      return;
+    }
+    guardarHorario().then(function(){ AG_PROFE=v; cargarAgenda(); }).catch(function(){});
+    return;
+  }
+  AG_PROFE=v; cargarAgenda();
 });
 /* Nombre de un profesor por id (para "la dicta X" en la grilla y el modal de franja). */
 function nombreProfe(id){
@@ -3671,10 +3731,48 @@ function nombreProfe(id){
   var p=(AG_PROFES||[]).filter(function(x){ return x.id===id; })[0];
   return (p&&p.nombre)||"";
 }
-/* Abreviatura para la celda: "Pilates Máquinas · Reformer" -> "MÁQ·REF" */
-function abrevTipo(t){
+/* Nombre corto LEGIBLE para la celda (10-ago-2026): antes abreviaba a "MÁQ·REF" y nadie
+   sabía qué clase era. Ahora se queda con la variante ("Pilates Máquinas · Reformer" ->
+   "Reformer") y el CSS le pone puntos suspensivos si no entra. */
+function nombreCortoTipo(t){
   if(!t) return "";
-  return String(t).split("·").map(function(p){ return p.trim().split(/\s+/).pop().slice(0,3).toUpperCase(); }).join("·");
+  var p=String(t).split("·").map(function(x){ return x.trim(); }).filter(Boolean);
+  return p.length?p[p.length-1]:"";
+}
+function abrevTipo(t){ return nombreCortoTipo(t); }   /* alias: nombre viejo */
+/* Aforo EFECTIVO: lo propio de la franja, si no el del tipo de clase, si no el general de
+   Ajustes → Reservas. Antes solo se pintaba el propio, así que las academias que heredan
+   (las 64 franjas de Elevate tienen cupo=0) veían la grilla sin ningún número. */
+function cupoGeneralReservas(){
+  var v=0;
+  try{ v=parseInt((db&&db.config&&db.config.agenda_cupo)||0,10); }catch(e){ v=0; }
+  return (v>=1&&v<=60)?v:0;
+}
+function aforoEfectivo(curso,cupo){
+  var c=parseInt(cupo,10)||0;
+  if(c>=1&&c<=60) return c;
+  return aforoDelTipo(curso)||cupoGeneralReservas();
+}
+var SVG_CAL_DCELL='<svg class="dc-cal" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>';
+/* UN solo constructor del contenido de la celda, usado por la grilla y por pintarDcell(). */
+function contenidoDcell(curso,cupo,vd,vh){
+  var nom=nombreCortoTipo(curso);
+  var af=aforoEfectivo(curso,cupo);
+  /* "Sin tipo" solo es un aviso útil si la academia YA creó tipos de clase; si no tiene
+     ninguno, repetirlo en 60 casillas es ruido, no información. */
+  var vacio=(clasesTenant().length?"Sin tipo":"Dictas");
+  var h='<span class="dc-t">'+(nom?esc(nom):vacio)+'</span>';
+  var abajo=(af?(af+(af===1?" cupo":" cupos")):"")+((vd||vh)?SVG_CAL_DCELL:"");
+  if(abajo) h+='<span class="dc-n">'+abajo+'</span>';
+  return h;
+}
+function tituloDcell(on,curso,cupo,profe,vd,vh){
+  if(!on) return "Clic para prender esta hora";
+  var af=aforoEfectivo(curso,cupo);
+  return (curso||"Sin tipo de clase")+(profe?(" · la dicta "+nombreProfe(profe)):"")+
+    " · entran "+(af?af:"los del cupo general")+
+    ((vd||vh)?(" · solo se dicta del "+(vd||"…")+" al "+(vh||"…")):" · todas las semanas")+
+    " · clic para cambiarlo";
 }
 function renderAgendaAdmin(){
   calcularHoras();
@@ -3690,10 +3788,19 @@ function renderAgendaAdmin(){
     if(pSel && pSel.rol!=="dueno") quien=pSel.nombre;
   }
   var html = "";
+  /* Trampa del selector (10-ago-2026): al elegir a otro profesor la grilla se ve VACÍA y el
+     dueño cree que perdió su horario entero. Mientras mire el de otro, se lo decimos SIEMPRE. */
+  if(quien){
+    html += '<div class="card" style="padding:12px 14px;margin:0 0 12px;border-color:var(--accent);">'+
+      '<strong>Estás viendo el horario de '+esc(quien)+', no el tuyo.</strong> '+
+      'Tu horario está intacto: para volver, arriba en <b>«Horario de»</b> elígete a ti.</div>';
+  }
   if(!(AG_DISP||[]).some(function(r){return r.activo;})){
     html += '<div class="card" style="padding:12px 14px;margin:0 0 12px;border-color:var(--accent);"><strong>'+
-      (quien ? (esc(quien)+" todavía no tiene horarios.") : "Tus alumnos aún no ven horarios.")+
-      '</strong> Prende abajo los días y horas '+(quien?"en que dicta":"en que dictas")+', y guarda: recién ahí podrán reservar desde su portal.</div>';
+      (quien ? (esc(quien)+" todavía no tiene horarios propios.") : "Tus alumnos aún no ven horarios.")+
+      '</strong> '+(quien
+        ? ('Esta grilla vacía es la de '+esc(quien)+', no la tuya: no se borró nada. Prende aquí los días y horas en que dicta, y guarda.')
+        : 'Prende abajo los días y horas en que dictas, y guarda: recién ahí podrán reservar desde su portal.')+'</div>';
   }
   /* Pestañas por sala (03-ago-2026): una grilla por espacio físico, clases en paralelo. */
   var salasTabs=salasGrilla();
@@ -3720,13 +3827,14 @@ function renderAgendaAdmin(){
       var curso = cursoDeCelda(d.d,h);
       var profe = profeDeCelda(d.d,h);
       var vig = vigDeCelda(d.d,h);
-      var badge = on ? ((curso?('<span class="dc-t">'+esc(abrevTipo(curso))+'</span>'):"✓")+(cupo?('<span class="dc-n">'+cupo+'</span>'):"")+((vig[0]||vig[1])?'<span class="dc-n" title="Solo entre fechas">📅</span>':"")) : "";
-      var ttl = on ? ((curso||"Sin tipo de clase")+(profe?(" · la dicta "+nombreProfe(profe)):"")+" · aforo "+(cupo?cupo:"el del tipo")+((vig[0]||vig[1])?(" · corre "+(vig[0]||"…")+" a "+(vig[1]||"…")):"")+" · clic para cambiarlo") : "Clic para prender esta franja";
+      var badge = on ? contenidoDcell(curso,cupo,vig[0],vig[1]) : "";
+      var ttl = tituloDcell(on,curso,cupo,profe,vig[0],vig[1]);
       return '<td><button class="dcell'+(on?" on":"")+'" data-dow="'+d.d+'" data-hora="'+h+'" data-cupo="'+cupo+'" data-curso="'+esc(curso)+'" data-sala="'+esc(AG_SALA)+'" data-profe="'+esc(profe)+'" data-vdesde="'+esc(vig[0])+'" data-vhasta="'+esc(vig[1])+'" title="'+esc(ttl)+'">'+badge+'</button></td>';
     }).join("")+'</tr>';
   });
   el("dispGrid").innerHTML = html + '</tbody></table>'+
-    '<p class="hint" style="margin-top:8px;">Clic en una franja apagada la <b>prende</b>. Clic en una prendida abre su <b>tipo de clase, aforo y profesor</b> (Máquinas 3, Mat 8…), y puedes aplicarlo a todo el día o a toda la semana de un golpe. Los tipos de clase se crean en <b>Ajustes → Clases y planes</b>'+(salasTabs.length?'; las salas también.':'. ¿Dictas dos clases a la misma hora en espacios distintos? Crea tus salas en <b>Ajustes → Clases y planes</b>.')+'</p>';
+    '<p class="hint" style="margin-top:8px;">Clic en una hora apagada la <b>prende</b>. Clic en una prendida abre su <b>tipo de clase, aforo y profesor</b> (Máquinas 3, Mat 8…), y puedes aplicarlo a todo el día o a toda la semana de un golpe. Los tipos de clase se crean en <b>Ajustes → Clases y planes</b>'+(salasTabs.length?'; las salas también.':'. ¿Dictas dos clases a la misma hora en espacios distintos? Crea tus salas en <b>Ajustes → Clases y planes</b>.')+'</p>';
+  try{ pintarSemanaBanner(); pintarBarraSinGuardar(); }catch(e){}
 
   var sel = el("ag_alumno"), actual = sel.value;
   sel.innerHTML = '<option value="">— Solo bloquear (sin alumno) —</option>'+
@@ -3806,11 +3914,14 @@ function renderCalMes(){
     var dow=new Date(Date.UTC(y,m,d)).getUTCDay();
     var rsm=calResumenDia(fkey,dow);
     var pasado=fkey<hoyKey;
+    /* Palabras honestas (10-ago-2026): "3 clases" eran franjas DISPONIBLES, no clases con
+       gente — el calendario sonaba lleno en academias con cero reservas. Ahora la gente va
+       primero y los horarios dicen "abiertos", con el "0 reservados" explícito. */
     var badges="";
-    if(rsm.franjas) badges+='<span class="cm-b">'+rsm.franjas+' clase'+(rsm.franjas===1?"":"s")+'</span>';
-    if(rsm.res) badges+='<span class="cm-b"><b>'+rsm.res+' reserva'+(rsm.res===1?"":"s")+'</b></span>';
-    if(rsm.bloq) badges+='<span class="cm-b">'+rsm.bloq+' bloqueo'+(rsm.bloq===1?"":"s")+'</span>';
-    h+='<button type="button" class="cm-d'+(pasado?" off":"")+(fkey===hoyKey?" hoy":"")+(fkey===CAL_SEL?" sel":"")+((rsm.res||rsm.bloq)?" condata":"")+'" data-calfecha="'+fkey+'" data-caldow="'+dow+'">'+
+    if(rsm.res) badges+='<span class="cm-b cb-res"><b>'+rsm.res+'</b><span class="cb-w"> '+(rsm.res===1?"alumno viene":"alumnos vienen")+'</span></span>';
+    if(rsm.franjas) badges+='<span class="cm-b cb-hor">'+rsm.franjas+' horario'+(rsm.franjas===1?"":"s")+' abierto'+(rsm.franjas===1?"":"s")+(rsm.res?"":" · 0 reservados")+'</span>';
+    if(rsm.bloq) badges+='<span class="cm-b cb-blo">'+rsm.bloq+' hora'+(rsm.bloq===1?"":"s")+' apartada'+(rsm.bloq===1?"":"s")+'</span>';
+    h+='<button type="button" class="cm-d'+(pasado?" off":"")+(fkey===hoyKey?" hoy":"")+(fkey===CAL_SEL?" sel":"")+((rsm.res||rsm.bloq)?" condata":"")+((rsm.bloq&&!rsm.res)?" solobloq":"")+'" data-calfecha="'+fkey+'" data-caldow="'+dow+'">'+
        '<span class="cm-n">'+d+'</span>'+badges+'</button>';
   }
   box.className="calmes";
@@ -3824,6 +3935,7 @@ function renderCalDia(fkey){
   var dow=new Date(Date.UTC(parts[0],parts[1]-1,parts[2])).getUTCDay();
   var bonita=new Date(Date.UTC(parts[0],parts[1]-1,parts[2],12)).toLocaleDateString("es-PE",{timeZone:"UTC",weekday:"long",day:"numeric",month:"long"});
   var conSalas=salasGrilla().length>0;
+  var pasado=fkey<calFechaKeyLima(Date.now());
   /* reservas y bloqueos reales de ESA fecha, agrupados por hora */
   var porHora={};
   (AG_RESERVAS||[]).forEach(function(r){
@@ -3845,8 +3957,8 @@ function renderCalDia(fkey){
       '<b style="font-family:var(--mono);font-size:12.5px;flex:0 0 auto;">'+esc(f.hora)+'</b>'+
       '<span style="font-size:13px;flex:1 1 auto;">'+esc(f.curso||"Clase")+(f.sala?(' · '+esc(f.sala)):'')+(f.profe?(' · '+esc(nombreProfe(f.profe)||"")):'')+'</span>'+
       '<span class="hint" style="margin:0;flex:1 1 100%;">'+
-        (gente.length?('<b style="color:var(--accent);">'+gente.length+'</b> — '+gente.map(esc).join(" · ")):"Sin reservas aún")+
-        (bloqs?(' · '+bloqs+' bloqueo(s)'):'')+
+        (gente.length?('<b style="color:var(--accent);">'+(pasado?"Vinieron":gente.length)+'</b>'+(pasado?": ":" — ")+gente.map(esc).join(" · ")):(pasado?"No vino nadie":"Sin reservas aún"))+
+        (bloqs?(' · '+bloqs+(bloqs===1?' hora apartada':' horas apartadas')):'')+
       '</span></div>');
   });
   /* reservas sueltas en horas que no están en el horario semanal (siembras puntuales) */
@@ -3860,14 +3972,23 @@ function renderCalDia(fkey){
       '<b style="font-family:var(--mono);font-size:12.5px;flex:0 0 auto;">'+esc(hh)+'</b>'+
       '<span style="font-size:13px;flex:1 1 auto;">Fuera del horario semanal</span>'+
       '<span class="hint" style="margin:0;flex:1 1 100%;">'+
-        (gente.length?('<b style="color:var(--accent);">'+gente.length+'</b> — '+gente.map(esc).join(" · ")):'')+
-        (bloqs?((gente.length?' · ':'')+bloqs+' bloqueo(s)'):'')+
+        (gente.length?('<b style="color:var(--accent);">'+(pasado?"Vinieron":gente.length)+'</b>'+(pasado?": ":" — ")+gente.map(esc).join(" · ")):'')+
+        (bloqs?((gente.length?' · ':'')+bloqs+(bloqs===1?' hora apartada':' horas apartadas')):'')+
       '</span></div>');
   });
+  /* Día que ya pasó: se abre SOLO para ver quiénes vinieron (antes ni siquiera respondía al
+     clic y la ayuda decía "Toca un día"). Sin botones que cambien nada hacia atrás. */
+  var acciones = pasado
+    ? '<p class="hint" style="margin:10px 0 0;">Este día ya pasó: es solo para consultar. Para anotar qué se hizo en clase, ve a <b><a href="#" data-ira="registro">Asistencia</a></b>.</p>'
+    : ('<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;">'+
+       '<button type="button" class="btn" id="btnCalSemana" data-calfecha="'+fkey+'">Cambiar el horario de esta semana</button>'+
+       '<button type="button" class="btn ghost" id="btnCalSembrar" data-calfecha="'+fkey+'">Apartar una hora de este día</button>'+
+       '</div>'+
+       '<p class="hint" style="margin:8px 0 0;">«Cambiar el horario de esta semana» toca <b>solo</b> del '+esc(rangoSemanaTexto(fkey))+'. El resto de tus semanas se queda igual.</p>');
   box.innerHTML='<div class="card" style="max-width:640px;">'+
-    '<div class="mlab" style="margin-bottom:2px;text-transform:capitalize;">'+esc(bonita)+'</div>'+
-    (filas.length?filas.join(""):'<p class="hint" style="margin:8px 0 0;">Este día no tiene clases en el horario ni reservas.</p>')+
-    '<button type="button" class="btn ghost sm" id="btnCalSembrar" data-calfecha="'+fkey+'" style="margin-top:10px;">Bloquear o sembrar en este día</button>'+
+    '<div class="mlab" style="margin-bottom:2px;"><span style="text-transform:capitalize;">'+esc(bonita)+'</span>'+(pasado?' · ya pasó':'')+'</div>'+
+    (filas.length?filas.join(""):'<p class="hint" style="margin:8px 0 0;">Este día no tiene horarios abiertos ni reservas.</p>')+
+    acciones+
   '</div>';
   renderCalMes._skipDia=true;
   /* re-pinta el mes solo para mover el resaltado del día elegido */
@@ -3881,25 +4002,80 @@ if(el("calNext")) el("calNext").addEventListener("click",function(){
   if(!CAL_ANCLA) return; CAL_ANCLA=new Date(Date.UTC(CAL_ANCLA.getUTCFullYear(),CAL_ANCLA.getUTCMonth()+1,1)); CAL_SEL=null; el("calDia").innerHTML=""; renderCalMes();
 });
 if(el("calMes")) el("calMes").addEventListener("click",function(e){
-  var b=e.target.closest(".cm-d"); if(!b||b.classList.contains("off")) return;
+  var b=e.target.closest(".cm-d"); if(!b) return;
+  /* Los días pasados CON gente sí se abren (en modo lectura). Los vacíos no hacen nada,
+     y el CSS ya les quita el cursor de mano para que no parezcan botones. */
+  if(b.classList.contains("off") && !b.classList.contains("condata")) return;
   renderCalDia(b.dataset.calfecha);
 });
 if(el("calDia")) el("calDia").addEventListener("click",function(e){
+  var sem=e.target.closest("#btnCalSemana");
+  if(sem){ entrarModoSemana(sem.dataset.calfecha); return; }
   var b=e.target.closest("#btnCalSembrar"); if(!b) return;
   /* precarga la fecha en "Bloquear o sembrar" y lleva ahí: el flujo que ya existe */
   var dt=el("ag_dt"); if(dt) dt.value=b.dataset.calfecha+"T09:00";
   var grupo=el("btnBloquearSlot") && el("btnBloquearSlot").closest(".group");
   if(grupo){ grupo.scrollIntoView({behavior:"smooth",block:"start"}); }
-  toast("Fecha puesta en \"Bloquear o sembrar\": elige alumno u hora y aparta.");
+  toast("Fecha puesta abajo: elige alumno u hora y apártala.");
 });
+
+/* ================= MODO "UNA SOLA SEMANA" (10-ago-2026) =================
+   El pedido literal de Elevate era "un calendario mensual EDITABLE: horarios distintos por
+   semana, programados con meses de anticipación". Lo que había eran DOS mitades que no se
+   hablaban: un calendario de solo lectura arriba y la vigencia por fechas escondida dentro
+   del modal de una franja suelta. Este modo las une: desde el día del calendario entras a la
+   grilla con las fechas de ESA semana ya cargadas, y todo lo que toques vale solo ahí. */
+var SEMANA_EDIT=null;   /* {desde:"YYYY-MM-DD", hasta:"YYYY-MM-DD"} */
+function lunesYDomingoDe(fkey){
+  var p=fkey.split("-").map(Number);
+  var base=Date.UTC(p[0],p[1]-1,p[2]);
+  var dow=new Date(base).getUTCDay();          /* 0=Dom */
+  var haciaLunes=(dow===0?6:dow-1);
+  var lun=new Date(base-haciaLunes*86400000);
+  var dom=new Date(base+(6-haciaLunes)*86400000);
+  var k=function(d){ return d.getUTCFullYear()+"-"+String(d.getUTCMonth()+1).padStart(2,"0")+"-"+String(d.getUTCDate()).padStart(2,"0"); };
+  return {desde:k(lun), hasta:k(dom)};
+}
+/* "17 de agosto" — sin año, que es como lo dice una persona */
+function fechaBonita(fk){
+  if(!fk) return "";
+  var p=String(fk).split("-").map(Number);
+  if(p.length<3) return fk;
+  return new Date(Date.UTC(p[0],p[1]-1,p[2],12)).toLocaleDateString("es-PE",{timeZone:"UTC",day:"numeric",month:"long"});
+}
+function rangoSemanaTexto(fkey){
+  var s=lunesYDomingoDe(fkey);
+  return fechaBonita(s.desde)+" al "+fechaBonita(s.hasta);
+}
+function pintarSemanaBanner(){
+  var b=el("semanaBanner"), t=el("semanaBannerTx");
+  if(!b||!t) return;
+  if(!SEMANA_EDIT){ b.hidden=true; return; }
+  t.innerHTML='<b>Estás editando solo la semana del '+esc(fechaBonita(SEMANA_EDIT.desde))+' al '+esc(fechaBonita(SEMANA_EDIT.hasta))+'.</b><br />'+
+    'Lo que prendas o cambies ahora vale <b>solo esa semana</b>; el resto de tus semanas se queda igual. Al terminar, dale <b>Guardar horario</b>.';
+  b.hidden=false;
+}
+function entrarModoSemana(fkey){
+  SEMANA_EDIT=lunesYDomingoDe(fkey);
+  pintarSemanaBanner();
+  var grupo=el("dispGrid") && el("dispGrid").closest(".group");
+  if(grupo) grupo.scrollIntoView({behavior:"smooth",block:"start"});
+  toast("Semana del "+fechaBonita(SEMANA_EDIT.desde)+" al "+fechaBonita(SEMANA_EDIT.hasta),3600);
+}
+function salirModoSemana(silencio){
+  SEMANA_EDIT=null;
+  pintarSemanaBanner();
+  if(!silencio) toast("Listo: volviste a tu horario de todas las semanas");
+}
+if(el("btnSalirSemana")) el("btnSalirSemana").addEventListener("click",function(){ salirModoSemana(); });
 function pintarDcell(cell){
   var on=cell.classList.contains("on");
   var cupo=parseInt(cell.dataset.cupo,10)||0;
   var curso=cell.dataset.curso||"";
   var profe=cell.dataset.profe||"";
   var vd=cell.dataset.vdesde||"", vh=cell.dataset.vhasta||"";
-  cell.innerHTML=on?((curso?('<span class="dc-t">'+esc(abrevTipo(curso))+'</span>'):"✓")+(cupo?('<span class="dc-n">'+cupo+'</span>'):"")+((vd||vh)?'<span class="dc-n" title="Solo entre fechas">📅</span>':"")):"";
-  cell.title=on?((curso||"Sin tipo de clase")+(profe?(" · la dicta "+nombreProfe(profe)):"")+" · aforo "+(cupo?cupo:"el del tipo")+((vd||vh)?(" · corre "+(vd||"…")+" a "+(vh||"…")):"")+" · clic para cambiarlo"):"Clic para prender esta franja";
+  cell.innerHTML=on?contenidoDcell(curso,cupo,vd,vh):"";
+  cell.title=tituloDcell(on,curso,cupo,profe,vd,vh);
 }
 
 /* ---------- Modal de franja: tipo de clase + aforo (27-jul-2026) ---------- */
@@ -3968,13 +4144,44 @@ function pintarReservasFranja(dow,hora,sala){
   if(orden.length>5) h+='<p class="hint" style="margin:0;">…y '+(orden.length-5)+' fecha(s) más en la tabla de abajo.</p>';
   box.innerHTML=h;
 }
+/* Interruptor de la vigencia (10-ago-2026): abrir/cerrar las 2 casillas de fecha. */
+function textoRangoVig(vd,vh){
+  if(vd&&vh) return "del "+fechaBonita(vd)+" al "+fechaBonita(vh);
+  if(vd) return "desde el "+fechaBonita(vd)+" en adelante";
+  if(vh) return "hasta el "+fechaBonita(vh);
+  return "";
+}
+function mostrarVigencia(abrir){
+  var w=el("fr_vigWrap"), t=el("fr_vigToggle");
+  if(!w||!t) return;
+  w.hidden=!abrir;
+  t.setAttribute("aria-expanded",abrir?"true":"false");
+  if(abrir){ t.textContent="Ocultar las fechas"; return; }
+  /* Cerrado nunca miente: si quedaron fechas puestas, el enlace las dice. */
+  var vd=(el("fr_vdesde")&&el("fr_vdesde").value)||"", vh=(el("fr_vhasta")&&el("fr_vhasta").value)||"";
+  t.textContent=(vd||vh) ? ("Solo se dicta "+textoRangoVig(vd,vh)+" — cambiar") : "Esta clase solo corre por un tiempo";
+}
+if(el("fr_vigToggle")) el("fr_vigToggle").addEventListener("click",function(){
+  mostrarVigencia(el("fr_vigWrap").hidden);
+});
+if(el("btnVigQuitar")) el("btnVigQuitar").addEventListener("click",function(){
+  if(el("fr_vdesde")) el("fr_vdesde").value="";
+  if(el("fr_vhasta")) el("fr_vhasta").value="";
+  toast("Esta clase vuelve a correr todas las semanas — dale Guardar");
+});
 function abrirFranja(cell){
   FRANJA_CELDA=cell;
   var dow=Number(cell.dataset.dow), hora=cell.dataset.hora;
   var d=AG_DOW.find(function(x){return x.d===dow;});
   el("franjaCuando").textContent=((d&&d.n)||"")+" "+hora+(cell.dataset.sala?(" · "+cell.dataset.sala):"");
-  if(el("fr_vdesde")) el("fr_vdesde").value=cell.dataset.vdesde||"";
-  if(el("fr_vhasta")) el("fr_vhasta").value=cell.dataset.vhasta||"";
+  /* Vigencia: por defecto ESCONDIDA (el 95% de las veces este modal se abre para poner tipo
+     o aforo). Se abre sola si la franja ya tiene fechas o si vienes del calendario editando
+     una semana — en ese caso llega con las fechas de esa semana puestas. */
+  var vdIni=cell.dataset.vdesde||"", vhIni=cell.dataset.vhasta||"";
+  if(SEMANA_EDIT){ vdIni=SEMANA_EDIT.desde; vhIni=SEMANA_EDIT.hasta; }
+  if(el("fr_vdesde")) el("fr_vdesde").value=vdIni;
+  if(el("fr_vhasta")) el("fr_vhasta").value=vhIni;
+  mostrarVigencia(!!(vdIni||vhIni));
   try{ pintarReservasFranja(dow,hora,cell.dataset.sala||""); }catch(e){ if(el("frReservas")) el("frReservas").innerHTML=""; }
   el("fr_tipo").innerHTML=opcionesDeTipo(cell.dataset.curso||"");
   el("fr_tipo").value=cell.dataset.curso||"";
@@ -4050,14 +4257,28 @@ if(el("btnFranjaOk")) el("btnFranjaOk").addEventListener("click",function(){
   var profeFr=(el("fr_profe")&&el("fr_profeWrap")&&el("fr_profeWrap").style.display!=="none")?(el("fr_profe").value||""):(FRANJA_CELDA.dataset.profe||"");
   /* vigencia por fechas (10-ago-2026): rango invertido se avisa y NO se aplica */
   var vd=(el("fr_vdesde")&&el("fr_vdesde").value)||"", vh=(el("fr_vhasta")&&el("fr_vhasta").value)||"";
-  if(vd&&vh&&vd>vh){ toast("El rango de fechas está al revés (desde > hasta). Corrígelo y vuelve a guardar."); return; }
+  if(vd&&vh&&vd>vh){ toast("Las fechas están al revés: la de inicio es posterior a la de fin. Corrígelas y vuelve a guardar."); return; }
+  /* 🔒 CANDADO (10-ago-2026). El modal PRECARGA la vigencia de la celda que abriste, así que
+     con "Aplicar también a…" se podía estampar un rango de fechas sobre TODO el horario sin
+     haberlo escrito — y esas clases desaparecen del portal fuera del rango. Se confirma antes
+     de restringir horarios que hoy corren siempre. */
+  var corrianSiempre=objetivo.filter(function(c){ return !(c.dataset.vdesde||c.dataset.vhasta); });
+  if((vd||vh) && corrianSiempre.length && (modo!=="una" || !!SEMANA_EDIT)){
+    var n=corrianSiempre.length;
+    var aviso="Vas a hacer que "+(n===1?"ese horario exista":("esos "+n+" horarios existan"))+" SOLO "+textoRangoVig(vd,vh)+".\n\n"+
+      "Fuera de esas fechas tus alumnos no verán nada ahí"+(n>1?(" — le pasa a "+n+" horarios de tu semana"):"")+".\n\n¿Seguro?";
+    if(!confirm(aviso)) return;
+  }
   objetivo.forEach(function(c){ c.classList.add("on"); c.dataset.curso=tipo; c.dataset.cupo=cupo; c.dataset.profe=profeFr; c.dataset.vdesde=vd; c.dataset.vhasta=vh; pintarDcell(c); });
   closeOv("ovFranja");
-  toast(objetivo.length>1?("Aplicado a "+objetivo.length+" franjas — dale Guardar horario"):'Listo — dale "Guardar horario"');
+  /* GUARDA DE VERDAD (10-ago-2026): antes "Aplicar" solo pintaba el HTML, parecía guardado y
+     al cambiar de pestaña o de profesor cargarAgenda() lo borraba sin preguntar. */
+  guardarHorario(objetivo.length>1?("Guardado en "+objetivo.length+" horarios ✓"):"Guardado ✓");
 });
 if(el("btnFranjaApagar")) el("btnFranjaApagar").addEventListener("click",function(){
   if(FRANJA_CELDA){ FRANJA_CELDA.classList.remove("on"); FRANJA_CELDA.dataset.curso=""; FRANJA_CELDA.dataset.cupo=0; FRANJA_CELDA.dataset.profe=""; FRANJA_CELDA.dataset.vdesde=""; FRANJA_CELDA.dataset.vhasta=""; pintarDcell(FRANJA_CELDA); }
   closeOv("ovFranja");
+  guardarHorario("Horario quitado ✓");
 });
 
 el("panel-agenda").addEventListener("click",function(e){
@@ -4073,15 +4294,20 @@ el("panel-agenda").addEventListener("click",function(e){
   var cell = e.target.closest(".dcell");
   if(cell){
     if(!cell.classList.contains("on")){        // apagada -> prender (un clic, sin fricción)
-      cell.classList.add("on"); pintarDcell(cell);
+      cell.classList.add("on");
+      /* Editando UNA semana: la hora nueva nace con las fechas de esa semana, así que existe
+         solo ahí. Es puramente aditivo — no le quita nada al horario de siempre. */
+      if(SEMANA_EDIT){ cell.dataset.vdesde=SEMANA_EDIT.desde; cell.dataset.vhasta=SEMANA_EDIT.hasta; }
+      pintarDcell(cell);
       /* si la academia tiene UN solo tipo de clase, se lo pone solo: cero pasos extra */
       var cl=clasesTenant();
       if(cl.length===1 && !cell.dataset.curso){ cell.dataset.curso=cl[0].n; pintarDcell(cell); }
+      pintarBarraSinGuardar();
       return;
     }
     /* prendida -> abrir su editor. El tipo y el aforo los define SOLO el dueño (el server
        igual los ignora si no lo es), así que a un profe solo se le ofrece apagarla. */
-    if(ROL!=="dueno"){ cell.classList.remove("on"); pintarDcell(cell); return; }
+    if(ROL!=="dueno"){ cell.classList.remove("on"); pintarDcell(cell); pintarBarraSinGuardar(); return; }
     abrirFranja(cell);
     return;
   }
@@ -4150,9 +4376,17 @@ if(el("btnCopiarDiaOk")) el("btnCopiarDiaOk").addEventListener("click",function(
     pintarDcell(c);
   });
   closeOv("ovCopiarDia");
-  toast(n+" franjas copiadas — dale \"Guardar horario\"");
+  pintarBarraSinGuardar();
+  toast(n+" horarios copiados — dale \"Guardar horario\"");
 });
-el("btnGuardarDisp").addEventListener("click",function(){
+/* ============ GUARDADO REAL + CAMBIOS SIN GUARDAR (10-ago-2026) ============
+   Bug de fondo que rompía el modelo mental de la pantalla: el botón del modal decía
+   "Aplicar", cerraba el modal y NO guardaba nada — solo pintaba el HTML. El guardado real
+   estaba en un botón de más abajo, fuera de pantalla. Y si el dueño cambiaba de pestaña, de
+   sala o de profesor, cargarAgenda() refetcheaba y le borraba todo sin preguntar. Ahora:
+   1) el modal guarda de verdad · 2) lo que quede pendiente lo grita una barra pegada abajo
+   · 3) nada se refetchea con cambios pendientes sin preguntar primero. */
+function guardarHorario(msgOk){
   /* Se guardan TODAS las salas juntas: la grilla pinta solo la activa, así que primero se
      vuelca al estado en memoria y de ahí sale el paquete completo (03-ago-2026). */
   sincronizarGrillaEnMemoria();
@@ -4160,9 +4394,77 @@ el("btnGuardarDisp").addEventListener("click",function(){
   (AG_DISP||[]).forEach(function(r){
     if(r && r.activo!==0) activos.push({dia_semana:Number(r.dia_semana), hora:r.hora, cupo:parseInt(r.cupo,10)||0, curso:r.curso||"", sala:String(r.sala||""), profe:r.profe||"", vdesde:r.vdesde||"", vhasta:r.vhasta||""});
   });
-  apiPost("/app/api/admin/disponibilidad",{activos:activos, profe: AG_PROFE||undefined})
-    .then(function(){ toast("Horario guardado"); cargarAgenda(); })
-    .catch(function(e){ toast(e.message||"No se pudo guardar"); });
+  return apiPost("/app/api/admin/disponibilidad",{activos:activos, profe: AG_PROFE||undefined})
+    .then(function(){ toast(msgOk||"Horario guardado ✓"); cargarAgenda(); })
+    .catch(function(e){ toast(e.message||"No se pudo guardar"); throw e; });
+}
+/* Firma del horario COMPLETO (todas las salas): lo del DOM para la sala visible + lo que
+   AG_DISP guarda de las otras. Comparar dos firmas dice si hay cambios sin guardar. */
+function firmaDisp(){
+  var g=el("dispGrid"); if(!g) return null;
+  var celdas=g.querySelectorAll(".dcell");
+  if(!celdas.length) return null;              // grilla no pintada: no se puede opinar
+  var arr=[];
+  (AG_DISP||[]).forEach(function(r){
+    if(!r || r.activo===0 || String(r.sala||"")===AG_SALA) return;
+    arr.push([Number(r.dia_semana),r.hora,parseInt(r.cupo,10)||0,r.curso||"",String(r.sala||""),r.profe||"",r.vdesde||"",r.vhasta||""].join("|"));
+  });
+  Array.prototype.forEach.call(g.querySelectorAll(".dcell.on"),function(c){
+    arr.push([Number(c.dataset.dow),c.dataset.hora,parseInt(c.dataset.cupo,10)||0,c.dataset.curso||"",AG_SALA,c.dataset.profe||"",c.dataset.vdesde||"",c.dataset.vhasta||""].join("|"));
+  });
+  arr.sort();
+  return arr.join("\n");
+}
+var DISP_SNAP=null;      // firma de lo que está guardado en el servidor
+var DISP_BYPASS=false;   // para no volver a preguntar tras guardar y reintentar el clic
+function mapaFirma(f){
+  var m={};
+  String(f||"").split("\n").forEach(function(l){ if(!l) return; var p=l.split("|"); m[p[0]+"|"+p[1]+"|"+p[4]]=l; });
+  return m;
+}
+function contarCambiosDisp(){
+  if(DISP_SNAP===null || DISP_SNAP===undefined) return 0;
+  var f=firmaDisp(); if(f===null || f===DISP_SNAP) return 0;
+  var A=mapaFirma(DISP_SNAP), B=mapaFirma(f), llaves={}, n=0;
+  Object.keys(A).forEach(function(k){ llaves[k]=1; });
+  Object.keys(B).forEach(function(k){ llaves[k]=1; });
+  Object.keys(llaves).forEach(function(k){ if(A[k]!==B[k]) n++; });
+  return n;
+}
+function hayCambiosDisp(){
+  var p=el("panel-agenda");
+  if(!p || !p.classList.contains("active")) return false;
+  return contarCambiosDisp()>0;
+}
+function pintarBarraSinGuardar(){
+  var bar=el("dispSinGuardar"); if(!bar) return;
+  var n=contarCambiosDisp();
+  if(!n){ bar.hidden=true; return; }
+  el("dispSinGuardarTx").textContent="Tienes "+n+(n===1?" cambio":" cambios")+" sin guardar en tu horario";
+  bar.hidden=false;
+}
+function fijarSnapshotDisp(){ DISP_SNAP=firmaDisp(); pintarBarraSinGuardar(); }
+if(el("btnGuardarDisp")) el("btnGuardarDisp").addEventListener("click",function(){ guardarHorario().catch(function(){}); });
+if(el("btnSinSaveGuardar")) el("btnSinSaveGuardar").addEventListener("click",function(){ guardarHorario().catch(function(){}); });
+if(el("btnSinSaveDeshacer")) el("btnSinSaveDeshacer").addEventListener("click",function(){
+  if(!confirm("¿Botar los cambios que no guardaste y volver a tu horario guardado?")) return;
+  cargarAgenda();
+});
+/* Cambiar de pestaña con cambios pendientes: se pregunta ANTES, nunca se borra en silencio. */
+document.addEventListener("click",function(e){
+  var t=e.target.closest?e.target.closest(".tab"):null; if(!t) return;
+  if(t.dataset.tab==="agenda") return;
+  if(DISP_BYPASS){ DISP_BYPASS=false; return; }
+  if(!hayCambiosDisp()) return;
+  e.stopPropagation(); e.preventDefault();
+  if(!confirm("Tienes cambios sin guardar en tu horario.\n\nAceptar = los guardo ahora y sigo.\nCancelar = me quedo aquí para revisarlos.")) return;
+  guardarHorario().then(function(){ DISP_BYPASS=true; t.click(); }).catch(function(){});
+},true);
+/* Y al cerrar la pestaña del navegador */
+window.addEventListener("beforeunload",function(e){
+  if(!hayCambiosDisp()) return;
+  e.preventDefault();
+  e.returnValue="Tienes cambios sin guardar en tu horario.";
 });
 /* Con 2+ clases en la misma hora (salas en paralelo), el admin ELIGE a cuál siembra.
    Antes el server tomaba la primera en silencio: en Elevate siempre ganaba una sala
@@ -4678,7 +4980,7 @@ document.body.addEventListener("click",function(e){
 });
 
 /* ---------- Tabs / modales ---------- */
-var TITULOS={resumen:"Hoy",academia:"Mi academia",alumnos:"Alumnos",grupos:"Grupos",profesores:"Profesores",registro:"Asistencia",agenda:"Agenda",pagos:"Pagos",caja:"Caja",reportes:"Reportes",cuentas:"Cuentas de alumnos",leads:"Interesados",recursos:"Para tus alumnos",ejercicios:"Tu biblioteca",ajustes:"Ajustes",perfil:"Perfil",servicios:"Servicios",campanas:"Campañas",chat:"Chat",feedback:"Ideas y errores",web:"Mi web"};
+var TITULOS={resumen:"Hoy",academia:"Mi academia",alumnos:"Alumnos",grupos:"Grupos",profesores:"Profesores",registro:"Asistencia",agenda:"Mis clases",pagos:"Pagos",caja:"Caja",reportes:"Reportes",cuentas:"Cuentas de alumnos",leads:"Interesados",recursos:"Para tus alumnos",ejercicios:"Tu biblioteca",ajustes:"Ajustes",perfil:"Perfil",servicios:"Servicios",campanas:"Campañas",chat:"Chat",feedback:"Ideas y errores",web:"Mi web"};
 document.querySelectorAll(".tab").forEach(function(t){
   t.addEventListener("click",function(){
     document.querySelectorAll(".tab").forEach(function(x){x.classList.remove("active");});
@@ -7434,10 +7736,10 @@ window.batutaInit = batutaInit;
 <!-- "+" global (fase 3, 10-ago-2026): agregar lo de todos los días sin buscar la pantalla -->
 <button class="mas-fab" id="masFab" aria-label="Agregar" aria-expanded="false" title="Agregar (alumno, pago, clase, asistencia)">+</button>
 <div class="mas-menu" id="masMenu" hidden>
-  <button type="button" data-ira="alumnos" data-iract="btnNuevoAlumno">👤 Agregar un alumno</button>
-  <button type="button" data-ira="pagos">💵 Anotar un pago</button>
-  <button type="button" data-ira="agenda">📅 Programar una clase</button>
-  <button type="button" data-ira="registro" data-iract="btnNuevoRegistro">✔️ Anotar asistencia</button>
+  <button type="button" data-ira="alumnos" data-iract="btnNuevoAlumno"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/></svg>Agregar un alumno</button>
+  <button type="button" data-ira="pagos"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="5" width="20" height="14" rx="2"/><circle cx="12" cy="12" r="3"/><line x1="6" y1="12" x2="6.01" y2="12"/><line x1="18" y1="12" x2="18.01" y2="12"/></svg>Anotar un pago</button>
+  <button type="button" data-ira="agenda"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>Programar una clase</button>
+  <button type="button" data-ira="registro" data-iract="btnNuevoRegistro"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>Anotar asistencia</button>
 </div>
 <button class="oia-fab" id="oiaFab" aria-label="Abrir soporte" aria-expanded="false">?</button>
 <div class="oia-panel" id="oiaPanel" role="dialog" aria-label="Soporte" hidden>
@@ -7739,8 +8041,9 @@ window.batutaInit = batutaInit;
     ],
     agenda:[
       {sel:'.dispcfg', t:"Primero, la vista", b:"«Mostrar de … a … cada …» ajusta la grilla a TU horario. ¿Tus clases son 7:15 u 8:30? Pon el paso en 30 o 15 minutos. Esto es solo tu vista: nunca borra un horario ya guardado."},
-      {sel:'#dispGrid', t:"Un clic prende la franja", b:"Prende las horas en que dictas. Los alumnos solo ven lo que esté prendido."},
-      {sel:'#dispGrid', t:"Otro clic la configura", b:"Sobre una franja prendida eliges su tipo de clase, su aforo y quién la dicta. Y con «Aplicar también a…» se lo pones a todo el día o a toda la semana de un golpe."},
+      {sel:'#dispGrid', t:"Un clic prende la hora", b:"Prende las horas en que dictas. Los alumnos solo ven lo que esté prendido. Este horario se repite TODAS las semanas."},
+      {sel:'#dispGrid', t:"Otro clic la configura", b:"Sobre una hora prendida eliges su tipo de clase, su aforo y quién la dicta. Y con «Aplicar también a…» se lo pones a todo el día o a toda la semana de un golpe."},
+      {sel:'#calMes', t:"¿Cambia solo una semana?", b:"Toca ese día en el calendario del mes y dale «Cambiar el horario de esta semana»: lo que prendas ahí vale solo esa semana y el resto del año se queda igual."},
       {sel:'#dispGrid', t:"¿Dos clases a la misma hora?", b:"Crea tus salas en Ajustes → Clases y planes (ej. Sala grande, Sala chica) y acá aparecerá una pestaña por sala: máquinas y mat pueden dictarse en paralelo, cada una con su propio cupo."},
       {sel:'#btnDispCopiar', t:"Arma el mes en 5 minutos", b:"Deja el lunes perfecto y cópialo al resto de días. Al final, dale «Guardar horario»: nada se aplica hasta ese botón."},
       {sel:null, t:"Los recordatorios van solos", b:"Batuta le escribe a cada alumno 24 horas y 1 hora antes de su clase, y cuando su paquete está por vencer. Menos faltas sin mover un dedo."}
