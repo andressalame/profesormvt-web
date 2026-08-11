@@ -1267,6 +1267,24 @@ async function enviarWhatsApp(env, phoneId, to, text){
   } catch (e) { return false; }
 }
 
+/* Valida la firma X-Hub-Signature-256 de Meta sobre el body CRUDO (estandar oficial de la
+   Cloud API): sha256=hex(HMAC-SHA256(app_secret, bytes_del_body)).
+   Dos trampas que este helper evita a proposito:
+   (a) se firman los BYTES tal como llegan (ArrayBuffer). Si se parsea el JSON antes y se
+       re-serializa, el texto exacto cambia y el HMAC no cuadra NUNCA.
+   (b) la comparacion va con safeEq (tiempo constante), no con === .
+   Fail-CLOSED: sin WHATSAPP_APP_SECRET cargado no pasa ningun POST y el motivo queda en el
+   log. Un guard que se abre solo no es un guard. */
+async function validarFirmaMeta(env, rawBuf, sigHeader){
+  if (!env.WHATSAPP_APP_SECRET) return { ok: false, motivo: "falta el secret WHATSAPP_APP_SECRET" };
+  const recibida = String(sigHeader || "").trim().toLowerCase();
+  if (!recibida.startsWith("sha256=")) return { ok: false, motivo: "sin header X-Hub-Signature-256" };
+  const key = await crypto.subtle.importKey("raw", enc.encode(env.WHATSAPP_APP_SECRET), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  const esperado = hex(await crypto.subtle.sign("HMAC", key, rawBuf));
+  if (!safeEq(recibida.slice(7), esperado)) return { ok: false, motivo: "firma no coincide" };
+  return { ok: true };
+}
+
 /* ============ RESCATE DE COMPRAS ABANDONADAS (07-jul-2026) ============
    La compra que quedó 'iniciada' (checkout de tarjeta que nunca pagó) o 'rechazada' hoy muere
    en silencio. Este motor manda UN correo por compra invitando a retomarla en el portal.
@@ -3886,8 +3904,20 @@ export default {
         return new Response("forbidden", { status: 403 });
       }
       if (url.pathname === "/api/wa/webhook" && request.method === "POST"){
+        /* Guard de borde (11-ago-2026): solo pasan los POST firmados por Meta. Sin esto,
+           cualquiera que descubriera esta URL podia inventar leads, disparar alertas falsas y
+           —lo peor— usar el numero oficial de MVT como relay para mandarle WhatsApp a cualquier
+           telefono del mundo (el destinatario sale del propio body), lo que arriesga un ban de
+           la WABA. Se valida ANTES de tocar la DB o mandar nada. */
+        const rawBuf = await request.arrayBuffer();
+        const firma = await validarFirmaMeta(env, rawBuf, request.headers.get("x-hub-signature-256"));
+        if (!firma.ok){
+          console.error("wa webhook: POST rechazado (401) —", firma.motivo);
+          return new Response("unauthorized", { status: 401 });
+        }
         if (!env.WHATSAPP_TOKEN) return new Response("ok", { status: 200 });
-        const body = await request.json().catch(() => null);
+        let body = null;
+        try { body = JSON.parse(new TextDecoder().decode(rawBuf)); } catch (e) { body = null; }
         ctx.waitUntil((async () => {
           try {
             const val = body && body.entry && body.entry[0] && body.entry[0].changes && body.entry[0].changes[0] && body.entry[0].changes[0].value;
