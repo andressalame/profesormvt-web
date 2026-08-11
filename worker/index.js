@@ -3420,14 +3420,46 @@ export default {
           // "Clase de prueba" como LEGADO para el cálculo de saldo de alumnos viejos), así que
           // el selector la ofrecía y pagar-directo la rechazaba después: callejón sin salida.
           paquetes: PAQUETES_COMPRABLES.filter(pk => (preciosPd[pk] || 0) > 0).map(pk => ({ k: pk, precio: preciosPd[pk] || 0 })),
-          metodos,
-          infoPago: {
-            yape: { numero: cfgPd.pago_numero || "", titular: cfgPd.pago_titular || "" },
-            bcp: { cuenta: cfgPd.bcp_cuenta || "", cci: cfgPd.bcp_cci || "" },
-            scotia: { cuenta: cfgPd.scotia_cuenta || "", cci: cfgPd.scotia_cci || "" },
-            crypto: { moneda: cfgPd.crypto_moneda || "USDT", red: cfgPd.crypto_red || "", wallet: cfgPd.crypto_wallet || "" }
-          }
+          metodos
+          /* FUGA CERRADA (11-ago-2026): aqui viajaba `infoPago` con el juego COMPLETO de datos
+             de cobro PERSONALES de Andres — Yape con su nombre real, cuenta BCP + CCI, cuenta
+             Scotiabank + CCI y la wallet USDT — a cualquiera que pidiera esta URL. Peor que la
+             gemela de Batuta: alla habia que adivinar el slug de una academia; aca el sitio es
+             mono-tenant, o sea que la URL ES la URL y no habia nada que adivinar. La wallet de
+             Tron ademas es publica en el explorador: quien la tuviera podia leerle el historial
+             entero de cobros en cripto y atarlo a su nombre.
+             Los `metodos` se quedan porque son solo etiquetas ("Yape / Plin / Sip"): dicen QUE
+             se puede usar, nunca el numero. Los digitos ahora los sirve /api/pago-datos, uno a
+             uno y al momento de pagar. */
         });
+      }
+
+      /* Datos de cobro, UNO a la vez y recien cuando el alumno elige como pagar (11-ago-2026).
+         Mismo patron que se deployo hoy en Batuta (/app/api/pago-datos).
+         Sigue SIN pedir sesion, y es a proposito: el que paga por el link publico todavia no
+         tiene cuenta y exigirsela mataria la venta. Lo que se acaba es la cosecha: viaja solo
+         el riel elegido, nunca el juego completo, y con tope por IP. */
+      if (url.pathname === "/api/pago-datos" && request.method === "POST"){
+        const ipPD = request.headers.get("CF-Connecting-IP") || "";
+        if (ipPD && await chatbotPasoTope(env, "pdat:" + ipPD, 30)){
+          return json({ error: "Demasiados intentos. Espera un rato." }, 429);
+        }
+        const bPD = await request.json().catch(() => ({}));
+        const metodoPD = String(bPD.metodo || "").trim();
+        const cPD = await loadConfig(env).catch(() => ({}));
+        let textoPD = "";
+        if (metodoPD === "Yape/Plin/Sip" && cPD.pago_numero){
+          textoPD = "Yapea o Plinea a: " + cPD.pago_numero + (cPD.pago_titular ? "\nA nombre de: " + cPD.pago_titular : "");
+        } else if (metodoPD === "Transferencia BCP" && cPD.bcp_cuenta){
+          textoPD = "BCP Soles: " + cPD.bcp_cuenta + (cPD.bcp_cci ? "\nCCI: " + cPD.bcp_cci : "");
+        } else if (metodoPD === "Transferencia Scotiabank" && cPD.scotia_cuenta){
+          textoPD = "Scotiabank Soles: " + cPD.scotia_cuenta + (cPD.scotia_cci ? "\nCCI: " + cPD.scotia_cci : "");
+        } else if (metodoPD === "Crypto USDT" && cPD.crypto_wallet){
+          textoPD = (cPD.crypto_moneda || "USDT") + " por " + (cPD.crypto_red || "Tron (TRC20)") + ":\n" + cPD.crypto_wallet;
+        } else {
+          return json({ error: "Ese metodo no esta disponible ahora." }, 404);
+        }
+        return json({ texto: textoPD });
       }
 
       if (url.pathname === "/api/pagar-directo" && request.method === "POST"){

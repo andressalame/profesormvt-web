@@ -89,7 +89,7 @@ import Layout from '../layouts/Layout.astro';
 
 <script>
 (function(){
-  var INFO=null, pq=document.getElementById('pq'), cs=document.getElementById('cs'),
+  var pq=document.getElementById('pq'), cs=document.getElementById('cs'),
       mt=document.getElementById('mt'), pinfo=document.getElementById('pinfo'),
       manual=document.getElementById('manualbox'), btn=document.getElementById('btnp'),
       form=document.getElementById('fp'), err=document.getElementById('errp');
@@ -106,7 +106,6 @@ import Layout from '../layouts/Layout.astro';
       form.innerHTML='<p>Los pagos por aquí no están disponibles ahora. Escríbeme por WhatsApp y lo coordinamos directo.</p>';
       return;
     }
-    INFO=d.infoPago;
     pq.innerHTML=d.paquetes.map(function(p){
       return '<option value="'+p.k+'"'+(p.k===preSel?' selected':'')+'>'+p.k+' — S/ '+p.precio+'</option>';
     }).join('');
@@ -116,20 +115,29 @@ import Layout from '../layouts/Layout.astro';
     form.innerHTML='<p>No se pudo cargar la información de pago. Recarga la página o escríbeme por WhatsApp.</p>';
   });
 
+  /* Los datos de cobro ya NO llegan con el resto de la pagina: se piden al elegir metodo y solo
+     el que toca (11-ago-2026, misma jugada que en Batuta). Cache en memoria para no repetir el
+     fetch si el alumno pasea por el select. */
+  var CACHEP={};
+  function traeInfo(v){
+    if(CACHEP[v]!==undefined) return Promise.resolve(CACHEP[v]);
+    return fetch('/api/pago-datos',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({metodo:v})})
+      .then(function(r){ return r.json().then(function(d){ CACHEP[v]=r.ok?(d.texto||''):''; return CACHEP[v]; }); })
+      .catch(function(){ CACHEP[v]=''; return ''; });
+  }
   function pintaInfo(){
-    if(!INFO) return;
-    var v=mt.value, t='';
+    var v=mt.value;
     if(v==='Tarjeta (Mercado Pago)'){
-      t='Te llevamos al checkout de Mercado Pago. Al aprobar, tu paquete se activa solo.';
       manual.style.display='none'; btn.textContent='Pagar con tarjeta →';
-    } else {
-      manual.style.display=''; btn.textContent='Registrar mi pago';
-      if(v==='Yape/Plin/Sip'){ t='Yapea o Plinea a: '+INFO.yape.numero+(INFO.yape.titular?('\nA nombre de: '+INFO.yape.titular):''); }
-      else if(v==='Transferencia BCP'){ t='BCP Soles: '+INFO.bcp.cuenta+(INFO.bcp.cci?('\nCCI: '+INFO.bcp.cci):''); }
-      else if(v==='Transferencia Scotiabank'){ t='Scotiabank Soles: '+INFO.scotia.cuenta+(INFO.scotia.cci?('\nCCI: '+INFO.scotia.cci):''); }
-      else if(v==='Crypto USDT'){ t=INFO.crypto.moneda+' por '+INFO.crypto.red+':\n'+INFO.crypto.wallet; }
+      pinfo.textContent='Te llevamos al checkout de Mercado Pago. Al aprobar, tu paquete se activa solo.';
+      return;
     }
-    pinfo.textContent=t;
+    manual.style.display=''; btn.textContent='Registrar mi pago';
+    pinfo.textContent='Cargando los datos para pagar…';
+    traeInfo(v).then(function(txt){
+      if(mt.value!==v) return;   // cambió de método mientras llegaba
+      pinfo.textContent=txt||'No se pudo cargar los datos. Recarga la página o escríbeme por WhatsApp.';
+    });
   }
   mt.addEventListener('change', pintaInfo);
 
