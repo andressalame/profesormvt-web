@@ -7995,7 +7995,52 @@ function impProcesarFilas(rows){
           error:errFila, errOtros:"", avisos:avisos, paqDesc:paqDesc,
           profTxt:profTxt, profesor_id:impResolveProfe(profTxt) });
       }
+      out=impFusionarPases(out);
       IMP_ROWS=out; impPreview(out,dup,vacios,dupArchivo,sinCruce);
+}
+/* ---- Varios pases para la MISMA persona (11-ago-2026, el caso Camila Ruiz de Elevate) ----
+   Punchpass permite tener varios pases activos a la vez; la ficha de Batuta hoy lleva UNO.
+   Antes, cada pase generaba su propia fila de "completar" y solo una pegaba: los demás pases
+   se botaban EN SILENCIO (Camila tenía 3 y quedó con el que ni había estrenado). Ahora entra
+   el pase que ESTÁ USANDO (con clases consumidas; a igualdad, el que vence primero) y los
+   demás quedan escritos en sus Notas con saldo y vencimiento, para que el dueño decida.
+   Nada se pierde y la vista previa lo dice. */
+function impFusionarPases(out){
+  var porPersona={};
+  out.forEach(function(a,ix){
+    if(!a.paquete||a.error) return;
+    var k=a.completaA?("id:"+a.completaA):("cl:"+impClave(a.nombre,a.apellido,a.email));
+    (porPersona[k]=porPersona[k]||[]).push(ix);
+  });
+  var quitar={};
+  Object.keys(porPersona).forEach(function(k){
+    var ixs=porPersona[k];
+    if(ixs.length<2) return;
+    var orden=ixs.slice().sort(function(x,y){
+      var a=out[x],b=out[y];
+      var ea=(Number(a.migrado_usadas)||0)>0?0:1, eb=(Number(b.migrado_usadas)||0)>0?0:1;
+      if(ea!==eb) return ea-eb;                    // el empezado gana al sin estrenar
+      var va=a.vence||"9999-99-99", vb=b.vence||"9999-99-99";
+      if(va!==vb) return va<vb?-1:1;               // el que vence primero es el que se consume
+      return x-y;                                  // estable: el orden del archivo
+    });
+    var g=out[orden[0]];
+    var extras=orden.slice(1).map(function(ix2){
+      var p=out[ix2]; quitar[ix2]=1;
+      var det=[];
+      if(p.restantes!=null) det.push("le quedan "+p.restantes);
+      else if(p.saldoNota) det.push(p.saldoNota);
+      if(p.vence) det.push("vence "+p.vence);
+      else if(p.venceTxt) det.push("vence: "+p.venceTxt);
+      return p.paquete+(det.length?" ("+det.join(", ")+")":"");
+    });
+    g.pasesExtra=extras.length;
+    var linea="Otros pases migrados: "+extras.join(" · ");
+    if(g.completaA) g.notasExtra=(g.notasExtra?g.notasExtra+" · ":"")+linea;
+    else g.notas=(g.notas?g.notas+" · ":"")+linea;
+  });
+  var hayQuitar=false; for(var q in quitar){ hayQuitar=true; break; }
+  return hayQuitar?out.filter(function(_,ix){ return !quitar[ix]; }):out;
 }
 function impLeerArchivo(f){
   if(!f) return;
@@ -8145,6 +8190,7 @@ el("btnImpPegar").addEventListener("click",function(){
       profTxt:profTxt, profesor_id:undefined });
   });
   IMP_COLS_EXTRA=[];   // el pegado sin cabecera ya manda los sobrantes a notas por celda
+  out=impFusionarPases(out);
   IMP_ROWS=out; impPreview(out,dup,0,0);
 });
 function impPreview(rows,dup,vacios,dupArchivo,sinCruce){
@@ -8180,6 +8226,7 @@ function impPreview(rows,dup,vacios,dupArchivo,sinCruce){
     var compQue=(a.completaQue||[]).filter(function(q){ return q!=="clase"||!!a.curso; });
     var nomCel=esc(a.nombre)+(a.apellido?(" "+esc(a.apellido)):"")+
       (a.completaA?('<br><span class="mini" style="color:var(--accent);">ya está en tu lista: '+(compQue.length?("se le completa "+esc(compQue.join(", "))):"confirma su clase abajo")+'</span>'):"")+
+      (a.pasesExtra?('<br><span class="mini" style="color:var(--amber,#E8A13D);">trae '+(a.pasesExtra+1)+' pases: entra el que está usando y '+(a.pasesExtra===1?"el otro queda":"los otros "+a.pasesExtra+" quedan")+' en sus Notas</span>'):"")+
       ((a.avisos&&a.avisos.length)?('<br><span class="mini" style="color:var(--amber,#d99a3c);">'+esc(a.avisos[0])+(a.avisos.length>1?(" (+"+(a.avisos.length-1)+")"):"")+'</span>'):"");
     return "<tr"+(a.error?' style="background:rgba(217,83,79,.08);"':'')+"><td>"+nomCel+"</td><td>"+cuCel+"</td><td>"+esc(a.whatsapp)+"</td><td>"+esc(a.paquete||"—")+"</td><td>"+saldo+"</td><td>"+pf+"</td></tr>";
   }).join("");
@@ -8450,6 +8497,11 @@ el("btnImpConfirmar").addEventListener("click",function(){
       if(a.whatsapp && !ex.whatsapp) ex.whatsapp=a.whatsapp;
       if(a.nacimiento && !ex.nacimiento) ex.nacimiento=a.nacimiento;
       if(a.apellido && !ex.apellido) ex.apellido=a.apellido;
+      /* los OTROS pases de la misma persona (impFusionarPases) sí se AGREGAN a sus Notas:
+         es información nueva, no pisa nada — solo se cuida de no duplicarla si reimporta */
+      if(a.notasExtra && String(ex.notas||"").indexOf(a.notasExtra)<0){
+        ex.notas=(ex.notas?ex.notas+" · ":"")+a.notasExtra;
+      }
       if(a.reservas && a.reservas.length) resPend.push({alumno_id:ex.id, isos:a.reservas});
       return;
     }
