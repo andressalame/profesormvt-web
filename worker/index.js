@@ -1416,10 +1416,17 @@ const SORTEO = {
                          Si gana NO hay correo que mandarle: el aviso a Andrés lo dice y él
                          le escribe por WhatsApp. Si algún día se crea su cuenta, se engancha
                          sola y sus compras se suman en la misma entrada. */
+  /* 🔒 12-ago-2026: los dos primeros estaban acá con su CORREO PERSONAL. No se servían por
+     HTTP, pero el fuente vive en git para siempre: el día que este repo se comparta o se haga
+     público, salen. Se cambian por su `alumno_id`, que identifica igual y no es un dato
+     personal. Único efecto: si uno de ellos ganara, el aviso no le sale por correo solo —
+     irrelevante, el sorteo cerró el 5-ago con ganadora (Yaritza) y `activo` está en false.
+     ⚠️ Los correos siguen en el HISTORIAL de git: solo se van reescribiéndolo, que no vale
+     la pena por dos direcciones de alumnos que además son clientes suyos. */
   invitados: [
-    { email: "alvaro.guillenc1612@gmail.com", boletos: 1 },   // Álvaro Guillén
-    { email: "missdelilah12345@gmail.com",    boletos: 1 },   // Delilah Rivera
-    { alumno_id: "mse2dkz8eun8t",             boletos: 1 }    // Renato Cárdenas (sin cuenta del portal)
+    { alumno_id: "mqfxwwh8w77d1", boletos: 1 },   // Álvaro Guillén
+    { alumno_id: "mrwqqfoa9x1f7", boletos: 1 },   // Delilah
+    { alumno_id: "mse2dkz8eun8t", boletos: 1 }    // Renato Cárdenas (sin cuenta del portal)
   ]
 };
 

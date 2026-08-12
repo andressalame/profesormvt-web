@@ -382,8 +382,19 @@ export function contexto(tenant, cfg, precios, paq, opciones){
      el resto del worker (cfg.whatsapp_profe || tenant.whatsapp). */
   var wa = String(cfg.whatsapp_profe || (tenant && tenant.whatsapp) || "").replace(/[^0-9]/g, "");
   var paquetes = (paq && paq.list ? paq.list : []).filter(function (pk){ return (precios[pk] || 0) > 0 && pk !== "Clase de prueba"; });
+  /* 🔒 12-ago-2026 (endurecimiento latente de la auditoría del 11-ago): acá se metía la config
+     COMPLETA del tenant en el contexto de la web PÚBLICA de la academia — incluidos los datos
+     de cobro (Yape, cuentas, CCI, wallet), los tokens de facturación y las instrucciones del
+     bot. Hoy no filtraba nada porque los renderers solo leen 6 claves de marca y el contexto
+     nunca se serializa a la página; pero el día que alguien pinte `ctx.cfg` entero o lo mande
+     en un JSON embebido, salen todos los datos bancarios de golpe. Lista blanca: si un render
+     nuevo necesita otra clave, se agrega ACÁ a propósito — que es justo el punto. */
+  var cfgPublica = {};
+  ["brand_color", "brand_font", "brand_logo", "clases", "cursos", "whatsapp_profe"].forEach(function (k){
+    if (cfg && cfg[k] !== undefined) cfgPublica[k] = cfg[k];
+  });
   return {
-    tenant: tenant, cfg: cfg, precios: precios,
+    tenant: tenant, cfg: cfgPublica, precios: precios,
     cursos: cursos, clases: clases, wa: wa, cobroOn: !!o.cobroOn, paquetes: paquetes,
     base: "/app/a/" + tenant.slug,
     waMsg: encodeURIComponent("Hola! Vi la página de " + tenant.academia + " y quiero más información :)"),
