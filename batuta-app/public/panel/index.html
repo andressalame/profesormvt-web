@@ -2984,17 +2984,29 @@ function renderAlumnos(){
          dice que falta ponerlo, no se inventa uno (11-ago-2026). */
       '<td>'+(a.curso?esc(a.curso):'<span class="mini">— sin curso —</span>')+'</td>'+
       /* "ciclo N" era jerga interna: se dice en castellano y solo cuando ya renovó */
-      '<td>'+(a.paquete?(esc(a.paquete)+(function(){
-        /* varios pases activos (11-ago-2026): la tabla avisa que este alumno tiene más
-           pases aparte del principal; el detalle vive en su portal y en la reserva */
-        try{ var pj=JSON.parse(a.pases||""); var np=(pj&&pj.p&&pj.p.length)||0;
-             return (np>=2 && (Number(pj.c)||1)===(Number(a.ciclo)||1))?' <span class="mini" style="font-weight:600;">(+'+(np-1)+' pase'+(np-1===1?'':'s')+')</span>':""; }catch(e){ return ""; }
-      })()+'<br><span class="mini">S/ '+c.monto+
-      /* 11-ago-2026 (pedido en vivo de José): el saldo TAMBIÉN acá, pegado al plan. La columna
-         "Le quedan" existe pero vive lejos y los botones flotantes la tapan justo al pasar el
-         mouse — y el dato que más mira el dueño es este. */
-      ' · <b>'+(c.ilim?'sin límite':((c.restantes===Infinity?'∞':Math.max(0,Number(c.restantes)||0))+' de '+(c.compradas||0)+' quedan'))+'</b>'+
-      ((Number(a.ciclo)||1)>1?(' · '+((Number(a.ciclo)||1)-1)+'ª renovación'):'')+'</span>'):'<span class="mini">— sin plan —</span>')+'</td>'+
+      '<td>'+(function(){
+        /* VARIOS PASES (11-ago-2026, en vivo con José): la celda pinta TODOS los pases del
+           alumno, cada uno con su saldo y su vencimiento. El saldo por pase de esta celda
+           sale de las clases del plan menos las usadas migradas; con reservas de por medio
+           la verdad fina la calcula el server (reserva y portal) — en una academia recién
+           migrada son exactamente lo mismo. */
+        try{
+          var pj=JSON.parse(a.pases||"");
+          if(pj&&pj.p&&pj.p.length>=2&&(Number(pj.c)||1)===(Number(a.ciclo)||1)){
+            var pk2=pkMap();
+            return pj.p.map(function(px){
+              var def=pk2[px.n]||{clases:0,ilim:false};
+              var sal=def.ilim?'sin límite':(Math.max(0,(Number(def.clases)||0)-(Number(px.usadas)||0))+' de '+(Number(def.clases)||0)+' quedan');
+              return esc(px.n)+' <span class="mini"><b>'+sal+'</b>'+(px.vence?' · vence '+esc(px.vence):'')+'</span>';
+            }).join('<br>');
+          }
+        }catch(e){}
+        /* un solo plan: el saldo pegado al plan (la columna "Le quedan" vive lejos y los
+           botones flotantes la tapan justo al pasar el mouse) */
+        return a.paquete?(esc(a.paquete)+'<br><span class="mini">S/ '+c.monto+
+          ' · <b>'+(c.ilim?'sin límite':((c.restantes===Infinity?'∞':Math.max(0,Number(c.restantes)||0))+' de '+(c.compradas||0)+' quedan'))+'</b>'+
+          ((Number(a.ciclo)||1)>1?(' · '+((Number(a.ciclo)||1)-1)+'ª renovación'):'')+'</span>'):'<span class="mini">— sin plan —</span>';
+      })()+'</td>'+
       '<td>'+pago+'</td>'+
       /* "(manual)" no le decía nada a nadie: es el horario que escribió el profe a mano */
       '<td>'+esc((a.horarioFijo&&a.horarioFijo.length)?a.horarioFijo.join(' · '):(a.horario||'—'))+
