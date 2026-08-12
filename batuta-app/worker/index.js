@@ -4329,7 +4329,30 @@ function reciboHTML(d){
 async function assetConSeguridad(resp){
   const h = new Headers(resp.headers);
   for (const [k, v] of Object.entries(SEC_HEADERS)) h.set(k, v);
+  /* 11-ago-2026: el HTML del panel/portal NUNCA se guarda en cachés intermedias ni en el
+     navegador — cada navegación trae la versión viva. Los assets pesados (fuentes, íconos)
+     no pasan por aquí, así que no se encarece nada. batuta.lat ya mandaba max-age=0 por la
+     capa de Vercel; esto lo garantiza también en workers.dev y ante cualquier proxy futuro. */
+  const ct = String(h.get("content-type") || "");
+  if (ct.includes("text/html")) h.set("Cache-Control", "no-cache, must-revalidate");
   return new Response(resp.body, { status: resp.status, statusText: resp.statusText, headers: h });
+}
+/* ---- Versión viva del panel (11-ago-2026) ----
+   Hash del HTML del panel tal cual lo sirve ESTE deploy. Memoizado por isolate: un deploy
+   nuevo levanta isolates nuevos y el hash cambia solo. El panel lo consulta al ganar foco y
+   cada tanto: si difiere del que traía cargado, se recarga solo (o avisa). Así una pestaña
+   abierta desde hace horas no puede volver a operar con código viejo — la causa de que la
+   migración de Elevate corriera sin el multi-pase la noche del 11-ago. */
+let PANEL_VERSION_MEMO = null;
+async function panelVersion(env, url){
+  if (PANEL_VERSION_MEMO) return PANEL_VERSION_MEMO;
+  try {
+    const r = await env.ASSETS.fetch(new Request(new URL("/panel/index.html", url)));
+    const buf = await r.arrayBuffer();
+    const dig = await crypto.subtle.digest("SHA-256", buf);
+    PANEL_VERSION_MEMO = [...new Uint8Array(dig)].slice(0, 8).map(b => b.toString(16).padStart(2, "0")).join("");
+  } catch (e) { PANEL_VERSION_MEMO = "sin-hash"; }
+  return PANEL_VERSION_MEMO;
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -5977,6 +6000,11 @@ export default {
     /* ----- PWA: service workers + manifests ----- */
     if (path === "/app/sw-panel.js" && request.method === "GET"){
       return new Response(swFuente("/app/panel"), { headers: { "content-type": "application/javascript; charset=utf-8", "cache-control": "no-cache" } });
+    }
+    /* versión viva del panel: el panel abierto la compara con la suya y se recarga solo */
+    if (path === "/app/api/panel-version" && request.method === "GET"){
+      return new Response(JSON.stringify({ v: await panelVersion(env, url) }),
+        { headers: { "content-type": "application/json", "cache-control": "no-store" } });
     }
     if (path === "/app/sw-alumno.js" && request.method === "GET"){
       return new Response(swFuente("/app"), { headers: { "content-type": "application/javascript; charset=utf-8", "cache-control": "no-cache" } });

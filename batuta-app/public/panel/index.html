@@ -7318,6 +7318,11 @@ function impPintarGuia(){
    archivo de planes (lo usan el banner de Alumnos y el aviso de después de importar). */
 function abrirImportador(opts){
   opts=opts||{};
+  /* Importar con código viejo fue lo que rompió la migración de Elevate: si ya sabemos que
+     hay versión nueva, acá se recarga ANTES de que elija un archivo (no hay nada a medias).
+     Y se re-chequea al abrir, por si la pestaña lleva horas quieta. */
+  if(VER_VIEJA){ location.reload(); return; }
+  verChequear();
   IMP_MSG_RESULTADO=opts.resultado||"";
   IMP_ROWS=[]; el("impFile").value="";
   el("btnImpConfirmar").style.display="none"; el("impErr").style.display="none";
@@ -8092,6 +8097,34 @@ function impEncolar(lista){
   impLeerArchivo(primero);
 }
 el("impFile").addEventListener("change",function(){ impEncolar(this.files); });
+/* ---- Panel siempre fresco (11-ago-2026) ----
+   La causa raíz de la noche de Elevate: una pestaña abierta desde hacía HORAS corrió la
+   importación con JS viejo — y ningún caché tenía la culpa, una SPA abierta ES su versión.
+   El panel ahora se compara contra el servidor (hash del deploy vivo): al ganar foco, cada
+   10 minutos y antes de abrir el importador. Si el servidor cambió: con la pestaña en
+   segundo plano se recarga sola; en primer plano muestra una franja para recargar con un
+   toque. Nunca recarga a nadie con algo a medias en pantalla. */
+var VER_PANEL=null, VER_VIEJA=false;
+function verAvisar(){
+  if(document.hidden){ location.reload(); return; }
+  if(document.getElementById("verBanner")) return;
+  var b=document.createElement("div");
+  b.id="verBanner";
+  b.style.cssText="position:fixed;top:0;left:0;right:0;z-index:99999;background:var(--amber,#E8A13D);color:#141414;font-size:14px;font-weight:600;padding:10px 16px;text-align:center;cursor:pointer;";
+  b.textContent="El panel se actualizó mientras esta pestaña estaba abierta. Toca aquí para recargar — lo guardado no se pierde.";
+  b.addEventListener("click",function(){ location.reload(); });
+  document.body.appendChild(b);
+}
+function verChequear(){
+  fetch("/app/api/panel-version",{cache:"no-store"}).then(function(r){return r.json();}).then(function(d){
+    if(!d||!d.v) return;
+    if(VER_PANEL===null){ VER_PANEL=d.v; return; }
+    if(d.v!==VER_PANEL && !VER_VIEJA){ VER_VIEJA=true; verAvisar(); }
+  }).catch(function(){});
+}
+verChequear();
+setInterval(verChequear, 10*60*1000);
+document.addEventListener("visibilitychange",function(){ if(!document.hidden) verChequear(); });
 /* Arrastrar y soltar (9-ago-2026, pedido de Andrés: "descarga el CSV, arrástralo y listo").
    El guard de window evita el clásico desastre: soltar el archivo fuera del recuadro y que
    el navegador abandone el panel para abrir el CSV. Soltar un archivo en CUALQUIER parte
