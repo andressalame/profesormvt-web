@@ -1954,7 +1954,13 @@
         <div style="margin-top:8px;"><button class="btn" id="btnImpPegar">Ver cómo quedaría</button></div>
         <div style="text-align:center;color:var(--muted);font-size:12px;margin:18px 0 12px;">— o, si ya tienes el archivo —</div>
       </div>
-      <div class="field"><label id="impFileLab">Subir un archivo .csv (o arrástralo aquí)</label><input id="impFile" type="file" accept=".csv,text/csv" />
+      <div class="field"><label id="impFileLab">Subir un archivo .csv (o arrástralo aquí)</label><input id="impFile" type="file" accept=".csv,text/csv" multiple />
+        <!-- Cola de archivos (11-ago-2026, reporte de José en plena migración: "cuando trata de subir
+             los dos archivos al mismo tiempo, solo le deja subir 1 a la vez"). La pantalla le PIDE dos
+             archivos, así que agarrar los dos juntos es lo que cualquiera haría; el input aceptaba uno
+             y el segundo se perdía en silencio. Ahora entran los dos, se procesa el primero y el otro
+             queda esperando su turno acá, con su nombre a la vista. -->
+        <div id="impCola" style="display:none;margin:9px 0 0;padding:9px 11px;border-radius:9px;background:var(--soft,#f4f5f7);font-size:13.5px;line-height:1.5;"></div>
         <p class="hint" style="margin:5px 0 0;"><b>Sube (o pega) el export de tu sistema anterior TAL CUAL</b> — Batuta reconoce las columnas por su nombre, también en inglés (Punchpass, Excel, Sheets, con comas, punto y coma o tabs). La única obligatoria es <b>Nombre</b>; también entiende Apellido, Correo, WhatsApp, Nacimiento, Curso, Paquete, <b>Clases restantes</b>, <b>Vence</b> y <b>Reservas</b> (los horarios que ya tenía agendados, ej. <code>20/08/2026 19:00; 27/08/2026 19:00</code>). Lo que no reconozca, simplemente lo ignora, y antes de importar te muestra TODO en una previsualización. La plantilla de abajo es solo por si prefieres armarlo tú.</p>
         <p class="hint" id="impHint2Arch" style="margin:8px 0 0;"><b>¿Los planes vienen en otro archivo?</b> Pasa mucho: el export de clientes trae los datos de contacto y el de pases trae el plan de cada uno. Sube el segundo archivo aquí mismo (con su nombre, apellido y su plan) y a cada alumno que ya esté en tu lista <b>se le completa lo que le falte</b>. Nunca se pisa un dato que ya tengas, y nadie se duplica.</p></div>
       <div style="margin:0 0 4px;display:flex;gap:14px;align-items:center;flex-wrap:wrap;">
@@ -7099,17 +7105,26 @@ var IMP_PLATAFORMAS=[
         nota:'Aplica los filtros que quieras, dale a <b>Exportar</b> y después a <b>Descargar</b>. De ahí sale el plan que compró cada alumno.' } ],
     aviso:'AgendaPro no documenta si el archivo de planes trae <b>cuántas sesiones le quedan</b> a cada alumno. Si no vienen, súbelo igual: entra el plan y el saldo se lo ajustas tú.' },
   /* PUNCHPASS — el caso de Elevate, y el que originó todo esto.
-     Rutas verificadas contra support.punchpass.com (11-ago-2026). OJO: la ruta que teníamos
-     anotada, "Reports → Active Customers", NO EXISTE — el listado de clientes vive en la
-     página Customers, no en Reports. Se corrigió antes de escribirla en pantalla. */
+     Rutas verificadas contra support.punchpass.com. OJO con DOS correcciones, las dos caras:
+     1) "Reports → Active Customers" NO EXISTE: el listado de clientes vive en la página
+        Customers, no en Reports.
+     2) 11-ago-2026, CORREGIDO EN VIVO durante la migración de José, que preguntó si no era
+        más bien "Active Passes By Customer". Tenía razón: acá decía "Reports → Sales Details"
+        para los planes, y ese es el reporte de VENTAS — trae Customer Id y la transacción de
+        compra, pero NO cuántas clases le quedan a la persona (confirmado en el artículo
+        "Working with the Sales Details Report"). El saldo vive en el Active Passes Report.
+        Migrar con Sales Details habría metido a todos con el paquete lleno, que es justo el
+        bug de plata que se cazó esa misma mañana.
+     Lección para las demás plataformas: no basta con que la ruta EXISTA; hay que comprobar
+     que el archivo traiga el dato que se necesita. */
   { id:"punchpass", nombre:"Punchpass", icono:"app", verificado:true,
     sub:"son 2 archivos",
     pasos:[
       { titulo:"Tus alumnos", ruta:"Customers → Export", formato:"CSV",
         nota:'Entra a <b>Customers</b>, elige la lista (por ejemplo <i>All Customers</i>), marca a todos con <i>Select All</i> y aprieta <b>Export</b>. Trae nombre, apellido, correo y teléfono. <b>Todavía no trae sus planes</b>: eso es el segundo archivo.' },
-      { titulo:"Sus planes", ruta:"Reports → Sales Details", formato:"CSV",
-        alt:"la página All Pass Purchases", altPor:"tiene su propio botón de exportar",
-        nota:'Dentro del reporte busca la sección <b>Tracking Pass Purchases</b>: ahí están el pase de cada alumno y las clases que le quedan. Si el archivo trae la columna <b>Customer Id</b>, mejor todavía: cruzo por ese número en vez de por el nombre, así no se me confunden dos personas que se llaman parecido.' } ],
+      { titulo:"Sus planes y las clases que les quedan", ruta:"Reports → Active Passes By Customer", formato:"CSV",
+        alt:"Reports → Sales Details", altPor:"trae la columna Customer Id para cruzar sin confundir homónimos",
+        nota:'Este es el que trae <b>cuántas clases le quedan a cada alumno</b>, que es lo que hace falta para que entren con su saldo al día. <b>Ojo:</b> <i>Sales Details</i> NO sirve para el saldo — ese es el reporte de <b>ventas</b> y solo cuenta la compra, no lo que la persona ya consumió. Vale subirlo igual como tercer archivo si tu lista tiene <b>nombres repetidos</b>: es el único que trae <b>Customer Id</b> y con ese número cruzo sin confundir a dos personas que se llaman parecido.' } ],
     /* Detalle operativo que ahorra un susto: Punchpass no descarga el archivo al toque. */
     aviso:'En Punchpass el archivo <b>no se descarga al instante: te llega por correo</b> con un enlace para bajarlo. Si no lo ves en un par de minutos, revisa tu bandeja de spam. Y necesitas entrar como <b>Admin</b>.' },
   /* GLOFOX — el mejor caso: UN archivo trae contacto, plan, vencimiento y créditos.
@@ -7901,7 +7916,32 @@ function impLeerArchivo(f){
   };
   fr.readAsText(f,"utf-8");
 }
-el("impFile").addEventListener("change",function(){ impLeerArchivo(this.files&&this.files[0]); });
+/* ---- Cola de archivos (11-ago-2026) ----
+   Se procesa el primero y los demás esperan con su nombre a la vista, con un botón para
+   cargarlos sin volver a buscarlos en el disco. No se importan solos: el segundo archivo
+   COMPLETA a los que ya entraron, así que tiene que ir después del primero, no a la vez. */
+var IMP_COLA=[];
+function impPintarCola(){
+  var av=el("impCola"); if(!av) return;
+  if(!IMP_COLA.length){ av.style.display="none"; av.innerHTML=""; return; }
+  var f=IMP_COLA[0];
+  av.style.display="";
+  av.innerHTML='<b>Te queda '+IMP_COLA.length+' archivo'+(IMP_COLA.length===1?"":"s")+' por subir.</b><br>'+
+    'El siguiente es <b>'+esc(f.name)+'</b>. Termina de importar este y despues cargalo con el boton.<br>'+
+    '<button class="btn ghost sm" id="btnImpCola" style="margin-top:7px;">Cargar '+esc(f.name.length>34?f.name.slice(0,32)+"...":f.name)+'</button>';
+  var b=el("btnImpCola");
+  if(b) b.addEventListener("click",function(){ var sig=IMP_COLA.shift(); impPintarCola(); impLeerArchivo(sig); });
+}
+function impEncolar(lista){
+  var arr=[],i;
+  for(i=0;i<((lista&&lista.length)||0);i++) arr.push(lista[i]);
+  if(!arr.length) return;
+  var primero=arr.shift();
+  IMP_COLA=arr;
+  impPintarCola();
+  impLeerArchivo(primero);
+}
+el("impFile").addEventListener("change",function(){ impEncolar(this.files); });
 /* Arrastrar y soltar (9-ago-2026, pedido de Andrés: "descarga el CSV, arrástralo y listo").
    El guard de window evita el clásico desastre: soltar el archivo fuera del recuadro y que
    el navegador abandone el panel para abrir el CSV. Soltar un archivo en CUALQUIER parte
@@ -7922,15 +7962,16 @@ window.addEventListener("drop",function(e){
   e.preventDefault();
   var mI=el("ovImport")&&el("ovImport").querySelector(".modal");
   if(mI) mI.classList.remove("arrastrando");
-  var f=e.dataTransfer&&e.dataTransfer.files&&e.dataTransfer.files[0];
-  if(!f) return;
+  var fl=e.dataTransfer&&e.dataTransfer.files;
+  if(!fl||!fl.length) return;
   openOv("ovImport");
   /* Soltar un archivo salta la pregunta de "¿de dónde vienes?" a propósito: quien arrastra ya
      tiene su archivo. Pero hay que ESCONDER el paso 0 o quedan los dos a la vez en pantalla. */
   el("impPaso0").style.display="none";
   el("impPaso1").style.display=""; el("impPaso2").style.display="none";
   el("btnImpConfirmar").style.display="none";
-  impLeerArchivo(f);
+  /* Arrastrar los DOS archivos juntos tambien vale: el resto entra a la cola. */
+  impEncolar(fl);
 });
 /* ¿La celda pegada es el nombre de un paquete? Antes solo se reconocía si decía "paquete",
    así que una academia con planes tipo "Mensual ilimitado" o "Plan Pro" los perdía y caían
