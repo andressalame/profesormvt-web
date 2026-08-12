@@ -2175,6 +2175,16 @@
     <input type="hidden" id="rn_id" />
     <div class="field"><label>Paquete comprado</label><select id="rn_paquete"></select>
       <p class="hint" style="margin:6px 0 0;">Puede ser igual o distinto al que tenía antes.</p></div>
+    <!-- V2 multi-pase (11-ago-2026): con pases vivos, renovar puede SUMAR uno más en vez de
+         reemplazar todo. Solo aparece cuando el alumno de verdad tiene pases activos. -->
+    <div class="field" id="rn_modo_wrap" style="display:none;">
+      <label>¿Qué estás registrando?</label>
+      <select id="rn_modo">
+        <option value="suma">Un pase MÁS (se suma a los que ya tiene)</option>
+        <option value="reemplaza">Renovación: reemplaza todos sus pases y arranca ciclo nuevo</option>
+      </select>
+      <p class="hint" style="margin:6px 0 0;" id="rn_modo_hint"></p>
+    </div>
     <div class="frow">
       <div class="field"><label>Fecha de compra</label><input id="rn_fecha" type="date" /></div>
       <div class="field"><label>Estado de pago</label><select id="rn_pago"><option>Pagado</option><option>Pendiente</option></select></div>
@@ -6378,6 +6388,14 @@ function renovar(a){
 }
 
 /* ---------- Renovación manual (pago recibido fuera del portal) ---------- */
+/* pases vivos del alumno (los del ciclo actual), o null */
+function pasesDelAlumno(a){
+  try{
+    var pj=JSON.parse((a&&a.pases)||"");
+    if(pj&&pj.p&&pj.p.length&&(Number(pj.c)||1)===(Number(a.ciclo)||1)) return pj.p;
+  }catch(e){}
+  return null;
+}
 function abrirRenovar(alumnoId){
   var a=db.alumnos.find(function(x){return x.id===alumnoId;}); if(!a) return;
   el("rn_id").value=a.id;
@@ -6385,21 +6403,49 @@ function abrirRenovar(alumnoId){
   el("rn_paquete").value=a.paquete;
   el("rn_fecha").value=hoyLima();
   el("rn_pago").value="Pagado";
+  /* V2: si tiene pases activos, se pregunta si SUMA o REEMPLAZA (por defecto suma: es lo
+     que pasa de verdad cuando alguien compra teniendo clases sin usar). */
+  var ps=pasesDelAlumno(a), w=el("rn_modo_wrap");
+  if(w){
+    if(ps){
+      w.style.display="";
+      el("rn_modo").value="suma";
+      el("rn_modo_hint").textContent="Hoy tiene "+ps.length+" pases: "+ps.map(function(p){return p.n;}).join(" · ")+". Sumar deja los suyos intactos; reemplazar los borra y empieza de cero.";
+    } else { w.style.display="none"; }
+  }
   openOv("ovRenovar");
 }
 el("btnGuardarRenovar").addEventListener("click",function(){
   var id=el("rn_id").value;
   var a=db.alumnos.find(function(x){return x.id===id;}); if(!a) return;
-  var nuevoCiclo=(Number(a.ciclo)||1)+1;
-  var obj=Object.assign({},a,{
-    paquete:el("rn_paquete").value,
-    fecha:el("rn_fecha").value,
-    pago:el("rn_pago").value,
-    ciclo:nuevoCiclo
-  });
+  var psAct=pasesDelAlumno(a);
+  var modo=(psAct && el("rn_modo") && el("rn_modo_wrap").style.display!=="none") ? el("rn_modo").value : "reemplaza";
+  var obj, msgOk;
+  if(modo==="suma"){
+    /* V2: un pase MÁS. El ciclo NO sube (los pases viven atados a él) y los suyos quedan
+       intactos; el nuevo entra sin clases usadas. La ficha sigue espejando al principal. */
+    var ciclo=Number(a.ciclo)||1;
+    var lista=psAct.slice();
+    lista.push({ n:el("rn_paquete").value, usadas:0, vence:"" });
+    obj=Object.assign({},a,{
+      fecha:el("rn_fecha").value, pago:el("rn_pago").value,
+      pases:JSON.stringify({c:ciclo,p:lista}), pases_set:true
+    });
+    msgOk="Pase agregado — ahora tiene "+lista.length;
+  } else {
+    var nuevoCiclo=(Number(a.ciclo)||1)+1;
+    obj=Object.assign({},a,{
+      paquete:el("rn_paquete").value,
+      fecha:el("rn_fecha").value,
+      pago:el("rn_pago").value,
+      ciclo:nuevoCiclo,
+      pases:""   // ciclo nuevo = época de cobro nueva: los pases viejos se van
+    });
+    msgOk="Renovación registrada — ciclo "+nuevoCiclo;
+  }
   db.alumnos=db.alumnos.map(function(x){return x.id===id?obj:x;});
   var btnRen=el("btnGuardarRenovar"); btnRen.disabled=true;
-  apiPut().then(function(){ renderAll(); closeOv("ovRenovar"); toast("Renovación registrada — ciclo "+nuevoCiclo); })
+  apiPut().then(function(){ renderAll(); closeOv("ovRenovar"); toast(msgOk); })
     .catch(function(){ toast("No se pudo guardar. Revisa tu conexión e intenta de nuevo."); })
     .finally(function(){ btnRen.disabled=false; });
 });

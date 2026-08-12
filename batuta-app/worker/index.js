@@ -753,7 +753,8 @@ function pasesDe(alumno){
     out.push({
       n,
       usadas: Math.max(0, Math.floor(Number(x && x.usadas) || 0)),
-      vence: /^\d{4}-\d{2}-\d{2}$/.test(String((x && x.vence) || "")) ? String(x.vence) : ""
+      vence: /^\d{4}-\d{2}-\d{2}$/.test(String((x && x.vence) || "")) ? String(x.vence) : "",
+      av: (x && x.av) ? 1 : 0   // ya se avisó el vencimiento DE ESTE pase
     });
     if (out.length >= 12) break;
   }
@@ -769,11 +770,13 @@ function sanearPasesJson(valor, ciclo){
   for (const x of lista){
     const n = String((x && x.n) || "").trim().slice(0, 40);
     if (!n) continue;
-    p.push({
+    const it = {
       n,
       usadas: Math.min(9999, Math.max(0, Math.floor(Number(x && x.usadas) || 0))),
       vence: /^\d{4}-\d{2}-\d{2}$/.test(String((x && x.vence) || "")) ? String(x.vence) : ""
-    });
+    };
+    if (x && x.av) it.av = 1;   // marca de "ya avisado", se preserva entre guardados
+    p.push(it);
     if (p.length >= 12) break;
   }
   return p.length >= 2 ? JSON.stringify({ c: Number(ciclo) || 1, p }) : "";
@@ -1979,7 +1982,56 @@ async function confirmarCompra(env, tenantId, tenant, compra){
   const vence = new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10);
   if (cu.alumno_id){
     const al = await env.DB.prepare("SELECT * FROM alumnos WHERE id = ?1 AND tenant_id = ?2").bind(cu.alumno_id, tenantId).first();
+    /* ═══ V2 (11-ago-2026): COMPRAR UN PASE MÁS, sin pisar los que ya tiene ═══
+       Regla, que es como lo entiende cualquiera: si al alumno TODAVÍA le queda algo vivo,
+       lo que compra se SUMA como pase nuevo (el de Barré no se come al de Máquinas ni le
+       resetea el ciclo). Si ya no le queda nada, es la renovación clásica de siempre.
+       Ojo con el ciclo: los pases viven atados a él, así que sumar NO puede subirlo. */
+    let sumado = false;
     if (al){
+      try {
+        const paqMapC = (await loadPaquetes(env, tenantId)).map;
+        const pkComprado = resolverPk(paqMapC, compra.paquete);
+        const yaTiene = pasesDe(al);
+        const cicloAct = Number(al.ciclo) || 1;
+        let vivoAntes = false;
+        if (yaTiene){
+          const cmC = await computeMulti(env, tenantId, al, paqMapC, {});
+          vivoAntes = cmC.pases.some(p => !p.vencido && (p.ilim || p.restantes > 0));
+        } else if (al.paquete){
+          const pkAct = resolverPk(paqMapC, al.paquete);
+          const cicloA = Number(al.ciclo) || 1;
+          const { results: regsA } = await env.DB.prepare(
+            "SELECT estado FROM registro WHERE tenant_id = ?1 AND alumno_id = ?2 AND COALESCE(ciclo,1) = ?3"
+          ).bind(tenantId, al.id, cicloA).all();
+          const rUsA = await reservasUsadasCount(env, tenantId, al.id, cicloA);
+          const cA = compute(al, regsA || [], {}, rUsA, pkAct);
+          vivoAntes = !Number(al.caducado) && !venceVencido(al.vence) && (cA.ilim || cA.restantes > 0);
+        }
+        /* la clase de prueba nunca suma pase: es puerta de entrada, no un plan paralelo */
+        if (vivoAntes && compra.paquete !== "Clase de prueba"){
+          const lista = yaTiene ? yaTiene.slice() : [{
+            n: al.paquete,
+            usadas: ((Number(al.migrado_ciclo) || 0) === cicloAct) ? (Number(al.migrado_usadas) || 0) : 0,
+            vence: al.vence || ""
+          }];
+          const vencePase = pkComprado.dias
+            ? calcularVence(pkComprado, { fecha: hoyLima(), activado: "" }, "")
+            : (pkComprado.ilim ? vence : "");
+          lista.push({ n: compra.paquete, usadas: 0, vence: vencePase });
+          const pj = sanearPasesJson({ c: cicloAct, p: lista }, cicloAct);
+          if (pj){
+            stmts.push(env.DB.prepare(
+              "UPDATE alumnos SET pases = ?1, pago = 'Pagado' WHERE id = ?2 AND tenant_id = ?3"
+            ).bind(pj, al.id, tenantId));
+            /* las reservas futuras NO se migran de ciclo: el ciclo no cambió, siguen válidas */
+            sumado = true;
+            renovado = true;   // ya se atendió a este alumno: no crear ficha nueva
+          }
+        }
+      } catch (e) { /* cualquier problema: cae a la renovación clásica de abajo */ }
+    }
+    if (al && !sumado){
       const cicloNuevo = (Number(al.ciclo) || 1) + 1;
       /* caducado = 0 + activado = '': renovar REVIVE al alumno caducado (promesa del cron
          caducarPlanesSinArrancar) y el ciclo nuevo arranca su vigencia de cero — el mismo
@@ -5120,14 +5172,19 @@ async function seguimientoLeadsDueno(env){
 
 async function recordatorioRenovacion(env){
   if (!env.RESEND_API_KEY) return 0;
+  /* V2 multi-pase (11-ago-2026): el alumno con varios pases entra también si es CUALQUIERA
+     de sus pases el que está por vencer, no solo el espejo de la ficha. Sin esto, al que
+     tiene 3 pases se le vencía uno en silencio. El texto del correo nombra el pase exacto. */
   const { results } = await env.DB.prepare(
     "SELECT a.id, a.tenant_id, a.nombre, a.vence, COALESCE(a.ciclo,1) AS ciclo, a.paquete, a.curso, COALESCE(a.aviso_vence_ciclo,0) AS avisado, " +
+    "COALESCE(a.pases,'') AS pases, COALESCE(a.migrado_usadas,0) AS migrado_usadas, COALESCE(a.migrado_ciclo,0) AS migrado_ciclo, " +
     "t.academia, t.slug, c.email AS alumno_email " +
     "FROM alumnos a " +
     "JOIN tenants t ON t.id = a.tenant_id AND t.estado != 'vencido' AND COALESCE(t.plan,'profe') != 'gratis' AND t.email != ?1 " +
     "JOIN cuentas c ON c.alumno_id = a.id AND c.tenant_id = a.tenant_id " +
-    "WHERE a.vence IS NOT NULL AND a.vence != '' " +
-    "AND date(a.vence) <= date('now', '+3 days') AND date(a.vence) >= date('now', '-3 days') " +
+    "WHERE ((a.vence IS NOT NULL AND a.vence != '' " +
+    "        AND date(a.vence) <= date('now', '+3 days') AND date(a.vence) >= date('now', '-3 days')) " +
+    "   OR COALESCE(a.pases,'') != '') " +
     "AND COALESCE(a.aviso_vence_ciclo,0) < COALESCE(a.ciclo,1) LIMIT 100"
   ).bind(DEMO_EMAIL).all();
   const cache = new Map(), cacheMsg = new Map();
@@ -5136,15 +5193,27 @@ async function recordatorioRenovacion(env){
     if (enviados >= 40) break;
     if (!a.alumno_email) continue;
     if (!(await toggleTenantOn(env, cache, a.tenant_id, "recordatorio_renovacion"))) continue;
+    /* multi-pase: se avisa por el pase que vence ANTES dentro de la ventana; si ninguno de
+       sus pases cae en la ventana, esta fila no toca avisarla todavía. */
+    let venceAviso = a.vence, paqAviso = a.paquete;
+    const listaAv = pasesDe(a);
+    if (listaAv){
+      const hoyMs = Date.now(), ventana = 3 * 86400000;
+      const cand = listaAv
+        .filter(p => !p.av && p.vence && Math.abs(Date.parse(p.vence + "T23:59:59Z") - hoyMs) <= ventana)
+        .sort((x, y) => x.vence < y.vence ? -1 : 1)[0];
+      if (!cand) continue;
+      venceAviso = cand.vence; paqAviso = cand.n;
+    }
     const linkPortal = MARCA.dominio + "/app/a/" + (a.slug || "");
-    const yaVencio = Date.parse(a.vence) < Date.now();
+    const yaVencio = Date.parse(venceAviso) < Date.now();
     const nombreCorto = (a.nombre || "").split(" ")[0] || "Hola";
     /* Texto editable por la academia (Ajustes > Mensajes); si no lo toco, el default. */
     const msgs = await mensajesTenant(env, cacheMsg, a.tenant_id);
     const mPlant = msgs[yaVencio ? "vencido" : "renovacion"];
     const datosR = {
       alumno: nombreCorto, academia: a.academia || "", curso: a.curso || "",
-      paquete: a.paquete || "paquete", vence: a.vence,
+      paquete: paqAviso || "paquete", vence: venceAviso,
       curso_de: a.curso ? " de " + a.curso : "", con_profe: ""
     };
     const mail = { subject: msgAsunto(mPlant.asunto, datosR),
@@ -5153,7 +5222,19 @@ async function recordatorioRenovacion(env){
     try { ok = await enviarCorreo(env, { to: a.alumno_email, subject: mail.subject, html: mail.html }); } catch (e) {}
     if (ok){
       enviados++;
-      try { await env.DB.prepare("UPDATE alumnos SET aviso_vence_ciclo = ?1 WHERE id = ?2 AND tenant_id = ?3").bind(a.ciclo, a.id, a.tenant_id).run(); } catch (e) {}
+      if (listaAv){
+        /* multi-pase: se marca EL PASE avisado, no el ciclo entero — si no, el aviso del
+           segundo pase no saldría nunca. El ciclo se marca solo cuando ya no queda ningún
+           pase por avisar, para que la fila deje de mirarse todos los días. */
+        const marcada = listaAv.map(p => (p.n === paqAviso && p.vence === venceAviso) ? Object.assign({}, p, { av: 1 }) : p);
+        const pjAv = sanearPasesJson({ c: Number(a.ciclo) || 1, p: marcada }, Number(a.ciclo) || 1);
+        try { await env.DB.prepare("UPDATE alumnos SET pases = ?1 WHERE id = ?2 AND tenant_id = ?3").bind(pjAv, a.id, a.tenant_id).run(); } catch (e) {}
+        if (marcada.every(p => p.av || !p.vence)){
+          try { await env.DB.prepare("UPDATE alumnos SET aviso_vence_ciclo = ?1 WHERE id = ?2 AND tenant_id = ?3").bind(a.ciclo, a.id, a.tenant_id).run(); } catch (e) {}
+        }
+      } else {
+        try { await env.DB.prepare("UPDATE alumnos SET aviso_vence_ciclo = ?1 WHERE id = ?2 AND tenant_id = ?3").bind(a.ciclo, a.id, a.tenant_id).run(); } catch (e) {}
+      }
     }
   }
   return enviados;
