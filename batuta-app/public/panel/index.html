@@ -2989,7 +2989,12 @@ function renderAlumnos(){
            pases aparte del principal; el detalle vive en su portal y en la reserva */
         try{ var pj=JSON.parse(a.pases||""); var np=(pj&&pj.p&&pj.p.length)||0;
              return (np>=2 && (Number(pj.c)||1)===(Number(a.ciclo)||1))?' <span class="mini" style="font-weight:600;">(+'+(np-1)+' pase'+(np-1===1?'':'s')+')</span>':""; }catch(e){ return ""; }
-      })()+'<br><span class="mini">S/ '+c.monto+((Number(a.ciclo)||1)>1?(' · '+((Number(a.ciclo)||1)-1)+'ª renovación'):'')+'</span>'):'<span class="mini">— sin plan —</span>')+'</td>'+
+      })()+'<br><span class="mini">S/ '+c.monto+
+      /* 11-ago-2026 (pedido en vivo de José): el saldo TAMBIÉN acá, pegado al plan. La columna
+         "Le quedan" existe pero vive lejos y los botones flotantes la tapan justo al pasar el
+         mouse — y el dato que más mira el dueño es este. */
+      ' · <b>'+(c.ilim?'sin límite':((c.restantes===Infinity?'∞':Math.max(0,Number(c.restantes)||0))+' de '+(c.compradas||0)+' quedan'))+'</b>'+
+      ((Number(a.ciclo)||1)>1?(' · '+((Number(a.ciclo)||1)-1)+'ª renovación'):'')+'</span>'):'<span class="mini">— sin plan —</span>')+'</td>'+
       '<td>'+pago+'</td>'+
       /* "(manual)" no le decía nada a nadie: es el horario que escribió el profe a mano */
       '<td>'+esc((a.horarioFijo&&a.horarioFijo.length)?a.horarioFijo.join(' · '):(a.horario||'—'))+
@@ -8490,7 +8495,11 @@ el("btnImpConfirmar").addEventListener("click",function(){
       if(!ex) return;
       if(a.paquete && !ex.paquete){ ex.paquete=a.paquete;
         /* el saldo que traiga el archivo solo se aplica junto con el plan que lo da sentido */
-        if((Number(a.migrado_usadas)||0)>0){ ex.migrado_usadas=Number(a.migrado_usadas)||0; ex.migrado_ciclo=Number(ex.ciclo)||1; ex.migrado_set=true; }
+        if((Number(a.migrado_usadas)||0)>0){ ex.migrado_usadas=Number(a.migrado_usadas)||0; ex.migrado_ciclo=Number(ex.ciclo)||1; }
+        /* 🐛 11-ago: la marca va SIEMPRE que el plan venga del archivo, no solo con saldo>0.
+           Sin ella, el server botaba el VENCIMIENTO de un pase sin estrenar (usadas 0) y el
+           alumno quedaba sin su fecha de vencimiento. */
+        ex.migrado_set=true;
         if(a.vence) ex.vence=a.vence;
       }
       if(a.curso && !ex.curso) ex.curso=a.curso;
