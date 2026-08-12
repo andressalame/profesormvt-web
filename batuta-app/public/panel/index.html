@@ -7674,7 +7674,10 @@ function impClave(nom,ape,mail){ return impNorm(nom)+"|"+impNorm(ape)+"|"+impNor
    archivo la columna del id no se reconoce y por eso viaja COMPLETA a las Notas ("Customer Id:
    12345"), el segundo archivo se puede cruzar por ese mismo id — más fiable que el nombre
    (homónimos, apellidos al revés, tildes). Orden: id primero, nombre+apellido+correo después. */
-var IMP_ID_CAB=["customer id","customerid","customer id number","customer number","cliente id","id cliente","id del cliente","client id","member id","student id","punchpass id","id"];
+/* 11-ago-2026: el export "Active Passes By Customer" de Punchpass llama a la columna
+   "Custom ID" (así, no "Customer Id" como el Sales Details). Sin ese alias el cruce caía a
+   nombre+apellido, y en la lista de Elevate hay 19 nombres repetidos entre 39 personas. */
+var IMP_ID_CAB=["customer id","customerid","customer id number","customer number","custom id","customid","cliente id","id cliente","id del cliente","client id","member id","student id","punchpass id","id"];
 function impEsCabId(h){ return IMP_ID_CAB.indexOf(impNormForma(h))>=0; }
 function impIdDeNotas(notas){
   var partes=String(notas||"").split(" · ");
@@ -7690,17 +7693,56 @@ function parseCsv(text){
   /* tambi\u00e9n TSV (7-ago-2026): lo copiado de Excel/Sheets viene con tabs */
   var nT=(l0.split("\t").length-1),nS=(l0.split(";").length-1),nC=(l0.split(",").length-1);
   var delim=(nT>0&&nT>=nS&&nT>=nC)?"\t":(nS>nC?";":",");
+  /* 🐛 11-ago-2026, migración de Elevate: a José le entraron alumnos cuyo NOMBRE era una fila
+     entera del CSV ("Arias,\"Jair\",\"jariasnez@gmail.com\",\"8 clases de Mat\",..."). Causa: UNA
+     comilla suelta en algún campo (los exports reales no siempre las duplican como manda el
+     estándar) dejaba el parser "dentro de comillas" y se tragaba comas y saltos de línea hasta
+     la siguiente comilla, colapsando filas enteras en un solo campo.
+     Dos reglas que lo vuelven a prueba de exports sucios, sin romper los bien formados:
+       · una comilla ABRE campo solo si está al principio del campo; a mitad es literal.
+       · una comilla CIERRA solo si después viene un delimitador, un salto de línea o el fin
+         del archivo; si viene cualquier otra cosa, también es literal.
+     Así un `5" de alto` o un `O"Brien` ya no desalinean el resto del archivo. */
   var rows=[],row=[],cur="",q=false;
   for(var i=0;i<text.length;i++){var c=text[i];
-    if(q){ if(c=='"'){ if(text[i+1]=='"'){cur+='"';i++;} else q=false; } else cur+=c; }
-    else if(c=='"'){ q=true; }
+    if(q){
+      if(c=='"'){
+        if(text[i+1]=='"'){ cur+='"'; i++; }
+        else {
+          var sig=text[i+1];
+          if(sig===undefined||sig===delim||sig=="\n"||sig=="\r") q=false;
+          else cur+='"';                      // comilla suelta a mitad de campo: literal
+        }
+      } else cur+=c;
+    }
+    else if(c=='"'&&cur===""){ q=true; }      // solo abre si el campo está vacío
     else if(c===delim){ row.push(cur); cur=""; }
     else if(c=="\n"){ row.push(cur); rows.push(row); row=[]; cur=""; }
     else if(c=="\r"){ /* ignora */ }
     else cur+=c;
   }
   if(cur!==""||row.length){ row.push(cur); rows.push(row); }
-  return rows.filter(function(r){ return r.some(function(v){ return String(v).trim()!==""; }); });
+  rows=rows.filter(function(r){ return r.some(function(v){ return String(v).trim()!==""; }); });
+  /* ---- Des-anidar el "CSV dentro de un CSV" (11-ago-2026, migración de Elevate) ----
+     José abrió su export en Excel para corregirlo (se lo pedimos nosotros) y lo volvió a
+     guardar. Excel en configuración regional peruana separa con PUNTO Y COMA, así que metió
+     cada línea original entera en la columna A y al guardar la envolvió en comillas (con las
+     internas dobladas). Resultado: un CSV de UNA columna donde cada celda ES la fila real.
+     Se detecta (casi todas las filas con un solo campo, y ese campo con varios separadores
+     adentro) y se vuelve a parsear el contenido interno. Una sola vez: sin recursión infinita. */
+  if(!parseCsv._niv && rows.length>1){
+    var deUna=rows.filter(function(r){ return r.filter(function(v){ return String(v).trim()!==""; }).length===1; }).length;
+    if(deUna/rows.length>=0.9){
+      var interno=rows.map(function(r){ for(var j=0;j<r.length;j++){ if(String(r[j]).trim()!=="") return String(r[j]); } return ""; });
+      var maxSep=0;
+      for(var k=0;k<Math.min(interno.length,5);k++){ var nsep=(interno[k].match(/[,;\t]/g)||[]).length; if(nsep>maxSep) maxSep=nsep; }
+      if(maxSep>=3){
+        parseCsv._niv=1;
+        try{ return parseCsv(interno.join("\n")); } finally{ parseCsv._niv=0; }
+      }
+    }
+  }
+  return rows;
 }
 var IMP_ALIAS={ nombre:["nombre","alumno","alumna","name","nombre completo","nombres","estudiante","first name","full name","customer","customer name","client","client name"],
   apellido:["apellido","apellidos","last name","surname","apellido paterno"],
@@ -7764,6 +7806,18 @@ function impError(msg){ var e=el("impErr"); e.textContent=msg; e.style.display="
 /* Procesador ÚNICO de filas (7-ago-2026): lo usan el archivo CSV y el pegado con cabecera.
    Reconoce las columnas por su nombre (español o inglés, ver IMP_ALIAS) — la idea es que el
    dueño suba o pegue el export de su sistema anterior TAL CUAL, sin rearmar nada a mano. */
+/* Red de seguridad contra la fila colapsada (11-ago-2026). Aunque parseCsv ya se recupera de
+   las comillas sueltas, un archivo lo bastante roto podría volver a meter una fila entera en
+   un solo campo — y eso termina en un alumno llamado
+   `Arias,"Jair","jariasnez@gmail.com","8 clases de Mat",...`, que es lo que le pasó a José.
+   Un nombre de persona no tiene comillas Y comas Y 60+ caracteres a la vez. */
+function impNombreRoto(txt){
+  var s=String(txt||"");
+  if(s.length<60) return false;
+  var comillas=(s.match(/"/g)||[]).length;
+  var separadores=(s.match(/[,;\t]/g)||[]).length;
+  return comillas>=2 && separadores>=3;
+}
 function impProcesarFilas(rows){
       if(!rows.length){ impError("El archivo está vacío."); return; }
       var map=impMapHeader(rows[0]),start=0;
@@ -8156,6 +8210,11 @@ function impPreview(rows,dup,vacios,dupArchivo,sinCruce){
   /* Freno duro (28-jul-2026): con una sola fila mal (le quedan más clases de las que trae su
      paquete, un número que no es número, una fecha ilegible) NO se importa nada. Se dice quién
      y por qué, incluso si la fila cayó fuera de las 50 que se muestran. */
+  /* Fila colapsada (11-ago-2026): nadie entra con un renglón de CSV por nombre. Se marca acá,
+     al final, para que caiga en el mismo freno duro que el resto de filas malas. */
+  rows.forEach(function(a){
+    if(!a.error && impNombreRoto(a.nombre)) a.error='esta fila llegó pegada: su nombre trae el renglón entero del archivo (suele ser una comilla suelta en el CSV)';
+  });
   var malas=rows.filter(function(a){ return !!a.error; });
   var box=el("impSaldoErr");
   if(malas.length){
@@ -8168,14 +8227,16 @@ function impPreview(rows,dup,vacios,dupArchivo,sinCruce){
       var c={};
       malas.forEach(function(a){
         var e=String(a.error||"");
-        var k=/no reconozco el plan/.test(e)?"paquete":
+        var k=/llegó pegada|llego pegada/.test(e)?"pegada":
+              /no reconozco el plan/.test(e)?"paquete":
               /fecha/.test(e)?"fecha":
               /reserva/i.test(e)?"reserva":"saldo";
         c[k]=(c[k]||0)+1;
       });
       var top=Object.keys(c).sort(function(a,b){return c[b]-c[a];})[0];
       return { paquete:"un paquete que no reconozco", fecha:"una fecha que no entiendo",
-               reserva:"una reserva que no entiendo", saldo:"un saldo que no cuadra" }[top];
+               reserva:"una reserva que no entiendo", saldo:"un saldo que no cuadra",
+               pegada:"el renglón entero del archivo metido en el nombre" }[top];
     })();
     box.style.display="";
     box.innerHTML='<div style="border:1px solid var(--red,#D9534F);border-radius:8px;padding:10px 12px;">'+
