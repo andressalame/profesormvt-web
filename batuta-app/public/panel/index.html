@@ -7139,7 +7139,20 @@ var IMP_ROWS=[],IMP_DUP=0,IMP_VACIOS=0,IMP_DUPARCH=0,IMP_SINCRUCE=0,IMP_COMPLETA
    REGLA DE HONESTIDAD (no negociable): acá NO se inventan rutas de menú. Cada `pasos` de
    abajo salió de la documentación oficial de soporte de esa plataforma. La que no se pudo
    verificar va con `verificado:false` y la interfaz LO DICE ("no tenemos el paso a paso de
-   esta") en vez de mandar a la dueña a un menú que no existe, que es peor que no decir nada. */
+   esta") en vez de mandar a la dueña a un menú que no existe, que es peor que no decir nada.
+
+   ⚠️ REGLA SEGUNDA, que costó una migración (11-ago-2026): NO BASTA CON QUE LA RUTA EXISTA.
+   Hay que comprobar que el archivo TRAIGA EL DATO que el paso promete. Punchpass decía
+   "Reports → Sales Details" para los planes: la ruta existía perfecto, pero es el reporte de
+   VENTAS y no trae el saldo — habría metido a los 1,445 alumnos de Elevate con el paquete
+   lleno. Un `verificado:true` que solo confirmó la existencia del menú es un sello falso.
+
+   AUDITORÍA COMPLETA 12-ago-2026: las 7 plataformas se re-verificaron contra su documentación
+   oficial viva, con doble pasada (un agente audita, otro intenta refutar la corrección antes
+   de escribirla). Resultado: Glofox, AgendaPro, Bewe y Trainingym quedaron confirmadas (+
+   avisos nuevos); Mindbody, Zen Planner y Fitco tenían errores REALES ya corregidos abajo.
+   `auditado` guarda la fecha de esa revisión: si algún día vuelve a oler raro, se sabe desde
+   cuándo nadie la mira. */
 var IMP_ICONOS={
   app:'<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>',
   hoja:'<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/><path d="M3 15h18"/><path d="M9 3v18"/></svg>',
@@ -7154,32 +7167,32 @@ var IMP_PLATAFORMAS=[
      FITCO — peruana. Los nombres de los reportes salen de la lista oficial de "Reportes
      básicos" de soporte.fitcolatam.com; la ruta se compone de dos artículos suyos, no de
      una cita única, así que se avisa que el menú puede verse distinto. */
-  { id:"fitco", nombre:"Fitco", icono:"app", verificado:true, sub:"son 2 archivos",
+  { id:"fitco", nombre:"Fitco", icono:"app", verificado:true, auditado:"2026-08-12", sub:"son 2 archivos",
     pasos:[
       { titulo:"Tus alumnos", ruta:"Reportes → Reportes básicos", formato:"Excel",
         nota:'De la lista de reportes elige <b>Información de clientes</b> y dale a <b>Descargar</b>.' },
       { titulo:"Sus planes", ruta:"Reportes → Reportes básicos", formato:"Excel",
-        nota:'Mismo sitio, pero eligiendo <b>Venta de membresías</b> (o <b>Ventas por plan</b>). De ahí sale qué compró cada alumno.' } ],
-    aviso:'Dos cosas honestas de Fitco: los reportes salen en <b>Excel</b>, así que guárdalos como <b>CSV</b> antes de subirlos; y <b>las sesiones que le quedan a cada alumno no salen en ningún reporte</b> — en Fitco eso se ve entrando cliente por cliente. Sube lo que tengas y ese saldo se lo pones tú acá, que es rápido.' },
+        nota:'Mismo sitio, eligiendo <b>Venta de membresías</b>. <b>Ojo:</b> es un reporte de <b>ventas por fechas</b>, así que pon un rango que llegue hasta la venta más antigua que siga vigente — el plan que se vendió antes del rango no aparece. Si tu archivo no trae a cada alumno con su plan, el respaldo documentado es <b>Reportes avanzados → Evolución de usuarios activos e inactivos</b>, que sí trae el último plan de cada cliente.' } ],
+    aviso:'Tres cosas honestas de Fitco: los reportes salen en <b>Excel</b>, así que guárdalos como <b>CSV</b> antes de subirlos; <b>las sesiones que le quedan a cada alumno no salen en ningún reporte</b> (verificado contra su catálogo oficial completo: eso se ve cliente por cliente, y acá se lo pones a mano); y si no te aparece "Información de clientes", su propia ayuda avisa que <b>no viene en todos los planes de Fitco</b> — pídelo a su chat de soporte.' },
   /* BEWE — de su centro de ayuda solo se pudo verificar cómo sacar los CONTACTOS. Buscar
      "exportar bono" en su propia ayuda devuelve cero resultados, así que no se inventa una
      ruta de planes: se dice que no la tenemos. */
-  { id:"bewe", nombre:"Bewe", icono:"app", verificado:true, sub:"empieza por tus contactos",
+  { id:"bewe", nombre:"Bewe", icono:"app", verificado:true, auditado:"2026-08-12", sub:"empieza por tus contactos",
     pasos:[
       { titulo:"Tus alumnos", ruta:"Contactos → Exportar",
         nota:'Entra al módulo de <b>Contactos</b> y dale al botón de exportar.' } ],
-    introUnico:'De Bewe solo tenemos verificado cómo sacar tus contactos. <b>Cómo exportar los bonos y planes no está en su ayuda</b>, así que no te vamos a mandar a un menú inventado.',
-    aviso:'Si encuentras dónde exportar los bonos de tus alumnos, súbelo después como segundo archivo y a cada uno se le completa su plan. Si no, se los pones acá a mano.' },
+    introUnico:'De Bewe solo tenemos verificado cómo sacar tus contactos. <b>Cómo exportar los bonos y planes no está en su ayuda</b> (re-verificado en su centro de ayuda completo, 12-ago-2026), así que no te vamos a mandar a un menú inventado.',
+    aviso:'El archivo baja directo (no llega por correo). Para los bonos de tus alumnos, lo realista: pídele el volcado a su soporte oficial (<b>ayuda@bewe.ai</b>) o pon los saldos acá a mano. Si encuentras dónde exportarlos, súbelo como segundo archivo y a cada uno se le completa su plan.' },
   /* AGENDAPRO — la mejor documentada de las tres de LATAM: las dos rutas son cita literal
      de ayuda.agendapro.com. Lo que NO está documentado es si el archivo de planes trae el
      saldo de sesiones, así que eso no se promete. */
-  { id:"agendapro", nombre:"AgendaPro", icono:"app", verificado:true, sub:"son 2 archivos",
+  { id:"agendapro", nombre:"AgendaPro", icono:"app", verificado:true, auditado:"2026-08-12", sub:"son 2 archivos",
     pasos:[
       { titulo:"Tus alumnos", ruta:"Clientes → Base de clientes → Acciones",
         nota:'Dentro de <b>Acciones</b> elige <b>Descargar este listado de clientes</b>. Se abre otra pestaña, se arma el archivo y se descarga solo. Ojo: esto lo puede hacer únicamente un <b>administrador</b>.' },
       { titulo:"Sus planes", ruta:"Ventas → Planes → Exportar", formato:"Excel",
         nota:'Aplica los filtros que quieras, dale a <b>Exportar</b> y después a <b>Descargar</b>. De ahí sale el plan que compró cada alumno.' } ],
-    aviso:'AgendaPro no documenta si el archivo de planes trae <b>cuántas sesiones le quedan</b> a cada alumno. Si no vienen, súbelo igual: entra el plan y el saldo se lo ajustas tú.' },
+    aviso:'Dos detalles que ahorran sustos: al descargar los clientes <b>se abre otra pestaña donde se genera el archivo</b> — espera ahí, no llega por correo. Y en el export de planes pon un <b>rango de fechas amplio</b> (que cubra la venta vigente más antigua). AgendaPro no documenta si ese archivo trae <b>cuántas sesiones le quedan</b> a cada alumno: si no vienen, súbelo igual — entra el plan y el saldo se lo ajustas tú.' },
   /* PUNCHPASS — el caso de Elevate, y el que originó todo esto.
      Rutas verificadas contra support.punchpass.com. OJO con DOS correcciones, las dos caras:
      1) "Reports → Active Customers" NO EXISTE: el listado de clientes vive en la página
@@ -7193,7 +7206,7 @@ var IMP_PLATAFORMAS=[
         bug de plata que se cazó esa misma mañana.
      Lección para las demás plataformas: no basta con que la ruta EXISTA; hay que comprobar
      que el archivo traiga el dato que se necesita. */
-  { id:"punchpass", nombre:"Punchpass", icono:"app", verificado:true,
+  { id:"punchpass", nombre:"Punchpass", icono:"app", verificado:true, auditado:"2026-08-11",
     sub:"son 2 archivos",
     pasos:[
       { titulo:"Tus alumnos", ruta:"Customers → Export", formato:"CSV",
@@ -7205,41 +7218,41 @@ var IMP_PLATAFORMAS=[
     aviso:'En Punchpass el archivo <b>no se descarga al instante: te llega por correo</b> con un enlace para bajarlo. Si no lo ves en un par de minutos, revisa tu bandeja de spam. Y necesitas entrar como <b>Admin</b>.' },
   /* GLOFOX — el mejor caso: UN archivo trae contacto, plan, vencimiento y créditos.
      Verificado contra el artículo vivo de support.glofox.com (leído literal). */
-  { id:"glofox", nombre:"Glofox", icono:"app", verificado:true, sub:"un solo archivo",
+  { id:"glofox", nombre:"Glofox", icono:"app", verificado:true, auditado:"2026-08-12", sub:"un solo archivo",
     pasos:[
       { titulo:"Tus alumnos y sus planes", ruta:"Manage → Clients → Actions → Download", formato:"CSV",
         nota:'Este archivo viene completo: trae el correo y el teléfono de cada alumno <b>y también</b> su plan, hasta cuándo le vence y las clases que le quedan. Con este solo terminas.' } ],
-    aviso:'Si tu plan de Glofox no te muestra los filtros de clientes, no pasa nada: descarga la lista completa igual.' },
+    aviso:'Si tu plan de Glofox no te muestra los filtros de clientes, no pasa nada: descarga la lista completa igual. Y un matiz de su columna <b>Membership Expiry</b>: en planes recurrentes sin contrato esa fecha es el <b>próximo cobro</b>, no un vencimiento de verdad — no te asustes si la ves cerca.' },
   /* MINDBODY — el peor caso real: la información vive en TRES reportes distintos.
      Las rutas salen de la documentación oficial (parte de ella archivada) cruzada con tres
      guías de migración independientes. Mindbody renombró menús, así que se avisa. */
-  { id:"mindbody", nombre:"Mindbody", icono:"app", verificado:true, sub:"son 3 archivos",
+  { id:"mindbody", nombre:"Mindbody", icono:"app", verificado:true, auditado:"2026-08-12", sub:"son 3 archivos",
     pasos:[
-      { titulo:"Tus alumnos", ruta:"Reports → Clients → Mailing Lists", formato:"Excel",
-        nota:'Elige <b>Email List</b>, pon <i>All Clients</i> en los dos filtros y dale a <b>Generate</b>. De ahí sale el botón para exportar.' },
-      { titulo:"Sus planes", ruta:"Reports → Clients → Membership", formato:"Excel",
-        nota:'Pon la fecha de hoy, <i>All Memberships</i> y la vista <b>Detail View</b> antes de exportar.' },
-      { titulo:"Su saldo", ruta:"Reports → Clients → Visits Remaining", formato:"Excel",
-        nota:'Este es el que trae <b>cuántas clases le quedan</b> a cada uno. Pon un rango de fechas largo (un año o más) y los filtros en <i>All</i>. Ojo que este reporte no trae correo, así que los cruzo por su nombre.' } ],
-    aviso:'Mindbody exporta en <b>Excel</b>: ábrelo y usa <b>Archivo → Guardar como → CSV UTF-8</b> antes de subirlo. Y cambiaron nombres de menú hace poco, así que si no ves <i>Membership</i> busca <i>Members</i>, y si los reportes te aparecen dentro de <i>Insights</i> es el mismo camino.' },
+      { titulo:"Tus alumnos", ruta:"Insights → Reports → Clients → Mailing Lists", formato:"Excel",
+        nota:'Elige la lista <b>Email List</b> (es la que trae correo y teléfono), en <i>List clients</i> pon <b>All clients</b>, en <i>Opt-in status</i> <b>All Clients</b>, y dale a <b>Generate</b>. De ahí sale <b>Export to Excel</b>.' },
+      { titulo:"Sus planes", ruta:"Insights → Reports → Clients → Membership", formato:"Excel",
+        nota:'Arriba a la izquierda aprieta <b>New Version</b> (el "Members report"). Pon <i>As of Date</i> = hoy, <i>All Memberships</i>, vista <b>Detail View</b> y <b>Generate</b>. <b>Ojo con dos cosas:</b> este reporte solo trae a los clientes marcados como <i>members</i> con membresía activa — <b>los paquetes sueltos de clases NO salen acá</b> (salen en el paso 3); y en la versión nueva el Excel <b>no baja al instante</b>: aparece en su sección de descargas.' },
+      { titulo:"Su saldo", ruta:"Insights → Reports → Clients → Visits Remaining", formato:"Excel",
+        nota:'Este es el que trae <b>cuántas clases le quedan</b> a cada uno, y en vista <b>Detail</b> también su correo (así los cruzo sin confundir tocayos). <b>La trampa está en los filtros:</b> las fechas filtran por cuándo se <i>activó</i> el paquete — pon un rango de <b>dos años o más</b> o los paquetes viejos con saldo desaparecen del archivo. Y <i>Sale location</i> en <b>All Locations</b>.' } ],
+    aviso:'Mindbody exporta en <b>Excel</b>: ábrelo y usa <b>Archivo → Guardar como → CSV UTF-8</b> antes de subirlo. Sus reportes viven bajo <i>Insights</i> y al de membresías le pusieron <i>Members report</i> en la versión nueva: mismo camino, otros nombres.' },
   /* ZEN PLANNER — dos reportes que se arman con "+ New Report". Confianza media-alta: su
      centro de ayuda se mudó al hub de Daxko y lo verificable hoy es la versión archivada. */
-  { id:"zenplanner", nombre:"Zen Planner", icono:"app", verificado:true, sub:"son 2 archivos",
+  { id:"zenplanner", nombre:"Zen Planner", icono:"app", verificado:true, auditado:"2026-08-12", sub:"son 2 archivos",
     pasos:[
       { titulo:"Tus alumnos", ruta:"+ New Report → People", formato:"CSV",
         nota:'Desde el tablero, <b>+ New Report</b> y elige el tipo <b>People</b>. Con <i>Edit Report Settings</i> eliges qué columnas van; asegúrate de incluir correo y teléfono. Se exporta con la flechita que está al lado del número de resultados.' },
       { titulo:"Sus planes", ruta:"+ New Report → Memberships", formato:"CSV",
-        nota:'Mismo camino pero eligiendo <b>Memberships</b>. Acá vive el saldo: busca la columna <b>Attendance Remaining</b> y actívala en <i>Edit Report Settings</i>.' } ],
-    aviso:'Zen Planner cambió su centro de ayuda hace poco. Si algún menú te aparece con otro nombre, el camino es siempre el mismo: crear un reporte nuevo y exportarlo.' },
+        nota:'Mismo camino pero eligiendo <b>Memberships</b>. Acá vive el saldo: en <i>Edit Report Settings</i> activa la casilla <b>Class Card Attendance Remaining</b> (así se llama exacto, no la busques como "Attendance" a secas). <b>Límite honesto de Zen Planner:</b> esa columna solo trae saldo para las tarjetas de clases <b>que vencen al agotarse</b>; las punch cards semanales o mensuales salen sin saldo — a esos alumnos se lo pones acá a mano.' } ],
+    aviso:'Zen Planner cambió su centro de ayuda hace poco. Si algún menú te aparece con otro nombre, el camino es siempre el mismo: crear un reporte nuevo y exportarlo (baja directo del navegador, en CSV).' },
   /* TRAININGYM — verificado contra help.trainingym.com: un SOLO archivo trae al socio y su
      membresía. Lo que NO está documentado es que traiga las sesiones que le quedan, así que
      eso no se promete: se avisa que capaz haya que ponerlo a mano. */
-  { id:"trainingym", nombre:"Trainingym", icono:"app", verificado:true,
+  { id:"trainingym", nombre:"Trainingym", icono:"app", verificado:true, auditado:"2026-08-12",
     sub:"un solo archivo",
     pasos:[
       { titulo:"Tus alumnos y sus planes", ruta:"Socios → Socios (Activos, Potenciales y Baja)", formato:"Excel",
-        nota:'Al lado de <b>Filtrar</b> hay tres puntitos <b>[...]</b>: ahí adentro está <b>Exportar listado</b>. El archivo sale con el socio Y su membresía, así que con este solo alcanza. <b>Ojo:</b> las sesiones que le quedan a cada uno puede que no vengan en el archivo; si no están, se las pones tú después.' } ],
-    aviso:'Trainingym exporta en <b>Excel</b>: ábrelo y usa <b>Archivo → Guardar como → CSV UTF-8</b> antes de subirlo acá.' },
+        nota:'Al lado de <b>Filtrar</b> hay tres puntitos <b>[...]</b>: ahí adentro está <b>Exportar listado</b>. El archivo sale con el socio Y su membresía, así que con este solo alcanza. <b>Dos ojos:</b> el export respeta los filtros que tengas puestos — <b>quítalos todos</b> antes de exportar, o te llevas media academia; y cuando pregunte si incluir las <b>observaciones</b>, dile que <b>sí</b> (son las notas de cada ficha, no las pierdas).' } ],
+    aviso:'Trainingym exporta en <b>Excel</b>: ábrelo y usa <b>Archivo → Guardar como → CSV UTF-8</b> antes de subirlo acá. Y lo honesto sobre el saldo: <b>las sesiones restantes no salen en ningún export de Trainingym</b> (verificado contra su ayuda oficial) — se ven solo en la ficha de cada socio, así que acá se las pones tú a mano.' },
   /* Estas dos van al final y `simple` las deja EXACTAMENTE como estaban antes del paso 0:
      pegar o subir, sin peaje nuevo. El subtítulo de Excel dice "hecha por mí" a propósito:
      quien exportó de Punchpass también tiene un Excel en la mano y, sin esa aclaración,
@@ -7379,8 +7392,13 @@ function abrirImportador(opts){
   /* Importar con código viejo fue lo que rompió la migración de Elevate: si ya sabemos que
      hay versión nueva, acá se recarga ANTES de que elija un archivo (no hay nada a medias).
      Y se re-chequea al abrir, por si la pestaña lleva horas quieta. */
-  if(VER_VIEJA){ location.reload(); return; }
+  /* 🐛 12-ago-2026: recargar A MITAD de una cola tira el archivo que espera (vive en memoria).
+     Si hay deploy nuevo mientras se drena, se termina de drenar y el reload espera al cierre. */
+  if(VER_VIEJA && !opts.encadena && !IMP_COLA.length){ location.reload(); return; }
   verChequear();
+  /* sesión nueva del importador = cola limpia; el encadenado (opts.encadena) la preserva
+     para que el 2º archivo arrastrado no se pierda entre confirmación y confirmación */
+  if(!opts.encadena){ IMP_COLA=[]; IMP_TOTAL_ARCHIVOS=1; IMP_ARCHIVO_IDX=1; try{ impPintarCola(); }catch(e){} }
   IMP_MSG_RESULTADO=opts.resultado||"";
   IMP_ROWS=[]; el("impFile").value="";
   el("btnImpConfirmar").style.display="none"; el("impErr").style.display="none";
@@ -7394,7 +7412,9 @@ function abrirImportador(opts){
      inventarle un "archivo 2 de 2" que en su caso no existe. */
   var nTotAbrir=impNumArchivos(IMP_PLAT);
   IMP_ARCHIVO_N=(opts.archivo>1 && nTotAbrir>1)?Math.min(opts.archivo,nTotAbrir):1;
-  if(IMP_PLAT || opts.resultado){ impIrPaso1(); }   // ya nos dijo de dónde viene: no se pregunta dos veces
+  /* `opts.encadena`: a mitad de cola JAMÁS se vuelve a preguntar de dónde viene — el paso 0
+     quedaría montado encima de la vista previa del 2º archivo (12-ago-2026). */
+  if(IMP_PLAT || opts.resultado || opts.encadena){ impIrPaso1(); }   // ya nos dijo de dónde viene: no se pregunta dos veces
   else{
     el("impPaso0").style.display=""; el("impPaso1").style.display="none"; el("impPaso2").style.display="none";
     el("impTitulo").innerHTML='¿De dónde traes a tus <em>alumnos</em>?';
@@ -7875,7 +7895,23 @@ function impResolveProfe(txt){
   var m=(EQUIPO||[]).find(function(p){ return p.estado!=="suspendido" && impNorm(p.nombre)===n; });
   return m?m.id:undefined;
 }
-function impError(msg){ var e=el("impErr"); e.textContent=msg; e.style.display=""; }
+function impError(msg){
+  var e=el("impErr"); e.textContent=msg; e.style.display="";
+  /* 🐛 12-ago-2026: si el archivo que falla es uno de la cola (p.ej. arrastró un .xlsx de más),
+     antes la cola quedaba varada sin botón y el archivo bueno nunca se cargaba. Ahora se ofrece
+     saltarlo, sin descartarlo a escondidas: lo decide el dueño. */
+  if(IMP_COLA.length){
+    var sig=IMP_COLA[0];
+    var b=document.createElement("button");
+    b.className="btn ghost sm"; b.style.margin="8px 0 0"; b.type="button";
+    b.textContent="Saltar este y cargar "+(sig.name.length>28?sig.name.slice(0,26)+"…":sig.name);
+    b.addEventListener("click",function(){
+      var f=IMP_COLA.shift(); IMP_ARCHIVO_IDX++;
+      el("impErr").style.display="none"; impPintarCola(); impLeerArchivo(f);
+    });
+    e.appendChild(document.createElement("br")); e.appendChild(b);
+  }
+}
 /* Procesador ÚNICO de filas (7-ago-2026): lo usan el archivo CSV y el pegado con cabecera.
    Reconoce las columnas por su nombre (español o inglés, ver IMP_ALIAS) — la idea es que el
    dueño suba o pegue el export de su sistema anterior TAL CUAL, sin rearmar nada a mano. */
@@ -8129,30 +8165,56 @@ function impLeerArchivo(f){
   };
   fr.readAsText(f,"utf-8");
 }
-/* ---- Cola de archivos (11-ago-2026) ----
-   Se procesa el primero y los demás esperan con su nombre a la vista, con un botón para
-   cargarlos sin volver a buscarlos en el disco. No se importan solos: el segundo archivo
-   COMPLETA a los que ya entraron, así que tiene que ir después del primero, no a la vez. */
-var IMP_COLA=[];
+/* ---- "Arrastra tus dos archivos y listo" (12-ago-2026, mandato de Andrés) ----
+   El dueño suelta TODO junto y el importador hace el resto: mira las cabeceras de cada
+   archivo, reconoce cuál es la lista de ALUMNOS y cuál el de PASES, los ordena SOLO
+   (alumnos primero, siempre: el de pases completa a los que ya entraron) y, al confirmar
+   uno, el siguiente se carga sin ningún clic. El orden en que los agarró el dedo al
+   arrastrar no puede cambiar el resultado. */
+var IMP_COLA=[], IMP_TOTAL_ARCHIVOS=1, IMP_ARCHIVO_IDX=1;
 function impPintarCola(){
   var av=el("impCola"); if(!av) return;
   if(!IMP_COLA.length){ av.style.display="none"; av.innerHTML=""; return; }
   var f=IMP_COLA[0];
   av.style.display="";
-  av.innerHTML='<b>Te queda '+IMP_COLA.length+' archivo'+(IMP_COLA.length===1?"":"s")+' por subir.</b><br>'+
-    'El siguiente es <b>'+esc(f.name)+'</b>. Termina de importar este y despues cargalo con el boton.<br>'+
-    '<button class="btn ghost sm" id="btnImpCola" style="margin-top:7px;">Cargar '+esc(f.name.length>34?f.name.slice(0,32)+"...":f.name)+'</button>';
-  var b=el("btnImpCola");
-  if(b) b.addEventListener("click",function(){ var sig=IMP_COLA.shift(); impPintarCola(); impLeerArchivo(sig); });
+  av.innerHTML='<b>Archivo '+IMP_ARCHIVO_IDX+' de '+IMP_TOTAL_ARCHIVOS+'.</b> Cuando confirmes este, el siguiente ('+esc(f.name.length>42?f.name.slice(0,40)+'…':f.name)+') <b>se carga solo</b>.';
+}
+/* La cabecera decide qué es cada archivo: el de PASES trae saldo restante o vencimiento
+   junto al plan; el de CLIENTES trae contacto (correo, teléfono, nacimiento, apellido). */
+function impLeerCabecera(f){
+  return new Promise(function(res){
+    var fr=new FileReader();
+    fr.onload=function(){ res(String(fr.result||"").replace(/^﻿/,"").split(/\r?\n/)[0]||""); };
+    fr.onerror=function(){ res(""); };
+    try{ fr.readAsText(f.slice(0,65536),"utf-8"); }catch(e){ res(""); }
+  });
+}
+function impPuntuarCabecera(linea){
+  var celdas=(parseCsv(linea)[0])||[];
+  var tiene=function(clave){ return celdas.some(function(c){ return IMP_ALIAS[clave].indexOf(impNormForma(c))>=0; }); };
+  return { pases:(tiene("restantes")?2:0)+(tiene("vence")?1:0)+(tiene("paquete")?1:0),
+           clientes:(tiene("email")?1:0)+(tiene("whatsapp")?1:0)+(tiene("nacimiento")?1:0)+(tiene("apellido")?1:0) };
 }
 function impEncolar(lista){
   var arr=[],i;
   for(i=0;i<((lista&&lista.length)||0);i++) arr.push(lista[i]);
   if(!arr.length) return;
-  var primero=arr.shift();
-  IMP_COLA=arr;
-  impPintarCola();
-  impLeerArchivo(primero);
+  /* 🐛 12-ago-2026: si el 1er archivo trae filas malas, el dueño lo corrige y arrastra ESE
+     SOLO — antes eso vaciaba la cola y el archivo de pases se perdía en silencio. Ahora el
+     corregido se une a los que esperan y se re-ordena todo por cabecera. */
+  if(arr.length===1 && !IMP_COLA.length){ IMP_TOTAL_ARCHIVOS=1; IMP_ARCHIVO_IDX=1; impPintarCola(); impLeerArchivo(arr[0]); return; }
+  if(arr.length===1){ arr=arr.concat(IMP_COLA); IMP_COLA=[]; }
+  Promise.all(arr.map(impLeerCabecera)).then(function(cabs){
+    var punt=arr.map(function(f,ix){ var p=impPuntuarCabecera(cabs[ix]); return { f:f, d:p.pases-p.clientes, ix:ix }; });
+    /* menor puntaje de pases primero = clientes primero; empate = el orden en que llegaron */
+    punt.sort(function(a,b){ return (a.d-b.d)||(a.ix-b.ix); });
+    var orden=punt.map(function(x){ return x.f; });
+    IMP_TOTAL_ARCHIVOS=orden.length; IMP_ARCHIVO_IDX=1;
+    var primero=orden.shift();
+    IMP_COLA=orden;
+    impPintarCola();
+    impLeerArchivo(primero);
+  });
 }
 el("impFile").addEventListener("change",function(){ impEncolar(this.files); });
 /* ---- Panel siempre fresco (11-ago-2026) ----
@@ -8205,6 +8267,11 @@ window.addEventListener("drop",function(e){
   if(mI) mI.classList.remove("arrastrando");
   var fl=e.dataTransfer&&e.dataTransfer.files;
   if(!fl||!fl.length) return;
+  /* 🐛 12-ago-2026: este camino se saltaba el candado de versión vieja — arrastrar el archivo
+     a una pestaña de ayer importaba con el código de ayer, que es EXACTAMENTE el agujero por
+     el que la migración de Elevate corrió sin el multi-pase. Acá todavía no hay nada a medias,
+     así que recargar es gratis. */
+  if(VER_VIEJA && !IMP_COLA.length){ location.reload(); return; }
   openOv("ovImport");
   /* Soltar un archivo salta la pregunta de "¿de dónde vienes?" a propósito: quien arrastra ya
      tiene su archivo. Pero hay que ESCONDER el paso 0 o quedan los dos a la vez en pantalla. */
@@ -8348,7 +8415,12 @@ function impPreview(rows,dup,vacios,dupArchivo,sinCruce){
   if(conRes) extra.push(conRes+" con reservas ya agendadas que se migran");
   var conMail=rows.filter(function(a){ return !a.error && a.email; }).length;
   if(conMail) extra.push(conMail+" con correo");
-  el("impResumen").innerHTML="<b>"+nuevos+" alumno"+(nuevos!=1?"s":"")+" nuevo"+(nuevos!=1?"s":"")+"</b>"+(extra.length?(" · "+extra.join(" · ")):"")+(rows.length>50?" · se muestran los primeros 50":"")+"."+
+  /* El contador de la cola vive en el paso 1, que se esconde en cuanto aparece esta tabla:
+     el dueño nunca lo veía. Va también acá, que es donde de verdad pasa el tiempo (12-ago). */
+  var cintaCola=(IMP_TOTAL_ARCHIVOS>1)
+    ? ('<span style="display:inline-block;background:var(--soft,#f4f5f7);border-radius:6px;padding:2px 9px;margin:0 0 6px;font-size:13px;">Archivo <b>'+IMP_ARCHIVO_IDX+' de '+IMP_TOTAL_ARCHIVOS+'</b>'+(IMP_COLA.length?' · al confirmar, <b>'+esc(IMP_COLA[0].name.length>34?IMP_COLA[0].name.slice(0,32)+'…':IMP_COLA[0].name)+'</b> se carga solo':' · es el último')+'</span><br>')
+    : "";
+  el("impResumen").innerHTML=cintaCola+"<b>"+nuevos+" alumno"+(nuevos!=1?"s":"")+" nuevo"+(nuevos!=1?"s":"")+"</b>"+(extra.length?(" · "+extra.join(" · ")):"")+(rows.length>50?" · se muestran los primeros 50":"")+"."+
     /* transparencia total (7-ago-2026): nada se bota en silencio */
     ((IMP_COLS_EXTRA&&IMP_COLS_EXTRA.length)?('<br><span class="mini">Columnas que no reconocí — <b>no se pierden</b>: van completas a las Notas de cada alumno, con su título: <b>'+IMP_COLS_EXTRA.map(esc).join(", ")+'</b></span>'):"");
   var multi=(ROL||"dueno")==="dueno" && (EQUIPO||[]).filter(function(p){return p.estado!=="suspendido";}).length>1;
@@ -8650,7 +8722,11 @@ el("btnImpConfirmar").addEventListener("click",function(){
     if(!resPend.length) return null;
     return apiPost("/app/api/admin/importar-reservas",{filas:resPend}).catch(function(){ return {creadas:0,saltadas:[{motivo:"error de conexión"}]}; });
   }).then(function(rr){
-    renderAll(); closeOv("ovImport");
+    renderAll();
+    /* "arrastra tus dos archivos y listo" (12-ago-2026): si quedó un archivo en la cola, el
+       modal NO se cierra — se confirma este y el siguiente se carga solo, sin ningún clic */
+    var hayCola=IMP_COLA.length>0;
+    if(!hayCola) closeOv("ovImport");
     /* la cuenta clara (11-ago-2026): cuántos entraron y cuántos NO, con el motivo. Antes el
        aviso solo cantaba los que entraron y el dueño no tenía cómo saber que faltaba gente. */
     var nComp=IMP_COMPLETADOS, nNuevos=n-nComp;
@@ -8667,19 +8743,38 @@ el("btnImpConfirmar").addEventListener("click",function(){
     if(rr&&rr.saltadas&&rr.saltadas.length){
       alert("Estas reservas no se pudieron migrar:\n\n"+rr.saltadas.slice(0,15).map(function(s){return "· "+(s.alumno||"?")+" — "+(s.iso?new Date(s.iso).toLocaleString("es-PE",{timeZone:"America/Lima"})+" — ":"")+(s.motivo||"");}).join("\n")+(rr.saltadas.length>15?"\n… y "+(rr.saltadas.length-15)+" más":"")+"\n\nRevisa que el horario exista en tu Agenda y tenga cupo, y agéndalas a mano.");
     }
-    /* Y acá se cierra el círculo: si entraron sin plan, se dice AHORA (no tres días después). */
-    try{ impDespuesDeImportar(nNuevos,nComp); }catch(e){}
+    /* Y acá se cierra el círculo: si entraron sin plan, se dice AHORA (no tres días después).
+       PERO no cuando viene otro archivo en cola: sería regañar por el plan que falta justo
+       cuando el archivo de los planes se está cargando solo. */
+    IMP_ROWS=[];   // solo tras guardar de verdad (en el fallo de red se conservan para reintentar)
+    if(hayCola){
+      IMP_ARCHIVO_IDX++;
+      var sigArch=IMP_COLA.shift();
+      /* abrirImportador({archivo:2}) repinta el título y la guía para "sus planes";
+         encadena:true preserva la cola que estamos drenando */
+      try{ abrirImportador({archivo:(IMP_ARCHIVO_N||1)+1, encadena:true}); }catch(e){}
+      impPintarCola();
+      impLeerArchivo(sigArch);
+    } else {
+      try{ impDespuesDeImportar(nNuevos,nComp); }catch(e){}
+    }
   })
     .catch(function(e){
       /* Si el rechazo lo explicó el servidor (p.ej. el tope de la demo pública), se muestra ESO
          y no un "revisa tu conexión" que miente. Y se recarga desde el server: el importador ya
          había metido las filas en db.alumnos en memoria, y si no se guardaron no pueden quedar
          ahí colgadas — mucho menos en la demo, que es justo lo que no debe conservarlas. */
-      if(e && e.servidor && e.message){ alert(e.message); recargar().catch(function(){}); }
-      else { toast("No se pudo importar. Revisa tu conexión e intenta de nuevo."); }
+      if(e && e.servidor && e.message){ alert(e.message); IMP_ROWS=[]; recargar().catch(function(){}); }
+      else {
+        /* 🐛 12-ago-2026: el .finally vaciaba IMP_ROWS SIEMPRE, también al fallar. El toast
+           decía "intenta de nuevo", José volvía a apretar Importar y el handler encontraba
+           IMP_ROWS vacío → closeOv() → el modal se cerraba como si hubiera funcionado, con
+           801 alumnos sin importar y el archivo de pases perdido. Ahora en un fallo de RED
+           las filas se conservan y el reintento importa de verdad. */
+        toast("No se pudo importar. Revisa tu conexión y vuelve a apretar Importar.");
+      }
       btn.disabled=false;
-    })
-    .finally(function(){ IMP_ROWS=[]; });
+    });
 });
 
 /* ---------- Avisos push (Web Push / VAPID) ---------- */
