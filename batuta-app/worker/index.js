@@ -10527,10 +10527,36 @@ export default {
         }
 
         const nuevoVence = new Date(Date.parse(al.vence || hoy()) + dias * 86400000).toISOString().slice(0, 10);
+        /* ═══ V2 multi-pase (12-ago-2026): la pausa congela a la PERSONA ═══
+           Un viaje no distingue pases: TODOS los pases vivos con fecha corren `dias` hacia
+           adelante, no solo el espejo de la ficha. Sin esto, el alumno multi-pase pausaba y
+           sus pases seguían muriendo en su fecha original — la pausa no le servía de nada.
+           El pase YA vencido no revive (muerto se queda), y el que vence "al primer uso"
+           (sin fecha) no necesita moverse. Se edita el JSON crudo preservando lo que no se
+           conoce (como la marca av de avisos), en vez de re-sanear. Las reglas (días máx y
+           bloques) siguen saliendo del plan ESPEJO de la ficha — decisión consciente: es el
+           pase principal que el alumno está usando, y una regla por pase confundiría más de
+           lo que protege. */
+        let pasesPausa = null;
+        try {
+          const objP = JSON.parse(al.pases || "");
+          if (objP && Array.isArray(objP.p) && objP.p.length && (Number(objP.c) || 1) === ciclo){
+            let movio = false;
+            for (const px of objP.p){
+              if (px && px.vence && /^\d{4}-\d{2}-\d{2}$/.test(String(px.vence)) && !venceVencido(px.vence)){
+                px.vence = new Date(Date.parse(px.vence + "T00:00:00Z") + dias * 86400000).toISOString().slice(0, 10);
+                movio = true;
+              }
+            }
+            if (movio) pasesPausa = JSON.stringify(objP);
+          }
+        } catch (e) { /* pases ilegibles: la pausa clásica sigue funcionando igual */ }
         await env.DB.batch([
           env.DB.prepare("INSERT INTO pausas (id,tenant_id,alumno_id,ciclo,motivo,dias,creada) VALUES (?1,?2,?3,?4,?5,?6,?7)")
             .bind(crypto.randomUUID(), tid, al.id, ciclo, motivo, dias, new Date().toISOString()),
-          env.DB.prepare("UPDATE alumnos SET vence = ?1 WHERE id = ?2 AND tenant_id = ?3").bind(nuevoVence, al.id, tid)
+          pasesPausa
+            ? env.DB.prepare("UPDATE alumnos SET vence = ?1, pases = ?4 WHERE id = ?2 AND tenant_id = ?3").bind(nuevoVence, al.id, tid, pasesPausa)
+            : env.DB.prepare("UPDATE alumnos SET vence = ?1 WHERE id = ?2 AND tenant_id = ?3").bind(nuevoVence, al.id, tid)
         ]);
         try { await avisarPush(env, tid, { title: "Pausa por " + motivo + ": " + al.nombre }); } catch (e) {}
         return json({ ok: true, vence: nuevoVence, dias_usados_ciclo: yaUsados + dias, dias_disponibles: PAUSA_MAX_DIAS - (yaUsados + dias) });
