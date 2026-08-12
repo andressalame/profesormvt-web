@@ -7767,6 +7767,12 @@ export default {
         ).bind(compraAn, tAn.id, planAn, montoAn, new Date().toISOString()).run();
         const prefAn = await mpFetch(env, "/checkout/preferences", { method: "POST", body: {
           items: [{ title: "Batuta " + (PLAN_NOMBRE[planAn] || planAn) + " - plan anual (12 meses al precio de 10)", quantity: 1, unit_price: montoAn, currency_id: "PEN" }],
+          /* 12-ago-2026: lo que el dueño ve en el ESTADO DE CUENTA de su tarjeta dice "BATUTA"
+             y no el nombre de la cuenta MP (que hoy es la de MVT). Arregla la mitad del pedido
+             del 6-ago ("cuando sea pago de Batuta que diga Batuta"): el header del checkout
+             sigue saliendo de la cuenta MP y eso SOLO se arregla con la 2ª cuenta (investigado
+             el 10-ago). Máx. 13 caracteres; no existe en suscripciones, solo en preferencias. */
+          statement_descriptor: "BATUTA",
           external_reference: "btan:" + compraAn,
           notification_url: MARCA.dominio + "/app/api/mp/webhook",
           back_urls: {
@@ -10029,6 +10035,7 @@ export default {
         ).bind(compraIdPk, actorPk.tenant.id, packKey, cantPk, Number(packKey), new Date().toISOString()).run();
         const prefPk = await mpFetch(env, "/checkout/preferences", { method: "POST", body: {
           items: [{ title: "Batuta - " + cantPk + " mensajes extra del asistente (mes en curso)", quantity: 1, unit_price: Number(packKey), currency_id: "PEN" }],
+          statement_descriptor: "BATUTA",   // ver comentario en el pago anual (12-ago-2026)
           external_reference: "btpk:" + compraIdPk,
           notification_url: MARCA.dominio + "/app/api/mp/webhook",
           back_urls: {
