@@ -2218,6 +2218,10 @@ var MARCA = {
   portalUrl: "",
   archivoExport: "batuta"
 };
+/* Tope de planes por academia. TIENE QUE COINCIDIR con PAQUETES_MAX del worker: el 11-ago-2026
+   estaban desincronizados (panel 12, servidor 20) y eso dejó a Elevate, que va en 13, sin poder
+   crear ni un plan desde el importador. Si un día se sube, se suben LOS DOS. */
+var PLANES_MAX = 20;
 var PAQUETES = {
   "Paquete 4":  { clases:4,  reprog:2 },
   "Paquete 8":  { clases:8,  reprog:3 },
@@ -2233,7 +2237,11 @@ function paquetesTenant(){
   var raw=db.config&&db.config.paquetes;
   /* "[]" guardado = sin paquetes DE VERDAD (registro nuevo, 03-ago-2026): nada de pintar
      los 5 de música por default — el editor muestra el estado vacío "crea el primero". */
-  if(raw){ try{ var a=JSON.parse(raw); if(Array.isArray(a)&&!a.length) return []; if(Array.isArray(a)&&a.length){ var out=a.map(function(p){return {n:String((p&&p.n)||'').trim().slice(0,40),c:(p&&p.u)?0:(parseInt(p&&p.c,10)||0),r:parseInt(p&&p.r,10)||0,u:!!(p&&p.u),t:(Array.isArray(p&&p.t)?p.t:[]).map(function(x){return String(x||'').trim();}).filter(Boolean),d:Math.max(0,Math.min(3650,parseInt(p&&p.d,10)||0)),i:((p&&p.i)==="clase")?"clase":"compra"};}).filter(function(p){return p.n;}); if(out.length) return out; } }catch(e){} }
+  /* 11-ago-2026: este parseo se comía `o` (plan oculto), `g` (días de congelar) y `gb`
+     (bloques) — las perillas de la reunión con Elevate del 7-ago. Quien guardara desde un
+     camino que se apoye en esta función se las borraba a TODOS sus planes sin enterarse.
+     Se preservan tal cual vienen (ausente sigue significando "usa la regla global"). */
+  if(raw){ try{ var a=JSON.parse(raw); if(Array.isArray(a)&&!a.length) return []; if(Array.isArray(a)&&a.length){ var out=a.map(function(p){var q={n:String((p&&p.n)||'').trim().slice(0,40),c:(p&&p.u)?0:(parseInt(p&&p.c,10)||0),r:parseInt(p&&p.r,10)||0,u:!!(p&&p.u),t:(Array.isArray(p&&p.t)?p.t:[]).map(function(x){return String(x||'').trim();}).filter(Boolean),d:Math.max(0,Math.min(3650,parseInt(p&&p.d,10)||0)),i:((p&&p.i)==="clase")?"clase":"compra"};if(p&&p.o)q.o=1;if(p&&p.g!==undefined&&p.g!==null&&p.g!=="")q.g=p.g;if(p&&p.gb!==undefined&&p.gb!==null&&p.gb!=="")q.gb=p.gb;return q;}).filter(function(p){return p.n;}); if(out.length) return out; } }catch(e){} }
   return paquetesDefPanel();
 }
 function pkMap(){ var m={}; paquetesTenant().forEach(function(p){ m[p.n]={clases:p.c,reprog:p.r,ilim:p.u,dias:p.d||0,inicio:p.i||"compra"}; }); return m; }
@@ -7604,9 +7612,15 @@ function impCrearPlan(nombre,clases,ilim){
   if(!ilim && c<1){ toast("Dime de cuántas clases es «"+nombre+"» y lo creo."); return; }
   var lista=[]; try{ lista=paquetesTenant().slice(); }catch(e){ lista=[]; }
   if(lista.some(function(p){ return impNorm(p.n)===impNorm(nombre); })){ reMapPaquete(nombre,nombre); return; }
-  if(lista.length>=12){ toast("Ya tienes 12 planes, que es el máximo."); return; }
+  /* 🐛 11-ago-2026, reportado por José en plena migración: acá decía 12 mientras el servidor
+     acepta 20 (PAQUETES_MAX). Elevate tiene 13 planes, o sea que el importador le bloqueaba
+     crear CUALQUIER plan nuevo con un tope que ni siquiera era el de verdad, y encima el
+     mensaje le mentía el número. Los dos topes salen ahora del mismo sitio. */
+  if(lista.length>=PLANES_MAX){ toast("Ya tienes "+PLANES_MAX+" planes, que es el máximo. Junta o borra alguno en Ajustes → Clases y planes."); return; }
   lista.push({n:nombre, c:ilim?0:c, r:(!ilim&&c>=2)?Math.round(c/4)+1:0, u:!!ilim, t:[], d:0, i:"compra"});
-  apiPost("/app/api/admin/config",{paquetes:JSON.stringify(lista.map(function(p){ return {n:p.n,c:p.c,r:p.r,u:p.u,t:p.t||[],d:p.d||0,i:p.i||"compra"}; }))})
+  /* Se preservan o/g/gb de los planes que YA existen: crear uno nuevo desde acá no puede
+     borrarle al dueño los planes ocultos ni sus reglas de congelamiento. */
+  apiPost("/app/api/admin/config",{paquetes:JSON.stringify(lista.map(function(p){ var j={n:p.n,c:p.c,r:p.r,u:p.u,t:p.t||[],d:p.d||0,i:p.i||"compra"}; if(p.o)j.o=1; if(p.g!==undefined&&p.g!==null&&p.g!=="")j.g=p.g; if(p.gb!==undefined&&p.gb!==null&&p.gb!=="")j.gb=p.gb; return j; }))})
     .then(function(){
       db.config=db.config||{}; db.config.paquetes=JSON.stringify(lista);
       if(db.precios && db.precios[nombre]===undefined) db.precios[nombre]=0;   // nace sin precio, y se dice
