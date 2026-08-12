@@ -87,9 +87,16 @@ function parsePaquetes(valor){
     gb = (Number.isFinite(gb) && gb >= 1 && gb <= 12) ? gb : 2;
     map[n] = { clases: c, reprog: r, ilim: u, tipos: t, dias: d, inicio: i, oculto: o, congela: g, congelaBloques: gb };
     list.push(n);
-    if (list.length >= 20) break;
+    /* Tope de 20 planes por academia. 11-ago-2026: antes esto era un `break` MUDO — la
+       academia con 25 planes guardaba 20 y los otros 5 desaparecian sin que nadie se
+       enterara, que es exactamente el modo de fallar que nos costo la manana con el dedup
+       del importador. Ahora se cuenta lo que quedo fuera para poder avisarlo. */
+    if (list.length >= PAQUETES_MAX){
+      const restantes = arr.length - (arr.indexOf(p) + 1);
+      return { map, list, sobran: Math.max(0, restantes) };
+    }
   }
-  return list.length ? { map, list } : null;
+  return list.length ? { map, list, sobran: 0 } : null;
 }
 function paquetesDefault(){
   const map = {}, list = [];
@@ -832,6 +839,9 @@ function cursosDeCfg(cfg){
    El ORDEN manda: la primera categoria es la principal (portal y web la muestran primero).
    Sin config.clases el sistema se comporta exactamente como antes (cursos planos). */
 const CLASES_MAX = 12, VARIANTES_MAX = 12;
+/* Planes (paquetes) por academia. 20 cubre de sobra al caso mas cargado que tenemos:
+   Elevate va en 13 con su malla de Mat x Maquinas en 1/4/8/12/16/20/48 clases. */
+const PAQUETES_MAX = 20;
 function parseClases(valor){
   let arr; try { arr = JSON.parse(valor || ""); } catch (e) { return []; }
   if (!Array.isArray(arr)) return [];
@@ -11686,6 +11696,8 @@ export default {
                           /* wizard de primer ingreso (10-ago-2026): "1" = completado, no re-mostrar */
                           "wizard_hecho"];
           const stmts = [];
+          /* > 0 = cuantos planes quedaron fuera por el tope, para decirselo en la respuesta */
+          let avisoPaquetes = 0;
           for (const k of claves){
             if (k in b){
               let valor = String(b[k] || "").trim();
@@ -11696,7 +11708,23 @@ export default {
               /* paquetes por tenant: valida el JSON y lo reescribe canónico (o "" = usa el default) */
               if (k === "paquetes"){
                 const parsed = parsePaquetes(valor);
-                valor = parsed ? JSON.stringify(parsed.list.map(n => ({ n: n, c: parsed.map[n].clases, r: parsed.map[n].reprog, u: parsed.map[n].ilim, t: parsed.map[n].tipos || [], d: parsed.map[n].dias || 0, i: parsed.map[n].inicio || "compra" }))) : "";
+                /* 🐛 11-ago-2026: este reescribe canónico se COMÍA tres campos que sí se leen en
+                   el resto del worker — `o` (plan oculto), `g` (días de congelamiento) y `gb`
+                   (en cuántos bloques se parte). Son justo las perillas que salieron de la
+                   reunión con Elevate del 7-ago. Efecto: el dueño marcaba un plan como oculto
+                   o le ponía sus días de congelar, y al siguiente guardado desde Ajustes se le
+                   borraba solo, sin aviso. Se serializan omitiendo el default a propósito:
+                   `g` AUSENTE significa "usa la regla global", que no es lo mismo que g=0
+                   ("este plan no congela"). */
+                valor = parsed ? JSON.stringify(parsed.list.map(n => {
+                  const p = parsed.map[n];
+                  const out = { n: n, c: p.clases, r: p.reprog, u: p.ilim, t: p.tipos || [], d: p.dias || 0, i: p.inicio || "compra" };
+                  if (p.oculto) out.o = 1;
+                  if (p.congela !== null && p.congela !== undefined) out.g = p.congela;
+                  if (p.congelaBloques !== 2) out.gb = p.congelaBloques;
+                  return out;
+                })) : "";
+                if (parsed && parsed.sobran > 0) avisoPaquetes = parsed.sobran;
               }
               /* clases de 2 niveles: valida y reescribe canónico ("" = cursos planos de siempre) */
               if (k === "clases"){
@@ -11832,6 +11860,11 @@ export default {
             if (waAcademia){
               try { await env.DB.prepare("UPDATE tenants SET whatsapp = ?1 WHERE id = ?2").bind(waAcademia, tid).run(); } catch (e) {}
             }
+          }
+          /* Si el tope de planes dejo alguno afuera, se DICE. Guardar 20 de 25 y no avisar es
+             la forma mas facil de que una academia crea que tiene todo cargado y no lo tenga. */
+          if (avisoPaquetes > 0){
+            return json({ ok: true, aviso: "Guarde tus planes, pero " + avisoPaquetes + " quedaron fuera: el maximo es " + PAQUETES_MAX + " por academia. Borra o junta alguno y vuelve a intentar con los que faltan." });
           }
           return json({ ok: true });
         }
