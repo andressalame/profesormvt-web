@@ -8590,8 +8590,23 @@ export default {
         if (!emailOk(email)) return json({ error: "Ese correo no parece valido." }, 400);
         if (password.length < 8) return json({ error: "La contrasena necesita minimo 8 caracteres." }, 400);
 
-        const existe = await env.DB.prepare("SELECT id FROM cuentas WHERE tenant_id = ?1 AND email = ?2").bind(t.id, email).first();
-        if (existe) return json({ error: "Ya existe una cuenta con ese correo. Prueba ingresar." }, 409);
+        /* 🔒 12-ago-2026: el 409 "ya existe una cuenta con ese correo" confirmaba que ese correo
+           es alumno de esta academia. Cerrarlo del todo (responder siempre ok y avisar por
+           correo) rompería la venta: el alumno se queda mirando una pantalla que no lo deja
+           entrar ni le dice por qué. La salida es mejor para las dos cosas: si el correo ya
+           tiene cuenta Y la contraseña que acaba de escribir es la suya, SE LE ENTRA — nadie
+           aprende nada nuevo y el alumno legítimo ni se entera de que se había registrado
+           antes. Solo cuando la contraseña NO coincide queda el aviso, que es el mismo caso
+           en que un curioso tampoco puede hacer nada con él. */
+        const existe = await env.DB.prepare("SELECT * FROM cuentas WHERE tenant_id = ?1 AND email = ?2").bind(t.id, email).first();
+        if (existe){
+          if (existe.pass_hash && safeEq(await hashPass(password, existe.pass_salt), existe.pass_hash)){
+            const tokenYa = await crearSesion(env, existe.id);
+            return json({ token: tokenYa, ya_tenia_cuenta: true });
+          }
+          await new Promise(r => setTimeout(r, 350));
+          return json({ error: "No pudimos crear la cuenta con esos datos. Si ya tienes cuenta aqui, entra con tu contrasena o usa \"Olvide mi contrasena\"." }, 409);
+        }
 
         const refPor = await buscarRefCode(env, t.id, b.ref);
         const refCode = await genRefCode(env, t.id);
@@ -8636,15 +8651,23 @@ export default {
           : null;
         if (!c){
           await new Promise(r => setTimeout(r, 350));
-          return json({ error: "Correo o contrasena incorrectos." }, 401);
+          return json({ error: "Correo o contrasena incorrectos. Si entraste por un link de invitacion y nunca creaste una contrasena, usa \"Olvide mi contrasena\" para ponerte una." }, 401);
         }
+        /* 🔒 12-ago-2026: este 401 decía "esta cuenta no tiene contrasena configurada" y con eso
+           cualquiera averiguaba si un correo es alumno de esta academia — probando correos uno
+           por uno se reconstruye la lista de clientes. Ahora la respuesta es IDÉNTICA a la de
+           credenciales malas (mismo texto, mismo status, mismo delay), y la pista de qué hacer
+           va en el texto genérico: se le muestra a TODOS, así que no delata a nadie y el alumno
+           que entró por invitación igual sabe que su camino es "¿Olvidaste tu contraseña?". */
+        const ERR_LOGIN = "Correo o contrasena incorrectos. Si entraste por un link de invitacion y nunca creaste una contrasena, usa \"Olvide mi contrasena\" para ponerte una.";
         if (!c.pass_hash){
-          return json({ error: "Esta cuenta no tiene contrasena configurada." }, 401);
+          await new Promise(r => setTimeout(r, 350));
+          return json({ error: ERR_LOGIN }, 401);
         }
         const hash = await hashPass(password, c.pass_salt);
         if (!safeEq(hash, c.pass_hash)){
           await new Promise(r => setTimeout(r, 350));
-          return json({ error: "Correo o contrasena incorrectos." }, 401);
+          return json({ error: ERR_LOGIN }, 401);
         }
         const token = await crearSesion(env, c.id);
         return json({ token });

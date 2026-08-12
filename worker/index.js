@@ -3280,8 +3280,18 @@ export default {
         if (!emailOk(email)) return json({ error: "Ese correo no parece válido." }, 400);
         if (password.length < 8) return json({ error: "La contraseña necesita mínimo 8 caracteres." }, 400);
 
-        const existe = await env.DB.prepare("SELECT id FROM cuentas WHERE email = ?1").bind(email).first();
-        if (existe) return json({ error: "Ya existe una cuenta con ese correo. Prueba ingresar." }, 409);
+        /* 🔒 12-ago-2026 (misma regla que Batuta): el 409 confirmaba que el correo ya es
+           alumno. Si la contraseña que escribió es la suya, SE LE ENTRA (mejor UX y sin
+           señal nueva); si no coincide, aviso que no confirma nada. */
+        const existe = await env.DB.prepare("SELECT * FROM cuentas WHERE email = ?1").bind(email).first();
+        if (existe){
+          if (existe.pass_hash && safeEq(await hashPass(password, existe.pass_salt), existe.pass_hash)){
+            const tokenYa = await crearSesion(env, existe.id);
+            return json({ token: tokenYa, ya_tenia_cuenta: true });
+          }
+          await new Promise(r => setTimeout(r, 350));
+          return json({ error: "No pudimos crear la cuenta con esos datos. Si ya tienes cuenta aquí, entra con tu contraseña o usa \"Olvidé mi contraseña\"." }, 409);
+        }
 
         const refPor = await buscarRefCode(env, b.ref);   // inválido -> null (se ignora)
         const refCode = await genRefCode(env);
@@ -3312,15 +3322,19 @@ export default {
           : null;
         if (!c){
           await new Promise(r => setTimeout(r, 350));
-          return json({ error: "Correo o contraseña incorrectos." }, 401);
+          return json({ error: "Correo o contraseña incorrectos. Si tu cuenta entra con Google, usa el botón de Google; y si nunca creaste una contraseña, usa \"Olvidé mi contraseña\"." }, 401);
         }
+        /* 🔒 12-ago-2026: decir "esta cuenta ingresa con Google" confirmaba que ese correo
+           es alumno. Mismo texto, mismo status y mismo delay que credenciales malas; la
+           pista de Google va DENTRO del texto genérico, que se le muestra a todos. */
         if (!c.pass_hash){
-          return json({ error: "Esta cuenta ingresa con el botón de Google." }, 401);
+          await new Promise(r => setTimeout(r, 350));
+          return json({ error: "Correo o contraseña incorrectos. Si tu cuenta entra con Google, usa el botón de Google; y si nunca creaste una contraseña, usa \"Olvidé mi contraseña\"." }, 401);
         }
         const hash = await hashPass(password, c.pass_salt);
         if (!safeEq(hash, c.pass_hash)){
           await new Promise(r => setTimeout(r, 350));
-          return json({ error: "Correo o contraseña incorrectos." }, 401);
+          return json({ error: "Correo o contraseña incorrectos. Si tu cuenta entra con Google, usa el botón de Google; y si nunca creaste una contraseña, usa \"Olvidé mi contraseña\"." }, 401);
         }
         const token = await crearSesion(env, c.id);
         return json({ token });
