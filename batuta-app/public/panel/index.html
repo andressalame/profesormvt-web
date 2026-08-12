@@ -2984,7 +2984,12 @@ function renderAlumnos(){
          dice que falta ponerlo, no se inventa uno (11-ago-2026). */
       '<td>'+(a.curso?esc(a.curso):'<span class="mini">— sin curso —</span>')+'</td>'+
       /* "ciclo N" era jerga interna: se dice en castellano y solo cuando ya renovó */
-      '<td>'+(a.paquete?(esc(a.paquete)+'<br><span class="mini">S/ '+c.monto+((Number(a.ciclo)||1)>1?(' · '+((Number(a.ciclo)||1)-1)+'ª renovación'):'')+'</span>'):'<span class="mini">— sin plan —</span>')+'</td>'+
+      '<td>'+(a.paquete?(esc(a.paquete)+(function(){
+        /* varios pases activos (11-ago-2026): la tabla avisa que este alumno tiene más
+           pases aparte del principal; el detalle vive en su portal y en la reserva */
+        try{ var pj=JSON.parse(a.pases||""); var np=(pj&&pj.p&&pj.p.length)||0;
+             return (np>=2 && (Number(pj.c)||1)===(Number(a.ciclo)||1))?' <span class="mini" style="font-weight:600;">(+'+(np-1)+' pase'+(np-1===1?'':'s')+')</span>':""; }catch(e){ return ""; }
+      })()+'<br><span class="mini">S/ '+c.monto+((Number(a.ciclo)||1)>1?(' · '+((Number(a.ciclo)||1)-1)+'ª renovación'):'')+'</span>'):'<span class="mini">— sin plan —</span>')+'</td>'+
       '<td>'+pago+'</td>'+
       /* "(manual)" no le decía nada a nadie: es el horario que escribió el profe a mano */
       '<td>'+esc((a.horarioFijo&&a.horarioFijo.length)?a.horarioFijo.join(' · '):(a.horario||'—'))+
@@ -8025,19 +8030,15 @@ function impFusionarPases(out){
       return x-y;                                  // estable: el orden del archivo
     });
     var g=out[orden[0]];
-    var extras=orden.slice(1).map(function(ix2){
-      var p=out[ix2]; quitar[ix2]=1;
-      var det=[];
-      if(p.restantes!=null) det.push("le quedan "+p.restantes);
-      else if(p.saldoNota) det.push(p.saldoNota);
-      if(p.vence) det.push("vence "+p.vence);
-      else if(p.venceTxt) det.push("vence: "+p.venceTxt);
-      return p.paquete+(det.length?" ("+det.join(", ")+")":"");
+    /* TODOS los pases viajan como datos (11-ago-2026, decisión de Andrés: multi-pase real,
+       no parche): el sistema los guarda en la ficha y cada uno reserva y vence por su cuenta.
+       La ficha espeja el principal (orden[0]) para todo lo viejo que lee `paquete`. */
+    g.pases=orden.map(function(ix2){
+      var p=out[ix2];
+      if(ix2!==orden[0]) quitar[ix2]=1;
+      return { n:p.paquete, usadas:Number(p.migrado_usadas)||0, vence:p.vence||"" };
     });
-    g.pasesExtra=extras.length;
-    var linea="Otros pases migrados: "+extras.join(" · ");
-    if(g.completaA) g.notasExtra=(g.notasExtra?g.notasExtra+" · ":"")+linea;
-    else g.notas=(g.notas?g.notas+" · ":"")+linea;
+    g.pasesExtra=g.pases.length-1;
   });
   var hayQuitar=false; for(var q in quitar){ hayQuitar=true; break; }
   return hayQuitar?out.filter(function(_,ix){ return !quitar[ix]; }):out;
@@ -8226,7 +8227,7 @@ function impPreview(rows,dup,vacios,dupArchivo,sinCruce){
     var compQue=(a.completaQue||[]).filter(function(q){ return q!=="clase"||!!a.curso; });
     var nomCel=esc(a.nombre)+(a.apellido?(" "+esc(a.apellido)):"")+
       (a.completaA?('<br><span class="mini" style="color:var(--accent);">ya está en tu lista: '+(compQue.length?("se le completa "+esc(compQue.join(", "))):"confirma su clase abajo")+'</span>'):"")+
-      (a.pasesExtra?('<br><span class="mini" style="color:var(--amber,#E8A13D);">trae '+(a.pasesExtra+1)+' pases: entra el que está usando y '+(a.pasesExtra===1?"el otro queda":"los otros "+a.pasesExtra+" quedan")+' en sus Notas</span>'):"")+
+      (a.pasesExtra?('<br><span class="mini" style="color:var(--accent);">trae '+(a.pasesExtra+1)+' pases: entran los '+(a.pasesExtra+1)+' A LA VEZ, cada uno con su saldo y su vencimiento</span>'):"")+
       ((a.avisos&&a.avisos.length)?('<br><span class="mini" style="color:var(--amber,#d99a3c);">'+esc(a.avisos[0])+(a.avisos.length>1?(" (+"+(a.avisos.length-1)+")"):"")+'</span>'):"");
     return "<tr"+(a.error?' style="background:rgba(217,83,79,.08);"':'')+"><td>"+nomCel+"</td><td>"+cuCel+"</td><td>"+esc(a.whatsapp)+"</td><td>"+esc(a.paquete||"—")+"</td><td>"+saldo+"</td><td>"+pf+"</td></tr>";
   }).join("");
@@ -8497,10 +8498,11 @@ el("btnImpConfirmar").addEventListener("click",function(){
       if(a.whatsapp && !ex.whatsapp) ex.whatsapp=a.whatsapp;
       if(a.nacimiento && !ex.nacimiento) ex.nacimiento=a.nacimiento;
       if(a.apellido && !ex.apellido) ex.apellido=a.apellido;
-      /* los OTROS pases de la misma persona (impFusionarPases) sí se AGREGAN a sus Notas:
-         es información nueva, no pisa nada — solo se cuida de no duplicarla si reimporta */
-      if(a.notasExtra && String(ex.notas||"").indexOf(a.notasExtra)<0){
-        ex.notas=(ex.notas?ex.notas+" · ":"")+a.notasExtra;
+      /* VARIOS PASES (11-ago-2026): van a la ficha como datos de verdad. pases_set es la
+         marca que el server exige para aceptarlos (igual que migrado_set con el saldo). */
+      if(a.pases && a.pases.length>=2){
+        ex.pases={ c:Number(ex.ciclo)||1, p:a.pases };
+        ex.pases_set=true;
       }
       if(a.reservas && a.reservas.length) resPend.push({alumno_id:ex.id, isos:a.reservas});
       return;
@@ -8515,6 +8517,7 @@ el("btnImpConfirmar").addEventListener("click",function(){
       migrado_usadas:Number(a.migrado_usadas)||0,
       migrado_ciclo:(Number(a.migrado_usadas)||0)>0?1:0,
       vence:a.vence||"",
+      pases:(a.pases&&a.pases.length>=2)?{c:1,p:a.pases}:undefined,
       profesor_id:a.profesor_id||undefined });
     if(a.reservas && a.reservas.length) resPend.push({alumno_id:idNuevo, isos:a.reservas});
   });

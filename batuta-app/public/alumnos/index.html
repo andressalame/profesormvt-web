@@ -1263,7 +1263,24 @@ function renderInicio(){
     $("iPlanLine").textContent = (a.curso||"") + " · " + (a.paquete||"");
     var est=$("iEstado"); est.textContent=ME.estado;
     est.className = "pill " + (ME.estado==="Activo"?"green":(ME.estado==="Renovar pronto"?"amber":"gray"));
-    if(a.ilim){
+    if(a.pases && a.pases.length){
+      /* VARIOS PASES ACTIVOS (11-ago-2026): cada pase con SU saldo y SU vencimiento.
+         12 de Barré + 4 de Máquinas no es "16 clases": acá se ven por separado. */
+      $("iLab").textContent = "Tus pases";
+      $("iRest").style.fontSize = "";
+      $("iRest").textContent = (Number(a.restantes)>=9999) ? "∞" : a.restantes;
+      $("iDe").textContent = "clases en " + a.pases.length + " pases";
+      var sp="";
+      for(var pi=0; pi<a.pases.length; pi++){
+        var pp=a.pases[pi];
+        sp += '<div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px;margin:5px 0;">'+
+              '<span style="font-size:13px;'+(pp.vencido?'opacity:.55;':'')+'">'+esc(pp.n)+(pp.vencido?' (vencido)':'')+'</span>'+
+              '<b style="white-space:nowrap;">'+(pp.ilim?'sin límite':(pp.restantes+' de '+pp.compradas))+
+              (pp.vence?' <small>· hasta '+esc(fechaBonita(pp.vence))+'</small>':'')+'</b></div>';
+      }
+      $("iStubs").innerHTML = sp;
+      if($("iStubCap")) $("iStubCap").style.display = "none";
+    } else if(a.ilim){
       /* Mensualidad: sin contador de clases; lo que importa es hasta cuándo va (vence). */
       $("iLab").textContent = "Tu mensualidad vence";
       $("iRest").textContent = fechaBonita(a.vence);

@@ -724,6 +724,200 @@ function compute(alumno, regs, precios, reservasUsadas, pk){
     monto
   };
 }
+/* ═══════════ VARIOS PASES ACTIVOS A LA VEZ (11-ago-2026, decisión de Andrés) ═══════════
+   Las academias de fitness venden pases EN PARALELO: 12 de Barré y 4 de Máquinas no es lo
+   mismo que 16 de clase — cada pase lleva SU saldo y solo cubre SUS tipos de clase (el caso
+   que lo destapó: Camila Ruiz de Elevate, con 3 pases activos en Punchpass).
+   `alumnos.pases` = JSON {c: ciclo, p: [{n, usadas, vence}]}:
+     c      = ciclo al que pertenecen. Al renovar (ciclo+1) dejan de aplicar SOLOS, igual que
+              migrado_usadas; así "+ Renovar" sigue significando "época de cobro nueva".
+     n      = nombre del plan de la academia (pkDe/resolverPk le da clases, tipos, ilim).
+     usadas = clases que ese pase YA traía consumidas al migrar (arranque, no historial falso).
+     vence  = vencimiento PROPIO del pase (cada uno vence solo; no se hereda del vecino).
+   REGLA DE ORO: alumno sin `pases` (o con un solo pase) = camino clásico INTACTO. El modo
+   multi existe solo para quien de verdad tiene 2+ pases: cero riesgo para las demás academias. */
+function pasesDe(alumno){
+  const raw = alumno && alumno.pases;
+  if (!raw) return null;
+  let obj; try { obj = (typeof raw === "string") ? JSON.parse(raw) : raw; } catch (e) { return null; }
+  if (!obj) return null;
+  const lista = Array.isArray(obj.p) ? obj.p : (Array.isArray(obj) ? obj : null);
+  if (!lista || !lista.length) return null;
+  /* pases de un ciclo viejo = inertes (el alumno ya renovó a otra época de cobro) */
+  const cicloPases = Array.isArray(obj.p) ? (Number(obj.c) || 1) : 1;
+  if (cicloPases !== (Number(alumno.ciclo) || 1)) return null;
+  const out = [];
+  for (const x of lista){
+    const n = String((x && x.n) || "").trim().slice(0, 40);
+    if (!n) continue;
+    out.push({
+      n,
+      usadas: Math.max(0, Math.floor(Number(x && x.usadas) || 0)),
+      vence: /^\d{4}-\d{2}-\d{2}$/.test(String((x && x.vence) || "")) ? String(x.vence) : ""
+    });
+    if (out.length >= 12) break;
+  }
+  return out.length >= 2 ? out : null;
+}
+/* Saneo server-side de lo que manda el importador. Devuelve el JSON canónico o "" si no
+   hay nada que guardar. Solo el importador escribe esto (misma regla que migrado_usadas). */
+function sanearPasesJson(valor, ciclo){
+  let obj; try { obj = (typeof valor === "string") ? JSON.parse(valor) : valor; } catch (e) { return ""; }
+  const lista = obj && Array.isArray(obj.p) ? obj.p : (Array.isArray(obj) ? obj : null);
+  if (!lista) return "";
+  const p = [];
+  for (const x of lista){
+    const n = String((x && x.n) || "").trim().slice(0, 40);
+    if (!n) continue;
+    p.push({
+      n,
+      usadas: Math.min(9999, Math.max(0, Math.floor(Number(x && x.usadas) || 0))),
+      vence: /^\d{4}-\d{2}-\d{2}$/.test(String((x && x.vence) || "")) ? String(x.vence) : ""
+    });
+    if (p.length >= 12) break;
+  }
+  return p.length >= 2 ? JSON.stringify({ c: Number(ciclo) || 1, p }) : "";
+}
+/* Orden de consumo entre pases: el EMPEZADO gana al sin estrenar (ya lo está usando), y a
+   igualdad consume primero el que vence antes (use-it-or-lose-it). Determinista. */
+function pasesOrdenConsumo(lista){
+  return lista.map((p, i) => ({ p, i })).sort((a, b) => {
+    const ea = a.p.usadas > 0 ? 0 : 1, eb = b.p.usadas > 0 ? 0 : 1;
+    if (ea !== eb) return ea - eb;
+    const va = a.p.vence || "9999-99-99", vb = b.p.vence || "9999-99-99";
+    if (va !== vb) return va < vb ? -1 : 1;
+    return a.i - b.i;
+  }).map(x => x.p);
+}
+/* ---- El reparto (PURO, sin DB: se prueba solo) ----
+   eventos = consumos del ciclo en orden cronológico [{tipo, cuando}] (reservas con su tipo +
+   clases dictadas con su curso). Cada evento se cobra al primer pase (en orden de consumo)
+   que cubra su tipo y tenga saldo; si ninguno tiene saldo pero alguno lo cubre, se cobra al
+   primero que cubra (piso 0: sobreconsumo visible, no negativo); sin cobertura, al primero.
+   reprogTotal por encima de la suma de reprogramaciones permitidas = exceso, y consume. */
+function atribuirPases(lista, paqMap, eventos, reprogTotal){
+  const orden = pasesOrdenConsumo(lista);
+  const est = orden.map(p => {
+    const pk = resolverPk(paqMap, p.n);
+    return {
+      n: p.n, pk,
+      compradas: pk.ilim ? null : (pk.clases || 0),
+      ilim: !!pk.ilim,
+      usadas: p.usadas,
+      vence: p.vence,
+      vencido: venceVencido(p.vence),
+      tipos: pk.tipos || []
+    };
+  });
+  const restanteDe = (e) => e.ilim ? Infinity : Math.max(0, (e.compradas || 0) - e.usadas);
+  const cobrar = (tipo) => {
+    let candidatos = est.filter(e => !e.vencido && paqueteCubre(e.pk, tipo || ""));
+    let con = candidatos.find(e => restanteDe(e) > 0);
+    if (con){ con.usadas++; return; }
+    if (candidatos.length){ candidatos[0].usadas++; return; }
+    /* sin cobertura vigente: al primero vivo, o al primero a secas (no se pierde el consumo) */
+    const vivo = est.find(e => !e.vencido) || est[0];
+    if (vivo) vivo.usadas++;
+  };
+  for (const ev of eventos) cobrar(ev.tipo);
+  const permitidas = est.reduce((s, e) => s + (e.pk.reprog || 0), 0);
+  const exceso = Math.max(0, (Number(reprogTotal) || 0) - permitidas);
+  for (let i = 0; i < exceso; i++) cobrar("");
+  for (const e of est){
+    e.restantes = e.vencido ? 0 : (e.ilim ? 9999 : Math.max(0, (e.compradas || 0) - e.usadas));
+  }
+  return { pases: est, reprogPermitidas: permitidas };
+}
+/* ¿Con qué puede reservar ESTE tipo de clase? Devuelve el detalle para dar el error justo. */
+function multiParaTipo(cm, tipo){
+  const cubren = cm.pases.filter(e => paqueteCubre(e.pk, tipo || ""));
+  const vivos = cubren.filter(e => !e.vencido);
+  const conSaldo = vivos.filter(e => e.ilim || e.restantes > 0);
+  return { cubren, vivos, conSaldo, ok: conSaldo.length > 0 };
+}
+/* pk sintético para el LISTADO de slots (cobertura, no saldo): la unión de los tipos de los
+   pases vigentes. Si alguno cubre todo (tipos vacíos), la unión cubre todo. */
+function pkUnionPases(lista, paqMap){
+  const tipos = [];
+  let algunoTodo = false, algunReprog = 0;
+  for (const p of lista){
+    if (venceVencido(p.vence)) continue;
+    const pk = resolverPk(paqMap, p.n);
+    algunReprog = Math.max(algunReprog, pk.reprog || 0);
+    if (!(pk.tipos || []).length){ algunoTodo = true; continue; }
+    for (const t of pk.tipos){ if (!tipos.includes(t)) tipos.push(t); }
+  }
+  return { clases: 999, reprog: algunReprog, ilim: false, tipos: algunoTodo ? [] : tipos, dias: 0, inicio: "compra" };
+}
+/* computeMulti: la versión de compute() para el alumno con varios pases. Junta los consumos
+   REALES del ciclo (misma semántica que reservasUsadasCount + compute: reservas vivas con su
+   tipo, emparejadas por fecha contra las clases dictadas para no cobrar doble; las dictadas
+   consumen con su curso; el exceso de reprogramaciones consume) y los reparte con
+   atribuirPases. Devuelve la misma forma que compute() + `pases` para pintar. */
+async function computeMulti(env, tid, alumno, paqMap, precios, excluirReservaId){
+  const ciclo = Number(alumno.ciclo) || 1;
+  const lista = pasesDe(alumno);
+  const { results: resv } = await env.DB.prepare(
+    "SELECT id, inicio_utc, COALESCE(tipo,'') AS tipo FROM reservas WHERE tenant_id = ?1 AND alumno_id = ?2 AND COALESCE(ciclo,1) = ?3 " +
+    "AND estado IN ('reservada','completada','falta') ORDER BY inicio_utc ASC"
+  ).bind(tid, alumno.id, ciclo).all();
+  const { results: regs } = await env.DB.prepare(
+    "SELECT fecha, COALESCE(curso,'') AS curso, estado FROM registro WHERE tenant_id = ?1 AND alumno_id = ?2 AND COALESCE(ciclo,1) = ?3 ORDER BY fecha ASC, id ASC"
+  ).bind(tid, alumno.id, ciclo).all();
+  const eventos = [];
+  let reprogTotal = 0;
+  const porFecha = new Map();   // registros que consumen, para emparejar reservas pasadas
+  for (const g of (regs || [])){
+    if (g.estado === "Reprogramó"){ reprogTotal++; continue; }
+    if (g.estado === "Asistió" || g.estado === "Falta"){
+      eventos.push({ tipo: g.curso || "", cuando: String(g.fecha || "") });
+      const f = String(g.fecha || "").slice(0, 10);
+      if (f) porFecha.set(f, (porFecha.get(f) || 0) + 1);
+    }
+  }
+  const excl = String(excluirReservaId || "");
+  const ahora = Date.now();
+  const pasadas = [];
+  for (const r of (resv || [])){
+    if (r.id === excl) continue;
+    if (Date.parse(r.inicio_utc) >= ahora){ eventos.push({ tipo: r.tipo || "", cuando: r.inicio_utc }); continue; }
+    pasadas.push({ f: fechaLimaDe(r.inicio_utc), tipo: r.tipo || "", cuando: r.inicio_utc });
+  }
+  for (const r of pasadas){
+    /* la reserva pasada cuyo día ya tiene clase dictada NO consume otra vez (misma regla
+       de siempre, incluyendo el día vecino por las clases que cruzan medianoche) */
+    let libre = porFecha.get(r.f) || 0;
+    if (libre > 0){ porFecha.set(r.f, libre - 1); continue; }
+    let emparejada = false;
+    for (const vf of [diaVecino(r.f, 1), diaVecino(r.f, -1)]){
+      const lv = porFecha.get(vf) || 0;
+      if (lv > 0){ porFecha.set(vf, lv - 1); emparejada = true; break; }
+    }
+    if (!emparejada) eventos.push({ tipo: r.tipo, cuando: r.cuando });
+  }
+  eventos.sort((a, b) => String(a.cuando) < String(b.cuando) ? -1 : 1);
+  const at = atribuirPases(lista, paqMap, eventos, reprogTotal);
+  const vivos = at.pases.filter(e => !e.vencido);
+  const finitos = vivos.filter(e => !e.ilim);
+  const restantes = finitos.reduce((s, e) => s + e.restantes, 0) + (vivos.some(e => e.ilim) ? 9999 : 0);
+  const compradas = at.pases.filter(e => !e.ilim).reduce((s, e) => s + (e.compradas || 0), 0);
+  const usadasTot = at.pases.reduce((s, e) => s + e.usadas, 0);
+  return {
+    multi: true,
+    pases: at.pases.map(e => ({ n: e.n, compradas: e.compradas, ilim: e.ilim, usadas: e.usadas,
+      restantes: e.restantes, vence: e.vence, vencido: e.vencido, tipos: e.tipos, pk: e.pk })),
+    compradas, ilim: false, usadas: usadasTot,
+    restantes,
+    vencido: vivos.length === 0, caducado: false,
+    vence: (alumno && alumno.vence) || "",
+    reprogPermitidas: at.reprogPermitidas,
+    reprogUsadas: reprogTotal,
+    reprogRestantes: Math.max(0, at.reprogPermitidas - reprogTotal),
+    saldo: restantes,
+    monto: precios && precios[alumno.paquete] != null ? precios[alumno.paquete] : 0
+  };
+}
+
 /* Le fecha de vencimiento se compara al FINAL del dia de Lima: un plan que vence "hoy"
    vale todo el dia de hoy, que es como lo entiende cualquier alumno. */
 function venceVencido(vence){
@@ -3540,21 +3734,27 @@ async function promoverEspera(env, tenantId, iso, sala){
     if (String(cfgEsp.espera_auto || "") === "1" && Date.parse(iso) > Date.now()){
       try {
         const alE = await env.DB.prepare("SELECT * FROM alumnos WHERE id = ?1 AND tenant_id = ?2").bind(row.alumno_id, tenantId).first();
-        const pkE = alE ? resolverPk((await loadPaquetes(env, tenantId)).map, alE.paquete) : null;
-        const vivo = alE && pkE && !Number(alE.caducado) && !venceVencido(alE.vence);
+        const paqMapPE = alE ? (await loadPaquetes(env, tenantId)).map : null;
+        const pasesPE = alE ? pasesDe(alE) : null;
+        const pkE = alE ? (pasesPE ? pkUnionPases(pasesPE, paqMapPE) : resolverPk(paqMapPE, alE.paquete)) : null;
+        /* con varios pases el vencimiento es POR PASE (lo resuelve computeMulti); el vence de
+           la ficha es solo el espejo del principal y no puede vetar a los demás pases */
+        const vivo = alE && pkE && !Number(alE.caducado) && (pasesPE ? true : !venceVencido(alE.vence));
         if (vivo){
           const cicloE = Number(alE.ciclo) || 1;
           const { results: regsE } = await env.DB.prepare(
             "SELECT estado FROM registro WHERE tenant_id = ?1 AND alumno_id = ?2 AND COALESCE(ciclo,1) = ?3"
           ).bind(tenantId, alE.id, cicloE).all();
           const rUsE = await reservasUsadasCount(env, tenantId, alE.id, cicloE);
-          const restE = compute(alE, regsE || [], await loadPrecios(env, tenantId), rUsE, pkE).restantes;
+          const cmE = pasesPE ? await computeMulti(env, tenantId, alE, paqMapPE, await loadPrecios(env, tenantId)) : null;
+          const restE = cmE ? cmE.restantes : compute(alE, regsE || [], await loadPrecios(env, tenantId), rUsE, pkE).restantes;
           const profE = await profeDeAlumno(env, tenantId, alE);
           const { franja: frE, ambigua: ambE } = await resolverFranja(env, tenantId, iso, profE, String(sala || ""));
           const yaE = await env.DB.prepare(
             "SELECT 1 AS ok FROM reservas WHERE tenant_id = ?1 AND inicio_utc = ?2 AND alumno_id = ?3 AND estado IN ('reservada','completada')"
           ).bind(tenantId, iso, alE.id).first();
-          if (restE >= 1 && frE && !ambE && !yaE && paqueteCubre(pkE, frE.curso || "")){
+          const cubreE = cmE ? (frE ? multiParaTipo(cmE, frE.curso || "").ok : false) : (frE ? paqueteCubre(pkE, frE.curso || "") : false);
+          if (restE >= 1 && frE && !ambE && !yaE && cubreE){
             const salaE = frE.sala || "";
             const cupoE = await cupoDeSlot(env, tenantId, iso, profE, cfgEsp, salaE);
             const ocE = await ocupacionSlot(env, tenantId, iso, profE, salaE);
@@ -4387,6 +4587,8 @@ async function ensureSaldoMigradoSchema(env){
   for (const col of ["migrado_usadas", "migrado_ciclo"]){
     try { await env.DB.prepare("ALTER TABLE alumnos ADD COLUMN " + col + " INTEGER DEFAULT 0").run(); } catch (e) { /* ya existe */ }
   }
+  /* varios pases activos a la vez (11-ago-2026): JSON {c: ciclo, p:[{n, usadas, vence}]} */
+  try { await env.DB.prepare("ALTER TABLE alumnos ADD COLUMN pases TEXT DEFAULT ''").run(); } catch (e) { /* ya existe */ }
   SALDO_MIGRADO_OK = true;
 }
 
@@ -8587,7 +8789,10 @@ export default {
             }
             const rUsadas = await reservasUsadasCount(env, tid, alumno.id, ciclo);
             const paqMap = (await loadPaquetes(env, tid)).map;
-            computed = compute(alumno, historial, precios, rUsadas, resolverPk(paqMap, alumno.paquete));
+            const pasesMe = pasesDe(alumno);
+            computed = pasesMe
+              ? await computeMulti(env, tid, alumno, paqMap, precios)
+              : compute(alumno, historial, precios, rUsadas, resolverPk(paqMap, alumno.paquete));
             horarioFijo = await horarioFijoDerivado(env, tid, alumno.id);
             proximasClases = (await env.DB.prepare(
               "SELECT id, inicio_utc, fin_utc, tipo, curso FROM reservas WHERE tenant_id = ?1 AND alumno_id = ?2 AND estado = 'reservada' AND inicio_utc >= ?3 ORDER BY inicio_utc ASC"
@@ -8693,6 +8898,8 @@ export default {
             horario: alumno.horario || "", horarioFijo: horarioFijo, pago: alumno.pago || "",
             compradas: computed.compradas, usadas: computed.usadas, restantes: computed.restantes,
             ilim: !!computed.ilim,
+            /* varios pases activos (11-ago-2026): el portal pinta cada uno con su saldo */
+            pases: computed.multi ? computed.pases.map(p => ({ n: p.n, compradas: p.compradas, ilim: p.ilim, usadas: p.usadas, restantes: p.restantes, vence: p.vence, vencido: p.vencido })) : undefined,
             reprogPermitidas: computed.reprogPermitidas, reprogRestantes: computed.reprogRestantes,
             monto: computed.monto, vence: alumno.vence || "",
             congela: congelaMe,
@@ -9872,11 +10079,13 @@ export default {
         const cu = await cuentaDeSesion(env, request);
         if (!cu) return json({ error: "Sesion expirada" }, 401);
         // El alumno ve la agenda de SU profesor (multi-profesor); sin ficha aun -> la del dueno.
-        const alS = cu.alumno_id ? await env.DB.prepare("SELECT profesor_id, paquete FROM alumnos WHERE id = ?1 AND tenant_id = ?2").bind(cu.alumno_id, cu.tenant_id).first() : null;
+        const alS = cu.alumno_id ? await env.DB.prepare("SELECT profesor_id, paquete, ciclo, COALESCE(pases,'') AS pases FROM alumnos WHERE id = ?1 AND tenant_id = ?2").bind(cu.alumno_id, cu.tenant_id).first() : null;
         const profS = await profeDeAlumno(env, cu.tenant_id, alS);
         /* El alumno solo ve lo que SU plan cubre (27-jul-2026, Elevate): un plan de Mat no
-           muestra Maquinas. Lo de fuera se devuelve aparte para poder explicarlo, no ocultarlo. */
-        const pkS = alS ? resolverPk((await loadPaquetes(env, cu.tenant_id)).map, alS.paquete) : null;
+           muestra Maquinas. Lo de fuera se devuelve aparte para poder explicarlo, no ocultarlo.
+           Con VARIOS pases (11-ago-2026): ve la UNIÓN de lo que cubren sus pases vigentes. */
+        const pasesS = alS ? pasesDe(alS) : null;
+        const pkS = alS ? (pasesS ? pkUnionPases(pasesS, (await loadPaquetes(env, cu.tenant_id)).map) : resolverPk((await loadPaquetes(env, cu.tenant_id)).map, alS.paquete)) : null;
         const det = await generarSlotsDetalle(env, cu.tenant_id, profS, { pk: pkS });
         /* portal_sin_profe (7-ago-2026, Elevate): clases grupales sin profe fijo por alumno.
            No se nombra al profesor; el portal dice "Tu clase en {academia}". */
@@ -9928,7 +10137,8 @@ export default {
            tiene que ser de una de ellas. Se valida en el SERVIDOR: el portal ya las esconde,
            pero esconder no es impedir. */
         const tipoSlot = frR.curso || "";
-        if (!paqueteCubre(pkR, tipoSlot)){
+        const pasesRes = pasesDe(alumno);
+        if (!pasesRes && !paqueteCubre(pkR, tipoSlot)){
           return json({ error: 'Tu plan "' + (alumno.paquete || "") + '" no incluye ' + (categoriaDe(tipoSlot) || "ese tipo de clase") + ". Escríbenos para cambiar de plan." }, 403);
         }
         /* Reglas de reserva de ESE curso (28-jul-2026, Elevate): aca ya sabemos que categoria
@@ -9942,22 +10152,42 @@ export default {
         if (regR.maxDias > 0 && faltanH / 24 > regR.maxDias){
           return json({ error: "Para " + (categoriaDe(tipoSlot) || "esta clase") + " puedes reservar hasta " + regR.maxDias + " día" + (regR.maxDias === 1 ? "" : "s") + " antes. Vuelve más cerca de la fecha." }, 400);
         }
-        /* Mensualidad ilimitada: no descuenta clases, pero vence por fecha. Sin este freno,
-           un alumno con la mensualidad vencida reservaría para siempre (fuga de ingresos). */
-        if (pkR.ilim && alumno.vence){
-          const vms = Date.parse(alumno.vence + "T23:59:59Z");
-          if (!isNaN(vms) && vms < Date.now()) return json({ error: "Tu mensualidad venció. Renuévala para seguir reservando." }, 409);
+        if (pasesRes){
+          /* ---- VARIOS PASES ACTIVOS (11-ago-2026) ----
+             Cada pase vence y se agota SOLO, y solo cubre SUS tipos: 12 de Barré + 4 de
+             Máquinas NO es 16 de clase. Agotado el de Barré, el de Máquinas no presta sus
+             clases para Barré. El mensaje dice exactamente cuál es el problema. */
+          const cmR = await computeMulti(env, tid, alumno, paqMapR, precios);
+          const detR = multiParaTipo(cmR, tipoSlot);
+          if (!detR.cubren.length){
+            return json({ error: "Ninguno de tus pases incluye " + (categoriaDe(tipoSlot) || "ese tipo de clase") + ". Escríbenos para agregarte uno." }, 403);
+          }
+          if (!detR.vivos.length){
+            const vp = detR.cubren[0];
+            return json({ error: 'Tu pase "' + vp.n + '"' + (vp.vence ? (" venció el " + vp.vence) : " venció") + ". Renuévalo para seguir reservando." }, 409);
+          }
+          if (!detR.ok){
+            const sp = detR.vivos[0];
+            return json({ error: 'Se te acabaron las clases de tu pase "' + sp.n + '". Renuévalo para reservar más de ' + (categoriaDe(tipoSlot) || "esta clase") + "." }, 409);
+          }
+        } else {
+          /* Mensualidad ilimitada: no descuenta clases, pero vence por fecha. Sin este freno,
+             un alumno con la mensualidad vencida reservaría para siempre (fuga de ingresos). */
+          if (pkR.ilim && alumno.vence){
+            const vms = Date.parse(alumno.vence + "T23:59:59Z");
+            if (!isNaN(vms) && vms < Date.now()) return json({ error: "Tu mensualidad venció. Renuévala para seguir reservando." }, 409);
+          }
+          /* Vigencia y caducidad del paquete por clases (28-jul-2026, Elevate). compute() ya
+             deja el saldo en 0, pero un mensaje claro evita el ticket de soporte. */
+          if (!pkR.ilim && Number(alumno.caducado)){
+            return json({ error: "Tu plan caducó por no haberse usado a tiempo. Escríbenos para reactivarlo." }, 409);
+          }
+          if (!pkR.ilim && venceVencido(alumno.vence)){
+            return json({ error: "Tu plan venció el " + alumno.vence + ". Renuévalo para seguir reservando." }, 409);
+          }
+          const restantes = compute(alumno, regs || [], precios, rUsadas, pkR).restantes;
+          if (restantes < 1) return json({ error: "No te quedan clases en tu paquete. Renueva para reservar mas." }, 409);
         }
-        /* Vigencia y caducidad del paquete por clases (28-jul-2026, Elevate). compute() ya
-           deja el saldo en 0, pero un mensaje claro evita el ticket de soporte. */
-        if (!pkR.ilim && Number(alumno.caducado)){
-          return json({ error: "Tu plan caducó por no haberse usado a tiempo. Escríbenos para reactivarlo." }, 409);
-        }
-        if (!pkR.ilim && venceVencido(alumno.vence)){
-          return json({ error: "Tu plan venció el " + alumno.vence + ". Renuévalo para seguir reservando." }, 409);
-        }
-        const restantes = compute(alumno, regs || [], precios, rUsadas, pkR).restantes;
-        if (restantes < 1) return json({ error: "No te quedan clases en tu paquete. Renueva para reservar mas." }, 409);
 
         const nowIso = new Date().toISOString();
         const startMs = Date.parse(iso);
@@ -10084,10 +10314,13 @@ export default {
         if (!frE) return json({ error: "Ese horario ya no esta disponible." }, 400);
         const salaFE = frE.sala || "";
         /* no tiene sentido hacer cola por una clase que su plan no cubre */
-        const pkE = resolverPk((await loadPaquetes(env, tid)).map, alumno.paquete);
+        const pasesEG = pasesDe(alumno);
+        const pkE = pasesEG ? pkUnionPases(pasesEG, (await loadPaquetes(env, tid)).map) : resolverPk((await loadPaquetes(env, tid)).map, alumno.paquete);
         const tipoE = frE.curso || "";
         if (!paqueteCubre(pkE, tipoE)){
-          return json({ error: 'Tu plan "' + (alumno.paquete || "") + '" no incluye ' + (categoriaDe(tipoE) || "ese tipo de clase") + "." }, 403);
+          return json({ error: pasesEG
+            ? ("Ninguno de tus pases incluye " + (categoriaDe(tipoE) || "ese tipo de clase") + ".")
+            : ('Tu plan "' + (alumno.paquete || "") + '" no incluye ' + (categoriaDe(tipoE) || "ese tipo de clase") + ".") }, 403);
         }
         await ensureErpSchema(env);
         /* si el slot NO esta lleno, no tiene sentido esperar: que reserve directo */
@@ -11430,7 +11663,7 @@ export default {
             prevRows = (await env.DB.prepare(
               "SELECT " + colsPrev + ", COALESCE(migrado_usadas,0) AS migrado_usadas, COALESCE(migrado_ciclo,0) AS migrado_ciclo, " +
               "COALESCE(activado,'') AS activado, COALESCE(caducado,0) AS caducado, " +
-              "COALESCE(apellido,'') AS apellido, COALESCE(email,'') AS email, COALESCE(nacimiento,'') AS nacimiento " +
+              "COALESCE(apellido,'') AS apellido, COALESCE(email,'') AS email, COALESCE(nacimiento,'') AS nacimiento, COALESCE(pases,'') AS pases " +
               "FROM alumnos WHERE tenant_id = ?1 AND (?2 = 1 OR profesor_id = ?3)"
             ).bind(tid, esDueno ? 1 : 0, profeActorId || "").all()).results || [];
           } catch (e) {
@@ -11572,8 +11805,18 @@ export default {
             let sedeAl = "";
             if (a.sede_id !== undefined) sedeAl = sedesValidas.has(String(a.sede_id)) ? String(a.sede_id) : "";
             else if (pr && pr.sede_id) sedeAl = pr.sede_id;
+            /* Pases multi-activos (11-ago-2026): SOLO el importador los fija (alumno nuevo o
+               la marca explicita pases_set/migrado_set del completar); el guardado normal del
+               panel los preserva server-side, y renovar (ciclo nuevo) los limpia — cambio de
+               epoca de cobro, la misma regla que migrado_usadas. */
+            let pasesAl = (pr && pr.pases) || "";
+            if (esRenovManual) pasesAl = "";
+            if (a.pases !== undefined && (!pr || a.migrado_set === true || a.pases_set === true)){
+              const pj = sanearPasesJson(a.pases, cicloAl);
+              if (pj) pasesAl = pj;
+            }
             stmts.push(env.DB.prepare(
-              "INSERT INTO alumnos (id,tenant_id,codigo,nombre,whatsapp,curso,paquete,fecha,pago,horario,notas,ciclo,vence,aviso_vence_ciclo,recordatorio_fecha,recordatorio_ciclo,winback_ciclo,profesor_id,sede_id,migrado_usadas,migrado_ciclo,activado,caducado,apellido,email,nacimiento) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,?22,?23,?24,?25,?26)"
+              "INSERT INTO alumnos (id,tenant_id,codigo,nombre,whatsapp,curso,paquete,fecha,pago,horario,notas,ciclo,vence,aviso_vence_ciclo,recordatorio_fecha,recordatorio_ciclo,winback_ciclo,profesor_id,sede_id,migrado_usadas,migrado_ciclo,activado,caducado,apellido,email,nacimiento,pases) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,?22,?23,?24,?25,?26,?27)"
             ).bind(
               a.id, tid, String(a.codigo || "").toUpperCase() || randHex(3).toUpperCase(), a.nombre,
               a.whatsapp || "", a.curso || "", a.paquete || "",
@@ -11587,7 +11830,8 @@ export default {
                  prendio esos campos, y si no llegan se preserva lo que ya habia */
               (a.apellido !== undefined ? String(a.apellido || "").slice(0, 60) : ((pr && pr.apellido) || "")),
               (a.email !== undefined ? String(a.email || "").trim().slice(0, 120) : ((pr && pr.email) || "")),
-              (a.nacimiento !== undefined ? String(a.nacimiento || "").slice(0, 10) : ((pr && pr.nacimiento) || ""))
+              (a.nacimiento !== undefined ? String(a.nacimiento || "").slice(0, 10) : ((pr && pr.nacimiento) || "")),
+              pasesAl
             ));
           }
           for (const r of body.registro){
