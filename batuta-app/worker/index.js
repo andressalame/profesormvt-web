@@ -1321,6 +1321,18 @@ async function filaSesion(env, request){
    vivas de antes siguen funcionando como sesion del dueno). Regla permanente:
    profesor_id NULL (o '' en disponibilidad) = "del dueno", nunca "de todos". */
 const MAX_PROFES = { gratis: 1, profe: 1, profe_duo: 2, profe_trio: 3, academia: 5, xl: 20, por_alumno: 50 };
+/* Asientos EXTRA por academia (11-ago-2026). Cortesía puntual sin moverle el plan ni el
+   precio: Elevate es design partner con S/149 bloqueado 36 meses, subirlo a XL para darle
+   asientos le rompería el trato. Se guarda en config `profes_extra` (solo superadmin lo
+   escribe) y SUMA al tope de su plan. Ausente = el tope de siempre. */
+async function maxProfesDe(env, tenantId, plan){
+  const base = MAX_PROFES[plan || "profe"] || 1;
+  try {
+    const row = await env.DB.prepare("SELECT valor FROM config WHERE tenant_id = ?1 AND clave = 'profes_extra'").bind(tenantId).first();
+    const extra = Math.max(0, Math.min(50, parseInt((row && row.valor) || "0", 10) || 0));
+    return base + extra;
+  } catch (e) { return base; }
+}
 
 async function duenoDeTenant(env, tenantId){
   return env.DB.prepare("SELECT * FROM profesores WHERE tenant_id = ?1 AND rol = 'dueno'").bind(tenantId).first();
@@ -6396,6 +6408,21 @@ export default {
            autoriza a mano, no se hereda. Apagado, el panel simula la tanda.
            curl -X POST .../app/api/su/invitaciones -H "Authorization: Bearer $ADMIN_TOKEN" \
                 -H "content-type: application/json" -d '{"slug":"elevate-studio","on":true}' */
+        /* Asientos extra de profesor por academia (11-ago-2026): cortesía sin tocarle el plan
+           ni el precio. {slug, extra:N}. extra=0 lo deja como su plan manda. */
+        if (path === "/app/api/su/profes-extra" && request.method === "POST"){
+          const bPE = await request.json().catch(() => ({}));
+          const slugPE = String(bPE.slug || "").trim();
+          const tPE = slugPE ? await env.DB.prepare("SELECT id, slug, academia, plan FROM tenants WHERE slug = ?1").bind(slugPE).first() : null;
+          if (!tPE) return json({ error: "No encontre esa academia (pasa el slug)." }, 404);
+          const extraPE = Math.max(0, Math.min(50, parseInt(bPE.extra, 10) || 0));
+          await env.DB.prepare(
+            "INSERT INTO config (tenant_id, clave, valor) VALUES (?1,'profes_extra',?2) ON CONFLICT(tenant_id, clave) DO UPDATE SET valor = ?2"
+          ).bind(tPE.id, String(extraPE)).run();
+          return json({ ok: true, academia: tPE.academia, plan: tPE.plan,
+            base: MAX_PROFES[tPE.plan || "profe"] || 1, extra: extraPE,
+            max_ahora: (MAX_PROFES[tPE.plan || "profe"] || 1) + extraPE });
+        }
         if (path === "/app/api/su/invitaciones" && request.method === "POST"){
           const bSI = await request.json().catch(() => ({}));
           const slugSI = String(bSI.slug || "").trim();
@@ -7456,7 +7483,7 @@ export default {
         let asientos = null;
         try {
           const nP = await env.DB.prepare("SELECT COUNT(*) AS n FROM profesores WHERE tenant_id = ?1 AND estado != 'suspendido'").bind(t.id).first();
-          asientos = { usados: Number(nP && nP.n) || 1, max: MAX_PROFES[t.plan || "profe"] || 1 };
+          asientos = { usados: Number(nP && nP.n) || 1, max: await maxProfesDe(env, t.id, t.plan) };
         } catch (e) {}
         const activosMe = await contarAlumnosActivos(env, t.id);
         // Cupo del asistente de WhatsApp con IA por plan (freemium 23-jul-2026): el panel muestra
@@ -10819,7 +10846,7 @@ export default {
             permisos: p.permisos || "",
             invite_link: (p.estado === "invitado" && p.invite_token) ? (MARCA.dominio + "/app/p/activar?token=" + p.invite_token) : ""
           }));
-          const maxA = MAX_PROFES[t.plan || "profe"] || 1;
+          const maxA = await maxProfesDe(env, tid, t.plan);
           const usados = lista.filter(p => p.estado !== "suspendido").length;
           return json({ profesores: lista, asientos: { usados, max: maxA }, plan: t.plan || "profe" });
         }
@@ -10835,7 +10862,7 @@ export default {
             if (nombreP.length < 2) return json({ error: "Escribe el nombre del profesor." }, 400);
             if (!emailOk(emailP)) return json({ error: "Ese correo no parece valido." }, 400);
             /* candado de asientos: lo que de verdad vende Academia/XL */
-            const maxA = MAX_PROFES[t.plan || "profe"] || 1;
+            const maxA = await maxProfesDe(env, tid, t.plan);
             const nAct = await env.DB.prepare("SELECT COUNT(*) AS n FROM profesores WHERE tenant_id = ?1 AND estado != 'suspendido'").bind(tid).first();
             if ((Number(nAct && nAct.n) || 0) >= maxA){
               return json({ error: "Tu plan " + (PLAN_NOMBRE[t.plan || "profe"] || "Profe") + " permite " + maxA + " profesor" + (maxA === 1 ? "" : "es") + ". Sube de plan en Perfil para agregar mas.", upgrade: true }, 402);
@@ -10910,7 +10937,7 @@ export default {
 
           if (accion === "suspender" || accion === "reactivar"){
             if (accion === "reactivar"){
-              const maxA = MAX_PROFES[t.plan || "profe"] || 1;
+              const maxA = await maxProfesDe(env, tid, t.plan);
               const nAct = await env.DB.prepare("SELECT COUNT(*) AS n FROM profesores WHERE tenant_id = ?1 AND estado != 'suspendido'").bind(tid).first();
               if ((Number(nAct && nAct.n) || 0) >= maxA) return json({ error: "Tu plan no tiene asientos libres para reactivarlo. Sube de plan." , upgrade: true }, 402);
             }
