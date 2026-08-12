@@ -7957,8 +7957,13 @@ function impProcesarFilas(rows){
           if(waNuevo && !yaEsta.whatsapp) faltantes.push("WhatsApp");
           if(nIso && !yaEsta.nacimiento) faltantes.push("nacimiento");
           if(apeFila && !yaEsta.apellido) faltantes.push("apellido");
-          if(!faltantes.length){ dup++; continue; }
-          out.push({ completaA:yaEsta.id, completaQue:faltantes,
+          /* 🐛 11-ago (Camila): la fila que trae un PASE entra SIEMPRE, aunque la ficha ya
+             tenga plan. El archivo de pases es LA fuente de verdad de los pases: la persona
+             puede tener VARIOS (se arman en impFusionarPases) o traer el saldo/vencimiento
+             que a la ficha le falta. Antes se botaba como "ya estaba" y ningún re-upload
+             podía corregir un plan que se pegó mal en un intento anterior. */
+          if(!faltantes.length && !paqFila){ dup++; continue; }
+          out.push({ completaA:yaEsta.id, completaQue:faltantes, paseArchivo:!!paqFila,
             nombre:nombre, apellido:apeFila, email:mailOk?mailFila:"", nacimiento:nIso||"",
             curso:cursoNuevo, cursoPend:cuM.pend, cursoCrudo:cuM.crudo, paqSug:paqSug,
             whatsapp:waNuevo, paquete:paqFila,
@@ -8231,7 +8236,7 @@ function impPreview(rows,dup,vacios,dupArchivo,sinCruce){
     var cuCel=esc(a.curso||"—")+((a.cursoPend&&a.cursoPend.length)?('<br><span class="mini" style="color:var(--amber,#d99a3c);">«'+esc(a.cursoPend[0].crudo)+'» '+(a.cursoPend[0].sug?"por confirmar":"sin reconocer")+'</span>'):"");
     var compQue=(a.completaQue||[]).filter(function(q){ return q!=="clase"||!!a.curso; });
     var nomCel=esc(a.nombre)+(a.apellido?(" "+esc(a.apellido)):"")+
-      (a.completaA?('<br><span class="mini" style="color:var(--accent);">ya está en tu lista: '+(compQue.length?("se le completa "+esc(compQue.join(", "))):"confirma su clase abajo")+'</span>'):"")+
+      (a.completaA?('<br><span class="mini" style="color:var(--accent);">ya está en tu lista: '+(a.pases?("se le arman sus "+a.pases.length+" pases"):(compQue.length?("se le completa "+esc(compQue.join(", "))):(a.paseArchivo?"se le pone al día su plan y saldo":"confirma su clase abajo")))+'</span>'):"")+
       (a.pasesExtra?('<br><span class="mini" style="color:var(--accent);">trae '+(a.pasesExtra+1)+' pases: entran los '+(a.pasesExtra+1)+' A LA VEZ, cada uno con su saldo y su vencimiento</span>'):"")+
       ((a.avisos&&a.avisos.length)?('<br><span class="mini" style="color:var(--amber,#d99a3c);">'+esc(a.avisos[0])+(a.avisos.length>1?(" (+"+(a.avisos.length-1)+")"):"")+'</span>'):"");
     return "<tr"+(a.error?' style="background:rgba(217,83,79,.08);"':'')+"><td>"+nomCel+"</td><td>"+cuCel+"</td><td>"+esc(a.whatsapp)+"</td><td>"+esc(a.paquete||"—")+"</td><td>"+saldo+"</td><td>"+pf+"</td></tr>";
@@ -8501,6 +8506,17 @@ el("btnImpConfirmar").addEventListener("click",function(){
            alumno quedaba sin su fecha de vencimiento. */
         ex.migrado_set=true;
         if(a.vence) ex.vence=a.vence;
+      } else if(a.paquete && ex.paquete && a.paseArchivo){
+        /* 🐛 11-ago (Camila): la ficha YA tenía plan — casi siempre pegado por un intento
+           anterior con el importador roto — y por la regla "no pisar" ningún re-upload podía
+           corregirla. Cuando la fila viene DEL ARCHIVO DE PASES, el archivo manda: plan,
+           saldo y vencimiento se ponen al día. Un guardado normal del panel sigue sin poder
+           tocar nada de esto (paseArchivo solo lo pone el importador). */
+        ex.paquete=a.paquete;
+        ex.migrado_usadas=Number(a.migrado_usadas)||0;
+        ex.migrado_ciclo=Number(ex.ciclo)||1;
+        ex.migrado_set=true; ex.pases_set=true;
+        if(a.vence) ex.vence=a.vence;
       }
       if(a.curso && !ex.curso) ex.curso=a.curso;
       if(a.email && !ex.email) ex.email=a.email;
@@ -8512,6 +8528,13 @@ el("btnImpConfirmar").addEventListener("click",function(){
       if(a.pases && a.pases.length>=2){
         ex.pases={ c:Number(ex.ciclo)||1, p:a.pases };
         ex.pases_set=true;
+        /* la ficha espeja al pase PRINCIPAL (el que está usando). Si un intento anterior le
+           dejó el equivocado —Camila quedó con el que ni había estrenado—, acá se corrige. */
+        ex.paquete=a.pases[0].n;
+        ex.migrado_usadas=Number(a.pases[0].usadas)||0;
+        ex.migrado_ciclo=Number(ex.ciclo)||1;
+        ex.migrado_set=true;
+        if(a.pases[0].vence) ex.vence=a.pases[0].vence;
       }
       if(a.reservas && a.reservas.length) resPend.push({alumno_id:ex.id, isos:a.reservas});
       return;
