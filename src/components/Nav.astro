@@ -21,7 +21,8 @@ const { activeNav } = Astro.props;
          resto de los enlaces se ocultan y este es justo el que no puede desaparecer. -->
     <a href="/politicas/" class:list={["snav-link", "siempre", { active: activeNav === 'politicas' }]}>Políticas</a>
     <a class="snav-ghost" href="/alumnos/">Ingresar</a>
-    <a class="snav-cta" href="/prueba/">Quiero empezar →</a>
+    <!-- dos etiquetas: en el celular no caben la marca, Políticas y "Quiero empezar" a la vez -->
+    <a class="snav-cta" href="/prueba/"><span class="larga">Quiero empezar →</span><span class="corta">Empezar →</span></a>
   </div>
 </nav>
 <style>
@@ -65,10 +66,18 @@ const { activeNav } = Astro.props;
        justo donde llega la mayoría de los leads. */
     .snav-link.siempre{ display: inline-flex; }
   }
-  @media (max-width: 420px){
-    .snav-links{ gap: .8rem; }
+  /* En el celular quedan tres cosas en la barra: marca, Políticas y el botón. Sin esto se
+     leían pegadas ("PROFESORMVTPOLÍTICAS") y el botón se salía por la derecha. Se acorta el
+     botón, se encoge la marca y se fuerza un aire mínimo que el `space-between` no garantiza
+     cuando el contenido llena la barra. */
+  .snav-cta .corta{ display: none; }
+  @media (max-width: 560px){
+    .snav-brand{ font-size: 1rem; }
+    .snav-links{ gap: .9rem; margin-left: .9rem; }
     .snav-link.siempre{ font-size: .68rem; letter-spacing: .1em; }
-    .snav-cta{ font-size: .64rem; padding: .7em .85em; }
+    .snav-cta{ font-size: .64rem; padding: .7em .9em; }
+    .snav-cta .larga{ display: none; }
+    .snav-cta .corta{ display: inline; }
   }
   @media (prefers-reduced-motion: reduce){
     .snav, .snav-cta{ transition: none; }
