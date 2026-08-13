@@ -6594,8 +6594,15 @@ el("btnGuardarAjustes").addEventListener("click",function(){
      el alta. Vaciarlo a propósito no es un caso real; perderlo en silencio, sí lo era. */
   if(!cfg.whatsapp_profe) delete cfg.whatsapp_profe;
   Promise.all([ apiPut(), apiPost("/app/api/admin/config",cfg) ])
-    .then(function(){
-      AJ_DIRTY=false; db.config=Object.assign(db.config||{},cfg); renderAll(); toast("Ajustes guardados");
+    .then(function(res){
+      /* 🐛 12-ago-2026: el server manda avisos que el dueño NECESITA leer (planes que no
+         entraron por el tope, salas renombradas que arrastraron su horario, franjas que
+         quedaron sueltas) y acá se tiraban a la basura con un "Ajustes guardados" alegre.
+         Los que piden acción van también en alert: un toast se lo pierde quien no mira. */
+      var d=res&&res[1];
+      AJ_DIRTY=false; db.config=Object.assign(db.config||{},cfg); renderAll();
+      toast((d&&d.aviso)?d.aviso:"Ajustes guardados");
+      if(d&&d.aviso&&d.requiere_accion) alert(d.aviso);
       /* 10-ago-2026: refresca el banner causal, el checklist y el punto pulsante SIN
          recargar — antes se calculaban solo al arrancar y el aviso quedaba mintiendo
          después de que el dueño ponía sus precios. */

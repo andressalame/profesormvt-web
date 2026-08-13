@@ -12173,6 +12173,17 @@ export default {
           const stmts = [];
           /* > 0 = cuantos planes quedaron fuera por el tope, para decirselo en la respuesta */
           let avisoPaquetes = 0;
+          /* ---- Renombrar una sala tiene que arrastrar su agenda (12-ago-2026, José/Elevate) ----
+             `disponibilidad.sala` y `reservas.sala` guardan el NOMBRE, no un id. José renombró
+             "Sala grande"/"Sala chica" a "Sala 1"/"Sala 2" desde Ajustes y sus 64 franjas y 77
+             reservas quedaron apuntando a salas que ya no existian: el horario se ve VACIO y
+             nadie puede reservar. Hay que leer la lista de ANTES para poder arrastrar el cambio. */
+          let salasCanon = null, salasAntes = null;
+          if ("salas" in b){
+            const filaS = await env.DB.prepare("SELECT valor FROM config WHERE tenant_id = ?1 AND clave = 'salas'")
+              .bind(tid).first().catch(() => null);
+            salasAntes = salasDeCfg({ salas: (filaS && filaS.valor) || "" });
+          }
           for (const k of claves){
             if (k in b){
               let valor = String(b[k] || "").trim();
@@ -12207,10 +12218,13 @@ export default {
                 valor = cl.length ? JSON.stringify(cl) : "";
               }
               /* salas: llega como JSON o como csv; se guarda canónico ("" = sin salas) */
-              if (k === "salas" && valor !== ""){
-                let lista = salasDeCfg({ salas: valor });
-                if (!lista.length) lista = salasDeCfg({ salas: JSON.stringify(valor.split(",")) });
-                valor = lista.length ? JSON.stringify(lista) : "";
+              if (k === "salas"){
+                if (valor !== ""){
+                  let lista = salasDeCfg({ salas: valor });
+                  if (!lista.length) lista = salasDeCfg({ salas: JSON.stringify(valor.split(",")) });
+                  valor = lista.length ? JSON.stringify(lista) : "";
+                  salasCanon = lista;
+                } else salasCanon = [];
               }
               if (k === "anticipacion_h" && valor !== ""){
                 const na = parseInt(valor, 10);
@@ -12313,6 +12327,39 @@ export default {
             }
           }
           if (stmts.length) await env.DB.batch(stmts);
+          /* ---- El arrastre del renombrado de salas (12-ago-2026) ----
+             Solo cuando la CANTIDAD de salas no cambió: ahí el mapeo por posición es seguro.
+             Si agregó o quitó salas no se adivina nada — se cuenta lo que quedó suelto y se
+             dice, que es peor callarlo. El renombrado va en DOS pasos con un nombre temporal:
+             cambiar "A"→"B" y "B"→"A" de un tirón se pisaría a sí mismo. */
+          let salasRenombradas = 0, salasHuerfanas = 0;
+          if (salasAntes && salasCanon){
+            const pares = [];
+            if (salasAntes.length === salasCanon.length){
+              for (let i = 0; i < salasAntes.length; i++)
+                if (salasAntes[i] !== salasCanon[i]) pares.push([salasAntes[i], salasCanon[i]]);
+            }
+            for (const tabla of ["disponibilidad", "reservas", "espera"]){
+              for (let i = 0; i < pares.length; i++){
+                try { await env.DB.prepare("UPDATE " + tabla + " SET sala = ?1 WHERE tenant_id = ?2 AND sala = ?3")
+                  .bind("__tmp_sala_" + i + "__", tid, pares[i][0]).run(); } catch (e) { /* tabla sin columna sala */ }
+              }
+              for (let i = 0; i < pares.length; i++){
+                try {
+                  const r = await env.DB.prepare("UPDATE " + tabla + " SET sala = ?1 WHERE tenant_id = ?2 AND sala = ?3")
+                    .bind(pares[i][1], tid, "__tmp_sala_" + i + "__").run();
+                  salasRenombradas += (r && r.meta && r.meta.changes) || 0;
+                } catch (e) {}
+              }
+            }
+            /* franjas que quedaron apuntando a una sala inexistente (quitó o agregó salas) */
+            try {
+              const { results: hs } = await env.DB.prepare(
+                "SELECT COALESCE(sala,'') s, COUNT(*) n FROM disponibilidad WHERE tenant_id = ?1 AND activo = 1 GROUP BY sala"
+              ).bind(tid).all();
+              for (const r of (hs || [])) if (r.s && !salasCanon.includes(r.s)) salasHuerfanas += Number(r.n) || 0;
+            } catch (e) {}
+          }
           /* Sincronía del nombre del dueño (6-ago-2026, reporte de José/Elevate): el nombre vive
              en TRES sitios (config.profe_nombre, tenants.profe_nombre y la fila rol='dueno' de
              profesores, que es la que pinta la lista de Personas → Profesores). Cambiarlo en
@@ -12340,6 +12387,15 @@ export default {
              la forma mas facil de que una academia crea que tiene todo cargado y no lo tenga. */
           if (avisoPaquetes > 0){
             return json({ ok: true, aviso: "Guarde tus planes, pero " + avisoPaquetes + " quedaron fuera: el maximo es " + PAQUETES_MAX + " por academia. Borra o junta alguno y vuelve a intentar con los que faltan." });
+          }
+          /* Lo del renombrado de salas se DICE: el dueno acaba de mover algo de lo que cuelga
+             todo su horario, y tiene que saber que su agenda se movio con el (o que no). */
+          if (salasHuerfanas > 0){
+            return json({ ok: true, requiere_accion: true, aviso: "Guarde tus salas, pero " + salasHuerfanas + " hora" + (salasHuerfanas === 1 ? "" : "s") +
+              " de tu horario quedaron en una sala que ya no existe, asi que no se ven en la grilla. Vuelve a ponerlas en una de tus salas, o escribe de nuevo el nombre anterior para recuperarlas." });
+          }
+          if (salasRenombradas > 0){
+            return json({ ok: true, aviso: "Listo: cambie el nombre en tus salas y en las " + salasRenombradas + " horas y reservas que colgaban de ellas. Tu horario queda igual." });
           }
           return json({ ok: true });
         }
