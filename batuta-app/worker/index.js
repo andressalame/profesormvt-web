@@ -852,27 +852,12 @@ function pkUnionPases(lista, paqMap){
   }
   return { clases: 999, reprog: algunReprog, ilim: false, tipos: algunoTodo ? [] : tipos, dias: 0, inicio: "compra" };
 }
-/* computeMulti: la versión de compute() para el alumno con varios pases. Junta los consumos
-   REALES del ciclo (misma semántica que reservasUsadasCount + compute: reservas vivas con su
-   tipo, emparejadas por fecha contra las clases dictadas para no cobrar doble; las dictadas
-   consumen con su curso; el exceso de reprogramaciones consume) y los reparte con
-   atribuirPases. Devuelve la misma forma que compute() + `pases` para pintar. */
-async function computeMulti(env, tid, alumno, paqMap, precios, excluirReservaId){
-  const ciclo = Number(alumno.ciclo) || 1;
-  const lista = pasesDe(alumno);
-  /* 🐛 12-ago-2026: acá se traía SOLO `tipo`, que vale 'suelta'/'fija'/'bloqueo' — el modo de
-     la reserva, NO el tipo de clase. El tipo de clase vive en `curso` ("Pilates Mat",
-     "Pilates Máquinas · Reformer"). Como ningún pase por tipo "cubre" algo llamado *suelta*,
-     atribuirPases caía a su último recurso y le cobraba la clase AL PRIMER PASE VIVO, del tipo
-     que fuera: las 2 clases de Mat de Camila salían de su pase de Máquinas. Las clases ya
-     dictadas nunca tuvieron el problema (esas salen de `registro`, que sí guarda el curso). */
-  const { results: resv } = await env.DB.prepare(
-    "SELECT id, inicio_utc, COALESCE(curso,'') AS curso, COALESCE(tipo,'') AS tipo FROM reservas WHERE tenant_id = ?1 AND alumno_id = ?2 AND COALESCE(ciclo,1) = ?3 " +
-    "AND estado IN ('reservada','completada','falta') ORDER BY inicio_utc ASC"
-  ).bind(tid, alumno.id, ciclo).all();
-  const { results: regs } = await env.DB.prepare(
-    "SELECT fecha, COALESCE(curso,'') AS curso, estado FROM registro WHERE tenant_id = ?1 AND alumno_id = ?2 AND COALESCE(ciclo,1) = ?3 ORDER BY fecha ASC, id ASC"
-  ).bind(tid, alumno.id, ciclo).all();
+/* PURO (12-ago-2026): arma los consumos del ciclo en orden cronológico, sin tocar la DB.
+   Se extrajo de computeMulti para que el saldo del PANEL salga de este mismo código en vez de
+   recalcularse en el navegador: ahí nació el desajuste de "24 en el panel y 22 en el portal".
+   Regla de siempre: pasado = registro (bitácora), futuro = reserva; la reserva pasada cuyo día
+   ya tiene clase dictada NO consume otra vez (emparejada ±1 día por las clases nocturnas). */
+function eventosConsumo(resv, regs, excluirReservaId){
   const eventos = [];
   let reprogTotal = 0;
   const porFecha = new Map();   // registros que consumen, para emparejar reservas pasadas
@@ -889,14 +874,12 @@ async function computeMulti(env, tid, alumno, paqMap, precios, excluirReservaId)
   const pasadas = [];
   for (const r of (resv || [])){
     if (r.id === excl) continue;
-    /* el tipo de clase manda; `tipo` queda solo de respaldo para reservas viejas sin curso */
+    /* el tipo de CLASE manda; `tipo` (suelta/fija) queda de respaldo para reservas viejas */
     const etiqueta = r.curso || r.tipo || "";
     if (Date.parse(r.inicio_utc) >= ahora){ eventos.push({ tipo: etiqueta, cuando: r.inicio_utc }); continue; }
     pasadas.push({ f: fechaLimaDe(r.inicio_utc), tipo: etiqueta, cuando: r.inicio_utc });
   }
   for (const r of pasadas){
-    /* la reserva pasada cuyo día ya tiene clase dictada NO consume otra vez (misma regla
-       de siempre, incluyendo el día vecino por las clases que cruzan medianoche) */
     let libre = porFecha.get(r.f) || 0;
     if (libre > 0){ porFecha.set(r.f, libre - 1); continue; }
     let emparejada = false;
@@ -907,6 +890,38 @@ async function computeMulti(env, tid, alumno, paqMap, precios, excluirReservaId)
     if (!emparejada) eventos.push({ tipo: r.tipo, cuando: r.cuando });
   }
   eventos.sort((a, b) => String(a.cuando) < String(b.cuando) ? -1 : 1);
+  return { eventos, reprogTotal };
+}
+/* computeMulti: la versión de compute() para el alumno con varios pases. Junta los consumos
+   REALES del ciclo (misma semántica que reservasUsadasCount + compute: reservas vivas con su
+   tipo, emparejadas por fecha contra las clases dictadas para no cobrar doble; las dictadas
+   consumen con su curso; el exceso de reprogramaciones consume) y los reparte con
+   atribuirPases. Devuelve la misma forma que compute() + `pases` para pintar.
+   `filas` (12-ago-2026): si quien llama YA tiene las reservas y el registro de ese alumno
+   (el panel los carga todos de una para sus 1,447), se pasan y no se vuelve a la DB. Mismo
+   cálculo, un solo código: es lo que cierra el hueco panel vs portal. */
+async function computeMulti(env, tid, alumno, paqMap, precios, excluirReservaId, filas){
+  const ciclo = Number(alumno.ciclo) || 1;
+  const lista = pasesDe(alumno);
+  /* 🐛 12-ago-2026: acá se traía SOLO `tipo`, que vale 'suelta'/'fija'/'bloqueo' — el modo de
+     la reserva, NO el tipo de clase. El tipo de clase vive en `curso` ("Pilates Mat",
+     "Pilates Máquinas · Reformer"). Como ningún pase por tipo "cubre" algo llamado *suelta*,
+     atribuirPases caía a su último recurso y le cobraba la clase AL PRIMER PASE VIVO, del tipo
+     que fuera: las 2 clases de Mat de Camila salían de su pase de Máquinas. Las clases ya
+     dictadas nunca tuvieron el problema (esas salen de `registro`, que sí guarda el curso). */
+  let resv, regs;
+  if (filas){
+    resv = filas.resv || []; regs = filas.regs || [];
+  } else {
+    resv = (await env.DB.prepare(
+      "SELECT id, inicio_utc, COALESCE(curso,'') AS curso, COALESCE(tipo,'') AS tipo FROM reservas WHERE tenant_id = ?1 AND alumno_id = ?2 AND COALESCE(ciclo,1) = ?3 " +
+      "AND estado IN ('reservada','completada','falta') ORDER BY inicio_utc ASC"
+    ).bind(tid, alumno.id, ciclo).all()).results || [];
+    regs = (await env.DB.prepare(
+      "SELECT fecha, COALESCE(curso,'') AS curso, estado FROM registro WHERE tenant_id = ?1 AND alumno_id = ?2 AND COALESCE(ciclo,1) = ?3 ORDER BY fecha ASC, id ASC"
+    ).bind(tid, alumno.id, ciclo).all()).results || [];
+  }
+  const { eventos, reprogTotal } = eventosConsumo(resv || [], regs || [], excluirReservaId);
   const at = atribuirPases(lista, paqMap, eventos, reprogTotal);
   const vivos = at.pases.filter(e => !e.vencido);
   const finitos = vivos.filter(e => !e.ilim);
@@ -3401,17 +3416,13 @@ function diaVecino(f, delta){
    UTC, las clases nocturnas quedaron corridas un dia). Las filas 'Reprogramo' no emparejan: su
    costo lo cobra compute() via la cuota/exceso, no como clase dictada.
    excluirId: la reserva que se esta moviendo en un reprogramar (no debe exigir credito extra). */
-async function reservasUsadasCount(env, tenantId, alumnoId, ciclo, excluirId){
+/* PURO (12-ago-2026): el mismo conteo, sin DB. Existe para que el panel pueda calcular el
+   saldo de 1,447 alumnos con las filas ya cargadas, en vez de rehacer la cuenta en el
+   navegador — que es justo de donde salió el desajuste panel vs portal. */
+function reservasUsadasPuro(resv, regs, excluirId){
   const excl = String(excluirId || "");
   const ahora = Date.now();
-  const { results: resv } = await env.DB.prepare(
-    "SELECT id, inicio_utc FROM reservas WHERE tenant_id = ?1 AND alumno_id = ?2 AND COALESCE(ciclo,1) = ?3 " +
-    "AND estado IN ('reservada','completada','falta') ORDER BY inicio_utc ASC"
-  ).bind(tenantId, alumnoId, ciclo).all();
   if (!resv || !resv.length) return 0;
-  const { results: regs } = await env.DB.prepare(
-    "SELECT fecha FROM registro WHERE tenant_id = ?1 AND alumno_id = ?2 AND COALESCE(ciclo,1) = ?3 AND estado != 'Reprogramó'"
-  ).bind(tenantId, alumnoId, ciclo).all();
   const porFecha = new Map();
   for (const g of (regs || [])){
     const f = String(g.fecha || "").slice(0, 10);
@@ -3439,6 +3450,18 @@ async function reservasUsadasCount(env, tenantId, alumnoId, ciclo, excluirId){
     if (!emparejada) n++;                                       // dictada y sin anotar: igual consume
   }
   return n;
+}
+/* El de siempre, ahora solo trae las filas y delega la cuenta en la version pura. */
+async function reservasUsadasCount(env, tenantId, alumnoId, ciclo, excluirId){
+  const { results: resv } = await env.DB.prepare(
+    "SELECT id, inicio_utc FROM reservas WHERE tenant_id = ?1 AND alumno_id = ?2 AND COALESCE(ciclo,1) = ?3 " +
+    "AND estado IN ('reservada','completada','falta') ORDER BY inicio_utc ASC"
+  ).bind(tenantId, alumnoId, ciclo).all();
+  if (!resv || !resv.length) return 0;
+  const { results: regs } = await env.DB.prepare(
+    "SELECT fecha FROM registro WHERE tenant_id = ?1 AND alumno_id = ?2 AND COALESCE(ciclo,1) = ?3 AND estado != 'Reprogramó'"
+  ).bind(tenantId, alumnoId, ciclo).all();
+  return reservasUsadasPuro(resv, regs || [], excluirId);
 }
 
 const DIAS_FIJO = ["Domingo","Lunes","Martes","Miercoles","Jueves","Viernes","Sabado"];
@@ -11655,13 +11678,12 @@ export default {
           /* devolver el saldo YA recalculado: el dueño ve el efecto sin recargar ni dudar */
           let saldoTx = "";
           try {
-            const paqMap = await loadPaquetes(env, tid);
+            const paqMap = (await loadPaquetes(env, tid)).map;   // devuelve {map,list}: va el .map
             const precios = await loadPrecios(env, tid);
             const alF = await env.DB.prepare("SELECT * FROM alumnos WHERE id = ?1 AND tenant_id = ?2").bind(alumnoId, tid).first();
             let cm;
-            /* ojo: pasesDe() devuelve NULL (no []) cuando el alumno no tiene multi-pase,
-               que es el caso de la mayoría. Sin el `|| []` esto revienta siempre. */
-            if ((pasesDe(alF) || []).length > 1){
+            /* misma condición que el portal: pasesDe() truthy (devuelve null, no [], si no tiene) */
+            if (pasesDe(alF)){
               cm = await computeMulti(env, tid, alF, paqMap, precios);
             } else {
               const { results: regsF } = await env.DB.prepare(
@@ -11728,6 +11750,47 @@ export default {
           for (const a of alumnos){ a.horarioFijo = fijasPorAlumno[a.id] || []; }
           const registroAll = (await env.DB.prepare("SELECT * FROM registro WHERE tenant_id = ?1 ORDER BY fecha DESC, id DESC").bind(tid).all()).results || [];
           const registro = esDueno ? registroAll : registroAll.filter(r => idsScope.has(r.alumno_id));
+
+          /* SALDO CALCULADO EN EL SERVIDOR (12-ago-2026) — el arreglo de fondo del desajuste
+             "24 en el panel y 22 en el portal". El panel rehacía la cuenta en el navegador y su
+             versión no descontaba las reservas ni entendía el multi-pase, así que le mostraba al
+             dueño un saldo más alto del real y lo invitaba a cobrarle a quien no debía.
+             Ahora sale del MISMO computeMulti/compute que usa el portal. Barato: una consulta
+             más para TODAS las reservas del tenant (Elevate: 80 filas para 1,447 alumnos) y el
+             resto en memoria — cero consultas por alumno. */
+          const resvAll = (await env.DB.prepare(
+            "SELECT id, alumno_id, inicio_utc, COALESCE(curso,'') AS curso, COALESCE(tipo,'') AS tipo, COALESCE(ciclo,1) AS ciclo " +
+            "FROM reservas WHERE tenant_id = ?1 AND estado IN ('reservada','completada','falta') ORDER BY inicio_utc ASC"
+          ).bind(tid).all()).results || [];
+          const resvPorAlumno = new Map(), regsPorAlumno = new Map();
+          for (const r of resvAll){ if (!r.alumno_id) continue;
+            if (!resvPorAlumno.has(r.alumno_id)) resvPorAlumno.set(r.alumno_id, []);
+            resvPorAlumno.get(r.alumno_id).push(r); }
+          /* registroAll viene DESC; el cálculo espera orden cronológico */
+          for (let i = registroAll.length - 1; i >= 0; i--){ const g = registroAll[i];
+            if (!g.alumno_id) continue;
+            if (!regsPorAlumno.has(g.alumno_id)) regsPorAlumno.set(g.alumno_id, []);
+            regsPorAlumno.get(g.alumno_id).push(g); }
+          try {
+            /* OJO: loadPaquetes devuelve {map, list} — va el `.map`, como en los otros 10 sitios.
+               Sin él, resolverPk no encuentra NINGÚN paquete propio de la academia y devuelve
+               0 clases: los 1,447 de Elevate saldrían "Completado — renovar" en rojo. */
+            const paqMapP = (await loadPaquetes(env, tid)).map;
+            const preciosP = await loadPrecios(env, tid);
+            for (const a of alumnos){
+              const ciA = Number(a.ciclo) || 1;
+              const rv = (resvPorAlumno.get(a.id) || []).filter(r => (Number(r.ciclo) || 1) === ciA);
+              const rg = (regsPorAlumno.get(a.id) || []).filter(g => (Number(g.ciclo) || 1) === ciA);
+              /* misma condición que el PORTAL (pasesDe truthy, no ">1"): si acá se decidiera
+                 distinto, panel y portal volverían a divergir, que es justo lo que se arregla */
+              if (pasesDe(a)){
+                a.saldo = await computeMulti(env, tid, a, paqMapP, preciosP, "", { resv: rv, regs: rg });
+              } else {
+                const rUsA = reservasUsadasPuro(rv, rg.filter(g => g.estado !== "Reprogramó"));
+                a.saldo = compute(a, rg, preciosP, rUsA, resolverPk(paqMapP, a.paquete));
+              }
+            }
+          } catch (e) { console.error("saldo panel", e && e.message); }   // el panel cae a su cálculo viejo
           const cuentasAll = (await env.DB.prepare(
             "SELECT id,email,nombre,whatsapp,marketing,alumno_id,creada,ref_code,ref_por,credito FROM cuentas WHERE tenant_id = ?1 ORDER BY creada DESC"
           ).bind(tid).all()).results || [];

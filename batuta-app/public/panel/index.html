@@ -2782,6 +2782,19 @@ function venceVencidoPanel(v){
    la del plan (pinta uno por línea) y la de "Le quedan" — que antes mostraba el saldo de UNO
    solo mientras al costado se veían tres pases, y eso se lee como un error del sistema. */
 function pasesResumen(a){
+  /* 12-ago-2026: si el servidor mandó el desglose ya repartido, ese manda. El de abajo leía
+     `usadas` GUARDADO en cada pase, que no incluye ni las clases dictadas del ciclo ni las
+     reservas futuras: por eso Camila salía 24/36 acá y 22 en su portal. */
+  var sv=a.saldo;
+  if(sv && Array.isArray(sv.pases) && sv.pases.length>=2){
+    var lst=sv.pases.map(function(p){
+      return { n:p.n, ilim:!!p.ilim, comp:Number(p.compradas)||0,
+               rest:p.ilim?0:Math.max(0,Number(p.restantes)||0), vence:p.vence||"" };
+    });
+    return { lista:lst, ilim:lst.some(function(x){return x.ilim;}),
+      comp:lst.reduce(function(s,x){return s+(x.ilim?0:x.comp);},0),
+      rest:lst.reduce(function(s,x){return s+(x.ilim?0:x.rest);},0) };
+  }
   try{
     var pj=JSON.parse((a&&a.pases)||"");
     if(!(pj&&pj.p&&pj.p.length>=2&&(Number(pj.c)||1)===(Number(a.ciclo)||1))) return null;
@@ -2796,7 +2809,37 @@ function pasesResumen(a){
       rest:lista.reduce(function(s,x){ return s+(x.ilim?0:x.rest); },0) };
   }catch(e){ return null; }
 }
+/* Etiqueta y color a partir de los números, sea quien sea que los calculó. */
+function estadoDeSaldo(a,saldo,ilim,vencido,caduco){
+  if(!a.paquete) return {estado:"Falta ponerle su plan",clase:"gray"};
+  if(caduco) return {estado:"Plan caducado",clase:"red"};
+  if(vencido) return {estado:ilim?"Mensualidad vencida":"Plan vencido",clase:"red"};
+  if(ilim){
+    var vms=a.vence?Date.parse(a.vence):0;
+    if(vms && vms<=Date.now()+3*86400000) return {estado:"Renovar mensualidad",clase:"amber"};
+    return {estado:"Activo",clase:"green"};
+  }
+  if(saldo<=0) return {estado:"Completado — renovar",clase:"red"};
+  if(saldo===1) return {estado:"⚠ Última clase",clase:"amber"};
+  return {estado:"Activo",clase:"green"};
+}
 function computeAlumno(a){
+  /* 12-ago-2026: el saldo lo calcula AHORA EL SERVIDOR, con el mismo código que el portal
+     del alumno (`a.saldo` viene en /app/api/admin/data). El cálculo local de abajo quedó como
+     respaldo por si la respuesta es vieja. Este es el arreglo del desajuste "24 en el panel y
+     22 en el portal": el panel no descontaba las reservas ni entendía el multi-pase, así que
+     le mostraba al dueño un saldo inflado y lo invitaba a cobrarle a quien no debía. */
+  var sv=a.saldo;
+  if(sv && typeof sv.usadas==="number"){
+    var ilimS=!!sv.ilim, restS=ilimS?Infinity:Math.max(0,Number(sv.restantes)||0);
+    var e=estadoDeSaldo(a,restS,ilimS,!!sv.vencido,!!sv.caducado);
+    return {compradas:ilimS?null:sv.compradas, ilim:ilimS, usadas:sv.usadas, restantes:restS,
+            vencido:!!sv.vencido, caducado:!!sv.caducado, vence:a.vence||"",
+            reprogPermit:sv.reprogPermitidas||0,
+            reprogRest:(sv.reprogRestantes==null?Infinity:sv.reprogRestantes),
+            pases:sv.pases||null,
+            estado:e.estado, clase:e.clase, monto:db.precios[a.paquete]||0};
+  }
   var pk = pkDe(a.paquete);
   var ciclo = a.ciclo||1;
   var regs = db.registro.filter(function(r){ return (r.alumnoId||r.alumno_id)===a.id && (r.ciclo||1)===ciclo; });

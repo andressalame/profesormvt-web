@@ -15,7 +15,7 @@ function cortar(nombre){
   return SRC.slice(ini, i);
 }
 const FN = ["categoriaDe","paqueteCubre","resolverPk","venceVencido","pasesDe","pasesOrdenConsumo",
-            "atribuirPases","fechaLimaDe","diaVecino","computeMulti"];
+            "atribuirPases","fechaLimaDe","diaVecino","eventosConsumo","computeMulti"];
 /* las constantes que esas funciones usan, cortadas del mismo archivo */
 function cortarConst(nombre){
   const m = new RegExp("^const " + nombre + "\\s*=", "m").exec(SRC);
