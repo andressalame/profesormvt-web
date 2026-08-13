@@ -860,8 +860,14 @@ function pkUnionPases(lista, paqMap){
 async function computeMulti(env, tid, alumno, paqMap, precios, excluirReservaId){
   const ciclo = Number(alumno.ciclo) || 1;
   const lista = pasesDe(alumno);
+  /* 🐛 12-ago-2026: acá se traía SOLO `tipo`, que vale 'suelta'/'fija'/'bloqueo' — el modo de
+     la reserva, NO el tipo de clase. El tipo de clase vive en `curso` ("Pilates Mat",
+     "Pilates Máquinas · Reformer"). Como ningún pase por tipo "cubre" algo llamado *suelta*,
+     atribuirPases caía a su último recurso y le cobraba la clase AL PRIMER PASE VIVO, del tipo
+     que fuera: las 2 clases de Mat de Camila salían de su pase de Máquinas. Las clases ya
+     dictadas nunca tuvieron el problema (esas salen de `registro`, que sí guarda el curso). */
   const { results: resv } = await env.DB.prepare(
-    "SELECT id, inicio_utc, COALESCE(tipo,'') AS tipo FROM reservas WHERE tenant_id = ?1 AND alumno_id = ?2 AND COALESCE(ciclo,1) = ?3 " +
+    "SELECT id, inicio_utc, COALESCE(curso,'') AS curso, COALESCE(tipo,'') AS tipo FROM reservas WHERE tenant_id = ?1 AND alumno_id = ?2 AND COALESCE(ciclo,1) = ?3 " +
     "AND estado IN ('reservada','completada','falta') ORDER BY inicio_utc ASC"
   ).bind(tid, alumno.id, ciclo).all();
   const { results: regs } = await env.DB.prepare(
@@ -883,8 +889,10 @@ async function computeMulti(env, tid, alumno, paqMap, precios, excluirReservaId)
   const pasadas = [];
   for (const r of (resv || [])){
     if (r.id === excl) continue;
-    if (Date.parse(r.inicio_utc) >= ahora){ eventos.push({ tipo: r.tipo || "", cuando: r.inicio_utc }); continue; }
-    pasadas.push({ f: fechaLimaDe(r.inicio_utc), tipo: r.tipo || "", cuando: r.inicio_utc });
+    /* el tipo de clase manda; `tipo` queda solo de respaldo para reservas viejas sin curso */
+    const etiqueta = r.curso || r.tipo || "";
+    if (Date.parse(r.inicio_utc) >= ahora){ eventos.push({ tipo: etiqueta, cuando: r.inicio_utc }); continue; }
+    pasadas.push({ f: fechaLimaDe(r.inicio_utc), tipo: etiqueta, cuando: r.inicio_utc });
   }
   for (const r of pasadas){
     /* la reserva pasada cuyo día ya tiene clase dictada NO consume otra vez (misma regla
