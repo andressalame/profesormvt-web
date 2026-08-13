@@ -16,6 +16,10 @@ const { activeNav } = Astro.props;
     <a href="/horarios/" class:list={["snav-link", { active: activeNav === 'horarios' }]}>Horarios</a>
     <a class="snav-link" href="/#precios">Precios</a>
     <a class="snav-link" href="/#faq">FAQ</a>
+    <!-- 13-ago-2026: va en el header a pedido de Andrés, para que nadie pueda alegar que la
+         política de reprogramación "estaba escondida". Lleva `siempre` porque en móvil el
+         resto de los enlaces se ocultan y este es justo el que no puede desaparecer. -->
+    <a href="/politicas/" class:list={["snav-link", "siempre", { active: activeNav === 'politicas' }]}>Políticas</a>
     <a class="snav-ghost" href="/alumnos/">Ingresar</a>
     <a class="snav-cta" href="/prueba/">Quiero empezar →</a>
   </div>
@@ -56,6 +60,15 @@ const { activeNav } = Astro.props;
   @media (max-width: 980px){
     .snav-links{ gap: 1.1rem; }
     .snav-link, .snav-ghost{ display: none; }
+    /* La excepción va DESPUÉS de la regla que oculta: a igual especificidad manda el orden.
+       Si se sube arriba, `display:none` la pisa y el enlace no sale en el celular, que es
+       justo donde llega la mayoría de los leads. */
+    .snav-link.siempre{ display: inline-flex; }
+  }
+  @media (max-width: 420px){
+    .snav-links{ gap: .8rem; }
+    .snav-link.siempre{ font-size: .68rem; letter-spacing: .1em; }
+    .snav-cta{ font-size: .64rem; padding: .7em .85em; }
   }
   @media (prefers-reduced-motion: reduce){
     .snav, .snav-cta{ transition: none; }
