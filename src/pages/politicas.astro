@@ -1,0 +1,211 @@
+---
+// Políticas de reprogramación, cancelación y vigencia (13-ago-2026).
+// Nace de un caso real: una alumna intentó cancelar una hora antes de la clase. El sistema
+// YA lo bloqueaba, pero la regla no estaba escrita en ninguna parte pública, así que la
+// conversación terminaba por WhatsApp y en terreno de opinión. Escrita, deja de ser una
+// negociación caso por caso.
+//
+// ⚠️ Los números de acá tienen que coincidir con el sistema. Si cambian allá, cambian acá:
+//   · 6 horas  -> config `reprog_min_h` en la D1 (default del código: CANCELA_MIN_H = 4)
+//   · 2/3/4 reprogramaciones -> PAQUETES en worker/index.js
+//   · 60 días de vigencia -> worker/index.js (alumnos.vence)
+//   · 14 días de pausa -> PAUSA_MAX_DIAS en worker/index.js
+//
+// Voz: firme y clara, pero cálida. Explica el PORQUÉ, no amenaza. Nada de letra chica.
+import Layout from '../layouts/Layout.astro';
+---
+
+<Layout
+  title="Políticas de reprogramación y cancelación | ProfesorMVT"
+  description="Cómo mover o cancelar una clase, cuántos cambios incluye tu plan, cuánto dura tu paquete y cómo congelarlo por viaje o salud. Reglas claras, sin letra chica."
+>
+  <main class="pol">
+    <section class="pol-hero">
+      <div class="container-narrow">
+        <p class="label">Reglas de la casa</p>
+        <h1>Reprogramación y <em>cancelación</em></h1>
+        <p class="lead">
+          Tu clase es 1 a 1: esa hora queda apartada solo para ti y no se le ofrece a nadie más.
+          Por eso hay reglas claras. Están acá para que las sepas desde el primer día y no
+          tengamos que discutirlas por chat.
+        </p>
+      </div>
+    </section>
+
+    <section class="pol-cuerpo">
+      <div class="container-narrow">
+
+        <article class="regla destacada">
+          <h2>Mover una clase: hasta 6 horas antes</h2>
+          <p>
+            Puedes reprogramar tú mismo desde tu portal de alumno, sin escribirme ni esperar
+            respuesta. Eliges otro horario libre y listo.
+          </p>
+          <p>
+            <strong>A menos de 6 horas del inicio, la clase ya no se puede mover.</strong>
+            A esa altura el horario está reservado, preparado y ya no alcanza a tomarlo otra
+            persona. Si no asistes, esa clase cuenta como usada.
+          </p>
+          <p class="nota">
+            No es un castigo: es que esa hora ya se gastó igual. Con 6 horas de aviso, en cambio,
+            casi siempre se puede reacomodar sin que nadie pierda nada.
+          </p>
+        </article>
+
+        <article class="regla">
+          <h2>Cuántos cambios incluye tu plan</h2>
+          <p>Cada plan mensual trae reprogramaciones incluidas, sin costo:</p>
+          <ul class="lista-planes">
+            <li><span class="plan">4 horas al mes</span><span class="cant">2 cambios</span></li>
+            <li><span class="plan">8 horas al mes</span><span class="cant">3 cambios</span></li>
+            <li><span class="plan">12 horas al mes</span><span class="cant">4 cambios</span></li>
+          </ul>
+          <p>
+            Pasada esa cuota, cada cambio adicional consume una clase de tu paquete. Tu portal
+            te muestra en todo momento cuántos cambios te quedan, así que nunca es una sorpresa.
+          </p>
+        </article>
+
+        <article class="regla">
+          <h2>Si no avisas y no llegas</h2>
+          <p>
+            La clase cuenta como usada. Te espero los primeros 15 minutos; después de eso el
+            horario se cierra.
+          </p>
+          <p>
+            Si te pasó algo de verdad, escríbeme. Soy persona antes que reglamento y las
+            emergencias existen. Lo que no funciona es que sea la costumbre.
+          </p>
+        </article>
+
+        <article class="regla">
+          <h2>Cuánto dura tu paquete</h2>
+          <p>
+            Tus clases tienen <strong>60 días de vigencia</strong> desde que compras o renuevas.
+            Es un plazo amplio a propósito: cubre una semana mala, un viaje corto o un mes
+            cargado de trabajo sin que pierdas nada.
+          </p>
+        </article>
+
+        <article class="regla">
+          <h2>Viajes y salud: congela tu plazo</h2>
+          <p>
+            Si te vas de viaje o te enfermas, puedes <strong>congelar tu paquete hasta 14 días</strong>
+            por ciclo, tú mismo desde el portal. Los días que congelas se suman al final de tu
+            vigencia. No hace falta pedir permiso ni dar explicaciones.
+          </p>
+        </article>
+
+        <article class="regla">
+          <h2>Si soy yo quien mueve la clase</h2>
+          <p>
+            La misma vara para los dos. Si por algo mío tengo que mover una clase, te aviso y la
+            reponemos en el horario que te acomode, sin que se te descuente ni te cueste un cambio
+            de tu cuota.
+          </p>
+        </article>
+
+        <article class="regla">
+          <h2>Devoluciones</h2>
+          <p>
+            Los paquetes no se devuelven en dinero, pero <strong>las clases que no usaste no se
+            pierden mientras tu paquete siga vigente</strong>. Si tienes un problema de fondo,
+            hablamos: siempre prefiero resolverlo a que te quedes con un mal sabor.
+          </p>
+        </article>
+
+      </div>
+    </section>
+
+    <section class="pol-fin">
+      <div class="container-narrow">
+        <h2>Todo esto vive en tu portal</h2>
+        <p class="lead">
+          Ahí ves tus clases restantes, tus cambios disponibles, tu fecha de vencimiento, y
+          mueves o congelas lo que necesites sin escribirle a nadie.
+        </p>
+        <div class="fin-cta">
+          <a href="/alumnos/" class="btn-cta">Entrar a mi portal →</a>
+          <a href="/#precios" class="btn-ghost">Ver planes y precios</a>
+        </div>
+        <p class="note">Última actualización: 13 de agosto de 2026.</p>
+      </div>
+    </section>
+  </main>
+</Layout>
+
+<style>
+  .pol { position: relative; z-index: 2; }
+
+  .pol-hero { padding: 80px 0 30px; text-align: center; }
+  .pol-hero h1 { font-size: clamp(34px, 5.5vw, 58px); line-height: 1.05; margin: 16px 0 0; }
+  .pol-hero h1 em { color: var(--color-ember); }
+  .pol-hero .lead {
+    max-width: 640px; margin: 22px auto 0;
+    font-size: 18px; color: var(--color-bone-mute); line-height: 1.65;
+  }
+
+  .pol-cuerpo { padding: 30px 0 20px; }
+
+  .regla {
+    background: var(--color-ink-soft);
+    border: 1px solid var(--color-line);
+    border-radius: 14px;
+    padding: 30px 28px;
+    margin: 0 0 16px;
+  }
+  /* la regla que más se rompe va marcada, no escondida entre las demás */
+  .regla.destacada { border-color: var(--color-ember); }
+  .regla h2 { font-size: clamp(21px, 3vw, 27px); margin: 0 0 14px; line-height: 1.25; }
+  .regla p { color: var(--color-bone-mute); font-size: 16px; line-height: 1.65; margin: 0 0 12px; }
+  .regla p:last-child { margin-bottom: 0; }
+  .regla strong { color: var(--color-bone); }
+  .regla .nota {
+    font-size: 15px; color: var(--color-text-mute);
+    border-left: 2px solid var(--color-line); padding-left: 14px; margin-top: 16px;
+  }
+
+  .lista-planes { list-style: none; margin: 0 0 14px; padding: 0; }
+  .lista-planes li {
+    display: flex; justify-content: space-between; align-items: baseline; gap: 16px;
+    padding: 11px 0; border-bottom: 1px solid var(--color-line);
+  }
+  .lista-planes li:last-child { border-bottom: 0; }
+  .lista-planes .plan { color: var(--color-bone); font-size: 16px; }
+  .lista-planes .cant {
+    font-family: 'JetBrains Mono', monospace; font-size: 14px;
+    color: var(--color-ember); white-space: nowrap;
+  }
+
+  .pol-fin { padding: 40px 0 80px; text-align: center; }
+  .pol-fin h2 { font-size: clamp(26px, 4vw, 38px); margin: 0 0 14px; }
+  .pol-fin .lead {
+    max-width: 580px; margin: 0 auto 26px;
+    font-size: 17px; color: var(--color-bone-mute); line-height: 1.6;
+  }
+  .fin-cta { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; }
+  .note { color: var(--color-text-mute); font-size: 13px; margin: 26px 0 0; }
+
+  /* Astro aísla los estilos por página, así que los botones se declaran acá.
+     Copiados de horarios.astro para que se vean idénticos en todo el sitio. */
+  .btn-cta {
+    display: inline-block; background: var(--color-ember);
+    color: var(--color-bone) !important; font-weight: 600;
+    padding: 15px 30px; border-radius: 6px; font-size: 16px;
+    transition: background .2s;
+  }
+  .btn-cta:hover { background: var(--wine-deep); }
+  .btn-ghost {
+    display: inline-block; border: 1px solid var(--hairline-strong);
+    color: var(--color-bone) !important; font-weight: 600;
+    padding: 15px 30px; border-radius: 6px; font-size: 16px;
+    transition: border-color .15s, color .15s;
+  }
+  .btn-ghost:hover { border-color: var(--color-ember); color: var(--color-ember) !important; }
+
+  @media (max-width: 620px) {
+    .pol-hero { padding: 56px 0 20px; }
+    .regla { padding: 24px 20px; }
+    .lista-planes li { flex-direction: column; gap: 2px; align-items: flex-start; }
+  }
+</style>
