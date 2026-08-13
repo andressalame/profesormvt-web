@@ -5026,6 +5026,30 @@ async function resolverFranja(env, tenantId, iso, prof, sala){
   if (rows.length === 1) return { franja: rows[0], ambigua: false };
   return { franja: null, ambigua: true };
 }
+/* ---- La franja que calza con el NOMBRE de la clase del sistema viejo (12-ago-2026) ----
+   El 3er reporte de Punchpass (las reservas futuras) nombra la clase asi: "Pilates Maquinas |
+   Reformer - David". A esa misma hora la academia puede tener DOS clases en dos salas (en
+   Elevate: Mat en la chica y Maquinas en la grande), y resolverFranja devolvia "ambigua" y la
+   reserva se perdia. Se queda la franja cuyo curso esta contenido, palabra por palabra, en el
+   nombre del archivo; gana la que calza con MAS palabras, asi "Pilates Mat · + Spine" le gana
+   a "Pilates Mat". Lo que sobra en el nombre (el profesor, el nivel) no estorba: solo se exige
+   que no FALTE ninguna palabra del curso. Empate = no se adivina. */
+function palabrasClase(s){
+  return String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ").trim().split(" ").filter(Boolean);
+}
+function franjaPorNombreClase(rows, nombre){
+  const pal = new Set(palabrasClase(nombre));
+  if (!pal.size) return null;
+  let mejor = null, mejorN = 0, empate = false;
+  for (const r of rows){
+    const pc = palabrasClase(r.curso);
+    if (!pc.length || !pc.every(w => pal.has(w))) continue;
+    if (pc.length > mejorN){ mejor = r; mejorN = pc.length; empate = false; }
+    else if (pc.length === mejorN) empate = true;
+  }
+  return (mejor && !empate) ? mejor : null;
+}
 /* Cupo efectivo de UN slot: el de la franja si es >0, si no el aforo del tipo, si no el
    global, si no 1 (nadie lo definio). Misma cascada que la grilla del panel: aforoResuelto(). */
 async function cupoDeSlot(env, tenantId, iso, prof, cfg, sala){
@@ -10631,15 +10655,27 @@ export default {
             const alIR = await env.DB.prepare("SELECT * FROM alumnos WHERE id = ?1 AND tenant_id = ?2")
               .bind(String((fIR && fIR.alumno_id) || ""), tid).first();
             const isosIR = Array.isArray(fIR && fIR.isos) ? fIR.isos.slice(0, 60) : [];
+            /* 12-ago-2026: el nombre de la clase viaja al lado de cada reserva (mismo indice).
+               Es lo que desambigua cuando a esa hora hay dos clases en dos salas. */
+            const clasesIR = Array.isArray(fIR && fIR.clases) ? fIR.clases : [];
             if (!alIR){ isosIR.forEach(x => saltadasIR.push({ alumno: String((fIR && fIR.alumno_id) || "?"), iso: x, motivo: "alumno no encontrado" })); continue; }
             const profIR = await profeDeAlumno(env, tid, alIR);
             const cicloIR = Number(alIR.ciclo) || 1;
-            for (const isoRaw of isosIR){
-              const isoIR = String(isoRaw || "");
+            for (let ixIR = 0; ixIR < isosIR.length; ixIR++){
+              const isoIR = String(isosIR[ixIR] || "");
+              const claseIR = String(clasesIR[ixIR] || "").trim();
               if (isNaN(Date.parse(isoIR))){ saltadasIR.push({ alumno: alIR.nombre, iso: isoIR, motivo: "fecha invalida" }); continue; }
-              const { franja: frIR, ambigua: ambIR } = await resolverFranja(env, tid, isoIR, profIR, "");
-              if (ambIR){ saltadasIR.push({ alumno: alIR.nombre, iso: isoIR, motivo: "a esa hora hay varias clases (agendar a mano eligiendo la sala)" }); continue; }
-              if (!frIR){ saltadasIR.push({ alumno: alIR.nombre, iso: isoIR, motivo: "no hay clase a esa hora en tu Agenda" }); continue; }
+              const rowsIR = await franjasDeSlot(env, tid, isoIR, profIR);
+              let frIR = null;
+              if (rowsIR.length === 1) frIR = rowsIR[0];
+              else if (rowsIR.length > 1) frIR = franjaPorNombreClase(rowsIR, claseIR);
+              if (!frIR && rowsIR.length > 1){
+                saltadasIR.push({ alumno: alIR.nombre, iso: isoIR, motivo: claseIR
+                  ? ('a esa hora tienes ' + rowsIR.length + ' clases y "' + claseIR + '" no calza con ninguna (' + rowsIR.map(r => r.curso || "sin nombre").join(" / ") + ")")
+                  : "a esa hora hay varias clases (agendar a mano eligiendo la sala)" });
+                continue;
+              }
+              if (!frIR){ saltadasIR.push({ alumno: alIR.nombre, iso: isoIR, motivo: "no hay clase a esa hora en tu Agenda" + (claseIR ? (' (' + claseIR + ")") : "") }); continue; }
               const salaIR = frIR.sala || "";
               const yaIR = await env.DB.prepare(
                 "SELECT 1 AS ok FROM reservas WHERE tenant_id = ?1 AND inicio_utc = ?2 AND alumno_id = ?3 AND estado IN ('reservada','completada')"

@@ -2762,6 +2762,26 @@ function venceVencidoPanel(v){
   return isFinite(ms) && ms<Date.now();
 }
 /* ---------- Cálculo (ciclo actual) ---------- */
+/* ---- Resumen de los pases del alumno, para la TABLA (12-ago-2026) ----
+   Devuelve null salvo que de verdad tenga 2+ pases vivos de su ciclo (regla de oro del
+   multi-pase: sin eso, el camino clásico queda intacto). Vive acá porque lo usan DOS celdas:
+   la del plan (pinta uno por línea) y la de "Le quedan" — que antes mostraba el saldo de UNO
+   solo mientras al costado se veían tres pases, y eso se lee como un error del sistema. */
+function pasesResumen(a){
+  try{
+    var pj=JSON.parse((a&&a.pases)||"");
+    if(!(pj&&pj.p&&pj.p.length>=2&&(Number(pj.c)||1)===(Number(a.ciclo)||1))) return null;
+    var pk2=pkMap();
+    var lista=pj.p.map(function(px){
+      var def=pk2[px.n]||{clases:0,ilim:false};
+      var comp=Number(def.clases)||0, us=Number(px.usadas)||0;
+      return { n:px.n, ilim:!!def.ilim, comp:comp, rest:Math.max(0,comp-us), vence:px.vence||"" };
+    });
+    return { lista:lista, ilim:lista.some(function(x){ return x.ilim; }),
+      comp:lista.reduce(function(s,x){ return s+(x.ilim?0:x.comp); },0),
+      rest:lista.reduce(function(s,x){ return s+(x.ilim?0:x.rest); },0) };
+  }catch(e){ return null; }
+}
 function computeAlumno(a){
   var pk = pkDe(a.paquete);
   var ciclo = a.ciclo||1;
@@ -3000,17 +3020,11 @@ function renderAlumnos(){
            sale de las clases del plan menos las usadas migradas; con reservas de por medio
            la verdad fina la calcula el server (reserva y portal) — en una academia recién
            migrada son exactamente lo mismo. */
-        try{
-          var pj=JSON.parse(a.pases||"");
-          if(pj&&pj.p&&pj.p.length>=2&&(Number(pj.c)||1)===(Number(a.ciclo)||1)){
-            var pk2=pkMap();
-            return pj.p.map(function(px){
-              var def=pk2[px.n]||{clases:0,ilim:false};
-              var sal=def.ilim?'sin límite':(Math.max(0,(Number(def.clases)||0)-(Number(px.usadas)||0))+' de '+(Number(def.clases)||0)+' quedan');
-              return esc(px.n)+' <span class="mini"><b>'+sal+'</b>'+(px.vence?' · vence '+esc(px.vence):'')+'</span>';
-            }).join('<br>');
-          }
-        }catch(e){}
+        var prC=pasesResumen(a);
+        if(prC) return prC.lista.map(function(px){
+          var sal=px.ilim?'sin límite':(px.rest+' de '+px.comp+' quedan');
+          return esc(px.n)+' <span class="mini"><b>'+sal+'</b>'+(px.vence?' · vence '+esc(px.vence):'')+'</span>';
+        }).join('<br>');
         /* un solo plan: el saldo pegado al plan (la columna "Le quedan" vive lejos y los
            botones flotantes la tapan justo al pasar el mouse) */
         return a.paquete?(esc(a.paquete)+'<br><span class="mini">S/ '+c.monto+
@@ -3021,12 +3035,20 @@ function renderAlumnos(){
       /* "(manual)" no le decía nada a nadie: es el horario que escribió el profe a mano */
       '<td>'+esc((a.horarioFijo&&a.horarioFijo.length)?a.horarioFijo.join(' · '):(a.horario||'—'))+
         ((!(a.horarioFijo&&a.horarioFijo.length)&&a.horario)?'<br><span class="mini">lo anotaste tú</span>':'')+'</td>'+
-      '<td>'+(!a.paquete
-        ? '<span class="mini">—</span>'
-        : c.ilim
-        ? '<span class="mini" style="font-weight:600;">Mensual</span><br><span class="mini">vence '+esc(fechaBonita(a.vence))+'</span>'
-        : '<span class="big">'+c.restantes+'</span> <span class="mini">/ '+c.compradas+'</span>'+
-          '<br><span class="mini" title="Veces que le quedan para cambiar de horario sin perder la clase">'+c.reprogRest+' de '+c.reprogPermit+' cambios</span>')+'</td>'+
+      /* con varios pases, el saldo de la tabla es la SUMA de todos (12-ago-2026): decir
+         "6 de 12" cuando la celda de al lado muestra tres pases parece un error. El desglose
+         por pase está ahí mismo, en la columna del plan. */
+      '<td>'+(function(pr){
+        if(pr) return pr.ilim
+          ? '<span class="mini" style="font-weight:600;">Mensualidad + pases</span><br><span class="mini">'+pr.lista.length+' pases activos</span>'
+          : '<span class="big">'+pr.rest+'</span> <span class="mini">/ '+pr.comp+'</span>'+
+            '<br><span class="mini">sumando sus '+pr.lista.length+' pases</span>';
+        if(!a.paquete) return '<span class="mini">—</span>';
+        return c.ilim
+          ? '<span class="mini" style="font-weight:600;">Mensual</span><br><span class="mini">vence '+esc(fechaBonita(a.vence))+'</span>'
+          : '<span class="big">'+c.restantes+'</span> <span class="mini">/ '+c.compradas+'</span>'+
+            '<br><span class="mini" title="Veces que le quedan para cambiar de horario sin perder la clase">'+c.reprogRest+' de '+c.reprogPermit+' cambios</span>';
+      })(pasesResumen(a))+'</td>'+
       '<td><span class="pill '+c.clase+'">'+esc(c.estado)+'</span></td>'+
       '<td class="notes" title="'+esc(a.notas||'')+'"><span>'+esc(a.notas||'')+'</span></td>'+
       '<td><div class="rowact">'+renovBtn+'<button class="btn ghost sm" data-regrenovacion="'+a.id+'" title="Registrar un pago de renovación recibido fuera del portal">+ Renovar</button><button class="btn ghost sm" data-edit="'+a.id+'">Editar</button><button class="btn ghost sm" data-del="'+a.id+'">×</button></div></td>'+
@@ -7206,14 +7228,18 @@ var IMP_PLATAFORMAS=[
         bug de plata que se cazó esa misma mañana.
      Lección para las demás plataformas: no basta con que la ruta EXISTA; hay que comprobar
      que el archivo traiga el dato que se necesita. */
-  { id:"punchpass", nombre:"Punchpass", icono:"app", verificado:true, auditado:"2026-08-11",
-    sub:"son 2 archivos",
+  { id:"punchpass", nombre:"Punchpass", icono:"app", verificado:true, auditado:"2026-08-12",
+    sub:"son 3 archivos",
     pasos:[
       { titulo:"Tus alumnos", ruta:"Customers → Export", formato:"CSV",
         nota:'Entra a <b>Customers</b>, elige la lista (por ejemplo <i>All Customers</i>), marca a todos con <i>Select All</i> y aprieta <b>Export</b>. Trae nombre, apellido, correo y teléfono. <b>Todavía no trae sus planes</b>: eso es el segundo archivo.' },
       { titulo:"Sus planes y las clases que les quedan", ruta:"Reports → Active Passes By Customer", formato:"CSV",
         alt:"Reports → Sales Details", altPor:"trae la columna Customer Id para cruzar sin confundir homónimos",
-        nota:'Este es el que trae <b>cuántas clases le quedan a cada alumno</b>, que es lo que hace falta para que entren con su saldo al día. <b>Ojo:</b> <i>Sales Details</i> NO sirve para el saldo — ese es el reporte de <b>ventas</b> y solo cuenta la compra, no lo que la persona ya consumió. Vale subirlo igual como tercer archivo si tu lista tiene <b>nombres repetidos</b>: es el único que trae <b>Customer Id</b> y con ese número cruzo sin confundir a dos personas que se llaman parecido.' } ],
+        nota:'Este es el que trae <b>cuántas clases le quedan a cada alumno</b>, que es lo que hace falta para que entren con su saldo al día. Si alguien tiene <b>varios pases a la vez</b> (Máquinas y Mat, por ejemplo), acá salen <b>en varias filas</b> y entran todos, cada uno con su saldo. <b>Ojo:</b> <i>Sales Details</i> NO sirve para el saldo — ese es el reporte de <b>ventas</b> y solo cuenta la compra, no lo que la persona ya consumió. Vale subirlo igual, aparte, si tu lista tiene <b>nombres repetidos</b>: es el único que trae <b>Customer Id</b> y con ese número cruzo sin confundir a dos personas que se llaman parecido.' },
+      /* 3er archivo (12-ago-2026, reunión con José): sin esto los alumnos amanecen sin las
+         clases que ya tenían agendadas y el dueño tiene que re-agendar la semana a mano. */
+      { titulo:"Las clases que ya tienen reservadas", ruta:"Reports → Upcoming Reservations", formato:"CSV",
+        nota:'Este trae <b>quién ya tiene clase agendada y para cuándo</b>, así tus alumnos entran a Batuta con su semana puesta y no tienes que volver a reservarles nada. Sale de <b>Reports</b>, en la caja <i>Reservations</i> → <b>Upcoming Reservations</b> (el archivo se llama <i>Pending Future Class Reservations</i>). <b>Súbelo al final</b>, después de los otros dos: para agendar, la persona y su plan ya tienen que estar adentro. Una condición: <b>esos horarios tienen que existir en tu Agenda de Batuta</b>; si una clase no está creada, esa reserva se salta y te digo cuál.' } ],
     /* Detalle operativo que ahorra un susto: Punchpass no descarga el archivo al toque. */
     aviso:'En Punchpass el archivo <b>no se descarga al instante: te llega por correo</b> con un enlace para bajarlo. Si no lo ves en un par de minutos, revisa tu bandeja de spam. Y necesitas entrar como <b>Admin</b>.' },
   /* GLOFOX — el mejor caso: UN archivo trae contacto, plan, vencimiento y créditos.
@@ -7771,6 +7797,10 @@ function impClave(nom,ape,mail){ return impNorm(nom)+"|"+impNorm(ape)+"|"+impNor
    "Custom ID" (así, no "Customer Id" como el Sales Details). Sin ese alias el cruce caía a
    nombre+apellido, y en la lista de Elevate hay 19 nombres repetidos entre 39 personas. */
 var IMP_ID_CAB=["customer id","customerid","customer id number","customer number","custom id","customid","cliente id","id cliente","id del cliente","client id","member id","student id","punchpass id","id"];
+/* Id del PASE (no de la persona): "Pass ID" en el Active Passes de Punchpass. Sirve para
+   distinguir dos pases de la MISMA persona dentro del archivo (12-ago-2026). Ojo: nunca se
+   usa para identificar gente — por eso vive aparte de IMP_ID_CAB. */
+var IMP_PASE_CAB=["pass id","passid","pase id","id del pase","pass number","numero de pase"];
 function impEsCabId(h){ return IMP_ID_CAB.indexOf(impNormForma(h))>=0; }
 function impIdDeNotas(notas){
   var partes=String(notas||"").split(" · ");
@@ -7839,7 +7869,12 @@ function parseCsv(text){
 }
 var IMP_ALIAS={ nombre:["nombre","alumno","alumna","name","nombre completo","nombres","estudiante","first name","full name","customer","customer name","client","client name"],
   apellido:["apellido","apellidos","last name","surname","apellido paterno"],
-  email:["correo","email","e-mail","mail","correo electronico","gmail","email address"],
+  /* 🐛 12-ago-2026: "Customer Email" NO estaba, y así se titula el correo en los reportes de
+     PASES y de RESERVAS de Punchpass. Sin reconocerlo, esos dos archivos cruzaban a la gente
+     por NOMBRE COMPLETO — y en la lista de Elevate hay 19 nombres repetidos entre 39 personas.
+     Efecto real: los dos "César Velarde" (la misma persona, duplicada en Punchpass con dos
+     correos) no cruzaron con nadie y entraron como UN alumno nuevo con los pases de ambos. */
+  email:["correo","email","e-mail","mail","correo electronico","gmail","email address","customer email","client email","member email","student email","correo del cliente","correo del alumno"],
   nacimiento:["nacimiento","fecha de nacimiento","cumpleanos","cumple","birthday","fecha nac","nac","birth date","date of birth","dob"],
   curso:["curso","cursos","materia","materias","clase","instrumento","asignatura"],
   whatsapp:["whatsapp","wsp","celular","telefono","movil","phone","numero","contacto","phone number","mobile","mobile phone","cell phone"],
@@ -7853,6 +7888,13 @@ var IMP_ALIAS={ nombre:["nombre","alumno","alumna","name","nombre completo","nom
   restantes:["clases restantes","restantes","clases que le quedan","le quedan","saldo","saldo de clases","clases pendientes","pendientes","credits","clases disponibles","disponibles","remaining","classes remaining","remaining classes","credits remaining","visits remaining","punches remaining","classes left","punches left","number of punches left","punches","uses left","uses remaining","sessions left","sessions remaining"],
   vence:["vence","vencimiento","fecha de vencimiento","valido hasta","vigencia","expira","expiracion","expires","expires on","expiration","expiration date","expiry","expiry date","valid until"],
   reservas:["reservas","clases reservadas","horarios reservados","reservado","reservados","proximas clases","bookings","registrations","schedule","upcoming registrations","upcoming classes","upcoming bookings"],
+  /* ---- 3er archivo: las reservas que el alumno YA tenía (12-ago-2026, Elevate) ----
+     Punchpass no mete las reservas futuras en el export de clientes ni en el de pases: son su
+     propio reporte ("Pending Future Class Reservations"), con UNA FILA POR RESERVA — fecha y
+     hora en una columna, nombre de la clase en otra. Sin estos alias el archivo entraba como
+     una lista de gente repetida y las reservas de la semana se perdían enteras. */
+  fecha_reserva:["class date","class date/time","class date time","class datetime","fecha de clase","fecha de la clase","fecha reserva","fecha de reserva","fecha y hora","date and time","start","start time","starts at","when"],
+  clase_reserva:["class name","class title","nombre de la clase","clase reservada","class"],
   notas:["notas","nota","observaciones","observacion","comentario","comentarios","notes"],
   profesor:["profesor","profesora","profe","docente","maestro","maestra","teacher","tutor","instructor"] };
 /* "Reservas" migradas (7-ago-2026, reunión Elevate): los horarios que el alumno YA tenía
@@ -7878,6 +7920,24 @@ function impReservas(txt){
   });
   return {isos:isos.slice(0,60),crudo:malas.join("; "),
     error:malas.length?('no entiendo la reserva "'+malas[0]+'"'+(malas.length>1?(" y "+(malas.length-1)+" más"):"")+' (usa 20/08/2026 19:00)'):""};
+}
+/* UNA celda con fecha Y hora de UNA reserva (12-ago-2026, 3er archivo de Punchpass).
+   Su formato es "2026-08-13 07:00:00 -0500": trae su propio huso, y hay que respetarlo (si se
+   asumiera Lima a ciegas, un export hecho en otro huso agendaría a la hora equivocada). Sin
+   huso en la celda, se asume hora de Lima, que es lo que escribe una persona a mano. */
+function impFechaHoraCelda(txt){
+  var s=String(txt==null?"":txt).trim();
+  if(!s) return "";
+  var m=s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})[T\s]+(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(Z|[+-]\d{2}:?\d{2})?$/i);
+  if(m){
+    var off=m[7]?(m[7].toUpperCase()==="Z"?"Z":(m[7].length===5?(m[7].slice(0,3)+":"+m[7].slice(3)):m[7])):"-05:00";
+    var d=new Date(m[1]+"-"+String(m[2]).padStart(2,"0")+"-"+String(m[3]).padStart(2,"0")+
+      "T"+String(m[4]).padStart(2,"0")+":"+m[5]+":"+(m[6]||"00")+off);
+    return isNaN(d.getTime())?"":d.toISOString();
+  }
+  /* cualquier otro formato (20/08/2026 19:00, 8/20/2026 7:00 pm) lo resuelve el de siempre */
+  var r=impReservas(s);
+  return r.isos.length?r.isos[0]:"";
 }
 function impMapHeader(cells){
   var map={},known=false;
@@ -7939,8 +7999,13 @@ function impProcesarFilas(rows){
          su id del sistema anterior y nada más (11-ago-2026). Antes eso moría en "no encontré
          una columna de Nombre" y no había forma de traer los planes. Ahora, con id que cruce
          contra alguien de la lista, el archivo entra igual (solo completa, no crea). */
-      var colId=null;
-      if(cab) cab.forEach(function(h,ix){ if(colId==null && impEsCabId(h)) colId=ix; });
+      var colId=null,colPase=null;
+      if(cab) cab.forEach(function(h,ix){
+        if(colId==null && impEsCabId(h)) colId=ix;
+        if(colPase==null && IMP_PASE_CAB.indexOf(impNormForma(h))>=0) colPase=ix;
+      });
+      /* ¿es el archivo de RESERVAS? (una fila por reserva, con su fecha y su clase) */
+      var esArchReservas=(map.fecha_reserva!=null);
       if(map.nombre==null && colId==null){ impError("No encontré una columna de Nombre. Pon 'Nombre' (o 'Name') como título de la primera columna."); return; }
       var usadosIx={}; for(var kM in map){ if(map[kM]!=null) usadosIx[map[kM]]=1; }
       var extrasIx=[];
@@ -7989,6 +8054,24 @@ function impProcesarFilas(rows){
         var porNom=(!mailFila&&nomFull&&existeNom[nomFull]!=="varios")?existeNom[nomFull]:null;
         var yaEsta=(idFila&&existeId[idFila])||(mailFila&&existeMail[impNorm(mailFila)])||existe[key]||porNom||null;
         var keyDup=idFila?("id:"+idFila):key;
+        /* ---- 🐛 12-ago-2026: el duplicado se juzga por persona + LO QUE TRAE LA FILA ----
+           Los archivos de Punchpass que importan de verdad traen UNA FILA POR PASE y UNA FILA
+           POR RESERVA, así que la misma persona sale varias veces a propósito: Camila Ruiz
+           aparece 3 veces en el de pases porque tiene 3 pases activos. Con la clave por persona
+           a secas, la 2ª y la 3ª morían acá como "repetidas en el archivo" y NUNCA llegaban a
+           impFusionarPases: el multi-pase (construido el 11-ago) no llegó a existir para nadie.
+           En el archivo real de Elevate eran 12 personas y 14 pases perdidos, en silencio.
+           Con esto, dos filas solo son la misma si traen TAMBIÉN el mismo pase / la misma
+           reserva — que es cuando de verdad sobra una. */
+        var detalleFila=[
+          colPase!=null?String(r[colPase]||""):"",
+          map.paquete!=null?String(r[map.paquete]||""):"",
+          map.restantes!=null?String(r[map.restantes]||""):"",
+          map.vence!=null?String(r[map.vence]||""):"",
+          map.fecha_reserva!=null?String(r[map.fecha_reserva]||""):"",
+          map.clase_reserva!=null?String(r[map.clase_reserva]||""):""
+        ].map(function(x){ return String(x).trim(); });
+        if(detalleFila.join("")) keyDup+="|"+impNorm(detalleFila.join("|"));
         if(vistos[keyDup]){ dupArchivo++; continue; }
         vistos[keyDup]=true;
         var profTxt=map.profesor!=null?String(r[map.profesor]||"").trim():"";
@@ -8023,6 +8106,20 @@ function impProcesarFilas(rows){
           return parseInt(p[2],10)+" de "+(M[parseInt(p[1],10)]||"");
         })():"";
         var rsv=map.reservas!=null?impReservas(r[map.reservas]):{isos:[],error:""};
+        /* archivo de RESERVAS: la fila ES una reserva. La clase viaja con ella porque a una
+           misma hora la academia puede tener dos clases en dos salas (en Elevate, Mat en la
+           chica y Máquinas en la grande): sin el nombre no hay forma de saber a cuál entra. */
+        var clasesRsv=[];
+        if(esArchReservas){
+          var celdaF=String(r[map.fecha_reserva]==null?"":r[map.fecha_reserva]).trim();
+          var isoUno=impFechaHoraCelda(celdaF);
+          if(isoUno){
+            rsv={isos:[isoUno],crudo:"",error:""};
+            clasesRsv=[map.clase_reserva!=null?String(r[map.clase_reserva]||"").trim():""];
+          } else if(celdaF){
+            rsv={isos:[],crudo:celdaF,error:'no entendí la fecha de la reserva "'+celdaF+'"'};
+          }
+        }
         var mailOk=!mailFila||/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(mailFila);
         /* ---- Regla del 11-ago-2026 (migracion de Elevate, 1400 alumnos de Punchpass) ----
            Un dato OPCIONAL nunca tumba la importacion entera. Nacimiento, vencimiento, reservas,
@@ -8061,8 +8158,12 @@ function impProcesarFilas(rows){
              puede tener VARIOS (se arman en impFusionarPases) o traer el saldo/vencimiento
              que a la ficha le falta. Antes se botaba como "ya estaba" y ningún re-upload
              podía corregir un plan que se pegó mal en un intento anterior. */
-          if(!faltantes.length && !paqFila){ dup++; continue; }
+          /* la fila que trae una RESERVA también entra siempre: no completa un dato de la
+             ficha, agenda una clase (12-ago-2026). Sin esto el 3er archivo se descartaba
+             entero como "ya estaban" y el alumno se quedaba sin sus horarios de la semana. */
+          if(!faltantes.length && !paqFila && !rsv.isos.length){ dup++; continue; }
           out.push({ completaA:yaEsta.id, completaQue:faltantes, paseArchivo:!!paqFila,
+            reservasClase:clasesRsv,
             nombre:nombre, apellido:apeFila, email:mailOk?mailFila:"", nacimiento:nIso||"",
             curso:cursoNuevo, cursoPend:cuM.pend, cursoCrudo:cuM.crudo, paqSug:paqSug,
             whatsapp:waNuevo, paquete:paqFila,
@@ -8072,6 +8173,11 @@ function impProcesarFilas(rows){
             profTxt:profTxt, profesor_id:impResolveProfe(profTxt) });
           continue;
         }
+        /* Nadie se CREA desde el archivo de reservas (12-ago-2026): es una lista de horarios,
+           no de personas. Si esa reserva es de alguien que no está en la academia, se cuenta
+           aparte y se dice en pantalla — antes se habría creado un alumno fantasma por cada
+           reserva, sin plan y con el nombre repetido. */
+        if(esArchReservas){ sinCruce++; continue; }
         out.push({ nombre:nombre,
           apellido:apeFila,
           email:mailOk?mailFila:"",
@@ -8122,7 +8228,10 @@ function impProcesarFilas(rows){
 function impFusionarPases(out){
   var porPersona={};
   out.forEach(function(a,ix){
-    if(!a.paquete||a.error) return;
+    if(a.error) return;
+    /* 12-ago-2026: también las filas que solo traen RESERVAS (el 3er archivo trae una fila
+       por reserva: la misma persona sale una vez por cada clase que tiene agendada). */
+    if(!a.paquete && !(a.reservas&&a.reservas.length)) return;
     var k=a.completaA?("id:"+a.completaA):("cl:"+impClave(a.nombre,a.apellido,a.email));
     (porPersona[k]=porPersona[k]||[]).push(ix);
   });
@@ -8130,7 +8239,8 @@ function impFusionarPases(out){
   Object.keys(porPersona).forEach(function(k){
     var ixs=porPersona[k];
     if(ixs.length<2) return;
-    var orden=ixs.slice().sort(function(x,y){
+    var conPase=ixs.filter(function(ix){ return !!out[ix].paquete; });
+    var orden=conPase.slice().sort(function(x,y){
       var a=out[x],b=out[y];
       var ea=(Number(a.migrado_usadas)||0)>0?0:1, eb=(Number(b.migrado_usadas)||0)>0?0:1;
       if(ea!==eb) return ea-eb;                    // el empezado gana al sin estrenar
@@ -8138,16 +8248,39 @@ function impFusionarPases(out){
       if(va!==vb) return va<vb?-1:1;               // el que vence primero es el que se consume
       return x-y;                                  // estable: el orden del archivo
     });
-    var g=out[orden[0]];
+    /* la fila que se queda es la del pase principal; si el archivo no trae pases (el de
+       reservas), la primera de esa persona */
+    var base=orden.length?orden[0]:ixs[0];
+    var g=out[base];
     /* TODOS los pases viajan como datos (11-ago-2026, decisión de Andrés: multi-pase real,
        no parche): el sistema los guarda en la ficha y cada uno reserva y vence por su cuenta.
        La ficha espeja el principal (orden[0]) para todo lo viejo que lee `paquete`. */
-    g.pases=orden.map(function(ix2){
-      var p=out[ix2];
-      if(ix2!==orden[0]) quitar[ix2]=1;
-      return { n:p.paquete, usadas:Number(p.migrado_usadas)||0, vence:p.vence||"" };
+    if(orden.length>=2){
+      g.pases=orden.map(function(ix2){
+        var p=out[ix2];
+        return { n:p.paquete, usadas:Number(p.migrado_usadas)||0, vence:p.vence||"" };
+      });
+      g.pasesExtra=g.pases.length-1;
+    }
+    /* todas las reservas de la persona a UNA sola fila, con su clase al lado y sin repetir
+       el mismo horario dos veces (12-ago-2026) */
+    var isos=[],clases=[],vistoIso={};
+    ixs.forEach(function(ix2){
+      (out[ix2].reservas||[]).forEach(function(iso,j){
+        if(!iso||vistoIso[iso]) return;
+        vistoIso[iso]=1; isos.push(iso); clases.push((out[ix2].reservasClase||[])[j]||"");
+      });
     });
-    g.pasesExtra=g.pases.length-1;
+    if(isos.length){ g.reservas=isos.slice(0,60); g.reservasClase=clases.slice(0,60); }
+    /* de las filas que se van, la que queda hereda lo que a ella le falte: un archivo puede
+       traer el correo en una fila y el teléfono en otra, y nada se pierde en silencio */
+    ixs.forEach(function(ix2){
+      if(ix2===base) return;
+      ["email","whatsapp","nacimiento","apellido","curso","notas","profesor_id"].forEach(function(campo){
+        if(!g[campo] && out[ix2][campo]) g[campo]=out[ix2][campo];
+      });
+      quitar[ix2]=1;
+    });
   });
   var hayQuitar=false; for(var q in quitar){ hayQuitar=true; break; }
   return hayQuitar?out.filter(function(_,ix){ return !quitar[ix]; }):out;
@@ -8193,7 +8326,9 @@ function impPuntuarCabecera(linea){
   var celdas=(parseCsv(linea)[0])||[];
   var tiene=function(clave){ return celdas.some(function(c){ return IMP_ALIAS[clave].indexOf(impNormForma(c))>=0; }); };
   return { pases:(tiene("restantes")?2:0)+(tiene("vence")?1:0)+(tiene("paquete")?1:0),
-           clientes:(tiene("email")?1:0)+(tiene("whatsapp")?1:0)+(tiene("nacimiento")?1:0)+(tiene("apellido")?1:0) };
+           clientes:(tiene("email")?1:0)+(tiene("whatsapp")?1:0)+(tiene("nacimiento")?1:0)+(tiene("apellido")?1:0),
+           /* el de reservas va SIEMPRE al final: agenda a gente que ya tiene que existir */
+           reservas:tiene("fecha_reserva")?1:0 };
 }
 function impEncolar(lista){
   var arr=[],i;
@@ -8205,7 +8340,7 @@ function impEncolar(lista){
   if(arr.length===1 && !IMP_COLA.length){ IMP_TOTAL_ARCHIVOS=1; IMP_ARCHIVO_IDX=1; impPintarCola(); impLeerArchivo(arr[0]); return; }
   if(arr.length===1){ arr=arr.concat(IMP_COLA); IMP_COLA=[]; }
   Promise.all(arr.map(impLeerCabecera)).then(function(cabs){
-    var punt=arr.map(function(f,ix){ var p=impPuntuarCabecera(cabs[ix]); return { f:f, d:p.pases-p.clientes, ix:ix }; });
+    var punt=arr.map(function(f,ix){ var p=impPuntuarCabecera(cabs[ix]); return { f:f, d:p.reservas?99:(p.pases-p.clientes), ix:ix }; });
     /* menor puntaje de pases primero = clientes primero; empate = el orden en que llegaron */
     punt.sort(function(a,b){ return (a.d-b.d)||(a.ix-b.ix); });
     var orden=punt.map(function(x){ return x.f; });
@@ -8394,7 +8529,7 @@ function impPreview(rows,dup,vacios,dupArchivo,sinCruce){
     var cuCel=esc(a.curso||"—")+((a.cursoPend&&a.cursoPend.length)?('<br><span class="mini" style="color:var(--amber,#d99a3c);">«'+esc(a.cursoPend[0].crudo)+'» '+(a.cursoPend[0].sug?"por confirmar":"sin reconocer")+'</span>'):"");
     var compQue=(a.completaQue||[]).filter(function(q){ return q!=="clase"||!!a.curso; });
     var nomCel=esc(a.nombre)+(a.apellido?(" "+esc(a.apellido)):"")+
-      (a.completaA?('<br><span class="mini" style="color:var(--accent);">ya está en tu lista: '+(a.pases?("se le arman sus "+a.pases.length+" pases"):(compQue.length?("se le completa "+esc(compQue.join(", "))):(a.paseArchivo?"se le pone al día su plan y saldo":"confirma su clase abajo")))+'</span>'):"")+
+      (a.completaA?('<br><span class="mini" style="color:var(--accent);">ya está en tu lista: '+(a.pases?("se le arman sus "+a.pases.length+" pases"):(compQue.length?("se le completa "+esc(compQue.join(", "))):(a.paseArchivo?"se le pone al día su plan y saldo":((a.reservas&&a.reservas.length)?("se le agendan sus "+a.reservas.length+" clase"+(a.reservas.length!=1?"s":"")):"confirma su clase abajo"))))+'</span>'):"")+
       (a.pasesExtra?('<br><span class="mini" style="color:var(--accent);">trae '+(a.pasesExtra+1)+' pases: entran los '+(a.pasesExtra+1)+' A LA VEZ, cada uno con su saldo y su vencimiento</span>'):"")+
       ((a.avisos&&a.avisos.length)?('<br><span class="mini" style="color:var(--amber,#d99a3c);">'+esc(a.avisos[0])+(a.avisos.length>1?(" (+"+(a.avisos.length-1)+")"):"")+'</span>'):"");
     return "<tr"+(a.error?' style="background:rgba(217,83,79,.08);"':'')+"><td>"+nomCel+"</td><td>"+cuCel+"</td><td>"+esc(a.whatsapp)+"</td><td>"+esc(a.paquete||"—")+"</td><td>"+saldo+"</td><td>"+pf+"</td></tr>";
@@ -8408,7 +8543,9 @@ function impPreview(rows,dup,vacios,dupArchivo,sinCruce){
   if(vacios)extra.push(vacios+" sin nombre (omitidos)");
   /* filas del reporte de pases cuyo id no le corresponde a nadie de la lista: hay que
      decirlo, si no el dueño cree que se le migraron todos los pases (11-ago-2026) */
-  if(IMP_SINCRUCE)extra.push(IMP_SINCRUCE+" con un id que no está en tu lista (omitidos: sube primero tu lista de clientes)");
+  /* vale para las dos formas de no cruzar: la fila que solo trae un id ajeno y la reserva de
+     alguien que todavía no está en la academia (12-ago-2026) */
+  if(IMP_SINCRUCE)extra.push(IMP_SINCRUCE+" de gente que no está en tu lista (omitidas: sube primero tu lista de alumnos)");
   var conSaldo=rows.filter(function(a){ return !a.error && a.restantes!=null; }).length;
   if(conSaldo) extra.push(conSaldo+" con saldo traído de tu sistema anterior");
   var conRes=rows.filter(function(a){ return !a.error && a.reservas && a.reservas.length; }).length;
@@ -8699,7 +8836,7 @@ el("btnImpConfirmar").addEventListener("click",function(){
         ex.migrado_set=true;
         if(a.pases[0].vence) ex.vence=a.pases[0].vence;
       }
-      if(a.reservas && a.reservas.length) resPend.push({alumno_id:ex.id, isos:a.reservas});
+      if(a.reservas && a.reservas.length) resPend.push({alumno_id:ex.id, isos:a.reservas, clases:a.reservasClase||[]});
       return;
     }
     var idNuevo=uid();
@@ -8714,7 +8851,7 @@ el("btnImpConfirmar").addEventListener("click",function(){
       vence:a.vence||"",
       pases:(a.pases&&a.pases.length>=2)?{c:1,p:a.pases}:undefined,
       profesor_id:a.profesor_id||undefined });
-    if(a.reservas && a.reservas.length) resPend.push({alumno_id:idNuevo, isos:a.reservas});
+    if(a.reservas && a.reservas.length) resPend.push({alumno_id:idNuevo, isos:a.reservas, clases:a.reservasClase||[]});
   });
   var n=IMP_ROWS.length,btn=el("btnImpConfirmar"); btn.disabled=true;
   IMP_COMPLETADOS=IMP_ROWS.filter(function(a){ return a.completaA; }).length;
