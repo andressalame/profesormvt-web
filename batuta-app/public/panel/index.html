@@ -1585,6 +1585,10 @@
           <option value="nacimiento">Sí, pedirla en el formulario de compra</option>
         </select></div>
       <p class="hint" style="margin-top:-4px;">Solo si de verdad la usas (cumpleaños, categorías por edad). Es un <b>dato personal</b>: si el alumno resulta menor de 14 años, el formulario le exige a quien compra declarar que es su apoderado, y sin esa marca no deja inscribirlo. Tú eres el responsable de esos datos; Batuta solo los guarda por encargo tuyo. El <b>apellido</b> se pide siempre, opcional.</p>
+      <div class="cfgrow"><span class="pk">¿Cuándo se le descuenta la clase?</span><select id="cfg_saldo_modo">
+        <option value="">Cuando reserva</option>
+        <option value="asistencia">Cuando asiste</option></select></div>
+      <p class="hint" style="margin-top:-4px;"><b>Es solo cómo se ve el saldo.</b> Con <b>cuando reserva</b>, al alumno que aparta su semana le baja el número de una vez. Con <b>cuando asiste</b> el número no se mueve hasta que va a la clase, que es como funcionan Punchpass y la mayoría de estudios; abajo del saldo le decimos cuántas tiene apartadas. En los dos casos la reserva le guarda el cupo igual y <b>nadie puede reservar más clases de las que compró</b>.</p>
       <div class="cfgrow"><span class="pk">¿Cómo se marca la asistencia?</span><select id="cfg_asistencia_auto">
         <option value="">Una por una, a mano</option>
         <option value="1">Doy todas por asistidas y marco solo al que faltó</option></select></div>
@@ -2809,6 +2813,15 @@ function pasesResumen(a){
       rest:lista.reduce(function(s,x){ return s+(x.ilim?0:x.rest); },0) };
   }catch(e){ return null; }
 }
+/* Clases ya reservadas que todavía no se dictan. Solo tiene sentido mostrarlas cuando la
+   academia eligió "se descuenta cuando asiste": ahí el saldo no las resta y el número se
+   entiende con esta línea al lado. Con el modo de siempre ya están descontadas y decirlo
+   solo confundiría. */
+function saldoApartadas(a){
+  var s=a&&a.saldo;
+  if(!s || s.modo_saldo!=="asistencia") return 0;
+  return Math.max(0,Number(s.reservadas)||0);
+}
 /* Etiqueta y color a partir de los números, sea quien sea que los calculó. */
 function estadoDeSaldo(a,saldo,ilim,vencido,caduco){
   if(!a.paquete) return {estado:"Falta ponerle su plan",clase:"gray"};
@@ -3104,6 +3117,9 @@ function renderAlumnos(){
         return c.ilim
           ? '<span class="mini" style="font-weight:600;">Mensual</span><br><span class="mini">vence '+esc(fechaBonita(a.vence))+'</span>'
           : '<span class="big">'+c.restantes+'</span> <span class="mini">/ '+c.compradas+'</span>'+
+            /* con "se descuenta al asistir", el número NO baja al reservar: decirle cuántas
+               tiene apartadas es lo que evita el "¿y por qué me salen tantas?" */
+            (saldoApartadas(a)?('<br><span class="mini" title="Ya las reservó pero todavía no las toma. Con tu ajuste de «se descuenta cuando asiste», estas todavía no le bajan el saldo.">'+saldoApartadas(a)+' apartada'+(saldoApartadas(a)===1?'':'s')+'</span>'):'')+
             '<br><span class="mini" title="Veces que le quedan para cambiar de horario sin perder la clase">'+c.reprogRest+' de '+c.reprogPermit+' cambios</span>';
       })(pasesResumen(a))+'</td>'+
       '<td><span class="pill '+c.clase+'">'+esc(c.estado)+'</span></td>'+
@@ -3425,6 +3441,7 @@ function renderAjustes(){
   if(el("cfg_anticipacion_h")) el("cfg_anticipacion_h").value=(db.config&&db.config.anticipacion_h)||"";
   if(el("cfg_caduca_meses")) el("cfg_caduca_meses").value=(db.config&&db.config.caduca_meses)||"";
   if(el("cfg_campos_alumno")) el("cfg_campos_alumno").value=(db.config&&db.config.campos_alumno)||"";
+  if(el("cfg_saldo_modo")) el("cfg_saldo_modo").value=(db.config&&db.config.saldo_modo)||"";
   if(el("cfg_asistencia_auto")) el("cfg_asistencia_auto").value=(db.config&&db.config.asistencia_auto)||"";
   if(el("cfg_asistencia_horas")) el("cfg_asistencia_horas").value=(db.config&&db.config.asistencia_horas)||"";
   if(el("cfg_cursos")) el("cfg_cursos").value=(db.config&&db.config.cursos)||MARCA.cursos.join(", ");
@@ -6669,6 +6686,7 @@ el("btnGuardarAjustes").addEventListener("click",function(){
                textos propios de cada correo. Vacío en cualquiera = comportamiento de siempre. */
             caduca_meses:(el("cfg_caduca_meses")?el("cfg_caduca_meses").value.trim():""),
             campos_alumno:(el("cfg_campos_alumno")?el("cfg_campos_alumno").value:""),
+            saldo_modo:(el("cfg_saldo_modo")?el("cfg_saldo_modo").value:""),
             asistencia_auto:(el("cfg_asistencia_auto")?el("cfg_asistencia_auto").value:""),
             asistencia_horas:(el("cfg_asistencia_horas")?el("cfg_asistencia_horas").value.trim():""),
             mensajes: Object.keys(msgRows).length?JSON.stringify(msgRows):"",

@@ -715,6 +715,7 @@ function compute(alumno, regs, precios, reservasUsadas, pk){
     ilim: false,
     usadas,
     restantes: muerto ? 0 : Math.max(0, saldo),
+    reservadas: Math.max(0, Number(reservasUsadas) || 0),   // apartadas y aun sin dictar
     vencido, caducado: caduco,
     vence: (alumno && alumno.vence) || "",
     reprogPermitidas: pk.reprog,
@@ -852,6 +853,20 @@ function pkUnionPases(lista, paqMap){
   }
   return { clases: 999, reprog: algunReprog, ilim: false, tipos: algunoTodo ? [] : tipos, dias: 0, inicio: "compra" };
 }
+/* El saldo TAL COMO LO VE la academia y sus alumnos (12-ago-2026).
+   Con "asistencia" se le devuelven al número las clases apartadas que aún no se dictan, que es
+   lo que la gente venía viendo en Punchpass. NO toca el saldo real: `restantes` sigue siendo el
+   que manda para dejar o no reservar, así que nadie puede reservar más de lo que compró.
+   Devuelve el mismo objeto con `restantes` ya ajustado + `reservadas` para poder explicarlo. */
+function saldoMostrado(c, modo){
+  if (!c || c.ilim || String(modo || "") !== "asistencia") return c;
+  const res = Math.max(0, Number(c.reservadas) || 0);
+  /* el modo se marca SIEMPRE, aunque no tenga nada apartado: si no, el alumno sin reservas
+     viajaría con modo "reserva" y la próxima persona que lea este campo se confundiría */
+  const out = Object.assign({}, c, { restantes: (Number(c.restantes) || 0) + res, modo_saldo: "asistencia" });
+  if (Array.isArray(c.pases)) out.pases = c.pases.map(p => Object.assign({}, p));   // el desglose por pase se deja igual: ahí el reparto sí es real
+  return out;
+}
 /* PURO (12-ago-2026): arma los consumos del ciclo en orden cronológico, sin tocar la DB.
    Se extrajo de computeMulti para que el saldo del PANEL salga de este mismo código en vez de
    recalcularse en el navegador: ahí nació el desajuste de "24 en el panel y 22 en el portal".
@@ -872,11 +887,12 @@ function eventosConsumo(resv, regs, excluirReservaId){
   const excl = String(excluirReservaId || "");
   const ahora = Date.now();
   const pasadas = [];
+  let reservadas = 0;
   for (const r of (resv || [])){
     if (r.id === excl) continue;
     /* el tipo de CLASE manda; `tipo` (suelta/fija) queda de respaldo para reservas viejas */
     const etiqueta = r.curso || r.tipo || "";
-    if (Date.parse(r.inicio_utc) >= ahora){ eventos.push({ tipo: etiqueta, cuando: r.inicio_utc }); continue; }
+    if (Date.parse(r.inicio_utc) >= ahora){ eventos.push({ tipo: etiqueta, cuando: r.inicio_utc }); reservadas++; continue; }
     pasadas.push({ f: fechaLimaDe(r.inicio_utc), tipo: etiqueta, cuando: r.inicio_utc });
   }
   for (const r of pasadas){
@@ -890,7 +906,10 @@ function eventosConsumo(resv, regs, excluirReservaId){
     if (!emparejada) eventos.push({ tipo: r.tipo, cuando: r.cuando });
   }
   eventos.sort((a, b) => String(a.cuando) < String(b.cuando) ? -1 : 1);
-  return { eventos, reprogTotal };
+  /* `reservadas` = clases apartadas que TODAVIA no se dictaron. La contabilidad no cambia
+     (siguen consumiendo, y por eso nadie puede sobrevender), pero la academia que descuenta
+     "al asistir" las suma de vuelta SOLO para mostrar el saldo. Ver saldoMostrado(). */
+  return { eventos, reprogTotal, reservadas };
 }
 /* computeMulti: la versión de compute() para el alumno con varios pases. Junta los consumos
    REALES del ciclo (misma semántica que reservasUsadasCount + compute: reservas vivas con su
@@ -921,7 +940,7 @@ async function computeMulti(env, tid, alumno, paqMap, precios, excluirReservaId,
       "SELECT fecha, COALESCE(curso,'') AS curso, estado FROM registro WHERE tenant_id = ?1 AND alumno_id = ?2 AND COALESCE(ciclo,1) = ?3 ORDER BY fecha ASC, id ASC"
     ).bind(tid, alumno.id, ciclo).all()).results || [];
   }
-  const { eventos, reprogTotal } = eventosConsumo(resv || [], regs || [], excluirReservaId);
+  const { eventos, reprogTotal, reservadas } = eventosConsumo(resv || [], regs || [], excluirReservaId);
   const at = atribuirPases(lista, paqMap, eventos, reprogTotal);
   const vivos = at.pases.filter(e => !e.vencido);
   const finitos = vivos.filter(e => !e.ilim);
@@ -934,6 +953,7 @@ async function computeMulti(env, tid, alumno, paqMap, precios, excluirReservaId,
       restantes: e.restantes, vence: e.vence, vencido: e.vencido, tipos: e.tipos, pk: e.pk })),
     compradas, ilim: false, usadas: usadasTot,
     restantes,
+    reservadas,                                             // apartadas y aun sin dictar
     vencido: vivos.length === 0, caducado: false,
     vence: (alumno && alumno.vence) || "",
     reprogPermitidas: at.reprogPermitidas,
@@ -991,6 +1011,14 @@ async function loadConfig(env, tenantId){
                  campos_alumno    = que datos extra se piden en la ficha (apellido,email,nacimiento)
                  mensajes         = JSON con el asunto/cuerpo propios de cada correo automatico */
               caduca_meses: "", asistencia_auto: "", asistencia_horas: "", campos_alumno: "", mensajes: "",
+              /* saldo_modo (12-ago-2026, pedido de Andrés tras la migración de Elevate):
+                 ""/"reserva" = el saldo BAJA al reservar (como siempre en Batuta)
+                 "asistencia" = el saldo baja al ASISTIR (como Punchpass y compañía).
+                 ⚠️ Es SOLO cómo se MUESTRA. La contabilidad de abajo no cambia: la reserva
+                 sigue apartando el crédito, que es lo único que impide que alguien con 1 clase
+                 reserve 10. Con "asistencia" se le suman de vuelta las reservadas al número
+                 que ve la gente, y se le dice al lado cuántas tiene apartadas. */
+              saldo_modo: "",
               /* Reunión Elevate 7-ago-2026 — interruptores por academia (todos apagados por defecto):
                  interbank_*      = cuenta Interbank como método de pago por transferencia
                  mp_solo_tarjeta  = "1" -> Mercado Pago solo acepta tarjeta (Yape/Plin va directo al
@@ -9013,6 +9041,8 @@ export default {
             computed = pasesMe
               ? await computeMulti(env, tid, alumno, paqMap, precios)
               : compute(alumno, historial, precios, rUsadas, resolverPk(paqMap, alumno.paquete));
+            /* la academia que descuenta "al asistir" ve acá el mismo número que en su panel */
+            computed = saldoMostrado(computed, (config && config.saldo_modo) || "");
             horarioFijo = await horarioFijoDerivado(env, tid, alumno.id);
             proximasClases = (await env.DB.prepare(
               "SELECT id, inicio_utc, fin_utc, tipo, curso FROM reservas WHERE tenant_id = ?1 AND alumno_id = ?2 AND estado = 'reservada' AND inicio_utc >= ?3 ORDER BY inicio_utc ASC"
@@ -9117,6 +9147,9 @@ export default {
             curso: alumno.curso || "", paquete: alumno.paquete || "",
             horario: alumno.horario || "", horarioFijo: horarioFijo, pago: alumno.pago || "",
             compradas: computed.compradas, usadas: computed.usadas, restantes: computed.restantes,
+            /* con "el saldo baja al asistir", el portal necesita poder decir cuántas de esas
+               clases ya están apartadas; si no, el número se lee como disponible del todo */
+            reservadas: Number(computed.reservadas) || 0, modo_saldo: computed.modo_saldo || "",
             ilim: !!computed.ilim,
             /* varios pases activos (11-ago-2026): el portal pinta cada uno con su saldo */
             pases: computed.multi ? computed.pases.map(p => ({ n: p.n, compradas: p.compradas, ilim: p.ilim, usadas: p.usadas, restantes: p.restantes, vence: p.vence, vencido: p.vencido })) : undefined,
@@ -10406,8 +10439,15 @@ export default {
           if (!pkR.ilim && venceVencido(alumno.vence)){
             return json({ error: "Tu plan venció el " + alumno.vence + ". Renuévalo para seguir reservando." }, 409);
           }
-          const restantes = compute(alumno, regs || [], precios, rUsadas, pkR).restantes;
-          if (restantes < 1) return json({ error: "No te quedan clases en tu paquete. Renueva para reservar mas." }, 409);
+          const cR = compute(alumno, regs || [], precios, rUsadas, pkR);
+          if (cR.restantes < 1){
+            /* Con "el saldo baja al asistir" el alumno VE clases disponibles (las que tiene
+               apartadas todavía suman) y aquí se le dice que no. Sin explicar el porqué eso se
+               lee como un error del sistema. El saldo real no cambia: solo el mensaje. */
+            const apart = (String((await loadConfig(env, tid)).saldo_modo || "") === "asistencia") ? (Number(cR.reservadas) || 0) : 0;
+            if (apart > 0) return json({ error: "Ya tienes " + apart + " clase" + (apart === 1 ? "" : "s") + " reservada" + (apart === 1 ? "" : "s") + " y con eso usas todo tu paquete. Toma una o cancélala para poder reservar otra." }, 409);
+            return json({ error: "No te quedan clases en tu paquete. Renueva para reservar mas." }, 409);
+          }
         }
 
         const nowIso = new Date().toISOString();
@@ -11777,6 +11817,7 @@ export default {
                0 clases: los 1,447 de Elevate saldrían "Completado — renovar" en rojo. */
             const paqMapP = (await loadPaquetes(env, tid)).map;
             const preciosP = await loadPrecios(env, tid);
+            const modoSaldo = (await loadConfig(env, tid)).saldo_modo || "";
             for (const a of alumnos){
               const ciA = Number(a.ciclo) || 1;
               const rv = (resvPorAlumno.get(a.id) || []).filter(r => (Number(r.ciclo) || 1) === ciA);
@@ -11789,6 +11830,7 @@ export default {
                 const rUsA = reservasUsadasPuro(rv, rg.filter(g => g.estado !== "Reprogramó"));
                 a.saldo = compute(a, rg, preciosP, rUsA, resolverPk(paqMapP, a.paquete));
               }
+              a.saldo = saldoMostrado(a.saldo, modoSaldo);
             }
           } catch (e) { console.error("saldo panel", e && e.message); }   // el panel cae a su cálculo viejo
           const cuentasAll = (await env.DB.prepare(
