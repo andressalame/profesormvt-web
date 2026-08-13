@@ -1312,6 +1312,18 @@
       <button class="btn" id="btnBloquearSlot">Apartar este horario</button>
     </div>
 
+    <!-- Link de cupos para partners (12-ago-2026, caso Beholos de Elevate): el partner
+         reservaba a ciegas y el dueño vivía revisando a mano para avisarle si había espacio. -->
+    <div class="group">
+      <h2>Link de cupos para compartir</h2>
+      <p class="hint">Solo lectura, sin datos de tus alumnos. Sirve para <b>gimnasios o apps con los que trabajas</b> (o para quien te pregunte por WhatsApp): abren el link y ven <b>qué clases tienen espacio</b>, sin tener que preguntarte. Se actualiza solo.</p>
+      <div class="cfgrow"><span class="pk">Tu link</span><input id="linkCuposBox" type="text" readonly /></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <button class="btn" id="btnCopiarCupos">Copiar link</button>
+        <a class="btn ghost" id="btnVerCupos" target="_blank" rel="noopener">Verlo</a>
+      </div>
+    </div>
+
     <!-- "Vino y no había reservado" (12-ago-2026, pedido de José/Elevate). Va aparte del
          bloque de arriba a propósito: son dos intenciones distintas (guardar un cupo a futuro
          vs. registrar algo que YA pasó) y mezclarlas en un formulario con casillas confunde. -->
@@ -2688,6 +2700,10 @@ function pintarLinkAlumnos(){
   var linkPub = "https://" + TENANT_SLUG + ".batuta.lat";
   var boxPub = el("linkPublicaBox"); if(boxPub) boxPub.value = linkPub;
   var verPub = el("btnVerPublica"); if(verPub) verPub.href = linkPub;
+  /* link de cupos para partners (solo lectura) */
+  var linkCup = location.origin + "/app/d/" + TENANT_SLUG;
+  var boxCup = el("linkCuposBox"); if(boxCup) boxCup.value = linkCup;
+  var verCup = el("btnVerCupos"); if(verCup) verCup.href = linkCup;
   // Chips de link de cobro directo por paquete (pago sin registro previo)
   try{
     var cont=el("linksCobro");
@@ -2717,6 +2733,13 @@ if(_btnCopiarLinkAlumnos) _btnCopiarLinkAlumnos.addEventListener("click",functio
   var box=el("linkAlumnosBox"); if(!box || !box.value) return;
   if(navigator.clipboard && navigator.clipboard.writeText){
     navigator.clipboard.writeText(box.value).then(function(){ toast("Link copiado"); }).catch(function(){ box.select(); });
+  } else { box.select(); }
+});
+var _btnCopiarCupos = el("btnCopiarCupos");
+if(_btnCopiarCupos) _btnCopiarCupos.addEventListener("click",function(){
+  var box=el("linkCuposBox"); if(!box || !box.value) return;
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(box.value).then(function(){ toast("Link de cupos copiado"); }).catch(function(){ box.select(); });
   } else { box.select(); }
 });
 var _btnCopiarLinkPublica = el("btnCopiarLinkPublica");

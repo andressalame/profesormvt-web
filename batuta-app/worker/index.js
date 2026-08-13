@@ -6173,6 +6173,15 @@ export default {
     if (path.startsWith("/app/a/") && request.method === "GET"){
       return env.ASSETS ? assetConSeguridad(await env.ASSETS.fetch(new Request(new URL("/alumnos/index.html", url), request))) : json({ error: "No encontrado" }, 404);
     }
+    /* Disponibilidad pública, solo lectura (12-ago-2026, caso Beholos de Elevate).
+       Sus alumnos reservan desde la web del partner SIN poder ver si queda cupo, así que José
+       vive revisando a mano y metiendo "guests" para tapar el espacio. Este link se lo pasa al
+       partner y deja de ser el intermediario. NO expone nada nuevo: los mismos cupos y
+       ocupación que /app/api/agenda/slots-publicos ya daba para su página de reservas.
+       Cero nombres de alumnos, cero precios, cero datos de contacto. */
+    if (path.startsWith("/app/d/") && request.method === "GET"){
+      return env.ASSETS ? assetConSeguridad(await env.ASSETS.fetch(new Request(new URL("/disponibilidad/index.html", url), request))) : json({ error: "No encontrado" }, 404);
+    }
     /* ----- PWA: service workers + manifests ----- */
     if (path === "/app/sw-panel.js" && request.method === "GET"){
       return new Response(swFuente("/app/panel"), { headers: { "content-type": "application/javascript; charset=utf-8", "cache-control": "no-cache" } });
