@@ -1305,10 +1305,24 @@
       <p class="hint">Aparta un horario que ya está tomado (tu clase fija de hoy, o un bloqueo personal) para que nadie reserve encima. Si eliges un alumno y marcas "cada semana", le creas su horario fijo. Hora de Lima.</p>
       <div class="cfgrow"><span class="pk">Día y hora</span><input id="ag_dt" type="datetime-local" /></div>
       <div class="cfgrow hidden" id="ag_claseWrap"><span class="pk">Clase</span><select id="ag_clase"></select></div>
+      <div class="cfgrow"><span class="pk">Buscar alumno</span><input id="ag_alumno_q" type="search" placeholder="Escribe nombre, apellido o teléfono" autocomplete="off" /></div>
       <div class="cfgrow"><span class="pk">Alumno (opcional)</span><select id="ag_alumno"><option value="">— Solo bloquear (sin alumno) —</option></select></div>
       <div class="cfgrow"><span class="pk">Repetir</span><label style="display:flex;align-items:center;gap:8px;font-size:13px;"><input id="ag_fija" type="checkbox" style="flex:0 0 auto;min-width:0;width:auto;" /> Cada semana (horario fijo)</label></div>
       <div class="cfgrow"><span class="pk">Nota (opcional)</span><input id="ag_nota" type="text" placeholder="Ej: clase fija de Juan" /></div>
       <button class="btn" id="btnBloquearSlot">Apartar este horario</button>
+    </div>
+
+    <!-- "Vino y no había reservado" (12-ago-2026, pedido de José/Elevate). Va aparte del
+         bloque de arriba a propósito: son dos intenciones distintas (guardar un cupo a futuro
+         vs. registrar algo que YA pasó) y mezclarlas en un formulario con casillas confunde. -->
+    <div class="group">
+      <h2>Vino a clase y no había reservado</h2>
+      <p class="hint">Para el que se apareció sin reservar. Le cuenta la clase que <b>ya pasó</b> y le descuenta del paquete que corresponda. Hora de Lima.</p>
+      <div class="cfgrow"><span class="pk">Día y hora</span><input id="vn_dt" type="datetime-local" /></div>
+      <div class="cfgrow hidden" id="vn_claseWrap"><span class="pk">Clase</span><select id="vn_clase"></select></div>
+      <div class="cfgrow"><span class="pk">Buscar alumno</span><input id="vn_alumno_q" type="search" placeholder="Escribe nombre, apellido o teléfono" autocomplete="off" /></div>
+      <div class="cfgrow"><span class="pk">Alumno</span><select id="vn_alumno"><option value="">— Elige quién vino —</option></select></div>
+      <button class="btn" id="btnVinoSinReserva">Contarle la clase</button>
     </div>
 
     <div class="group">
@@ -4181,12 +4195,14 @@ function renderAgendaAdmin(){
     '<p class="hint" style="margin-top:8px;">Clic en una hora apagada la <b>prende</b>. Clic en una prendida abre su <b>tipo de clase, aforo y profesor</b> (Máquinas 3, Mat 8…), y puedes aplicarlo a todo el día o a toda la semana de un golpe. Los tipos de clase se crean en <b>Ajustes → Clases y planes</b>'+(salasTabs.length?'; las salas también.':'. ¿Dictas dos clases a la misma hora en espacios distintos? Crea tus salas en <b>Ajustes → Clases y planes</b>.')+'</p>';
   try{ pintarSemanaBanner(); pintarBarraSinGuardar(); }catch(e){}
 
-  var sel = el("ag_alumno"), actual = sel.value;
-  sel.innerHTML = '<option value="">— Solo bloquear (sin alumno) —</option>'+
-    (db.alumnos||[]).slice().sort(function(a,b){return (a.nombre||"").localeCompare(b.nombre||"");})
-      .map(function(a){return '<option value="'+esc(a.id)+'">'+esc(a.nombre)+'</option>';}).join("");
-  sel.value = actual;
+  /* Los dos selectores de alumno (12-ago-2026, pedido de José con 1,447 alumnos en la lista:
+     «no me aparecen los apellidos jeje tambien seria bueno que en vez de una lista sea un
+     buscador para tipear el nombre»). Se pinta NOMBRE + APELLIDO y hay caja de búsqueda.
+     El value sigue siendo el id, nunca el nombre: Elevate tiene 19 nombres repetidos. */
+  pintarSelAlumno("ag_alumno", "— Solo bloquear (sin alumno) —");
   refrescarClaseSelect();
+  pintarSelAlumno("vn_alumno", "— Elige quién vino —");
+  refrescarClaseSelectVino();
 
   /* Con salas, la tabla dice a QUÉ clase cayó cada reserva (sin esto el admin siembra a ciegas). */
   var conSalas = salasGrilla().length>0;
@@ -4884,6 +4900,49 @@ function dowHoraDeInput(v){
      (mediodía UTC esquiva cualquier corrimiento). Convención 0=Dom, igual que limaParts. */
   return { dow: new Date(Date.UTC(+m[1], +m[2]-1, +m[3], 12)).getUTCDay(), hora: m[4]+":"+m[5] };
 }
+/* ---------- Selector de alumno con buscador (12-ago-2026, pedido de José) ----------
+   Una lista de 1,447 nombres sin apellido no se puede usar. Se pinta "Nombre Apellido" y la
+   caja de al lado filtra al tipear por nombre, apellido, correo o teléfono, ignorando tildes
+   y mayúsculas. El value de cada opción sigue siendo el ID: en Elevate hay 19 nombres
+   repetidos entre 39 personas, así que casar por nombre elegiría a la persona equivocada. */
+function vnNorm(s){ return String(s==null?"":s).toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,""); }
+function alumnoEtiqueta(a){ return ((a.nombre||"")+" "+(a.apellido||"")).trim() || "(sin nombre)"; }
+function pintarSelAlumno(selId, placeholder){
+  var sel=el(selId); if(!sel) return;
+  var q=vnNorm((el(selId+"_q")&&el(selId+"_q").value)||"").trim();
+  var lista=(db.alumnos||[]).slice().sort(function(a,b){
+    return alumnoEtiqueta(a).localeCompare(alumnoEtiqueta(b));
+  });
+  if(q){
+    lista=lista.filter(function(a){
+      return vnNorm(alumnoEtiqueta(a)+" "+(a.email||"")+" "+(a.whatsapp||"")).indexOf(q)!==-1;
+    });
+  }
+  var actual=sel.value;
+  var ph=placeholder+(q?(" · "+lista.length+" de "+(db.alumnos||[]).length):"");
+  sel.innerHTML='<option value="">'+esc(ph)+'</option>'+lista.map(function(a){
+    return '<option value="'+esc(a.id)+'">'+esc(alumnoEtiqueta(a))+'</option>';
+  }).join("");
+  /* si el elegido sigue en la lista filtrada, se respeta; si el filtro lo escondió, se limpia
+     para que nadie registre a una persona que ya no ve en pantalla */
+  sel.value=actual;
+  if(sel.value!==actual) sel.value="";
+}
+/* Mismo selector de clase, para el bloque "vino y no había reservado". Se separa en vez de
+   parametrizar refrescarClaseSelect para no tocar el camino que ya funciona. */
+function refrescarClaseSelectVino(){
+  var wrap=el("vn_claseWrap"); if(!wrap) return;
+  var p=dowHoraDeInput(el("vn_dt").value);
+  var franjas=p ? (AG_DISP||[]).filter(function(r){
+    return r.activo!==0 && Number(r.dia_semana)===p.dow && r.hora===p.hora;
+  }) : [];
+  if(franjas.length<2){ wrap.classList.add("hidden"); el("vn_clase").innerHTML=""; return; }
+  el("vn_clase").innerHTML=franjas.map(function(f){
+    var lbl=(String(f.sala||"")||"Sin sala")+(f.curso?(" · "+f.curso):"");
+    return '<option value="'+esc(String(f.sala||""))+'">'+esc(lbl)+'</option>';
+  }).join("");
+  wrap.classList.remove("hidden");
+}
 function refrescarClaseSelect(){
   var wrap=el("ag_claseWrap"); if(!wrap) return;
   var p=dowHoraDeInput(el("ag_dt").value);
@@ -4917,6 +4976,32 @@ el("btnBloquearSlot").addEventListener("click",function(){
     el("ag_nota").value="";
     cargarAgenda();
   }).catch(function(e){ toast(e.message||"No se pudo"); });
+});
+
+if(el("vn_dt")){
+  el("vn_dt").addEventListener("change",refrescarClaseSelectVino);
+  el("vn_dt").addEventListener("input",refrescarClaseSelectVino);
+}
+if(el("ag_alumno_q")) el("ag_alumno_q").addEventListener("input",function(){ pintarSelAlumno("ag_alumno","— Solo bloquear (sin alumno) —"); });
+if(el("vn_alumno_q")) el("vn_alumno_q").addEventListener("input",function(){ pintarSelAlumno("vn_alumno","— Elige quién vino —"); });
+if(el("btnVinoSinReserva")) el("btnVinoSinReserva").addEventListener("click",function(){
+  var btn=this;
+  var iso = limaInputToUtc(el("vn_dt").value);
+  if(!iso){ toast("Elige el día y la hora de la clase"); return; }
+  if(!el("vn_alumno").value){ toast("Elige quién vino"); return; }
+  var claseVisible = el("vn_claseWrap") && !el("vn_claseWrap").classList.contains("hidden");
+  btn.disabled=true;   // doble clic = doble clase descontada
+  apiPost("/app/api/admin/agenda/vino",{
+    inicio_utc: iso,
+    alumno_id: el("vn_alumno").value,
+    sala: claseVisible ? el("vn_clase").value : undefined
+  }).then(function(r){
+    toast(r.mensaje||"Listo");
+    el("vn_alumno").value=""; el("vn_dt").value="";
+    refrescarClaseSelectVino();
+    cargarAgenda();
+  }).catch(function(e){ toast(e.message||"No se pudo"); })
+    .then(function(){ btn.disabled=false; });
 });
 
 /* ---------- Menú lateral: drawer en móvil, colapsar en desktop ---------- */

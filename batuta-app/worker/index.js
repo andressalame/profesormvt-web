@@ -11588,6 +11588,92 @@ export default {
           return json({ ok: true });
         }
 
+        /* "Vino y no había reservado" (12-ago-2026, pedido textual de José/Elevate):
+           «imagínate que alguien no vio el correo y no pudo reservar por el otro lado y igual
+           se aparece mañana, cómo hago para marcarle la asistencia a esa clase que ya pasó?»
+           El hueco real: /agenda/marcar necesita una reserva que marcar, y quien nunca reservó
+           NO tiene fila. Acá se crea la reserva ya en 'completada' + su fila de registro, que
+           es la que de verdad descuenta (compute/computeMulti cuentan "Asistió" del registro).
+           El multi-pase NO se toca a mano: atribuirPases cobra sola al pase que cubre ese curso.
+           Diferencia clave con /agenda/bloquear: NO valida aforo. La clase ya pasó y la persona
+           estuvo ahí fisicamente; negarlo por cupo seria discutirle a la realidad. */
+        if (path === "/app/api/admin/agenda/vino" && request.method === "POST"){
+          const b = await request.json().catch(() => ({}));
+          const alumnoId = String(b.alumno_id || "");
+          const t0 = Date.parse(String(b.inicio_utc || ""));
+          if (!alumnoId) return json({ error: "Elige al alumno que vino." }, 400);
+          if (!Number.isFinite(t0)) return json({ error: "Elige el día y la hora de la clase." }, 400);
+          /* solo hacia atrás (5 min de gracia para la clase que está terminando ahora) */
+          if (t0 > Date.now() + 5 * 60000) return json({ error: "Esa clase todavía no pasa. Para guardarle el cupo usa 'Bloquear o sembrar una clase'." }, 400);
+          const al = await env.DB.prepare("SELECT id, nombre, curso, ciclo, profesor_id FROM alumnos WHERE id = ?1 AND tenant_id = ?2").bind(alumnoId, tid).first();
+          if (!al) return json({ error: "Alumno no encontrado" }, 404);
+          if (!esDueno && al.profesor_id !== profeActorId) return json({ error: "Ese alumno no está asignado a ti." }, 403);
+
+          const isoT = new Date(t0).toISOString();
+          /* ¿ya tiene algo esa hora? entonces no es este caso: se marca con los botones normales */
+          const yaTiene = await env.DB.prepare(
+            "SELECT id, estado FROM reservas WHERE tenant_id = ?1 AND alumno_id = ?2 AND inicio_utc = ?3 AND estado != 'cancelada'"
+          ).bind(tid, alumnoId, isoT).first();
+          if (yaTiene) return json({ error: "Ese alumno ya figura en esa clase (" + yaTiene.estado + "). Márcala desde la lista de clases." }, 409);
+
+          const profAl = await profeDeAlumno(env, tid, al);
+          const target = { id: profAl.id, esDueno: profAl.esDueno };
+          /* La franja puede YA NO EXISTIR (la clase pasó y el horario cambió): eso no bloquea,
+             solo significa que el curso sale de la ficha del alumno. Ambiguo sí se pregunta:
+             con 2 salas a la misma hora, adivinar el curso descuenta del pase equivocado. */
+          let curso = al.curso || "", sala = "";
+          const salaPedida = String(b.sala || "").trim().slice(0, 40);
+          const { franja, ambigua } = await resolverFranja(env, tid, isoT, target, salaPedida);
+          if (ambigua) return json({ error: "A esa hora había más de una clase. Elige en 'Clase' a cuál vino." }, 400);
+          if (franja){ sala = franja.sala || ""; if (franja.curso) curso = franja.curso; }
+
+          const ciclo = Number(al.ciclo) || 1;
+          const fechaL = fechaLimaDe(isoT);
+          const nowIso = new Date().toISOString();
+          const stmts = [env.DB.prepare(
+            "INSERT INTO reservas (id,tenant_id,alumno_id,inicio_utc,fin_utc,tipo,serie_id,estado,curso,nota,ciclo,creada,profesor_id,sala) VALUES (?1,?2,?3,?4,?5,'suelta','','completada',?6,?7,?8,?9,?10,?11)"
+          ).bind(crypto.randomUUID(), tid, alumnoId, isoT, new Date(t0 + CLASE_MIN * 60000).toISOString(),
+                 curso, "Vino sin reservar (registrado a mano)", ciclo, nowIso, target.id || null, sala)];
+          /* misma guarda idempotente que /agenda/marcar: una clase dictada por alumno+día+ciclo */
+          const yaReg = await env.DB.prepare(
+            "SELECT 1 FROM registro WHERE tenant_id = ?1 AND alumno_id = ?2 AND COALESCE(ciclo,1) = ?3 AND fecha = ?4 AND estado != 'Reprogramó' LIMIT 1"
+          ).bind(tid, alumnoId, ciclo, fechaL).first();
+          if (!yaReg){
+            stmts.push(env.DB.prepare(
+              "INSERT INTO registro (id,tenant_id,fecha,alumno_id,curso,estado,trabajo,tarea,ciclo,tarea_audio,plan) VALUES (?1,?2,?3,?4,?5,'Asistió','','',?6,'','')"
+            ).bind(crypto.randomUUID(), tid, fechaL, alumnoId, curso, ciclo));
+          }
+          await env.DB.batch(stmts);
+          /* devolver el saldo YA recalculado: el dueño ve el efecto sin recargar ni dudar */
+          let saldoTx = "";
+          try {
+            const paqMap = await loadPaquetes(env, tid);
+            const precios = await loadPrecios(env, tid);
+            const alF = await env.DB.prepare("SELECT * FROM alumnos WHERE id = ?1 AND tenant_id = ?2").bind(alumnoId, tid).first();
+            let cm;
+            /* ojo: pasesDe() devuelve NULL (no []) cuando el alumno no tiene multi-pase,
+               que es el caso de la mayoría. Sin el `|| []` esto revienta siempre. */
+            if ((pasesDe(alF) || []).length > 1){
+              cm = await computeMulti(env, tid, alF, paqMap, precios);
+            } else {
+              const { results: regsF } = await env.DB.prepare(
+                "SELECT estado FROM registro WHERE tenant_id = ?1 AND alumno_id = ?2 AND COALESCE(ciclo,1) = ?3"
+              ).bind(tid, alumnoId, ciclo).all();
+              const rUs = await reservasUsadasCount(env, tid, alumnoId, ciclo);
+              cm = compute(alF, regsF || [], precios, rUs, resolverPk(paqMap, alF.paquete));
+            }
+            /* ilimitado (o multi con un pase ilimitado) devuelve 9999: ahí no se canta saldo */
+            const rest = cm && cm.restantes;
+            if (cm && !cm.ilim && Number.isFinite(rest) && rest < 9999) saldoTx = " Le quedan " + rest + ".";
+          } catch (e) { saldoTx = ""; console.error("vino/saldo", e && e.message); }
+          /* si ya tenía clase contada ese día, la guarda idempotente NO insertó otra. Decirlo:
+             si no, el dueño ve "listo" con el saldo igual y cree que el sistema falló. */
+          const base = yaReg
+            ? ("Ya tenía una clase contada ese día, así que no se le descontó otra.")
+            : ("Listo, se le contó la clase." + saldoTx);
+          return json({ ok: true, alumno: al.nombre || "", curso, sala, yaTenia: !!yaReg, mensaje: base });
+        }
+
         if (path === "/app/api/admin/push/suscribir" && request.method === "POST"){
           if (!env.VAPID_PUBLIC_KEY) return json({ error: "No disponible en el trial." }, 501);
           const b = await request.json().catch(() => ({}));
