@@ -12002,10 +12002,47 @@ export default {
 
         if (path === "/app/api/admin/data" && request.method === "GET"){
           /* Profesor: SOLO sus filas (alumnos/registro/cuentas/compras/grupos suyos).
-             Dueno: toda la academia; el filtro por profe del panel es client-side. */
-          const alumnos  = (await env.DB.prepare(
-            "SELECT * FROM alumnos WHERE tenant_id = ?1 AND (?2 = 1 OR profesor_id = ?3) ORDER BY nombre"
-          ).bind(tid, esDueno ? 1 : 0, profeActorId || "").all()).results || [];
+             Dueno: toda la academia; el filtro por profe del panel es client-side.
+
+             🐛 14-ago-2026 — la segunda mitad del bug de José. La agenda ya contempla los DOS
+             MODELOS (ver `memoria: batuta-dos-modelos-academia`), pero "Mis alumnos" seguía
+             saliendo solo por `alumnos.profesor_id`. En un estudio grupal como Elevate los
+             1,447 alumnos cuelgan del dueño, así que David, Sheila y Fiorella veían sus clases
+             llenas de gente y su lista de alumnos VACÍA — que se lee como que el sistema perdió
+             los datos. Ahora el profesor ve, además de los suyos, a quien tiene reserva en una
+             franja que él dicta: exactamente el mismo criterio que la agenda, para que las dos
+             pantallas no se contradigan.
+             El 1 a 1 (MVT) no se toca: ahí `disponibilidad.profe` está vacío, `mias` queda en
+             cero y el resultado es idéntico al de siempre. */
+          const todosAl = (await env.DB.prepare(
+            "SELECT * FROM alumnos WHERE tenant_id = ?1 ORDER BY nombre"
+          ).bind(tid).all()).results || [];
+          let alumnos = todosAl;
+          if (!esDueno){
+            const miasAl = new Set();
+            try {
+              const frAl = (await env.DB.prepare(
+                "SELECT dia_semana, hora, COALESCE(sala,'') AS sala FROM disponibilidad " +
+                "WHERE tenant_id = ?1 AND activo = 1 AND COALESCE(profe,'') = ?2"
+              ).bind(tid, profeActorId || "").all()).results || [];
+              for (const f of frAl) miasAl.add(f.dia_semana + "|" + f.hora + "|" + (f.sala || ""));
+            } catch (e) { /* base sin la columna `profe`: se queda con el filtro de siempre */ }
+            const deSusFranjas = new Set();
+            if (miasAl.size){
+              const rrAl = (await env.DB.prepare(
+                "SELECT DISTINCT alumno_id, inicio_utc, COALESCE(sala,'') AS sala FROM reservas " +
+                "WHERE tenant_id = ?1 AND alumno_id IS NOT NULL AND estado IN ('reservada','completada','falta')"
+              ).bind(tid).all()).results || [];
+              for (const r of rrAl){
+                const pAl = limaParts(new Date(Date.parse(r.inicio_utc)));
+                const hAl = hhmm(pAl);
+                /* la sala se compara solo si la franja la especifica: una franja sin sala cubre
+                   la hora entera, igual que antes de multi-sala */
+                if (miasAl.has(pAl.dow + "|" + hAl + "|" + (r.sala || "")) || miasAl.has(pAl.dow + "|" + hAl + "|")) deSusFranjas.add(r.alumno_id);
+              }
+            }
+            alumnos = todosAl.filter(a => a.profesor_id === profeActorId || deSusFranjas.has(a.id));
+          }
           const idsScope = new Set(alumnos.map(a => a.id));
           const { results: fijasRows } = await env.DB.prepare(
             "SELECT alumno_id, serie_id, id, inicio_utc FROM reservas " +
