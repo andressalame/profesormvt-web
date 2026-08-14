@@ -2092,10 +2092,44 @@ async function confirmarCompra(env, tenantId, tenant, compra){
         "UPDATE alumnos SET paquete = ?1, curso = ?2, pago = 'Pagado', fecha = ?3, ciclo = ?4, vence = ?5, aviso_vence_ciclo = 0, caducado = 0, activado = '' WHERE id = ?6 AND tenant_id = ?7"
       ).bind(compra.paquete, compra.curso || al.curso, hoyLima(), cicloNuevo, vence, al.id, tenantId));
       /* Migrar las reservas FUTURAS al ciclo nuevo: si no, el credito de esas clases queda
-         huerfano en el ciclo viejo y la clase se carga mal al paquete nuevo (bug MVT 21-jul). */
-      stmts.push(env.DB.prepare(
-        "UPDATE reservas SET ciclo = ?1 WHERE tenant_id = ?2 AND alumno_id = ?3 AND estado = 'reservada' AND inicio_utc >= ?4"
-      ).bind(cicloNuevo, tenantId, al.id, new Date().toISOString()));
+         huerfano en el ciclo viejo y la clase se carga mal al paquete nuevo (bug MVT 21-jul).
+
+         🐛 14-ago-2026 (José/Elevate, caso Daniela Guerra-García): se migraban TODAS, y eso
+         cobra dos veces las que el paquete ANTERIOR ya había pagado. Ella entró con 6 de 8
+         usadas del sistema viejo, reservó las 2 que le quedaban (ciclo viejo: 8 de 8, cerrado),
+         compró otro paquete de 8 y esas 2 reservas se mudaron y le dejaron 6 en vez de 8.
+         Pagó 16 clases y podía tomar 14.
+
+         Ahora se migran SOLO las que el paquete viejo NO alcanzaba a cubrir. Las que ya estaban
+         pagadas se quedan en su ciclo, que es donde se pagaron. El motivo original se respeta
+         igual: ninguna reserva queda sin paquete que la sostenga. */
+      let migrarIds = null;
+      try {
+        const paqMapR = (await loadPaquetes(env, tenantId)).map;
+        const pkAnt = resolverPk(paqMapR, al.paquete);
+        const cicloAnt = Number(al.ciclo) || 1;
+        const { results: regsAnt } = await env.DB.prepare(
+          "SELECT estado FROM registro WHERE tenant_id = ?1 AND alumno_id = ?2 AND COALESCE(ciclo,1) = ?3"
+        ).bind(tenantId, al.id, cicloAnt).all();
+        /* reservasUsadas = 0 a propósito: acá quiero SOLO lo que consumió la bitácora, para
+           saber cuánto del paquete viejo quedaba libre para sostener reservas futuras. */
+        const cAnt = compute(al, regsAnt || [], {}, 0, pkAnt);
+        const cubiertas = cAnt.ilim ? 1e9 : Math.max(0, (Number(cAnt.compradas) || 0) - (Number(cAnt.usadas) || 0));
+        const { results: futuras } = await env.DB.prepare(
+          "SELECT id FROM reservas WHERE tenant_id = ?1 AND alumno_id = ?2 AND estado = 'reservada' AND inicio_utc >= ?3 ORDER BY inicio_utc ASC"
+        ).bind(tenantId, al.id, new Date().toISOString()).all();
+        /* las primeras `cubiertas` (las más próximas) ya están pagadas por el paquete viejo */
+        migrarIds = (futuras || []).slice(cubiertas).map(r => r.id);
+      } catch (e) { migrarIds = null; }   // si algo falla, se cae al comportamiento de siempre
+      if (migrarIds){
+        for (const rid of migrarIds){
+          stmts.push(env.DB.prepare("UPDATE reservas SET ciclo = ?1 WHERE id = ?2 AND tenant_id = ?3").bind(cicloNuevo, rid, tenantId));
+        }
+      } else {
+        stmts.push(env.DB.prepare(
+          "UPDATE reservas SET ciclo = ?1 WHERE tenant_id = ?2 AND alumno_id = ?3 AND estado = 'reservada' AND inicio_utc >= ?4"
+        ).bind(cicloNuevo, tenantId, al.id, new Date().toISOString()));
+      }
       renovado = true;
     }
   }
@@ -11609,12 +11643,49 @@ export default {
 
         if (path === "/app/api/admin/agenda" && request.method === "GET"){
           const desde = new Date(Date.now() - 7 * 86400000).toISOString();
-          // Profesor: solo SU agenda. Dueno: toda la academia (profesor_id viaja para pintar/filtrar).
-          const rows = (await env.DB.prepare(
-            "SELECT r.id, r.alumno_id, r.profesor_id, r.inicio_utc, r.fin_utc, r.tipo, r.serie_id, r.estado, r.curso, r.nota, COALESCE(r.sala,'') AS sala, a.nombre AS alumno_nombre " +
+          /* 🐛 14-ago-2026 (José/Elevate): "mis profesores no ven sus clases, no les aparece nada".
+             No era permisos: son DOS MODELOS de academia y el filtro solo contemplaba uno.
+               · 1 a 1 (MVT, de donde nació esto): el profesor "posee" al alumno, y la reserva
+                 hereda el profesor DEL ALUMNO. Filtrar por `reservas.profesor_id` funciona.
+               · Estudio grupal (Elevate): el profesor pertenece a la CLASE, no al alumno. Una
+                 alumna hace Barré con Fiorella y Fuerza con David. Ahí la reserva sigue heredando
+                 el profe del alumno, y como los 1,447 alumnos cuelgan del dueño, TODAS las
+                 reservas salían suyas y los demás veían la agenda vacía.
+             La columna que ya resuelve esto existe desde el 03-ago: `disponibilidad.profe`
+             ("la dicta"), y José la tenía bien llena (Sheila 15 franjas, David 15, Fiorella 5).
+             Solo que nadie la leía. Ahora el profesor ve las reservas que caen en las franjas
+             QUE ÉL DICTA, además de las que llevan su id. El 1 a 1 no se toca: ahí sigue
+             mandando `profesor_id` y estas franjas no existen. */
+          const todas = (await env.DB.prepare(
+            /* 🐛 14-ago-2026 (José): en la agenda salía solo el nombre. Con 1,447 alumnos hay
+               nombres repetidos de sobra (19 entre 39 personas en su primera migración), así que
+               el profesor no sabía a quién estaba marcando. Va nombre + apellido, y el TRIM deja
+               igual a los que no tienen apellido cargado. */
+            "SELECT r.id, r.alumno_id, r.profesor_id, r.inicio_utc, r.fin_utc, r.tipo, r.serie_id, r.estado, r.curso, r.nota, COALESCE(r.sala,'') AS sala, " +
+            "TRIM(COALESCE(a.nombre,'') || ' ' || COALESCE(a.apellido,'')) AS alumno_nombre " +
             "FROM reservas r LEFT JOIN alumnos a ON a.id = r.alumno_id AND a.tenant_id = r.tenant_id " +
-            "WHERE r.tenant_id = ?1 AND r.inicio_utc >= ?2 AND (?3 = 1 OR r.profesor_id = ?4) ORDER BY r.inicio_utc ASC"
-          ).bind(tid, desde, esDueno ? 1 : 0, profeActorId || "").all()).results || [];
+            "WHERE r.tenant_id = ?1 AND r.inicio_utc >= ?2 ORDER BY r.inicio_utc ASC"
+          ).bind(tid, desde).all()).results || [];
+          let rows = todas;
+          if (!esDueno){
+            const mias = new Set();
+            try {
+              const fr = (await env.DB.prepare(
+                "SELECT dia_semana, hora, COALESCE(sala,'') AS sala FROM disponibilidad " +
+                "WHERE tenant_id = ?1 AND activo = 1 AND COALESCE(profe,'') = ?2"
+              ).bind(tid, profeActorId || "").all()).results || [];
+              for (const f of fr) mias.add(f.dia_semana + "|" + f.hora + "|" + (f.sala || ""));
+            } catch (e) { /* base sin la columna `profe`: se queda solo con el filtro de siempre */ }
+            rows = todas.filter(r => {
+              if (r.profesor_id === profeActorId) return true;
+              if (!mias.size) return false;
+              const p = limaParts(new Date(Date.parse(r.inicio_utc)));
+              const hhmm = String(p.h).padStart(2, "0") + ":" + String(p.min).padStart(2, "0");
+              /* la sala se compara solo si la franja la especifica: una franja sin sala
+                 cubre la hora entera, que es como se comportaba antes de multi-sala */
+              return mias.has(p.dow + "|" + hhmm + "|" + (r.sala || "")) || mias.has(p.dow + "|" + hhmm + "|");
+            });
+          }
           return json({ reservas: rows });
         }
 
