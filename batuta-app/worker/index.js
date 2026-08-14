@@ -5578,10 +5578,50 @@ async function resetDemo(env){
   stmts.push(env.DB.prepare("INSERT INTO sedes (id,tenant_id,nombre,direccion,creado) VALUES (?1,?2,'Sede Miraflores','Av. Larco 345, Miraflores',?3)").bind(SD_MIRA, tid, ahoraIso));
   stmts.push(env.DB.prepare("INSERT INTO sedes (id,tenant_id,nombre,direccion,creado) VALUES (?1,?2,'Sede San Borja','Av. San Luis 2201, San Borja',?3)").bind(SD_BORJA, tid, ahoraIso));
   // precios + config
-  for (const k of Object.keys(PRECIOS_DEFAULT)){
-    stmts.push(env.DB.prepare("INSERT INTO precios (tenant_id, paquete, precio) VALUES (?1,?2,?3)").bind(tid, k, PRECIOS_DEFAULT[k]));
+  /* los 2 planes nuevos de la demo llevan precio propio: un plan sin precio se ve gratis */
+  const preciosDemo = Object.assign({}, PRECIOS_DEFAULT, { "8 clases de Coro": 320, "1 mes ilimitado": 890 });
+  for (const k of Object.keys(preciosDemo)){
+    stmts.push(env.DB.prepare("INSERT INTO precios (tenant_id, paquete, precio) VALUES (?1,?2,?3)").bind(tid, k, preciosDemo[k]));
   }
-  const cfg = { profe_nombre: "Profe Emilia", cursos: "Canto, Piano, Guitarra", pago_numero: "987 654 321", pago_titular: "Emilia Vargas", whatsapp_profe: "51999888777" };
+  /* ---- Configuración moderna de la demo (14-ago-2026) ----
+     Hasta hoy la demo guardaba SOLO 5 claves (nombre, cursos, pago, whatsapp): sin `clases`,
+     sin `salas` y sin `paquetes`. Resultado: caía a los paquetes de música por defecto y NADA
+     de lo construido entre julio y agosto se veía. Un prospecto abría la demo y juzgaba un
+     producto de hace tres meses. Andrés, 14-ago: "esa demo está desactualizada asf".
+
+     ⚠️ Los 3 paquetes de siempre (Paquete 4/8/12) van SÍ O SÍ en esta lista: definir
+     `paquetes` REEMPLAZA a los del sistema, y sin ellos los 5 alumnos sembrados se quedarían
+     sin plan y con saldo 0. Es exactamente el bug que reportó José el 13-ago. */
+  const clasesDemo = [
+    { n: "Canto",     a: 1,  v: [], ah: -1, am: 30, ch: 12 },
+    { n: "Piano",     a: 1,  v: [], ah: -1, am: 30, ch: 12 },
+    { n: "Guitarra",  a: 1,  v: [], ah: -1, am: 30, ch: 12 },
+    /* las dos grupales son las que enseñan el aforo y las variantes, que es lo que viene a
+       mirar una academia con clases de grupo (pilates, baile, idiomas) */
+    { n: "Coro",              a: 12, v: [],                                  ah: -1, am: 30, ch: 12 },
+    { n: "Taller de banda",   a: 6,  v: ["Nivel inicial", "Nivel intermedio"], ah: -1, am: 30, ch: 12 }
+  ];
+  const paquetesDemo = [
+    { n: "Paquete 4",  c: 4,  r: 2, u: false, t: [], d: 0, i: "compra" },
+    { n: "Paquete 8",  c: 8,  r: 3, u: false, t: [], d: 0, i: "compra" },
+    { n: "Paquete 12", c: 12, r: 4, u: false, t: [], d: 0, i: "compra" },
+    /* plan atado a UN tipo: así se ve que un pase de Coro no sirve para Piano */
+    { n: "8 clases de Coro", c: 8, r: 2, u: false, t: ["Coro"], d: 60, i: "clase" },
+    /* mensualidad ilimitada: vence por fecha, no por saldo */
+    { n: "1 mes ilimitado",  c: 0, r: 0, u: true,  t: [], d: 30, i: "compra" }
+  ];
+  const cfg = {
+    profe_nombre: "Profe Emilia", cursos: "Canto, Piano, Guitarra",
+    pago_numero: "987 654 321", pago_titular: "Emilia Vargas", whatsapp_profe: "51999888777",
+    clases: JSON.stringify(clasesDemo),
+    paquetes: JSON.stringify(paquetesDemo),
+    /* dos salas = dos clases a la misma hora, que es lo que pidió Elevate en agosto */
+    salas: "Sala A, Sala B",
+    /* el interruptor nuevo, visible en Ajustes aunque vaya en su valor de siempre */
+    saldo_modo: "",
+    beneficios: "10% en la tienda de instrumentos de la esquina (muestra tu carné)",
+    agenda_cupo: "1"
+  };
   for (const k of Object.keys(cfg)){
     stmts.push(env.DB.prepare("INSERT INTO config (tenant_id, clave, valor) VALUES (?1,?2,?3)").bind(tid, k, cfg[k]));
   }
@@ -5593,13 +5633,24 @@ async function resetDemo(env){
     ["demo-al-2", "A002", "Natalia Rojas",  "51912345678", "Piano",    "Paquete 4",  f(90),  "Pagado",    "Lun 19:00", "Independencia de manos en progreso", 5, PF_PIANO, SD_MIRA],
     ["demo-al-3", "A003", "Yaritza Campos", "51998877665", "Canto",    "Paquete 12", f(45),  "Pagado",    "Sáb 10:00", "Belting seguro, va muy bien", 2, DUENO, SD_MIRA],
     ["demo-al-4", "A004", "Diego Salas",    "51955443322", "Guitarra", "Paquete 8",  f(50),  "Pagado",    "Mar 17:00", "Cambios de acorde lentos aún", 1, PF_GUITARRA, SD_BORJA],
-    ["demo-al-5", "A005", "Laura Pacheco",  "51966554433", "Piano",    "Paquete 4",  f(120), "Pendiente", "Mié 18:00", "Hablar renovación esta semana", 4, PF_PIANO, SD_MIRA]
+    ["demo-al-5", "A005", "Laura Pacheco",  "51966554433", "Piano",    "Paquete 4",  f(120), "Pendiente", "Mié 18:00", "Hablar renovación esta semana", 4, PF_PIANO, SD_MIRA],
+    /* Multi-pase (14-ago-2026): dos pases vivos a la vez, cada uno con SU saldo y SU tipo.
+       Es la función más nueva del producto y no se veía en ninguna parte de la demo. La
+       historia que cuenta sola: 5 de Coro + 3 del general NO son 8 clases sueltas. */
+    ["demo-al-6", "A006", "Marcela Ríos",   "51944332211", "Canto",    "8 clases de Coro", f(20), "Pagado", "Vie 19:00", "Lleva coro y clase individual", 1, DUENO, SD_MIRA]
   ];
   for (const a of alumnos){
     stmts.push(env.DB.prepare(
       "INSERT INTO alumnos (id,tenant_id,codigo,nombre,whatsapp,curso,paquete,fecha,pago,horario,notas,ciclo,profesor_id,sede_id) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14)"
     ).bind(a[0], tid, a[1], a[2], a[3], a[4], a[5], a[6], a[7], a[8], a[9], a[10], a[11], a[12]));
   }
+  /* Los pases de Marcela. `c` es el ciclo y TIENE que coincidir con el del alumno, si no
+     pasesDe() los da por inertes y el alumno queda sin plan. */
+  stmts.push(env.DB.prepare("UPDATE alumnos SET pases = ?1 WHERE id = ?2 AND tenant_id = ?3").bind(
+    JSON.stringify({ c: 1, p: [
+      { n: "8 clases de Coro", usadas: 3, vence: new Date(Date.now() + 40 * 86400000).toISOString().slice(0, 10) },
+      { n: "Paquete 4",        usadas: 1, vence: "" }
+    ] }), "demo-al-6", tid));
   // registro de clases: el saldo del panel sale de aquí (compute() cuenta por ciclo)
   const regs = [
     // Fabio (ciclo 3): 3 asistidas -> 5 de 8
@@ -11627,7 +11678,23 @@ export default {
             }
             if (!fija) break;
           }
-          return json({ ok: creadas > 0, creadas });
+          /* 🐛 13-ago-2026 (José/Elevate): si no se pudo crear NADA esto devolvía 200 con
+             ok:false y sin motivo, así que en el panel "no pasaba nada" y parecía roto.
+             Ahora se dice POR QUÉ, que siempre es una de tres. Se recalcula sobre el primer
+             slot, que es el que el dueño acaba de elegir y del que se está quejando. */
+          if (!creadas){
+            if (!alumnoId) return json({ error: "Esa hora ya está bloqueada." }, 409);
+            const isoP = new Date(t0).toISOString();
+            const ocP = await ocupacionSlot(env, tid, isoP, targetB, salaB);
+            const yaP = await env.DB.prepare(
+              "SELECT 1 AS ok FROM reservas WHERE tenant_id = ?1 AND inicio_utc = ?2 AND alumno_id = ?3 AND estado IN ('reservada','completada')"
+            ).bind(tid, isoP, alumnoId).first();
+            if (yaP) return json({ error: "Ya está inscrito en esa clase." + (fija ? " Y en las siguientes semanas también, o esas horas están llenas." : "") }, 409);
+            if (ocP.bloqueado) return json({ error: "Esa hora está bloqueada en tu agenda. Libérala y vuelve a intentar." }, 409);
+            if (ocP.n >= cupoB) return json({ error: "Esa clase ya está llena (" + ocP.n + " de " + cupoB + "). Elige otra hora o sube el aforo en Ajustes > Clases y planes." }, 409);
+            return json({ error: "No se pudo apartar esa hora. Refresca la página y vuelve a intentar." }, 409);
+          }
+          return json({ ok: true, creadas });
         }
 
         if (path === "/app/api/admin/agenda/marcar" && request.method === "POST"){
@@ -12377,7 +12444,13 @@ export default {
                           "interbank_cuenta", "interbank_cci", "mp_solo_tarjeta", "espera_auto",
                           "portal_fija_off", "portal_chat_off", "portal_sin_profe",
                           /* wizard de primer ingreso (10-ago-2026): "1" = completado, no re-mostrar */
-                          "wizard_hecho"];
+                          "wizard_hecho",
+                          /* 🐛 13-ago-2026: `saldo_modo` se agregó al panel y al worker que lo LEE,
+                             pero nunca a esta lista. El panel lo mandaba, esta lista lo descartaba
+                             sin decir nada, y José veía "guardado" con el ajuste sin guardar: cambió
+                             "descontar al asistir" y el saldo seguía bajando al reservar.
+                             ⚠️ Toda clave nueva de Ajustes tiene que entrar ACÁ además del panel. */
+                          "saldo_modo"];
           const stmts = [];
           /* > 0 = cuantos planes quedaron fuera por el tope, para decirselo en la respuesta */
           let avisoPaquetes = 0;
@@ -12591,21 +12664,28 @@ export default {
               try { await env.DB.prepare("UPDATE tenants SET whatsapp = ?1 WHERE id = ?2").bind(waAcademia, tid).run(); } catch (e) {}
             }
           }
+          /* 🔒 Rastro contra el bug de `saldo_modo` (13-ago-2026): si el panel manda una clave que
+             esta lista no reconoce, se descarta EN SILENCIO y el dueño ve "guardado" con el ajuste
+             sin guardar. Se devuelve `ignoradas` para que eso sea VISIBLE al depurar.
+             A propósito NO lleva `aviso`: no le cambia nada a la academia (no vería ningún cartel
+             nuevo) y el panel actual simplemente no lee este campo. Es diagnóstico, no interfaz. */
+          const ignoradas = Object.keys(b || {}).filter(k => claves.indexOf(k) === -1);
+          const conRastro = (obj) => (ignoradas.length ? Object.assign({}, obj, { ignoradas }) : obj);
           /* Si el tope de planes dejo alguno afuera, se DICE. Guardar 20 de 25 y no avisar es
              la forma mas facil de que una academia crea que tiene todo cargado y no lo tenga. */
           if (avisoPaquetes > 0){
-            return json({ ok: true, aviso: "Guarde tus planes, pero " + avisoPaquetes + " quedaron fuera: el maximo es " + PAQUETES_MAX + " por academia. Borra o junta alguno y vuelve a intentar con los que faltan." });
+            return json(conRastro({ ok: true, aviso: "Guarde tus planes, pero " + avisoPaquetes + " quedaron fuera: el maximo es " + PAQUETES_MAX + " por academia. Borra o junta alguno y vuelve a intentar con los que faltan." }));
           }
           /* Lo del renombrado de salas se DICE: el dueno acaba de mover algo de lo que cuelga
              todo su horario, y tiene que saber que su agenda se movio con el (o que no). */
           if (salasHuerfanas > 0){
-            return json({ ok: true, requiere_accion: true, aviso: "Guarde tus salas, pero " + salasHuerfanas + " hora" + (salasHuerfanas === 1 ? "" : "s") +
-              " de tu horario quedaron en una sala que ya no existe, asi que no se ven en la grilla. Vuelve a ponerlas en una de tus salas, o escribe de nuevo el nombre anterior para recuperarlas." });
+            return json(conRastro({ ok: true, requiere_accion: true, aviso: "Guarde tus salas, pero " + salasHuerfanas + " hora" + (salasHuerfanas === 1 ? "" : "s") +
+              " de tu horario quedaron en una sala que ya no existe, asi que no se ven en la grilla. Vuelve a ponerlas en una de tus salas, o escribe de nuevo el nombre anterior para recuperarlas." }));
           }
           if (salasRenombradas > 0){
-            return json({ ok: true, aviso: "Listo: cambie el nombre en tus salas y en las " + salasRenombradas + " horas y reservas que colgaban de ellas. Tu horario queda igual." });
+            return json(conRastro({ ok: true, aviso: "Listo: cambie el nombre en tus salas y en las " + salasRenombradas + " horas y reservas que colgaban de ellas. Tu horario queda igual." }));
           }
-          return json({ ok: true });
+          return json(conRastro({ ok: true }));
         }
 
         /* -------- Asistente WhatsApp: prueba EN SECO del tono/KB (sin enviar, sin gastar cupo) --------
