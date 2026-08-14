@@ -9117,6 +9117,28 @@ export default {
         let proximasClases = [];
         let horarioFijo = [];
         let congelaMe = null;   // reglas de congelamiento del plan del alumno (7-ago-2026)
+        /* 🔧 ENGANCHE TARDIO (14-ago-2026). fichaLibrePorCorreo() solo corria en el INSTANTE del
+           registro, asi que la cuenta que nacia suelta se quedaba suelta PARA SIEMPRE: el alumno
+           entraba a un portal vacio ("no tienes plan") mientras el dueno veia su plan perfecto en
+           el panel. Eso reporto Jose el 14-ago, y no eran 2 personas: en Elevate eran 7 cuentas
+           de alumnas CON plan activo, todas registradas el 12 y 13 de agosto — la ventana en la
+           que `alumnos.email` todavia venia vacio del importador (el alias "Customer Email" se
+           arreglo el 12-ago, ver leccion-una-fila-por-evento). Con el correo vacio la funcion no
+           encontraba ficha, devolvia null, y nada volvia a intentarlo nunca.
+           Ahora se reintenta en CADA visita al portal mientras la cuenta siga suelta: en cuanto la
+           ficha tiene correo, el enganche pega solo. Las dos reglas duras siguen siendo las mismas
+           (una sola ficha con ese correo Y sin cuenta ya vinculada), asi que no puede enlazar mal.
+           El UPDATE exige que siga suelta: si dos pestanas entran a la vez, gana una y la otra
+           no pisa nada. */
+        if (!cu.alumno_id){
+          const vincTardio = await fichaLibrePorCorreo(env, tid, cu.email);
+          if (vincTardio){
+            await env.DB.prepare(
+              "UPDATE cuentas SET alumno_id = ?1 WHERE id = ?2 AND tenant_id = ?3 AND (alumno_id IS NULL OR alumno_id = '')"
+            ).bind(vincTardio, cu.id, tid).run().catch(() => null);
+            cu.alumno_id = vincTardio;
+          }
+        }
         if (cu.alumno_id){
           alumno = await env.DB.prepare("SELECT * FROM alumnos WHERE id = ?1 AND tenant_id = ?2").bind(cu.alumno_id, tid).first();
           if (alumno){

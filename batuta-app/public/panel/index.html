@@ -2206,7 +2206,13 @@
     <div class="field"><label>Paquete comprado</label><select id="rn_paquete"></select>
       <p class="hint" style="margin:6px 0 0;">Puede ser igual o distinto al que tenía antes.</p></div>
     <!-- V2 multi-pase (11-ago-2026): con pases vivos, renovar puede SUMAR uno más en vez de
-         reemplazar todo. Solo aparece cuando el alumno de verdad tiene pases activos. -->
+         reemplazar todo.
+         🔧 14-ago-2026: antes esto aparecía SOLO si el alumno ya tenía 2+ pases, y eso era un
+         círculo cerrado — para poder sumar un 2º pase había que tener ya dos. El que tenía UNO
+         solo veía "reemplaza", así que al registrarle su segunda compra se le borraba la
+         primera. Lo reportó José con una alumna que compró 4 de Máquinas + 8 de Mat el mismo
+         día. Ahora aparece también con un solo plan, y al sumar el plan actual se convierte en
+         el pase nº1 con su saldo intacto. -->
     <div class="field" id="rn_modo_wrap" style="display:none;">
       <label>¿Qué estás registrando?</label>
       <select id="rn_modo">
@@ -2219,7 +2225,8 @@
       <div class="field"><label>Fecha de compra</label><input id="rn_fecha" type="date" /></div>
       <div class="field"><label>Estado de pago</label><select id="rn_pago"><option>Pagado</option><option>Pendiente</option></select></div>
     </div>
-    <p class="hint">Esto abre un ciclo nuevo: las clases restantes se recalculan desde cero con el paquete elegido. El historial de clases anteriores se conserva, no se borra.</p>
+    <p class="hint" id="rn_hint_ciclo">Esto abre un ciclo nuevo: las clases restantes se recalculan desde cero con el paquete elegido. El historial de clases anteriores se conserva, no se borra.</p>
+    <p class="hint" id="rn_hint_suma" style="display:none;">Se le agrega este plan a los que ya tiene. <b>No pierde ninguna clase</b>: lo que le quedaba sigue igual y cada plan gasta solo las clases de su tipo.</p>
     <div class="modal-actions">
       <button class="btn ghost" data-close>Cancelar</button>
       <button class="btn" id="btnGuardarRenovar">Guardar renovación</button>
@@ -6594,34 +6601,61 @@ function abrirRenovar(alumnoId){
   el("rn_fecha").value=hoyLima();
   el("rn_pago").value="Pagado";
   /* V2: si tiene pases activos, se pregunta si SUMA o REEMPLAZA (por defecto suma: es lo
-     que pasa de verdad cuando alguien compra teniendo clases sin usar). */
+     que pasa de verdad cuando alguien compra teniendo clases sin usar).
+     14-ago-2026: también con UN solo plan. Comprar un 2º plan teniendo clases sin usar es lo
+     normal en un estudio de grupo (Máquinas y Mat son planes distintos, no 12 clases sueltas),
+     y hasta hoy el panel obligaba a pisar el primero. */
   var ps=pasesDelAlumno(a), w=el("rn_modo_wrap");
   if(w){
-    if(ps){
+    var planUnico=!ps&&String(a.paquete||"").trim();
+    if(ps||planUnico){
       w.style.display="";
       el("rn_modo").value="suma";
-      el("rn_modo_hint").textContent="Hoy tiene "+ps.length+" pases: "+ps.map(function(p){return p.n;}).join(" · ")+". Sumar deja los suyos intactos; reemplazar los borra y empieza de cero.";
+      el("rn_modo_hint").textContent = ps
+        ? ("Hoy tiene "+ps.length+" pases: "+ps.map(function(p){return p.n;}).join(" · ")+". Sumar deja los suyos intactos; reemplazar los borra y empieza de cero.")
+        : ("Hoy tiene “"+a.paquete+"”. Sumar se lo deja intacto y le agrega el nuevo al costado; reemplazar lo borra y empieza de cero.");
     } else { w.style.display="none"; }
   }
+  rnPintarHint();
   openOv("ovRenovar");
 }
+/* El aviso de abajo tiene que decir lo que de verdad va a pasar: "esto abre un ciclo nuevo"
+   es falso (y asusta) cuando lo que eligió fue sumar un pase. */
+function rnPintarHint(){
+  var w=el("rn_modo_wrap");
+  var sumando=w&&w.style.display!=="none"&&el("rn_modo")&&el("rn_modo").value==="suma";
+  var hc=el("rn_hint_ciclo"), hs=el("rn_hint_suma");
+  if(hc) hc.style.display=sumando?"none":"";
+  if(hs) hs.style.display=sumando?"":"none";
+}
+if(el("rn_modo")) el("rn_modo").addEventListener("change",rnPintarHint);
 el("btnGuardarRenovar").addEventListener("click",function(){
   var id=el("rn_id").value;
   var a=db.alumnos.find(function(x){return x.id===id;}); if(!a) return;
   var psAct=pasesDelAlumno(a);
-  var modo=(psAct && el("rn_modo") && el("rn_modo_wrap").style.display!=="none") ? el("rn_modo").value : "reemplaza";
+  var modo=(el("rn_modo") && el("rn_modo_wrap").style.display!=="none") ? el("rn_modo").value : "reemplaza";
   var obj, msgOk;
   if(modo==="suma"){
     /* V2: un pase MÁS. El ciclo NO sube (los pases viven atados a él) y los suyos quedan
        intactos; el nuevo entra sin clases usadas. La ficha sigue espejando al principal. */
     var ciclo=Number(a.ciclo)||1;
-    var lista=psAct.slice();
+    /* 14-ago-2026: el alumno con UN solo plan todavía no tiene lista de pases. Se le arma
+       aquí, con su plan actual de pase nº1. `usadas` va con el arrastre de la migración y NO
+       con lo que lleva consumido: computeMulti recuenta las reservas y clases dictadas del
+       ciclo por su cuenta, así que meter aquí el consumo real se lo cobraría dos veces.
+       El vencimiento del pase nº1 es el que ya tenía la ficha. */
+    var lista;
+    if(psAct){ lista=psAct.slice(); }
+    else {
+      var migAnt=((Number(a.migrado_ciclo)||0)===ciclo)?Math.max(0,Number(a.migrado_usadas)||0):0;
+      lista=[{ n:String(a.paquete||""), usadas:migAnt, vence:String(a.vence||"") }];
+    }
     lista.push({ n:el("rn_paquete").value, usadas:0, vence:"" });
     obj=Object.assign({},a,{
       fecha:el("rn_fecha").value, pago:el("rn_pago").value,
       pases:JSON.stringify({c:ciclo,p:lista}), pases_set:true
     });
-    msgOk="Pase agregado — ahora tiene "+lista.length;
+    msgOk="Plan agregado — ahora tiene "+lista.length;
   } else {
     var nuevoCiclo=(Number(a.ciclo)||1)+1;
     obj=Object.assign({},a,{
