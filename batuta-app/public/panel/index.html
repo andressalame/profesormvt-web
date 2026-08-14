@@ -4115,6 +4115,7 @@ function cargarAgenda(){
   }).then(function(res){
     AG_DISP = (res[0] && res[0].disponibilidad) || [];
     AG_RESERVAS = (res[1] && res[1].reservas) || [];
+    AG_RESERVAS_LISTAS = true;
     normalizarSalasDisp();
     renderAgendaAdmin();
     /* Recién aquí sabemos qué hay guardado: esta es la foto contra la que se mide "sin guardar". */
@@ -5934,6 +5935,10 @@ document.body.addEventListener("click",function(e){
     }
   }
   if(er){ var rg=db.registro.find(function(x){return x.id===er.dataset.editreg;}); if(!rg)return;
+    /* 14-ago-2026: este botón ahora también vive DENTRO de la ficha del alumno ("Ya tomadas").
+       Se cierra la ficha antes de abrir el editor de clase: dos ventanas apiladas se ven como
+       un error y al cerrar la de arriba no queda claro qué pasó con la de abajo. */
+    closeOv("ovAlumno");
     fillSelects();
     grupoAsistencia=null;
     setFieldVis("r_alumno",true); setFieldVis("r_estado",true);
@@ -6671,45 +6676,145 @@ function renovar(a){
   window.open("https://wa.me/"+num+"?text="+encodeURIComponent(msg),"_blank");
 }
 
-/* ---------- "Sus clases" en la ficha del alumno (14-ago-2026) ----------
-   Pedido de José/Elevate: ver en la ficha las reservas futuras y las asistencias pasadas.
-   Sale de lo que el panel YA tiene cargado (AG_RESERVAS + db.registro): ni una consulta más
-   al servidor. Es solo lectura a propósito — la ficha es para los datos del alumno; marcar
-   asistencia y quitar reservas se hace en la clase, dentro del calendario. */
+/* ---------- "Sus clases" en la ficha del alumno ----------
+   Pedido de José/Elevate el 14-ago-2026, en dos tandas.
+   Primera: "que en la ficha se vean sus reservas futuras y sus asistencias".
+   Segunda, el mismo día: "que salgan TODAS, futuras y pasadas, y poder editarlas. Ahorita me
+   aparecen '2 clases apartadas' y no podemos estar viendo el calendario uno por uno".
+   Por eso ya no hay tope de 8 ni es solo lectura: sale todo, con scroll, y desde acá mismo se
+   marca quién vino, se quita una reserva y se edita una clase ya anotada.
+
+   Las TRES listas y por qué son tres:
+     · Próximas    → reservas futuras. Se pueden marcar por adelantado o quitar.
+     · Sin marcar  → 🔑 la que no existía en ninguna pantalla: la clase YA PASÓ y nadie le puso
+                     Vino ni Faltó. No estaba en "próximas" (ya pasó) ni en el registro (nunca
+                     se anotó), así que era invisible y el saldo del alumno quedaba raro sin que
+                     se viera por qué. Va primero y en acento.
+     · Ya tomadas  → el registro, que es la bitácora que de verdad descuenta. "Editar" abre el
+                     editor de clase de siempre (cierra la ficha primero, para no apilar dos
+                     ventanas encima). */
 function pintarClasesDeAlumno(a){
   var wrap=el("a_clases_wrap"), box=el("a_clases");
   if(!wrap||!box) return;
-  if(!a||!a.id){ wrap.style.display="none"; box.innerHTML=""; return; }
-  var ahora=Date.now(), TOPE=8;
-  var futuras=(AG_RESERVAS||[]).filter(function(r){
-    return r.alumno_id===a.id && r.estado==="reservada" && r.tipo!=="bloqueo" && Date.parse(r.inicio_utc)>=ahora;
-  }).sort(function(x,y){ return String(x.inicio_utc).localeCompare(String(y.inicio_utc)); });
-  /* las asistencias salen del registro, que es la bitácora que de verdad descuenta */
-  var pasadas=(db.registro||[]).filter(function(r){
+  if(!a||!a.id){ wrap.style.display="none"; box.innerHTML=""; FICHA_AL=null; return; }
+  FICHA_AL=a.id;
+  if(!AG_RESERVAS_LISTAS){
+    wrap.style.display="";
+    box.innerHTML='<p class="hint" style="margin:3px 0 0;">Cargando sus clases…</p>';
+    asegurarReservas().then(function(){ if(FICHA_AL===a.id) pintarClasesDeAlumno(a); });
+    return;
+  }
+  var ahora=Date.now();
+  var mias=(AG_RESERVAS||[]).filter(function(r){ return r.alumno_id===a.id && r.tipo!=="bloqueo"; });
+  var futuras=mias.filter(function(r){ return r.estado==="reservada" && Date.parse(r.inicio_utc)>=ahora; })
+                  .sort(function(x,y){ return String(x.inicio_utc).localeCompare(String(y.inicio_utc)); });
+  var sinMarcar=mias.filter(function(r){ return r.estado==="reservada" && Date.parse(r.inicio_utc)<ahora; })
+                  .sort(function(x,y){ return String(y.inicio_utc).localeCompare(String(x.inicio_utc)); });
+  var tomadas=(db.registro||[]).filter(function(r){
     return (r.alumnoId||r.alumno_id)===a.id && (r.estado==="Asistió"||r.estado==="Falta");
   }).sort(function(x,y){ return String(y.fecha||"").localeCompare(String(x.fecha||"")); });
 
-  var h='<div style="margin-top:2px;"><b style="font-size:12.5px;">Próximas</b>';
+  function fila(izq, botones){
+    return '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:4px 0;border-bottom:1px solid var(--line,rgba(255,255,255,.07));">'+
+      '<span style="flex:1 1 auto;font-size:13px;">'+izq+'</span>'+
+      '<span style="flex:0 0 auto;white-space:nowrap;">'+(botones||'')+'</span></div>';
+  }
+  /* con muchas clases la ficha se volvía un rollo infinito: cada lista scrollea aparte */
+  function lista(filas){ return '<div style="max-height:210px;overflow-y:auto;margin:3px 0 0;">'+filas+'</div>'; }
+  function titulo(t, n, color){
+    return '<b style="font-size:12.5px;'+(color?('color:'+color+';'):'')+'">'+t+'</b>'+
+           (n?(' <span class="hint" style="margin:0;">('+n+')</span>'):'');
+  }
+
+  var h='';
+  if(sinMarcar.length){
+    h+='<div style="margin-top:2px;">'+titulo("Ya pasaron y están sin marcar", sinMarcar.length, "var(--accent)")+
+      lista(sinMarcar.map(function(r){
+        return fila(esc(fmtLima(r.inicio_utc))+(r.curso?(' · '+esc(r.curso)):''),
+          '<button type="button" class="btn ghost sm" data-ficha-marcar="completada" data-id="'+esc(r.id)+'">Vino</button> '+
+          '<button type="button" class="btn ghost sm" data-ficha-marcar="falta" data-id="'+esc(r.id)+'">Faltó</button>');
+      }).join(""))+
+      '<p class="hint" style="margin:4px 0 0;">Hasta que las marques, su saldo no termina de cuadrar.</p></div>';
+  }
+
+  h+='<div style="margin-top:'+(sinMarcar.length?'12px':'2px')+';">'+titulo("Próximas", futuras.length);
   if(!futuras.length) h+='<p class="hint" style="margin:3px 0 0;">No tiene ninguna clase reservada.</p>';
-  else {
-    h+='<div style="margin:3px 0 0;">'+futuras.slice(0,TOPE).map(function(r){
-      return '<div style="padding:2px 0;">'+esc(fmtLima(r.inicio_utc))+(r.curso?(' · '+esc(r.curso)):'')+'</div>';
-    }).join("")+'</div>';
-    if(futuras.length>TOPE) h+='<p class="hint" style="margin:3px 0 0;">y '+(futuras.length-TOPE)+' más</p>';
-  }
-  h+='</div><div style="margin-top:10px;"><b style="font-size:12.5px;">Últimas que tomó</b>';
-  if(!pasadas.length) h+='<p class="hint" style="margin:3px 0 0;">Todavía no tiene clases anotadas.</p>';
-  else {
-    h+='<div style="margin:3px 0 0;">'+pasadas.slice(0,TOPE).map(function(r){
-      return '<div style="padding:2px 0;">'+esc(fechaBonita(r.fecha))+(r.curso?(' · '+esc(r.curso)):'')+
-             ' · <span class="hint" style="margin:0;">'+(r.estado==="Falta"?"faltó":"vino")+'</span></div>';
-    }).join("")+'</div>';
-    if(pasadas.length>TOPE) h+='<p class="hint" style="margin:3px 0 0;">y '+(pasadas.length-TOPE)+' más, en Asistencia</p>';
-  }
+  else h+=lista(futuras.map(function(r){
+    return fila(esc(fmtLima(r.inicio_utc))+(r.curso?(' · '+esc(r.curso)):''),
+      '<button type="button" class="btn ghost sm" data-ficha-marcar="completada" data-id="'+esc(r.id)+'">Vino</button> '+
+      '<button type="button" class="btn ghost sm" data-ficha-marcar="falta" data-id="'+esc(r.id)+'">Faltó</button> '+
+      '<button type="button" class="btn ghost sm" data-ficha-marcar="cancelada" data-id="'+esc(r.id)+'">Quitar</button>');
+  }).join(""));
   h+='</div>';
+
+  h+='<div style="margin-top:12px;">'+titulo("Ya tomadas", tomadas.length);
+  if(!tomadas.length) h+='<p class="hint" style="margin:3px 0 0;">Todavía no tiene clases anotadas.</p>';
+  else h+=lista(tomadas.map(function(r){
+    return fila(esc(fechaBonita(r.fecha))+(r.curso?(' · '+esc(r.curso)):'')+
+      ' · <span class="hint" style="margin:0;">'+(r.estado==="Falta"?"faltó":"vino")+'</span>',
+      '<button type="button" class="btn ghost sm" data-editreg="'+esc(r.id)+'">Editar</button>');
+  }).join(""));
+  h+='</div>';
+
   box.innerHTML=h;
   wrap.style.display="";
 }
+/* qué alumno está abierto en la ficha, para repintar su lista sin cerrar la ventana */
+var FICHA_AL=null;
+/* 🐛 Cazado al probarlo en vivo, antes de que lo viera José: `AG_RESERVAS` se llena SOLO al
+   entrar a la pestaña de agenda. La ficha se abre desde "Mis alumnos", así que quien fuera
+   directo ahí veía "No tiene ninguna clase reservada" aunque tuviera tres. Un vacío que parece
+   un dato es peor que un error: nadie lo reporta, simplemente se cree.
+   No se usa cargarAgenda() a propósito: esa función pinta "Cargando…" sobre la grilla de
+   horarios y le borraría a José lo que estuviera armando ahí sin guardar. Acá solo se traen
+   las reservas. */
+var AG_RESERVAS_LISTAS=false;
+function asegurarReservas(){
+  if(AG_RESERVAS_LISTAS) return Promise.resolve();
+  return fetch("/app/api/admin/agenda",{headers:hdr()})
+    .then(function(r){ return r.json(); })
+    .then(function(d){ if(d && d.reservas){ AG_RESERVAS=d.reservas; AG_RESERVAS_LISTAS=true; } })
+    .catch(function(){ /* sin agenda la ficha igual muestra el registro */ });
+}
+function repintarFicha(){
+  if(!FICHA_AL) return;
+  var a=db.alumnos.find(function(x){ return x.id===FICHA_AL; });
+  if(a) pintarClasesDeAlumno(a);
+}
+/* Los botones de la ficha NO reusan el listener de `panel-agenda` (ese cuelga de la pestaña de
+   agenda y el modal vive fuera). Y después de marcar hay que recargar DOS cosas: la agenda (la
+   reserva cambió de estado) y los datos (marcar Vino/Faltó ESCRIBE una fila de registro, que es
+   la que de verdad descuenta). Si solo se recargara la agenda, la clase desaparecería de
+   "sin marcar" y no aparecería en "ya tomadas": se vería como que se perdió. */
+if(el("ovAlumno")) el("ovAlumno").addEventListener("click",function(e){
+  var b=e.target.closest("[data-ficha-marcar]");
+  if(!b) return;
+  e.preventDefault();
+  var accion=b.dataset.fichaMarcar;
+  if(accion==="cancelada" && !confirm("¿Quitarle esta clase reservada? La clase vuelve a su saldo.")) return;
+  b.disabled=true;
+  apiPost("/app/api/admin/agenda/marcar",{id:b.dataset.id, estado:accion})
+    .then(function(){
+      AG_RESERVAS_LISTAS=false;   // forzar el refetch liviano, sin tocar la grilla de horarios
+      return Promise.all([
+        asegurarReservas(),
+        /* ⚠️ La ficha está ABIERTA y puede tener cambios sin guardar (un apellido a medio
+           escribir, un plan recién cambiado). Por eso se refresca todo MENOS la fila del
+           alumno abierto: si se pisara, "Guardar alumno" escribiría encima lo que él acababa
+           de tipear con la versión vieja del servidor. */
+        apiGet().then(function(d){
+          db.registro=d.registro||db.registro;
+          if(d.alumnos){
+            var abierto=db.alumnos.find(function(x){ return x.id===FICHA_AL; });
+            db.alumnos=d.alumnos.map(function(x){ return (abierto && x.id===FICHA_AL) ? abierto : x; });
+          }
+        })
+      ]);
+    })
+    .then(function(){ toast(accion==="cancelada"?"Clase quitada":"Listo"); repintarFicha(); try{ renderAlumnos(); }catch(e2){} })
+    .catch(function(err){ toast((err&&err.message)||"No se pudo"); })
+    .finally(function(){ b.disabled=false; });
+});
 
 /* ---------- Renovación manual (pago recibido fuera del portal) ---------- */
 /* pases vivos del alumno (los del ciclo actual), o null */
