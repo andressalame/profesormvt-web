@@ -1293,12 +1293,11 @@
       <p class="hint calleyenda" style="margin:8px 0 0;">El <b style="color:var(--accent);">número naranja</b> = alumnos que vienen ese día. El <b>punto</b> = tienes una hora apartada. Toca el día para ver quiénes son y cuántos horarios tienes abiertos.</p>
       <div id="calDia" style="margin-top:12px;"></div>
     </div>
-    <div class="group">
-      <h2>Próximas clases reservadas</h2>
-      <p class="hint">Lo que los alumnos reservaron desde su portal, más lo que bloquees aquí. Marca asistencia para cerrar la clase (Asistió y Falta consumen 1 clase del paquete).</p>
-      <div class="tablewrap"><table id="tablaAgenda"><thead><tr><th>Cuándo (Lima)</th><th>Alumno</th><th>Tipo</th><th id="thAgClase" class="hidden">Clase</th><th>Estado</th><th></th></tr></thead><tbody></tbody></table></div>
-      <div class="empty hidden" id="agAdminVacio">No hay clases próximas todavía.</div>
-    </div>
+    <!-- 14-ago-2026: aquí vivía "Próximas clases reservadas", una tabla plana con TODAS las
+         reservas de todos los días mezcladas. José pidió quitarla: con 1,447 alumnos era una
+         lista interminable en la que no se encontraba nada. Todo lo que hacía (marcar
+         asistencia, quitar una reserva, liberar una hora apartada) se mudó adentro de cada
+         clase, en el calendario de arriba, que es donde uno la busca. -->
 
     <div class="group">
       <h2>Bloquear o sembrar una clase existente</h2>
@@ -1936,6 +1935,11 @@
     <div class="field"><label>Horario, si lo anotas tú</label><input id="a_horario" type="text" placeholder="Solo si no usa la agenda. Ej: Martes 18:00" />
       <p class="hint" id="a_horario_derivado" style="margin:4px 0 0;"></p></div>
     <div class="field"><label>Notas</label><textarea id="a_notas"></textarea></div>
+    <!-- Sus clases (14-ago-2026, pedido de José/Elevate): «que en la ficha del alumno se vean
+         sus reservas futuras y sus asistencias». Antes, para saber si una alumna venía mañana
+         había que salir de su ficha y rastrearla en la agenda. Es solo lectura. -->
+    <div class="field" id="a_clases_wrap" style="display:none;"><label>Sus clases</label>
+      <div id="a_clases" style="font-size:13px;"></div></div>
     <div class="modal-actions">
       <button class="btn ghost" data-close>Cancelar</button>
       <button class="btn ghost" id="btnGuardarAlumnoOtro" title="Guarda este alumno y deja el formulario listo para el siguiente">Guardar y agregar otro</button>
@@ -4294,25 +4298,10 @@ function renderAgendaAdmin(){
   pintarSelAlumno("vn_alumno", "— Elige quién vino —");
   refrescarClaseSelectVino();
 
-  /* Con salas, la tabla dice a QUÉ clase cayó cada reserva (sin esto el admin siembra a ciegas). */
-  var conSalas = salasGrilla().length>0;
-  if(el("thAgClase")) el("thAgClase").classList.toggle("hidden", !conSalas);
-
-  /* calendario del mes (10-ago-2026): se repinta con cada recarga de la agenda */
+  /* calendario del mes (10-ago-2026): se repinta con cada recarga de la agenda. Desde el
+     14-ago es la ÚNICA vista de la agenda — la tabla plana de "Próximas clases reservadas"
+     se retiró y todo lo suyo vive dentro de cada clase del día. */
   try{ renderCalMes(); }catch(e){}
-  var tb = el("tablaAgenda").querySelector("tbody");
-  if(AG_RESERVAS.length===0){ tb.innerHTML=""; el("agAdminVacio").classList.remove("hidden"); return; }
-  el("agAdminVacio").classList.add("hidden");
-  tb.innerHTML = AG_RESERVAS.map(function(r){
-    var quien = r.alumno_nombre ? esc(r.alumno_nombre) : '<span class="hint" style="margin:0">'+(r.tipo==="bloqueo"?"(bloqueo)":"—")+(r.nota?" · "+esc(r.nota):"")+'</span>';
-    var acc = "";
-    if(r.estado==="reservada"){
-      acc = '<button class="btn ghost sm" data-ag-marcar="completada" data-id="'+esc(r.id)+'">Asistió</button> '+
-            '<button class="btn ghost sm" data-ag-marcar="falta" data-id="'+esc(r.id)+'">Falta</button> '+
-            '<button class="btn ghost sm" data-ag-marcar="cancelada" data-id="'+esc(r.id)+'">Cancelar</button>';
-    }
-    return '<tr><td style="white-space:nowrap;">'+esc(fmtLima(r.inicio_utc))+'</td><td>'+quien+'</td><td>'+esc(r.tipo)+'</td>'+(conSalas?('<td>'+esc(r.sala||"—")+'</td>'):'')+'<td>'+esc(r.estado)+'</td><td style="white-space:nowrap;">'+acc+'</td></tr>';
-  }).join("");
 }
 /* ---------- Calendario del mes (10-ago-2026, reunión Elevate) ----------
    La foto mensual que José extraña de Punchpass. Se pinta con lo mismo que ya carga
@@ -4379,6 +4368,81 @@ function renderCalMes(){
   box.innerHTML=h;
   if(CAL_SEL) renderCalDia(CAL_SEL);
 }
+/* ---------- Cada clase del día, desplegable con sus inscritos (14-ago-2026) ----------
+   Pedido de José/Elevate: «poder desplegar cada clase con sus inscritos para marcar
+   asistencia, cancelar una reserva y cancelar la clase de ESA fecha sin tocar las futuras».
+   Antes el día solo listaba los nombres en una línea de texto y para marcar asistencia había
+   que bajar a la tabla plana de "Próximas clases reservadas", que mezclaba todas las clases
+   de todos los días en una sola lista. Con 1,447 alumnos eso es inservible.
+   Qué estado se conserva: cuáles clases están desplegadas (CAL_ABIERTAS). Sin esto, marcar
+   una asistencia recarga la agenda, repinta el día y te cierra la clase que estabas pasando.
+   La regla de `memoria: batuta-panel-details-innerhtml` se respeta: el innerHTML lo rehace
+   renderCalDia (disparado por los BOTONES o por la recarga), nunca el clic en el <summary>. */
+var CAL_ABIERTAS={};
+function claveClase(fkey,hora,sala){ return fkey+"|"+hora+"|"+(sala||""); }
+function filaClaseDia(fkey,hora,titulo,rs,pasado,sala,cupo){
+  var ck=claveClase(fkey,hora,sala);
+  var gente=rs.filter(function(r){ return r.tipo!=="bloqueo" && r.estado!=="cancelada"; });
+  var bloqs=rs.filter(function(r){ return r.tipo==="bloqueo"; });
+  var cancelada=bloqs.some(function(r){ return /cancelada/i.test(String(r.nota||"")); });
+  var vivas=gente.filter(function(r){ return r.estado==="reservada"; }).length;
+  /* el resumen del <summary> es lo que se lee de un vistazo sin desplegar nada */
+  var resumen;
+  if(cancelada) resumen='<span style="color:var(--bad,#e06666);font-weight:600;">Clase cancelada</span>';
+  /* "persona/personas" y no "inscrito/inscritos": Batuta también le vende a academias de
+     música y de artes marciales, así que el resumen no puede salir en femenino por venir de
+     un estudio de pilates ni en masculino genérico. Y "1 inscritos" se leía a error. */
+  else if(gente.length) resumen='<b style="color:var(--accent);">'+gente.length+(cupo?(' de '+cupo):'')+'</b> '+
+    (gente.length===1?'persona':'personas');
+  else resumen='<span class="hint" style="margin:0;">'+(pasado?'No vino nadie':'Sin reservas aún')+'</span>';
+  if(bloqs.length && !cancelada) resumen+=' <span class="hint" style="margin:0;">· '+bloqs.length+(bloqs.length===1?' hora apartada':' horas apartadas')+'</span>';
+
+  var lista=gente.map(function(r){
+    var nom=esc(r.alumno_nombre||"(sin nombre)");
+    var estado=r.estado==="completada"?' <span class="hint" style="margin:0;">· vino</span>'
+             : r.estado==="falta"?' <span class="hint" style="margin:0;">· faltó</span>' : '';
+    var btns="";
+    if(r.estado==="reservada"){
+      btns='<button class="btn ghost sm" data-ag-marcar="completada" data-id="'+esc(r.id)+'">Vino</button> '+
+           '<button class="btn ghost sm" data-ag-marcar="falta" data-id="'+esc(r.id)+'">Faltó</button>'+
+           (pasado?'':' <button class="btn ghost sm" data-ag-marcar="cancelada" data-id="'+esc(r.id)+'">Quitar</button>');
+    }
+    return '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:5px 0;">'+
+           '<span style="flex:1 1 auto;font-size:13px;">'+nom+estado+'</span>'+
+           '<span style="flex:0 0 auto;white-space:nowrap;">'+btns+'</span></div>';
+  }).join("");
+  if(!lista) lista='<p class="hint" style="margin:4px 0 0;">Nadie reservó esta clase.</p>';
+  /* Las horas apartadas viven acá desde que se retiró la tabla plana (14-ago-2026): era el
+     ÚNICO sitio del panel donde se podía liberar un bloqueo, y quitarla sin esto habría dejado
+     horas apartadas para siempre, sin forma de soltarlas. */
+  lista+=bloqs.filter(function(r){ return r.estado==="reservada"; }).map(function(r){
+    return '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:5px 0;">'+
+      '<span style="flex:1 1 auto;font-size:13px;" class="hint">Hora apartada'+(r.nota?(' · '+esc(r.nota)):'')+'</span>'+
+      (pasado?'':'<span style="flex:0 0 auto;"><button class="btn ghost sm" data-ag-marcar="cancelada" data-id="'+esc(r.id)+'">Liberar</button></span>')+
+    '</div>';
+  }).join("");
+
+  /* Cancelar la clase entera: solo hacia adelante y solo si de verdad hay algo que cancelar. */
+  var pieCancel="";
+  if(!pasado && !cancelada){
+    pieCancel='<div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--line,rgba(255,255,255,.1));">'+
+      '<button class="btn ghost sm" data-cancelclase="'+esc(hora)+'" data-fecha="'+esc(fkey)+'" data-sala="'+esc(sala||"")+'" data-vivas="'+vivas+'">Cancelar esta clase</button>'+
+      '<p class="hint" style="margin:6px 0 0;">Cancela <b>solo la del '+esc(fechaBonita(fkey))+'</b> y aparta la hora para que nadie reserve encima. Las de las otras semanas se quedan igual.</p></div>';
+  }
+  return '<details class="cd-clase" data-ck="'+esc(ck)+'"'+(CAL_ABIERTAS[ck]?' open':'')+
+    ' style="border-top:1px solid var(--line,rgba(255,255,255,.1));padding:6px 0;">'+
+    /* el triangulito nativo se DEJA a propósito (nada de list-style:none acá): es lo único
+       que le avisa a quien mira que la clase se abre. Sin él la fila parece texto muerto. */
+    '<summary style="cursor:pointer;">'+
+      '<span style="display:inline-flex;gap:10px;align-items:baseline;flex-wrap:wrap;width:calc(100% - 24px);vertical-align:top;">'+
+        '<b style="font-family:var(--mono);font-size:12.5px;flex:0 0 auto;">'+esc(hora)+'</b>'+
+        '<span style="font-size:13px;flex:1 1 auto;">'+titulo+'</span>'+
+        '<span style="flex:0 0 auto;font-size:12.5px;">'+resumen+'</span>'+
+      '</span>'+
+    '</summary>'+
+    '<div style="padding:6px 0 2px 0;">'+lista+pieCancel+'</div>'+
+  '</details>';
+}
 function renderCalDia(fkey){
   var box=el("calDia"); if(!box) return;
   CAL_SEL=fkey;
@@ -4402,35 +4466,23 @@ function renderCalDia(fkey){
   franjas.forEach(function(f){
     vistasHoras[f.hora]=1;
     var rs=(porHora[f.hora]||[]).filter(function(r){ return !conSalas || String(r.sala||"")===String(f.sala||""); });
-    var gente=rs.filter(function(r){return r.tipo!=="bloqueo" && (r.estado==="reservada"||r.estado==="completada");}).map(function(r){return r.alumno_nombre||"(sin nombre)";});
-    var bloqs=rs.filter(function(r){return r.tipo==="bloqueo";}).length;
-    filas.push('<div style="padding:8px 0;border-top:1px solid var(--line,rgba(255,255,255,.1));display:flex;gap:10px;flex-wrap:wrap;align-items:baseline;">'+
-      '<b style="font-family:var(--mono);font-size:12.5px;flex:0 0 auto;">'+esc(f.hora)+'</b>'+
-      '<span style="font-size:13px;flex:1 1 auto;">'+esc(f.curso||"Clase")+(f.sala?(' · '+esc(f.sala)):'')+(f.profe?(' · '+esc(nombreProfe(f.profe)||"")):'')+'</span>'+
-      '<span class="hint" style="margin:0;flex:1 1 100%;">'+
-        (gente.length?('<b style="color:var(--accent);">'+(pasado?"Vinieron":gente.length)+'</b>'+(pasado?": ":" — ")+gente.map(esc).join(" · ")):(pasado?"No vino nadie":"Sin reservas aún"))+
-        (bloqs?(' · '+bloqs+(bloqs===1?' hora apartada':' horas apartadas')):'')+
-      '</span></div>');
+    var titulo=esc(f.curso||"Clase")+(f.sala?(' · '+esc(f.sala)):'')+(f.profe?(' · '+esc(nombreProfe(f.profe)||"")):'');
+    filas.push(filaClaseDia(fkey,f.hora,titulo,rs,pasado,String(f.sala||""),f.cupo));
   });
   /* reservas sueltas en horas que no están en el horario semanal (siembras puntuales) */
   Object.keys(porHora).sort().forEach(function(hh){
     if(vistasHoras[hh]) return;
     var rs=porHora[hh];
-    var gente=rs.filter(function(r){return r.tipo!=="bloqueo" && (r.estado==="reservada"||r.estado==="completada");}).map(function(r){return r.alumno_nombre||"(sin nombre)";});
+    var hayGente=rs.some(function(r){return r.tipo!=="bloqueo";});
     var bloqs=rs.filter(function(r){return r.tipo==="bloqueo";}).length;
-    if(!gente.length && !bloqs) return;
-    filas.push('<div style="padding:8px 0;border-top:1px solid var(--line,rgba(255,255,255,.1));display:flex;gap:10px;flex-wrap:wrap;align-items:baseline;">'+
-      '<b style="font-family:var(--mono);font-size:12.5px;flex:0 0 auto;">'+esc(hh)+'</b>'+
-      '<span style="font-size:13px;flex:1 1 auto;">Fuera del horario semanal</span>'+
-      '<span class="hint" style="margin:0;flex:1 1 100%;">'+
-        (gente.length?('<b style="color:var(--accent);">'+(pasado?"Vinieron":gente.length)+'</b>'+(pasado?": ":" — ")+gente.map(esc).join(" · ")):'')+
-        (bloqs?((gente.length?' · ':'')+bloqs+(bloqs===1?' hora apartada':' horas apartadas')):'')+
-      '</span></div>');
+    if(!hayGente && !bloqs) return;
+    filas.push(filaClaseDia(fkey,hh,"Fuera del horario semanal",rs,pasado,"",0));
   });
-  /* Día que ya pasó: se abre SOLO para ver quiénes vinieron (antes ni siquiera respondía al
-     clic y la ayuda decía "Toca un día"). Sin botones que cambien nada hacia atrás. */
+  /* Día que ya pasó: se abre para ver quiénes vinieron y, desde el 14-ago-2026, para MARCARLES
+     la asistencia — que es justo cuando uno la marca, después de la clase. Lo que no se ofrece
+     hacia atrás es cancelar (ni una reserva ni la clase): eso ya ocurrió. */
   var acciones = pasado
-    ? '<p class="hint" style="margin:10px 0 0;">Este día ya pasó: es solo para consultar. Para anotar qué se hizo en clase, ve a <b><a href="#" data-ira="registro">Asistencia</a></b>.</p>'
+    ? '<p class="hint" style="margin:10px 0 0;">Este día ya pasó. Puedes desplegar cada clase y marcar quién vino. Para anotar qué se trabajó en clase, ve a <b><a href="#" data-ira="registro">Asistencia</a></b>.</p>'
     : ('<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;">'+
        '<button type="button" class="btn" id="btnCalSemana" data-calfecha="'+fkey+'">Cambiar el horario de esta semana</button>'+
        '<button type="button" class="btn ghost" id="btnCalSembrar" data-calfecha="'+fkey+'">Apartar una hora de este día</button>'+
@@ -4459,7 +4511,41 @@ if(el("calMes")) el("calMes").addEventListener("click",function(e){
   if(b.classList.contains("off") && !b.classList.contains("condata")) return;
   renderCalDia(b.dataset.calfecha);
 });
+/* Recuerda qué clases quedaron desplegadas. El evento `toggle` NO burbujea, por eso va en
+   captura: así un solo listener cubre todos los <details> que renderCalDia vuelva a pintar. */
+if(el("calDia")) el("calDia").addEventListener("toggle",function(e){
+  var d=e.target; if(!d || !d.classList || !d.classList.contains("cd-clase")) return;
+  var ck=d.dataset.ck; if(!ck) return;
+  if(d.open) CAL_ABIERTAS[ck]=1; else delete CAL_ABIERTAS[ck];
+},true);
 if(el("calDia")) el("calDia").addEventListener("click",function(e){
+  var cc=e.target.closest("[data-cancelclase]");
+  if(cc){
+    var vivas=parseInt(cc.dataset.vivas,10)||0;
+    var aviso=vivas
+      ? ("Vas a cancelar la clase de las "+cc.dataset.cancelclase+" del "+fechaBonita(cc.dataset.fecha)+".\n\n"+
+         vivas+(vivas===1?" alumna tiene":" alumnas tienen")+" reservada esa clase. Se les devuelve la clase a su plan, pero "+
+         "el aviso se lo das tú.\n\nSolo se cancela la de ese día. Las de las otras semanas quedan igual.")
+      : ("Vas a cancelar la clase de las "+cc.dataset.cancelclase+" del "+fechaBonita(cc.dataset.fecha)+
+         ".\n\nNadie la tiene reservada. Se aparta la hora para que nadie reserve encima. Solo ese día.");
+    if(!confirm(aviso)) return;
+    cc.disabled=true;
+    apiPost("/app/api/admin/agenda/cancelar-clase",{
+      inicio_utc:limaInputToUtc(cc.dataset.fecha+"T"+cc.dataset.cancelclase),
+      sala:cc.dataset.sala||""
+    }).then(function(r){
+      var n=(r&&r.canceladas)||0;
+      toast(n?("Clase cancelada — avísales a "+n+(n===1?" alumna":" alumnas")):"Clase cancelada");
+      if(n && r.avisar && r.avisar.length){
+        alert("Avísales a mano:\n\n"+r.avisar.map(function(a){
+          return "· "+(a.nombre||"(sin nombre)")+(a.whatsapp?("  "+a.whatsapp):"");
+        }).join("\n"));
+      }
+      cargarAgenda();
+    }).catch(function(err){ toast(err.message||"No se pudo cancelar"); })
+      .finally(function(){ cc.disabled=false; });
+    return;
+  }
   var sem=e.target.closest("#btnCalSemana");
   if(sem){ entrarModoSemana(sem.dataset.calfecha); return; }
   var b=e.target.closest("#btnCalSembrar"); if(!b) return;
@@ -5746,7 +5832,7 @@ el("btnNuevoAlumno").addEventListener("click",function(){
   ["a_apellido","a_email","a_nacimiento"].forEach(function(k){ if(el(k)) el(k).value=""; });
   setCursosAlumno(MARCA.cursoDefault); fillSelects(); el("a_paquete").value=pkNombres()[0]||"";
   el("a_fecha").value=hoyLima(); el("a_pago").value="Pagado";
-  el("a_horario").value=""; el("a_notas").value=""; el("a_horario_derivado").textContent="";
+  el("a_horario").value=""; el("a_notas").value=""; el("a_horario_derivado").textContent=""; pintarClasesDeAlumno(null);
   fillProfeSelect("");
   fillSedeSelectGen("a_sede","a_sede_wrap","");
   el("btnGuardarAlumnoOtro").style.display="";
@@ -5785,7 +5871,7 @@ function guardarAlumnoModal(encadenar){
       el("a_id").value=""; el("a_codigo").value=""; el("a_ciclo").value="1";
       el("a_nombre").value=""; el("a_whatsapp").value="";
       ["a_apellido","a_email","a_nacimiento"].forEach(function(k){ if(el(k)) el(k).value=""; });
-      el("a_horario").value=""; el("a_notas").value=""; el("a_horario_derivado").textContent="";
+      el("a_horario").value=""; el("a_notas").value=""; el("a_horario_derivado").textContent=""; pintarClasesDeAlumno(null);
       el("alumnoTitulo").innerHTML='Nuevo <em>alumno</em>';
       toast("Guardado ✓ — siguiente alumno"); el("a_nombre").focus();
     } else { closeOv("ovAlumno"); toast("Alumno guardado"); }
@@ -5828,6 +5914,7 @@ document.body.addEventListener("click",function(e){
     el("a_horario_derivado").textContent=(a.horarioFijo&&a.horarioFijo.length)?("Agenda: "+a.horarioFijo.join(" · ")):"Sin horario fijo en la agenda";
     fillProfeSelect(a.profesor_id||"");
     fillSedeSelectGen("a_sede","a_sede_wrap",a.sede_id||"");
+    pintarClasesDeAlumno(a);
     openOv("ovAlumno");
   }
   if(dl){ var al=db.alumnos.find(function(x){return x.id===dl.dataset.del;});
@@ -6582,6 +6669,46 @@ function renovar(a){
   var plantilla=(db.config&&db.config.msg_renovacion) || MSG_RENOVACION_DEFAULT;
   var msg=plantilla.replace(/\{nombre\}/g,a.nombre).replace(/\{curso\}/g,a.curso||"");
   window.open("https://wa.me/"+num+"?text="+encodeURIComponent(msg),"_blank");
+}
+
+/* ---------- "Sus clases" en la ficha del alumno (14-ago-2026) ----------
+   Pedido de José/Elevate: ver en la ficha las reservas futuras y las asistencias pasadas.
+   Sale de lo que el panel YA tiene cargado (AG_RESERVAS + db.registro): ni una consulta más
+   al servidor. Es solo lectura a propósito — la ficha es para los datos del alumno; marcar
+   asistencia y quitar reservas se hace en la clase, dentro del calendario. */
+function pintarClasesDeAlumno(a){
+  var wrap=el("a_clases_wrap"), box=el("a_clases");
+  if(!wrap||!box) return;
+  if(!a||!a.id){ wrap.style.display="none"; box.innerHTML=""; return; }
+  var ahora=Date.now(), TOPE=8;
+  var futuras=(AG_RESERVAS||[]).filter(function(r){
+    return r.alumno_id===a.id && r.estado==="reservada" && r.tipo!=="bloqueo" && Date.parse(r.inicio_utc)>=ahora;
+  }).sort(function(x,y){ return String(x.inicio_utc).localeCompare(String(y.inicio_utc)); });
+  /* las asistencias salen del registro, que es la bitácora que de verdad descuenta */
+  var pasadas=(db.registro||[]).filter(function(r){
+    return (r.alumnoId||r.alumno_id)===a.id && (r.estado==="Asistió"||r.estado==="Falta");
+  }).sort(function(x,y){ return String(y.fecha||"").localeCompare(String(x.fecha||"")); });
+
+  var h='<div style="margin-top:2px;"><b style="font-size:12.5px;">Próximas</b>';
+  if(!futuras.length) h+='<p class="hint" style="margin:3px 0 0;">No tiene ninguna clase reservada.</p>';
+  else {
+    h+='<div style="margin:3px 0 0;">'+futuras.slice(0,TOPE).map(function(r){
+      return '<div style="padding:2px 0;">'+esc(fmtLima(r.inicio_utc))+(r.curso?(' · '+esc(r.curso)):'')+'</div>';
+    }).join("")+'</div>';
+    if(futuras.length>TOPE) h+='<p class="hint" style="margin:3px 0 0;">y '+(futuras.length-TOPE)+' más</p>';
+  }
+  h+='</div><div style="margin-top:10px;"><b style="font-size:12.5px;">Últimas que tomó</b>';
+  if(!pasadas.length) h+='<p class="hint" style="margin:3px 0 0;">Todavía no tiene clases anotadas.</p>';
+  else {
+    h+='<div style="margin:3px 0 0;">'+pasadas.slice(0,TOPE).map(function(r){
+      return '<div style="padding:2px 0;">'+esc(fechaBonita(r.fecha))+(r.curso?(' · '+esc(r.curso)):'')+
+             ' · <span class="hint" style="margin:0;">'+(r.estado==="Falta"?"faltó":"vino")+'</span></div>';
+    }).join("")+'</div>';
+    if(pasadas.length>TOPE) h+='<p class="hint" style="margin:3px 0 0;">y '+(pasadas.length-TOPE)+' más, en Asistencia</p>';
+  }
+  h+='</div>';
+  box.innerHTML=h;
+  wrap.style.display="";
 }
 
 /* ---------- Renovación manual (pago recibido fuera del portal) ---------- */

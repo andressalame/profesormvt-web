@@ -11828,6 +11828,73 @@ export default {
           return json({ ok: true });
         }
 
+        /* "Cancelar la clase de ESTE día, sin tocar las demás semanas" (14-ago-2026, pedido de
+           José/Elevate). Hasta hoy cancelar una clase puntual era ir reserva por reserva y
+           además apartar la hora a mano para que nadie volviera a meterse; si se olvidaba el
+           segundo paso, el cupo quedaba abierto en una clase que ya no existe.
+           Hace tres cosas, en este orden y por una razón:
+             1) BLOQUEA el slot de esa fecha (una fila `bloqueo`), para que nadie reserve encima;
+             2) recién entonces cancela las reservas vivas;
+             3) NO promueve la lista de espera.
+           El orden importa: /agenda/marcar llama a promoverEspera() con cada cancelación, y sin
+           el bloqueo puesto antes, cancelar la clase le regalaría el cupo recién liberado a la
+           siguiente de la lista — metiendo gente a una clase que se acaba de cancelar.
+           Solo toca ESA fecha: las semanas siguientes ni se miran, que es literalmente lo que
+           pidió. Devuelve a quiénes hay que avisarles; el aviso NO se manda solo (mensajería
+           masiva se dispara desde el panel, no desde acá). */
+        if (path === "/app/api/admin/agenda/cancelar-clase" && request.method === "POST"){
+          const b = await request.json().catch(() => ({}));
+          const t0 = Date.parse(String(b.inicio_utc || ""));
+          if (!Number.isFinite(t0)) return json({ error: "Fecha invalida" }, 400);
+          const isoC = new Date(t0).toISOString();
+          const salaC = String(b.sala || "").trim().slice(0, 40);
+          const motivo = String(b.nota || "").slice(0, 200);
+          const filas = (await env.DB.prepare(
+            "SELECT r.id, r.alumno_id, r.profesor_id, r.tipo, COALESCE(r.sala,'') AS sala, " +
+            "TRIM(COALESCE(a.nombre,'') || ' ' || COALESCE(a.apellido,'')) AS alumno_nombre, COALESCE(a.whatsapp,'') AS whatsapp " +
+            "FROM reservas r LEFT JOIN alumnos a ON a.id = r.alumno_id AND a.tenant_id = r.tenant_id " +
+            "WHERE r.tenant_id = ?1 AND r.inicio_utc = ?2 AND r.estado = 'reservada'"
+          ).bind(tid, isoC).all()).results || [];
+          /* franja sin sala = la hora entera (mismo criterio que el resto del multi-sala) */
+          const delSlot = filas.filter(r => !salaC || String(r.sala || "") === salaC || !String(r.sala || ""));
+          /* Permisos: el dueño siempre. Un profesor, solo si esa franja es SUYA o las reservas
+             llevan su id — la misma regla de los dos modelos que arregló la agenda el 14-ago. */
+          if (!esDueno){
+            let suya = delSlot.length > 0 && delSlot.every(r => r.profesor_id === profeActorId);
+            if (!suya){
+              try {
+                const p = limaParts(new Date(t0));
+                const hhmm = String(p.h).padStart(2, "0") + ":" + String(p.min).padStart(2, "0");
+                const fr = (await env.DB.prepare(
+                  "SELECT COALESCE(sala,'') AS sala FROM disponibilidad WHERE tenant_id = ?1 AND activo = 1 " +
+                  "AND COALESCE(profe,'') = ?2 AND dia_semana = ?3 AND hora = ?4"
+                ).bind(tid, profeActorId || "", p.dow, hhmm).all()).results || [];
+                suya = fr.some(f => !salaC || !f.sala || String(f.sala) === salaC);
+              } catch (e) { /* base sin la columna `profe`: se queda con el criterio de arriba */ }
+            }
+            if (!suya) return json({ error: "Esa clase no es tuya. Pídele al dueño que la cancele." }, 403);
+          }
+          const stmts = [];
+          const yaBloqueada = delSlot.some(r => r.tipo === "bloqueo");
+          if (!yaBloqueada){
+            stmts.push(env.DB.prepare(
+              "INSERT INTO reservas (id,tenant_id,alumno_id,inicio_utc,fin_utc,tipo,serie_id,estado,curso,nota,ciclo,creada,profesor_id,sala) " +
+              "VALUES (?1,?2,NULL,?3,?4,'bloqueo','','reservada','',?5,1,?6,?7,?8)"
+            ).bind(crypto.randomUUID(), tid, isoC, new Date(t0 + CLASE_MIN * 60000).toISOString(),
+                   (motivo || "Clase cancelada"), new Date().toISOString(), (esDueno ? null : (profeActorId || null)), salaC));
+          }
+          const avisar = [];
+          for (const r of delSlot){
+            if (r.tipo === "bloqueo") continue;
+            stmts.push(env.DB.prepare(
+              "UPDATE reservas SET estado = 'cancelada', cancelada_utc = ?1, cancelada_por = ?2 WHERE id = ?3 AND tenant_id = ?4"
+            ).bind(new Date().toISOString(), (esDueno ? "dueno" : "profesor") + ":" + (profeActorId || "") + ":clase-cancelada", r.id, tid));
+            if (r.alumno_id) avisar.push({ alumno_id: r.alumno_id, nombre: r.alumno_nombre || "", whatsapp: r.whatsapp || "" });
+          }
+          if (stmts.length) await env.DB.batch(stmts);
+          return json({ ok: true, canceladas: avisar.length, bloqueada: !yaBloqueada, avisar });
+        }
+
         /* "Vino y no había reservado" (12-ago-2026, pedido textual de José/Elevate):
            «imagínate que alguien no vio el correo y no pudo reservar por el otro lado y igual
            se aparece mañana, cómo hago para marcarle la asistencia a esa clase que ya pasó?»
