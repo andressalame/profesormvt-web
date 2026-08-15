@@ -9130,6 +9130,24 @@ export default {
            (una sola ficha con ese correo Y sin cuenta ya vinculada), asi que no puede enlazar mal.
            El UPDATE exige que siga suelta: si dos pestanas entran a la vez, gana una y la otra
            no pisa nada. */
+        /* 👻 FICHA FANTASMA (14-ago-2026, noche — caso Ledy Carbajal de Elevate: "sigue sin
+           salirle sus créditos"). Su cuenta SÍ estaba enganchada, pero a un `alumno_id` que ya
+           no existe en la tabla: la ficha se borró o se reemplazó en una reimportación y el
+           puntero quedó colgando. El arreglo de esta mañana no la cubría porque solo curaba las
+           cuentas SIN enganchar, y la suya tenía un id puesto — solo que apuntaba a la nada.
+           Resultado: entraba al portal y no veía ni plan ni saldo, con sus 3 pases intactos en
+           la ficha buena. Ahora, si la ficha no existe, el puntero se limpia y se vuelve a
+           enganchar por correo como cualquier cuenta suelta. */
+        if (cu.alumno_id){
+          const vive = await env.DB.prepare(
+            "SELECT 1 AS ok FROM alumnos WHERE id = ?1 AND tenant_id = ?2"
+          ).bind(cu.alumno_id, tid).first().catch(() => null);
+          if (!vive){
+            await env.DB.prepare("UPDATE cuentas SET alumno_id = '' WHERE id = ?1 AND tenant_id = ?2")
+              .bind(cu.id, tid).run().catch(() => null);
+            cu.alumno_id = "";
+          }
+        }
         if (!cu.alumno_id){
           const vincTardio = await fichaLibrePorCorreo(env, tid, cu.email);
           if (vincTardio){
@@ -11577,9 +11595,19 @@ export default {
           if (!target) return json({ error: "Profesor no encontrado" }, 404);
           let rows = [];
           try {
+            /* 🐛 14-ago-2026 (noche, caso Sheila de Elevate) — LOS DOS MODELOS, tercera vez.
+               Hoy ya se arregló `/agenda` (las clases que ve) y `/admin/data` (los alumnos),
+               pero este endpoint seguía filtrando SOLO por `profesor_id`, que es el modelo 1 a 1.
+               En un estudio grupal las franjas cuelgan del dueño y quien la dicta vive en
+               `disponibilidad.profe`, así que Sheila recibía CERO franjas. Consecuencia visible:
+               en la vista del día, sus clases caían todas en el cajón de "reservas en horas que
+               no están en el horario semanal" y le salía **"Fuera del horario semanal"** con sus
+               4 alumnas dentro. El dato estaba bien; el horario contra el que se comparaba
+               llegaba vacío. Ahora también entran las franjas que ESTE profesor dicta.
+               MVT no se entera: ahí `profe` está vacío y no suma ni una fila. */
             rows = (await env.DB.prepare(
               "SELECT dia_semana, hora, activo, COALESCE(cupo,0) AS cupo, COALESCE(curso,'') AS curso, COALESCE(sala,'') AS sala, COALESCE(profe,'') AS profe, COALESCE(vigente_desde,'') AS vdesde, COALESCE(vigente_hasta,'') AS vhasta FROM disponibilidad WHERE tenant_id = ?1 " +
-              "AND (profesor_id = ?2 OR (?3 = 1 AND (profesor_id IS NULL OR profesor_id = ''))) ORDER BY dia_semana, hora"
+              "AND (profesor_id = ?2 OR COALESCE(profe,'') = ?2 OR (?3 = 1 AND (profesor_id IS NULL OR profesor_id = ''))) ORDER BY dia_semana, hora"
             ).bind(tid, target.id, target.esDueno ? 1 : 0).all()).results || [];
           } catch (e) {
             try {
