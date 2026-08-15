@@ -6154,9 +6154,14 @@ async function resetDemo(env){
   ).bind(tid, new Date(Date.now() + 3650 * 86400000).toISOString()).run();
 
   // Borrón total de los datos del tenant demo (las sesiones de visitantes mueren con el reset).
-  const tablas = ["alumnos", "registro", "pausas", "precios", "config", "disponibilidad", "reservas", "grupos", "sedes", "cuentas", "compras", "recursos", "ejercicios", "chat_mensajes", "push_subs", "leads", "feedback", "gastos", "comprobantes"];
+  /* ⚠️ Toda tabla nueva con `tenant_id` tiene que entrar ACÁ, o la demo pública acumula basura
+     de cada visitante para siempre. `campanas` se sumó el 15-ago-2026 tras verlo pasar. */
+  const tablas = ["alumnos", "registro", "pausas", "precios", "config", "disponibilidad", "reservas", "grupos", "sedes", "cuentas", "compras", "recursos", "ejercicios", "chat_mensajes", "push_subs", "leads", "feedback", "gastos", "comprobantes", "campanas"];
   await env.DB.batch(tablas.map(tb => env.DB.prepare("DELETE FROM " + tb + " WHERE tenant_id = ?1").bind(tid)));
   await env.DB.prepare("DELETE FROM sesiones WHERE cuenta_id = ?1 OR cuenta_id LIKE 'demo-cu-%'").bind("T:" + tid).run();
+  /* `campana_destinos` no tiene tenant_id (cuelga de la campaña), así que se limpia por
+     huérfanas: las campañas de este tenant ya se borraron en el batch de arriba. */
+  try { await env.DB.prepare("DELETE FROM campana_destinos WHERE campana_id NOT IN (SELECT id FROM campanas)").run(); } catch (e) {}
 
   /* Equipo de la academia. `profesores` NO va en la lista de arriba (el dueño debe
      sobrevivir al reset), así que se purga aparte a los que siembra la demo, si no se
