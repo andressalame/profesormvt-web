@@ -817,6 +817,12 @@ async function calcularCobro(env, tenantId, cu, paquete, precio, cfg, paqMap){
 /* ---------- reglas (compute / estado) ---------- */
 function compute(alumno, regs, precios, reservasUsadas, pk){
   pk = pk || PAQUETES[alumno.paquete] || { clases: 0, reprog: 0, ilim: false };
+  /* `reservasUsadas` llega de reservasUsadasCount/Puro como {n, futuras} desde el 15-ago-2026.
+     Se sigue aceptando un número suelto por compatibilidad, y ahí n = futuras (lo que hacía
+     antes): así ningún llamador viejo cambia de comportamiento sin que alguien lo decida. */
+  const ru = (reservasUsadas && typeof reservasUsadas === "object")
+    ? { n: Math.max(0, Number(reservasUsadas.n) || 0), futuras: Math.max(0, Number(reservasUsadas.futuras) || 0) }
+    : { n: Math.max(0, Number(reservasUsadas) || 0), futuras: Math.max(0, Number(reservasUsadas) || 0) };
   let asistio = 0, reprogramo = 0, falta = 0;
   for (const r of regs){
     if (r.estado === "Asistió") asistio++;
@@ -831,7 +837,7 @@ function compute(alumno, regs, precios, reservasUsadas, pk){
      el ajuste deja de aplicar solo y el alumno arranca su paquete completo. */
   const migradas = ((Number(alumno && alumno.migrado_ciclo) || 0) === (Number(alumno && alumno.ciclo) || 1))
     ? Math.max(0, Number(alumno && alumno.migrado_usadas) || 0) : 0;
-  const usadas = asistio + falta + exceso + (Number(reservasUsadas) || 0) + migradas;
+  const usadas = asistio + falta + exceso + ru.n + migradas;
   /* Clases de REGALO por traer un amigo (15-ago-2026). Mismo patron que migrado_usadas pero
      al reves: en vez de restar saldo, lo suma. Va atado al ciclo por la misma razon, y lo que
      le sobre al renovar se arrastra al ciclo nuevo (ver confirmarCompra): un premio que se
@@ -863,7 +869,9 @@ function compute(alumno, regs, precios, reservasUsadas, pk){
     ilim: false,
     usadas,
     restantes: muerto ? 0 : Math.max(0, saldo),
-    reservadas: Math.max(0, Number(reservasUsadas) || 0),   // apartadas y aun sin dictar
+    /* apartadas y aun SIN DICTAR. Antes acá entraba todo lo que consumía, incluidas las clases
+       ya tomadas, y saldoMostrado se las devolvía al saldo: por eso no bajaba nunca. */
+    reservadas: ru.futuras,
     vencido, caducado: caduco,
     vence: (alumno && alumno.vence) || "",
     reprogPermitidas: pk.reprog,
@@ -1201,6 +1209,9 @@ async function loadConfig(env, tenantId){
                  El detalle de cada clave está arriba, en el bloque de refCfg(). */
               ref_premio_modo: "", ref_premio_valor: "", ref_desc_modo: "", ref_desc_valor: "",
               ref_min_clases: "", ref_solo_nuevos: "",
+              /* "off" = no avisarle al alumno cuando el dueño le activa o renueva el plan a mano
+                 desde su ficha (15-ago-2026). Vacío = sí se le avisa. Ver avisarPlanActivo. */
+              aviso_plan_activo: "",
               brand_color: "", brand_font: "", brand_logo: "", agenda_cupo: "",
               /* "Mi web" (editor visual de la página pública de la academia). Vacío = la
                  landing por defecto armada con los datos de la academia. web_version cambia
@@ -1824,6 +1835,59 @@ async function correoBienvenidaAlumno(env, tenant, cu, compra){
       '<p>Un abrazo.</p>' +
     '</div>';
   return enviarCorreo(env, { to: cu.email, subject: "Ya estas dentro de " + academia, html: html });
+}
+
+/* ═══ "Tu plan ya está activo" (15-ago-2026, reporte de José/Elevate) ═══
+   El correo de compra existía solo para el que paga POR LA APP y solo en su primera compra.
+   La academia que cobra por Yape y le carga el plan a mano en la ficha —que es como opera
+   Elevate y la mayoría— dejaba al alumno sin ningún aviso: pagó y no recibió nada.
+
+   ⚠️ EL TOPE ES LA PIEZA IMPORTANTE. `PUT /admin/data` recibe el snapshot COMPLETO de la lista
+   de alumnos, así que una importación o una edición masiva puede marcar centenares de altas de
+   golpe. Si en un solo guardado se activan más planes que el tope, NO se manda ninguno y queda
+   en el log: un correo de más a 1,447 personas no se puede deshacer. El caso real —el dueño
+   renovando a un alumno que le acaba de yapear— es de 1 o 2 por guardado.
+   Se apaga en Ajustes > Reservas ("Aviso de plan activo"). */
+const AVISO_PLAN_TOPE = 10;
+async function avisarPlanActivo(env, tenant, lista){
+  if (!tenant || !lista || !lista.length) return 0;
+  const cfg = await loadConfig(env, tenant.id).catch(() => ({}));
+  if (String(cfg.aviso_plan_activo || "") === "off") return 0;
+  if (lista.length > AVISO_PLAN_TOPE){
+    console.log("aviso de plan activo: " + lista.length + " altas en un guardado (tope " + AVISO_PLAN_TOPE +
+                "), no se manda ninguno — huele a importación, no a renovaciones una por una. tenant " + tenant.id);
+    return 0;
+  }
+  const academia = tenant.academia || MARCA.nombre;
+  const portal = MARCA.dominio + "/app/a/" + tenant.slug;
+  const wa = "https://wa.me/" + (tenant.whatsapp || MARCA.whatsapp);
+  let enviados = 0;
+  for (const al of lista){
+    try {
+      /* el correo se busca en la ficha y, si no está ahí, en la cuenta del portal: son dos
+         campos distintos y el alumno migrado suele tener solo uno de los dos */
+      const fila = await env.DB.prepare(
+        "SELECT COALESCE(a.email,'') AS ficha, COALESCE((SELECT c.email FROM cuentas c WHERE c.alumno_id = a.id AND c.tenant_id = a.tenant_id LIMIT 1),'') AS cuenta, " +
+        "COALESCE(a.no_email,0) AS no_email FROM alumnos a WHERE a.id = ?1 AND a.tenant_id = ?2"
+      ).bind(al.id, tenant.id).first();
+      if (!fila || Number(fila.no_email)) continue;      // se dio de baja de los correos: se respeta
+      const para = String(fila.ficha || fila.cuenta || "").trim();
+      if (!emailOk(para)) continue;
+      const nombre = ((al.nombre || "").trim().split(/\s+/)[0]) || "";
+      const html =
+        '<div style="font-family:Arial,Helvetica,sans-serif;max-width:480px;margin:0 auto;color:#1a1a1a;font-size:15px;line-height:1.6">' +
+          '<p>Hola' + (nombre ? ' ' + esc(nombre) : '') + ',</p>' +
+          '<p>Tu <b>' + esc(al.paquete) + '</b> ya está activo en ' + esc(academia) + '.</p>' +
+          '<ul style="padding-left:18px">' +
+            '<li><b>Reserva tus clases:</b> <a href="' + portal + '">' + portal + '</a></li>' +
+            '<li>Ahí ves cuántas clases te quedan y tu historial.</li>' +
+          '</ul>' +
+          '<p>Cualquier cosa, escríbenos por <a href="' + wa + '">WhatsApp</a>.</p>' +
+        '</div>';
+      if (await enviarCorreo(env, { to: para, subject: "Tu plan ya está activo en " + academia, html: html })) enviados++;
+    } catch (e) { console.error("aviso de plan activo", al.id, e); }
+  }
+  return enviados;
 }
 
 /* ---------- Renovación del plan ANUAL (candado 6-ago-2026). Lo dispara scheduled(). ----------
@@ -3725,20 +3789,30 @@ function diaVecino(f, delta){
 /* PURO (12-ago-2026): el mismo conteo, sin DB. Existe para que el panel pueda calcular el
    saldo de 1,447 alumnos con las filas ya cargadas, en vez de rehacer la cuenta en el
    navegador — que es justo de donde salió el desajuste panel vs portal. */
+/* 🐛 15-ago-2026 (José/Elevate: "la gente que vino a clase ayer no se le ha descontado").
+   Esto devolvía UN número: el total de clases que las reservas consumen. Pero `compute` lo
+   usaba también como "clases apartadas", y las academias que descuentan AL ASISTIR se las
+   suman de vuelta al saldo que ve la gente (saldoMostrado). Resultado: la clase que la alumna
+   YA tomó se restaba y se volvía a sumar, así que el saldo no bajaba nunca.
+   Ahora devuelve las dos cifras por separado:
+     n       = todo lo que consume crédito (futuras + dictadas sin anotar). No cambió.
+     futuras = SOLO lo apartado que todavía no se dictó. Es lo único que se suma de vuelta.
+   `computeMulti` ya lo hacía bien por su lado (eventosConsumo), y por eso los 12 alumnos con
+   varios pases nunca dieron el síntoma: el bug solo se veía en los de un pase, que son 1,435. */
 function reservasUsadasPuro(resv, regs, excluirId){
   const excl = String(excluirId || "");
   const ahora = Date.now();
-  if (!resv || !resv.length) return 0;
+  if (!resv || !resv.length) return { n: 0, futuras: 0 };
   const porFecha = new Map();
   for (const g of (regs || [])){
     const f = String(g.fecha || "").slice(0, 10);
     if (f) porFecha.set(f, (porFecha.get(f) || 0) + 1);
   }
-  let n = 0;
+  let n = 0, futuras = 0;
   const pasadas = [];
   for (const r of resv){
     if (r.id === excl) continue;
-    if (Date.parse(r.inicio_utc) >= ahora){ n++; continue; }   // futura: aparta credito
+    if (Date.parse(r.inicio_utc) >= ahora){ n++; futuras++; continue; }   // futura: aparta credito
     pasadas.push(fechaLimaDe(r.inicio_utc));
   }
   const sinPar = [];
@@ -3755,7 +3829,7 @@ function reservasUsadasPuro(resv, regs, excluirId){
     }
     if (!emparejada) n++;                                       // dictada y sin anotar: igual consume
   }
-  return n;
+  return { n, futuras };
 }
 /* El de siempre, ahora solo trae las filas y delega la cuenta en la version pura. */
 async function reservasUsadasCount(env, tenantId, alumnoId, ciclo, excluirId){
@@ -5768,14 +5842,52 @@ async function cerrarAsistenciasAuto(env){
     } catch (e) {}
     const corte = new Date(Date.now() - horas * 3600000).toISOString();
     try {
+      /* 🐛 15-ago-2026 (José/Elevate: "en su perfil no aparece la clase que tomaron").
+         Esto hacía SOLO el UPDATE de la reserva. Marcar la asistencia A MANO (/agenda/marcar)
+         siempre escribió además la bitácora en `registro`, que es de donde salen el historial
+         del alumno y el del panel — así que la academia que dejó el cierre en automático se
+         quedaba con las clases dictadas invisibles.
+         Por eso ahora se leen las reservas ANTES de cerrarlas: hace falta el alumno, el curso,
+         el ciclo y la fecha de cada una para poder anotarlas. Es la misma guarda idempotente
+         del marcado manual (una clase dictada por alumno + día de Lima + ciclo), así que el
+         dedupe de reservasUsadasPuro sigue impidiendo que la clase se cobre dos veces. */
+      const { results: aCerrar } = await env.DB.prepare(
+        "SELECT id, alumno_id, inicio_utc, COALESCE(curso,'') AS curso, COALESCE(ciclo,1) AS ciclo FROM reservas " +
+        "WHERE tenant_id = ?1 AND estado = 'reservada' AND alumno_id IS NOT NULL AND tipo != 'bloqueo' AND fin_utc <= ?2 " +
+        "ORDER BY inicio_utc ASC LIMIT 500"
+      ).bind(t.id, corte).all();
+      if (!aCerrar || !aCerrar.length) continue;
       const r = await env.DB.prepare(
         "UPDATE reservas SET estado = 'completada' WHERE tenant_id = ?1 AND estado = 'reservada' " +
         "AND alumno_id IS NOT NULL AND tipo != 'bloqueo' AND fin_utc <= ?2"
       ).bind(t.id, corte).run();
       cerradas += (r && r.meta && (r.meta.changes ?? 0)) || 0;
-    } catch (e) {}
+      for (const rv of aCerrar){
+        try { await anotarClaseDictada(env, t.id, rv.alumno_id, rv.inicio_utc, rv.curso, rv.ciclo, "Asistió"); }
+        catch (e) { console.error("asistencia auto: no se pudo anotar la clase", rv.id, e); }
+      }
+    } catch (e) { console.error("asistencia auto", t.id, e); }
   }
   return cerradas;
+}
+/* La bitácora de una clase dictada, en UN solo sitio (15-ago-2026). La escribían el marcado
+   manual y "vino sin reservar" con su propia copia de la guarda; el cierre automático no la
+   escribía y ahí nació el bug de las clases invisibles de Elevate. Devuelve true si anotó.
+   Idempotente: una fila por alumno + día de Lima + ciclo, que es lo que espera el dedupe de
+   reservasUsadasPuro para no cobrar la misma clase dos veces. */
+async function anotarClaseDictada(env, tenantId, alumnoId, inicioUtc, curso, ciclo, estado){
+  if (!alumnoId) return false;
+  const fechaL = fechaLimaDe(inicioUtc);
+  if (!fechaL) return false;
+  const cicloR = Number(ciclo) || 1;
+  const ya = await env.DB.prepare(
+    "SELECT 1 FROM registro WHERE tenant_id = ?1 AND alumno_id = ?2 AND COALESCE(ciclo,1) = ?3 AND fecha = ?4 AND estado != 'Reprogramó' LIMIT 1"
+  ).bind(tenantId, alumnoId, cicloR, fechaL).first();
+  if (ya) return false;
+  await env.DB.prepare(
+    "INSERT INTO registro (id,tenant_id,fecha,alumno_id,curso,estado,trabajo,tarea,ciclo,tarea_audio,plan) VALUES (?1,?2,?3,?4,?5,?6,'','',?7,'','')"
+  ).bind(crypto.randomUUID(), tenantId, fechaL, alumnoId, curso || "", (estado === "Falta" ? "Falta" : "Asistió"), cicloR).run();
+  return true;
 }
 
 
@@ -12660,7 +12772,9 @@ export default {
           }
           await ensureSaldoMigradoSchema(env);
           await ensureAlumnoExtraSchema(env);
-          const colsPrev = "id, vence, ciclo, aviso_vence_ciclo, recordatorio_fecha, recordatorio_ciclo, winback_ciclo, profesor_id, COALESCE(sede_id,'') AS sede_id";
+          /* `paquete` entra acá el 15-ago-2026: hace falta para saber si el dueño le acaba de
+             ACTIVAR un plan a un alumno que no tenía, y avisarle por correo (ver avisarPlan). */
+          const colsPrev = "id, vence, ciclo, aviso_vence_ciclo, recordatorio_fecha, recordatorio_ciclo, profesor_id, COALESCE(paquete,'') AS paquete, winback_ciclo, COALESCE(sede_id,'') AS sede_id";
           let prevRows = [];
           try {
             prevRows = (await env.DB.prepare(
@@ -12720,6 +12834,17 @@ export default {
             stmts.push(env.DB.prepare("DELETE FROM alumnos WHERE tenant_id = ?1 AND profesor_id = ?2").bind(tid, profeActorId || ""));
           }
           const idsSnapshot = new Set();
+          /* ---- "No me llegó el correo de la compra" (15-ago-2026, José/Elevate) ----
+             José se agregó un plan a su cuenta de alumno para ver si llegaba el correo, y no
+             llegó. No estaba roto: el único correo de compra sale al CONFIRMAR UN PAGO en Pagos
+             y solo en la PRIMERA compra. Elevate cobra por Yape fuera de la app y le carga el
+             plan a mano en la ficha, así que ese camino no pasaba por ningún correo: el alumno
+             pagaba y no recibía nada.
+             Acá se juntan los alumnos a los que este guardado les ACTIVÓ un plan (lo renovaron
+             o pasaron de no tener a tener) y al final se les avisa.
+             ⚠️ El tope de abajo no es decorativo: este endpoint recibe el snapshot COMPLETO de
+             la lista, así que sin él una importación de 1,447 alumnos manda 1,447 correos. */
+          const avisarPlan = [];
           for (const a of body.alumnos){
             const pr = prev.get(a.id);
             /* profesor: todo lo suyo; dueno: respeta la asignacion del payload si es valida,
@@ -12746,6 +12871,12 @@ export default {
               venceAl = new Date(Date.parse(base + "T00:00:00Z") + 30 * 86400000).toISOString().slice(0, 10);
             }
             if (esRenovManual) avisoAl = 0;   // ciclo nuevo: el aviso de vencimiento se re-arma
+            /* ¿A este alumno le acaban de activar un plan? Dos casos, los dos son "ya puedes
+               reservar": lo renovaron (el ciclo subió) o no tenía plan y ahora sí. Cambiarle el
+               plan DENTRO del mismo ciclo no cuenta: eso es corregir un dato, no activarle nada. */
+            if (a.id && (a.paquete || "") && (esRenovManual || (pr && !(pr.paquete || "")))){
+              avisarPlan.push({ id: a.id, nombre: a.nombre || "", paquete: a.paquete || "" });
+            }
             /* ---- Vigencia del paquete (28-jul-2026, Elevate) ----
                `activado` = fecha de su PRIMERA clase del ciclo actual, que es desde cuando corre
                la vigencia si el paquete cuenta "desde la primera clase". Se deriva del registro
@@ -12859,6 +12990,12 @@ export default {
             }
           }
           await env.DB.batch(stmts);
+          /* Los avisos van DESPUÉS del batch a propósito: si el guardado falla, el alumno no
+             puede haber recibido "tu plan ya está activo" por un plan que no se guardó. */
+          if (avisarPlan.length){
+            try { await avisarPlanActivo(env, t, avisarPlan); }
+            catch (e) { console.error("aviso de plan activo", e); }
+          }
           return json({ ok: true });
         }
 
@@ -12953,7 +13090,9 @@ export default {
                           "saldo_modo",
                           /* programa de referidos por academia (15-ago-2026, José/Elevate) */
                           "ref_premio_modo", "ref_premio_valor", "ref_desc_modo", "ref_desc_valor",
-                          "ref_min_clases", "ref_solo_nuevos"];
+                          "ref_min_clases", "ref_solo_nuevos",
+                          /* aviso al alumno cuando le activan el plan a mano (15-ago-2026) */
+                          "aviso_plan_activo"];
           const stmts = [];
           /* > 0 = cuantos planes quedaron fuera por el tope, para decirselo en la respuesta */
           let avisoPaquetes = 0;
