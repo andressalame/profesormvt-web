@@ -1033,10 +1033,19 @@ function eventosConsumo(resv, regs, excluirReservaId){
   let reprogTotal = 0;
   const porFecha = new Map();   // registros que consumen, para emparejar reservas pasadas
   for (const g of (regs || [])){
-    if (g.estado === "Reprogramó"){ reprogTotal++; continue; }
+    const f = String(g.fecha || "").slice(0, 10);
+    if (g.estado === "Reprogramó"){
+      reprogTotal++;
+      /* 🐛 15-ago-2026 (caso Paola Zapata): la fila 'Reprogramó' NO es un evento de consumo
+         —su costo lo cobra la cuota, más abajo— pero SÍ tiene que emparejar la reserva pasada
+         de ese día. Si no, esa reserva se queda sin par y cuenta como clase dictada, así que
+         reprogramar terminaba costando una clase igual. Mismo arreglo que en
+         reservasUsadasCount; los dos caminos tienen que contar idéntico. */
+      if (f) porFecha.set(f, (porFecha.get(f) || 0) + 1);
+      continue;
+    }
     if (g.estado === "Asistió" || g.estado === "Falta"){
       eventos.push({ tipo: g.curso || "", cuando: String(g.fecha || "") });
-      const f = String(g.fecha || "").slice(0, 10);
       if (f) porFecha.set(f, (porFecha.get(f) || 0) + 1);
     }
   }
@@ -3839,7 +3848,16 @@ async function reservasUsadasCount(env, tenantId, alumnoId, ciclo, excluirId){
   ).bind(tenantId, alumnoId, ciclo).all();
   if (!resv || !resv.length) return 0;
   const { results: regs } = await env.DB.prepare(
-    "SELECT fecha FROM registro WHERE tenant_id = ?1 AND alumno_id = ?2 AND COALESCE(ciclo,1) = ?3 AND estado != 'Reprogramó'"
+    /* 🐛 15-ago-2026 (José/Elevate, caso Paola Zapata): acá se excluían las filas 'Reprogramó'
+       a propósito, para que su costo lo cobrara la cuota de reprogramaciones y no como clase
+       dictada. La intención era buena pero dejaba la RESERVA de ese día huérfana: sin fila con
+       la que emparejarse, contaba igual como clase consumida. Efecto: reprogramar costaba una
+       clase SIEMPRE, incluso dentro del límite, justo lo contrario de lo que promete el ajuste.
+       Paola marcó "Reprogramó" el 12-ago y seguía viendo 17 de 20 en vez de 18.
+       Ahora sí emparejan: la reserva reprogramada deja de consumir (la clase se movió a otro
+       día, y ESA reserva nueva es la que consume), y la cuota se sigue cobrando aparte en
+       compute() vía `exceso`. */
+    "SELECT fecha FROM registro WHERE tenant_id = ?1 AND alumno_id = ?2 AND COALESCE(ciclo,1) = ?3"
   ).bind(tenantId, alumnoId, ciclo).all();
   return reservasUsadasPuro(resv, regs || [], excluirId);
 }
@@ -12243,6 +12261,63 @@ export default {
           return json({ ok: true });
         }
 
+        /* ---- "Anular la clase: que no haya pasado y se le devuelva el crédito" ----
+           15-ago-2026, pedido de José/Elevate al pie de la letra: *"en lugar de reprogramó
+           debería ser simplemente eliminar y hacer de cuenta que nunca pasó"*.
+           Para qué existe además de "Reprogramó": reprogramar es un movimiento real del alumno
+           y gasta su cuota (pasarse de la cuota cuesta una clase). Esto es otra cosa: el dueño
+           corrigiendo un error suyo —una clase que se marcó y no debía—, y ahí no tiene por qué
+           gastarse nada. Borra la bitácora de ese día y cancela la reserva, que son las DOS
+           patas que consumen crédito; tocar una sola dejaba el saldo a medio arreglar, que es
+           exactamente el bug que Paola destapó. */
+        if (path === "/app/api/admin/clase/anular" && request.method === "POST"){
+          const b = await request.json().catch(() => ({}));
+          const alumnoId = String(b.alumno_id || "");
+          const fecha = String(b.fecha || "").slice(0, 10);
+          if (!alumnoId || !/^\d{4}-\d{2}-\d{2}$/.test(fecha)) return json({ error: "Falta el alumno o la fecha." }, 400);
+          const alA = await env.DB.prepare(
+            "SELECT * FROM alumnos WHERE id = ?1 AND tenant_id = ?2 AND (?3 = 1 OR profesor_id = ?4)"
+          ).bind(alumnoId, tid, esDueno ? 1 : 0, profeActorId || "").first();
+          if (!alA) return json({ error: "Ese alumno no esta en tu lista." }, 404);
+          const cicloA = Number(b.ciclo) || Number(alA.ciclo) || 1;
+          /* la bitácora de ese día se va entera: es lo que el dueño ve como "la clase" */
+          const delReg = await env.DB.prepare(
+            "DELETE FROM registro WHERE tenant_id = ?1 AND alumno_id = ?2 AND COALESCE(ciclo,1) = ?3 AND fecha = ?4"
+          ).bind(tid, alumnoId, cicloA, fecha).run();
+          /* y las reservas de ese mismo día de LIMA (date(...,'-5 hours') = fechaLimaDe), porque
+             una reserva viva sigue apartando crédito aunque su bitácora ya no exista */
+          const delRes = await env.DB.prepare(
+            "UPDATE reservas SET estado = 'cancelada', cancelada_utc = ?1, cancelada_por = ?2 " +
+            "WHERE tenant_id = ?3 AND alumno_id = ?4 AND COALESCE(ciclo,1) = ?5 AND date(inicio_utc,'-5 hours') = ?6 " +
+            "AND estado != 'cancelada' AND tipo != 'bloqueo'"
+          ).bind(new Date().toISOString(), (esDueno ? "dueno" : "profesor") + ":" + (profeActorId || "") + ":anulada", tid, alumnoId, cicloA, fecha).run();
+          const nReg = (delReg && delReg.meta && (delReg.meta.changes ?? 0)) || 0;
+          const nRes = (delRes && delRes.meta && (delRes.meta.changes ?? 0)) || 0;
+          if (!nReg && !nRes) return json({ error: "Esa clase ya no existe." }, 404);
+          /* el saldo recalculado vuelve en la respuesta: el dueño ve el efecto sin recargar,
+             que es lo que le faltó a José para darse cuenta de que "Reprogramó" no le devolvía
+             la clase (creyó que sí y siguió) */
+          let saldoTxt = "";
+          try {
+            const paqMapA = (await loadPaquetes(env, tid)).map;
+            const alFresh = await env.DB.prepare("SELECT * FROM alumnos WHERE id = ?1 AND tenant_id = ?2").bind(alumnoId, tid).first();
+            const cfgA = await loadConfig(env, tid);
+            let cA;
+            if (pasesDe(alFresh)){
+              cA = await computeMulti(env, tid, alFresh, paqMapA, await loadPrecios(env, tid));
+            } else {
+              const { results: regsA } = await env.DB.prepare(
+                "SELECT estado, fecha, COALESCE(curso,'') AS curso FROM registro WHERE tenant_id = ?1 AND alumno_id = ?2 AND COALESCE(ciclo,1) = ?3"
+              ).bind(tid, alumnoId, cicloA).all();
+              const rUsA = await reservasUsadasCount(env, tid, alumnoId, cicloA);
+              cA = compute(alFresh, regsA || [], await loadPrecios(env, tid), rUsA, resolverPk(paqMapA, alFresh.paquete));
+            }
+            cA = saldoMostrado(cA, cfgA.saldo_modo || "");
+            saldoTxt = cA.ilim ? "sin límite" : (cA.restantes + " de " + cA.compradas);
+          } catch (e) { console.error("anular clase: saldo", e); }
+          return json({ ok: true, registro_borrado: nReg, reservas_canceladas: nRes, saldo: saldoTxt });
+        }
+
         /* "Cancelar la clase de ESTE día, sin tocar las demás semanas" (14-ago-2026, pedido de
            José/Elevate). Hasta hoy cancelar una clase puntual era ir reserva por reserva y
            además apartar la hora a mano para que nadie volviera a meterse; si se olvidaba el
@@ -12515,7 +12590,10 @@ export default {
               if (pasesDe(a)){
                 a.saldo = await computeMulti(env, tid, a, paqMapP, preciosP, "", { resv: rv, regs: rg });
               } else {
-                const rUsA = reservasUsadasPuro(rv, rg.filter(g => g.estado !== "Reprogramó"));
+                /* sin filtrar 'Reprogramó' desde el 15-ago-2026: esas filas también emparejan
+                   la reserva de su día (ver reservasUsadasCount). Si acá se filtrara y allá no,
+                   el panel volvería a mostrar un saldo distinto al del portal. */
+                const rUsA = reservasUsadasPuro(rv, rg);
                 a.saldo = compute(a, rg, preciosP, rUsA, resolverPk(paqMapP, a.paquete));
               }
               a.saldo = saldoMostrado(a.saldo, modoSaldo);

@@ -2193,7 +2193,11 @@
       <div class="field"><label>Estado</label><select id="r_estado"><option>Asistió</option><option>Reprogramó</option><option>Falta</option></select></div>
       <div class="field"><label>Curso de esta clase</label><select id="r_curso"></select></div>
     </div>
-    <p class="hint">Asistió y Falta consumen 1 clase. Reprogramar dentro del límite no consume; pasarse del límite cuenta como falta.</p>
+    <!-- 15-ago-2026: este texto era verdad en la teoría y mentira en la práctica — "Reprogramó"
+         igual descontaba la clase porque la reserva de ese día seguía consumiendo por su cuenta
+         (caso Paola Zapata). Ya está arreglado, y de paso se aclara para qué es cada cosa: José
+         usó "Reprogramó" para deshacer un error suyo, que no es lo que hace. -->
+    <p class="hint"><b>Asistió</b> y <b>Falta</b> consumen 1 clase. <b>Reprogramó</b> es para cuando el alumno MUEVE su clase a otro día: no consume si está dentro de su límite, y pasarse del límite cuenta como falta.<br>¿Te equivocaste y quieres que esta clase no haya existido? Usa <b>Anular</b>, en la ficha del alumno → Sus clases: borra la clase y le devuelve el crédito, sin gastarle ninguna reprogramación.</p>
     <div class="field" id="r_grupal_wrap"><label>Quiénes más estuvieron en esta clase</label>
       <div id="r_gsel" class="gsel"></div>
       <input id="r_gbuscar" type="search" placeholder="Busca por nombre y haz clic para sumarlo" autocomplete="off" />
@@ -6809,7 +6813,12 @@ function pintarClasesDeAlumno(a){
   else h+=lista(tomadas.map(function(r){
     return fila(esc(fechaBonita(r.fecha))+(r.curso?(' · '+esc(r.curso)):'')+
       ' · <span class="hint" style="margin:0;">'+(r.estado==="Falta"?"faltó":"vino")+'</span>',
-      '<button type="button" class="btn ghost sm" data-editreg="'+esc(r.id)+'">Editar</button>');
+      '<button type="button" class="btn ghost sm" data-editreg="'+esc(r.id)+'">Editar</button> '+
+      /* "Anular" (15-ago-2026, José/Elevate): *"en lugar de reprogramó debería ser simplemente
+         eliminar y hacer de cuenta que nunca pasó y se le devuelve el crédito"*. Marcar
+         "Reprogramó" no servía para eso: gasta su cuota de reprogramaciones y está pensado para
+         cuando el alumno mueve su clase, no para deshacer un error del dueño. */
+      '<button type="button" class="btn ghost sm" data-anularclase="'+esc(r.fecha||"")+'" data-al="'+esc(a.id)+'" data-ciclo="'+esc(r.ciclo||a.ciclo||1)+'" title="Borra la clase y le devuelve el crédito">Anular</button>');
   }).join(""));
   h+='</div>';
 
@@ -6870,6 +6879,39 @@ if(el("ovAlumno")) el("ovAlumno").addEventListener("click",function(e){
     })
     .then(function(){ toast(accion==="cancelada"?"Clase quitada":"Listo"); repintarFicha(); try{ renderAlumnos(); }catch(e2){} })
     .catch(function(err){ toast((err&&err.message)||"No se pudo"); })
+    .finally(function(){ b.disabled=false; });
+});
+
+/* "Anular" una clase ya tomada (15-ago-2026, pedido de José/Elevate).
+   Borra la bitácora de ese día Y cancela la reserva: son las dos patas que consumen crédito.
+   El servidor devuelve el saldo ya recalculado y se lo decimos en el toast — José marcó
+   "Reprogramó" creyendo que le devolvía la clase, no vio ningún número y siguió adelante. */
+if(el("ovAlumno")) el("ovAlumno").addEventListener("click",function(e){
+  var b=e.target.closest("[data-anularclase]");
+  if(!b) return;
+  e.preventDefault();
+  if(!confirm("¿Anular esta clase?\n\nSe borra de su historial y la clase vuelve a su saldo, como si nunca hubiera pasado. No le gasta ninguna reprogramación.")) return;
+  b.disabled=true;
+  apiPost("/app/api/admin/clase/anular",{alumno_id:b.dataset.al, fecha:b.dataset.anularclase, ciclo:b.dataset.ciclo})
+    .then(function(d){
+      AG_RESERVAS_LISTAS=false;
+      return Promise.all([
+        asegurarReservas(),
+        /* mismo cuidado que arriba: la ficha abierta puede tener cambios sin guardar */
+        apiGet().then(function(dd){
+          db.registro=dd.registro||db.registro;
+          if(dd.alumnos){
+            var abierto=db.alumnos.find(function(x){ return x.id===FICHA_AL; });
+            db.alumnos=dd.alumnos.map(function(x){ return (abierto && x.id===FICHA_AL) ? abierto : x; });
+          }
+        })
+      ]).then(function(){ return d; });
+    })
+    .then(function(d){
+      toast((d&&d.saldo) ? ("Clase anulada — le quedan "+d.saldo) : "Clase anulada");
+      repintarFicha(); try{ renderAlumnos(); }catch(e2){}
+    })
+    .catch(function(err){ toast((err&&err.message)||"No se pudo anular"); })
     .finally(function(){ b.disabled=false; });
 });
 
