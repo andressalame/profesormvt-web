@@ -1221,6 +1221,10 @@ async function loadConfig(env, tenantId){
               /* "off" = no avisarle al alumno cuando el dueño le activa o renueva el plan a mano
                  desde su ficha (15-ago-2026). Vacío = sí se le avisa. Ver avisarPlanActivo. */
               aviso_plan_activo: "",
+              /* Domicilio de la academia. Obligatorio para poder mandar campañas: la Ley 28493
+                 art. 5.b exige nombre y domicilio completo del emisor en cada correo comercial.
+                 Sin esto, el módulo de campañas no deja crear ninguna. */
+              direccion_fiscal: "",
               brand_color: "", brand_font: "", brand_logo: "", agenda_cupo: "",
               /* "Mi web" (editor visual de la página pública de la academia). Vacío = la
                  landing por defecto armada con los datos de la academia. web_version cambia
@@ -5124,7 +5128,12 @@ async function ensureAlumnoExtraSchema(env){
   const cols = [["activado", "TEXT DEFAULT ''"], ["caducado", "INTEGER DEFAULT 0"],
                 ["apellido", "TEXT DEFAULT ''"], ["email", "TEXT DEFAULT ''"], ["nacimiento", "TEXT DEFAULT ''"],
                 /* clases de regalo por referir y el ciclo al que pertenecen (15-ago-2026) */
-                ["bonus_clases", "INTEGER DEFAULT 0"], ["bonus_ciclo", "INTEGER DEFAULT 0"]];
+                ["bonus_clases", "INTEGER DEFAULT 0"], ["bonus_ciclo", "INTEGER DEFAULT 0"],
+                /* Consentimiento para publicidad (15-ago-2026). mkt_ok = 1 SOLO si el alumno lo
+                   marcó él mismo; la fecha y el origen son la prueba de descargo ante Indecopi,
+                   que es lo que a ESAN no le alcanzó. mkt_token = su link de baja permanente. */
+                ["mkt_ok", "INTEGER DEFAULT 0"], ["mkt_fecha", "TEXT DEFAULT ''"],
+                ["mkt_origen", "TEXT DEFAULT ''"], ["mkt_token", "TEXT DEFAULT ''"]];
   for (const [c, tipo] of cols){
     try { await env.DB.prepare("ALTER TABLE alumnos ADD COLUMN " + c + " " + tipo).run(); } catch (e) { /* ya existe */ }
   }
@@ -5132,6 +5141,23 @@ async function ensureAlumnoExtraSchema(env){
      proposito: `descuento` es credito que se le RESTA al saldo del alumno al confirmar, y
      meterlos en la misma columna le vaciaria el credito por una rebaja que no salio de ahi. */
   try { await env.DB.prepare("ALTER TABLE compras ADD COLUMN desc_ref REAL DEFAULT 0").run(); } catch (e) { /* ya existe */ }
+  /* Campañas de correo (15-ago-2026). `campana_destinos` congela la lista al crear la campaña:
+     el envío va por tandas a lo largo del día y tiene que poder reanudarse sin volver a
+     preguntarle a la base quién entraba (si no, un alumno que se da de baja a media campaña
+     desordena el recuento, y uno que consiente después entraría a una campaña ya lanzada). */
+  try {
+    await env.DB.prepare(
+      "CREATE TABLE IF NOT EXISTS campanas (id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, segmento TEXT DEFAULT 'todos', " +
+      "asunto TEXT DEFAULT '', cuerpo TEXT DEFAULT '', estado TEXT DEFAULT 'enviando', total INTEGER DEFAULT 0, " +
+      "enviados INTEGER DEFAULT 0, fallidos INTEGER DEFAULT 0, creada TEXT DEFAULT '', ultima TEXT DEFAULT '')"
+    ).run();
+    await env.DB.prepare(
+      "CREATE TABLE IF NOT EXISTS campana_destinos (campana_id TEXT NOT NULL, alumno_id TEXT NOT NULL, " +
+      "estado TEXT DEFAULT 'pendiente', enviado_utc TEXT DEFAULT '', PRIMARY KEY (campana_id, alumno_id))"
+    ).run();
+    await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_campanas_tenant ON campanas (tenant_id, creada)").run();
+    await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_campdest_pend ON campana_destinos (campana_id, estado)").run();
+  } catch (e) { /* ya existen */ }
   try { await env.DB.prepare("ALTER TABLE profesores ADD COLUMN permisos TEXT DEFAULT ''").run(); } catch (e) { /* ya existe */ }
   /* El formulario publico de compra recoge apellido y (si la academia lo pide) fecha de
      nacimiento. Viven primero en `cuentas` porque el alumno todavia no existe: se crea
@@ -5697,6 +5723,202 @@ async function recordatorioRenovacion(env){
     }
   }
   return enviados;
+}
+
+/* ═══════════ CAMPAÑAS: correos de la academia a SUS alumnos (15-ago-2026) ═══════════
+   Pedido de José/Elevate: *"en Punchpass podías mandar mails masivos a toda mi base de datos,
+   a los alumnos activos o a los inactivos. ¿Se puede hacer acá?"*.
+
+   Se puede, pero NO como en Punchpass, y la diferencia no es técnica sino legal. En Perú:
+
+   · Ley 29571 (Codigo del Consumidor) art. 58.1.e — la publicidad por correo necesita
+     consentimiento PREVIO, EXPRESO E INEQUIVOCO. No basta con dar opcion de baja. Que la
+     persona ya sea tu cliente NO cuenta como consentimiento (es la defensa que Indecopi le
+     rechazo a ESAN, Res. 0001-2023/SPC). Por eso `mkt_ok`: sin esa marca, el alumno no entra
+     en ninguna campaña, y el panel se lo dice al dueño con todas sus letras.
+   · Misma norma, modificada el 14-set-2023 — PROHIBIDO enviar entre las 20:00 y las 07:00, y
+     sabados, domingos y feriados. Incluso a quien SI consintio. Infraccion muy grave. Por eso
+     la ventana la impone el sistema y no hay ajuste para saltarsela.
+   · Ley 28493 art. 5 — el correo comercial lleva la palabra PUBLICIDAD en el asunto, el nombre
+     y domicilio de quien lo manda, y una via de baja. Art. 6: seguir enviando pasados 2 dias de
+     la baja ya es ilegal (aca la baja es inmediata). Art. 8: 1% de la UIT por mensaje ilegal,
+     que con la UIT 2026 en S/5,500 son S/55 por correo — los 1,447 de Elevate serian S/79,585.
+   · Ley 28493 art. 7 — responden el que envia, el beneficiario Y LOS INTERMEDIARIOS. Batuta es
+     el dominio remitente: los candados van en el producto, no en un consejo al cliente.
+
+   Y aparte de la ley, la razon tecnica de siempre: `batuta.lat` es UN dominio para TODAS las
+   academias. Una campaña que se gane reportes de spam se lleva puesta la entregabilidad de los
+   recordatorios de clase de todo el mundo. De ahi las tandas y el tope diario, igual que en las
+   invitaciones al portal. */
+const CAMPANA_TANDA = 40;        // por corrida del cron (cada 15 min) y por academia
+const CAMPANA_TOPE_DIA = 300;    // techo diario por academia: calienta el dominio, no lo quema
+const CAMPANA_SEGMENTOS = ["todos", "activos", "inactivos"];
+/* Feriados nacionales del Perú. Los fijos van por MM-DD; los móviles (Semana Santa) por año.
+   Si el año no está en la tabla, se cae al lado seguro: solo se respetan los fijos. Ante la
+   duda de un feriado nuevo, el costo de mandar un día de más es una infracción muy grave, así
+   que esta lista se revisa cada enero. */
+const FERIADOS_FIJOS = ["01-01", "05-01", "06-07", "06-29", "07-23", "07-28", "07-29",
+                        "08-06", "08-30", "10-08", "11-01", "12-08", "12-09", "12-25"];
+const FERIADOS_MOVILES = { 2026: ["04-02", "04-03"], 2027: ["03-25", "03-26"] };  // jueves y viernes santo
+/* ¿Se puede enviar publicidad AHORA mismo? Lunes a viernes, 07:00–19:59 hora de Lima, sin
+   feriados. Devuelve el motivo para poder decírselo al dueño en el panel en vez de que vea
+   una campaña "detenida" sin explicación. */
+function ventanaComercialLima(ahora){
+  const p = limaParts(ahora || new Date());
+  const mmdd = String(p.m + 1).padStart(2, "0") + "-" + String(p.d).padStart(2, "0");
+  /* limaParts no trae el día de la semana: se calcula sobre la fecha de Lima ya resuelta */
+  const dow = new Date(Date.UTC(p.y, p.m, p.d)).getUTCDay();   // 0 = domingo
+  if (dow === 0 || dow === 6) return { ok: false, motivo: "Los sábados y domingos no se puede enviar publicidad (Ley 29571)." };
+  if (FERIADOS_FIJOS.indexOf(mmdd) !== -1 || (FERIADOS_MOVILES[p.y] || []).indexOf(mmdd) !== -1){
+    return { ok: false, motivo: "Hoy es feriado: la ley no permite enviar publicidad (Ley 29571)." };
+  }
+  if (p.h < 7) return { ok: false, motivo: "Antes de las 7:00 a.m. no se puede enviar publicidad. Arranca sola a esa hora." };
+  if (p.h >= 20) return { ok: false, motivo: "Después de las 8:00 p.m. no se puede enviar publicidad. Sigue mañana a las 7:00 a.m." };
+  return { ok: true, motivo: "" };
+}
+/* El WHERE de cada segmento. Los tres arrancan del MISMO filtro duro: consentimiento vigente,
+   sin baja, y con un correo al que escribir. Lo que cambia entre segmentos es solo el estado
+   del plan.
+   "Activo" acá es a propósito la definición barata y predecible —tiene plan, no caducado, sin
+   vencer— y no el saldo real calculado: sobre 1,447 alumnos, calcular saldo uno por uno para
+   contar destinatarios costaría más de lo que vale, y el dueño necesita que el número le
+   cuadre con lo que ve en su lista. */
+function campanaWhere(segmento){
+  const base = "a.tenant_id = ?1 AND COALESCE(a.mkt_ok,0) = 1 AND COALESCE(a.no_email,0) = 0 " +
+               "AND COALESCE(a.email,'') != ''";
+  const vigente = "COALESCE(a.paquete,'') != '' AND COALESCE(a.caducado,0) = 0 " +
+                  "AND (COALESCE(a.vence,'') = '' OR date(a.vence) >= date('now','-5 hours'))";
+  if (segmento === "activos") return base + " AND " + vigente;
+  if (segmento === "inactivos") return base + " AND NOT (" + vigente + ")";
+  return base;
+}
+async function contarSegmento(env, tenantId, segmento){
+  const seg = CAMPANA_SEGMENTOS.indexOf(segmento) !== -1 ? segmento : "todos";
+  const fila = await env.DB.prepare(
+    "SELECT COUNT(*) AS n FROM alumnos a WHERE " + campanaWhere(seg)
+  ).bind(tenantId).first().catch(() => null);
+  return (fila && Number(fila.n)) || 0;
+}
+/* Token de baja por alumno. Se guarda en su ficha la primera vez que se le escribe: así el
+   link del correo sigue funcionando aunque la campaña ya no exista, que es lo que exige poder
+   darse de baja "cuando quiera" y no solo mientras dure el envío. */
+async function tokenBajaDe(env, tenantId, alumnoId, actual){
+  const t = String(actual || "").trim();
+  if (t) return t;
+  const nuevo = randHex(16);
+  try {
+    await env.DB.prepare("UPDATE alumnos SET mkt_token = ?1 WHERE id = ?2 AND tenant_id = ?3")
+      .bind(nuevo, alumnoId, tenantId).run();
+  } catch (e) { return ""; }
+  return nuevo;
+}
+/* El correo que sale. El asunto y el pie NO son editables por la academia a propósito: son
+   justo las dos cosas que la ley exige y que un cliente apurado borraría por "que se vea
+   más limpio". El cuerpo sí es suyo entero. */
+function armarCorreoCampana(tenant, cfg, campana, alumno, tokenBaja){
+  const academia = tenant.academia || MARCA.nombre;
+  const dominio = MARCA.dominio.replace(/\/+$/, "");
+  const baja = dominio + "/app/baja?t=" + encodeURIComponent(tokenBaja);
+  const nombre = ((alumno.nombre || "").trim().split(/\s+/)[0]) || "";
+  const cuerpoHtml = String(campana.cuerpo || "")
+    .replace(/\{alumno\}/g, esc(nombre))
+    .replace(/\{academia\}/g, esc(academia))
+    .split(/\n{2,}/).map(p => "<p>" + esc(p).replace(/\n/g, "<br>") + "</p>").join("");
+  /* domicilio y contacto de la ACADEMIA: la Ley 28493 art. 5 pide nombre, domicilio completo
+     y correo de quien emite. Si la academia no los cargó, la campaña ni se deja crear. */
+  const dir = String(cfg.direccion_fiscal || cfg.direccion || "").trim();
+  const correoAcad = String(tenant.email || "").trim();
+  const html =
+    '<div style="font-family:Arial,Helvetica,sans-serif;max-width:520px;margin:0 auto;color:#1a1a1a;font-size:15px;line-height:1.6">' +
+      cuerpoHtml +
+      '<hr style="border:none;border-top:1px solid #e5e5e5;margin:26px 0 14px">' +
+      '<div style="color:#777;font-size:12px;line-height:1.5">' +
+        '<p style="margin:0 0 8px">Recibes este correo porque eres alumno de ' + esc(academia) +
+          ' y aceptaste recibir sus comunicaciones' + (alumno.mkt_fecha ? (" el " + esc(alumno.mkt_fecha)) : "") + '.</p>' +
+        '<p style="margin:0 0 8px">' + esc(academia) + (dir ? (" · " + esc(dir)) : "") + (correoAcad ? (" · " + esc(correoAcad)) : "") + '</p>' +
+        '<p style="margin:0 0 8px">¿No quieres recibir más correos como este? ' +
+          '<a href="' + baja + '" style="color:#777">Darte de baja en un clic</a>.</p>' +
+        '<p style="margin:0">Tus datos los trata ' + esc(academia) + '; Batuta solo los procesa por encargo suyo. Ley 29733 · Ley 28493.</p>' +
+      '</div>' +
+    '</div>';
+  return {
+    /* la palabra PUBLICIDAD en el asunto es literal en la Ley 28493 art. 5.a */
+    subject: "PUBLICIDAD: " + String(campana.asunto || "").slice(0, 120),
+    html: html
+  };
+}
+/* Motor de envío. Corre en CADA pasada del cron (cada 15 min) y manda una tanda por academia,
+   solo dentro de la ventana legal. Si la ventana está cerrada no hace nada y la campaña espera:
+   por eso el estado es 'enviando' y no 'pendiente'. */
+async function enviarCampanas(env){
+  if (!env.RESEND_API_KEY) return 0;
+  const ventana = ventanaComercialLima();
+  if (!ventana.ok) return 0;
+  let pend = [];
+  try {
+    pend = ((await env.DB.prepare(
+      "SELECT * FROM campanas WHERE estado = 'enviando' ORDER BY creada ASC LIMIT 20"
+    ).all()).results) || [];
+  } catch (e) { return 0; }
+  let total = 0;
+  const hoyL = hoyLima();
+  for (const c of pend){
+    const tenant = await env.DB.prepare("SELECT * FROM tenants WHERE id = ?1").bind(c.tenant_id).first().catch(() => null);
+    if (!tenant || tenant.estado === "vencido"){
+      await env.DB.prepare("UPDATE campanas SET estado = 'cancelada' WHERE id = ?1").bind(c.id).run().catch(() => {});
+      continue;
+    }
+    /* tope diario POR ACADEMIA, contando todas sus campañas del día */
+    const yaHoy = await env.DB.prepare(
+      "SELECT COUNT(*) AS n FROM campana_destinos d JOIN campanas k ON k.id = d.campana_id " +
+      "WHERE k.tenant_id = ?1 AND d.estado = 'enviado' AND substr(d.enviado_utc,1,10) = ?2"
+    ).bind(c.tenant_id, hoyL).first().catch(() => null);
+    const restanHoy = CAMPANA_TOPE_DIA - ((yaHoy && Number(yaHoy.n)) || 0);
+    if (restanHoy <= 0) continue;
+    const cupo = Math.min(CAMPANA_TANDA, restanHoy);
+    const { results: destinos } = await env.DB.prepare(
+      "SELECT d.alumno_id, a.nombre, COALESCE(a.email,'') AS email, COALESCE(a.no_email,0) AS no_email, " +
+      "COALESCE(a.mkt_ok,0) AS mkt_ok, COALESCE(a.mkt_fecha,'') AS mkt_fecha, COALESCE(a.mkt_token,'') AS mkt_token " +
+      "FROM campana_destinos d JOIN alumnos a ON a.id = d.alumno_id AND a.tenant_id = ?1 " +
+      "WHERE d.campana_id = ?2 AND d.estado = 'pendiente' LIMIT ?3"
+    ).bind(c.tenant_id, c.id, cupo).all().catch(() => ({ results: [] }));
+    if (!destinos || !destinos.length){
+      await env.DB.prepare("UPDATE campanas SET estado = 'terminada' WHERE id = ?1").bind(c.id).run().catch(() => {});
+      continue;
+    }
+    const cfg = await loadConfig(env, c.tenant_id).catch(() => ({}));
+    for (const d of destinos){
+      /* Se revalida EN EL MOMENTO del envío, no solo al armar la lista: entre que la campaña
+         se creó y le toca el turno, el alumno pudo darse de baja. Mandarle igual sería
+         exactamente la infracción del art. 6 de la Ley 28493. */
+      if (Number(d.no_email) || !Number(d.mkt_ok) || !emailOk(String(d.email))){
+        await env.DB.prepare("UPDATE campana_destinos SET estado = 'saltado' WHERE campana_id = ?1 AND alumno_id = ?2")
+          .bind(c.id, d.alumno_id).run().catch(() => {});
+        continue;
+      }
+      const token = await tokenBajaDe(env, c.tenant_id, d.alumno_id, d.mkt_token);
+      const msg = armarCorreoCampana(tenant, cfg, c, d, token);
+      const okEnvio = await enviarCorreo(env, {
+        to: d.email, subject: msg.subject, html: msg.html,
+        from: { name: tenant.academia || MARCA.nombre, email: "hola@" + MARCA.dominio.replace(/^https?:\/\//, "") },
+        replyTo: tenant.email || undefined
+      });
+      await env.DB.prepare(
+        "UPDATE campana_destinos SET estado = ?1, enviado_utc = ?2 WHERE campana_id = ?3 AND alumno_id = ?4"
+      ).bind(okEnvio ? "enviado" : "fallido", new Date().toISOString(), c.id, d.alumno_id).run().catch(() => {});
+      if (okEnvio) total++;
+    }
+    /* contadores de la campaña, siempre desde la verdad (los destinos), nunca sumando a ojo */
+    const res = await env.DB.prepare(
+      "SELECT SUM(estado = 'enviado') AS env, SUM(estado = 'fallido') AS fal, SUM(estado = 'pendiente') AS pen FROM campana_destinos WHERE campana_id = ?1"
+    ).bind(c.id).first().catch(() => null);
+    if (res){
+      await env.DB.prepare("UPDATE campanas SET enviados = ?1, fallidos = ?2, estado = ?3, ultima = ?4 WHERE id = ?5")
+        .bind(Number(res.env) || 0, Number(res.fal) || 0, (Number(res.pen) || 0) > 0 ? "enviando" : "terminada", new Date().toISOString(), c.id)
+        .run().catch(() => {});
+    }
+  }
+  return total;
 }
 
 /* ---------- Win-back (09-jul columna, activado 24-jul para Elevate) ----------
@@ -6637,6 +6859,39 @@ export default {
     }
     if (path.startsWith("/app/a/") && request.method === "GET"){
       return env.ASSETS ? assetConSeguridad(await env.ASSETS.fetch(new Request(new URL("/alumnos/index.html", url), request))) : json({ error: "No encontrado" }, 404);
+    }
+    /* ---- Baja de correos publicitarios, en UN clic y sin login (15-ago-2026) ----
+       Es lo que exige la Ley 28493 art. 5.c, y el art. 6 convierte en ilegal seguir enviando
+       pasados 2 días de la solicitud: acá el efecto es inmediato, que es más simple de cumplir
+       que medir dos días.
+       Sin sesión a propósito: pedirle al alumno que se loguee para dejar de recibir correos es
+       justo la fricción que la norma quiere evitar. El token es opaco, aleatorio y solo sirve
+       para esto — no da acceso a nada.
+       Se apagan las DOS marcas: `mkt_ok` (publicidad) y `no_email` (cualquier correo no
+       transaccional), porque quien pide la baja no está distinguiendo entre categorías. */
+    if (path === "/app/baja" && request.method === "GET"){
+      const tok = String(url.searchParams.get("t") || "").trim();
+      let al = null;
+      if (/^[a-f0-9]{8,64}$/i.test(tok)){
+        al = await env.DB.prepare(
+          "SELECT a.id, a.tenant_id, a.nombre, t.academia FROM alumnos a JOIN tenants t ON t.id = a.tenant_id WHERE a.mkt_token = ?1"
+        ).bind(tok).first().catch(() => null);
+      }
+      if (al){
+        try {
+          await env.DB.prepare("UPDATE alumnos SET mkt_ok = 0, no_email = 1, mkt_origen = 'baja' WHERE id = ?1 AND tenant_id = ?2")
+            .bind(al.id, al.tenant_id).run();
+        } catch (e) { console.error("baja de correos", e); }
+      }
+      const academia = (al && al.academia) || "tu academia";
+      const cuerpoB = al
+        ? '<h1 style="font-size:20px;margin:0 0 10px">Listo, te diste de baja</h1>' +
+          '<p>No vas a recibir más correos de promociones de <b>' + esc(academia) + '</b>.</p>' +
+          '<p style="color:#666;font-size:14px">Los avisos de tus clases (recordatorios, tu plan) te siguen llegando, porque son parte de tu servicio. Si tampoco los quieres, escríbele a tu academia.</p>' +
+          '<p style="color:#666;font-size:14px">¿Te arrepentiste? Puedes volver a activarlos desde tu portal, en <b>Mi cuenta</b>.</p>'
+        : '<h1 style="font-size:20px;margin:0 0 10px">Ese enlace ya no sirve</h1>' +
+          '<p>Puede que ya te hayas dado de baja antes. Si te siguen llegando correos, escríbele directo a tu academia.</p>';
+      return htmlResponse(paginaBase("Baja de correos", cuerpoB, ""));
     }
     /* Disponibilidad pública, solo lectura (12-ago-2026, caso Beholos de Elevate).
        Sus alumnos reservan desde la web del partner SIN poder ver si queda cupo, así que José
@@ -9399,6 +9654,36 @@ export default {
       /* ============================================================
          CUENTA / PUSH / ME de ALUMNO (sesion de cuenta)
          ============================================================ */
+      /* ---- Consentimiento para promociones (15-ago-2026) ----
+         La pieza que hace legal todo el módulo de campañas: el alumno lo marca ÉL, desde su
+         portal, con la casilla desmarcada por defecto. Se guarda la fecha y el origen porque
+         son la prueba de descargo — a ESAN no le bastó decir que el denunciante era su alumno
+         (Res. 0001-2023/SPC-Indecopi), hizo falta el consentimiento y no lo tenía.
+         Vive en la FICHA del alumno y no en la cuenta: el titular del dato es la academia, y la
+         ficha es lo que sobrevive si el alumno rehace su acceso al portal. */
+      if (path === "/app/api/cuenta/marketing" && request.method === "POST"){
+        const cu = await cuentaDeSesion(env, request);
+        if (!cu) return json({ error: "Sesion expirada" }, 401);
+        if (!cu.alumno_id) return json({ error: "Todavia no tienes una ficha de alumno." }, 400);
+        const b = await request.json().catch(() => ({}));
+        const quiere = !!b.acepto;
+        await ensureAlumnoExtraSchema(env);
+        try {
+          if (quiere){
+            await env.DB.prepare(
+              "UPDATE alumnos SET mkt_ok = 1, mkt_fecha = ?1, mkt_origen = 'portal', no_email = 0 WHERE id = ?2 AND tenant_id = ?3"
+            ).bind(hoyLima(), cu.alumno_id, cu.tenant_id).run();
+          } else {
+            /* al desmarcar se apaga tambien `no_email`... NO: se apaga solo la publicidad. El
+               alumno que quita la casilla sigue queriendo sus recordatorios de clase, que son
+               parte del servicio que paga. */
+            await env.DB.prepare(
+              "UPDATE alumnos SET mkt_ok = 0, mkt_origen = 'portal' WHERE id = ?1 AND tenant_id = ?2"
+            ).bind(cu.alumno_id, cu.tenant_id).run();
+          }
+        } catch (e) { return json({ error: "No se pudo guardar. Intenta de nuevo." }, 500); }
+        return json({ ok: true, acepto: quiere });
+      }
       if (path === "/app/api/cuenta/password" && request.method === "POST"){
         const cu = await cuentaDeSesion(env, request);
         if (!cu) return json({ error: "Sesion expirada" }, 401);
@@ -9656,7 +9941,10 @@ export default {
           /* sin_clave = entro por su link y nunca eligio contrasena. El portal usa esto para
              OFRECERLE ponerla (aviso cerrable, jamas un muro): si no la pone, su unica forma
              de volver despues es rebuscar el correo de la invitacion. */
-          cuenta: { nombre: cu.nombre, email: cu.email, whatsapp: cu.whatsapp || "", sin_clave: sinClaveMe },
+          cuenta: { nombre: cu.nombre, email: cu.email, whatsapp: cu.whatsapp || "", sin_clave: sinClaveMe,
+            /* la casilla de promociones vive en Mi cuenta; arranca en false para todos, que es
+               lo que exige un consentimiento "expreso e inequívoco" (15-ago-2026) */
+            marketing: !!(alumno && Number(alumno.mkt_ok)) },
           profesor: portalFlags.sin_profe ? null : miProfe,
           academia: (tRowMe && tRowMe.academia) || "",
           portal: portalFlags,
@@ -12223,6 +12511,89 @@ export default {
           return json({ ok: true, creadas });
         }
 
+        /* ═══ CAMPAÑAS DE CORREO (15-ago-2026, pedido de José/Elevate) ═══
+           Solo el dueño: es SU banco de datos y es él quien responde ante Indecopi por lo que
+           se envíe. Un profesor invitado no puede escribirle a la base de la academia. */
+        if (path === "/app/api/admin/campanas" && request.method === "GET"){
+          if (!esDueno) return json({ error: "Las campañas las maneja el dueno de la academia." }, 403);
+          await ensureAlumnoExtraSchema(env);
+          const conteos = {};
+          for (const s of CAMPANA_SEGMENTOS) conteos[s] = await contarSegmento(env, tid, s);
+          /* el total SIN filtrar es la otra mitad de la verdad: el dueño tiene que ver la
+             distancia entre "mis alumnos" y "a cuántos puedo escribirles", que es justo lo que
+             le va a preguntar a José su intuición de Punchpass */
+          const tot = await env.DB.prepare("SELECT COUNT(*) AS n FROM alumnos WHERE tenant_id = ?1").bind(tid).first().catch(() => null);
+          const { results: hist } = await env.DB.prepare(
+            "SELECT id, segmento, asunto, estado, total, enviados, fallidos, creada FROM campanas WHERE tenant_id = ?1 ORDER BY creada DESC LIMIT 20"
+          ).bind(tid).all().catch(() => ({ results: [] }));
+          const cfgC = await loadConfig(env, tid).catch(() => ({}));
+          const ventana = ventanaComercialLima();
+          return json({
+            conteos,
+            alumnos_total: (tot && Number(tot.n)) || 0,
+            campanas: hist || [],
+            ventana_abierta: ventana.ok,
+            ventana_motivo: ventana.motivo,
+            tope_dia: CAMPANA_TOPE_DIA,
+            /* la Ley 28493 pide domicilio del emisor en cada correo: si falta, no se deja enviar */
+            falta_direccion: !String(cfgC.direccion_fiscal || cfgC.direccion || "").trim()
+          });
+        }
+        if (path === "/app/api/admin/campanas" && request.method === "POST"){
+          if (!esDueno) return json({ error: "Las campañas las maneja el dueno de la academia." }, 403);
+          if (!env.RESEND_API_KEY) return json({ error: "El envio de correos no esta configurado. Escribenos." }, 501);
+          await ensureAlumnoExtraSchema(env);
+          const b = await request.json().catch(() => ({}));
+          const seg = CAMPANA_SEGMENTOS.indexOf(String(b.segmento || "")) !== -1 ? String(b.segmento) : "todos";
+          const asunto = String(b.asunto || "").trim().slice(0, 120);
+          const cuerpo = String(b.cuerpo || "").trim().slice(0, 5000);
+          if (!asunto || !cuerpo) return json({ error: "Ponle un asunto y un mensaje a tu campana." }, 400);
+          const cfgC = await loadConfig(env, tid).catch(() => ({}));
+          if (!String(cfgC.direccion_fiscal || cfgC.direccion || "").trim()){
+            return json({ error: "Antes de tu primera campana carga la direccion de tu academia en Ajustes > Academia: la ley exige que cada correo publicitario lleve el domicilio de quien lo envia." }, 400);
+          }
+          /* una campaña a la vez por academia: dos corriendo en paralelo se comen el tope diario
+             entre ellas y el dueño no entiende por qué ninguna avanza */
+          const enCurso = await env.DB.prepare("SELECT id FROM campanas WHERE tenant_id = ?1 AND estado = 'enviando' LIMIT 1").bind(tid).first().catch(() => null);
+          if (enCurso) return json({ error: "Ya tienes una campana enviandose. Espera a que termine o cancelala." }, 409);
+
+          const idC = crypto.randomUUID();
+          const { results: dest } = await env.DB.prepare(
+            "SELECT a.id FROM alumnos a WHERE " + campanaWhere(seg)
+          ).bind(tid).all().catch(() => ({ results: [] }));
+          const lista = (dest || []).map(r => r.id);
+          if (!lista.length){
+            return json({ error: "Todavia no tienes a nadie a quien escribirle en ese grupo. Tus alumnos tienen que aceptar recibir promociones desde su portal (Mi cuenta) antes de que puedas escribirles: la ley pide su permiso previo." }, 400);
+          }
+          await env.DB.prepare(
+            "INSERT INTO campanas (id,tenant_id,segmento,asunto,cuerpo,estado,total,enviados,fallidos,creada,ultima) VALUES (?1,?2,?3,?4,?5,'enviando',?6,0,0,?7,'')"
+          ).bind(idC, tid, seg, asunto, cuerpo, lista.length, new Date().toISOString()).run();
+          /* los destinos se graban en lotes: D1 topa la cantidad de sentencias por batch */
+          for (let i = 0; i < lista.length; i += 50){
+            const trozo = lista.slice(i, i + 50);
+            await env.DB.batch(trozo.map(aid =>
+              env.DB.prepare("INSERT INTO campana_destinos (campana_id, alumno_id, estado, enviado_utc) VALUES (?1,?2,'pendiente','')").bind(idC, aid)
+            )).catch(() => {});
+          }
+          const ventana = ventanaComercialLima();
+          return json({
+            ok: true, id: idC, total: lista.length,
+            ventana_abierta: ventana.ok, ventana_motivo: ventana.motivo,
+            /* cuántos días va a tardar, dicho ANTES: con el tope diario, 1,447 correos no salen
+               hoy, y es mejor que el dueño lo sepa ahora y no que crea que se colgó */
+            dias: Math.max(1, Math.ceil(lista.length / CAMPANA_TOPE_DIA))
+          });
+        }
+        if (path === "/app/api/admin/campanas/cancelar" && request.method === "POST"){
+          if (!esDueno) return json({ error: "Las campañas las maneja el dueno de la academia." }, 403);
+          const b = await request.json().catch(() => ({}));
+          const r = await env.DB.prepare("UPDATE campanas SET estado = 'cancelada' WHERE id = ?1 AND tenant_id = ?2 AND estado = 'enviando'")
+            .bind(String(b.id || ""), tid).run().catch(() => null);
+          const n = (r && r.meta && (r.meta.changes ?? 0)) || 0;
+          if (!n) return json({ error: "Esa campana ya no se esta enviando." }, 404);
+          return json({ ok: true });
+        }
+
         if (path === "/app/api/admin/agenda/marcar" && request.method === "POST"){
           const b = await request.json().catch(() => ({}));
           const id = String(b.id || "");
@@ -13170,7 +13541,9 @@ export default {
                           "ref_premio_modo", "ref_premio_valor", "ref_desc_modo", "ref_desc_valor",
                           "ref_min_clases", "ref_solo_nuevos",
                           /* aviso al alumno cuando le activan el plan a mano (15-ago-2026) */
-                          "aviso_plan_activo"];
+                          "aviso_plan_activo",
+                          /* domicilio de la academia: obligatorio en los correos de campaña */
+                          "direccion_fiscal"];
           const stmts = [];
           /* > 0 = cuantos planes quedaron fuera por el tope, para decirselo en la respuesta */
           let avisoPaquetes = 0;
@@ -13881,6 +14254,11 @@ export default {
        al cron de las 9am, la clase de las 7pm quedaria "reservada" toda la noche y el saldo
        del alumno mentiria hasta el dia siguiente. */
     try { await cerrarAsistenciasAuto(env); } catch (e) { console.error("asistencia auto", e); }
+    /* Campañas: en CADA corrida (cada 15 min), no en la diaria. La ley solo deja enviar de
+       07:00 a 20:00 de lunes a viernes, así que hay que ir despachando tandas a lo largo del
+       día; con una sola corrida diaria no entrarían ni 300 correos. La propia función se
+       encarga de no hacer nada fuera de la ventana. */
+    try { await enviarCampanas(env); } catch (e) { console.error("campanas", e); }
     const dSched = new Date((event && event.scheduledTime) || Date.now());
     if (!(dSched.getUTCHours() === 14 && dSched.getUTCMinutes() === 0)) return;
     /* ---- desde aqui: SOLO la corrida diaria de las 9am Lima ---- */

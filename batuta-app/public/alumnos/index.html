@@ -660,6 +660,17 @@
         <button class="btn ghost sm hidden" id="btnAvisosOff">Desactivar avisos</button>
         <p class="note hidden" id="avisosNoSop" style="margin-top:10px;">Tu navegador no soporta avisos. En iPhone: abre desde "Agregar a inicio".</p>
       </div>
+      <!-- Promociones (15-ago-2026). La casilla arranca SIEMPRE desmarcada: en Perú la
+           publicidad por correo necesita consentimiento previo, expreso e inequívoco (Ley 29571
+           art. 58.1.e), y una casilla premarcada no es ninguna de las tres cosas. -->
+      <div class="card hidden" id="ctaMktCard">
+        <h3>// PROMOCIONES</h3>
+        <label style="display:flex;gap:10px;align-items:flex-start;cursor:pointer;">
+          <input type="checkbox" id="ctaMkt" style="width:auto;margin-top:3px;flex:0 0 auto;" />
+          <span class="note" style="margin:0;">Quiero recibir promociones y novedades de <b id="ctaMktAcad">mi academia</b> por correo.</span>
+        </label>
+        <p class="note" style="margin:10px 0 0;opacity:.75;">Es opcional y puedes cambiarlo cuando quieras. Los avisos de tus clases y de tu plan te llegan igual: eso es parte de tu servicio, no publicidad.</p>
+      </div>
       <div class="card hidden" id="ctaPassCard">
         <!-- El que entró por su link de invitación nunca eligió clave, así que pedirle la
              "actual" lo deja trabado para siempre: para él la tarjeta se vuelve "poner" y el
@@ -1988,6 +1999,13 @@ function renderCuenta(){
     kv("Nombre", esc(ME.cuenta.nombre||"—"))+
     kv("Correo", esc(ME.cuenta.email||"—"))+
     kv("WhatsApp", esc(ME.cuenta.whatsapp||"—"));
+  /* Promociones: solo tiene sentido para quien YA es alumno (tiene ficha). El visitante que
+     apenas se registró no ve la casilla — todavía no hay academia que le escriba. */
+  if(ME.alumno){
+    $("ctaMkt").checked = !!(ME.cuenta && ME.cuenta.marketing);
+    $("ctaMktAcad").textContent = MARCA.nombre || "mi academia";
+    show("ctaMktCard");
+  } else hide("ctaMktCard");
   var sinClaveC = !!(ME.cuenta && ME.cuenta.sin_clave);
   $("ctaPassTit").textContent = sinClaveC ? "// PONER MI CONTRASEÑA" : "// CAMBIAR CONTRASEÑA";
   $("ctaPassActual").classList.toggle("hidden", sinClaveC);
@@ -2057,6 +2075,20 @@ function avisosOff(){
 }
 $("btnAvisosOn").addEventListener("click", avisosOn);
 $("btnAvisosOff").addEventListener("click", avisosOff);
+/* Promociones: se guarda al toque, sin botón "guardar". Es un permiso, y un permiso que
+   depende de que además le des a otro botón no es un permiso claro. Si falla, la casilla
+   vuelve sola a como estaba: nunca puede quedar marcada en pantalla y apagada en el servidor. */
+$("ctaMkt").addEventListener("change", function(){
+  var quiere = $("ctaMkt").checked;
+  $("ctaMkt").disabled = true;
+  api("/app/api/cuenta/marketing", { method:"POST", body: JSON.stringify({ acepto: quiere }) })
+    .then(function(){
+      if(ME && ME.cuenta) ME.cuenta.marketing = quiere;
+      toast(quiere ? "Listo, te avisamos de las promociones" : "Ya no te llegarán promociones");
+    })
+    .catch(function(){ $("ctaMkt").checked = !quiere; toast("No se pudo guardar"); })
+    .finally(function(){ $("ctaMkt").disabled = false; });
+});
 $("btnPass").addEventListener("click",function(){
   $("passErr").textContent="";
   var primeraVez = !!(ME && ME.cuenta && ME.cuenta.sin_clave);

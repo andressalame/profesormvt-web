@@ -810,6 +810,7 @@
         <button class="tab solo-dueno" data-tab="web">Mi web</button>
         <button class="tab solo-dueno" data-tab="perfil">Perfil</button>
         <button class="tab solo-dueno" data-tab="ajustes">Ajustes</button>
+        <button class="tab solo-dueno" data-tab="correos">Correos a mis alumnos</button>
         <button class="tab solo-dueno" data-tab="campanas">Campañas</button>
         <button class="tab solo-dueno" data-tab="servicios">Servicios</button>
         <button class="tab" data-tab="feedback">Ideas y errores</button>
@@ -1015,6 +1016,41 @@
         <thead><tr><th>Fecha</th><th>Tipo</th><th>Aporte</th><th>Premio</th><th>Estado</th></tr></thead>
         <tbody></tbody>
       </table>
+    </div>
+  </section>
+
+  <!-- ===== CORREOS A MIS ALUMNOS (15-ago-2026, pedido de José/Elevate) =====
+       Lo que pidió: los mails masivos de Punchpass, con los 3 grupos (todos / activos /
+       inactivos). Lo que NO se puede copiar de Punchpass: mandar a todos porque sí. En Perú la
+       publicidad por correo necesita permiso previo del alumno (Ley 29571 art. 58.1.e), y hay
+       horario prohibido (8pm-7am, fines de semana y feriados) que aplica incluso a quien dijo
+       que sí. Los dos candados los impone esta pantalla y el servidor, no el criterio del
+       dueño: si se los dejáramos a él, la multa se la come él y de rebote nosotros. -->
+  <section class="panel" id="panel-correos">
+    <h2>Correos a mis alumnos</h2>
+    <p class="hint" style="margin-bottom:12px;">Escríbele a tus alumnos por correo: una promoción, una novedad, o un "vuelve" a los que se enfriaron. Se envía solo, por tandas, dentro del horario que permite la ley.</p>
+    <div id="corrAviso"></div>
+    <div class="card" style="padding:14px 16px;margin-bottom:16px;">
+      <h3 style="margin:0 0 10px;font-size:14px;">¿A quiénes?</h3>
+      <div id="corrSegs" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:6px;"></div>
+      <p class="hint" id="corrSegNota" style="margin:8px 0 0;"></p>
+    </div>
+    <div class="card" style="padding:14px 16px;margin-bottom:16px;">
+      <h3 style="margin:0 0 10px;font-size:14px;">Tu mensaje</h3>
+      <div class="cfgrow"><span class="pk">Asunto</span><input id="corrAsunto" type="text" maxlength="120" placeholder="Ej. 3 cupos libres para el taller del sábado" /></div>
+      <p class="hint" style="margin:-2px 0 10px;">Al enviarse, el asunto sale como <b>"PUBLICIDAD: tu asunto"</b>. Lo exige la ley peruana para los correos comerciales y no se puede quitar.</p>
+      <label class="pk" style="display:block;margin-bottom:4px;">Mensaje</label>
+      <textarea id="corrCuerpo" rows="8" maxlength="5000" placeholder="Hola {alumno},&#10;&#10;Escribe acá tu mensaje. Deja una línea en blanco para separar párrafos.&#10;&#10;Te esperamos."></textarea>
+      <p class="hint" style="margin:6px 0 0;">Puedes usar <b>{alumno}</b> (su nombre) y <b>{academia}</b>. Abajo de tu mensaje se agrega solo el pie de ley con tus datos y el link para darse de baja.</p>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;align-items:center;">
+        <button class="btn" id="btnCorrEnviar">Enviar campaña</button>
+        <button class="btn ghost" id="btnCorrPrev">Ver cómo queda</button>
+        <span class="hint" id="corrResumen" style="margin:0;"></span>
+      </div>
+    </div>
+    <div class="card" style="padding:14px 16px;">
+      <h3 style="margin:0 0 10px;font-size:14px;">Lo que ya enviaste</h3>
+      <div id="corrHist"><p class="hint" style="margin:0;">Cargando…</p></div>
     </div>
   </section>
 
@@ -1493,6 +1529,10 @@
       <p class="hint">El número donde te escriben tus alumnos. Es el que se abre desde el <b>botón verde de tu web</b> y el que usan los mensajes del portal. Ponlo con el 51 adelante, sin espacios ni guiones.</p>
       <div class="cfgrow"><span class="pk">Mi WhatsApp</span><input id="cfg_whatsapp_profe" type="text" inputmode="numeric" placeholder="51999888777" /></div>
       <p class="hint" style="margin-top:-4px;">Se guarda con el botón <b>Guardar ajustes</b> del final de la página.</p>
+      <!-- Dirección (15-ago-2026): la pide la Ley 28493 art. 5.b en cada correo comercial, así
+           que sin esto el módulo de Correos no deja crear campañas. -->
+      <div class="cfgrow"><span class="pk">Dirección de tu academia</span><input id="cfg_direccion_fiscal" type="text" maxlength="160" placeholder="Av. Ejemplo 123, Miraflores, Lima" /></div>
+      <p class="hint" style="margin-top:-4px;">Hace falta para poder enviar <b>Correos a mis alumnos</b>: la ley exige que cada correo publicitario lleve el domicilio de quien lo manda. Sale solo en el pie de esos correos.</p>
     </div>
     <div class="group" data-aj="academia">
       <h2>Tu marca</h2>
@@ -3554,6 +3594,7 @@ function renderAjustes(){
   if(el("cfg_reprog_min_h")) el("cfg_reprog_min_h").value=(db.config&&db.config.reprog_min_h)||"";
   if(el("cfg_recordatorio_renovacion")) el("cfg_recordatorio_renovacion").value=(db.config&&db.config.recordatorio_renovacion)||"";
   if(el("cfg_aviso_plan_activo")) el("cfg_aviso_plan_activo").value=(db.config&&db.config.aviso_plan_activo)||"";
+  if(el("cfg_direccion_fiscal")) el("cfg_direccion_fiscal").value=(db.config&&db.config.direccion_fiscal)||"";
   if(el("cfg_nubefact_ruta")) el("cfg_nubefact_ruta").value=(db.config&&db.config.nubefact_ruta)||"";
   if(el("cfg_nubefact_token")) el("cfg_nubefact_token").value=(db.config&&db.config.nubefact_token)||"";
   if(el("cfg_fact_serie_boleta")) el("cfg_fact_serie_boleta").value=(db.config&&db.config.fact_serie_boleta)||"";
@@ -5303,6 +5344,122 @@ function abrirGrupoActivo(){
 aplicarEstadoMenu();
 abrirGrupoActivo();
 
+/* ═══════════ CORREOS A MIS ALUMNOS (15-ago-2026, pedido de José/Elevate) ═══════════
+   La pantalla tiene UN trabajo además de mandar correos: que el dueño entienda por qué no
+   puede escribirle a los 1,447 el primer día. Por eso cada grupo muestra los dos números —
+   cuántos alumnos son y a cuántos puede escribirles— en vez de esconder la diferencia. */
+var CORR = { segmento: "todos", datos: null };
+function cargarCorreos(){
+  var box = el("corrHist"); if(!box) return;
+  box.innerHTML = '<p class="hint" style="margin:0;">Cargando…</p>';
+  fetch("/app/api/admin/campanas", { headers: hdr() })
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      if(d && d.error){ box.innerHTML = '<p class="hint" style="margin:0;">'+esc(d.error)+'</p>'; return; }
+      CORR.datos = d;
+      pintarCorreos();
+    })
+    .catch(function(){ box.innerHTML = '<p class="hint" style="margin:0;">No se pudo cargar. Revisa tu conexión.</p>'; });
+}
+function pintarCorreos(){
+  var d = CORR.datos; if(!d) return;
+  var SEG = [
+    { k:"todos",     t:"Todos mis alumnos", d:"Los que aceptaron recibir promociones." },
+    { k:"activos",   t:"Solo los activos",  d:"Tienen un plan vigente ahora." },
+    { k:"inactivos", t:"Solo los inactivos",d:"Sin plan vigente. Para invitarlos a volver." }
+  ];
+  el("corrSegs").innerHTML = SEG.map(function(s){
+    var n = (d.conteos && d.conteos[s.k]) || 0;
+    var on = CORR.segmento === s.k;
+    return '<button type="button" class="btn '+(on?'':'ghost')+'" data-corrseg="'+s.k+'" style="flex:1 1 190px;text-align:left;padding:10px 12px;">'+
+      '<b>'+esc(s.t)+'</b><br><span style="font-size:18px;">'+n+'</span> <span class="hint" style="margin:0;">'+(n===1?'alumno':'alumnos')+'</span>'+
+      '<br><span class="hint" style="margin:0;font-size:11px;">'+esc(s.d)+'</span></button>';
+  }).join("");
+  /* La distancia entre "tengo 1,447" y "puedo escribirle a 12" es EL dato de esta pantalla.
+     Si se esconde, el dueño cree que el sistema está roto y nos escribe; si se muestra con su
+     porqué, entiende que tiene que juntar permisos y le sirve. */
+  var totCons = (d.conteos && d.conteos.todos) || 0;
+  var tot = d.alumnos_total || 0;
+  var sinPermiso = Math.max(0, tot - totCons);
+  el("corrSegNota").innerHTML = sinPermiso
+    ? 'Tienes <b>'+tot+'</b> alumnos, pero solo <b>'+totCons+'</b> aceptaron recibir promociones. '+
+      'A los otros '+sinPermiso+' <b>no se les puede escribir</b>: la ley peruana pide su permiso antes (Ley 29571). '+
+      'Ese permiso lo marcan ellos desde su portal, en <b>Mi cuenta</b>, y tu lista crece sola.'
+    : (tot ? 'Tus <b>'+tot+'</b> alumnos aceptaron recibir promociones.' : 'Todavía no tienes alumnos.');
+
+  var av = [];
+  if(d.falta_direccion) av.push('⚠️ Antes de tu primera campaña carga la <b>dirección de tu academia</b> en Ajustes → Academia. La ley pide que cada correo publicitario lleve el domicilio de quien lo envía.');
+  if(!d.ventana_abierta && d.ventana_motivo) av.push('🕗 '+esc(d.ventana_motivo)+' Puedes dejarla lista igual: sale sola apenas se pueda.');
+  av.push('Se envían hasta <b>'+(d.tope_dia||300)+' correos al día</b> por academia, de lunes a viernes entre 7am y 8pm. Es lo que la ley permite y lo que evita que tus correos caigan en spam.');
+  el("corrAviso").innerHTML = '<div class="card" style="padding:12px 14px;margin-bottom:16px;">'+
+    av.map(function(x){ return '<p class="hint" style="margin:0 0 6px;">'+x+'</p>'; }).join("")+'</div>';
+
+  var hist = d.campanas || [];
+  el("corrHist").innerHTML = hist.length ? hist.map(function(c){
+    var pc = c.estado==="terminada"?"green":(c.estado==="enviando"?"amber":"gray");
+    var falta = Math.max(0, (c.total||0) - (c.enviados||0) - (c.fallidos||0));
+    return '<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:7px 0;border-bottom:1px solid var(--line,rgba(255,255,255,.07));">'+
+      '<span style="flex:1 1 auto;font-size:13px;"><b>'+esc(c.asunto||"")+'</b><br>'+
+        '<span class="hint" style="margin:0;">'+esc(String(c.creada||"").slice(0,10))+' · '+esc(c.segmento||"")+' · '+
+        (c.enviados||0)+' de '+(c.total||0)+' enviados'+(c.fallidos?(' · '+c.fallidos+' rebotaron'):'')+
+        (falta&&c.estado==="enviando"?(' · faltan '+falta):'')+'</span></span>'+
+      '<span class="pill '+pc+'">'+esc(c.estado||"")+'</span>'+
+      (c.estado==="enviando"?' <button type="button" class="btn ghost sm" data-corrcancel="'+esc(c.id)+'">Detener</button>':'')+
+    '</div>';
+  }).join("") : '<p class="hint" style="margin:0;">Todavía no has enviado ninguna campaña.</p>';
+
+  var n = (d.conteos && d.conteos[CORR.segmento]) || 0;
+  el("corrResumen").textContent = n ? ("Se enviará a "+n+" alumno"+(n===1?"":"s")) : "No hay a quién enviarle en este grupo";
+  el("btnCorrEnviar").disabled = !n || !!d.falta_direccion;
+}
+if(el("corrSegs")) el("corrSegs").addEventListener("click", function(e){
+  var b = e.target.closest("[data-corrseg]"); if(!b) return;
+  CORR.segmento = b.dataset.corrseg; pintarCorreos();
+});
+if(el("corrHist")) el("corrHist").addEventListener("click", function(e){
+  var b = e.target.closest("[data-corrcancel]"); if(!b) return;
+  if(!confirm("¿Detener esta campaña? Los correos que ya salieron no se pueden deshacer, pero no se manda ninguno más.")) return;
+  b.disabled = true;
+  apiPost("/app/api/admin/campanas/cancelar", { id: b.dataset.corrcancel })
+    .then(function(){ toast("Campaña detenida"); cargarCorreos(); })
+    .catch(function(err){ toast((err&&err.message)||"No se pudo"); b.disabled=false; });
+});
+/* La previsualización muestra el correo COMPLETO, con el asunto forzado y el pie de ley. Es la
+   forma de que el dueño vea que no le estamos metiendo letra chica rara en su nombre. */
+if(el("btnCorrPrev")) el("btnCorrPrev").addEventListener("click", function(){
+  var asunto = (el("corrAsunto").value||"").trim();
+  var cuerpo = (el("corrCuerpo").value||"").trim();
+  if(!asunto || !cuerpo){ toast("Escribe el asunto y el mensaje"); return; }
+  var acad = (db.tenant && db.tenant.academia) || (db.config && db.config.profe_marca) || "Tu academia";
+  var dir = (db.config && (db.config.direccion_fiscal||"")) || "[tu dirección]";
+  var texto = cuerpo.replace(/\{alumno\}/g, "María").replace(/\{academia\}/g, acad);
+  alert("ASUNTO:\nPUBLICIDAD: "+asunto+"\n\n"+"— — —\n"+texto+"\n— — —\n\n"+
+    "Recibes este correo porque eres alumno de "+acad+" y aceptaste recibir sus comunicaciones.\n"+
+    acad+" · "+dir+"\n¿No quieres recibir más correos como este? Darte de baja en un clic.\n"+
+    "Tus datos los trata "+acad+"; Batuta solo los procesa por encargo suyo. Ley 29733 · Ley 28493.");
+});
+if(el("btnCorrEnviar")) el("btnCorrEnviar").addEventListener("click", function(){
+  var asunto = (el("corrAsunto").value||"").trim();
+  var cuerpo = (el("corrCuerpo").value||"").trim();
+  if(!asunto || !cuerpo){ toast("Escribe el asunto y el mensaje"); return; }
+  var n = (CORR.datos && CORR.datos.conteos && CORR.datos.conteos[CORR.segmento]) || 0;
+  /* confirmación con el número REAL: mandar correos a gente de verdad no puede ser un clic
+     distraído, y el dueño responde por el contenido ante Indecopi */
+  if(!confirm("Vas a enviarle este correo a "+n+" alumno"+(n===1?"":"s")+".\n\nSale por tandas, solo de lunes a viernes entre 7am y 8pm, que es lo que permite la ley.\n\n¿Lo mando?")) return;
+  var b = el("btnCorrEnviar"); b.disabled = true;
+  apiPost("/app/api/admin/campanas", { segmento: CORR.segmento, asunto: asunto, cuerpo: cuerpo })
+    .then(function(d){
+      el("corrAsunto").value = ""; el("corrCuerpo").value = "";
+      var msg = "Campaña creada para "+(d.total||0)+" alumnos.";
+      if(d.dias > 1) msg += " Por el tope diario va a tardar unos "+d.dias+" días.";
+      if(!d.ventana_abierta) msg += " Arranca apenas se abra el horario permitido.";
+      alert(msg);
+      cargarCorreos();
+    })
+    .catch(function(err){ alert((err&&err.message)||"No se pudo crear la campaña"); })
+    .finally(function(){ b.disabled = false; });
+});
+
 /* ---------- Feedback con premio (+7 días el primer aporte del mes) ---------- */
 /* ===== Campañas de Meta (Facebook/Instagram) ===== */
 var CAMPA=null;
@@ -5712,7 +5869,7 @@ document.body.addEventListener("click",function(e){
 });
 
 /* ---------- Tabs / modales ---------- */
-var TITULOS={resumen:"Hoy",academia:"Mi academia",alumnos:"Alumnos",grupos:"Grupos",profesores:"Profesores",registro:"Asistencia",agenda:"Mis clases",pagos:"Pagos",caja:"Caja",reportes:"Reportes",cuentas:"Cuentas de alumnos",leads:"Interesados",recursos:"Para tus alumnos",ejercicios:"Tu biblioteca",ajustes:"Ajustes",perfil:"Perfil",servicios:"Servicios",campanas:"Campañas",chat:"Chat",feedback:"Ideas y errores",web:"Mi web"};
+var TITULOS={resumen:"Hoy",academia:"Mi academia",alumnos:"Alumnos",grupos:"Grupos",profesores:"Profesores",registro:"Asistencia",agenda:"Mis clases",pagos:"Pagos",caja:"Caja",reportes:"Reportes",cuentas:"Cuentas de alumnos",leads:"Interesados",recursos:"Para tus alumnos",ejercicios:"Tu biblioteca",ajustes:"Ajustes",perfil:"Perfil",servicios:"Servicios",campanas:"Campañas",correos:"Correos a mis alumnos",chat:"Chat",feedback:"Ideas y errores",web:"Mi web"};
 document.querySelectorAll(".tab").forEach(function(t){
   t.addEventListener("click",function(){
     document.querySelectorAll(".tab").forEach(function(x){x.classList.remove("active");});
@@ -5731,6 +5888,7 @@ document.querySelectorAll(".tab").forEach(function(t){
     if(t.dataset.tab==="profesores"){ cargarProfesores(); cargarLiquidacion(); }
     if(t.dataset.tab==="caja"){ renderCaja(); if(el("g_fecha")&&!el("g_fecha").value) el("g_fecha").value=hoyLima(); }
     if(t.dataset.tab==="campanas") cargarCampanas();
+    if(t.dataset.tab==="correos") cargarCorreos();
     if(t.dataset.tab==="web") abrirEditorWeb();
     if(t.dataset.tab==="academia") renderAcademia();
     pintarNav(t.dataset.tab);
@@ -7145,6 +7303,7 @@ el("btnGuardarAjustes").addEventListener("click",function(){
             reprog_min_h:(el("cfg_reprog_min_h")?el("cfg_reprog_min_h").value.trim():""),
             recordatorio_renovacion:(el("cfg_recordatorio_renovacion")?el("cfg_recordatorio_renovacion").value:""),
             aviso_plan_activo:(el("cfg_aviso_plan_activo")?el("cfg_aviso_plan_activo").value:""),
+            direccion_fiscal:(el("cfg_direccion_fiscal")?el("cfg_direccion_fiscal").value.trim():""),
             /* Pedidos de Elevate (28-jul-2026): caducidad, asistencia automática y los
                textos propios de cada correo. Vacío en cualquiera = comportamiento de siempre. */
             caduca_meses:(el("cfg_caduca_meses")?el("cfg_caduca_meses").value.trim():""),
@@ -7283,6 +7442,7 @@ var BS_INDICE=[
   {t:"Mi web — editar mi página pública", tab:"web", k:"web pagina sitio landing publica editar diseno online internet subdominio dominio tuacademia batuta lat"},
   {t:"Mi perfil y mi plan de Batuta", tab:"perfil", k:"perfil plan suscripcion pagar batuta foto nombre subir bajar plan afiliados referir"},
   {t:"Campañas de publicidad", tab:"campanas", k:"campanas ads publicidad meta facebook instagram anuncios"},
+  {t:"Correos a mis alumnos", tab:"correos", k:"correos mails masivos campana email newsletter promocion boletin masivo"},
   {t:"Servicios", tab:"servicios", k:"servicios extras"},
   {t:"Ideas y errores — reportar algo", tab:"feedback", k:"feedback idea error bug problema sugerencia ayuda reportar reclamo"},
   /* Ajustes, por sub-pestaña: acá es donde más se pierde la gente */
