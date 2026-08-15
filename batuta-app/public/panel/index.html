@@ -1480,6 +1480,7 @@
       <button class="webpg" data-aj="reservas" type="button">Reservas</button>
       <button class="webpg" data-aj="mensajes" type="button">Mensajes</button>
       <button class="webpg" data-aj="cobros" type="button">Cobros</button>
+      <button class="webpg" data-aj="referidos" type="button">Referidos</button>
       <button class="webpg" data-aj="wa" type="button">WhatsApp e IA</button>
       <button class="webpg" data-aj="avanzado" type="button">Avanzado</button>
       <button class="btn ghost sm" type="button" style="margin-left:auto;" onclick="lanzarTourModulo('ajustes')">? Cómo funciona</button>
@@ -1647,6 +1648,45 @@
       <div class="cfgrow"><span class="pk">IGV</span><select id="cfg_fact_igv"><option value="">Gravado 18%</option><option value="exonerado">Exonerado</option></select></div>
       <div class="cfgrow"><span class="pk">Próximo número (opcional)</span><input id="cfg_fact_proximo_numero" type="number" min="1" placeholder="Solo si ya emitiste boletas fuera de Batuta" /></div>
     </div>
+    <!-- ===== REFERIDOS (15-ago-2026, pedido de José/Elevate) =====
+         Hasta hoy el programa estaba clavado en el código: S/50 al que refería y nada al
+         amigo. Acá cada academia arma el suyo. Todo en blanco = la regla de siempre, así que
+         ninguna academia se entera de este cambio hasta que entre a tocarlo. -->
+    <div class="group" data-aj="referidos">
+      <h2>Trae a un amigo</h2>
+      <p class="hint">Cada alumno tuyo tiene un <b>código propio</b> en su portal. Cuando alguien se registra con ese código y compra su primer paquete, los dos ganan algo. Acá decides qué.</p>
+      <div id="refResumen" class="hint" style="margin:12px 0;padding:11px 13px;border:1px solid var(--line,#2a2a2a);border-radius:8px;"></div>
+
+      <h2 style="margin-top:22px;">El que trae al amigo</h2>
+      <div class="cfgrow"><span class="pk">¿Qué gana?</span><select id="cfg_ref_premio_modo">
+        <option value="">Un monto fijo de descuento</option>
+        <option value="pct_compra">Un % de lo que pagó su amigo, como descuento</option>
+        <option value="clases_credito">Clases gratis, pagadas como descuento</option>
+        <option value="clases_saldo">Clases gratis de verdad, a su saldo</option>
+      </select></div>
+      <div class="cfgrow"><span class="pk" id="lblRefPremioValor">Cuánto</span><input id="cfg_ref_premio_valor" type="number" min="1" max="5000" step="0.01" placeholder="50" /></div>
+      <p class="hint" style="margin-top:-4px;"><b>Descuento</b> = plata a favor que se le aplica sola en su próxima compra. <b>Clases gratis de verdad</b> = se le suman al saldo y las puede reservar mañana, sin comprar nada. La diferencia importa: el descuento lo cobras igual el día que renueve; la clase gratis la das ahora.</p>
+
+      <h2 style="margin-top:22px;">El amigo que llega</h2>
+      <div class="cfgrow"><span class="pk">¿Qué gana en su primera compra?</span><select id="cfg_ref_desc_modo">
+        <option value="">Nada</option>
+        <option value="pct">Un % de descuento</option>
+        <option value="soles">Un monto fijo de descuento</option>
+      </select></div>
+      <div class="cfgrow"><span class="pk" id="lblRefDescValor">Cuánto</span><input id="cfg_ref_desc_valor" type="number" min="1" max="5000" step="0.01" placeholder="10" /></div>
+      <p class="hint" style="margin-top:-4px;">Se le descuenta solo, en su primera compra y una sola vez. No se acumula con otra promoción del mismo plan.</p>
+
+      <h2 style="margin-top:22px;">Las condiciones</h2>
+      <div class="cfgrow"><span class="pk">Compra mínima para que valga</span><input id="cfg_ref_min_clases" type="number" min="0" max="500" placeholder="sin mínimo" /> <span class="pk" style="flex:0 0 auto;">clases</span></div>
+      <p class="hint" style="margin-top:-4px;">Es lo que deja fuera a la <b>clase suelta</b> sin tener que nombrarla: pon <b>4</b> y solo cuentan los paquetes de 4 clases para arriba. Las mensualidades ilimitadas siempre cuentan. Vacío = cualquier compra vale.</p>
+      <div class="cfgrow"><span class="pk">¿Quién puede usar un código?</span><select id="cfg_ref_solo_nuevos">
+        <option value="">Cualquiera que nunca haya comprado</option>
+        <option value="1">Solo alumnos nuevos de verdad (nunca compraron ni asistieron)</option>
+      </select></div>
+      <p class="hint" style="margin-top:-4px;">La segunda opción es la que necesitas si migraste tus alumnos de otro sistema: sin ella, un alumno de siempre se registra con el código de una amiga y los dos cobran un premio pensado para gente nueva.</p>
+      <p class="hint" style="margin-top:10px;"><b>Siempre, sin que lo configures:</b> solo cuenta la <b>primera</b> compra (nunca las renovaciones), cada persona usa un código <b>una sola vez</b>, y nadie puede usar el suyo propio. Los planes que marques como <b>fuera de referidos</b> en <b>Clases y planes</b> no dan ni descuento ni premio.</p>
+    </div>
+
     <div class="group" data-aj="wa">
       <h2>WhatsApp</h2>
       <p class="hint"><b>Ya funciona, sin conectar nada.</b> En <b>Interesados</b> y en <b>Alumnos</b>, cada fila tiene un botón <b>WhatsApp</b> que abre tu propio WhatsApp con el mensaje ya escrito (bienvenida, seguimiento, recordatorio de pago). Tú solo revisas y le das enviar: sale desde TU número de siempre y nadie pierde su WhatsApp.</p>
@@ -2430,6 +2470,13 @@ function filaPaqHTML(p){
       '<div style="border-top:1px solid var(--line);margin-top:10px;padding-top:10px;">'+
         '<label style="font-size:12px;display:flex;gap:6px;align-items:center;cursor:pointer;"><input type="checkbox" class="pq-o"'+(p.o?" checked":"")+' style="width:auto;" /> <b>Plan oculto</b> — no sale en tu web ni en el portal</label>'+
         '<p class="hint" style="margin:6px 0 0;font-size:11px;">Para planes especiales de clientes puntuales. Se lo asignas tú desde el panel, o le pasas su link directo de compra: tu link de Pagos + <b>?p=NombreDelPlan</b>. El que ya lo tiene puede renovarlo normal.</p>'+
+      '</div>'+
+      /* Fuera del programa de referidos (15-ago-2026, José/Elevate: "no aplica a promociones
+         especiales"). Un plan ya rebajado no aguanta encima el descuento del amigo Y el premio
+         del que lo trajo: se vende bajo costo sin que nadie lo note. */
+      '<div style="border-top:1px solid var(--line);margin-top:10px;padding-top:10px;">'+
+        '<label style="font-size:12px;display:flex;gap:6px;align-items:center;cursor:pointer;"><input type="checkbox" class="pq-sr"'+(p.sr?" checked":"")+' style="width:auto;" /> <b>Fuera de "trae a un amigo"</b> — este plan no da descuento ni premio</label>'+
+        '<p class="hint" style="margin:6px 0 0;font-size:11px;">Márcalo en tus <b>promociones</b> y planes de temporada: ya están rebajados, y encimarles el descuento del referido te los deja bajo costo.</p>'+
       '</div></div></details>'+
     '<button type="button" class="btn ghost sm pq-x" title="Quitar paquete">×</button>'+
     /* "Pendiente de configurar" (11-ago-2026): un plan en S/0 no sale en la web ni se puede
@@ -3476,6 +3523,13 @@ function renderAjustes(){
   if(el("cfg_caduca_meses")) el("cfg_caduca_meses").value=(db.config&&db.config.caduca_meses)||"";
   if(el("cfg_campos_alumno")) el("cfg_campos_alumno").value=(db.config&&db.config.campos_alumno)||"";
   if(el("cfg_saldo_modo")) el("cfg_saldo_modo").value=(db.config&&db.config.saldo_modo)||"";
+  if(el("cfg_ref_premio_modo")) el("cfg_ref_premio_modo").value=(db.config&&db.config.ref_premio_modo)||"";
+  if(el("cfg_ref_premio_valor")) el("cfg_ref_premio_valor").value=(db.config&&db.config.ref_premio_valor)||"";
+  if(el("cfg_ref_desc_modo")) el("cfg_ref_desc_modo").value=(db.config&&db.config.ref_desc_modo)||"";
+  if(el("cfg_ref_desc_valor")) el("cfg_ref_desc_valor").value=(db.config&&db.config.ref_desc_valor)||"";
+  if(el("cfg_ref_min_clases")) el("cfg_ref_min_clases").value=(db.config&&db.config.ref_min_clases)||"";
+  if(el("cfg_ref_solo_nuevos")) el("cfg_ref_solo_nuevos").value=(db.config&&db.config.ref_solo_nuevos)||"";
+  pintarResumenReferidos();
   if(el("cfg_asistencia_auto")) el("cfg_asistencia_auto").value=(db.config&&db.config.asistencia_auto)||"";
   if(el("cfg_asistencia_horas")) el("cfg_asistencia_horas").value=(db.config&&db.config.asistencia_horas)||"";
   if(el("cfg_cursos")) el("cfg_cursos").value=(db.config&&db.config.cursos)||MARCA.cursos.join(", ");
@@ -6906,6 +6960,78 @@ el("btnGuardarRenovar").addEventListener("click",function(){
     .finally(function(){ btnRen.disabled=false; });
 });
 
+/* ---------- Referidos: el ejemplo en vivo (15-ago-2026) ----------
+   Cuatro selectores y dos números no le dicen a nadie qué va a pasar el martes. Acá abajo
+   se arma la frase con SUS planes y SUS precios reales: "Ana trae a Luis, Luis paga S/405
+   en vez de S/450 y Ana gana 1 clase". Es lo único de esta pantalla que de verdad se lee. */
+function refPlanEjemplo(){
+  var min=Math.max(0,parseInt(el("cfg_ref_min_clases")?el("cfg_ref_min_clases").value:"",10)||0);
+  var cands=[];
+  Array.prototype.forEach.call(document.querySelectorAll("#preciosBox .paqrow"),function(row){
+    var n=((row.querySelector(".pq-n")||{}).value||"").trim(); if(!n) return;
+    var srEl=row.querySelector(".pq-sr"); if(srEl&&srEl.checked) return;   // las promos no sirven de ejemplo
+    var ilim=!!(row.querySelector(".pq-u")||{}).checked;
+    var c=ilim?0:(parseInt((row.querySelector(".pq-c")||{}).value,10)||0);
+    var precio=Number((row.querySelector(".pq-p")||{}).value)||0;
+    if(!(precio>0)) return;
+    if(!ilim && min>0 && c<min) return;
+    cands.push({n:n,c:c,ilim:ilim,precio:precio});
+  });
+  /* el plan más barato de los que califican: es el caso peor, el que muestra el premio mínimo */
+  cands.sort(function(a,b){ return a.precio-b.precio; });
+  return cands[0]||null;
+}
+function pintarResumenReferidos(){
+  var box=el("refResumen"); if(!box) return;
+  var pm=(el("cfg_ref_premio_modo")||{}).value||"";
+  var pv=Number((el("cfg_ref_premio_valor")||{}).value)||0;
+  var dm=(el("cfg_ref_desc_modo")||{}).value||"";
+  var dv=Number((el("cfg_ref_desc_valor")||{}).value)||0;
+  /* mismos defaults que refCfg() en el worker: en blanco NO es cero, es la regla por defecto */
+  if(!(pv>0)) pv=(pm==="")?50:(pm==="pct_compra"?10:1);
+  if(!(dv>0)) dv=(dm==="pct")?10:0;
+  /* las etiquetas de los dos campos "Cuánto" cambian según el modo, o nadie sabe qué escribir */
+  if(el("lblRefPremioValor")) el("lblRefPremioValor").textContent =
+    pm==="pct_compra" ? "Qué porcentaje" : (pm==="" ? "Cuántos soles" : "Cuántas clases");
+  if(el("lblRefDescValor")) el("lblRefDescValor").textContent =
+    dm==="pct" ? "Qué porcentaje" : (dm==="soles" ? "Cuántos soles" : "Cuánto");
+  if(el("cfg_ref_desc_valor")) el("cfg_ref_desc_valor").disabled = !dm;
+
+  var p=refPlanEjemplo();
+  if(!p){
+    box.innerHTML='<b>Ejemplo:</b> ponle precio a por lo menos un plan (en <b>Clases y planes</b>) y acá te muestro exactamente cuánto paga cada uno.';
+    return;
+  }
+  var soles=function(x){ return "S/"+(Math.round(x*100)/100); };
+  var nom=p.ilim?(p.n+" (mensualidad)"):(p.n+", "+p.c+" clase"+(p.c===1?"":"s"));
+  var desc = dm==="pct" ? (p.precio*dv/100) : (dm==="soles" ? Math.min(dv,p.precio) : 0);
+  desc=Math.round(desc*100)/100;
+  var paga=Math.max(0,p.precio-desc);
+  var txtAmigo = desc>0
+    ? ("compra <b>"+esc(nom)+"</b> y en vez de "+soles(p.precio)+" paga <b>"+soles(paga)+"</b>")
+    : ("compra <b>"+esc(nom)+"</b> y paga "+soles(p.precio)+" (sin descuento: no le diste ninguno)");
+  var txtAna;
+  if(pm==="") txtAna="<b>"+soles(pv)+" de descuento</b> para su próxima compra";
+  else if(pm==="pct_compra") txtAna="<b>"+soles(Math.round(paga*pv)/100)+" de descuento</b> ("+pv+"% de lo que pagó Luis) para su próxima compra";
+  else {
+    var nCl=Math.max(1,Math.floor(pv));
+    if(pm==="clases_saldo") txtAna="<b>"+nCl+" clase"+(nCl===1?"":"s")+" de verdad</b> en su saldo — la puede reservar hoy mismo";
+    else {
+      var unit=(p.ilim||!p.c)?0:(p.precio/p.c);
+      txtAna=unit>0
+        ? ("<b>"+nCl+" clase"+(nCl===1?"":"s")+" gratis</b>, que se le abonan como "+soles(Math.round(unit*nCl*100)/100)+" de descuento para su próxima compra")
+        : ("<b>"+nCl+" clase"+(nCl===1?"":"s")+" gratis</b> como descuento (⚠️ este plan es mensualidad ilimitada: no tiene precio por clase, así que ahí no se puede calcular)");
+    }
+  }
+  box.innerHTML='<b>Así queda:</b> Ana le pasa su código a Luis. Luis '+txtAmigo+'. Ana gana '+txtAna+'.';
+}
+["cfg_ref_premio_modo","cfg_ref_premio_valor","cfg_ref_desc_modo","cfg_ref_desc_valor","cfg_ref_min_clases","cfg_ref_solo_nuevos"]
+  .forEach(function(id){
+    var n=el(id); if(!n) return;
+    n.addEventListener("change",pintarResumenReferidos);
+    n.addEventListener("input",pintarResumenReferidos);
+  });
+
 /* ---------- Ajustes ---------- */
 el("btnGuardarAjustes").addEventListener("click",function(){
   /* paquetes: colecta del editor (nombre + clases/mensual + precio) */
@@ -6929,6 +7055,8 @@ el("btnGuardarAjustes").addEventListener("click",function(){
        "regla general de Batuta", distinto de 0 ("este plan no congela"). */
     var fila={n:n,c:c,r:r,u:u,t:t,d:d,i:i,precio:precio};
     var oEl=row.querySelector(".pq-o"), gEl=row.querySelector(".pq-g"), gbEl=row.querySelector(".pq-gb");
+    var srEl=row.querySelector(".pq-sr");
+    if(srEl&&srEl.checked) fila.sr=1;   // fuera del programa de referidos (15-ago-2026)
     if(oEl&&oEl.checked) fila.o=1;
     if(gEl&&String(gEl.value).trim()!=="") fila.g=Math.max(0,Math.min(365,parseInt(gEl.value,10)||0));
     if(gbEl&&String(gbEl.value).trim()!=="") fila.gb=Math.max(1,Math.min(12,parseInt(gbEl.value,10)||2));
@@ -6958,7 +7086,7 @@ el("btnGuardarAjustes").addEventListener("click",function(){
   var msgRows=leerMensajesEditor();
   var salasRows=(el("cfg_salas")?el("cfg_salas").value:"").split(",").map(function(s){return s.trim().slice(0,40);}).filter(Boolean).filter(function(s,i,a){return a.indexOf(s)===i;}).slice(0,8);
   /* sin filas se guarda "[]" (set vacío de verdad), no "" (que cae al default de música) */
-  var cfg={ paquetes: paqRows.length?JSON.stringify(paqRows.map(function(x){var j={n:x.n,c:x.c,r:x.r,u:x.u,t:x.t,d:x.d,i:x.i};if(x.o)j.o=1;if(x.g!==undefined)j.g=x.g;if(x.gb!==undefined)j.gb=x.gb;return j;})):"[]",
+  var cfg={ paquetes: paqRows.length?JSON.stringify(paqRows.map(function(x){var j={n:x.n,c:x.c,r:x.r,u:x.u,t:x.t,d:x.d,i:x.i};if(x.o)j.o=1;if(x.sr)j.sr=1;if(x.g!==undefined)j.g=x.g;if(x.gb!==undefined)j.gb=x.gb;return j;})):"[]",
             clases: clasesRows.length?JSON.stringify(clasesRows):"",
             salas: salasRows.length?JSON.stringify(salasRows):"",
             cursos: clasesRows.length?clasesRows.map(function(c){return c.n;}).join(", "):el("cfg_cursos").value.trim(),
@@ -6976,6 +7104,15 @@ el("btnGuardarAjustes").addEventListener("click",function(){
             caduca_meses:(el("cfg_caduca_meses")?el("cfg_caduca_meses").value.trim():""),
             campos_alumno:(el("cfg_campos_alumno")?el("cfg_campos_alumno").value:""),
             saldo_modo:(el("cfg_saldo_modo")?el("cfg_saldo_modo").value:""),
+            /* Referidos por academia (15-ago-2026, José/Elevate). ⚠️ Estas 6 claves también
+               tienen que estar en la lista `claves` del POST /admin/config del worker, o se
+               descartan en silencio y el dueño ve "guardado" sin nada guardado (bug saldo_modo). */
+            ref_premio_modo:(el("cfg_ref_premio_modo")?el("cfg_ref_premio_modo").value:""),
+            ref_premio_valor:(el("cfg_ref_premio_valor")?el("cfg_ref_premio_valor").value.trim():""),
+            ref_desc_modo:(el("cfg_ref_desc_modo")?el("cfg_ref_desc_modo").value:""),
+            ref_desc_valor:(el("cfg_ref_desc_valor")?el("cfg_ref_desc_valor").value.trim():""),
+            ref_min_clases:(el("cfg_ref_min_clases")?el("cfg_ref_min_clases").value.trim():""),
+            ref_solo_nuevos:(el("cfg_ref_solo_nuevos")?el("cfg_ref_solo_nuevos").value:""),
             asistencia_auto:(el("cfg_asistencia_auto")?el("cfg_asistencia_auto").value:""),
             asistencia_horas:(el("cfg_asistencia_horas")?el("cfg_asistencia_horas").value.trim():""),
             mensajes: Object.keys(msgRows).length?JSON.stringify(msgRows):"",
@@ -10471,11 +10608,11 @@ window.batutaInit = batutaInit;
     /* Tour NUEVO (27-jul-2026): Ajustes es donde se arma el molde de la academia y no
        tenía guía. Es lo que más se pregunta: aforo, variantes y qué incluye cada plan. */
     ajustes:[
-      {sel:'#ajNav', t:"Seis pestañas, no una lista infinita", b:"Cada cosa vive en su pestaña. Las dos que vas a usar de verdad son «Clases y planes» y «Cobros». El botón de guardar es uno solo y guarda todas."},
+      {sel:'#ajNav', t:"Pestañas, no una lista infinita", b:"Cada cosa vive en su pestaña. Las dos que vas a usar de verdad son «Clases y planes» y «Cobros». El botón de guardar es uno solo y guarda todas."},
       {sel:'#clasesBox', t:"Tus clases y su aforo", b:"Una fila por tipo de clase. El aforo (cuánta gente entra) se escribe UNA vez acá: cuando pongas esa clase en un horario, el cupo viene solo. Las variantes son las versiones de la misma clase, y son opcionales."},
       {sel:'#clasesBox', t:"El orden manda", b:"La primera de la lista es tu clase principal: sale primera en tu web y en el portal de tus alumnos. Sube lo que quieras destacar."},
       {sel:'#preciosBox', t:"Y qué incluye cada plan", b:"En cada paquete, «Incluye» marca a qué clases da acceso. El alumno con ese plan solo verá y solo podrá reservar esas. Sin marcar nada, tiene acceso a todo."},
-      {sel:null, t:"Guarda y listo", b:"«Guardar ajustes» abajo guarda las seis pestañas de golpe. Los precios salen al instante en tu portal y en tu web pública."}
+      {sel:null, t:"Guarda y listo", b:"«Guardar ajustes» abajo guarda todas las pestañas de golpe. Los precios salen al instante en tu portal y en tu web pública."}
     ],
     registro:[
       {sel:'#btnNuevoRegistro', t:"Esto es el pasado", b:"Acá anotas las clases que YA dictaste: asistió, faltó o reprogramó, qué trabajaron y la tarea (puedes grabar un audio o adjuntar un PDF de Tu biblioteca). Toma 30 segundos."},

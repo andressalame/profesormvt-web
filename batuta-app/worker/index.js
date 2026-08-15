@@ -30,6 +30,10 @@ const PAQUETES = {
 };
 const PRECIOS_DEFAULT = { "Paquete 4": 250, "Paquete 8": 450, "Paquete 12": 600, "Clase suelta": 70, "Clase de prueba": 50 };
 const SESION_DIAS = 30;
+/* Premio de referidos por DEFECTO, en soles. Desde el 15-ago-2026 ya no es la unica regla
+   posible: cada academia arma la suya en Ajustes > Referidos (ver refCfg). Esta constante
+   quedo como el default de quien nunca toco esos ajustes, para que ninguna academia
+   existente vea cambiar su programa de un dia para otro. */
 const CREDITO_REFERIDO = 50;
 const TRIAL_DIAS = 30; // 30 dias + garantia (Fase 1 del plan, ejecutado 14-jul-2026; antes 7)
 
@@ -85,7 +89,11 @@ function parsePaquetes(valor){
     g = (p && p.g !== undefined && p.g !== null && p.g !== "" && Number.isFinite(g)) ? Math.max(0, Math.min(365, g)) : null;
     let gb = parseInt(p && p.gb, 10);
     gb = (Number.isFinite(gb) && gb >= 1 && gb <= 12) ? gb : 2;
-    map[n] = { clases: c, reprog: r, ilim: u, tipos: t, dias: d, inicio: i, oculto: o, congela: g, congelaBloques: gb };
+    /* sr = 1 -> este plan queda FUERA del programa de referidos (15-ago-2026, José/Elevate:
+       "no aplica a promociones especiales"). Sin esto, la promo de temporada se lleva encima
+       el descuento del amigo y el premio del que refiere, y el plan se vende bajo costo. */
+    const sr = !!(p && p.sr);
+    map[n] = { clases: c, reprog: r, ilim: u, tipos: t, dias: d, inicio: i, oculto: o, congela: g, congelaBloques: gb, sinRef: sr };
     list.push(n);
     /* Tope de 20 planes por academia. 11-ago-2026: antes esto era un `break` MUDO — la
        academia con 25 planes guardaba 20 y los otros 5 desaparecian sin que nadie se
@@ -100,7 +108,7 @@ function parsePaquetes(valor){
 }
 function paquetesDefault(){
   const map = {}, list = [];
-  for (const n of Object.keys(PAQUETES)){ map[n] = { clases: PAQUETES[n].clases, reprog: PAQUETES[n].reprog, ilim: false, tipos: [], dias: 0, inicio: "compra", oculto: false, congela: null, congelaBloques: 2 }; list.push(n); }
+  for (const n of Object.keys(PAQUETES)){ map[n] = { clases: PAQUETES[n].clases, reprog: PAQUETES[n].reprog, ilim: false, tipos: [], dias: 0, inicio: "compra", oculto: false, congela: null, congelaBloques: 2, sinRef: false }; list.push(n); }
   return { map, list };
 }
 /* ¿Este paquete deja reservar esta franja? Paquete sin tipos = todo permitido.
@@ -120,8 +128,8 @@ async function loadPaquetes(env, tenantId){
    nombres legacy por defecto, y si no existe (paquete renombrado/borrado) 0 clases. */
 function resolverPk(map, nombre){
   if (map && map[nombre]) return map[nombre];
-  if (PAQUETES[nombre]) return { clases: PAQUETES[nombre].clases, reprog: PAQUETES[nombre].reprog, ilim: false, tipos: [], dias: 0, inicio: "compra", oculto: false, congela: null, congelaBloques: 2 };
-  return { clases: 0, reprog: 0, ilim: false, tipos: [], dias: 0, inicio: "compra", oculto: false, congela: null, congelaBloques: 2 };
+  if (PAQUETES[nombre]) return { clases: PAQUETES[nombre].clases, reprog: PAQUETES[nombre].reprog, ilim: false, tipos: [], dias: 0, inicio: "compra", oculto: false, congela: null, congelaBloques: 2, sinRef: false };
+  return { clases: 0, reprog: 0, ilim: false, tipos: [], dias: 0, inicio: "compra", oculto: false, congela: null, congelaBloques: 2, sinRef: false };
 }
 
 /* Contexto para "Mi web": junta los datos duros de la academia (config, precios,
@@ -675,6 +683,137 @@ async function buscarRefCode(env, tenantId, ref){
   return fila ? fila.ref_code : null;
 }
 
+/* ═══════ EL PROGRAMA DE REFERIDOS LO ARMA CADA ACADEMIA (15-ago-2026, pedido de José/Elevate) ═══
+   Hasta hoy el programa era UNO SOLO y estaba clavado en el codigo: el que referia ganaba
+   S/50 de credito y el amigo nuevo no ganaba nada. Elevate lo queria al reves de dos formas
+   ("10% para el que llega, 1 clase para el que trae"), y su pedido destapo el problema real:
+   `CREDITO_REFERIDO` es una constante GLOBAL, asi que moverla le cambiaba el premio a MVT y a
+   TODA academia que use Batuta. Ahora vive en la config del tenant.
+
+   ⚠️ REGLA DE ORO: todo vacio = exactamente el comportamiento de siempre (S/50 al que refiere,
+   nada al nuevo, sin condiciones). Ninguna academia existente cambia hasta que lo toque.
+
+   ref_premio_modo  que gana EL QUE REFIERE, cuando su amigo hace su primera compra:
+     "soles"          (default) monto fijo en soles de credito
+     "pct_compra"     % de lo que PAGO el amigo, convertido a credito en soles
+     "clases_credito" N clases de regalo pagadas como credito (N x el precio de una clase)
+     "clases_saldo"   N clases de verdad sumadas a su saldo: las reserva sin comprar nada
+   ref_premio_valor  el numero de arriba (soles, % o cantidad de clases)
+   ref_desc_modo     que gana EL AMIGO NUEVO en su primera compra: "" (nada) | "pct" | "soles"
+   ref_desc_valor    el numero de arriba
+   ref_min_clases    compra minima para que el beneficio se active (0 = sin minimo).
+                     Es lo que deja fuera a las clases sueltas sin tener que nombrarlas.
+   ref_solo_nuevos   "1" = solo cuenta si el amigo nunca fue alumno de la academia (ni compro
+                     ni asistio). Sin esto, un alumno viejo se registra con el codigo de otro
+                     y los dos cobran. */
+const REF_PREMIO_MODOS = ["soles", "pct_compra", "clases_credito", "clases_saldo"];
+function refCfg(cfg){
+  const modoRaw = String((cfg && cfg.ref_premio_modo) || "").trim();
+  const premioModo = REF_PREMIO_MODOS.indexOf(modoRaw) !== -1 ? modoRaw : "soles";
+  /* El default de cada modo importa: una academia que elige "clases_saldo" y deja el numero
+     en blanco quiere 1 clase, no 0 clases (un premio de cero es un programa muerto y mudo). */
+  const defPremio = { soles: CREDITO_REFERIDO, pct_compra: 10, clases_credito: 1, clases_saldo: 1 }[premioModo];
+  let premioValor = Number((cfg && cfg.ref_premio_valor) || "");
+  if (!Number.isFinite(premioValor) || premioValor <= 0) premioValor = defPremio;
+  /* topes duros: un dedo de mas en Ajustes no puede regalar la academia */
+  if (premioModo === "soles") premioValor = Math.min(5000, premioValor);
+  else if (premioModo === "pct_compra") premioValor = Math.min(100, premioValor);
+  else premioValor = Math.max(1, Math.min(10, Math.floor(premioValor)));
+
+  const descRaw = String((cfg && cfg.ref_desc_modo) || "").trim();
+  const descModo = (descRaw === "pct" || descRaw === "soles") ? descRaw : "";
+  let descValor = Number((cfg && cfg.ref_desc_valor) || "");
+  if (!Number.isFinite(descValor) || descValor <= 0) descValor = descModo === "pct" ? 10 : 0;
+  descValor = descModo === "pct" ? Math.min(50, descValor) : Math.min(5000, descValor);
+
+  let minClases = parseInt((cfg && cfg.ref_min_clases) || "", 10);
+  minClases = (Number.isFinite(minClases) && minClases > 0) ? Math.min(500, minClases) : 0;
+
+  return {
+    premioModo, premioValor,
+    descModo, descValor: descModo ? descValor : 0,
+    minClases,
+    soloNuevos: String((cfg && cfg.ref_solo_nuevos) || "") === "1",
+    /* apagar el programa entero = premio en 0 Y sin descuento; no hay tal cosa hoy, pero
+       el portal necesita saber si tiene algo que contarle al alumno */
+    hayDescuento: !!(descModo && descValor > 0)
+  };
+}
+/* Precio de UNA clase del plan que se compro. Los planes de mensualidad ilimitada no tienen
+   precio por clase (no se pueden dividir), asi que ahi el premio "N clases" no se puede
+   traducir a soles: cae a 0 y el llamador decide (hoy: no premia y lo deja en el log). */
+function precioPorClase(precio, pk){
+  const p = Number(precio) || 0;
+  const c = (pk && !pk.ilim) ? (Number(pk.clases) || 0) : 0;
+  if (!p || c < 1) return 0;
+  return Math.round((p / c) * 100) / 100;
+}
+/* ¿Esta compra activa el beneficio de referidos? Una sola funcion para los DOS lados (el
+   descuento del amigo al comprar y el premio del que refirio al confirmarse el pago): si
+   se separaran, tarde o temprano uno cobra y el otro no.
+   `excluirCompraId` existe porque al CONFIRMAR la compra ya esta marcada 'confirmada' y
+   contaria como compra previa de si misma (el bug que tuvo el credito S/50 sin pagarse nunca). */
+async function refElegible(env, tenantId, cu, paquete, pk, rc, excluirCompraId){
+  if (!cu || !String(cu.ref_por || "").trim()) return { ok: false, motivo: "sin codigo" };
+  /* la clase de prueba es la puerta de entrada, no una compra: nunca activa el programa */
+  if (paquete === "Clase de prueba") return { ok: false, motivo: "clase de prueba" };
+  /* promocion especial: la academia marco este plan como fuera del programa */
+  if (pk && pk.sinRef) return { ok: false, motivo: "plan en promocion" };
+  /* compra minima. Una mensualidad ilimitada siempre pasa: no tiene numero de clases que
+     comparar y es el plan mas caro, no el mas barato. */
+  if (rc.minClases > 0 && !(pk && pk.ilim) && (Number(pk && pk.clases) || 0) < rc.minClases){
+    return { ok: false, motivo: "no llega al minimo de " + rc.minClases };
+  }
+  /* SOLO la primera compra: esto es lo que deja fuera a las renovaciones */
+  const previas = await env.DB.prepare(
+    "SELECT COUNT(*) AS n FROM compras WHERE tenant_id = ?1 AND cuenta_id = ?2 AND estado = 'confirmada' AND paquete != 'Clase de prueba' AND id != ?3"
+  ).bind(tenantId, cu.id, excluirCompraId || "").first();
+  if (previas && Number(previas.n)) return { ok: false, motivo: "no es su primera compra" };
+  /* "alumno nuevo que nunca compro NI asistio": la compra ya quedo descartada arriba, falta
+     el que llega con historial en la casa (tipico de una academia que migro sus alumnos de
+     otro sistema: la ficha vieja existe con sus clases dictadas y su saldo arrastrado). */
+  if (rc.soloNuevos && cu.alumno_id){
+    const al = await env.DB.prepare(
+      "SELECT COALESCE(migrado_usadas,0) AS mu, COALESCE(pases,'') AS pases FROM alumnos WHERE id = ?1 AND tenant_id = ?2"
+    ).bind(cu.alumno_id, tenantId).first().catch(() => null);
+    if (al && (Number(al.mu) > 0 || String(al.pases || ""))) return { ok: false, motivo: "ya era alumno" };
+    const hist = await env.DB.prepare(
+      "SELECT (SELECT COUNT(*) FROM registro WHERE tenant_id = ?1 AND alumno_id = ?2) + " +
+      "(SELECT COUNT(*) FROM reservas WHERE tenant_id = ?1 AND alumno_id = ?2) AS n"
+    ).bind(tenantId, cu.alumno_id).first().catch(() => null);
+    if (hist && Number(hist.n)) return { ok: false, motivo: "ya era alumno" };
+  }
+  return { ok: true };
+}
+/* Lo que paga el alumno por un paquete, con sus dos descuentos posibles. Vive en una sola
+   funcion porque hay SEIS rutas de compra (Yape, transferencia, MP, MP marketplace, Stripe,
+   Culqi) y cada una calculaba su total a mano: la septima que se agregue sin esto se olvida
+   del descuento de referido y nadie se entera.
+   Orden: el descuento de referido sale del precio de lista (es comercial), y recien sobre lo
+   que queda se aplica el credito acumulado (que es plata que el alumno ya tenia a favor). */
+async function calcularCobro(env, tenantId, cu, paquete, precio, cfg, paqMap){
+  const base = Math.max(0, Number(precio) || 0);
+  const credito = Math.max(0, Number(cu && cu.credito) || 0);
+  const salida = { precio: base, descRef: 0, descCredito: 0, monto: base, credito };
+  let descRef = 0;
+  try {
+    const rc = refCfg(cfg || (await loadConfig(env, tenantId)));
+    if (rc.hayDescuento){
+      const map = paqMap || (await loadPaquetes(env, tenantId)).map;
+      const pk = resolverPk(map, paquete);
+      const el = await refElegible(env, tenantId, cu, paquete, pk, rc, null);
+      if (el.ok){
+        descRef = rc.descModo === "pct" ? Math.round(base * rc.descValor) / 100 : rc.descValor;
+        descRef = Math.min(base, Math.round(descRef * 100) / 100);
+      }
+    }
+  } catch (e) { descRef = 0; }   // ante la duda se cobra el precio pleno, nunca se regala de mas
+  salida.descRef = descRef;
+  salida.descCredito = Math.min(credito, Math.max(0, base - descRef));
+  salida.monto = Math.max(0, Math.round((base - descRef - salida.descCredito) * 100) / 100);
+  return salida;
+}
+
 /* ---------- reglas (compute / estado) ---------- */
 function compute(alumno, regs, precios, reservasUsadas, pk){
   pk = pk || PAQUETES[alumno.paquete] || { clases: 0, reprog: 0, ilim: false };
@@ -693,16 +832,22 @@ function compute(alumno, regs, precios, reservasUsadas, pk){
   const migradas = ((Number(alumno && alumno.migrado_ciclo) || 0) === (Number(alumno && alumno.ciclo) || 1))
     ? Math.max(0, Number(alumno && alumno.migrado_usadas) || 0) : 0;
   const usadas = asistio + falta + exceso + (Number(reservasUsadas) || 0) + migradas;
+  /* Clases de REGALO por traer un amigo (15-ago-2026). Mismo patron que migrado_usadas pero
+     al reves: en vez de restar saldo, lo suma. Va atado al ciclo por la misma razon, y lo que
+     le sobre al renovar se arrastra al ciclo nuevo (ver confirmarCompra): un premio que se
+     evapora porque el alumno renovo antes de usarlo es un premio que genera un reclamo. */
+  const bonus = ((Number(alumno && alumno.bonus_ciclo) || 0) === (Number(alumno && alumno.ciclo) || 1))
+    ? Math.max(0, Number(alumno && alumno.bonus_clases) || 0) : 0;
   const monto = precios[alumno.paquete] != null ? precios[alumno.paquete] : 0;
   /* Mensualidad ilimitada: no descuenta clases; vence solo por fecha (a.vence, que
      ya maneja el motor de recordatorios). Saldo alto = siempre "Activo" por saldo. */
   if (pk.ilim){
-    return { compradas: null, ilim: true, usadas, restantes: 9999,
+    return { compradas: null, ilim: true, usadas, restantes: 9999, bonus,
       reprogPermitidas: pk.reprog, reprogUsadas: reprogramo,
       reprogRestantes: pk.reprog ? Math.max(0, pk.reprog - reprogramo) : 9999,
       saldo: 9999, monto };
   }
-  const saldo = pk.clases - usadas;
+  const saldo = pk.clases + bonus - usadas;
   /* Vigencia (28-jul-2026): un paquete con fecha de vencimiento pasada ya no da clases,
      aunque le sobre saldo — es justo lo que Elevate necesita para sus planes de 40 dias.
      `caducado` es el otro corte: compro y nunca arranco dentro del plazo de la academia.
@@ -711,7 +856,10 @@ function compute(alumno, regs, precios, reservasUsadas, pk){
   const caduco = !!(alumno && Number(alumno.caducado));
   const muerto = vencido || caduco;
   return {
-    compradas: pk.clases,
+    /* el regalo entra en "compradas" a proposito: es capacidad real del ciclo, y si no
+       entrara, el alumno veria "5 de 4 usadas" y creeria que el sistema se equivoco */
+    compradas: pk.clases + bonus,
+    bonus,
     ilim: false,
     usadas,
     restantes: muerto ? 0 : Math.max(0, saldo),
@@ -942,6 +1090,18 @@ async function computeMulti(env, tid, alumno, paqMap, precios, excluirReservaId,
   }
   const { eventos, reprogTotal, reservadas } = eventosConsumo(resv || [], regs || [], excluirReservaId);
   const at = atribuirPases(lista, paqMap, eventos, reprogTotal);
+  /* Clases de regalo por referir (15-ago-2026) en un alumno con VARIOS pases: el regalo es
+     del alumno, no de un pase, asi que hay que ponerlo en alguno. Va al primer pase VIVO
+     (el mas antiguo que sigue en pie), que es el que se va a acabar primero. Se suma DESPUES
+     de atribuir a proposito: la atribucion de clases ya dictadas no se toca, solo crece la
+     capacidad de ese pase. Si ya no le queda ningun pase vivo, el regalo espera (queda en la
+     ficha) hasta que compre de nuevo. */
+  const bonusM = ((Number(alumno && alumno.bonus_ciclo) || 0) === ciclo)
+    ? Math.max(0, Number(alumno && alumno.bonus_clases) || 0) : 0;
+  if (bonusM > 0){
+    const destino = at.pases.find(e => !e.vencido && !e.ilim);
+    if (destino){ destino.compradas = (destino.compradas || 0) + bonusM; destino.restantes = (destino.restantes || 0) + bonusM; }
+  }
   const vivos = at.pases.filter(e => !e.vencido);
   const finitos = vivos.filter(e => !e.ilim);
   const restantes = finitos.reduce((s, e) => s + e.restantes, 0) + (vivos.some(e => e.ilim) ? 9999 : 0);
@@ -952,6 +1112,7 @@ async function computeMulti(env, tid, alumno, paqMap, precios, excluirReservaId,
     pases: at.pases.map(e => ({ n: e.n, compradas: e.compradas, ilim: e.ilim, usadas: e.usadas,
       restantes: e.restantes, vence: e.vence, vencido: e.vencido, tipos: e.tipos, pk: e.pk })),
     compradas, ilim: false, usadas: usadasTot,
+    bonus: bonusM,
     restantes,
     reservadas,                                             // apartadas y aun sin dictar
     vencido: vivos.length === 0, caducado: false,
@@ -1035,6 +1196,11 @@ async function loadConfig(env, tenantId){
                  convenios de la academia (ej. descuento en X). Los ven los alumnos con cuenta
                  activa en su portal. Vacío = la sección no existe. */
               beneficios: "",
+              /* Programa de referidos POR ACADEMIA (15-ago-2026, José/Elevate). Todo vacío =
+                 la regla de siempre: S/50 de crédito al que refiere y nada al amigo nuevo.
+                 El detalle de cada clave está arriba, en el bloque de refCfg(). */
+              ref_premio_modo: "", ref_premio_valor: "", ref_desc_modo: "", ref_desc_valor: "",
+              ref_min_clases: "", ref_solo_nuevos: "",
               brand_color: "", brand_font: "", brand_logo: "", agenda_cupo: "",
               /* "Mi web" (editor visual de la página pública de la academia). Vacío = la
                  landing por defecto armada con los datos de la academia. web_version cambia
@@ -2030,6 +2196,10 @@ async function confirmarCompra(env, tenantId, tenant, compra){
   const stmts = [];
   let renovado = false;
   let alumnoIdNuevo = null;
+  /* Config y planes del tenant: se cargan UNA vez y se pasan a todo lo de abajo (referidos,
+     arrastre del bonus, cursos del alumno nuevo). Antes cada bloque los volvia a pedir. */
+  const cfgConfirm = await loadConfig(env, tenantId).catch(() => ({}));
+  const paqMapConfirm = await loadPaquetes(env, tenantId).then(p => p.map).catch(() => ({}));
   const vence = new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10);
   if (cu.alumno_id){
     const al = await env.DB.prepare("SELECT * FROM alumnos WHERE id = ?1 AND tenant_id = ?2").bind(cu.alumno_id, tenantId).first();
@@ -2130,6 +2300,31 @@ async function confirmarCompra(env, tenantId, tenant, compra){
           "UPDATE reservas SET ciclo = ?1 WHERE tenant_id = ?2 AND alumno_id = ?3 AND estado = 'reservada' AND inicio_utc >= ?4"
         ).bind(cicloNuevo, tenantId, al.id, new Date().toISOString()));
       }
+      /* ── El regalo por referir no se pierde al renovar (15-ago-2026) ──
+         `bonus_clases` va atado al ciclo, asi que al subir el ciclo se apagaria solo y el
+         alumno perderia una clase que se gano. Lo que le quedaba SIN USAR se muda al ciclo
+         nuevo; lo que ya consumio, no. Se calcula sobre el ciclo viejo: el bonus recien se
+         empieza a gastar cuando las usadas pasan las clases que compro.
+         Si algo falla acá, el bonus queda apuntando al ciclo viejo = inerte. Se pierde el
+         regalo, que es feo, pero nunca se regala una clase por cada renovacion. */
+      try {
+        const bonusAnt = ((Number(al.bonus_ciclo) || 0) === (Number(al.ciclo) || 1))
+          ? Math.max(0, Number(al.bonus_clases) || 0) : 0;
+        if (bonusAnt > 0){
+          const pkAntB = resolverPk(paqMapConfirm, al.paquete);
+          const { results: regsAntB } = await env.DB.prepare(
+            "SELECT estado FROM registro WHERE tenant_id = ?1 AND alumno_id = ?2 AND COALESCE(ciclo,1) = ?3"
+          ).bind(tenantId, al.id, Number(al.ciclo) || 1).all();
+          const cAntB = compute(al, regsAntB || [], {}, 0, pkAntB);
+          /* cAntB.compradas ya viene con el bonus sumado: el consumido es lo que se comio POR
+             ENCIMA de las clases que de verdad pago */
+          const consumido = pkAntB.ilim ? bonusAnt
+            : Math.min(bonusAnt, Math.max(0, (Number(cAntB.usadas) || 0) - (Number(pkAntB.clases) || 0)));
+          const restante = Math.max(0, bonusAnt - consumido);
+          stmts.push(env.DB.prepare("UPDATE alumnos SET bonus_clases = ?1, bonus_ciclo = ?2 WHERE id = ?3 AND tenant_id = ?4")
+            .bind(restante, restante > 0 ? cicloNuevo : 0, al.id, tenantId));
+        }
+      } catch (e) { console.error("referido: no se pudo arrastrar el bonus al renovar", e); }
       renovado = true;
     }
   }
@@ -2172,15 +2367,64 @@ async function confirmarCompra(env, tenantId, tenant, compra){
   ).bind(tenantId, cu.id, compra.id).first();
   const esPrimera = !previas || !Number(previas.n);
 
-  if (compra.paquete !== "Clase de prueba" && cu.ref_por){
-    const previasReales = await env.DB.prepare(
-      "SELECT COUNT(*) AS n FROM compras WHERE tenant_id = ?1 AND cuenta_id = ?2 AND estado = 'confirmada' AND paquete != 'Clase de prueba' AND id != ?3"
-    ).bind(tenantId, cu.id, compra.id).first();
-    const esPrimeraReal = !previasReales || !Number(previasReales.n);
-    if (esPrimeraReal){
-      const refidor = await env.DB.prepare("SELECT id FROM cuentas WHERE tenant_id = ?1 AND ref_code = ?2").bind(tenantId, cu.ref_por).first();
-      if (refidor && refidor.id !== cu.id){
-        stmts.push(env.DB.prepare("UPDATE cuentas SET credito = COALESCE(credito,0) + ?1 WHERE id = ?2 AND tenant_id = ?3").bind(CREDITO_REFERIDO, refidor.id, tenantId));
+  /* ═══ EL PREMIO DEL QUE REFIRIO (reescrito el 15-ago-2026 con las reglas de José/Elevate) ═══
+     Antes: S/50 de credito, siempre, para toda academia. Ahora: lo que la academia haya armado
+     en Ajustes > Referidos, y solo si la compra pasa TODAS sus condiciones (primera compra, plan
+     que no sea promocion, minimo de clases, y el amigo sin historial previo si asi lo pidio).
+     Las condiciones son las MISMAS que le dieron el descuento al amigo al comprar: si una de
+     las dos puntas fallara sola, uno cobraria y el otro no. */
+  if (cu.ref_por){
+    const rcC = refCfg(cfgConfirm);
+    const pkC = resolverPk(paqMapConfirm, compra.paquete);
+    const elC = await refElegible(env, tenantId, cu, compra.paquete, pkC, rcC, compra.id);
+    const refidor = elC.ok
+      ? await env.DB.prepare("SELECT id, alumno_id FROM cuentas WHERE tenant_id = ?1 AND ref_code = ?2").bind(tenantId, cu.ref_por).first()
+      : null;
+    /* auto-referido NO: quien se registra con su propio codigo se estaria pagando solo */
+    if (refidor && refidor.id !== cu.id){
+      let creditoPremio = 0;
+      let clasesPremio = 0;
+      if (rcC.premioModo === "soles"){
+        creditoPremio = rcC.premioValor;
+      } else if (rcC.premioModo === "pct_compra"){
+        /* sobre lo que el amigo PAGO de verdad, no sobre el precio de lista: si uso su credito
+           o su descuento de bienvenida, la academia no vio esa plata y no puede repartirla */
+        creditoPremio = Math.round(Math.max(0, Number(compra.monto) || 0) * rcC.premioValor) / 100;
+      } else {
+        /* "N clases gratis". En modo `clases_saldo` van al saldo del que refirio y las puede
+           reservar sin comprar nada; en `clases_credito` se pagan como credito, al precio de
+           una clase del plan que acaba de comprar el amigo.
+           Un plan de mensualidad ilimitada no tiene precio por clase: ahi el modo credito no
+           sabe cuanto vale el premio y no inventa un numero (se cae a 0 y queda en el log). */
+        const nClases = Math.max(1, Math.floor(rcC.premioValor));
+        if (rcC.premioModo === "clases_saldo" && refidor.alumno_id){
+          clasesPremio = nClases;
+        } else {
+          const preciosC = await loadPrecios(env, tenantId).catch(() => ({}));
+          const unit = precioPorClase((preciosC && preciosC[compra.paquete]) || 0, pkC);
+          creditoPremio = Math.round(unit * nClases * 100) / 100;
+          if (!creditoPremio) console.log("referido: premio en clases sin precio por clase", tenantId, compra.paquete);
+        }
+      }
+      if (creditoPremio > 0){
+        stmts.push(env.DB.prepare("UPDATE cuentas SET credito = COALESCE(credito,0) + ?1 WHERE id = ?2 AND tenant_id = ?3")
+          .bind(creditoPremio, refidor.id, tenantId));
+      }
+      if (clasesPremio > 0){
+        /* El bonus vive atado al ciclo VIGENTE del que refirio (mismo patron que migrado_usadas).
+           Si ya tenia bonus de este ciclo se acumula; si el que tenia era de un ciclo viejo ya
+           estaba inerte y se pisa. Se lee la ficha aca y no en el batch porque hay que saber en
+           que ciclo esta parado para no regalarle una clase que nunca va a poder usar. */
+        try {
+          const alR = await env.DB.prepare("SELECT ciclo, COALESCE(bonus_clases,0) AS bc, COALESCE(bonus_ciclo,0) AS bcl FROM alumnos WHERE id = ?1 AND tenant_id = ?2")
+            .bind(refidor.alumno_id, tenantId).first();
+          if (alR){
+            const cicloR = Number(alR.ciclo) || 1;
+            const acum = (Number(alR.bcl) === cicloR ? Math.max(0, Number(alR.bc) || 0) : 0) + clasesPremio;
+            stmts.push(env.DB.prepare("UPDATE alumnos SET bonus_clases = ?1, bonus_ciclo = ?2 WHERE id = ?3 AND tenant_id = ?4")
+              .bind(acum, cicloR, refidor.alumno_id, tenantId));
+          }
+        } catch (e) { console.error("referido: no se pudo abonar la clase de regalo", e); }
       }
     }
   }
@@ -4786,10 +5030,16 @@ let ELEVATE_SCHEMA_OK = false;
 async function ensureAlumnoExtraSchema(env){
   if (ELEVATE_SCHEMA_OK) return;
   const cols = [["activado", "TEXT DEFAULT ''"], ["caducado", "INTEGER DEFAULT 0"],
-                ["apellido", "TEXT DEFAULT ''"], ["email", "TEXT DEFAULT ''"], ["nacimiento", "TEXT DEFAULT ''"]];
+                ["apellido", "TEXT DEFAULT ''"], ["email", "TEXT DEFAULT ''"], ["nacimiento", "TEXT DEFAULT ''"],
+                /* clases de regalo por referir y el ciclo al que pertenecen (15-ago-2026) */
+                ["bonus_clases", "INTEGER DEFAULT 0"], ["bonus_ciclo", "INTEGER DEFAULT 0"]];
   for (const [c, tipo] of cols){
     try { await env.DB.prepare("ALTER TABLE alumnos ADD COLUMN " + c + " " + tipo).run(); } catch (e) { /* ya existe */ }
   }
+  /* desc_ref = descuento de bienvenida por venir referido. Va aparte de `descuento` a
+     proposito: `descuento` es credito que se le RESTA al saldo del alumno al confirmar, y
+     meterlos en la misma columna le vaciaria el credito por una rebaja que no salio de ahi. */
+  try { await env.DB.prepare("ALTER TABLE compras ADD COLUMN desc_ref REAL DEFAULT 0").run(); } catch (e) { /* ya existe */ }
   try { await env.DB.prepare("ALTER TABLE profesores ADD COLUMN permisos TEXT DEFAULT ''").run(); } catch (e) { /* ya existe */ }
   /* El formulario publico de compra recoge apellido y (si la academia lo pide) fecha de
      nacimiento. Viven primero en `cuentas` porque el alumno todavia no existe: se crea
@@ -9205,12 +9455,18 @@ export default {
           }
         }
         const pendiente = await env.DB.prepare(
-          "SELECT paquete, curso, monto, COALESCE(descuento,0) AS descuento, fecha FROM compras WHERE tenant_id = ?1 AND cuenta_id = ?2 AND estado = 'pendiente' ORDER BY fecha DESC LIMIT 1"
+          "SELECT paquete, curso, monto, COALESCE(descuento,0) AS descuento, COALESCE(desc_ref,0) AS desc_ref, fecha FROM compras WHERE tenant_id = ?1 AND cuenta_id = ?2 AND estado = 'pendiente' ORDER BY fecha DESC LIMIT 1"
         ).bind(tid, cu.id).first();
 
         const refStats = await env.DB.prepare(
           "SELECT COUNT(*) AS registrados, COALESCE(SUM(CASE WHEN alumno_id IS NOT NULL THEN 1 ELSE 0 END),0) AS compraron FROM cuentas WHERE tenant_id = ?1 AND ref_por = ?2"
         ).bind(tid, refCode).first();
+        /* ¿A este alumno le toca el descuento de bienvenida? Se pregunta aparte y no sobre la
+           lista de `pagos` (que viene topada en 20 filas): un tope de paginacion no puede ser
+           lo que decida si alguien tiene o no un descuento. */
+        const refPrimera = await env.DB.prepare(
+          "SELECT COUNT(*) AS n FROM compras WHERE tenant_id = ?1 AND cuenta_id = ?2 AND estado = 'confirmada' AND paquete != 'Clase de prueba'"
+        ).bind(tid, cu.id).first();
 
         const cursoAl = alumno ? (alumno.curso || "") : "";
         const cursosAl = cursoAl.split(",").map(s => s.trim()).filter(Boolean);
@@ -9225,7 +9481,7 @@ export default {
         }
 
         const pagos = (await env.DB.prepare(
-          "SELECT fecha, curso, paquete, monto, COALESCE(descuento,0) AS descuento, estado FROM compras WHERE tenant_id = ?1 AND cuenta_id = ?2 ORDER BY fecha DESC, rowid DESC LIMIT 20"
+          "SELECT fecha, curso, paquete, monto, COALESCE(descuento,0) AS descuento, COALESCE(desc_ref,0) AS desc_ref, estado FROM compras WHERE tenant_id = ?1 AND cuenta_id = ?2 ORDER BY fecha DESC, rowid DESC LIMIT 20"
         ).bind(tid, cu.id).all()).results || [];
 
         // Multi-profesor: el alumno ve con que profesor va ("Tu profesor: Ana").
@@ -9281,6 +9537,9 @@ export default {
             curso: alumno.curso || "", paquete: alumno.paquete || "",
             horario: alumno.horario || "", horarioFijo: horarioFijo, pago: alumno.pago || "",
             compradas: computed.compradas, usadas: computed.usadas, restantes: computed.restantes,
+            /* clases de regalo por referir que trae este ciclo: el portal las nombra aparte
+               para que se entienda de dónde salió la clase de más (15-ago-2026) */
+            bonus: Number(computed.bonus) || 0,
             /* con "el saldo baja al asistir", el portal necesita poder decir cuántas de esas
                clases ya están apartadas; si no, el número se lee como disponible del todo */
             reservadas: Number(computed.reservadas) || 0, modo_saldo: computed.modo_saldo || "",
@@ -9296,14 +9555,29 @@ export default {
           precios,
           /* Los planes ocultos (o=1) no se ofrecen en el portal — salvo que sea EL plan del
              alumno (para que pueda renovarlo). Se venden por su link directo o desde el panel. */
+          /* sinRef viaja al portal para poder decirle "este plan no entra en el descuento"
+             ANTES de que llegue a pagar y se lleve la sorpresa (15-ago-2026) */
           paquetes: paqMe.list.filter(function(n){ return !paqMe.map[n].oculto || (alumno && alumno.paquete === n); })
-            .map(function(n){ return { pk: n, nombre: n, clases: paqMe.map[n].clases, ilim: !!paqMe.map[n].ilim, precio: precios[n] || 0 }; }),
+            .map(function(n){ return { pk: n, nombre: n, clases: paqMe.map[n].clases, ilim: !!paqMe.map[n].ilim, precio: precios[n] || 0, sinRef: !!paqMe.map[n].sinRef }; }),
           credito: Number(cu.credito) || 0,
           ref_code: refCode,
-          referidos: {
-            registrados: (refStats && Number(refStats.registrados)) || 0,
-            compraron: (refStats && Number(refStats.compraron)) || 0
-          },
+          referidos: (function(){
+            /* Las REGLAS del programa de esta academia, para que la seccion Beneficios diga lo
+               que de verdad va a pasar y no el S/50 que estaba escrito a mano en el HTML.
+               `tengoDesc` = si YO, ahora mismo, tengo derecho al descuento de bienvenida:
+               vine con codigo, nunca compre, y la academia lo tiene prendido. */
+            const rcMe = refCfg(config);
+            return {
+              registrados: (refStats && Number(refStats.registrados)) || 0,
+              compraron: (refStats && Number(refStats.compraron)) || 0,
+              premioModo: rcMe.premioModo,
+              premioValor: rcMe.premioValor,
+              descModo: rcMe.descModo,
+              descValor: rcMe.descValor,
+              minClases: rcMe.minClases,
+              tengoDesc: !!(rcMe.hayDescuento && String(cu.ref_por || "").trim() && !(refPrimera && Number(refPrimera.n)))
+            };
+          })(),
           recursos,
           recursosBloqueados: !esAlumnoOEx,
           pagos,
@@ -9425,9 +9699,8 @@ export default {
 
         const precios = await loadPrecios(env, t.id);
         const precio = precios[paquete] || 0;
-        const credito = Number(cu.credito) || 0;
-        const descuento = Math.min(credito, precio);
-        const monto = Math.max(0, precio - descuento);
+        const cob = await calcularCobro(env, t.id, cu, paquete, precio);
+        const descuento = cob.descCredito, descRef = cob.descRef, monto = cob.monto;
         if (!(monto > 0)) return json({ error: "Ese paquete no está disponible. Escríbele a tu profesor." }, 400);
 
         const cursoDef = cursosDeCfg(await loadConfig(env, t.id))[0];
@@ -9481,8 +9754,8 @@ export default {
           ).bind(t.id, cu.id).run();
           const compraId = crypto.randomUUID();
           await env.DB.prepare(
-            "INSERT INTO compras (id,tenant_id,cuenta_id,curso,paquete,monto,descuento,op_numero,estado,fecha,metodo,comprobante,slot_deseado) VALUES (?1,?2,?3,?4,?5,?6,?7,'','iniciada',?8,'Tarjeta (Mercado Pago)','','')"
-          ).bind(compraId, t.id, cu.id, cursoDef, paquete, monto, descuento, hoy()).run();
+            "INSERT INTO compras (id,tenant_id,cuenta_id,curso,paquete,monto,descuento,desc_ref,op_numero,estado,fecha,metodo,comprobante,slot_deseado) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,'','iniciada',?9,'Tarjeta (Mercado Pago)','','')"
+          ).bind(compraId, t.id, cu.id, cursoDef, paquete, monto, descuento, descRef, hoy()).run();
           let pref = null;
           /* mp_solo_tarjeta (7-ago-2026, Elevate): MP queda SOLO para tarjeta — Yape dentro de MP
              le come comisión a la academia; el Yape directo (sin comisión) ya es otro método. */
@@ -9528,7 +9801,10 @@ export default {
           }
           const cfgSt = await loadConfig(env, t.id);
           const monedaSt = stripeMoneda(cfgSt.stripe_moneda);
-          // El credito de referido es en soles: no aplica al riel Stripe internacional. Cobra el precio pleno.
+          /* El credito de referido es en soles: no aplica al riel Stripe internacional. Cobra el
+             precio pleno. Mismo criterio para el descuento de bienvenida (15-ago-2026): la
+             academia lo fijo pensando en su precio en soles, y aplicarlo sobre un cobro en otra
+             moneda le cambia el margen sin que nadie lo haya decidido. */
           const montoSt = Number(precio) || 0;
           if (!(montoSt > 0)) return json({ error: "Ese paquete no está disponible. Escríbele a tu profesor." }, 400);
           /* Igual que en MP: la session vieja vive 1h y sigue pagable; 'cancelada', no DELETE. */
@@ -9570,8 +9846,8 @@ export default {
           } catch (e) { comprobanteKey = ""; }
         }
         await env.DB.prepare(
-          "INSERT INTO compras (id,tenant_id,cuenta_id,curso,paquete,monto,descuento,op_numero,estado,fecha,metodo,comprobante,slot_deseado) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,'pendiente',?9,?10,?11,'')"
-        ).bind(crypto.randomUUID(), t.id, cu.id, cursoDef, paquete, monto, descuento, String(b.op_numero || "").trim().slice(0, 40), hoy(), metodo, comprobanteKey).run();
+          "INSERT INTO compras (id,tenant_id,cuenta_id,curso,paquete,monto,descuento,desc_ref,op_numero,estado,fecha,metodo,comprobante,slot_deseado) VALUES (?1,?2,?3,?4,?5,?6,?7,?12,?8,'pendiente',?9,?10,?11,'')"
+        ).bind(crypto.randomUUID(), t.id, cu.id, cursoDef, paquete, monto, descuento, String(b.op_numero || "").trim().slice(0, 40), hoy(), metodo, comprobanteKey, descRef).run();
         try { await avisarPush(env, t.id, { title: "Pago por confirmar", paquete, monto }); } catch (e) {}
         await correoAcceso();
         return json({ ok: true, mensaje: esNueva
@@ -9616,9 +9892,8 @@ export default {
         if (ya) return json({ error: "Ya tienes un pago en verificacion. Te confirmo apenas lo vea." }, 409);
 
         const precio = precios[paquete] || 0;
-        const credito = Number(cu.credito) || 0;
-        const descuento = Math.min(credito, precio);
-        const monto = Math.max(0, precio - descuento);
+        const cob = await calcularCobro(env, tid, cu, paquete, precio, null, paqMapC);
+        const descuento = cob.descCredito, descRef = cob.descRef, monto = cob.monto;
 
         let comprobanteKey = "";
         if (comprobante && env.RECURSOS_R2) {
@@ -9647,8 +9922,8 @@ export default {
           profeCompra = (alPc && alPc.profesor_id) || null;
         }
         await env.DB.prepare(
-          "INSERT INTO compras (id,tenant_id,cuenta_id,curso,paquete,monto,descuento,op_numero,estado,fecha,metodo,comprobante,slot_deseado,profesor_id) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,'pendiente',?9,?10,?11,?12,?13)"
-        ).bind(crypto.randomUUID(), tid, cu.id, curso, paquete, monto, descuento, op, hoy(), metodo, comprobanteKey, slotDeseado, profeCompra).run();
+          "INSERT INTO compras (id,tenant_id,cuenta_id,curso,paquete,monto,descuento,desc_ref,op_numero,estado,fecha,metodo,comprobante,slot_deseado,profesor_id) VALUES (?1,?2,?3,?4,?5,?6,?7,?14,?8,'pendiente',?9,?10,?11,?12,?13)"
+        ).bind(crypto.randomUUID(), tid, cu.id, curso, paquete, monto, descuento, op, hoy(), metodo, comprobanteKey, slotDeseado, profeCompra, descRef).run();
 
         try { await avisarPush(env, tid, { title: "Pago por confirmar", paquete, monto }); } catch (e) {}
 
@@ -9756,9 +10031,8 @@ export default {
         // Precio SIEMPRE del servidor (nunca del cliente)
         const precios = await loadPrecios(env, tid);
         const precio = precios[paquete] || 0;
-        const credito = Number(cu.credito) || 0;
-        const descuento = Math.min(credito, precio);
-        const monto = Math.max(0, precio - descuento);
+        const cob = await calcularCobro(env, tid, cu, paquete, precio);
+        const descuento = cob.descCredito, descRef = cob.descRef, monto = cob.monto;
         if (!(monto > 0)) return json({ error: "Ese paquete no esta disponible para tarjeta. Escribele a tu profesor." }, 400);
 
         /* Intentos de tarjeta abandonados: se marcan 'cancelada', NUNCA DELETE. La preference
@@ -9768,8 +10042,8 @@ export default {
         ).bind(tid, cu.id).run();
         const compraId = crypto.randomUUID();
         await env.DB.prepare(
-          "INSERT INTO compras (id,tenant_id,cuenta_id,curso,paquete,monto,descuento,op_numero,estado,fecha,metodo,comprobante,slot_deseado) VALUES (?1,?2,?3,?4,?5,?6,?7,'','iniciada',?8,'Tarjeta (Mercado Pago)','',?9)"
-        ).bind(compraId, tid, cu.id, curso, paquete, monto, descuento, hoy(), slotDeseado).run();
+          "INSERT INTO compras (id,tenant_id,cuenta_id,curso,paquete,monto,descuento,desc_ref,op_numero,estado,fecha,metodo,comprobante,slot_deseado) VALUES (?1,?2,?3,?4,?5,?6,?7,?10,'','iniciada',?8,'Tarjeta (Mercado Pago)','',?9)"
+        ).bind(compraId, tid, cu.id, curso, paquete, monto, descuento, hoy(), slotDeseado, descRef).run();
 
         // Preferencia con el token del PROFE: la plata cae en SU cuenta de MP
         let pref = null;
@@ -9950,17 +10224,19 @@ export default {
         const moneda = stripeMoneda(cfgS.stripe_moneda);
         const precios = await loadPrecios(env, tid);
         const precio = precios[paquete] || 0;
-        // El credito de referido esta en soles: solo aplica si el cobro es en PEN (nunca en el riel Stripe internacional).
-        const credito = (moneda === "pen") ? (Number(cu.credito) || 0) : 0;
-        const descuento = Math.min(credito, precio);
-        const monto = Math.max(0, precio - descuento);
+        /* El credito y el descuento de referido estan en soles: solo aplican si el cobro es en
+           PEN (nunca en el riel Stripe internacional; ver el mismo criterio en la compra publica). */
+        const cobS = (moneda === "pen")
+          ? await calcularCobro(env, tid, cu, paquete, precio)
+          : { descCredito: 0, descRef: 0, monto: Math.max(0, Number(precio) || 0) };
+        const descuento = cobS.descCredito, descRef = cobS.descRef, monto = cobS.monto;
         if (!(monto > 0)) return json({ error: "Ese paquete no esta disponible para tarjeta." }, 400);
         /* Igual que en MP: la session vieja vive 1h y sigue pagable; 'cancelada', no DELETE. */
         await env.DB.prepare("UPDATE compras SET estado = 'cancelada' WHERE tenant_id = ?1 AND cuenta_id = ?2 AND estado = 'iniciada' AND metodo = 'Tarjeta (Stripe)'").bind(tid, cu.id).run();
         const compraId = crypto.randomUUID();
         await env.DB.prepare(
-          "INSERT INTO compras (id,tenant_id,cuenta_id,curso,paquete,monto,descuento,op_numero,estado,fecha,metodo,comprobante,slot_deseado) VALUES (?1,?2,?3,?4,?5,?6,?7,'','iniciada',?8,'Tarjeta (Stripe)','',?9)"
-        ).bind(compraId, tid, cu.id, curso, paquete, monto, descuento, hoy(), slotDeseado).run();
+          "INSERT INTO compras (id,tenant_id,cuenta_id,curso,paquete,monto,descuento,desc_ref,op_numero,estado,fecha,metodo,comprobante,slot_deseado) VALUES (?1,?2,?3,?4,?5,?6,?7,?10,'','iniciada',?8,'Tarjeta (Stripe)','',?9)"
+        ).bind(compraId, tid, cu.id, curso, paquete, monto, descuento, hoy(), slotDeseado, descRef).run();
         const sess = await stripeApi(env, "POST", "/v1/checkout/sessions", {
           mode: "payment",
           expires_at: Math.floor(Date.now() / 1000) + 3600, // sesion abandonada muere en 1h (evita pago huerfano en un reintento)
@@ -10108,9 +10384,8 @@ export default {
         }
         const precios = await loadPrecios(env, tid);
         const precio = precios[paquete] || 0;
-        const credito = Number(cu.credito) || 0;
-        const descuento = Math.min(credito, precio);
-        const monto = Math.max(0, precio - descuento);
+        const cobC = await calcularCobro(env, tid, cu, paquete, precio);
+        const descuento = cobC.descCredito, descRef = cobC.descRef, monto = cobC.monto;
         if (!(monto > 0)) return json({ error: "Ese paquete no esta disponible por Culqi." }, 400);
         const email = String(cu.email || "").trim();
         if (!emailOk(email)) return json({ error: "Tu cuenta no tiene un correo valido para el cargo." }, 400);
@@ -10119,8 +10394,8 @@ export default {
         await env.DB.prepare("DELETE FROM compras WHERE tenant_id = ?1 AND cuenta_id = ?2 AND estado = 'iniciada' AND metodo = 'Tarjeta/Yape (Culqi)'").bind(tid, cu.id).run();
         const compraId = crypto.randomUUID();
         await env.DB.prepare(
-          "INSERT INTO compras (id,tenant_id,cuenta_id,curso,paquete,monto,descuento,op_numero,estado,fecha,metodo,comprobante,slot_deseado) VALUES (?1,?2,?3,?4,?5,?6,?7,'','iniciada',?8,'Tarjeta/Yape (Culqi)','',?9)"
-        ).bind(compraId, tid, cu.id, curso, paquete, monto, descuento, hoy(), slotDeseado).run();
+          "INSERT INTO compras (id,tenant_id,cuenta_id,curso,paquete,monto,descuento,desc_ref,op_numero,estado,fecha,metodo,comprobante,slot_deseado) VALUES (?1,?2,?3,?4,?5,?6,?7,?10,'','iniciada',?8,'Tarjeta/Yape (Culqi)','',?9)"
+        ).bind(compraId, tid, cu.id, curso, paquete, monto, descuento, hoy(), slotDeseado, descRef).run();
         // Cargo directo con la sk_ del profe. amount en centimos (PEN). La respuesta es SINCRONA.
         // Distinguimos 3 desenlaces: EXITO, RECHAZO explicito (4xx con error de Culqi) y AMBIGUO
         // (timeout/red/5xx/sin JSON): en el ambiguo el dinero PUDO cobrarse, asi que NO borramos la
@@ -12675,7 +12950,10 @@ export default {
                              sin decir nada, y José veía "guardado" con el ajuste sin guardar: cambió
                              "descontar al asistir" y el saldo seguía bajando al reservar.
                              ⚠️ Toda clave nueva de Ajustes tiene que entrar ACÁ además del panel. */
-                          "saldo_modo"];
+                          "saldo_modo",
+                          /* programa de referidos por academia (15-ago-2026, José/Elevate) */
+                          "ref_premio_modo", "ref_premio_valor", "ref_desc_modo", "ref_desc_valor",
+                          "ref_min_clases", "ref_solo_nuevos"];
           const stmts = [];
           /* > 0 = cuantos planes quedaron fuera por el tope, para decirselo en la respuesta */
           let avisoPaquetes = 0;
@@ -12712,6 +12990,7 @@ export default {
                   const p = parsed.map[n];
                   const out = { n: n, c: p.clases, r: p.reprog, u: p.ilim, t: p.tipos || [], d: p.dias || 0, i: p.inicio || "compra" };
                   if (p.oculto) out.o = 1;
+                  if (p.sinRef) out.sr = 1;   // fuera del programa de referidos (15-ago-2026)
                   if (p.congela !== null && p.congela !== undefined) out.g = p.congela;
                   if (p.congelaBloques !== 2) out.gb = p.congelaBloques;
                   return out;
@@ -12745,6 +13024,20 @@ export default {
                 valor = valor.toLowerCase().split(",").map(x => x.trim())
                   .filter(x => permitidos.includes(x)).filter((x, i, a) => a.indexOf(x) === i).join(",");
               }
+              /* Referidos (15-ago-2026): los modos solo aceptan lo que refCfg sabe leer, y los
+                 numeros van con tope. Un valor raro se guarda vacio = regla por defecto, nunca
+                 un premio inventado. */
+              if (k === "ref_premio_modo") valor = REF_PREMIO_MODOS.indexOf(valor) !== -1 ? valor : "";
+              if (k === "ref_desc_modo") valor = (valor === "pct" || valor === "soles") ? valor : "";
+              if ((k === "ref_premio_valor" || k === "ref_desc_valor") && valor !== ""){
+                const nr = Number(valor);
+                valor = (Number.isFinite(nr) && nr > 0 && nr <= 5000) ? String(Math.round(nr * 100) / 100) : "";
+              }
+              if (k === "ref_min_clases" && valor !== ""){
+                const nm = parseInt(valor, 10);
+                valor = (Number.isFinite(nm) && nm > 0 && nm <= 500) ? String(nm) : "";
+              }
+              if (k === "ref_solo_nuevos") valor = valor === "1" ? "1" : "";
               if (k === "caduca_meses" && valor !== ""){
                 const nc = parseInt(valor, 10);
                 valor = (Number.isFinite(nc) && nc >= 0 && nc <= 60) ? String(nc) : "";

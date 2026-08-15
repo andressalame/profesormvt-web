@@ -630,7 +630,9 @@
         <div class="card stat"><div class="num" id="rReg">0</div><div class="lab">amigos registrados</div></div>
         <div class="card stat"><div class="num" id="rCom">0</div><div class="lab">ya compraron</div></div>
       </div>
-      <p class="note">Cuando un amigo compra su primer paquete con tu código, ganas <strong style="color:var(--cream)"><span id="txtRefSoles">S/50</span> de descuento</strong> para tu próxima compra.</p>
+      <!-- El texto lo escribe renderReferidos() con las reglas REALES de esta academia
+           (15-ago-2026). Nunca volver a clavar acá un premio ni un monto. -->
+      <p class="note" id="txtReglaRef"></p>
     </section>
 
     <!-- ===== RECURSOS ===== -->
@@ -805,7 +807,10 @@ var MARCA = {
      pilates o de una tienda de cartas veia "Elige canto, piano o guitarra". Vacio = el copy
      cae a la version neutra ("tu curso") hasta que llegan los cursos reales del tenant. */
   cursos: [],
-  referidoSoles: 50,                      // debe calzar con CREDITO_REFERIDO del worker
+  /* Solo el ÚLTIMO recurso: desde el 15-ago-2026 el premio lo define cada academia y viaja
+     en ME.referidos (ver textoPremioRef). Este 50 se usa nada más si /me todavía no respondió.
+     Sigue calzando con CREDITO_REFERIDO del worker, que es ese mismo default. */
+  referidoSoles: 50,
   rubro: ""
 };
 var KEY = "batuta_sesion";
@@ -1300,7 +1305,10 @@ function renderInicio(){
       $("iLab").textContent = "Clases restantes";
       $("iRest").style.fontSize = "";
       $("iRest").textContent = a.restantes;
-      $("iDe").textContent = "de " + a.compradas;
+      /* Si trae clases de regalo por referir, se DICE de dónde salieron (15-ago-2026): ver
+         "de 9" cuando compró un paquete de 8 se lee como un error del sistema, no como premio. */
+      $("iDe").textContent = "de " + a.compradas +
+        ((Number(a.bonus)||0) > 0 ? " (incluye "+a.bonus+" de regalo por referir)" : "");
       var s=""; for(var i=0;i<a.compradas;i++) s += '<div class="stub'+(i<a.usadas?" used":"")+'"></div>';
       $("iStubs").innerHTML = s;
       if($("iStubCap")) $("iStubCap").style.display = "";
@@ -1392,11 +1400,31 @@ function tiersDeMe(){
   out.sort(function(a,b){ return (b.primera?1:0)-(a.primera?1:0); });
   return out;
 }
+/* Descuento de bienvenida por haber llegado con el código de un amigo (15-ago-2026).
+   ⚠️ Esto es un ESPEJO de calcularCobro() en el worker, que es quien manda: acá solo sirve
+   para que el precio que el alumno VE sea el que le van a cobrar. Si las dos versiones se
+   separan, el alumno elige un precio y paga otro — así que las condiciones son las mismas:
+   tengo derecho + el plan no es promoción + llega al mínimo de clases. */
+function descRefDe(pk){
+  var r = (ME && ME.referidos) || {};
+  if(!r.tengoDesc || !r.descModo) return 0;
+  var precio = (ME.precios && ME.precios[pk]) || 0;
+  if(!(precio>0)) return 0;
+  var info = (ME.paquetes||[]).filter(function(p){ return p.pk===pk; })[0];
+  if(info && info.sinRef) return 0;
+  var min = Number(r.minClases)||0;
+  if(min>0 && info && !info.ilim && (Number(info.clases)||0) < min) return 0;
+  var d = r.descModo==="pct" ? (precio*(Number(r.descValor)||0)/100) : (Number(r.descValor)||0);
+  return Math.min(precio, Math.round(d*100)/100);
+}
 function calc(pk){
   var precio = (ME.precios && ME.precios[pk]) || 0;
+  var dRef = descRefDe(pk);
   var cred = Number(ME.credito) || 0;
-  var desc = Math.min(cred, precio);
-  return { precio:precio, desc:desc, final:Math.max(0, precio-desc) };
+  /* el crédito se aplica sobre lo que QUEDA tras el descuento de bienvenida, igual que en el
+     worker: al revés, el alumno gastaría crédito de más para nada */
+  var desc = Math.min(cred, Math.max(0, precio - dRef));
+  return { precio:precio, descRef:dRef, desc:desc, final:Math.max(0, precio-dRef-desc) };
 }
 /* "2026-08-20" -> "20 ago" (para mostrar el vencimiento de la mensualidad) */
 function fechaBonita(iso){
@@ -1407,9 +1435,18 @@ function fechaBonita(iso){
 }
 function renderComprar(){
   var cred = Number(ME.credito) || 0;
+  var rC = (ME && ME.referidos) || {};
+  var dTxtC = (typeof textoDescuentoRef === "function") ? textoDescuentoRef() : "";
   if(cred>0){
     $("bCredito").innerHTML = '<strong>// CRÉDITO</strong><br>Tienes S/'+cred+
       ' de crédito por referidos — se aplica solo en tu próxima compra.';
+    show("bCredito");
+  } else if(rC.tengoDesc && dTxtC){
+    /* Llegó con el código de un amigo y todavía no compró: el descuento se le dice ACÁ,
+       antes de elegir plan. Enterarse recién en la pantalla de pago es la mitad del valor. */
+    $("bCredito").innerHTML = '<strong>// TU DESCUENTO DE BIENVENIDA</strong><br>Viniste con el código de un amigo: tienes '+
+      esc(dTxtC)+' en tu primera compra'+((Number(rC.minClases)||0) ? ' (de '+(Number(rC.minClases)||0)+' clases para arriba)' : '')+
+      '. Ya está aplicado en los precios de abajo.';
     show("bCredito");
   } else hide("bCredito");
   if(ME.compraPendiente){
@@ -1420,7 +1457,7 @@ function renderComprar(){
 
   var tiersHtml = tiersDeMe().filter(function(t){ return ME.precios && (Number(ME.precios[t.pk])||0)>0 && (!t.primera || !ME.alumno); }).map(function(t){
     var c = calc(t.pk);
-    var precioHtml = c.desc>0
+    var precioHtml = (c.desc>0 || c.descRef>0)
       ? '<span class="strike">S/ '+c.precio+'</span><span class="cur">S/</span>'+c.final
       : '<span class="cur">S/</span>'+c.precio;
     return '<div class="tier'+(t.badge?' featured':'')+'">'+
@@ -1429,6 +1466,7 @@ function renderComprar(){
       '<h3>'+(t.primera ? 'Tu primera clase' : (t.ilim ? 'Mensualidad · sin límite de clases' : 'Paquete de '+t.horas+' clase'+(t.horas===1?'':'s')))+'</h3>'+
       '<div class="tprecio">'+precioHtml+'</div>'+
       (t.desc?'<div class="tdesc">'+t.desc+'</div>':'')+
+      (c.descRef>0?'<div class="tdesc">incluye -S/'+c.descRef+' de bienvenida por tu código</div>':'')+
       (c.desc>0?'<div class="tdesc">incluye -S/'+c.desc+' de tu crédito</div>':'')+
       '<button class="btn" data-comprar="'+t.pk+'"'+(ME.compraPendiente?' disabled':'')+'>Comprar →</button>'+
     '</div>';
@@ -1645,8 +1683,13 @@ $("c_slots").addEventListener("change", function(e){
 });
 function actualizaMonto(){
   var c = calc($("c_paquete").value);
-  $("c_monto").innerHTML = (c.desc>0?'<span class="strike">S/ '+c.precio+'</span> ':'') + 'S/ ' + c.final;
-  $("c_montoNote").textContent = c.desc>0 ? ("Incluye -S/"+c.desc+" de tu crédito de referidos") : "";
+  $("c_monto").innerHTML = ((c.desc>0||c.descRef>0)?'<span class="strike">S/ '+c.precio+'</span> ':'') + 'S/ ' + c.final;
+  /* los dos descuentos se nombran por separado: son cosas distintas y el alumno tiene que
+     poder cuadrar el número que va a yapear con lo que ve acá */
+  var notas = [];
+  if(c.descRef>0) notas.push("-S/"+c.descRef+" de bienvenida por tu código");
+  if(c.desc>0) notas.push("-S/"+c.desc+" de tu crédito de referidos");
+  $("c_montoNote").textContent = notas.length ? ("Incluye "+notas.join(" y ")) : "";
 }
 $("c_paquete").addEventListener("change", function(){ actualizaMonto(); renderPaybox(); actualizaSlotWrap(); actualizaBtnP1(); });
 $("c_curso").addEventListener("change", actualizaBtnP1);
@@ -1864,14 +1907,45 @@ document.querySelectorAll("[data-close]").forEach(function(b){
 });
 $("ovCompra").addEventListener("click",function(e){ if(e.target===$("ovCompra")) $("ovCompra").classList.remove("open"); });
 
-/* ---------- VISTA: REFERIDOS ---------- */
+/* ---------- VISTA: REFERIDOS ----------
+   15-ago-2026: el premio dejó de estar escrito a mano ("ganas S/50") y sale de las reglas que
+   armó la academia en Ajustes > Referidos, que viajan en ME.referidos. Si acá se volviera a
+   clavar un número, el alumno leería una promesa que el servidor no va a cumplir. */
+function textoPremioRef(){
+  var r = (ME && ME.referidos) || {};
+  var v = Number(r.premioValor) || 0;
+  if(r.premioModo === "pct_compra") return "<strong style=\"color:var(--cream)\">"+v+"% de lo que pague</strong>, como descuento para tu próxima compra";
+  if(r.premioModo === "clases_saldo") return "<strong style=\"color:var(--cream)\">"+v+" clase"+(v===1?"":"s")+" gratis</strong>, directo a tu saldo";
+  if(r.premioModo === "clases_credito") return "<strong style=\"color:var(--cream)\">"+v+" clase"+(v===1?"":"s")+" gratis</strong>, que se te abonan como descuento para tu próxima compra";
+  return "<strong style=\"color:var(--cream)\">S/"+(v||MARCA.referidoSoles)+" de descuento</strong> para tu próxima compra";
+}
+function textoDescuentoRef(){
+  var r = (ME && ME.referidos) || {};
+  if(!r.descModo) return "";
+  var v = Number(r.descValor) || 0;
+  if(!v) return "";
+  return r.descModo === "pct" ? (v+"% de descuento") : ("S/"+v+" de descuento");
+}
 function renderReferidos(){
   var code = ME.ref_code || "——";
   $("rCode").textContent = code;
   $("rReg").textContent = (ME.referidos && ME.referidos.registrados) || 0;
   $("rCom").textContent = (ME.referidos && ME.referidos.compraron) || 0;
+  var r = (ME && ME.referidos) || {};
+  var dTxt = textoDescuentoRef();
+  var min = Number(r.minClases) || 0;
+  /* La regla completa, en el mismo orden en que la vive el alumno: qué gana su amigo, qué
+     gana él, y la letra chica (que se dice acá y no en el momento de cobrar). */
+  var html = "Cuando un amigo tuyo compra su primer paquete con tu código, ganas "+textoPremioRef()+".";
+  if(dTxt) html += " Y él entra con <strong style=\"color:var(--cream)\">"+dTxt+"</strong> en esa primera compra.";
+  html += "<br><span style=\"opacity:.7\">Solo cuenta su <b>primera</b> compra"+
+    (min ? " (de "+min+" clases para arriba)" : "")+
+    ", una vez por persona, y no aplica en planes de promoción.</span>";
+  $("txtReglaRef").innerHTML = html;
+  /* el mensaje de WhatsApp también nombra el descuento: es lo que hace que el amigo abra el link */
   var msg = "¡Aprende conmigo en "+MARCA.nombre+"! Usa mi código "+code+
-    " al registrarte: "+location.origin+"/app/a/"+SLUG+"?ref="+code;
+    (dTxt ? " y entra con "+dTxt+" en tu primer paquete" : "")+
+    ": "+location.origin+"/app/a/"+SLUG+"?ref="+code;
   $("btnWaRef").href = "https://wa.me/?text="+encodeURIComponent(msg);
   /* la tarjeta de convenios vive en ESTA sección desde el 14-ago; se pinta al entrar */
   try{ renderBeneficios(); }catch(e){}
@@ -2613,8 +2687,15 @@ var TOUR_STEPS = [
     texto:function(){ return vz(
       "Este es el chat directo. Tienes el canal grupal con la comunidad y un canal privado conmigo para tus dudas. Te respondo por acá.",
       "Este es el chat directo. Tienes el canal grupal con la comunidad y un canal privado con la academia para tus dudas. Te respondemos por acá."); } },
+  /* 15-ago-2026: el premio ya no es S/50 para todos, así que el tour tampoco puede decirlo.
+     Se arma con las reglas reales de la academia (las mismas que pinta renderReferidos). */
   { sel:'a[data-v="referidos"]', vista:"referidos", titulo:"Trae a un amigo",
-    texto:"Tu código es tuyo. Cuando alguien compra su primer paquete con él, ganas S/"+MARCA.referidoSoles+" de descuento para tu próxima compra. Listo, ya conoces tu portal. A darle." }
+    texto:function(){
+      var p = (typeof textoPremioRef === "function")
+        ? textoPremioRef().replace(/<[^>]+>/g, "")
+        : ("S/"+MARCA.referidoSoles+" de descuento para tu próxima compra");
+      return "Tu código es tuyo. Cuando alguien compra su primer paquete con él, ganas "+p+". Listo, ya conoces tu portal. A darle.";
+    } }
 ];
 var tourIdx = 0;
 

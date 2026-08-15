@@ -96,7 +96,12 @@ CREATE TABLE IF NOT EXISTS alumnos (
   caducado            INTEGER DEFAULT 0,
   apellido            TEXT DEFAULT '',
   email               TEXT DEFAULT '',
-  nacimiento          TEXT DEFAULT ''
+  nacimiento          TEXT DEFAULT '',
+  -- Clases de REGALO por traer un amigo (15-ago-2026, programa de referidos por academia).
+  -- Suman saldo en el ciclo indicado (al reves de migrado_usadas, que resta). Lo que quede
+  -- sin usar se arrastra al ciclo nuevo al renovar. En prod van por ensureAlumnoExtraSchema.
+  bonus_clases        INTEGER DEFAULT 0,
+  bonus_ciclo         INTEGER DEFAULT 0
 );
 CREATE UNIQUE INDEX IF NOT EXISTS idx_alumnos_codigo ON alumnos (tenant_id, codigo);
 CREATE INDEX IF NOT EXISTS idx_alumnos_tenant ON alumnos (tenant_id);
@@ -253,7 +258,11 @@ CREATE TABLE IF NOT EXISTS compras (
   fecha        TEXT DEFAULT '',
   metodo       TEXT DEFAULT '',
   comprobante  TEXT DEFAULT '',
+  -- descuento = CREDITO del alumno consumido en esta compra (al confirmar se le resta del saldo).
   descuento    REAL DEFAULT 0,
+  -- desc_ref = descuento de bienvenida por venir referido (15-ago-2026). Va aparte porque NO
+  -- sale del credito del alumno: es una rebaja de la academia. En prod va por ALTER.
+  desc_ref     REAL DEFAULT 0,
   slot_deseado TEXT DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS idx_compras_estado ON compras (tenant_id, estado);
