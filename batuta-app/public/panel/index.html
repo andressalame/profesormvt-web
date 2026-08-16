@@ -1653,6 +1653,8 @@ button[data-ayuda],a[data-ayuda],select[data-ayuda],input[data-ayuda],label[data
       <div class="cfgrow"><span class="pk">Recordatorio de renovación</span><select id="cfg_recordatorio_renovacion"><option value="">Activado</option><option value="off">Apagado</option></select></div>
       <p class="hint" style="margin-top:-4px;">Correo automático cuando el paquete del alumno está por vencer (o venció), con link para renovar desde su portal.</p>
       <div class="cfgrow"><span class="pk">Aviso de plan activo</span><select id="cfg_aviso_plan_activo" data-ayuda="Cuando le cargas o le renuevas el plan a un alumno desde su ficha, le llega un correo avisándole. Útil si te pagó por Yape fuera de la app."><option value="">Activado</option><option value="off">Apagado</option></select></div>
+      <div class="cfgrow"><span class="pk">Rescatar compras a medias</span><select id="cfg_rescate_activo" data-ayuda="Si alguien abre el checkout y no llega a pagar, al día siguiente le llega un correo para retomarlo. Nunca se le escribe al que ya pagó por Yape y espera que confirmes."><option value="">Activado</option><option value="off">Apagado</option></select></div>
+      <p class="hint" style="margin-top:-4px;">Cuando alguien empieza a comprar y no termina, esa venta hoy se pierde en silencio. Con esto le llega un correo al día siguiente para retomarla desde su portal. <b>Nunca</b> le escribe a quien ya te pagó por Yape y espera tu confirmación.</p>
       <p class="hint" style="margin-top:-4px;">Cuando le cargas o le renuevas el plan a un alumno <b>desde su ficha</b> (típico si te pagó por Yape fuera de la app), le llega un correo con su plan y el link a su portal. El que paga por internet ya recibe el suyo al confirmarse el pago.</p>
 
       <h2 style="margin-top:22px;">Asistencia</h2>
@@ -3632,6 +3634,7 @@ function renderAjustes(){
   if(el("cfg_reprog_min_h")) el("cfg_reprog_min_h").value=(db.config&&db.config.reprog_min_h)||"";
   if(el("cfg_recordatorio_renovacion")) el("cfg_recordatorio_renovacion").value=(db.config&&db.config.recordatorio_renovacion)||"";
   if(el("cfg_aviso_plan_activo")) el("cfg_aviso_plan_activo").value=(db.config&&db.config.aviso_plan_activo)||"";
+  if(el("cfg_rescate_activo")) el("cfg_rescate_activo").value=(db.config&&db.config.rescate_activo)||"";
   if(el("cfg_direccion_fiscal")) el("cfg_direccion_fiscal").value=(db.config&&db.config.direccion_fiscal)||"";
   if(el("cfg_nubefact_ruta")) el("cfg_nubefact_ruta").value=(db.config&&db.config.nubefact_ruta)||"";
   if(el("cfg_nubefact_token")) el("cfg_nubefact_token").value=(db.config&&db.config.nubefact_token)||"";
@@ -7427,6 +7430,7 @@ el("btnGuardarAjustes").addEventListener("click",function(){
             reprog_min_h:(el("cfg_reprog_min_h")?el("cfg_reprog_min_h").value.trim():""),
             recordatorio_renovacion:(el("cfg_recordatorio_renovacion")?el("cfg_recordatorio_renovacion").value:""),
             aviso_plan_activo:(el("cfg_aviso_plan_activo")?el("cfg_aviso_plan_activo").value:""),
+            rescate_activo:(el("cfg_rescate_activo")?el("cfg_rescate_activo").value:""),
             direccion_fiscal:(el("cfg_direccion_fiscal")?el("cfg_direccion_fiscal").value.trim():""),
             /* Pedidos de Elevate (28-jul-2026): caducidad, asistencia automática y los
                textos propios de cada correo. Vacío en cualquiera = comportamiento de siempre. */

@@ -1221,6 +1221,8 @@ async function loadConfig(env, tenantId){
               /* "off" = no avisarle al alumno cuando el dueño le activa o renueva el plan a mano
                  desde su ficha (15-ago-2026). Vacío = sí se le avisa. Ver avisarPlanActivo. */
               aviso_plan_activo: "",
+              /* "off" = no escribirle a quien dejó una compra a medias. Vacío = sí. */
+              rescate_activo: "",
               /* Domicilio de la academia. Obligatorio para poder mandar campañas: la Ley 28493
                  art. 5.b exige nombre y domicilio completo del emisor en cada correo comercial.
                  Sin esto, el módulo de campañas no deja crear ninguna. */
@@ -5141,6 +5143,13 @@ async function ensureAlumnoExtraSchema(env){
      proposito: `descuento` es credito que se le RESTA al saldo del alumno al confirmar, y
      meterlos en la misma columna le vaciaria el credito por una rebaja que no salio de ahi. */
   try { await env.DB.prepare("ALTER TABLE compras ADD COLUMN desc_ref REAL DEFAULT 0").run(); } catch (e) { /* ya existe */ }
+  /* rescate de compras abandonadas (15-ago-2026, portado de MVT). Dos contadores porque hacen
+     falta los dos: `rescate_enviado` en la compra evita repetir por esa compra, y `rescate_fecha`
+     en la CUENTA evita repetir por la persona — cada reintento de checkout crea una compra nueva
+     con el contador en 0, y sin esto la misma persona recibía un correo por día (en MVT le pasó
+     a Genaro: 3 en 3 días). */
+  try { await env.DB.prepare("ALTER TABLE compras ADD COLUMN rescate_enviado INTEGER DEFAULT 0").run(); } catch (e) {}
+  try { await env.DB.prepare("ALTER TABLE cuentas ADD COLUMN rescate_fecha TEXT DEFAULT ''").run(); } catch (e) {}
   /* Campañas de correo (15-ago-2026). `campana_destinos` congela la lista al crear la campaña:
      el envío va por tandas a lo largo del día y tiene que poder reanudarse sin volver a
      preguntarle a la base quién entraba (si no, un alumno que se da de baja a media campaña
@@ -5919,6 +5928,75 @@ async function enviarCampanas(env){
     }
   }
   return total;
+}
+
+/* ═══════ RESCATE DE COMPRAS ABANDONADAS (15-ago-2026, portado de MVT) ═══════
+   La compra que quedó 'iniciada' (abrió el checkout y nunca pagó) o 'rechazada' hoy muere en
+   silencio: la academia perdió una venta y ni se entera. Este motor manda UN correo invitando
+   a retomarla desde el portal.
+
+   Las cinco reglas de abajo no son de diseño, son cicatrices del motor de MVT:
+   1. EXCLUYE 'pendiente' a propósito: esos YA pagaron por Yape y esperan que el dueño confirme.
+      Pedirles "completa tu pago" es un insulto al que ya pagó.
+   2. Mira la FICHA del alumno, no solo la compra: si la persona ya figura pagada, no se le
+      escribe (en MVT este candado se agregó después de mandarle rescate a gente que ya había
+      pagado por otro lado).
+   3. Dedupe por CUENTA además de por compra: cada reintento de checkout crea una compra nueva
+      con el contador en 0, así que la misma persona volvía a calificar al día siguiente.
+   4. Una cuenta con varias compras abandonadas recibe UN correo, no uno por compra.
+   5. Solo compras de AYER o antes: una compra iniciada hoy puede tener el pago en vuelo.
+
+   Apagable por academia con `rescate_activo` = "off" (vacío = encendido). */
+const RESCATE_ESPERA_DIAS = 30;   // una misma cuenta no vuelve a recibir rescate antes de este plazo
+async function rescatarComprasAbandonadas(env){
+  if (!env.RESEND_API_KEY) return 0;
+  const hoyStr = hoyLima();
+  const corte = new Date(Date.parse(hoyStr + "T00:00:00Z") - RESCATE_ESPERA_DIAS * 86400000).toISOString().slice(0, 10);
+  let filas = [];
+  try {
+    filas = ((await env.DB.prepare(
+      "SELECT co.id, co.tenant_id, co.cuenta_id, co.paquete, co.fecha, " +
+      "c.email AS _email, c.nombre AS _nombre, COALESCE(c.rescate_fecha,'') AS _resc, " +
+      "a.pago AS _pago_alumno, t.academia, t.slug, t.whatsapp " +
+      "FROM compras co " +
+      "JOIN cuentas c ON c.id = co.cuenta_id AND c.tenant_id = co.tenant_id " +
+      "JOIN tenants t ON t.id = co.tenant_id AND t.estado != 'vencido' " +
+      "LEFT JOIN alumnos a ON a.id = c.alumno_id AND a.tenant_id = co.tenant_id " +
+      "WHERE COALESCE(co.rescate_enviado,0) = 0 " +
+      "AND (co.estado = 'rechazada' OR (co.estado = 'iniciada' AND co.fecha < ?1)) " +
+      "AND c.email IS NOT NULL AND c.email != '' LIMIT 200"
+    ).bind(hoyStr).all()).results) || [];
+  } catch (e) { return 0; }
+  const cache = new Map();
+  const yaEscritas = new Set();   // regla 4: una cuenta, un correo
+  let enviados = 0;
+  for (const f of filas){
+    if (yaEscritas.has(f.cuenta_id)) continue;
+    if (String(f._pago_alumno || "") === "Pagado") continue;            // regla 2
+    if (String(f._resc || "") > corte) continue;                        // regla 3
+    if (!(await toggleTenantOn(env, cache, f.tenant_id, "rescate"))) continue;
+    const academia = f.academia || MARCA.nombre;
+    const portal = MARCA.dominio + "/app/a/" + f.slug;
+    const wa = "https://wa.me/" + (f.whatsapp || MARCA.whatsapp);
+    const nombre = ((f._nombre || "").trim().split(/\s+/)[0]) || "";
+    const html =
+      '<div style="font-family:Arial,Helvetica,sans-serif;max-width:480px;margin:0 auto;color:#1a1a1a;font-size:15px;line-height:1.6">' +
+        '<p>Hola' + (nombre ? ' ' + esc(nombre) : '') + ',</p>' +
+        '<p>Vi que empezaste a reservar tu <b>' + esc(f.paquete || "paquete") + '</b> en ' + esc(academia) + ' y quedó a medias. Tu cupo sigue disponible.</p>' +
+        '<p style="text-align:center;margin:24px 0"><a href="' + portal + '" style="background:#E8A13D;color:#17130C;text-decoration:none;font-weight:bold;padding:13px 24px;border-radius:6px;display:inline-block">Retomar mi compra</a></p>' +
+        '<p style="color:#666;font-size:14px">¿Tuviste algún problema para pagar o prefieres otra forma? Escríbenos por <a href="' + wa + '">WhatsApp</a> y lo resolvemos.</p>' +
+      '</div>';
+    const ok = await enviarCorreo(env, { to: f._email, subject: "Tu " + (f.paquete || "reserva") + " en " + academia + " quedó a medias", html: html });
+    /* se marca SIEMPRE, salga o no el correo: si el envío falla y no se marca, el motor lo
+       reintenta cada hora contra una dirección que probablemente rebota */
+    try {
+      await env.DB.prepare("UPDATE compras SET rescate_enviado = 1 WHERE id = ?1 AND tenant_id = ?2").bind(f.id, f.tenant_id).run();
+      await env.DB.prepare("UPDATE cuentas SET rescate_fecha = ?1 WHERE id = ?2 AND tenant_id = ?3").bind(hoyStr, f.cuenta_id, f.tenant_id).run();
+    } catch (e) {}
+    yaEscritas.add(f.cuenta_id);
+    if (ok) enviados++;
+  }
+  return enviados;
 }
 
 /* ---------- Win-back (09-jul columna, activado 24-jul para Elevate) ----------
@@ -13547,6 +13625,8 @@ export default {
                           "ref_min_clases", "ref_solo_nuevos",
                           /* aviso al alumno cuando le activan el plan a mano (15-ago-2026) */
                           "aviso_plan_activo",
+                          /* "off" apaga el rescate de compras abandonadas (15-ago-2026) */
+                          "rescate_activo",
                           /* domicilio de la academia: obligatorio en los correos de campaña */
                           "direccion_fiscal"];
           const stmts = [];
@@ -14269,6 +14349,9 @@ export default {
     /* ---- desde aqui: SOLO la corrida diaria de las 9am Lima ---- */
     try { await recordatorioRenovacion(env); } catch (e) { console.error("recordatorio renovacion", e); }
     try { await winbackAlumnos(env); } catch (e) { console.error("winback alumnos", e); }
+    /* Rescate de compras abandonadas: diario, no cada 15 min. Una compra que quedó a medias no
+       se recupera por escribirle más rápido, y a esa hora el pago de anoche ya se resolvió. */
+    try { await rescatarComprasAbandonadas(env); } catch (e) { console.error("rescate compras", e); }
     try { await caducarPlanesSinArrancar(env); } catch (e) { console.error("caducar planes", e); }
     try { await seguimientoLeadsDueno(env); } catch (e) { console.error("seguimiento leads dueno", e); }
     /* Fase 3 "para dummies" (10-ago-2026): el producto persigue al dueño trabado (día 2/7)
