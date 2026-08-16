@@ -3457,6 +3457,36 @@ export default {
         '<body style="font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;max-width:460px;margin:0 auto;padding:32px 20px;color:#1a1a1a;line-height:1.5">' +
         cuerpo + script + '</body></html>');
     }
+    /* Baja de correos del lead (16-ago-2026). Un clic desde el pie de las campañas, sin pedirle
+       nada: el token es HMAC del id del lead, así que nadie puede dar de baja a otro, y el correo
+       no viaja en la URL. Idempotente y sin caducidad: entrar dos veces no rompe nada. Responde
+       200 aunque el lead no exista, para no delatar quién está en la lista.
+       ⚠️ VA ARRIBA DE ESTE CORTE a propósito: dos líneas más abajo, todo lo que no sea /api/ o
+       /r/ se va a los assets y devolvería 404 (es la misma trampa de /invitacion). */
+    if (url.pathname === "/baja" && request.method === "GET"){
+      const leadId = url.searchParams.get("l") || "";
+      const tok = url.searchParams.get("t") || "";
+      const esperado = await tokenBaja(env, leadId);
+      const ok = !!(esperado && tok && safeEq(tok, esperado));
+      if (ok){
+        try { await env.DB.prepare("UPDATE leads SET baja = 1 WHERE id = ?1").bind(leadId).run(); } catch (e) {}
+      }
+      const cuerpo = ok
+        ? '<h1>Listo</h1><p>No te llegan más correos míos. Si algún día quieres retomar las clases, la puerta queda abierta.</p>'
+        : '<h1>Ese link ya no sirve</h1><p>Escríbeme y te saco de la lista a mano.</p>';
+      return new Response(
+        '<!doctype html><html lang="es"><head><meta charset="utf-8">' +
+        '<meta name="viewport" content="width=device-width,initial-scale=1">' +
+        '<meta name="robots" content="noindex"><title>Baja de correos · ' + esc(MARCA.nombre) + '</title>' +
+        '<style>body{background:#0d0b0a;color:#EBE5D6;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;' +
+        'display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;padding:24px;text-align:center}' +
+        'div{max-width:420px}h1{color:#e8501f;font-size:1.6rem;margin:0 0 12px}p{opacity:.85;line-height:1.6}' +
+        'a{color:#e8501f}</style></head><body><div>' + cuerpo +
+        '<p style="margin-top:26px"><a href="' + esc(MARCA.dominio) + '">' +
+        esc(MARCA.dominio.replace(/^https?:\/\//, "")) + '</a></p></div></body></html>',
+        { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" } }
+      );
+    }
     if (!url.pathname.startsWith("/api/") && !url.pathname.startsWith("/r/")){
       return env.ASSETS ? env.ASSETS.fetch(request) : json({ error: "No encontrado" }, 404);
     }
@@ -4144,34 +4174,6 @@ export default {
           metodo: compraR.metodo || "", fecha: compraR.fecha || "",
           numero: numR, whatsapp: MARCA.whatsapp || ""
         }));
-      }
-      /* Baja de correos del lead (16-ago-2026). Un solo clic desde el pie de las campañas, sin
-         pedirle nada: el token es HMAC del id, así que nadie puede dar de baja a otro, y el
-         email no viaja en la URL. Idempotente y sin caducidad: entrar dos veces no rompe nada.
-         Devuelve 200 aunque el lead no exista, para no delatar quién está en la lista. */
-      if (url.pathname === "/baja" && request.method === "GET"){
-        const leadId = url.searchParams.get("l") || "";
-        const tok = url.searchParams.get("t") || "";
-        const esperado = await tokenBaja(env, leadId);
-        const ok = !!(esperado && tok && safeEq(tok, esperado));
-        if (ok){
-          try { await env.DB.prepare("UPDATE leads SET baja = 1 WHERE id = ?1").bind(leadId).run(); } catch (e) {}
-        }
-        const cuerpo = ok
-          ? '<h1>Listo</h1><p>No te llegan más correos míos. Si algún día quieres retomar las clases, la puerta queda abierta.</p>'
-          : '<h1>Ese link ya no sirve</h1><p>Escríbeme y te saco de la lista a mano.</p>';
-        return new Response(
-          '<!doctype html><html lang="es"><head><meta charset="utf-8">' +
-          '<meta name="viewport" content="width=device-width,initial-scale=1">' +
-          '<meta name="robots" content="noindex"><title>Baja de correos · ' + esc(MARCA.nombre) + '</title>' +
-          '<style>body{background:#0d0b0a;color:#EBE5D6;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;' +
-          'display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;padding:24px;text-align:center}' +
-          'div{max-width:420px}h1{color:#e8501f;font-size:1.6rem;margin:0 0 12px}p{opacity:.85;line-height:1.6}' +
-          'a{color:#e8501f}</style></head><body><div>' + cuerpo +
-          '<p style="margin-top:26px"><a href="' + esc(MARCA.dominio) + '">' +
-          esc(MARCA.dominio.replace(/^https?:\/\//, "")) + '</a></p></div></body></html>',
-          { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" } }
-        );
       }
       /* Estado público del sorteo vigente. Además del cron, este GET dispara el sorteoElegir()
          de respaldo: si el cron fallara, el primer visitante después de la hora de cierre lo
