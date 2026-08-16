@@ -1223,6 +1223,10 @@ async function loadConfig(env, tenantId){
               aviso_plan_activo: "",
               /* "off" = no escribirle a quien dejó una compra a medias. Vacío = sí. */
               rescate_activo: "",
+              /* Link de reseñas de Google de la academia. VACÍO = el motor no manda nada: el
+                 link de Google no se inventa. `resena_activa` = "off" lo apaga aunque haya link. */
+              review_link: "", resena_activa: "",
+              resena_min_clases: "",
               /* Domicilio de la academia. Obligatorio para poder mandar campañas: la Ley 28493
                  art. 5.b exige nombre y domicilio completo del emisor en cada correo comercial.
                  Sin esto, el módulo de campañas no deja crear ninguna. */
@@ -5150,6 +5154,16 @@ async function ensureAlumnoExtraSchema(env){
      a Genaro: 3 en 3 días). */
   try { await env.DB.prepare("ALTER TABLE compras ADD COLUMN rescate_enviado INTEGER DEFAULT 0").run(); } catch (e) {}
   try { await env.DB.prepare("ALTER TABLE cuentas ADD COLUMN rescate_fecha TEXT DEFAULT ''").run(); } catch (e) {}
+  /* Pedido de reseña (15-ago-2026, portado de MVT). `resena_pedida` en la ficha para no volver
+     a pedírsela al mismo alumno; la tabla guarda solo el HASH del token, como reset_tokens.
+     Tabla propia y no `feedback`: esa es de las ideas y errores del DUEÑO, otra cosa. */
+  try { await env.DB.prepare("ALTER TABLE alumnos ADD COLUMN resena_pedida INTEGER DEFAULT 0").run(); } catch (e) {}
+  try {
+    await env.DB.prepare(
+      "CREATE TABLE IF NOT EXISTS resenas (token_hash TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, alumno_id TEXT NOT NULL, " +
+      "nota INTEGER DEFAULT 0, usado INTEGER DEFAULT 0, creada TEXT DEFAULT '')"
+    ).run();
+  } catch (e) {}
   /* Campañas de correo (15-ago-2026). `campana_destinos` congela la lista al crear la campaña:
      el envío va por tandas a lo largo del día y tiene que poder reanudarse sin volver a
      preguntarle a la base quién entraba (si no, un alumno que se da de baja a media campaña
@@ -5928,6 +5942,93 @@ async function enviarCampanas(env){
     }
   }
   return total;
+}
+
+/* ═══════ PEDIDO DE RESEÑA (15-ago-2026, portado de MVT) ═══════
+   Al alumno que ya lleva varias clases se le manda UN correo: "del 1 al 5, ¿cómo van tus
+   clases?", con cinco botones de un clic.
+     · nota 4 o 5 → se le lleva al link de reseñas de Google de la academia
+     · nota 1 a 3 → página de gracias sobria + aviso INMEDIATO al dueño
+   Lo segundo es lo que hace que esto valga: es un radar de churn. El alumno que está por irse
+   avisa antes de irse, y el dueño se entera el mismo día en vez de cuando ya no vuelve.
+
+   Reglas que vienen de MVT y no se tocan:
+   · Si la academia no cargó su link de Google, el motor NO manda nada. El link no se inventa.
+   · Un solo pedido por alumno (`resena_pedida`), y token de UN uso del que solo se guarda el hash.
+   · Solo a quien ya tomó varias clases: pedirle una reseña al que fue una vez es pedirle que
+     opine de lo que no conoce. */
+const RESENA_MIN_CLASES_DEF = 4;
+/* Tope POR ACADEMIA y POR DÍA. Dos razones, y la segunda importa más que la primera:
+   1. Elevate tiene 1,447 alumnos; el día que pegue su link de Google saldrían cientos de correos
+      de golpe desde el dominio de Batuta. Un pico así dispara quejas de spam y Resend puede
+      tumbar el dominio — y ahí dejan de llegar los correos TRANSACCIONALES de TODAS las
+      academias. Una academia estrenando la función no puede quemarle la entrega a las demás.
+   2. Google filtra los picos de reseñas: 300 reseñas en un día se ven compradas. El goteo se ve
+      orgánico y sobrevive. O sea que ir lento acá no es una traba, es lo que hace que funcione.
+   Con 25/día, 1,447 alumnos se cubren en ~2 meses, que es exactamente el ritmo que uno querría. */
+const RESENA_TOPE_ACADEMIA_DIA = 25;
+async function pedirResenas(env){
+  if (!env.RESEND_API_KEY) return 0;
+  /* El esquema se migra en perezoso (solo al entrar al panel), así que un motor del cron no
+     puede darlo por hecho: la tabla `resenas` puede no existir todavía y el motor moriría en
+     silencio dentro de su try/catch. Mismo patrón que caducarPlanesSinArrancar. */
+  await ensureAlumnoExtraSchema(env).catch(() => {});
+  /* Se recorre POR ACADEMIA, no con un LIMIT global sobre todos los alumnos. Con un LIMIT
+     global, Elevate (1,447 alumnos) llenaría la lista entera y ninguna otra academia recibiría
+     nunca su turno. El conteo de clases va en la misma consulta: antes era un COUNT por alumno,
+     o sea cientos de consultas para descartar a la mayoría. */
+  let tenants = [];
+  try {
+    tenants = ((await env.DB.prepare(
+      "SELECT id, academia FROM tenants WHERE estado != 'vencido'"
+    ).all()).results) || [];
+  } catch (e) { return 0; }
+  let enviados = 0;
+  for (const t of tenants){
+    const cfg = await loadConfig(env, t.id).catch(() => ({}));
+    const link = String(cfg.review_link || "").trim();
+    if (!link) continue;                                     // sin link de Google no se manda nada
+    if (String(cfg.resena_activa || "") === "off") continue;
+    let minCl = parseInt(cfg.resena_min_clases, 10);
+    if (!Number.isFinite(minCl) || minCl < 1) minCl = RESENA_MIN_CLASES_DEF;
+    let filas = [];
+    try {
+      filas = ((await env.DB.prepare(
+        "SELECT a.id, a.nombre, c.email AS _email FROM alumnos a " +
+        "JOIN cuentas c ON c.alumno_id = a.id AND c.tenant_id = a.tenant_id " +
+        "WHERE a.tenant_id = ?1 AND COALESCE(a.resena_pedida,0) = 0 AND COALESCE(a.no_email,0) = 0 " +
+        "AND c.email IS NOT NULL AND c.email != '' " +
+        "AND (SELECT COUNT(*) FROM registro r WHERE r.tenant_id = a.tenant_id AND r.alumno_id = a.id " +
+        "AND r.estado = 'Asistió') >= ?2 LIMIT ?3"
+      ).bind(t.id, minCl, RESENA_TOPE_ACADEMIA_DIA).all()).results) || [];
+    } catch (e) { continue; }
+    const academia = t.academia || MARCA.nombre;
+    for (const f of filas){
+      const token = randHex(32);
+      const tokenHash = await sha256Hex(token);
+      try {
+        await env.DB.batch([
+          env.DB.prepare("DELETE FROM resenas WHERE alumno_id = ?1 AND tenant_id = ?2 AND usado = 0").bind(f.id, t.id),
+          env.DB.prepare("INSERT INTO resenas (token_hash, tenant_id, alumno_id, nota, usado, creada) VALUES (?1,?2,?3,0,0,?4)")
+            .bind(tokenHash, t.id, f.id, new Date().toISOString()),
+          env.DB.prepare("UPDATE alumnos SET resena_pedida = 1 WHERE id = ?1 AND tenant_id = ?2").bind(f.id, t.id)
+        ]);
+      } catch (e) { continue; }
+      const nombre = ((f.nombre || "").trim().split(/\s+/)[0]) || "";
+      const base = MARCA.dominio + "/app/resena?t=" + token + "&nota=";
+      const btn = n => '<a href="' + base + n + '" style="display:inline-block;width:44px;height:44px;line-height:44px;margin:0 4px;background:#E8A13D;color:#17130C;text-decoration:none;font-weight:bold;font-size:18px;border-radius:6px;text-align:center">' + n + '</a>';
+      const html =
+        '<div style="font-family:Arial,Helvetica,sans-serif;max-width:480px;margin:0 auto;color:#1a1a1a;font-size:15px;line-height:1.6">' +
+          '<p>Hola' + (nombre ? ' ' + esc(nombre) : '') + ',</p>' +
+          '<p>Ya llevas varias clases en ' + esc(academia) + ' y queremos saber cómo lo estás viviendo. Del 1 al 5, ¿cómo van tus clases?</p>' +
+          '<p style="text-align:center;margin:26px 0">' + btn(1) + btn(2) + btn(3) + btn(4) + btn(5) + '</p>' +
+          '<p style="font-size:13px;color:#666;text-align:center">1 = puede mejorar mucho · 5 = excelente</p>' +
+          '<p>Un toque y listo. Tu respuesta llega directo y ayuda a que cada clase sume más.</p>' +
+        '</div>';
+      if (await enviarCorreo(env, { to: f._email, subject: "¿Cómo van tus clases en " + esc(academia) + "?", html })) enviados++;
+    }
+  }
+  return enviados;
 }
 
 /* ═══════ RESCATE DE COMPRAS ABANDONADAS (15-ago-2026, portado de MVT) ═══════
@@ -6952,6 +7053,61 @@ export default {
        para esto — no da acceso a nada.
        Se apagan las DOS marcas: `mkt_ok` (publicidad) y `no_email` (cualquier correo no
        transaccional), porque quien pide la baja no está distinguiendo entre categorías. */
+    /* ============ GATE DE SATISFACCIÓN (público, un clic desde el correo) ============
+       Nota 4-5 → se manda al alumno al link de reseñas de Google DE SU ACADEMIA.
+       Nota 1-3 → página de gracias sobria + aviso inmediato al dueño de esa academia.
+       La gracia del gate: la academia solo pide reseña pública a quien ya dijo que está
+       contento, y al que no lo está lo atiende antes de que se vaya. Token de un solo uso,
+       reclamado de forma atómica (usado = 0 → 1) para que dos clics no cuenten dos veces. */
+    if (path === "/app/resena" && request.method === "GET"){
+      const tok = String(url.searchParams.get("t") || "");
+      const nota = Math.round(Number(url.searchParams.get("nota"))) || 0;
+      const noSirve = () => htmlResponse(paginaBase("Reseña",
+        '<h1 style="font-size:20px;margin:0 0 10px">Ese enlace ya no funciona</h1>' +
+        '<p>Si llegaste desde un correo de tu academia, escríbeles directo y lo ven contigo.</p>', ""));
+      if (!/^[a-f0-9]{64}$/.test(tok) || nota < 1 || nota > 5) return noSirve();
+      const tokenHash = await sha256Hex(tok);
+      const fila = await env.DB.prepare("SELECT * FROM resenas WHERE token_hash = ?1").bind(tokenHash).first().catch(() => null);
+      if (!fila) return noSirve();
+      const upd = await env.DB.prepare(
+        "UPDATE resenas SET usado = 1, nota = ?1 WHERE token_hash = ?2 AND usado = 0"
+      ).bind(nota, tokenHash).run().catch(() => null);
+      const cambio = (upd && upd.meta && (upd.meta.changes ?? upd.meta.rows_written)) || 0;
+      if (!cambio){
+        return htmlResponse(paginaBase("Reseña",
+          '<h1 style="font-size:20px;margin:0 0 10px">Ya tenemos tu respuesta</h1>' +
+          '<p>Quedó registrada. Gracias por tomarte el minuto.</p>', ""));
+      }
+      const cfgR = await loadConfig(env, fila.tenant_id).catch(() => ({}));
+      if (nota >= 4){
+        const link = String(cfgR.review_link || "").trim();
+        if (/^https?:\/\//i.test(link)) return new Response(null, { status: 302, headers: { "location": link } });
+        return htmlResponse(paginaBase("Gracias",
+          '<h1 style="font-size:20px;margin:0 0 10px">¡Gracias!</h1>' +
+          '<p>Nos alegra un montón que las clases te vayan bien. Nos vemos en la próxima.</p>', ""));
+      }
+      /* Nota 1-3: radar de churn. El aviso va al DUEÑO de esa academia, no a Batuta:
+         el que puede hacer algo con esto hoy es él. */
+      try {
+        const t = await env.DB.prepare("SELECT academia, email FROM tenants WHERE id = ?1").bind(fila.tenant_id).first();
+        const al = await env.DB.prepare("SELECT nombre FROM alumnos WHERE id = ?1 AND tenant_id = ?2").bind(fila.alumno_id, fila.tenant_id).first();
+        const quien = (al && al.nombre) || fila.alumno_id;
+        if (t && t.email){
+          await enviarCorreo(env, {
+            to: t.email,
+            subject: "Ojo: " + quien + " puntuó " + nota + " de 5",
+            html: '<div style="font-family:Arial,Helvetica,sans-serif;max-width:480px;margin:0 auto;font-size:15px;line-height:1.6;color:#1a1a1a">' +
+              '<p><b>' + esc(quien) + '</b> respondió el correo de satisfacción con <b>' + nota + ' de 5</b>.</p>' +
+              '<p>No se le pidió reseña pública: el filtro lo frenó. Vale un mensaje tuyo hoy para escuchar qué le está faltando; ' +
+              'este es justo el alumno que se va sin avisar.</p>' +
+              '<p><a href="' + MARCA.dominio + '/app/panel">Abrir el panel</a></p></div>'
+          });
+        }
+      } catch (e) { console.error("aviso resena baja", e); }
+      return htmlResponse(paginaBase("Gracias",
+        '<h1 style="font-size:20px;margin:0 0 10px">Gracias por decírnoslo</h1>' +
+        '<p>Tu respuesta le llega directo a tu academia y se la toman en serio. Van a ajustar lo que haga falta para que cada clase te sume más.</p>', ""));
+    }
     if (path === "/app/baja" && request.method === "GET"){
       const tok = String(url.searchParams.get("t") || "").trim();
       let al = null;
@@ -13626,7 +13782,7 @@ export default {
                           /* aviso al alumno cuando le activan el plan a mano (15-ago-2026) */
                           "aviso_plan_activo",
                           /* "off" apaga el rescate de compras abandonadas (15-ago-2026) */
-                          "rescate_activo",
+                          "rescate_activo", "review_link", "resena_activa", "resena_min_clases",
                           /* domicilio de la academia: obligatorio en los correos de campaña */
                           "direccion_fiscal"];
           const stmts = [];
@@ -14352,6 +14508,7 @@ export default {
     /* Rescate de compras abandonadas: diario, no cada 15 min. Una compra que quedó a medias no
        se recupera por escribirle más rápido, y a esa hora el pago de anoche ya se resolvió. */
     try { await rescatarComprasAbandonadas(env); } catch (e) { console.error("rescate compras", e); }
+    try { await pedirResenas(env); } catch (e) { console.error("pedir resenas", e); }
     try { await caducarPlanesSinArrancar(env); } catch (e) { console.error("caducar planes", e); }
     try { await seguimientoLeadsDueno(env); } catch (e) { console.error("seguimiento leads dueno", e); }
     /* Fase 3 "para dummies" (10-ago-2026): el producto persigue al dueño trabado (día 2/7)

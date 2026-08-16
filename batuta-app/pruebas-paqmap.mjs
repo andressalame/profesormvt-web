@@ -1,7 +1,7 @@
 /* Demuestra el bug del `.map`: pasarle a resolverPk el objeto {map,list} en vez del map
    hace que NINGÚN paquete propio de la academia se encuentre → 0 clases para todos.
    Usa la config REAL de paquetes de Elevate y las funciones REALES del worker. */
-import { readFileSync } from "node:fs";
+import { readFileSync, existsSync } from "node:fs";
 const SRC = readFileSync(process.env.HOME + "/Code/mvt/web/batuta-app/worker/index.js", "utf8");
 function cortar(nombre, tipo){
   const re = tipo === "const" ? new RegExp("^const " + nombre + "\\s*=", "m")
@@ -25,6 +25,14 @@ const fuente =
   "\nexport { parsePaquetes, resolverPk };";
 const { parsePaquetes, resolverPk } = await import("data:text/javascript," + encodeURIComponent(fuente));
 
+/* Esta suite corre contra el dump real de paquetes de Elevate, que vive en /tmp y se borra al
+   reiniciar. Sin el archivo NO se puede probar nada, así que se salta con aviso en vez de morir:
+   una suite que siempre revienta hace que se deje de mirar el resultado de todas.
+   Para regenerarlo: exportar los paquetes de Elevate a /tmp/elevate_paquetes.json. */
+if (!existsSync("/tmp/elevate_paquetes.json")){
+  console.log("⏭  SALTADA: falta /tmp/elevate_paquetes.json (dump de Elevate, se borra al reiniciar la Mac)");
+  process.exit(0);
+}
 const crudo = readFileSync("/tmp/elevate_paquetes.json", "utf8");
 const paq = parsePaquetes(crudo);                       // {map, list}
 const NOMBRES = ["12 clases de Pilates con Máquinas", "12 clases de Mat", "48 clases de Pilates con Máquinas"];
