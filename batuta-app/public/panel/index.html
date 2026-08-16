@@ -1727,17 +1727,25 @@ button[data-ayuda],a[data-ayuda],select[data-ayuda],input[data-ayuda],label[data
            explicarlos mejor, fue RENOMBRARLOS. Ahora cada opción empieza diciendo QUÉ recibe la
            alumna —plata o clases— porque esa es la única diferencia que le importa al dueño; lo
            demás es cómo se calcula el monto. -->
-      <div class="cfgrow"><span class="pk">¿Qué gana?</span><select id="cfg_ref_premio_modo" data-ayuda="Qué se lleva tu alumno por traerte a un amigo. &quot;Plata a favor&quot; se le descuenta cuando vuelva a comprar; &quot;Clases&quot; las puede tomar mañana sin pagar.">
-        <option value="">Plata a favor: un monto fijo en soles</option>
-        <option value="pct_compra">Plata a favor: un % de lo que pagó su amigo</option>
-        <option value="clases_credito">Plata a favor: lo que cuestan X clases</option>
-        <option value="clases_saldo">Clases: X clases que puede tomar sin pagar</option>
+      <!-- 15-ago, 3ª pasada. La 2ª repetía "Plata a favor:" al empezar tres opciones y se leía
+           como la misma cosa escrita tres veces. La forma de decir "estas tres son del mismo
+           tipo" no es repetir la palabra en cada una: es agruparlas bajo un encabezado, que HTML
+           ya trae (optgroup). Así cada opción tiene su nombre propio y corto, y el tipo se dice
+           UNA vez, arriba del grupo. -->
+      <div class="cfgrow"><span class="pk">¿Qué gana?</span><select id="cfg_ref_premio_modo" data-ayuda="Qué se lleva tu alumno por traerte a un amigo. Las de arriba son descuento: se le aplican cuando vuelva a comprar. La de abajo son clases que puede tomar mañana sin pagar.">
+        <optgroup label="Descuento para su próxima compra">
+          <option value="">Un monto fijo en soles</option>
+          <option value="pct_compra">Un % de lo que pagó su amigo</option>
+          <option value="clases_credito">El precio de X clases</option>
+        </optgroup>
+        <optgroup label="Clases">
+          <option value="clases_saldo">X clases gratis, para tomar cuando quiera</option>
+        </optgroup>
       </select></div>
       <div class="cfgrow"><span class="pk" id="lblRefPremioValor">Cuánto</span><input id="cfg_ref_premio_valor" type="number" min="1" max="5000" step="0.01" placeholder="50" /></div>
-      <p class="hint" style="margin-top:-4px;">Las tres primeras son lo mismo (<b>plata a favor</b>), solo cambia cómo sacas el monto. La última es la distinta.</p>
-      <p class="hint" style="margin-top:6px;"><b>Plata a favor</b> = se le descuenta sola <b>el día que vuelva a comprar</b>. No le ocupa ningún cupo, y si nunca vuelve, no te costó nada.</p>
-      <p class="hint" style="margin-top:2px;"><b>Clases</b> = las puede <b>reservar mañana sin pagar</b>. Te cuesta hoy y te ocupa un lugar en esa clase.</p>
-      <p class="hint" style="margin-top:6px;">👉 <b>Si tus clases se llenan</b>, dale plata a favor: no regalas un cupo que ibas a vender. <b>Si te sobran cupos</b>, dale clases: se siente mejor premio y solo te cuesta un espacio que igual iba vacío.</p>
+      <p class="hint" style="margin-top:6px;"><b>Un descuento</b> se le aplica solo <b>el día que vuelva a comprar</b>. No te ocupa ningún cupo, y si nunca vuelve, no te costó nada.</p>
+      <p class="hint" style="margin-top:2px;"><b>Las clases</b> las puede <b>reservar mañana sin pagar</b>. Te cuesta hoy y te ocupa un lugar en esa clase.</p>
+      <p class="hint" style="margin-top:6px;">👉 <b>Si tus clases se llenan</b>, dale descuento: no regalas un cupo que ibas a vender. <b>Si te sobran cupos</b>, dale clases: se siente mejor premio y solo te cuesta un espacio que igual iba vacío.</p>
 
       <h2 style="margin-top:22px;">El amigo que llega</h2>
       <div class="cfgrow"><span class="pk">¿Qué gana en su primera compra?</span><select id="cfg_ref_desc_modo" data-ayuda="Qué se lleva el amigo nuevo en su primera compra. Es el gancho para que el código se comparta.">
