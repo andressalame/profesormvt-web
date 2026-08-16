@@ -1707,7 +1707,14 @@
         <option value="clases_saldo">Clases gratis de verdad, a su saldo</option>
       </select></div>
       <div class="cfgrow"><span class="pk" id="lblRefPremioValor">Cuánto</span><input id="cfg_ref_premio_valor" type="number" min="1" max="5000" step="0.01" placeholder="50" /></div>
-      <p class="hint" style="margin-top:-4px;"><b>Descuento</b> = plata a favor que se le aplica sola en su próxima compra. <b>Clases gratis de verdad</b> = se le suman al saldo y las puede reservar mañana, sin comprar nada. La diferencia importa: el descuento lo cobras igual el día que renueve; la clase gratis la das ahora.</p>
+      <!-- 15-ago-2026: la versión anterior explicaba la diferencia en abstracto y José la leyó
+           entera y aun así preguntó "¿cuál es la diferencia de estas dos?". Si el cliente lee el
+           texto y sigue sin entender, el texto está mal. Ahora se explica por lo único que le
+           importa a un dueño: CUÁNDO le cuesta la plata y si le ocupa un cupo. -->
+      <p class="hint" style="margin-top:-4px;">Las dos últimas suenan igual pero <b>no te cuestan igual</b>:</p>
+      <p class="hint" style="margin-top:2px;"><b>Clases gratis pagadas como descuento</b> → no le das una clase: le das <b>lo que vale esa clase en plata a favor</b>. Solo te cuesta <b>el día que ella vuelva a comprar</b>, y se le descuenta de esa compra. Si nunca vuelve, no te costó nada. <b>No te ocupa ningún cupo.</b></p>
+      <p class="hint" style="margin-top:2px;"><b>Clases gratis de verdad</b> → se le suma una clase a su saldo y <b>la puede reservar mañana sin pagar nada</b>. Te cuesta <b>hoy</b>, y te <b>ocupa un cupo</b> en esa clase.</p>
+      <p class="hint" style="margin-top:2px;">👉 <b>Si tus clases se llenan</b>, te conviene el descuento: no regalas un cupo que ibas a vender. <b>Si te sobran cupos</b>, la clase de verdad es mejor premio y no te cuesta plata, solo un espacio que igual iba vacío.</p>
 
       <h2 style="margin-top:22px;">El amigo que llega</h2>
       <div class="cfgrow"><span class="pk">¿Qué gana en su primera compra?</span><select id="cfg_ref_desc_modo">
@@ -7198,6 +7205,17 @@ function pintarResumenReferidos(){
     pm==="pct_compra" ? "Qué porcentaje" : (pm==="" ? "Cuántos soles" : "Cuántas clases");
   if(el("lblRefDescValor")) el("lblRefDescValor").textContent =
     dm==="pct" ? "Qué porcentaje" : (dm==="soles" ? "Cuántos soles" : "Cuánto");
+  /* 🐛 15-ago-2026, cazado con José mirando la pantalla: el placeholder estaba FIJO en "50"
+     (el default correcto de soles) y no cambiaba al pasar a porcentaje ni a clases. Un dueño
+     que eligiera "% de lo que pagó su amigo" leía "50" como sugerencia y regalaba la mitad de
+     la venta; y en clases, "50" era directamente absurdo. El placeholder tiene que decir SIEMPRE
+     el default real de ese modo, que es lo que aplica el servidor si lo deja vacío. */
+  if(el("cfg_ref_premio_valor")) el("cfg_ref_premio_valor").placeholder =
+    pm==="pct_compra" ? "10" : (pm==="" ? "50" : "1");
+  if(el("cfg_ref_desc_valor")) el("cfg_ref_desc_valor").placeholder = dm==="soles" ? "30" : "10";
+  /* topes por modo: 100% no tiene sentido en un premio, y 10 clases es el techo del worker */
+  if(el("cfg_ref_premio_valor")) el("cfg_ref_premio_valor").max = pm==="pct_compra" ? 100 : (pm==="" ? 5000 : 10);
+  if(el("cfg_ref_desc_valor")) el("cfg_ref_desc_valor").max = dm==="pct" ? 50 : 5000;
   if(el("cfg_ref_desc_valor")) el("cfg_ref_desc_valor").disabled = !dm;
 
   var p=refPlanEjemplo();
