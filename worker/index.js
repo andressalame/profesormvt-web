@@ -4707,6 +4707,50 @@ export default {
         }
 
         /* ----- Agenda: marcar asistencia / cerrar una reserva ----- */
+        /* ---- "Anular la clase: que no haya pasado y se le devuelva el crédito" ----
+           15-ago-2026, portado de Batuta (pedido de José/Elevate: *"en lugar de reprogramó
+           debería ser simplemente eliminar y hacer de cuenta que nunca pasó"*).
+           Para qué existe además de "Reprogramó": reprogramar es un movimiento real del alumno
+           y le gasta su cuota (pasarse cuesta una clase). Esto es otra cosa: Andrés corrigiendo
+           un error suyo —una clase que se marcó y no debía—, y ahí no tiene por qué gastarse
+           nada. Borra la bitácora de ese día Y cancela la reserva, que son las DOS patas que
+           consumen crédito; tocar una sola deja el saldo a medio arreglar. */
+        if (url.pathname === "/api/admin/clase/anular" && request.method === "POST"){
+          const b = await request.json().catch(() => ({}));
+          const alumnoId = String(b.alumno_id || "");
+          const fecha = String(b.fecha || "").slice(0, 10);
+          if (!alumnoId || !/^\d{4}-\d{2}-\d{2}$/.test(fecha)) return json({ error: "Falta el alumno o la fecha." }, 400);
+          const alA = await env.DB.prepare("SELECT * FROM alumnos WHERE id = ?1").bind(alumnoId).first();
+          if (!alA) return json({ error: "Ese alumno no existe." }, 404);
+          const cicloA = Number(b.ciclo) || Number(alA.ciclo) || 1;
+          const delReg = await env.DB.prepare(
+            "DELETE FROM registro WHERE alumno_id = ?1 AND COALESCE(ciclo,1) = ?2 AND fecha = ?3"
+          ).bind(alumnoId, cicloA, fecha).run();
+          /* las reservas del mismo día de LIMA (date(...,'-5 hours') = fechaLimaDe), porque una
+             reserva viva sigue apartando crédito aunque su bitácora ya no exista */
+          const delRes = await env.DB.prepare(
+            "UPDATE reservas SET estado = 'cancelada', cancelada_utc = ?1, cancelada_por = 'admin:anulada' " +
+            "WHERE alumno_id = ?2 AND COALESCE(ciclo,1) = ?3 AND date(inicio_utc,'-5 hours') = ?4 " +
+            "AND estado != 'cancelada' AND tipo != 'bloqueo'"
+          ).bind(new Date().toISOString(), alumnoId, cicloA, fecha).run();
+          const nReg = (delReg && delReg.meta && (delReg.meta.changes ?? 0)) || 0;
+          const nRes = (delRes && delRes.meta && (delRes.meta.changes ?? 0)) || 0;
+          if (!nReg && !nRes) return json({ error: "Esa clase ya no existe." }, 404);
+          /* el saldo recalculado vuelve en la respuesta: Andrés ve el efecto sin recargar, que
+             es lo que le faltó a José para darse cuenta de que "Reprogramó" no devolvía la clase */
+          let saldoTxt = "";
+          try {
+            const alF = await env.DB.prepare("SELECT * FROM alumnos WHERE id = ?1").bind(alumnoId).first();
+            const { results: regsA } = await env.DB.prepare(
+              "SELECT estado, fecha FROM registro WHERE alumno_id = ?1 AND COALESCE(ciclo,1) = ?2"
+            ).bind(alumnoId, cicloA).all();
+            const rUs = await reservasUsadasCount(env, alumnoId, cicloA);
+            const cA = compute(alF, regsA || [], await loadPrecios(env), rUs);
+            saldoTxt = cA.restantes + " de " + cA.compradas;
+          } catch (e) { console.error("anular clase: saldo", e); }
+          return json({ ok: true, registro_borrado: nReg, reservas_canceladas: nRes, saldo: saldoTxt });
+        }
+
         if (url.pathname === "/api/admin/agenda/marcar" && request.method === "POST"){
           const b = await request.json().catch(() => ({}));
           const id = String(b.id || "");

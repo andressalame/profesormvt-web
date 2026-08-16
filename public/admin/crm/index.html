@@ -764,6 +764,15 @@ button[data-ayuda],a[data-ayuda],select[data-ayuda],input[data-ayuda],label[data
     <div class="field"><label>Nota de horario (manual, opcional)</label><input id="a_horario" type="text" placeholder="Solo si no usa la agenda. Ej: Martes 18:00" />
       <p class="hint" id="a_horario_derivado" style="margin:4px 0 0;"></p></div>
     <div class="field"><label>Notas</label><textarea id="a_notas"></textarea></div>
+    <!-- Sus clases (15-ago-2026, portado de Batuta, donde lo pidió José/Elevate).
+         Las TRES listas y por qué son tres:
+           · Sin marcar → 🔑 la que no existía en ninguna pantalla: la clase YA PASÓ y nadie le
+             puso Vino ni Faltó. No estaba en "próximas" (ya pasó) ni en el registro (nunca se
+             anotó), así que era invisible y el saldo quedaba raro sin que se viera por qué.
+           · Próximas   → sus reservas futuras, para marcarlas por adelantado o quitarlas.
+           · Ya tomadas → la bitácora, que es la que de verdad descuenta. -->
+    <div class="field" id="a_clases_wrap" style="display:none;"><label>Sus clases</label>
+      <div id="a_clases"></div></div>
     <div class="modal-actions">
       <button class="btn ghost" data-close>Cancelar</button>
       <button class="btn ghost" id="btnGuardarAlumnoOtro" title="Guarda este alumno y deja el formulario listo para el siguiente">Guardar y agregar otro</button>
@@ -1762,8 +1771,154 @@ el("btnNuevoAlumno").addEventListener("click",function(){
   el("a_fecha").value=hoyLima(); el("a_pago").value="Pagado"; el("a_origen").value="";
   el("a_horario").value=""; el("a_notas").value=""; el("a_horario_derivado").textContent="";
   el("btnGuardarAlumnoOtro").style.display="";
+  pintarClasesDeAlumno(null);
   openOv("ovAlumno");
 });
+/* ---------- "Sus clases" en la ficha del alumno (15-ago-2026, portado de Batuta) ----------
+   Nació de un pedido de José/Elevate: "que en la ficha se vean TODAS sus clases, futuras y
+   pasadas, y poder editarlas; no podemos estar viendo el calendario uno por uno".
+   Las tres listas y por qué son tres:
+     · Sin marcar  → 🔑 la clase YA PASÓ y nadie le puso Vino ni Faltó. No estaba en "próximas"
+                     (ya pasó) ni en el registro (nunca se anotó): era invisible, y el saldo del
+                     alumno quedaba raro sin que se viera por qué. Va primera y en acento.
+     · Próximas    → sus reservas futuras. Se pueden marcar por adelantado o quitar.
+     · Ya tomadas  → la bitácora, que es la que de verdad descuenta. */
+var FICHA_AL = null;
+/* Las reservas se cargan SOLO al entrar a la pestaña Agenda, y la ficha se abre desde Alumnos:
+   quien vaya directo ahí vería "no tiene ninguna clase" aunque tenga tres. Un vacío que parece
+   un dato es peor que un error, porque nadie lo reporta: simplemente se lo cree. */
+var AG_RESERVAS_LISTAS = false;
+function asegurarReservas(){
+  if(AG_RESERVAS_LISTAS){ return Promise.resolve(); }
+  return fetch("/api/admin/agenda",{headers:hdr()})
+    .then(function(r){ return r.json(); })
+    .then(function(d){ if(d && d.reservas){ AG_RESERVAS = d.reservas; AG_RESERVAS_LISTAS = true; } })
+    .catch(function(){ /* sin agenda la ficha igual muestra el registro */ });
+}
+function pintarClasesDeAlumno(a){
+  var wrap=el("a_clases_wrap"), box=el("a_clases");
+  if(!wrap||!box) return;
+  if(!a||!a.id){ wrap.style.display="none"; box.innerHTML=""; FICHA_AL=null; return; }
+  FICHA_AL=a.id;
+  if(!AG_RESERVAS_LISTAS){
+    wrap.style.display="";
+    box.innerHTML='<p class="hint" style="margin:3px 0 0;">Cargando sus clases…</p>';
+    asegurarReservas().then(function(){ if(FICHA_AL===a.id) pintarClasesDeAlumno(a); });
+    return;
+  }
+  var ahora=Date.now();
+  var mias=(AG_RESERVAS||[]).filter(function(r){ return r.alumno_id===a.id && r.tipo!=="bloqueo"; });
+  var futuras=mias.filter(function(r){ return r.estado==="reservada" && Date.parse(r.inicio_utc)>=ahora; })
+                  .sort(function(x,y){ return String(x.inicio_utc).localeCompare(String(y.inicio_utc)); });
+  var sinMarcar=mias.filter(function(r){ return r.estado==="reservada" && Date.parse(r.inicio_utc)<ahora; })
+                  .sort(function(x,y){ return String(y.inicio_utc).localeCompare(String(x.inicio_utc)); });
+  var tomadas=(db.registro||[]).filter(function(r){
+    return (r.alumnoId||r.alumno_id)===a.id && (r.estado==="Asistió"||r.estado==="Falta");
+  }).sort(function(x,y){ return String(y.fecha||"").localeCompare(String(x.fecha||"")); });
+
+  function fila(izq, botones){
+    return '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:4px 0;border-bottom:1px solid var(--line);">'+
+      '<span style="flex:1 1 auto;font-size:13px;">'+izq+'</span>'+
+      '<span style="flex:0 0 auto;white-space:nowrap;">'+(botones||'')+'</span></div>';
+  }
+  /* con muchas clases la ficha se volvía un rollo infinito: cada lista scrollea aparte */
+  function lista(filas){ return '<div style="max-height:210px;overflow-y:auto;margin:3px 0 0;">'+filas+'</div>'; }
+  function titulo(t,n,color){
+    return '<b style="font-size:12.5px;'+(color?('color:'+color+';'):'')+'">'+t+'</b>'+
+           (n?(' <span class="hint" style="margin:0;">('+n+')</span>'):'');
+  }
+  var h='';
+  if(sinMarcar.length){
+    h+='<div style="margin-top:2px;">'+titulo("Ya pasaron y están sin marcar", sinMarcar.length, "var(--accent)")+
+      lista(sinMarcar.map(function(r){
+        return fila(esc(fmtLima(r.inicio_utc))+(r.curso?(' · '+esc(r.curso)):''),
+          '<button type="button" class="btn ghost sm" data-ficha-marcar="completada" data-id="'+esc(r.id)+'">Vino</button> '+
+          '<button type="button" class="btn ghost sm" data-ficha-marcar="falta" data-id="'+esc(r.id)+'">Faltó</button>');
+      }).join(""))+
+      '<p class="hint" style="margin:4px 0 0;">Hasta que las marques, su saldo no termina de cuadrar.</p></div>';
+  }
+  h+='<div style="margin-top:'+(sinMarcar.length?'12px':'2px')+';">'+titulo("Próximas", futuras.length);
+  if(!futuras.length) h+='<p class="hint" style="margin:3px 0 0;">No tiene ninguna clase reservada.</p>';
+  else h+=lista(futuras.map(function(r){
+    return fila(esc(fmtLima(r.inicio_utc))+(r.curso?(' · '+esc(r.curso)):''),
+      '<button type="button" class="btn ghost sm" data-ficha-marcar="completada" data-id="'+esc(r.id)+'">Vino</button> '+
+      '<button type="button" class="btn ghost sm" data-ficha-marcar="falta" data-id="'+esc(r.id)+'">Faltó</button> '+
+      '<button type="button" class="btn ghost sm" data-ficha-marcar="cancelada" data-id="'+esc(r.id)+'">Quitar</button>');
+  }).join(""));
+  h+='</div>';
+  h+='<div style="margin-top:12px;">'+titulo("Ya tomadas", tomadas.length);
+  if(!tomadas.length) h+='<p class="hint" style="margin:3px 0 0;">Todavía no tiene clases anotadas.</p>';
+  else h+=lista(tomadas.map(function(r){
+    return fila(esc(fechaBonita(r.fecha))+(r.curso?(' · '+esc(r.curso)):'')+
+      ' · <span class="hint" style="margin:0;">'+(r.estado==="Falta"?"faltó":"vino")+'</span>',
+      /* "Anular": borra la clase y le devuelve el crédito, como si nunca hubiera pasado.
+         Distinto de "Reprogramó", que es un movimiento del alumno y le gasta su cuota; esto es
+         deshacer un error tuyo, y no le gasta nada. */
+      '<button type="button" class="btn ghost sm" data-anularclase="'+esc(r.fecha||"")+'" data-al="'+esc(a.id)+'" data-ciclo="'+esc(r.ciclo||a.ciclo||1)+'" title="Borra la clase y le devuelve el crédito">Anular</button>');
+  }).join(""));
+  h+='</div>';
+  box.innerHTML=h;
+  wrap.style.display="";
+}
+function repintarFicha(){
+  if(!FICHA_AL) return;
+  var a=db.alumnos.find(function(x){ return x.id===FICHA_AL; });
+  if(a) pintarClasesDeAlumno(a);
+}
+/* ⚠️ La ficha está ABIERTA y puede tener cambios sin guardar (un nombre a medio escribir, un
+   paquete recién cambiado). Por eso se refresca todo MENOS la fila del alumno abierto: si se
+   pisara, "Guardar alumno" escribiría encima lo que él acababa de tipear con la versión vieja. */
+function recargarDatosFicha(){
+  return fetch("/api/admin/data",{headers:hdr()}).then(function(r){ return r.json(); }).then(function(d){
+    if(!d) return;
+    db.registro = d.registro || db.registro;
+    if(d.alumnos){
+      var abierto = db.alumnos.find(function(x){ return x.id===FICHA_AL; });
+      db.alumnos = d.alumnos.map(function(x){ return (abierto && x.id===FICHA_AL) ? abierto : x; });
+    }
+  }).catch(function(){});
+}
+/* Marcar / quitar desde la ficha. Después hay que recargar DOS cosas: la agenda (la reserva
+   cambió de estado) y los datos (marcar ESCRIBE una fila de registro, que es la que descuenta).
+   Si solo se recargara la agenda, la clase desaparecería de "sin marcar" y no aparecería en
+   "ya tomadas": se vería como que se perdió. */
+if(el("ovAlumno")) el("ovAlumno").addEventListener("click",function(e){
+  var b=e.target.closest ? e.target.closest("[data-ficha-marcar]") : null;
+  if(!b) return;
+  e.preventDefault();
+  var accion=b.dataset.fichaMarcar;
+  if(accion==="cancelada" && !confirm("¿Quitarle esta clase reservada? La clase vuelve a su saldo.")) return;
+  b.disabled=true;
+  apiPost("/api/admin/agenda/marcar",{id:b.dataset.id, estado:accion})
+    .then(function(){
+      AG_RESERVAS_LISTAS=false;
+      return Promise.all([asegurarReservas(), recargarDatosFicha()]);
+    })
+    .then(function(){ toast(accion==="cancelada"?"Clase quitada":"Listo"); repintarFicha(); try{ renderAlumnos(); }catch(e2){} })
+    .catch(function(err){ toast((err&&err.message)||"No se pudo"); })
+    .finally(function(){ b.disabled=false; });
+});
+/* "Anular" una clase ya tomada. Borra la bitácora de ese día Y cancela la reserva: son las dos
+   patas que consumen crédito, y tocar una sola deja el saldo a medio arreglar. */
+if(el("ovAlumno")) el("ovAlumno").addEventListener("click",function(e){
+  var b=e.target.closest ? e.target.closest("[data-anularclase]") : null;
+  if(!b) return;
+  e.preventDefault();
+  if(!confirm("¿Anular esta clase?\n\nSe borra de su historial y la clase vuelve a su saldo, como si nunca hubiera pasado. No le gasta ninguna reprogramación.")) return;
+  b.disabled=true;
+  apiPost("/api/admin/clase/anular",{alumno_id:b.dataset.al, fecha:b.dataset.anularclase, ciclo:b.dataset.ciclo})
+    .then(function(d){
+      AG_RESERVAS_LISTAS=false;
+      return Promise.all([asegurarReservas(), recargarDatosFicha()]).then(function(){ return d; });
+    })
+    .then(function(d){
+      toast((d&&d.saldo) ? ("Clase anulada — le quedan "+d.saldo) : "Clase anulada");
+      repintarFicha(); try{ renderAlumnos(); }catch(e2){}
+    })
+    .catch(function(err){ toast((err&&err.message)||"No se pudo anular"); })
+    .finally(function(){ b.disabled=false; });
+});
+
 function guardarAlumnoModal(encadenar){
   var nombre=el("a_nombre").value.trim();
   if(!nombre){ toast("Ponle nombre al alumno"); return; }
@@ -1830,6 +1985,7 @@ document.body.addEventListener("click",function(e){
     el("a_pago").value=a.pago; el("a_origen").value=a.origen||"";
     el("a_horario").value=a.horario||""; el("a_notas").value=a.notas||"";
     el("a_horario_derivado").textContent=(a.horarioFijo&&a.horarioFijo.length)?("Agenda: "+a.horarioFijo.join(" · ")):"Sin horario fijo en la agenda";
+    pintarClasesDeAlumno(a);
     openOv("ovAlumno");
   }
   if(dl){ var al=db.alumnos.find(function(x){return x.id===dl.dataset.del;});
