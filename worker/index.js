@@ -3098,6 +3098,14 @@ async function ensureSchema(env){
     await env.DB.prepare(
       "CREATE TABLE IF NOT EXISTS reset_tokens (token_hash TEXT PRIMARY KEY, cuenta_id TEXT, expira TEXT, usado INTEGER DEFAULT 0)"
     ).run();
+    /* invitaciones al portal (15-ago-2026, portado de Batuta y ADAPTADO a MVT).
+       El token es por ALUMNO, no por cuenta: el alumno todavía no tiene cuenta — justamente por
+       eso se le invita. En Batuta la invitación va por correo porque sus fichas guardan email;
+       las de MVT NO, pero Andrés sí tiene el WhatsApp de todos, así que acá el link se copia y
+       se manda por WhatsApp. Mismo mecanismo, otro canal. */
+    await env.DB.prepare(
+      "CREATE TABLE IF NOT EXISTS invitaciones (token TEXT PRIMARY KEY, alumno_id TEXT NOT NULL, creada TEXT, expira TEXT, usada INTEGER DEFAULT 0)"
+    ).run();
     // telefono: WhatsApp opcional del lead (06-jul-2026). El cierre real de MVT pasa por WhatsApp,
     // no por correo; si el lead deja su número, Andrés recibe el aviso con el wa.me listo.
     // puente_wa: dedupe del correo-puente a WhatsApp (0 = pendiente, 1 = enviado, 2 = ya es cuenta).
@@ -3210,6 +3218,52 @@ export default {
   async fetch(request, env, ctx){
     const url = new URL(request.url);
 
+    /* ---- Canje de la invitación al portal (15-ago-2026) ----
+       Va ANTES del guard de assets porque es una página propia, no un archivo estático.
+       Principio, portado de Batuta: entrar sin trabas. El alumno NO inventa contraseña acá —
+       solo deja su correo y ya está dentro; la clave la pone después desde su portal si quiere.
+       Cada trámite extra en esta pantalla es un alumno que no entra y le termina escribiendo a
+       Andrés, que es justo el trabajo que esto viene a ahorrar. */
+    if (url.pathname === "/invitacion" && request.method === "GET"){
+      const tok = String(url.searchParams.get("t") || "").trim();
+      let al = null;
+      if (/^[a-f0-9]{16,64}$/i.test(tok)){
+        await ensureSchema(env).catch(() => {});
+        al = await env.DB.prepare(
+          "SELECT i.token, i.alumno_id, a.nombre FROM invitaciones i JOIN alumnos a ON a.id = i.alumno_id " +
+          "WHERE i.token = ?1 AND i.usada = 0 AND i.expira > ?2"
+        ).bind(tok, new Date().toISOString()).first().catch(() => null);
+        /* si ya tiene cuenta, el link no sirve: que entre por la puerta normal */
+        if (al){
+          const ya = await env.DB.prepare("SELECT id FROM cuentas WHERE alumno_id = ?1").bind(al.alumno_id).first().catch(() => null);
+          if (ya) al = null;
+        }
+      }
+      const marca = MARCA.nombre;
+      const cuerpo = al
+        ? '<h1>Hola ' + esc(String(al.nombre || "").split(/\s+/)[0] || "") + '</h1>' +
+          '<p>Este es tu acceso al portal de <b>' + esc(marca) + '</b>. Ahí ves cuántas clases te quedan, reservas tus horarios y encuentras tu material.</p>' +
+          '<p>Solo dime a qué correo te escribo y entras. <b>No tienes que crear ninguna contraseña.</b></p>' +
+          '<form id="f"><input id="m" type="email" required placeholder="tucorreo@gmail.com" ' +
+          'style="width:100%;padding:13px;font-size:16px;border:1px solid #ccc;border-radius:8px;margin:10px 0" />' +
+          '<button style="width:100%;padding:14px;font-size:16px;border:0;border-radius:8px;background:#e8501f;color:#fff;font-weight:700;cursor:pointer">Entrar a mi portal</button></form>' +
+          '<p id="e" style="color:#c00;margin-top:10px"></p>'
+        : '<h1>Ese enlace ya no sirve</h1><p>Puede que ya lo hayas usado o que haya vencido. Escríbele a tu profesor y te manda uno nuevo.</p>';
+      const script = al
+        ? '<script>document.getElementById("f").addEventListener("submit",async function(ev){ev.preventDefault();' +
+          'var e=document.getElementById("e");e.textContent="";var b=ev.target.querySelector("button");b.disabled=true;b.textContent="Entrando…";' +
+          'try{var r=await fetch("/api/invitacion/canjear",{method:"POST",headers:{"content-type":"application/json"},' +
+          'body:JSON.stringify({t:' + JSON.stringify(tok) + ',email:document.getElementById("m").value})});' +
+          'var d=await r.json();if(!r.ok){e.textContent=d.error||"No se pudo";b.disabled=false;b.textContent="Entrar a mi portal";return;}' +
+          'localStorage.setItem("pmvt_sesion",d.token);location.href="/alumnos/";' +
+          '}catch(x){e.textContent="Error de conexión. Intenta de nuevo.";b.disabled=false;b.textContent="Entrar a mi portal";}});</script>'
+        : "";
+      return htmlRecibo('<!doctype html><html lang="es"><head><meta charset="utf-8">' +
+        '<meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex">' +
+        '<title>Tu portal · ' + esc(marca) + '</title></head>' +
+        '<body style="font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;max-width:460px;margin:0 auto;padding:32px 20px;color:#1a1a1a;line-height:1.5">' +
+        cuerpo + script + '</body></html>');
+    }
     if (!url.pathname.startsWith("/api/") && !url.pathname.startsWith("/r/")){
       return env.ASSETS ? env.ASSETS.fetch(request) : json({ error: "No encontrado" }, 404);
     }
@@ -3218,6 +3272,44 @@ export default {
     try {
       await ensureSchema(env);
       /* ============ PÚBLICO (sin auth): el portal lee esto antes del login ============ */
+      /* ---- Canjear la invitación: crea la cuenta YA VINCULADA a su ficha y lo mete ----
+         Sin contraseña a propósito (la pone después desde su portal, si quiere). La cuenta nace
+         con el `alumno_id` puesto, que es justo lo que faltaba: en MVT el acceso vive en
+         `cuentas` y la ficha en `alumnos`, y nada las unía si el alumno se registraba solo. */
+      if (url.pathname === "/api/invitacion/canjear" && request.method === "POST"){
+        const b = await request.json().catch(() => ({}));
+        const tok = String(b.t || "").trim();
+        const email = String(b.email || "").trim().toLowerCase();
+        if (!/^[a-f0-9]{16,64}$/i.test(tok)) return json({ error: "Ese enlace no es válido." }, 400);
+        if (!emailOk(email)) return json({ error: "Escribe un correo válido." }, 400);
+        const inv = await env.DB.prepare(
+          "SELECT i.token, i.alumno_id, a.nombre, a.whatsapp FROM invitaciones i JOIN alumnos a ON a.id = i.alumno_id " +
+          "WHERE i.token = ?1 AND i.usada = 0 AND i.expira > ?2"
+        ).bind(tok, new Date().toISOString()).first();
+        if (!inv) return json({ error: "Ese enlace ya se usó o venció. Pídele otro a tu profesor." }, 404);
+        const yaFicha = await env.DB.prepare("SELECT id FROM cuentas WHERE alumno_id = ?1").bind(inv.alumno_id).first();
+        if (yaFicha) return json({ error: "Ya tienes tu portal. Entra desde la página de siempre." }, 409);
+        /* si el correo YA es de otra cuenta, se engancha esa a su ficha en vez de crear una
+           segunda: dos cuentas para la misma persona es peor que ninguna */
+        const cuentaMail = await env.DB.prepare("SELECT id, alumno_id FROM cuentas WHERE LOWER(email) = ?1").bind(email).first();
+        let cuentaId;
+        if (cuentaMail){
+          if (cuentaMail.alumno_id && cuentaMail.alumno_id !== inv.alumno_id){
+            return json({ error: "Ese correo ya está en uso por otro alumno. Usa otro o escríbele a tu profesor." }, 409);
+          }
+          cuentaId = cuentaMail.id;
+          await env.DB.prepare("UPDATE cuentas SET alumno_id = ?1 WHERE id = ?2").bind(inv.alumno_id, cuentaId).run();
+        } else {
+          cuentaId = crypto.randomUUID();
+          await env.DB.prepare(
+            "INSERT INTO cuentas (id,email,nombre,whatsapp,pass_hash,pass_salt,marketing,alumno_id,creada,ref_code,ref_por,credito) VALUES (?1,?2,?3,?4,'','',0,?5,?6,?7,'',0)"
+          ).bind(cuentaId, email, inv.nombre || "", inv.whatsapp || "", inv.alumno_id, new Date().toISOString(), randHex(3).toUpperCase()).run();
+        }
+        await env.DB.prepare("UPDATE invitaciones SET usada = 1 WHERE token = ?1").bind(tok).run();
+        const token = await crearSesion(env, cuentaId);
+        return json({ ok: true, token });
+      }
+
       if (url.pathname === "/api/publico" && request.method === "GET"){
         const cfg = await loadConfig(env);
         return json({ google_client_id: cfg.google_client_id || "" });
@@ -4950,6 +5042,43 @@ export default {
            un error suyo —una clase que se marcó y no debía—, y ahí no tiene por qué gastarse
            nada. Borra la bitácora de ese día Y cancela la reserva, que son las DOS patas que
            consumen crédito; tocar una sola deja el saldo a medio arreglar. */
+        /* ---- Invitar a un alumno a su portal (15-ago-2026, portado de Batuta) ----
+           MVT tiene 6 alumnos CON PLAN que nunca entraron al portal: pagan, pero no pueden
+           reservar ni ver cuántas clases les quedan. El acceso vivía en `cuentas` y la ficha en
+           `alumnos`, y nada las unía salvo que el alumno adivinara la URL y se registrara solo.
+           Devuelve el link y el mensaje de WhatsApp ya escrito, para copiar y pegar. */
+        if (url.pathname === "/api/admin/invitacion/link" && request.method === "POST"){
+          const b = await request.json().catch(() => ({}));
+          const alumnoId = String(b.alumno_id || "");
+          const al = await env.DB.prepare("SELECT id, nombre, whatsapp FROM alumnos WHERE id = ?1").bind(alumnoId).first();
+          if (!al) return json({ error: "Ese alumno no existe." }, 404);
+          const yaTiene = await env.DB.prepare("SELECT id FROM cuentas WHERE alumno_id = ?1").bind(alumnoId).first();
+          if (yaTiene) return json({ error: "Ese alumno ya tiene su portal. No hace falta invitarlo." }, 409);
+          /* si ya tenía una invitación viva se reusa: dos links vivos para la misma persona es
+             la forma más fácil de que use el vencido y crea que el sistema está roto */
+          const ahora = new Date().toISOString();
+          let inv = await env.DB.prepare(
+            "SELECT token FROM invitaciones WHERE alumno_id = ?1 AND usada = 0 AND expira > ?2 ORDER BY creada DESC LIMIT 1"
+          ).bind(alumnoId, ahora).first().catch(() => null);
+          let token = inv && inv.token;
+          if (!token){
+            token = randHex(16);
+            /* 45 días: el que lee por WhatsApp contesta tarde, y un link vencido lo manda a
+               escribirle a Andrés, que es justo el trabajo que esto viene a ahorrar */
+            const expira = new Date(Date.now() + 45 * 86400000).toISOString();
+            await env.DB.prepare("INSERT INTO invitaciones (token, alumno_id, creada, expira, usada) VALUES (?1,?2,?3,?4,0)")
+              .bind(token, alumnoId, ahora, expira).run();
+          }
+          const link = MARCA.dominio + "/invitacion?t=" + token;
+          const primer = String(al.nombre || "").trim().split(/\s+/)[0] || "";
+          const msg = "Hola" + (primer ? " " + primer : "") + "! Te dejo tu acceso al portal de " + MARCA.nombre +
+            ": ahi ves cuantas clases te quedan, reservas tus horarios y encuentras el material.\n\n" + link +
+            "\n\nEntras con un clic, no tienes que crear ninguna contrasena.";
+          const wa = String(al.whatsapp || "").replace(/\D/g, "");
+          return json({ ok: true, link, mensaje: msg,
+                        wa_url: wa ? ("https://wa.me/" + wa + "?text=" + encodeURIComponent(msg)) : "" });
+        }
+
         if (url.pathname === "/api/admin/clase/anular" && request.method === "POST"){
           const b = await request.json().catch(() => ({}));
           const alumnoId = String(b.alumno_id || "");

@@ -807,6 +807,15 @@ button[data-ayuda],a[data-ayuda],select[data-ayuda],input[data-ayuda],label[data
              anotó), así que era invisible y el saldo quedaba raro sin que se viera por qué.
            · Próximas   → sus reservas futuras, para marcarlas por adelantado o quitarlas.
            · Ya tomadas → la bitácora, que es la que de verdad descuenta. -->
+    <!-- Invitar al portal (15-ago-2026). Solo aparece si el alumno TODAVÍA no tiene acceso:
+         mostrarlo siempre convertiría la ficha en un cementerio de botones que no hacen nada. -->
+    <div class="field" id="a_invitar_wrap" style="display:none;"><label>Acceso al portal</label>
+      <p class="hint" style="margin:0 0 8px;">Este alumno todavía no entró a su portal, así que no puede reservar ni ver cuántas clases le quedan. Mándale su acceso: entra de un clic, sin crear contraseña.</p>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <button type="button" class="btn" id="btnInvitarWa" data-ayuda="Abre tu WhatsApp con el mensaje y su link ya escritos. Tú solo le das enviar.">Invitar por WhatsApp</button>
+        <button type="button" class="btn ghost" id="btnInvitarLink" data-ayuda="Copia solo el link, por si prefieres mandárselo por otro lado.">Copiar el link</button>
+      </div>
+      <p class="hint" id="a_invitar_msg" style="margin:8px 0 0;"></p></div>
     <div class="field" id="a_clases_wrap" style="display:none;"><label>Sus clases</label>
       <div id="a_clases"></div></div>
     <div class="modal-actions">
@@ -1837,6 +1846,7 @@ el("btnNuevoAlumno").addEventListener("click",function(){
   el("a_horario").value=""; el("a_notas").value=""; el("a_horario_derivado").textContent="";
   el("btnGuardarAlumnoOtro").style.display="";
   pintarClasesDeAlumno(null);
+  pintarInvitacion(null);
   openOv("ovAlumno");
 });
 /* ---------- "Sus clases" en la ficha del alumno (15-ago-2026, portado de Batuta) ----------
@@ -1924,6 +1934,45 @@ function pintarClasesDeAlumno(a){
   h+='</div>';
   box.innerHTML=h;
   wrap.style.display="";
+}
+/* Invitación al portal: el botón solo existe para quien NO tiene cuenta todavía. */
+var FICHA_INVITA = null;
+function pintarInvitacion(a){
+  var wrap = el("a_invitar_wrap"); if(!wrap) return;
+  FICHA_INVITA = null;
+  if(!a || !a.id){ wrap.style.display="none"; return; }
+  var tieneCuenta = (db.cuentas||[]).some(function(c){ return c.alumno_id === a.id; });
+  if(tieneCuenta){ wrap.style.display="none"; return; }
+  FICHA_INVITA = a.id;
+  el("a_invitar_msg").textContent = "";
+  wrap.style.display = "";
+}
+function pedirInvitacion(){
+  if(!FICHA_INVITA) return Promise.reject(new Error("Guarda al alumno primero"));
+  return apiPost("/api/admin/invitacion/link", { alumno_id: FICHA_INVITA });
+}
+if(el("btnInvitarWa")) el("btnInvitarWa").addEventListener("click", function(){
+  var b=this; b.disabled=true;
+  pedirInvitacion().then(function(d){
+    if(d.wa_url){ window.open(d.wa_url, "_blank", "noopener"); el("a_invitar_msg").textContent="Se abrió tu WhatsApp con el mensaje listo."; }
+    /* sin WhatsApp en la ficha no se puede abrir el chat: se cae a copiar el mensaje entero,
+       que sigue sirviendo (lo pega donde quiera) en vez de dejarlo sin salida */
+    else { copiarAlPortapapeles(d.mensaje); el("a_invitar_msg").textContent="Este alumno no tiene WhatsApp en su ficha, así que copié el mensaje completo."; }
+  }).catch(function(e){ el("a_invitar_msg").textContent = (e&&e.message)||"No se pudo"; })
+    .finally(function(){ b.disabled=false; });
+});
+if(el("btnInvitarLink")) el("btnInvitarLink").addEventListener("click", function(){
+  var b=this; b.disabled=true;
+  pedirInvitacion().then(function(d){
+    copiarAlPortapapeles(d.link);
+    el("a_invitar_msg").textContent = "Link copiado. Vence en 45 días.";
+  }).catch(function(e){ el("a_invitar_msg").textContent = (e&&e.message)||"No se pudo"; })
+    .finally(function(){ b.disabled=false; });
+});
+function copiarAlPortapapeles(txt){
+  if(!txt) return;
+  if(navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(txt).catch(function(){ prompt("Copia:", txt); });
+  else prompt("Copia:", txt);
 }
 function repintarFicha(){
   if(!FICHA_AL) return;
@@ -2051,6 +2100,7 @@ document.body.addEventListener("click",function(e){
     el("a_horario").value=a.horario||""; el("a_notas").value=a.notas||"";
     el("a_horario_derivado").textContent=(a.horarioFijo&&a.horarioFijo.length)?("Agenda: "+a.horarioFijo.join(" · ")):"Sin horario fijo en la agenda";
     pintarClasesDeAlumno(a);
+    pintarInvitacion(a);
     openOv("ovAlumno");
   }
   if(dl){ var al=db.alumnos.find(function(x){return x.id===dl.dataset.del;});
