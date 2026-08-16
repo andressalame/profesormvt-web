@@ -578,12 +578,43 @@ async function confirmarCompra(env, compra){
       stmts.push(env.DB.prepare(
         "UPDATE alumnos SET paquete = ?1, curso = ?2, pago = 'Pagado', fecha = ?3, ciclo = ?4, vence = ?5, aviso_vence_ciclo = 0 WHERE id = ?6"
       ).bind(compra.paquete, compra.curso || al.curso, hoy(), cicloNuevo, vence, al.id));
-      // Las clases YA agendadas a futuro pertenecen al paquete nuevo: si se quedaran con el
-      // ciclo viejo, el conteo del ciclo nuevo no las vería (sobre-reserva) y al dictarse la
-      // clase se cargaría igual al paquete nuevo con el crédito viejo huérfano.
-      stmts.push(env.DB.prepare(
-        "UPDATE reservas SET ciclo = ?1 WHERE alumno_id = ?2 AND estado = 'reservada' AND inicio_utc >= ?3"
-      ).bind(cicloNuevo, al.id, new Date().toISOString()));
+      /* Las clases YA agendadas a futuro pertenecen al paquete nuevo: si se quedaran con el
+         ciclo viejo, el conteo del ciclo nuevo no las vería (sobre-reserva) y al dictarse la
+         clase se cargaría igual al paquete nuevo con el crédito viejo huérfano.
+
+         🐛 15-ago-2026 (portado de Batuta, caso Daniela Guerra-García de Elevate): se migraban
+         TODAS, y eso cobra dos veces las que el paquete ANTERIOR ya había pagado. Ella entró con
+         6 de 8 usadas, reservó las 2 que le quedaban (ciclo viejo: 8 de 8, cerrado), compró otro
+         paquete de 8, y esas 2 reservas se mudaron dejándola en 6 en vez de 8: pagó 16 clases y
+         podía tomar 14.
+         Ahora se migran SOLO las que el paquete viejo NO alcanzaba a cubrir. Las que ya estaban
+         pagadas se quedan en su ciclo, que es donde se pagaron. El motivo original se respeta
+         igual: ninguna reserva queda sin paquete que la sostenga. */
+      let migrarIds = null;
+      try {
+        const cicloAnt = Number(al.ciclo) || 1;
+        const { results: regsAnt } = await env.DB.prepare(
+          "SELECT estado, fecha FROM registro WHERE alumno_id = ?1 AND COALESCE(ciclo,1) = ?2"
+        ).bind(al.id, cicloAnt).all();
+        /* reservasUsadas = 0 a propósito: acá interesa SOLO lo que consumió la bitácora, para
+           saber cuánto del paquete viejo quedaba libre para sostener reservas futuras. */
+        const cAnt = compute(al, regsAnt || [], {}, 0);
+        const cubiertas = Math.max(0, (Number(cAnt.compradas) || 0) - (Number(cAnt.usadas) || 0));
+        const { results: futuras } = await env.DB.prepare(
+          "SELECT id FROM reservas WHERE alumno_id = ?1 AND estado = 'reservada' AND inicio_utc >= ?2 ORDER BY inicio_utc ASC"
+        ).bind(al.id, new Date().toISOString()).all();
+        /* las primeras `cubiertas` (las más próximas) ya las pagó el paquete viejo */
+        migrarIds = (futuras || []).slice(cubiertas).map(r => r.id);
+      } catch (e) { migrarIds = null; }   // si algo falla, se cae al comportamiento de siempre
+      if (migrarIds){
+        for (const rid of migrarIds){
+          stmts.push(env.DB.prepare("UPDATE reservas SET ciclo = ?1 WHERE id = ?2").bind(cicloNuevo, rid));
+        }
+      } else {
+        stmts.push(env.DB.prepare(
+          "UPDATE reservas SET ciclo = ?1 WHERE alumno_id = ?2 AND estado = 'reservada' AND inicio_utc >= ?3"
+        ).bind(cicloNuevo, al.id, new Date().toISOString()));
+      }
       renovado = true;
     }
   }
@@ -4894,7 +4925,9 @@ export default {
           // de correo, con lo que un alumno podia recibir el mismo aviso dos veces.
           const estadoPrevio = new Map();
           for (const p of ((await env.DB.prepare(
-            "SELECT id, vence, origen, recordatorio_ciclo, recordatorio_fecha, aviso_vence_ciclo, " +
+            /* `ciclo` entra acá el 15-ago-2026: hace falta para detectar la renovación MANUAL
+               (el profe sube el ciclo en el CRM) y re-derivar el plazo. Ver esRenovManual. */
+            "SELECT id, ciclo, vence, origen, recordatorio_ciclo, recordatorio_fecha, aviso_vence_ciclo, " +
             "winback_ciclo, resena_pedida, nudge_ciclo, referido_nudge_ciclo, " +
             "COALESCE(migrado_usadas,0) AS migrado_usadas, COALESCE(migrado_ciclo,0) AS migrado_ciclo, " +
             "COALESCE(bono_clases,0) AS bono_clases, COALESCE(bono_ciclo,0) AS bono_ciclo FROM alumnos"
@@ -4920,7 +4953,20 @@ export default {
             // Regla: un `vence` vacio que llegue del CRM NUNCA pisa al guardado (si no, un CRM
             // abierto con datos viejos vuelve a borrarlo todo). Las otras 7 son estado de
             // maquina que el CRM no edita: siempre gana la base.
-            const vence = (a.vence && String(a.vence).trim()) || prev.vence || "";
+            let vence = (a.vence && String(a.vence).trim()) || prev.vence || "";
+            /* 🐛 15-ago-2026 (portado de Batuta; en MVT este bug le llegó a Fabio y Yaritza el
+               19-jul). RENOVACIÓN MANUAL: si Andrés sube el ciclo del alumno en el CRM —o sea
+               le cobró por fuera y lo renovó a mano— el `vence` viejo se preservaba tal cual.
+               Como ya estaba pasado, el cron del aviso lo leía como "su paquete venció" y le
+               mandaba el correo en falso, justo al alumno que acababa de pagar.
+               Ahora, cuando el ciclo SUBE, se re-deriva el plazo desde hoy y se resetea el
+               dedupe del aviso, igual que hace una compra confirmada. */
+            const cicloAntPut = (prev && Number(prev.ciclo)) || 1;
+            const esRenovManual = !esNuevo && (Number(a.ciclo) || 1) > cicloAntPut;
+            if (esRenovManual){
+              const baseR = (a.fecha && /^\d{4}-\d{2}-\d{2}$/.test(a.fecha)) ? a.fecha : hoy();
+              vence = new Date(Date.parse(baseR + "T00:00:00Z") + 60 * 86400000).toISOString().slice(0, 10);
+            }
             // origen sigue la regla de vence: un CRM abierto con datos viejos (sin el campo) no lo borra.
             const origen = (a.origen && String(a.origen).trim()) || prev.origen || "";
             stmts.push(env.DB.prepare(
@@ -4935,7 +4981,9 @@ export default {
               vence,
               prev.recordatorio_ciclo ?? 0,
               prev.recordatorio_fecha ?? "",
-              prev.aviso_vence_ciclo ?? 0,
+              /* renovación manual: el aviso de vencimiento se re-arma para el ciclo nuevo,
+                 si no el alumno que acaba de renovar no recibiría el aviso cuando toque */
+              esRenovManual ? 0 : (prev.aviso_vence_ciclo ?? 0),
               prev.winback_ciclo ?? 0,
               prev.resena_pedida ?? 0,
               prev.nudge_ciclo ?? 0,
