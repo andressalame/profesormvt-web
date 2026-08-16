@@ -1570,10 +1570,15 @@ async function validarFirmaMeta(env, rawBuf, sigHeader){
 const NOMBRES_PAQUETE = { "Paquete 4": "Plan Esencial", "Paquete 8": "Plan Intensivo", "Paquete 12": "Plan Estrella", "Clase suelta": "Clase suelta", "Clase de prueba": "Clase de prueba" };
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   SORTEO DE CUMPLEAÑOS (02-ago-2026) — campaña con fecha de muerte.
+   SORTEO — campaña con fecha de muerte. Vigente: SETIEMBRE 2026 (cierra 1-set 20:00 Lima).
    Regla: quien compre un paquete de 4, 8 o 12 clases dentro de la ventana entra
-   al sorteo de 1 mes de clases gratis. Más clases = más boletos (empuja el ticket
-   promedio hacia arriba sin descontar el precio).
+   al sorteo. Más clases = más boletos (empuja el ticket promedio hacia arriba sin
+   descontar el precio).
+
+   PARA MONTAR EL SIGUIENTE: se cambia SOLO este objeto. `id` nuevo (la clave del ganador
+   en `config` es "sorteo_ganador_<id>", así que un id repetido resucitaría al ganador viejo),
+   premio, fechas y listo. La página /sorteo y los banners de /pagar y del portal se arman
+   con lo que devuelve GET /api/sorteo — no hay copy quemado en tres sitios como en 2026.
 
    Cómo se cierra solo: el cron horario llama a sorteoElegir(); en el primer disparo
    posterior a SORTEO.cierraUTC congela la lista, elige un boleto al azar
@@ -1588,23 +1593,24 @@ const NOMBRES_PAQUETE = { "Paquete 4": "Plan Esencial", "Paquete 8": "Plan Inten
    OJO: compras.fecha se guarda con hoy() = fecha UTC, no Lima. Por eso la ventana en
    fechas va un día más allá del cierre real; el corte fino lo pone el instante del sorteo.
 
-   PARA APAGARLO cuando pase el cumpleaños: SORTEO.activo = false (la página avisa que
-   no hay sorteo vigente y el endpoint deja de listar). El ganador queda guardado en config.
+   PARA APAGARLO cuando termine: SORTEO.activo = false (la página avisa que no hay sorteo
+   vigente y el endpoint deja de listar). El ganador queda guardado en config.
    ═══════════════════════════════════════════════════════════════════════════ */
 const SORTEO = {
-  /* APAGADO el 11-ago-2026 por orden de Andrés: cerró el 5-ago y ya tiene ganadora (Yaritza,
-     premio entregado como 4 clases de bono). Con esto se bajan los banners de /pagar y del portal,
-     y deja de publicarse la lista de boletos POR PERSONA, de la que se deducía cuánto pagó cada
-     alumno (los boletos son 1:1 con el paquete). El ganador queda guardado en `config`. */
-  activo: false,
-  id: "cumple-2026",
-  titulo: "Sorteo de cumpleaños",
-  premio: "1 mes de clases gratis de Canto + Composición",
-  premioDetalle: "Plan Intensivo del combo: 8 horas al mes (4 sesiones de 2 horas), valorizado en S/580.",
-  cierraUTC: "2026-08-06T01:00:00Z",          // 5-ago-2026, 20:00 Lima (UTC-5)
-  desdeFecha: "2026-08-02",                   // compras.fecha (UTC) desde
-  hastaFecha: "2026-08-06",                   // compras.fecha (UTC) hasta — cubre la noche del 5 en Lima
+  activo: true,
+  id: "setiembre-2026",
+  titulo: "Sorteo de setiembre",
+  premio: "4 clases extra, gratis",
+  premioDetalle: "4 horas de clase valorizadas en S/320, del curso que ya llevas. Se abonan como clases de cortesía sobre el paquete que tengas vigente.",
+  cierraUTC: "2026-09-02T01:00:00Z",          // 1-set-2026, 20:00 Lima (UTC-5)
+  desdeFecha: "2026-08-16",                   // compras.fecha (UTC) desde
+  hastaFecha: "2026-09-02",                   // compras.fecha (UTC) hasta — cubre la noche del 1 en Lima
   boletos: { "Paquete 4": 1, "Paquete 8": 2, "Paquete 12": 3 },  // clase suelta NO entra
+  /* Clases que se abonan SOLAS al ganador (bono de cortesía del ciclo vigente). Es la lección
+     que dejó el sorteo de cumpleaños: sumar al bono entrega el premio sin destruir nada, mientras
+     que "renovar con monto 0" le subía el ciclo al ganador y le mataba las clases que aún no usaba.
+     Poner 0 aquí devuelve el premio a entrega manual (útil si algún día el premio no es en clases). */
+  premioClases: 4,
   /* Invitados a dedo (03-ago-2026, pedido de Andrés): alumnos que entran al sorteo aunque su
      compra no aparezca en `compras` dentro de la ventana. NO se inventa ninguna fila en
      `compras`, que ensuciaría la caja y le subiría el ciclo al alumno (y con eso le mataría
@@ -1617,18 +1623,13 @@ const SORTEO = {
                          Si gana NO hay correo que mandarle: el aviso a Andrés lo dice y él
                          le escribe por WhatsApp. Si algún día se crea su cuenta, se engancha
                          sola y sus compras se suman en la misma entrada. */
-  /* 🔒 12-ago-2026: los dos primeros estaban acá con su CORREO PERSONAL. No se servían por
-     HTTP, pero el fuente vive en git para siempre: el día que este repo se comparta o se haga
-     público, salen. Se cambian por su `alumno_id`, que identifica igual y no es un dato
-     personal. Único efecto: si uno de ellos ganara, el aviso no le sale por correo solo —
-     irrelevante, el sorteo cerró el 5-ago con ganadora (Yaritza) y `activo` está en false.
-     ⚠️ Los correos siguen en el HISTORIAL de git: solo se van reescribiéndolo, que no vale
-     la pena por dos direcciones de alumnos que además son clientes suyos. */
-  invitados: [
-    { alumno_id: "mqfxwwh8w77d1", boletos: 1 },   // Álvaro Guillén
-    { alumno_id: "mrwqqfoa9x1f7", boletos: 1 },   // Delilah
-    { alumno_id: "mse2dkz8eun8t", boletos: 1 }    // Renato Cárdenas (sin cuenta del portal)
-  ]
+  /* 🔒 Identificar SIEMPRE por `alumno_id`, nunca por correo: el fuente vive en git para
+     siempre y un correo personal ahí queda expuesto el día que el repo se comparta.
+     ⚠️ Los 3 invitados del sorteo de cumpleaños (Álvaro, Delilah, Renato) se retiraron acá:
+     eran de esa campaña. Este sorteo arranca sin invitados; se agregan solo si Andrés lo pide,
+     y el caso típico son los alumnos SIN cuenta del portal, cuyas renovaciones no dejan fila
+     en `compras` y por eso no entran solas (ver el comentario de sorteoParticipantes). */
+  invitados: []
 };
 
 /* "Andrés Salamé Córdova" -> "Andrés S." · la lista del sorteo es pública, así que
@@ -1754,13 +1755,53 @@ async function sorteoElegir(env){
   // Si otra corrida ganó la carrera, ella manda los avisos: acá se sale sin duplicar correos.
   if (guardado.pick_id !== pickId) return guardado;
 
-  try { await sorteoAvisar(env, guardado, lista); } catch (e) {}
+  let premio = { aplicado: false, motivo: "No se pudo abonar (error inesperado): hazlo tú desde el CRM." };
+  try { premio = await sorteoAplicarPremio(env, guardado); } catch (e) { console.error("sorteo: fallo al abonar el premio", e); }
+  try { await sorteoAvisar(env, guardado, lista, premio); } catch (e) {}
   return guardado;
 }
 
+/* Entrega el premio SOLO, abonándolo al bono de cortesía del ciclo vigente del ganador.
+   Es la lección que dejó el sorteo de cumpleaños (5-ago-2026): entregarlo como "renovar con
+   monto 0" le subía el ciclo al ganador y le borraba las clases que aún no usaba del paquete
+   que acababa de pagar, así que había que esperar a que lo terminara y hacerlo a mano. Sumar
+   al bono entrega lo mismo, al instante, sin destruir nada y sin paso manual.
+   Corre una sola vez: sorteoElegir solo llega acá si ganó la carrera del INSERT del ganador. */
+async function sorteoAplicarPremio(env, g){
+  const n = Math.max(0, Number(SORTEO.premioClases) || 0);
+  if (!n) return { aplicado: false, motivo: "Este premio no es en clases: entrégalo tú." };
+
+  let alumnoId = g.alumno_id || null;
+  if (!alumnoId && g.cuenta_id){
+    const cu = await env.DB.prepare("SELECT alumno_id FROM cuentas WHERE id = ?1").bind(g.cuenta_id).first();
+    alumnoId = (cu && cu.alumno_id) || null;
+  }
+  if (!alumnoId) return { aplicado: false, motivo: "El ganador tiene cuenta del portal pero NO ficha de alumno en el CRM. Vincúlalo y abónale las " + n + " clases a mano." };
+
+  const al = await env.DB.prepare(
+    "SELECT ciclo, COALESCE(bono_clases,0) AS bc, COALESCE(bono_ciclo,0) AS bcl FROM alumnos WHERE id = ?1"
+  ).bind(alumnoId).first();
+  if (!al) return { aplicado: false, motivo: "La ficha del ganador ya no existe en el CRM: abónale las " + n + " clases a mano." };
+
+  /* El bono vive atado a un ciclo: si el que tenía era de un ciclo viejo ya estaba inerte y se
+     pisa; si es del ciclo actual, se acumula. Nunca se resta ni se pisa un bono vigente. */
+  const ciclo = Number(al.ciclo) || 1;
+  const previo = (Number(al.bcl) === ciclo) ? Math.max(0, Number(al.bc) || 0) : 0;
+  const total = previo + n;
+  await env.DB.prepare("UPDATE alumnos SET bono_clases = ?1, bono_ciclo = ?2 WHERE id = ?3")
+    .bind(total, ciclo, alumnoId).run();
+  return { aplicado: true, alumno_id: alumnoId, previo, abonado: n, total, ciclo };
+}
+
 /* Avisos del resultado: correo al ganador + alerta a Andrés (correo, Telegram y push). */
-async function sorteoAvisar(env, g, lista){
+async function sorteoAvisar(env, g, lista, premio){
   const portal = MARCA.dominio + "/alumnos/";
+  const yaAbonado = !!(premio && premio.aplicado);
+  /* Lo que se le promete al ganador depende de si el premio ya entró a su cuenta o no.
+     Nunca decirle "ya lo tienes" si el abono falló: quedaría buscando clases que no están. */
+  const comoLoRecibe = yaAbonado
+    ? "Ya están abonadas en tu cuenta. Entra al portal, las vas a ver sumadas a tu saldo, y reservas cuando quieras."
+    : "Te escribo por WhatsApp para activarlas y cuadrar los horarios.";
   if (g.email){
     await enviarCorreo(env, {
       to: g.email,
@@ -1771,10 +1812,10 @@ async function sorteoAvisar(env, g, lista){
         '<p>Hola ' + esc(String(g.nombre || "").split(/\s+/)[0] || "") + ', saliste sorteado entre ' + g.participantes +
         ' participantes: te llevas <b>' + esc(SORTEO.premio) + '</b>.</p>' +
         '<p>' + esc(SORTEO.premioDetalle) + '</p>' +
-        '<p>Te escribo por WhatsApp para cuadrar los horarios. El mes gratis arranca cuando termines el paquete que ya tienes, así no pierdes ninguna clase pagada.</p>' +
+        '<p>' + esc(comoLoRecibe) + ' No pierdes ninguna clase de las que ya pagaste: estas se suman a las tuyas.</p>' +
         '<p style="text-align:center;margin:26px 0"><a href="' + portal + '" style="background:#e8501f;color:#fff;text-decoration:none;font-weight:bold;padding:14px 26px;border-radius:6px;display:inline-block">Ver mi portal</a></p>' +
-        '<p style="color:#8a8172;font-size:.9rem">Gracias por celebrar mi cumpleaños comprando clases. — ' + esc(MARCA.profe) + '</p></div>',
-      text: "Ganaste el sorteo de " + MARCA.nombre + ": " + SORTEO.premio + ". " + SORTEO.premioDetalle + " Te escribo por WhatsApp para cuadrar horarios. Portal: " + portal
+        '<p style="color:#8a8172;font-size:.9rem">Gracias por seguir apostando por tu música. Nos vemos en clase. — ' + esc(MARCA.profe) + '</p></div>',
+      text: "Ganaste el sorteo de " + MARCA.nombre + ": " + SORTEO.premio + ". " + SORTEO.premioDetalle + " " + comoLoRecibe + " Portal: " + portal
     });
   }
   const resumen =
@@ -1782,13 +1823,18 @@ async function sorteoAvisar(env, g, lista){
     "Boleto " + g.boleto_ganador + " de " + g.total_boletos + " · " + g.participantes + " participantes\n" +
     "Compró: " + ((g.paquetes && g.paquetes.length) ? g.paquetes.join(", ") : "— (invitado a dedo)") + "\n\n" +
     "Premio: " + SORTEO.premio + "\n" + SORTEO.premioDetalle + "\n\n" +
-    "OJO: el premio NO se aplicó solo, a propósito. Cargarlo ahora le subiría el ciclo y le\n" +
-    "mataría las clases que todavía no usa del paquete que acaba de pagar. Aplícalo en el CRM\n" +
-    "cuando termine su paquete actual (Renovar → Paquete 8, monto 0).\n\n" +
+    (yaAbonado
+      ? ("✅ YA ENTREGADO, no tienes que hacer nada.\n" +
+         "Se le abonaron " + premio.abonado + " clase(s) de cortesía en su ciclo " + premio.ciclo +
+         " (tenía " + premio.previo + ", ahora " + premio.total + "). Le salen solas en su portal,\n" +
+         "sumadas a las que ya pagó. No se le tocó el paquete ni el ciclo.\n")
+      : ("🔴 EL PREMIO NO SE ABONÓ SOLO — te toca a ti:\n" + (premio && premio.motivo ? premio.motivo : "motivo desconocido") + "\n" +
+         "Hazlo con el bono de cortesía de su ficha, NO con Renovar monto 0 (eso le sube el ciclo\n" +
+         "y le mata las clases que todavía no usa).\n")) + "\n" +
     "Participantes:\n" + (lista || []).map(p => "· " + p.nombre + " — " + p.boletos + " boleto(s)" +
       (p.invitado ? " (invitado)" : (p.confirmado ? "" : " (pago SIN confirmar)"))).join("\n");
   try {
-    await enviarCorreo(env, { to: MARCA.correoAdmin, subject: "Sorteo de cumpleaños: ganó " + g.nombre, text: resumen });
+    await enviarCorreo(env, { to: MARCA.correoAdmin, subject: SORTEO.titulo + ": ganó " + g.nombre, text: resumen });
   } catch (e) {}
   try { await avisarTelegram(env, resumen); } catch (e) {}
   try {
@@ -1800,7 +1846,12 @@ async function sorteoAvisar(env, g, lista){
   } catch (e) {}
 }
 
-/* Foto pública del sorteo (lo que consume /sorteo). Solo nombres cortos. */
+/* Foto pública del sorteo (lo que consume /sorteo). Solo nombres cortos.
+
+   🔒 NO se publican los boletos POR PERSONA, y es a propósito: los boletos son 1:1 con el
+   paquete (1 = S/320, 2 = S/580, 3 = S/780), así que publicarlos le decía a cualquiera cuánto
+   paga cada alumno por su nombre. Fue una de las razones de apagar el sorteo de cumpleaños.
+   El total sí va: da la sensación de urna llena sin delatar a nadie. */
 async function sorteoEstado(env){
   const ahora = Date.now();
   const cierra = Date.parse(SORTEO.cierraUTC);
@@ -1814,7 +1865,7 @@ async function sorteoEstado(env){
   const ganador = await sorteoGanadorGuardado(env);
   const { lista, totalBoletos } = await sorteoParticipantes(env);
   return Object.assign(base, {
-    participantes: lista.map((p, i) => ({ n: i + 1, nombre: p.corto, boletos: p.boletos })),
+    participantes: lista.map((p, i) => ({ n: i + 1, nombre: p.corto })),
     totalBoletos,
     ganador: ganador ? { nombre: ganador.corto, boleto: ganador.boleto_ganador, total: ganador.total_boletos, participantes: ganador.participantes, cuando: ganador.elegido_utc } : null,
     desierto: base.cerrado && !ganador && !lista.length
@@ -3952,9 +4003,9 @@ export default {
           numero: numR, whatsapp: MARCA.whatsapp || ""
         }));
       }
-      /* Estado público del sorteo de cumpleaños. Además del cron, este GET dispara el
-         sorteoElegir() de respaldo: si el cron fallara, el primer visitante después de las
-         8pm cierra el sorteo igual (el ON CONFLICT garantiza que solo se elija una vez). */
+      /* Estado público del sorteo vigente. Además del cron, este GET dispara el sorteoElegir()
+         de respaldo: si el cron fallara, el primer visitante después de la hora de cierre lo
+         cierra igual (el ON CONFLICT garantiza que solo se elija una vez). */
       if (url.pathname === "/api/sorteo" && request.method === "GET"){
         try { await sorteoElegir(env); } catch (e) {}
         return json(await sorteoEstado(env));
@@ -5840,9 +5891,9 @@ export default {
     // Eventos gcal huérfanos de reservas canceladas: reintento del borrado que falló online
     // (si se quedan, bloquean su slot para siempre vía gcalBusy). Tanda corta por hora.
     ctx.waitUntil(limpiarGcalHuerfanos(env).catch(function(){}));
-    // Sorteo de cumpleaños: no-op hasta SORTEO.cierraUTC (5-ago 20:00 Lima = 01:00 UTC del 6);
-    // en el disparo siguiente congela la lista, elige al ganador y avisa. Corre cada hora para
-    // no depender de que el cron de esa hora exacta no falle.
+    // Sorteo: no-op hasta SORTEO.cierraUTC (1-set-2026 20:00 Lima = 01:00 UTC del 2); en el
+    // disparo siguiente congela la lista, elige al ganador, le abona el premio y avisa. Corre
+    // cada hora para no depender de que el cron de esa hora exacta no falle.
     ctx.waitUntil(sorteoElegir(env).catch(function(){}));
     // Smoke test de los flujos que cobran: 1 vez al día a las 13:00 UTC (≈ 08:00 Lima).
     // Solo hace ruido si algo falla (aviso al Telegram personal). Auditoria 4-ago-2026.

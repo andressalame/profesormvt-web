@@ -1,6 +1,6 @@
 ---
 /*
-  Sorteo de cumpleaños (5-ago-2026). Página de campaña con fecha de muerte.
+  Sorteo de setiembre (cierra el 1-set-2026, 8 p.m. Lima). Campaña con fecha de muerte.
   Todo lo dinámico sale de GET /api/sorteo (worker/index.js, bloque SORTEO):
   lista de participantes en vivo, cuenta regresiva y revelación del ganador.
   Cuando pase la fecha: poner SORTEO.activo = false en el worker; esta página
@@ -10,17 +10,18 @@ import Layout from '../layouts/Layout.astro';
 ---
 
 <Layout
-  title="Sorteo de cumpleaños | ProfesorMVT"
-  description="Compra tu paquete de 4 clases o más antes del 5 de agosto y entra al sorteo de un mes de clases gratis de canto y composición."
+  title="Sorteo de setiembre | ProfesorMVT"
+  description="Compra tu paquete de 4 clases o más antes del 1 de setiembre y entra al sorteo de 4 clases extra, gratis."
 >
   <main class="sorteo">
     <section class="so-hero">
       <div class="container-narrow">
-        <p class="label" id="soLabel">Cumplo años el 5 de agosto</p>
-        <h1>El regalo <em>te lo llevas tú</em></h1>
+        <p class="label" id="soLabel">Sorteo de setiembre</p>
+        <h1>Cuatro clases <em>de regalo</em></h1>
         <p class="lead">
-          Sorteo <strong>un mes entero de clases gratis</strong> de canto y composición
-          entre todos los que compren un paquete de 4 clases o más antes de mi cumpleaños.
+          Sorteo <strong>4 clases extra, gratis</strong> entre todos los que compren un
+          paquete de 4 clases o más antes del 1 de setiembre. Da igual si recién empiezas
+          o si estás renovando: entras solo.
         </p>
 
         <div class="so-reloj" id="soReloj">
@@ -30,7 +31,7 @@ import Layout from '../layouts/Layout.astro';
             <div><b id="cdM">--</b><span>min</span></div>
             <div><b id="cdS">--</b><span>seg</span></div>
           </div>
-          <p class="so-cierra">Cierra el <b>5 de agosto a las 8:00 p.m.</b> (hora de Lima)</p>
+          <p class="so-cierra">Cierra el <b>lunes 1 de setiembre a las 8:00 p.m.</b> (hora de Lima)</p>
         </div>
       </div>
     </section>
@@ -52,7 +53,7 @@ import Layout from '../layouts/Layout.astro';
         <ol class="so-pasos">
           <li><b>Compras</b> tu paquete de 4, 8 o 12 clases en la web.</li>
           <li><b>Entras solo</b>: apenas se registra tu pago, tu nombre aparece en la lista de abajo.</li>
-          <li><b>El 5 de agosto a las 8:00 p.m.</b> se elige al ganador en esta misma página.</li>
+          <li><b>El 1 de setiembre a las 8:00 p.m.</b> se elige al ganador en esta misma página.</li>
         </ol>
 
         <h3>Mientras más clases, más chances</h3>
@@ -94,14 +95,14 @@ import Layout from '../layouts/Layout.astro';
       <div class="container-narrow">
         <h2>Las bases, en corto</h2>
         <ul>
-          <li>Participa toda compra de <b>Plan Esencial (4), Intensivo (8) o Estrella (12)</b> registrada entre el <b>2 y el 5 de agosto de 2026 hasta las 8:00 p.m.</b> (hora de Lima). La clase suelta no participa.</li>
+          <li>Participa toda compra de <b>Plan Esencial (4), Intensivo (8) o Estrella (12)</b> registrada entre el <b>16 de agosto y el 1 de setiembre de 2026 hasta las 8:00 p.m.</b> (hora de Lima). La clase suelta no participa.</li>
           <li>Boletos por compra: 4 clases = 1 · 8 clases = 2 · 12 clases = 3. Si compras más de un paquete, se suman.</li>
           <li>Vale igual si eres alumno nuevo o si estás renovando.</li>
-          <li>El premio es <b>un mes de clases de Canto + Composición: 8 horas (4 sesiones de 2 horas)</b>, valorizado en S/580. Es intransferible y no se cambia por dinero.</li>
-          <li>Si el ganador ya tiene un paquete en curso, el mes gratis <b>arranca cuando termine el que pagó</b>: no se pierde ninguna clase comprada.</li>
-          <li>El ganador se elige <b>al azar entre todos los boletos</b>, de forma automática, a las 8:00 p.m. del 5 de agosto. Se publica en esta página y se le avisa por correo y WhatsApp.</li>
+          <li>El premio es <b>4 clases extra</b> (4 horas), valorizadas en S/320, del curso que ya llevas. Es intransferible y no se cambia por dinero.</li>
+          <li>Las 4 clases <b>se suman a las que ya pagaste</b>, sobre tu paquete vigente: no reemplazan ni vencen tu saldo actual. Se rigen por la misma vigencia de tu paquete.</li>
+          <li>El ganador se elige <b>al azar entre todos los boletos</b>, de forma automática, a las 8:00 p.m. del 1 de setiembre. Se publica en esta página y se le avisa por correo y WhatsApp.</li>
           <li>Compras hechas con un pago que no se llegue a confirmar quedan fuera.</li>
-          <li>La lista pública muestra solo nombre e inicial del apellido. Ningún dato de contacto se hace público.</li>
+          <li>La lista pública muestra solo nombre e inicial del apellido. Ni los boletos de cada persona ni ningún dato de contacto se hacen públicos.</li>
         </ul>
         <p class="so-nota">Organiza: ProfesorMVT (Andrés Salamé-Córdova). Dudas: <a href="https://wa.me/51904056197">WhatsApp</a>.</p>
       </div>
@@ -183,10 +184,11 @@ import Layout from '../layouts/Layout.astro';
     // Lista de participantes
     lista.innerHTML = participantes.map(function(p){
       var gano = d.ganador && d.ganador.nombre === p.nombre;
+      /* Sin boletos por persona, a propósito: son 1:1 con el paquete, así que publicarlos
+         diría cuánto paga cada alumno con nombre y apellido. El total sí va en el conteo. */
       return '<li class="' + (gano ? 'gano' : '') + '">' +
              '<span class="num">' + p.n + '</span>' +
-             '<span class="nom"></span>' +
-             '<span class="bol">' + p.boletos + (p.boletos === 1 ? ' boleto' : ' boletos') + '</span></li>';
+             '<span class="nom"></span></li>';
     }).join('');
     // El nombre se inyecta como texto (nunca como HTML): viene de lo que el alumno escribio al pagar.
     Array.prototype.forEach.call(lista.querySelectorAll('.nom'), function(el, i){

@@ -15,11 +15,12 @@ import Layout from '../layouts/Layout.astro';
           Elige tu paquete, paga y listo: tu cuenta del portal se crea sola y te llega
           un correo para ponerle tu contraseña. Sin registro previo.
         </p>
-        <!-- Aviso del sorteo de cumpleaños: se esconde solo cuando el sorteo cierra
-             (lo decide /api/sorteo, no hay que volver a tocar esta página). -->
+        <!-- Aviso del sorteo vigente. El título, el premio y la fecha los pone /api/sorteo:
+             al montar la campaña siguiente NO se toca esta página, solo el bloque SORTEO del
+             worker. Se esconde solo cuando el sorteo cierra o se apaga. -->
         <a class="pg-sorteo" id="pgSorteo" href="/sorteo/" hidden>
-          <b>Sorteo de cumpleaños</b>
-          <span>Compra 4 clases o más y entras al sorteo de un mes de clases gratis. Cierra el 5 de agosto, 8 p.m. →</span>
+          <b id="pgSorteoTit"></b>
+          <span id="pgSorteoTxt"></span>
         </a>
       </div>
     </section>
@@ -96,9 +97,19 @@ import Layout from '../layouts/Layout.astro';
   var preSel="";
   try{ preSel=new URLSearchParams(location.search).get('p')||""; }catch(e){}
 
-  // Banner del sorteo: solo si hay uno vigente y todavía abierto.
+  // Banner del sorteo: solo si hay uno vigente y todavía abierto. El texto se arma con lo que
+  // dice /api/sorteo (título, premio y cierre), así la campaña siguiente no obliga a tocar esto.
   fetch('/api/sorteo').then(function(r){ return r.json(); }).then(function(s){
-    if(s && s.activo && !s.cerrado) document.getElementById('pgSorteo').hidden=false;
+    if(!s || !s.activo || s.cerrado) return;
+    var f='';
+    try{
+      f=new Date(s.cierraUTC).toLocaleString('es-PE',{timeZone:'America/Lima',day:'numeric',
+        month:'long',hour:'numeric',minute:'2-digit',hour12:true});
+    }catch(e){}
+    document.getElementById('pgSorteoTit').textContent=s.titulo||'Sorteo';
+    document.getElementById('pgSorteoTxt').textContent='Compra 4 clases o más y entras al sorteo de '+
+      (s.premio||'')+'.'+(f?' Cierra el '+f+'.':'')+' →';
+    document.getElementById('pgSorteo').hidden=false;
   }).catch(function(){});
 
   fetch('/api/pagar-info').then(function(r){ return r.json(); }).then(function(d){

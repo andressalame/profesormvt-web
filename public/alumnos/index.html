@@ -1102,12 +1102,21 @@ function calc(pk){
   var desc = Math.min(cred, precio);
   return { precio:precio, desc:desc, final:Math.max(0, precio-desc) };
 }
-/* Sorteo de cumpleaños (5-ago-2026): el banner aparece solo mientras haya uno abierto.
-   Cuando cierre, /api/sorteo devuelve cerrado:true y esto se apaga solo. */
+/* Sorteo: el banner aparece solo mientras haya uno abierto y se arma con lo que devuelve
+   /api/sorteo (título, premio y fecha de cierre), así montar la campaña siguiente no obliga
+   a tocar el portal. Cuando cierre, /api/sorteo dice cerrado:true y esto se apaga solo. */
 function renderSorteo(){
   fetch("/api/sorteo").then(function(r){ return r.json(); }).then(function(s){
     if(!s || !s.activo || s.cerrado){ hide("bSorteo"); return; }
-    $("bSorteo").innerHTML = '<strong>// SORTEO DE CUMPLEAÑOS</strong><br>Renueva con un paquete de 4 clases o más y entras al sorteo de <b>un mes de clases gratis</b>. 8 clases = 2 boletos, 12 = 3. Cierra el 5 de agosto a las 8 p.m. — <a href="/sorteo/" style="color:inherit;text-decoration:underline">ver el sorteo</a>';
+    var f="";
+    try{
+      f=new Date(s.cierraUTC).toLocaleString("es-PE",{timeZone:"America/Lima",day:"numeric",
+        month:"long",hour:"numeric",minute:"2-digit",hour12:true});
+    }catch(e){}
+    $("bSorteo").innerHTML = '<strong>// '+esc(String(s.titulo||"SORTEO").toUpperCase())+
+      '</strong><br>Renueva con un paquete de 4 clases o más y entras al sorteo de <b>'+
+      esc(s.premio||"")+'</b>. 8 clases = 2 boletos, 12 = 3.'+(f?" Cierra el "+esc(f)+".":"")+
+      ' — <a href="/sorteo/" style="color:inherit;text-decoration:underline">ver el sorteo</a>';
     show("bSorteo");
   }).catch(function(){ hide("bSorteo"); });
 }
