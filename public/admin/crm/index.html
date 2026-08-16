@@ -268,6 +268,21 @@
   .btn:disabled,.btn:disabled:hover{opacity:.45;cursor:not-allowed;filter:none;}
   /* La previsualización del importador ganó la columna "Le queda". */
   #ovImport .modal{max-width:680px;}
+
+/* ====== AYUDA AL PASAR EL MOUSE (15-ago-2026) ======
+   Portada desde Batuta: los dos paneles comparten las mismas variables de color, así que el
+   bloque entra tal cual. Cualquier elemento con el atributo data-ayuda muestra su explicación
+   al pasarle el mouse.
+   Por qué no el title nativo de HTML: tarda ~1s en salir, no se puede estilar y en celular NO
+   EXISTE. Este va con retardo corto y en pantallas táctiles se abre al tocar. */
+#btTip{position:fixed;z-index:9999;max-width:320px;background:#000;color:var(--cream);
+  border:1px solid var(--line);border-radius:6px;padding:9px 11px;font-size:12.5px;line-height:1.45;
+  box-shadow:0 8px 26px rgba(0,0,0,.55);pointer-events:none;opacity:0;transform:translateY(4px);
+  transition:opacity .12s,transform .12s;}
+#btTip.on{opacity:1;transform:translateY(0);}
+#btTip b{color:var(--accent);}
+[data-ayuda]{cursor:help;}
+button[data-ayuda],a[data-ayuda],select[data-ayuda],input[data-ayuda],label[data-ayuda]{cursor:inherit;}
 </style>
 </head>
 <body>
@@ -286,39 +301,39 @@
       <!-- Inicio va SUELTO (sin .navgroup): ese wrapper viejo usaba .navgroup-items,
            que es display:none por defecto -> el botón era invisible. Mismo bug cazado en Batuta. -->
       <div style="display:block;padding:2px 0 4px;">
-        <button class="tab active" data-tab="resumen" style="display:flex;align-items:center;gap:8px;"><svg viewBox="0 0 24 24" style="width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:2;flex:0 0 auto;"><path d="M3 11l9-8 9 8"/><path d="M5 9.5V21h14V9.5"/></svg>Inicio</button>
+        <button class="tab active" data-tab="resumen" data-ayuda="Lo que tienes que mirar hoy: quién viene a clase, quién te debe y qué está pendiente." style="display:flex;align-items:center;gap:8px;"><svg viewBox="0 0 24 24" style="width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:2;flex:0 0 auto;"><path d="M3 11l9-8 9 8"/><path d="M5 9.5V21h14V9.5"/></svg>Inicio</button>
       </div>
       <div class="navgroup">
         <button class="navgroup-h" type="button" data-tour="personas"><span class="ng-ico"><svg viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span><span class="ng-tx">Alumnos</span><span class="ng-chev"><svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg></span></button>
         <div class="navgroup-items">
-          <button class="tab" data-tab="alumnos">Alumnos</button>
+          <button class="tab" data-tab="alumnos" data-ayuda="Tus alumnos. Acá los das de alta, les cargas su plan y ves cómo van.">Alumnos</button>
           <button class="tab" data-tab="grupos">Grupos</button>
-          <button class="tab" data-tab="registro">Clases</button>
-          <button class="tab" data-tab="agenda">Agenda</button>
-          <button class="tab" data-tab="chat">Chat</button>
+          <button class="tab" data-tab="registro" data-ayuda="Marcar quién vino y quién faltó, y anotar qué trabajaron. De acá sale el descuento de clases.">Clases</button>
+          <button class="tab" data-tab="agenda" data-ayuda="Tus horarios y las clases de cada día. Acá abres cupos para que reserven.">Agenda</button>
+          <button class="tab" data-tab="chat" data-ayuda="Los mensajes con tus alumnos desde su portal.">Chat</button>
         </div>
       </div>
       <div class="navgroup">
         <button class="navgroup-h" type="button" data-tour="cobros"><span class="ng-ico"><svg viewBox="0 0 24 24"><rect x="2" y="5" width="20" height="14" rx="2"/><circle cx="12" cy="12" r="3"/><line x1="6" y1="12" x2="6.01" y2="12"/><line x1="18" y1="12" x2="18.01" y2="12"/></svg></span><span class="ng-tx">Cobros</span><span class="ng-chev"><svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg></span></button>
         <div class="navgroup-items">
-          <button class="tab" data-tab="pagos">Pagos<span class="dot hidden" id="dotPagos">0</span></button>
-          <button class="tab" data-tab="reportes">Reportes</button>
+          <button class="tab" data-tab="pagos" data-ayuda="Los pagos de tus alumnos. Acá confirmas los que llegan por Yape o transferencia.">Pagos<span class="dot hidden" id="dotPagos">0</span></button>
+          <button class="tab" data-tab="reportes" data-ayuda="Tus números: cuánto facturas, cuántos alumnos activos y quién se está enfriando.">Reportes</button>
           <button class="tab" data-tab="cuentas">Accesos</button>
-          <button class="tab" data-tab="leads">Interesados</button>
+          <button class="tab" data-tab="leads" data-ayuda="Gente que preguntó por clases y todavía no compra. Acá los sigues hasta que se inscriban.">Interesados</button>
         </div>
       </div>
       <div class="navgroup">
         <button class="navgroup-h" type="button"><span class="ng-ico"><svg viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg></span><span class="ng-tx">Material</span><span class="ng-chev"><svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg></span></button>
         <div class="navgroup-items">
-          <button class="tab" data-tab="recursos">Para tus alumnos</button>
-          <button class="tab" data-tab="ejercicios">Tu biblioteca</button>
+          <button class="tab" data-tab="recursos" data-ayuda="Material que compartes con tus alumnos. Lo ven desde su portal.">Para tus alumnos</button>
+          <button class="tab" data-tab="ejercicios" data-ayuda="Tu biblioteca privada de ejercicios y material. Esto NO lo ven los alumnos.">Tu biblioteca</button>
         </div>
       </div>
       <div class="navgroup">
         <button class="navgroup-h" type="button"><span class="ng-ico"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></span><span class="ng-tx">Configuración</span><span class="ng-chev"><svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg></span></button>
         <div class="navgroup-items">
-          <button class="tab" data-tab="perfil">Perfil</button>
-          <button class="tab" data-tab="ajustes">Ajustes</button>
+          <button class="tab" data-tab="perfil" data-ayuda="Tus datos y los de la academia.">Perfil</button>
+          <button class="tab" data-tab="ajustes" data-ayuda="Todo lo que se puede configurar: cómo te pagan, cómo reservan, tus correos automáticos.">Ajustes</button>
         </div>
       </div>
     </nav>
@@ -596,7 +611,7 @@
     </div>
     <div class="group">
       <h2>// Pagos y reservas del portal</h2>
-      <div class="cfgrow"><span class="pk">Número Yape / Plin</span><input id="cfg_pago_numero" type="text" placeholder="999 999 999" /></div>
+      <div class="cfgrow"><span class="pk">Número Yape / Plin</span><input id="cfg_pago_numero" data-ayuda="Tu número de Yape o Plin. Hasta que lo llenes, el portal manda a tus alumnos a coordinarte el pago por WhatsApp." type="text" placeholder="999 999 999" /></div>
       <div class="cfgrow"><span class="pk">Titular (como sale en Yape)</span><input id="cfg_pago_titular" type="text" placeholder="Nombre Apellido" /></div>
       <p class="hint">Hasta que llenes el número, el portal manda a los alumnos a coordinarte el pago por WhatsApp.</p>
       <div class="cfgrow"><span class="pk">Google Client ID</span><input id="cfg_google_client_id" type="text" placeholder="xxxxx.apps.googleusercontent.com" /></div>
@@ -612,8 +627,8 @@
     </div>
     <div class="group">
       <h2>// Reprogramaciones del alumno</h2>
-      <div class="cfgrow"><span class="pk">¿El alumno reprograma solo?</span><select id="cfg_reprog_activo"><option value="">Sí, desde su portal</option><option value="0">No, solo a través de mí</option></select></div>
-      <div class="cfgrow"><span class="pk">Horas mínimas de anticipación</span><input id="cfg_reprog_min_h" type="number" min="1" max="72" placeholder="4" /></div>
+      <div class="cfgrow"><span class="pk">¿El alumno reprograma solo?</span><select id="cfg_reprog_activo" data-ayuda="Si lo dejas encendido, el alumno mueve su clase solo desde su portal, sin escribirte."><option value="">Sí, desde su portal</option><option value="0">No, solo a través de mí</option></select></div>
+      <div class="cfgrow"><span class="pk">Horas mínimas de anticipación</span><input id="cfg_reprog_min_h" data-ayuda="Hasta cuántas horas antes puede mover su clase sin perderla. Con menos tiempo, ya no se puede." type="number" min="1" max="72" placeholder="4" /></div>
       <p class="hint" style="margin-top:-4px;">Con esa anticipación o más, reprogramar libera el horario sin consumir la clase; con menos ya no se puede y una inasistencia cuenta como falta. Vacío = 4 horas.</p>
     </div>
     <div class="group">
@@ -868,6 +883,61 @@
 
 <script>
 "use strict";
+
+/* ═══════════ AYUDA AL PASAR EL MOUSE (15-ago-2026) ═══════════
+   Portada desde el panel de Batuta. Cómo se usa: se le pone el atributo data-ayuda al elemento,
+   con el texto dentro. Nada más; se pinta solo.
+   Un único listener en el documento (delegación) en vez de uno por elemento: el panel repinta
+   tablas enteras todo el tiempo, y con listeners individuales habría que reengancharlos en cada
+   render — el tipo de cosa que funciona el primer día y se rompe en silencio al tercero.
+   En CELULAR no hay "pasar el mouse", así que ahí se abre al TOCAR y se cierra a los 5s. */
+var BT_TIP = null, BT_TIP_T = null;
+function ayudaFlotante(el, texto){
+  if(!BT_TIP){ BT_TIP = document.createElement("div"); BT_TIP.id = "btTip"; document.body.appendChild(BT_TIP); }
+  BT_TIP.innerHTML = texto;
+  BT_TIP.classList.add("on");
+  /* se mide DESPUÉS de pintar el texto: el alto depende de cuánto texto sea */
+  var r = el.getBoundingClientRect(), t = BT_TIP.getBoundingClientRect();
+  var x = r.left + (r.width / 2) - (t.width / 2), y = r.bottom + 8;
+  if(y + t.height > window.innerHeight - 8) y = Math.max(8, r.top - t.height - 8);
+  x = Math.max(8, Math.min(x, window.innerWidth - t.width - 8));
+  BT_TIP.style.left = Math.round(x) + "px";
+  BT_TIP.style.top = Math.round(y) + "px";
+}
+function ocultarAyuda(){
+  if(BT_TIP) BT_TIP.classList.remove("on");
+  if(BT_TIP_T){ clearTimeout(BT_TIP_T); BT_TIP_T = null; }
+}
+(function(){
+  var tactil = false;
+  try{ tactil = window.matchMedia("(hover: none)").matches; }catch(e){}
+  document.addEventListener("mouseover", function(e){
+    if(tactil) return;
+    var n = e.target.closest ? e.target.closest("[data-ayuda]") : null;
+    if(!n){ ocultarAyuda(); return; }
+    var txt = n.getAttribute("data-ayuda"); if(!txt) return;
+    if(BT_TIP_T) clearTimeout(BT_TIP_T);
+    /* 220ms de retardo: sin esto, mover el mouse dispara una ráfaga de globos y marea */
+    BT_TIP_T = setTimeout(function(){ ayudaFlotante(n, txt); }, 220);
+  });
+  document.addEventListener("mouseout", function(e){
+    if(tactil) return;
+    var n = e.target.closest ? e.target.closest("[data-ayuda]") : null;
+    if(n) ocultarAyuda();
+  });
+  document.addEventListener("click", function(e){
+    if(!tactil) return;
+    var n = e.target.closest ? e.target.closest("[data-ayuda]") : null;
+    if(!n || !n.getAttribute("data-ayuda")){ ocultarAyuda(); return; }
+    ayudaFlotante(n, n.getAttribute("data-ayuda"));
+    if(BT_TIP_T) clearTimeout(BT_TIP_T);
+    BT_TIP_T = setTimeout(ocultarAyuda, 5000);
+  });
+  /* si la página se mueve debajo del globo, queda flotando apuntando a nada */
+  window.addEventListener("scroll", ocultarAyuda, true);
+  window.addEventListener("resize", ocultarAyuda);
+})();
+
 /* ========== MARCA (white-label): edita SOLO este bloque para otro cliente.
    Debe calzar con el bloque MARCA del worker. Ver docs/white-label-checklist.md ========== */
 var MARCA = {
