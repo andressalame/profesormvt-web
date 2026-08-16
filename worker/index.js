@@ -294,6 +294,12 @@ function paqueteExpirado(alumno){
 }
 function compute(alumno, regs, precios, reservasUsadas){
   const pk = PAQUETES[alumno.paquete] || { clases: 0, reprog: 0 };
+  /* `reservasUsadas` llega de reservasUsadasCount/Puro como {n, futuras} desde el 15-ago-2026.
+     Se sigue aceptando un numero suelto por compatibilidad, y ahi n = futuras (lo que hacia
+     antes): asi ningun llamador viejo cambia de comportamiento sin que alguien lo decida. */
+  const ru = (reservasUsadas && typeof reservasUsadas === "object")
+    ? { n: Math.max(0, Number(reservasUsadas.n) || 0), futuras: Math.max(0, Number(reservasUsadas.futuras) || 0) }
+    : { n: Math.max(0, Number(reservasUsadas) || 0), futuras: Math.max(0, Number(reservasUsadas) || 0) };
   let asistio = 0, reprogramo = 0, falta = 0;
   for (const r of regs){
     if (r.estado === "Asistió") asistio++;
@@ -313,12 +319,15 @@ function compute(alumno, regs, precios, reservasUsadas){
      bono se cae solo. Espejo de computeAlumno() en el CRM; si cambia uno, cambia el otro. */
   const bono = ((Number(alumno && alumno.bono_ciclo) || 0) === (Number(alumno && alumno.ciclo) || 1))
     ? Math.max(0, Number(alumno && alumno.bono_clases) || 0) : 0;
-  const usadas = asistio + falta + exceso + (Number(reservasUsadas) || 0) + migradas;
+  const usadas = asistio + falta + exceso + ru.n + migradas;
   const saldo = pk.clases + bono - usadas;
   const expirado = paqueteExpirado(alumno) && saldo > 0;
   return {
     compradas: pk.clases + bono,
     usadas,
+    /* apartadas y aun SIN DICTAR: es lo unico que el modo "baja al asistir" devuelve al saldo
+       mostrado. Meter aca las ya dictadas fue el bug que Elevate destapo el 15-ago. */
+    reservadas: ru.futuras,
     restantes: expirado ? 0 : Math.max(0, saldo),
     expirado,
     vence: (alumno && alumno.vence) || "",
@@ -328,6 +337,20 @@ function compute(alumno, regs, precios, reservasUsadas){
     saldo,
     monto: precios[alumno.paquete] != null ? precios[alumno.paquete] : 0
   };
+}
+/* ---------- "El saldo baja al ASISTIR" (15-ago-2026, portado de Batuta) ----------
+   Es SOLO cómo se ve el número, no cómo se cobra: la reserva sigue apartando la clase y el
+   candado anti-sobreventa no se toca. Con el modo puesto, a lo que le queda se le suman de
+   vuelta las clases APARTADAS Y AÚN NO DICTADAS, para que el número no baje hasta que venga.
+   ⚠️ La versión original de Batuta sumaba TODAS las reservas contadas, incluidas las ya
+   dictadas, y por eso el saldo no bajaba nunca (lo destapó Elevate el 15-ago). Acá se porta ya
+   arreglado: `c.reservadas` son solo las futuras. */
+function saldoMostrado(c, modo){
+  if (!c || String(modo || "") !== "asistencia") return c;
+  const res = Math.max(0, Number(c.reservadas) || 0);
+  /* el modo se marca SIEMPRE, aunque no tenga nada apartado: si no, el alumno sin reservas
+     viajaría con modo "reserva" y la próxima persona que lea este campo se confundiría */
+  return Object.assign({}, c, { restantes: (Number(c.restantes) || 0) + res, modo_saldo: "asistencia" });
 }
 function estadoAlumno(c){
   if (!c) return "Inactivo";
@@ -350,7 +373,13 @@ async function loadConfig(env){
               salud_gcal: "ok", salud_gcal_aviso_utc: "", salud_correo_estado: "ok", salud_correo_aviso_utc: "",
               // 4 motores (07-jul-2026): encendidos por defecto; poner '0' en config para apagar.
               // review_link SIN default: si está vacío, el motor de reseñas no manda nada (no se inventa el link de Google).
-              review_link: "", rescate_activo: "0", resena_activo: "0", nudge_asistencia_activo: "0", referido_nudge_activo: "0" };
+              review_link: "", rescate_activo: "0", resena_activo: "0", nudge_asistencia_activo: "0", referido_nudge_activo: "0",
+              /* Portados de Batuta el 15-ago-2026. Vacío = como siempre, así que nada cambia
+                 hasta que Andrés los toque en Ajustes.
+                 saldo_modo       "" = el saldo baja al RESERVAR · "asistencia" = baja al ASISTIR
+                 asistencia_auto  "1" = las clases que ya pasaron se dan por asistidas solas
+                 asistencia_horas cuántas horas esperar antes de cerrarlas (vacío = 6) */
+              saldo_modo: "", asistencia_auto: "", asistencia_horas: "" };
               // Los 4 motores nuevos van APAGADOS por defecto (07-jul): tocan correos de alumnos reales.
               // Andrés los enciende poniendo el switch en "1" en la tabla config (comandos en la bitácora del loop).
   for (const row of (results || [])) c[row.clave] = row.valor || "";
@@ -2485,7 +2514,7 @@ function diaVecino(f, delta){
 function reservasUsadasPuro(resv, regs, excluirId){
   const excl = String(excluirId || "");
   const ahora = Date.now();
-  if (!resv || !resv.length) return 0;
+  if (!resv || !resv.length) return { n: 0, futuras: 0 };
   const porFecha = new Map();          // fecha -> filas de registro libres para emparejar
   for (const g of (regs || [])){
     const f = String(g.fecha || "").slice(0, 10);
@@ -2493,11 +2522,11 @@ function reservasUsadasPuro(resv, regs, excluirId){
   }
   /* Dos pasadas: primero match exacto por fecha-Lima; luego ±1 día, porque el registro
      histórico se anotó con fecha UTC (las clases nocturnas quedaron corridas un día). */
-  let n = 0;
+  let n = 0, futuras = 0;
   const pasadas = [];
   for (const r of resv){
     if (r.id === excl) continue;
-    if (Date.parse(r.inicio_utc) >= ahora){ n++; continue; }   // futura: aparta credito
+    if (Date.parse(r.inicio_utc) >= ahora){ n++; futuras++; continue; }   // futura: aparta credito
     pasadas.push(fechaLimaDe(r.inicio_utc));
   }
   const sinPar = [];
@@ -2514,7 +2543,13 @@ function reservasUsadasPuro(resv, regs, excluirId){
     }
     if (!emparejada) n++;                                      // dictada y sin anotar: igual consume
   }
-  return n;
+  /* Se devuelven las DOS cifras (portado de Batuta, 15-ago-2026):
+       n       = todo lo que consume credito (futuras + dictadas sin anotar)
+       futuras = SOLO lo apartado que todavia no se dicto
+     La segunda existe para el modo "el saldo baja al asistir": ahi las apartadas se le suman de
+     vuelta al numero que ve la gente, y si se sumaran tambien las YA DICTADAS el saldo no bajaria
+     nunca (el bug que Elevate destapo el 15-ago). */
+  return { n, futuras };
 }
 /* El de siempre, ahora solo trae las filas y delega la cuenta en la version pura.
    🐛 15-ago-2026 (portado de Batuta, caso Paola Zapata de Elevate): la consulta de `registro`
@@ -2528,7 +2563,7 @@ async function reservasUsadasCount(env, alumnoId, ciclo, excluirId){
     "SELECT id, inicio_utc FROM reservas WHERE alumno_id = ?1 AND COALESCE(ciclo,1) = ?2 " +
     "AND estado IN ('reservada','completada','falta') ORDER BY inicio_utc ASC"
   ).bind(alumnoId, ciclo).all();
-  if (!resv || !resv.length) return 0;
+  if (!resv || !resv.length) return { n: 0, futuras: 0 };
   const { results: regs } = await env.DB.prepare(
     "SELECT fecha FROM registro WHERE alumno_id = ?1 AND COALESCE(ciclo,1) = ?2"
   ).bind(alumnoId, ciclo).all();
@@ -2975,6 +3010,59 @@ async function ensureSchema(env){
     if (!tieneCancPor) await env.DB.prepare("ALTER TABLE reservas ADD COLUMN cancelada_por TEXT DEFAULT ''").run();
     _schemaChecked = true;
   } catch (e) { /* otra invocación pudo correrla en paralelo; se reintenta en la próxima request */ }
+}
+
+/* ---------- Asistencia automática (15-ago-2026, portada de Batuta) ----------
+   Con `asistencia_auto` en "1", las clases que ya pasaron y que nadie tocó se dan por asistidas
+   solas N horas después de terminar, y solo hay que marcar al que faltó. Es como trabaja la
+   mayoría de estudios. Apagado = a mano, como siempre.
+   El margen existe para alcanzar a poner la falta antes de que se cierre.
+
+   ⚠️ Se porta YA ARREGLADO: la versión original de Batuta solo cambiaba el estado de la reserva
+   y NO escribía la bitácora en `registro`, que es de donde salen el historial del alumno y el
+   del panel. Efecto: las clases dictadas quedaban invisibles. Acá se anota desde el primer día,
+   con la misma guarda idempotente del marcado manual. */
+const ASISTENCIA_HORAS_DEF = 6;
+async function anotarClaseDictada(env, alumnoId, inicioUtc, curso, ciclo, estado){
+  if (!alumnoId) return false;
+  const fechaL = fechaLimaDe(inicioUtc);
+  if (!fechaL) return false;
+  const cicloR = Number(ciclo) || 1;
+  const ya = await env.DB.prepare(
+    "SELECT 1 FROM registro WHERE alumno_id = ?1 AND COALESCE(ciclo,1) = ?2 AND fecha = ?3 AND estado != 'Reprogramó' LIMIT 1"
+  ).bind(alumnoId, cicloR, fechaL).first();
+  if (ya) return false;
+  await env.DB.prepare(
+    "INSERT INTO registro (id,fecha,alumno_id,curso,estado,trabajo,tarea,ciclo,tarea_audio,plan) VALUES (?1,?2,?3,?4,?5,'','',?6,'','')"
+  ).bind(crypto.randomUUID(), fechaL, alumnoId, curso || "", (estado === "Falta" ? "Falta" : "Asistió"), cicloR).run();
+  return true;
+}
+async function cerrarAsistenciasAuto(env){
+  let cfg = {};
+  try { cfg = await loadConfig(env); } catch (e) { return 0; }
+  if (String(cfg.asistencia_auto || "") !== "1") return 0;
+  let horas = ASISTENCIA_HORAS_DEF;
+  const h = parseInt(cfg.asistencia_horas, 10);
+  if (Number.isFinite(h) && h >= 0 && h <= 168) horas = h;
+  const corte = new Date(Date.now() - horas * 3600000).toISOString();
+  try {
+    /* se leen ANTES de cerrarlas: hace falta el alumno, el curso, el ciclo y la fecha de cada
+       una para poder anotarlas en la bitácora */
+    const { results: aCerrar } = await env.DB.prepare(
+      "SELECT id, alumno_id, inicio_utc, COALESCE(curso,'') AS curso, COALESCE(ciclo,1) AS ciclo FROM reservas " +
+      "WHERE estado = 'reservada' AND alumno_id IS NOT NULL AND tipo != 'bloqueo' AND fin_utc <= ?1 " +
+      "ORDER BY inicio_utc ASC LIMIT 200"
+    ).bind(corte).all();
+    if (!aCerrar || !aCerrar.length) return 0;
+    await env.DB.prepare(
+      "UPDATE reservas SET estado = 'completada' WHERE estado = 'reservada' AND alumno_id IS NOT NULL AND tipo != 'bloqueo' AND fin_utc <= ?1"
+    ).bind(corte).run();
+    for (const rv of aCerrar){
+      try { await anotarClaseDictada(env, rv.alumno_id, rv.inicio_utc, rv.curso, rv.ciclo, "Asistió"); }
+      catch (e) { console.error("asistencia auto: no se pudo anotar", rv.id, e); }
+    }
+    return aCerrar.length;
+  } catch (e) { console.error("asistencia auto", e); return 0; }
 }
 
 export default {
@@ -3519,6 +3607,8 @@ export default {
             const histCiclo = historial.filter(r => Number(r.ciclo) === Number(ciclo));
             const rUsadas = await reservasUsadasCount(env, alumno.id, ciclo);
             computed = compute(alumno, histCiclo, precios, rUsadas);
+            /* la academia que descuenta "al asistir" ve acá el mismo número que en su panel */
+            computed = saldoMostrado(computed, (await loadConfig(env)).saldo_modo || "");
             horarioFijo = await horarioFijoDerivado(env, alumno.id);
             proximasClases = (await env.DB.prepare(
               "SELECT id, inicio_utc, fin_utc, tipo, curso FROM reservas WHERE alumno_id = ?1 AND estado = 'reservada' AND inicio_utc >= ?2 ORDER BY inicio_utc ASC"
@@ -4903,6 +4993,7 @@ export default {
               "SELECT alumno_id, id, inicio_utc, COALESCE(ciclo,1) AS ciclo FROM reservas " +
               "WHERE estado IN ('reservada','completada','falta') ORDER BY inicio_utc ASC"
             ).all();
+            const modoSaldoPanel = (config && config.saldo_modo) || "";
             const resvPor = new Map(), regsPor = new Map();
             for (const r of (resvTodas || [])){
               if (!r.alumno_id) continue;
@@ -4918,7 +5009,7 @@ export default {
               const ci = Number(a.ciclo) || 1;
               const rv = (resvPor.get(a.id) || []).filter(r => (Number(r.ciclo) || 1) === ci);
               const rg = (regsPor.get(a.id) || []).filter(g => (Number(g.ciclo) || 1) === ci);
-              a.saldo = compute(a, rg, precios, reservasUsadasPuro(rv, rg));
+              a.saldo = saldoMostrado(compute(a, rg, precios, reservasUsadasPuro(rv, rg)), modoSaldoPanel);
             }
           } catch (e) { console.error("saldo panel", e && e.message); }   // el CRM cae a su cálculo viejo
           let grupos = [];
@@ -5060,7 +5151,12 @@ export default {
 
         if (url.pathname === "/api/admin/config" && request.method === "POST"){
           const b = await request.json().catch(() => ({}));
-          const claves = ["pago_numero", "pago_titular", "google_client_id", "bcp_cuenta", "bcp_cci", "scotia_cuenta", "scotia_cci", "crypto_moneda", "crypto_red", "crypto_wallet", "profe_nombre", "profe_marca", "profe_foto", "gcal_client_id", "gcal_client_secret", "gcal_calendar_id", "reprog_activo", "reprog_min_h"];
+          const claves = ["pago_numero", "pago_titular", "google_client_id", "bcp_cuenta", "bcp_cci", "scotia_cuenta", "scotia_cci", "crypto_moneda", "crypto_red", "crypto_wallet", "profe_nombre", "profe_marca", "profe_foto", "gcal_client_id", "gcal_client_secret", "gcal_calendar_id", "reprog_activo", "reprog_min_h",
+                          /* portados de Batuta el 15-ago-2026. ⚠️ Toda clave nueva de Ajustes
+                             tiene que entrar ACÁ además del panel, o se descarta en silencio y
+                             el dueño ve "guardado" sin nada guardado (el bug de saldo_modo que
+                             Batuta pagó el 13-ago). */
+                          "saldo_modo", "asistencia_auto", "asistencia_horas"];
           const stmts = [];
           for (const k of claves){
             if (k in b){
@@ -5459,6 +5555,10 @@ export default {
     try { await ensureSchema(env); } catch (e) {}
     // Recordatorios de clase: cada hora (necesario para el T-2h).
     ctx.waitUntil(procesarRecordatoriosClase(env).catch(function(){}));
+    /* Asistencia automática: en CADA corrida (cada hora). Si esperara al cron diario, la clase
+       de las 7pm quedaría "reservada" toda la noche y el saldo del alumno mentiría hasta el día
+       siguiente. La función no hace nada si el ajuste está apagado. */
+    ctx.waitUntil(cerrarAsistenciasAuto(env).catch(function(){}));
     // Salud de Google Calendar: cada hora, alerta 1 vez por incidencia (detección ≤1h).
     ctx.waitUntil(chequearSaludGcal(env).catch(function(){}));
     // Eventos gcal huérfanos de reservas canceladas: reintento del borrado que falló online
