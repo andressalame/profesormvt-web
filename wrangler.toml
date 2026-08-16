@@ -21,7 +21,8 @@ not_found_handling = "404-page"
 binding = "ASSETS"
 # /invitacion es una PÁGINA que arma el worker (el canje del acceso al portal), no un archivo
 # de dist/: sin esto los assets responden primero y devuelven 404. (15-ago-2026)
-run_worker_first = ["/api/*", "/r/*", "/invitacion"]
+# /baja es igual: la confirmación del opt-out de correos, armada por el worker. (16-ago-2026)
+run_worker_first = ["/api/*", "/r/*", "/invitacion", "/baja"]
 
 [[d1_databases]]
 binding = "DB"

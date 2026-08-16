@@ -1192,7 +1192,7 @@ async function procesarNurtureLeads(env){
   // correos que SÍ importan). Se excluyen igual que ya lo hacía el blast de composición.
   const { results: leads } = await env.DB.prepare(
     "SELECT id, email, fecha, nurture_paso, telefono FROM leads " +
-    "WHERE marca = 'MVT' AND COALESCE(nurture_paso,0) < ?1 AND email NOT LIKE 'wa-%@wa.mvt'"
+    "WHERE marca = 'MVT' AND COALESCE(nurture_paso,0) < ?1 AND COALESCE(baja,0) = 0 AND email NOT LIKE 'wa-%@wa.mvt'"
   ).bind(ultimoPaso).all();
   const telPagados = await telefonosAlumnosPagados(env);
   const ahora = Date.now();
@@ -1318,11 +1318,11 @@ async function procesarPuenteWhatsApp(env){
   // existe y cada intento es un rebote duro contra la reputación del dominio.
   const q = blast
     ? env.DB.prepare(
-        "SELECT id, email, telefono FROM leads WHERE marca = 'MVT' AND COALESCE(puente_wa,0) = 0 " +
+        "SELECT id, email, telefono FROM leads WHERE marca = 'MVT' AND COALESCE(puente_wa,0) = 0 AND COALESCE(baja,0) = 0 " +
         "AND email NOT LIKE '%andressalame%' AND email NOT LIKE 'wa-%@wa.mvt' ORDER BY fecha ASC LIMIT ?1"
       ).bind(disponible)
     : env.DB.prepare(
-        "SELECT id, email, telefono FROM leads WHERE marca = 'MVT' AND COALESCE(puente_wa,0) = 0 " +
+        "SELECT id, email, telefono FROM leads WHERE marca = 'MVT' AND COALESCE(puente_wa,0) = 0 AND COALESCE(baja,0) = 0 " +
         "AND COALESCE(nurture_paso,0) != 99 AND (COALESCE(nurture_paso,0) >= ?1 OR fecha <= ?2) " +
         "AND email NOT LIKE '%andressalame%' AND email NOT LIKE 'wa-%@wa.mvt' ORDER BY fecha ASC LIMIT ?3"
       ).bind(ultimoPaso, corte, disponible);
@@ -1362,6 +1362,140 @@ async function procesarPuenteWhatsApp(env){
     await new Promise(function(r){ setTimeout(r, 250); });   // Resend free también limita a 2 req/s
   }
   if (enviados.length){ try { await avisarPuenteResumen(env, enviados); } catch (e) {} }
+  await reportarSaludCorreo(env, fallos, fallos + enviados.length);
+  return enviados;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   BLAST DE CAMPAÑA DEL SORTEO — correo único a los leads que nunca compraron.
+   Se enciende con config.sorteo_blast_activo = '1' y se apaga SOLO al vaciarse la cola.
+
+   ⚖️ VENTANA LEGAL, y por eso no sale a cualquier hora: las comunicaciones comerciales en
+   Perú no pueden mandarse de 8 p.m. a 7 a.m., ni fines de semana, ni feriados (es la misma
+   regla que ya está escrita para Batuta; la multa es por correo, no por tanda). Así que este
+   motor solo trabaja de LUNES A VIERNES entre las 12:00 y las 23:00 UTC = 7 a.m. a 6 p.m. de
+   Lima, con margen por los dos lados. Si se enciende un domingo, no manda nada hasta el lunes
+   a las 7 a.m., solo. No hay que acordarse de nada.
+   ═══════════════════════════════════════════════════════════════════════════ */
+const SORTEO_BLAST_TANDA = 25;      // por corrida horaria
+const SORTEO_BLAST_TOPE_DIA = 70;   // por día UTC: deja aire para el puente en la cuota de Resend (100/día free)
+/* Feriados peruanos que caen en día hábil dentro de la campaña. (30-ago, Santa Rosa, cae
+   domingo en 2026, así que la lista va vacía a propósito: se llena si la campaña se alarga.) */
+const FERIADOS_PE = [];
+
+/* ¿Se puede mandar correo comercial ahora mismo? Todo en UTC: entre las 12:00 y las 23:00 UTC
+   la fecha UTC y la de Lima son el mismo día, así que el día de la semana no se desfasa. */
+function ventanaComercialAbierta(d){
+  const ahora = d || new Date();
+  const hora = ahora.getUTCHours();
+  if (hora < 12 || hora >= 23) return false;              // fuera de 7 a.m.-6 p.m. de Lima
+  const dia = ahora.getUTCDay();
+  if (dia === 0 || dia === 6) return false;               // domingo o sábado
+  if (FERIADOS_PE.indexOf(ahora.toISOString().slice(0, 10)) !== -1) return false;
+  return true;
+}
+
+/* Token de baja: HMAC del id del lead, sin caducidad (un link de opt-out no puede expirar).
+   Va el ID y no el correo, para no pasear un dato personal por la barra de direcciones. */
+async function tokenBaja(env, leadId){
+  const k = await claveFirma(env);
+  if (!k) return null;
+  return hex(await crypto.subtle.sign("HMAC", k, enc.encode("baja|" + String(leadId)))).slice(0, 32);
+}
+
+async function correoSorteo(env, lead){
+  if (!lead || !lead.email) return false;
+  const dominioLimpio = MARCA.dominio.replace(/^https?:\/\//, "");
+  const url = MARCA.dominio + "/sorteo/";
+  const t = await tokenBaja(env, lead.id);
+  const linkBaja = t ? (MARCA.dominio + "/baja?l=" + encodeURIComponent(lead.id) + "&t=" + t) : "";
+  const pieBaja = linkBaja
+    ? '<p style="font-size:12px;color:#888888;margin-top:8px">Si no quieres recibir más correos míos, <a href="' + linkBaja + '" style="color:#888888">te sales acá</a> y listo.</p>' : "";
+  const html =
+    '<div style="font-family:Arial,Helvetica,sans-serif;max-width:480px;margin:0 auto;color:#1a1a1a;font-size:15px;line-height:1.6">' +
+      '<p>Hola,</p>' +
+      '<p>Te escribo corto: hasta el <b>lunes 1 de setiembre</b> estoy sorteando <b>4 clases extra</b> entre todos los que arrancan con un paquete de clases este mes.</p>' +
+      '<p>Funciona simple. Entras con cualquier plan y mientras más clases, más chances:</p>' +
+      '<ul style="padding-left:18px">' +
+        '<li><b>4 clases</b> → 1 boleto</li>' +
+        '<li style="margin-top:4px"><b>8 clases</b> → 2 boletos</li>' +
+        '<li style="margin-top:4px"><b>12 clases</b> → 3 boletos</li>' +
+      '</ul>' +
+      '<p>El ganador se elige solo el 1 de setiembre a las 8 p.m. y se publica en la web.</p>' +
+      '<p style="text-align:center;margin:26px 0"><a href="' + url + '" style="background:#e8501f;color:#ffffff;text-decoration:none;font-weight:bold;padding:14px 26px;border-radius:6px;display:inline-block">Ver el sorteo</a></p>' +
+      '<p>Si llevabas rato pensando en empezar a cantar o a componer, es buen momento. Y si el sorteo te da igual, las clases son las mismas de siempre: 1 a 1, personalizadas, para adultos que empiezan de grandes.</p>' +
+      '<p>Un abrazo,<br><b>' + MARCA.profe + '</b><br>' + MARCA.nombre + '</p>' +
+      '<p style="font-size:12px;color:#888888;margin-top:26px">' + dominioLimpio + ' · Canto y composición para adultos</p>' +
+      pieBaja +
+    '</div>';
+  const text = 'Hola,\n\nTe escribo corto: hasta el lunes 1 de setiembre estoy sorteando 4 clases extra entre todos los que arrancan con un paquete de clases este mes.\n\nFunciona simple. Entras con cualquier plan y mientras más clases, más chances: 4 clases = 1 boleto, 8 = 2 boletos, 12 = 3 boletos.\n\nEl ganador se elige solo el 1 de setiembre a las 8 p.m. y se publica acá: ' + url + '\n\nSi llevabas rato pensando en empezar a cantar o a componer, es buen momento. Y si el sorteo te da igual, las clases son las mismas de siempre: 1 a 1, personalizadas, para adultos que empiezan de grandes.\n\nUn abrazo,\n' + MARCA.profe + ' - ' + MARCA.nombre + '\n' + dominioLimpio + (linkBaja ? '\n\nPara no recibir más correos míos: ' + linkBaja : '');
+  return enviarCorreo(env, { to: lead.email, subject: "Estoy sorteando 4 clases (hasta el 1 de setiembre)", html: html, text: text });
+}
+
+async function procesarBlastSorteo(env){
+  const cfg = await loadConfig(env);
+  if (cfg.sorteo_blast_activo !== "1") return [];        // interruptor: apagado por defecto
+  if (!SORTEO.activo) return [];                          // sin campaña viva no se anuncia nada
+  if (Date.now() >= Date.parse(SORTEO.cierraUTC)) return [];  // ya cerró: nadie recibe una invitación muerta
+  if (!ventanaComercialAbierta()) return [];              // fuera de horario/día hábil
+
+  const hoy = new Date().toISOString().slice(0, 10);
+  const ct = String(cfg.sorteo_enviados_hoy || "").split(":");
+  const yaHoy = (ct[0] === hoy) ? (Number(ct[1]) || 0) : 0;
+  const disponible = Math.min(SORTEO_BLAST_TANDA, SORTEO_BLAST_TOPE_DIA - yaHoy);
+  if (disponible <= 0) return [];
+
+  /* Mismos dos filtros del puente: fuera la cuenta de Andrés y fuera los correos sintéticos
+     'wa-...@wa.mvt' (buzón que no existe: cada intento es un rebote duro contra la reputación
+     del dominio). Y fuera, por supuesto, el que pidió no recibir más correos. */
+  const { results: leads } = await env.DB.prepare(
+    "SELECT id, email, telefono FROM leads WHERE marca = 'MVT' AND COALESCE(sorteo_blast,0) = 0 " +
+    "AND COALESCE(baja,0) = 0 AND email NOT LIKE '%andressalame%' AND email NOT LIKE 'wa-%@wa.mvt' " +
+    "ORDER BY fecha DESC LIMIT ?1"
+  ).bind(disponible).all();
+
+  if (!(leads || []).length){
+    await env.DB.prepare("UPDATE config SET valor = '0' WHERE clave = 'sorteo_blast_activo'").run();
+    return [];
+  }
+
+  /* Al que YA es alumno no se le invita a un sorteo de compra: o renueva solo (y entra igual),
+     o le estaríamos vendiendo algo que ya tiene. Se marca como saltado, no se le escribe. */
+  const { results: ctas } = await env.DB.prepare("SELECT LOWER(email) AS e FROM cuentas").all();
+  const yaCuenta = new Set((ctas || []).map(function(c){ return c.e; }));
+  const telPagados = await telefonosAlumnosPagados(env);
+
+  const enviados = []; let fallos = 0;
+  for (const l of (leads || [])){
+    if (yaCuenta.has(String(l.email).toLowerCase()) ||
+        (telPagados.size && telPagados.has(telefono9(l.telefono)))){
+      await env.DB.prepare("UPDATE leads SET sorteo_blast = 2 WHERE id = ?1").bind(l.id).run();
+      continue;
+    }
+    const ok = await correoSorteo(env, l);
+    if (ok){
+      await env.DB.prepare("UPDATE leads SET sorteo_blast = 1 WHERE id = ?1").bind(l.id).run();
+      enviados.push(l.email);
+      // Contador al día tras CADA envío: si el runtime corta la corrida, la cuenta no se pierde.
+      await env.DB.prepare("INSERT OR REPLACE INTO config (clave, valor) VALUES ('sorteo_enviados_hoy', ?1)")
+        .bind(hoy + ":" + (yaHoy + enviados.length)).run();
+    } else { fallos++; }
+    await new Promise(function(r){ setTimeout(r, 250); });   // Resend free limita a 2 req/s
+  }
+  if (enviados.length){
+    try {
+      if (env.AVISOS){
+        const msg = createMimeMessage();
+        msg.setSender({ name: "Avisos " + MARCA.nombre, addr: MARCA.correoAvisos });
+        msg.setRecipient(MARCA.correoAdmin);
+        msg.setSubject("Sorteo: " + enviados.length + " lead(s) invitados hoy");
+        msg.addMessage({ contentType: "text/plain", data:
+          "Se les mandó la invitación al sorteo de setiembre (4 clases extra). El que te escriba por esto viene de aquí:\n\n" +
+          enviados.map(function(e){ return "- " + e; }).join("\n") + "\n" });
+        await env.AVISOS.send(new EmailMessage(MARCA.correoAvisos, MARCA.correoAdmin, msg.asRaw()));
+      }
+    } catch (e) {}
+  }
   await reportarSaludCorreo(env, fallos, fallos + enviados.length);
   return enviados;
 }
@@ -3165,6 +3299,14 @@ async function ensureSchema(env){
     if (!tieneTelefono) await env.DB.prepare("ALTER TABLE leads ADD COLUMN telefono TEXT DEFAULT ''").run();
     const tienePuente = (infoLeads.results || []).some(c => c.name === "puente_wa");
     if (!tienePuente) await env.DB.prepare("ALTER TABLE leads ADD COLUMN puente_wa INTEGER DEFAULT 0").run();
+    // baja: opt-out del lead (16-ago-2026). Lo pone él mismo desde el link "ya no quiero recibir
+    // correos" que ahora llevan las campañas. Un opt-out que solo respeta UN motor no es opt-out:
+    // lo miran el blast del sorteo, el nurture y el puente. Nunca se borra la fila, solo se marca.
+    const tieneBaja = (infoLeads.results || []).some(c => c.name === "baja");
+    if (!tieneBaja) await env.DB.prepare("ALTER TABLE leads ADD COLUMN baja INTEGER DEFAULT 0").run();
+    // sorteo_blast: dedupe del correo de campaña del sorteo (0 = pendiente, 1 = enviado, 2 = saltado).
+    const tieneSorteoBlast = (infoLeads.results || []).some(c => c.name === "sorteo_blast");
+    if (!tieneSorteoBlast) await env.DB.prepare("ALTER TABLE leads ADD COLUMN sorteo_blast INTEGER DEFAULT 0").run();
     // v16 (win-back) plegada al auto-migrador: en prod se aplicó por .sql recién el 06-jul-2026,
     // pero un despliegue fresco (clon Batuta) la necesita igual que las demás.
     const tieneRecFecha = (infoAlumnos.results || []).some(c => c.name === "recordatorio_fecha");
@@ -4002,6 +4144,34 @@ export default {
           metodo: compraR.metodo || "", fecha: compraR.fecha || "",
           numero: numR, whatsapp: MARCA.whatsapp || ""
         }));
+      }
+      /* Baja de correos del lead (16-ago-2026). Un solo clic desde el pie de las campañas, sin
+         pedirle nada: el token es HMAC del id, así que nadie puede dar de baja a otro, y el
+         email no viaja en la URL. Idempotente y sin caducidad: entrar dos veces no rompe nada.
+         Devuelve 200 aunque el lead no exista, para no delatar quién está en la lista. */
+      if (url.pathname === "/baja" && request.method === "GET"){
+        const leadId = url.searchParams.get("l") || "";
+        const tok = url.searchParams.get("t") || "";
+        const esperado = await tokenBaja(env, leadId);
+        const ok = !!(esperado && tok && safeEq(tok, esperado));
+        if (ok){
+          try { await env.DB.prepare("UPDATE leads SET baja = 1 WHERE id = ?1").bind(leadId).run(); } catch (e) {}
+        }
+        const cuerpo = ok
+          ? '<h1>Listo</h1><p>No te llegan más correos míos. Si algún día quieres retomar las clases, la puerta queda abierta.</p>'
+          : '<h1>Ese link ya no sirve</h1><p>Escríbeme y te saco de la lista a mano.</p>';
+        return new Response(
+          '<!doctype html><html lang="es"><head><meta charset="utf-8">' +
+          '<meta name="viewport" content="width=device-width,initial-scale=1">' +
+          '<meta name="robots" content="noindex"><title>Baja de correos · ' + esc(MARCA.nombre) + '</title>' +
+          '<style>body{background:#0d0b0a;color:#EBE5D6;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;' +
+          'display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;padding:24px;text-align:center}' +
+          'div{max-width:420px}h1{color:#e8501f;font-size:1.6rem;margin:0 0 12px}p{opacity:.85;line-height:1.6}' +
+          'a{color:#e8501f}</style></head><body><div>' + cuerpo +
+          '<p style="margin-top:26px"><a href="' + esc(MARCA.dominio) + '">' +
+          esc(MARCA.dominio.replace(/^https?:\/\//, "")) + '</a></p></div></body></html>',
+          { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" } }
+        );
       }
       /* Estado público del sorteo vigente. Además del cron, este GET dispara el sorteoElegir()
          de respaldo: si el cron fallara, el primer visitante después de la hora de cierre lo
@@ -5891,6 +6061,9 @@ export default {
     // Eventos gcal huérfanos de reservas canceladas: reintento del borrado que falló online
     // (si se quedan, bloquean su slot para siempre vía gcalBusy). Tanda corta por hora.
     ctx.waitUntil(limpiarGcalHuerfanos(env).catch(function(){}));
+    // Invitación al sorteo para los leads que nunca compraron. Se auto-limita: solo trabaja en
+    // horario comercial hábil (ver ventanaComercialAbierta) y se apaga solo al vaciar la cola.
+    ctx.waitUntil(procesarBlastSorteo(env).catch(function(){}));
     // Sorteo: no-op hasta SORTEO.cierraUTC (1-set-2026 20:00 Lima = 01:00 UTC del 2); en el
     // disparo siguiente congela la lista, elige al ganador, le abona el premio y avisa. Corre
     // cada hora para no depender de que el cron de esa hora exacta no falle.
