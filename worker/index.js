@@ -2447,34 +2447,26 @@ function diaVecino(f, delta){
 
    excluirId: la reserva que se está moviendo en un reprogramar. Mover una clase no puede
    exigir un crédito extra, y la vieja sigue 'reservada' mientras validamos la nueva. */
-async function reservasUsadasCount(env, alumnoId, ciclo, excluirId){
+/* PURO (15-ago-2026, portado de Batuta): el mismo conteo, sin tocar la DB. Existe para que el
+   panel reciba el saldo YA calculado por el servidor con las filas que este endpoint ya cargó,
+   en vez de que el CRM lo recalcule por su cuenta — que es de donde salía el desajuste entre lo
+   que veía Andrés y lo que veía el alumno. */
+function reservasUsadasPuro(resv, regs, excluirId){
   const excl = String(excluirId || "");
   const ahora = Date.now();
-  const { results: resv } = await env.DB.prepare(
-    "SELECT id, inicio_utc FROM reservas WHERE alumno_id = ?1 AND COALESCE(ciclo,1) = ?2 " +
-    "AND estado IN ('reservada','completada','falta') ORDER BY inicio_utc ASC"
-  ).bind(alumnoId, ciclo).all();
   if (!resv || !resv.length) return 0;
-
-  // Solo filas de CLASE emparejan reservas: una fila 'Reprogramó' es el movimiento de un
-  // horario, no una clase dictada (su costo lo cobra compute() vía la cuota/exceso).
-  const { results: regs } = await env.DB.prepare(
-    "SELECT fecha FROM registro WHERE alumno_id = ?1 AND COALESCE(ciclo,1) = ?2 AND estado != 'Reprogramó'"
-  ).bind(alumnoId, ciclo).all();
   const porFecha = new Map();          // fecha -> filas de registro libres para emparejar
   for (const g of (regs || [])){
     const f = String(g.fecha || "").slice(0, 10);
     if (f) porFecha.set(f, (porFecha.get(f) || 0) + 1);
   }
-
-  // Dos pasadas: primero match exacto por fecha-Lima; luego ±1 día, porque el registro
-  // histórico se anotó con fecha UTC (clases nocturnas quedaron corridas un día). Solo
-  // puede emparejar MÁS que antes (la fecha UTC es la Lima o su vecina), nunca menos.
+  /* Dos pasadas: primero match exacto por fecha-Lima; luego ±1 día, porque el registro
+     histórico se anotó con fecha UTC (las clases nocturnas quedaron corridas un día). */
   let n = 0;
   const pasadas = [];
   for (const r of resv){
     if (r.id === excl) continue;
-    if (Date.parse(r.inicio_utc) >= ahora){ n++; continue; }   // futura: aparta crédito
+    if (Date.parse(r.inicio_utc) >= ahora){ n++; continue; }   // futura: aparta credito
     pasadas.push(fechaLimaDe(r.inicio_utc));
   }
   const sinPar = [];
@@ -2492,6 +2484,24 @@ async function reservasUsadasCount(env, alumnoId, ciclo, excluirId){
     if (!emparejada) n++;                                      // dictada y sin anotar: igual consume
   }
   return n;
+}
+/* El de siempre, ahora solo trae las filas y delega la cuenta en la version pura.
+   🐛 15-ago-2026 (portado de Batuta, caso Paola Zapata de Elevate): la consulta de `registro`
+   excluia las filas 'Reprogramo', con el argumento de que su costo lo cobra la cuota y no como
+   clase dictada. La intencion era buena pero dejaba la RESERVA de ese dia huerfana: sin fila con
+   la que emparejarse, contaba igual como clase consumida, asi que reprogramar costaba una clase
+   SIEMPRE, incluso dentro del limite. En MVT habia 7 alumnos expuestos a esto.
+   Ahora si emparejan, y la cuota se sigue cobrando aparte en compute() via `exceso`. */
+async function reservasUsadasCount(env, alumnoId, ciclo, excluirId){
+  const { results: resv } = await env.DB.prepare(
+    "SELECT id, inicio_utc FROM reservas WHERE alumno_id = ?1 AND COALESCE(ciclo,1) = ?2 " +
+    "AND estado IN ('reservada','completada','falta') ORDER BY inicio_utc ASC"
+  ).bind(alumnoId, ciclo).all();
+  if (!resv || !resv.length) return 0;
+  const { results: regs } = await env.DB.prepare(
+    "SELECT fecha FROM registro WHERE alumno_id = ?1 AND COALESCE(ciclo,1) = ?2"
+  ).bind(alumnoId, ciclo).all();
+  return reservasUsadasPuro(resv, regs || [], excluirId);
 }
 
 const DIAS_FIJO = ["Domingo","Lunes","Martes","Miércoles","Jueves","Viernes","Sábado"];
@@ -4803,6 +4813,39 @@ export default {
           const leads    = (await env.DB.prepare("SELECT id,email,marca,fuente,interes,fecha FROM leads ORDER BY fecha DESC, rowid DESC LIMIT 1000").all()).results || [];
           const precios  = await loadPrecios(env);
           const config   = await loadConfig(env);
+          /* ═══ El saldo lo calcula el SERVIDOR, no el panel (15-ago-2026, portado de Batuta) ═══
+             El CRM tenía su propia copia del cálculo (computeAlumno) y esa copia NO contaba las
+             reservas — ni las futuras ni las pasadas sin anotar. O sea que Andrés veía un número
+             y su alumno veía otro: medido el 15-ago, 6 de 26 alumnos divergían, y Yaritza salía
+             15 en el panel contra 9 en su portal. El correcto es el del portal: una reserva
+             futura ya apartó su clase.
+             La cura de fondo es la misma que en Batuta: UN solo cálculo, el del servidor, y el
+             panel solo lo pinta. Se manda `saldo` ya resuelto en cada alumno.
+             Se hace con las filas YA cargadas (registro arriba + una consulta de reservas), sin
+             una consulta por alumno: son 28 hoy, pero el patrón N+1 se paga carísimo después. */
+          try {
+            const { results: resvTodas } = await env.DB.prepare(
+              "SELECT alumno_id, id, inicio_utc, COALESCE(ciclo,1) AS ciclo FROM reservas " +
+              "WHERE estado IN ('reservada','completada','falta') ORDER BY inicio_utc ASC"
+            ).all();
+            const resvPor = new Map(), regsPor = new Map();
+            for (const r of (resvTodas || [])){
+              if (!r.alumno_id) continue;
+              if (!resvPor.has(r.alumno_id)) resvPor.set(r.alumno_id, []);
+              resvPor.get(r.alumno_id).push(r);
+            }
+            for (const g of registro){
+              const aid = g.alumno_id; if (!aid) continue;
+              if (!regsPor.has(aid)) regsPor.set(aid, []);
+              regsPor.get(aid).push(g);
+            }
+            for (const a of alumnos){
+              const ci = Number(a.ciclo) || 1;
+              const rv = (resvPor.get(a.id) || []).filter(r => (Number(r.ciclo) || 1) === ci);
+              const rg = (regsPor.get(a.id) || []).filter(g => (Number(g.ciclo) || 1) === ci);
+              a.saldo = compute(a, rg, precios, reservasUsadasPuro(rv, rg));
+            }
+          } catch (e) { console.error("saldo panel", e && e.message); }   // el CRM cae a su cálculo viejo
           let grupos = [];
           try {
             grupos = ((await env.DB.prepare("SELECT * FROM grupos ORDER BY creado DESC, rowid DESC").all()).results || [])

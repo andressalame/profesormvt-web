@@ -1106,6 +1106,25 @@ el("btnLogoutAdmin").addEventListener("click",function(){
 
 /* ---------- Cálculo (ciclo actual) ---------- */
 function computeAlumno(a){
+  /* ═══ 15-ago-2026: el saldo lo manda el SERVIDOR ═══
+     Esta función tenía su propia copia del cálculo y NO contaba las reservas — ni las futuras
+     ni las pasadas sin anotar. Resultado: Andrés veía un número en su panel y el alumno veía
+     otro en su portal. Medido ese día: 6 de 26 alumnos divergían, y Yaritza salía 15 acá contra
+     9 en su portal. El correcto es el del portal: una reserva futura ya apartó esa clase.
+     Ahora el worker manda `a.saldo` ya resuelto y acá solo se pinta — un único cálculo, así que
+     no pueden volver a separarse. El cálculo de abajo queda SOLO de respaldo, por si el
+     servidor no mandó saldo (worker viejo en caché). */
+  if(a && a.saldo && typeof a.saldo === "object"){
+    var s = a.saldo;
+    var rest = Math.max(0, Number(s.restantes) || 0);
+    var est, cls;
+    if(rest<=0){ est="Completado — renovar"; cls="red"; }
+    else if(rest===1){ est="⚠ Última clase"; cls="amber"; }
+    else { est="Activo"; cls="green"; }
+    return {compradas:Number(s.compradas)||0, usadas:Number(s.usadas)||0, restantes:rest,
+            reprogPermit:Number(s.reprogPermitidas)||0, reprogRest:Number(s.reprogRestantes)||0,
+            estado:est, clase:cls, monto:Number(s.monto)||(db.precios[a.paquete]||0)};
+  }
   var pk = PAQUETES[a.paquete] || {clases:0,reprog:0};
   var ciclo = a.ciclo||1;
   var regs = db.registro.filter(function(r){ return (r.alumnoId||r.alumno_id)===a.id && (r.ciclo||1)===ciclo; });
