@@ -638,6 +638,33 @@ button[data-ayuda],a[data-ayuda],select[data-ayuda],input[data-ayuda],label[data
         <option value="1">Doy todas por asistidas y marco solo al que faltó</option></select></div>
       <div class="cfgrow"><span class="pk">Esperar antes de darla por asistida</span><input id="cfg_asistencia_horas" data-ayuda="Horas después de que termina la clase. Es tu margen para marcar la falta antes de que se cierre sola. Vacío = 6 horas." type="number" min="0" max="168" placeholder="6" /></div>
       <p class="hint" style="margin-top:-4px;">Solo aplica si elegiste el modo automático de arriba.</p>
+
+      <h2 style="margin-top:22px;">Trae a un amigo</h2>
+      <p class="hint">Cada alumno tiene su código en el portal. Cuando alguien se registra con ese código y compra su primer paquete, los dos ganan algo. Todo vacío = como siempre (S/50 de crédito al que trae, nada al amigo).</p>
+      <div class="cfgrow"><span class="pk">¿Qué gana el que trae?</span><select id="cfg_ref_premio_modo" data-ayuda="Las de arriba son descuento: se le aplican cuando vuelva a comprar. La de abajo son clases que puede tomar sin pagar.">
+        <optgroup label="Descuento para su próxima compra">
+          <option value="">Un monto fijo en soles</option>
+          <option value="pct_compra">Un % de lo que pagó su amigo</option>
+          <option value="clases_credito">El precio de X clases</option>
+        </optgroup>
+        <optgroup label="Clases">
+          <option value="clases_saldo">X clases gratis, para tomar cuando quiera</option>
+        </optgroup>
+      </select></div>
+      <div class="cfgrow"><span class="pk" id="lblRefPremioValor">Cuánto</span><input id="cfg_ref_premio_valor" type="number" min="1" max="5000" step="0.01" placeholder="50" /></div>
+      <p class="hint" style="margin-top:-4px;"><b>Un descuento</b> se le aplica solo el día que vuelva a comprar; si nunca vuelve, no te costó nada. <b>Las clases</b> las puede reservar mañana sin pagar: te cuestan hoy y te ocupan un lugar.</p>
+      <div class="cfgrow"><span class="pk">¿Qué gana el amigo nuevo?</span><select id="cfg_ref_desc_modo" data-ayuda="El gancho para que el código se comparta. Se le descuenta solo en su primera compra, una sola vez.">
+        <option value="">Nada</option>
+        <option value="pct">Un % de descuento</option>
+        <option value="soles">Un monto fijo de descuento</option>
+      </select></div>
+      <div class="cfgrow"><span class="pk" id="lblRefDescValor">Cuánto</span><input id="cfg_ref_desc_valor" type="number" min="1" max="5000" step="0.01" placeholder="10" /></div>
+      <div class="cfgrow"><span class="pk">Compra mínima</span><input id="cfg_ref_min_clases" data-ayuda="Es lo que deja fuera a la clase suelta sin tener que nombrarla: pon 4 y solo cuentan los paquetes de 4 para arriba. Vacío = cualquier compra vale." type="number" min="0" max="500" placeholder="sin mínimo" /> <span class="pk" style="flex:0 0 auto;">clases</span></div>
+      <div class="cfgrow"><span class="pk">¿Quién puede usar un código?</span><select id="cfg_ref_solo_nuevos" data-ayuda="La segunda opción evita que un alumno de siempre se registre con el código de un amigo y los dos cobren un premio pensado para gente nueva.">
+        <option value="">Cualquiera que nunca haya comprado</option>
+        <option value="1">Solo alumnos nuevos de verdad (nunca compraron ni asistieron)</option>
+      </select></div>
+      <p class="hint" style="margin-top:-4px;"><b>Siempre, sin configurar:</b> solo cuenta la <b>primera</b> compra (nunca las renovaciones), cada persona usa un código <b>una sola vez</b>, nadie puede usar el suyo propio, y la clase de prueba nunca lo dispara.</p>
       <p class="hint" style="margin-top:-4px;">Con esa anticipación o más, reprogramar libera el horario sin consumir la clase; con menos ya no se puede y una inasistencia cuenta como falta. Vacío = 4 horas.</p>
     </div>
     <div class="group">
@@ -1123,6 +1150,28 @@ el("btnLogoutAdmin").addEventListener("click",function(){
 });
 
 /* ---------- Cálculo (ciclo actual) ---------- */
+/* Las etiquetas y los valores sugeridos SIGUEN al modo elegido. En Batuta el placeholder quedó
+   fijo en "50" (el default de soles) y al pasar a porcentaje se leía como "regala el 50%": lo
+   cazó José mirando la pantalla. Acá nace bien. */
+function pintarEtiquetasRef(){
+  var pm=(el("cfg_ref_premio_modo")||{}).value||"", dm=(el("cfg_ref_desc_modo")||{}).value||"";
+  if(el("lblRefPremioValor")) el("lblRefPremioValor").textContent =
+    pm==="pct_compra" ? "Qué porcentaje" : (pm==="" ? "Cuántos soles" : "Cuántas clases");
+  if(el("lblRefDescValor")) el("lblRefDescValor").textContent =
+    dm==="pct" ? "Qué porcentaje" : (dm==="soles" ? "Cuántos soles" : "Cuánto");
+  if(el("cfg_ref_premio_valor")){
+    el("cfg_ref_premio_valor").placeholder = pm==="pct_compra" ? "10" : (pm==="" ? "50" : "1");
+    el("cfg_ref_premio_valor").max = pm==="pct_compra" ? 100 : (pm==="" ? 5000 : 10);
+  }
+  if(el("cfg_ref_desc_valor")){
+    el("cfg_ref_desc_valor").placeholder = dm==="soles" ? "30" : "10";
+    el("cfg_ref_desc_valor").max = dm==="pct" ? 50 : 5000;
+    el("cfg_ref_desc_valor").disabled = !dm;
+  }
+}
+["cfg_ref_premio_modo","cfg_ref_desc_modo"].forEach(function(id){
+  var n=el(id); if(n){ n.addEventListener("change", pintarEtiquetasRef); }
+});
 function computeAlumno(a){
   /* ═══ 15-ago-2026: el saldo lo manda el SERVIDOR ═══
      Esta función tenía su propia copia del cálculo y NO contaba las reservas — ni las futuras
@@ -1400,6 +1449,10 @@ function renderAjustes(){
   if(el("cfg_saldo_modo")) el("cfg_saldo_modo").value=(db.config&&db.config.saldo_modo)||"";
   if(el("cfg_asistencia_auto")) el("cfg_asistencia_auto").value=(db.config&&db.config.asistencia_auto)||"";
   if(el("cfg_asistencia_horas")) el("cfg_asistencia_horas").value=(db.config&&db.config.asistencia_horas)||"";
+  ["ref_premio_modo","ref_premio_valor","ref_desc_modo","ref_desc_valor","ref_min_clases","ref_solo_nuevos"].forEach(function(k){
+    var n=el("cfg_"+k); if(n) n.value=(db.config&&db.config[k])||"";
+  });
+  try{ pintarEtiquetasRef(); }catch(e){}
   el("cfg_pago_titular").value=(db.config&&db.config.pago_titular)||"";
   el("cfg_google_client_id").value=(db.config&&db.config.google_client_id)||"";
   el("cfg_bcp_cuenta").value=(db.config&&db.config.bcp_cuenta)||"";
@@ -2536,6 +2589,12 @@ el("btnGuardarAjustes").addEventListener("click",function(){
             saldo_modo:(el("cfg_saldo_modo")?el("cfg_saldo_modo").value:""),
             asistencia_auto:(el("cfg_asistencia_auto")?el("cfg_asistencia_auto").value:""),
             asistencia_horas:(el("cfg_asistencia_horas")?el("cfg_asistencia_horas").value.trim():""),
+            ref_premio_modo:(el("cfg_ref_premio_modo")?el("cfg_ref_premio_modo").value:""),
+            ref_premio_valor:(el("cfg_ref_premio_valor")?el("cfg_ref_premio_valor").value.trim():""),
+            ref_desc_modo:(el("cfg_ref_desc_modo")?el("cfg_ref_desc_modo").value:""),
+            ref_desc_valor:(el("cfg_ref_desc_valor")?el("cfg_ref_desc_valor").value.trim():""),
+            ref_min_clases:(el("cfg_ref_min_clases")?el("cfg_ref_min_clases").value.trim():""),
+            ref_solo_nuevos:(el("cfg_ref_solo_nuevos")?el("cfg_ref_solo_nuevos").value:""),
             google_client_id:el("cfg_google_client_id").value.trim(),
             bcp_cuenta:el("cfg_bcp_cuenta").value.trim(),
             bcp_cci:el("cfg_bcp_cci").value.trim(),

@@ -292,6 +292,100 @@ function paqueteExpirado(alumno){
   const ms = Date.parse(v + "T23:59:59Z");         // el día del vence todavía puede canjear
   return Number.isFinite(ms) && Date.now() > ms;
 }
+/* ═══ El programa de referidos, configurable (15-ago-2026, portado de Batuta) ═══
+   Antes era UNO solo y estaba clavado: S/50 de crédito al que refiere y nada al amigo nuevo.
+   Ahora las reglas viven en config y se arman desde Ajustes.
+   ⚠️ REGLA DE ORO: todo vacío = exactamente el comportamiento de siempre.
+
+   ref_premio_modo  qué gana EL QUE REFIERE cuando su amigo hace su primera compra:
+     "soles" (default) monto fijo · "pct_compra" % de lo que pagó el amigo ·
+     "clases_credito" N clases pagadas como crédito · "clases_saldo" N clases de verdad al saldo
+   ref_desc_modo    qué gana EL AMIGO NUEVO en su primera compra: "" (nada) | "pct" | "soles"
+   ref_min_clases   compra mínima (deja fuera a la clase suelta sin nombrarla)
+   ref_solo_nuevos  "1" = solo si el amigo nunca fue alumno (ni compró ni asistió) */
+const REF_PREMIO_MODOS = ["soles", "pct_compra", "clases_credito", "clases_saldo"];
+function refCfg(cfg){
+  const modoRaw = String((cfg && cfg.ref_premio_modo) || "").trim();
+  const premioModo = REF_PREMIO_MODOS.indexOf(modoRaw) !== -1 ? modoRaw : "soles";
+  /* el default de cada modo importa: quien elige "clases" y deja el número vacío quiere 1 clase,
+     no 0 (un premio de cero es un programa muerto y mudo) */
+  const defPremio = { soles: CREDITO_REFERIDO, pct_compra: 10, clases_credito: 1, clases_saldo: 1 }[premioModo];
+  let premioValor = Number((cfg && cfg.ref_premio_valor) || "");
+  if (!Number.isFinite(premioValor) || premioValor <= 0) premioValor = defPremio;
+  if (premioModo === "soles") premioValor = Math.min(5000, premioValor);
+  else if (premioModo === "pct_compra") premioValor = Math.min(100, premioValor);
+  else premioValor = Math.max(1, Math.min(10, Math.floor(premioValor)));
+
+  const descRaw = String((cfg && cfg.ref_desc_modo) || "").trim();
+  const descModo = (descRaw === "pct" || descRaw === "soles") ? descRaw : "";
+  let descValor = Number((cfg && cfg.ref_desc_valor) || "");
+  if (!Number.isFinite(descValor) || descValor <= 0) descValor = descModo === "pct" ? 10 : 0;
+  descValor = descModo === "pct" ? Math.min(50, descValor) : Math.min(5000, descValor);
+
+  let minClases = parseInt((cfg && cfg.ref_min_clases) || "", 10);
+  minClases = (Number.isFinite(minClases) && minClases > 0) ? Math.min(500, minClases) : 0;
+
+  return { premioModo, premioValor, descModo, descValor: descModo ? descValor : 0, minClases,
+           soloNuevos: String((cfg && cfg.ref_solo_nuevos) || "") === "1",
+           hayDescuento: !!(descModo && descValor > 0) };
+}
+/* Precio de UNA clase del paquete comprado. Sirve para traducir "N clases gratis" a soles. */
+function precioPorClase(precio, paquete){
+  const p = Number(precio) || 0;
+  const c = (PAQUETES[paquete] && Number(PAQUETES[paquete].clases)) || 0;
+  if (!p || c < 1) return 0;
+  return Math.round((p / c) * 100) / 100;
+}
+/* ¿Esta compra activa el beneficio? Una sola función para los DOS lados (el descuento del amigo
+   al comprar y el premio del que refirió al confirmarse): si se separaran, tarde o temprano uno
+   cobra y el otro no.
+   `excluirCompraId` existe porque al CONFIRMAR la compra ya está marcada 'confirmada' y contaría
+   como compra previa de sí misma. */
+async function refElegible(env, cu, paquete, rc, excluirCompraId){
+  if (!cu || !String(cu.ref_por || "").trim()) return { ok: false, motivo: "sin codigo" };
+  if (paquete === "Clase de prueba") return { ok: false, motivo: "clase de prueba" };
+  const pk = PAQUETES[paquete] || { clases: 0 };
+  if (rc.minClases > 0 && (Number(pk.clases) || 0) < rc.minClases){
+    return { ok: false, motivo: "no llega al minimo de " + rc.minClases };
+  }
+  /* SOLO la primera compra: esto es lo que deja fuera a las renovaciones */
+  const previas = await env.DB.prepare(
+    "SELECT COUNT(*) AS n FROM compras WHERE cuenta_id = ?1 AND estado = 'confirmada' AND paquete != 'Clase de prueba' AND id != ?2"
+  ).bind(cu.id, excluirCompraId || "").first();
+  if (previas && Number(previas.n)) return { ok: false, motivo: "no es su primera compra" };
+  /* "alumno nuevo que nunca compró NI asistió": la compra ya quedó descartada arriba, falta el
+     que llega con historial en la casa. */
+  if (rc.soloNuevos && cu.alumno_id){
+    const hist = await env.DB.prepare(
+      "SELECT (SELECT COUNT(*) FROM registro WHERE alumno_id = ?1) + (SELECT COUNT(*) FROM reservas WHERE alumno_id = ?1) AS n"
+    ).bind(cu.alumno_id).first().catch(() => null);
+    if (hist && Number(hist.n)) return { ok: false, motivo: "ya era alumno" };
+  }
+  return { ok: true };
+}
+/* Lo que paga el alumno, con sus dos descuentos. En una sola función porque hay varias rutas de
+   compra y cada una calculaba su total a mano: la próxima que se agregue sin esto se olvida del
+   descuento de referido y nadie se entera.
+   Orden: el descuento de referido sale del precio de lista (es comercial) y recién sobre lo que
+   queda se aplica el crédito acumulado (que es plata que el alumno ya tenía a favor). */
+async function calcularCobro(env, cu, paquete, precio, cfg){
+  const base = Math.max(0, Number(precio) || 0);
+  const credito = Math.max(0, Number(cu && cu.credito) || 0);
+  let descRef = 0;
+  try {
+    const rc = refCfg(cfg || (await loadConfig(env)));
+    if (rc.hayDescuento){
+      const el = await refElegible(env, cu, paquete, rc, null);
+      if (el.ok){
+        descRef = rc.descModo === "pct" ? Math.round(base * rc.descValor) / 100 : rc.descValor;
+        descRef = Math.min(base, Math.round(descRef * 100) / 100);
+      }
+    }
+  } catch (e) { descRef = 0; }   // ante la duda se cobra el precio pleno, nunca se regala de mas
+  const descCredito = Math.min(credito, Math.max(0, base - descRef));
+  return { precio: base, descRef, descCredito, credito,
+           monto: Math.max(0, Math.round((base - descRef - descCredito) * 100) / 100) };
+}
 function compute(alumno, regs, precios, reservasUsadas){
   const pk = PAQUETES[alumno.paquete] || { clases: 0, reprog: 0 };
   /* `reservasUsadas` llega de reservasUsadasCount/Puro como {n, futuras} desde el 15-ago-2026.
@@ -379,7 +473,11 @@ async function loadConfig(env){
                  saldo_modo       "" = el saldo baja al RESERVAR · "asistencia" = baja al ASISTIR
                  asistencia_auto  "1" = las clases que ya pasaron se dan por asistidas solas
                  asistencia_horas cuántas horas esperar antes de cerrarlas (vacío = 6) */
-              saldo_modo: "", asistencia_auto: "", asistencia_horas: "" };
+              saldo_modo: "", asistencia_auto: "", asistencia_horas: "",
+              /* Programa de referidos configurable (15-ago-2026, portado de Batuta). Todo vacío
+                 = la regla de siempre: S/50 de crédito al que refiere y nada al amigo nuevo. */
+              ref_premio_modo: "", ref_premio_valor: "", ref_desc_modo: "", ref_desc_valor: "",
+              ref_min_clases: "", ref_solo_nuevos: "" };
               // Los 4 motores nuevos van APAGADOS por defecto (07-jul): tocan correos de alumnos reales.
               // Andrés los enciende poniendo el switch en "1" en la tabla config (comandos en la bitácora del loop).
   for (const row of (results || [])) c[row.clave] = row.valor || "";
@@ -594,6 +692,8 @@ async function confirmarCompra(env, compra){
   const stmts = [];
   let renovado = false;
   let alumnoIdNuevo = null;
+  /* Config del tenant: se carga UNA vez y la usa todo lo de abajo (referidos, avisos). */
+  const cfgConfirm = await loadConfig(env).catch(() => ({}));
   // Plazo para canjear (21-jul-2026, antes "matrícula por mes" de 30d): cada compra confirmada
   // arma un plazo de 60 dias (2 meses) para usar
   // las horas del paquete, tal cual venga (1/semana en Esencial, 2/semana en Intensivo, etc, via
@@ -663,18 +763,59 @@ async function confirmarCompra(env, compra){
   ).bind(cu.id, compra.id).first();
   const esPrimera = !previas || !Number(previas.n);
 
-  // El premio de referido (S/50) se gana con la primera compra de un PAQUETE real, NO con la clase
-  // de prueba S/50 (si no, un referido que solo prueba dispararía S/50 de crédito por una venta de S/50,
-  // y se abriría un loop de auto-referidos baratos). Si hizo prueba y LUEGO compra paquete, ahí sí paga.
-  if (compra.paquete !== "Clase de prueba" && cu.ref_por){
-    const previasReales = await env.DB.prepare(
-      "SELECT COUNT(*) AS n FROM compras WHERE cuenta_id = ?1 AND estado = 'confirmada' AND paquete != 'Clase de prueba' AND id != ?2"
-    ).bind(cu.id, compra.id).first();
-    const esPrimeraReal = !previasReales || !Number(previasReales.n);
-    if (esPrimeraReal){
-      const refidor = await env.DB.prepare("SELECT id FROM cuentas WHERE ref_code = ?1").bind(cu.ref_por).first();
-      if (refidor && refidor.id !== cu.id){
-        stmts.push(env.DB.prepare("UPDATE cuentas SET credito = COALESCE(credito,0) + ?1 WHERE id = ?2").bind(CREDITO_REFERIDO, refidor.id));
+  /* ═══ EL PREMIO DEL QUE REFIRIÓ (15-ago-2026: ahora lo define Ajustes) ═══
+     Antes: S/50 de crédito, siempre. Ahora: lo que Andrés haya armado en Ajustes > Referidos, y
+     solo si la compra pasa TODAS las condiciones (primera compra real, mínimo de clases, y el
+     amigo sin historial previo si así lo pidió). Las condiciones son las MISMAS que le dieron el
+     descuento al amigo al comprar: si una de las dos puntas fallara sola, uno cobraría y el otro
+     no. Sigue sin contar la clase de prueba: si no, un referido que solo prueba dispararía el
+     premio por una venta de S/50 y se abriría un loop de auto-referidos baratos. */
+  if (cu.ref_por){
+    const rcC = refCfg(cfgConfirm);
+    const elC = await refElegible(env, cu, compra.paquete, rcC, compra.id);
+    const refidor = elC.ok
+      ? await env.DB.prepare("SELECT id, alumno_id FROM cuentas WHERE ref_code = ?1").bind(cu.ref_por).first()
+      : null;
+    /* auto-referido NO: quien se registra con su propio código se estaría pagando solo */
+    if (refidor && refidor.id !== cu.id){
+      let creditoPremio = 0, clasesPremio = 0;
+      if (rcC.premioModo === "soles"){
+        creditoPremio = rcC.premioValor;
+      } else if (rcC.premioModo === "pct_compra"){
+        /* sobre lo que el amigo PAGÓ de verdad, no sobre el precio de lista: si usó su crédito o
+           su descuento de bienvenida, esa plata no entró y no se puede repartir */
+        creditoPremio = Math.round(Math.max(0, Number(compra.monto) || 0) * rcC.premioValor) / 100;
+      } else {
+        /* "N clases gratis": al saldo del que refirió (las usa sin comprar nada) o pagadas como
+           crédito al precio de una clase del paquete que acaba de comprar el amigo. */
+        const nClases = Math.max(1, Math.floor(rcC.premioValor));
+        if (rcC.premioModo === "clases_saldo" && refidor.alumno_id){
+          clasesPremio = nClases;
+        } else {
+          const preciosC = await loadPrecios(env).catch(() => ({}));
+          const unit = precioPorClase((preciosC && preciosC[compra.paquete]) || 0, compra.paquete);
+          creditoPremio = Math.round(unit * nClases * 100) / 100;
+          if (!creditoPremio) console.log("referido: premio en clases sin precio por clase", compra.paquete);
+        }
+      }
+      if (creditoPremio > 0){
+        stmts.push(env.DB.prepare("UPDATE cuentas SET credito = COALESCE(credito,0) + ?1 WHERE id = ?2")
+          .bind(creditoPremio, refidor.id));
+      }
+      if (clasesPremio > 0){
+        /* MVT ya tenía su propio bono de cortesía por ciclo (bono_clases/bono_ciclo): el premio
+           se abona AHÍ en vez de inventar un campo nuevo. Se acumula si ya tenía bono de este
+           ciclo; si el que tenía era de un ciclo viejo ya estaba inerte y se pisa. */
+        try {
+          const alR = await env.DB.prepare("SELECT ciclo, COALESCE(bono_clases,0) AS bc, COALESCE(bono_ciclo,0) AS bcl FROM alumnos WHERE id = ?1")
+            .bind(refidor.alumno_id).first();
+          if (alR){
+            const cicloR = Number(alR.ciclo) || 1;
+            const acum = (Number(alR.bcl) === cicloR ? Math.max(0, Number(alR.bc) || 0) : 0) + clasesPremio;
+            stmts.push(env.DB.prepare("UPDATE alumnos SET bono_clases = ?1, bono_ciclo = ?2 WHERE id = ?3")
+              .bind(acum, cicloR, refidor.alumno_id));
+          }
+        } catch (e) { console.error("referido: no se pudo abonar la clase de regalo", e); }
       }
     }
   }
@@ -3876,8 +4017,8 @@ export default {
           await env.DB.prepare("DELETE FROM compras WHERE cuenta_id = ?1 AND estado = 'iniciada'").bind(cu.id).run();
           const compraIdPd = crypto.randomUUID();
           await env.DB.prepare(
-            "INSERT INTO compras (id,cuenta_id,curso,paquete,monto,descuento,op_numero,estado,fecha,metodo,comprobante,slot_deseado) VALUES (?1,?2,?3,?4,?5,?6,'','iniciada',?7,'Tarjeta (Mercado Pago)','','')"
-          ).bind(compraIdPd, cu.id, cursoPd, paquete, montoPd, descuentoPd, hoy()).run();
+            "INSERT INTO compras (id,cuenta_id,curso,paquete,monto,descuento,desc_ref,op_numero,estado,fecha,metodo,comprobante,slot_deseado) VALUES (?1,?2,?3,?4,?5,?6,?8,'','iniciada',?7,'Tarjeta (Mercado Pago)','','')"
+          ).bind(compraIdPd, cu.id, cursoPd, paquete, montoPd, descuentoPd, hoy(), 0).run();   // desc_ref 0: el link de cobro directo no pasa por el flujo de referidos
           const nombrePaquetePd = NOMBRES_PAQUETE[paquete] || paquete;
           let mpDataPd = {};
           try {
@@ -3922,8 +4063,8 @@ export default {
           } catch (e) { comprobanteKeyPd = ""; }
         }
         await env.DB.prepare(
-          "INSERT INTO compras (id,cuenta_id,curso,paquete,monto,descuento,op_numero,estado,fecha,metodo,comprobante,slot_deseado) VALUES (?1,?2,?3,?4,?5,?6,?7,'pendiente',?8,?9,?10,'')"
-        ).bind(crypto.randomUUID(), cu.id, cursoPd, paquete, montoPd, descuentoPd, String(b.op_numero || "").trim().slice(0, 40), hoy(), metodo, comprobanteKeyPd).run();
+          "INSERT INTO compras (id,cuenta_id,curso,paquete,monto,descuento,desc_ref,op_numero,estado,fecha,metodo,comprobante,slot_deseado) VALUES (?1,?2,?3,?4,?5,?6,?11,?7,'pendiente',?8,?9,?10,'')"
+        ).bind(crypto.randomUUID(), cu.id, cursoPd, paquete, montoPd, descuentoPd, String(b.op_numero || "").trim().slice(0, 40), hoy(), metodo, comprobanteKeyPd, 0).run();   // desc_ref 0: idem
         /* FIRMADO con alcance "c" y 30 días (11-ago-2026): Andrés abre este link desde su
            correo, donde el navegador no manda ningún token. Sin firma se quedaba fuera de
            la única vista que tiene de la captura. */
@@ -3970,9 +4111,14 @@ export default {
         if (ya) return json({ error: "Ya tienes un pago en verificación. Te confirmo apenas lo vea." }, 409);
 
         const precio = precios[paquete] || 0;
-        const credito = Number(cu.credito) || 0;
-        const descuento = Math.min(credito, precio);   // snapshot; se consume recién al CONFIRMAR
-        const monto = Math.max(0, precio - descuento);
+        /* un solo cálculo para las dos rebajas posibles (descuento de bienvenida por venir
+           referido + crédito acumulado). El `descuento` sigue siendo SOLO el crédito, porque es
+           lo que al confirmar se le resta del saldo: meter ahí la rebaja de la casa le vaciaría
+           el crédito por algo que no salió de él. */
+        const cobP = await calcularCobro(env, cu, paquete, precio);
+        const descuento = cobP.descCredito;   // snapshot; se consume recién al CONFIRMAR
+        const descRef = cobP.descRef;
+        const monto = cobP.monto;
 
         let comprobanteKey = "";
         if (comprobante) {
@@ -3987,8 +4133,8 @@ export default {
         }
 
         await env.DB.prepare(
-          "INSERT INTO compras (id,cuenta_id,curso,paquete,monto,descuento,op_numero,estado,fecha,metodo,comprobante,slot_deseado) VALUES (?1,?2,?3,?4,?5,?6,?7,'pendiente',?8,?9,?10,?11)"
-        ).bind(crypto.randomUUID(), cu.id, curso, paquete, monto, descuento, op, hoy(), metodo, comprobanteKey, slotDeseado).run();
+          "INSERT INTO compras (id,cuenta_id,curso,paquete,monto,descuento,desc_ref,op_numero,estado,fecha,metodo,comprobante,slot_deseado) VALUES (?1,?2,?3,?4,?5,?6,?12,?7,'pendiente',?8,?9,?10,?11)"
+        ).bind(crypto.randomUUID(), cu.id, curso, paquete, monto, descuento, op, hoy(), metodo, comprobanteKey, slotDeseado, descRef).run();
 
         /* mismo criterio que arriba: firma "c", 30 días, para el correo de aviso a Andrés */
         const comprobanteUrl = comprobanteKey
@@ -4027,15 +4173,14 @@ export default {
 
         const precios = await loadPrecios(env);
         const precio = precios[paquete] || 0;
-        const credito = Number(cu.credito) || 0;
-        const descuento = Math.min(credito, precio);
-        const monto = Math.max(0, precio - descuento);
+        const cobT = await calcularCobro(env, cu, paquete, precio);
+        const descuento = cobT.descCredito, descRef = cobT.descRef, monto = cobT.monto;
         if (monto < 1) return json({ error: "Tu crédito cubre el paquete completo. Escríbeme por WhatsApp para activarlo." }, 400);
 
         const compraId = crypto.randomUUID();
         await env.DB.prepare(
-          "INSERT INTO compras (id,cuenta_id,curso,paquete,monto,descuento,op_numero,estado,fecha,metodo,comprobante,slot_deseado) VALUES (?1,?2,?3,?4,?5,?6,'','iniciada',?7,?8,'',?9)"
-        ).bind(compraId, cu.id, curso, paquete, monto, descuento, hoy(), "Tarjeta (Mercado Pago)", slotDeseado).run();
+          "INSERT INTO compras (id,cuenta_id,curso,paquete,monto,descuento,desc_ref,op_numero,estado,fecha,metodo,comprobante,slot_deseado) VALUES (?1,?2,?3,?4,?5,?6,?10,'','iniciada',?7,?8,'',?9)"
+        ).bind(compraId, cu.id, curso, paquete, monto, descuento, hoy(), "Tarjeta (Mercado Pago)", slotDeseado, descRef).run();
 
         const nombrePaquete = NOMBRES_PAQUETE[paquete] || paquete;
         const pref = {
@@ -5156,7 +5301,9 @@ export default {
                              tiene que entrar ACÁ además del panel, o se descarta en silencio y
                              el dueño ve "guardado" sin nada guardado (el bug de saldo_modo que
                              Batuta pagó el 13-ago). */
-                          "saldo_modo", "asistencia_auto", "asistencia_horas"];
+                          "saldo_modo", "asistencia_auto", "asistencia_horas",
+                          "ref_premio_modo", "ref_premio_valor", "ref_desc_modo", "ref_desc_valor",
+                          "ref_min_clases", "ref_solo_nuevos"];
           const stmts = [];
           for (const k of claves){
             if (k in b){
