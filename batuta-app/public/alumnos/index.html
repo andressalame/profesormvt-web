@@ -1926,8 +1926,9 @@ function textoPremioRef(){
   var r = (ME && ME.referidos) || {};
   var v = Number(r.premioValor) || 0;
   if(r.premioModo === "pct_compra") return "<strong style=\"color:var(--cream)\">"+v+"% de lo que pague</strong>, como descuento para tu próxima compra";
-  if(r.premioModo === "clases_saldo") return "<strong style=\"color:var(--cream)\">"+v+" clase"+(v===1?"":"s")+" gratis</strong>, directo a tu saldo";
-  if(r.premioModo === "clases_credito") return "<strong style=\"color:var(--cream)\">"+v+" clase"+(v===1?"":"s")+" gratis</strong>, que se te abonan como descuento para tu próxima compra";
+  /* al alumno se le dice qué recibe y CUÁNDO lo puede usar, que es lo único que le importa */
+  if(r.premioModo === "clases_saldo") return "<strong style=\"color:var(--cream)\">"+v+" clase"+(v===1?"":"s")+" gratis</strong>, que puedes reservar cuando quieras sin pagar nada";
+  if(r.premioModo === "clases_credito") return "<strong style=\"color:var(--cream)\">lo que cuesta"+(v===1?"":"n")+" "+v+" clase"+(v===1?"":"s")+"</strong> a favor, para descontar de tu próxima compra";
   return "<strong style=\"color:var(--cream)\">S/"+(v||MARCA.referidoSoles)+" de descuento</strong> para tu próxima compra";
 }
 function textoDescuentoRef(){

@@ -762,6 +762,28 @@
    (los 2 pasos donde se trabaron las 3 academias fundadoras). */
 .nav .tab .dot.pulse{width:8px;height:8px;min-width:8px;padding:0;border-radius:999px;background:var(--amber,#d99a3c);animation:bt-pulse 1.6s ease-in-out infinite;}
 @keyframes bt-pulse{0%,100%{opacity:.45;transform:scale(.9);}50%{opacity:1;transform:scale(1.15);}}
+
+/* ====== AYUDA AL PASAR EL MOUSE (15-ago-2026, pedido de Andrés) ======
+   Cualquier elemento con el atributo data-ayuda muestra su explicación al pasarle el mouse.
+   Por qué no el `title` nativo de HTML: tarda ~1s en salir, no se puede estilar, se corta feo
+   y en celular NO EXISTE — y la mitad de los dueños entra desde el celular.
+   Este va con retardo corto, se ve como el panel, y en pantallas táctiles se abre al tocar.
+   El texto se pinta desde JS (ver ayudaFlotante), no con CSS ::after, para poder reposicionarlo
+   cuando el elemento está pegado a un borde. */
+#btTip{position:fixed;z-index:9999;max-width:320px;background:#000;color:var(--cream);
+  border:1px solid var(--line);border-radius:6px;padding:9px 11px;font-size:12.5px;line-height:1.45;
+  box-shadow:0 8px 26px rgba(0,0,0,.55);pointer-events:none;opacity:0;transform:translateY(4px);
+  transition:opacity .12s,transform .12s;}
+#btTip.on{opacity:1;transform:translateY(0);}
+#btTip b{color:var(--accent);}
+/* la marquita "?" que se le puede poner a un rótulo para que se note que hay ayuda */
+.ayuda-i{display:inline-flex;align-items:center;justify-content:center;width:15px;height:15px;
+  border:1px solid var(--line);border-radius:999px;font-size:10px;color:var(--muted);
+  margin-left:5px;cursor:help;vertical-align:middle;flex:0 0 auto;}
+.ayuda-i:hover{color:var(--accent);border-color:var(--accent);}
+[data-ayuda]{cursor:help;}
+/* los controles no cambian de cursor: ahí manda su propia función, no la ayuda */
+button[data-ayuda],a[data-ayuda],select[data-ayuda],input[data-ayuda],label[data-ayuda]{cursor:inherit;}
 </style>
 </head>
 <body>
@@ -792,28 +814,28 @@
       <button class="navbig" type="button" data-nav="academia" data-tabgo="academia"><span class="nb-ico"><svg viewBox="0 0 24 24"><path d="M3 21h18"/><path d="M5 21V7l7-4 7 4v14"/><path d="M9 21v-6h6v6"/></svg></span>Mi academia</button>
       <!-- tabs reales, ocultos: NO borrar ninguno (data-ira/buscador dependen de ellos) -->
       <div id="tabsLegacy" hidden>
-        <button class="tab active" data-tab="resumen">Hoy</button>
-        <button class="tab" data-tab="alumnos">Alumnos</button>
-        <button class="tab" data-tab="grupos">Grupos</button>
-        <button class="tab solo-dueno" data-tab="profesores">Profesores</button>
+        <button class="tab active" data-tab="resumen" data-ayuda="Lo que tienes que mirar hoy: quién viene a clase, quién te debe y qué está pendiente.">Hoy</button>
+        <button class="tab" data-tab="alumnos" data-ayuda="Tu lista de alumnos. Acá los das de alta, les cargas su plan y ves sus clases.">Alumnos</button>
+        <button class="tab" data-tab="grupos" data-ayuda="Grupos de alumnos que llevan la misma clase.">Grupos</button>
+        <button class="tab solo-dueno" data-tab="profesores" data-ayuda="Tu equipo. Acá los invitas, les asignas alumnos y ves cuánto les toca cobrar.">Profesores</button>
         <button class="tab" data-tab="cuentas">Cuentas de alumnos</button>
-        <button class="tab solo-dueno" data-tab="leads">Interesados<span class="dot hidden" id="dotLeads">0</span></button>
-        <button class="tab" data-tab="registro">Asistencia</button>
-        <button class="tab" data-tab="agenda">Mis clases</button>
+        <button class="tab solo-dueno" data-tab="leads" data-ayuda="Gente que preguntó por tus clases pero todavía no compra. Acá los sigues hasta que se inscriban.">Interesados<span class="dot hidden" id="dotLeads">0</span></button>
+        <button class="tab" data-tab="registro" data-ayuda="Marcar quién vino y quién faltó. De acá sale el descuento de clases de cada alumno.">Asistencia</button>
+        <button class="tab" data-tab="agenda" data-ayuda="Tus horarios y las clases de cada día. Acá abres cupos para que reserven.">Mis clases</button>
         <button class="tab" data-tab="chat">Chat</button>
-        <button class="tab" data-tab="pagos">Pagos<span class="dot hidden" id="dotPagos">0</span></button>
-        <button class="tab solo-dueno" data-tab="caja">Caja</button>
-        <button class="tab" data-tab="reportes">Reportes</button>
-        <button class="tab" data-tab="recursos">Para tus alumnos</button>
-        <button class="tab" data-tab="ejercicios">Tu biblioteca</button>
-        <button class="tab" data-tab="academia">Mi academia</button>
-        <button class="tab solo-dueno" data-tab="web">Mi web</button>
-        <button class="tab solo-dueno" data-tab="perfil">Perfil</button>
-        <button class="tab solo-dueno" data-tab="ajustes">Ajustes</button>
-        <button class="tab solo-dueno" data-tab="correos">Correos a mis alumnos</button>
-        <button class="tab solo-dueno" data-tab="campanas">Campañas</button>
-        <button class="tab solo-dueno" data-tab="servicios">Servicios</button>
-        <button class="tab" data-tab="feedback">Ideas y errores</button>
+        <button class="tab" data-tab="pagos" data-ayuda="Los pagos que te hicieron tus alumnos. Acá confirmas los que llegaron por Yape o transferencia.">Pagos<span class="dot hidden" id="dotPagos">0</span></button>
+        <button class="tab solo-dueno" data-tab="caja" data-ayuda="Lo que entra y lo que sale de tu academia, mes a mes.">Caja</button>
+        <button class="tab" data-tab="reportes" data-ayuda="Tus números: cuánto facturas, cuántos alumnos activos tienes y quién se está enfriando.">Reportes</button>
+        <button class="tab" data-tab="recursos" data-ayuda="Material que compartes con tus alumnos: PDFs, videos, links. Lo ven desde su portal.">Para tus alumnos</button>
+        <button class="tab" data-tab="ejercicios" data-ayuda="Tu biblioteca privada de ejercicios y material de clase. Esto NO lo ven los alumnos.">Tu biblioteca</button>
+        <button class="tab" data-tab="academia" data-ayuda="Los datos de tu academia: tus clases, tus planes y tus precios.">Mi academia</button>
+        <button class="tab solo-dueno" data-tab="web" data-ayuda="Tu página web pública, la que ve alguien que te busca en Google.">Mi web</button>
+        <button class="tab solo-dueno" data-tab="perfil" data-ayuda="Tus datos y tu plan de Batuta.">Perfil</button>
+        <button class="tab solo-dueno" data-tab="ajustes" data-ayuda="Todo lo que se puede configurar: cómo te pagan, cómo reservan, tus correos automáticos.">Ajustes</button>
+        <button class="tab solo-dueno" data-tab="correos" data-ayuda="Escribirle por correo a tus alumnos: una promoción, una novedad o un "vuelve" a los que se enfriaron.">Correos a mis alumnos</button>
+        <button class="tab solo-dueno" data-tab="campanas" data-ayuda="Anuncios pagados en Facebook e Instagram para conseguir alumnos nuevos.">Campañas</button>
+        <button class="tab solo-dueno" data-tab="servicios" data-ayuda="Si prefieres que nosotros te lo dejemos andando en vez de hacerlo tú.">Servicios</button>
+        <button class="tab" data-tab="feedback" data-ayuda="Cuéntanos qué te falta o qué se rompió. Tu primer aporte del mes te suma 7 días gratis.">Ideas y errores</button>
       </div>
     </nav>
     <div class="sb-tools">
@@ -1037,10 +1059,10 @@
     </div>
     <div class="card" style="padding:14px 16px;margin-bottom:16px;">
       <h3 style="margin:0 0 10px;font-size:14px;">Tu mensaje</h3>
-      <div class="cfgrow"><span class="pk">Asunto</span><input id="corrAsunto" type="text" maxlength="120" placeholder="Ej. 3 cupos libres para el taller del sábado" /></div>
+      <div class="cfgrow"><span class="pk">Asunto</span><input id="corrAsunto" data-ayuda="Lo que la persona ve en su bandeja antes de abrir. Al enviarse le agregamos &quot;PUBLICIDAD:&quot; adelante, que lo exige la ley peruana para correos comerciales." type="text" maxlength="120" placeholder="Ej. 3 cupos libres para el taller del sábado" /></div>
       <p class="hint" style="margin:-2px 0 10px;">Al enviarse, el asunto sale como <b>"PUBLICIDAD: tu asunto"</b>. Lo exige la ley peruana para los correos comerciales y no se puede quitar.</p>
       <label class="pk" style="display:block;margin-bottom:4px;">Mensaje</label>
-      <textarea id="corrCuerpo" rows="8" maxlength="5000" placeholder="Hola {alumno},&#10;&#10;Escribe acá tu mensaje. Deja una línea en blanco para separar párrafos.&#10;&#10;Te esperamos."></textarea>
+      <textarea id="corrCuerpo" data-ayuda="Tu mensaje. Deja una línea en blanco para separar párrafos. Puedes escribir {alumno} y sale su nombre." rows="8" maxlength="5000" placeholder="Hola {alumno},&#10;&#10;Escribe acá tu mensaje. Deja una línea en blanco para separar párrafos.&#10;&#10;Te esperamos."></textarea>
       <p class="hint" style="margin:6px 0 0;">Puedes usar <b>{alumno}</b> (su nombre) y <b>{academia}</b>. Abajo de tu mensaje se agrega solo el pie de ley con tus datos y el link para darse de baja.</p>
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;align-items:center;">
         <button class="btn" id="btnCorrEnviar">Enviar campaña</button>
@@ -1531,7 +1553,7 @@
       <p class="hint" style="margin-top:-4px;">Se guarda con el botón <b>Guardar ajustes</b> del final de la página.</p>
       <!-- Dirección (15-ago-2026): la pide la Ley 28493 art. 5.b en cada correo comercial, así
            que sin esto el módulo de Correos no deja crear campañas. -->
-      <div class="cfgrow"><span class="pk">Dirección de tu academia</span><input id="cfg_direccion_fiscal" type="text" maxlength="160" placeholder="Av. Ejemplo 123, Miraflores, Lima" /></div>
+      <div class="cfgrow"><span class="pk">Dirección de tu academia</span><input id="cfg_direccion_fiscal" data-ayuda="La dirección de tu academia. Hace falta para poder mandar Correos a tus alumnos: la ley exige que cada correo publicitario lleve el domicilio de quien lo envía." type="text" maxlength="160" placeholder="Av. Ejemplo 123, Miraflores, Lima" /></div>
       <p class="hint" style="margin-top:-4px;">Hace falta para poder enviar <b>Correos a mis alumnos</b>: la ley exige que cada correo publicitario lleve el domicilio de quien lo manda. Sale solo en el pie de esos correos.</p>
     </div>
     <div class="group" data-aj="academia">
@@ -1613,16 +1635,16 @@
       <p class="hint">Las reglas del portal. Tus horarios y el aforo de cada franja se arman en <b>Clases → Agenda</b>.</p>
       <div class="cfgrow"><span class="pk">Cupo por horario (general)</span><input id="cfg_agenda_cupo" type="number" min="1" max="60" placeholder="1" /></div>
       <p class="hint" style="margin-top:-4px;">Es el último recurso: manda el aforo que le pongas a la franja en la Agenda, luego el aforo del tipo de clase, y recién este. 1 = clases individuales.</p>
-      <div class="cfgrow"><span class="pk">Anticipación mínima para reservar</span><input id="cfg_anticipacion_h" type="number" min="0" max="168" placeholder="12" /></div>
+      <div class="cfgrow"><span class="pk">Anticipación mínima para reservar</span><input id="cfg_anticipacion_h" data-ayuda="Con cuánta anticipación te tienen que reservar. 0 = pueden reservar la clase de dentro de un rato." type="number" min="0" max="168" placeholder="12" /></div>
       <p class="hint" style="margin-top:-4px;">Horas de aviso que exiges. <b>0</b> = pueden reservar la clase de dentro de un rato (lo normal en un estudio). Vacío = 12 horas.</p>
       <div class="cfgrow"><span class="pk">¿El alumno reprograma solo?</span><select id="cfg_reprog_activo"><option value="">Sí, desde su portal</option><option value="0">No, solo a través del profesor</option></select></div>
-      <div class="cfgrow"><span class="pk">Horas mínimas para reprogramar</span><input id="cfg_reprog_min_h" type="number" min="1" max="72" placeholder="4" /></div>
+      <div class="cfgrow"><span class="pk">Horas mínimas para reprogramar</span><input id="cfg_reprog_min_h" data-ayuda="Hasta cuántas horas antes puede mover su clase sin perderla. Con menos tiempo, ya no se puede." type="number" min="1" max="72" placeholder="4" /></div>
       <p class="hint" style="margin-top:-4px;">Con esa anticipación o más, reprogramar libera el horario sin consumir la clase; con menos ya no se puede. Vacío = 4 horas.</p>
-      <div class="cfgrow"><span class="pk">Horario fijo semanal en el portal</span><select id="cfg_portal_fija_off"><option value="">Encendido — pueden apartar el mismo horario cada semana</option><option value="1">Apagado — solo reservan clase por clase</option></select></div>
+      <div class="cfgrow"><span class="pk">Horario fijo semanal en el portal</span><select id="cfg_portal_fija_off" data-ayuda="El &quot;horario fijo semanal&quot; es para el alumno que viene siempre el mismo día y hora. Apágalo si tus clases son grupales y nadie tiene horario fijo."><option value="">Encendido — pueden apartar el mismo horario cada semana</option><option value="1">Apagado — solo reservan clase por clase</option></select></div>
       <p class="hint" style="margin-top:-4px;">Apágalo si tus alumnos no tienen horario fijo (típico en estudios con clases grupales): el portal solo ofrecerá reservar clase por clase.</p>
-      <div class="cfgrow"><span class="pk">Lista de espera al liberarse un cupo</span><select id="cfg_espera_auto"><option value="">Avisar al primero para que reserve</option><option value="1">Reservarle la clase automáticamente al primero</option></select></div>
+      <div class="cfgrow"><span class="pk">Lista de espera al liberarse un cupo</span><select id="cfg_espera_auto" data-ayuda="Cuando alguien cancela y queda un cupo libre: o le avisas al primero de la cola, o se lo reservas automáticamente."><option value="">Avisar al primero para que reserve</option><option value="1">Reservarle la clase automáticamente al primero</option></select></div>
       <p class="hint" style="margin-top:-4px;">Con el modo automático, apenas alguien cancela, el primero de la cola queda <b>dentro</b> de la clase (si su plan tiene saldo) y le llega el aviso por correo y notificación. Si su plan no alcanza, se le avisa como siempre.</p>
-      <div class="cfgrow"><span class="pk">Nombres de profesores en el portal</span><select id="cfg_portal_sin_profe"><option value="">Mostrarlos ("Tu clase con Ana")</option><option value="1">Ocultarlos ("Tu clase en tu academia")</option></select></div>
+      <div class="cfgrow"><span class="pk">Nombres de profesores en el portal</span><select id="cfg_portal_sin_profe" data-ayuda="Si tus clases son grupales y nadie tiene profesor fijo, mejor que el portal no diga nombres de profesores."><option value="">Mostrarlos ("Tu clase con Ana")</option><option value="1">Ocultarlos ("Tu clase en tu academia")</option></select></div>
       <p class="hint" style="margin-top:-4px;">Ocúltalos si tus clases son grupales y ningún alumno tiene profesor fijo.</p>
       <div class="cfgrow"><span class="pk">Chat del portal</span><select id="cfg_portal_chat_off"><option value="">Encendido</option><option value="1">Apagado — botón directo a tu WhatsApp</option></select></div>
       <p class="hint" style="margin-top:-4px;">Apagado: en vez del chat, el alumno ve un botón que abre tu WhatsApp (el número de tu Perfil).</p>
@@ -1630,28 +1652,28 @@
       <p class="hint" style="margin-top:-4px;">Correo automático al alumno 24 horas y 1 hora antes de su reserva. Menos faltas sin que muevas un dedo.</p>
       <div class="cfgrow"><span class="pk">Recordatorio de renovación</span><select id="cfg_recordatorio_renovacion"><option value="">Activado</option><option value="off">Apagado</option></select></div>
       <p class="hint" style="margin-top:-4px;">Correo automático cuando el paquete del alumno está por vencer (o venció), con link para renovar desde su portal.</p>
-      <div class="cfgrow"><span class="pk">Aviso de plan activo</span><select id="cfg_aviso_plan_activo"><option value="">Activado</option><option value="off">Apagado</option></select></div>
+      <div class="cfgrow"><span class="pk">Aviso de plan activo</span><select id="cfg_aviso_plan_activo" data-ayuda="Cuando le cargas o le renuevas el plan a un alumno desde su ficha, le llega un correo avisándole. Útil si te pagó por Yape fuera de la app."><option value="">Activado</option><option value="off">Apagado</option></select></div>
       <p class="hint" style="margin-top:-4px;">Cuando le cargas o le renuevas el plan a un alumno <b>desde su ficha</b> (típico si te pagó por Yape fuera de la app), le llega un correo con su plan y el link a su portal. El que paga por internet ya recibe el suyo al confirmarse el pago.</p>
 
       <h2 style="margin-top:22px;">Asistencia</h2>
-      <div class="cfgrow"><span class="pk">Pedir fecha de nacimiento al comprar</span><select id="cfg_campos_alumno">
+      <div class="cfgrow"><span class="pk">Pedir fecha de nacimiento al comprar</span><select id="cfg_campos_alumno" data-ayuda="Solo si de verdad la usas. Es un dato personal, y si el alumno resulta menor de 14 años el formulario le exige al que compra declarar que es su apoderado.">
           <option value="">No pedirla</option>
           <option value="nacimiento">Sí, pedirla en el formulario de compra</option>
         </select></div>
       <p class="hint" style="margin-top:-4px;">Solo si de verdad la usas (cumpleaños, categorías por edad). Es un <b>dato personal</b>: si el alumno resulta menor de 14 años, el formulario le exige a quien compra declarar que es su apoderado, y sin esa marca no deja inscribirlo. Tú eres el responsable de esos datos; Batuta solo los guarda por encargo tuyo. El <b>apellido</b> se pide siempre, opcional.</p>
-      <div class="cfgrow"><span class="pk">¿Cuándo se le descuenta la clase?</span><select id="cfg_saldo_modo">
+      <div class="cfgrow"><span class="pk">¿Cuándo se le descuenta la clase?</span><select id="cfg_saldo_modo" data-ayuda="Cuándo le baja el número de clases al alumno. &quot;Cuando reserva&quot; = apenas aparta su cupo. &quot;Cuando asiste&quot; = recién el día que viene, como Punchpass. Es solo cómo se VE: nadie puede reservar más clases de las que compró.">
         <option value="">Cuando reserva</option>
         <option value="asistencia">Cuando asiste</option></select></div>
       <p class="hint" style="margin-top:-4px;"><b>Es solo cómo se ve el saldo.</b> Con <b>cuando reserva</b>, al alumno que aparta su semana le baja el número de una vez. Con <b>cuando asiste</b> el número no se mueve hasta que va a la clase, que es como funcionan Punchpass y la mayoría de estudios; abajo del saldo le decimos cuántas tiene apartadas. En los dos casos la reserva le guarda el cupo igual y <b>nadie puede reservar más clases de las que compró</b>.</p>
-      <div class="cfgrow"><span class="pk">¿Cómo se marca la asistencia?</span><select id="cfg_asistencia_auto">
+      <div class="cfgrow"><span class="pk">¿Cómo se marca la asistencia?</span><select id="cfg_asistencia_auto" data-ayuda="Si lo dejas en automático, las clases que ya pasaron se dan por asistidas solas y tú solo marcas al que faltó. Es lo que hace la mayoría de estudios.">
         <option value="">Una por una, a mano</option>
         <option value="1">Doy todas por asistidas y marco solo al que faltó</option></select></div>
       <p class="hint" style="margin-top:-4px;">La segunda opción es la de la mayoría de estudios: las clases que ya pasaron se dan por asistidas solas y tú solo marcas la inasistencia del que no vino.</p>
-      <div class="cfgrow"><span class="pk">Esperar antes de darla por asistida</span><input id="cfg_asistencia_horas" type="number" min="0" max="168" placeholder="6" /></div>
+      <div class="cfgrow"><span class="pk">Esperar antes de darla por asistida</span><input id="cfg_asistencia_horas" data-ayuda="Cuánto esperamos antes de dar la clase por asistida. Es tu margen para marcar la falta. Vacío = 6 horas." type="number" min="0" max="168" placeholder="6" /></div>
       <p class="hint" style="margin-top:-4px;">Horas después de que termina la clase. Es tu margen para marcar la falta antes de que se cierre sola. Vacío = 6 horas.</p>
 
       <h2 style="margin-top:22px;">Planes que nunca se usaron</h2>
-      <div class="cfgrow"><span class="pk">Caducan si no arrancan en</span><input id="cfg_caduca_meses" type="number" min="0" max="60" placeholder="nunca" /> <span class="pk" style="flex:0 0 auto;">meses</span></div>
+      <div class="cfgrow"><span class="pk">Caducan si no arrancan en</span><input id="cfg_caduca_meses" data-ayuda="Para el alumno que compra y nunca viene. Si no arranca en ese plazo, se le apaga el saldo. No se borra nada: si renueva, revive." type="number" min="0" max="60" placeholder="nunca" /> <span class="pk" style="flex:0 0 auto;">meses</span></div>
       <p class="hint" style="margin-top:-4px;">Para el que compra y nunca viene. Solo aplica a los planes que cuentan <b>desde la primera clase</b> (los que cuentan desde la compra ya vencen solos). Vacío o 0 = no caducan nunca. El alumno y su historial no se borran: se le apaga el saldo, y renovar lo revive.</p>
     </div>
 
@@ -1678,7 +1700,7 @@
       <div class="cfgrow"><span class="pk">Crypto wallet</span><input id="cfg_crypto_wallet" type="text" placeholder="T..." /></div>
       <p class="hint" style="margin-top:-4px;">Salen en el portal como métodos de pago al comprar.</p>
       <h2 style="margin-top:22px;">Mercado Pago: qué acepta</h2>
-      <div class="cfgrow"><span class="pk">Métodos dentro de Mercado Pago</span><select id="cfg_mp_solo_tarjeta"><option value="">Tarjeta y Yape</option><option value="1">Solo tarjeta</option></select></div>
+      <div class="cfgrow"><span class="pk">Métodos dentro de Mercado Pago</span><select id="cfg_mp_solo_tarjeta" data-ayuda="Si el alumno paga con Yape DENTRO de Mercado Pago, MP te cobra comisión igual. Con &quot;solo tarjeta&quot;, el que elige Yape te paga directo a tu número, sin comisión."><option value="">Tarjeta y Yape</option><option value="1">Solo tarjeta</option></select></div>
       <p class="hint" style="margin-top:-4px;">Si el alumno paga con Yape <b>dentro</b> de Mercado Pago, MP te cobra su comisión igual. Con <b>"Solo tarjeta"</b>, el que elige Yape/Plin paga directo a tu número (sin comisión) y Mercado Pago queda solo para tarjetas.</p>
     </div>
     <div class="group" data-aj="cobros">
@@ -1700,24 +1722,25 @@
       <div id="refResumen" class="hint" style="margin:12px 0;padding:11px 13px;border:1px solid var(--line,#2a2a2a);border-radius:8px;"></div>
 
       <h2 style="margin-top:22px;">El que trae al amigo</h2>
-      <div class="cfgrow"><span class="pk">¿Qué gana?</span><select id="cfg_ref_premio_modo">
-        <option value="">Un monto fijo de descuento</option>
-        <option value="pct_compra">Un % de lo que pagó su amigo, como descuento</option>
-        <option value="clases_credito">Clases gratis, pagadas como descuento</option>
-        <option value="clases_saldo">Clases gratis de verdad, a su saldo</option>
+      <!-- 15-ago-2026, 2ª pasada. Los nombres anteriores ("pagadas como descuento" / "de verdad,
+           a su saldo") eran jerga nuestra: ni José ni Andrés los entendieron. El arreglo no fue
+           explicarlos mejor, fue RENOMBRARLOS. Ahora cada opción empieza diciendo QUÉ recibe la
+           alumna —plata o clases— porque esa es la única diferencia que le importa al dueño; lo
+           demás es cómo se calcula el monto. -->
+      <div class="cfgrow"><span class="pk">¿Qué gana?</span><select id="cfg_ref_premio_modo" data-ayuda="Qué se lleva tu alumno por traerte a un amigo. &quot;Plata a favor&quot; se le descuenta cuando vuelva a comprar; &quot;Clases&quot; las puede tomar mañana sin pagar.">
+        <option value="">Plata a favor: un monto fijo en soles</option>
+        <option value="pct_compra">Plata a favor: un % de lo que pagó su amigo</option>
+        <option value="clases_credito">Plata a favor: lo que cuestan X clases</option>
+        <option value="clases_saldo">Clases: X clases que puede tomar sin pagar</option>
       </select></div>
       <div class="cfgrow"><span class="pk" id="lblRefPremioValor">Cuánto</span><input id="cfg_ref_premio_valor" type="number" min="1" max="5000" step="0.01" placeholder="50" /></div>
-      <!-- 15-ago-2026: la versión anterior explicaba la diferencia en abstracto y José la leyó
-           entera y aun así preguntó "¿cuál es la diferencia de estas dos?". Si el cliente lee el
-           texto y sigue sin entender, el texto está mal. Ahora se explica por lo único que le
-           importa a un dueño: CUÁNDO le cuesta la plata y si le ocupa un cupo. -->
-      <p class="hint" style="margin-top:-4px;">Las dos últimas suenan igual pero <b>no te cuestan igual</b>:</p>
-      <p class="hint" style="margin-top:2px;"><b>Clases gratis pagadas como descuento</b> → no le das una clase: le das <b>lo que vale esa clase en plata a favor</b>. Solo te cuesta <b>el día que ella vuelva a comprar</b>, y se le descuenta de esa compra. Si nunca vuelve, no te costó nada. <b>No te ocupa ningún cupo.</b></p>
-      <p class="hint" style="margin-top:2px;"><b>Clases gratis de verdad</b> → se le suma una clase a su saldo y <b>la puede reservar mañana sin pagar nada</b>. Te cuesta <b>hoy</b>, y te <b>ocupa un cupo</b> en esa clase.</p>
-      <p class="hint" style="margin-top:2px;">👉 <b>Si tus clases se llenan</b>, te conviene el descuento: no regalas un cupo que ibas a vender. <b>Si te sobran cupos</b>, la clase de verdad es mejor premio y no te cuesta plata, solo un espacio que igual iba vacío.</p>
+      <p class="hint" style="margin-top:-4px;">Las tres primeras son lo mismo (<b>plata a favor</b>), solo cambia cómo sacas el monto. La última es la distinta.</p>
+      <p class="hint" style="margin-top:6px;"><b>Plata a favor</b> = se le descuenta sola <b>el día que vuelva a comprar</b>. No le ocupa ningún cupo, y si nunca vuelve, no te costó nada.</p>
+      <p class="hint" style="margin-top:2px;"><b>Clases</b> = las puede <b>reservar mañana sin pagar</b>. Te cuesta hoy y te ocupa un lugar en esa clase.</p>
+      <p class="hint" style="margin-top:6px;">👉 <b>Si tus clases se llenan</b>, dale plata a favor: no regalas un cupo que ibas a vender. <b>Si te sobran cupos</b>, dale clases: se siente mejor premio y solo te cuesta un espacio que igual iba vacío.</p>
 
       <h2 style="margin-top:22px;">El amigo que llega</h2>
-      <div class="cfgrow"><span class="pk">¿Qué gana en su primera compra?</span><select id="cfg_ref_desc_modo">
+      <div class="cfgrow"><span class="pk">¿Qué gana en su primera compra?</span><select id="cfg_ref_desc_modo" data-ayuda="Qué se lleva el amigo nuevo en su primera compra. Es el gancho para que el código se comparta.">
         <option value="">Nada</option>
         <option value="pct">Un % de descuento</option>
         <option value="soles">Un monto fijo de descuento</option>
@@ -1726,9 +1749,9 @@
       <p class="hint" style="margin-top:-4px;">Se le descuenta solo, en su primera compra y una sola vez. No se acumula con otra promoción del mismo plan.</p>
 
       <h2 style="margin-top:22px;">Las condiciones</h2>
-      <div class="cfgrow"><span class="pk">Compra mínima para que valga</span><input id="cfg_ref_min_clases" type="number" min="0" max="500" placeholder="sin mínimo" /> <span class="pk" style="flex:0 0 auto;">clases</span></div>
+      <div class="cfgrow"><span class="pk">Compra mínima para que valga</span><input id="cfg_ref_min_clases" data-ayuda="Compra mínima para que el premio valga. Pon 4 y la clase suelta queda fuera sola, sin que tengas que nombrarla." type="number" min="0" max="500" placeholder="sin mínimo" /> <span class="pk" style="flex:0 0 auto;">clases</span></div>
       <p class="hint" style="margin-top:-4px;">Es lo que deja fuera a la <b>clase suelta</b> sin tener que nombrarla: pon <b>4</b> y solo cuentan los paquetes de 4 clases para arriba. Las mensualidades ilimitadas siempre cuentan. Vacío = cualquier compra vale.</p>
-      <div class="cfgrow"><span class="pk">¿Quién puede usar un código?</span><select id="cfg_ref_solo_nuevos">
+      <div class="cfgrow"><span class="pk">¿Quién puede usar un código?</span><select id="cfg_ref_solo_nuevos" data-ayuda="Si migraste tus alumnos de otro sistema, ponlo en &quot;solo alumnos nuevos&quot;: sin eso, un alumno de siempre se registra con el código de una amiga y los dos cobran un premio que era para gente nueva.">
         <option value="">Cualquiera que nunca haya comprado</option>
         <option value="1">Solo alumnos nuevos de verdad (nunca compraron ni asistieron)</option>
       </select></div>
@@ -2485,9 +2508,9 @@ function filaPaqHTML(p){
     : '<span class="hint" style="margin:0;">Primero crea tus tipos de clase arriba.</span>';
   return '<div class="paqrow" style="display:grid;grid-template-columns:1.4fr 0.7fr auto 0.8fr minmax(120px,1fr) auto;gap:6px;align-items:center;margin-bottom:6px;">'+
     '<input type="text" class="pq-n" maxlength="40" data-orig="'+esc(p.n||"")+'" placeholder="Nombre (ej. Mensualidad)" value="'+esc(p.n||"")+'" />'+
-    '<input type="number" class="pq-c" min="0" max="500" placeholder="clases" value="'+(ilim?"":(p.c||0))+'"'+(ilim?' disabled style="opacity:.4"':'')+' />'+
+    '<input type="number" class="pq-c" data-ayuda="Cuántas clases trae el plan. Si es una mensualidad sin límite, marca &quot;mensual&quot; al costado." min="0" max="500" placeholder="clases" value="'+(ilim?"":(p.c||0))+'"'+(ilim?' disabled style="opacity:.4"':'')+' />'+
     '<label style="font-size:12px;opacity:.8;display:flex;gap:4px;align-items:center;white-space:nowrap;"><input type="checkbox" class="pq-u"'+(ilim?" checked":"")+' /> mensual</label>'+
-    '<input type="number" class="pq-p" min="0" placeholder="S/" value="'+(db.precios[p.n]||0)+'" />'+
+    '<input type="number" class="pq-p" data-ayuda="Lo que cobras por este plan. En S/0 no sale en tu web ni en el portal, y no te podemos cobrar por él." min="0" placeholder="S/" value="'+(db.precios[p.n]||0)+'" />'+
     /* .pq-tipos = lo ÚNICO que repinta refrescarIncluyeDePaquetes(). El <summary> y el bloque
        de vigencia de abajo quedan fuera a propósito: ver el comentario de esa función. */
     '<details class="pq-inc"><summary>'+esc(resumen)+'</summary><div class="pq-incbox">'+
@@ -2498,7 +2521,7 @@ function filaPaqHTML(p){
       '<div style="border-top:1px solid var(--line);margin-top:10px;padding-top:10px;">'+
         '<b style="font-size:12px;">¿Cuánto le dura?</b>'+
         '<div style="display:flex;gap:8px;align-items:center;margin-top:6px;flex-wrap:wrap;">'+
-          '<input type="number" class="pq-d" min="0" max="3650" style="width:90px;" placeholder="días" value="'+(parseInt(p.d,10)>0?parseInt(p.d,10):"")+'" />'+
+          '<input type="number" class="pq-d" data-ayuda="Cuántos días le dura el plan desde que lo compra (o desde su primera clase). Vacío = no vence por fecha." min="0" max="3650" style="width:90px;" placeholder="días" value="'+(parseInt(p.d,10)>0?parseInt(p.d,10):"")+'" />'+
           '<span style="font-size:12px;">días, contados desde</span>'+
           '<select class="pq-i" style="width:auto;">'+
             '<option value="compra"'+(p.i==="clase"?"":" selected")+'>que lo compra</option>'+
@@ -2512,7 +2535,7 @@ function filaPaqHTML(p){
       '<div style="border-top:1px solid var(--line);margin-top:10px;padding-top:10px;">'+
         '<b style="font-size:12px;">Congelamiento (pausa por viaje o salud)</b>'+
         '<div style="display:flex;gap:8px;align-items:center;margin-top:6px;flex-wrap:wrap;">'+
-          '<input type="number" class="pq-g" min="0" max="365" style="width:90px;" placeholder="—" value="'+((p.g===undefined||p.g===null||p.g==="")?"":Math.max(0,parseInt(p.g,10)||0))+'" />'+
+          '<input type="number" class="pq-g" data-ayuda="Días que puede pausar su plan por viaje o salud. 0 = este plan no se congela. Vacío = la regla general." min="0" max="365" style="width:90px;" placeholder="—" value="'+((p.g===undefined||p.g===null||p.g==="")?"":Math.max(0,parseInt(p.g,10)||0))+'" />'+
           '<span style="font-size:12px;">días máx por ciclo, repartidos en hasta</span>'+
           '<input type="number" class="pq-gb" min="1" max="12" style="width:70px;" placeholder="2" value="'+((parseInt(p.gb,10)>=1)?parseInt(p.gb,10):"")+'" />'+
           '<span style="font-size:12px;">bloques</span>'+
@@ -5351,6 +5374,77 @@ function abrirGrupoActivo(){
 aplicarEstadoMenu();
 abrirGrupoActivo();
 
+/* ═══════════ AYUDA AL PASAR EL MOUSE (15-ago-2026, pedido de Andrés) ═══════════
+   "Que cuando el puntero pase por encima de casi cualquier cosa salga un texto que lo explique."
+   Nace del mismo problema del día: José y Andrés leyeron la pantalla de Referidos y ninguno
+   entendió las opciones. La ayuda tiene que estar DONDE está la duda, no en un párrafo abajo.
+
+   Cómo se usa: se le pone el atributo data-ayuda al elemento, con el texto dentro. Nada más.
+   Un único listener en el documento (delegación) en vez de uno por elemento: el panel repinta
+   tablas enteras todo el tiempo, y con listeners individuales habría que reengancharlos en cada
+   render — el tipo de cosa que funciona el primer día y se rompe en silencio al tercero.
+
+   En CELULAR no hay "pasar el mouse", así que ahí se abre al TOCAR y se cierra al tocar afuera
+   o a los 5 segundos. La mitad de las dueñas entra desde el celular; una ayuda que solo existe
+   en desktop no le sirve justo a quien más la necesita. */
+var BT_TIP = null, BT_TIP_T = null;
+function ayudaFlotante(el, texto){
+  if(!BT_TIP){
+    BT_TIP = document.createElement("div");
+    BT_TIP.id = "btTip";
+    document.body.appendChild(BT_TIP);
+  }
+  BT_TIP.innerHTML = texto;
+  BT_TIP.classList.add("on");
+  /* posición: debajo del elemento y centrado; si se sale por abajo o por los lados, se acomoda.
+     Se mide DESPUÉS de pintar el texto porque el alto depende de cuánto texto sea. */
+  var r = el.getBoundingClientRect();
+  var t = BT_TIP.getBoundingClientRect();
+  var x = r.left + (r.width / 2) - (t.width / 2);
+  var y = r.bottom + 8;
+  if(y + t.height > window.innerHeight - 8) y = Math.max(8, r.top - t.height - 8);  // no cabe abajo: va arriba
+  x = Math.max(8, Math.min(x, window.innerWidth - t.width - 8));                    // nunca fuera de pantalla
+  BT_TIP.style.left = Math.round(x) + "px";
+  BT_TIP.style.top = Math.round(y) + "px";
+}
+function ocultarAyuda(){
+  if(BT_TIP) BT_TIP.classList.remove("on");
+  if(BT_TIP_T){ clearTimeout(BT_TIP_T); BT_TIP_T = null; }
+}
+(function(){
+  var tactil = false;
+  try{ tactil = window.matchMedia("(hover: none)").matches; }catch(e){}
+  document.addEventListener("mouseover", function(e){
+    if(tactil) return;
+    var n = e.target.closest ? e.target.closest("[data-ayuda]") : null;
+    if(!n){ ocultarAyuda(); return; }
+    var txt = n.getAttribute("data-ayuda");
+    if(!txt) return;
+    if(BT_TIP_T) clearTimeout(BT_TIP_T);
+    /* 220ms de retardo: sin esto, mover el mouse por la pantalla dispara una ráfaga de globos
+       y marea. Con esto solo sale donde el ojo se detuvo. */
+    BT_TIP_T = setTimeout(function(){ ayudaFlotante(n, txt); }, 220);
+  });
+  document.addEventListener("mouseout", function(e){
+    if(tactil) return;
+    var n = e.target.closest ? e.target.closest("[data-ayuda]") : null;
+    if(n) ocultarAyuda();
+  });
+  /* celular: un toque abre la ayuda; el siguiente toque (o 5s) la cierra. No se hace
+     preventDefault para no romper el botón que hay debajo. */
+  document.addEventListener("click", function(e){
+    if(!tactil) return;
+    var n = e.target.closest ? e.target.closest("[data-ayuda]") : null;
+    if(!n || !n.getAttribute("data-ayuda")){ ocultarAyuda(); return; }
+    ayudaFlotante(n, n.getAttribute("data-ayuda"));
+    if(BT_TIP_T) clearTimeout(BT_TIP_T);
+    BT_TIP_T = setTimeout(ocultarAyuda, 5000);
+  });
+  /* si la página se mueve debajo del globo, queda flotando en el aire apuntando a nada */
+  window.addEventListener("scroll", ocultarAyuda, true);
+  window.addEventListener("resize", ocultarAyuda);
+})();
+
 /* ═══════════ CORREOS A MIS ALUMNOS (15-ago-2026, pedido de José/Elevate) ═══════════
    La pantalla tiene UN trabajo además de mandar correos: que el dueño entienda por qué no
    puede escribirle a los 1,447 el primer día. Por eso cada grupo muestra los dos números —
@@ -7236,15 +7330,19 @@ function pintarResumenReferidos(){
   else if(pm==="pct_compra") txtAna="<b>"+soles(Math.round(paga*pv)/100)+" de descuento</b> ("+pv+"% de lo que pagó Luis) para su próxima compra";
   else {
     var nCl=Math.max(1,Math.floor(pv));
-    if(pm==="clases_saldo") txtAna="<b>"+nCl+" clase"+(nCl===1?"":"s")+" de verdad</b> en su saldo — la puede reservar hoy mismo";
+    if(pm==="clases_saldo") txtAna="<b>"+nCl+" clase"+(nCl===1?"":"s")+"</b> que puede reservar mañana sin pagar nada";
     else {
       var unit=(p.ilim||!p.c)?0:(p.precio/p.c);
       txtAna=unit>0
-        ? ("<b>"+nCl+" clase"+(nCl===1?"":"s")+" gratis</b>, que se le abonan como "+soles(Math.round(unit*nCl*100)/100)+" de descuento para su próxima compra")
-        : ("<b>"+nCl+" clase"+(nCl===1?"":"s")+" gratis</b> como descuento (⚠️ este plan es mensualidad ilimitada: no tiene precio por clase, así que ahí no se puede calcular)");
+        ? ("<b>"+soles(Math.round(unit*nCl*100)/100)+" a favor</b> (lo que cuesta"+(nCl===1?"":"n")+" "+nCl+" clase"+(nCl===1?"":"s")+"), para cuando vuelva a comprar")
+        : ("<b>lo que cuesta"+(nCl===1?"":"n")+" "+nCl+" clase"+(nCl===1?"":"s")+"</b> a favor (⚠️ este plan es mensualidad ilimitada: no tiene precio por clase, así que ahí no se puede calcular)");
     }
   }
-  box.innerHTML='<b>Así queda:</b> Ana le pasa su código a Luis. Luis '+txtAmigo+'. Ana gana '+txtAna+'.';
+  /* el remate dice CUÁNDO le cuesta al dueño: es lo que ni José ni Andrés sacaban del selector */
+  var cuando = pm==="clases_saldo"
+    ? ' <span style="opacity:.75">A ti te cuesta hoy: le ocupa un cupo en esa clase.</span>'
+    : ' <span style="opacity:.75">A ti te cuesta recién el día que Ana vuelva a comprar. Si no vuelve, no te costó nada.</span>';
+  box.innerHTML='<b>Así queda:</b> Ana le pasa su código a Luis. Luis '+txtAmigo+'. Ana gana '+txtAna+'.'+cuando;
 }
 ["cfg_ref_premio_modo","cfg_ref_premio_valor","cfg_ref_desc_modo","cfg_ref_desc_valor","cfg_ref_min_clases","cfg_ref_solo_nuevos"]
   .forEach(function(id){

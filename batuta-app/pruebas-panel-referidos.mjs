@@ -82,7 +82,11 @@ console.log("\n── El caso de José: 10% al amigo, 1 clase al que lo trae, m�
   contiene("usa el plan de 4 (la clase suelta no califica)", r.texto, "4 clases de Mat, 4 clases");
   contiene("el plural sale bien", r.texto, "4 clases");
   contiene("S/250 con 10% → paga S/225", r.texto, "en vez de S/250", "S/225");
-  contiene("el premio es 1 clase de verdad, reservable hoy", r.texto, "1 clase de verdad", "reservar hoy mismo");
+  /* 15-ago, 2ª pasada: los nombres "de verdad / pagadas como descuento" eran jerga nuestra y
+     ni José ni Andrés los entendieron. Ahora el ejemplo dice qué recibe la alumna Y cuándo le
+     cuesta al dueño, que es lo que faltaba. */
+  contiene("dice que la clase la puede reservar sin pagar", r.texto, "reservar mañana sin pagar nada");
+  contiene("y le dice al dueño que le cuesta HOY, con el cupo", r.texto, "te cuesta hoy", "ocupa un cupo");
   contiene("las etiquetas dicen qué escribir en cada campo",
     r.nodos.lblRefPremioValor.textContent + "|" + r.nodos.lblRefDescValor.textContent, "Cuántas clases|Qué porcentaje");
 }
@@ -91,7 +95,8 @@ console.log("\n── El otro modo: la clase gratis pagada como descuento ──
 {
   const r = await correr({ premioModo: "clases_credito", premioValor: "1", descModo: "pct", descValor: "10", minClases: "4" }, PLANES_ELEVATE);
   /* S/250 / 4 clases = S/62.5 por clase */
-  contiene("traduce la clase a soles al precio real del plan", r.texto, "1 clase gratis", "S/62.5 de descuento");
+  contiene("traduce la clase a soles al precio real del plan", r.texto, "S/62.5 a favor", "lo que cuesta 1 clase");
+  contiene("y avisa que solo cuesta si la alumna vuelve", r.texto, "el día que Ana vuelva a comprar", "no te costó nada");
 }
 
 console.log("\n── Sin mínimo, el ejemplo cae en la clase suelta (y hay que verlo) ──");
