@@ -146,6 +146,35 @@
   td.mono{font-family:var(--mono);font-size:12px;color:var(--muted);white-space:nowrap;}
   td.mut,span.mut{color:var(--muted);font-size:13.5px;}
   .empty{color:var(--muted);font-family:var(--mono);font-size:12px;text-transform:uppercase;letter-spacing:.08em;padding:10px 0;}
+
+  /* ---- Curso grabado ---- */
+  .cur-tabs{display:flex;gap:8px;margin:14px 0 16px;flex-wrap:wrap;}
+  .cur-tab{background:transparent;border:1px solid var(--line);color:var(--muted);cursor:pointer;
+    font-family:var(--mono);font-size:11.5px;text-transform:uppercase;letter-spacing:.12em;
+    padding:9px 15px;border-radius:2px;}
+  .cur-tab.active{border-color:var(--accent);color:var(--accent);}
+  .cur-prog{font-family:var(--mono);font-size:12px;color:var(--muted);letter-spacing:.06em;margin-bottom:14px;}
+  .cur-prog b{color:var(--cream);}
+  .cur-sec{margin-bottom:22px;}
+  .cur-sec h3{font-family:var(--mono);font-size:11.5px;text-transform:uppercase;letter-spacing:.14em;
+    color:var(--accent);margin:0 0 8px;font-weight:700;}
+  .cur-lec{border-bottom:1px solid var(--line);}
+  .cur-cab{width:100%;background:transparent;border:0;color:var(--cream);cursor:pointer;text-align:left;
+    display:flex;align-items:center;gap:10px;padding:13px 2px;font-size:14.5px;font-family:inherit;}
+  .cur-lec.bloq .cur-cab{color:var(--muted);cursor:default;}
+  .cur-lec.visto .cur-tit::before{content:"✓ ";color:var(--accent);}
+  .cur-tit{flex:1;}
+  .cur-dur,.cur-free,.cur-lock{font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;color:var(--muted);}
+  .cur-free{color:var(--accent);border:1px solid var(--accent);border-radius:999px;padding:2px 7px;}
+  .cur-body{padding:4px 2px 16px;}
+  /* El iframe de YouTube necesita una caja con proporción propia: sin esto se ve como una tira. */
+  .cur-video{position:relative;padding-top:56.25%;margin-bottom:12px;background:#000;}
+  .cur-video iframe{position:absolute;inset:0;width:100%;height:100%;border:0;}
+  .cur-desc,.cur-nota{color:var(--muted);font-size:13.5px;line-height:1.6;margin:0 0 10px;}
+  .cur-visto{background:transparent;border:1px solid var(--line);color:var(--muted);cursor:pointer;
+    font-family:var(--mono);font-size:11px;text-transform:uppercase;letter-spacing:.1em;
+    padding:8px 13px;border-radius:2px;}
+  .cur-visto:hover{border-color:var(--accent);color:var(--accent);}
   .tarea{border-left:5px solid var(--accent);}
   .tarea .t{font-family:var(--display);font-size:20px;line-height:1.35;}
   .tarea .meta{font-family:var(--mono);font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;margin-top:8px;}
@@ -403,6 +432,7 @@
       <a href="#clases" data-v="clases" aria-label="Mis clases" title="Mis clases"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16M4 12h16M4 19h10"/></svg><span>Mis clases</span></a>
       <a href="#agenda" data-v="agenda" aria-label="Agenda" title="Agenda"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M3 9h18M8 2v4M16 2v4"/></svg><span>Agenda</span></a>
       <a href="#recursos" data-v="recursos" aria-label="Recursos" title="Recursos"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7a1 1 0 0 1 1-1h5l2 2h9a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z"/></svg><span>Recursos</span></a>
+      <a href="#curso" data-v="curso" aria-label="Curso" title="Curso"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2.5" y="4" width="19" height="13" rx="2"/><path d="M10 8.5l5 2.5-5 2.5z"/><path d="M8 21h8"/></svg><span>Curso</span></a>
       <a href="#comprar" data-v="comprar" aria-label="Comprar" title="Comprar"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7h2l2.4 10.2A2 2 0 0 0 9.3 19h7.4a2 2 0 0 0 1.9-1.6L21 9H6"/><circle cx="10" cy="21" r="1"/><circle cx="17" cy="21" r="1"/></svg><span>Comprar</span></a>
       <a href="#referidos" data-v="referidos" aria-label="Referidos" title="Referidos"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="8" width="18" height="4"/><path d="M5 12v8h14v-8M12 8v12M12 8s-4-.5-4-3a2 2 0 0 1 4-1 2 2 0 0 1 4 1c0 2.5-4 3-4 3z"/></svg><span>Referidos</span></a>
       <a href="#cuenta" data-v="cuenta" aria-label="Mi cuenta" title="Mi cuenta"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 5-5.5 8-5.5s6.5 1.5 8 5.5"/></svg><span>Mi cuenta</span></a>
@@ -574,6 +604,20 @@
       <hr class="rule" />
       <div id="recList"></div>
       <div class="empty hidden" id="recVacio">Pronto subiré material aquí — atento al chat.</div>
+    </section>
+
+    <!-- ===== CURSO GRABADO ===== -->
+    <section class="view" id="v-curso">
+      <div class="eyebrow">// CURSO GRABADO</div>
+      <hr class="rule" />
+      <div class="cur-tabs">
+        <button class="cur-tab active" data-c="canto">Canto</button>
+        <button class="cur-tab" data-c="composicion">Composición</button>
+      </div>
+      <div id="curBanner" class="hidden"></div>
+      <div id="curProgreso" class="cur-prog hidden"></div>
+      <div id="curLista"></div>
+      <div class="empty hidden" id="curVacio">Este curso todavía se está grabando. Te aviso apenas esté listo.</div>
     </section>
 
     <!-- ===== MI CUENTA ===== -->
@@ -967,7 +1011,7 @@ function onGoogleCred(resp){
 }
 
 /* ---------- ROUTER (SPA por hash) ---------- */
-var VISTAS = ["inicio","clases","agenda","recursos","comprar","referidos","cuenta"];
+var VISTAS = ["inicio","clases","agenda","recursos","curso","comprar","referidos","cuenta"];
 function vistaActual(){
   var h=(location.hash||"#inicio").replace("#","");
   return VISTAS.indexOf(h)>=0 ? h : "inicio";
@@ -1953,8 +1997,102 @@ $("v-agenda").addEventListener("click", function(e){
   if(rc){ salirModoReprog(); return; }
 });
 
+/* ---------- VISTA: CURSO GRABADO ---------- */
+/* El temario se ve SIEMPRE, aunque no lo haya comprado: saber qué hay adentro es lo que vende.
+   El video solo llega desde el servidor si le corresponde (ver GET /api/curso), así que acá no
+   hay nada que "ocultar": si no lo compró, sencillamente no viene. */
+var CURSO_ACTUAL = "canto";
+var CURSO_ABIERTA = null;          // id de la lección desplegada
+var CURSO_TABS_OK = false;
+
+function engancharTabsCurso(){
+  if(CURSO_TABS_OK) return;        // una sola vez: renderCurso se llama en cada navegación
+  CURSO_TABS_OK = true;
+  document.querySelectorAll(".cur-tab").forEach(function(b){
+    b.addEventListener("click", function(){
+      if(CURSO_ACTUAL === b.dataset.c) return;
+      CURSO_ACTUAL = b.dataset.c;
+      CURSO_ABIERTA = null;        // lo abierto en un curso no tiene sentido en el otro
+      renderCurso();
+    });
+  });
+}
+
+function renderCurso(){
+  engancharTabsCurso();
+  document.querySelectorAll(".cur-tab").forEach(function(b){
+    b.classList.toggle("active", b.dataset.c === CURSO_ACTUAL);
+  });
+  api("/api/curso?c=" + encodeURIComponent(CURSO_ACTUAL)).then(function(d){
+    var lista = $("curLista");
+    var hayAlgo = (d.secciones || []).some(function(s){ return s.lecciones.length; });
+    if(!hayAlgo){ lista.innerHTML = ""; hide("curProgreso"); hide("curBanner"); show("curVacio"); return; }
+    hide("curVacio");
+
+    if(d.comprado){
+      $("curProgreso").innerHTML = '<b>' + d.vistas + ' de ' + d.total + '</b> lecciones vistas';
+      show("curProgreso"); hide("curBanner");
+    } else {
+      hide("curProgreso");
+      $("curBanner").innerHTML = '<strong>// AÚN NO TIENES ESTE CURSO</strong><br>' +
+        'Puedes ver el temario completo. Para desbloquear los videos, escríbeme por el chat de acá abajo.';
+      $("curBanner").className = "aviso";
+      show("curBanner");
+    }
+
+    var html = "";
+    (d.secciones || []).forEach(function(sec, i){
+      html += '<div class="cur-sec"><h3>' + (sec.nombre ? esc(sec.nombre) : "Lecciones") + '</h3>';
+      sec.lecciones.forEach(function(l){
+        var abierta = CURSO_ABIERTA === l.id;
+        html += '<div class="cur-lec' + (l.puede ? "" : " bloq") + (l.visto ? " visto" : "") + '">' +
+          '<button class="cur-cab" data-id="' + esc(l.id) + '" data-puede="' + (l.puede ? "1" : "0") + '">' +
+            '<span class="cur-tit">' + esc(l.titulo) + '</span>' +
+            (l.duracion ? '<span class="cur-dur">' + esc(l.duracion) + '</span>' : "") +
+            (l.gratis && !d.comprado ? '<span class="cur-free">GRATIS</span>' : "") +
+            (l.puede ? "" : '<span class="cur-lock" aria-label="Bloqueada">·</span>') +
+          '</button>';
+        if(abierta && l.puede){
+          html += '<div class="cur-body">' +
+            (l.video ? '<div class="cur-video"><iframe src="https://www.youtube-nocookie.com/embed/' +
+                       esc(l.video) + '" title="' + esc(l.titulo) + '" allowfullscreen ' +
+                       'referrerpolicy="strict-origin-when-cross-origin" loading="lazy"></iframe></div>'
+                     : '<p class="cur-nota">Esta lección todavía no tiene video.</p>') +
+            (l.descripcion ? '<p class="cur-desc">' + esc(l.descripcion) + '</p>' : "") +
+            (l.recurso_url ? '<p><a href="' + esc(l.recurso_url) + '" target="_blank" rel="noopener">Material de la lección</a></p>' : "") +
+            '<button class="cur-visto" data-id="' + esc(l.id) + '" data-visto="' + (l.visto ? "1" : "0") + '">' +
+              (l.visto ? "Marcar como no vista" : "Marcar como vista") + '</button>' +
+          '</div>';
+        }
+        html += '</div>';
+      });
+      html += '</div>';
+    });
+    lista.innerHTML = html;
+
+    lista.querySelectorAll(".cur-cab").forEach(function(b){
+      b.addEventListener("click", function(){
+        if(b.dataset.puede !== "1"){ toast("Esta lección se desbloquea con el curso"); return; }
+        CURSO_ABIERTA = (CURSO_ABIERTA === b.dataset.id) ? null : b.dataset.id;
+        renderCurso();
+      });
+    });
+    lista.querySelectorAll(".cur-visto").forEach(function(b){
+      b.addEventListener("click", function(){
+        var nuevo = b.dataset.visto !== "1";
+        api("/api/curso/visto", { method:"POST", body: JSON.stringify({ leccion_id: b.dataset.id, visto: nuevo }) })
+          .then(function(){ renderCurso(); })
+          .catch(function(e){ toast(e.message || "No se pudo guardar"); });
+      });
+    });
+  }).catch(function(){
+    $("curLista").innerHTML = "";
+    show("curVacio");
+  });
+}
+
 var RENDER = { inicio:renderInicio, clases:renderClases, agenda:renderAgenda, recursos:renderRecursos,
-               comprar:renderComprar, referidos:renderReferidos, cuenta:renderCuenta };
+               comprar:renderComprar, referidos:renderReferidos, cuenta:renderCuenta, curso:renderCurso };
 
 function autoVerificarPago(){
   api("/api/mp/verificar",{method:"POST",body:"{}"}).then(function(r){
