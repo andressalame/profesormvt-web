@@ -96,6 +96,9 @@ const { activeNav } = Astro.props;
   }
   .snav-panel a:last-child{ border-bottom: 0; }
   .snav-panel a.destacado{ color: #e8501f; }
+  /* El `display:flex` de arriba pisa al atributo `hidden` (que solo trae display:none desde la
+     hoja del navegador), así que el panel nacía ABIERTO en cada carga. Cazado en el celular. */
+  .snav-panel[hidden]{ display: none; }
 
   @media (max-width: 980px){
     .snav-links{ gap: 1.1rem; }
