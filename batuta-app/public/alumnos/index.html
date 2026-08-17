@@ -577,6 +577,21 @@
         <div class="card" style="margin-bottom:16px;">
           <h3>// MIS PRÓXIMAS CLASES</h3>
           <div id="agProx"></div>
+          <!-- Calendario (17-ago-2026): lo pidió una alumna de Elevate. Se SUSCRIBE una vez y
+               sus clases aparecen solas en el calendario que ya usa; si reserva o cancela, se
+               le actualiza sin hacer nada. No se integra con Google a propósito: eso pediría
+               conectar su cuenta y dar permisos, y esto funciona igual en iPhone y Outlook. -->
+          <div style="margin-top:14px;padding-top:12px;border-top:1px solid rgba(255,255,255,.08);">
+            <button class="btn ghost sm" type="button" id="btnCalendario">Agregar mis clases a mi calendario</button>
+            <p class="note" style="margin:8px 0 0;">Se agregan solas cada vez que reservas o cancelas. Funciona con Google, iPhone y Outlook.</p>
+            <div id="calBox" style="display:none;margin-top:12px;">
+              <p class="note" style="margin:0 0 8px;"><b>Tócalo desde tu celular</b> y tu calendario te va a preguntar si quieres suscribirte. Di que sí y listo, no tienes que volver a hacer nada.</p>
+              <a class="btn sm" id="calAbrir" href="#">Suscribirme ahora</a>
+              <p class="note" style="margin:10px 0 4px;">¿Lo quieres pegar a mano? Copia este enlace:</p>
+              <input id="calLink" type="text" readonly style="width:100%;font-family:monospace;font-size:12px;" />
+              <button class="btn ghost sm" type="button" id="calCopiar" style="margin-top:8px;">Copiar enlace</button>
+            </div>
+          </div>
         </div>
 
         <div class="card" id="agEsperaCard" style="margin-bottom:16px;display:none;">
@@ -2597,6 +2612,36 @@ function cancelarClase(id){
     })
     .catch(function(e){ toast(e.message || "No se pudo reprogramar."); });
 }
+
+/* Suscripción al calendario (17-ago-2026). El token se pide al servidor la primera vez y
+   se reusa siempre: si generáramos uno nuevo en cada clic, el calendario que la alumna ya
+   agregó a su celular quedaría apuntando a una URL muerta. */
+(function(){
+  var b=$("btnCalendario"); if(!b) return;
+  var pedido=false;
+  b.addEventListener("click",function(){
+    if(pedido){ $("calBox").style.display = ($("calBox").style.display==="none" ? "" : "none"); return; }
+    b.disabled=true; b.textContent="Preparando tu link…";
+    api("/app/api/cuenta/calendario",{method:"POST"}).then(function(d){
+      pedido=true; b.disabled=false; b.textContent="Agregar mis clases a mi calendario";
+      if(!d||!d.https) return;
+      $("calLink").value=d.https;
+      /* webcal:// para que el celular ofrezca SUSCRIBIRSE (se actualiza solo) en vez de
+         importar una copia congelada, que es el error que arruina todo el asunto */
+      $("calAbrir").href=d.webcal||d.https;
+      $("calBox").style.display="";
+    }).catch(function(){
+      b.disabled=false; b.textContent="Agregar mis clases a mi calendario";
+      toast("No se pudo preparar tu link. Intenta de nuevo.");
+    });
+  });
+  var c=$("calCopiar");
+  if(c) c.addEventListener("click",function(){
+    var i=$("calLink"); if(!i||!i.value) return;
+    if(navigator.clipboard&&navigator.clipboard.writeText){ navigator.clipboard.writeText(i.value).then(function(){ toast("Enlace copiado"); }); }
+    else { i.select(); toast("Copia el enlace"); }
+  });
+})();
 
 $("v-agenda").addEventListener("click", function(e){
   var dia = e.target.closest("[data-day]");

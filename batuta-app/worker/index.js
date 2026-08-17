@@ -5158,6 +5158,10 @@ async function ensureAlumnoExtraSchema(env){
      a pedírsela al mismo alumno; la tabla guarda solo el HASH del token, como reset_tokens.
      Tabla propia y no `feedback`: esa es de las ideas y errores del DUEÑO, otra cosa. */
   try { await env.DB.prepare("ALTER TABLE alumnos ADD COLUMN resena_pedida INTEGER DEFAULT 0").run(); } catch (e) {}
+  /* Token de suscripción al calendario (17-ago-2026, lo pidió una alumna de Elevate). Opaco,
+     por alumno, sin caducidad: es la URL que su calendario va a consultar sola para siempre.
+     Mismo patrón que `mkt_token`: no da acceso a nada más que a SUS horarios. */
+  try { await env.DB.prepare("ALTER TABLE alumnos ADD COLUMN cal_token TEXT DEFAULT ''").run(); } catch (e) {}
   try {
     await env.DB.prepare(
       "CREATE TABLE IF NOT EXISTS resenas (token_hash TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, alumno_id TEXT NOT NULL, " +
@@ -5967,6 +5971,70 @@ const RESENA_MIN_CLASES_DEF = 4;
       orgánico y sobrevive. O sea que ir lento acá no es una traba, es lo que hace que funcione.
    Con 25/día, 1,447 alumnos se cubren en ~2 meses, que es exactamente el ritmo que uno querría. */
 const RESENA_TOPE_ACADEMIA_DIA = 25;
+/* ═══ CALENDARIO DEL ALUMNO (.ics de suscripción, 17-ago-2026) ═══
+   Lo pidió una alumna de Elevate: "¿puedo agregar mis reservas a mi calendario?".
+   NO se integra con Google Calendar a propósito: eso pide OAuth, permisos y que cada alumno
+   conecte su cuenta. Un .ics de suscripción funciona en Google, Apple, Outlook y cualquier
+   otro, el alumno lo agrega UNA vez, y cuando reserva o cancela su calendario se actualiza
+   solo. Cero permisos, cero datos suyos guardados, cero dependencias nuevas.
+
+   Detalles que parecen menores y no lo son:
+   · Las fechas van en UTC con Z. El calendario del alumno las convierte a su hora local; si
+     mandáramos hora de Lima sin zona, a quien viaje se le corren todas las clases.
+   · Las líneas se pliegan a 75 octetos (RFC 5545). Sin eso, un nombre de curso largo rompe
+     el archivo entero en Outlook — y falla en silencio, que es peor.
+   · Las canceladas se mandan con STATUS:CANCELLED en vez de omitirse: así el calendario que
+     ya la tenía la BORRA. Si solo se omite, la clase cancelada se queda ahí para siempre. */
+function icsEscapar(t){
+  return String(t == null ? "" : t)
+    .replace(/\\/g, "\\\\").replace(/;/g, "\\;").replace(/,/g, "\\,")
+    .replace(/\r?\n/g, "\\n");
+}
+function icsPlegar(linea){
+  /* RFC 5545: máximo 75 octetos por línea; las siguientes empiezan con un espacio. Se cuenta
+     en BYTES, no en caracteres: "Máquinas" y "Barré" ocupan más de lo que aparentan. */
+  const bytes = new TextEncoder().encode(linea);
+  if (bytes.length <= 75) return linea;
+  const out = []; let act = "", largo = 0;
+  for (const ch of linea){
+    const n = new TextEncoder().encode(ch).length;
+    if (largo + n > (out.length ? 74 : 75)){ out.push(act); act = ""; largo = 0; }
+    act += ch; largo += n;
+  }
+  if (act) out.push(act);
+  return out.join("\r\n ");
+}
+function icsFecha(iso){
+  return String(iso || "").replace(/[-:]/g, "").replace(/\.\d{3}/, "");
+}
+function armarIcs(academia, filas, dominio){
+  const L = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Batuta//Calendario de alumno//ES",
+             "CALSCALE:GREGORIAN", "METHOD:PUBLISH",
+             "X-WR-CALNAME:" + icsEscapar(academia),
+             "X-WR-TIMEZONE:America/Lima",
+             /* cada cuánto lo vuelve a mirar el calendario del alumno */
+             "REFRESH-INTERVAL;VALUE=DURATION:PT6H", "X-PUBLISHED-TTL:PT6H"];
+  const sello = icsFecha(new Date().toISOString());
+  for (const r of filas){
+    const cancelada = String(r.estado || "") === "cancelada";
+    L.push("BEGIN:VEVENT");
+    L.push("UID:" + r.id + "@batuta.lat");
+    L.push("DTSTAMP:" + sello);
+    L.push("DTSTART:" + icsFecha(r.inicio_utc));
+    L.push("DTEND:" + icsFecha(r.fin_utc || r.inicio_utc));
+    L.push("SUMMARY:" + icsEscapar((r.curso || "Clase") + " · " + academia));
+    if (r.sala) L.push("LOCATION:" + icsEscapar(r.sala));
+    L.push("STATUS:" + (cancelada ? "CANCELLED" : "CONFIRMED"));
+    /* SEQUENCE sube en las canceladas para que el calendario acepte que es una actualización
+       de un evento que ya tenía, y no la ignore por venir "igual" que la anterior. */
+    L.push("SEQUENCE:" + (cancelada ? 1 : 0));
+    L.push("DESCRIPTION:" + icsEscapar(cancelada ? "Esta clase se canceló." : "Tu clase en " + academia + ". Reservas y cambios en " + dominio + "/app"));
+    L.push("END:VEVENT");
+  }
+  L.push("END:VCALENDAR");
+  return L.map(icsPlegar).join("\r\n") + "\r\n";
+}
+
 async function pedirResenas(env){
   if (!env.RESEND_API_KEY) return 0;
   /* El esquema se migra en perezoso (solo al entrar al panel), así que un motor del cron no
@@ -7107,6 +7175,49 @@ export default {
       return htmlResponse(paginaBase("Gracias",
         '<h1 style="font-size:20px;margin:0 0 10px">Gracias por decírnoslo</h1>' +
         '<p>Tu respuesta le llega directo a tu academia y se la toman en serio. Van a ajustar lo que haga falta para que cada clase te sume más.</p>', ""));
+    }
+    /* Suscripción al calendario del alumno. Público a propósito: el calendario de su celular
+       consulta esta URL solo, sin sesión y sin poder loguearse. El token es opaco y solo
+       expone SUS horarios — ni nombres de otros, ni precios, ni contacto.
+       Se sirven las próximas 12 semanas y también las canceladas recientes (con
+       STATUS:CANCELLED), que es lo único que hace que una clase cancelada DESAPAREZCA de su
+       calendario en vez de quedarse ahí para siempre. */
+    if (path === "/app/cal.ics" && request.method === "GET"){
+      const tok = String(url.searchParams.get("t") || "").trim();
+      const vacio = () => new Response(
+        "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//Batuta//Calendario de alumno//ES\r\nEND:VCALENDAR\r\n",
+        { headers: { "content-type": "text/calendar; charset=utf-8", "cache-control": "no-store" } });
+      if (!/^[a-f0-9]{16,64}$/i.test(tok)) return vacio();
+      let al = null;
+      try {
+        al = await env.DB.prepare(
+          "SELECT a.id, a.tenant_id, t.academia FROM alumnos a JOIN tenants t ON t.id = a.tenant_id " +
+          "WHERE a.cal_token = ?1 AND t.estado != 'vencido'"
+        ).bind(tok).first();
+      } catch (e) { return vacio(); }
+      if (!al) return vacio();
+      const desde = new Date(Date.now() - 14 * 86400000).toISOString();   // canceladas recientes
+      const hasta = new Date(Date.now() + 84 * 86400000).toISOString();   // 12 semanas
+      let filas = [];
+      try {
+        filas = ((await env.DB.prepare(
+          "SELECT id, inicio_utc, fin_utc, curso, sala, estado FROM reservas " +
+          "WHERE tenant_id = ?1 AND alumno_id = ?2 AND inicio_utc >= ?3 AND inicio_utc <= ?4 " +
+          "AND tipo != 'bloqueo' ORDER BY inicio_utc ASC LIMIT 400"
+        ).bind(al.tenant_id, al.id, desde, hasta).all()).results) || [];
+      } catch (e) { filas = []; }
+      /* de las pasadas solo interesan las canceladas: una clase que ya se dictó no necesita
+         volver a viajar en cada consulta */
+      const ahora = Date.now();
+      filas = filas.filter(r => Date.parse(r.inicio_utc) >= ahora || String(r.estado) === "cancelada");
+      return new Response(armarIcs(al.academia || MARCA.nombre, filas, MARCA.dominio), {
+        headers: {
+          "content-type": "text/calendar; charset=utf-8",
+          "content-disposition": 'inline; filename="mis-clases.ics"',
+          "cache-control": "no-store",
+          "x-robots-tag": "noindex",
+        },
+      });
     }
     if (path === "/app/baja" && request.method === "GET"){
       const tok = String(url.searchParams.get("t") || "").trim();
@@ -9931,6 +10042,36 @@ export default {
          (Res. 0001-2023/SPC-Indecopi), hizo falta el consentimiento y no lo tenía.
          Vive en la FICHA del alumno y no en la cuenta: el titular del dato es la academia, y la
          ficha es lo que sobrevive si el alumno rehace su acceso al portal. */
+      /* Link de suscripción al calendario del alumno (17-ago-2026). El token se crea la
+         PRIMERA vez que lo pide, no al dar de alta a todo el mundo: la mayoría no lo va a
+         usar y un token que nadie pidió es superficie de ataque regalada. Si ya existe se
+         devuelve el mismo, para no invalidar el calendario que ya agregó a su celular. */
+      if (path === "/app/api/cuenta/calendario" && request.method === "POST"){
+        const cuCal = await cuentaDeSesion(env, request);
+        if (!cuCal) return json({ error: "Sesion expirada" }, 401);
+        if (!cuCal.alumno_id) return json({ error: "Todavia no tienes una ficha de alumno." }, 400);
+        await ensureAlumnoExtraSchema(env);
+        let tokCal = "";
+        try {
+          const fila = await env.DB.prepare("SELECT COALESCE(cal_token,'') AS t FROM alumnos WHERE id = ?1 AND tenant_id = ?2")
+            .bind(cuCal.alumno_id, cuCal.tenant_id).first();
+          tokCal = (fila && fila.t) || "";
+          if (!tokCal){
+            tokCal = randHex(20);
+            await env.DB.prepare("UPDATE alumnos SET cal_token = ?1 WHERE id = ?2 AND tenant_id = ?3")
+              .bind(tokCal, cuCal.alumno_id, cuCal.tenant_id).run();
+          }
+        } catch (e) { return json({ error: "No se pudo generar tu link" }, 500); }
+        const base = MARCA.dominio.replace(/^https?:\/\//, "");
+        return json({
+          ok: true,
+          /* webcal:// hace que el celular ofrezca SUSCRIBIRSE (se actualiza solo) en vez de
+             importar una copia congelada, que es el error que arruina todo el asunto */
+          webcal: "webcal://" + base + "/app/cal.ics?t=" + tokCal,
+          https: MARCA.dominio + "/app/cal.ics?t=" + tokCal,
+        });
+      }
+
       if (path === "/app/api/cuenta/marketing" && request.method === "POST"){
         const cu = await cuentaDeSesion(env, request);
         if (!cu) return json({ error: "Sesion expirada" }, 401);
