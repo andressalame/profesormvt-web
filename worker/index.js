@@ -4406,7 +4406,10 @@ export default {
         }
         const b = await request.json().catch(() => ({}));
         const paquete = String(b.paquete || "");
-        if (!(paquete in PAQUETES)) return json({ error: "Paquete no válido." }, 400);
+        /* Los cursos grabados NO viven en PAQUETES (ese objeto describe cuántas CLASES da cada
+           producto, y un curso no da ninguna). Se validan aparte en vez de meterlos ahí con
+           clases:0, que los colaría en todos los cálculos de saldo. */
+        if (!(paquete in PAQUETES) && CURSOS_GRABADOS.indexOf(paquete) === -1) return json({ error: "Paquete no válido." }, 400);
         const nombre = String(b.nombre || "").trim();
         const email = String(b.email || "").trim().toLowerCase();
         const whatsapp = String(b.whatsapp || "").trim().slice(0, 20);
@@ -4554,7 +4557,10 @@ export default {
         const comprobante = typeof b.comprobante === "string" ? b.comprobante : "";
 
         const precios = await loadPrecios(env);
-        if (!(paquete in PAQUETES)) return json({ error: "Paquete no válido." }, 400);
+        /* Los cursos grabados NO viven en PAQUETES (ese objeto describe cuántas CLASES da cada
+           producto, y un curso no da ninguna). Se validan aparte en vez de meterlos ahí con
+           clases:0, que los colaría en todos los cálculos de saldo. */
+        if (!(paquete in PAQUETES) && CURSOS_GRABADOS.indexOf(paquete) === -1) return json({ error: "Paquete no válido." }, 400);
         // Solo se venden los paquetes vigentes: la clase de prueba está retirada (25-jul-2026).
         if (!PAQUETES_COMPRABLES.includes(paquete)) return json({ error: PAQUETE_RETIRADO_MSG }, 400);
 
@@ -4617,7 +4623,10 @@ export default {
         const b = await request.json().catch(() => ({}));
         const paquete = String(b.paquete || "");
         const curso = String(b.curso || "").trim() || "Canto";
-        if (!(paquete in PAQUETES)) return json({ error: "Paquete no válido." }, 400);
+        /* Los cursos grabados NO viven en PAQUETES (ese objeto describe cuántas CLASES da cada
+           producto, y un curso no da ninguna). Se validan aparte en vez de meterlos ahí con
+           clases:0, que los colaría en todos los cálculos de saldo. */
+        if (!(paquete in PAQUETES) && CURSOS_GRABADOS.indexOf(paquete) === -1) return json({ error: "Paquete no válido." }, 400);
         // Solo se venden los paquetes vigentes: la clase de prueba está retirada (25-jul-2026).
         if (!PAQUETES_COMPRABLES.includes(paquete)) return json({ error: PAQUETE_RETIRADO_MSG }, 400);
 
