@@ -923,10 +923,13 @@ button[data-ayuda],a[data-ayuda],select[data-ayuda],input[data-ayuda],label[data
         </div>
       </div>
     </div>
-    <div class="group"><h2>Hoy</h2><div class="grid cards" id="resHoy"></div></div>
-    <div class="group"><h2>Alumnos</h2><div class="grid cards" id="resAlumnos"></div></div>
-    <div class="group"><h2>Este mes</h2><div class="grid cards" id="resMes"></div></div>
-    <div class="group"><h2>Histórico</h2><div class="grid cards" id="resHist"></div></div>
+    <!-- Fase 3 (17-ago-2026): arriba SOLO lo que pide acción hoy; los números que no piden
+         nada bajan al segundo bloque. "Este mes" e "Histórico" se fueron a Reportes, donde
+         ya estaban mejor contados (series por mes con gráfico, no un número suelto). -->
+    <div class="group"><h2>Lo que toca hoy</h2><div class="grid cards" id="resHoy"></div></div>
+    <div class="group"><h2>Tu academia en números</h2>
+      <p class="hint">Cómo va tu academia. Nada de esto pide que hagas algo ahora. ¿Quieres el detalle mes a mes, con gráficos? Está en <a href="#" data-ira="reportes">Reportes</a>.</p>
+      <div class="grid cards" id="resAlumnos"></div></div>
   </section>
 
   <!-- ====== MI ACADEMIA (fase 3, 10-ago-2026): pantalla-índice de tarjetas ======
@@ -3089,33 +3092,29 @@ function renderResumen(){
   var mrr=cs.reduce(function(s,c,i){ var a=db.alumnos[i]; if(!a) return s; var _p=pkDe(a.paquete); if((!_p.ilim && _p.clases===1) || a.paquete==="Clase suelta") return s; return (c.estado==="Activo"||c.estado==="⚠ Última clase"||c.estado==="Renovar mensualidad") ? s+(Number(c.monto)||0) : s; },0);
   var mkt=db.cuentas.filter(function(c){return c.marketing;}).length;
 
-  var now=new Date(); var ym=now.getFullYear()+"-"+String(now.getMonth()+1).padStart(2,"0");
-  var mes=db.registro.filter(function(r){return (r.fecha||"").slice(0,7)===ym;});
-  var dictMes=mes.filter(function(r){return r.estado==="Asistió";}).length;
-  var faltaMes=mes.filter(function(r){return r.estado==="Falta";}).length;
-  var repMes=mes.filter(function(r){return r.estado==="Reprogramó";}).length;
-  var ingresosMes=db.compras.filter(function(c){return c.estado==="confirmada" && (c.fecha||"").slice(0,7)===ym;})
-    .reduce(function(s,c){return s+(Number(c.monto)||0);},0);
+  /* ── Poda de "Hoy" (17-ago-2026, fase 3 del plan de UX) ────────────────────────────
+     Eran 14 tarjetas en 4 bloques y el spec pedía una pantalla ORIENTADA A TAREAS: "la
+     señora abre y no sabe qué toca". Un número que no pide hacer nada no es una tarea,
+     es un reporte, y compitiendo con los que sí lo son hace que no se lea ninguno.
 
-  var dictTotal=db.registro.filter(function(r){return r.estado==="Asistió";}).length;
-  var ingresosTot=db.compras.filter(function(c){return c.estado==="confirmada";})
-    .reduce(function(s,c){return s+(Number(c.monto)||0);},0);
+     ARRIBA queda SOLO lo que exige que hagas algo hoy: confirmar un pago, hablar una
+     renovación. Lo demás baja a "Tu academia en números", que es lo que es.
 
+     Se BORRARON 6 tarjetas por duplicadas, no por sobrar: "Este mes" (dictadas, faltas,
+     reprogramaciones, cobrado) e "Histórico" (dictadas y cobrado totales) ya viven en
+     Reportes, y allá están MEJOR — series por mes con gráfico en vez de un número suelto
+     sin contexto. Ver dos veces el mismo dato con distinta forma no informa, confunde.
+     Nada se perdió: todo sigue en Reportes. */
   el("resHoy").innerHTML =
     card("Pagos por confirmar",pend,pend>0?"red":"")+
+    card("⚠ Última clase — hablar renovación",ultima,"hot")+
+    card("Completados — renovar hoy",compl,"red");
+  el("resAlumnos").innerHTML =
+    card("Alumnos activos",activos,"")+
+    card("MRR proyectado /mes","S/ "+mrr,"green")+
     card("Cuentas en el portal",db.cuentas.length,"")+
     card("Leads capturados",(db.leads||[]).length,"")+
     card("Emails con permiso de promos",mkt,"");
-  el("resAlumnos").innerHTML =
-    card("Activos",activos,"")+
-    card("⚠ Última clase — hablar renovación",ultima,"hot")+
-    card("Completados — renovar hoy",compl,"red")+
-    card("MRR proyectado /mes","S/ "+mrr,"green");
-  el("resMes").innerHTML =
-    card("Clases dictadas",dictMes,"")+card("Faltas",faltaMes,"")+
-    card("Reprogramaciones",repMes,"")+card("Cobrado por el portal","S/ "+ingresosMes,"");
-  el("resHist").innerHTML =
-    card("Clases dictadas (total)",dictTotal,"")+card("Cobrado por el portal (total)","S/ "+ingresosTot,"");
 
   var dot=el("dotPagos");
   if(pend>0){ dot.textContent=pend; dot.classList.remove("hidden"); } else dot.classList.add("hidden");
