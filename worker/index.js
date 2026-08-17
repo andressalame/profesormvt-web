@@ -1701,7 +1701,19 @@ async function validarFirmaMeta(env, rawBuf, sigHeader){
    EXCLUYE 'pendiente' a propósito: esos YA pagaron por Yape/Plin y esperan la confirmación de
    Andrés; un "rescate" ahí sería un insulto. Dedupe con compras.rescate_enviado
    (0 pendiente, 1 enviado, 2 saltada). Encendido por defecto (config.rescate_activo). */
-const NOMBRES_PAQUETE = { "Paquete 4": "Plan Esencial", "Paquete 8": "Plan Intensivo", "Paquete 12": "Plan Estrella", "Clase suelta": "Clase suelta", "Clase de prueba": "Clase de prueba" };
+const NOMBRES_PAQUETE = { "Paquete 4": "Plan Esencial", "Paquete 8": "Plan Intensivo", "Paquete 12": "Plan Estrella", "Clase suelta": "Clase suelta", "Clase de prueba": "Clase de prueba", "Curso canto": "Curso grabado de canto", "Curso composicion": "Curso grabado de composición" };
+
+/* Cursos grabados: el producto se llama "Curso canto" / "Curso composicion" en `compras`.
+   Es compra ÚNICA y de acceso perpetuo, así que no mira ciclos ni vencimientos: basta con que
+   exista una compra confirmada. Se acepta también 'pendiente' porque el que paga por Yape queda
+   ahí hasta que Andrés confirma, y dejarlo sin acceso tras haber pagado es peor que el riesgo. */
+async function tieneCurso(env, cuentaId, curso){
+  const prod = curso === "composicion" ? "Curso composicion" : "Curso canto";
+  const r = await env.DB.prepare(
+    "SELECT 1 AS x FROM compras WHERE cuenta_id = ?1 AND paquete = ?2 AND estado IN ('confirmada','pendiente') LIMIT 1"
+  ).bind(cuentaId, prod).first();
+  return !!r;
+}
 
 /* ═══════════════════════════════════════════════════════════════════════════
    SORTEO — campaña con fecha de muerte. Vigente: SETIEMBRE 2026 (cierra 1-set 20:00 Lima).
@@ -3307,6 +3319,27 @@ async function ensureSchema(env){
     // sorteo_blast: dedupe del correo de campaña del sorteo (0 = pendiente, 1 = enviado, 2 = saltado).
     const tieneSorteoBlast = (infoLeads.results || []).some(c => c.name === "sorteo_blast");
     if (!tieneSorteoBlast) await env.DB.prepare("ALTER TABLE leads ADD COLUMN sorteo_blast INTEGER DEFAULT 0").run();
+
+    /* ── CURSOS GRABADOS (17-ago-2026) ────────────────────────────────────────
+       Dos cursos independientes ("canto" y "composicion"), cada uno con SUS PROPIAS
+       secciones. Una lección = un video de YouTube NO LISTADO embebido: servir video
+       desde R2 se cobra por reproducción y el portal ya da el control de acceso.
+       `orden` ordena dentro de la sección; `seccion_orden` ordena las secciones entre sí,
+       para no depender del alfabeto ni renumerar todo al insertar una sección nueva. */
+    await env.DB.prepare(
+      "CREATE TABLE IF NOT EXISTS curso_lecciones (" +
+      "id TEXT PRIMARY KEY, curso TEXT NOT NULL, seccion TEXT DEFAULT '', seccion_orden INTEGER DEFAULT 0, " +
+      "orden INTEGER DEFAULT 0, titulo TEXT NOT NULL, descripcion TEXT DEFAULT '', " +
+      "video TEXT DEFAULT '', duracion TEXT DEFAULT '', recurso_url TEXT DEFAULT '', " +
+      "gratis INTEGER DEFAULT 0, publicada INTEGER DEFAULT 0, creada TEXT DEFAULT '')"
+    ).run();
+    /* El progreso se guarda por CUENTA, no por alumno: quien compra el curso puede no tener
+       ficha de alumno (es un producto que se vende suelto, sin clases). */
+    await env.DB.prepare(
+      "CREATE TABLE IF NOT EXISTS curso_progreso (" +
+      "cuenta_id TEXT NOT NULL, leccion_id TEXT NOT NULL, visto TEXT DEFAULT '', " +
+      "PRIMARY KEY (cuenta_id, leccion_id))"
+    ).run();
     // v16 (win-back) plegada al auto-migrador: en prod se aplicó por .sql recién el 06-jul-2026,
     // pero un despliegue fresco (clon Batuta) la necesita igual que las demás.
     const tieneRecFecha = (infoAlumnos.results || []).some(c => c.name === "recordatorio_fecha");
@@ -4174,6 +4207,64 @@ export default {
           metodo: compraR.metodo || "", fecha: compraR.fecha || "",
           numero: numR, whatsapp: MARCA.whatsapp || ""
         }));
+      }
+      /* ============ CURSOS GRABADOS (17-ago-2026) ============
+         Dos cursos sueltos ("canto" y "composicion"), cada uno con sus secciones. El alumno ve
+         el temario COMPLETO aunque no haya comprado: saber qué hay adentro es lo que vende. Lo
+         que se guarda para el que pagó es el video — el resto es vitrina. */
+      if (url.pathname === "/api/curso" && request.method === "GET"){
+        const cu = await cuentaDeSesion(env, request);
+        if (!cu) return json({ error: "Inicia sesión" }, 401);
+        const curso = (url.searchParams.get("c") || "canto").toLowerCase();
+        if (curso !== "canto" && curso !== "composicion") return json({ error: "Curso no encontrado" }, 404);
+
+        const comprado = await tieneCurso(env, cu.id, curso);
+        const { results: lecs } = await env.DB.prepare(
+          "SELECT id, seccion, seccion_orden, orden, titulo, descripcion, video, duracion, recurso_url, gratis " +
+          "FROM curso_lecciones WHERE curso = ?1 AND publicada = 1 ORDER BY seccion_orden ASC, orden ASC"
+        ).bind(curso).all();
+        const { results: vistas } = await env.DB.prepare(
+          "SELECT leccion_id FROM curso_progreso WHERE cuenta_id = ?1"
+        ).bind(cu.id).all();
+        const vistoSet = new Set((vistas || []).map(v => v.leccion_id));
+
+        /* El video solo viaja si la puede ver: si se mandara siempre y se ocultara en el
+           frontend, cualquiera lo saca del JSON y el curso deja de venderse solo. */
+        const secciones = [];
+        for (const l of (lecs || [])){
+          const puede = comprado || l.gratis === 1;
+          let sec = secciones.find(s => s.nombre === l.seccion);
+          if (!sec){ sec = { nombre: l.seccion || "", lecciones: [] }; secciones.push(sec); }
+          sec.lecciones.push({
+            id: l.id, titulo: l.titulo, descripcion: l.descripcion, duracion: l.duracion,
+            gratis: l.gratis === 1, puede, visto: vistoSet.has(l.id),
+            video: puede ? l.video : "", recurso_url: puede ? l.recurso_url : ""
+          });
+        }
+        const total = (lecs || []).length;
+        return json({
+          curso, comprado, secciones, total,
+          vistas: (lecs || []).filter(l => vistoSet.has(l.id)).length
+        });
+      }
+      if (url.pathname === "/api/curso/visto" && request.method === "POST"){
+        const cu = await cuentaDeSesion(env, request);
+        if (!cu) return json({ error: "Inicia sesión" }, 401);
+        const b = await request.json().catch(() => ({}));
+        const lid = String(b.leccion_id || "");
+        const l = await env.DB.prepare("SELECT id, curso, gratis FROM curso_lecciones WHERE id = ?1").bind(lid).first();
+        if (!l) return json({ error: "Lección no encontrada" }, 404);
+        // No se marca progreso de lo que no puede ver: si no, el contador miente.
+        if (l.gratis !== 1 && !(await tieneCurso(env, cu.id, l.curso))) return json({ error: "No tienes este curso" }, 403);
+        if (b.visto === false){
+          await env.DB.prepare("DELETE FROM curso_progreso WHERE cuenta_id = ?1 AND leccion_id = ?2").bind(cu.id, lid).run();
+        } else {
+          await env.DB.prepare(
+            "INSERT INTO curso_progreso (cuenta_id, leccion_id, visto) VALUES (?1,?2,?3) " +
+            "ON CONFLICT(cuenta_id, leccion_id) DO UPDATE SET visto = ?3"
+          ).bind(cu.id, lid, new Date().toISOString()).run();
+        }
+        return json({ ok: true });
       }
       /* Estado público del sorteo vigente. Además del cron, este GET dispara el sorteoElegir()
          de respaldo: si el cron fallara, el primer visitante después de la hora de cierre lo
@@ -5270,6 +5361,57 @@ export default {
            reservar ni ver cuántas clases les quedan. El acceso vivía en `cuentas` y la ficha en
            `alumnos`, y nada las unía salvo que el alumno adivinara la URL y se registrara solo.
            Devuelve el link y el mensaje de WhatsApp ya escrito, para copiar y pegar. */
+        /* Cursos grabados: alta, edición y borrado de lecciones (17-ago-2026).
+           `video` guarda el ID de YouTube, no la URL: así da igual que pegue el link corto,
+           el largo o el de "compartir", y el portal arma el embed a su manera. */
+        if (url.pathname === "/api/admin/curso/leccion" && request.method === "POST"){
+          const b = await request.json().catch(() => ({}));
+          const curso = String(b.curso || "").toLowerCase();
+          if (curso !== "canto" && curso !== "composicion") return json({ error: "Curso inválido: usa 'canto' o 'composicion'." }, 400);
+          const titulo = String(b.titulo || "").trim();
+          if (!titulo) return json({ error: "La lección necesita título." }, 400);
+          const vid = String(b.video || "").trim();
+          const m = vid.match(/(?:youtu\.be\/|v=|embed\/|shorts\/)([\w-]{11})/) || vid.match(/^([\w-]{11})$/);
+          const video = m ? m[1] : "";
+          if (vid && !video) return json({ error: "No reconozco ese video de YouTube." }, 400);
+
+          const campos = {
+            curso, seccion: String(b.seccion || "").trim(),
+            seccion_orden: Number(b.seccion_orden) || 0, orden: Number(b.orden) || 0,
+            titulo, descripcion: String(b.descripcion || "").trim(), video,
+            duracion: String(b.duracion || "").trim(), recurso_url: String(b.recurso_url || "").trim(),
+            gratis: b.gratis ? 1 : 0, publicada: b.publicada ? 1 : 0
+          };
+          if (b.id){
+            await env.DB.prepare(
+              "UPDATE curso_lecciones SET curso=?1, seccion=?2, seccion_orden=?3, orden=?4, titulo=?5, " +
+              "descripcion=?6, video=?7, duracion=?8, recurso_url=?9, gratis=?10, publicada=?11 WHERE id=?12"
+            ).bind(campos.curso, campos.seccion, campos.seccion_orden, campos.orden, campos.titulo,
+                   campos.descripcion, campos.video, campos.duracion, campos.recurso_url,
+                   campos.gratis, campos.publicada, String(b.id)).run();
+            return json({ ok: true, id: String(b.id) });
+          }
+          const id = crypto.randomUUID();
+          await env.DB.prepare(
+            "INSERT INTO curso_lecciones (id, curso, seccion, seccion_orden, orden, titulo, descripcion, " +
+            "video, duracion, recurso_url, gratis, publicada, creada) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13)"
+          ).bind(id, campos.curso, campos.seccion, campos.seccion_orden, campos.orden, campos.titulo,
+                 campos.descripcion, campos.video, campos.duracion, campos.recurso_url,
+                 campos.gratis, campos.publicada, hoy()).run();
+          return json({ ok: true, id });
+        }
+        if (url.pathname === "/api/admin/curso/lecciones" && request.method === "GET"){
+          const curso = (url.searchParams.get("c") || "canto").toLowerCase();
+          const { results } = await env.DB.prepare(
+            "SELECT * FROM curso_lecciones WHERE curso = ?1 ORDER BY seccion_orden ASC, orden ASC"
+          ).bind(curso).all();
+          return json({ lecciones: results || [] });
+        }
+        if (url.pathname === "/api/admin/curso/leccion" && request.method === "DELETE"){
+          const b = await request.json().catch(() => ({}));
+          await env.DB.prepare("DELETE FROM curso_lecciones WHERE id = ?1").bind(String(b.id || "")).run();
+          return json({ ok: true });
+        }
         if (url.pathname === "/api/admin/invitacion/link" && request.method === "POST"){
           const b = await request.json().catch(() => ({}));
           const alumnoId = String(b.alumno_id || "");
