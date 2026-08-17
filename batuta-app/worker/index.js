@@ -8587,6 +8587,23 @@ export default {
         /* 10-ago-2026: se suma interbank_cuenta — la web pública ya lo contaba (armarWebCtx)
            pero este checklist no: un tenant solo-Interbank vendía y aquí se le decía que no. */
         const cobroConectado = !!(mpOnAct || cfgAct.pago_numero || cfgAct.bcp_cuenta || cfgAct.interbank_cuenta || cfgAct.scotia_cuenta || cfgAct.crypto_wallet);
+        /* El PRIMER cobro confirmado, con nombre y monto (17-ago-2026, fase 4 del plan de UX).
+           Es el momento en que la dueña deja de creer que esto es una hoja de cálculo bonita:
+           su academia cobró sola. Hoy pasa sin que nadie se entere. Se manda el detalle para
+           que el panel pueda celebrarlo con el dato real ("S/250 de María"), no con un
+           genérico. `celebrado` vive en config, no en el navegador: es una vez por ACADEMIA,
+           no una por dispositivo. */
+        let primerCobro = null;
+        if (Number(nComp && nComp.n) > 0 && String(cfgAct.primer_cobro_celebrado || "") !== "1"){
+          const pc = await env.DB.prepare(
+            "SELECT c.monto, c.fecha, COALESCE(a.nombre, cu.nombre, '') AS quien " +
+            "FROM compras c " +
+            "LEFT JOIN cuentas cu ON cu.id = c.cuenta_id AND cu.tenant_id = c.tenant_id " +
+            "LEFT JOIN alumnos a ON a.id = cu.alumno_id AND a.tenant_id = c.tenant_id " +
+            "WHERE c.tenant_id = ?1 AND c.estado = 'confirmada' ORDER BY c.fecha ASC, c.id ASC LIMIT 1"
+          ).bind(t.id).first().catch(() => null);
+          if (pc) primerCobro = { monto: Number(pc.monto) || 0, quien: (pc.quien || "").trim(), fecha: pc.fecha || "" };
+        }
         return json({
           pasos: {
             precios: preciosPropios,
@@ -8595,7 +8612,21 @@ export default {
             cobro_conectado: cobroConectado,
             cobro: Number(nComp && nComp.n) > 0,
           },
+          primer_cobro: primerCobro,
         });
+      }
+
+      /* "Ya vi mi celebración": se guarda por ACADEMIA, no por navegador, para que el confeti
+         no vuelva a salir cada vez que la dueña entra desde el celular. Idempotente. */
+      if (path === "/app/api/t/celebrado" && request.method === "POST"){
+        const actorC = await actorDeSesion(env, request);
+        if (!actorC) return json({ error: "Sesion expirada" }, 401);
+        if (!actorC.esDueno) return json({ error: "Solo el dueño" }, 403);
+        await env.DB.prepare(
+          "INSERT INTO config (tenant_id, clave, valor) VALUES (?1,'primer_cobro_celebrado','1') " +
+          "ON CONFLICT(tenant_id, clave) DO UPDATE SET valor = '1'"
+        ).bind(actorC.tenant.id).run().catch(() => {});
+        return json({ ok: true });
       }
 
       if (path === "/app/api/t/logout" && request.method === "POST"){

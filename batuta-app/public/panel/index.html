@@ -763,6 +763,21 @@
 .nav .tab .dot.pulse{width:8px;height:8px;min-width:8px;padding:0;border-radius:999px;background:var(--amber,#d99a3c);animation:bt-pulse 1.6s ease-in-out infinite;}
 @keyframes bt-pulse{0%,100%{opacity:.45;transform:scale(.9);}50%{opacity:1;transform:scale(1.15);}}
 
+/* ── Celebración del primer cobro (17-ago-2026) ──
+   Confeti en CSS puro: 40 papelitos cayendo. Sin librerías, sin canvas y sin una sola
+   petición de red — es una fiesta de 2 segundos, no vale cargar nada por ella. */
+.celebra-wrap{position:fixed;inset:0;z-index:900;display:flex;align-items:center;justify-content:center;padding:20px;background:rgba(6,8,12,.72);backdrop-filter:blur(3px);overflow:hidden;}
+.celebra-conf{position:absolute;inset:0;pointer-events:none;overflow:hidden;}
+.celebra-conf .cfti{position:absolute;top:-14px;width:9px;height:15px;border-radius:2px;opacity:.9;animation-name:cfti-cae;animation-timing-function:linear;animation-iteration-count:1;animation-fill-mode:forwards;}
+@keyframes cfti-cae{0%{transform:translateY(-10px) rotate(0deg);opacity:1;}100%{transform:translateY(102vh) rotate(680deg);opacity:.85;}}
+.celebra-caja{position:relative;max-width:440px;width:100%;background:var(--panel,#171b23);border:1px solid var(--line,rgba(255,255,255,.14));border-radius:16px;padding:30px 26px 24px;text-align:center;box-shadow:0 24px 70px rgba(0,0,0,.5);}
+.celebra-monto{font-family:var(--mono);font-size:40px;font-weight:700;color:#34d399;line-height:1;margin-bottom:12px;}
+.celebra-caja h2{font-size:19px;line-height:1.35;margin:0 0 10px;}
+.celebra-caja p{font-size:14.5px;line-height:1.6;color:var(--muted);margin:0 0 20px;}
+.celebra-btns{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;}
+/* Quien pidió menos animación no recibe 40 cosas cayéndole encima: se queda el mensaje. */
+@media (prefers-reduced-motion: reduce){ .celebra-conf{display:none;} }
+
 /* ====== AYUDA AL PASAR EL MOUSE (15-ago-2026, pedido de Andrés) ======
    Cualquier elemento con el atributo data-ayuda muestra su explicación al pasarle el mouse.
    Por qué no el `title` nativo de HTML: tarda ~1s en salir, no se puede estilar, se corta feo
@@ -10212,6 +10227,56 @@ function marcarMenuPendiente(p){
     tab.appendChild(dot);
   }
 }
+/* ═══ Celebrar el PRIMER cobro (17-ago-2026, fase 4 del plan de UX) ═══
+   El momento en que la dueña deja de creer que Batuta es una hoja de cálculo bonita: su
+   academia cobró sola, sin que ella persiguiera a nadie. Hoy ese momento pasa sin que
+   nadie se entere, y es justo el que decide si se queda.
+   Sale UNA vez por academia (la marca vive en config, no en el navegador: si no, el
+   confeti volvería a salir cada vez que entra desde el celular).
+   El mensaje lleva el dato REAL — "S/250 de María" — porque un genérico no emociona a
+   nadie. Y el botón de compartir es a la vez el marketing más barato que existe. */
+function celebrarPrimerCobro(pc){
+  if(!pc || el("celebraCobro")) return;
+  var monto="S/ "+(Number(pc.monto)||0);
+  var quien=(pc.quien||"").trim();
+  var titular=quien ? ("Tu academia acaba de cobrar solita: "+monto+" de "+quien)
+                    : ("Tu academia acaba de cobrar solita: "+monto);
+  var wa="https://wa.me/?text="+encodeURIComponent(
+    "Mi academia acaba de cobrar sola por internet "+monto+(quien?(" de "+quien):"")+" 🎉");
+  var d=document.createElement("div");
+  d.id="celebraCobro"; d.className="celebra-wrap"; d.setAttribute("role","dialog");
+  d.setAttribute("aria-modal","true"); d.setAttribute("aria-label","Tu primer cobro");
+  var conf=""; /* 40 papelitos con posición/color/retraso variados; CSS puro, sin librerías */
+  for(var i=0;i<40;i++){
+    conf+='<i class="cfti" style="left:'+(Math.random()*100).toFixed(1)+'%;'
+        + 'background:'+["#E8A13D","#34d399","#6ea8fe","#f472b6","#fbbf24"][i%5]+';'
+        + 'animation-delay:'+(Math.random()*1.2).toFixed(2)+'s;'
+        + 'animation-duration:'+(2.4+Math.random()*1.6).toFixed(2)+'s;"></i>';
+  }
+  d.innerHTML='<div class="celebra-conf" aria-hidden="true">'+conf+'</div>'
+    +'<div class="celebra-caja">'
+    +'<div class="celebra-monto">'+esc(monto)+'</div>'
+    +'<h2>'+esc(titular)+'</h2>'
+    +'<p>Se pagó por internet y quedó registrado solo. No tuviste que perseguir a nadie ni anotarlo a mano: eso es lo que va a pasar con cada cobro de ahora en adelante.</p>'
+    +'<div class="celebra-btns">'
+    +'<a class="btn" href="'+wa+'" target="_blank" rel="noopener">Contarlo por WhatsApp</a>'
+    +'<button class="btn ghost" type="button" id="celebraCerrar">Seguir trabajando</button>'
+    +'</div></div>';
+  document.body.appendChild(d);
+  function cerrar(){
+    var n=el("celebraCobro"); if(n) n.remove();
+    document.removeEventListener("keydown",esc2);
+    /* se marca al CERRAR, no al abrir: si el panel se cae en medio, la dueña no se queda
+       sin su celebración */
+    fetch("/app/api/t/celebrado",{method:"POST",headers:hdr()}).catch(function(){});
+  }
+  function esc2(ev){ if(ev.key==="Escape") cerrar(); }
+  el("celebraCerrar").addEventListener("click",cerrar);
+  d.addEventListener("click",function(ev){ if(ev.target===d) cerrar(); });
+  document.addEventListener("keydown",esc2);
+  try{ el("celebraCerrar").focus(); }catch(e){}
+}
+
 function cargarActivacion(){
   fetch("/app/api/t/activacion",{headers:hdr()}).then(function(r){
     if(!r.ok) throw new Error("HTTP "+r.status);
@@ -10220,6 +10285,7 @@ function cargarActivacion(){
     var p=(d&&d.pasos)||{};
     try{ pintarAvisoWeb(p); }catch(e){}
     try{ marcarMenuPendiente(p); }catch(e){}
+    try{ if(d&&d.primer_cobro) celebrarPrimerCobro(d.primer_cobro); }catch(e){}
     /* Ajustes aterriza en lo pendiente (03-ago-2026): sin precios → "Clases y planes";
        con precios pero sin cobro → "Cobros". Antes aterrizaba en "Academia" (marca/logo)
        y el dueño se perdía antes de llegar a lo importante. Si no falta nada, se respeta
