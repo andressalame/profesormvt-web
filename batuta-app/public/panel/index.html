@@ -930,6 +930,17 @@ button[data-ayuda],a[data-ayuda],select[data-ayuda],input[data-ayuda],label[data
         </div>
         <div class="hint" style="margin:14px 0 6px;">O manda un <b>link de cobro directo</b> por WhatsApp: el alumno paga sin registrarse y su cuenta se crea sola.</div>
         <div id="linksCobro" style="display:flex;gap:8px;flex-wrap:wrap;"></div>
+        <!-- Ver tu propio cobro (17-ago-2026, fase 4 del plan de UX). El spec pedía un "cobro
+             de prueba de S/1 a tu propio Yape" para que la dueña CREA que esto cobra de
+             verdad. Se cambió por esto: pagarse a uno mismo por Yape ni siquiera pasa por
+             Batuta, y por Mercado Pago le cuesta comisión por un sol. Abrir la página prueba
+             lo mismo -- que existe y se ve bien -- sin mover un centavo. El GET solo pinta;
+             cobrar exige el POST de pagar-directo, así que mirar es gratis y seguro. -->
+        <div id="verCobroWrap" style="margin-top:10px;display:none;">
+          <a class="btn ghost sm" id="btnVerCobro" href="#" target="_blank" rel="noopener"
+             data-ayuda="Abre tu propia página de pago tal como la ve un alumno, con tus planes y tus precios. Es solo mirar: no se cobra nada ni se registra ningún pago.">Ver cómo lo ve tu alumno</a>
+          <span class="hint" style="margin-left:8px;">Solo para mirar. No se cobra nada.</span>
+        </div>
         <div class="hint" style="margin:14px 0 6px;">Y esta es <b>tu página web pública</b>, ahora en tu propio subdominio (se genera sola con tus cursos y precios, y la editas en la pestaña <b>Mi web</b>): ponla en tu bio de Instagram o compártela en redes.</div>
         <div class="cfgrow" style="max-width:100%;">
           <input id="linkPublicaBox" type="text" readonly style="flex:1;font-family:var(--mono);font-size:12.5px;" />
@@ -2890,6 +2901,14 @@ function pintarLinkAlumnos(){
         });
         cont.appendChild(b);
       });
+      /* "Ver cómo lo ve tu alumno": apunta al primer plan con precio. Solo aparece si HAY
+         un plan cobrable — un botón que lleva a una página vacía enseña justo lo contrario
+         de lo que queremos que vea. */
+      var wrapV=el("verCobroWrap"), aV=el("btnVerCobro");
+      if(wrapV&&aV){
+        if(pks.length){ aV.href=link+"/pagar?p="+encodeURIComponent(pks[0]); wrapV.style.display=""; }
+        else { wrapV.style.display="none"; }
+      }
     }
   }catch(e){}
 }
@@ -10317,6 +10336,27 @@ function cargarActivacion(){
       box.appendChild(row);
     });
     wireIrPantalla(box);
+    /* Cierre del checklist (17-ago-2026): al que ya tiene precios y medio de cobro pero
+       todavía no ha cobrado, se le ofrece MIRAR su propia página de pago. Es el paso que
+       más cuesta creer ("¿de verdad me van a pagar por aquí?") y verlo con sus planes y
+       sus precios lo resuelve en 5 segundos. Sin mover un sol: el spec pedía un cobro de
+       prueba de S/1 y eso, por Yape, ni siquiera pasa por Batuta.
+       Solo se ofrece cuando tiene sentido: con precios, con cobro conectado y sin cobrar aún. */
+    try{
+      if(p.precios && p.cobro_conectado && !p.cobro && TENANT_SLUG){
+        var pkV=(db&&db.precios)?pkNombres().filter(function(k){return (db.precios[k]||0)>0;}):[];
+        if(pkV.length){
+          var fila=document.createElement("div");
+          fila.style.cssText="padding:10px 0 2px;";
+          fila.innerHTML="<p class='hint' style='margin:0 0 7px;'>¿Dudas de que te vayan a pagar por aquí? Míralo tú misma, con tus planes y tus precios.</p>"
+            +"<a class='btn ghost sm' target='_blank' rel='noopener' href='"
+            +location.origin+"/app/a/"+encodeURIComponent(TENANT_SLUG)+"/pagar?p="+encodeURIComponent(pkV[0])
+            +"'>Ver mi página de pago</a>"
+            +"<span class='hint' style='margin-left:8px;'>Solo para mirar. No se cobra nada.</span>";
+          box.appendChild(fila);
+        }
+      }
+    }catch(e){}
     var g=el("grpActivacion"); if(g) g.style.display="";
   }).catch(function(e){ /* el checklist es opcional: jamás rompe el panel */ });
 }

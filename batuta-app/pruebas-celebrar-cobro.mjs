@@ -80,5 +80,37 @@ t("no rompe el panel si algo falla (va en try/catch)", () => {
   has(PANEL, "try{ if(d&&d.primer_cobro) celebrarPrimerCobro(d.primer_cobro); }catch(e){}");
 });
 
+console.log("\n=== Ver mi página de pago (reemplaza el cobro de prueba de S/1) ===");
+const PAGAR = SRC.slice(SRC.indexOf('/^\\/app\\/a\\/[^/]+\\/pagar$/'), SRC.indexOf('/^\\/app\\/a\\/[^/]+\\/pagar$/') + 1800);
+t("abrir la página NO cobra: el GET solo pinta", () => {
+  if (/pagar-directo|preference|charges\.create/.test(PAGAR))
+    throw new Error("el GET está tocando el cobro; tiene que ser solo lectura");
+});
+t("cobrar exige un POST aparte", () => has(SRC, 'path === "/app/api/pagar-directo" && request.method === "POST"'));
+t("el botón existe en la sección de links", () => has(PANEL, 'id="btnVerCobro"'));
+t("abre en pestaña nueva y sin filtrar el referrer", () => {
+  const i = PANEL.indexOf('id="btnVerCobro"');
+  const frag = PANEL.slice(i - 220, i + 220);
+  has(frag, 'target="_blank"'); has(frag, 'rel="noopener"');
+});
+t("dice claramente que no se cobra nada", () => has(PANEL, "Solo para mirar. No se cobra nada."));
+t("tiene ayuda al pasar el mouse", () => {
+  const i = PANEL.indexOf('id="btnVerCobro"');
+  if (!PANEL.slice(i - 300, i + 400).includes("data-ayuda")) throw new Error("sin data-ayuda");
+});
+t("se esconde si no hay ningún plan con precio", () => {
+  has(PANEL, 'wrapV.style.display="none"');
+  has(PANEL, "if(pks.length){ aV.href=");
+});
+t("apunta a un plan que SÍ tiene precio", () => has(PANEL, 'encodeURIComponent(pks[0])'));
+t("el slug y el plan van codificados en la URL", () => has(PANEL, "encodeURIComponent(TENANT_SLUG)"));
+t("en el checklist solo aparece a quien le falta cobrar", () => {
+  has(PANEL, "if(p.precios && p.cobro_conectado && !p.cobro && TENANT_SLUG)");
+});
+t("el bloque del checklist no puede tumbar el panel", () => {
+  const i = PANEL.indexOf("if(p.precios && p.cobro_conectado && !p.cobro");
+  has(PANEL.slice(i - 120, i), "try{");
+});
+
 console.log("\n" + (mal ? "✗ " + mal + " fallando · " : "✓ ") + ok + " pruebas OK\n");
 process.exit(mal ? 1 : 0);
