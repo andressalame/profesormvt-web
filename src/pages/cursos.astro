@@ -1,0 +1,152 @@
+---
+/*
+  Página de venta de los dos cursos grabados (17-ago-2026).
+  El temario NO se lista acá a mano: se pide a /api/curso-publico, que lee las mismas secciones
+  que ve el alumno en el portal. Si Andrés reordena una sección, esta página cambia sola —
+  duplicar el temario en el HTML es garantía de que un día digan cosas distintas.
+*/
+import Layout from '../layouts/Layout.astro';
+---
+
+<Layout
+  title="Cursos grabados de canto y composición | ProfesorMVT"
+  description="Dos cursos grabados para adultos que empiezan de cero: canto y composición. A tu ritmo, para siempre, S/297 cada uno."
+  image="/og-image.jpg"
+>
+  <main class="cur">
+    <section class="cu-hero">
+      <div class="container-narrow">
+        <p class="label">Cursos grabados</p>
+        <h1>Aprende a tu ritmo,<br><em>sin horario</em></h1>
+        <p class="lead">
+          Los mismos métodos que uso en mis clases 1 a 1, grabados y ordenados para que
+          empieces de cero cuando quieras. Lo compras una vez y es tuyo para siempre.
+        </p>
+      </div>
+    </section>
+
+    <section class="cu-grid-wrap">
+      <div class="container-narrow cu-grid">
+        <article class="cu-card">
+          <p class="cu-k">Curso de canto</p>
+          <h2>Canto desde cero</h2>
+          <p class="cu-d">Registros, afinación, resistencia de cuerda, vocales y consonantes, salud
+          vocal y escenario. Con los vocalizos que uso con mis alumnos, en tu tesitura.</p>
+          <p class="cu-meta" id="metaCanto">—</p>
+          <p class="cu-precio">S/297</p>
+          <a class="cu-cta" href="/pagar/?p=Curso%20canto">Comprar el curso →</a>
+        </article>
+        <article class="cu-card">
+          <p class="cu-k">Curso de composición</p>
+          <h2>Escribe tus canciones</h2>
+          <p class="cu-d">Teoría musical desde el principio, armonía funcional, melodía, estructura,
+          letra y Hook Theory. De la idea suelta a la canción terminada.</p>
+          <p class="cu-meta" id="metaCompo">—</p>
+          <p class="cu-precio">S/297</p>
+          <a class="cu-cta" href="/pagar/?p=Curso%20composicion">Comprar el curso →</a>
+        </article>
+      </div>
+    </section>
+
+    <section class="cu-temario">
+      <div class="container-narrow">
+        <div class="cu-tabs">
+          <button class="cu-tab active" data-c="canto" type="button">Temario de canto</button>
+          <button class="cu-tab" data-c="composicion" type="button">Temario de composición</button>
+        </div>
+        <div id="cuTemario" class="cu-lista">Cargando temario…</div>
+      </div>
+    </section>
+
+    <section class="cu-faq">
+      <div class="container-narrow">
+        <h2>Lo que siempre preguntan</h2>
+        <ul>
+          <li><b>¿Es para mí si nunca canté (ni escribí) nada?</b> Sí. Los dos cursos están hechos justamente para el adulto que empieza de cero o retoma después de años.</li>
+          <li><b>¿Cuánto dura el acceso?</b> Para siempre. Se paga una vez.</li>
+          <li><b>¿Reemplaza las clases 1 a 1?</b> No. El curso te da el método y el orden; las clases te dan corrección sobre TU voz, que es lo que un video no puede hacer. Muchos hacen las dos cosas.</li>
+          <li><b>¿Cómo pago?</b> Con tarjeta, Yape, Plin o transferencia, igual que las clases.</li>
+        </ul>
+        <p class="cu-nota">¿Dudas antes de comprar? Escríbeme por el chat de esta página.</p>
+      </div>
+    </section>
+  </main>
+</Layout>
+
+<style>
+  .cur{background:var(--negro,#0d0b0a);color:var(--crema,#EBE5D6);}
+  .cur h2{font-family:var(--display,'Oswald',sans-serif);text-transform:uppercase;font-size:clamp(1.3rem,3.6vw,1.9rem);}
+  .label{font-family:var(--mono,'JetBrains Mono',monospace);text-transform:uppercase;letter-spacing:.14em;font-size:.72rem;color:var(--naranja,#e8501f);margin-bottom:10px;}
+  .cu-hero{padding:70px 0 30px;}
+  .cu-hero h1{font-family:var(--display,'Oswald',sans-serif);font-size:clamp(2.1rem,6.5vw,3.4rem);line-height:1.02;text-transform:uppercase;}
+  .cu-hero h1 em{color:var(--naranja,#e8501f);font-style:normal;}
+  .cu-hero .lead{margin-top:16px;max-width:560px;opacity:.86;font-size:1.03rem;line-height:1.6;}
+
+  .cu-grid-wrap{padding:26px 0 10px;}
+  .cu-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px;}
+  .cu-card{background:rgba(255,255,255,.035);border:1px solid rgba(235,229,214,.14);border-radius:6px;padding:24px 22px;display:flex;flex-direction:column;}
+  .cu-k{font-family:var(--mono,'JetBrains Mono',monospace);font-size:.66rem;text-transform:uppercase;letter-spacing:.14em;color:var(--naranja,#e8501f);margin-bottom:8px;}
+  .cu-d{font-size:.94rem;opacity:.8;line-height:1.55;margin-top:10px;}
+  .cu-meta{font-family:var(--mono,'JetBrains Mono',monospace);font-size:.7rem;letter-spacing:.08em;opacity:.55;margin-top:14px;text-transform:uppercase;}
+  .cu-precio{font-family:var(--display,'Oswald',sans-serif);font-size:2.1rem;margin-top:6px;}
+  .cu-cta{margin-top:16px;display:block;text-align:center;background:var(--naranja,#e8501f);color:#160a04;font-family:var(--mono,'JetBrains Mono',monospace);font-weight:700;font-size:.76rem;letter-spacing:.1em;text-transform:uppercase;padding:14px;border-radius:3px;text-decoration:none;box-shadow:4px 4px 0 #000;}
+
+  .cu-temario{padding:44px 0 10px;}
+  .cu-tabs{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:18px;}
+  .cu-tab{background:transparent;border:1px solid rgba(235,229,214,.18);color:#8a8279;font-family:var(--mono,'JetBrains Mono',monospace);font-size:.7rem;letter-spacing:.1em;text-transform:uppercase;padding:9px 14px;border-radius:3px;cursor:pointer;}
+  .cu-tab.active{border-color:var(--naranja,#e8501f);color:var(--naranja,#e8501f);}
+  .cu-sec{border-top:1px solid rgba(235,229,214,.12);padding:14px 0;}
+  .cu-sec h3{font-family:var(--display,'Oswald',sans-serif);text-transform:uppercase;font-size:1.02rem;letter-spacing:.01em;}
+  .cu-sec ul{margin:8px 0 0;padding-left:18px;display:grid;gap:5px;font-size:.9rem;opacity:.72;}
+
+  .cu-faq{padding:40px 0 84px;}
+  .cu-faq ul{margin-top:14px;padding-left:20px;display:grid;gap:11px;max-width:660px;font-size:.92rem;opacity:.82;line-height:1.55;}
+  .cu-nota{font-size:.86rem;opacity:.55;margin-top:16px;}
+</style>
+
+<script>
+(function(){
+  var cache = {};
+  function pinta(c){
+    var cont = document.getElementById('cuTemario');
+    if (cache[c]){ render(cache[c]); return; }
+    cont.textContent = 'Cargando temario…';
+    fetch('/api/curso-publico?c=' + encodeURIComponent(c))
+      .then(function(r){ return r.json(); })
+      .then(function(d){ cache[c] = d; render(d); })
+      .catch(function(){ cont.textContent = 'No se pudo cargar el temario. Recarga la página.'; });
+  }
+  function render(d){
+    var cont = document.getElementById('cuTemario');
+    if (!d || !d.secciones || !d.secciones.length){ cont.textContent = 'Temario en preparación.'; return; }
+    cont.innerHTML = d.secciones.map(function(s){
+      return '<div class="cu-sec"><h3></h3><ul>' +
+        s.lecciones.map(function(){ return '<li></li>'; }).join('') + '</ul></div>';
+    }).join('');
+    // Los títulos se inyectan como TEXTO, nunca como HTML: vienen de la base y no se escapan solos.
+    var secs = cont.querySelectorAll('.cu-sec');
+    d.secciones.forEach(function(s, i){
+      secs[i].querySelector('h3').textContent = s.nombre || 'Lecciones';
+      var lis = secs[i].querySelectorAll('li');
+      s.lecciones.forEach(function(l, j){ lis[j].textContent = l; });
+    });
+    var meta = d.curso === 'composicion' ? 'metaCompo' : 'metaCanto';
+    var el = document.getElementById(meta);
+    if (el) el.textContent = d.secciones.length + ' secciones · ' + d.total + ' lecciones';
+  }
+  document.querySelectorAll('.cu-tab').forEach(function(b){
+    b.addEventListener('click', function(){
+      document.querySelectorAll('.cu-tab').forEach(function(x){ x.classList.remove('active'); });
+      b.classList.add('active');
+      pinta(b.dataset.c);
+    });
+  });
+  pinta('canto');
+  // La ficha del otro curso también necesita su conteo, aunque su pestaña no se haya abierto.
+  fetch('/api/curso-publico?c=composicion').then(function(r){ return r.json(); }).then(function(d){
+    cache['composicion'] = d;
+    var el = document.getElementById('metaCompo');
+    if (el && d && d.secciones) el.textContent = d.secciones.length + ' secciones · ' + d.total + ' lecciones';
+  }).catch(function(){});
+})();
+</script>

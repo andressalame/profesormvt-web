@@ -49,14 +49,21 @@ const PAQUETES = {
   "Clase suelta": { clases: 1,  reprog: 0 },
   "Clase de prueba": { clases: 1, reprog: 0 }   // LEGADO: ya no se vende (ver PAQUETES_COMPRABLES)
 };
-const PRECIOS_DEFAULT = { "Paquete 4": 320, "Paquete 8": 580, "Paquete 12": 780, "Clase suelta": 90, "Clase de prueba": 50 };
+const PRECIOS_DEFAULT = { "Paquete 4": 320, "Paquete 8": 580, "Paquete 12": 780, "Clase suelta": 90, "Clase de prueba": 50,
+  /* Cursos grabados (17-ago-2026): S/297 cada uno, por DEBAJO del plan mensual de S/320 a
+     proposito. Asi el curso no le compite a las clases 1 a 1: es la puerta barata, y el que
+     quiere mas sube a clases. Costo marginal ~0, o sea que el piso de margen del 60% se cumple
+     con cualquier precio; lo que manda aca es no canibalizar el servicio caro. */
+  "Curso canto": 297, "Curso composicion": 297 };
 
 /* La clase de prueba S/50 MURIÓ el 25-jul-2026 (decisión de Andrés: se vende paquete de frente o
    nada). Sigue en PAQUETES y PRECIOS_DEFAULT solo como LEGADO, para que los alumnos históricos que
    la tienen en la D1 sigan calculando bien su saldo; comprarla está bloqueado en los 3 endpoints de
    compra. NO reintroducirla ni inventar variantes ("primera clase con diagnóstico", "clase de
    descubrimiento", descuento de arranque): la decisión es permanente. */
-const PAQUETES_COMPRABLES = ["Paquete 4", "Paquete 8", "Paquete 12", "Clase suelta"];
+const PAQUETES_COMPRABLES = ["Paquete 4", "Paquete 8", "Paquete 12", "Clase suelta", "Curso canto", "Curso composicion"];
+/* Productos que NO son clases: compra unica, acceso perpetuo, y no tocan el paquete del alumno. */
+const CURSOS_GRABADOS = ["Curso canto", "Curso composicion"];
 const PAQUETE_RETIRADO_MSG = "Ese paquete ya no está disponible. Elige uno de los planes o una clase suelta.";
 const SESION_DIAS = 30;
 const CREDITO_REFERIDO = 50; // S/ que gana el referidor cuando su amigo confirma su 1ª compra
@@ -687,6 +694,16 @@ async function confirmarCompra(env, compra){
   const filasReclamo = (reclamo && reclamo.meta && (reclamo.meta.changes ?? reclamo.meta.rows_written)) || 0;
   if (!filasReclamo){
     return { ok: false, error: "Esa compra ya fue procesada", status: 409, yaProcesada: true };
+  }
+
+  /* CURSOS GRABADOS: se salen ACA, apenas reclamada la compra. Son producto aparte (compra unica,
+     acceso perpetuo) y no tienen nada que ver con el paquete de clases. Si siguieran de largo,
+     confirmarCompra le subiria el ciclo al alumno, le pondria un vencimiento de 60 dias y le
+     pisaria las clases que ya pago: comprar un curso le destruiria su plan. */
+  if (CURSOS_GRABADOS.indexOf(compra.paquete) !== -1){
+    try { await correoCursoComprado(env, cu, compra); } catch (e) {}
+    try { await avisarPush(env, { title: "Curso vendido", body: (cu.nombre || cu.email) + " compro " + (NOMBRES_PAQUETE[compra.paquete] || compra.paquete), url: MARCA.dominio + "/alumnos/" }); } catch (e) {}
+    return { ok: true, curso: true };
   }
 
   const stmts = [];
@@ -1702,6 +1719,27 @@ async function validarFirmaMeta(env, rawBuf, sigHeader){
    Andrés; un "rescate" ahí sería un insulto. Dedupe con compras.rescate_enviado
    (0 pendiente, 1 enviado, 2 saltada). Encendido por defecto (config.rescate_activo). */
 const NOMBRES_PAQUETE = { "Paquete 4": "Plan Esencial", "Paquete 8": "Plan Intensivo", "Paquete 12": "Plan Estrella", "Clase suelta": "Clase suelta", "Clase de prueba": "Clase de prueba", "Curso canto": "Curso grabado de canto", "Curso composicion": "Curso grabado de composición" };
+
+/* Correo de acceso al curso. No promete fechas de clase ni horarios: es un producto grabado,
+   se entra y ya. El link va al portal, que es donde vive el temario y el progreso. */
+async function correoCursoComprado(env, cu, compra){
+  const nombre = NOMBRES_PAQUETE[compra.paquete] || compra.paquete;
+  const portal = MARCA.dominio + "/alumnos/#curso";
+  const primer = String(cu.nombre || "").trim().split(/\s+/)[0] || "";
+  return enviarCorreo(env, {
+    to: cu.email,
+    subject: "Ya tienes tu " + nombre + " 🎸",
+    html:
+      '<div style="font-family:Arial,Helvetica,sans-serif;max-width:480px;margin:0 auto;color:#1a1a1a;font-size:15px;line-height:1.6">' +
+      '<p>Hola' + (primer ? " " + esc(primer) : "") + ',</p>' +
+      '<p>Tu <b>' + esc(nombre) + '</b> ya está activo. Entra al portal y empieza cuando quieras: es tuyo para siempre y lo ves a tu ritmo, las veces que quieras.</p>' +
+      '<p style="text-align:center;margin:26px 0"><a href="' + portal + '" style="background:#e8501f;color:#fff;text-decoration:none;font-weight:bold;padding:14px 26px;border-radius:6px;display:inline-block">Entrar al curso</a></p>' +
+      '<p>Un consejo: no lo veas de corrido. Una lección, la practicas unos días, y sigues. Se entrena, no se memoriza.</p>' +
+      '<p>Cualquier duda me escribes por el chat del portal.</p>' +
+      '<p>Un abrazo,<br><b>' + esc(MARCA.profe) + '</b><br>' + esc(MARCA.nombre) + '</p></div>',
+    text: "Hola" + (primer ? " " + primer : "") + ",\n\nTu " + nombre + " ya está activo. Entra al portal y empieza cuando quieras: es tuyo para siempre.\n\n" + portal + "\n\nUn consejo: no lo veas de corrido. Una lección, la practicas unos días, y sigues.\n\nUn abrazo,\n" + MARCA.profe + " - " + MARCA.nombre
+  });
+}
 
 /* Cursos grabados: el producto se llama "Curso canto" / "Curso composicion" en `compras`.
    Es compra ÚNICA y de acceso perpetuo, así que no mira ciclos ni vencimientos: basta con que
@@ -4212,6 +4250,25 @@ export default {
          Dos cursos sueltos ("canto" y "composicion"), cada uno con sus secciones. El alumno ve
          el temario COMPLETO aunque no haya comprado: saber qué hay adentro es lo que vende. Lo
          que se guarda para el que pagó es el video — el resto es vitrina. */
+      /* Temario PÚBLICO, sin sesión: lo consume la página de venta /cursos. Devuelve solo
+         títulos —ni videos ni ids—, así que no hay nada que proteger. Se sirve de la misma tabla
+         que ve el alumno: si el temario se listara a mano en el HTML, un día dirían cosas
+         distintas y la página de venta prometería lecciones que no existen. */
+      if (url.pathname === "/api/curso-publico" && request.method === "GET"){
+        const c = (url.searchParams.get("c") || "canto").toLowerCase();
+        if (c !== "canto" && c !== "composicion") return json({ error: "Curso no encontrado" }, 404);
+        const { results } = await env.DB.prepare(
+          "SELECT seccion, titulo FROM curso_lecciones WHERE curso = ?1 AND publicada = 1 " +
+          "ORDER BY seccion_orden ASC, orden ASC"
+        ).bind(c).all();
+        const secciones = [];
+        for (const l of (results || [])){
+          let sec = secciones.find(x => x.nombre === l.seccion);
+          if (!sec){ sec = { nombre: l.seccion || "", lecciones: [] }; secciones.push(sec); }
+          sec.lecciones.push(l.titulo);
+        }
+        return json({ curso: c, secciones, total: (results || []).length });
+      }
       if (url.pathname === "/api/curso" && request.method === "GET"){
         const cu = await cuentaDeSesion(env, request);
         if (!cu) return json({ error: "Inicia sesión" }, 401);
