@@ -23,8 +23,25 @@ const { activeNav } = Astro.props;
     <a class="snav-ghost" href="/alumnos/">Ingresar</a>
     <!-- dos etiquetas: en el celular no caben la marca, Políticas y "Quiero empezar" a la vez -->
     <a class="snav-cta" href="/prueba/"><span class="larga">Quiero empezar →</span><span class="corta">Empezar →</span></a>
+    <!-- 16-ago-2026: hasta hoy el celular ocultaba Método, Horarios, Precios, FAQ e Ingresar y
+         no había nada que los reemplazara. O sea que el lead que llega desde la bio de Instagram
+         (casi todo el tráfico) no podía ver precios ni horarios, y el alumno no encontraba por
+         dónde entrar a su portal. Este botón abre el menú de verdad, no un parche. -->
+    <button class="snav-burger" id="navBurger" type="button"
+            aria-label="Abrir menú" aria-expanded="false" aria-controls="navMenu">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="6" width="18" height="2.4" rx="1.2"/><rect x="3" y="11" width="18" height="2.4" rx="1.2"/><rect x="3" y="16" width="18" height="2.4" rx="1.2"/></svg>
+    </button>
   </div>
 </nav>
+<div class="snav-panel" id="navMenu" hidden>
+  <a href="/#metodo">Método</a>
+  <a href="/horarios/">Horarios</a>
+  <a href="/#precios">Precios</a>
+  <a href="/#faq">FAQ</a>
+  <a href="/politicas/">Políticas</a>
+  <a href="/sorteo/">Sorteo</a>
+  <a class="destacado" href="/alumnos/">Ingresar a mi portal</a>
+</div>
 <style>
   .snav{
     position: sticky; top: 0; z-index: 50; height: 64px;
@@ -58,6 +75,28 @@ const { activeNav } = Astro.props;
   .snav-cta{ background: #e8501f; color: #160a04; border: 2px solid #e8501f; box-shadow: 4px 4px 0 #000; }
   .snav-cta:hover{ background: #ff6a35; border-color: #ff6a35; transform: translate(-2px,-2px); box-shadow: 6px 6px 0 #000; }
 
+  /* Botón del menú: solo existe en pantallas chicas, donde los enlaces se ocultan. */
+  .snav-burger{
+    display: none; background: transparent; border: 2px solid rgba(243,237,224,.35);
+    border-radius: 2px; padding: .34em .4em; cursor: pointer; color: #f3ede0; line-height: 0;
+  }
+  .snav-burger svg{ width: 22px; height: 22px; fill: currentColor; }
+  .snav-burger[aria-expanded="true"]{ border-color: #e8501f; color: #e8501f; }
+
+  .snav-panel{
+    position: sticky; top: 64px; z-index: 49;
+    background: rgba(13,11,10,.97); backdrop-filter: blur(10px);
+    border-bottom: 2px solid #e8501f; padding: 8px clamp(20px, 5vw, 64px) 18px;
+    display: flex; flex-direction: column;
+  }
+  .snav-panel a{
+    font-family: "JetBrains Mono", monospace; font-size: .82rem; letter-spacing: .12em;
+    text-transform: uppercase; color: #f3ede0; text-decoration: none;
+    padding: 15px 2px; border-bottom: 1px solid #2A2926;
+  }
+  .snav-panel a:last-child{ border-bottom: 0; }
+  .snav-panel a.destacado{ color: #e8501f; }
+
   @media (max-width: 980px){
     .snav-links{ gap: 1.1rem; }
     .snav-link, .snav-ghost{ display: none; }
@@ -65,6 +104,12 @@ const { activeNav } = Astro.props;
        Si se sube arriba, `display:none` la pisa y el enlace no sale en el celular, que es
        justo donde llega la mayoría de los leads. */
     .snav-link.siempre{ display: inline-flex; }
+    .snav-burger{ display: inline-block; }
+  }
+  /* Arriba de 980px los enlaces están todos a la vista: el panel no debe poder abrirse ni
+     quedarse abierto si el visitante agranda la ventana con el menú desplegado. */
+  @media (min-width: 981px){
+    .snav-panel{ display: none !important; }
   }
   /* En el celular quedan tres cosas en la barra: marca, Políticas y el botón. Sin esto se
      leían pegadas ("PROFESORMVTPOLÍTICAS") y el botón se salía por la derecha. Se acorta el
@@ -79,6 +124,13 @@ const { activeNav } = Astro.props;
     .snav-cta .larga{ display: none; }
     .snav-cta .corta{ display: inline; }
   }
+  /* Con el botón de menú ya no caben marca + POLÍTICAS + burger + CTA en un teléfono angosto:
+     se salía por la derecha. Políticas pasa al panel, donde sigue siendo el primer bloque
+     visible al abrir el menú, así que no queda escondida (que era el punto de tenerla arriba). */
+  @media (max-width: 460px){
+    .snav-link.siempre{ display: none; }
+    .snav-links{ gap: .7rem; }
+  }
   @media (prefers-reduced-motion: reduce){
     .snav, .snav-cta{ transition: none; }
   }
@@ -89,5 +141,29 @@ const { activeNav } = Astro.props;
     const onScroll = () => snav.classList.toggle('scrolled', window.scrollY > 40);
     onScroll();
     window.addEventListener('scroll', onScroll, { passive: true });
+  }
+
+  // Menú móvil. `hidden` en vez de una clase: si el JS no llegara a cargar, el panel se queda
+  // oculto y la barra sigue funcionando como antes, nunca al revés.
+  const burger = document.getElementById('navBurger');
+  const panel = document.getElementById('navMenu');
+  if (burger && panel){
+    const abrir = (v) => {
+      panel.hidden = !v;
+      burger.setAttribute('aria-expanded', String(v));
+      burger.setAttribute('aria-label', v ? 'Cerrar menú' : 'Abrir menú');
+    };
+    burger.addEventListener('click', (e) => {
+      e.stopPropagation();
+      abrir(panel.hidden);
+    });
+    // Al elegir un destino se cierra: si no, el ancla (#precios) salta con el panel encima.
+    panel.addEventListener('click', (e) => { if (e.target.closest('a')) abrir(false); });
+    document.addEventListener('click', (e) => {
+      if (!panel.hidden && !panel.contains(e.target) && e.target !== burger) abrir(false);
+    });
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !panel.hidden) abrir(false); });
+    // Si agranda la ventana con el menú abierto, los enlaces vuelven a la barra y el panel sobra.
+    window.addEventListener('resize', () => { if (window.innerWidth > 980 && !panel.hidden) abrir(false); });
   }
 </script>
