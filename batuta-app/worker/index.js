@@ -1717,8 +1717,39 @@ async function validarFirmaMeta(env, rawBuf, sigHeader){
   return { ok: true };
 }
 
-async function enviarCorreo(env, { to, subject, html, text, from, replyTo }){
+/* Cache del remitente por academia: una tanda de 40 correos no puede hacer 40 consultas
+   para preguntar lo mismo. Vive lo que vive el worker, que es lo que dura la tanda. */
+const _REMITENTE_CACHE = new Map();
+
+async function remitenteDeTenant(env, tenantId){
+  if (!tenantId) return null;
+  if (_REMITENTE_CACHE.has(tenantId)) return _REMITENTE_CACHE.get(tenantId);
+  let r = null;
+  try {
+    const t = await env.DB.prepare("SELECT academia, email FROM tenants WHERE id = ?1").bind(tenantId).first();
+    if (t && t.academia) r = { name: String(t.academia).trim(), replyTo: (t.email || "").trim() };
+  } catch (e) { r = null; }
+  _REMITENTE_CACHE.set(tenantId, r);
+  return r;
+}
+
+async function enviarCorreo(env, { to, subject, html, text, from, replyTo, tenantId }){
   if (!env.RESEND_API_KEY || !to || !subject) return false;
+  /* 18-ago-2026, José (Elevate): "me sale que el que manda los emails es Batuta y la gente no
+     sabe qué es Batuta". Tenía razón y era grande: de 31 correos del sistema, solo 2 salían a
+     nombre de la academia. Sus 1,447 alumnos recibían mensajes de un remitente que no conocen.
+     Ahora basta con pasar `tenantId` y el nombre se resuelve solo, con Reply-To al correo del
+     dueño para que la respuesta le llegue a él y no a Batuta.
+     El DOMINIO no cambia (es el verificado en Resend); lo que ve el alumno es el NOMBRE.
+     Los correos que manda Batuta AL DUEÑO siguen firmando Batuta a propósito: ahí el remitente
+     correcto es el proveedor, no su propia academia. */
+  if (!from && tenantId){
+    const rt = await remitenteDeTenant(env, tenantId);
+    if (rt){
+      from = { name: rt.name, email: "hola@" + MARCA.dominio.replace(/^https?:\/\//, "") };
+      if (!replyTo && rt.replyTo) replyTo = rt.replyTo;
+    }
+  }
   /* El NOMBRE del remitente puede ser el de la academia (invitaciones a alumnos: el alumno
      conoce a su academia, no a Batuta), pero el DOMINIO sigue siendo el verificado en Resend.
      replyTo manda las respuestas al correo real de la academia. */
@@ -1853,7 +1884,7 @@ async function correoBienvenidaAlumno(env, tenant, cu, compra){
       '</ul>' +
       '<p>Un abrazo.</p>' +
     '</div>';
-  return enviarCorreo(env, { to: cu.email, subject: "Ya estas dentro de " + academia, html: html });
+  return enviarCorreo(env, { tenantId: tenant.id, to: cu.email, subject: "Ya estas dentro de " + academia, html: html });
 }
 
 /* ═══ "Tu plan ya está activo" (15-ago-2026, reporte de José/Elevate) ═══
@@ -1903,7 +1934,7 @@ async function avisarPlanActivo(env, tenant, lista){
           '</ul>' +
           '<p>Cualquier cosa, escríbenos por <a href="' + wa + '">WhatsApp</a>.</p>' +
         '</div>';
-      if (await enviarCorreo(env, { to: para, subject: "Tu plan ya está activo en " + academia, html: html })) enviados++;
+      if (await enviarCorreo(env, { tenantId: tenant.id, to: para, subject: "Tu plan ya está activo en " + academia, html: html })) enviados++;
     } catch (e) { console.error("aviso de plan activo", al.id, e); }
   }
   return enviados;
@@ -5631,7 +5662,7 @@ async function recordatoriosDeClase(env){
     const mail = { subject: msgAsunto(m.asunto, datos),
                    html: msgHtml(m.cuerpo, datos, { url: linkPortal, texto: cual === "1h" ? "Ver mi portal" : "Ver o reprogramar" }) };
     let ok = false;
-    try { ok = await enviarCorreo(env, { to: r.alumno_email, subject: mail.subject, html: mail.html }); } catch (e) {}
+    try { ok = await enviarCorreo(env, { tenantId: r.tenant_id, to: r.alumno_email, subject: mail.subject, html: mail.html }); } catch (e) {}
     if (ok){
       enviados++;
       const set = cual === "1h" ? "aviso_1h = 1, aviso_24 = 1" : "aviso_24 = 1";
@@ -5731,7 +5762,7 @@ async function recordatorioRenovacion(env){
     const mail = { subject: msgAsunto(mPlant.asunto, datosR),
                    html: msgHtml(mPlant.cuerpo, datosR, { url: linkPortal, texto: "Renovar ahora" }) };
     let ok = false;
-    try { ok = await enviarCorreo(env, { to: a.alumno_email, subject: mail.subject, html: mail.html }); } catch (e) {}
+    try { ok = await enviarCorreo(env, { tenantId: a.tenant_id, to: a.alumno_email, subject: mail.subject, html: mail.html }); } catch (e) {}
     if (ok){
       enviados++;
       if (listaAv){
@@ -6093,7 +6124,7 @@ async function pedirResenas(env){
           '<p style="font-size:13px;color:#666;text-align:center">1 = puede mejorar mucho · 5 = excelente</p>' +
           '<p>Un toque y listo. Tu respuesta llega directo y ayuda a que cada clase sume más.</p>' +
         '</div>';
-      if (await enviarCorreo(env, { to: f._email, subject: "¿Cómo van tus clases en " + esc(academia) + "?", html })) enviados++;
+      if (await enviarCorreo(env, { tenantId: t.id, to: f._email, subject: "¿Cómo van tus clases en " + esc(academia) + "?", html })) enviados++;
     }
   }
   return enviados;
