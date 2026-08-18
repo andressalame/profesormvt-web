@@ -44,7 +44,18 @@ t("se cachea incluso el resultado nulo (o reconsulta en cada correo)", () => {
 console.log("\n=== Quién recibe qué ===");
 const conTenant = L.filter(l => l.includes("enviarCorreo") && l.includes("tenantId:"));
 t("hay correos ya migrados al nombre de la academia", () => {
-  if (conTenant.length < 4) throw new Error("solo " + conTenant.length + " migrados");
+  if (conTenant.length < 12) throw new Error("solo " + conTenant.length + " migrados; los que recibe un alumno deben ir TODOS");
+});
+t("ya no queda ningún correo A ALUMNO firmando Batuta", () => {
+  const sospechosos = [];
+  L.forEach((l, i) => {
+    if (!l.includes("enviarCorreo(env")) return;
+    const frag = L.slice(i, i + 8).join("\n");
+    if (frag.includes("tenantId:") || frag.includes("from:")) return;
+    const to = /to: ([^,\n]+)/.exec(frag);
+    if (to && /alumno|cu\.email|row\.email|pRow|emailP|f\._email/.test(to[1])) sospechosos.push("L" + (i + 1) + " " + to[1].trim());
+  });
+  if (sospechosos.length) throw new Error("sin migrar → " + sospechosos.join(" · "));
 });
 t("los migrados son los que recibe un ALUMNO", () => {
   const texto = conTenant.join("\n");
@@ -63,18 +74,27 @@ t("el aviso de pago huérfano sigue siendo de Batuta", () => {
 });
 
 console.log("\n=== Las variables existen de verdad ===");
-t("cada tenantId apunta a una variable definida en su ámbito", () => {
+t("cada tenantId apunta a una variable que existe en su ámbito", () => {
+  /* Se busca la definición hacia atrás DENTRO del mismo handler (desde su `if (path === ...`),
+     y si no está ahí se acepta que la variable ya se use antes en ese handler: eso prueba que
+     existe, venga del bloque padre que venga. Una ventana fija de N líneas daba falsos
+     positivos con los handlers largos. */
   const malos = [];
   L.forEach((l, i) => {
     if (!l.includes("tenantId:") || !l.includes("enviarCorreo")) return;
     const v = /tenantId: ([A-Za-z_][\w.]*)/.exec(l)[1], raiz = v.split(".")[0];
-    const ctx = L.slice(Math.max(0, i - 70), i).join("\n");
-    const def = new RegExp("\\b(const|let|var)\\s+" + raiz + "\\b").test(ctx)
-             || new RegExp("function \\w+\\([^)]*\\b" + raiz + "\\b").test(ctx)
-             || new RegExp("for \\(const " + raiz + "\\b").test(ctx);
-    if (!def) malos.push("línea " + (i + 1) + ": " + v);
+    let ini = 0;
+    for (let k = i; k > 0 && i - k < 2000; k--) {
+      if (/if \(path ===|if \(path\.startsWith|^async function |^function /.test(L[k])) { ini = k; break; }
+    }
+    const ctx = L.slice(ini, i).join("\n");
+    const definida = new RegExp("\\b(const|let|var)\\s+" + raiz + "\\b").test(ctx)
+                  || new RegExp("function \\w+\\([^)]*\\b" + raiz + "\\b").test(ctx)
+                  || new RegExp("for \\(const " + raiz + "\\b").test(ctx);
+    const yaSeUsa = new RegExp("[^\\w.]" + raiz + "[,)\\s.]").test(ctx);
+    if (!definida && !yaSeUsa) malos.push("L" + (i + 1) + ": " + v);
   });
-  if (malos.length) throw new Error("sin definir → " + malos.join(" · "));
+  if (malos.length) throw new Error("no existen en su ámbito → " + malos.join(" · "));
 });
 
 console.log("\n" + (mal ? "✗ " + mal + " fallando · " : "✓ ") + ok + " pruebas OK\n");

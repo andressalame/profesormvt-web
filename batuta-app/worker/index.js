@@ -4309,7 +4309,7 @@ async function promoverEspera(env, tenantId, iso, sala){
                   try {
                     const msgsA = mensajesDeCfg(cfgEsp);
                     const datosA = { alumno: primer, academia: tenant.academia || "tu academia", fecha: cuando, curso: "", curso_de: "", con_profe: "", vence_frase: "" };
-                    await enviarCorreo(env, {
+                    await enviarCorreo(env, { tenantId: tenantId,
                       to: row.email,
                       subject: msgAsunto(msgsA.espera_auto.asunto, datosA),
                       html: msgHtml(msgsA.espera_auto.cuerpo, datosA, { url: "https://batuta.lat/app/a/" + (tenant.slug || ""), texto: "Ver mi clase" })
@@ -4332,7 +4332,7 @@ async function promoverEspera(env, tenantId, iso, sala){
       try {
         const msgsE = mensajesDeCfg(await loadConfig(env, tenantId).catch(() => ({})));
         const datosE = { alumno: primer, academia: tenant.academia || "tu academia", fecha: cuando, curso: "", curso_de: "", con_profe: "", vence_frase: "" };
-        await enviarCorreo(env, {
+        await enviarCorreo(env, { tenantId: tenantId,
           to: row.email,
           subject: msgAsunto(msgsE.espera.asunto, datosE),
           html: msgHtml(msgsE.espera.cuerpo, datosE, { url: link, texto: "Reservar ahora" })
@@ -6186,7 +6186,7 @@ async function rescatarComprasAbandonadas(env){
         '<p style="text-align:center;margin:24px 0"><a href="' + portal + '" style="background:#E8A13D;color:#17130C;text-decoration:none;font-weight:bold;padding:13px 24px;border-radius:6px;display:inline-block">Retomar mi compra</a></p>' +
         '<p style="color:#666;font-size:14px">¿Tuviste algún problema para pagar o prefieres otra forma? Escríbenos por <a href="' + wa + '">WhatsApp</a> y lo resolvemos.</p>' +
       '</div>';
-    const ok = await enviarCorreo(env, { to: f._email, subject: "Tu " + (f.paquete || "reserva") + " en " + academia + " quedó a medias", html: html });
+    const ok = await enviarCorreo(env, { tenantId: f.tenant_id, to: f._email, subject: "Tu " + (f.paquete || "reserva") + " en " + academia + " quedó a medias", html: html });
     /* se marca SIEMPRE, salga o no el correo: si el envío falla y no se marca, el motor lo
        reintenta cada hora contra una dirección que probablemente rebota */
     try {
@@ -6282,7 +6282,7 @@ async function winbackAlumnos(env){
     };
     let ok = false;
     try {
-      ok = await enviarCorreo(env, {
+      ok = await enviarCorreo(env, { tenantId: a.tenant_id,
         to: a.alumno_email,
         subject: msgAsunto(msgsW.winback.asunto, datosW),
         html: msgHtml(msgsW.winback.cuerpo, datosW, { url: linkPortal, texto: "Reservar mi clase" })
@@ -9564,7 +9564,7 @@ export default {
               env.DB.prepare("INSERT INTO reset_tokens (token_hash, tenant_id, cuenta_id, expira, usado) VALUES (?1, ?2, ?3, ?4, 0)").bind(tokenHash, t.id, cu.id, expira)
             ]);
             const link = MARCA.dominio + "/app/a/" + slug + "?reset=" + token;
-            try { await enviarCorreo(env, { to: email, subject: "Restablece tu contrasena", text: "Entra aqui para elegir una nueva contrasena: " + link + " (expira en 30 minutos)" }); } catch (e) {}
+            try { await enviarCorreo(env, { tenantId: t.id, to: email, subject: "Restablece tu contrasena", text: "Entra aqui para elegir una nueva contrasena: " + link + " (expira en 30 minutos)" }); } catch (e) {}
           }
         }
         return json({ ok: true });
@@ -10584,7 +10584,7 @@ export default {
               const msgsA = mensajesDeCfg(await loadConfig(env, t.id).catch(() => ({})));
               const datosA = { alumno: nombre, academia: t.academia || "tu academia", curso: "", curso_de: "", con_profe: "", vence_frase: "" };
               const linkAcceso = MARCA.dominio + "/app/a/" + t.slug + "?reset=" + token;
-              await enviarCorreo(env, {
+              await enviarCorreo(env, { tenantId: t.id,
                 to: email,
                 subject: msgAsunto(msgsA.acceso.asunto, datosA),
                 html: msgHtml(msgsA.acceso.cuerpo, datosA, { url: linkAcceso, texto: "Crear mi contraseña" }) +
@@ -10593,7 +10593,7 @@ export default {
             } else {
               const msgsP = mensajesDeCfg(await loadConfig(env, t.id).catch(() => ({})));
               const datosP = { alumno: nombre, academia: t.academia || "tu academia", curso: "", curso_de: "", con_profe: "", vence_frase: "" };
-              await enviarCorreo(env, {
+              await enviarCorreo(env, { tenantId: t.id,
                 to: email,
                 subject: msgAsunto(msgsP.pago.asunto, datosP),
                 html: msgHtml(msgsP.pago.cuerpo, datosP, { url: portal, texto: "Ver mi portal" })
@@ -12392,7 +12392,7 @@ export default {
             const link = MARCA.dominio + "/app/p/activar?token=" + inviteToken;
             let correoEnviado = false;
             try {
-              correoEnviado = await enviarCorreo(env, {
+              correoEnviado = await enviarCorreo(env, { tenantId: tid,
                 to: emailP,
                 subject: nombreP.split(" ")[0] + ", te invitaron a " + (t.academia || "una academia") + " en Batuta",
                 html: "<p>Hola " + esc(nombreP) + ",</p><p><b>" + esc(t.profe_nombre || t.academia || "El dueno") + "</b> te invito como profesor de <b>" + esc(t.academia || "su academia") + "</b> en Batuta (el panel donde veras tus alumnos, tu agenda y tus clases).</p>" +
@@ -12466,7 +12466,7 @@ export default {
             const link = MARCA.dominio + "/app/p/activar?token=" + pRow.invite_token;
             let correoEnviado = false;
             try {
-              correoEnviado = await enviarCorreo(env, {
+              correoEnviado = await enviarCorreo(env, { tenantId: tid,
                 to: pRow.email,
                 subject: "Tu invitacion a " + (t.academia || "una academia") + " en Batuta",
                 html: "<p>Hola " + esc(pRow.nombre) + ", te reenviamos tu invitacion a <b>" + esc(t.academia || "la academia") + "</b>.</p><p><a href=\"" + link + "\"><b>Acepta y crea tu contrasena aqui</b></a></p>"
