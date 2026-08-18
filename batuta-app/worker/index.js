@@ -12879,6 +12879,16 @@ export default {
           const t0 = Date.parse(String(b.inicio_utc || ""));
           if (!Number.isFinite(t0)) return json({ error: "Fecha invalida" }, 400);
           const alumnoId = b.alumno_id ? String(b.alumno_id) : null;
+          /* "Reserva sin nombre" (18-ago-2026, pedido de Andrés tras el lío de José).
+             Antes solo había dos extremos: con alumno, o SIN alumno = cerrar la hora entera.
+             Eso último no es algo que un dueño quiera hacer casi nunca, y el que sí quiere
+             —guardar UN sitio para alguien que todavía no sabe quién es— no tenía cómo:
+             José terminó cerrando su clase de Pilates y Elevate mantiene un alumno falso
+             llamado "Holos" solo para tapar huecos.
+             Una reserva sin nombre ocupa UN cupo como cualquier alumno, respeta el aforo y
+             se puede repetir hasta llenar la clase si al dueño le da la gana. Cerrar la hora
+             entera vive donde corresponde: "Cancelar esta clase", en la agenda. */
+          const sinNombre = !alumnoId && !!b.sin_nombre;
           const nota = String(b.nota || "").slice(0, 200);
           const fija = !!b.fija;
           let curso = "", ciclo = 1;
@@ -12893,7 +12903,7 @@ export default {
             targetB = { id: profAl.id, esDueno: profAl.esDueno };
             curso = al.curso || ""; ciclo = Number(al.ciclo) || 1;
           }
-          const tipo = alumnoId ? (fija ? "fija" : "suelta") : "bloqueo";
+          const tipo = alumnoId ? (fija ? "fija" : "suelta") : (sinNombre ? "aparta" : "bloqueo");
           const serie = fija ? crypto.randomUUID() : "";
           const horizonMs = Date.now() + HORIZONTE_SEMANAS * 7 * 86400000;
           const nowIso = new Date().toISOString();
@@ -12903,7 +12913,7 @@ export default {
              10-ago-2026: con 2+ clases en paralelo YA NO se adivina la primera (en Elevate
              siempre ganaba una sala y pisaba el curso): ambiguo = 400, igual que el portal. */
           let salaB = "";
-          if (alumnoId){
+          if (alumnoId || sinNombre){
             const salaPedida = String(b.sala || "").trim().slice(0, 40);
             const { franja: frB, ambigua: ambB } = await resolverFranja(env, tid, new Date(t0).toISOString(), targetB, salaPedida);
             if (ambB) return json({ error: "A esa hora hay más de una clase. Elige en 'Clase' a cuál lo estás metiendo." }, 400);
@@ -12918,7 +12928,11 @@ export default {
             const oc = await ocupacionSlot(env, tid, isoT, targetB, salaB);
             /* bloqueo: 1 por slot basta. Con alumno: respeta el cupo y evita duplicar al mismo alumno. */
             let cabe;
-            if (!alumnoId){
+            if (sinNombre){
+              /* como un alumno más: respeta el aforo, pero SÍ se puede repetir (varias
+                 reservas sin nombre en la misma clase es justo el caso de uso) */
+              cabe = !oc.bloqueado && oc.n < cupoB;
+            } else if (!alumnoId){
               cabe = !oc.bloqueado;
             } else {
               const yaEl = await env.DB.prepare(
@@ -12939,6 +12953,14 @@ export default {
              Ahora se dice POR QUÉ, que siempre es una de tres. Se recalcula sobre el primer
              slot, que es el que el dueño acaba de elegir y del que se está quejando. */
           if (!creadas){
+            /* 18-ago-2026: este mensaje asumía que "sin alumno" siempre era cerrar la hora, y
+               a una Reserva sin nombre que no entra por AFORO le decía "ya está bloqueada",
+               que manda al dueño a buscar un bloqueo que no existe. Se distingue el motivo. */
+            if (sinNombre){
+              const ocSN = await ocupacionSlot(env, tid, new Date(t0).toISOString(), targetB, salaB);
+              if (ocSN.bloqueado) return json({ error: "Esa hora está cerrada. Ábrela desde la agenda (la clase aparece como cancelada) y vuelve a intentar." }, 409);
+              return json({ error: "Esa clase ya está llena: no queda cupo libre para apartar." }, 409);
+            }
             if (!alumnoId) return json({ error: "Esa hora ya está bloqueada." }, 409);
             const isoP = new Date(t0).toISOString();
             const ocP = await ocupacionSlot(env, tid, isoP, targetB, salaB);

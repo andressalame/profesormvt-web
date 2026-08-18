@@ -1400,23 +1400,21 @@ button[data-ayuda],a[data-ayuda],select[data-ayuda],input[data-ayuda],label[data
          clase, en el calendario de arriba, que es donde uno la busca. -->
 
     <div class="group">
-      <h2>Cerrar una hora, o sembrar el horario fijo de un alumno</h2>
-      <!-- 18-ago-2026: José (Elevate) usó esto pensando que "apartar" era GUARDARLE UN CUPO a
-           alguien, y cerró su clase de Pilates entera: nadie más pudo reservar y no encontraba
-           cómo deshacerlo. El copy decía "para que nadie reserve encima", pero el botón decía
-           "Apartar este horario" y en un estudio grupal eso se lee como apartar UN sitio.
-           Ahora lo dice sin rodeos y en el orden en que se piensa. -->
-      <p class="hint"><b>Ojo: sin alumno, esto CIERRA la hora completa</b> y nadie va a poder reservarla, ni siquiera tú. Úsalo para tu clase fija de hoy o para un bloqueo personal.<br>
-      Si lo que quieres es <b>guardarle el sitio a una persona</b>, elígela abajo en "Alumno": ahí le ocupas UN cupo y la clase sigue abierta para los demás.<br>
-      Con alumno + "cada semana" le creas su horario fijo. Hora de Lima.<br>
-      <span class="hint">¿Cerraste una hora sin querer? Se suelta en <b>Agenda → toca esa clase → "Hora apartada" → Liberar</b>.</span></p>
+      <h2>Apartar un horario</h2>
+      <!-- 18-ago-2026: antes esto tenía un modo "sin alumno" que CERRABA la hora entera, y
+           José cerró su clase de Pilates creyendo que apartaba un sitio. Cerrar la clase no es
+           algo que un dueño quiera hacer casi nunca, y vive donde corresponde: "Cancelar esta
+           clase", dentro de la agenda. Lo que sí quiere a menudo es guardar UN cupo sin saber
+           todavía de quién es: eso ahora es "Reserva sin nombre", y se puede repetir. -->
+      <p class="hint">Guarda un sitio en una clase que ya existe. Si eliges al alumno, le ocupas su cupo (y con "cada semana" le creas su horario fijo). Si todavía no sabes quién va, déjalo en <b>Reserva sin nombre</b> y le pones el nombre después. Puedes apartar varios cupos, uno por uno. Hora de Lima.<br>
+      <span class="hint">¿Querías cerrar la clase entera para que nadie reserve? Eso se hace en <b>Agenda → toca la clase → "Cancelar esta clase"</b>.</span></p>
       <div class="cfgrow"><span class="pk">Día y hora</span><input id="ag_dt" type="datetime-local" /></div>
       <div class="cfgrow hidden" id="ag_claseWrap"><span class="pk">Clase</span><select id="ag_clase"></select></div>
       <div class="cfgrow"><span class="pk">Buscar alumno</span><input id="ag_alumno_q" type="search" placeholder="Escribe nombre, apellido o teléfono" autocomplete="off" /></div>
-      <div class="cfgrow"><span class="pk">Alumno (opcional)</span><select id="ag_alumno"><option value="">— Sin alumno: CIERRA la hora para todos —</option></select></div>
+      <div class="cfgrow"><span class="pk">Alumno (opcional)</span><select id="ag_alumno"><option value="">— Reserva sin nombre (aparta 1 cupo) —</option></select></div>
       <div class="cfgrow"><span class="pk">Repetir</span><label style="display:flex;align-items:center;gap:8px;font-size:13px;"><input id="ag_fija" type="checkbox" style="flex:0 0 auto;min-width:0;width:auto;" /> Cada semana (horario fijo)</label></div>
       <div class="cfgrow"><span class="pk">Nota (opcional)</span><input id="ag_nota" type="text" placeholder="Ej: clase fija de Juan" /></div>
-      <button class="btn" id="btnBloquearSlot" data-ayuda="Sin alumno cierra la hora entera para todos. Con un alumno elegido, solo le ocupa su cupo y los demás pueden seguir reservando.">Guardar</button>
+      <button class="btn" id="btnBloquearSlot" data-ayuda="Aparta un cupo de esa clase. Con un alumno elegido queda a su nombre; sin elegir a nadie queda como Reserva sin nombre y le pones el nombre cuando lo sepas. La clase sigue abierta para los demás.">Apartar el cupo</button>
     </div>
 
     <!-- Link de cupos para partners (12-ago-2026, caso Beholos de Elevate): el partner
@@ -4526,7 +4524,7 @@ function renderAgendaAdmin(){
      «no me aparecen los apellidos jeje tambien seria bueno que en vez de una lista sea un
      buscador para tipear el nombre»). Se pinta NOMBRE + APELLIDO y hay caja de búsqueda.
      El value sigue siendo el id, nunca el nombre: Elevate tiene 19 nombres repetidos. */
-  pintarSelAlumno("ag_alumno", "— Solo bloquear (sin alumno) —");
+  pintarSelAlumno("ag_alumno", "— Reserva sin nombre (aparta 1 cupo) —");
   refrescarClaseSelect();
   pintarSelAlumno("vn_alumno", "— Elige quién vino —");
   refrescarClaseSelectVino();
@@ -4631,11 +4629,22 @@ function filaClaseDia(fkey,hora,titulo,rs,pasado,sala,cupo){
   if(bloqs.length && !cancelada) resumen+=' <span class="hint" style="margin:0;">· '+bloqs.length+(bloqs.length===1?' hora apartada':' horas apartadas')+'</span>';
 
   var lista=gente.map(function(r){
-    var nom=esc(r.alumno_nombre||"(sin nombre)");
+    /* Reserva sin nombre (18-ago-2026): ocupa su cupo como cualquiera, pero todavía no se
+       sabe de quién es. No se le puede marcar "Vino" ni "Faltó" —no hay a quién anotárselo—
+       así que solo se puede liberar. */
+    /* Anónima = la creó "Reserva sin nombre". Se mira el TIPO primero y el nombre después:
+       una reserva de alumno puede venir sin `alumno_id` en algunas vistas, y tratarla como
+       anónima le quitaría los botones de asistencia a una persona real. */
+    var anon = (r.tipo==="aparta") || (!r.alumno_id && !r.alumno_nombre);
+    var nom = anon ? '<span class="hint" style="margin:0;">Reserva sin nombre</span>'
+                   : esc(r.alumno_nombre||"(sin nombre)");
     var estado=r.estado==="completada"?' <span class="hint" style="margin:0;">· vino</span>'
              : r.estado==="falta"?' <span class="hint" style="margin:0;">· faltó</span>' : '';
+    if(anon && r.nota) estado=' <span class="hint" style="margin:0;">· '+esc(r.nota)+'</span>';
     var btns="";
-    if(r.estado==="reservada"){
+    if(r.estado==="reservada" && anon){
+      btns=(pasado?'':'<button class="btn ghost sm" data-ag-marcar="cancelada" data-id="'+esc(r.id)+'">Liberar</button>');
+    } else if(r.estado==="reservada"){
       btns='<button class="btn ghost sm" data-ag-marcar="completada" data-id="'+esc(r.id)+'">Vino</button> '+
            '<button class="btn ghost sm" data-ag-marcar="falta" data-id="'+esc(r.id)+'">Faltó</button>'+
            (pasado?'':' <button class="btn ghost sm" data-ag-marcar="cancelada" data-id="'+esc(r.id)+'">Quitar</button>');
@@ -5147,6 +5156,19 @@ el("panel-agenda").addEventListener("click",function(e){
   }
   var mb = e.target.closest("[data-ag-marcar]");
   if(mb){
+    /* "Quitar" borra la reserva de una persona y está pegado a "Vino" y "Faltó": tres botones
+       seguidos donde el tercero destruye, y en el celular se tocan con el dedo. Se pregunta
+       SOLO en esa acción — poner un confirm en Vino/Faltó volvería insoportable marcar la
+       asistencia de una clase de ocho. Se dice además qué pasa con su crédito y con la lista
+       de espera, que es lo que nadie adivina. (18-ago-2026) */
+    if(mb.dataset.agMarcar==="cancelada"){
+      var quienQ=(mb.closest("div")||{}).textContent||"";
+      quienQ=quienQ.replace(/\s*(Vino|Faltó|Quitar|Liberar)\s*/g," ").replace(/\s+/g," ").trim();
+      var esAnon=/Reserva sin nombre/i.test(quienQ);
+      if(!confirm(esAnon
+        ? "¿Liberar este cupo?\n\nLa clase vuelve a tener un espacio libre y, si alguien está en lista de espera, se le avisa."
+        : "¿Quitar de esta clase a "+(quienQ||"esta persona")+"?\n\nLe vuelve a quedar disponible su clase y, si alguien está en lista de espera, se le avisa.")) return;
+    }
     apiPost("/app/api/admin/agenda/marcar",{id:mb.dataset.id, estado:mb.dataset.agMarcar})
       .then(function(){ toast("Listo"); cargarAgenda(); })
       .catch(function(err){ toast(err.message||"No se pudo"); });
@@ -5377,11 +5399,12 @@ el("btnBloquearSlot").addEventListener("click",function(){
   apiPost("/app/api/admin/agenda/bloquear",{
     inicio_utc: iso,
     alumno_id: el("ag_alumno").value || undefined,
+    sin_nombre: !el("ag_alumno").value,   /* sin alumno = apartar 1 cupo, NO cerrar la hora */
     sala: claseVisible ? el("ag_clase").value : undefined,
     fija: el("ag_fija").checked,
     nota: el("ag_nota").value.trim()
   }).then(function(r){
-    toast(r.creadas>0 ? ("Horario apartado ("+r.creadas+")") : "Ese horario ya estaba ocupado");
+    toast(r.creadas>0 ? ("Cupo apartado ("+r.creadas+")") : "Esa clase ya está llena o la hora está cerrada");
     el("ag_nota").value="";
     cargarAgenda();
   }).catch(function(e){ toast(e.message||"No se pudo"); });
@@ -5391,7 +5414,7 @@ if(el("vn_dt")){
   el("vn_dt").addEventListener("change",refrescarClaseSelectVino);
   el("vn_dt").addEventListener("input",refrescarClaseSelectVino);
 }
-if(el("ag_alumno_q")) el("ag_alumno_q").addEventListener("input",function(){ pintarSelAlumno("ag_alumno","— Solo bloquear (sin alumno) —"); });
+if(el("ag_alumno_q")) el("ag_alumno_q").addEventListener("input",function(){ pintarSelAlumno("ag_alumno","— Reserva sin nombre (aparta 1 cupo) —"); });
 if(el("vn_alumno_q")) el("vn_alumno_q").addEventListener("input",function(){ pintarSelAlumno("vn_alumno","— Elige quién vino —"); });
 if(el("btnVinoSinReserva")) el("btnVinoSinReserva").addEventListener("click",function(){
   var btn=this;
