@@ -4707,7 +4707,17 @@ function renderCalDia(fkey){
   var vistasHoras={};
   franjas.forEach(function(f){
     vistasHoras[f.hora]=1;
-    var rs=(porHora[f.hora]||[]).filter(function(r){ return !conSalas || String(r.sala||"")===String(f.sala||""); });
+    var rs=(porHora[f.hora]||[]).filter(function(r){
+      if(!conSalas) return true;
+      var rsala=String(r.sala||"");
+      /* 🐛 18-ago-2026 (José): un bloqueo SIN sala cierra TODAS las salas de esa hora
+         (así lo cuenta el backend), pero acá se filtraba por sala exacta y entonces no
+         aparecía en NINGUNA fila. Resultado: su clase quedó cerrada y el botón para
+         soltarla no existía en pantalla — "no encuentro lo de liberar" era literal.
+         Ahora se muestra en todas las salas de esa hora, que es donde de verdad pega. */
+      if(!rsala && r.tipo==="bloqueo") return true;
+      return rsala===String(f.sala||"");
+    });
     var titulo=esc(f.curso||"Clase")+(f.sala?(' · '+esc(f.sala)):'')+(f.profe?(' · '+esc(nombreProfe(f.profe)||"")):'');
     filas.push(filaClaseDia(fkey,f.hora,titulo,rs,pasado,String(f.sala||""),f.cupo));
   });

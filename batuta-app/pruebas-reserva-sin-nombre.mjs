@@ -96,5 +96,16 @@ t("a una Reserva sin nombre le habla de liberar el cupo, no de quitar a una pers
   has(P.slice(i, i + 1400), "¿Liberar este cupo?");
 });
 
+console.log("\n=== Un bloqueo sin sala TIENE que verse (José, 18-ago) ===");
+t("el filtro por sala deja pasar los bloqueos sin sala", () => {
+  has(P, 'if(!rsala && r.tipo==="bloqueo") return true;');
+});
+t("sigue filtrando por sala todo lo demás", () => has(P, 'return rsala===String(f.sala||"");'));
+t("sin salas configuradas, no filtra nada", () => has(P, "if(!conSalas) return true;"));
+t("el backend efectivamente cierra TODAS las salas con un bloqueo sin sala", () => {
+  has(S, 'if (r.tipo === "bloqueo"){ bloqueados.add(r.inicio_utc); continue; }',
+      "el bloqueo se guarda por hora, sin sala: por eso tiene que verse en todas");
+});
+
 console.log("\n" + (mal ? "✗ " + mal + " fallando · " : "✓ ") + ok + " pruebas OK\n");
 process.exit(mal ? 1 : 0);
