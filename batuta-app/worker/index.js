@@ -29,6 +29,22 @@ const PAQUETES = {
   "Clase de prueba": { clases: 1, reprog: 0 }
 };
 const PRECIOS_DEFAULT = { "Paquete 4": 250, "Paquete 8": 450, "Paquete 12": 600, "Clase suelta": 70, "Clase de prueba": 50 };
+
+/* Correos que NUNCA se pueden entregar (18-ago-2026). `example.com` y compañía son dominios
+   RESERVADOS por IANA para documentación: no aceptan correo, nunca. En la base quedaron 6
+   alumnos y varias academias de prueba con direcciones así, y motores como el win-back o el
+   rescate de compras sí les habrían escrito.
+   Cada envío a una de esas es un rebote seguro, y los rebotes le cuestan reputación al dominio
+   en Resend — la MISMA reputación que necesitan los correos de las academias que pagan. Se
+   estaba gastando en ruido de pruebas.
+   Se bloquea en `enviarCorreo`, que es la salida única: filtrar motor por motor deja fuera al
+   siguiente motor que alguien escriba. */
+const DOMINIOS_NO_ENTREGABLES = ["example.com", "example.org", "example.net", "example.edu", "test", "localhost", "invalid"];
+
+function correoNoEntregable(dir){
+  const dom = String(dir || "").toLowerCase().trim().split("@")[1] || "";
+  return !dom || DOMINIOS_NO_ENTREGABLES.includes(dom);
+}
 const SESION_DIAS = 30;
 /* Premio de referidos por DEFECTO, en soles. Desde el 15-ago-2026 ya no es la unica regla
    posible: cada academia arma la suya en Ajustes > Referidos (ver refCfg). Esta constante
@@ -1735,6 +1751,12 @@ async function remitenteDeTenant(env, tenantId){
 
 async function enviarCorreo(env, { to, subject, html, text, from, replyTo, tenantId }){
   if (!env.RESEND_API_KEY || !to || !subject) return false;
+  /* Los dominios reservados (example.com y compañía) rebotan SIEMPRE y cada rebote le cuesta
+     reputación al dominio en Resend, que es la que necesitan los correos de las academias que
+     pagan. Se corta acá, en la salida única, y no en cada motor. */
+  const destinos = (Array.isArray(to) ? to : [to]).filter(d => !correoNoEntregable(d));
+  if (!destinos.length) return false;
+  to = Array.isArray(to) ? destinos : destinos[0];
   /* 18-ago-2026, José (Elevate): "me sale que el que manda los emails es Batuta y la gente no
      sabe qué es Batuta". Tenía razón y era grande: de 31 correos del sistema, solo 2 salían a
      nombre de la academia. Sus 1,447 alumnos recibían mensajes de un remitente que no conocen.
@@ -8718,9 +8740,24 @@ export default {
           env.DB.prepare("SELECT COUNT(*) AS n FROM alumnos WHERE tenant_id = ?1").bind(t.id).first(),
           env.DB.prepare("SELECT COUNT(*) AS n FROM disponibilidad WHERE tenant_id = ?1 AND activo = 1").bind(t.id).first(),
           env.DB.prepare("SELECT COUNT(*) AS n FROM compras WHERE tenant_id = ?1").bind(t.id).first(),
-          env.DB.prepare("SELECT COUNT(*) AS n FROM precios WHERE tenant_id = ?1 AND precio > 0").bind(t.id).first(),
+          env.DB.prepare("SELECT paquete, precio FROM precios WHERE tenant_id = ?1").bind(t.id).all(),
         ]);
-        const preciosPropios = t.email === DEMO_EMAIL || Number(nPre && nPre.n) > 0;
+        /* 18-ago-2026: el arreglo del 27-jul cerró el falso positivo de "todo en S/0" y abrió
+           el contrario. A varias academias se les SIEMBRAN los precios de fábrica
+           (250/450/600/70/50), que son todos > 0, así que el checklist les tachaba "pon tus
+           precios" sin que hubieran tocado nada — y el nurture dejaba de insistirles justo en
+           el paso donde estaban trabadas. Se vio en los datos: Waleska, TCGPro y profedeprueba
+           tienen los CINCO idénticos a la semilla.
+           Ahora hacen falta las dos cosas: que haya algún precio > 0 Y que el conjunto no sea
+           exactamente el de fábrica. Cambiar UNO ya cuenta, y agregar un paquete propio también
+           (un paquete que no existe en la semilla nunca coincide). */
+        const filasPre = (nPre && nPre.results) || [];
+        const algunoPositivo = filasPre.some(r => Number(r.precio) > 0);
+        const soloFabrica = filasPre.length > 0 && filasPre.every(r => {
+          const def = PRECIOS_DEFAULT[r.paquete];
+          return def !== undefined && Number(r.precio) === Number(def);
+        });
+        const preciosPropios = t.email === DEMO_EMAIL || (algunoPositivo && !soloFabrica);
         /* "Conecta como te pagan": misma formula cobroOn de armarWebCtx / cobroOnPanel.
            Sin esto el checklist llegaba a 4/4 anotando un cobro en efectivo sin haber
            conectado nunca Yape/MP, y la web publica seguia sin poder vender (03-ago-2026). */
