@@ -196,7 +196,15 @@ async function armarWebCtx(env, tenant){
   for (const nPub of paqPub.list) paqPub.map[nPub] = paq.map[nPub];
   const mpOn = !!(tenant.mp_access_token) && (!(Number(tenant.mp_expires_at) || 0) || Number(tenant.mp_expires_at) > Date.now());
   const cobroOn = !!(mpOn || cfg.pago_numero || cfg.bcp_cuenta || cfg.interbank_cuenta || cfg.scotia_cuenta || cfg.crypto_wallet);
-  const ctx = webContexto(tenant, cfg, precios, paqPub, { cobroOn: cobroOn, paqInfo: function (pk){ return resolverPk(paq.map, pk); } });
+  /* ¿Dónde queda? (23-ago-2026, pedido de Andrés). La página de una academia vendía clases
+     con un botón de "Comprar" y no decía en ninguna parte a qué distrito ir.
+     🔒 OPCIONAL: `web_direccion_off = "1"` la esconde. Hay profesoras que dan clases en su
+     casa y su dirección no puede salir publicada por defecto sin que ellas lo sepan; el
+     interruptor vive junto a las sedes en Ajustes, donde se escribe el dato. */
+  const sedesWeb = String(cfg.web_direccion_off || "") === "1"
+    ? []
+    : await sedesDeTenant(env, tenant.id).catch(() => []);
+  const ctx = webContexto(tenant, cfg, precios, paqPub, { cobroOn: cobroOn, sedes: sedesWeb, paqInfo: function (pk){ return resolverPk(paq.map, pk); } });
   return { ctx: ctx, cfg: cfg };
 }
 function webJsonDe(cfg){
@@ -8486,7 +8494,14 @@ export default {
         "(SELECT valor FROM config c WHERE c.tenant_id = t.id AND c.clave = 'brand_color') AS color, " +
         "(SELECT COUNT(*) FROM alumnos a WHERE a.tenant_id = t.id) AS nal, " +
         "(SELECT valor FROM config c WHERE c.tenant_id = t.id AND c.clave = 'paquetes') AS paq, " +
-        "(SELECT s.direccion FROM sedes s WHERE s.tenant_id = t.id LIMIT 1) AS sede " +
+        /* 🐛 23-ago-2026 · esto era `LIMIT 1` SIN ORDEN: una academia con dos locales salía
+           publicada en UNO, elegido por lo que le tocara a SQLite, y el otro no existía para
+           quien la buscaba. Ahora manda el primero que creó, y se dice cuántos más tiene.
+           Y respeta el mismo interruptor que su página: si eligió no publicar dirección,
+           tampoco sale acá. */
+        "(SELECT s.direccion FROM sedes s WHERE s.tenant_id = t.id ORDER BY s.creado, s.rowid LIMIT 1) AS sede, " +
+        "(SELECT COUNT(*) FROM sedes s WHERE s.tenant_id = t.id AND COALESCE(s.direccion,'') != '') AS n_sedes, " +
+        "(SELECT valor FROM config c WHERE c.tenant_id = t.id AND c.clave = 'web_direccion_off') AS dir_off " +
         "FROM tenants t WHERE t.estado != 'vencido' AND t.email NOT LIKE 'demo%@batuta.lat' " +
         "AND t.email NOT LIKE '%@example.com' AND t.email != 'andressalame@gmail.com' " +
         "ORDER BY t.creado ASC LIMIT 300"
@@ -8544,7 +8559,10 @@ export default {
             (rubroUtil ? '<span class="ac-rubro">' + esc2(rubroUtil) + '</span>' : '') + '</div>' +
           '</div>' +
           (cursos.length ? '<div class="ac-cursos">' + cursos.map(c => '<span>' + esc2(c) + '</span>').join("") + '</div>' : '') +
-          (f.sede ? '<p class="ac-sede">' + esc2(String(f.sede).slice(0, 60)) + '</p>' : '') +
+          ((f.sede && String(f.dir_off || "") !== "1")
+            ? '<p class="ac-sede">' + esc2(String(f.sede).slice(0, 60)) +
+              ((Number(f.n_sedes) || 0) > 1 ? esc2(" · y " + ((Number(f.n_sedes) || 0) - 1) + " local" + ((Number(f.n_sedes) || 0) > 2 ? "es" : "") + " más") : "") +
+              '</p>' : '') +
           '<span class="ac-cta">Ver la academia &rarr;</span></a>';
       }).join("");
 
@@ -15997,7 +16015,7 @@ export default {
           /* config del tenant (cobros, marca, cupo, cursos): SOLO el dueno */
           if (!esDueno) return json({ error: "Los ajustes de la academia los maneja el dueno." }, 403);
           const b = await request.json().catch(() => ({}));
-          const claves = ["pago_numero", "pago_titular", "bcp_cuenta", "bcp_cci", "scotia_cuenta", "scotia_cci", "crypto_moneda", "crypto_red", "crypto_wallet", "stripe_moneda", "profe_nombre", "profe_marca", "profe_foto", "whatsapp_profe", "cursos", "brand_color", "brand_font", "agenda_cupo", "recordatorios_clase", "recordatorio_renovacion", "nubefact_ruta", "nubefact_token", "fact_serie_boleta", "fact_igv", "fact_proximo_numero", "wa_phone_id", "wa_enabled", "wa_modo", "wa_tono", "wa_instrucciones", "wa_kb", "reprog_activo", "reprog_min_h", "paquetes", "modulos_off", "clases", "anticipacion_h",
+          const claves = ["pago_numero", "pago_titular", "bcp_cuenta", "bcp_cci", "scotia_cuenta", "scotia_cci", "crypto_moneda", "crypto_red", "crypto_wallet", "stripe_moneda", "profe_nombre", "profe_marca", "profe_foto", "whatsapp_profe", "cursos", "brand_color", "brand_font", "agenda_cupo", "recordatorios_clase", "recordatorio_renovacion", "nubefact_ruta", "nubefact_token", "fact_serie_boleta", "fact_igv", "fact_proximo_numero", "wa_phone_id", "wa_enabled", "wa_modo", "wa_tono", "wa_instrucciones", "wa_kb", "reprog_activo", "reprog_min_h", "paquetes", "modulos_off", "clases", "anticipacion_h", "web_direccion_off",
                           /* Elevate (28-jul-2026) */
                           "caduca_meses", "asistencia_auto", "asistencia_horas", "mensajes",
                           /* que datos extra pide el formulario publico de compra (02-ago-2026) */

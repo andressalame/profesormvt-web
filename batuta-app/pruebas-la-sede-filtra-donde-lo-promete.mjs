@@ -23,7 +23,9 @@ const cortar = (n) => {
 };
 
 console.log("── 0. La ayuda ya no promete más de lo que hace ──");
-const hint = /¿Tienes más de un local\?[\s\S]{0,600}?<\/p>/.exec(SRC);
+/* el ancla es el <h2> de la sección, no una frase del texto: el texto se reescribe
+   (pasó el 23-ago al meter "publica tu dirección") y la prueba no debe morir por eso */
+const hint = /<h2>Tus locales y tu dirección<\/h2>\s*<p class="hint">([\s\S]{0,900}?)<\/p>/.exec(SRC);
 if (!hint) { no("no encontré la ayuda de sedes en Ajustes"); process.exit(1); }
 const txt = hint[0].replace(/<[^>]+>/g, "");
 /^.*$/.test(txt);
@@ -32,6 +34,8 @@ const txt = hint[0].replace(/<[^>]+>/g, "");
   : ok("no dice «todo se filtra»");
 /Mis alumnos/.test(txt) && /Grupos/.test(txt) ? ok("nombra las dos pantallas que sí filtran") : no("no nombra Mis alumnos y Grupos");
 /caja|informes/i.test(txt) ? ok("y avisa que la caja y los informes suman toda la academia") : no("no aclara qué NO se filtra");
+/un solo local/i.test(txt) ? ok("y le dice al de un solo local que igual cargue su dirección")
+                           : no("el de un solo local sigue creyendo que esto no es para él");
 
 console.log("\n── 1. renderGrupos, ejecutado de verdad ──");
 const cuerpo = cortar("renderGrupos");

@@ -1660,15 +1660,22 @@ button[data-ayuda],a[data-ayuda],select[data-ayuda],input[data-ayuda],label[data
       <input id="cfg_salas" type="text" maxlength="200" placeholder="Sala grande, Sala chica" style="width:100%;max-width:420px;" />
     </div>
     <div class="group solo-dueno" data-aj="academia">
-      <h2>Sedes de tu academia</h2>
-      <p class="hint">¿Tienes más de un local? Crea tus sedes y asígnalas a tus profesores, alumnos y grupos (en Mis alumnos y Mi academia → Mis profesores). Cada alumno ve su sede y su dirección en su portal, y <b>Mis alumnos</b> y <b>Grupos</b> se pueden filtrar por local. La caja y los informes siguen sumando toda la academia junta. Si tienes un solo local, ignora esta sección.</p>
+      <h2>Tus locales y tu dirección</h2>
+      <p class="hint"><b>Aunque tengas un solo local, créalo con su dirección:</b> es de ahí de donde sale la dirección que ven tus alumnos en su portal, en el recordatorio de su clase, en el calendario de su celular y en tu página web. Si tienes varios, asígnalos a tus profesores, alumnos y grupos (en Mis alumnos y Mi academia → Mis profesores): <b>Mis alumnos</b> y <b>Grupos</b> se filtran por local. La caja y los informes siguen sumando toda la academia junta.</p>
       <div id="sedesLista" style="display:flex;flex-direction:column;gap:8px;"></div>
-      <div class="cfgrow" style="margin-top:8px;"><span class="pk">Nueva sede</span>
+      <div class="cfgrow" style="margin-top:8px;"><span class="pk">Nuevo local</span>
         <input id="sd_nombre" type="text" placeholder="Sede Miraflores" style="flex:1;min-width:140px;" />
         <input id="sd_direccion" type="text" placeholder="Dirección (opcional)" style="flex:1;min-width:140px;" />
         <button class="btn ghost sm" id="btnCrearSede" style="flex:0 0 auto;">Agregar</button>
       </div>
       <p class="hint" id="sdErr" style="color:#c00;"></p>
+      <div class="cfgrow" style="margin-top:10px;"><span class="pk">¿Publicas tu dirección?</span>
+        <select id="cfg_web_direccion_off">
+          <option value="">Sí — sale en mi página web y en el directorio</option>
+          <option value="1">No — solo la ven mis alumnos</option>
+        </select>
+      </div>
+      <p class="hint" id="sdWebNota" style="margin-top:4px;"></p>
     </div>
     <div class="group" data-aj="academia">
       <h2>Módulos de tu panel</h2>
@@ -3937,6 +3944,7 @@ function renderAjustes(){
   if(el("cfg_portal_fija_off")) el("cfg_portal_fija_off").value=(db.config&&db.config.portal_fija_off)||"";
   if(el("cfg_directorio")) el("cfg_directorio").value=(db.config&&db.config.directorio)||"";
   if(el("cfg_portal_chat_off")) el("cfg_portal_chat_off").value=(db.config&&db.config.portal_chat_off)||"";
+  if(el("cfg_web_direccion_off")){ el("cfg_web_direccion_off").value=(db.config&&db.config.web_direccion_off)||""; notaWebDireccion(); }
   if(el("cfg_portal_sin_profe")) el("cfg_portal_sin_profe").value=(db.config&&db.config.portal_sin_profe)||"";
   el("cfg_crypto_moneda").value=(db.config&&db.config.crypto_moneda)||"";
   el("cfg_crypto_red").value=(db.config&&db.config.crypto_red)||"";
@@ -6045,6 +6053,26 @@ if(el("btnPwFb")) el("btnPwFb").addEventListener("click",function(){
     .finally(function(){ btn.disabled=false; });
 });
 
+/* Le dice al dueño, con SU dato delante, qué va a salir publicado y qué no. Un
+   interruptor de privacidad que no enseña la consecuencia no es una decisión informada. */
+function notaWebDireccion(){
+  var n=el("sdWebNota"); if(!n) return;
+  var sel=el("cfg_web_direccion_off"); var off=sel&&sel.value==="1";
+  var conDir=(db.sedes||[]).filter(function(s){ return (s.direccion||"").trim(); });
+  if(!conDir.length){
+    n.innerHTML='Todavía no has escrito ninguna dirección, así que tu página web no dice dónde quedas.';
+    return;
+  }
+  if(off){
+    n.innerHTML='Tu dirección <b>no sale</b> en tu página web ni en el directorio. Tus alumnos sí la siguen viendo en su portal y en sus recordatorios.';
+    return;
+  }
+  var ej=conDir[0];
+  n.innerHTML='En tu página web va a salir: <b>'+esc(ej.direccion)+'</b>'+
+    (conDir.length>1?(' y '+(conDir.length-1)+' dirección'+(conDir.length>2?'es':'')+' más'):'')+
+    ', con enlace a Google Maps.';
+}
+if(el("cfg_web_direccion_off")) el("cfg_web_direccion_off").addEventListener("change",notaWebDireccion);
 /* ---------- Sedes (multisede: locales de la academia) ---------- */
 function nombreSede(id){ var s=(db.sedes||[]).find(function(x){return x.id===id;}); return s?s.nombre:""; }
 /* llena un <select> de sede y muestra/oculta su wrap según existan sedes */
@@ -6057,6 +6085,7 @@ function fillSedeSelectGen(selId,wrapId,val){
   s.value=val||""; if(s.value!==(val||"")) s.value="";
 }
 function renderSedes(){
+  notaWebDireccion();
   var w=el("sedesLista"); if(!w) return;
   var ss=db.sedes||[];
   w.innerHTML=ss.length?ss.map(function(s){
@@ -8113,6 +8142,7 @@ el("btnGuardarAjustes").addEventListener("click",function(){
             portal_fija_off:(el("cfg_portal_fija_off")?el("cfg_portal_fija_off").value:""),
             directorio:(el("cfg_directorio")?el("cfg_directorio").value:""),
             portal_chat_off:(el("cfg_portal_chat_off")?el("cfg_portal_chat_off").value:""),
+            web_direccion_off:(el("cfg_web_direccion_off")?el("cfg_web_direccion_off").value:""),
             portal_sin_profe:(el("cfg_portal_sin_profe")?el("cfg_portal_sin_profe").value:""),
             crypto_moneda:el("cfg_crypto_moneda").value.trim(),
             crypto_red:el("cfg_crypto_red").value.trim(),

@@ -289,6 +289,21 @@ function secGaleria(d){
   return '<section class="bt-sec"><h2 data-ed="galeria.titulo">' + esc(g.titulo || "Galería") + '</h2><div class="bt-galeria">' + fotos + "</div></section>";
 }
 
+/* Dónde queda la academia. Va en Contacto porque es la pregunta que se hace justo
+   antes de escribir o de pagar: hasta hoy la página vendía clases con un botón de
+   "Comprar" y no decía en ningún sitio a qué distrito había que ir. */
+function bloqueSedes(ctx){
+  var ss = (ctx && ctx.sedes) || [];
+  if (!ss.length) return "";
+  var uno = ss.length === 1;
+  return '<div class="bt-sedes">' + ss.map(function (s){
+    var q = encodeURIComponent((s.nombre ? s.nombre + ", " : "") + s.direccion);
+    return '<div class="bt-sede">' +
+      (uno || !s.nombre ? "" : '<span class="bt-sede-n">' + esc(s.nombre) + "</span>") +
+      '<a class="bt-sede-d" href="https://www.google.com/maps/search/?api=1&amp;query=' + q +
+      '" target="_blank" rel="noopener">' + esc(s.direccion) + "</a></div>";
+  }).join("") + "</div>";
+}
 function secContacto(d, ctx){
   var c = d.contacto;
   if (!c.on) return "";
@@ -299,9 +314,11 @@ function secContacto(d, ctx){
   if (c.mostrar_portal){
     botones += '<a class="bt-cta bt-cta-sec" href="' + esc(ctx.base) + '">Portal del alumno</a>';
   }
-  if (!c.texto && !botones) return "";
+  var sedes = bloqueSedes(ctx);
+  if (!c.texto && !botones && !sedes) return "";
   return '<section class="bt-sec bt-contacto"><h2 data-ed="contacto.titulo">' + esc(c.titulo || "Contáctanos") + "</h2>" +
     (c.texto ? '<p class="bt-sec-intro" data-ed="contacto.texto">' + texto(c.texto) + "</p>" : "") +
+    sedes +
     (botones ? '<div class="bt-cta-row">' + botones + "</div>" : "") + "</section>";
 }
 
@@ -315,6 +332,12 @@ function css(){
     "img{max-width:100%;display:block}",
     "a{color:inherit}",
     "h1,h2,h3{font-family:var(--ft),var(--fc),sans-serif;line-height:1.1;letter-spacing:-.01em}",
+    /* se alinean con el <h2> y los botones de la sección, no centradas por su cuenta */
+    ".bt-sedes{display:flex;flex-wrap:wrap;gap:14px 32px;margin:2px 0 20px}",
+    ".bt-sede{display:flex;flex-direction:column;gap:1px}",
+    ".bt-sede-n{font-size:13px;color:var(--muted);letter-spacing:.02em}",
+    ".bt-sede-d{font-size:15px;text-decoration:none;border-bottom:1px solid var(--linea,rgba(128,128,128,.35));padding-bottom:1px}",
+    ".bt-sede-d:hover{border-bottom-color:var(--acento)}",
     ".bt-anuncio{background:var(--acento);color:#0F1115;text-align:center;padding:9px 14px;font-size:13px;font-weight:600;letter-spacing:.02em}",
     ".bt-wrap{max-width:1040px;margin:0 auto;padding:0 22px}",
     ".bt-hero{max-width:1040px;margin:0 auto;padding:72px 22px 40px;text-align:center}",
@@ -393,8 +416,17 @@ export function contexto(tenant, cfg, precios, paq, opciones){
   ["brand_color", "brand_font", "brand_logo", "clases", "cursos", "whatsapp_profe"].forEach(function (k){
     if (cfg && cfg[k] !== undefined) cfgPublica[k] = cfg[k];
   });
+  /* Los locales de la academia, para que su página diga DÓNDE queda (23-ago-2026).
+     Llegan ya filtrados desde el worker: acá no hay base de datos, y el interruptor
+     de "publicar mi dirección" se decide allá, en un solo sitio. Solo entran los que
+     tienen dirección escrita: un local sin dirección no ayuda a nadie a llegar. */
+  var sedes = (Array.isArray(o.sedes) ? o.sedes : [])
+    .map(function (x){ return { nombre: String((x && x.nombre) || "").trim(),
+                                direccion: String((x && x.direccion) || "").trim() }; })
+    .filter(function (x){ return x.direccion; })
+    .slice(0, 20);
   return {
-    tenant: tenant, cfg: cfgPublica, precios: precios,
+    tenant: tenant, cfg: cfgPublica, precios: precios, sedes: sedes,
     cursos: cursos, clases: clases, wa: wa, cobroOn: !!o.cobroOn, paquetes: paquetes,
     base: "/app/a/" + tenant.slug,
     waMsg: encodeURIComponent("Hola! Vi la página de " + tenant.academia + " y quiero más información :)"),
@@ -435,7 +467,9 @@ export function htmlDocumento(data, ctx, opciones){
   var urlCanon = slugCanon ? ("https://batuta.lat/a/" + encodeURIComponent(slugCanon)) : "";
   /* Datos estructurados: SOLO lo que la academia ya publicó. Nada de dirección ni teléfono
      inventados — schema.org no los exige para EducationalOrganization y poner un dato que no
-     tenemos sería publicar información falsa de un negocio real. */
+     tenemos sería publicar información falsa de un negocio real.
+     23-ago-2026: ahora SÍ puede haber dirección, porque la academia la escribió ella y eligió
+     publicarla. Es lo que hace que Google la muestre en el mapa y en "cerca de mí". */
   var jsonLd = "";
   if (urlCanon){
     var ld = {
@@ -446,6 +480,17 @@ export function htmlDocumento(data, ctx, opciones){
       description: desc
     };
     if (ctx.cfg && ctx.cfg.brand_logo) ld.image = "https://batuta.lat" + ctx.cfg.brand_logo;
+    var sedesLd = (ctx.sedes || []);
+    if (sedesLd.length){
+      ld.address = { "@type": "PostalAddress", streetAddress: sedesLd[0].direccion, addressCountry: "PE" };
+      /* con varios locales, `address` es el principal y `location` los lista todos */
+      if (sedesLd.length > 1){
+        ld.location = sedesLd.map(function (x){
+          return { "@type": "Place", name: x.nombre || titulo,
+                   address: { "@type": "PostalAddress", streetAddress: x.direccion, addressCountry: "PE" } };
+        });
+      }
+    }
     if (ctx.cursos.length){
       ld.hasOfferCatalog = {
         "@type": "OfferCatalog",
