@@ -6105,6 +6105,87 @@ async function sedesDeTenant(env, tid){
     return (await env.DB.prepare("SELECT id, nombre, direccion FROM sedes WHERE tenant_id = ?1 ORDER BY creado, rowid").bind(tid).all()).results || [];
   } catch (e) { return []; }
 }
+/* ═══ LA CAMPANITA DEL PANEL (23-ago-2026) ═══════════════════════════════════
+   Pedido de Andrés: "una campanita arriba a la derecha, solo para los profes. Ahí
+   van a recibir notificaciones de actualizaciones del sistema y ver si alguien les
+   pagó, nada más."
+
+   Dos fuentes, y ninguna más a propósito:
+     · NOVEDADES  — lo que cambió en Batuta. Las escribe Andrés acá abajo y salen con
+       el siguiente deploy. Es una constante y no una tabla porque hay UN solo autor y
+       despliega varias veces al día: una tabla y su panel de administración serían
+       infraestructura para un problema que no existe.
+     · PAGOS      — solo para el DUEÑO. Un profesor del equipo no ve Cobros ni Caja,
+       así que enseñarle quién pagó sería filtrarle plata que no le toca.
+
+   Lo leído se guarda POR PERSONA (no por academia): la dueña y su profesora tienen
+   cada una su marca. Y la marca que se guarda es la que el cliente VIO, no "ahora":
+   si entra un pago entre que se pinta la lista y se marca leído, no se pierde. */
+const NOVEDADES = [
+  { id: "2026-08-23-direccion", fecha: "2026-08-23",
+    titulo: "Tu página web ya dice dónde queda tu academia",
+    texto: "Carga la dirección de tu local en Ajustes → Mi academia y sale en tu página, con enlace a Google Maps. Si prefieres no publicarla, ahí mismo la apagas: tus alumnos la siguen viendo en su portal." },
+  { id: "2026-08-23-recordatorio", fecha: "2026-08-23",
+    titulo: "El recordatorio de clase dice a qué local ir",
+    texto: "Si tienes más de un local, el correo de 24h y el de 1h ahora le dicen a cada alumno dónde es su clase. Y el calendario que se guarda en su celular lleva la dirección." },
+  { id: "2026-08-21-vencen", fecha: "2026-08-21",
+    titulo: "Aviso de clases pagadas que se vencen",
+    texto: "Cuando a un alumno le quedan clases pagadas y su plan está por vencer, te aparece en el panel para que puedas avisarle a tiempo." },
+  { id: "2026-08-20-packs", fecha: "2026-08-20",
+    titulo: "Batuta es gratis, con el producto completo",
+    texto: "Se acabaron los planes. Tienes todo Batuta con 20 alumnos, 1 profesor y 5 conversaciones del asistente al mes. Si necesitas más, compras packs y se suman a un solo cobro." }
+];
+let AVISOS_OK = false;
+async function ensureAvisosSchema(env){
+  if (AVISOS_OK) return;
+  try { await env.DB.prepare("ALTER TABLE profesores ADD COLUMN avisos_visto TEXT DEFAULT ''").run(); } catch (e) { /* ya existe */ }
+  AVISOS_OK = true;
+}
+/* La marca de "hasta acá leí": {n: fecha de la última novedad, c: rowid del último pago}.
+   `c` va por rowid y no por fecha porque `compras.fecha` es un DÍA de Lima: con fechas, un
+   pago de hoy quedaría "nuevo" o "viejo" según la hora, y el contador mentiría medio día. */
+function avisosVistoDe(profesor){
+  try { const j = JSON.parse((profesor && profesor.avisos_visto) || "{}") || {}; return { n: String(j.n || ""), c: Number(j.c) || 0 }; }
+  catch (e) { return { n: "", c: 0 }; }
+}
+async function avisosDe(env, actor){
+  await ensureAvisosSchema(env);
+  const visto = avisosVistoDe(actor.profesor);
+  const lista = [];
+  for (const nv of NOVEDADES.slice(0, 12)){
+    lista.push({ tipo: "novedad", id: nv.id, fecha: nv.fecha, titulo: nv.titulo, texto: nv.texto,
+                 nuevo: nv.fecha > visto.n });
+  }
+  let topeC = visto.c;
+  if (actor.esDueno){
+    let filas = [];
+    try {
+      filas = ((await env.DB.prepare(
+        "SELECT c.rowid AS rid, c.paquete, c.curso, COALESCE(c.monto,0) AS monto, c.estado, c.fecha, c.metodo, " +
+        "COALESCE(cu.nombre,'') AS quien FROM compras c LEFT JOIN cuentas cu ON cu.id = c.cuenta_id " +
+        "WHERE c.tenant_id = ?1 AND c.estado IN ('pendiente','confirmada') ORDER BY c.rowid DESC LIMIT 15"
+      ).bind(actor.tenant.id).all()).results) || [];
+    } catch (e) { filas = []; }
+    for (const f of filas){
+      const rid = Number(f.rid) || 0;
+      if (rid > topeC) topeC = rid;
+      const pend = f.estado === "pendiente";
+      lista.push({
+        tipo: "pago", id: "pago-" + rid, fecha: f.fecha || "",
+        titulo: (f.quien || "Alguien") + (pend ? " dice que te pagó" : " te pagó") + " S/ " + (Math.round(Number(f.monto) * 100) / 100),
+        texto: (f.paquete || "") + (f.curso ? " de " + f.curso : "") + (f.metodo ? " · " + f.metodo : "") +
+               (pend ? " · falta que lo confirmes en Cobros" : ""),
+        pendiente: pend,
+        nuevo: rid > visto.c
+      });
+    }
+  }
+  /* por fecha, y a igualdad de fecha primero lo que hay que hacer algo */
+  lista.sort((a, b) => (b.fecha || "").localeCompare(a.fecha || "") || (b.pendiente ? 1 : 0) - (a.pendiente ? 1 : 0));
+  const topeN = NOVEDADES.length ? NOVEDADES.map(x => x.fecha).sort().slice(-1)[0] : visto.n;
+  return { avisos: lista.slice(0, 25), nuevos: lista.filter(x => x.nuevo).length, tope: { n: topeN, c: topeC } };
+}
+
 /* ── ¿A QUÉ LOCAL TIENE QUE IR? Una sola regla para TODAS las superficies ──────
    (23-ago-2026, pedido de Andrés: "que el recordatorio diga a qué local ir; si está
    en blanco o sin configurar, asume que solo hay 1 local".)
@@ -15451,6 +15532,32 @@ export default {
                         })),
                         msg_campos: CAMPOS_MSG,
                         vapid_public: env.VAPID_PUBLIC_KEY || "" });
+        }
+
+        /* -------- La campanita (23-ago-2026) --------
+           La ve todo el que entra al panel; los PAGOS solo el dueño (`avisosDe` lo decide,
+           no el cliente: un profesor del equipo no ve Cobros y no puede enterarse por acá). */
+        if (path === "/app/api/admin/avisos" && request.method === "GET"){
+          return json(await avisosDe(env, actor));
+        }
+        if (path === "/app/api/admin/avisos/visto" && request.method === "POST"){
+          await ensureAvisosSchema(env);
+          if (!profeActorId) return json({ ok: true });   /* sin ficha de profesor no hay dónde guardar */
+          const bAv = await request.json().catch(() => ({}));
+          /* 🔴 se guarda lo que el cliente VIO, no `ahora`: si entra un pago entre que se
+             pintó la lista y se marcó leída, con `ahora` quedaría enterrado sin que nadie
+             lo vea nunca. Y se valida: esto viene de fuera. */
+          const nAv = /^\d{4}-\d{2}-\d{2}$/.test(String((bAv && bAv.n) || "")) ? String(bAv.n) : "";
+          const cAv = Math.max(0, Math.min(1e12, parseInt((bAv && bAv.c), 10) || 0));
+          const prev = avisosVistoDe(profeActor);
+          /* nunca hacia atrás: dos pestañas abiertas no pueden "des-leer" lo ya leído */
+          const guardar = { n: nAv > prev.n ? nAv : prev.n, c: Math.max(cAv, prev.c) };
+          try {
+            await env.DB.prepare("UPDATE profesores SET avisos_visto = ?1 WHERE id = ?2 AND tenant_id = ?3")
+              .bind(JSON.stringify(guardar), profeActorId, tid).run();
+            if (profeActor) profeActor.avisos_visto = JSON.stringify(guardar);
+          } catch (e) { return json({ error: "No se pudo guardar" }, 500); }
+          return json({ ok: true, visto: guardar });
         }
 
         /* -------- Sedes (multisede: locales fisicos de la academia) -------- */

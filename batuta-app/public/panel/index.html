@@ -190,6 +190,29 @@
   .buscador:hover{border-color:var(--accent);color:var(--cream);}
   .buscador svg{width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;flex:0 0 auto;}
   .bs-kbd,.bsfoot kbd{font-family:var(--mono);font-size:10px;border:1px solid var(--line);border-radius:3px;padding:1px 5px;opacity:.75;}
+  /* ---------- Campanita ---------- */
+  .camp-wrap{position:relative;flex:0 0 auto;}
+  .camp{position:relative;display:flex;align-items:center;justify-content:center;width:34px;height:32px;background:transparent;border:1px solid var(--line);border-radius:4px;color:var(--muted);cursor:pointer;transition:border-color .12s,color .12s;}
+  .camp:hover,.camp[aria-expanded="true"]{border-color:var(--accent);color:var(--accent);}
+  .camp svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;}
+  .camp-pt{position:absolute;top:-5px;right:-5px;min-width:16px;height:16px;padding:0 4px;border-radius:9px;background:var(--accent);color:#0F1115;font-family:var(--mono);font-size:10px;line-height:16px;text-align:center;font-weight:700;}
+  .camp-panel{position:absolute;top:calc(100% + 8px);right:0;width:min(370px,calc(100vw - 24px));max-height:min(460px,70vh);overflow:auto;background:var(--panel);border:1px solid var(--line);border-radius:6px;box-shadow:0 14px 40px rgba(0,0,0,.45);z-index:60;}
+  .camp-cab{display:flex;align-items:center;justify-content:space-between;padding:11px 14px;border-bottom:1px solid var(--line);font-family:var(--mono);font-size:10.5px;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);position:sticky;top:0;background:var(--panel);}
+  .camp-x{background:transparent;border:0;color:var(--muted);font-size:19px;line-height:1;cursor:pointer;padding:0 2px;}
+  .camp-x:hover{color:var(--cream);}
+  .camp-it{display:block;width:100%;text-align:left;background:transparent;border:0;border-bottom:1px solid var(--line);padding:12px 14px;cursor:default;color:inherit;font:inherit;}
+  .camp-it:last-child{border-bottom:0;}
+  .camp-it.click{cursor:pointer;}
+  .camp-it.click:hover{background:var(--panel2);}
+  .camp-it.nuevo{border-left:2px solid var(--accent);padding-left:12px;}
+  .camp-t{display:block;font-size:13.5px;line-height:1.35;margin-bottom:3px;}
+  .camp-dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:7px;vertical-align:middle;position:relative;top:-1px;}
+  .camp-dot.pend{background:var(--accent);}
+  .camp-dot.ok{background:#4ba36a;}
+  .camp-d{display:block;font-size:12px;color:var(--muted);line-height:1.4;}
+  .camp-f{display:block;font-family:var(--mono);font-size:9.5px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);opacity:.75;margin-top:5px;}
+  .camp-vacio{padding:26px 16px;text-align:center;color:var(--muted);font-size:13px;}
+  @media(max-width:700px){ .camp-panel{position:fixed;top:56px;right:10px;left:10px;width:auto;} }
   .bsov.open{align-items:flex-start;}
   .bsbox{width:min(620px,94vw);margin-top:12vh;background:var(--panel);border:1px solid var(--accent);border-radius:6px;overflow:hidden;box-shadow:0 24px 60px rgba(0,0,0,.6);}
   .bsbox>input{width:100%;border:0;border-bottom:1px solid var(--line);border-radius:0;background:transparent;padding:16px 18px;font-size:16px;color:var(--cream);outline:none;}
@@ -890,6 +913,17 @@ button[data-ayuda],a[data-ayuda],select[data-ayuda],input[data-ayuda],label[data
         <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
         <span class="bs-tx">Buscar…</span><kbd class="bs-kbd">Ctrl K</kbd>
       </button>
+      <!-- Campanita (23-ago-2026): novedades de Batuta y quién te pagó. Nada más. -->
+      <div class="camp-wrap">
+        <button class="camp" id="btnCampana" type="button" aria-label="Novedades y pagos" aria-expanded="false" title="Novedades y pagos">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 8a6 6 0 1 0-12 0c0 6-2 7-2 7h16s-2-1-2-7"/><path d="M13.7 20a2 2 0 0 1-3.4 0"/></svg>
+          <span class="camp-pt" id="campPunto" hidden></span>
+        </button>
+        <div class="camp-panel" id="campPanel" hidden>
+          <div class="camp-cab"><span>Novedades</span><button class="camp-x" id="btnCampCerrar" type="button" aria-label="Cerrar">&times;</button></div>
+          <div class="camp-lista" id="campLista"></div>
+        </div>
+      </div>
     </header>
     <div class="content">
       <div class="pagehead">
@@ -2800,6 +2834,9 @@ function recargar(){
     aplicarRol();
     try{ aplicarPermisosPropios(); }catch(e){}
     renderAll(); pintarLinkAlumnos(); setSync("Conectado ✓","ok");
+    /* la campanita se llena aparte y DESPUÉS: si su endpoint falla o tarda, el panel ya
+       está en pantalla. Nunca al revés. */
+    try{ campCargar(); }catch(e){}
   });
 }
 /* ---------- Multi-profesor: rol del actor y vistas por rol ---------- */
@@ -6073,6 +6110,79 @@ function notaWebDireccion(){
     ', con enlace a Google Maps.';
 }
 if(el("cfg_web_direccion_off")) el("cfg_web_direccion_off").addEventListener("change",notaWebDireccion);
+/* ═══ LA CAMPANITA ═══════════════════════════════════════════════════════════
+   Dos cosas y nada más: qué cambió en Batuta, y quién te pagó. Los pagos los
+   decide el SERVIDOR (un profesor del equipo no ve Cobros, así que tampoco se
+   entera por acá); el cliente solo pinta lo que le llega. */
+var CAMP={avisos:[],nuevos:0,tope:null,cargando:false};
+function campPintar(){
+  var L=el("campLista"); if(!L) return;
+  var pt=el("campPunto");
+  if(pt){ if(CAMP.nuevos>0){ pt.textContent=CAMP.nuevos>9?"9+":String(CAMP.nuevos); pt.hidden=false; } else pt.hidden=true; }
+  if(!CAMP.avisos.length){
+    L.innerHTML='<p class="camp-vacio">Nada nuevo por acá.<br>Te avisamos cuando alguien te pague o cuando Batuta cambie.</p>';
+    return;
+  }
+  L.innerHTML=CAMP.avisos.map(function(a){
+    var esPago=a.tipo==="pago";
+    /* los pagos llevan a Cobros; una novedad no lleva a ningún lado */
+    return '<'+(esPago?'button type="button" class="camp-it click'+(a.nuevo?" nuevo":"")+'" data-ira="pagos"':
+                       'div class="camp-it'+(a.nuevo?" nuevo":"")+'"')+'>'+
+      /* 🔴 nada de emojis (regla de la casa): un punto dibujado, ámbar si falta confirmarlo
+         y verde si ya entró. Con `title` para quien no distingue los colores. */
+      '<span class="camp-t">'+(esPago?'<i class="camp-dot'+(a.pendiente?' pend':' ok')+'" title="'+(a.pendiente?'Falta confirmarlo':'Confirmado')+'"></i>':'')+esc(a.titulo)+'</span>'+
+      (a.texto?'<span class="camp-d">'+esc(a.texto)+'</span>':'')+
+      '<span class="camp-f">'+esc(campFecha(a.fecha))+'</span>'+
+      '</'+(esPago?'button':'div')+'>';
+  }).join("");
+}
+/* "hoy" / "ayer" / "hace 3 días" y, más allá, la fecha. Un ISO pelado no le dice
+   nada a nadie de un vistazo. */
+function campFecha(f){
+  if(!f) return "";
+  var hoy=hoyLima();
+  if(f===hoy) return "hoy";
+  var d=Math.round((Date.parse(hoy+"T00:00:00Z")-Date.parse(f+"T00:00:00Z"))/86400000);
+  if(d===1) return "ayer";
+  if(d>1&&d<=6) return "hace "+d+" días";
+  var p=f.split("-"); return p.length===3?(p[2]+"/"+p[1]):f;
+}
+function campCargar(){
+  if(CAMP.cargando) return Promise.resolve();
+  CAMP.cargando=true;
+  return fetch("/app/api/admin/avisos",{headers:hdr()})
+    .then(function(r){ return r.ok?r.json():null; })
+    .then(function(d){
+      if(d){ CAMP.avisos=d.avisos||[]; CAMP.nuevos=d.nuevos||0; CAMP.tope=d.tope||null; campPintar(); }
+    })
+    .catch(function(){ /* la campanita nunca puede tumbar el panel */ })
+    .then(function(){ CAMP.cargando=false; });
+}
+function campMarcarLeido(){
+  if(!CAMP.tope||!CAMP.nuevos) return;
+  /* se manda el tope que se PINTÓ, no "ahora": si entra un pago mientras el panel está
+     abierto, no queda enterrado como leído sin que nadie lo haya visto. */
+  var t=CAMP.tope;
+  CAMP.nuevos=0; CAMP.avisos.forEach(function(a){ a.nuevo=false; }); campPintar();
+  apiPost("/app/api/admin/avisos/visto",{n:t.n,c:t.c}).catch(function(){});
+}
+function campAbrir(abrir){
+  var b=el("btnCampana"), pn=el("campPanel"); if(!b||!pn) return;
+  var quedaAbierto=(abrir===undefined)?pn.hidden:abrir;
+  pn.hidden=!quedaAbierto;
+  b.setAttribute("aria-expanded",quedaAbierto?"true":"false");
+  if(quedaAbierto){ campCargar().then(campMarcarLeido); }
+}
+if(el("btnCampana")) el("btnCampana").addEventListener("click",function(e){ e.stopPropagation(); campAbrir(); });
+if(el("btnCampCerrar")) el("btnCampCerrar").addEventListener("click",function(){ campAbrir(false); });
+document.addEventListener("click",function(e){
+  var pn=el("campPanel"); if(!pn||pn.hidden) return;
+  if(!e.target.closest(".camp-wrap")) campAbrir(false);
+});
+document.addEventListener("keydown",function(e){ if(e.key==="Escape") campAbrir(false); });
+/* refresco tranquilo: esto no es un chat, con mirar cada 5 minutos sobra */
+setInterval(function(){ if(document.visibilityState==="visible") campCargar(); },300000);
+
 /* ---------- Sedes (multisede: locales de la academia) ---------- */
 function nombreSede(id){ var s=(db.sedes||[]).find(function(x){return x.id===id;}); return s?s.nombre:""; }
 /* llena un <select> de sede y muestra/oculta su wrap según existan sedes */
