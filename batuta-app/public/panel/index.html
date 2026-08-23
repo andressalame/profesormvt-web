@@ -3764,7 +3764,26 @@ var MSG_EJEMPLO={ alumno:"María", academia:(db.config&&db.config.profe_marca)||
   paquete:"Paquete 8", saldo:"te quedan 3 clases", vence:"20 de agosto", dias:"9",
   curso_de:" de Reformer", con_profe:" con Ana",
   /* el comodín tiene que VERSE en la previa: si sale vacío, el dueño cree que no hace nada */
-  vence_frase:" Acuérdate que tu plan vence el 20 de agosto." };
+  vence_frase:" Acuérdate que tu plan vence el 20 de agosto.",
+  sede:"Sede Miraflores", direccion:"Av. Larco 345, Miraflores", sede_frase:" en Sede Miraflores" };
+/* Las academias con varios locales llevan la dirección al pie del correo aunque no usen
+   {sede}: si la previa no lo enseñara, el dueño creería que su recordatorio no dice dónde
+   es la clase y se pondría a pegarlo a mano en el texto (y saldría dos veces).
+   🔴 23-ago-2026 · la previa pintaba un local INVENTADO ("Sede Miraflores — Av. Larco 345")
+   cuando la academia tenía 2 o más: al dueño de "Local Surco / Local La Molina" se le
+   enseñaba una dirección de otro distrito. Y prometía la línea SIEMPRE, cuando en el correo
+   real la alumna sin local asignado no recibe ninguna. Ahora se usan sus sedes de verdad y
+   se dice de qué depende. */
+function msgPieSede(cuerpo){
+  var ss=db.sedes||[];
+  if(!ss.length) return "";
+  if(/\{(sede|direccion|sede_frase)\}/.test(String(cuerpo||""))) return "";
+  var s=ss[0]||{};
+  if(!s.nombre) return "";
+  var linea='<br><b>Dónde:</b> '+esc(s.nombre)+(s.direccion?" · "+esc(s.direccion):"");
+  if(ss.length>1) linea+=' <span class="mini">(el de cada alumno; a quien no le asignaste local, esta línea no le llega)</span>';
+  return linea;
+}
 function msgPintar(txt){
   return String(txt||"").replace(/\{([a-z_]+)\}/g,function(m,k){
     var v=MSG_EJEMPLO[k]; return (v===undefined)?"":v;
@@ -3778,7 +3797,8 @@ function msgPintarPreviews(){
     var a=document.querySelector('.msg-a[data-k="'+k+'"]'), c=document.querySelector('.msg-c[data-k="'+k+'"]');
     var asunto=((a&&a.value.trim())||m.asunto_def);
     var cuerpo=((c&&c.value.trim())||m.cuerpo_def);
-    sp.innerHTML='<b>'+esc(msgPintar(asunto))+'</b><br>'+esc(msgPintar(cuerpo)).replace(/\n/g,"<br>");
+    var pieSede=(k==="clase_24h"||k==="clase_1h"||k==="espera"||k==="espera_auto")?msgPieSede(cuerpo):"";
+    sp.innerHTML='<b>'+esc(msgPintar(asunto))+'</b><br>'+esc(msgPintar(cuerpo)).replace(/\n/g,"<br>")+pieSede;
   });
 }
 if(el("msgBox")){

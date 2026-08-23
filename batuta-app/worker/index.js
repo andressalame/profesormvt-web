@@ -1827,7 +1827,12 @@ const CAMPOS_MSG = [
   ["dias", "Cuántos días lleva sin venir"],
   ["curso_de", "El curso con su “de” delante (vacío si no hay curso)"],
   ["con_profe", "El profesor con su “con” delante (vacío si no hay)"],
-  ["vence_frase", "La frase completa “Acuérdate que tu plan vence el …” (vacía si ese plan no vence)"]
+  ["vence_frase", "La frase completa “Acuérdate que tu plan vence el …” (vacía si ese plan no vence)"],
+  /* Multisede (23-ago-2026). Si NO los usas, la dirección se agrega igual al pie del correo:
+     que el alumno sepa a qué local ir no puede depender de que nadie borre un campo. */
+  ["sede", "El local al que le toca ir (vacío si tu academia tiene uno solo sin nombre)"],
+  ["direccion", "La dirección de ese local"],
+  ["sede_frase", "El local con su “en” delante (vacío si no aplica)"]
 ];
 const MSG_DEF = {
   clase_24h: {
@@ -1915,11 +1920,14 @@ function pintarMsg(txt, datos){
   });
 }
 function msgAsunto(plantilla, datos){ return pintarMsg(plantilla, datos).replace(/\s+/g, " ").trim().slice(0, 180); }
-function msgHtml(plantilla, datos, cta){
+/* `extra` = bloques del SISTEMA que van DENTRO del correo pero fuera del texto editable
+   (hoy: a qué local ir). Van ANTES del botón a propósito: el dato de dónde es la clase se
+   lee con el mensaje, no debajo del call-to-action, que es donde la vista se corta. */
+function msgHtml(plantilla, datos, cta, extra){
   const cuerpo = pintarMsg(plantilla, datos);
   const parrafos = cuerpo.split(/\n{2,}/).map(p =>
     "<p>" + esc(p.trim()).replace(/\n/g, "<br>") + "</p>").join("");
-  return parrafos + (cta ? '<p><a href="' + cta.url + '"><b>' + esc(cta.texto) + "</b></a></p>" : "");
+  return parrafos + (extra || "") + (cta ? '<p><a href="' + cta.url + '"><b>' + esc(cta.texto) + "</b></a></p>" : "");
 }
 /* Etiqueta de franja: "Categoria" o "Categoria · Variante". La categoria es lo que
    manda para el aforo y para el permiso del plan. */
@@ -4843,6 +4851,9 @@ async function promoverEspera(env, tenantId, iso, sala, opciones){
     const tenant = await env.DB.prepare("SELECT academia, slug FROM tenants WHERE id = ?1").bind(tenantId).first().catch(() => null);
     const cuando = fmtLima(iso);
     const cfgEsp = await loadConfig(env, tenantId).catch(() => ({}));
+    /* Multisede: estos dos avisos citan a una clase concreta igual que el recordatorio,
+       así que tienen que decir a qué local. Una sola lectura por cupo liberado. */
+    const sedesEsp = await sedesDeTenant(env, tenantId).catch(() => []);
 
   /* 🔴 22-ago-2026 · antes se tomaba SOLO al primero de la cola y se le avisaba sin mirar si
      podía tomar la clase. Dos daños encadenados: al que está en cero se le decía "se liberó un
@@ -4879,18 +4890,28 @@ async function promoverEspera(env, tenantId, iso, sala, opciones){
               } else {
                 await env.DB.prepare("UPDATE espera SET estado = 'convertida', avisado_utc = ?1 WHERE id = ?2 AND tenant_id = ?3")
                   .bind(new Date().toISOString(), row.eid, tenantId).run();
+                /* la sede se resuelve UNA vez y fuera del `if`: la usan el correo Y el push,
+                   y declararla dentro dejaba al push referenciando una variable de otro
+                   ámbito — un ReferenceError que el `try{}catch(e){}` de afuera se traga
+                   entero, dejando a la alumna sin aviso y sin rastro. Lo cazó la batería. */
+                const sedeA = await sedeDeClase(env, tenantId, { sedes: sedesEsp, alumno: elE.alE, profesorId: (elE.frE && elE.frE.profe) || "" }).catch(() => null);
                 if (row.email && env.RESEND_API_KEY && tenant){
                   try {
                     const msgsA = mensajesDeCfg(cfgEsp);
-                    const datosA = { alumno: primer, academia: tenant.academia || "tu academia", fecha: cuando, curso: "", curso_de: "", con_profe: "", vence_frase: "" };
+                    const datosA = Object.assign({ alumno: primer, academia: tenant.academia || "tu academia", fecha: cuando, curso: "", curso_de: "", con_profe: "", vence_frase: "" }, datosSede(sedeA));
                     await enviarCorreo(env, { tenantId: tenantId,
                       to: row.email,
                       subject: msgAsunto(msgsA.espera_auto.asunto, datosA),
-                      html: msgHtml(msgsA.espera_auto.cuerpo, datosA, { url: "https://batuta.lat/app/a/" + (tenant.slug || ""), texto: "Ver mi clase" })
+                      html: msgHtml(msgsA.espera_auto.cuerpo, datosA,
+                              { url: "https://batuta.lat/app/a/" + (tenant.slug || ""), texto: "Ver mi clase" },
+                              lineaSedeHtml(sedeA, msgsA.espera_auto.cuerpo))
                     });
                   } catch (e) {}
                 }
-                try { await avisarPushAlumno(env, tenantId, row.cuenta_id, { title: "¡Quedaste dentro!", body: "Se liberó un cupo y tu clase del " + cuando + " ya está reservada.", url: tenant ? ("https://batuta.lat/app/a/" + (tenant.slug || "")) : "" }); } catch (e) {}
+                /* el push es lo que la persona mira en el celular: si hay varios locales,
+                   el nombre del suyo va acá también (la dirección completa no cabe) */
+                const dondePush = sedeA && sedeA.nombre ? (" · " + sedeA.nombre) : "";
+                try { await avisarPushAlumno(env, tenantId, row.cuenta_id, { title: "¡Quedaste dentro!", body: "Se liberó un cupo y tu clase del " + cuando + dondePush + " ya está reservada.", url: tenant ? ("https://batuta.lat/app/a/" + (tenant.slug || "")) : "" }); } catch (e) {}
                 return;
               }
             }
@@ -4926,7 +4947,8 @@ async function promoverEspera(env, tenantId, iso, sala, opciones){
       const link = "https://batuta.lat/app/a/" + (tenant.slug || "");
       try {
         const msgsE = mensajesDeCfg(await loadConfig(env, tenantId).catch(() => ({})));
-        const datosE = { alumno: primer, academia: tenant.academia || "tu academia", fecha: cuando, curso: "", curso_de: "", con_profe: "", vence_frase: "" };
+        const sedeE = await sedeDeClase(env, tenantId, { sedes: sedesEsp, alumno: elE.alE, profesorId: (elE.frE && elE.frE.profe) || "" });
+        const datosE = Object.assign({ alumno: primer, academia: tenant.academia || "tu academia", fecha: cuando, curso: "", curso_de: "", con_profe: "", vence_frase: "" }, datosSede(sedeE));
         /* El plazo se añade ACÁ y no en la plantilla: `mensajesDeCfg` deja que la academia
            reescriba el cuerpo, y si el reloj viviera ahí, quien personalizó su texto mandaría
            un correo sin decir que hay cronómetro. Si el aviso es real, no puede ser opcional. */
@@ -4935,11 +4957,12 @@ async function promoverEspera(env, tenantId, iso, sala, opciones){
         await enviarCorreo(env, { tenantId: tenantId,
           to: row.email,
           subject: msgAsunto(msgsE.espera.asunto, datosE),
-          html: msgHtml(msgsE.espera.cuerpo, datosE, { url: link, texto: "Reservar ahora" }) + pieE
+          html: msgHtml(msgsE.espera.cuerpo, datosE, { url: link, texto: "Reservar ahora" },
+                        lineaSedeHtml(sedeE, msgsE.espera.cuerpo)) + pieE
         });
       } catch (e) {}
     }
-    try { await avisarPushAlumno(env, tenantId, row.cuenta_id, { title: "Se liberó tu horario", body: "Cupo libre el " + cuando + ". Reserva antes de que lo tomen.", url: tenant ? ("https://batuta.lat/app/a/" + (tenant.slug || "")) : "" }); } catch (e) {}
+    try { await avisarPushAlumno(env, tenantId, row.cuenta_id, { title: "Se liberó tu horario", body: "Cupo libre el " + cuando + (sedeE && sedeE.nombre ? (" · " + sedeE.nombre) : "") + ". Reserva antes de que lo tomen.", url: tenant ? ("https://batuta.lat/app/a/" + (tenant.slug || "")) : "" }); } catch (e) {}
     return;   /* avisado el primero que puede: la cola se detiene acá */
   }
   } catch (e) {}
@@ -6074,6 +6097,107 @@ async function sedesDeTenant(env, tid){
     return (await env.DB.prepare("SELECT id, nombre, direccion FROM sedes WHERE tenant_id = ?1 ORDER BY creado, rowid").bind(tid).all()).results || [];
   } catch (e) { return []; }
 }
+/* ── ¿A QUÉ LOCAL TIENE QUE IR? Una sola regla para TODAS las superficies ──────
+   (23-ago-2026, pedido de Andrés: "que el recordatorio diga a qué local ir; si está
+   en blanco o sin configurar, asume que solo hay 1 local".)
+
+   Hay tres sitios que le dicen a una alumna dónde es su clase —su portal, el
+   recordatorio de 24h/1h y el aviso de cupo liberado— y no pueden contradecirse:
+   recibir "Tu sede: San Borja" en la web y "Miraflores" en el correo es peor que
+   no decir nada. Por eso la decisión vive acá y los tres preguntan lo mismo.
+
+   El orden, y por qué:
+     1. La academia no tiene sedes → no se dice nada. Un solo local sin nombre no
+        necesita explicación, y el correo no se llena de ruido para las 7 academias
+        reales (ninguna usa sedes hoy).
+     2. Tiene UNA sola sede → esa, aunque nadie la tenga asignada. Es lo que pidió
+        Andrés: si solo hay un local, no hace falta que el dueño etiquete a nadie.
+     3. Tiene varias → manda la sede PROPIA de la alumna (el dueño la asignó a
+        propósito), y si no tiene, la de su profesor (el modelo dice que la sede de
+        una clase se deriva de su profesor).
+     4. Varias sedes y nadie asignado → nada. No se adivina: mandar a alguien al
+        local equivocado es peor que no decírselo.
+   Pura a propósito: se prueba sin base de datos. */
+function sedeQueToca(sedes, sedeAlumnoId, sedeProfeId){
+  const lista = Array.isArray(sedes) ? sedes.filter(Boolean) : [];
+  if (!lista.length) return null;
+  if (lista.length === 1) return lista[0];
+  const buscar = (id) => {
+    const k = String(id || "");
+    return k ? (lista.find(x => String(x.id) === k) || null) : null;
+  };
+  return buscar(sedeAlumnoId) || buscar(sedeProfeId) || null;
+}
+/* Los {campos} de sede para las plantillas editables de la academia. */
+function datosSede(sede){
+  const nom = (sede && sede.nombre) || "";
+  return { sede: nom, direccion: (sede && sede.direccion) || "",
+           sede_frase: nom ? (" en " + nom) : "" };
+}
+/* La línea "Dónde" del correo. Va como pie DEL SISTEMA, fuera de la plantilla editable:
+   `mensajesDeCfg` deja que la academia reescriba el cuerpo entero, así que si la dirección
+   viviera ahí, quien personalizó su texto mandaría un correo sin decir dónde es la clase.
+   Mismo criterio que el cronómetro de la lista de espera: si el dato es necesario, no puede
+   ser opcional. Si la plantilla YA usa {sede} o {direccion}, no se repite. */
+function lineaSedeHtml(sede, plantilla){
+  if (!sede || !sede.nombre) return "";
+  if (/\{(sede|direccion|sede_frase)\}/.test(String(plantilla || ""))) return "";
+  /* 🔴 nada de entidades HTML escritas a mano: `enviarCorreo` deriva la versión en TEXTO
+     PLANO con `html.replace(/<[^>]+>/g," ")`, que no las desescapa, así que un `&mdash;`
+     le llega literal a quien lee el correo en texto plano. (Y en esta casa el guion largo
+     está prohibido de todos modos.) */
+  return '<p style="margin:14px 0 0"><b>Dónde:</b> ' + esc(sede.nombre) +
+         (sede.direccion ? " · " + esc(sede.direccion) : "") + "</p>";
+}
+/* Los profesores del tenant por id, una sola lectura por corrida. Hace falta para saber
+   el NOMBRE y la SEDE de quien de verdad dicta, sin una consulta por correo. */
+async function profesoresTenant(env, cache, tenantId){
+  if (cache.has(tenantId)) return cache.get(tenantId);
+  let m = new Map();
+  try {
+    const { results } = await env.DB.prepare(
+      "SELECT id, COALESCE(nombre,'') AS nombre, COALESCE(sede_id,'') AS sede_id FROM profesores WHERE tenant_id = ?1"
+    ).bind(tenantId).all();
+    m = new Map((results || []).map(r => [String(r.id), r]));
+  } catch (e) {
+    try {
+      const { results } = await env.DB.prepare("SELECT id, COALESCE(nombre,'') AS nombre FROM profesores WHERE tenant_id = ?1").bind(tenantId).all();
+      m = new Map((results || []).map(r => [String(r.id), { id: r.id, nombre: r.nombre, sede_id: "" }]));
+    } catch (e2) { m = new Map(); }
+  }
+  cache.set(tenantId, m);
+  return m;
+}
+/* Las sedes del tenant, una sola lectura por corrida del cron (mismo patrón que
+   `mensajesTenant`: una academia con 40 recordatorios haría 40 consultas iguales). */
+async function sedesTenant(env, cache, tenantId){
+  if (cache.has(tenantId)) return cache.get(tenantId);
+  const ss = await sedesDeTenant(env, tenantId).catch(() => []);
+  cache.set(tenantId, ss);
+  return ss;
+}
+/* La sede de UNA clase, resuelta contra la base. Para los caminos que no traen las
+   columnas ya cargadas. Solo consulta al profesor si de verdad hace falta. */
+async function sedeDeClase(env, tenantId, { sedes, alumno, profesorId }){
+  /* `Array.isArray` y no `sedes.length`: una academia SIN sedes pasa `[]`, y tratarlo como
+     "no me pasaron nada" hacía releer la tabla en cada correo — justo en las 7 academias
+     reales, que son las que no tienen sedes. */
+  const lista = Array.isArray(sedes) ? sedes : await sedesDeTenant(env, tenantId).catch(() => []);
+  if (!lista.length) return null;
+  if (lista.length === 1) return lista[0];
+  const sedeAl = String((alumno && alumno.sede_id) || "");
+  let sedeProf = "";
+  if (!sedeAl && profesorId){
+    try {
+      const pr = await env.DB.prepare(
+        "SELECT COALESCE(sede_id,'') AS sede_id FROM profesores WHERE id = ?1 AND tenant_id = ?2"
+      ).bind(String(profesorId), tenantId).first();
+      sedeProf = (pr && pr.sede_id) || "";
+    } catch (e) {}
+  }
+  return sedeQueToca(lista, sedeAl, sedeProf);
+}
+
 /* '' si viene vacia o no es una sede de ESTE tenant (nunca 400: sede invalida = sin sede) */
 async function sedeValidada(env, tid, sedeId){
   const s = String(sedeId || "").trim();
@@ -6288,17 +6412,35 @@ async function recordatoriosDeClase(env){
   const now = Date.now();
   const hasta = new Date(now + 25 * 3600000).toISOString();
   const desde = new Date(now).toISOString();
-  const { results } = await env.DB.prepare(
+  /* Multisede (23-ago-2026): se traen las dos sedes candidatas EN LA MISMA consulta.
+     Con hasta 200 recordatorios por corrida, preguntarlas fila por fila serían 400 viajes
+     más a la D1 para un dato que casi siempre está vacío. */
+  const SEL_REC = (cols, joins) =>
     "SELECT r.id, r.tenant_id, r.inicio_utc, r.curso, COALESCE(r.aviso_24,0) AS aviso_24, COALESCE(r.aviso_1h,0) AS aviso_1h, " +
-    "t.academia, t.slug, c.email AS alumno_email, c.nombre AS alumno_nombre, p.nombre AS profe_nombre " +
+    "COALESCE(r.sala,'') AS sala, COALESCE(r.profesor_id,'') AS grilla, " +
+    "t.academia, t.slug, c.email AS alumno_email, c.nombre AS alumno_nombre, p.nombre AS profe_nombre" + cols + " " +
     "FROM reservas r " +
     "JOIN tenants t ON t.id = r.tenant_id AND t.estado != 'vencido' AND COALESCE(t.plan,'profe') != 'gratis' AND t.email NOT LIKE ?3 " +
     "JOIN cuentas c ON c.alumno_id = r.alumno_id AND c.tenant_id = r.tenant_id " +
-    "LEFT JOIN profesores p ON p.id = r.profesor_id " +
+    "LEFT JOIN profesores p ON p.id = r.profesor_id" + joins + " " +
     "WHERE r.estado = 'reservada' AND r.alumno_id IS NOT NULL AND r.inicio_utc > ?1 AND r.inicio_utc <= ?2 " +
-    "AND (COALESCE(r.aviso_24,0) = 0 OR COALESCE(r.aviso_1h,0) = 0) LIMIT 200"
-  ).bind(desde, hasta, SQL_DEMO_LIKE).all();
-  const cache = new Map(), cacheMsg = new Map();
+    "AND (COALESCE(r.aviso_24,0) = 0 OR COALESCE(r.aviso_1h,0) = 0) LIMIT 200";
+  let results = [];
+  try {
+    ({ results } = await env.DB.prepare(
+      SEL_REC(", COALESCE(al.sede_id,'') AS alumno_sede, COALESCE(p.sede_id,'') AS profe_sede",
+              " LEFT JOIN alumnos al ON al.id = r.alumno_id AND al.tenant_id = r.tenant_id")
+    ).bind(desde, hasta, SQL_DEMO_LIKE).all());
+  } catch (e) {
+    /* 🔴 La columna `sede_id` la pone un ALTER perezoso (`ensureSedesSchema`). Si una D1
+       todavía no la tiene, esta consulta revienta y se caen TODOS los recordatorios de
+       TODAS las academias por un dato decorativo. Cascada, igual que `franjasDeSlot`. */
+    /* el motivo puede ser la columna que falta O un fallo de red/D1: no se afirma cuál,
+       que si no manda a buscar un ALTER inexistente cuando lo que hubo fue un timeout */
+    console.error("recordatorios: la consulta con sede falló, reintento sin ella:", e && e.message);
+    ({ results } = await env.DB.prepare(SEL_REC("", "")).bind(desde, hasta, SQL_DEMO_LIKE).all());
+  }
+  const cache = new Map(), cacheMsg = new Map(), cacheSedes = new Map(), cacheProfes = new Map();
   let enviados = 0;
   for (const r of (results || [])){
     if (enviados >= 40) break; // tope por corrida (rate de Resend); la siguiente corrida sigue
@@ -6306,24 +6448,45 @@ async function recordatoriosDeClase(env){
     if (!(await toggleTenantOn(env, cache, r.tenant_id, "recordatorios_clase"))) continue;
     const dif = Date.parse(r.inicio_utc) - now;
     const linkPortal = MARCA.dominio + "/app/a/" + (r.slug || "");
-    const conProfe = r.profe_nombre ? (" con " + r.profe_nombre) : "";
     let cual = null;
     if (dif <= 3600000 && dif > 900000 && !r.aviso_1h) cual = "1h";
     else if (dif <= 24 * 3600000 && dif > 22 * 3600000 && !r.aviso_24) cual = "24h";
     if (!cual) continue;
+    /* 🐛 23-ago-2026 · QUIÉN DICTA. `reservas.profesor_id` es el dueño de la AGENDA, no
+       quien da la clase: en Elevate las 80 reservas futuras dicen "Jose" mientras el horario
+       reparte Sheila (16 franjas), David (15) y Fiorella (5). O sea que cada alumna recibía
+       "te esperamos en tu clase con Jose" y la clase la daba otra persona. Es el MISMO bug
+       que se arregló esta mañana en la liquidación; este era el otro consumidor y se me pasó.
+       La fuente correcta es el HORARIO (`disponibilidad.profe`), que es lo que resuelve
+       `profeQueDicta`. Se llama DESPUÉS de decidir que hay correo que mandar, no antes: así
+       son ≤40 resoluciones por corrida y no 200. */
+    let profeNombre = r.profe_nombre || "", profeSede = r.profe_sede || "";
+    try {
+      const pidDicta = await profeQueDicta(env, r.tenant_id, r.inicio_utc,
+        { sala: r.sala || "", grilla: r.grilla || "", fallback: r.grilla || "" });
+      if (pidDicta){
+        const quien = (await profesoresTenant(env, cacheProfes, r.tenant_id)).get(String(pidDicta));
+        if (quien){ profeNombre = quien.nombre || profeNombre; profeSede = quien.sede_id || profeSede; }
+      }
+    } catch (e) { /* el horario no contesta: se queda el de la reserva, como siempre */ }
+    const conProfe = profeNombre ? (" con " + profeNombre) : "";
     const nombreCorto = (r.alumno_nombre || "").split(" ")[0] || "Hola";
     /* El texto sale de la plantilla de la academia (Ajustes > Mensajes); si no la toco,
        del default. Una sola llamada a loadConfig por tenant y por corrida. */
     const msgs = await mensajesTenant(env, cacheMsg, r.tenant_id);
     const m = msgs[cual === "1h" ? "clase_1h" : "clase_24h"];
-    const datos = {
+    /* A qué local tiene que ir. Misma regla que su portal: ver `sedeQueToca`. */
+    const sedeR = sedeQueToca(await sedesTenant(env, cacheSedes, r.tenant_id), r.alumno_sede, profeSede);
+    const datos = Object.assign({
       alumno: nombreCorto, academia: r.academia || "", curso: r.curso || "",
-      profe: r.profe_nombre || "", fecha: fmtLima(r.inicio_utc),
+      profe: profeNombre, fecha: fmtLima(r.inicio_utc),
       hora: (fmtLima(r.inicio_utc).split(" a las ")[1] || "").replace(" (hora de Lima)", ""),
       curso_de: r.curso ? " de " + r.curso : "", con_profe: conProfe
-    };
+    }, datosSede(sedeR));
     const mail = { subject: msgAsunto(m.asunto, datos),
-                   html: msgHtml(m.cuerpo, datos, { url: linkPortal, texto: cual === "1h" ? "Ver mi portal" : "Ver o reprogramar" }) };
+                   html: msgHtml(m.cuerpo, datos,
+                           { url: linkPortal, texto: cual === "1h" ? "Ver mi portal" : "Ver o reprogramar" },
+                           lineaSedeHtml(sedeR, m.cuerpo)) };
     let ok = false;
     try { ok = await enviarCorreo(env, { tenantId: r.tenant_id, to: r.alumno_email, subject: mail.subject, html: mail.html }); } catch (e) {}
     if (ok){
@@ -6753,7 +6916,12 @@ function armarIcs(academia, filas, dominio){
     L.push("DTSTART:" + icsFecha(r.inicio_utc));
     L.push("DTEND:" + icsFecha(r.fin_utc || r.inicio_utc));
     L.push("SUMMARY:" + icsEscapar((r.curso || "Clase") + " · " + academia));
-    if (r.sala) L.push("LOCATION:" + icsEscapar(r.sala));
+    /* 🐛 23-ago-2026 · LOCATION es el campo que el teléfono convierte en enlace a Maps, y
+       decía "Sala Grande": el correo ya sabe la dirección y el calendario mandaba a la
+       persona a ninguna parte. Ahora va la dirección del local y la sala entre paréntesis. */
+    const donde = [r.sede_nombre, r.sede_direccion].filter(Boolean).join(", ");
+    const lugar = donde + (r.sala ? (donde ? " (" + r.sala + ")" : r.sala) : "");
+    if (lugar) L.push("LOCATION:" + icsEscapar(lugar));
     L.push("STATUS:" + (cancelada ? "CANCELLED" : "CONFIRMED"));
     /* SEQUENCE sube en las canceladas para que el calendario acepte que es una actualización
        de un evento que ya tenía, y no la ignore por venir "igual" que la anterior. */
@@ -8673,10 +8841,18 @@ export default {
       let al = null;
       try {
         al = await env.DB.prepare(
-          "SELECT a.id, a.tenant_id, t.academia FROM alumnos a JOIN tenants t ON t.id = a.tenant_id " +
-          "WHERE a.cal_token = ?1 AND t.estado != 'vencido'"
+          "SELECT a.id, a.tenant_id, COALESCE(a.sede_id,'') AS sede_id, COALESCE(a.profesor_id,'') AS profesor_id, t.academia " +
+          "FROM alumnos a JOIN tenants t ON t.id = a.tenant_id WHERE a.cal_token = ?1 AND t.estado != 'vencido'"
         ).bind(tok).first();
-      } catch (e) { return vacio(); }
+      } catch (e) {
+        /* cascada: si esta D1 aún no tiene `sede_id`, el calendario sale igual sin dirección */
+        try {
+          al = await env.DB.prepare(
+            "SELECT a.id, a.tenant_id, '' AS sede_id, '' AS profesor_id, t.academia FROM alumnos a " +
+            "JOIN tenants t ON t.id = a.tenant_id WHERE a.cal_token = ?1 AND t.estado != 'vencido'"
+          ).bind(tok).first();
+        } catch (e2) { return vacio(); }
+      }
       if (!al) return vacio();
       const desde = new Date(Date.now() - 14 * 86400000).toISOString();   // canceladas recientes
       const hasta = new Date(Date.now() + 84 * 86400000).toISOString();   // 12 semanas
@@ -8692,6 +8868,13 @@ export default {
          volver a viajar en cada consulta */
       const ahora = Date.now();
       filas = filas.filter(r => Date.parse(r.inicio_utc) >= ahora || String(r.estado) === "cancelada");
+      /* Multisede: la dirección se resuelve UNA vez para esta alumna (misma regla que su
+         portal y su recordatorio) y se le cuelga a cada evento. Resolverla por clase serían
+         400 consultas para un calendario que se pide cada 6 horas. */
+      try {
+        const sdIcs = await sedeDeClase(env, al.tenant_id, { alumno: al, profesorId: al.profesor_id || "" });
+        if (sdIcs) for (const f of filas){ f.sede_nombre = sdIcs.nombre || ""; f.sede_direccion = sdIcs.direccion || ""; }
+      } catch (e) { /* sin dirección, el calendario sale como siempre */ }
       return new Response(armarIcs(al.academia || MARCA.nombre, filas, MARCA.dominio), {
         headers: {
           "content-type": "text/calendar; charset=utf-8",
@@ -11858,17 +12041,13 @@ export default {
         if (alumno){
           const pAl = await profeDeAlumno(env, tid, alumno);
           if (pAl && pAl.nombre) miProfe = { nombre: pAl.nombre, foto: pAl.foto || "" };
-          /* multisede: la sede del alumno, o la de su profesor como fallback */
+          /* multisede: la MISMA regla que el recordatorio de clase y el aviso de cupo
+             liberado (`sedeQueToca`). Vivía duplicada acá y por eso podía decir una cosa en
+             el portal y otra en el correo; ahora la decisión está en un solo sitio y de paso
+             el portal hereda la regla de "si la academia tiene un solo local, es ese". */
           try {
-            let sidAl = String(alumno.sede_id || "");
-            if (!sidAl && alumno.profesor_id){
-              const pS = await env.DB.prepare("SELECT COALESCE(sede_id,'') AS sede_id FROM profesores WHERE id = ?1 AND tenant_id = ?2").bind(alumno.profesor_id, tid).first();
-              sidAl = (pS && pS.sede_id) || "";
-            }
-            if (sidAl){
-              const sRow = await env.DB.prepare("SELECT nombre, direccion FROM sedes WHERE id = ?1 AND tenant_id = ?2").bind(sidAl, tid).first();
-              if (sRow) miSede = { nombre: sRow.nombre, direccion: sRow.direccion || "" };
-            }
+            const sd = await sedeDeClase(env, tid, { alumno, profesorId: alumno.profesor_id || "" });
+            if (sd) miSede = { nombre: sd.nombre, direccion: sd.direccion || "" };
           } catch (e) {}
         }
         const portalFlags = {

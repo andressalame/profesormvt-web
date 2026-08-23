@@ -48,9 +48,14 @@ function correr({ cola, puede, auto }) {
       },
       async run(){ if (/UPDATE espera SET estado = 'avisado'/.test(s)) avisados.push(a[1]); return { meta: { changes: 1 } }; },
     }; return api; } };
+  /* 23-ago-2026: `sedesDeTenant`, `sedeDeClase`, `datosSede` y `lineaSedeHtml` entran acá
+     porque el aviso de cupo ahora también dice a qué local ir. Si faltan, `promoverEspera`
+     revienta dentro de su `try{}catch(e){}` y esta prueba diría "no se avisó a nadie" sin
+     un solo error en pantalla: por eso el paso 3 exige que a alguien SÍ le llegue. */
   const hacer = new Function("env","esperaElegible","fmtLima","loadConfig","avisarPushAlumno","enviarCorreo",
     "mensajesDeCfg","msgAsunto","msgHtml","cupoDeSlot","ocupacionSlot","crypto","CLASE_MIN",
     "ESPERA_VENTANA_MIN","ESPERA_TURNOS_MAX","esperaEnHorario","esperaAvisadaHacePoco",
+    "sedesDeTenant","sedeDeClase","datosSede","lineaSedeHtml",
     FN + "\nreturn promoverEspera;")(
     { DB, RESEND_API_KEY: "x" },
     async (env, tid, alumnoId) => puede.includes(alumnoId) ? { ok: true, alE: { id: alumnoId, curso: "" }, cicloE: 1,
@@ -63,7 +68,9 @@ function correr({ cola, puede, auto }) {
     x => x, x => x,
     async () => 8, async () => ({ bloqueado: false, n: 7 }),
     { randomUUID: () => "r1" }, 50,
-    30, 3, () => true, async () => false);
+    30, 3, () => true, async () => false,
+    /* la academia de la prueba no tiene sedes: el aviso no debe cambiar en nada */
+    async () => [], async () => null, () => ({ sede: "", direccion: "", sede_frase: "" }), () => "");
   return hacer({ DB, RESEND_API_KEY: "x" }, "t1", "2999-08-28T13:00:00.000Z", "").then(() => ({ avisados, correos, pushes }));
 }
 const COLA = [

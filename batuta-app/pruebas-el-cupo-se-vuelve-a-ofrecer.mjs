@@ -74,7 +74,12 @@ comprobar("las dos cancelaciones siguen llamando SIN bandera",
 console.log("\n── 5. el plazo se dice aunque la academia edite su texto ──");
 comprobar("el reloj va en el pie de sistema, no en la plantilla",
   /pieE = '<p style="font-size:13px;opacity:\.75;">Tienes unos ' \+ ESPERA_VENTANA_MIN/.test(SRC));
-comprobar("y se pega al correo después de la plantilla", /msgHtml\(msgsE\.espera\.cuerpo[^)]*\) \+ pieE/.test(sinCom));
+/* 23-ago-2026: al cuerpo se le pegan DOS pies de sistema, el reloj y el local. Se
+   comprueban los dos juntos porque comparten el mismo motivo: la academia puede reescribir
+   su plantilla entera, así que lo que es obligatorio no puede vivir dentro de ella. */
+const HTML_ESPERA = (/html:\s*msgHtml\(msgsE\.espera\.cuerpo[\s\S]{0,300}?\}\);/.exec(sinCom) || [""])[0];
+comprobar("y se pega al correo después de la plantilla", /\+\s*pieE/.test(HTML_ESPERA), HTML_ESPERA.trim().slice(0, 110));
+comprobar("y el local también va de pie de sistema", /lineaSedeHtml\(sedeE/.test(HTML_ESPERA));
 
 console.log("\n── 6. la que ya reservó no recibe otra oferta ──");
 const reof = cortar("reofrecerEsperas") || "";
