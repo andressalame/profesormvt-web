@@ -204,6 +204,28 @@ for (const [quien, marca] of [["«se liberó un cupo»", "lineaSedeHtml(sedeE"],
   SRCW.includes(marca) ? ok(quien + " lleva el pie de local") : no(quien + " se quedó sin el pie de local");
 }
 
+console.log("\n── 10b. ¿DÓNDE MÁS? Los tres consumidores de «quién dicta» ──");
+/* El mismo bug apareció TRES veces: liquidación (mañana), recordatorio (tarde) y la
+   agenda de la API/MCP —la superficie que se vende—. Todos leían `reservas.profesor_id`,
+   que es el dueño de la AGENDA. Esta sección existe para que el cuarto no se escape. */
+const liq = (/SELECT COALESCE\(NULLIF\(r\.profesor_id[\s\S]{0,400}?GROUP BY[^"]*/.exec(SRCW) || [""])[0];
+liq ? ok("liquidación: usa registro.profesor_id, que ya guarda quién dictó") : no("la liquidación volvió al profesor asignado");
+/profeQueDicta\(env, r\.tenant_id/.test(SRCW) ? ok("recordatorio: resuelve por el horario") : no("el recordatorio volvió al de la reserva");
+/* por BALANCE DE LLAVES, no por tamaño fijo: un recorte de N caracteres se queda corto en
+   cuanto la función crece y la prueba grita un fallo que no existe (me pasó tres veces hoy) */
+const cortarDelWorker = (marca) => {
+  const i = SRCW.indexOf(marca);
+  if (i < 0) return "";
+  let j = SRCW.indexOf("{", i), prof = 0;
+  for (; j < SRCW.length; j++){ if (SRCW[j] === "{") prof++; else if (SRCW[j] === "}"){ prof--; if (!prof){ j++; break; } } }
+  return SRCW.slice(i, j);
+};
+const agApi = cortarDelWorker("async function apiAgenda");
+/FROM disponibilidad d JOIN profesores pd ON pd\.id = d\.profe/.test(agApi)
+  ? ok("agenda de la API/MCP: también sale del horario") : no("🚨 la agenda que se VENDE sigue nombrando al dueño de la agenda");
+/LIMIT 1\), p\.nombre/.test(agApi)
+  ? ok("y va como subconsulta, así que no duplica clases si hay dos franjas") : no("usa un JOIN: puede duplicar clases en la agenda del cliente");
+
 console.log("\n── 11. La previa del panel no inventa un local que no existe ──");
 const PANEL = _leer(process.env.BATUTA_PANEL || (process.env.HOME + "/Code/mvt/web/batuta-app/public/panel/index.html"), "utf8");
 const pie = (/function msgPieSede\(cuerpo\)\{[\s\S]*?\n\}/.exec(PANEL) || [""])[0];

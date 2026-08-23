@@ -8103,7 +8103,19 @@ async function apiAgenda(env, t, dias){
   const desde = new Date().toISOString();
   const hasta = new Date(Date.now() + d * 86400000).toISOString();
   const { results } = await env.DB.prepare(
-    "SELECT r.inicio_utc, r.fin_utc, COALESCE(r.curso,'') AS curso, " + SQL_NOMBRE_COMPLETO("a") + " AS alumno, COALESCE(p.nombre,'') AS profesor " +
+    /* 🐛 23-ago-2026 · QUIÉN DICTA, tercera vez. `reservas.profesor_id` es el dueño de la
+       AGENDA: acá salían las 80 clases de Elevate "con Jose" mientras el horario reparte
+       Sheila, David y Fiorella. Ya se había arreglado en la liquidación y en el recordatorio;
+       este era el consumidor que faltaba, y encima es el que se vende ("conecta tu Claude").
+       Va como SUBCONSULTA y no como JOIN a propósito: un JOIN que empate con dos franjas
+       duplicaría la clase en la agenda del cliente. La subconsulta devuelve uno o ninguno. */
+    "SELECT r.inicio_utc, r.fin_utc, COALESCE(r.curso,'') AS curso, " + SQL_NOMBRE_COMPLETO("a") + " AS alumno, " +
+    "COALESCE((SELECT pd.nombre FROM disponibilidad d JOIN profesores pd ON pd.id = d.profe " +
+    " WHERE d.tenant_id = r.tenant_id AND d.activo = 1" +
+    "   AND d.dia_semana = CAST(strftime('%w', datetime(r.inicio_utc,'-5 hours')) AS INTEGER)" +
+    "   AND d.hora = strftime('%H:%M', datetime(r.inicio_utc,'-5 hours'))" +
+    "   AND COALESCE(d.sala,'') = COALESCE(r.sala,'')" +
+    "   AND (d.profesor_id = r.profesor_id OR COALESCE(d.profesor_id,'') = '') LIMIT 1), p.nombre, '') AS profesor " +
     "FROM reservas r LEFT JOIN alumnos a ON a.id = r.alumno_id LEFT JOIN profesores p ON p.id = r.profesor_id " +
     "WHERE r.tenant_id = ?1 AND r.estado = 'reservada' AND r.inicio_utc BETWEEN ?2 AND ?3 ORDER BY r.inicio_utc ASC LIMIT 200"
   ).bind(t.id, desde, hasta).all();
