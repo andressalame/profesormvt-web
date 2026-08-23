@@ -140,12 +140,47 @@ async function loadPaquetes(env, tenantId){
   const row = await env.DB.prepare("SELECT valor FROM config WHERE tenant_id = ?1 AND clave = 'paquetes'").bind(tenantId).first().catch(() => null);
   return (row && parsePaquetes(row.valor)) || paquetesDefault();
 }
+/* Normaliza para comparar nombres de paquete: sin tildes, sin mayúsculas y con la
+   puntuación colapsada a espacios ("16 clases de Pilates con Máquinas" -> "16 clases de
+   pilates con maquinas"). */
+function normPaqNombre(s){
+  return String(s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, " ").trim();
+}
+
 /* Resuelve el paquete de un alumno por nombre: primero el set del tenant, luego los
-   nombres legacy por defecto, y si no existe (paquete renombrado/borrado) 0 clases. */
+   nombres legacy por defecto, y si no existe, 0 clases.
+   🐛 20-ago-2026 (Elevate): el pase guarda el NOMBRE del paquete, así que renombrar
+   "16 clases de Pilates con Máquinas" a "16 clases de Pilates" en Ajustes dejó huérfanos los
+   pases de 9 alumnas y el panel les mostró 0/0 — habían pagado y usado clases. Ahora el
+   nombre se resuelve con tolerancia, en este orden y sin adivinar nunca:
+     1. exacto · 2. igual salvo tildes/mayúsculas · 3. el nombre viejo o el nuevo es prefijo
+     del otro Y arrancan con el mismo número de clases, con UN solo candidato.
+   Dos candidatos = se devuelve 0, porque cobrarle al pase equivocado es peor que mostrar 0. */
 function resolverPk(map, nombre){
   if (map && map[nombre]) return map[nombre];
+  if (map){
+    const objetivo = normPaqNombre(nombre);
+    if (objetivo){
+      const claves = Object.keys(map);
+      const iguales = claves.filter(k => normPaqNombre(k) === objetivo);
+      if (iguales.length === 1) return map[iguales[0]];
+      const numObj = (objetivo.match(/^\d+/) || [""])[0];
+      if (numObj){
+        const cand = claves.filter(k => {
+          const nk = normPaqNombre(k);
+          if (((nk.match(/^\d+/) || [""])[0]) !== numObj) return false;
+          return objetivo.startsWith(nk + " ") || nk.startsWith(objetivo + " ");
+        });
+        if (cand.length === 1) return map[cand[0]];
+      }
+    }
+  }
   if (PAQUETES[nombre]) return { clases: PAQUETES[nombre].clases, reprog: PAQUETES[nombre].reprog, ilim: false, tipos: [], dias: 0, inicio: "compra", oculto: false, congela: null, congelaBloques: 2, sinRef: false };
-  return { clases: 0, reprog: 0, ilim: false, tipos: [], dias: 0, inicio: "compra", oculto: false, congela: null, congelaBloques: 2, sinRef: false };
+  /* noExiste: el pase apunta a un paquete que ya no está en el catálogo (renombrado o borrado)
+     y ni la tolerancia de arriba pudo emparejarlo. Se marca para que el panel lo DIGA en vez de
+     mostrar un 0/0 mudo, que fue justo lo que hizo que el bug del 20-ago llegara al cliente. */
+  return { clases: 0, reprog: 0, ilim: false, tipos: [], dias: 0, inicio: "compra", oculto: false, congela: null, congelaBloques: 2, sinRef: false, noExiste: true };
 }
 
 /* Contexto para "Mi web": junta los datos duros de la academia (config, precios,
@@ -175,9 +210,134 @@ function webJsonDe(cfg){
    MP Peru rechaza USD ("Cannot operate with currency id USD in MPE", verificado 06-jul-2026).
    Escalera AGRESIVA con tope por alumnos (12-jul-2026, decision de Andres tras el costeo):
    Freemium 23-jul-2026: alumnos ILIMITADOS en Profe/Academia/XL; diferencian por profes (1/5/20), funciones y cupo de conversaciones IA. Enterprise = mas de 20 profes / red grande. */
+/* ═══════════════════════════════════════════════════════════════════════════
+   MODELO DE PACKS (20-ago-2026) — reemplaza la escalera de planes
+   ───────────────────────────────────────────────────────────────────────────
+   Andrés: "lo mejor es tener 1 cosa standard para todos y que si quieren más,
+   les cobramos". Ya no hay Profe/Dúo/Trío/Academia/XL: hay UNA Batuta gratis
+   con el producto completo, y encima se compran packs de CAPACIDAD (alumnos,
+   profesores) y de CONSUMO (conversaciones del asistente IA).
+
+   Reglas del modelo:
+     · Nunca se cobra por PODER hacer algo, solo por hacerlo MUCHO.
+     · Los packs son mensuales: mientras los uses, los pagas. Las conversaciones
+       se resetean cada mes.
+     · Al bajar un pack no se borra NADA: se bloquea el alta de nuevos y lo que
+       excede queda en solo lectura hasta que baje o vuelva a comprar.
+     · Los profesores se venden de 5 en 5, nunca de a uno (pedido de Andrés).
+
+   Dónde vive: `config.packs` del tenant = {"alum_50":2,"ia_1000":1}. Aparte va
+   `config.packs_cortesia`, con la MISMA forma, que suma límites pero NO cobra:
+   ahí viven los planes viejos migrados y los tratos especiales (Elevate).
+   ═══════════════════════════════════════════════════════════════════════════ */
+const BASE_LIMITES = { alumnos: 20, profes: 1, ia: 5 };
+const PACKS = {
+  alum_50:   { fam: "alumnos", suma: 50,    precio: 39,  nombre: "+50 alumnos" },
+  alum_150:  { fam: "alumnos", suma: 150,   precio: 89,  nombre: "+150 alumnos" },
+  alum_500:  { fam: "alumnos", suma: 500,   precio: 199, nombre: "+500 alumnos" },
+  profes_5:  { fam: "profes",  suma: 5,     precio: 59,  nombre: "+5 profesores" },
+  profes_20: { fam: "profes",  suma: 20,    precio: 189, nombre: "+20 profesores" },
+  ia_300:    { fam: "ia",      suma: 300,   precio: 29,  nombre: "300 conversaciones del asistente" },
+  ia_1000:   { fam: "ia",      suma: 1000,  precio: 69,  nombre: "1,000 conversaciones del asistente" },
+  ia_3000:   { fam: "ia",      suma: 3000,  precio: 169, nombre: "3,000 conversaciones del asistente" },
+  ia_10000:  { fam: "ia",      suma: 10000, precio: 449, nombre: "10,000 conversaciones del asistente" }
+};
+
+/* Suma packs comprados + de cortesía y devuelve los límites vivos del tenant.
+   El monto mensual sale SOLO de los comprados: la cortesía no se cobra. */
+function limitesDePacks(comprados, cortesia){
+  const lim = { alumnos: BASE_LIMITES.alumnos, profes: BASE_LIMITES.profes, ia: BASE_LIMITES.ia, monto: 0, items: [] };
+  const sumar = (bolsa, cobra) => {
+    for (const k of Object.keys(bolsa || {})){
+      const pk = PACKS[k];
+      const n = Math.max(0, Math.min(50, parseInt(bolsa[k], 10) || 0));
+      if (!pk || !n) continue;
+      lim[pk.fam] += pk.suma * n;
+      if (cobra){
+        lim.monto += pk.precio * n;
+        lim.items.push({ id: k, nombre: pk.nombre, cantidad: n, precio: pk.precio, total: pk.precio * n });
+      }
+    }
+  };
+  sumar(comprados, true);
+  sumar(cortesia, false);
+  lim.monto = Math.round(lim.monto * 100) / 100;
+  return lim;
+}
+
+async function packsDe(env, tenantId){
+  let comprados = {}, cortesia = {};
+  try {
+    const { results } = await env.DB.prepare(
+      "SELECT clave, valor FROM config WHERE tenant_id = ?1 AND clave IN ('packs','packs_cortesia')"
+    ).bind(tenantId).all();
+    for (const r of (results || [])){
+      try {
+        const j = JSON.parse(r.valor || "{}") || {};
+        if (r.clave === "packs") comprados = j; else cortesia = j;
+      } catch (e) {}
+    }
+  } catch (e) {}
+  const lim = limitesDePacks(comprados, cortesia);
+  lim.comprados = comprados;
+  lim.cortesia = cortesia;
+  return lim;
+}
+
+/* Los tres medidores del producto. Son los ÚNICOS límites reales que existen:
+   multi-sede, marca propia y SUNAT nunca tuvieron candado en el código. */
+async function setConfigValor(env, tenantId, clave, valor){
+  await env.DB.prepare(
+    "INSERT INTO config (tenant_id, clave, valor) VALUES (?1,?2,?3) ON CONFLICT(tenant_id, clave) DO UPDATE SET valor = ?3"
+  ).bind(tenantId, clave, String(valor)).run();
+}
+
+/* Los packs comprados en un checkout que todavía no confirma MP viven en `packs_pendientes`
+   y NO dan capacidad: se promueven recién cuando el preapproval queda 'authorized'. Sin esto,
+   abandonar el checkout regalaría los packs (el mismo agujero que ya se tapó en por_alumno). */
+/* Freemium (20-ago-2026): dejar de pagar NO puede bloquear el panel. El tenant vuelve a la
+   Batuta base — suelta los packs COMPRADOS, conserva la cortesía y sigue 'activo'. Lo que ya
+   tenía adentro no se borra: simplemente no puede dar de alta más allá del límite gratis. */
+async function volverALaBase(env, tenantId){
+  try {
+    await setConfigValor(env, tenantId, "packs", "{}");
+    await env.DB.prepare("DELETE FROM config WHERE tenant_id = ?1 AND clave = 'packs_pendientes'").bind(tenantId).run();
+    await env.DB.prepare(
+      "UPDATE tenants SET estado = 'activo', plan = 'base', mp_preapproval_id = '', mp_sub_status = '' WHERE id = ?1"
+    ).bind(tenantId).run();
+    return true;
+  } catch (e) { return false; }
+}
+
+async function promoverPacksPendientes(env, tenantId){
+  try {
+    const row = await env.DB.prepare("SELECT valor FROM config WHERE tenant_id = ?1 AND clave = 'packs_pendientes'").bind(tenantId).first();
+    if (!row || !row.valor) return false;
+    const j = JSON.parse(row.valor || "{}") || {};
+    if (!Object.keys(j).length) return false;
+    await setConfigValor(env, tenantId, "packs", JSON.stringify(j));
+    await env.DB.prepare("DELETE FROM config WHERE tenant_id = ?1 AND clave = 'packs_pendientes'").bind(tenantId).run();
+    return true;
+  } catch (e) { return false; }
+}
+
+/* ⚠️ alumCapDe y convCapDe toman el MÁXIMO contra el plan viejo: mientras quede un tenant sin
+   migrar (o si la migración falla a medias), nadie puede perder capacidad que ya estaba usando.
+   Elevate tiene 1,447 alumnos en un plan viejo; sin esta red, el tope le bajaría a 20 de golpe. */
+async function alumCapDe(env, tenantId, plan){
+  const lim = await packsDe(env, tenantId);
+  return Math.max(lim.alumnos, ALUM_CAP[plan] || 0);
+}
+/* El vencido (suscripción caída) baja al cupo base, no se queda con lo que compró. */
+async function convCapDe(env, tenantId, vencido, plan){
+  if (vencido) return BASE_LIMITES.ia;
+  const lim = await packsDe(env, tenantId);
+  return Math.max(lim.ia, PLAN_CONV_CAP[plan] || 0);
+}
+
 const PLANES = { profe: 49, profe_duo: 78, profe_trio: 107, academia: 149, xl: 299 };
 const PLANES_USD = { profe: "14.95", profe_duo: "22.95", profe_trio: "31.95", academia: "43.95", xl: "87.95" };
-const PLAN_NOMBRE = { gratis: "Gratis", profe: "Profe", profe_duo: "Profe Dúo", profe_trio: "Profe Trío", academia: "Academia", xl: "Academia XL", por_alumno: "Academia por alumno" };
+const PLAN_NOMBRE = { base: "Batuta", gratis: "Gratis", profe: "Profe", profe_duo: "Profe Dúo", profe_trio: "Profe Trío", academia: "Academia", xl: "Academia XL", por_alumno: "Academia por alumno" };
 /* Tope de alumnos por plan (12-jul-2026): la palanca de valor. Se enforce en admin/data PUT SOLO
    para tenants ya pagando (estado 'activo'); en trial no topa (para que importen su academia entera).
    15-jul-2026 (aprobado por Andres): plan GRATIS (15 alumnos desde el freemium 23-jul, 1 profe, sin recordatorios ni SUNAT;
@@ -319,6 +479,13 @@ function hoy(){ return new Date().toISOString().slice(0, 10); }
 /* Fecha-dia en hora de Lima (UTC-5). Para lo que el usuario percibe como "hoy"
    (CRM, caja, liquidacion): despues de las 7pm Lima, hoy() UTC ya es "manana". */
 function hoyLima(){ return new Date(Date.now() - 5 * 3600000).toISOString().slice(0, 10); }
+/* 🔴 22-ago-2026 · TODA fecha que se GUARDA va en hora de Lima, sin excepciones.
+   `hoy()` (UTC) seguía usándose en 22 sitios, entre ellos las SIETE escrituras de
+   `compras.fecha`. La caja del panel y el resumen de la API agrupan por el mes de LIMA
+   (`hoyLima().slice(0,7)`), así que una venta del último día del mes a las 20:00 se
+   guardaba con la fecha del mes siguiente y desaparecía de la caja de ese mes.
+   Entre las 19:00 y medianoche de Lima, `hoy()` ya es mañana: cinco horas de cada día.
+   `hoy()` queda solo para lo que de verdad sea UTC. */
 function safeEq(a, b){
   if (typeof a !== "string" || typeof b !== "string" || a.length !== b.length) return false;
   let d = 0;
@@ -894,6 +1061,11 @@ function compute(alumno, regs, precios, reservasUsadas, pk){
     reprogUsadas: reprogramo,
     reprogRestantes: Math.max(0, pk.reprog - reprogramo),
     saldo: muerto ? 0 : saldo,
+    /* El plan del alumno ya no está en el catálogo (renombrado o borrado). Sin esto el panel
+       le muestra un 0/0 mudo, que es exactamente lo que hizo que el bug del 20-ago (9 alumnas
+       de Elevate en 0 habiendo pagado) tardara días y llegara por WhatsApp del cliente. En
+       multi-pase ya viajaba por pase; faltaba el caso de un solo plan. */
+    noExiste: !!(pk && pk.noExiste),
     monto
   };
 }
@@ -976,26 +1148,79 @@ function atribuirPases(lista, paqMap, eventos, reprogTotal){
   const est = orden.map(p => {
     const pk = resolverPk(paqMap, p.n);
     return {
+      /* 22-ago-2026: el índice ORIGINAL, que el orden de consumo pierde. Hace falta para que
+         el último recurso de `cobrar` sea estable: sin esto, editar una fecha reordena la
+         lista y las clases YA DICTADAS saltan de plan. */
+      idx: lista.indexOf(p),
       n: p.n, pk,
       compradas: pk.ilim ? null : (pk.clases || 0),
       ilim: !!pk.ilim,
       usadas: p.usadas,
       vence: p.vence,
       vencido: venceVencido(p.vence),
-      tipos: pk.tipos || []
+      tipos: pk.tipos || [],
+      noExiste: !!pk.noExiste
+    
     };
   });
   const restanteDe = (e) => e.ilim ? Infinity : Math.max(0, (e.compradas || 0) - e.usadas);
-  const cobrar = (tipo) => {
-    let candidatos = est.filter(e => !e.vencido && paqueteCubre(e.pk, tipo || ""));
+  /* `futuro` = el consumo viene de una clase APARTADA que todavía no se dicta. Se cuenta por
+     pase (21-ago-2026) para que la academia que descuenta "al asistir" pueda ver, pase por
+     pase, el mismo número que ve en el total. Sin esto el total decía 21 y el desglose 9. */
+  const cobrar = (tipo, futuro, cuando) => {
+    const marcar = (e) => { e.usadas++; if (futuro) e.futuras = (e.futuras || 0) + 1; };
+    /* 22-ago-2026: vencido AL MOMENTO DE LA CLASE, no vencido hoy. Ver `vencidoAl`. */
+    const muerto = (e) => vencidoAl(e.vence, cuando);
+    let candidatos = est.filter(e => !muerto(e) && paqueteCubre(e.pk, tipo || ""));
+    /* ---- De cuál se descuenta cuando la clase entra en VARIOS planes (21-ago-2026) ----
+       Pedido de José (Elevate): sus planes de Pilates Máquinas ahora también dan Pilates Mat,
+       y los de Mat dan Pilates Mat y todo lo demás. Con los dos planes vivos, una clase de
+       Pilates Mat se cobraba al de máquinas solo porque vencía antes, y se le comía el único
+       plan que abre las máquinas.
+       Regla, en dos pasos:
+       1) Si lo que cubre un plan cabe entero dentro de otro que también sirve, se gasta el
+          CONTENIDO. El de "8 clases de Coro" se gasta antes que el que sirve para todo: si no,
+          las clases de Coro quedan atrapadas en un plan que solo sirve para Coro.
+       2) Si ninguno contiene al otro, se gasta el que cubre MÁS tipos de clase, para conservar
+          el especializado — que es exactamente el caso Pilates/Mat de Elevate.
+       Empate: se respeta el orden de siempre (empezado primero, luego el que vence antes). */
+    if (candidatos.length > 1){
+      const universal = (e) => !((e.tipos || []).length);
+      const cabeEn = (e, o) => universal(o) || (e.tipos || []).every(t => (o.tipos || []).includes(t));
+      const contenido = (e) => !universal(e) && candidatos.some(o => o !== e && cabeEn(e, o) && !cabeEn(o, e));
+      candidatos = candidatos.slice().sort((x, y) => {
+        const cx = contenido(x) ? 0 : 1, cy = contenido(y) ? 0 : 1;
+        if (cx !== cy) return cx - cy;
+        const nx = universal(x) ? 9999 : (x.tipos || []).length;
+        const ny = universal(y) ? 9999 : (y.tipos || []).length;
+        return ny - nx;
+      });
+    }
     let con = candidatos.find(e => restanteDe(e) > 0);
-    if (con){ con.usadas++; return; }
-    if (candidatos.length){ candidatos[0].usadas++; return; }
-    /* sin cobertura vigente: al primero vivo, o al primero a secas (no se pierde el consumo) */
-    const vivo = est.find(e => !e.vencido) || est[0];
-    if (vivo) vivo.usadas++;
+    if (con){ marcar(con); return; }
+    if (candidatos.length){ marcar(candidatos[0]); return; }
+    /* ---- Último recurso: la clase se dictó sin NINGÚN plan que la cubriera ----
+       Pasa de verdad: Maria Jose Tobar Basabe (Elevate) tomó 7 clases del 17 al 21 de agosto
+       con sus dos planes ya vencidos (15 y 16). El consumo no se pierde, se le cobra a alguien.
+       🔴 Antes se le cobraba a `est[0]`, el primero en ORDEN DE CONSUMO, y ese orden depende
+       del vencimiento: mover la fecha de un plan re-repartía sus clases del pasado entre los
+       planes. La historia se movía por tocar un campo que mira al futuro.
+       Ahora se le cobra al plan que estuvo vigente MÁS CERCA de esa clase (el que "debió"
+       cubrirla), y a empate manda el orden original. Es estable: editar fechas ya no mueve
+       nada de lo que ya pasó. */
+    const vivo = est.find(e => !muerto(e));
+    if (vivo){ marcar(vivo); return; }
+    /* 🔴 Primer intento (22-ago): "el que venció más tarde, o sea el que casi la cubrió".
+       Sonaba mejor y NO servía: esa regla también mira `vence`, que es justo el campo que se
+       está editando, así que al mover la fecha los números simplemente se invertían. La
+       prueba siguió en rojo.
+       La única regla estable es una que NO mire ninguna fecha: el ORDEN ORIGINAL de los pases
+       en la ficha. Es arbitrario, sí, pero no se mueve nunca, y este caso solo aparece cuando
+       la academia dejó asistir a alguien sin plan vigente, que ya es una anomalía aparte. */
+    const estable = est.slice().sort((a, b) => a.idx - b.idx)[0];
+    if (estable) marcar(estable);
   };
-  for (const ev of eventos) cobrar(ev.tipo);
+  for (const ev of eventos) cobrar(ev.tipo, !!ev.futuro, ev.cuando);
   const permitidas = est.reduce((s, e) => s + (e.pk.reprog || 0), 0);
   const exceso = Math.max(0, (Number(reprogTotal) || 0) - permitidas);
   for (let i = 0; i < exceso; i++) cobrar("");
@@ -1036,7 +1261,14 @@ function saldoMostrado(c, modo){
   /* el modo se marca SIEMPRE, aunque no tenga nada apartado: si no, el alumno sin reservas
      viajaría con modo "reserva" y la próxima persona que lea este campo se confundiría */
   const out = Object.assign({}, c, { restantes: (Number(c.restantes) || 0) + res, modo_saldo: "asistencia" });
-  if (Array.isArray(c.pases)) out.pases = c.pases.map(p => Object.assign({}, p));   // el desglose por pase se deja igual: ahí el reparto sí es real
+  /* 21-ago-2026 (caso Abigayl, Elevate): el desglose por pase se dejaba SIN ajustar mientras el
+     total sí sumaba lo apartado. Resultado: el total decía 21 y el pase decía 9, y el dueño
+     creyó que el sistema le había borrado clases. Ahora cada pase recupera SUS apartadas, así
+     que el desglose y el total cuentan lo mismo. El saldo REAL (el que deja o no reservar) no
+     se toca: el candado usa computeMulti directo, sin pasar por acá. */
+  if (Array.isArray(c.pases)) out.pases = c.pases.map(p => Object.assign({}, p, {
+    restantes: p.ilim ? p.restantes : (Number(p.restantes) || 0) + (Number(p.futuras) || 0)
+  }));
   return out;
 }
 /* PURO (12-ago-2026): arma los consumos del ciclo en orden cronológico, sin tocar la DB.
@@ -1044,6 +1276,72 @@ function saldoMostrado(c, modo){
    recalcularse en el navegador: ahí nació el desajuste de "24 en el panel y 22 en el portal".
    Regla de siempre: pasado = registro (bitácora), futuro = reserva; la reserva pasada cuyo día
    ya tiene clase dictada NO consume otra vez (emparejada ±1 día por las clases nocturnas). */
+/* 🔴 22-ago-2026 · UN SOLO SQL para traer la bitácora de un ciclo.
+   Antes esta consulta estaba escrita SIETE veces y las siete decían "SELECT estado",
+   pero eventosConsumo lee `estado`, `fecha` Y `curso`: con `curso` en blanco ningún pase
+   "cubre" la clase y la atribución cae a su último recurso, y con `fecha` en blanco el
+   vencimiento se juzga con la fecha de HOY en vez de la del día de la clase. Úrsula Gamio
+   salía con 9 clases donde tiene 12, y Ekaterina Gamarra con 6 donde tiene 7.
+   Compartido a propósito: que el octavo llamador no pueda nacer mutilado.
+   Familia de `memoria: leccion-columna-nueva-no-llega-por-select-enumerado`. */
+const SQL_REGS_CICLO = "SELECT estado, fecha, COALESCE(curso,'') AS curso FROM registro " +
+  "WHERE tenant_id = ?1 AND alumno_id = ?2 AND COALESCE(ciclo,1) = ?3";
+
+/* ─── Cancelaciones que hizo EL ALUMNO desde su portal (22-ago-2026) ───────────
+   El botón del portal se llama "Reprogramar" y al lado dice "Reprogramaciones
+   disponibles: 3 de 3". Pero cancelar no escribía ninguna fila 'Reprogramó', así
+   que el contador NO BAJABA NUNCA: la interfaz prometía un límite que el código no
+   aplicaba, y el alumno podía cambiar de horario infinitas veces. Los planes de
+   Elevate venden justamente eso (2 a 13 cambios según el plan).
+   Se cuentan aparte, sin inventar filas en `registro`: meter una 'Reprogramó' ahí
+   la emparejaría por fecha con una reserva futura del mismo día y le regalaría una
+   clase. Esto SOLO mueve el contador que se muestra y el candado del portal; el
+   `exceso` que descuenta saldo NO se toca, así que a nadie le cambia el saldo. */
+async function reprogPortalDe(env, tenantId, alumnoId, ciclo){
+  try {
+    const r = await env.DB.prepare(
+      "SELECT COUNT(*) AS n FROM reservas WHERE tenant_id = ?1 AND alumno_id = ?2 " +
+      "AND COALESCE(ciclo,1) = ?3 AND estado = 'cancelada' AND COALESCE(cancelada_por,'') LIKE 'alumno:%'"
+    ).bind(tenantId, alumnoId, Number(ciclo) || 1).first();
+    return Math.max(0, Number(r && r.n) || 0);
+  } catch (e) { return 0; }
+}
+/* Aplica ese conteo al objeto de saldo YA calculado. Se usa en el portal y en el panel
+   para que los dos digan el mismo número (el panel lo lee de `saldo`, del server). */
+function conReprogPortal(c, nPortal){
+  if (!c || !nPortal) return c;
+  const usadas = (Number(c.reprogUsadas) || 0) + nPortal;
+  const permit = Number(c.reprogPermitidas) || 0;
+  return Object.assign({}, c, {
+    reprogUsadas: usadas,
+    reprogRestantes: (c.reprogRestantes === 9999) ? 9999 : Math.max(0, permit - usadas)
+  });
+}
+/* ─── ¿Quedó sobregirado tras reservar? (22-ago-2026) ─────────────────────────
+   El cupo de la sala ya tenía re-verificación optimista tras el INSERT, pero el
+   SALDO del alumno no. Dos peticiones a la vez —dos pestañas, un doble clic sobre
+   dos horarios— pasaban las dos el chequeo de "te queda 1 clase" y reservaban dos.
+   Se recalcula DESPUÉS de insertar, leyendo de la base: si consumió más de lo que
+   compró, esta reserva se deshace. Mismo patrón que el cupo, y por la misma razón:
+   entre el chequeo y el INSERT cabe otra petición. */
+async function sobregiroTrasReservar(env, tenantId, alumnoId){
+  try {
+    const al = await env.DB.prepare("SELECT * FROM alumnos WHERE id = ?1 AND tenant_id = ?2").bind(alumnoId, tenantId).first();
+    if (!al) return false;
+    const paqMap = (await loadPaquetes(env, tenantId)).map;
+    const ciclo = Number(al.ciclo) || 1;
+    let c;
+    if (pasesDe(al)) c = await computeMulti(env, tenantId, al, paqMap, {});
+    else {
+      const { results: regs } = await env.DB.prepare(SQL_REGS_CICLO).bind(tenantId, alumnoId, ciclo).all();
+      c = compute(al, regs || [], {}, await reservasUsadasCount(env, tenantId, alumnoId, ciclo), resolverPk(paqMap, al.paquete));
+    }
+    if (!c || c.ilim) return false;
+    /* multi-pase: `sobreconsumo` ya suma lo cobrado por encima de cada pase */
+    if (Number(c.sobreconsumo) > 0) return true;
+    return Number.isFinite(c.compradas) && (Number(c.usadas) || 0) > (Number(c.compradas) || 0);
+  } catch (e) { return false; }   // ante la duda NO se deshace una reserva buena
+}
 function eventosConsumo(resv, regs, excluirReservaId){
   const eventos = [];
   let reprogTotal = 0;
@@ -1073,7 +1371,7 @@ function eventosConsumo(resv, regs, excluirReservaId){
     if (r.id === excl) continue;
     /* el tipo de CLASE manda; `tipo` (suelta/fija) queda de respaldo para reservas viejas */
     const etiqueta = r.curso || r.tipo || "";
-    if (Date.parse(r.inicio_utc) >= ahora){ eventos.push({ tipo: etiqueta, cuando: r.inicio_utc }); reservadas++; continue; }
+    if (Date.parse(r.inicio_utc) >= ahora){ eventos.push({ tipo: etiqueta, cuando: r.inicio_utc, futuro: true }); reservadas++; continue; }
     pasadas.push({ f: fechaLimaDe(r.inicio_utc), tipo: etiqueta, cuando: r.inicio_utc });
   }
   for (const r of pasadas){
@@ -1140,11 +1438,23 @@ async function computeMulti(env, tid, alumno, paqMap, precios, excluirReservaId,
   const restantes = finitos.reduce((s, e) => s + e.restantes, 0) + (vivos.some(e => e.ilim) ? 9999 : 0);
   const compradas = at.pases.filter(e => !e.ilim).reduce((s, e) => s + (e.compradas || 0), 0);
   const usadasTot = at.pases.reduce((s, e) => s + e.usadas, 0);
+  /* 🔴 22-ago-2026 · SOBRECONSUMO QUE SE EVAPORABA.
+     Cuando ningún pase que cubre esa clase tiene saldo, `atribuirPases` se la carga igual al
+     primero (el consumo no se pierde, se le cobra a alguien). Pero `restantes` de cada pase
+     está clampado con `max(0, …)`, así que un pase con 13 usadas de 12 muestra 0 y esa clase
+     de más DESAPARECE de la cuenta: el alumno queda con más saldo del que le toca.
+     Hoy no le pasa a nadie (0 pases sobrecargados en producción), pero se alcanza con una
+     edición normal del catálogo. Ahora se cuenta y viaja, para que no se pierda en silencio. */
+  const sobreconsumo = at.pases.filter(e => !e.ilim)
+    .reduce((s, e) => s + Math.max(0, (e.usadas || 0) - (e.compradas || 0)), 0);
   return {
     multi: true,
     pases: at.pases.map(e => ({ n: e.n, compradas: e.compradas, ilim: e.ilim, usadas: e.usadas,
-      restantes: e.restantes, vence: e.vence, vencido: e.vencido, tipos: e.tipos, pk: e.pk })),
-    compradas, ilim: false, usadas: usadasTot,
+      restantes: e.restantes, futuras: Number(e.futuras) || 0, vence: e.vence, vencido: e.vencido, tipos: e.tipos, pk: e.pk,
+      noExiste: !!e.noExiste,
+      /* clases cobradas a este pase por encima de su capacidad: sin esto se perdían */
+      sobreconsumo: e.ilim ? 0 : Math.max(0, (e.usadas || 0) - (e.compradas || 0)) })),
+    compradas, ilim: false, usadas: usadasTot, sobreconsumo,
     bonus: bonusM,
     restantes,
     reservadas,                                             // apartadas y aun sin dictar
@@ -1160,6 +1470,24 @@ async function computeMulti(env, tid, alumno, paqMap, precios, excluirReservaId,
 
 /* Le fecha de vencimiento se compara al FINAL del dia de Lima: un plan que vence "hoy"
    vale todo el dia de hoy, que es como lo entiende cualquier alumno. */
+/* ¿El pase estaba vencido EN ESE MOMENTO? (22-ago-2026)
+   `venceVencido` pregunta siempre contra HOY, y para cobrar una clase eso está mal: una clase
+   dictada el 13 de agosto tiene que cobrarse al plan que estaba vigente el 13 de agosto, aunque
+   ese plan haya vencido después. Sin esto, el día que un plan vence TODA su historia se muda al
+   plan que quede vivo.
+   Caso real: Úrsula Gamio (Elevate). Terminó su plan de 12, renovó pagando por fuera y José le
+   cargó el nuevo a mano. El viejo seguía apareciendo y no la dejaba reservar, así que José le
+   movió el vencimiento a ayer para sacarlo del medio: las 3 clases que ya había tomado bajo el
+   viejo se las cobró el nuevo y quedó en 9 de 12 cuando debía estar en 12 de 12. */
+function vencidoAl(vence, cuando){
+  const v = String(vence || "").trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) return false;
+  const lim = Date.parse(v + "T23:59:59Z") + LIMA_OFFSET_MS;
+  if (!Number.isFinite(lim)) return false;
+  const t = Date.parse(String(cuando || ""));
+  /* sin fecha del evento se cae al comportamiento de siempre (contra hoy) */
+  return Number.isFinite(t) ? (lim < t) : (lim < Date.now());
+}
 function venceVencido(vence){
   const v = String(vence || "").trim();
   if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) return false;
@@ -1592,7 +1920,11 @@ const MAX_PROFES = { gratis: 1, profe: 1, profe_duo: 2, profe_trio: 3, academia:
    asientos le rompería el trato. Se guarda en config `profes_extra` (solo superadmin lo
    escribe) y SUMA al tope de su plan. Ausente = el tope de siempre. */
 async function maxProfesDe(env, tenantId, plan){
-  const base = MAX_PROFES[plan || "profe"] || 1;
+  /* Packs (20-ago-2026): el tope sale de los packs de 5. Se conserva el máximo contra el plan
+     viejo como red de seguridad, para que ninguna migración a medio camino le quite asientos
+     a una academia que ya los estaba usando. */
+  const lim = await packsDe(env, tenantId);
+  const base = Math.max(lim.profes, MAX_PROFES[plan || "base"] || 1);
   try {
     const row = await env.DB.prepare("SELECT valor FROM config WHERE tenant_id = ?1 AND clave = 'profes_extra'").bind(tenantId).first();
     const extra = Math.max(0, Math.min(50, parseInt((row && row.valor) || "0", 10) || 0));
@@ -1992,8 +2324,8 @@ function correoAnual(tenant, etapa){
     to: tenant.email,
     subject: "Tu plan anual terminó: " + academia + " pasó al plan Gratis",
     html: wrap('<p>' + hola + '</p><p>El plan anual de <b>' + academia + '</b> cumplió su año (venció el <b>' + fecha + '</b>, y sumamos unos días de cortesía).</p>' +
-      '<p><b>No se borró nada:</b> tu academia sigue viva en el plan Gratis (hasta 15 alumnos, 1 profesor). Cuando quieras recuperar tu plan completo, se renueva en un par de clics desde tu panel: <b>Configuración &rarr; Plan</b>.</p>'),
-    text: hola + "\n\nEl plan anual de " + academia + " cumplió su año (venció el " + fecha + " más unos días de cortesía). No se borró nada: tu academia sigue en el plan Gratis. Para recuperar tu plan completo: " + panel + " (Mi academia > Mi cuenta y mi plan).\n\n— El equipo de Batuta"
+      '<p><b>No se borró nada:</b> tu academia sigue viva en la Batuta gratis (hasta 20 alumnos, 1 profesor). Cuando necesites más capacidad, agregas el pack que quieras en un par de clics desde tu panel: <b>Mi cuenta y mi plan</b>.</p>'),
+    text: hola + "\n\nEl plan anual de " + academia + " cumplió su año (venció el " + fecha + " más unos días de cortesía). No se borró nada: tu academia sigue en la Batuta gratis. Para agregar packs: " + panel + " (Mi academia > Mi cuenta y mi plan).\n\n— El equipo de Batuta"
   };
 }
 
@@ -2044,7 +2376,7 @@ function correoNurtureTrial(tenant, etapa, extras){
     subject: "Una semana con tu academia en Batuta",
     html: wrap(
       '<p>' + hola + '</p>' +
-      '<p>Llevas ya varios dias probando Batuta con ' + (tenant.academia ? "<b>" + esc(tenant.academia) + "</b>" : "tu academia") + ', y aun te quedan dias de prueba de sobra: tienes 30 dias completos, sin tarjeta.</p>' +
+      '<p>Llevas ya varios dias probando Batuta con ' + (tenant.academia ? "<b>" + esc(tenant.academia) + "</b>" : "tu academia") + ', y y no hay reloj corriendo: Batuta es gratis para siempre, sin tarjeta.</p>' +
       '<p>Si todavia no lo hiciste, el momento en que Batuta se paga sola es cuando tus alumnos entran a su portal y te pagan por Yape con la confirmacion en un clic. Cualquier duda, respondeme por WhatsApp: feedback real vale oro por aca.</p>' +
       '<p><a href="' + panel + '"><b>Ir a mi panel</b></a></p>')
   };
@@ -2052,7 +2384,7 @@ function correoNurtureTrial(tenant, etapa, extras){
     subject: "Tu prueba termina pronto",
     html: wrap(
       '<p>' + hola + '</p>' +
-      '<p>Se acaban tus 30 dias de prueba de ' + (tenant.academia ? "<b>" + esc(tenant.academia) + "</b>" : "tu academia") + '. Si el panel te sirvio, activar tu plan toma 1 minuto desde el mismo panel: desde <b>S/49 al mes</b>, cobrado en soles. Y tu primer mes tiene garantia: si no te convence, te devolvemos tu plata.</p>' +
+      '<p>Sigues probando Batuta con ' + (tenant.academia ? "<b>" + esc(tenant.academia) + "</b>" : "tu academia") + '. Batuta es gratis para siempre (20 alumnos, 1 profesor, 5 conversaciones del asistente al mes) y no se te vence nada. Cuando se te llene, agregas un pack desde el panel: +50 alumnos por S/39, +5 profesores por S/59 o 1,000 conversaciones del asistente por S/69 al mes.</p>' +
       '<p>Si algo no te cerro, respondeme por WhatsApp y lo vemos antes de que venza.</p>' +
       '<p><a href="' + panel + '"><b>Activar mi plan</b></a></p>')
   };
@@ -2060,8 +2392,8 @@ function correoNurtureTrial(tenant, etapa, extras){
     subject: "Tu academia sigue andando (ahora en el plan Gratis)",
     html: wrap(
       '<p>' + hola + '</p>' +
-      '<p>Tu prueba termino y no se pauso nada: tu academia paso al <b>plan Gratis para siempre</b>. Tu web, el portal de tus alumnos y los pagos siguen vivos, con los limites del plan Gratis (hasta 15 alumnos y 1 profesor).</p>' +
-      '<p>Si necesitas mas (alumnos ilimitados, asistente de WhatsApp con IA, mas profesores), activas un plan en 1 minuto desde el panel, desde <b>S/49 al mes</b>.</p>' +
+      '<p>No se pauso nada: tu academia sigue en la <b>Batuta gratis, que no vence</b>. Tu web, el portal de tus alumnos y los pagos siguen vivos, con 20 alumnos y 1 profesor.</p>' +
+      '<p>Si necesitas mas (mas alumnos, mas profesores o que el asistente conteste todo el mes), agregas un pack en 1 minuto desde el panel, desde <b>S/29 al mes</b>.</p>' +
       '<p><a href="' + panel + '"><b>Ver planes en mi panel</b></a></p>')
   };
 }
@@ -2359,7 +2691,7 @@ async function confirmarCompra(env, tenantId, tenant, compra){
           const pkAct = resolverPk(paqMapC, al.paquete);
           const cicloA = Number(al.ciclo) || 1;
           const { results: regsA } = await env.DB.prepare(
-            "SELECT estado FROM registro WHERE tenant_id = ?1 AND alumno_id = ?2 AND COALESCE(ciclo,1) = ?3"
+            SQL_REGS_CICLO
           ).bind(tenantId, al.id, cicloA).all();
           const rUsA = await reservasUsadasCount(env, tenantId, al.id, cicloA);
           const cA = compute(al, regsA || [], {}, rUsA, pkAct);
@@ -2415,11 +2747,16 @@ async function confirmarCompra(env, tenantId, tenant, compra){
         const pkAnt = resolverPk(paqMapR, al.paquete);
         const cicloAnt = Number(al.ciclo) || 1;
         const { results: regsAnt } = await env.DB.prepare(
-          "SELECT estado FROM registro WHERE tenant_id = ?1 AND alumno_id = ?2 AND COALESCE(ciclo,1) = ?3"
+          SQL_REGS_CICLO
         ).bind(tenantId, al.id, cicloAnt).all();
         /* reservasUsadas = 0 a propósito: acá quiero SOLO lo que consumió la bitácora, para
            saber cuánto del paquete viejo quedaba libre para sostener reservas futuras. */
-        const cAnt = compute(al, regsAnt || [], {}, 0, pkAnt);
+        /* 🔴 22-ago-2026: con compute() pelado, un alumno de VARIOS pases contaba solo la
+           capacidad de `al.paquete`. `cubiertas` salía corto y se le mudaban al ciclo nuevo
+           reservas futuras que sus pases viejos YA habían pagado: volvía a pagarlas. */
+        const cAnt = pasesDe(al)
+          ? await computeMulti(env, tenantId, al, paqMapR, {}, "", { resv: [], regs: regsAnt || [] })
+          : compute(al, regsAnt || [], {}, 0, pkAnt);
         const cubiertas = cAnt.ilim ? 1e9 : Math.max(0, (Number(cAnt.compradas) || 0) - (Number(cAnt.usadas) || 0));
         const { results: futuras } = await env.DB.prepare(
           "SELECT id FROM reservas WHERE tenant_id = ?1 AND alumno_id = ?2 AND estado = 'reservada' AND inicio_utc >= ?3 ORDER BY inicio_utc ASC"
@@ -2449,13 +2786,22 @@ async function confirmarCompra(env, tenantId, tenant, compra){
         if (bonusAnt > 0){
           const pkAntB = resolverPk(paqMapConfirm, al.paquete);
           const { results: regsAntB } = await env.DB.prepare(
-            "SELECT estado FROM registro WHERE tenant_id = ?1 AND alumno_id = ?2 AND COALESCE(ciclo,1) = ?3"
+            SQL_REGS_CICLO
           ).bind(tenantId, al.id, Number(al.ciclo) || 1).all();
-          const cAntB = compute(al, regsAntB || [], {}, 0, pkAntB);
-          /* cAntB.compradas ya viene con el bonus sumado: el consumido es lo que se comio POR
-             ENCIMA de las clases que de verdad pago */
-          const consumido = pkAntB.ilim ? bonusAnt
-            : Math.min(bonusAnt, Math.max(0, (Number(cAntB.usadas) || 0) - (Number(pkAntB.clases) || 0)));
+          /* 🔴 22-ago-2026: igual que arriba. Con varios pases, el umbral de "clases que de
+             verdad pagó" era solo el de `al.paquete`, así que el bonus se daba por consumido
+             antes de tiempo y el alumno perdía clases de regalo al renovar. */
+          const multiB = pasesDe(al);
+          const cAntB = multiB
+            ? await computeMulti(env, tenantId, al, paqMapConfirm, {}, "", { resv: [], regs: regsAntB || [] })
+            : compute(al, regsAntB || [], {}, 0, pkAntB);
+          /* `compradas` ya viene con el bonus sumado, en las dos rutas: lo pagado de verdad es
+             `compradas - bonus`, y el consumido es lo que se comió POR ENCIMA de eso. */
+          const pagadas = multiB
+            ? Math.max(0, (Number(cAntB.compradas) || 0) - (Number(cAntB.bonus) || 0))
+            : (Number(pkAntB.clases) || 0);
+          const consumido = (multiB ? false : pkAntB.ilim) ? bonusAnt
+            : Math.min(bonusAnt, Math.max(0, (Number(cAntB.usadas) || 0) - pagadas));
           const restante = Math.max(0, bonusAnt - consumido);
           stmts.push(env.DB.prepare("UPDATE alumnos SET bonus_clases = ?1, bonus_ciclo = ?2 WHERE id = ?3 AND tenant_id = ?4")
             .bind(restante, restante > 0 ? cicloNuevo : 0, al.id, tenantId));
@@ -2711,6 +3057,7 @@ async function llamarClaudeOnboarding(env, system, mensajes, extraSystem, modelo
 const WA_VENDEDOR_SYS =
   "Eres el asistente de recepcion de una academia, atendiendo por WhatsApp a una persona interesada en tomar clases. " +
   "Tu trabajo: dar la bienvenida, entender que quiere aprender, responder precios y horarios con los DATOS de abajo, y motivarla a agendar una clase de prueba. El profesor humano cierra; tu abres la puerta.\n" +
+  "TRANSPARENCIA (obligatorio): eres un asistente virtual, no una persona. Si te preguntan si eres humano, un bot o una IA, dilo de frente y sin rodeos, y ofrece pasar la conversacion a una persona. Nunca digas ni des a entender que eres el profesor o una persona del equipo.\n" +
   "ESTILO (estricto): espanol claro y calido, de tu, maximo 3 frases por mensaje, directo, sin relleno. Sin em dash. Sin signos de apertura invertidos (nada de ¿ ni ¡, solo los de cierre). Sin markdown, sin asteriscos, sin vinetas: es WhatsApp, texto plano. Un emoji ocasional esta bien, con mesura. Nunca suenes a robot.\n" +
   "QUE HACES: saludas (por el nombre si lo tienes), preguntas que le gustaria aprender, respondes cursos/precios/horarios SOLO desde los DATOS, e invitas a agendar una clase de prueba o a dejar sus datos para que el profesor le escriba.\n" +
   "REGLAS DURAS: NUNCA prometes resultados, progreso garantizado ni ingresos (nada de 'vas a aprender en X semanas' ni 'garantizado'). NUNCA inventas precios, horarios, promos ni cursos que no esten en los DATOS. NUNCA cierras un pago ni pides datos de tarjeta por el chat: para pagar, el profesor coordina. NUNCA hablas mal de nadie, tono positivo. Si es un reclamo, un problema serio o piden hablar con una persona: di que el profesor le escribe en breve, no improvises. Si algo no esta en los DATOS, dilo con honestidad y ofrece que el profesor lo confirme.\n" +
@@ -2820,8 +3167,9 @@ async function ensureWaUsoSchema(env){
   } catch (e) {}
 }
 function waPlanEfectivo(tW){ const p = (tW && tW.plan) || ""; return (!p || (tW && tW.estado) === "vencido") ? "gratis" : p; }
-function waPeriodo(plan){ return plan === "gratis" ? "total" : mesActualUTC(); }
-function waConvCap(plan){ return PLAN_CONV_CAP[plan] != null ? PLAN_CONV_CAP[plan] : 500; }
+/* Packs (20-ago-2026): TODO periodo es mensual. Las 5 de la base y las compradas se
+   resetean el 1 de cada mes; ya no existe la bolsa "de por vida" del plan gratis viejo. */
+function waPeriodo(){ return mesActualUTC(); }
 /* Es conversacion NUEVA (nueva ventana de 24h)? Solo las nuevas consumen cupo; las
    continuaciones dentro de las 24h no. Se mide con wa_conv.actualizado (aun no reescrito). */
 async function waEsNuevaConversacion(env, tenantId, telefono){
@@ -2837,7 +3185,7 @@ async function waEsNuevaConversacion(env, tenantId, telefono){
    {ok, usados, cap}: ok=false = cupo agotado (no responder con IA). Fail-open ante error DB. */
 async function waConsumirConversacion(env, tenantId, plan){
   await ensureWaUsoSchema(env);
-  const periodo = waPeriodo(plan), cap = waConvCap(plan), ahora = new Date().toISOString();
+  const periodo = waPeriodo(), cap = await convCapDe(env, tenantId, plan === "gratis", plan), ahora = new Date().toISOString();
   try {
     await env.DB.prepare("INSERT OR IGNORE INTO wa_uso (tenant_id, periodo, usados, actualizado) VALUES (?1, ?2, 0, ?3)").bind(tenantId, periodo, ahora).run();
     const r = await env.DB.prepare("UPDATE wa_uso SET usados = usados + 1, actualizado = ?4 WHERE tenant_id = ?1 AND periodo = ?2 AND usados < ?3").bind(tenantId, periodo, cap, ahora).run();
@@ -2850,10 +3198,10 @@ async function waConsumirConversacion(env, tenantId, plan){
 async function waUsoActual(env, tenantId, plan){
   try {
     await ensureWaUsoSchema(env);
-    const periodo = waPeriodo(plan), cap = waConvCap(plan);
+    const periodo = waPeriodo(), cap = await convCapDe(env, tenantId, plan === "gratis", plan);
     const row = await env.DB.prepare("SELECT usados FROM wa_uso WHERE tenant_id = ?1 AND periodo = ?2").bind(tenantId, periodo).first();
     return { usados: row ? Number(row.usados) : 0, cap, periodo, plan };
-  } catch (e) { return { usados: 0, cap: waConvCap(plan), periodo: waPeriodo(plan), plan }; }
+  } catch (e) { return { usados: 0, cap: BASE_LIMITES.ia, periodo: waPeriodo(), plan }; }
 }
 
 /* ============ Asistente-cliente para NEGOCIOS sueltos (no-academia) — AISLADO, default OFF ============
@@ -3025,7 +3373,8 @@ async function manejarNegocioWA(env, { phoneId, from, texto, nombre }){
   }
   // cupo mensual: solo las conversaciones NUEVAS (ventana de 24h) consumen. Al agotarse, el lead
   // ya quedo registrado y el dueno responde a mano (no se llama a la IA).
-  if (await waEsNuevaConversacion(env, synthTenant, from)){
+  const esConvNuevaNeg = await waEsNuevaConversacion(env, synthTenant, from);
+  if (esConvNuevaNeg){
     const cupo = await negocioConsumirConv(env, neg.id, neg.cap_mes);
     if (!cupo.ok) return true;
   }
@@ -3040,7 +3389,12 @@ async function manejarNegocioWA(env, { phoneId, from, texto, nombre }){
     // sin IA disponible: primer-toque calido de respaldo (no deja al cliente sin respuesta)
     reply = (nombre ? String(nombre).split(" ")[0] : "Hola") + ", gracias por escribir a " + (neg.nombre || "nosotros") + ". Cuentame que necesitas y te ayudo, o el dueno te escribe en breve.";
   }
-  const enviado = await enviarWhatsApp(env, phoneId, from, reply);
+  /* Misma transparencia algorítmica que en el asistente de academias (Ley 31814). */
+  const salidaNeg = esConvNuevaNeg
+    ? ("Te responde el asistente virtual de " + (neg.nombre || "este negocio") +
+       ". Si prefieres hablar con una persona, escribe: quiero hablar con alguien.\n\n" + reply)
+    : reply;
+  const enviado = await enviarWhatsApp(env, phoneId, from, salidaNeg);
   if (enviado){
     await waHistorialGuardar(env, synthTenant, from, conversacion.concat([{ role: "assistant", content: reply }]));
   }
@@ -3376,7 +3730,15 @@ async function otorgarComision(env, tenant, pago, mpPaymentId){
       "SELECT COUNT(*) AS n FROM comisiones c WHERE c.tenant_id = ?1 AND c.tipo = 'comision' AND NOT EXISTS (SELECT 1 FROM comisiones r WHERE r.tipo = 'reversa' AND r.mp_payment_id = c.mp_payment_id)"
     ).bind(tenant.id).first();
     if (((meses && Number(meses.n)) || 0) >= AFILIADO_TOPE_MESES) return null; // tope 12 meses
-    const base = Number((pago && (pago.transaction_amount || (pago.payment && pago.payment.transaction_amount))) || 0) || (PLANES[tenant.plan] || 0);
+    /* 21-ago-2026: el fallback era PLANES[tenant.plan], y con el modelo de packs el plan es
+       'base' (no está en PLANES) -> daba 0 y el afiliado se quedaba sin su comisión en
+       silencio. Ahora, si MP no mandó el monto en el webhook, se usa lo que ese tenant paga
+       de packs, que es exactamente su mensualidad. */
+    let base = Number((pago && (pago.transaction_amount || (pago.payment && pago.payment.transaction_amount))) || 0);
+    if (!(base > 0)){
+      try { base = (await packsDe(env, tenant.id)).monto || 0; } catch (e) { base = 0; }
+      if (!(base > 0)) base = PLANES[tenant.plan] || 0;   // tenants legacy sin migrar
+    }
     if (!(base > 0)) return null;
     const comision = Math.round(base * AFILIADO_COMISION * 100) / 100;
     const pagoRealId = String((pago && pago.payment && pago.payment.id) || "");
@@ -3386,7 +3748,7 @@ async function otorgarComision(env, tenant, pago, mpPaymentId){
     try {
       await alertaCorreoAndres(env,
         "AFILIADOS: comision de S/" + comision + " para " + af.codigo,
-        "Referido: " + (tenant.academia || tenant.id) + " pago S/" + base + " (" + (tenant.plan || "?") + ").\n" +
+        "Referido: " + (tenant.academia || tenant.id) + " pago S/" + base + " en packs.\n" +
         "Afiliado: " + af.nombre + " (" + af.codigo + ") gana S/" + comision + " (30%).\n" +
         "Saldo del afiliado: S/" + (await saldoAfiliado(env, af.codigo)) + " · payout " + (af.tenant_id ? "automatico (credito en su cobro de MP)" : "PayPal (flag " + (env.PAYPAL_PAYOUTS_ON === "1" ? "ON" : "OFF") + ")") + ".");
     } catch (e) {}
@@ -4299,7 +4661,7 @@ async function promoverEspera(env, tenantId, iso, sala){
         if (vivo){
           const cicloE = Number(alE.ciclo) || 1;
           const { results: regsE } = await env.DB.prepare(
-            "SELECT estado FROM registro WHERE tenant_id = ?1 AND alumno_id = ?2 AND COALESCE(ciclo,1) = ?3"
+            SQL_REGS_CICLO
           ).bind(tenantId, alE.id, cicloE).all();
           const rUsE = await reservasUsadasCount(env, tenantId, alE.id, cicloE);
           const cmE = pasesPE ? await computeMulti(env, tenantId, alE, paqMapPE, await loadPrecios(env, tenantId)) : null;
@@ -4527,81 +4889,31 @@ function paginaLogin(googleOn){
   return paginaBase("Ingresa — Batuta", cuerpo, script);
 }
 
+/* Packs (20-ago-2026): ya no hay planes que activar. Esta página sobrevive porque hay links
+   viejos apuntando acá (correos, el panel, la landing), y en vez de un 404 explica el modelo
+   nuevo y manda al panel, que es donde se agregan los packs. */
 function paginaSuscribir(){
   const cuerpo =
-    "<h1>Activa tu plan</h1>" +
-    "<p class=\"sub\">S/0 hoy: al activar un plan de pago, tu primer cobro es recien al mes (via Mercado Pago). Cancela cuando quieras. Y con garantia: si en tu primer mes pagado no te convence, te devolvemos tu plata.</p>" +
-    "<div id=\"planes\">" +
-      "<div class=\"planopt\" data-plan=\"profe\">" +
-        "<div class=\"planopt-t\">Profe</div><div class=\"planopt-p\">S/49<span>/mes · 1 profesor · asistente WhatsApp con IA 24/7 · cobros automáticos · alumnos ilimitados</span></div>" +
-      "</div>" +
-      "<div class=\"planopt\" data-plan=\"profe_duo\">" +
-        "<div class=\"planopt-t\">Profe Dúo</div><div class=\"planopt-p\">S/78<span>/mes · 2 profesores · alumnos ilimitados</span></div>" +
-      "</div>" +
-      "<div class=\"planopt\" data-plan=\"profe_trio\">" +
-        "<div class=\"planopt-t\">Profe Trío</div><div class=\"planopt-p\">S/107<span>/mes · 3 profesores · alumnos ilimitados</span></div>" +
-      "</div>" +
-      "<div class=\"planopt\" data-plan=\"academia\">" +
-        "<div class=\"planopt-t\">Academia</div><div class=\"planopt-p\">S/149<span>/mes · 5 profesores · multi-sede, Meta Ads y marca propia</span></div>" +
-      "</div>" +
-      "<div class=\"planopt\" data-plan=\"xl\">" +
-        "<div class=\"planopt-t\">Academia XL</div><div class=\"planopt-p\">S/299<span>/mes · 20 profesores · boletas SUNAT y soporte prioritario</span></div>" +
-      "</div>" +
-      "<div class=\"planopt\" data-plan=\"por_alumno\">" +
-        "<div class=\"planopt-t\">Red / Enterprise</div><div class=\"planopt-p\">a medida<span>· más de 20 profesores o varias sedes grandes</span></div>" +
-      "</div>" +
+    "<h1>Batuta es gratis</h1>" +
+    "<p class=\"sub\">Ya no hay planes que activar. Tu Batuta incluye el producto completo con <b>20 alumnos</b>, <b>1 profesor</b> y <b>5 conversaciones</b> del asistente al mes, sin tarjeta y sin vencimiento.</p>" +
+    "<div id=\"packs\">" +
+      "<div class=\"planopt\"><div class=\"planopt-t\">Mas alumnos</div><div class=\"planopt-p\">desde S/39<span>/mes · +50 alumnos</span></div></div>" +
+      "<div class=\"planopt\"><div class=\"planopt-t\">Mas profesores</div><div class=\"planopt-p\">desde S/59<span>/mes · +5 profesores</span></div></div>" +
+      "<div class=\"planopt\"><div class=\"planopt-t\">Asistente de WhatsApp con IA</div><div class=\"planopt-p\">desde S/29<span>/mes · 300 conversaciones</span></div></div>" +
     "</div>" +
-    "<p class=\"sub\" style=\"margin:12px 0 0;font-size:13px\">💡 <b>Paga el año y llévate 2 meses gratis:</b> Profe S/490 · Dúo S/780 · Trío S/1,070 · Academia S/1,490 · XL S/2,990. Elige tu plan arriba y usa el botón de abajo.</p>" +
-    "<button type=\"button\" id=\"btnAnual\" style=\"margin-top:10px;background:transparent;border:1px solid var(--acento);color:var(--acento)\">Pagar 1 año (2 meses gratis)</button>" +
-    "<p class=\"sub\" style=\"margin:14px 0 0;font-size:12px\">El cobro es en soles peruanos via Mercado Pago. Con tarjeta de otro pais, tu banco convierte al equivalente en tu moneda. El plan por alumno cobra segun tus alumnos activos (minimo " + MIN_ALUMNOS_FACTURABLES + ") y se ajusta solo cada mes.</p>" +
-    "<button type=\"button\" id=\"btn\">Activar plan</button>" +
-    "<div class=\"err\" id=\"err\"></div>" +
-    "<div id=\"whaBox\" style=\"display:none;text-align:center;margin-top:14px\">" +
-      "<a href=\"https://wa.me/51989077928\" target=\"_blank\"><button type=\"button\">Escribenos por WhatsApp</button></a>" +
-    "</div>" +
-    "<div class=\"foot\"><a href=\"/app/panel\">Prefiero decidir despues</a></div>" +
+    "<p class=\"sub\" style=\"margin:14px 0 0;font-size:13px\">Los packs se agregan y se sueltan solos desde tu panel, en <b>Mi cuenta y mi plan</b>. Se suman a un solo cobro mensual por Mercado Pago y no tienen permanencia.</p>" +
+    "<a href=\"/app/panel\"><button type=\"button\">Ir a mi panel</button></a>" +
+    "<div class=\"foot\"><a href=\"" + MARCA.dominio + "/precios\">Ver los packs y sus precios</a></div>" +
     "<style>" +
-      "#planes{display:flex;flex-direction:column;gap:10px;margin-top:20px}" +
-      ".planopt{border:1px solid #2c303a;border-radius:10px;padding:14px 16px;cursor:pointer;display:flex;justify-content:space-between;align-items:center}" +
-      ".planopt.sel{border-color:var(--acento);background:rgba(232,161,61,0.08)}" +
-      ".planopt-t{font-weight:600}" +
-      ".planopt-p{color:var(--acento);font-weight:600}" +
-      ".planopt-p span{color:var(--muted);font-weight:400;font-size:12px}" +
+      "#packs{display:flex;flex-direction:column;gap:10px;margin-top:20px}" +
+      ".planopt{border:1px solid var(--line);border-radius:10px;padding:12px 14px}" +
+      ".planopt-t{font-weight:600;font-size:14px}" +
+      ".planopt-p{color:var(--muted);font-size:13px;margin-top:2px}" +
+      ".planopt-p span{display:block}" +
     "</style>";
-  const script =
-    "var planSel='profe';" +
-    "var opts=document.querySelectorAll('.planopt');" +
-    "function pintar(){opts.forEach(function(o){o.classList.toggle('sel', o.getAttribute('data-plan')===planSel);});}" +
-    "opts.forEach(function(o){o.addEventListener('click', function(){planSel=o.getAttribute('data-plan'); pintar();});});" +
-    "pintar();" +
-    "var token=localStorage.getItem('batuta_t');" +
-    "if(!token){location.href='/app/login';}" +
-    "document.getElementById('btn').addEventListener('click', async function(e){" +
-    "var err=document.getElementById('err'); err.textContent='';" +
-    "var wha=document.getElementById('whaBox'); wha.style.display='none';" +
-    "var btn=e.target; btn.disabled=true;" +
-    "try{" +
-    "var r=await fetch('/app/api/t/suscribir',{method:'POST',headers:{'content-type':'application/json','authorization':'Bearer '+token},body:JSON.stringify({plan:planSel})});" +
-    "var d=await r.json();" +
-    "if(r.status===501){err.textContent=d.error||'La suscripcion automatica aun no esta disponible.'; wha.style.display='block'; btn.disabled=false; return;}" +
-    "if(!r.ok||!d.init_point){err.textContent=d.error||'No se pudo iniciar la suscripcion.'; btn.disabled=false; return;}" +
-    "location.href=d.init_point;" +
-    "}catch(ex){err.textContent='Error de conexion. Intenta de nuevo.'; btn.disabled=false;}" +
-    "});" +
-    // Plan ANUAL (pago unico, 2 meses gratis): mismo plan seleccionado arriba.
-    "document.getElementById('btnAnual').addEventListener('click', async function(e){" +
-    "var err=document.getElementById('err'); err.textContent='';" +
-    "var btn=e.target; btn.disabled=true;" +
-    "if(planSel==='por_alumno'){err.textContent='El plan por alumno no tiene modalidad anual: elige otro plan.'; btn.disabled=false; return;}" +
-    "try{" +
-    "var r=await fetch('/app/api/t/plan-anual/checkout',{method:'POST',headers:{'content-type':'application/json','authorization':'Bearer '+token},body:JSON.stringify({plan:planSel})});" +
-    "var d=await r.json();" +
-    "if(!r.ok||!d.init_point){err.textContent=d.error||'No se pudo iniciar el pago anual.'; btn.disabled=false; return;}" +
-    "location.href=d.init_point;" +
-    "}catch(ex){err.textContent='Error de conexion. Intenta de nuevo.'; btn.disabled=false;}" +
-    "});";
-  return paginaBase("Activa tu plan — Batuta", cuerpo, script);
+  return paginaBase("Tu Batuta — Batuta", cuerpo, "");
 }
+
 
 function paginaLanding(){
   const cuerpo =
@@ -4921,6 +5233,75 @@ async function panelVersion(env, url){
 const DEMO_EMAIL = "demo@batuta.lat";
 
 /* ═══════════════════════════════════════════════════════════════════════════
+   DEMO PRIVADA POR VISITANTE (19-ago-2026)
+   ───────────────────────────────────────────────────────────────────────────
+   Andrés: "se me hace rarísimo que si yo escribo algo se pueda leer para todos
+   los demás". Tenía razón: hasta hoy /app/demo entregaba a TODOS la sesión del
+   mismo tenant, así que lo que escribía un visitante lo veía el siguiente hasta
+   el reset de las 9am (hasta 23 horas de ventana).
+
+   Ahora cada visitante recibe SU copia recién sembrada de Estudio Sonata:
+   tenant propio (demo+<suf>@batuta.lat), ids sembrados con su prefijo, y se
+   borra entera a las 24 horas. Nadie ve lo que escribió otro.
+   La demo canónica (demo@batuta.lat) sigue existiendo como red de seguridad:
+   si la creación falla o se topa el freno del día, /app/demo cae a ella.
+   ═══════════════════════════════════════════════════════════════════════════ */
+const DEMO_PRIV_EMAIL_PREF = "demo+";   // demo+<suf>@batuta.lat
+const DEMO_PRIV_HORAS = 24;             // cuánto vive una demo privada
+const DEMO_PRIV_MAX_DIA = 400;          // techo de creación por día (freno de abuso)
+
+/* Vale tanto para la demo canónica como para las privadas: TODA la lógica que
+   trata distinto a la demo (no cobrar, no mandar correos, no contar en métricas,
+   sanear lo que se escribe) tiene que preguntar por acá, no comparar con
+   DEMO_EMAIL a pelo, o las privadas se comportarían como un cliente de verdad. */
+/* Academias que SÍ pueden salir públicamente. Una sola fuente para el directorio y para su
+   sitemap: si se separaran, se podría llegar a publicar en el sitemap a alguien que se dio de
+   baja del directorio. */
+async function academiasListables(env){
+  const { results: filas } = await env.DB.prepare(
+    "SELECT t.id, t.slug, t.academia, " +
+    "(SELECT valor FROM config c WHERE c.tenant_id = t.id AND c.clave = 'directorio') AS dir, " +
+    "(SELECT valor FROM config c WHERE c.tenant_id = t.id AND c.clave = 'cursos') AS cursos, " +
+    "(SELECT COUNT(*) FROM alumnos a WHERE a.tenant_id = t.id) AS nal, " +
+    "(SELECT valor FROM config c WHERE c.tenant_id = t.id AND c.clave = 'paquetes') AS paq " +
+    "FROM tenants t WHERE t.estado != 'vencido' AND t.email NOT LIKE 'demo%@batuta.lat' " +
+    "AND t.email NOT LIKE '%@example.com' AND t.email != 'andressalame@gmail.com' " +
+    "ORDER BY t.creado ASC LIMIT 300"
+  ).all();
+  const PALABRAS = /\b(academia|academy|estudio|studio|centro|escuela|instituto|school|taller|gimnasio|gym|club|conservatorio|dance|danza|music|música|arte|pilates|yoga|box|sport|kids|company|corp|sac|eirl|srl)\b|\bs\.a\.c?\.?|\be\.i\.r\.l/i;
+  const pareceNombreDePersona = (nom) => {
+    const x = String(nom || "").trim();
+    if (!x || PALABRAS.test(x)) return false;
+    const partes = x.split(/\s+/).filter(Boolean);
+    return partes.length >= 2 && partes.length <= 5;
+  };
+  return (filas || []).filter(f => {
+    const dir = String(f.dir || "").toLowerCase();
+    if (dir === "off") return false;
+    if (pareceNombreDePersona(f.academia) && dir !== "si") return false;
+    if (/\(borrar\)|^TEST |^Prueba |^QA /i.test(String(f.academia || ""))) return false;
+    if (!String(f.cursos || "").trim()) return false;
+    const conPlanes = (() => { try { return (JSON.parse(f.paq || "[]") || []).length > 0; } catch (e) { return false; } })();
+    return Number(f.nal) > 0 || conPlanes;
+  });
+}
+function esTenantDemo(t){
+  const em = String((t && t.email) || "");
+  return em === DEMO_EMAIL || em.startsWith(DEMO_PRIV_EMAIL_PREF);
+}
+/* Prefijo de los ids sembrados de ese tenant: "demo-" en la canónica, "d<suf>-"
+   en una privada. Sale del email para no guardar el dato en dos sitios. */
+function prefDemoDe(t){
+  const m = String((t && t.email) || "").match(/^demo\+([a-z0-9]+)@/);
+  return m ? "d" + m[1] + "-" : "demo-";
+}
+/* En SQL no hay funciones: los filtros que excluyen a la demo de métricas, correos y
+   nurture pasaron de `email != 'demo@batuta.lat'` a `email NOT LIKE ?` con este patrón,
+   que cubre la canónica Y las privadas (demo+<suf>@batuta.lat). Sin esto, cada visitante
+   entraría a las alertas de "academias nuevas" y a los correos de recordatorio. */
+const SQL_DEMO_LIKE = "demo%@batuta.lat";
+
+/* ═══════════════════════════════════════════════════════════════════════════
    DEMO PÚBLICA — FRENO DE DATOS REALES (11-ago-2026, incidente Elevate)
    ───────────────────────────────────────────────────────────────────────────
    Qué pasó: /app/demo le entrega a CUALQUIER visitante anónimo una sesión de
@@ -4959,23 +5340,38 @@ function redactarTextoDemo(s){
 /* Los 5 alumnos de mentira que siembra resetDemo. Lista CERRADA a propósito: si la
    excepción fuera "el id empieza con demo-", cualquiera se la salta mandando desde un
    curl un alumno con id "demo-al-999" y sus datos reales intactos. */
-const RE_DEMO_SEED_AL = /^demo-al-[1-5]$/;
+/* Los 5 alumnos de mentira que siembra resetDemo. La excepción es una lista CERRADA a
+   propósito: si fuera "el id empieza con demo-", cualquiera se la salta mandando desde un
+   curl un alumno con id "demo-al-999" y sus datos reales intactos. El prefijo entra por
+   parámetro porque cada demo privada siembra los suyos ("d<suf>-al-1"). */
+function esAlumnoSembradoDemo(id, pref){
+  const P = pref || "demo-";
+  return new RegExp("^" + P.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "al-[1-5]$").test(String(id || ""));
+}
+
+/* Nombres a inicial (19-ago-2026, pedido de Andrés): "Andrés Salamé" queda en "Andrés S.".
+   El nombre de pila se conserva porque la demo tiene que seguir sintiéndose de verdad;
+   lo que no queremos guardar es a una persona identificable. */
+function acortarNombreDemo(s){
+  const partes = String(s == null ? "" : s).trim().split(/\s+/).filter(Boolean);
+  if (partes.length <= 1) return (partes[0] || "").slice(0, 40);
+  return (partes[0].slice(0, 40) + " " + partes.slice(1, 3).map(x => x[0].toUpperCase() + ".").join(" ")).trim();
+}
 
 /* Deja al alumno sin un solo dato con el que se pueda contactar o identificar a
-   una persona real. El nombre se conserva (si escribes "María" a mano quieres
-   ver "María": la demo tiene que seguir sintiéndose de verdad), pero un nombre
-   suelto, sin apellido, correo, teléfono ni fecha de nacimiento, y topado en 25,
-   no es la base de datos de nadie. */
-function sanearAlumnoDemo(a){
+   una persona real: nombre de pila + inicial, sin apellido, correo, teléfono ni
+   fecha de nacimiento, y topado en 25. Eso no es la base de datos de nadie. */
+function sanearAlumnoDemo(a, pref){
   if (!a || typeof a !== "object") return a;
   /* La redacción de texto libre va SIEMPRE, también sobre los sembrados: es inocua para
      ellos (sus notas no traen correos ni teléfonos) y así no hay id que la esquive. */
   a.nombre = redactarTextoDemo(a.nombre).slice(0, 60);
   a.notas = redactarTextoDemo(a.notas);
   a.horario = redactarTextoDemo(a.horario).slice(0, 60);
-  /* El contacto solo sobrevive en los 5 de muestra: son inventados y la demo los luce
-     (la columna WhatsApp, el botón de escribirle). Todo lo demás va vacío. */
-  if (RE_DEMO_SEED_AL.test(String(a.id || ""))) return a;
+  /* El contacto y el nombre completo solo sobreviven en los 5 de muestra: son inventados
+     y la demo los luce (la columna WhatsApp, el botón de escribirle). */
+  if (esAlumnoSembradoDemo(a.id, pref)) return a;
+  a.nombre = acortarNombreDemo(a.nombre);
   a.apellido = "";
   a.email = "";
   a.whatsapp = "";
@@ -5168,6 +5564,10 @@ async function ensureSaldoMigradoSchema(env){
   }
   /* varios pases activos a la vez (11-ago-2026): JSON {c: ciclo, p:[{n, usadas, vence}]} */
   try { await env.DB.prepare("ALTER TABLE alumnos ADD COLUMN pases TEXT DEFAULT ''").run(); } catch (e) { /* ya existe */ }
+  /* Vencimiento puesto A MANO (21-ago-2026, pedido de José/Elevate). Sin esta marca no se
+     puede extenderle la vigencia a nadie: `calcularVence` recalcula desde los días del
+     paquete en CADA guardado y pisaba la fecha escrita a mano. */
+  try { await env.DB.prepare("ALTER TABLE alumnos ADD COLUMN vence_manual INTEGER DEFAULT 0").run(); } catch (e) { /* ya existe */ }
   SALDO_MIGRADO_OK = true;
 }
 
@@ -5651,12 +6051,12 @@ async function recordatoriosDeClase(env){
     "SELECT r.id, r.tenant_id, r.inicio_utc, r.curso, COALESCE(r.aviso_24,0) AS aviso_24, COALESCE(r.aviso_1h,0) AS aviso_1h, " +
     "t.academia, t.slug, c.email AS alumno_email, c.nombre AS alumno_nombre, p.nombre AS profe_nombre " +
     "FROM reservas r " +
-    "JOIN tenants t ON t.id = r.tenant_id AND t.estado != 'vencido' AND COALESCE(t.plan,'profe') != 'gratis' AND t.email != ?3 " +
+    "JOIN tenants t ON t.id = r.tenant_id AND t.estado != 'vencido' AND COALESCE(t.plan,'profe') != 'gratis' AND t.email NOT LIKE ?3 " +
     "JOIN cuentas c ON c.alumno_id = r.alumno_id AND c.tenant_id = r.tenant_id " +
     "LEFT JOIN profesores p ON p.id = r.profesor_id " +
     "WHERE r.estado = 'reservada' AND r.alumno_id IS NOT NULL AND r.inicio_utc > ?1 AND r.inicio_utc <= ?2 " +
     "AND (COALESCE(r.aviso_24,0) = 0 OR COALESCE(r.aviso_1h,0) = 0) LIMIT 200"
-  ).bind(desde, hasta, DEMO_EMAIL).all();
+  ).bind(desde, hasta, SQL_DEMO_LIKE).all();
   const cache = new Map(), cacheMsg = new Map();
   let enviados = 0;
   for (const r of (results || [])){
@@ -5702,10 +6102,10 @@ async function seguimientoLeadsDueno(env){
   try {
     rows = ((await env.DB.prepare(
       "SELECT l.tenant_id, l.nombre, l.email AS lead_email, l.whatsapp, l.interes, l.etapa, t.email AS dueno_email, t.academia " +
-      "FROM leads l JOIN tenants t ON t.id = l.tenant_id AND t.estado != 'vencido' AND t.email != ?1 " +
+      "FROM leads l JOIN tenants t ON t.id = l.tenant_id AND t.estado != 'vencido' AND t.email NOT LIKE ?1 " +
       "WHERE COALESCE(l.seguir_el,'') != '' AND l.seguir_el <= ?2 AND COALESCE(l.etapa,'nuevo') NOT IN ('alumno','perdido') " +
       "ORDER BY l.tenant_id, l.seguir_el LIMIT 300"
-    ).bind(DEMO_EMAIL, hoyL).all()).results) || [];
+    ).bind(SQL_DEMO_LIKE, hoyL).all()).results) || [];
   } catch (e) { return 0; }
   const porTenant = new Map();
   for (const r of rows){
@@ -5745,13 +6145,13 @@ async function recordatorioRenovacion(env){
     "COALESCE(a.pases,'') AS pases, COALESCE(a.migrado_usadas,0) AS migrado_usadas, COALESCE(a.migrado_ciclo,0) AS migrado_ciclo, " +
     "t.academia, t.slug, c.email AS alumno_email " +
     "FROM alumnos a " +
-    "JOIN tenants t ON t.id = a.tenant_id AND t.estado != 'vencido' AND COALESCE(t.plan,'profe') != 'gratis' AND t.email != ?1 " +
+    "JOIN tenants t ON t.id = a.tenant_id AND t.estado != 'vencido' AND COALESCE(t.plan,'profe') != 'gratis' AND t.email NOT LIKE ?1 " +
     "JOIN cuentas c ON c.alumno_id = a.id AND c.tenant_id = a.tenant_id " +
     "WHERE ((a.vence IS NOT NULL AND a.vence != '' " +
     "        AND date(a.vence) <= date('now', '+3 days') AND date(a.vence) >= date('now', '-3 days')) " +
     "   OR COALESCE(a.pases,'') != '') " +
     "AND COALESCE(a.aviso_vence_ciclo,0) < COALESCE(a.ciclo,1) LIMIT 100"
-  ).bind(DEMO_EMAIL).all();
+  ).bind(SQL_DEMO_LIKE).all();
   const cache = new Map(), cacheMsg = new Map();
   let enviados = 0;
   for (const a of (results || [])){
@@ -5977,6 +6377,17 @@ async function enviarCampanas(env){
         continue;
       }
       const token = await tokenBajaDe(env, c.tenant_id, d.alumno_id, d.mkt_token);
+      /* 🔴 22-ago-2026 · `tokenBajaDe` devuelve "" si no pudo guardar el token, y el correo
+         salía igual con "/app/baja?t=" — un link de baja MUERTO en un correo comercial, que
+         es justo lo que la ley obliga a que funcione. Se marcaba "enviado" y nadie se
+         enteraba. Sin token no se manda: se marca fallido y el dueño lo ve en su contador. */
+      if (!token){
+        await env.DB.prepare(
+          "UPDATE campana_destinos SET estado = 'fallido', enviado_utc = ?1 WHERE campana_id = ?2 AND alumno_id = ?3"
+        ).bind(new Date().toISOString(), c.id, d.alumno_id).run().catch(() => {});
+        console.error("campana: sin link de baja, no se envia", c.id, d.alumno_id);
+        continue;
+      }
       const msg = armarCorreoCampana(tenant, cfg, c, d, token);
       const okEnvio = await enviarCorreo(env, {
         to: d.email, subject: msg.subject, html: msg.html,
@@ -6101,7 +6512,10 @@ async function pedirResenas(env){
   let tenants = [];
   try {
     tenants = ((await env.DB.prepare(
-      "SELECT id, academia FROM tenants WHERE estado != 'vencido'"
+      /* Fuera las demos (21-ago-2026): son 24 de los 43 tenants y traen alumnos sembrados.
+         Hoy no reciben nada porque no tienen correo, pero basta que un motor tome el correo
+         de `cuentas` para escribirle a un tercero que nunca pidió nada. */
+      "SELECT id, academia FROM tenants WHERE estado != 'vencido' AND email != 'demo@batuta.lat' AND email NOT LIKE 'demo+%'"
     ).all()).results) || [];
   } catch (e) { return 0; }
   let enviados = 0;
@@ -6236,11 +6650,11 @@ async function winbackAlumnos(env){
       "SELECT a.id, a.tenant_id, a.nombre, a.curso, a.paquete, COALESCE(a.ciclo,1) AS ciclo, a.vence, " +
       "t.academia, t.slug, c.email AS alumno_email " +
       "FROM alumnos a " +
-      "JOIN tenants t ON t.id = a.tenant_id AND t.estado != 'vencido' AND COALESCE(t.plan,'profe') != 'gratis' AND t.email != ?1 " +
+      "JOIN tenants t ON t.id = a.tenant_id AND t.estado != 'vencido' AND COALESCE(t.plan,'profe') != 'gratis' AND t.email NOT LIKE ?1 " +
       "JOIN cuentas c ON c.alumno_id = a.id AND c.tenant_id = a.tenant_id " +
       "WHERE COALESCE(a.winback_ciclo,0) < COALESCE(a.ciclo,1) " +
       "AND (a.vence IS NULL OR a.vence = '' OR date(a.vence) >= date('now')) LIMIT 200"
-    ).bind(DEMO_EMAIL).all()).results) || [];
+    ).bind(SQL_DEMO_LIKE).all()).results) || [];
   } catch (e) { return 0; }
   const cache = new Map(), cacheMsg = new Map();
   const now = Date.now();
@@ -6281,10 +6695,19 @@ async function winbackAlumnos(env){
     const precios = await loadPrecios(env, a.tenant_id);
     const pk = resolverPk((await loadPaquetes(env, a.tenant_id)).map, alumno.paquete);
     const { results: regs } = await env.DB.prepare(
-      "SELECT estado FROM registro WHERE tenant_id = ?1 AND alumno_id = ?2 AND COALESCE(ciclo,1) = ?3"
+      SQL_REGS_CICLO
     ).bind(a.tenant_id, a.id, cicloA).all();
     const rUsadas = await reservasUsadasCount(env, a.tenant_id, a.id, cicloA);
-    const restantes = compute(alumno, regs || [], precios, rUsadas, pk).restantes;
+    /* 🔴 22-ago-2026: acá se llamaba a compute() a secas, que solo mira `alumno.paquete` e
+       IGNORA la columna `pases`. Los 16 alumnos de multi-pase de Elevate recibían un número
+       equivocado: Camila Ruiz tiene 16 clases y el correo veía 0 (le habría dicho que
+       renovara); Maria Jose tiene 0 y el correo veía 7 (la invitaba a reservar).
+       Recaída de `memoria: leccion-api-nueva-repite-bugs-del-panel`. */
+    const cmW = pasesDe(alumno)
+      ? await computeMulti(env, a.tenant_id, alumno, (await loadPaquetes(env, a.tenant_id)).map, precios)
+      : null;
+    const restantes = cmW ? cmW.restantes
+      : compute(alumno, regs || [], precios, rUsadas, pk).restantes;
     const tieneClases = pk.ilim ? true : (restantes >= 1);
     if (!tieneClases) continue;
     const linkPortal = MARCA.dominio + "/app/a/" + (a.slug || "");
@@ -6420,9 +6843,18 @@ async function anotarClaseDictada(env, tenantId, alumnoId, inicioUtc, curso, cic
   const fechaL = fechaLimaDe(inicioUtc);
   if (!fechaL) return false;
   const cicloR = Number(ciclo) || 1;
+  /* 🔴 22-ago-2026 · la guarda era POR DÍA y Elevate tiene alumnas con DOS clases el mismo
+     día (Barré a las 8 y Pilates Mat a las 9). La segunda no se anotaba nunca: Paola Zapata
+     tomó 8 clases y su historial mostraba 6, con sus dos de Pilates Mat invisibles en el
+     portal. Es el mismo bug del 15-ago ("en su perfil no aparece la clase que tomaron"),
+     que quedó arreglado solo para el caso de una clase por día.
+     Ahora la guarda es por día Y CURSO: dos clases distintas del mismo día se anotan las dos,
+     y repetir el cierre de la misma sigue sin duplicar. El saldo no cambia: una reserva sin
+     su fila de bitácora ya contaba igual, por el emparejamiento de `eventosConsumo`. */
   const ya = await env.DB.prepare(
-    "SELECT 1 FROM registro WHERE tenant_id = ?1 AND alumno_id = ?2 AND COALESCE(ciclo,1) = ?3 AND fecha = ?4 AND estado != 'Reprogramó' LIMIT 1"
-  ).bind(tenantId, alumnoId, cicloR, fechaL).first();
+    "SELECT 1 FROM registro WHERE tenant_id = ?1 AND alumno_id = ?2 AND COALESCE(ciclo,1) = ?3 " +
+    "AND fecha = ?4 AND COALESCE(curso,'') = ?5 AND estado != 'Reprogramó' LIMIT 1"
+  ).bind(tenantId, alumnoId, cicloR, fechaL, String(curso || "")).first();
   if (ya) return false;
   await env.DB.prepare(
     "INSERT INTO registro (id,tenant_id,fecha,alumno_id,curso,estado,trabajo,tarea,ciclo,tarea_audio,plan) VALUES (?1,?2,?3,?4,?5,?6,'','',?7,'','')"
@@ -6431,45 +6863,83 @@ async function anotarClaseDictada(env, tenantId, alumnoId, inicioUtc, curso, cic
 }
 
 
-async function resetDemo(env){
+/* Tablas que cuelgan de un tenant. Vacían la demo canónica en cada reset y borran
+   entera una demo privada al vencer. ⚠️ Tabla nueva con `tenant_id` = agregarla ACÁ,
+   o la demo acumula basura de cada visitante para siempre (`campanas` se sumó el
+   15-ago-2026 tras verlo pasar). */
+const TABLAS_TENANT = ["alumnos", "registro", "pausas", "precios", "config", "disponibilidad", "reservas", "grupos", "sedes", "cuentas", "compras", "recursos", "ejercicios", "chat_mensajes", "push_subs", "leads", "feedback", "gastos", "comprobantes", "campanas", "espera", "reset_tokens", "mensajes_extra", "soporte_ia_log", "referidos"];
+/* Fuera de la lista a propósito: `afiliados` y `comisiones` tienen tenant_id pero la fila es
+   de OTRA persona (el afiliado que trajo al tenant, y su ledger de pagos). Borrar por
+   tenant_id ahí sería borrarle su registro y su historial de comisiones a un tercero.
+   `profesores` y `tenants` se borran aparte: en la demo canónica el dueño sobrevive al reset. */
+
+/* Vacía todas las filas de un tenant. El batch es todo-o-nada y varias de esas tablas nacen
+   por lazy CREATE, así que si en esta D1 todavía falta alguna se reintenta una por una: el
+   camino normal sigue siendo una sola ida, y el degradado no deja basura a medio borrar. */
+async function borrarFilasDeTenant(env, tid){
+  try {
+    await env.DB.batch(TABLAS_TENANT.map(tb => env.DB.prepare("DELETE FROM " + tb + " WHERE tenant_id = ?1").bind(tid)));
+  } catch (e){
+    for (const tb of TABLAS_TENANT){
+      try { await env.DB.prepare("DELETE FROM " + tb + " WHERE tenant_id = ?1").bind(tid).run(); } catch (e2) {}
+    }
+  }
+}
+
+/* Siembra la academia de muestra "Estudio Sonata".
+   - Sin opts  = modo canónico de siempre: el tenant demo@batuta.lat se vacía y se resiembra.
+   - Con opts  = DEMO PRIVADA (19-ago-2026): siembra un tenant recién creado, uno por
+     visitante. Los ids sembrados llevan el prefijo del tenant porque `id` es PRIMARY KEY
+     GLOBAL en casi todas las tablas: "demo-al-1" solo puede existir una vez en toda la base,
+     así que sin prefijo la segunda demo del día moría con UNIQUE constraint failed. */
+async function resetDemo(env, opts){
+  const O = opts || {};
+  const PREF = O.pref || "demo-";
   await ensureFeedbackSchema(env); // la lista de tablas de abajo la incluye; que exista antes del batch
   await ensureErpSchema(env);      // idem: gastos
   await ensureMultiprofesorSchema(env); // idem: profesores + la columna profesor_id que usa el equipo
   await ensureSedesSchema(env);         // idem: sedes + la columna sede_id (multisede)
-  let t = await env.DB.prepare("SELECT * FROM tenants WHERE email = ?1").bind(DEMO_EMAIL).first();
-  if (!t){
-    const id = crypto.randomUUID();
-    const salt = randHex(16);
-    const hash = await hashPass(randHex(24), salt);
+  let t = null;
+  if (O.tenantId){
+    /* Demo privada: el tenant lo acaba de crear crearDemoPrivada() y nace vacío. No hay nada
+       que borrar ni estado canónico que restaurar; se va derecho a sembrar. */
+    t = await env.DB.prepare("SELECT * FROM tenants WHERE id = ?1").bind(O.tenantId).first();
+    if (!t) return null;
+  } else {
+    t = await env.DB.prepare("SELECT * FROM tenants WHERE email = ?1").bind(DEMO_EMAIL).first();
+    if (!t){
+      const id = crypto.randomUUID();
+      const salt = randHex(16);
+      const hash = await hashPass(randHex(24), salt);
+      await env.DB.prepare(
+        "INSERT INTO tenants (id, slug, academia, profe_nombre, email, whatsapp, pass_hash, pass_salt, plan, estado, trial_hasta, creado) " +
+        "VALUES (?1, 'estudio-sonata-demo', 'Estudio Sonata', 'Emilia Vargas', ?2, '51999888777', ?3, ?4, 'academia', 'activo', ?5, ?6)"
+      ).bind(id, DEMO_EMAIL, hash, salt, new Date(Date.now() + 3650 * 86400000).toISOString(), new Date().toISOString()).run();
+      t = await env.DB.prepare("SELECT * FROM tenants WHERE id = ?1").bind(id).first();
+    }
+    // Estado canónico siempre (aunque un visitante haya cambiado nombre, plan o contraseña de perfil).
     await env.DB.prepare(
-      "INSERT INTO tenants (id, slug, academia, profe_nombre, email, whatsapp, pass_hash, pass_salt, plan, estado, trial_hasta, creado) " +
-      "VALUES (?1, 'estudio-sonata-demo', 'Estudio Sonata', 'Emilia Vargas', ?2, '51999888777', ?3, ?4, 'academia', 'activo', ?5, ?6)"
-    ).bind(id, DEMO_EMAIL, hash, salt, new Date(Date.now() + 3650 * 86400000).toISOString(), new Date().toISOString()).run();
-    t = await env.DB.prepare("SELECT * FROM tenants WHERE id = ?1").bind(id).first();
+      "UPDATE tenants SET academia='Estudio Sonata', profe_nombre='Emilia Vargas', plan='academia', estado='activo', trial_hasta=?2, mp_preapproval_id='', mp_sub_status='' WHERE id = ?1"
+    ).bind(t.id, new Date(Date.now() + 3650 * 86400000).toISOString()).run();
+
+    // Borrón total de los datos del tenant demo (las sesiones de visitantes mueren con el reset).
+    /* ⚠️ Toda tabla nueva con `tenant_id` tiene que entrar ACÁ, o la demo pública acumula basura
+       de cada visitante para siempre. `campanas` se sumó el 15-ago-2026 tras verlo pasar. */
+    await borrarFilasDeTenant(env, t.id);
+    await env.DB.prepare("DELETE FROM sesiones WHERE cuenta_id = ?1 OR cuenta_id LIKE 'demo-cu-%'").bind("T:" + t.id).run();
+    /* `campana_destinos` no tiene tenant_id (cuelga de la campaña), así que se limpia por
+       huérfanas: las campañas de este tenant ya se borraron en el batch de arriba. */
+    try { await env.DB.prepare("DELETE FROM campana_destinos WHERE campana_id NOT IN (SELECT id FROM campanas)").run(); } catch (e) {}
+
+    /* Equipo de la academia. `profesores` NO va en la lista de arriba (el dueño debe
+       sobrevivir al reset), así que se purga aparte a los que siembra la demo, si no se
+       acumularían un par por cada reset diario. */
+    await env.DB.batch([
+      env.DB.prepare("DELETE FROM profesores WHERE tenant_id = ?1 AND rol != 'dueno'").bind(t.id),
+      env.DB.prepare("DELETE FROM sesiones WHERE cuenta_id LIKE 'P:demo-pf-%'")
+    ]);
   }
   const tid = t.id;
-  // Estado canónico siempre (aunque un visitante haya cambiado nombre, plan o contraseña de perfil).
-  await env.DB.prepare(
-    "UPDATE tenants SET academia='Estudio Sonata', profe_nombre='Emilia Vargas', plan='academia', estado='activo', trial_hasta=?2, mp_preapproval_id='', mp_sub_status='' WHERE id = ?1"
-  ).bind(tid, new Date(Date.now() + 3650 * 86400000).toISOString()).run();
-
-  // Borrón total de los datos del tenant demo (las sesiones de visitantes mueren con el reset).
-  /* ⚠️ Toda tabla nueva con `tenant_id` tiene que entrar ACÁ, o la demo pública acumula basura
-     de cada visitante para siempre. `campanas` se sumó el 15-ago-2026 tras verlo pasar. */
-  const tablas = ["alumnos", "registro", "pausas", "precios", "config", "disponibilidad", "reservas", "grupos", "sedes", "cuentas", "compras", "recursos", "ejercicios", "chat_mensajes", "push_subs", "leads", "feedback", "gastos", "comprobantes", "campanas"];
-  await env.DB.batch(tablas.map(tb => env.DB.prepare("DELETE FROM " + tb + " WHERE tenant_id = ?1").bind(tid)));
-  await env.DB.prepare("DELETE FROM sesiones WHERE cuenta_id = ?1 OR cuenta_id LIKE 'demo-cu-%'").bind("T:" + tid).run();
-  /* `campana_destinos` no tiene tenant_id (cuelga de la campaña), así que se limpia por
-     huérfanas: las campañas de este tenant ya se borraron en el batch de arriba. */
-  try { await env.DB.prepare("DELETE FROM campana_destinos WHERE campana_id NOT IN (SELECT id FROM campanas)").run(); } catch (e) {}
-
-  /* Equipo de la academia. `profesores` NO va en la lista de arriba (el dueño debe
-     sobrevivir al reset), así que se purga aparte a los que siembra la demo, si no se
-     acumularían un par por cada reset diario. */
-  await env.DB.batch([
-    env.DB.prepare("DELETE FROM profesores WHERE tenant_id = ?1 AND rol != 'dueno'").bind(tid),
-    env.DB.prepare("DELETE FROM sesiones WHERE cuenta_id LIKE 'P:demo-pf-%'")
-  ]);
   /* El dueño lo crea el backfill (migrarProfesores); si la demo nace en una base limpia
      todavía no existe, y sin él no hay a quién colgar alumnos, reservas ni liquidación. */
   let dueno = await env.DB.prepare("SELECT id FROM profesores WHERE tenant_id = ?1 AND rol = 'dueno'").bind(tid).first();
@@ -6487,10 +6957,10 @@ async function resetDemo(env){
      que es justo lo que viene a ver una academia. Renzo cobra %, Camila por clase:
      así la liquidación luce los dos modelos de pago. La contraseña es basura aleatoria
      a propósito (quedan activos para la vista, pero nadie entra con su correo). */
-  const PF_PIANO = "demo-pf-1", PF_GUITARRA = "demo-pf-2";
+  const PF_PIANO = PREF + "pf-1", PF_GUITARRA = PREF + "pf-2";
   /* Las 2 sedes de la demo (multisede): la dueña y Renzo en Miraflores, Camila en San Borja.
      Una academia con locales viene a ver exactamente esto. */
-  const SD_MIRA = "demo-sd-1", SD_BORJA = "demo-sd-2";
+  const SD_MIRA = PREF + "sd-1", SD_BORJA = PREF + "sd-2";
   const equipoDemo = [
     [PF_PIANO,    "Renzo Aguilar", "renzo@estudiosonata.pe",  "51977112233", 50, 0,  SD_MIRA],
     [PF_GUITARRA, "Camila Ruiz",   "camila@estudiosonata.pe", "51988223344", 0, 25, SD_BORJA]
@@ -6570,15 +7040,15 @@ async function resetDemo(env){
   // entre la dueña y sus 2 profes: sin profesor_id la tabla Profesores decía "0 alumnos"
   // para todos, que es lo primero que mira una academia.
   const alumnos = [
-    ["demo-al-1", "A001", "Fabio Mendoza",  "51987654321", "Canto",    "Paquete 8",  f(30),  "Pagado",    "Jue 18:00", "Le cuesta el pasaje; trabajar twang", 3, DUENO, SD_MIRA],
-    ["demo-al-2", "A002", "Natalia Rojas",  "51912345678", "Piano",    "Paquete 4",  f(90),  "Pagado",    "Lun 19:00", "Independencia de manos en progreso", 5, PF_PIANO, SD_MIRA],
-    ["demo-al-3", "A003", "Yaritza Campos", "51998877665", "Canto",    "Paquete 12", f(45),  "Pagado",    "Sáb 10:00", "Belting seguro, va muy bien", 2, DUENO, SD_MIRA],
-    ["demo-al-4", "A004", "Diego Salas",    "51955443322", "Guitarra", "Paquete 8",  f(50),  "Pagado",    "Mar 17:00", "Cambios de acorde lentos aún", 1, PF_GUITARRA, SD_BORJA],
-    ["demo-al-5", "A005", "Laura Pacheco",  "51966554433", "Piano",    "Paquete 4",  f(120), "Pendiente", "Mié 18:00", "Hablar renovación esta semana", 4, PF_PIANO, SD_MIRA],
+    [PREF + "al-1", "A001", "Fabio Mendoza",  "51987654321", "Canto",    "Paquete 8",  f(30),  "Pagado",    "Jue 18:00", "Le cuesta el pasaje; trabajar twang", 3, DUENO, SD_MIRA],
+    [PREF + "al-2", "A002", "Natalia Rojas",  "51912345678", "Piano",    "Paquete 4",  f(90),  "Pagado",    "Lun 19:00", "Independencia de manos en progreso", 5, PF_PIANO, SD_MIRA],
+    [PREF + "al-3", "A003", "Yaritza Campos", "51998877665", "Canto",    "Paquete 12", f(45),  "Pagado",    "Sáb 10:00", "Belting seguro, va muy bien", 2, DUENO, SD_MIRA],
+    [PREF + "al-4", "A004", "Diego Salas",    "51955443322", "Guitarra", "Paquete 8",  f(50),  "Pagado",    "Mar 17:00", "Cambios de acorde lentos aún", 1, PF_GUITARRA, SD_BORJA],
+    [PREF + "al-5", "A005", "Laura Pacheco",  "51966554433", "Piano",    "Paquete 4",  f(120), "Pendiente", "Mié 18:00", "Hablar renovación esta semana", 4, PF_PIANO, SD_MIRA],
     /* Multi-pase (14-ago-2026): dos pases vivos a la vez, cada uno con SU saldo y SU tipo.
        Es la función más nueva del producto y no se veía en ninguna parte de la demo. La
        historia que cuenta sola: 5 de Coro + 3 del general NO son 8 clases sueltas. */
-    ["demo-al-6", "A006", "Marcela Ríos",   "51944332211", "Canto",    "8 clases de Coro", f(20), "Pagado", "Vie 19:00", "Lleva coro y clase individual", 1, DUENO, SD_MIRA]
+    [PREF + "al-6", "A006", "Marcela Ríos",   "51944332211", "Canto",    "8 clases de Coro", f(20), "Pagado", "Vie 19:00", "Lleva coro y clase individual", 1, DUENO, SD_MIRA]
   ];
   for (const a of alumnos){
     stmts.push(env.DB.prepare(
@@ -6591,46 +7061,46 @@ async function resetDemo(env){
     JSON.stringify({ c: 1, p: [
       { n: "8 clases de Coro", usadas: 3, vence: new Date(Date.now() + 40 * 86400000).toISOString().slice(0, 10) },
       { n: "Paquete 4",        usadas: 1, vence: "" }
-    ] }), "demo-al-6", tid));
+    ] }), PREF + "al-6", tid));
   // registro de clases: el saldo del panel sale de aquí (compute() cuenta por ciclo)
   const regs = [
     // Fabio (ciclo 3): 3 asistidas -> 5 de 8
-    [f(8), "demo-al-1", "Canto", "Asistió", "Apoyo respiratorio en frases largas", "Vocalizo 1", "", 3],
-    [f(4), "demo-al-1", "Canto", "Asistió", "Twang en la zona de pasaje", "Vocalizo 2", "", 3],
-    [f(1), "demo-al-1", "Canto", "Asistió", "Cierre cordal en el pasaje", "Vocalizo 3", "Repasar twang", 3],
+    [f(8), PREF + "al-1", "Canto", "Asistió", "Apoyo respiratorio en frases largas", "Vocalizo 1", "", 3],
+    [f(4), PREF + "al-1", "Canto", "Asistió", "Twang en la zona de pasaje", "Vocalizo 2", "", 3],
+    [f(1), PREF + "al-1", "Canto", "Asistió", "Cierre cordal en el pasaje", "Vocalizo 3", "Repasar twang", 3],
     // Natalia (ciclo 5): 2 asistidas -> 2 de 4
-    [f(7), "demo-al-2", "Piano", "Asistió", "Lectura en clave de fa", "Czerny 599 n.º 12", "", 5],
-    [f(1), "demo-al-2", "Piano", "Asistió", "Independencia de manos", "Hanon 1", "Escalas en La menor", 5],
+    [f(7), PREF + "al-2", "Piano", "Asistió", "Lectura en clave de fa", "Czerny 599 n.º 12", "", 5],
+    [f(1), PREF + "al-2", "Piano", "Asistió", "Independencia de manos", "Hanon 1", "Escalas en La menor", 5],
     // Yaritza (ciclo 2): 3 asistidas + 1 reprogramada (dentro del margen) -> 9 de 12
-    [f(9), "demo-al-3", "Canto", "Asistió", "Calentamiento SOVT", "Pajita 5 min diarios", "", 2],
-    [f(5), "demo-al-3", "Canto", "Asistió", "Mezcla en notas altas", "Repertorio: coro de su canción", "", 2],
-    [f(3), "demo-al-3", "Canto", "Asistió", "Belting con apoyo", "Grabarse el coro", "Belting seguro", 2],
-    [f(2), "demo-al-3", "Canto", "Reprogramó", "", "", "", 2],
+    [f(9), PREF + "al-3", "Canto", "Asistió", "Calentamiento SOVT", "Pajita 5 min diarios", "", 2],
+    [f(5), PREF + "al-3", "Canto", "Asistió", "Mezcla en notas altas", "Repertorio: coro de su canción", "", 2],
+    [f(3), PREF + "al-3", "Canto", "Asistió", "Belting con apoyo", "Grabarse el coro", "Belting seguro", 2],
+    [f(2), PREF + "al-3", "Canto", "Reprogramó", "", "", "", 2],
     // Diego (ciclo 1): 6 asistidas + 1 falta -> 1 de 8 (última clase)
-    [f(21), "demo-al-4", "Guitarra", "Asistió", "Acordes abiertos", "Em, Am, D", "", 1],
-    [f(18), "demo-al-4", "Guitarra", "Asistió", "Cambios Em-Am", "Metrónomo 60", "", 1],
-    [f(14), "demo-al-4", "Guitarra", "Asistió", "Rasgueo básico", "Patrón 1", "", 1],
-    [f(11), "demo-al-4", "Guitarra", "Asistió", "Primera canción completa", "Repasarla entera", "", 1],
-    [f(7),  "demo-al-4", "Guitarra", "Asistió", "Cejilla en F", "F con cejilla 10 min", "", 1],
-    [f(4),  "demo-al-4", "Guitarra", "Asistió", "Ritmo con palm mute", "Patrón 2", "", 1],
-    [f(2),  "demo-al-4", "Guitarra", "Falta",   "", "Progresión 1-5-6-4", "Recuperar cambios de acorde", 1],
+    [f(21), PREF + "al-4", "Guitarra", "Asistió", "Acordes abiertos", "Em, Am, D", "", 1],
+    [f(18), PREF + "al-4", "Guitarra", "Asistió", "Cambios Em-Am", "Metrónomo 60", "", 1],
+    [f(14), PREF + "al-4", "Guitarra", "Asistió", "Rasgueo básico", "Patrón 1", "", 1],
+    [f(11), PREF + "al-4", "Guitarra", "Asistió", "Primera canción completa", "Repasarla entera", "", 1],
+    [f(7),  PREF + "al-4", "Guitarra", "Asistió", "Cejilla en F", "F con cejilla 10 min", "", 1],
+    [f(4),  PREF + "al-4", "Guitarra", "Asistió", "Ritmo con palm mute", "Patrón 2", "", 1],
+    [f(2),  PREF + "al-4", "Guitarra", "Falta",   "", "Progresión 1-5-6-4", "Recuperar cambios de acorde", 1],
     // Laura (ciclo 4): 4 asistidas -> 0 de 4 (renovar hoy)
-    [f(28), "demo-al-5", "Piano", "Asistió", "Repaso general", "", "", 4],
-    [f(21), "demo-al-5", "Piano", "Asistió", "Acordes con inversiones", "Inversiones de C y G", "", 4],
-    [f(14), "demo-al-5", "Piano", "Asistió", "Pedal de resonancia", "Balada con pedal", "", 4],
-    [f(7),  "demo-al-5", "Piano", "Asistió", "Su canción favorita completa", "Pulirla para tocarla en casa", "", 4]
+    [f(28), PREF + "al-5", "Piano", "Asistió", "Repaso general", "", "", 4],
+    [f(21), PREF + "al-5", "Piano", "Asistió", "Acordes con inversiones", "Inversiones de C y G", "", 4],
+    [f(14), PREF + "al-5", "Piano", "Asistió", "Pedal de resonancia", "Balada con pedal", "", 4],
+    [f(7),  PREF + "al-5", "Piano", "Asistió", "Su canción favorita completa", "Pulirla para tocarla en casa", "", 4]
   ];
   regs.forEach((r, i) => {
     stmts.push(env.DB.prepare(
       "INSERT INTO registro (id,tenant_id,fecha,alumno_id,curso,estado,trabajo,tarea,ciclo,tarea_audio,plan) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,'',?10)"
-    ).bind("demo-rg-" + (i + 1), tid, r[0], r[1], r[2], r[3], r[4], r[5], r[7], r[6]));
+    ).bind(PREF + "rg-" + (i + 1), tid, r[0], r[1], r[2], r[3], r[4], r[5], r[7], r[6]));
   });
   // reservas próximas (hoy 18:00 y 19:00 Lima, mañana 17:00, +3 días 10:00)
   const rvs = [
-    ["demo-rv-1", "demo-al-1", limaAt(0, 18, 0), "Canto", 3, DUENO],
-    ["demo-rv-2", "demo-al-2", limaAt(0, 19, 0), "Piano", 5, PF_PIANO],
-    ["demo-rv-3", "demo-al-4", limaAt(1, 17, 0), "Guitarra", 1, PF_GUITARRA],
-    ["demo-rv-4", "demo-al-3", limaAt(3, 10, 0), "Canto", 2, DUENO]
+    [PREF + "rv-1", PREF + "al-1", limaAt(0, 18, 0), "Canto", 3, DUENO],
+    [PREF + "rv-2", PREF + "al-2", limaAt(0, 19, 0), "Piano", 5, PF_PIANO],
+    [PREF + "rv-3", PREF + "al-4", limaAt(1, 17, 0), "Guitarra", 1, PF_GUITARRA],
+    [PREF + "rv-4", PREF + "al-3", limaAt(3, 10, 0), "Canto", 2, DUENO]
   ];
   for (const rv of rvs){
     const fin = new Date(rv[2].getTime() + 3600000);
@@ -6657,11 +7127,11 @@ async function resetDemo(env){
   }
   // cuentas del portal (2 vinculadas, 1 sin vincular, como la réplica)
   const cuentas = [
-    ["demo-cu-1", "fabio@gmail.com",     "Fabio Mendoza", "51987654321", 1, "demo-al-1", f(117)],
-    ["demo-cu-2", "nat.rojas@gmail.com", "Natalia Rojas", "51912345678", 1, "demo-al-2", f(129)],
-    ["demo-cu-3", "yari.c@gmail.com",    "Yaritza Campos", "51998877665", 0, "demo-al-3", f(45)],
-    ["demo-cu-4", "dsalas@gmail.com",    "Diego Salas", "51955443322", 0, "demo-al-4", f(50)],
-    ["demo-cu-5", "marco.t@gmail.com",   "Marco Túllume", "", 0, null, f(1)]
+    [PREF + "cu-1", "fabio@example.com",     "Fabio Mendoza", "51987654321", 1, PREF + "al-1", f(117)],
+    [PREF + "cu-2", "nat.rojas@example.com", "Natalia Rojas", "51912345678", 1, PREF + "al-2", f(129)],
+    [PREF + "cu-3", "yari.c@example.com",    "Yaritza Campos", "51998877665", 0, PREF + "al-3", f(45)],
+    [PREF + "cu-4", "dsalas@example.com",    "Diego Salas", "51955443322", 0, PREF + "al-4", f(50)],
+    [PREF + "cu-5", "marco.t@example.com",   "Marco Túllume", "", 0, null, f(1)]
   ];
   for (const c of cuentas){
     stmts.push(env.DB.prepare(
@@ -6671,10 +7141,10 @@ async function resetDemo(env){
   // compras: 1 pendiente por confirmar (el gancho del panel) + 3 procesadas.
   // Cada una atribuida al profe del alumno: de ahí sale el reparto de la liquidación.
   const compras = [
-    ["demo-cp-1", "demo-cu-4", "Guitarra", "Paquete 8",  450, "03471825", "pendiente",  f(0), "yape",    PF_GUITARRA],
-    ["demo-cp-2", "demo-cu-3", "Canto",    "Paquete 12", 600, "",         "confirmada", f(0), "tarjeta", DUENO],
-    ["demo-cp-3", "demo-cu-1", "Canto",    "Paquete 8",  450, "",         "confirmada", f(1), "tarjeta", DUENO],
-    ["demo-cp-4", "demo-cu-2", "Piano",    "Paquete 4",  250, "71624098", "confirmada", f(3), "yape",    PF_PIANO]
+    [PREF + "cp-1", PREF + "cu-4", "Guitarra", "Paquete 8",  450, "03471825", "pendiente",  f(0), "yape",    PF_GUITARRA],
+    [PREF + "cp-2", PREF + "cu-3", "Canto",    "Paquete 12", 600, "",         "confirmada", f(0), "tarjeta", DUENO],
+    [PREF + "cp-3", PREF + "cu-1", "Canto",    "Paquete 8",  450, "",         "confirmada", f(1), "tarjeta", DUENO],
+    [PREF + "cp-4", PREF + "cu-2", "Piano",    "Paquete 4",  250, "71624098", "confirmada", f(3), "yape",    PF_PIANO]
   ];
   for (const cp of compras){
     stmts.push(env.DB.prepare(
@@ -6683,8 +7153,8 @@ async function resetDemo(env){
   }
   // grupos: la pestaña salía vacía aunque es de las cosas que una academia viene a ver
   const gruposDemo = [
-    ["demo-gr-1", "Coro juvenil",    "Canto", "Sáb 11:00", ["demo-al-1", "demo-al-3"], DUENO,    SD_MIRA],
-    ["demo-gr-2", "Piano · nivel 1", "Piano", "Mié 18:00", ["demo-al-2", "demo-al-5"], PF_PIANO, SD_MIRA]
+    [PREF + "gr-1", "Coro juvenil",    "Canto", "Sáb 11:00", [PREF + "al-1", PREF + "al-3"], DUENO,    SD_MIRA],
+    [PREF + "gr-2", "Piano · nivel 1", "Piano", "Mié 18:00", [PREF + "al-2", PREF + "al-5"], PF_PIANO, SD_MIRA]
   ];
   for (const g of gruposDemo){
     stmts.push(env.DB.prepare(
@@ -6695,22 +7165,22 @@ async function resetDemo(env){
   // (nombre, email, whatsapp, interes, fecha, etapa, nota, seguir_el)
   const hoyDemo = new Date(Date.now() - 5 * 3600000).toISOString().slice(0, 10);
   const leads = [
-    ["Carla Mendoza", "carla.mv@gmail.com", "51987654321", "Canto", f(0), "nuevo", "Dejó su correo en la web", ""],
+    ["Carla Mendoza", "carla.mv@example.com", "51987654321", "Canto", f(0), "nuevo", "Dejó su correo en la web", ""],
     ["Jorge Soto", "jsoto94@gmail.com", "51976543210", "Piano", f(1), "contactado", "Le mandé precios, quedó en avisar", hoyDemo],
-    ["Andrea Quispe", "andrea.qp@gmail.com", "51965432109", "Canto", f(3), "prueba", "Prueba el sábado 10am", ""],
+    ["Andrea Quispe", "andrea.qp@example.com", "51965432109", "Canto", f(3), "prueba", "Prueba el sábado 10am", ""],
     ["Lucía Paredes", "", "51954321098", "Canto", f(5), "alumno", "Cerró con Paquete 4", ""],
-    ["Marco Díaz", "marco.dz@gmail.com", "", "Piano", f(9), "perdido", "Se fue por horarios, retomar en agosto", ""]
+    ["Marco Díaz", "marco.dz@example.com", "", "Piano", f(9), "perdido", "Se fue por horarios, retomar en agosto", ""]
   ];
   leads.forEach((l, i) => {
     stmts.push(env.DB.prepare(
       "INSERT INTO leads (id,tenant_id,email,marca,fuente,interes,fecha,nombre,whatsapp,etapa,nota,seguir_el,actualizado) VALUES (?1,?2,?3,'Batuta','Portal',?4,?5,?6,?7,?8,?9,?10,?5)"
-    ).bind("demo-ld-" + (i + 1), tid, l[1], l[3], l[4], l[0], l[2], l[5], l[6], l[7]));
+    ).bind(PREF + "ld-" + (i + 1), tid, l[1], l[3], l[4], l[0], l[2], l[5], l[6], l[7]));
   });
   // Caja: gastos del mes para que el P&L muestre numeros reales
   const gastosDemo = [
-    ["demo-gs-1", f(8),  "Alquiler del estudio", "Local", 650],
-    ["demo-gs-2", f(6),  "Publicidad en Instagram", "Marketing", 120],
-    ["demo-gs-3", f(2),  "Afinación del piano", "Materiales", 180]
+    [PREF + "gs-1", f(8),  "Alquiler del estudio", "Local", 650],
+    [PREF + "gs-2", f(6),  "Publicidad en Instagram", "Marketing", 120],
+    [PREF + "gs-3", f(2),  "Afinación del piano", "Materiales", 180]
   ];
   for (const g of gastosDemo){
     stmts.push(env.DB.prepare(
@@ -6720,29 +7190,392 @@ async function resetDemo(env){
   // comisión del dueño demo: luce la liquidación (20% + S/15 por clase)
   stmts.push(env.DB.prepare("UPDATE profesores SET comision_pct = 20, tarifa_clase = 15 WHERE tenant_id = ?1 AND rol = 'dueno'").bind(tid));
   // material: publicado para alumnos + biblioteca privada
-  stmts.push(env.DB.prepare("INSERT INTO recursos (id,tenant_id,titulo,descripcion,url,curso,fecha) VALUES ('demo-rc-1',?1,'Guía de respiración diafragmática','PDF con la rutina de 10 minutos','https://batuta.lat/demo','Todos',?2)").bind(tid, f(5)));
-  stmts.push(env.DB.prepare("INSERT INTO recursos (id,tenant_id,titulo,descripcion,url,curso,fecha) VALUES ('demo-rc-2',?1,'Playlist de repertorio del mes','Para elegir tu próxima canción','https://open.spotify.com','Canto',?2)").bind(tid, f(12)));
+  stmts.push(env.DB.prepare("INSERT INTO recursos (id,tenant_id,titulo,descripcion,url,curso,fecha) VALUES (?3,?1,'Guía de respiración diafragmática','PDF con la rutina de 10 minutos','https://batuta.lat/demo','Todos',?2)").bind(tid, f(5), PREF + "rc-1"));
+  stmts.push(env.DB.prepare("INSERT INTO recursos (id,tenant_id,titulo,descripcion,url,curso,fecha) VALUES (?3,?1,'Playlist de repertorio del mes','Para elegir tu próxima canción','https://open.spotify.com','Canto',?2)").bind(tid, f(12), PREF + "rc-2"));
   const ejercicios = [
-    ["demo-ej-1", "Vocalizo 3 · quinta ascendente", "Vocalizos / Semana 1", "Canto", f(6)],
-    ["demo-ej-2", "Hanon 1 · manos juntas", "Técnica", "Piano", f(6)],
-    ["demo-ej-3", "Ritmos de rasgueo básicos", "Ritmo", "Guitarra", f(9)],
-    ["demo-ej-4", "Guía de respiración", "Fundamentos", "Todos", f(17)]
+    [PREF + "ej-1", "Vocalizo 3 · quinta ascendente", "Vocalizos / Semana 1", "Canto", f(6)],
+    [PREF + "ej-2", "Hanon 1 · manos juntas", "Técnica", "Piano", f(6)],
+    [PREF + "ej-3", "Ritmos de rasgueo básicos", "Ritmo", "Guitarra", f(9)],
+    [PREF + "ej-4", "Guía de respiración", "Fundamentos", "Todos", f(17)]
   ];
   for (const e of ejercicios){
     stmts.push(env.DB.prepare("INSERT INTO ejercicios (id,tenant_id,titulo,descripcion,url,curso,carpeta,fecha) VALUES (?1,?2,?3,'','',?4,?5,?6)").bind(e[0], tid, e[1], e[3], e[2], e[4]));
   }
   // chat: 1 mensaje grupal + hilo privado con Fabio (hilo = id de su cuenta)
   const chat = [
-    ["demo-ch-1", null,        "Profe Emilia", 1, "Bienvenidos! Acá publico avisos para todos. Lo privado, en tu hilo :)", "grupal",    f(2) + "T15:00:00.000Z"],
-    ["demo-ch-2", "demo-cu-1", "Fabio",        0, "Profe, el vocalizo 3 me cuesta en la parte aguda",                      "demo-cu-1", f(1) + "T16:10:00.000Z"],
-    ["demo-ch-3", null,        "Profe Emilia", 1, "Normal, baja medio tono y sube de a pocos. Lo vemos el jueves",          "demo-cu-1", f(1) + "T16:14:00.000Z"],
-    ["demo-ch-4", "demo-cu-1", "Fabio",        0, "Buenazo, gracias!",                                                      "demo-cu-1", f(1) + "T16:15:00.000Z"]
+    [PREF + "ch-1", null,        "Profe Emilia", 1, "Bienvenidos! Acá publico avisos para todos. Lo privado, en tu hilo :)", "grupal",    f(2) + "T15:00:00.000Z"],
+    [PREF + "ch-2", PREF + "cu-1", "Fabio",        0, "Profe, el vocalizo 3 me cuesta en la parte aguda",                      PREF + "cu-1", f(1) + "T16:10:00.000Z"],
+    [PREF + "ch-3", null,        "Profe Emilia", 1, "Normal, baja medio tono y sube de a pocos. Lo vemos el jueves",          PREF + "cu-1", f(1) + "T16:14:00.000Z"],
+    [PREF + "ch-4", PREF + "cu-1", "Fabio",        0, "Buenazo, gracias!",                                                      PREF + "cu-1", f(1) + "T16:15:00.000Z"]
   ];
   for (const m of chat){
     stmts.push(env.DB.prepare("INSERT INTO chat_mensajes (id,tenant_id,cuenta_id,nombre,es_admin,texto,hilo,fecha) VALUES (?1,?2,?3,?4,?5,?6,?7,?8)").bind(m[0], tid, m[1], m[2], m[3], m[4], m[5], m[6]));
   }
   await env.DB.batch(stmts);
   return tid;
+}
+
+/* Crea una demo privada: tenant nuevo + siembra completa + sesión de dueño.
+   Devuelve { tid, token } o null si no se pudo (el llamador cae a la compartida).
+   La contraseña es basura sin hashear a propósito: nadie inicia sesión con este
+   correo (se entra por el token), y así nos ahorramos 4 PBKDF2 de 100k iteraciones
+   por visita, que es lo que más pesaba en el tiempo de respuesta. */
+async function crearDemoPrivada(env){
+  try {
+    const hoyIso = new Date().toISOString().slice(0, 10);
+    const usadas = await env.DB.prepare(
+      "SELECT COUNT(*) AS n FROM tenants WHERE email LIKE 'demo+%' AND creado >= ?1"
+    ).bind(hoyIso).first();
+    if (usadas && Number(usadas.n) >= DEMO_PRIV_MAX_DIA) return null;
+
+    const suf = randHex(5);
+    const tid = crypto.randomUUID();
+    const ahora = new Date().toISOString();
+    await env.DB.prepare(
+      "INSERT INTO tenants (id, slug, academia, profe_nombre, email, whatsapp, pass_hash, pass_salt, plan, estado, trial_hasta, creado) " +
+      "VALUES (?1, ?2, 'Estudio Sonata', 'Emilia Vargas', ?3, '51999888777', ?4, ?5, 'academia', 'activo', ?6, ?7)"
+    ).bind(tid, "demo-" + suf, DEMO_PRIV_EMAIL_PREF + suf + "@batuta.lat", randHex(32), randHex(16),
+           new Date(Date.now() + 3650 * 86400000).toISOString(), ahora).run();
+
+    const sembrado = await resetDemo(env, { tenantId: tid, pref: "d" + suf + "-" });
+    if (!sembrado){
+      try { await env.DB.prepare("DELETE FROM tenants WHERE id = ?1").bind(tid).run(); } catch (e) {}
+      return null;
+    }
+    return { tid, token: await crearSesion(env, "T:" + tid) };
+  } catch (e){
+    console.error("crear demo privada", e);
+    return null;
+  }
+}
+
+/* Borra una demo privada ENTERA. Las sesiones no tienen tenant_id, así que sus tres
+   sabores (dueño 'T:', profesores 'P:' y cuentas de alumno) se resuelven por subconsulta
+   ANTES de borrar las filas de las que cuelgan. */
+async function borrarDemoPrivada(env, t){
+  if (!t || !t.id || !esTenantDemo(t) || t.email === DEMO_EMAIL) return false;
+  await env.DB.batch([
+    env.DB.prepare("DELETE FROM sesiones WHERE cuenta_id IN (SELECT id FROM cuentas WHERE tenant_id = ?1)").bind(t.id),
+    env.DB.prepare("DELETE FROM sesiones WHERE cuenta_id IN (SELECT 'P:' || id FROM profesores WHERE tenant_id = ?1)").bind(t.id),
+    env.DB.prepare("DELETE FROM sesiones WHERE cuenta_id = ?1").bind("T:" + t.id)
+  ]);
+  await borrarFilasDeTenant(env, t.id);
+  await env.DB.batch([
+    env.DB.prepare("DELETE FROM profesores WHERE tenant_id = ?1").bind(t.id),
+    env.DB.prepare("DELETE FROM tenants WHERE id = ?1").bind(t.id)
+  ]);
+  try { await env.DB.prepare("DELETE FROM campana_destinos WHERE campana_id NOT IN (SELECT id FROM campanas)").run(); } catch (e) {}
+  return true;
+}
+
+/* Vencidas fuera. Va en CADA corrida del cron (cada 15 min), no en la diaria: si esperara
+   al cron de las 9am, una demo de las 10am viviría 23 horas de más ocupando base.
+   Los ensure* van acá porque el cron no pasa por el panel y no hereda sus migraciones:
+   un DELETE contra una tabla que no existe tumba el batch entero. */
+async function limpiarDemosPrivadas(env){
+  try {
+    await ensureFeedbackSchema(env);
+    await ensureErpSchema(env);
+    await ensureMultiprofesorSchema(env);
+    await ensureSedesSchema(env);
+    const corte = new Date(Date.now() - DEMO_PRIV_HORAS * 3600000).toISOString();
+    const r = await env.DB.prepare(
+      "SELECT * FROM tenants WHERE email LIKE 'demo+%' AND creado < ?1 LIMIT 15"
+    ).bind(corte).all();
+    let n = 0;
+    for (const t of (r.results || [])){
+      try { if (await borrarDemoPrivada(env, t)) n++; } catch (e){ console.error("borrar demo privada", t.id, e); }
+    }
+    return n;
+  } catch (e){
+    console.error("limpiar demos privadas", e);
+    return 0;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   API v1 + MCP (21-ago-2026) — "conecta tu Claude a tu academia"
+   ───────────────────────────────────────────────────────────────────────────
+   Pedido de Andrés: que un dueño enchufe su propio Claude y le pregunte por SUS
+   datos. Se hacen las dos cosas porque una sale de la otra:
+     · API REST  GET /app/api/v1/*   → para integraciones (y para la app de celular)
+     · MCP       POST /mcp/<token>   → el conector que entiende Claude
+   Las dos leen las MISMAS funciones de abajo, así nunca dicen cosas distintas.
+
+   🔒 v1 es de SOLO LECTURA a propósito. Un token que puede borrar alumnos es un
+   token que un día borra alumnos. Escribir se evalúa cuando esto tenga uso real.
+   El token vive en config.api_token, lo genera el dueño desde Ajustes y puede
+   rotarlo; identifica a UNA academia y todo queda scoped a su tenant_id.
+   ═══════════════════════════════════════════════════════════════════════════ */
+const API_V1 = "1.0.0";
+
+async function apiTokenDe(env, tenantId, rotar){
+  if (!rotar){
+    const row = await env.DB.prepare("SELECT valor FROM config WHERE tenant_id = ?1 AND clave = 'api_token'").bind(tenantId).first().catch(() => null);
+    if (row && row.valor) return String(row.valor);
+  }
+  const nuevo = "bt_" + randHex(20);
+  await setConfigValor(env, tenantId, "api_token", nuevo);
+  return nuevo;
+}
+
+/* Resuelve el tenant de un token. config es chica (unas pocas filas por academia),
+   así que el scan por valor es barato; si algún día pesa, va un índice por valor. */
+async function tenantPorApiToken(env, token){
+  const tk = String(token || "").trim();
+  if (!/^bt_[a-f0-9]{40}$/.test(tk)) return null;
+  const row = await env.DB.prepare(
+    "SELECT tenant_id FROM config WHERE clave = 'api_token' AND valor = ?1"
+  ).bind(tk).first().catch(() => null);
+  if (!row) return null;
+  return env.DB.prepare("SELECT * FROM tenants WHERE id = ?1").bind(row.tenant_id).first().catch(() => null);
+}
+
+/* ---------- las consultas (las comparten REST y MCP) ---------- */
+async function apiResumen(env, t){
+  const tid = t.id;
+  const hoyL = hoyLima();
+  const mes = hoyL.slice(0, 7);
+  const activos = await contarAlumnosActivos(env, tid);
+  const totAl = await env.DB.prepare("SELECT COUNT(*) AS n FROM alumnos WHERE tenant_id = ?1").bind(tid).first();
+  const ingresos = await env.DB.prepare(
+    "SELECT COALESCE(SUM(monto),0) AS s, COUNT(*) AS n FROM compras WHERE tenant_id = ?1 AND estado = 'confirmada' AND substr(fecha,1,7) = ?2"
+  ).bind(tid, mes).first();
+  const pend = await env.DB.prepare(
+    "SELECT COUNT(*) AS n FROM compras WHERE tenant_id = ?1 AND estado = 'pendiente'"
+  ).bind(tid).first();
+  const hoyIni = new Date(Date.parse(hoyL + "T00:00:00Z") + 5 * 3600000).toISOString();
+  const hoyFin = new Date(Date.parse(hoyL + "T23:59:59Z") + 5 * 3600000).toISOString();
+  const clasesHoy = await env.DB.prepare(
+    "SELECT COUNT(*) AS n FROM reservas WHERE tenant_id = ?1 AND estado = 'reservada' AND inicio_utc BETWEEN ?2 AND ?3"
+  ).bind(tid, hoyIni, hoyFin).first();
+  const profes = await env.DB.prepare("SELECT COUNT(*) AS n FROM profesores WHERE tenant_id = ?1 AND estado != 'suspendido'").bind(tid).first();
+  const lim = await packsDe(env, tid);
+  return {
+    academia: t.academia, fecha: hoyL,
+    alumnos: { activos, total: Number(totAl && totAl.n) || 0, tope: await alumCapDe(env, tid, t.plan) },
+    profesores: { activos: Number(profes && profes.n) || 0, tope: await maxProfesDe(env, tid, t.plan) },
+    ingresos_del_mes: { pen: Math.round((Number(ingresos && ingresos.s) || 0) * 100) / 100, pagos: Number(ingresos && ingresos.n) || 0 },
+    cobros_por_confirmar: Number(pend && pend.n) || 0,
+    clases_hoy: Number(clasesHoy && clasesHoy.n) || 0,
+    packs: { comprados: lim.comprados, cobro_mensual_pen: lim.monto }
+  };
+}
+
+async function apiAlumnos(env, t, q, limite){
+  const lim = Math.max(1, Math.min(100, parseInt(limite, 10) || 25));
+  const busca = String(q || "").trim();
+  /* 🐛 22-ago-2026: acá se enumeraban las columnas y faltaban migrado_usadas/migrado_ciclo,
+     bonus_clases/bonus_ciclo y caducado, que son justo las que compute() usa para descontar.
+     Resultado medido en Elevate: 48 alumnas con MÁS clases en la API que en el panel (187
+     clases fantasma). Va `SELECT *`, como la ficha, para que agregar una columna nueva no
+     vuelva a romper esto en silencio. Ver `memoria: leccion-columna-nueva-no-llega-por-select-enumerado`. */
+  const filtro = " FROM alumnos WHERE tenant_id = ?1" +
+                 (busca ? " AND (nombre LIKE ?2 OR COALESCE(apellido,'') LIKE ?2 OR COALESCE(codigo,'') LIKE ?2)" : "");
+  const sql = "SELECT *" + filtro + " ORDER BY nombre LIMIT " + lim;
+  const st = busca ? env.DB.prepare(sql).bind(t.id, "%" + busca + "%") : env.DB.prepare(sql).bind(t.id);
+  const { results } = await st.all();
+  const cSql = "SELECT COUNT(*) AS n" + filtro;
+  const cSt = busca ? env.DB.prepare(cSql).bind(t.id, "%" + busca + "%") : env.DB.prepare(cSql).bind(t.id);
+  const totalReal = Number(((await cSt.first().catch(() => null)) || {}).n) || 0;
+  const paqMap = (await loadPaquetes(env, t.id)).map;
+  const precios = await loadPrecios(env, t.id);
+  const cfg = await loadConfig(env, t.id);
+  /* 🔴 22-ago-2026: acá se le pasaba `[]` como bitácora a compute(), que es donde viven
+     'Asistió', 'Falta' y el exceso de reprogramaciones. Sin eso, la API v1 y el MCP le
+     devolvían a José un saldo INFLADO: medido en Elevate, 43 de sus 72 alumnas de un solo
+     plan, 100 clases fantasma (Carlos A Bedoya salía con 38 en vez de 30). Es la otra mitad
+     del bug de las columnas que se arregló esta misma mañana en el SELECT de arriba: se
+     corrigió de dónde salían los alumnos, no de dónde salían sus clases dictadas.
+     Recaída de `memoria: leccion-api-nueva-repite-bugs-del-panel`.
+     Una sola consulta para toda la página: en un bucle de hasta 100 sería una por alumno. */
+  const ids = (results || []).map(a => a.id);
+  const regsPorAlumno = new Map();
+  if (ids.length){
+    const hue = ids.map((_, i) => "?" + (i + 2)).join(",");
+    const { results: todos } = await env.DB.prepare(
+      "SELECT alumno_id, estado, fecha, COALESCE(curso,'') AS curso, COALESCE(ciclo,1) AS ciclo " +
+      "FROM registro WHERE tenant_id = ?1 AND alumno_id IN (" + hue + ")"
+    ).bind(t.id, ...ids).all().catch(() => ({ results: [] }));
+    for (const g of (todos || [])){
+      const k = g.alumno_id + "|" + (Number(g.ciclo) || 1);
+      if (!regsPorAlumno.has(k)) regsPorAlumno.set(k, []);
+      regsPorAlumno.get(k).push(g);
+    }
+  }
+  const out = [];
+  for (const al of (results || [])){
+    let c = null;
+    try {
+      const cicloAl = Number(al.ciclo) || 1;
+      c = pasesDe(al)
+        ? await computeMulti(env, t.id, al, paqMap, precios)
+        : compute(al, regsPorAlumno.get(al.id + "|" + cicloAl) || [], precios,
+                  await reservasUsadasCount(env, t.id, al.id, cicloAl), resolverPk(paqMap, al.paquete));
+      c = saldoMostrado(c, cfg.saldo_modo || "");
+    } catch (e) {}
+    out.push({
+      id: al.id, codigo: al.codigo, nombre: [al.nombre, al.apellido].filter(Boolean).join(" "),
+      curso: al.curso, plan: al.paquete, horario: al.horario || "",
+      clases_restantes: c ? c.restantes : null,
+      clases_compradas: c ? c.compradas : null,
+      vence: (c && c.vence) || al.vence || "",
+      pago: al.pago || ""
+    });
+  }
+  /* `total` era out.length, o sea el tope de la consulta: una academia de 1,449 alumnos
+     respondía "total 25" y quien leyera eso (el dueño o su Claude) se lo creía. */
+  return { total: totalReal, mostrados: out.length, alumnos: out };
+}
+
+async function apiFichaAlumno(env, t, idOnombre){
+  const clave = String(idOnombre || "").trim();
+  if (!clave) return { error: "Falta el alumno (id o nombre)." };
+  let al = await env.DB.prepare("SELECT * FROM alumnos WHERE tenant_id = ?1 AND id = ?2").bind(t.id, clave).first().catch(() => null);
+  if (!al){
+    al = await env.DB.prepare(
+      "SELECT * FROM alumnos WHERE tenant_id = ?1 AND (nombre LIKE ?2 OR COALESCE(codigo,'') = ?3) ORDER BY nombre LIMIT 1"
+    ).bind(t.id, "%" + clave + "%", clave).first().catch(() => null);
+  }
+  if (!al) return { error: "No encontré a ese alumno en " + t.academia + "." };
+  const paqMap = (await loadPaquetes(env, t.id)).map;
+  const precios = await loadPrecios(env, t.id);
+  const cfg = await loadConfig(env, t.id);
+  const ciclo = Number(al.ciclo) || 1;
+  let c = null;
+  try {
+    c = pasesDe(al)
+      ? await computeMulti(env, t.id, al, paqMap, precios)
+      : compute(al, ((await env.DB.prepare(SQL_REGS_CICLO).bind(t.id, al.id, ciclo).all().catch(() => ({ results: [] }))).results) || [],
+                precios, await reservasUsadasCount(env, t.id, al.id, ciclo), resolverPk(paqMap, al.paquete));
+    c = saldoMostrado(c, cfg.saldo_modo || "");
+  } catch (e) {}
+  const { results: prox } = await env.DB.prepare(
+    "SELECT inicio_utc, COALESCE(curso,'') AS curso FROM reservas WHERE tenant_id = ?1 AND alumno_id = ?2 AND estado = 'reservada' AND inicio_utc >= ?3 ORDER BY inicio_utc ASC LIMIT 5"
+  ).bind(t.id, al.id, new Date().toISOString()).all();
+  const { results: ult } = await env.DB.prepare(
+    "SELECT fecha, COALESCE(curso,'') AS curso, estado, COALESCE(trabajo,'') AS trabajo FROM registro WHERE tenant_id = ?1 AND alumno_id = ?2 ORDER BY fecha DESC LIMIT 5"
+  ).bind(t.id, al.id).all();
+  return {
+    id: al.id, codigo: al.codigo, nombre: [al.nombre, al.apellido].filter(Boolean).join(" "),
+    curso: al.curso, plan: al.paquete, horario: al.horario || "", notas: al.notas || "",
+    saldo: c ? { restantes: c.restantes, compradas: c.compradas, usadas: c.usadas, reservadas: c.reservadas,
+                 vence: c.vence || "", pases: (c.pases || []).map(x => ({ plan: x.n, restantes: x.restantes, compradas: x.compradas, vence: x.vence })) } : null,
+    proximas_clases: (prox || []).map(r => ({ cuando: r.inicio_utc, clase: r.curso })),
+    ultimas_clases: (ult || []).map(r => ({ fecha: r.fecha, clase: r.curso, estado: r.estado, trabajo: r.trabajo }))
+  };
+}
+
+async function apiAgenda(env, t, dias){
+  const d = Math.max(1, Math.min(30, parseInt(dias, 10) || 7));
+  const desde = new Date().toISOString();
+  const hasta = new Date(Date.now() + d * 86400000).toISOString();
+  const { results } = await env.DB.prepare(
+    "SELECT r.inicio_utc, r.fin_utc, COALESCE(r.curso,'') AS curso, COALESCE(a.nombre,'') AS alumno, COALESCE(p.nombre,'') AS profesor " +
+    "FROM reservas r LEFT JOIN alumnos a ON a.id = r.alumno_id LEFT JOIN profesores p ON p.id = r.profesor_id " +
+    "WHERE r.tenant_id = ?1 AND r.estado = 'reservada' AND r.inicio_utc BETWEEN ?2 AND ?3 ORDER BY r.inicio_utc ASC LIMIT 200"
+  ).bind(t.id, desde, hasta).all();
+  return { dias: d, clases: (results || []).map(r => ({ cuando: r.inicio_utc, clase: r.curso, alumno: r.alumno, profesor: r.profesor })) };
+}
+
+async function apiPagos(env, t, dias){
+  const d = Math.max(1, Math.min(120, parseInt(dias, 10) || 30));
+  const desde = new Date(Date.now() - d * 86400000).toISOString().slice(0, 10);
+  const { results } = await env.DB.prepare(
+    "SELECT c.fecha, c.monto, c.estado, c.metodo, COALESCE(c.paquete,'') AS plan, COALESCE(cu.nombre,'') AS quien " +
+    "FROM compras c LEFT JOIN cuentas cu ON cu.id = c.cuenta_id " +
+    "WHERE c.tenant_id = ?1 AND c.fecha >= ?2 ORDER BY c.fecha DESC LIMIT 100"
+  ).bind(t.id, desde).all();
+  const total = (results || []).filter(r => r.estado === "confirmada").reduce((s, r) => s + (Number(r.monto) || 0), 0);
+  return { dias: d, total_confirmado_pen: Math.round(total * 100) / 100, pagos: results || [] };
+}
+
+async function apiPorRenovar(env, t){
+  /* Reescrita el 22-ago-2026. Tenía tres cosas que la volvían inútil justo donde importa:
+       1. `LIMIT 300` sin orden y tope de 50 → en Elevate (1,449 alumnos) miraba el 20% y
+          contestaba con los primeros alfabéticos.
+       2. No aplicaba `saldoMostrado`, así que la academia que descuenta "al asistir" veía
+          un saldo distinto al del panel y al del portal (28 alumnas, 5 falsas alarmas).
+       3. Marcaba "por renovar" a quien todavía NO tiene plan puesto en su ficha. El panel ya
+          había aprendido eso el 11-ago ("Falta ponerle su plan"): con 1,359 alumnas migradas
+          sin plan, la lista salía 100% ruido y escondía a las 3 que sí tocaba renovar.
+     Las filas se cargan en bloque (2 consultas para toda la academia, como el panel) en vez
+     de consultar por alumno: así se puede recorrer a TODOS sin reventar los subrequests. */
+  const { results } = await env.DB.prepare("SELECT * FROM alumnos WHERE tenant_id = ?1").bind(t.id).all();
+  const alumnos = results || [];
+  const resvAll = (await env.DB.prepare(
+    "SELECT id, alumno_id, inicio_utc, COALESCE(curso,'') AS curso, COALESCE(tipo,'') AS tipo, COALESCE(ciclo,1) AS ciclo " +
+    "FROM reservas WHERE tenant_id = ?1 AND estado IN ('reservada','completada','falta') ORDER BY inicio_utc ASC"
+  ).bind(t.id).all()).results || [];
+  const regsAll = (await env.DB.prepare(
+    "SELECT alumno_id, fecha, COALESCE(curso,'') AS curso, estado, COALESCE(ciclo,1) AS ciclo " +
+    "FROM registro WHERE tenant_id = ?1 ORDER BY fecha ASC, id ASC"
+  ).bind(t.id).all()).results || [];
+  const resvPor = new Map(), regsPor = new Map();
+  for (const r of resvAll){ if (!r.alumno_id) continue;
+    if (!resvPor.has(r.alumno_id)) resvPor.set(r.alumno_id, []);
+    resvPor.get(r.alumno_id).push(r); }
+  for (const g of regsAll){ if (!g.alumno_id) continue;
+    if (!regsPor.has(g.alumno_id)) regsPor.set(g.alumno_id, []);
+    regsPor.get(g.alumno_id).push(g); }
+  const paqMap = (await loadPaquetes(env, t.id)).map;
+  const precios = await loadPrecios(env, t.id);
+  const cfg = await loadConfig(env, t.id);
+  const hoy10 = hoyLima();
+  const en10 = new Date(Date.now() + 10 * 86400000).toISOString().slice(0, 10);
+  const out = [];
+  for (const al of alumnos){
+    /* sin plan en la ficha no hay nada que renovar: le falta que la academia se lo ponga */
+    if (!String(al.paquete || "").trim()) continue;
+    const ci = Number(al.ciclo) || 1;
+    const rv = (resvPor.get(al.id) || []).filter(r => (Number(r.ciclo) || 1) === ci);
+    const rg = (regsPor.get(al.id) || []).filter(g => (Number(g.ciclo) || 1) === ci);
+    let c = null;
+    try {
+      c = pasesDe(al) ? await computeMulti(env, t.id, al, paqMap, precios, "", { resv: rv, regs: rg })
+                      : compute(al, rg, precios, reservasUsadasPuro(rv, rg), resolverPk(paqMap, al.paquete));
+      c = saldoMostrado(c, cfg.saldo_modo || "");   // el mismo número que ve el panel y el portal
+    } catch (e) { continue; }
+    if (!c) continue;
+    const vencido = !!(c.vencido || c.caducado);
+    const porSaldo = !vencido && c.restantes !== null && c.restantes <= 2 && !c.ilim;
+    const v = String(c.vence || al.vence || "");
+    const porFecha = !vencido && /^\d{4}-\d{2}-\d{2}$/.test(v) && v >= hoy10 && v <= en10;
+    if (!vencido && !porSaldo && !porFecha) continue;
+    out.push({ id: al.id, nombre: [al.nombre, al.apellido].filter(Boolean).join(" "), curso: al.curso,
+               plan: al.paquete, clases_restantes: c.restantes, vence: v,
+               motivo: vencido ? "se le venció el plan" : (porSaldo ? "se le acaban las clases" : "se le vence el plan") });
+  }
+  /* primero el que está peor: menos clases, y a igual saldo el que vence antes */
+  out.sort((a, b) => {
+    const ra = Number(a.clases_restantes) || 0, rb = Number(b.clases_restantes) || 0;
+    if (ra !== rb) return ra - rb;
+    return (a.vence || "9999-99-99") < (b.vence || "9999-99-99") ? -1 : 1;
+  });
+  return { total: out.length, mostrados: Math.min(out.length, 50), alumnos: out.slice(0, 50) };
+}
+
+/* ---------- catálogo de herramientas (lo comparten MCP y la ayuda del REST) ---------- */
+const API_TOOLS = [
+  { name: "resumen_academia", desc: "Foto de hoy de la academia: alumnos activos, ingresos del mes, cobros por confirmar, clases de hoy y los packs contratados.", args: {} },
+  { name: "buscar_alumnos", desc: "Lista alumnos con su saldo de clases. Sin busqueda devuelve los primeros por orden alfabetico.", args: { busqueda: "texto a buscar en nombre o codigo", limite: "cuantos devolver (max 100)" } },
+  { name: "ficha_alumno", desc: "Ficha completa de un alumno: saldo por pase, proximas clases y ultimas clases dictadas.", args: { alumno: "id, codigo o nombre del alumno" } },
+  { name: "agenda", desc: "Clases reservadas de los proximos dias, con alumno y profesor.", args: { dias: "cuantos dias hacia adelante (max 30, por defecto 7)" } },
+  { name: "pagos_recientes", desc: "Pagos de los ultimos dias con su estado y metodo, y el total confirmado.", args: { dias: "cuantos dias hacia atras (max 120, por defecto 30)" } },
+  { name: "alumnos_por_renovar", desc: "Alumnos a los que se les acaban las clases (2 o menos), se les vence el plan en los proximos 10 dias o ya se les vencio. Ordenados del que esta peor al que menos. No entra quien todavia no tiene un plan puesto en su ficha: a ese no le toca renovar, le falta que la academia se lo asigne. Devuelve como maximo 50; `total` dice cuantos hay de verdad.", args: {} }
+];
+
+async function ejecutarHerramientaApi(env, t, nombre, args){
+  const a = args || {};
+  switch (nombre){
+    case "resumen_academia":    return apiResumen(env, t);
+    case "buscar_alumnos":      return apiAlumnos(env, t, a.busqueda, a.limite);
+    case "ficha_alumno":        return apiFichaAlumno(env, t, a.alumno);
+    case "agenda":              return apiAgenda(env, t, a.dias);
+    case "pagos_recientes":     return apiPagos(env, t, a.dias);
+    case "alumnos_por_renovar": return apiPorRenovar(env, t);
+    default: return { error: "No existe la herramienta '" + nombre + "'." };
+  }
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -6765,6 +7598,96 @@ export default {
     }
     if (request.method === "OPTIONS") return new Response(null, { status: 204 });
 
+    /* ══════ API v1 (REST, solo lectura) y MCP ══════
+       Auth propia por token de academia, así que van ANTES del gate de sesión. */
+    if (path.startsWith("/app/api/v1/")){
+      const auth = request.headers.get("authorization") || "";
+      const tk = auth.toLowerCase().startsWith("bearer ") ? auth.slice(7).trim() : "";
+      const tApi = await tenantPorApiToken(env, tk);
+      if (!tApi) return json({ error: "Token invalido. Genera el tuyo en Ajustes > Conecta tu Claude." }, 401);
+      if (request.method !== "GET") return json({ error: "La API v1 es de solo lectura." }, 405);
+      const ipApi = clientIp(request);
+      if (ipApi && await chatbotPasoTope(env, "apiv1:" + tApi.id, 300)){
+        return json({ error: "Demasiadas consultas esta hora. Intenta en un rato." }, 429);
+      }
+      const q = url.searchParams;
+      const sub = path.slice("/app/api/v1/".length);
+      try {
+        if (sub === "resumen")     return json(await apiResumen(env, tApi));
+        if (sub === "alumnos")     return json(await apiAlumnos(env, tApi, q.get("q"), q.get("limite")));
+        if (sub.startsWith("alumno/")) return json(await apiFichaAlumno(env, tApi, decodeURIComponent(sub.slice(7))));
+        if (sub === "agenda")      return json(await apiAgenda(env, tApi, q.get("dias")));
+        if (sub === "pagos")       return json(await apiPagos(env, tApi, q.get("dias")));
+        if (sub === "por-renovar") return json(await apiPorRenovar(env, tApi));
+        if (sub === "" || sub === "ayuda"){
+          return json({ version: API_V1, academia: tApi.academia, solo_lectura: true,
+            rutas: ["/app/api/v1/resumen", "/app/api/v1/alumnos?q=&limite=", "/app/api/v1/alumno/{id|nombre}", "/app/api/v1/agenda?dias=7", "/app/api/v1/pagos?dias=30", "/app/api/v1/por-renovar"],
+            mcp: MARCA.dominio + "/app/mcp/<tu-token>" });
+        }
+      } catch (e){ console.error("api v1", e); return json({ error: "Error del servidor" }, 500); }
+      return json({ error: "No encontrado" }, 404);
+    }
+
+    /* MCP (Model Context Protocol): lo que el dueño pega en su Claude. JSON-RPC 2.0 sobre
+       POST; el token va en la URL porque es lo único que un cliente MCP configura sin
+       pelear. Mismo alcance que la API: su academia y solo lectura. */
+    if (path.startsWith("/app/mcp/")){
+      const tMcp = await tenantPorApiToken(env, path.slice("/app/mcp/".length));
+      if (!tMcp) return json({ error: "Token invalido" }, 401);
+      if (request.method === "GET"){
+        return json({ servidor: "batuta", version: API_V1, academia: tMcp.academia,
+                      herramientas: API_TOOLS.map(x => x.name),
+                      como_usar: "Pega esta misma URL como servidor MCP en tu Claude." });
+      }
+      if (request.method !== "POST") return json({ error: "Metodo no permitido" }, 405);
+      if (await chatbotPasoTope(env, "mcp:" + tMcp.id, 300)) return json({ error: "Demasiadas consultas esta hora." }, 429);
+
+      const rpc = await request.json().catch(() => null);
+      const responder = (id, result, error) => {
+        if (id === undefined || id === null) return new Response(null, { status: 202 }); // notificación
+        return json(error ? { jsonrpc: "2.0", id, error } : { jsonrpc: "2.0", id, result });
+      };
+      if (!rpc || typeof rpc !== "object") return json({ jsonrpc: "2.0", id: null, error: { code: -32700, message: "JSON invalido" } });
+      const metodo = String(rpc.method || "");
+      const id = rpc.id;
+      try {
+        if (metodo === "initialize"){
+          return responder(id, {
+            protocolVersion: (rpc.params && rpc.params.protocolVersion) || "2024-11-05",
+            capabilities: { tools: {} },
+            serverInfo: { name: "batuta", version: API_V1, title: "Batuta · " + (tMcp.academia || "tu academia") }
+          });
+        }
+        if (metodo === "ping") return responder(id, {});
+        if (metodo.startsWith("notifications/")) return responder(undefined);
+        if (metodo === "tools/list"){
+          return responder(id, {
+            tools: API_TOOLS.map(h => ({
+              name: h.name,
+              description: h.desc,
+              inputSchema: {
+                type: "object",
+                properties: Object.keys(h.args).reduce((acc, k) => { acc[k] = { type: "string", description: h.args[k] }; return acc; }, {}),
+                required: []
+              }
+            }))
+          });
+        }
+        if (metodo === "tools/call"){
+          const nombre = String((rpc.params && rpc.params.name) || "");
+          if (!API_TOOLS.some(h => h.name === nombre)){
+            return responder(id, { content: [{ type: "text", text: "No existe la herramienta '" + nombre + "'." }], isError: true });
+          }
+          const datos = await ejecutarHerramientaApi(env, tMcp, nombre, (rpc.params && rpc.params.arguments) || {});
+          return responder(id, { content: [{ type: "text", text: JSON.stringify(datos, null, 1) }] });
+        }
+        return responder(id, null, { code: -32601, message: "Metodo no soportado: " + metodo });
+      } catch (e){
+        console.error("mcp", e);
+        return responder(id, null, { code: -32603, message: "Error interno" });
+      }
+    }
+
     /* ---------- Paginas (no-API) ---------- */
     if (path === "/app" && request.method === "GET"){
       return htmlResponse(paginaLanding());
@@ -6779,11 +7702,21 @@ export default {
       return htmlResponse(paginaSuscribir());
     }
     if (path === "/app/demo" && request.method === "GET"){
-      // Demo pública: sesión directa al tenant Estudio Sonata (se resetea cada mañana).
+      /* Una demo PRIVADA por visitante (19-ago-2026): tenant propio, sembrado al vuelo y
+         borrado a las 24h. Lo que escribe uno no lo ve nadie más. Si la creación falla o se
+         topa el freno del día, se cae a la demo compartida de siempre: el botón nunca
+         se queda sin llevar a ninguna parte. */
       const ipDemo = clientIp(request);
       if (ipDemo && await chatbotPasoTope(env, "demo:" + ipDemo, 20)){
         return htmlResponse(paginaBase("Demo — Batuta", "<h1>Un momento</h1><p class=\"sub\">Demasiadas entradas a la demo desde tu red. Intenta de nuevo en un rato.</p>", ""));
       }
+      const entrar = (token) => htmlResponse(paginaBase("Entrando a la demo — Batuta",
+        "<h1>Entrando…</h1><p class=\"sub\">Preparando tu academia de demostración.</p>",
+        "try{localStorage.setItem('batuta_t','" + token + "');}catch(e){};location.replace('/app/panel');"));
+
+      const priv = await crearDemoPrivada(env);
+      if (priv && priv.token) return entrar(priv.token);
+
       let tDemo = await env.DB.prepare("SELECT * FROM tenants WHERE email = ?1").bind(DEMO_EMAIL).first();
       const nAl = tDemo ? await env.DB.prepare("SELECT COUNT(*) AS n FROM alumnos WHERE tenant_id = ?1").bind(tDemo.id).first() : null;
       if (!tDemo || !nAl || !Number(nAl.n)){
@@ -6791,9 +7724,7 @@ export default {
         tDemo = await env.DB.prepare("SELECT * FROM tenants WHERE email = ?1").bind(DEMO_EMAIL).first();
       }
       if (!tDemo) return json({ error: "Demo no disponible" }, 503);
-      const tokenDemo = await crearSesion(env, "T:" + tDemo.id);
-      return htmlResponse(paginaBase("Entrando a la demo — Batuta", "<h1>Entrando…</h1><p class=\"sub\">Abriendo la academia de demostración.</p>",
-        "try{localStorage.setItem('batuta_t','" + tokenDemo + "');}catch(e){};location.replace('/app/panel');"));
+      return entrar(await crearSesion(env, "T:" + tDemo.id));
     }
     /* Fuentes self-hosted (01-ago-2026). Van bajo /app/ a proposito: batuta.lat solo
        reescribe /app/* hacia este worker (vercel.json), asi que un /fonts/... en la raiz
@@ -7021,6 +7952,173 @@ export default {
        correo con link para poner su contraseña). Pedido de Andrés 08-jul. ----- */
     // Pagina publica de la academia (batuta.lat/a/{slug} via rewrite de Vercel).
     // Solo datos ya publicos por diseno: nombre, cursos, paquetes con precio y WhatsApp de contacto.
+    /* ══════ DESCUBRIMIENTO: el directorio de academias (21-ago-2026) ══════
+       Pedido de Andrés: que quien entre a Batuta sin ser academia pueda mirar las que ya
+       usan Batuta y matricularse con ellas. Sale en batuta.lat/academias (rewrite de Vercel).
+       Todas entran por defecto — Andrés: "no me importa si tienen que aceptar, les conviene" —
+       y el dueño puede salirse con un interruptor en Ajustes (config `directorio` = "off").
+       Se renderiza en el servidor a propósito: el valor de esto es que Google lo indexe. */
+    /* Sitemap del directorio (21-ago-2026). Las fichas /a/<slug> respondían 200 pero no
+       estaban en ningún sitemap: existían para quien ya tenía el link, no para Google. Un
+       directorio que no se indexa no le trae un solo alumno a la academia, que es justo lo
+       que Fons sí resuelve con su marketplace. Reusa exactamente el mismo filtro que la
+       página del directorio, así nunca se publica una academia que decidió no aparecer. */
+    if (path === "/app/sitemap-academias.xml" && request.method === "GET"){
+      const filas = await academiasListables(env);
+      const hoy = new Date().toISOString().slice(0, 10);
+      const urls = filas.map(f =>
+        "<url><loc>https://batuta.lat/a/" + esc(encodeURIComponent(f.slug)) + "</loc>" +
+        "<lastmod>" + hoy + "</lastmod><changefreq>weekly</changefreq><priority>0.7</priority></url>"
+      ).join("");
+      return new Response(
+        '<?xml version="1.0" encoding="UTF-8"?>' +
+        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">' +
+        "<url><loc>https://batuta.lat/academias</loc><lastmod>" + hoy + "</lastmod><changefreq>daily</changefreq><priority>0.8</priority></url>" +
+        urls + "</urlset>",
+        { headers: { "content-type": "application/xml; charset=utf-8", "cache-control": "public, max-age=3600" } }
+      );
+    }
+    if ((path === "/app/academias" || path === "/app/descubre") && request.method === "GET"){
+      const { results: filas } = await env.DB.prepare(
+        "SELECT t.id, t.slug, t.academia, COALESCE(t.rubro,'') AS rubro, t.creado, " +
+        "(SELECT valor FROM config c WHERE c.tenant_id = t.id AND c.clave = 'directorio') AS dir, " +
+        "(SELECT valor FROM config c WHERE c.tenant_id = t.id AND c.clave = 'cursos') AS cursos, " +
+        "(SELECT valor FROM config c WHERE c.tenant_id = t.id AND c.clave = 'profe_foto') AS foto, " +
+        "(SELECT valor FROM config c WHERE c.tenant_id = t.id AND c.clave = 'brand_color') AS color, " +
+        "(SELECT COUNT(*) FROM alumnos a WHERE a.tenant_id = t.id) AS nal, " +
+        "(SELECT valor FROM config c WHERE c.tenant_id = t.id AND c.clave = 'paquetes') AS paq, " +
+        "(SELECT s.direccion FROM sedes s WHERE s.tenant_id = t.id LIMIT 1) AS sede " +
+        "FROM tenants t WHERE t.estado != 'vencido' AND t.email NOT LIKE 'demo%@batuta.lat' " +
+        "AND t.email NOT LIKE '%@example.com' AND t.email != 'andressalame@gmail.com' " +
+        "ORDER BY t.creado ASC LIMIT 300"
+      ).all();
+      /* ⚖️ Ley 29733: el nombre de una ACADEMIA (persona jurídica o nombre comercial) no es dato
+         personal, pero el de un profesor particular SÍ. Perú no tiene "interés legítimo" y el
+         art. 13 exige consentimiento previo, expreso e inequívoco: un opt-out no lo es. Por eso
+         quien se llama como una persona entra SOLO si lo pide (config `directorio` = "si");
+         el resto entra por defecto y puede salirse cuando quiera. */
+      /* Con \b a propósito: sin límites de palabra, el patrón de "S.A.C." se comía el "sa" de
+         "Rosales" y un profesor particular pasaba por empresa. */
+      const PALABRAS_NEGOCIO = /\b(academia|academy|estudio|studio|centro|escuela|instituto|school|taller|gimnasio|gym|club|conservatorio|dance|danza|music|música|arte|pilates|yoga|box|sport|kids|company|corp|sac|eirl|srl)\b|\bs\.a\.c?\.?|\be\.i\.r\.l/i;
+      const pareceNombreDePersona = (nom) => {
+        const s = String(nom || "").trim();
+        if (!s || PALABRAS_NEGOCIO.test(s)) return false;
+        const partes = s.split(/\s+/).filter(Boolean);
+        return partes.length >= 2 && partes.length <= 5;   // "Julio Armando Principe Rosales"
+      };
+      const lista = (filas || []).filter(f => {
+        const dir = String(f.dir || "").toLowerCase();
+        if (dir === "off") return false;                                     // se salió del directorio
+        if (pareceNombreDePersona(f.academia) && dir !== "si") return false;  // persona natural: solo con su sí
+        if (/\(borrar\)|^TEST |^Prueba |^QA /i.test(String(f.academia || ""))) return false;
+        /* Que tenga algo REAL que mostrar: cursos configurados y señal de vida (alumnos o
+           planes con precio). Una academia vacía en el directorio es peor que ninguna: el
+           visitante entra, ve una página en blanco y se lleva esa idea de Batuta. */
+        if (!String(f.cursos || "").trim()) return false;
+        const conPlanes = (() => { try { return (JSON.parse(f.paq || "[]") || []).length > 0; } catch (e) { return false; } })();
+        return Number(f.nal) > 0 || conPlanes;
+      });
+      const esc2 = (s) => esc(String(s == null ? "" : s));
+      /* "JULIO ARMANDO PRINCIPE ROSALES" se ve como una fila de Excel. Si el nombre viene todo
+         en mayúsculas se pasa a Capital Case; si el dueño lo escribió mezclado, se respeta. */
+      const nombreBonito = (s) => {
+        const x = String(s || "").trim();
+        if (!x || x !== x.toUpperCase()) return x;
+        return x.toLowerCase().replace(/(^|[\s(\-·])([a-záéíóúñ])/g, (m, a, b) => a + b.toUpperCase());
+      };
+      const tarjetas = lista.map(f => {
+        const cursos = String(f.cursos || "").split(",").map(x => x.trim()).filter(Boolean).slice(0, 4);
+        const color = /^#[0-9a-fA-F]{6}$/.test(String(f.color || "")) ? String(f.color) : "#E8A13D";
+        const inicial = String(nombreBonito(f.academia) || "?").trim().charAt(0).toUpperCase();
+        /* El rubro va con inicial mayúscula y nada más: con text-transform:capitalize salía
+           "Academia De Música". Y si el nombre ya lo dice (RODASLI - Academia de Música), se
+           calla: repetirlo dos veces en la misma tarjeta se lee como error. */
+        const rubroCrudo = String(f.rubro || "").trim().toLowerCase();
+        const nomNorm = normPaqNombre(nombreBonito(f.academia));
+        const rubroUtil = (!rubroCrudo || nomNorm.indexOf(normPaqNombre(rubroCrudo)) !== -1)
+          ? "" : rubroCrudo.charAt(0).toUpperCase() + rubroCrudo.slice(1);
+        return '<a class="ac" href="/a/' + encodeURIComponent(f.slug) + '">' +
+          '<div class="ac-top">' +
+            (f.foto ? '<img src="' + esc2(f.foto) + '" alt="" loading="lazy" />'
+                    : '<span class="ac-ini" style="background:' + color + '22;color:' + color + '">' + esc2(inicial) + '</span>') +
+            '<div><h2>' + esc2(nombreBonito(f.academia)) + '</h2>' +
+            (rubroUtil ? '<span class="ac-rubro">' + esc2(rubroUtil) + '</span>' : '') + '</div>' +
+          '</div>' +
+          (cursos.length ? '<div class="ac-cursos">' + cursos.map(c => '<span>' + esc2(c) + '</span>').join("") + '</div>' : '') +
+          (f.sede ? '<p class="ac-sede">' + esc2(String(f.sede).slice(0, 60)) + '</p>' : '') +
+          '<span class="ac-cta">Ver la academia &rarr;</span></a>';
+      }).join("");
+
+      const ld = {
+        "@context": "https://schema.org", "@type": "ItemList",
+        name: "Academias que usan Batuta",
+        numberOfItems: lista.length,
+        itemListElement: lista.slice(0, 100).map((f, i) => ({
+          "@type": "ListItem", position: i + 1, name: nombreBonito(f.academia),
+          url: MARCA.dominio + "/a/" + encodeURIComponent(f.slug)
+        }))
+      };
+      const html =
+        '<!doctype html><html lang="es"><head><meta charset="utf-8">' +
+        '<meta name="viewport" content="width=device-width,initial-scale=1">' +
+        '<title>Academias y profesores en Batuta · encuentra dónde estudiar</title>' +
+        '<meta name="description" content="Directorio de academias, estudios y profesores que usan Batuta: mira sus cursos, sus horarios y matricúlate directo con ellos.">' +
+        '<link rel="canonical" href="' + MARCA.dominio + '/academias">' +
+        '<meta property="og:title" content="Academias y profesores en Batuta">' +
+        '<meta property="og:description" content="Mira las academias que usan Batuta y matricúlate directo con ellas.">' +
+        '<meta property="og:image" content="' + MARCA.dominio + '/og-image-v2.png">' +
+        '<link rel="icon" type="image/svg+xml" href="' + MARCA.dominio + '/favicon.svg">' +
+        '<script type="application/ld+json">' + JSON.stringify(ld) + '</script>' +
+        '<style>' +
+        ':root{--bg:#F7F3EB;--card:#FFFDF8;--ink:#17130C;--ink2:#6E6656;--amber:#E8A13D;--amberInk:#905A14;--line:rgba(23,19,12,.12)}' +
+        '*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font-family:Switzer,system-ui,-apple-system,sans-serif;line-height:1.5}' +
+        '.wrap{max-width:1060px;margin:0 auto;padding:0 24px}' +
+        'header{border-bottom:1px solid var(--line);background:rgba(255,253,248,.8);position:sticky;top:0;backdrop-filter:blur(12px);z-index:5}' +
+        'header .wrap{display:flex;align-items:center;justify-content:space-between;padding:12px 24px}' +
+        'header a.logo{font-weight:700;letter-spacing:.18em;font-size:.72rem;color:var(--ink);text-decoration:none}' +
+        'header a.cta{background:var(--amber);color:#17130C;text-decoration:none;font-weight:600;font-size:.78rem;padding:7px 14px;border-radius:5px}' +
+        '.hero{padding:56px 0 26px}' +
+        '.hero h1{font-size:clamp(2rem,5vw,3.1rem);line-height:1.05;letter-spacing:-.025em;margin:0 0 14px}' +
+        '.hero h1 em{font-style:normal;color:var(--amberInk)}' +
+        '.hero p{color:var(--ink2);max-width:560px;margin:0}' +
+        '.buscador{margin:26px 0 8px;display:flex;gap:10px;flex-wrap:wrap}' +
+        '.buscador input{flex:1;min-width:220px;padding:12px 14px;border:1px solid var(--line);border-radius:10px;background:var(--card);font:inherit;color:inherit}' +
+        '.cuenta{color:var(--ink2);font-size:.85rem;margin:6px 0 22px}' +
+        '.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:16px;padding-bottom:56px}' +
+        '.ac{display:block;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px 20px;text-decoration:none;color:inherit;transition:transform .15s ease,box-shadow .15s ease}' +
+        '.ac:hover{transform:translateY(-3px);box-shadow:0 12px 30px rgba(23,19,12,.10)}' +
+        '.ac-top{display:flex;gap:12px;align-items:center}' +
+        '.ac-top img,.ac-ini{width:42px;height:42px;border-radius:10px;object-fit:cover;flex:0 0 auto;display:grid;place-items:center;font-weight:700}' +
+        '.ac h2{font-size:1.02rem;margin:0;letter-spacing:-.01em}' +
+        '.ac-rubro{font-size:.74rem;color:var(--ink2)}' +
+        '.ac-cursos{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px}' +
+        '.ac-cursos span{font-size:.72rem;color:var(--amberInk);background:rgba(232,161,61,.14);border-radius:20px;padding:3px 9px}' +
+        '.ac-sede{font-size:.78rem;color:var(--ink2);margin:10px 0 0}' +
+        '.ac-cta{display:inline-block;margin-top:14px;font-size:.82rem;font-weight:600;color:var(--amberInk)}' +
+        '.vacio{color:var(--ink2);padding:30px 0 60px}' +
+        'footer{border-top:1px solid var(--line);padding:26px 0;color:var(--ink2);font-size:.84rem}' +
+        'footer a{color:var(--amberInk)}' +
+        '</style></head><body>' +
+        '<header><div class="wrap"><a class="logo" href="' + MARCA.dominio + '">BATUTA</a>' +
+        '<a class="cta" href="' + MARCA.dominio + '/app/registro?f=directorio">Crear mi academia gratis</a></div></header>' +
+        '<main class="wrap">' +
+        '<div class="hero"><h1>Dónde <em>estudiar</em>, en un solo lugar.</h1>' +
+        '<p>Estas academias, estudios y profesores usan Batuta para su día a día. Entra a la que te guste y matricúlate directo con ellos.</p></div>' +
+        '<div class="buscador"><input id="q" type="search" placeholder="Busca por nombre, curso o distrito" aria-label="Buscar academia"></div>' +
+        '<p class="cuenta" id="cuenta">' + lista.length + ' academia' + (lista.length === 1 ? "" : "s") + '</p>' +
+        (lista.length ? '<div class="grid" id="grid">' + tarjetas + '</div>'
+                      : '<p class="vacio">Todavía no hay academias publicadas. Si tienes una, <a href="' + MARCA.dominio + '/app/registro?f=directorio">créala gratis</a> y aparece acá.</p>') +
+        '</main>' +
+        '<footer class="wrap">Tu academia también puede estar acá: <a href="' + MARCA.dominio + '/app/registro?f=directorio">créala gratis en Batuta</a>. ' +
+        'Si ya usas Batuta y prefieres no aparecer, lo apagas en Ajustes → Avanzado.</footer>' +
+        '<script>(function(){var q=document.getElementById("q"),g=document.getElementById("grid"),c=document.getElementById("cuenta");' +
+        'if(!q||!g)return;var tot=g.children.length;q.addEventListener("input",function(){var v=q.value.toLowerCase().trim();var n=0;' +
+        '[].forEach.call(g.children,function(el){var ok=!v||el.textContent.toLowerCase().indexOf(v)!==-1;el.style.display=ok?"":"none";if(ok)n++;});' +
+        'c.textContent=(v?n:tot)+" academia"+((v?n:tot)===1?"":"s");});})();</script>' +
+        '</body></html>';
+      return new Response(html, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "public, max-age=600" } });
+    }
+
     if (/^\/app\/a\/[^/]+\/web$/.test(path) && request.method === "GET"){
       const slugW = decodeURIComponent(path.split("/")[3] || "");
       const tW = await env.DB.prepare("SELECT id, academia, slug, estado, rubro, whatsapp, mp_access_token, mp_expires_at FROM tenants WHERE slug = ?1").bind(slugW).first();
@@ -7086,7 +8184,7 @@ export default {
           "<label>Tu correo</label><input id=\"em\" type=\"email\" required maxlength=\"120\">" +
           "<label>Tu WhatsApp (opcional)</label><input id=\"wa\" type=\"tel\" maxlength=\"20\">" +
           (camposP.nacimiento
-            ? "<label>Fecha de nacimiento</label><input id=\"fn\" type=\"date\" max=\"" + hoy() + "\">" +
+            ? "<label>Fecha de nacimiento</label><input id=\"fn\" type=\"date\" max=\"" + hoyLima() + "\">" +
               "<div id=\"tutorbox\" style=\"display:none;margin:10px 0 0\">" +
                 "<label style=\"display:flex;gap:9px;align-items:flex-start;font-size:13px;line-height:1.45\">" +
                   "<input id=\"tutor\" type=\"checkbox\" style=\"width:auto;margin-top:3px;flex:0 0 auto\">" +
@@ -8215,7 +9313,7 @@ export default {
             const r = await env.DB.prepare(
               "SELECT id, academia, email, plan, estado, mp_sub_status, creado, trial_hasta, COALESCE(fuente,'') AS fuente, COALESCE(ref_code,'') AS ref_code FROM tenants ORDER BY creado ASC"
             ).all();
-            tenantsCo = (r.results || []).filter(t => t.email !== DEMO_EMAIL);
+            tenantsCo = (r.results || []).filter(t => !esTenantDemo(t));
           } catch (e) {}
           const mrrDe = t => {
             if (t.mp_sub_status === "authorized" && t.estado === "activo") return PLANES[t.plan] || 0;
@@ -8239,8 +9337,8 @@ export default {
             const desdeG = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10);
             const g = await env.DB.prepare(
               "SELECT c.tenant_id, t.academia, COUNT(*) AS pagos, SUM(c.monto) AS gpv_pen FROM compras c JOIN tenants t ON t.id = c.tenant_id " +
-              "WHERE c.estado = 'confirmada' AND c.fecha >= ?1 AND t.email != ?2 GROUP BY c.tenant_id ORDER BY gpv_pen DESC"
-            ).bind(desdeG, DEMO_EMAIL).all();
+              "WHERE c.estado = 'confirmada' AND c.fecha >= ?1 AND t.email NOT LIKE ?2 GROUP BY c.tenant_id ORDER BY gpv_pen DESC"
+            ).bind(desdeG, SQL_DEMO_LIKE).all();
             gpv = g.results || [];
           } catch (e) {}
           const mrrTotal = Math.round(tenantsCo.reduce((s, t) => s + mrrDe(t), 0) * 100) / 100;
@@ -8441,8 +9539,8 @@ export default {
           try {
             const desde45 = new Date(Date.now() - 45 * 86400000).toISOString();
             const { results: tsAct } = await env.DB.prepare(
-              "SELECT id, academia, email, creado, estado, plan, mp_access_token, mp_expires_at FROM tenants WHERE creado >= ?1 AND email != ?2 ORDER BY creado DESC"
-            ).bind(desde45, DEMO_EMAIL).all();
+              "SELECT id, academia, email, creado, estado, plan, mp_access_token, mp_expires_at FROM tenants WHERE creado >= ?1 AND email NOT LIKE ?2 ORDER BY creado DESC"
+            ).bind(desde45, SQL_DEMO_LIKE).all();
             for (const tA of (tsAct || [])){
               const a = await tenantActivado(env, tA.id);
               /* paso exacto del funnel (fase 3): dónde está clavado cada uno, no solo si activó */
@@ -8540,7 +9638,7 @@ export default {
             await ensurePassPuestaSchema(env);   /* clave aleatoria: ver comentario en canjear */
             await env.DB.prepare(
               "INSERT INTO cuentas (id,tenant_id,email,nombre,whatsapp,pass_hash,pass_salt,marketing,alumno_id,creada,ref_code,ref_por,credito,google_id) VALUES (?1,?2,?3,?4,'',?5,?6,0,?7,?8,?9,'',0,'g')"
-            ).bind(id, t.id, perfil.email, nombre, hash, salt, alumnoVincG, hoy(), refCode).run();
+            ).bind(id, t.id, perfil.email, nombre, hash, salt, alumnoVincG, hoyLima(), refCode).run();
             cu = { id };
           }
           const token = await crearSesion(env, cu.id);
@@ -8603,10 +9701,11 @@ export default {
           "INSERT INTO tenants (id,slug,academia,profe_nombre,email,whatsapp,pass_hash,pass_salt,plan,estado,trial_hasta,creado,fuente,rubro,tam_alumnos,ref_code) " +
           "VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?14,?15,?9,?10,?11,?12,?13,?16)"
         ).bind(id, slug, academia, nombre, email, whatsapp, hash, salt, trialHasta, new Date().toISOString(), fuente, rubro, tam,
-               // Freemium (23-jul-2026): TODO registro nuevo nace en el plan Gratis permanente
-               // (estado 'activo', esquiva el gate). Se sube a un plan de pago desde el panel.
-               // (Se conserva esGratis por si un dia se quiere reintroducir un trial via ?plan.)
-               "gratis", "activo", refCode).run();
+               /* Packs (20-ago-2026): todo registro nuevo nace en la Batuta base ('base', activo):
+                  producto completo, 20 alumnos, 1 profesor y 5 conversaciones al mes. Los packs
+                  se agregan después desde Perfil > Tu Batuta. Ya no hay trial ni planes que elegir
+                  (se conserva esGratis por si algún día se reintroduce un trial vía ?plan). */
+               "base", "activo", refCode).run();
 
         // config default para el tenant nuevo. Los paquetes nacen VACIOS a proposito
         // (03-ago-2026): antes se sembraban 5 paquetes de musica con precios inventados
@@ -8636,10 +9735,10 @@ export default {
           "\nRubro: " + (rubro || "-") +
           "\nFuente: " + (fuente || "-") +
           (refCode ? "\nReferido por (afiliado): " + refCode : "") +
-          "\nPlan: " + (esGratis ? "GRATIS (15 alumnos, 1 profe)" : "GRATIS (nuevo registro freemium)") +
+          "\nPlan: Batuta base (20 alumnos · 1 profesor · 5 conversaciones del asistente al mes)" +
           "\nSlug: " + slug +
           "\n\nACTIVACION (la metrica #1): el objetivo del primer toque es que cargue 5 alumnos y registre 1 cobro en 7 dias. Ofrecele cargar su Excel juntos por chat."));
-        return json({ ok: true, token, slug, plan: "gratis" }); // freemium: todo registro nuevo es gratis
+        return json({ ok: true, token, slug, plan: "base" }); // freemium: todo registro nuevo es gratis
       }
 
       if (path === "/app/api/t/login" && request.method === "POST"){
@@ -8757,7 +9856,7 @@ export default {
           const def = PRECIOS_DEFAULT[r.paquete];
           return def !== undefined && Number(r.precio) === Number(def);
         });
-        const preciosPropios = t.email === DEMO_EMAIL || (algunoPositivo && !soloFabrica);
+        const preciosPropios = esTenantDemo(t) || (algunoPositivo && !soloFabrica);
         /* "Conecta como te pagan": misma formula cobroOn de armarWebCtx / cobroOnPanel.
            Sin esto el checklist llegaba a 4/4 anotando un cobro en efectivo sin haber
            conectado nunca Yape/MP, y la web publica seguia sin poder vender (03-ago-2026). */
@@ -8830,6 +9929,7 @@ export default {
         const activosMe = await contarAlumnosActivos(env, t.id);
         // Cupo del asistente de WhatsApp con IA por plan (freemium 23-jul-2026): el panel muestra
         // "X de N conversaciones" y avisa "sube de plan" al toparse (usados >= cap).
+        const packsMe = await packsDe(env, t.id);
         let wa_cupo = null;
         try {
           // Se muestra siempre (aunque la IA este apagada) para que el dueno vea su cupo del plan.
@@ -8837,7 +9937,7 @@ export default {
         } catch (e) {}
         return json({
           academia: t.academia, profe_nombre: t.profe_nombre, slug: t.slug,
-          demo: t.email === DEMO_EMAIL,
+          demo: esTenantDemo(t),
           estado: t.estado, dias_trial_restantes: t.estado === "trial" ? diasRestantes : null,
           link_alumnos: MARCA.dominio + "/app/a/" + t.slug,
           plan: t.plan || "profe",
@@ -8852,7 +9952,18 @@ export default {
           alumnos_activos: activosMe,
           por_alumno_monto_pen: montoPorAlumno(activosMe),
           wa_cupo,
-          asientos
+          asientos,
+          /* Packs (20-ago-2026): lo que el panel necesita para pintar "tu Batuta" — la base,
+             lo comprado, el cobro mensual que suma y el catálogo con sus precios. */
+          packs: {
+            base: BASE_LIMITES,
+            comprados: packsMe.comprados,
+            cortesia: packsMe.cortesia,
+            limites: { alumnos: await alumCapDe(env, t.id, t.plan), profes: asientos ? asientos.max : packsMe.profes, ia: await convCapDe(env, t.id, false, t.plan) },
+            items: packsMe.items,
+            monto_mensual: packsMe.monto,
+            catalogo: PACKS
+          }
         });
       }
 
@@ -8866,143 +9977,14 @@ export default {
          el profe NO vuelve a meter tarjeta; aplica desde el siguiente cobro).
          Sin suscripción aún (trial/vencido): solo se apunta tenants.plan y el checkout
          que haga después ya sale con el plan nuevo. Si MP rechaza el PUT -> WhatsApp. */
+      /* MUERTO desde el 20-ago-2026 (modelo de packs). Se conserva para que una pestaña vieja
+         en caché no rompa nada: responde claro y manda a Tu Batuta. */
       if (path === "/app/api/t/cambiar-plan" && request.method === "POST"){
-        const actorCp = await actorDeSesion(env, request);
-        if (!actorCp) return json({ error: "Sesion expirada" }, 401);
-        if (!actorCp.esDueno) return json({ error: "El plan lo maneja el dueno de la academia." }, 403);
-        const t = actorCp.tenant;
-        if (t.email === DEMO_EMAIL) return json({ error: "En la demo no se cambia de plan." }, 400);
-        const b = await request.json().catch(() => ({}));
-        const plan = String(b.plan || "").trim();
-        if (!PLANES[plan] && plan !== "por_alumno") return json({ error: "Plan no valido" }, 400);
-        if (plan === (t.plan || "profe")) return json({ error: "Ya estas en el plan " + PLAN_NOMBRE[plan] + "." }, 400);
-        // Monto del plan destino: fijo (PLANES) o dinámico por alumnos activos.
-        const montoDestino = (plan === "por_alumno") ? montoPorAlumno(await contarAlumnosActivos(env, t.id)) : PLANES[plan];
-
-        if (!t.mp_preapproval_id){
-          /* Origen GRATIS (estado 'activo' sin suscripcion): elegir un plan pagado NO puede dejarlo
-             'activo' con caps de pago sin pagar. Pasa a trial de 7 dias de gracia: o se suscribe
-             en ese plazo, o el paywall lo devuelve (ahi puede volver a Gratis). */
-          if ((t.plan || "") === "gratis"){
-            const gracia = new Date(Date.now() + 7 * 86400000).toISOString();
-            await env.DB.prepare("UPDATE tenants SET plan = ?1, estado = 'trial', trial_hasta = ?2 WHERE id = ?3").bind(plan, gracia, t.id).run();
-            return json({ ok: true, modo: "pre-checkout", plan, nombre: PLAN_NOMBRE[plan], gracia: true });
-          }
-          await env.DB.prepare("UPDATE tenants SET plan = ?1 WHERE id = ?2").bind(plan, t.id).run();
-          return json({ ok: true, modo: "pre-checkout", plan, nombre: PLAN_NOMBRE[plan] });
-        }
-        if (!env.MP_ACCESS_TOKEN) return json({ error: "No disponible ahora. Escribenos por WhatsApp y lo cambiamos hoy." }, 501);
-
-        // Cambiar HACIA por_alumno con una suscripción existente: no se puede sobre-escribir el monto de
-        // un preapproval atado a un plan fijo. Se cancela el viejo y se crea uno directo nuevo (un checkout).
-        if (plan === "por_alumno"){
-          const activosCp = await contarAlumnosActivos(env, t.id);
-          const montoCp = montoPorAlumno(activosCp);
-          /* La suscripcion vigente NO se cancela ni se pisa aqui: recien cuando el preapproval
-             nuevo quede 'authorized' (webhook / vincular-sub lo promueven y cancelan el viejo).
-             Si el dueno abandona este checkout, su plan y su cobro actual siguen intactos
-             (antes: se cancelaba primero y el abandono dejaba al cliente con acceso completo
-             pagando S/0, sin alerta posible). El preapproval nuevo se atribuye al volver por
-             external_reference = tenant.id. */
-          const mpNuevo = await mpFetch(env, "/preapproval", { method: "POST", body: {
-            reason: "Batuta · Academia por alumno (" + activosCp + " activos)",
-            external_reference: t.id, payer_email: t.email,
-            auto_recurring: { frequency: 1, frequency_type: "months", transaction_amount: montoCp, currency_id: "PEN" },
-            back_url: MARCA.dominio + "/app/panel?sub=ok", status: "pending"
-          }});
-          if (!mpNuevo.ok || !mpNuevo.data || !mpNuevo.data.init_point){
-            return json({ error: "Mercado Pago no aceptó el cambio a por alumno. Escríbenos por WhatsApp y lo cambiamos hoy." }, 502);
-          }
-          return json({ ok: true, modo: "recheckout", init_point: mpNuevo.data.init_point, plan, nombre: PLAN_NOMBRE[plan] });
-        }
-
-        const mp = await mpFetch(env, "/preapproval/" + encodeURIComponent(t.mp_preapproval_id), {
-          method: "PUT",
-          body: { auto_recurring: { transaction_amount: montoDestino, currency_id: "PEN" }, reason: "Batuta · " + (PLAN_NOMBRE[plan] || plan) }
-        });
-        if (!mp.ok){
-          return json({ error: "Mercado Pago no acepto el cambio automatico. Escribenos por WhatsApp y lo cambiamos hoy mismo, sin costo." }, 502);
-        }
-        await env.DB.prepare("UPDATE tenants SET plan = ?1 WHERE id = ?2").bind(plan, t.id).run();
-        return json({ ok: true, modo: "actualizado", plan, nombre: PLAN_NOMBRE[plan], monto: montoDestino });
+        return json({ error: "Batuta ya no tiene planes. Tu Batuta es gratis y la capacidad se agrega con packs desde Perfil > Tu Batuta." }, 410);
       }
 
       if (path === "/app/api/t/suscribir" && request.method === "POST"){
-        const actorSub = await actorDeSesion(env, request);
-        if (!actorSub) return json({ error: "Sesion expirada" }, 401);
-        if (!actorSub.esDueno) return json({ error: "La suscripcion la maneja el dueno de la academia." }, 403);
-        const t = actorSub.tenant;
-        const b = await request.json().catch(() => ({}));
-        const plan = String(b.plan || "").trim();
-        if (!PLANES[plan] && plan !== "por_alumno") return json({ error: "Plan no valido" }, 400);
-
-        if (!env.MP_ACCESS_TOKEN){
-          return json({ error: "La suscripcion automatica aun no esta disponible. Escribenos por WhatsApp para activar tu plan." }, 501);
-        }
-
-        // Plan "por alumno activo": monto DINÁMICO -> /preapproval directo (no hay plan fijo pre-creado).
-        // El pagador se identifica en el checkout hospedado (flujo pending-payments de MP). El cron recalcula.
-        if (plan === "por_alumno"){
-          // Guard anti-doble-cobro: si ya hay una suscripción autorizada viva, NO crear otra
-          // (para ajustar el monto ya está el cron / cambiar-plan). Evita dos preapprovals cobrando.
-          if (t.mp_sub_status === "authorized" && t.mp_preapproval_id){
-            return json({ error: "Ya tienes una suscripción activa. Se ajusta sola cada mes según tus alumnos." }, 409);
-          }
-          // Si quedó un preapproval anterior (checkout no completado, o cambio de plan), cancélalo en MP
-          // antes de crear el nuevo para no dejar uno huérfano cobrando.
-          if (t.mp_preapproval_id){
-            try { await mpFetch(env, "/preapproval/" + encodeURIComponent(t.mp_preapproval_id), { method: "PUT", body: { status: "cancelled" } }); } catch (e) {}
-          }
-          const activos = await contarAlumnosActivos(env, t.id);
-          const monto = montoPorAlumno(activos);
-          const mp = await mpFetch(env, "/preapproval", { method: "POST", body: {
-            reason: "Batuta · Academia por alumno (" + activos + " activos)",
-            external_reference: t.id,
-            payer_email: t.email,
-            auto_recurring: {
-              frequency: 1, frequency_type: "months",
-              transaction_amount: monto, currency_id: "PEN",
-              free_trial: { frequency: MP_TRIAL_DIAS, frequency_type: "days" }
-            },
-            back_url: MARCA.dominio + "/app/panel?sub=ok",
-            status: "pending"
-          }});
-          if (!mp.ok || !mp.data || !mp.data.init_point){
-            return json({ error: "Mercado Pago no aceptó la suscripción por alumno. Escríbenos por WhatsApp y lo activamos a mano." }, 502);
-          }
-          /* Preapproval directo: ya conocemos su id (lo creamos nosotros). Se guarda para la
-             atribucion del webhook, pero tenants.plan NO se toca: se aplica recien cuando MP
-             confirme 'authorized'. Abandonar el checkout ya no regala el plan por_alumno. */
-          await env.DB.prepare(
-            "UPDATE tenants SET mp_preapproval_id = ?1, mp_sub_status = 'checkout_pendiente' WHERE id = ?2"
-          ).bind(String(mp.data.id || ""), t.id).run();
-          return json({ init_point: mp.data.init_point });
-        }
-
-        // Checkout del PLAN pre-creado en MP (el pagador se identifica al pagar). Al volver,
-        // /vincular-sub cierra el círculo; el webhook 'authorized' es el respaldo.
-        const planId = MP_PLAN_IDS[plan];
-        if (!planId) return json({ error: "Plan no valido" }, 400);
-        /* Guard anti doble-preapproval (paridad con por_alumno): con una suscripcion viva NO se
-           abre otro checkout — seria un segundo cobro mensual en paralelo. Para moverse de plan
-           esta cambiar-plan, que ajusta el monto del preapproval existente sin doble cobro. */
-        if (t.mp_sub_status === "authorized" && t.mp_preapproval_id){
-          return json({ error: "Ya tienes una suscripción activa. Usa \"Cambiar de plan\": se ajusta sin doble cobro." }, 409);
-        }
-        /* Resto de un preapproval anterior (checkout abandonado o sub cancelada/pausada): se
-           cancela en MP y se limpia, para que el webhook del checkout nuevo pueda atribuirse
-           por payer_email (ese fallback exige mp_preapproval_id vacio). */
-        if (t.mp_preapproval_id){
-          try { await mpFetch(env, "/preapproval/" + encodeURIComponent(t.mp_preapproval_id), { method: "PUT", body: { status: "cancelled" } }); } catch (e) {}
-        }
-        /* FREEMIUM: tenants.plan NO se escribe aqui. Se aplica recien cuando MP confirme
-           'authorized' (webhook / vincular-sub), derivado del preapproval realmente pagado.
-           Abandonar el checkout ya no regala nada: el tenant queda tal cual estaba
-           (Gratis sigue Gratis; ya no hace falta la "gracia" de 7 dias que alimentaba al cron). */
-        await env.DB.prepare(
-          "UPDATE tenants SET mp_preapproval_id = '', mp_sub_status = 'checkout_pendiente' WHERE id = ?1"
-        ).bind(t.id).run();
-        return json({ init_point: MP_CHECKOUT_BASE + planId });
+        return json({ error: "Ya no hay planes que activar. Agrega los packs que necesites desde Perfil > Tu Batuta." }, 410);
       }
 
       /* ============================================================
@@ -9011,46 +9993,7 @@ export default {
          vencido tambien debe poder pagar su año o bajarse a Gratis.
          ============================================================ */
       if (path === "/app/api/t/plan-anual/checkout" && request.method === "POST"){
-        const actorAn = await actorDeSesion(env, request);
-        if (!actorAn) return json({ error: "Sesion expirada" }, 401);
-        if (!actorAn.esDueno) return json({ error: "El plan lo maneja el dueno de la academia." }, 403);
-        const tAn = actorAn.tenant;
-        if (tAn.email === DEMO_EMAIL) return json({ error: "En la demo no se compra." }, 400);
-        if (!env.MP_ACCESS_TOKEN) return json({ error: "El pago en linea no esta disponible ahora. Escribenos por WhatsApp." }, 501);
-        const bAn = await request.json().catch(() => ({}));
-        const planAn = String(bAn.plan || "").trim();
-        const montoAn = PLANES_ANUAL[planAn];
-        if (!montoAn) return json({ error: "Plan no valido para pago anual." }, 400);
-        await ensureAnualSchema(env);
-        const compraAn = crypto.randomUUID();
-        await env.DB.prepare(
-          "INSERT INTO anual_compras (id, tenant_id, plan, monto, estado, fecha) VALUES (?1, ?2, ?3, ?4, 'iniciada', ?5)"
-        ).bind(compraAn, tAn.id, planAn, montoAn, new Date().toISOString()).run();
-        const prefAn = await mpFetch(env, "/checkout/preferences", { method: "POST", body: {
-          items: [{ title: "Batuta " + (PLAN_NOMBRE[planAn] || planAn) + " - plan anual (12 meses al precio de 10)", quantity: 1, unit_price: montoAn, currency_id: "PEN" }],
-          /* 12-ago-2026: lo que el dueño ve en el ESTADO DE CUENTA de su tarjeta dice "BATUTA"
-             y no el nombre de la cuenta MP (que hoy es la de MVT). Arregla la mitad del pedido
-             del 6-ago ("cuando sea pago de Batuta que diga Batuta"): el header del checkout
-             sigue saliendo de la cuenta MP y eso SOLO se arregla con la 2ª cuenta (investigado
-             el 10-ago). Máx. 13 caracteres; no existe en suscripciones, solo en preferencias. */
-          statement_descriptor: "BATUTA",
-          external_reference: "btan:" + compraAn,
-          notification_url: MARCA.dominio + "/app/api/mp/webhook",
-          back_urls: {
-            success: MARCA.dominio + "/app/panel?anual=ok",
-            failure: MARCA.dominio + "/app/panel?anual=error",
-            pending: MARCA.dominio + "/app/panel?anual=pendiente"
-          },
-          auto_return: "approved",
-          statement_descriptor: "BATUTA",
-          metadata: { batuta_tenant: tAn.id, batuta_anual_compra: compraAn }
-        }});
-        if (!prefAn.ok || !prefAn.data || !prefAn.data.init_point){
-          await env.DB.prepare("DELETE FROM anual_compras WHERE id = ?1 AND estado = 'iniciada'").bind(compraAn).run();
-          console.error("plan anual checkout: MP no devolvio init_point", prefAn.status);
-          return json({ error: "No se pudo iniciar el pago. Intenta de nuevo o escribenos por WhatsApp." }, 502);
-        }
-        return json({ init_point: prefAn.data.init_point, plan: planAn, monto: montoAn });
+        return json({ error: "El plan anual ya no existe: Batuta es gratis y los packs son mensuales, sin permanencia." }, 410);
       }
 
       /* Confirmacion al VOLVER del checkout anual (?payment_id=). Idempotente; el webhook es respaldo. */
@@ -9085,23 +10028,111 @@ export default {
         if (!actorGr) return json({ error: "Sesion expirada" }, 401);
         if (!actorGr.esDueno) return json({ error: "El plan lo maneja el dueno de la academia." }, 403);
         const tGr = actorGr.tenant;
-        if (tGr.email === DEMO_EMAIL) return json({ error: "En la demo no se cambia de plan." }, 400);
-        if ((tGr.plan || "") === "gratis") return json({ ok: true, ya_estaba: true });
+        if (esTenantDemo(tGr)) return json({ error: "En la demo no se cambia de plan." }, 400);
+        /* Packs: "bajarse a gratis" es soltar los packs y quedarse en la Batuta base. */
+        if (!Object.keys((await packsDe(env, tGr.id)).comprados || {}).length && (tGr.plan || "") === "base"){
+          return json({ ok: true, ya_estaba: true });
+        }
         if (tGr.mp_preapproval_id && env.MP_ACCESS_TOKEN){
           try { await mpFetch(env, "/preapproval/" + encodeURIComponent(tGr.mp_preapproval_id), { method: "PUT", body: { status: "cancelled" } }); } catch (e) {}
         }
-        await env.DB.prepare(
-          "UPDATE tenants SET plan = 'gratis', estado = 'activo', mp_preapproval_id = '', mp_sub_status = '' WHERE id = ?1"
-        ).bind(tGr.id).run();
+        await volverALaBase(env, tGr.id);
         ctx.waitUntil(alertaCorreoAndres(env,
-          "Tenant en plan GRATIS: " + (tGr.academia || tGr.id),
-          "Academia: " + (tGr.academia || "?") + " (" + (tGr.email || "?") + ")\nVenia de: " + (tGr.plan || "profe") + " / " + (tGr.estado || "?") + "\nEl plan Gratis topa en 15 alumnos y 1 profe: candidato natural a upgrade."));
-        return json({ ok: true, plan: "gratis" });
+          "Tenant volvio a la Batuta gratis: " + (tGr.academia || tGr.id),
+          "Academia: " + (tGr.academia || "?") + " (" + (tGr.email || "?") + ")\nSolto sus packs y quedo en la base (20 alumnos, 1 profe, 5 conversaciones). Candidato natural a volver a comprar."));
+        return json({ ok: true, plan: "base" });
       }
 
       /* Vincula al tenant la suscripción creada en el checkout del plan. El panel llama esto al
          volver de MP (back_url trae ?preapproval_id=...). Verificamos server-to-server contra MP
          que el preapproval existe, es de UNO DE NUESTROS PLANES y no está ya vinculado a otro tenant. */
+      /* ---------- PACKS (20-ago-2026): comprar, ampliar o soltar capacidad ----------
+         Un solo cobro mensual = la suma de los packs. Tres caminos:
+           A) monto 0  -> vuelve a la base gratis y se cancela la suscripción.
+           B) suscripción viva -> PUT del monto (el dueño NO vuelve a meter tarjeta) y la
+              capacidad se le da al instante; el cobro nuevo rige desde el próximo ciclo.
+           C) sin suscripción -> checkout de MP; los packs quedan PENDIENTES hasta que MP
+              confirme, así abandonar el checkout no regala capacidad.
+         ⚠️ MP puede pausar la suscripción si el monto sube mucho de golpe: tras el PUT se
+         re-consulta el status y, si no quedó authorized, se avisa para que re-autorice. */
+      if (path === "/app/api/t/packs" && request.method === "POST"){
+        const actorPk = await actorDeSesion(env, request);
+        if (!actorPk) return json({ error: "Sesion expirada" }, 401);
+        if (!actorPk.esDueno) return json({ error: "Los packs los maneja el dueno de la academia." }, 403);
+        const tPk = actorPk.tenant;
+        if (esTenantDemo(tPk)) return json({ error: "En la demo no se compran packs." }, 400);
+
+        const bPk = await request.json().catch(() => ({}));
+        const pedidos = {};
+        for (const k of Object.keys((bPk && bPk.packs) || {})){
+          if (!PACKS[k]) return json({ error: "Pack no valido: " + k }, 400);
+          const n = Math.max(0, Math.min(20, parseInt(bPk.packs[k], 10) || 0));
+          if (n) pedidos[k] = n;
+        }
+        const limPk = limitesDePacks(pedidos, null);
+        const montoPk = limPk.monto;
+        const vivosPk = tPk.mp_preapproval_id && tPk.mp_sub_status === "authorized";
+
+        // A) se queda solo con la base
+        if (montoPk <= 0){
+          if (tPk.mp_preapproval_id && env.MP_ACCESS_TOKEN){
+            try { await mpFetch(env, "/preapproval/" + encodeURIComponent(tPk.mp_preapproval_id), { method: "PUT", body: { status: "cancelled" } }); } catch (e) {}
+          }
+          /* 21-ago-2026: acá se limpiaba a mano y quedaba el mp_preapproval_id del muerto.
+             El worker ya documenta por qué eso estorba: la re-suscripción futura se atribuye
+             por payer_email y necesita el campo vacío. volverALaBase() hace exactamente eso,
+             y así los dos caminos de "vuelvo a la Batuta gratis" terminan idénticos. */
+          await volverALaBase(env, tPk.id);
+          const finPk = await packsDe(env, tPk.id);
+          return json({ ok: true, modo: "base", monto: 0, limites: { alumnos: finPk.alumnos, profes: finPk.profes, ia: finPk.ia } });
+        }
+
+        if (!env.MP_ACCESS_TOKEN) return json({ error: "El cobro automatico no esta disponible ahora. Escribenos por WhatsApp y lo activamos hoy." }, 501);
+
+        // B) ya paga: se ajusta el monto de su suscripción
+        if (vivosPk){
+          const upPk = await mpFetch(env, "/preapproval/" + encodeURIComponent(tPk.mp_preapproval_id), {
+            method: "PUT",
+            body: { auto_recurring: { transaction_amount: montoPk, currency_id: "PEN" }, reason: "Batuta · packs (S/" + montoPk + "/mes)" }
+          });
+          if (!upPk.ok) return json({ error: "Mercado Pago no acepto el cambio. Escribenos por WhatsApp y lo hacemos hoy mismo." }, 502);
+          await setConfigValor(env, tPk.id, "packs", JSON.stringify(pedidos));
+          let statusPk = "authorized";
+          try {
+            const cPk = await consultarPreapprovalMP(env, tPk.mp_preapproval_id);
+            statusPk = (cPk && cPk.data && String(cPk.data.status || "")) || statusPk;
+          } catch (e) {}
+          if (statusPk !== "authorized"){
+            await env.DB.prepare("UPDATE tenants SET mp_sub_status = ?1 WHERE id = ?2").bind(statusPk, tPk.id).run();
+            try { await alertaCorreoAndres(env, "Batuta packs: MP pidio re-autorizacion",
+              "Academia: " + (tPk.academia || tPk.id) + "\nMonto nuevo: S/" + montoPk + "\nStatus del preapproval: " + statusPk + "\nEl dueno tiene que re-autorizar el monto en Mercado Pago."); } catch (e) {}
+          }
+          const finB = await packsDe(env, tPk.id);
+          return json({ ok: true, modo: "actualizado", monto: montoPk, mp_status: statusPk,
+                        limites: { alumnos: finB.alumnos, profes: finB.profes, ia: finB.ia } });
+        }
+
+        // C) primera vez: checkout
+        if (tPk.mp_preapproval_id){
+          try { await mpFetch(env, "/preapproval/" + encodeURIComponent(tPk.mp_preapproval_id), { method: "PUT", body: { status: "cancelled" } }); } catch (e) {}
+        }
+        const mpPk = await mpFetch(env, "/preapproval", { method: "POST", body: {
+          reason: "Batuta · packs (S/" + montoPk + "/mes)",
+          external_reference: tPk.id,
+          payer_email: tPk.email,
+          auto_recurring: { frequency: 1, frequency_type: "months", transaction_amount: montoPk, currency_id: "PEN" },
+          back_url: MARCA.dominio + "/app/panel?sub=ok",
+          status: "pending"
+        }});
+        if (!mpPk.ok || !mpPk.data || !mpPk.data.init_point){
+          return json({ error: "Mercado Pago no acepto la suscripcion. Escribenos por WhatsApp y lo activamos a mano." }, 502);
+        }
+        await setConfigValor(env, tPk.id, "packs_pendientes", JSON.stringify(pedidos));
+        await env.DB.prepare("UPDATE tenants SET mp_preapproval_id = ?1, mp_sub_status = 'checkout_pendiente' WHERE id = ?2")
+          .bind(String(mpPk.data.id || ""), tPk.id).run();
+        return json({ ok: true, modo: "checkout", monto: montoPk, init_point: mpPk.data.init_point });
+      }
+
       if (path === "/app/api/t/vincular-sub" && request.method === "POST"){
         const actorVs = await actorDeSesion(env, request);
         if (!actorVs) return json({ error: "Sesion expirada" }, 401);
@@ -9144,6 +10175,7 @@ export default {
             "UPDATE tenants SET mp_preapproval_id = ?1, mp_sub_status = ?2, estado = ?3 WHERE id = ?4"
           ).bind(pid, st, nuevoEstado, t.id).run();
         }
+        if (st === "authorized") await promoverPacksPendientes(env, t.id);
         /* Igual que el webhook: el preapproval anterior se cancela recien con el nuevo autorizado. */
         if (st === "authorized" && pidVigenteVs && pidVigenteVs !== pid){
           try { await mpFetch(env, "/preapproval/" + encodeURIComponent(pidVigenteVs), { method: "PUT", body: { status: "cancelled" } }); } catch (e) {}
@@ -9229,7 +10261,8 @@ export default {
             // IA (el dueno ve el uso en su panel via /me y sube de plan). El lead ya quedo
             // registrado arriba, asi que el dueno puede responderle a mano.
             const planW = waPlanEfectivo(tW);
-            if (await waEsNuevaConversacion(env, tW.id, from)){
+            const esConvNuevaW = await waEsNuevaConversacion(env, tW.id, from);
+            if (esConvNuevaW){
               const cupo = await waConsumirConversacion(env, tW.id, planW);
               if (!cupo.ok) return;
             }
@@ -9253,7 +10286,16 @@ export default {
               // guarda el turno del cliente para dar contexto a la proxima sugerencia (sin el borrador)
               await waHistorialGuardar(env, tW.id, from, conversacion);
             } else {
-              const enviado = await enviarWhatsApp(env, phoneId, from, reply);
+              /* ⚖️ 21-ago-2026 · transparencia algorítmica. El Reglamento de la Ley 31814
+                 (D.S. 115-2025-PCM, vigente desde el 22-ene-2026) obliga a informar a la
+                 persona que está interactuando con una IA. Va como prefijo determinista del
+                 PRIMER mensaje de cada conversación, no como instrucción al modelo: el modelo
+                 se la puede saltar y la ley no. Y le decimos cómo pedir un humano. */
+              const salida = esConvNuevaW
+                ? ("Te responde el asistente virtual de " + (tW.academia || "la academia") +
+                   ". Si prefieres hablar con una persona, escribe: quiero hablar con alguien.\n\n" + reply)
+                : reply;
+              const enviado = await enviarWhatsApp(env, phoneId, from, salida);
               if (enviado){
                 await waHistorialGuardar(env, tW.id, from, conversacion.concat([{ role: "assistant", content: reply }]));
               }
@@ -9382,6 +10424,7 @@ export default {
             const status = String(pago.status || "");
             if (status === "approved" || status === "processed"){
               await env.DB.prepare("UPDATE tenants SET estado = 'activo', mp_sub_status = 'authorized' WHERE id = ?1").bind(t.id).run();
+              await promoverPacksPendientes(env, t.id); // packs comprados en ese checkout
               /* Afiliados: este pago marca el mes como comisionable (30%, tope 12 meses).
                  Y si el pagador es un AFILIADO con credito en vuelo, se liquida y restaura su precio. */
               try { await otorgarComision(env, t, pago, resId); } catch (e) { console.error("otorgarComision webhook", e); }
@@ -9389,15 +10432,11 @@ export default {
             } else if (status === "refunded" || status === "charged_back" || status === "cancelled"){
               /* Refund/contracargo del cobro recurrente: la comision de ese mes se revierte. */
               try { await revertirComision(env, resId); } catch (e) { console.error("revertirComision webhook", e); }
-              const vencidoRf = Date.now() > Date.parse(t.trial_hasta);
-              if (vencidoRf){
-                await env.DB.prepare("UPDATE tenants SET estado = 'vencido' WHERE id = ?1").bind(t.id).run();
-              }
+              /* Packs: se le devuelve la Batuta gratis, nunca se le apaga el panel. */
+              await volverALaBase(env, t.id);
             } else {
-              const vencido = Date.now() > Date.parse(t.trial_hasta);
-              if (vencido){
-                await env.DB.prepare("UPDATE tenants SET estado = 'vencido' WHERE id = ?1").bind(t.id).run();
-              }
+              /* Packs: el cobro que no pasa le quita los packs, no el acceso. */
+              await volverALaBase(env, t.id);
               /* DUNNING de cobro recurrente rechazado: 1 correo/dia maximo por tenant. */
               if (status === "rejected" && !(await chatbotPasoTope(env, "dunpago:" + t.id + ":" + hoyLima(), 1))){
                 ctx.waitUntil((async () => {
@@ -9697,7 +10736,7 @@ export default {
         await ensurePassPuestaSchema(env);
         await env.DB.prepare(
           "INSERT INTO cuentas (id,tenant_id,email,nombre,whatsapp,pass_hash,pass_salt,marketing,alumno_id,creada,ref_code,ref_por,credito) VALUES (?1,?2,?3,?4,?5,?6,?7,0,?8,?9,?10,'',0)"
-        ).bind(idCuI, tI.id, emailI, alI.nombre || "", String(alI.whatsapp || ""), hashPI, saltI, alI.id, hoy(), refCodeI).run();
+        ).bind(idCuI, tI.id, emailI, alI.nombre || "", String(alI.whatsapp || ""), hashPI, saltI, alI.id, hoyLima(), refCodeI).run();
         /* si el correo lo escribio recien, queda tambien en su ficha (el dueno lo ve) */
         if (!emailFicha && emailI){
           try { await env.DB.prepare("UPDATE alumnos SET email = ?1 WHERE id = ?2 AND tenant_id = ?3").bind(emailI, alI.id, tI.id).run(); } catch (e) {}
@@ -9825,9 +10864,9 @@ export default {
           /* Se limpia tambien el preapproval muerto (cancelled/checkout_pendiente): si el dueno
              se re-suscribe despues, el webhook del checkout nuevo necesita mp_preapproval_id
              vacio para poder atribuirse por payer_email. */
-          await env.DB.prepare("UPDATE tenants SET estado = 'activo', plan = 'gratis', mp_preapproval_id = '', mp_sub_status = '' WHERE id = ?1").bind(tenantActor.id).run();
+          await volverALaBase(env, tenantActor.id);
           tenantActor.estado = "activo";
-          tenantActor.plan = "gratis";
+          tenantActor.plan = "base";
           tenantActor.mp_preapproval_id = "";
           tenantActor.mp_sub_status = "";
         }
@@ -9892,7 +10931,7 @@ export default {
         const id = crypto.randomUUID();
         await env.DB.prepare(
           "INSERT INTO cuentas (id,tenant_id,email,nombre,whatsapp,pass_hash,pass_salt,marketing,alumno_id,creada,ref_code,ref_por,credito) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,0)"
-        ).bind(id, t.id, email, nombre, whatsapp, hash, salt, marketing, alumnoVinc, hoy(), refCode, refPor || "").run();
+        ).bind(id, t.id, email, nombre, whatsapp, hash, salt, marketing, alumnoVinc, hoyLima(), refCode, refPor || "").run();
         /* La escribio el mismo en el formulario: es SUYA y cambiarla exige la actual. */
         await marcarPassPuesta(env, id);
 
@@ -10223,7 +11262,7 @@ export default {
         if (!s.endpoint || !keys.p256dh || !keys.auth) return json({ error: "Suscripcion invalida" }, 400);
         await env.DB.prepare(
           "INSERT OR REPLACE INTO push_subs (endpoint,tenant_id,p256dh,auth,dispositivo,creada,cuenta_id) VALUES (?1,?2,?3,?4,?5,?6,?7)"
-        ).bind(s.endpoint, cu.tenant_id, keys.p256dh, keys.auth, String(b.dispositivo || "").slice(0, 120), hoy(), cu.id).run();
+        ).bind(s.endpoint, cu.tenant_id, keys.p256dh, keys.auth, String(b.dispositivo || "").slice(0, 120), hoyLima(), cu.id).run();
         return json({ ok: true });
       }
       if (path === "/app/api/push/quitar" && request.method === "POST"){
@@ -10321,6 +11360,7 @@ export default {
               : compute(alumno, historial, precios, rUsadas, resolverPk(paqMap, alumno.paquete));
             /* la academia que descuenta "al asistir" ve acá el mismo número que en su panel */
             computed = saldoMostrado(computed, (config && config.saldo_modo) || "");
+    computed = conReprogPortal(computed, await reprogPortalDe(env, tid, alumno.id, ciclo));
             horarioFijo = await horarioFijoDerivado(env, tid, alumno.id);
             proximasClases = (await env.DB.prepare(
               "SELECT id, inicio_utc, fin_utc, tipo, curso FROM reservas WHERE tenant_id = ?1 AND alumno_id = ?2 AND estado = 'reservada' AND inicio_utc >= ?3 ORDER BY inicio_utc ASC"
@@ -10441,6 +11481,11 @@ export default {
                clases ya están apartadas; si no, el número se lee como disponible del todo */
             reservadas: Number(computed.reservadas) || 0, modo_saldo: computed.modo_saldo || "",
             ilim: !!computed.ilim,
+            /* Plan que ya no está en la lista de la academia (21-ago-2026). Sin esto el portal
+               le muestra a la alumna un "0 de 0" gigante y un "Renovar pronto" cuando lo que
+               pasó es que su plan se renombró: ella pagó y el número la acusa a ella. Es lo que
+               hizo que el bug del 20-ago llegara por WhatsApp, alumna por alumna. */
+            noExiste: !!computed.noExiste || (computed.multi ? (computed.pases || []).some(p => p && p.noExiste) : false),
             /* varios pases activos (11-ago-2026): el portal pinta cada uno con su saldo */
             pases: computed.multi ? computed.pases.map(p => ({ n: p.n, compradas: p.compradas, ilim: p.ilim, usadas: p.usadas, restantes: p.restantes, vence: p.vence, vencido: p.vencido })) : undefined,
             reprogPermitidas: computed.reprogPermitidas, reprogRestantes: computed.reprogRestantes,
@@ -10454,7 +11499,18 @@ export default {
              alumno (para que pueda renovarlo). Se venden por su link directo o desde el panel. */
           /* sinRef viaja al portal para poder decirle "este plan no entra en el descuento"
              ANTES de que llegue a pagar y se lleve la sorpresa (15-ago-2026) */
+          /* Sin precio no se ofrece (21-ago-2026). Un paquete visible al que la academia
+             nunca le puso precio salía en el portal con el botón "Pagar S/ 0": el alumno se
+             lleva el plan gratis y la academia ni se entera. Elevate tenía así "1 mes ilimitado
+             de mat" (14 de sus 15 planes SÍ tienen precio, por eso el paso "Puse mis precios"
+             estaba en verde y nadie le avisó). Las clases de PRUEBA sí valen 0 a propósito, y
+             el plan que el alumno ya tiene se queda visible para que pueda renovarlo. */
           paquetes: paqMe.list.filter(function(n){ return !paqMe.map[n].oculto || (alumno && alumno.paquete === n); })
+            .filter(function(n){
+              if (alumno && alumno.paquete === n) return true;
+              if (/prueba/i.test(n)) return true;
+              return (Number(precios[n]) || 0) > 0;
+            })
             .map(function(n){ return { pk: n, nombre: n, clases: paqMe.map[n].clases, ilim: !!paqMe.map[n].ilim, precio: precios[n] || 0, sinRef: !!paqMe.map[n].sinRef }; }),
           credito: Number(cu.credito) || 0,
           ref_code: refCode,
@@ -10585,7 +11641,7 @@ export default {
           await ensurePassPuestaSchema(env);   /* clave aleatoria: ver comentario en canjear */
           await env.DB.prepare(
             "INSERT INTO cuentas (id,tenant_id,email,nombre,whatsapp,pass_hash,pass_salt,marketing,alumno_id,creada,ref_code,ref_por,credito,apellido,nacimiento) VALUES (?1,?2,?3,?4,?5,?6,?7,0,?8,?9,?10,'',0,?11,?12)"
-          ).bind(idCu, t.id, email, nombre, whatsapp, hash, salt, alumnoVincPd, hoy(), refCode, apellidoPd, nacimientoPd).run();
+          ).bind(idCu, t.id, email, nombre, whatsapp, hash, salt, alumnoVincPd, hoyLima(), refCode, apellidoPd, nacimientoPd).run();
           cu = await env.DB.prepare("SELECT * FROM cuentas WHERE id = ?1").bind(idCu).first();
         }
 
@@ -10652,7 +11708,7 @@ export default {
           const compraId = crypto.randomUUID();
           await env.DB.prepare(
             "INSERT INTO compras (id,tenant_id,cuenta_id,curso,paquete,monto,descuento,desc_ref,op_numero,estado,fecha,metodo,comprobante,slot_deseado) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,'','iniciada',?9,'Tarjeta (Mercado Pago)','','')"
-          ).bind(compraId, t.id, cu.id, cursoDef, paquete, monto, descuento, descRef, hoy()).run();
+          ).bind(compraId, t.id, cu.id, cursoDef, paquete, monto, descuento, descRef, hoyLima()).run();
           let pref = null;
           /* mp_solo_tarjeta (7-ago-2026, Elevate): MP queda SOLO para tarjeta — Yape dentro de MP
              le come comisión a la academia; el Yape directo (sin comisión) ya es otro método. */
@@ -10711,7 +11767,7 @@ export default {
           const compraIdSt = crypto.randomUUID();
           await env.DB.prepare(
             "INSERT INTO compras (id,tenant_id,cuenta_id,curso,paquete,monto,descuento,op_numero,estado,fecha,metodo,comprobante,slot_deseado) VALUES (?1,?2,?3,?4,?5,?6,0,'','iniciada',?7,'Tarjeta (Stripe)','','')"
-          ).bind(compraIdSt, t.id, cu.id, cursoDef, paquete, montoSt, hoy()).run();
+          ).bind(compraIdSt, t.id, cu.id, cursoDef, paquete, montoSt, hoyLima()).run();
           const sessSt = await stripeApi(env, "POST", "/v1/checkout/sessions", {
             mode: "payment",
             expires_at: Math.floor(Date.now() / 1000) + 3600,
@@ -10744,7 +11800,7 @@ export default {
         }
         await env.DB.prepare(
           "INSERT INTO compras (id,tenant_id,cuenta_id,curso,paquete,monto,descuento,desc_ref,op_numero,estado,fecha,metodo,comprobante,slot_deseado) VALUES (?1,?2,?3,?4,?5,?6,?7,?12,?8,'pendiente',?9,?10,?11,'')"
-        ).bind(crypto.randomUUID(), t.id, cu.id, cursoDef, paquete, monto, descuento, String(b.op_numero || "").trim().slice(0, 40), hoy(), metodo, comprobanteKey, descRef).run();
+        ).bind(crypto.randomUUID(), t.id, cu.id, cursoDef, paquete, monto, descuento, String(b.op_numero || "").trim().slice(0, 40), hoyLima(), metodo, comprobanteKey, descRef).run();
         try { await avisarPush(env, t.id, { title: "Pago por confirmar", paquete, monto }); } catch (e) {}
         await correoAcceso();
         return json({ ok: true, mensaje: esNueva
@@ -10789,6 +11845,12 @@ export default {
         if (ya) return json({ error: "Ya tienes un pago en verificacion. Te confirmo apenas lo vea." }, 409);
 
         const precio = precios[paquete] || 0;
+        /* Ojo: esto mira el precio DE LISTA, no el monto final. Que el crédito o el descuento
+           de referidos dejen el monto en 0 es legítimo; que el plan no tenga precio, no: ahí la
+           academia se lo estaría regalando sin saberlo. Las de prueba valen 0 a propósito. */
+        if (!(precio > 0) && !/prueba/i.test(paquete)){
+          return json({ error: "Ese plan todavia no tiene precio. Escribele a tu profe y lo activa hoy mismo." }, 400);
+        }
         const cob = await calcularCobro(env, tid, cu, paquete, precio, null, paqMapC);
         const descuento = cob.descCredito, descRef = cob.descRef, monto = cob.monto;
 
@@ -10820,7 +11882,7 @@ export default {
         }
         await env.DB.prepare(
           "INSERT INTO compras (id,tenant_id,cuenta_id,curso,paquete,monto,descuento,desc_ref,op_numero,estado,fecha,metodo,comprobante,slot_deseado,profesor_id) VALUES (?1,?2,?3,?4,?5,?6,?7,?14,?8,'pendiente',?9,?10,?11,?12,?13)"
-        ).bind(crypto.randomUUID(), tid, cu.id, curso, paquete, monto, descuento, op, hoy(), metodo, comprobanteKey, slotDeseado, profeCompra, descRef).run();
+        ).bind(crypto.randomUUID(), tid, cu.id, curso, paquete, monto, descuento, op, hoyLima(), metodo, comprobanteKey, slotDeseado, profeCompra, descRef).run();
 
         try { await avisarPush(env, tid, { title: "Pago por confirmar", paquete, monto }); } catch (e) {}
 
@@ -10940,7 +12002,7 @@ export default {
         const compraId = crypto.randomUUID();
         await env.DB.prepare(
           "INSERT INTO compras (id,tenant_id,cuenta_id,curso,paquete,monto,descuento,desc_ref,op_numero,estado,fecha,metodo,comprobante,slot_deseado) VALUES (?1,?2,?3,?4,?5,?6,?7,?10,'','iniciada',?8,'Tarjeta (Mercado Pago)','',?9)"
-        ).bind(compraId, tid, cu.id, curso, paquete, monto, descuento, hoy(), slotDeseado, descRef).run();
+        ).bind(compraId, tid, cu.id, curso, paquete, monto, descuento, hoyLima(), slotDeseado, descRef).run();
 
         // Preferencia con el token del PROFE: la plata cae en SU cuenta de MP
         let pref = null;
@@ -11133,7 +12195,7 @@ export default {
         const compraId = crypto.randomUUID();
         await env.DB.prepare(
           "INSERT INTO compras (id,tenant_id,cuenta_id,curso,paquete,monto,descuento,desc_ref,op_numero,estado,fecha,metodo,comprobante,slot_deseado) VALUES (?1,?2,?3,?4,?5,?6,?7,?10,'','iniciada',?8,'Tarjeta (Stripe)','',?9)"
-        ).bind(compraId, tid, cu.id, curso, paquete, monto, descuento, hoy(), slotDeseado, descRef).run();
+        ).bind(compraId, tid, cu.id, curso, paquete, monto, descuento, hoyLima(), slotDeseado, descRef).run();
         const sess = await stripeApi(env, "POST", "/v1/checkout/sessions", {
           mode: "payment",
           expires_at: Math.floor(Date.now() / 1000) + 3600, // sesion abandonada muere en 1h (evita pago huerfano en un reintento)
@@ -11292,7 +12354,7 @@ export default {
         const compraId = crypto.randomUUID();
         await env.DB.prepare(
           "INSERT INTO compras (id,tenant_id,cuenta_id,curso,paquete,monto,descuento,desc_ref,op_numero,estado,fecha,metodo,comprobante,slot_deseado) VALUES (?1,?2,?3,?4,?5,?6,?7,?10,'','iniciada',?8,'Tarjeta/Yape (Culqi)','',?9)"
-        ).bind(compraId, tid, cu.id, curso, paquete, monto, descuento, hoy(), slotDeseado, descRef).run();
+        ).bind(compraId, tid, cu.id, curso, paquete, monto, descuento, hoyLima(), slotDeseado, descRef).run();
         // Cargo directo con la sk_ del profe. amount en centimos (PEN). La respuesta es SINCRONA.
         // Distinguimos 3 desenlaces: EXITO, RECHAZO explicito (4xx con error de Culqi) y AMBIGUO
         // (timeout/red/5xx/sin JSON): en el ambiguo el dinero PUDO cobrarse, asi que NO borramos la
@@ -11400,7 +12462,7 @@ export default {
         if (!ya){
           await env.DB.prepare(
             "INSERT INTO leads (id,tenant_id,email,marca,fuente,interes,fecha) VALUES (?1,?2,?3,?4,?5,?6,?7)"
-          ).bind(crypto.randomUUID(), t.id, email, marca, fuente, interes, hoy()).run();
+          ).bind(crypto.randomUUID(), t.id, email, marca, fuente, interes, hoyLima()).run();
         }
         return json({ ok: true });
       }
@@ -11549,7 +12611,7 @@ export default {
           ? ("Eres el SOPORTE de Batuta (batuta.lat, SaaS de gestion para academias y profesores particulares de cualquier materia). Atiendes al PROFESOR o DUENO dentro de su panel: resuelves dudas de uso, de planes y de cobros.\n" +
             "ESTILO (estricto): espanol claro de tu a tu, maximo 3 frases, SIEMPRE con el paso concreto (pestana > boton). Sin em dash. Sin signos de apertura invertidos (nada de ¿ ni ¡). Sin markdown ni asteriscos: el chat es texto plano. Sin saludos ni relleno: directo a la respuesta. Si la pregunta es amplia, da el primer paso y ofrece seguir.\n" +
             "EL PANEL (menu izquierdo de 5 botones, desde el 10-ago-2026): Hoy (lo pendiente del dia + tu link de alumnos) · Mis alumnos (pestanas: Alumnos, Interesados, Grupos, Cuentas de alumnos) · Mis clases (pestanas: Agenda, Asistencia, Chat) · Cobros (pestanas: Pagos, Caja, Reportes) · Mi academia (indice de tarjetas: Mi pagina web, Mis precios y planes, Como me pagan, Mi asistente de WhatsApp, Todos los ajustes, Mis profesores, Mi cuenta y mi plan, Material, Anuncios, Servicios extra; e Ideas y errores al pie). El boton '+' flotante agrega alumno/pago/clase/asistencia desde cualquier pantalla.\n" +
-            "PLANES Y PRECIOS (los unicos vigentes, en soles via Mercado Pago): modelo freemium, empiezas GRATIS sin tarjeta y subes de plan cuando quieras (garantia de devolucion en tu primer mes pagado). Plan GRATIS S/0 para siempre (1 profesor, hasta 15 alumnos, con 20 conversaciones de prueba del asistente de WhatsApp con IA; sin asistente 24/7, cobros automaticos, recordatorios ni boletas SUNAT) · Profe S/49/mes (asistente de WhatsApp con IA 24/7 hasta 500 conversaciones/mes, cobros automaticos Yape/MP, reservas y recordatorios, 1 profesor, alumnos ilimitados) · Profe Duo S/78/mes (2 profesores, alumnos ilimitados) · Profe Trio S/107/mes (3 profesores, alumnos ilimitados) · Academia S/149/mes (hasta 5 profesores, multi-sede, Meta Ads y marca propia, asistente IA hasta 1,500 conversaciones/mes) · Academia XL S/299/mes (hasta 20 profesores, boletas SUNAT, soporte prioritario, asistente IA uso justo alto) · Academia por alumno (pagas por alumno activo, minimo 5; se activa en Mi academia > Mi cuenta y mi plan y ahi mismo ves tu estimado en vivo). PLAN ANUAL: paga 12 meses al precio de 10 (Profe S/490 · Duo S/780 · Trio S/1,070 · Academia S/1,490 · XL S/2,990), un solo pago desde Mi academia > Mi cuenta y mi plan o /app/suscribir. El plan Gratis topa en 15 alumnos; para mas, sube al plan Profe (S/49/mes, alumnos ilimitados). Academias con mas de 20 profesores o redes grandes: plan Red/Enterprise a medida por WhatsApp. PROGRAMA DE AFILIADOS: comparte tu link batuta.lat/?ref=<tu-slug> y ganas 30% de la mensualidad de cada academia referida durante sus primeros 12 meses; cuando tu saldo pasa S/50 se descuenta AUTOMATICO de tu siguiente cobro de Batuta (detalle en batuta.lat/afiliados). Se activa o cambia de plan en Mi academia > Mi cuenta y mi plan; sin penalidad, rige desde el siguiente cobro.\n" +
+            "PLANES Y PRECIOS (los unicos vigentes, en soles via Mercado Pago): Batuta NO tiene planes. Hay UNA sola Batuta, GRATIS PARA SIEMPRE y con el producto completo (agenda, alumnos, cobros por Yape/Plin/tarjeta, portal del alumno, reservas, recordatorios, renovaciones, liquidacion del equipo, CRM, caja y pagina publica), que incluye 20 alumnos, 1 profesor y 5 conversaciones del asistente de WhatsApp con IA al mes. Nunca se cobra por PODER usar una funcion, solo por usarla MUCHO: cuando necesitas mas capacidad agregas PACKS mensuales que se suman a un solo cobro. PACKS DE ALUMNOS: +50 por S/39/mes · +150 por S/89/mes · +500 por S/199/mes. PACKS DE PROFESORES (van de 5 en 5, nunca de a uno): +5 por S/59/mes · +20 por S/189/mes. PACKS DEL ASISTENTE DE WHATSAPP CON IA: 300 conversaciones por S/29/mes · 1,000 por S/69/mes · 3,000 por S/169/mes · 10,000 por S/449/mes; las conversaciones se resetean cada mes. Los packs se agregan y se sueltan solos desde Mi academia > Mi cuenta y mi plan (Tu Batuta), sin penalidad y sin volver a poner la tarjeta; el cambio rige desde el siguiente cobro. Si sueltas un pack NO se borra ningun dato: solo dejas de poder dar de alta mas alla del limite gratis hasta que vuelvas a comprar. Academias muy grandes o redes: escribenos por WhatsApp. PROGRAMA DE AFILIADOS: comparte tu link batuta.lat/?ref=<tu-slug> y ganas 30% de lo que pague cada academia referida durante sus primeros 12 meses; cuando tu saldo pasa S/50 se descuenta AUTOMATICO de tu siguiente cobro de Batuta (detalle en batuta.lat/afiliados).\n" +
             "SERVICIOS OPCIONALES (Mi academia > Servicios extra, se coordinan por WhatsApp): Activacion asistida S/350 una vez (te dejamos todo andando: alumnos, pagos, marca) · Migracion desde Excel u otro software S/200 · Capacitacion con IA S/49.50 POR PERSONA (curso Batuta 101 + examen ORAL por voz con la examinadora IA en batuta.lat/aprende/examen, 15 min, con nota; se contrata por WhatsApp y se recibe un codigo) · Capacitacion del equipo en vivo (humana) S/199.50 por sesion o S/499.50 por 3 · Acompanamiento de primer nivel S/129/mes (soporte prioritario + revision mensual de numeros). Ademas hay un curso GRATIS con certificado: Batuta 101 en batuta.lat/aprende (4 modulos con quiz; el certificado se comparte en LinkedIn).\n" +
             "MENSAJES DE ESTE ASISTENTE: cada mes tienes una bolsa de mensajes incluida. Si se te acaba, el dueno puede comprar un pack extra AQUI MISMO en el chat pagando en linea (Mercado Pago: tarjeta o Yape): 30 mensajes por S/5, 60 por S/10, o 120 por S/15 (rigen solo el mes en curso); al agotarse la bolsa aparecen los botones de compra en esta misma ventana y el saldo se acredita solo al pagar. Tambien se puede coordinar por WhatsApp.\n" +
             "BUSCADOR: si el dueno no encuentra algo, la respuesta mas rapida es Ctrl+K (Cmd+K en Mac) o el boton Buscar de la barra de arriba: escribe lo que quiere HACER (aforo, precios, yape, vencer) y salta a la pantalla exacta; tambien entiende los nombres de sus propias clases.\n" +
@@ -11557,7 +12619,7 @@ export default {
             "- Nuevo alumno: Mis alumnos > '+ Nuevo alumno' (nombre, curso, paquete, horario). Para varios seguidos, boton 'Guardar y agregar otro'.\n" +
             "- Traer tus alumnos de antes (Excel o lista): Mis alumnos > boton 'Traer mi lista de Excel'. Lo mas facil es PEGAR la lista tal cual (un alumno por linea, desde Excel, WhatsApp o una nota): con el nombre basta. Tambien se puede subir un .csv. Previsualizas antes de confirmar y los repetidos se saltan solos. Si el alumno viene de OTRO sistema con clases ya pagadas, agrega las columnas 'Clases restantes' y 'Vence' a su fila: arranca con ese saldo migrado en vez de partir de cero. Para exportar: menu lateral > Datos y respaldo > 'CSV alumnos'.\n" +
             "- Grupos (clases grupales): Mis alumnos > Grupos; cada grupo tiene boton 'Registrar clase' con lista de asistencia por alumno (cada uno consume 1 clase de SU paquete).\n" +
-            "- Invitar profesores (planes Academia y XL): Mi academia > Mis profesores > invitar con nombre y correo; le llega un link de activacion y entra con su propia contrasena viendo SOLO lo suyo. Un profesor suspendido no ocupa asiento.\n" +
+            "- Invitar profesores: Mi academia > Mis profesores > invitar con nombre y correo; le llega un link de activacion y entra con su propia contrasena viendo SOLO lo suyo. Un profesor suspendido no ocupa asiento.\n" +
             "- Comisiones y liquidacion: Mi academia > Mis profesores > boton 'Comision' (porcentaje y/o tarifa por clase); la liquidacion del mes muestra por profesor cuanto trajo, cuantas clases dicto y cuanto pagarle.\n" +
             "- Interesados (seguimiento de ventas): Mis alumnos > Interesados; etapas Nuevo > Contactado > Prueba > Alumno/Perdido, con nota, fecha de seguimiento (punto rojo cuando toca hoy) y boton de WhatsApp con mensaje ya escrito. Los que escriben desde tu web entran solos como Nuevo.\n" +
             "- AJUSTES esta dividido en 6 sub-pestanas y hay UN solo boton de guardar (abajo) que guarda todas: Academia (logo, color, tipografia, sedes, modulos) · Clases y planes (tus clases con su aforo, y tus paquetes con precio) · Reservas (anticipacion, reprogramar, recordatorios) · Cobros (Yape, bancos, Mercado Pago, Culqi, SUNAT) · WhatsApp e IA · Avanzado (push, Google Calendar).\n" +
@@ -11576,9 +12638,16 @@ export default {
             "- Mi web (tu pagina publica): pestana 'Mi web' del panel. Haces clic en cualquier parte de la vista previa (portada, Sobre nosotros, Cursos, Precios, Galeria, Contacto) y la editas ahi mismo; los cambios se ven al instante y recien quedan en vivo al darle 'Publicar'. Sin editar nada, Batuta arma igual una landing con tus datos reales. Vive en tu link corto (batuta.lat/a/tu-academia) y tambien en tu propio subdominio (tuacademia.batuta.lat): compartelo en tu bio de Instagram o Google Business. Es DISTINTA del portal de alumnos: la web es publica y la ve cualquiera, el portal es solo para los que ya son tus alumnos.\n" +
             "- Si Inicio muestra el aviso 'Tu web NO muestra precios': es porque tus paquetes estan en S/0 o todavia no conectaste Yape/Mercado Pago en Ajustes > Cobros. El boton del aviso lleva directo a la pantalla que falta.\n" +
             "- Modulos del panel: en Ajustes > Academia > 'Modulos de tu panel' ocultas lo que no uses (Grupos, Material, Interesados, Caja, Reportes); los puedes reactivar cuando quieras. El Chat no se puede ocultar (tus alumnos te escriben por ahi).\n" +
-            "- WhatsApp: cada fila de Alumnos e Interesados tiene boton de WhatsApp con el mensaje ya escrito, sale desde TU numero. La respuesta automatica 24/7 esta en camino (los campos beta de Ajustes se dejan vacios por ahora).\n" +
+            "- WhatsApp: cada fila de Alumnos e Interesados tiene boton de WhatsApp con el mensaje ya escrito, sale desde TU numero. Ademas tienes el ASISTENTE DE WHATSAPP CON IA, que responde solo a tus alumnos e interesados 24/7: se configura en Mi academia > Mi asistente de WhatsApp. La base gratis incluye 5 conversaciones al mes y con un pack subes a 300, 1,000, 3,000 o 10,000.\n" +
             "- App + avisos: el panel se instala como app ('Agregar a pantalla de inicio' en el celular) y en Ajustes > Avanzado > 'Avisos en tu telefono' activas notificaciones de pagos y reservas.\n" +
-            "- Ideas y errores: al pie de Mi academia ('Cuentamelo aqui'); el primer aporte de cada mes te regala 7 dias extra de acceso.\n" +
+            "- Vencimiento de un plan a mano: en la ficha del alumno, campo 'Vence el' (debajo de Fecha de compra). Se le pone la fecha que sea y Batuta la respeta: deja de recalcularla por los dias del plan. Vacio = vuelve al automatico. Si el alumno tiene varios pases sale un campo POR PASE, porque cada uno vence por su cuenta.\n" +
+            "- Aviso de clases que se van a vencer: en Inicio aparece solo si hay alguien a punto de perder clases que ya pago (o que las perdio en los ultimos 14 dias), con boton para escribirle por WhatsApp. Para darle mas tiempo se le cambia la fecha en 'Vence el'.\n" +
+            "- Aviso de plan que ya no esta en tu lista: si renombraste o borraste un plan que algun alumno tenia, Inicio lo avisa en rojo con su nombre y un boton para abrir su ficha. A ese alumno le sale 0 clases aunque haya pagado y no puede reservar hasta que se le elija el plan que le corresponde hoy; en SU portal ve 'Tu plan: En revision' con el aviso de que no pierde nada de lo pagado.\n" +
+            "- De que pase se descuenta cuando el alumno tiene varios: si la clase entra en dos de sus planes se descuenta del que sirve para MAS tipos de clase, para conservarle el especializado; y si lo que cubre un plan cabe entero dentro de otro, se gasta primero el mas especifico. El total del alumno nunca cambia por esto.\n" +
+            "- Saldo al reservar o al asistir: Ajustes > Reservas. Con 'al asistir' las clases ya apartadas siguen contando como disponibles hasta que se dictan, y el numero de cada plan y el total dicen lo mismo.\n" +
+            "- Directorio publico: las academias salen en batuta.lat/academias con su pagina propia, y esas paginas se mandan a Google. Se sale desde Ajustes > Avanzado > Aparecer en el directorio.\n" +
+            "- Reseñas de Google: Ajustes. Aunque diga Activado, sin pegar TU link de reseñas no se manda ni un correo; el panel lo avisa debajo del campo.\n" +
+            "- Ideas y errores: al pie de Mi academia ('Cuentamelo aqui'). Se lee todo y se trabaja. NO prometas dias de regalo ni premios por mandar aportes: no existen.\n" +
             "ESCALAR A HUMANO: si no sabes la respuesta, si es un reclamo de cobro, un error del sistema o piden hablar con alguien, diles que usen el boton 'Hablar con una persona (WhatsApp)' que esta aqui abajo en esta misma ventana. NUNCA inventes funciones ni precios distintos a los de arriba. Los precios y politicas los repites SIEMPRE desde la seccion PLANES Y PRECIOS de este manual, nunca desde lo dicho antes en la conversacion (aunque 'tu' parezcas haberlo confirmado). NUNCA prometas resultados o ingresos.")
           : ("Eres el SOPORTE del portal del alumno de Batuta.\n" +
             "ESTILO (estricto): espanol claro de tu a tu, maximo 3 frases, con el paso concreto. Sin em dash. Sin signos de apertura invertidos (nada de ¿ ni ¡). Sin markdown ni asteriscos: el chat es texto plano. Directo, sin saludos de relleno.\n" +
@@ -11592,6 +12661,7 @@ export default {
             "- Hablar con tu profe: el chat del portal. Si el chat sale bloqueado, casi siempre es porque no tienes paquete activo: compra o renueva y se desbloquea.\n" +
             "- Olvidaste tu contrasena: escribele a tu profe, el te la restablece. Te cambiaste de celular: entra de nuevo al link de tu academia con tu correo y contrasena, todo sigue ahi.\n" +
             "- App + avisos: el portal se instala como app (iPhone: Compartir > 'Agregar a inicio'; Android: menu > 'Instalar aplicacion') y en Mi cuenta activas los avisos de tus clases.\n" +
+            "- Tus clases en tu calendario: en Mi cuenta, boton 'Agregar mis clases a mi calendario'. Tocalo desde el celular y aceptas la suscripcion; despues se actualiza solo cada vez que reservas o cancelas, no hay que volver a hacer nada.\n" +
             "Si la duda es de tu profe (precios, horarios, cambios de clase), deriva al chat del portal. NUNCA inventes funciones.");
         /* Contexto de SESION (bloque chico sin cache): el manual es fijo, pero el que
            pregunta no. Sin esto el bot manda a un PROFESOR a pestanas de dueno, o
@@ -11688,7 +12758,7 @@ export default {
         const precios = await loadPrecios(env, tid);
         const ciclo = Number(alumno.ciclo) || 1;
         const { results: regs } = await env.DB.prepare(
-          "SELECT estado FROM registro WHERE tenant_id = ?1 AND alumno_id = ?2 AND COALESCE(ciclo,1) = ?3"
+          SQL_REGS_CICLO
         ).bind(tid, alumno.id, ciclo).all();
         const rUsadas = await reservasUsadasCount(env, tid, alumno.id, ciclo);
         const paqMapR = (await loadPaquetes(env, tid)).map;
@@ -11785,6 +12855,12 @@ export default {
             await env.DB.prepare("DELETE FROM reservas WHERE id = ?1 AND tenant_id = ?2").bind(rid, tid).run();
             return json({ error: "Justo se lleno ese horario. Elige otro." }, 409);
           }
+          /* 🔴 22-ago-2026 · y la misma re-verificación para el SALDO. Sin esto, dos peticiones
+             simultáneas del MISMO alumno con una sola clase disponible pasaban las dos. */
+          if (await sobregiroTrasReservar(env, tid, alumno.id)){
+            await env.DB.prepare("DELETE FROM reservas WHERE id = ?1 AND tenant_id = ?2").bind(rid, tid).run();
+            return json({ error: "Se te acabaron las clases justo ahora. Renueva para reservar mas." }, 409);
+          }
           try { await env.DB.prepare("UPDATE espera SET estado = 'convertida' WHERE tenant_id = ?1 AND inicio_utc = ?2 AND alumno_id = ?3 AND estado IN ('esperando','avisado')").bind(tid, iso, alumno.id).run(); } catch (e) {}
           return json({ ok: true, reservadas: 1, tipo: "suelta" });
         }
@@ -11827,6 +12903,7 @@ export default {
         const r = await env.DB.prepare("SELECT * FROM reservas WHERE id = ?1 AND tenant_id = ?2").bind(String(b.id || ""), tid).first();
         if (!r || r.alumno_id !== cu.alumno_id) return json({ error: "No encuentro esa clase." }, 404);
         if (r.estado !== "reservada") return json({ error: "Esa clase ya no se puede cancelar." }, 400);
+        const alCancel = await env.DB.prepare("SELECT ciclo, paquete FROM alumnos WHERE id = ?1 AND tenant_id = ?2").bind(cu.alumno_id, tid).first();
         const cfgCancel = await loadConfig(env, tid).catch(() => ({}));
         const rcfgB = reprogCfg(cfgCancel);
         if (!rcfgB.activo){
@@ -11839,8 +12916,33 @@ export default {
         if (horas < regCancel.cancelH){
           return json({ error: "Ya no se puede reprogramar: falta menos de " + regCancel.cancelH + " horas para tu clase." }, 400);
         }
-        await env.DB.prepare("UPDATE reservas SET estado = 'cancelada', cancelada_utc = ?1, cancelada_por = ?2 WHERE id = ?3 AND tenant_id = ?4")
-          .bind(new Date().toISOString(), "alumno:" + cu.alumno_id, r.id, tid).run();
+        /* 🔴 22-ago-2026 · el candado que faltaba. El portal le promete al alumno "X de Y
+           reprogramaciones" y hasta hoy ese número no bajaba nunca: podía cambiar de horario
+           infinitas veces. Ahora se cuenta lo que ya usó (sus cancelaciones + las que le marcó
+           el dueño) y se le dice cuántas le quedan. */
+        const cicloCancel = Number(alCancel && alCancel.ciclo) || 1;
+        const pkCancel = resolverPk((await loadPaquetes(env, tid)).map, (alCancel && alCancel.paquete) || "");
+        const cuotaCancel = Number(pkCancel && pkCancel.reprog) || 0;
+        if (cuotaCancel > 0){
+          const yaPortal = await reprogPortalDe(env, tid, cu.alumno_id, cicloCancel);
+          const { results: regsCancel } = await env.DB.prepare(SQL_REGS_CICLO).bind(tid, cu.alumno_id, cicloCancel).all();
+          const yaDueno = (regsCancel || []).filter(g => g.estado === "Reprogramó").length;
+          if (yaPortal + yaDueno >= cuotaCancel){
+            return json({ error: "Tu plan incluye " + cuotaCancel + " cambio" + (cuotaCancel === 1 ? "" : "s") +
+              " de horario y ya los usaste. Escríbele a tu profesor si necesitas mover esta clase.",
+              sin_reprogramaciones: true, usadas: yaPortal + yaDueno, permitidas: cuotaCancel }, 403);
+          }
+        }
+        /* 🔴 22-ago-2026 · faltaba `AND estado = 'reservada'`. El `if` de arriba lee y compara,
+           pero el cierre automático corre cada 15 minutos: si le cae justo encima, el alumno
+           cancelaba una clase que el cron acababa de marcar como dictada. Se reclama la fila. */
+        const canc = await env.DB.prepare(
+          "UPDATE reservas SET estado = 'cancelada', cancelada_utc = ?1, cancelada_por = ?2 " +
+          "WHERE id = ?3 AND tenant_id = ?4 AND estado = 'reservada'"
+        ).bind(new Date().toISOString(), "alumno:" + cu.alumno_id, r.id, tid).run();
+        if (!((canc && canc.meta && (canc.meta.changes ?? 0)) || 0)){
+          return json({ error: "Esa clase ya se dio por dictada. Escríbele a tu profesor si hubo un error." }, 409);
+        }
         await promoverEspera(env, tid, r.inicio_utc, r.sala || "");   // se libero un cupo EN ESA SALA: avisar a su lista de espera
         return json({ ok: true, mensaje: "Listo, libere tu horario. Elige tu nuevo horario abajo." });
       }
@@ -11957,7 +13059,18 @@ export default {
           return json({ error: "Tu plan permite partir el congelamiento en máximo " + maxBloques + " bloques y ya los usaste este ciclo." }, 400);
         }
 
-        const nuevoVence = new Date(Date.parse(al.vence || hoy()) + dias * 86400000).toISOString().slice(0, 10);
+        /* 🔴 22-ago-2026 · acá había un `al.vence || hoy()`: al alumno SIN fecha de
+           vencimiento la pausa le INVENTABA una, hoy + los días pedidos. O sea: pedía un favor
+           y salía con fecha de muerte. Un alumno con 48 clases y plan sin caducidad que pausara
+           1 día perdía las 48 al día siguiente. Alcanzable hoy por 30 de los 97 alumnos con
+           plan (sus planes no definen congelamiento, así que corre la regla global de 14 días).
+           Nadie llegó a sufrirlo: en toda la historia hay 0 pausas.
+           Ahora: solo se mueve una fecha que YA existía. Lo que no vence, no empieza a vencer. */
+        const venceFicha = String(al.vence || "").trim();
+        const teniaVence = /^\d{4}-\d{2}-\d{2}$/.test(venceFicha);
+        const nuevoVence = teniaVence
+          ? new Date(Date.parse(venceFicha + "T00:00:00Z") + dias * 86400000).toISOString().slice(0, 10)
+          : "";
         /* ═══ V2 multi-pase (12-ago-2026): la pausa congela a la PERSONA ═══
            Un viaje no distingue pases: TODOS los pases vivos con fecha corren `dias` hacia
            adelante, no solo el espejo de la ficha. Sin esto, el alumno multi-pase pausaba y
@@ -11982,15 +13095,27 @@ export default {
             if (movio) pasesPausa = JSON.stringify(objP);
           }
         } catch (e) { /* pases ilegibles: la pausa clásica sigue funcionando igual */ }
+        /* Si no había NINGUNA fecha que mover —ni en la ficha ni en sus pases— congelar no
+           hace nada, y cobrarle días de su cupo por nada sería peor que no dejarlo. Se le dice
+           en vez de responder "ok" a una operación vacía. */
+        if (!teniaVence && !pasesPausa){
+          return json({ error: "Tu plan no vence por fecha, así que no hace falta congelarlo: tus clases te esperan sin límite de tiempo.", sin_efecto: true }, 400);
+        }
         await env.DB.batch([
           env.DB.prepare("INSERT INTO pausas (id,tenant_id,alumno_id,ciclo,motivo,dias,creada) VALUES (?1,?2,?3,?4,?5,?6,?7)")
             .bind(crypto.randomUUID(), tid, al.id, ciclo, motivo, dias, new Date().toISOString()),
-          pasesPausa
-            ? env.DB.prepare("UPDATE alumnos SET vence = ?1, pases = ?4 WHERE id = ?2 AND tenant_id = ?3").bind(nuevoVence, al.id, tid, pasesPausa)
-            : env.DB.prepare("UPDATE alumnos SET vence = ?1 WHERE id = ?2 AND tenant_id = ?3").bind(nuevoVence, al.id, tid)
+          /* la ficha solo se toca si TENÍA fecha; los pases van por su cuenta */
+          (pasesPausa && !teniaVence)
+            ? env.DB.prepare("UPDATE alumnos SET pases = ?1 WHERE id = ?2 AND tenant_id = ?3").bind(pasesPausa, al.id, tid)
+            : pasesPausa
+              ? env.DB.prepare("UPDATE alumnos SET vence = ?1, pases = ?4 WHERE id = ?2 AND tenant_id = ?3").bind(nuevoVence, al.id, tid, pasesPausa)
+              : env.DB.prepare("UPDATE alumnos SET vence = ?1 WHERE id = ?2 AND tenant_id = ?3").bind(nuevoVence, al.id, tid)
         ]);
         try { await avisarPush(env, tid, { title: "Pausa por " + motivo + ": " + al.nombre }); } catch (e) {}
-        return json({ ok: true, vence: nuevoVence, dias_usados_ciclo: yaUsados + dias, dias_disponibles: PAUSA_MAX_DIAS - (yaUsados + dias) });
+        /* `dias_disponibles` sale del tope QUE APLICA (el del plan si lo define), no del
+           global: con un plan de 7 días la respuesta decía 14 menos lo usado. */
+        return json({ ok: true, vence: nuevoVence, dias_usados_ciclo: yaUsados + dias,
+                      dias_disponibles: Math.max(0, maxDias - (yaUsados + dias)) });
       }
 
       /* ============================================================
@@ -12025,13 +13150,27 @@ export default {
         if (path === "/app/api/admin/importar-reservas" && request.method === "POST"){
           if (!esDueno) return json({ error: "Las migraciones las maneja el dueno." }, 403);
           const bIR = await request.json().catch(() => ({}));
-          const filasIR = Array.isArray(bIR.filas) ? bIR.filas.slice(0, 500) : [];
+          /* 🔴 22-ago-2026: los dos recortes de abajo eran MUDOS. Quien mandaba 700 filas
+             recibía "ok" y 200 no se miraban nunca; un alumno con 80 clases que migrar perdía
+             20. Exactamente el modo de fallar que ya costó una mañana con el dedup del
+             importador y con el `break` mudo de los 20 planes. Ahora se cuenta lo que quedó
+             fuera y se DICE, con instrucciones de qué hacer. */
+          const IR_MAX_FILAS = 500, IR_MAX_ISOS = 60;
+          const filasTodasIR = Array.isArray(bIR.filas) ? bIR.filas : [];
+          const filasIR = filasTodasIR.slice(0, IR_MAX_FILAS);
+          const recorteFilasIR = Math.max(0, filasTodasIR.length - filasIR.length);
+          let recorteIsosIR = 0, alumnosRecortadosIR = 0;
           const cfgIR = await loadConfig(env, tid);
           let creadasIR = 0; const saltadasIR = [];
           for (const fIR of filasIR){
             const alIR = await env.DB.prepare("SELECT * FROM alumnos WHERE id = ?1 AND tenant_id = ?2")
               .bind(String((fIR && fIR.alumno_id) || ""), tid).first();
-            const isosIR = Array.isArray(fIR && fIR.isos) ? fIR.isos.slice(0, 60) : [];
+            const isosTodosIR = Array.isArray(fIR && fIR.isos) ? fIR.isos : [];
+            const isosIR = isosTodosIR.slice(0, IR_MAX_ISOS);
+            if (isosTodosIR.length > isosIR.length){
+              recorteIsosIR += (isosTodosIR.length - isosIR.length);
+              alumnosRecortadosIR++;
+            }
             /* 12-ago-2026: el nombre de la clase viaja al lado de cada reserva (mismo indice).
                Es lo que desambigua cuando a esa hora hay dos clases en dos salas. */
             const clasesIR = Array.isArray(fIR && fIR.clases) ? fIR.clases : [];
@@ -12068,7 +13207,16 @@ export default {
               creadasIR++;
             }
           }
-          return json({ ok: true, creadas: creadasIR, saltadas: saltadasIR });
+          const avisosIR = [];
+          if (recorteFilasIR) avisosIR.push("Mandaste " + filasTodasIR.length + " alumnos y en una tanda entran " +
+            IR_MAX_FILAS + ": quedaron " + recorteFilasIR + " sin procesar. Vuelve a subir el archivo con los que faltan.");
+          if (recorteIsosIR) avisosIR.push("A " + alumnosRecortadosIR + " alumno" + (alumnosRecortadosIR === 1 ? "" : "s") +
+            " le" + (alumnosRecortadosIR === 1 ? "" : "s") + " quedaron " + recorteIsosIR + " clase" + (recorteIsosIR === 1 ? "" : "s") +
+            " sin importar: entran " + IR_MAX_ISOS + " por alumno en cada tanda.");
+          return json({ ok: true, creadas: creadasIR, saltadas: saltadasIR,
+                        recortadas: recorteFilasIR + recorteIsosIR,
+                        recorte_alumnos: recorteFilasIR, recorte_clases: recorteIsosIR,
+                        avisos: avisosIR });
         }
 
         /* ============================================================
@@ -12101,7 +13249,7 @@ export default {
           /* El envio REAL de correo nace apagado: se prende por tenant desde superadmin
              (POST /app/api/su/invitaciones). Apagado, el boton simula la tanda y muestra
              exactamente lo que saldria, sin tocar Resend. La demo nunca manda de verdad. */
-          const envioReal = String(cfgInv.invitaciones_envio || "") === "on" && t.email !== DEMO_EMAIL;
+          const envioReal = String(cfgInv.invitaciones_envio || "") === "on" && !esTenantDemo(t);
           const ejemplo = porCorreo[0] || faltan[0] || todos[0] || { nombre: "Maria", email: "", curso: "" };
           const prev = correoInvitacionAlumno(t, ejemplo, cfgInv, MARCA.dominio + "/app/a/" + t.slug + "?inv=EJEMPLO", MARCA.dominio + "/app/inv/baja?t=EJEMPLO");
           const liviano = a => ({ id: a.id, nombre: a.nombre, email: a.email, whatsapp: a.whatsapp, invitado_el: a.invitado_el, canal: a.invitado_canal });
@@ -12208,7 +13356,7 @@ export default {
           await ensureInvitacionesSchema(env);
           const bE = await request.json().catch(() => ({}));
           const cfgE = await loadConfig(env, tid);
-          const envioReal = String(cfgE.invitaciones_envio || "") === "on" && t.email !== DEMO_EMAIL;
+          const envioReal = String(cfgE.invitaciones_envio || "") === "on" && !esTenantDemo(t);
           const hoyE = hoyLima();
           const { results: yaHoy } = await env.DB.prepare(
             "SELECT COUNT(*) AS n FROM alumnos WHERE tenant_id = ?1 AND COALESCE(invitado_el,'') = ?2 AND COALESCE(invitado_canal,'') = 'email'"
@@ -12342,7 +13490,7 @@ export default {
           if (textoFb.length < 20) return json({ error: "Cuentanos un poco mas (minimo 20 caracteres) para poder trabajarlo." }, 400);
           if (textoFb.length > 1500) return json({ error: "Maximo 1500 caracteres. Si necesitas mas espacio, mandalo en dos aportes." }, 400);
           await ensureFeedbackSchema(env);
-          const mesFb = hoy().slice(0, 7);
+          const mesFb = hoyLima().slice(0, 7);
           const nMes = await env.DB.prepare(
             "SELECT COUNT(*) AS n FROM feedback WHERE tenant_id = ?1 AND mes = ?2"
           ).bind(tid, mesFb).first();
@@ -12415,7 +13563,7 @@ export default {
             const maxA = await maxProfesDe(env, tid, t.plan);
             const nAct = await env.DB.prepare("SELECT COUNT(*) AS n FROM profesores WHERE tenant_id = ?1 AND estado != 'suspendido'").bind(tid).first();
             if ((Number(nAct && nAct.n) || 0) >= maxA){
-              return json({ error: "Tu plan " + (PLAN_NOMBRE[t.plan || "profe"] || "Profe") + " permite " + maxA + " profesor" + (maxA === 1 ? "" : "es") + ". Sube de plan en Perfil para agregar mas.", upgrade: true }, 402);
+              return json({ error: "Tu Batuta tiene " + maxA + " asiento" + (maxA === 1 ? "" : "s") + " de profesor. Los profesores van de 5 en 5: agrega un pack de +5 (S/59 al mes) en Perfil > Tu Batuta.", upgrade: true }, 402);
             }
             const ya = await env.DB.prepare("SELECT id FROM profesores WHERE tenant_id = ?1 AND email = ?2").bind(tid, emailP).first();
             if (ya) return json({ error: "Ya hay un profesor con ese correo en tu academia." }, 409);
@@ -12489,7 +13637,7 @@ export default {
             if (accion === "reactivar"){
               const maxA = await maxProfesDe(env, tid, t.plan);
               const nAct = await env.DB.prepare("SELECT COUNT(*) AS n FROM profesores WHERE tenant_id = ?1 AND estado != 'suspendido'").bind(tid).first();
-              if ((Number(nAct && nAct.n) || 0) >= maxA) return json({ error: "Tu plan no tiene asientos libres para reactivarlo. Sube de plan." , upgrade: true }, 402);
+              if ((Number(nAct && nAct.n) || 0) >= maxA) return json({ error: "No te quedan asientos de profesor libres. Agrega un pack de +5 profesores en Perfil > Tu Batuta.", upgrade: true }, 402);
             }
             const nuevoEst = accion === "suspender" ? "suspendido" : (pRow.pass_hash ? "activo" : "invitado");
             await env.DB.batch([
@@ -12553,8 +13701,8 @@ export default {
             /* Demo pública (11-ago-2026): un "interesado" del CRM es una persona real igual que
                un alumno, y el formulario público de la academia demo también crea leads. Mismo
                criterio: se guarda el nombre, el contacto no se guarda. */
-            const esDemoLead = t.email === DEMO_EMAIL;
-            const nombreL = (esDemoLead ? redactarTextoDemo(b.nombre) : String(b.nombre || "")).trim().slice(0, 80);
+            const esDemoLead = esTenantDemo(t);
+            const nombreL = (esDemoLead ? acortarNombreDemo(redactarTextoDemo(b.nombre)) : String(b.nombre || "")).trim().slice(0, 80);
             const emailL = esDemoLead ? "" : String(b.email || "").trim().toLowerCase().slice(0, 120);
             const waL = esDemoLead ? "" : String(b.whatsapp || "").replace(/[^\d+]/g, "").slice(0, 20);
             const interesL = String(b.interes || "").trim().slice(0, 60);
@@ -12607,9 +13755,9 @@ export default {
         if (path === "/app/api/admin/comprobante" && request.method === "POST"){
           if (!esDueno) return json({ error: "La facturacion la maneja el dueno." }, 403);
           await ensureErpSchema(env);
-          if ((t && t.plan) === "gratis"){
-            return json({ error: "La facturacion electronica SUNAT esta disponible desde el plan Profe (S/49/mes). Sube de plan en Perfil y emites tu primera boleta hoy mismo." }, 402);
-          }
+          /* 22-ago-2026: aqui habia un candado que exigia el "plan Profe (S/49/mes)" para emitir
+             boletas. Ese plan murio el 20-ago y con el modelo de packs SUNAT viene en la base
+             gratis (nunca se cobra por PODER usar una funcion). Candado retirado. */
           const cfgF = await loadConfig(env, tid);
           if (!cfgF.nubefact_ruta || !cfgF.nubefact_token){
             return json({ error: "Conecta tu cuenta de Nubefact en Ajustes (ruta y token) para emitir boletas. Crea tu cuenta en nubefact.com: tiene modo demo gratis." }, 501);
@@ -12720,13 +13868,23 @@ export default {
           /* + clases cerradas desde la AGENDA (reservas 'completada') que no tienen fila en registro:
              sin esto, marcar "Asistió" en la agenda no contaba para la tarifa por clase (hallazgo del review).
              La fecha de la reserva se lleva a dia-Lima (-5h) para casar con registro.fecha. */
+          /* 🐛 21-ago-2026: este NOT EXISTS excluía TODAS las reservas del día en cuanto hubiera
+             UNA fila en registro de ese alumno. En un estudio donde alguien toma Mat en la mañana
+             y Máquinas en la tarde, la segunda clase desaparecía de la liquidación: en Elevate,
+             **15 clases dictadas en agosto que el profesor no cobraba**. `registro` no guarda
+             hora, así que no se pueden casar una a una; lo correcto con el dato que hay es
+             descontar TANTAS reservas como registros haya ese día, no todas. */
           const { results: clsAgRows } = await env.DB.prepare(
-            "SELECT COALESCE(rv.profesor_id, ?3) AS pid, COUNT(*) AS n FROM reservas rv " +
-            "WHERE rv.tenant_id = ?1 AND rv.estado = 'completada' AND rv.tipo != 'bloqueo' AND rv.alumno_id IS NOT NULL " +
-            "AND substr(date(rv.inicio_utc, '-5 hours'), 1, 7) = ?2 " +
-            "AND NOT EXISTS (SELECT 1 FROM registro rg WHERE rg.tenant_id = rv.tenant_id AND rg.alumno_id = rv.alumno_id " +
-            "AND rg.fecha = date(rv.inicio_utc, '-5 hours') AND rg.estado = 'Asistió') " +
-            "GROUP BY COALESCE(rv.profesor_id, ?3)"
+            "SELECT pid, SUM(extra) AS n FROM (" +
+            "  SELECT COALESCE(rv.profesor_id, ?3) AS pid, rv.alumno_id AS al, date(rv.inicio_utc, '-5 hours') AS dia, " +
+            "         COUNT(*) - COALESCE((SELECT COUNT(*) FROM registro rg WHERE rg.tenant_id = rv.tenant_id " +
+            "           AND rg.alumno_id = rv.alumno_id AND rg.fecha = date(rv.inicio_utc, '-5 hours') " +
+            "           AND rg.estado = 'Asistió'), 0) AS extra " +
+            "  FROM reservas rv " +
+            "  WHERE rv.tenant_id = ?1 AND rv.estado = 'completada' AND rv.tipo != 'bloqueo' AND rv.alumno_id IS NOT NULL " +
+            "    AND substr(date(rv.inicio_utc, '-5 hours'), 1, 7) = ?2 " +
+            "  GROUP BY 1, 2, 3" +
+            ") WHERE extra > 0 GROUP BY pid"
           ).bind(tid, mesL, (duenoRow && duenoRow.id) || "").all();
           const ingM = new Map((ingRows || []).map(r => [r.pid, r]));
           const clsM = new Map((clsRows || []).map(r => [r.pid, Number(r.n) || 0]));
@@ -13325,7 +14483,7 @@ export default {
               cm = await computeMulti(env, tid, alF, paqMap, precios);
             } else {
               const { results: regsF } = await env.DB.prepare(
-                "SELECT estado FROM registro WHERE tenant_id = ?1 AND alumno_id = ?2 AND COALESCE(ciclo,1) = ?3"
+                SQL_REGS_CICLO
               ).bind(tid, alumnoId, ciclo).all();
               const rUs = await reservasUsadasCount(env, tid, alumnoId, ciclo);
               cm = compute(alF, regsF || [], precios, rUs, resolverPk(paqMap, alF.paquete));
@@ -13350,7 +14508,7 @@ export default {
           if (!s.endpoint || !keys.p256dh || !keys.auth) return json({ error: "Suscripcion invalida" }, 400);
           await env.DB.prepare(
             "INSERT OR REPLACE INTO push_subs (endpoint,tenant_id,p256dh,auth,dispositivo,creada) VALUES (?1,?2,?3,?4,?5,?6)"
-          ).bind(s.endpoint, tid, keys.p256dh, keys.auth, String(b.dispositivo || "").slice(0, 120), hoy()).run();
+          ).bind(s.endpoint, tid, keys.p256dh, keys.auth, String(b.dispositivo || "").slice(0, 120), hoyLima()).run();
           return json({ ok: true });
         }
         if (path === "/app/api/admin/push/probar" && request.method === "POST"){
@@ -13437,6 +14595,17 @@ export default {
             "SELECT id, alumno_id, inicio_utc, COALESCE(curso,'') AS curso, COALESCE(tipo,'') AS tipo, COALESCE(ciclo,1) AS ciclo " +
             "FROM reservas WHERE tenant_id = ?1 AND estado IN ('reservada','completada','falta') ORDER BY inicio_utc ASC"
           ).bind(tid).all()).results || [];
+          /* cancelaciones que hizo el ALUMNO desde su portal, en lote: sin esto el panel
+             mostraría "3 de 3 cambios" y el portal "0 de 3" para la misma persona. */
+          const reprogPortalPor = new Map();
+          try {
+            const { results: cancAll } = await env.DB.prepare(
+              "SELECT alumno_id, COALESCE(ciclo,1) AS ciclo, COUNT(*) AS n FROM reservas " +
+              "WHERE tenant_id = ?1 AND estado = 'cancelada' AND COALESCE(cancelada_por,'') LIKE 'alumno:%' " +
+              "GROUP BY alumno_id, COALESCE(ciclo,1)"
+            ).bind(tid).all();
+            for (const c of (cancAll || [])) reprogPortalPor.set(c.alumno_id + "|" + c.ciclo, Number(c.n) || 0);
+          } catch (e) { /* si falla, el panel muestra lo de siempre */ }
           const resvPorAlumno = new Map(), regsPorAlumno = new Map();
           for (const r of resvAll){ if (!r.alumno_id) continue;
             if (!resvPorAlumno.has(r.alumno_id)) resvPorAlumno.set(r.alumno_id, []);
@@ -13469,6 +14638,7 @@ export default {
                 a.saldo = compute(a, rg, preciosP, rUsA, resolverPk(paqMapP, a.paquete));
               }
               a.saldo = saldoMostrado(a.saldo, modoSaldo);
+              a.saldo = conReprogPortal(a.saldo, reprogPortalPor.get(a.id + "|" + ciA) || 0);
             }
           } catch (e) { console.error("saldo panel", e && e.message); }   // el panel cae a su cálculo viejo
           const cuentasAll = (await env.DB.prepare(
@@ -13552,7 +14722,7 @@ export default {
           } catch (e) {}
           const sedes = await sedesDeTenant(env, tid);
           return json({ alumnos, registro, precios, cuentas, compras, recursos, ejercicios, leads, gastos, comprobantes, config, grupos, sedes,
-                        slug: t.slug, academia: t.academia, estado: t.estado, demo: t.email === DEMO_EMAIL,
+                        slug: t.slug, academia: t.academia, estado: t.estado, demo: esTenantDemo(t),
                         rol: esDueno ? "dueno" : "profesor", profe_id: profeActorId || "", equipo,
                         cobro_on: cobroOnPanel,
                         /* lo que este profe NO puede hacer, para que el panel esconda esos
@@ -13595,7 +14765,7 @@ export default {
             const nS = await env.DB.prepare("SELECT COUNT(*) AS n FROM sedes WHERE tenant_id = ?1").bind(tid).first();
             if ((Number(nS && nS.n) || 0) >= 20) return json({ error: "Maximo 20 sedes por academia." }, 400);
             await env.DB.prepare("INSERT INTO sedes (id, tenant_id, nombre, direccion, creado) VALUES (?1,?2,?3,?4,?5)")
-              .bind(crypto.randomUUID(), tid, nombreS, direccionS, hoy()).run();
+              .bind(crypto.randomUUID(), tid, nombreS, direccionS, hoyLima()).run();
           } else {
             const r = await env.DB.prepare("UPDATE sedes SET nombre = ?1, direccion = ?2 WHERE id = ?3 AND tenant_id = ?4")
               .bind(nombreS, direccionS, String(b.id || ""), tid).run();
@@ -13634,7 +14804,7 @@ export default {
           if (accion === "crear"){
             await env.DB.prepare(
               "INSERT INTO grupos (id,tenant_id,nombre,curso,horario,miembros,creado,profesor_id,sede_id) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9)"
-            ).bind(crypto.randomUUID(), tid, nombre, curso, horario, JSON.stringify(miembros), hoy(), profeActorId || null, sedeG || "").run();
+            ).bind(crypto.randomUUID(), tid, nombre, curso, horario, JSON.stringify(miembros), hoyLima(), profeActorId || null, sedeG || "").run();
           } else {
             const r = await env.DB.prepare(
               "UPDATE grupos SET nombre = ?1, curso = ?2, horario = ?3, miembros = ?4, sede_id = CASE WHEN ?9 IS NULL THEN COALESCE(sede_id,'') ELSE ?9 END WHERE id = ?5 AND tenant_id = ?6 AND (?7 = 1 OR profesor_id = ?8)"
@@ -13660,16 +14830,17 @@ export default {
              Va ANTES que todo lo demás porque es la única defensa que no depende de que el
              panel se porte bien: /app/demo entrega sesión de dueño a un anónimo, así que
              este endpoint es alcanzable con un curl. Ver el bloque DEMO_ALUM_CAP. */
-          if (t.email === DEMO_EMAIL){
+          if (esTenantDemo(t)){
             if (body.alumnos.length > DEMO_ALUM_CAP){
               return json({
-                error: "Esta es la demo pública de Batuta: entra cualquiera y ve lo que subas, "
+                error: "Esta es una demo: se borra sola en 24 horas y no guarda datos de personas reales, "
                      + "así que aquí caben " + DEMO_ALUM_CAP + " alumnos de ejemplo y sin datos de contacto. "
                      + "Tu lista completa va en tu propia academia: créala gratis en 2 minutos y es solo tuya.",
                 demo_cap: DEMO_ALUM_CAP
               }, 400);
             }
-            body.alumnos.forEach(sanearAlumnoDemo);
+            const prefDemoT = prefDemoDe(t);
+            body.alumnos.forEach(a => sanearAlumnoDemo(a, prefDemoT));
             if (body.registro.length > DEMO_REGISTRO_CAP) body.registro = body.registro.slice(0, DEMO_REGISTRO_CAP);
             body.registro.forEach(r => {
               if (!r || typeof r !== "object") return;
@@ -13726,19 +14897,16 @@ export default {
              ACTIVAR un plan a un alumno que no tenía, y avisarle por correo (ver avisarPlan). */
           const colsPrev = "id, vence, ciclo, aviso_vence_ciclo, recordatorio_fecha, recordatorio_ciclo, profesor_id, COALESCE(paquete,'') AS paquete, winback_ciclo, COALESCE(sede_id,'') AS sede_id";
           let prevRows = [];
+          /* `SELECT *` a propósito, no una lista de columnas: este guardado hace DELETE +
+             INSERT de todos los alumnos, así que TODO lo que no vuelva a escribirse se pierde.
+             Con la lista enumerada, cada columna nueva nacía condenada — así se borraban en
+             silencio las bajas de correo, el consentimiento de marketing y las clases de
+             regalo. `memoria: leccion-columna-nueva-no-llega-por-select-enumerado` */
           try {
             prevRows = (await env.DB.prepare(
-              "SELECT " + colsPrev + ", COALESCE(migrado_usadas,0) AS migrado_usadas, COALESCE(migrado_ciclo,0) AS migrado_ciclo, " +
-              "COALESCE(activado,'') AS activado, COALESCE(caducado,0) AS caducado, " +
-              "COALESCE(apellido,'') AS apellido, COALESCE(email,'') AS email, COALESCE(nacimiento,'') AS nacimiento, COALESCE(pases,'') AS pases " +
-              "FROM alumnos WHERE tenant_id = ?1 AND (?2 = 1 OR profesor_id = ?3)"
+              "SELECT * FROM alumnos WHERE tenant_id = ?1 AND (?2 = 1 OR profesor_id = ?3)"
             ).bind(tid, esDueno ? 1 : 0, profeActorId || "").all()).results || [];
-          } catch (e) {
-            /* D1 sin las columnas del saldo migrado: el guardado normal no se cae por eso */
-            prevRows = (await env.DB.prepare(
-              "SELECT " + colsPrev + " FROM alumnos WHERE tenant_id = ?1 AND (?2 = 1 OR profesor_id = ?3)"
-            ).bind(tid, esDueno ? 1 : 0, profeActorId || "").all()).results || [];
-          }
+          } catch (e) { prevRows = []; }
           const prev = new Map((prevRows || []).map(r => [r.id, r]));
           const paqPut = (await loadPaquetes(env, tid)).map;   // para derivar vence de mensualidades ilimitadas
           let profesValidos = new Set();
@@ -13755,18 +14923,25 @@ export default {
           /* Candado de alumnos por plan (12-jul-2026): topa el plan SOLO para tenants ya pagando
              (en trial se importa la academia entera sin tope). Permite GUARDAR sin aumentar aunque
              ya estén sobre el tope (no rompe a nadie); solo bloquea el neto que pasa el límite. */
-          if (t && t.estado === "activo"){
-            /* alum_extra (packs +50 por S/39, su/alumnos-extra) suma al tope base del plan. */
+          /* Packs (20-ago-2026): el tope de alumnos ya no depende del plan ni del estado, sale
+             de la base (20) más los packs comprados. Sigue valiendo la regla de siempre: se puede
+             GUARDAR estando por encima del tope (no se rompe a nadie ni se borra nada), lo que se
+             bloquea es el neto que lo pasa. Los vencidos también topan, si no el freemium no existe. */
+          if (t && !esTenantDemo(t)){
+            /* alum_extra (cortesía en unidades de alumno, la pone el superadmin) sigue sumando. */
             let extraAl = 0;
             try { const cfgAl = await loadConfig(env, tid); extraAl = parseInt(cfgAl.alum_extra, 10) || 0; } catch (e) {}
-            const capAl = (ALUM_CAP[t.plan || "profe"] || 1000000) + extraAl;
+            const capAl = (await alumCapDe(env, tid, t.plan)) + extraAl;
             const totActRow = await env.DB.prepare("SELECT COUNT(*) AS n FROM alumnos WHERE tenant_id = ?1").bind(tid).first();
             const totActual = Number(totActRow && totActRow.n) || 0;
             const totNuevo = esDueno ? body.alumnos.length : (totActual - (prevRows ? prevRows.length : 0)) + body.alumnos.length;
             if (totNuevo > capAl && totNuevo > totActual){
-              const msgCap = (t.plan || "") === "gratis"
-                ? "Tu plan Gratis incluye hasta " + capAl + " alumnos. Pasa al plan Profe (S/49/mes, alumnos ilimitados) en Perfil y sigue creciendo."
-                : "Tu plan " + (PLAN_NOMBRE[t.plan || "profe"] || "Profe") + " incluye hasta " + capAl + " alumnos. Sube de plan en Perfil, o agrega packs de +50 alumnos por S/39/mes escribiendonos por WhatsApp. Y en Ideas y errores, tu primer aporte del mes te suma 7 días.";
+              /* "un pack" la primera vez, "otro pack" si ya compró: se decide por lo que tiene,
+                 no por un plan que ya no existe. */
+              const yaTienePacks = Object.keys((await packsDe(env, tid)).comprados || {}).length > 0;
+              const msgCap = yaTienePacks
+                ? "Tu Batuta llega hasta " + capAl + " alumnos. Agrega otro pack en Perfil > Tu Batuta (+50 por S/39, +150 por S/89 o +500 por S/199 al mes)."
+                : "Tu Batuta llega hasta " + capAl + " alumnos. Agrega un pack de +50 alumnos (S/39 al mes) en Perfil > Tu Batuta y sigues creciendo hoy mismo.";
               return json({ error: msgCap, upgrade: true, cap: capAl }, 402);
             }
           }
@@ -13816,7 +14991,22 @@ export default {
             const esRenovManual = !!pr && cicloAl > cicloPrev;
             let venceAl = (pr && pr.vence) || "";
             let avisoAl = (pr && pr.aviso_vence_ciclo) || 0;
-            if (pkAl.ilim || esRenovManual){
+            /* ---- Vencimiento a mano (21-ago-2026) ----
+               El dueño escribe la fecha en la ficha ("le doy dos semanas más porque se operó").
+               `vence_set` = la acaba de tocar; la marca queda guardada para que el recálculo
+               por días del paquete NO se la pise en el siguiente guardado. Renovar (ciclo
+               nuevo) la limpia: es un ciclo nuevo, con su vigencia normal. */
+            let venceManual = (pr && Number(pr.vence_manual)) || 0;
+            if (esRenovManual) venceManual = 0;
+            if (a.vence_set === true){
+              const vMan = String(a.vence || "").trim();
+              if (/^\d{4}-\d{2}-\d{2}$/.test(vMan) && !isNaN(Date.parse(vMan + "T00:00:00Z"))){
+                venceAl = vMan; venceManual = 1; avisoAl = 0;   // fecha nueva: el aviso se re-arma
+              } else if (!vMan){
+                venceManual = 0;                                 // lo vació: vuelve al automático
+              }
+            }
+            if ((pkAl.ilim && !venceManual) || esRenovManual){
               const base = (a.fecha && /^\d{4}-\d{2}-\d{2}$/.test(a.fecha)) ? a.fecha : hoyLima();
               venceAl = new Date(Date.parse(base + "T00:00:00Z") + 30 * 86400000).toISOString().slice(0, 10);
             }
@@ -13847,7 +15037,7 @@ export default {
               if (primera) activadoAl = primera;
               else if (!esRenovManual && !(pr && pr.activado)) activadoAl = "";
             }
-            if (pkAl.dias){
+            if (pkAl.dias && !venceManual){
               const vCalc = calcularVence(pkAl, { fecha: a.fecha, activado: activadoAl }, venceAl);
               /* el paquete con vigencia MANDA sobre el vence guardado: si el dueno cambia los
                  dias del plan, los vencimientos se recalculan solos en el siguiente guardado */
@@ -13902,8 +15092,40 @@ export default {
               const pj = sanearPasesJson(a.pases, cicloAl);
               if (pj) pasesAl = pj;
             }
+            /* ---- QUITAR UN PLAN (22-ago-2026, pedido de José por audio) ----
+               Hasta hoy el panel dejaba AGREGAR un plan pero no quitarlo, y el guardado ignoraba
+               la baja EN SILENCIO: `sanearPasesJson` devuelve "" cuando queda un solo pase, y el
+               `if (pj)` de arriba dejaba el valor viejo intacto. Por eso José terminó moviéndole
+               el vencimiento a un plan para "sacarlo del medio", que es justo lo que destapó el
+               bug de la historia que se mudaba.
+               Con `pase_quitado` la baja es explícita y pasan dos cosas:
+                 · si quedan 2 o más, se guarda la lista nueva tal cual;
+                 · si queda UNO, se vuelve al modelo de plan único SIN perder el arrastre: sus
+                   `usadas` pasan a `migrado_usadas` y su vencimiento al del alumno.
+               Lo que NUNCA se toca: las clases dictadas. Siguen en `reservas` y `registro`, así
+               que el saldo se recalcula solo y la historia no se mueve. */
+            if (a.pase_quitado === true && a.pases !== undefined){
+              const pjQ = sanearPasesJson(a.pases, cicloAl);
+              pasesAl = pjQ;
+              if (!pjQ){
+                let uno = null;
+                try {
+                  const o = (typeof a.pases === "string") ? JSON.parse(a.pases) : a.pases;
+                  const l = (o && Array.isArray(o.p)) ? o.p : (Array.isArray(o) ? o : []);
+                  if (l && l.length === 1) uno = l[0];
+                } catch (e) { uno = null; }
+                if (uno){
+                  migUsadas = Math.min(9999, Math.max(0, Math.floor(Number(uno.usadas) || 0)));
+                  migCiclo = cicloAl;
+                  const vU = String((uno && uno.vence) || "").trim();
+                  if (/^\d{4}-\d{2}-\d{2}$/.test(vU)){ venceAl = vU; venceManual = 1; }
+                  else { venceAl = ""; venceManual = 0; }
+                  avisoAl = 0;   // vencimiento nuevo: el aviso se re-arma
+                }
+              }
+            }
             stmts.push(env.DB.prepare(
-              "INSERT INTO alumnos (id,tenant_id,codigo,nombre,whatsapp,curso,paquete,fecha,pago,horario,notas,ciclo,vence,aviso_vence_ciclo,recordatorio_fecha,recordatorio_ciclo,winback_ciclo,profesor_id,sede_id,migrado_usadas,migrado_ciclo,activado,caducado,apellido,email,nacimiento,pases) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,?22,?23,?24,?25,?26,?27)"
+              "INSERT INTO alumnos (id,tenant_id,codigo,nombre,whatsapp,curso,paquete,fecha,pago,horario,notas,ciclo,vence,aviso_vence_ciclo,recordatorio_fecha,recordatorio_ciclo,winback_ciclo,profesor_id,sede_id,migrado_usadas,migrado_ciclo,activado,caducado,apellido,email,nacimiento,pases,vence_manual,invitado_el,invitado_canal,no_email,bonus_clases,bonus_ciclo,mkt_ok,mkt_fecha,mkt_origen,mkt_token,resena_pedida,cal_token) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,?22,?23,?24,?25,?26,?27,?28,?29,?30,?31,?32,?33,?34,?35,?36,?37,?38,?39)"
             ).bind(
               a.id, tid, String(a.codigo || "").toUpperCase() || randHex(3).toUpperCase(), a.nombre,
               a.whatsapp || "", a.curso || "", a.paquete || "",
@@ -13918,7 +15140,14 @@ export default {
               (a.apellido !== undefined ? String(a.apellido || "").slice(0, 60) : ((pr && pr.apellido) || "")),
               (a.email !== undefined ? String(a.email || "").trim().slice(0, 120) : ((pr && pr.email) || "")),
               (a.nacimiento !== undefined ? String(a.nacimiento || "").slice(0, 10) : ((pr && pr.nacimiento) || "")),
-              pasesAl
+              pasesAl, venceManual,
+              /* se preservan tal cual: el panel no las manda y no son suyas */
+              (pr && pr.invitado_el) || "", (pr && pr.invitado_canal) || "",
+              (pr && Number(pr.no_email)) || 0,
+              (pr && Number(pr.bonus_clases)) || 0, (pr && Number(pr.bonus_ciclo)) || 0,
+              (pr && Number(pr.mkt_ok)) || 0, (pr && pr.mkt_fecha) || "", (pr && pr.mkt_origen) || "",
+              (pr && pr.mkt_token) || "", (pr && Number(pr.resena_pedida)) || 0,
+              (pr && pr.cal_token) || ""
             ));
           }
           for (const r of body.registro){
@@ -13939,6 +15168,18 @@ export default {
               stmts.push(env.DB.prepare("INSERT INTO precios (tenant_id, paquete, precio) VALUES (?1, ?2, ?3)").bind(tid, k, Number(preciosPut[k]) || 0));
             }
           }
+          /* Reservas que quedaron sin dueño (21-ago-2026). Este guardado borra y reinserta
+             `alumnos` y `registro`, pero NUNCA tocó `reservas`: al borrar a un alumno, sus
+             reservas futuras seguían vivas y SEGUÍAN OCUPANDO CUPO (el conteo de cupo mira
+             `reservas` por horario, sin comprobar que el alumno exista). En una sala con
+             máquinas contadas eso significa rechazar a una alumna real por el cupo de alguien
+             que ya no está. Va al final del batch, cuando los alumnos ya se reinsertaron.
+             `bloqueo` y `aparta` se quedan fuera: esos NO tienen alumno por diseño. */
+          stmts.push(env.DB.prepare(
+            "DELETE FROM reservas WHERE tenant_id = ?1 AND tipo NOT IN ('bloqueo','aparta') " +
+            "AND COALESCE(alumno_id,'') != '' " +
+            "AND alumno_id NOT IN (SELECT id FROM alumnos WHERE tenant_id = ?1)"
+          ).bind(tid));
           await env.DB.batch(stmts);
           /* Los avisos van DESPUÉS del batch a propósito: si el guardado falla, el alumno no
              puede haber recibido "tu plan ya está activo" por un plan que no se guardó. */
@@ -14014,6 +15255,16 @@ export default {
           return json({ ok: true });
         }
 
+        /* Token de la API / MCP: lo ve y lo rota SOLO el dueño. Se muestra en claro a
+           propósito (es lo que tiene que pegar en su Claude); rotarlo invalida el anterior. */
+        if (path === "/app/api/admin/api-token" && request.method === "POST"){
+          if (!esDueno) return json({ error: "La conexion con tu Claude la maneja el dueno." }, 403);
+          if (esTenantDemo(t)) return json({ error: "En la demo no se generan tokens." }, 400);
+          const bTk = await request.json().catch(() => ({}));
+          const token = await apiTokenDe(env, tid, bTk && bTk.accion === "rotar");
+          return json({ ok: true, token, mcp_url: MARCA.dominio + "/app/mcp/" + token, api_url: MARCA.dominio + "/app/api/v1" });
+        }
+
         if (path === "/app/api/admin/config" && request.method === "POST"){
           /* config del tenant (cobros, marca, cupo, cursos): SOLO el dueno */
           if (!esDueno) return json({ error: "Los ajustes de la academia los maneja el dueno." }, 403);
@@ -14023,6 +15274,8 @@ export default {
                           "caduca_meses", "asistencia_auto", "asistencia_horas", "mensajes",
                           /* que datos extra pide el formulario publico de compra (02-ago-2026) */
                           "campos_alumno",
+                          /* directorio publico de academias (21-ago-2026): "off" = no salir listada */
+                          "directorio",
                           /* salas o espacios fisicos: N clases en paralelo (03-ago-2026, Elevate) */
                           "salas",
                           /* beneficios / convenios para alumnos activos (10-ago-2026, Elevate) */
@@ -14089,6 +15342,39 @@ export default {
                   return out;
                 })) : "";
                 if (parsed && parsed.sobran > 0) avisoPaquetes = parsed.sobran;
+                /* 🐛 20-ago-2026 (Elevate): renombrar un paquete deja huérfanos los pases que
+                   guardaban el nombre viejo, y esos alumnos ven 0/0 aunque hayan pagado.
+                   `resolverPk` ya lo resuelve con tolerancia, pero lo que NI ASÍ se puede
+                   emparejar hay que saberlo el mismo día, no cuando reclama el cliente. */
+                if (parsed){
+                  ctx.waitUntil((async () => {
+                    try {
+                      const { results: conPases } = await env.DB.prepare(
+                        "SELECT nombre, pases FROM alumnos WHERE tenant_id = ?1 AND COALESCE(pases,'') != ''"
+                      ).bind(tid).all();
+                      const huerfanos = new Map();
+                      for (const al of (conPases || [])){
+                        let obj = null;
+                        try { obj = JSON.parse(al.pases || "{}"); } catch (e) { continue; }
+                        for (const ps of ((obj && obj.p) || [])){
+                          const nom = String((ps && ps.n) || "");
+                          if (!nom) continue;
+                          if (!(resolverPk(parsed.map, nom).clases || resolverPk(parsed.map, nom).ilim)){
+                            huerfanos.set(nom, (huerfanos.get(nom) || 0) + 1);
+                          }
+                        }
+                      }
+                      if (huerfanos.size){
+                        await alertaCorreoAndres(env,
+                          "🔴 " + (t.academia || tid) + ": pases apuntando a paquetes que ya no existen",
+                          "Al guardar Ajustes quedaron pases sin paquete que los respalde. Esos alumnos ven 0/0 aunque hayan pagado.\n\n" +
+                          [...huerfanos.entries()].map(([nom, n]) => "· \"" + nom + "\" — " + n + " pase(s)").join("\n") +
+                          "\n\nPaquetes vigentes: " + parsed.list.join(" · ") +
+                          "\n\nArreglo: renombrar el paquete de vuelta, o actualizar el nombre dentro de alumnos.pases.");
+                      }
+                    } catch (e) { console.error("aviso pases huerfanos", e); }
+                  })());
+                }
               }
               /* clases de 2 niveles: valida y reescribe canónico ("" = cursos planos de siempre) */
               if (k === "clases"){
@@ -14353,7 +15639,7 @@ export default {
             if (!/^https?:\/\//i.test(urlR)) return json({ error: "El link debe empezar con http:// o https://" }, 400);
             await env.DB.prepare(
               "INSERT INTO recursos (id,tenant_id,titulo,descripcion,url,curso,fecha) VALUES (?1,?2,?3,?4,?5,?6,?7)"
-            ).bind(crypto.randomUUID(), tid, titulo, descripcion, urlR, curso, hoy()).run();
+            ).bind(crypto.randomUUID(), tid, titulo, descripcion, urlR, curso, hoyLima()).run();
             return json({ ok: true });
           }
           if (b.accion === "borrar"){
@@ -14394,7 +15680,7 @@ export default {
           });
           await env.DB.prepare(
             "INSERT INTO recursos (id,tenant_id,titulo,descripcion,url,curso,fecha) VALUES (?1,?2,?3,?4,?5,?6,?7)"
-          ).bind(crypto.randomUUID(), tid, titulo, descripcion, "/app/api/recurso/archivo/" + key, curso, hoy()).run();
+          ).bind(crypto.randomUUID(), tid, titulo, descripcion, "/app/api/recurso/archivo/" + key, curso, hoyLima()).run();
           return json({ ok: true });
         }
 
@@ -14518,7 +15804,7 @@ export default {
           });
           await env.DB.prepare(
             "INSERT INTO ejercicios (id,tenant_id,titulo,descripcion,url,curso,fecha) VALUES (?1,?2,?3,?4,?5,?6,?7)"
-          ).bind(crypto.randomUUID(), tid, titulo, descripcion, "/app/api/recurso/archivo/" + key, curso, hoy()).run();
+          ).bind(crypto.randomUUID(), tid, titulo, descripcion, "/app/api/recurso/archivo/" + key, curso, hoyLima()).run();
           return json({ ok: true });
         }
 
@@ -14548,7 +15834,7 @@ export default {
             });
             await env.DB.prepare(
               "INSERT INTO ejercicios (id,tenant_id,titulo,descripcion,url,curso,fecha,carpeta) VALUES (?1,?2,?3,?4,?5,?6,?7,?8)"
-            ).bind(crypto.randomUUID(), tid, titulo, "", "/app/api/recurso/archivo/" + key, curso, hoy(), carpeta).run();
+            ).bind(crypto.randomUUID(), tid, titulo, "", "/app/api/recurso/archivo/" + key, curso, hoyLima(), carpeta).run();
             subidos++;
           }
           return json({ ok: true, subidos, saltados });
@@ -14686,7 +15972,18 @@ export default {
           }
 
           if (b.accion === "rechazar"){
-            await env.DB.prepare("UPDATE compras SET estado = 'rechazada' WHERE id = ?1 AND tenant_id = ?2").bind(compra.id, tid).run();
+            /* 🔴 22-ago-2026 · el UPDATE no miraba el estado. El `if` de arriba lee y compara,
+               pero entre leer y escribir cabe otra petición: con "confirmar" y "rechazar" a la
+               vez (dos pestañas, o un clic en cada botón), la confirmación acreditaba las
+               clases y el rechazo pisaba la compra a 'rechazada'. El alumno se quedaba con su
+               plan y la caja mostraba un pago rechazado.
+               Mismo candado que usa `confirmarCompra`: se reclama la fila y se mira `changes`. */
+            const rch = await env.DB.prepare(
+              "UPDATE compras SET estado = 'rechazada' WHERE id = ?1 AND tenant_id = ?2 AND estado = 'pendiente'"
+            ).bind(compra.id, tid).run();
+            if (!((rch && rch.meta && (rch.meta.changes ?? 0)) || 0)){
+              return json({ error: "Esa compra ya fue procesada mientras tanto. Recarga para ver como quedo." }, 409);
+            }
             return json({ ok: true });
           }
           if (b.accion === "confirmar"){
@@ -14757,6 +16054,10 @@ export default {
        al cron de las 9am, la clase de las 7pm quedaria "reservada" toda la noche y el saldo
        del alumno mentiria hasta el dia siguiente. */
     try { await cerrarAsistenciasAuto(env); } catch (e) { console.error("asistencia auto", e); }
+    /* Demos privadas vencidas (19-ago-2026): cada visitante de /app/demo tiene la suya y
+       vive 24h. Va en CADA corrida y no en la diaria para que la base no cargue un día
+       entero de copias muertas. */
+    try { await limpiarDemosPrivadas(env); } catch (e) { console.error("limpiar demos privadas", e); }
     /* Campañas: en CADA corrida (cada 15 min), no en la diaria. La ley solo deja enviar de
        07:00 a 20:00 de lunes a viernes, así que hay que ir despachando tandas a lo largo del
        día; con una sola corrida diaria no entrarían ni 300 correos. La propia función se
@@ -14790,8 +16091,8 @@ export default {
     try {
       const desde7 = new Date(Date.now() - 7 * 86400000).toISOString();
       const { results: nuevos } = await env.DB.prepare(
-        "SELECT id, academia, email, whatsapp, creado, plan, estado FROM tenants WHERE creado >= ?1 AND email != ?2"
-      ).bind(desde7, DEMO_EMAIL).all();
+        "SELECT id, academia, email, whatsapp, creado, plan, estado FROM tenants WHERE creado >= ?1 AND email NOT LIKE ?2"
+      ).bind(desde7, SQL_DEMO_LIKE).all();
       const sinActivar = [];
       for (const tN of (nuevos || [])){
         const aN = await tenantActivado(env, tN.id);
@@ -14800,8 +16101,8 @@ export default {
       let dunningPend = [];
       try {
         const dp = await env.DB.prepare(
-          "SELECT academia, email, whatsapp, mp_sub_status FROM tenants WHERE mp_sub_status IN ('paused','cancelled') AND estado != 'vencido' AND email != ?1"
-        ).bind(DEMO_EMAIL).all();
+          "SELECT academia, email, whatsapp, mp_sub_status FROM tenants WHERE mp_sub_status IN ('paused','cancelled') AND estado != 'vencido' AND email NOT LIKE ?1"
+        ).bind(SQL_DEMO_LIKE).all();
         dunningPend = dp.results || [];
       } catch (e) {}
       if (sinActivar.length || dunningPend.length){
@@ -14846,7 +16147,7 @@ export default {
       tenants = r.results || [];
     } catch (e) { return; }
     for (const t of tenants){
-      if (!t.email || t.email === "demo@batuta.lat") continue; // la demo no recibe nurture
+      if (!t.email || esTenantDemo(t)) continue; // ni la demo canónica ni las privadas reciben nurture
       const dias = Math.floor((ahora - (Date.parse(t.creado) || ahora)) / 86400000);
       const venceMs = Date.parse(t.trial_hasta) || 0;
       /* Renovación ANUAL (candado 6-ago-2026): el anual ya no es eterno. Aviso 7 días antes

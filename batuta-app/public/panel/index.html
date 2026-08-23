@@ -846,7 +846,7 @@ button[data-ayuda],a[data-ayuda],select[data-ayuda],input[data-ayuda],label[data
         <button class="tab" data-tab="alumnos" data-ayuda="Tu lista de alumnos. Acá los das de alta, les cargas su plan y ves sus clases.">Alumnos</button>
         <button class="tab" data-tab="grupos" data-ayuda="Grupos de alumnos que llevan la misma clase.">Grupos</button>
         <button class="tab solo-dueno" data-tab="profesores" data-ayuda="Tu equipo. Acá los invitas, les asignas alumnos y ves cuánto les toca cobrar.">Profesores</button>
-        <button class="tab" data-tab="cuentas">Cuentas de alumnos</button>
+        <button class="tab" data-tab="cuentas" data-ayuda="Quiénes crearon su cuenta en tu portal. Si alguien aparece «Sin vincular», se registró pero todavía no está enlazado a su ficha: hasta que lo enlaces no ve sus clases ni su saldo.">Cuentas de alumnos<span class="dot hidden" id="dotCuentas">0</span></button>
         <button class="tab solo-dueno" data-tab="leads" data-ayuda="Gente que preguntó por tus clases pero todavía no compra. Acá los sigues hasta que se inscriban.">Interesados<span class="dot hidden" id="dotLeads">0</span></button>
         <button class="tab" data-tab="registro" data-ayuda="Marcar quién vino y quién faltó. De acá sale el descuento de clases de cada alumno.">Asistencia</button>
         <button class="tab" data-tab="agenda" data-ayuda="Tus horarios y las clases de cada día. Acá abres cupos para que reserven.">Mis clases</button>
@@ -863,7 +863,7 @@ button[data-ayuda],a[data-ayuda],select[data-ayuda],input[data-ayuda],label[data
         <button class="tab solo-dueno" data-tab="correos" data-ayuda="Escribirle por correo a tus alumnos: una promoción, una novedad o un "vuelve" a los que se enfriaron.">Correos a mis alumnos</button>
         <button class="tab solo-dueno" data-tab="campanas" data-ayuda="Anuncios pagados en Facebook e Instagram para conseguir alumnos nuevos.">Campañas</button>
         <button class="tab solo-dueno" data-tab="servicios" data-ayuda="Si prefieres que nosotros te lo dejemos andando en vez de hacerlo tú.">Servicios</button>
-        <button class="tab" data-tab="feedback" data-ayuda="Cuéntanos qué te falta o qué se rompió. Tu primer aporte del mes te suma 7 días gratis.">Ideas y errores</button>
+        <button class="tab" data-tab="feedback" data-ayuda="Cuéntanos qué te falta o qué se rompió. Lo leemos todo y lo trabajamos.">Ideas y errores</button>
       </div>
     </nav>
     <div class="sb-tools">
@@ -910,6 +910,15 @@ button[data-ayuda],a[data-ayuda],select[data-ayuda],input[data-ayuda],label[data
     </div>
 
   <section class="panel active" id="panel-resumen">
+    <!-- Clases pagadas por vencerse (21-ago-2026): a Elevate se le perdieron 22 clases ya
+         pagadas de 3 alumnas y nadie se enteró, porque el único aviso que existía era el correo
+         al ALUMNO (y ese llega a pocos). El dueño no tenía dónde verlo. Lo pinta renderVenceBanner(). -->
+    <!-- Planes rotos (21-ago-2026): un alumno cuyo plan ya no está en el catálogo queda en
+         0/0 aunque haya pagado. Pasó el 20-ago con 9 alumnas de Elevate al renombrar un
+         paquete, y nadie se enteró hasta que el cliente reclamó por WhatsApp. Lo pinta
+         renderPlanRotoBanner(). -->
+    <div id="planRotoBanner" style="display:none;"></div>
+    <div id="venceBanner" style="display:none;"></div>
     <div class="group" id="grpActivacion" style="display:none;">
       <h2>Pon tu academia a andar</h2>
       <div class="card" style="max-width:560px;">
@@ -978,7 +987,7 @@ button[data-ayuda],a[data-ayuda],select[data-ayuda],input[data-ayuda],label[data
   <section class="panel" id="panel-academia">
     <p class="hint quees"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 21h18"/><path d="M5 21V7l7-4 7 4v14"/><path d="M9 21v-6h6v6"/></svg><b>Todo lo que configura tu academia, en un solo lugar.</b> Lo del día a día (alumnos, clases, cobros) vive en el menú de la izquierda; aquí está el resto.</p>
     <div class="acadgrid" id="acadGrid"></div>
-    <p class="hint" style="margin-top:18px;">¿Algo no funciona o se te ocurrió una mejora? <a href="#" data-ira="feedback">Cuéntamelo aquí</a> (el primer aporte del mes te regala +7 días).</p>
+    <p class="hint" style="margin-top:18px;">¿Algo no funciona o se te ocurrió una mejora? <a href="#" data-ira="feedback">Cuéntamelo aquí</a> (lo leemos todo).</p>
   </section>
 
   <section class="panel" id="panel-alumnos">
@@ -1056,7 +1065,7 @@ button[data-ayuda],a[data-ayuda],select[data-ayuda],input[data-ayuda],label[data
 
   <section class="panel" id="panel-feedback">
     <div class="card" style="padding:14px 16px;margin-bottom:16px;">
-      <strong>Tu primer aporte te regala 7 días de acceso (una sola vez).</strong>
+      <strong>Cada aporte lo leemos y lo trabajamos.</strong>
       <p class="hint" id="fbPremioEstado" style="margin:6px 0 0;">Cargando…</p>
     </div>
     <div class="frow">
@@ -1548,21 +1557,13 @@ button[data-ayuda],a[data-ayuda],select[data-ayuda],input[data-ayuda],label[data
       <button class="btn" id="btnGuardarPerfil" style="margin-top:8px;">Guardar perfil</button>
     </div>
     <div class="group">
-      <h2>Tu plan</h2>
-      <p class="hint">Sube o baja de plan cuando quieras, sin penalidad. Si ya tienes tu suscripción activa, el cambio se aplica solo (no vuelves a poner tu tarjeta) y rige desde tu siguiente cobro mensual.</p>
-      <div class="rowact" style="margin-top:8px;flex-wrap:wrap;">
-        <span class="pill gray" id="planActual">—</span>
-        <button class="btn ghost sm" data-plan="profe" id="btnPlanProfe">Profe · S/49 (1 profe, alumnos ilimitados)</button>
-        <button class="btn ghost sm" data-plan="profe_duo" id="btnPlanProfeDuo">Profe Dúo · S/78 (2 profes)</button>
-        <button class="btn ghost sm" data-plan="profe_trio" id="btnPlanProfeTrio">Profe Trío · S/107 (3 profes)</button>
-        <button class="btn ghost sm" data-plan="academia" id="btnPlanAcademia">Academia · S/149 (5 profes, 150 alumnos)</button>
-        <button class="btn ghost sm" data-plan="xl" id="btnPlanXl">Academia XL · S/299 (20 profes, 400 alumnos)</button>
-        <button class="btn ghost sm" data-plan="por_alumno" id="btnPlanPorAlumno">Academia por alumno · US$1.50/alumno</button>
-      </div>
-      <p class="hint" id="porAlumnoHint" style="margin-top:6px;display:none;">Con tus <strong id="paCount">—</strong> alumnos activos hoy, tu cobro sería <strong id="paMonto">—</strong>/mes. Se recalcula solo cada mes según cuántos tengas. Ideal para academias grandes.</p>
-      <div class="rowact" style="margin-top:10px;flex-wrap:wrap;">
-        <button class="btn ghost sm" id="btnPlanAnualPerfil" type="button"><svg viewBox="0 0 24 24" aria-hidden="true" class="ico-tx"><path d="M9.3 18h5.4"/><path d="M10.2 21.3h3.6"/><path d="M12 2.7a5.9 5.9 0 0 0-3.4 10.7c.6.4 1 1.1 1 1.9V18h4.8v-2.7c0-.8.4-1.5 1-1.9A5.9 5.9 0 0 0 12 2.7z"/></svg>Pagar 1 año de mi plan (2 meses gratis)</button>
-        <span class="hint" style="margin:0;">Profe S/490 · Dúo S/780 · Trío S/1,070 · Academia S/1,490 · XL S/2,990. Un solo pago, cero cobros mensuales.</span>
+      <h2>Tu Batuta</h2>
+      <p class="hint">Batuta es <b>gratis para siempre</b>: 20 alumnos, 1 profesor y 5 conversaciones del asistente al mes. Cuando necesites más, agregas un pack y pagas solo eso. Puedes soltarlo cuando quieras: no se borra nada, solo dejas de dar de alta nuevos hasta que bajes o vuelvas a comprar.</p>
+      <div id="packsUso" class="packs-uso"></div>
+      <div id="packsCat"></div>
+      <div class="packs-pie">
+        <div>Tu cobro mensual: <b id="packsTotal">S/0</b> <span class="hint" id="packsNota" style="margin:0;"></span></div>
+        <button class="btn" id="btnPacksAplicar" type="button" disabled>Aplicar cambios</button>
       </div>
     </div>
     <div class="group">
@@ -1703,6 +1704,10 @@ button[data-ayuda],a[data-ayuda],select[data-ayuda],input[data-ayuda],label[data
       <div class="cfgrow"><span class="pk">Aviso de plan activo</span><select id="cfg_aviso_plan_activo" data-ayuda="Cuando le cargas o le renuevas el plan a un alumno desde su ficha, le llega un correo avisándole. Útil si te pagó por Yape fuera de la app."><option value="">Activado</option><option value="off">Apagado</option></select></div>
       <div class="cfgrow"><span class="pk">Pedir reseñas de Google</span><select id="cfg_resena_activa" data-ayuda="Al alumno que ya lleva varias clases le llega un correo: del 1 al 5, ¿cómo van tus clases? Si responde 4 o 5 lo mandamos a dejar tu reseña en Google. Si responde 3 o menos NO le pedimos nada público y te avisamos a ti al toque, para que lo llames antes de que se vaya."><option value="">Activado</option><option value="off">Apagado</option></select></div>
       <div class="cfgrow"><span class="pk">Tu link de reseñas de Google</span><input id="cfg_review_link" placeholder="https://g.page/r/..." data-ayuda="Pega acá el link donde tus alumnos dejan la reseña (Google Business → Pedir reseñas). Si lo dejas vacío no se manda ningún correo: nunca inventamos un link por ti."></div>
+      <!-- 21-ago-2026: "Pedir reseñas" sale como Activado aunque falte el link, y sin link no
+           se manda un solo correo. Resultado: cero reseñas pedidas en toda la historia de
+           Batuta, con el dueño creyendo que estaba funcionando. -->
+      <p class="hint" id="avisoResenaSinLink" style="display:none;margin:2px 0 0;color:var(--amber,#E8A13D);">Dice <b>Activado</b>, pero sin tu link no se manda ningún correo. Lo sacas de Google Business → Pedir reseñas y lo pegas acá.</p>
       <div class="cfgrow"><span class="pk">Clases antes de pedirla</span><input id="cfg_resena_min_clases" type="number" min="1" placeholder="4" data-ayuda="Cuántas clases tiene que haber tomado el alumno antes de que le pidamos su opinión. Por defecto 4: pedírsela al que fue una vez es pedirle que opine de lo que todavía no conoce."></div>
       <div class="cfgrow"><span class="pk">Rescatar compras a medias</span><select id="cfg_rescate_activo" data-ayuda="Si alguien abre el checkout y no llega a pagar, al día siguiente le llega un correo para retomarlo. Nunca se le escribe al que ya pagó por Yape y espera que confirmes."><option value="">Activado</option><option value="off">Apagado</option></select></div>
       <p class="hint" style="margin-top:-4px;">Cuando alguien empieza a comprar y no termina, esa venta hoy se pierde en silencio. Con esto le llega un correo al día siguiente para retomarla desde su portal. <b>Nunca</b> le escribe a quien ya te pagó por Yape y espera tu confirmación.</p>
@@ -1858,6 +1863,24 @@ button[data-ayuda],a[data-ayuda],select[data-ayuda],input[data-ayuda],label[data
       <div id="waSugList"></div>
     </div>
     <div class="group" data-aj="avanzado">
+      <h2>Aparecer en el directorio de Batuta</h2>
+      <p class="hint">Tu academia puede salir en <b>batuta.lat/academias</b>, donde la gente que busca dónde estudiar te encuentra y se matricula contigo. Se muestra el nombre de tu academia, tus cursos y el link de tu página: <b>ningún dato de tus alumnos ni de tus cobros</b>. Si tu cuenta está a nombre de una persona y no de una academia, no apareces salvo que lo pidas aquí (tu nombre es un dato personal y no lo publicamos sin tu permiso).</p>
+      <div class="cfgrow"><span class="pk">Aparecer en el directorio</span><select id="cfg_directorio"><option value="">Como está (academias sí, nombres de persona no)</option><option value="si">Sí, publíquenme aunque sea mi nombre</option><option value="off">No, prefiero no aparecer</option></select></div>
+    </div>
+    <div class="group" data-aj="avanzado">
+      <h2>Conecta tu Claude a tu academia</h2>
+      <p class="hint">Genera tu llave y pégala en Claude (o en cualquier programa que use MCP). Desde ahí le puedes preguntar cosas como <i>"¿a quién se le acaban las clases esta semana?"</i> o <i>"¿cuánto entró este mes?"</i> y te responde con TUS datos. <b>Solo puede leer</b>: no cambia ni borra nada en tu academia.</p>
+      <div class="rowact" style="margin-top:8px;flex-wrap:wrap;">
+        <button class="btn ghost sm" id="btnApiToken" type="button">Ver mi llave</button>
+        <button class="btn ghost sm" id="btnApiRotar" type="button">Generar una nueva</button>
+      </div>
+      <div id="apiTokenBox" style="display:none;margin-top:10px;">
+        <div class="cfgrow"><span class="pk">Para pegar en tu Claude</span><input id="apiMcpUrl" type="text" readonly /></div>
+        <div class="cfgrow"><span class="pk">Tu llave</span><input id="apiToken" type="text" readonly /></div>
+        <p class="hint">Guárdala como una contraseña: quien la tenga puede leer los datos de tu academia. Si se te escapa, genera una nueva y la anterior deja de servir al instante.</p>
+      </div>
+    </div>
+    <div class="group" data-aj="avanzado">
       <h2>Avisos en tu teléfono (app + push)</h2>
       <p class="hint">Instala el panel como app: en tu celular abre batuta.lat/app/panel y elige "Agregar a pantalla de inicio" (en iPhone: botón Compartir → Agregar a inicio). Luego activa los avisos aquí y te llega una notificación con cada pago por confirmar y cada reserva nueva.</p>
       <div class="rowact" style="margin-top:8px;">
@@ -1964,24 +1987,19 @@ button[data-ayuda],a[data-ayuda],select[data-ayuda],input[data-ayuda],label[data
 <!-- Overlay de paywall (trial vencido) -->
 <div class="overlay" id="ovPaywall">
   <div class="modal">
-    <h3>Tu <em>prueba terminó</em></h3>
-    <div class="mlab">Activa tu plan para seguir usando Batuta (garantía de devolución en tu primer mes)</div>
+    <h3>Tu cuenta está <em>en pausa</em></h3>
+    <div class="mlab">Tus datos están intactos. Escríbenos y la reactivamos.</div>
     <div class="frow" style="grid-template-columns:1fr;gap:10px;">
-      <div class="card" style="padding:14px 16px;"><strong>Profe</strong> — S/49/mes (US$14.95) · 1 profesor · alumnos ilimitados</div>
-      <div class="card" style="padding:14px 16px;"><strong>Academia</strong> — S/149/mes (US$43.95) · 5 profesores · hasta 150 alumnos</div>
-      <div class="card" style="padding:14px 16px;"><strong>Academia XL</strong> — S/299/mes (US$87.95) · 20 profesores · hasta 400 alumnos</div>
-      <div class="card" style="padding:14px 16px;"><svg viewBox="0 0 24 24" aria-hidden="true" class="ico-tx"><path d="M9.3 18h5.4"/><path d="M10.2 21.3h3.6"/><path d="M12 2.7a5.9 5.9 0 0 0-3.4 10.7c.6.4 1 1.1 1 1.9V18h4.8v-2.7c0-.8.4-1.5 1-1.9A5.9 5.9 0 0 0 12 2.7z"/></svg><strong>Paga el año y llévate 2 meses gratis</strong> (Profe S/490 · Academia S/1,490 · XL S/2,990), desde "Activar mi plan".</div>
+      <div class="card" style="padding:14px 16px;">Batuta es <strong>gratis para siempre</strong>: 20 alumnos, 1 profesor y 5 conversaciones del asistente al mes. Esta pausa no es por dinero, y no se borró nada de lo tuyo.</div>
     </div>
     <div class="modal-actions">
-      <a class="btn" href="/app/suscribir">Activar mi plan</a>
-      <a class="btn ghost" id="btnPaywallWa" target="_blank" rel="noopener">Activar por WhatsApp</a>
-      <button class="btn ghost" id="btnPaywallGratis" type="button">Seguir con el plan Gratis (1 profe, 10 alumnos)</button>
+      <a class="btn" id="btnPaywallWa" target="_blank" rel="noopener">Escribirnos por WhatsApp</a>
     </div>
-    <div class="mlab" style="margin-top:18px;">O gana 7 días más de prueba</div>
-    <p class="hint" style="margin:6px 0 8px;">Cuéntanos qué te faltó, qué mejorarías o qué error viste, y tu primer aporte te regala 7 días más para seguir probando (una sola vez por academia).</p>
+    <div class="mlab" style="margin-top:18px;">Cuéntanos qué pasó</div>
+    <p class="hint" style="margin:6px 0 8px;">Si algo se rompió o te faltó, escríbelo aquí: lo leemos y lo trabajamos.</p>
     <div class="field"><textarea id="pw_fb" rows="3" placeholder="Ej: me faltó poder cobrar en dólares, o el botón X no me funcionó."></textarea></div>
     <div style="display:flex;align-items:center;gap:12px;">
-      <button class="btn ghost" id="btnPwFb">Enviar y ganar 7 días</button>
+      <button class="btn ghost" id="btnPwFb">Enviar</button>
       <span class="hint" id="pwFbMsg"></span>
     </div>
   </div>
@@ -2102,6 +2120,14 @@ button[data-ayuda],a[data-ayuda],select[data-ayuda],input[data-ayuda],label[data
       <div class="field"><label>Fecha de compra</label><input id="a_fecha" type="date" /></div>
       <div class="field"><label>Estado de pago</label><select id="a_pago"><option>Pagado</option><option>Pendiente</option></select></div>
     </div>
+    <!-- Vencimiento editable (21-ago-2026, pedido de José/Elevate por audio): "a veces hago
+         excepciones y les quiero extender la fecha". Antes no había dónde: el vencimiento se
+         recalculaba solo desde los días del plan en cada guardado. Con multi-pase se pinta un
+         campo POR PASE, que es como lo vive Elevate. Lo llena pintarVencimientos(). -->
+    <div class="field" id="a_vence_wrap" style="display:none;"><label>Vence el</label>
+      <div id="a_vence_box"></div>
+      <p class="hint" id="a_vence_hint" style="margin:5px 0 0;">Si pones la fecha a mano, Batuta la respeta y deja de recalcularla por los días del plan. Vacío = vuelve al automático.</p>
+    </div>
     <div class="field" id="a_profe_wrap" style="display:none;"><label>Profesor asignado</label><select id="a_profe"></select>
       <p class="hint" style="margin:5px 0 0;">El alumno reserva en la agenda de SU profesor, y ese profesor lo ve en su panel.</p></div>
     <div class="field" id="a_sede_wrap" style="display:none;"><label>Sede</label><select id="a_sede"></select></div>
@@ -2130,10 +2156,10 @@ button[data-ayuda],a[data-ayuda],select[data-ayuda],input[data-ayuda],label[data
          donde alguien sube el export real de su academia. Lo pinta demoAvisoImport(). -->
     <div id="impAvisoDemo" style="display:none;">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 9v4"/><path d="M12 17h.01"/><path d="M10.3 3.9 2.4 17.5A2 2 0 0 0 4.1 20.5h15.8a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg>
-      <b>Estás en la demo pública: cualquiera que entre a batuta.lat/app/demo ve lo que subas aquí.</b>
-      No cargues la lista real de tus alumnos. Para probar, sube unos pocos con nombres inventados:
-      guardo hasta 25 y no guardo correos, teléfonos ni fechas de nacimiento.
-      <a href="/app/registro?f=demo-import">Crea tu academia gratis</a> y ahí sí entra tu lista completa, privada y solo tuya.
+      <b>Estás en una demo: es solo tuya y se borra sola en 24 horas.</b>
+      Para probar, sube unos pocos alumnos con nombres inventados: guardo hasta 25 y no guardo
+      correos, teléfonos ni fechas de nacimiento.
+      <a href="/app/registro?f=demo-import">Crea tu academia gratis</a> y ahí entra tu lista completa, privada y para quedarse.
     </div>
     <!-- ===== PASO 0 (11-ago-2026): ¿de dónde vienen? =====
          Sin esta pregunta no hay forma de saber que a un export de Punchpass le falta el
@@ -2571,7 +2597,7 @@ function filaPaqHTML(p){
     '<input type="text" class="pq-n" maxlength="40" data-orig="'+esc(p.n||"")+'" placeholder="Nombre (ej. Mensualidad)" value="'+esc(p.n||"")+'" />'+
     '<input type="number" class="pq-c" data-ayuda="Cuántas clases trae el plan. Si es una mensualidad sin límite, marca &quot;mensual&quot; al costado." min="0" max="500" placeholder="clases" value="'+(ilim?"":(p.c||0))+'"'+(ilim?' disabled style="opacity:.4"':'')+' />'+
     '<label style="font-size:12px;opacity:.8;display:flex;gap:4px;align-items:center;white-space:nowrap;"><input type="checkbox" class="pq-u"'+(ilim?" checked":"")+' /> mensual</label>'+
-    '<input type="number" class="pq-p" data-ayuda="Lo que cobras por este plan. En S/0 no sale en tu web ni en el portal, y no te podemos cobrar por él." min="0" placeholder="S/" value="'+(db.precios[p.n]||0)+'" />'+
+    '<input type="number" class="pq-p" data-ayuda="Lo que cobras por este plan. En S/0 no sale en tu web ni se puede comprar desde el portal, y no te podemos cobrar por él." min="0" placeholder="S/" value="'+(db.precios[p.n]||0)+'" />'+
     /* .pq-tipos = lo ÚNICO que repinta refrescarIncluyeDePaquetes(). El <summary> y el bloque
        de vigencia de abajo quedan fuera a propósito: ver el comentario de esa función. */
     '<details class="pq-inc"><summary>'+esc(resumen)+'</summary><div class="pq-incbox">'+
@@ -2621,7 +2647,7 @@ function filaPaqHTML(p){
        propia fila cada vez que entra a Ajustes. Es el estado en el que nace un plan creado
        desde el importador, que trae el nombre y las clases pero nunca el precio. */
     ((p.n && !(Number(db.precios[p.n])>0))
-      ? '<p class="hint" style="grid-column:1/-1;margin:2px 0 0;color:var(--amber,#E8A13D);">Falta ponerle precio a <b>'+esc(p.n)+'</b>: en S/0 no sale en tu web ni en el portal, y no te puedo cobrar por él.</p>'
+      ? '<p class="hint" style="grid-column:1/-1;margin:2px 0 0;color:var(--amber,#E8A13D);">Falta ponerle precio a <b>'+esc(p.n)+'</b>: en S/0 no sale en tu web ni se puede comprar desde el portal, y no te puedo cobrar por él.</p>'
       : "")+
   '</div>';
 }
@@ -2665,6 +2691,16 @@ function tipoAdjunto(u){
 function setSync(txt,cls){ var d=el("syncdot"); d.textContent=txt; d.className="syncdot "+(cls||""); }
 var toastT;
 function toast(msg, dur){ var t=el("toast"); t.textContent=msg; t.classList.add("show"); clearTimeout(toastT); toastT=setTimeout(function(){t.classList.remove("show");}, dur||2400); }
+/* 402 con `upgrade` = tope de packs, NO trial vencido (22-ago-2026). El worker ya manda el
+   mensaje bueno ("Tu Batuta llega hasta 20 alumnos. Agrega un pack de +50 (S/39 al mes)...")
+   y el panel lo tiraba a la basura: mostraba el paywall con Profe/Academia/XL, planes MUERTOS
+   desde el 20-ago. Justo en el momento de cobrar se le enseñaban precios que no existen. */
+function avisoTope(msg){
+  var m = msg || "Llegaste al tope de tu Batuta.";
+  if(confirm(m + "\n\nTe llevo a Tu Batuta para agregarlo?")){
+    var t=document.querySelector('.tab[data-tab="perfil"]'); if(t) t.click();
+  }
+}
 
 /* ---------- API ---------- */
 function hdr(){ return { "authorization":"Bearer "+token, "content-type":"application/json" }; }
@@ -2683,7 +2719,12 @@ function apiPut(){
     body:JSON.stringify({alumnos:db.alumnos,registro:db.registro,precios:db.precios})})
     .then(function(r){
       if(r.status===401){ irALogin(); throw {auth:true}; }
-      if(r.status===402){ mostrarPaywall(); throw {paywall:true}; }
+      if(r.status===402){
+        return r.json().catch(function(){ return {}; }).then(function(d){
+          if(d && d.upgrade){ avisoTope(d.error); } else { mostrarPaywall(); }
+          throw {paywall:true};
+        });
+      }
       /* 11-ago-2026: el motivo del rechazo se pierde si tiramos "HTTP 400" a secas. El server
          manda explicaciones que el dueño necesita leer (p.ej. el tope de la demo pública), así
          que el mensaje viaja en el Error y el caller decide cómo mostrarlo. */
@@ -2703,7 +2744,7 @@ function apiPost(path, body){
   return fetch(path,{method:"POST",headers:hdr(),body:JSON.stringify(body)}).then(function(r){
     return r.json().catch(function(){return {};}).then(function(d){
       if(r.status===401){ irALogin(); throw {auth:true}; }
-      if(r.status===402){ mostrarPaywall(); throw {paywall:true}; }
+      if(r.status===402){ if(d&&d.upgrade){ avisoTope(d.error); } else { mostrarPaywall(); } throw {paywall:true}; }
       if(!r.ok){ var e=new Error(d.error||("HTTP "+r.status)); throw e; }
       return d;
     });
@@ -2788,22 +2829,9 @@ function aplicarModulos(){
 function mostrarPaywall(){
   var wa = "https://wa.me/"+WA_ACTIVAR+"?text="+encodeURIComponent("Hola Andrés, quiero activar mi plan de Batuta (academia: "+TENANT_SLUG+")");
   var btn=el("btnPaywallWa"); if(btn) btn.href=wa;
-  /* Plan Gratis desde el paywall (15-jul-2026): 1 profe, 10 alumnos, sin recordatorios ni SUNAT.
-     Recupera al que no iba a pagar y lo deja dentro del producto (candidato natural a upgrade). */
-  var bG=el("btnPaywallGratis");
-  if(bG && !bG._listo){
-    bG._listo=true;
-    bG.addEventListener("click",function(){
-      if(!confirm("Pasar al plan Gratis? Mantienes tu cuenta y tus datos. Límites: 1 profesor, 10 alumnos, sin recordatorios automáticos ni boletas SUNAT. Puedes subir de plan cuando quieras.")) return;
-      bG.disabled=true;
-      fetch("/app/api/t/plan-gratis",{method:"POST",headers:Object.assign({"content-type":"application/json"},hdr()),body:"{}"})
-        .then(function(r){return r.json().catch(function(){return {};});})
-        .then(function(d){
-          if(d && d.ok){ location.reload(); return; }
-          alert((d&&d.error)||"No se pudo cambiar al plan Gratis. Escríbenos por WhatsApp."); bG.disabled=false;
-        }).catch(function(){ alert("Error de conexión. Intenta de nuevo."); bG.disabled=false; });
-    });
-  }
+  /* El botón "Seguir con el plan Gratis" murió el 22-ago-2026 junto con el paywall de planes:
+     mandaba al tenant al plan legacy 'gratis' (1 profe, 10 alumnos, sin SUNAT), que hoy es PEOR
+     que la Batuta base gratis (20 alumnos) y encima destrababa el candado SUNAT viejo. */
   /* multi-profesor: el plan lo paga el dueño; al profesor se le dice a quién acudir */
   if(ROL==="profesor"){
     var m=el("ovPaywall").querySelector(".modal");
@@ -2867,7 +2895,10 @@ function pintarTrialBar(d){
     // 11-ago-2026: manda la ADVERTENCIA, después el CTA. La demo es un tenant compartido y
     // público; quien no lo sabe sube la lista real de su academia (pasó, 1.465 personas).
     var f=(demoArm()==="tour")?"demo-tour":"demo-panel";
-    bar.innerHTML='Demo pública: cualquiera que entre ve lo que subas. No cargues datos reales de tus alumnos.'
+    /* 21-ago-2026: decía "Demo pública: cualquiera ve lo que subas", que dejó de ser cierto
+       el 19-ago (cada visitante entra a SU demo, que se borra sola a las 24h). Además restaba:
+       le decía "esto es público" justo a quien está probando el producto. */
+    bar.innerHTML='Esta demo es solo tuya y se borra sola en 24 horas. Para probar, usa nombres inventados.'
       +' · <a href="/app/registro?f='+f+'">Crea tu academia gratis en 2 minutos</a>';
     bar.classList.add("show");
     demoAvisoImport(true);
@@ -3018,8 +3049,13 @@ function pasesResumen(a){
   var sv=a.saldo;
   if(sv && Array.isArray(sv.pases) && sv.pases.length>=2){
     var lst=sv.pases.map(function(p){
+      /* 🔴 22-ago-2026 (José): `vencido` viaja del server desde siempre y acá se tiraba.
+         Sin él, un pase muerto se pintaba igual que uno vivo y la celda decía "vence
+         2026-08-21" —fecha ya pasada— que se lee como algo que va a pasar. José le puso
+         fecha de ayer a un pase para matarlo, funcionó, y el panel no se lo dijo. */
       return { n:p.n, ilim:!!p.ilim, comp:Number(p.compradas)||0,
-               rest:p.ilim?0:Math.max(0,Number(p.restantes)||0), vence:p.vence||"" };
+               rest:p.ilim?0:Math.max(0,Number(p.restantes)||0), vence:p.vence||"",
+               vencido:!!p.vencido, noExiste:!!p.noExiste };
     });
     return { lista:lst, ilim:lst.some(function(x){return x.ilim;}),
       comp:lst.reduce(function(s,x){return s+(x.ilim?0:x.comp);},0),
@@ -3032,7 +3068,9 @@ function pasesResumen(a){
     var lista=pj.p.map(function(px){
       var def=pk2[px.n]||{clases:0,ilim:false};
       var comp=Number(def.clases)||0, us=Number(px.usadas)||0;
-      return { n:px.n, ilim:!!def.ilim, comp:comp, rest:Math.max(0,comp-us), vence:px.vence||"" };
+      var muerto=venceVencidoPanel(px.vence||"");
+      return { n:px.n, ilim:!!def.ilim, comp:comp, rest:muerto?0:Math.max(0,comp-us),
+               vence:px.vence||"", vencido:muerto };
     });
     return { lista:lista, ilim:lista.some(function(x){ return x.ilim; }),
       comp:lista.reduce(function(s,x){ return s+(x.ilim?0:x.comp); },0),
@@ -3200,6 +3238,15 @@ function renderResumen(){
 
   var dot=el("dotPagos");
   if(pend>0){ dot.textContent=pend; dot.classList.remove("hidden"); } else dot.classList.add("hidden");
+  /* 21-ago-2026: quien se registra en el portal y no queda enlazado a su ficha ve un portal
+     VACÍO — sin sus clases, sin su saldo y sin poder reservar. Estaba marcado dentro de la
+     pestaña, pero sin contador nadie entraba a mirar: en Elevate había 3 personas así desde
+     hacía días. Ahora el número se ve desde afuera, igual que Pagos e Interesados. */
+  var sinVinc=(db.cuentas||[]).filter(function(c){ return !c.alumno_id; }).length;
+  var dotC=el("dotCuentas");
+  if(dotC){
+    if(sinVinc>0){ dotC.textContent=sinVinc; dotC.classList.remove("hidden"); } else dotC.classList.add("hidden");
+  }
   try{ espejarDotsNav(); }catch(e){}
 
   renderTuDia({pend:pend, ultima:ultima, compl:compl});
@@ -3343,8 +3390,18 @@ function renderAlumnos(){
            migrada son exactamente lo mismo. */
         var prC=pasesResumen(a);
         if(prC) return prC.lista.map(function(px){
+          /* 21-ago-2026: un pase cuyo plan ya no está en tu lista (lo renombraste o lo borraste)
+             mostraba "0 de 0" sin explicación, y así fue como 9 alumnas de Elevate parecieron
+             sin saldo habiendo pagado. Ahora la celda lo dice con todas sus letras. */
+          if(px.noExiste) return esc(px.n)+' <span class="mini" style="color:#e8604f;font-weight:600" title="Este plan ya no está en tu lista de planes (Ajustes → Clases y planes). Mientras no exista, Batuta no puede calcular su saldo. Vuelve a crearlo con ese nombre o edítale el plan al alumno.">plan que ya no existe en tu lista</span>';
+          /* Un plan vencido se dice VENCIÓ, en pasado y en rojo. Decir "vence 21 ago" de una
+             fecha que ya pasó es prometer algo que no va a pasar. Y se explica qué hacer:
+             el saldo que le sobraba no se perdió en la nada, simplemente ese plan ya no lo da. */
+          if(px.vencido) return esc(px.n)+' <span class="mini" style="color:#e8604f;font-weight:600" '+
+            'title="Este plan venció: ya no da clases, aunque le sobrara saldo. Para sacarlo de la ficha usa Editar → Quitar; no se borra ninguna clase ya dictada.">'+
+            'venció el '+esc(fechaBonita(px.vence))+'</span>';
           var sal=px.ilim?'sin límite':(px.rest+' de '+px.comp+' quedan');
-          return esc(px.n)+' <span class="mini"><b>'+sal+'</b>'+(px.vence?' · vence '+esc(px.vence):'')+'</span>';
+          return esc(px.n)+' <span class="mini"><b>'+sal+'</b>'+(px.vence?' · vence '+esc(fechaBonita(px.vence)):'')+'</span>';
         }).join('<br>');
         /* un solo plan: el saldo pegado al plan (la columna "Le quedan" vive lejos y los
            botones flotantes la tapan justo al pasar el mouse) */
@@ -3432,7 +3489,7 @@ function renderRegistro(){
     var prev=selA.value;
     selA.innerHTML='<option value="">Todos los alumnos</option>'+
       db.alumnos.slice().sort(function(a,b){return (a.nombre||"").localeCompare(b.nombre||"");})
-        .map(function(a){return '<option value="'+esc(a.id)+'">'+esc(a.nombre)+'</option>';}).join("");
+        .map(function(a){return '<option value="'+esc(a.id)+'">'+esc(nombreCompleto(a))+'</option>';}).join("");
     selA.value=prev;
   }
   var cont=el("regContador");
@@ -3681,6 +3738,15 @@ if(el("benefBox")) el("benefBox").addEventListener("click",function(e){
   x.closest(".benefrow").remove();
   if(!el("benefBox").querySelector(".benefrow")) pintarBeneficios();
 });
+/* El aviso solo aparece cuando la función DICE que está encendida y le falta lo único que la
+   hace funcionar. Si el dueño la apaga a propósito, no se le insiste. */
+function pintarAvisoResena(){
+  var av=el("avisoResenaSinLink"); if(!av) return;
+  var act=el("cfg_resena_activa"), link=el("cfg_review_link");
+  var encendida=!act || act.value!=="off";
+  var sinLink=!link || !String(link.value||"").trim();
+  av.style.display=(encendida&&sinLink)?"":"none";
+}
 function renderAjustes(){
   renderClases();
   renderMensajes();
@@ -3721,6 +3787,7 @@ function renderAjustes(){
   if(el("cfg_rescate_activo")) el("cfg_rescate_activo").value=(db.config&&db.config.rescate_activo)||"";
   if(el("cfg_resena_activa")) el("cfg_resena_activa").value=(db.config&&db.config.resena_activa)||"";
   if(el("cfg_review_link")) el("cfg_review_link").value=(db.config&&db.config.review_link)||"";
+  try{ pintarAvisoResena(); }catch(e){}
   if(el("cfg_resena_min_clases")) el("cfg_resena_min_clases").value=(db.config&&db.config.resena_min_clases)||"";
   if(el("cfg_direccion_fiscal")) el("cfg_direccion_fiscal").value=(db.config&&db.config.direccion_fiscal)||"";
   if(el("cfg_nubefact_ruta")) el("cfg_nubefact_ruta").value=(db.config&&db.config.nubefact_ruta)||"";
@@ -3749,6 +3816,7 @@ function renderAjustes(){
   if(el("cfg_mp_solo_tarjeta")) el("cfg_mp_solo_tarjeta").value=(db.config&&db.config.mp_solo_tarjeta)||"";
   if(el("cfg_espera_auto")) el("cfg_espera_auto").value=(db.config&&db.config.espera_auto)||"";
   if(el("cfg_portal_fija_off")) el("cfg_portal_fija_off").value=(db.config&&db.config.portal_fija_off)||"";
+  if(el("cfg_directorio")) el("cfg_directorio").value=(db.config&&db.config.directorio)||"";
   if(el("cfg_portal_chat_off")) el("cfg_portal_chat_off").value=(db.config&&db.config.portal_chat_off)||"";
   if(el("cfg_portal_sin_profe")) el("cfg_portal_sin_profe").value=(db.config&&db.config.portal_sin_profe)||"";
   el("cfg_crypto_moneda").value=(db.config&&db.config.crypto_moneda)||"";
@@ -3858,7 +3926,8 @@ function aplicarPerfilSidebar(){
   }
 }
 function renderPerfil(){
-  if(!PLAN_CARGADO){ PLAN_CARGADO=true; try{ refrescarPlan(); }catch(e){} }
+  /* Packs: la sección "Tu Batuta" se carga al abrir Perfil (y se refresca sola al aplicar). */
+  try{ refrescarPlan(); }catch(e){}
   var c=db.config||{};
   if(el("cfg_profe_nombre")) el("cfg_profe_nombre").value=c.profe_nombre||"";
   if(el("cfg_profe_marca")) el("cfg_profe_marca").value=c.profe_marca||"";
@@ -3973,7 +4042,7 @@ function fillSelects(){
   /* conservar lo que ya estaba elegido: si no, el auto-refresh resetea el select al primer alumno */
   var prevPk=el("a_paquete").value, prevAl=el("r_alumno").value;
   el("a_paquete").innerHTML=opcionesPaquete(prevPk);
-  el("r_alumno").innerHTML=db.alumnos.map(function(a){return '<option value="'+a.id+'">'+esc(a.nombre)+'</option>';}).join("")
+  el("r_alumno").innerHTML=db.alumnos.map(function(a){return '<option value="'+a.id+'">'+esc(nombreCompleto(a))+'</option>';}).join("")
     || '<option value="">— agrega un alumno primero —</option>';
   if(prevPk) el("a_paquete").value=prevPk;
   if(prevAl) el("r_alumno").value=prevAl;
@@ -4246,7 +4315,7 @@ function renderReportes(){
   }
 }
 
-function renderAll(){ aplicarBrandTenant(); aplicarModulos(); aplicarMarcaCursos(); renderResumen(); renderAlumnos(); try{ renderSinPlanBanner(); }catch(e){} try{ renderInvBanner(); }catch(e){} renderGrupos(); renderRegistro(); renderPagos(); renderReportes(); renderCuentas(); renderLeads(); renderCaja(); renderRecursos(); renderEjercicios(); renderAjustes(); renderSedes(); renderPerfil(); fillSelects(); try{ arreglarTablas(); }catch(e){} }
+function renderAll(){ aplicarBrandTenant(); aplicarModulos(); aplicarMarcaCursos(); renderResumen(); renderAlumnos(); try{ renderPlanRotoBanner(); }catch(e){} try{ renderVenceBanner(); }catch(e){} try{ renderSinPlanBanner(); }catch(e){} try{ renderInvBanner(); }catch(e){} renderGrupos(); renderRegistro(); renderPagos(); renderReportes(); renderCuentas(); renderLeads(); renderCaja(); renderRecursos(); renderEjercicios(); renderAjustes(); renderSedes(); renderPerfil(); fillSelects(); try{ arreglarTablas(); }catch(e){} }
 
 /* ---------- AGENDA (admin) ---------- */
 var AG_DISP = [], AG_RESERVAS = [];
@@ -4611,7 +4680,7 @@ function renderCalMes(){
    renderCalDia (disparado por los BOTONES o por la recarga), nunca el clic en el <summary>. */
 var CAL_ABIERTAS={};
 function claveClase(fkey,hora,sala){ return fkey+"|"+hora+"|"+(sala||""); }
-function filaClaseDia(fkey,hora,titulo,rs,pasado,sala,cupo){
+function filaClaseDia(fkey,hora,titulo,rs,pasado,sala,cupo,curso){
   var ck=claveClase(fkey,hora,sala);
   var gente=rs.filter(function(r){ return r.tipo!=="bloqueo" && r.estado!=="cancelada"; });
   var bloqs=rs.filter(function(r){ return r.tipo==="bloqueo"; });
@@ -4623,8 +4692,28 @@ function filaClaseDia(fkey,hora,titulo,rs,pasado,sala,cupo){
   /* "persona/personas" y no "inscrito/inscritos": Batuta también le vende a academias de
      música y de artes marciales, así que el resumen no puede salir en femenino por venir de
      un estudio de pilates ni en masculino genérico. Y "1 inscritos" se leía a error. */
-  else if(gente.length) resumen='<b style="color:var(--accent);">'+gente.length+(cupo?(' de '+cupo):'')+'</b> '+
-    (gente.length===1?'persona':'personas');
+  /* 🔴 22-ago-2026 · el aforo VA SIEMPRE, ya resuelto. Acá se usaba `cupo` crudo de la
+     franja, que en Elevate es 0 en 50 de sus 64 horarios (el aforo les viene del TIPO de
+     clase): el resumen decía "7 personas" a secas y José no tenía forma de ver que entraban
+     4. Es la misma lección del 11-ago que ya se aplicó a la grilla del horario —"nunca
+     mostrar el aforo vacío, mostrar el número ya resuelto"— y que a esta tarjeta, que es la
+     que se mira todos los días, no había llegado.
+     Y si hay más gente que aforo se DICE: bajar el aforo no echa a nadie (esa es la regla),
+     pero el panel no puede pintar un 7 de 6 con el mismo color que un 3 de 6. */
+  else if(gente.length){
+    /* `curso === null` = NO hay franja (reservas fuera del horario semanal): ahí no existe
+       aforo y no se inventa. `undefined` NO es lo mismo: un llamador con 7 argumentos y un
+       cupo propio sí tiene aforo, y tratarlo como "sin franja" le borraba el denominador.
+       (Me lo cazó `pruebas-clase-del-dia.mjs` al primer intento, que para eso está.) */
+    var afo=(curso===null)
+      ? {n:0,fuente:""}
+      : (function(){ try{ return aforoResuelto(curso||"",cupo); }catch(e){ return {n:parseInt(cupo,10)||0,fuente:""}; } })();
+    var lleno=afo.n&&gente.length>afo.n;
+    resumen='<b style="color:'+(lleno?'var(--amber,#d99a3c)':'var(--accent)')+';">'+gente.length+
+      (afo.n?(' de '+afo.n):'')+'</b> '+(gente.length===1?'persona':'personas')+
+      (lleno?(' <span class="mini" style="color:var(--amber,#d99a3c);font-weight:600;" title="Hay más gente que el aforo de esta clase. No se echa a nadie: pasa cuando bajas el aforo después de que ya habían reservado. Súbelo en Mis clases si quieres que quepan, o libera cupos acá abajo.">'+
+        (gente.length-afo.n)+' por encima del aforo</span>'):'');
+  }
   else resumen='<span class="hint" style="margin:0;">'+(pasado?'No vino nadie':'Sin reservas aún')+'</span>';
   if(bloqs.length && !cancelada) resumen+=' <span class="hint" style="margin:0;">· '+bloqs.length+(bloqs.length===1?' hora apartada':' horas apartadas')+'</span>';
 
@@ -4719,7 +4808,7 @@ function renderCalDia(fkey){
       return rsala===String(f.sala||"");
     });
     var titulo=esc(f.curso||"Clase")+(f.sala?(' · '+esc(f.sala)):'')+(f.profe?(' · '+esc(nombreProfe(f.profe)||"")):'');
-    filas.push(filaClaseDia(fkey,f.hora,titulo,rs,pasado,String(f.sala||""),f.cupo));
+    filas.push(filaClaseDia(fkey,f.hora,titulo,rs,pasado,String(f.sala||""),f.cupo,f.curso||""));
   });
   /* reservas sueltas en horas que no están en el horario semanal (siembras puntuales) */
   Object.keys(porHora).sort().forEach(function(hh){
@@ -4728,7 +4817,10 @@ function renderCalDia(fkey){
     var hayGente=rs.some(function(r){return r.tipo!=="bloqueo";});
     var bloqs=rs.filter(function(r){return r.tipo==="bloqueo";}).length;
     if(!hayGente && !bloqs) return;
-    filas.push(filaClaseDia(fkey,hh,"Fuera del horario semanal",rs,pasado,"",0));
+    /* fuera del horario semanal NO hay franja, así que no hay aforo que valga: `curso=null`
+       apaga el cálculo. Sin esto la cascada caería a su default de 1 y le pintaría un
+       "3 de 1 · 2 por encima del aforo" que no significa nada. */
+    filas.push(filaClaseDia(fkey,hh,"Fuera del horario semanal",rs,pasado,"",0,null));
   });
   /* Día que ya pasó: se abre para ver quiénes vinieron y, desde el 14-ago-2026, para MARCARLES
      la asistencia — que es justo cuando uno la marca, después de la clase. Lo que no se ofrece
@@ -5694,7 +5786,7 @@ if(el("btnCorrEnviar")) el("btnCorrEnviar").addEventListener("click", function()
     .finally(function(){ b.disabled = false; });
 });
 
-/* ---------- Feedback con premio (+7 días el primer aporte del mes) ---------- */
+/* ---------- Ideas y errores (el premio de +7 días murió el 22-ago: no había nada que extender) ---------- */
 /* ===== Campañas de Meta (Facebook/Instagram) ===== */
 var CAMPA=null;
 function cargarCampanas(){
@@ -5777,14 +5869,14 @@ function cargarFeedback(){
   fetch("/app/api/admin/feedback",{headers:hdr()}).then(function(r){return r.json();}).then(function(d){
     var est=el("fbPremioEstado");
     if(est) est.textContent = d.premio_disponible
-      ? "Tu premio está disponible: el próximo aporte que mandes suma 7 días a tu cuenta (una sola vez)."
-      : "Ya usaste tus 7 días de regalo. Igual puedes seguir mandando aportes: cada uno se lee y se trabaja.";
+      ? "Mándanos lo que te falte o lo que se haya roto: lo leemos y lo trabajamos."
+      : "Gracias por lo que ya mandaste. Sigue mandando: cada aporte se lee y se trabaja.";
     var tabla=el("tablaFb"); var tb=tabla?tabla.querySelector("tbody"):null; if(!tb) return;
     var items=d.items||[];
-    if(!items.length){ tb.innerHTML='<tr><td colspan="5" class="empty">Todavía no mandas ninguno. El primero del mes te da 7 días gratis.</td></tr>'; return; }
+    if(!items.length){ tb.innerHTML='<tr><td colspan="5" class="empty">Todavía no mandas ninguno. Cuéntanos qué te falta.</td></tr>'; return; }
     var ESTADOS={nuevo:"Recibido",visto:"En revisión",hecho:"Hecho ✓"};
     tb.innerHTML=items.map(function(f){
-      return "<tr><td>"+esc((f.fecha||"").slice(0,10))+"</td><td>"+(f.tipo==="error"?"Error":"Idea")+"</td><td style=\"max-width:420px;white-space:normal;\">"+esc(f.texto||"")+"</td><td>"+(f.premiado?"+7 días ✓":"—")+"</td><td>"+(ESTADOS[f.estado]||"Recibido")+"</td></tr>";
+      return "<tr><td>"+esc((f.fecha||"").slice(0,10))+"</td><td>"+(f.tipo==="error"?"Error":"Idea")+"</td><td style=\"max-width:420px;white-space:normal;\">"+esc(f.texto||"")+"</td><td>"+(f.premiado?"1º aporte ✓":"—")+"</td><td>"+(ESTADOS[f.estado]||"Recibido")+"</td></tr>";
     }).join("");
   }).catch(function(){ var est=el("fbPremioEstado"); if(est) est.textContent="No pude cargar tus aportes. Recarga la página."; });
 }
@@ -5796,7 +5888,7 @@ if(el("btnEnviarFb")) el("btnEnviarFb").addEventListener("click",function(){
   apiPost("/app/api/admin/feedback",{tipo:el("fb_tipo").value,texto:texto})
     .then(function(d){
       el("fb_texto").value="";
-      toast(d.premiado?"Gracias! Sumaste 7 días de acceso ✓":"Gracias! Aporte recibido ✓",3200);
+      toast("Gracias! Aporte recibido ✓",3200);
       cargarFeedback();
     })
     .catch(function(e){ if(!e||(!e.auth&&!e.paywall)) el("fbErr").textContent=(e&&e.message)||"No se pudo enviar. Intenta de nuevo."; })
@@ -5809,7 +5901,7 @@ if(el("btnPwFb")) el("btnPwFb").addEventListener("click",function(){
   var btn=el("btnPwFb"); btn.disabled=true;
   apiPost("/app/api/admin/feedback",{tipo:"idea",texto:texto})
     .then(function(d){
-      if(d.premiado){ msg.textContent="Listo! Ganaste 7 días más. Cargando tu panel…"; setTimeout(function(){ location.reload(); },900); }
+      if(d.premiado){ msg.textContent="Listo! Aporte recibido. Gracias."; }
       else { msg.textContent="Gracias! Este mes ya usaste tu premio; tu aporte igual quedó registrado."; }
     })
     .catch(function(e){ msg.textContent=(e&&e.message)||"No se pudo enviar. Intenta de nuevo."; })
@@ -6202,7 +6294,7 @@ document.querySelectorAll(".navbig").forEach(function(b){
 });
 /* Los badges viejos (dotLeads/dotPagos) viven en tabs ocultos: se espejan al menú visible. */
 function espejarDotsNav(){
-  [["dotLeads","dotNavAlumnos"],["dotPagos","dotNavCobros"]].forEach(function(par){
+  [["dotLeads","dotNavAlumnos"],["dotPagos","dotNavCobros"],["dotCuentas","dotNavAlumnos"]].forEach(function(par){
     var src=el(par[0]),dst=el(par[1]); if(!src||!dst) return;
     dst.textContent=src.textContent;
     dst.classList.toggle("hidden",src.classList.contains("hidden"));
@@ -6314,10 +6406,57 @@ function guardarAlumnoModal(encadenar){
     apellido:(el("a_apellido")?el("a_apellido").value.trim():((prev&&prev.apellido)||"")),
     email:(el("a_email")?el("a_email").value.trim():((prev&&prev.email)||"")),
     nacimiento:(el("a_nacimiento")?el("a_nacimiento").value:((prev&&prev.nacimiento)||"")) };
+  /* ---- Vencimiento escrito a mano (21-ago-2026) ----
+     Solo se manda si DE VERDAD cambió: `vence_set`/`pases_set` le dicen al server "respeta
+     esto y no lo recalcules". Si no se tocó, no viaja nada y el server sigue mandando él. */
+  var inpsPase=document.querySelectorAll(".a-vence-pase");
+  /* ---- Se quitó un plan (22-ago-2026) ----
+     Va ANTES que todo lo demás: al bajar a un solo plan ya no quedan inputs `.a-vence-pase`,
+     así que sin esto la baja se caía por el `else` de abajo y el server no se enteraba. */
+  if(PASE_QUITADO && VENCE_PASES && VENCE_PASES.p && VENCE_PASES.p.length){
+    var pQ=VENCE_PASES.p.map(function(px,i){
+      var inp=document.querySelector('.a-vence-pase[data-i="'+i+'"]');
+      var v2=inp?String(inp.value||"")
+             :((VENCE_PASES.p.length===1&&el("a_vence"))?String(el("a_vence").value||""):(px.vence||""));
+      var o={n:px.n,usadas:Number(px.usadas)||0,vence:v2};
+      if(px.av) o.av=1;
+      return o;
+    });
+    obj.pases=JSON.stringify({c:Number(VENCE_PASES.c)||1,p:pQ});
+    obj.pases_set=true;
+    obj.pase_quitado=true;
+    if(pQ.length===1){
+      /* vuelve al modelo de UN plan: el que sobrevive pasa a ser su plan, con su arrastre */
+      obj.paquete=pQ[0].n;
+      obj.vence=pQ[0].vence||"";
+      obj.vence_set=true;
+      obj.migrado_usadas=Number(pQ[0].usadas)||0;
+    }
+  }
+  else if(inpsPase.length && VENCE_PASES && VENCE_PASES.p){
+    var cambio=false;
+    var pNuevos=VENCE_PASES.p.map(function(px,i){
+      var inp=document.querySelector('.a-vence-pase[data-i="'+i+'"]');
+      var v=inp?String(inp.value||""):(px.vence||"");
+      if(v!==(px.vence||"")) cambio=true;
+      var o={n:px.n,usadas:Number(px.usadas)||0,vence:v};
+      if(px.av) o.av=1;
+      return o;
+    });
+    if(cambio){ obj.pases=JSON.stringify({c:Number(VENCE_PASES.c)||1,p:pNuevos}); obj.pases_set=true; }
+  } else if(el("a_vence")){
+    var vNuevo=String(el("a_vence").value||"");
+    if(vNuevo!==String((prev&&prev.vence)||"")){ obj.vence=vNuevo; obj.vence_set=true; }
+  }
   if(id){ db.alumnos=db.alumnos.map(function(a){return a.id===id?obj:a;}); }
   else{ db.alumnos.push(obj); }
   var b1=el("btnGuardarAlumno"),b2=el("btnGuardarAlumnoOtro"); b1.disabled=true; if(b2)b2.disabled=true;
   apiPut().then(function(){
+    /* La baja ya se aplicó: se saca la marca del objeto local. Sin esto se queda pegada en
+       `db.alumnos` (el panel no recarga del server al guardar) y viajaría de nuevo en cada
+       guardado siguiente de CUALQUIER alumno, porque el PUT manda la tabla entera. */
+    if(obj && obj.pase_quitado){ delete obj.pase_quitado; delete obj.pases_set; }
+    PASE_QUITADO=false;
     renderAll();
     if(encadenar){
       /* deja el formulario listo para el siguiente: conserva curso/paquete/pago/fecha/profe
@@ -6333,6 +6472,10 @@ function guardarAlumnoModal(encadenar){
     .catch(function(){ toast("No se pudo guardar. Revisa tu conexión e intenta de nuevo."); })
     .finally(function(){ b1.disabled=false; if(b2)b2.disabled=false; });
 }
+["cfg_review_link","cfg_resena_activa"].forEach(function(id){
+  var n=el(id); if(n) n.addEventListener("input",function(){ try{ pintarAvisoResena(); }catch(e){} });
+  if(n) n.addEventListener("change",function(){ try{ pintarAvisoResena(); }catch(e){} });
+});
 el("btnGuardarAlumno").addEventListener("click",function(){ guardarAlumnoModal(false); });
 el("btnGuardarAlumnoOtro").addEventListener("click",function(){ guardarAlumnoModal(true); });
 
@@ -6369,10 +6512,11 @@ document.body.addEventListener("click",function(e){
     fillProfeSelect(a.profesor_id||"");
     fillSedeSelectGen("a_sede","a_sede_wrap",a.sede_id||"");
     pintarClasesDeAlumno(a);
+    pintarVencimientos(a);
     openOv("ovAlumno");
   }
   if(dl){ var al=db.alumnos.find(function(x){return x.id===dl.dataset.del;});
-    if(al && confirm("¿Borrar a "+al.nombre+"? Sus registros también se borran (las cuentas vinculadas quedan sin vincular).")){
+    if(al && confirm("¿Borrar a "+al.nombre+"? También se borran sus clases del registro y sus reservas, incluidas las futuras (las cuentas vinculadas quedan sin vincular).")){
       dl.disabled=true;
       db.alumnos=db.alumnos.filter(function(x){return x.id!==dl.dataset.del;});
       db.registro=db.registro.filter(function(r){return (r.alumnoId||r.alumno_id)!==dl.dataset.del;});
@@ -6488,7 +6632,7 @@ function abrirGrupo(g){
   }
   var mset={}; (g?(g.miembros||[]):[]).forEach(function(id){ mset[id]=true; });
   el("g_miembros").innerHTML=db.alumnos.map(function(a){
-    return '<label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-family:var(--body);font-size:13px;"><input type="checkbox" data-gm="'+esc(a.id)+'"'+(mset[a.id]?' checked':'')+' style="width:auto;"> '+esc(a.nombre)+'</label>';
+    return '<label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-family:var(--body);font-size:13px;"><input type="checkbox" data-gm="'+esc(a.id)+'"'+(mset[a.id]?' checked':'')+' style="width:auto;"> '+esc(nombreCompleto(a))+'</label>';
   }).join("") || '<span class="mini">Agrega alumnos primero.</span>';
   openOv("ovGrupo");
 }
@@ -6516,12 +6660,33 @@ function setFieldVis(inputId, show){ var f=el(inputId); if(!f) return; var w=f.c
 function renderAsistenciaGrid(miembros){
   var grid=el("r_asistencia_grid"); if(!grid) return;
   var opciones=[["Asistió","Asistió"],["Falta","Falta"],["Reprogramó","Reprog."],["omitir","Omitir"]];
-  grid.innerHTML=miembros.map(function(m){
+  /* 🔴 22-ago-2026 · acá solo iba el nombre y los cuatro botones. Marcabas "Todos asistieron"
+     en un grupo de 8 y si a una no le quedaban clases, o tenía el plan vencido, o ni siquiera
+     tenía plan, pasaba en SILENCIO: le regalabas la clase sin enterarte. El dato estaba a un
+     `computeAlumno()` de distancia, igual que pasaba con el aforo de la agenda.
+     Ahora cada fila dice cuántas le quedan, y a quien no puede se le avisa en ámbar. */
+  var sinSaldo=0;
+  var filas=miembros.map(function(m){
     var seg=opciones.map(function(o){
       return '<button type="button" class="asist-opt'+(o[0]==="Asistió"?" on":"")+'" data-v="'+o[0]+'">'+o[1]+'</button>';
     }).join("");
-    return '<div class="asist-row" data-al="'+esc(m.id)+'"><span class="asist-name" title="'+esc(m.nombre)+'">'+esc(m.nombre)+'</span><span class="asist-seg">'+seg+'</span></div>';
+    var nota="", c=null;
+    try{ c=computeAlumno(m); }catch(e){ c=null; }
+    if(!m.paquete){ nota='<span class="mini" style="color:var(--amber,#d99a3c);">sin plan</span>'; sinSaldo++; }
+    else if(c&&c.ilim){ nota='<span class="mini">mensualidad</span>'; }
+    else if(c&&(c.vencido||c.caducado)){ nota='<span class="mini" style="color:var(--amber,#d99a3c);font-weight:600;">plan vencido</span>'; sinSaldo++; }
+    else if(c&&Number(c.restantes)<=0){ nota='<span class="mini" style="color:var(--amber,#d99a3c);font-weight:600;">sin clases</span>'; sinSaldo++; }
+    else if(c){ nota='<span class="mini">le quedan '+Math.max(0,Number(c.restantes)||0)+'</span>'; }
+    return '<div class="asist-row" data-al="'+esc(m.id)+'"><span class="asist-name" title="'+esc(m.nombre)+'">'+esc(m.nombre)+
+      (nota?' · '+nota:'')+'</span><span class="asist-seg">'+seg+'</span></div>';
   }).join("");
+  /* el resumen arriba, para que se vea ANTES de darle a "Todos asistieron" */
+  var aviso = sinSaldo
+    ? '<div class="hint" style="margin:0 0 8px;color:var(--amber,#d99a3c);font-weight:600;">'+sinSaldo+
+      (sinSaldo===1?' alumno no tiene clases para esta sesión':' alumnos no tienen clases para esta sesión')+
+      '. Si igual lo marcas como que asistió, se la das de cortesía: su saldo ya está en cero y no baja más.</div>'
+    : '';
+  grid.innerHTML=aviso+filas;
 }
 function registrarClaseGrupo(g){
   var miembros=(g.miembros||[]).map(function(id){ return db.alumnos.find(function(a){return a.id===id;}); }).filter(Boolean);
@@ -6645,7 +6810,7 @@ function fillGrupales(){
     return a.id!==main && REG_GRUPO.indexOf(a.id)===-1 && (!q || (a.nombre||"").toLowerCase().indexOf(q)!==-1);
   });
   box.innerHTML = lista.length
-    ? lista.map(function(a){ return '<button type="button" data-sumagrupo="'+esc(a.id)+'">'+esc(a.nombre)+'</button>'; }).join("")
+    ? lista.map(function(a){ return '<button type="button" data-sumagrupo="'+esc(a.id)+'">'+esc(nombreCompleto(a))+'</button>'; }).join("")
     : '<div class="vacio">'+(q?"Ningún alumno con ese nombre.":"No hay más alumnos para sumar.")+'</div>';
 }
 function pintarEjerciciosReg(){
@@ -6768,7 +6933,7 @@ function abrirCuenta(id, modo){
     db.cuentas.forEach(function(x){ if(x.alumno_id && x.id!==id) vinculados[x.alumno_id]=true; });
     var opts='<option value="">— Sin vincular —</option>'+db.alumnos
       .filter(function(a){ return !vinculados[a.id]; })
-      .map(function(a){ return '<option value="'+a.id+'"'+(c.alumno_id===a.id?' selected':'')+'>'+esc(a.nombre)+' ('+esc(a.curso)+')</option>'; }).join("");
+      .map(function(a){ return '<option value="'+a.id+'"'+(c.alumno_id===a.id?' selected':'')+'>'+esc(nombreCompleto(a))+' ('+esc(a.curso)+')</option>'; }).join("");
     el("cu_alumno").innerHTML=opts;
   } else {
     el("cu_pass").value="";
@@ -7146,6 +7311,84 @@ function renovar(a){
      · Ya tomadas  → el registro, que es la bitácora que de verdad descuenta. "Editar" abre el
                      editor de clase de siempre (cierra la ficha primero, para no apilar dos
                      ventanas encima). */
+var VENCE_PASES=null;
+/* Vencimiento en la ficha (21-ago-2026). Un campo si tiene un solo plan; uno por pase si
+   tiene varios, porque ahí cada pase vence por su cuenta y un solo campo mentiría. */
+function pintarVencimientos(a){
+  var wrap=el("a_vence_wrap"), box=el("a_vence_box"), hint=el("a_vence_hint");
+  VENCE_PASES=null;
+  PASE_QUITADO=false;   /* ficha nueva: la baja pendiente no se arrastra de un alumno a otro */
+  if(!wrap||!box) return;
+  if(!a||!a.id||!(a.paquete||"")){ wrap.style.display="none"; box.innerHTML=""; return; }
+  wrap.style.display="";
+  var pj=null; try{ pj=JSON.parse(a.pases||""); }catch(e){}
+  var multi=pj&&pj.p&&pj.p.length>=2&&(Number(pj.c)||1)===(Number(a.ciclo)||1);
+  if(multi){
+    VENCE_PASES=pj;
+    box.innerHTML=pj.p.map(function(px,i){
+      return '<div style="display:flex;gap:8px;align-items:center;margin:0 0 6px;flex-wrap:wrap;">'+
+        '<span style="flex:1 1 140px;font-size:13px;">'+esc(px.n||"")+'</span>'+
+        '<input type="date" class="a-vence-pase" data-i="'+i+'" value="'+esc(px.vence||"")+'" style="flex:0 0 auto;" />'+
+        '<button type="button" class="a-quitar-pase" data-i="'+i+'" title="Quitar este plan" '+
+        'style="flex:0 0 auto;border:1px solid #d9534f;background:#fff;color:#d9534f;border-radius:6px;'+
+        'padding:4px 10px;font-size:12px;cursor:pointer;">Quitar</button></div>';
+    }).join("");
+    Array.prototype.forEach.call(box.querySelectorAll(".a-quitar-pase"),function(b){
+      b.addEventListener("click",function(){ quitarPase(Number(b.getAttribute("data-i"))); });
+    });
+    if(hint) hint.textContent="Cada plan vence por su cuenta. Cambia la fecha del que quieras extender; vacío = ese plan no caduca. \"Quitar\" saca un plan sin borrar ninguna clase ya dictada.";
+  } else {
+    box.innerHTML='<input type="date" id="a_vence" style="max-width:265px;" value="'+esc(a.vence||"")+'" />';
+    if(hint) hint.textContent="Si pones la fecha a mano, Batuta la respeta y deja de recalcularla por los días del plan. Vacío = vuelve al automático.";
+  }
+}
+/* ---- Quitar un plan (22-ago-2026, pedido de José) ----
+   Antes esto no existía y para "sacar un plan del medio" había que moverle el vencimiento, que
+   es como se descubrió que la historia se mudaba de plan. Reglas:
+   · No borra ninguna clase dictada. El saldo se recalcula solo desde las reservas y el registro.
+   · Si queda UN plan, el alumno vuelve al modelo de plan único conservando su arrastre.
+   · Se marca `PASE_QUITADO` para que el server sepa que la baja es a propósito y no la ignore. */
+var PASE_QUITADO=false;
+function quitarPase(i){
+  if(!VENCE_PASES||!VENCE_PASES.p||!VENCE_PASES.p[i]) return;
+  var px=VENCE_PASES.p[i];
+  var quedan=VENCE_PASES.p.filter(function(_,k){ return k!==i; });
+  var usadas=Number(px.usadas)||0;
+  var msg='¿Quitar el plan "'+(px.n||"")+'"?\n\n';
+  msg+='NO se borra ninguna clase dictada: su historial queda intacto.\n\n';
+  /* 🔴 Lo que de verdad hay que advertir: al QUITAR un plan, las clases que se le estaban
+     cobrando se mudan al plan que quede. Dejarlo VENCER no hace eso (desde el arreglo del
+     22-ago la historia se queda donde estaba). Son dos cosas distintas y hay que decirlo. */
+  msg+='⚠️ Las clases que se estaban descontando de este plan pasarán a descontarse del que quede, '+
+       'así que el saldo del otro plan puede bajar.\n\n';
+  msg+='Si lo que quieres es RETIRAR un plan ya terminado sin mover nada, no lo quites: '+
+       'ponle una fecha de vencimiento pasada y listo. Quitar es para un plan cargado POR ERROR.\n\n';
+  msg+= usadas>0
+    ? 'Este plan trae '+usadas+' clase'+(usadas===1?'':'s')+' de arrastre que se van con él.\n\n'
+    : '';
+  msg+= quedan.length===1
+    ? 'Le queda un solo plan ("'+(quedan[0].n||"")+'"), así que vuelve al modo de un plan, conservando su arrastre.'
+    : 'Le quedan '+quedan.length+' planes.';
+  if(!confirm(msg)) return;
+  VENCE_PASES={c:Number(VENCE_PASES.c)||1,p:quedan};
+  PASE_QUITADO=true;
+  /* re-pintar la lista con lo que queda, sin cerrar la ficha */
+  var box=el("a_vence_box");
+  if(box){
+    if(quedan.length>=2){
+      pintarVencimientos(Object.assign({},{id:1,paquete:"x",ciclo:VENCE_PASES.c},{pases:JSON.stringify(VENCE_PASES)}));
+      VENCE_PASES={c:Number(VENCE_PASES.c)||1,p:quedan};
+    } else {
+      box.innerHTML='<div style="font-size:13px;margin:0 0 6px;"><b>'+esc(quedan[0].n||"")+'</b>'+
+        ' <span class="mini">(único plan)</span></div>'+
+        '<input type="date" id="a_vence" style="max-width:265px;" value="'+esc(quedan[0].vence||"")+'" />';
+      var h=el("a_vence_hint");
+      if(h) h.textContent="Quedó con un solo plan. Guarda para aplicar el cambio.";
+    }
+  }
+  PASE_QUITADO=true;
+  toast("Plan quitado. Dale Guardar para aplicarlo.");
+}
 function pintarClasesDeAlumno(a){
   var wrap=el("a_clases_wrap"), box=el("a_clases");
   if(!wrap||!box) return;
@@ -7609,6 +7852,7 @@ el("btnGuardarAjustes").addEventListener("click",function(){
             mp_solo_tarjeta:(el("cfg_mp_solo_tarjeta")?el("cfg_mp_solo_tarjeta").value:""),
             espera_auto:(el("cfg_espera_auto")?el("cfg_espera_auto").value:""),
             portal_fija_off:(el("cfg_portal_fija_off")?el("cfg_portal_fija_off").value:""),
+            directorio:(el("cfg_directorio")?el("cfg_directorio").value:""),
             portal_chat_off:(el("cfg_portal_chat_off")?el("cfg_portal_chat_off").value:""),
             portal_sin_profe:(el("cfg_portal_sin_profe")?el("cfg_portal_sin_profe").value:""),
             crypto_moneda:el("cfg_crypto_moneda").value.trim(),
@@ -8523,6 +8767,166 @@ function impDespuesDeImportar(nNuevos,nComp){
 /* Banner causal en Alumnos: el mismo problema, pero para el que cerró el aviso y siguió.
    Se puede apagar; si más adelante el hueco crece de verdad, vuelve a aparecer. */
 function sinPlanKey(){ return "bt_sinplan_ok_"+(TENANT_SLUG||"x"); }
+/* ---- Clases pagadas a punto de vencerse (21-ago-2026) ----
+   Ventana: vencen dentro de 7 días, o vencieron en los últimos 14 (esas todavía se rescatan
+   congelando el plan o regalando la clase). Solo pases con saldo real: los ilimitados y los
+   que no caducan no entran. Lee lo mismo que la tabla de Alumnos, así que nunca puede decir
+   un número distinto al de la ficha. */
+function diasHastaFecha(ymd){
+  var s=String(ymd||"").trim();
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(s)) return null;
+  var h=new Date(), hoy=new Date(h.getFullYear(),h.getMonth(),h.getDate());
+  var q=s.split("-"), d=new Date(Number(q[0]),Number(q[1])-1,Number(q[2]));
+  if(!isFinite(d.getTime())) return null;
+  return Math.round((d-hoy)/86400000);
+}
+function cuandoVence(d){
+  if(d<0) return d===-1?"vencieron ayer":("vencieron hace "+(-d)+" días");
+  if(d===0) return "vencen hoy";
+  if(d===1) return "vencen mañana";
+  return "vencen en "+d+" días";
+}
+function pasesEnRiesgo(a){
+  var c; try{ c=computeAlumno(a); }catch(e){ return []; }
+  if(!c || c.caducado) return [];
+  var sv=a.saldo||{};
+  /* Cuánto se pierde. Si el pase sigue vivo son las que le quedan; si YA venció, el servidor
+     manda restantes en 0 (correcto: no puede gastarlas), así que hay que reconstruirlo con
+     compradas + bonus - usadas, que es justo lo que se le evaporó. */
+  function cuantas(comp,bonus,usadas,rest,vencido){
+    if(!vencido) return Math.max(0,Number(rest)||0);
+    return Math.max(0,(Number(comp)||0)+(Number(bonus)||0)-(Number(usadas)||0));
+  }
+  var out=[];
+  if(c.pases && c.pases.length>=2){
+    c.pases.forEach(function(p){
+      if(p.ilim) return;
+      var d=diasHastaFecha(p.vence);
+      if(d===null || d>7 || d<-14) return;
+      var n=cuantas(p.compradas,0,p.usadas,p.restantes,!!p.vencido || d<0);
+      if(n>0) out.push({n:p.n||"",rest:n,dias:d,perdidas:d<0});
+    });
+    return out;
+  }
+  if(c.ilim) return [];
+  var d1=diasHastaFecha(c.vence);
+  if(d1===null || d1>7 || d1<-14) return [];
+  var n1=cuantas(sv.compradas,sv.bonus,sv.usadas,c.restantes,!!sv.vencido || d1<0);
+  if(n1>0) out.push({n:a.paquete||"su plan",rest:n1,dias:d1,perdidas:d1<0});
+  return out;
+}
+function venceOcultoHoy(){
+  try{ return localStorage.getItem("bt_vence_ok_"+(TENANT_SLUG||"x"))===hoyLima(); }catch(e){ return false; }
+}
+/* ---- Alumnos con un plan que ya no existe (21-ago-2026) ----
+   Se cree el servidor, no el catálogo local: `noExiste` lo pone resolverPk(), que además
+   tolera acentos y nombres parecidos. Comparar a mano contra pkMap() daría falsos positivos
+   justo donde el servidor SÍ resuelve el plan. */
+function alumnosConPlanRoto(){
+  var out=[];
+  (db.alumnos||[]).forEach(function(a){
+    if(!a || !(a.paquete||"")) return;
+    if(Number(a.caducado)) return;
+    var sv=a.saldo||{};
+    var rotos=[];
+    if(sv.pases && sv.pases.length){
+      sv.pases.forEach(function(p){ if(p && p.noExiste && p.n) rotos.push(p.n); });
+    } else if(sv.noExiste){
+      rotos.push(a.paquete);
+    }
+    if(rotos.length) out.push({a:a, planes:rotos});
+  });
+  return out;
+}
+function renderPlanRotoBanner(){
+  var box=el("planRotoBanner"); if(!box) return;
+  box.style.display="none"; box.innerHTML="";
+  if(ROL!=="dueno" && ROL!=="profe") return;
+  var filas=alumnosConPlanRoto();
+  if(!filas.length) return;
+  var tit = filas.length===1
+    ? ("A "+esc(String(filas[0].a.nombre||"un alumno").split(" ")[0])+" le figura un plan que ya no está en tu lista")
+    : (filas.length+" alumnos tienen un plan que ya no está en tu lista");
+  var lineas=filas.slice(0,10).map(function(f){
+    return '<div style="display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap;padding:7px 0;border-top:1px solid var(--line);">'+
+      '<div style="flex:1;min-width:200px;"><b>'+esc(f.a.nombre||"")+'</b>'+
+        '<div class="mini" style="margin-top:2px;">tenía «'+esc(f.planes.join("», «"))+'»</div></div>'+
+      '<button type="button" class="btn sm" data-edit="'+esc(f.a.id)+'" style="white-space:nowrap;">Abrir su ficha</button></div>';
+  }).join("");
+  var mas=filas.length>10?('<div class="mini" style="padding-top:8px;">y '+(filas.length-10)+' más</div>'):"";
+  box.style.display="";
+  box.innerHTML='<div style="border:1px solid var(--line);border-left:4px solid var(--danger,#e8604f);border-radius:8px;padding:14px 16px;margin:10px 0 16px;">'+
+    '<div style="flex:1;"><b style="font-size:16px;">'+tit+'</b>'+
+      '<div class="hint" style="margin:4px 0 0;">Mientras tanto le sale <b>0 clases</b> aunque haya pagado, y no puede reservar. Pasa al renombrar o borrar un plan: ábrele la ficha y elígele el plan que le corresponde hoy.</div></div>'+
+    '<div style="margin-top:8px;">'+lineas+mas+'</div>'+
+  '</div>';
+}
+function renderVenceBanner(){
+  var box=el("venceBanner"); if(!box) return;
+  box.style.display="none"; box.innerHTML="";
+  if(ROL!=="dueno" && ROL!=="profe") return;
+  if(venceOcultoHoy()) return;
+  var filas=[];
+  (db.alumnos||[]).forEach(function(a){
+    var ps=pasesEnRiesgo(a);
+    if(ps.length) filas.push({a:a,ps:ps});
+  });
+  if(!filas.length) return;
+  /* lo más urgente arriba: primero lo que vence antes */
+  filas.sort(function(x,y){ return Math.min.apply(null,x.ps.map(function(p){return p.dias;})) - Math.min.apply(null,y.ps.map(function(p){return p.dias;})); });
+  var totalClases=0;
+  filas.forEach(function(f){ f.ps.forEach(function(p){ totalClases+=p.rest; }); });
+  var hayPasadas=false, hayFuturas=false;
+  filas.forEach(function(f){ f.ps.forEach(function(p){ if(p.perdidas) hayPasadas=true; else hayFuturas=true; }); });
+  /* El título con "(o ya se les vencieron)" era un trabalenguas al verlo en pantalla. Con las
+     dos cosas mezcladas, "están perdiendo" lo dice más corto y más claro. */
+  var tit;
+  if(filas.length===1){
+    var pn=esc(String(filas[0].a.nombre||"un alumno").split(" ")[0]);
+    var cl=(totalClases===1?"1 clase que ya pagó":(totalClases+" clases que ya pagó"));
+    tit = (hayPasadas&&hayFuturas) ? (pn+" está perdiendo "+cl)
+        : hayPasadas ? ("A "+pn+" se le "+(totalClases===1?"venció ":"vencieron ")+cl)
+        : ("A "+pn+" se le "+(totalClases===1?"vence ":"vencen ")+cl);
+  } else {
+    tit = (hayPasadas&&hayFuturas) ? (filas.length+" alumnos están perdiendo clases que ya pagaron")
+        : hayPasadas ? ("A "+filas.length+" alumnos se les vencieron clases que ya pagaron")
+        : ("A "+filas.length+" alumnos se les vencen clases que ya pagaron");
+  }
+  var lineas=filas.slice(0,8).map(function(f){
+    var det=f.ps.map(function(p){
+      return '<span style="white-space:nowrap;"><b>'+p.rest+'</b> de '+esc(p.n)+' — '+cuandoVence(p.dias)+'</span>';
+    }).join(" · ");
+    var tel=String(f.a.whatsapp||"").replace(/[^0-9]/g,"");
+    var prim=String(f.a.nombre||"").split(" ")[0];
+    var yaFue=f.ps.every(function(p){ return p.perdidas; });
+    var msg=encodeURIComponent(yaFue
+      ? ("Hola "+prim+", vi que se te vencieron clases de tu paquete sin usar. ¿Conversamos?")
+      : ("Hola "+prim+", te quedan clases de tu paquete y están por vencerse. ¿Coordinamos para que no se te pasen?"));
+    var btn=tel
+      ? '<a class="btn sm" href="https://wa.me/'+tel+'?text='+msg+'" target="_blank" rel="noopener" style="white-space:nowrap;">Escribirle</a>'
+      : '<span class="mini" style="opacity:.7;white-space:nowrap;">sin WhatsApp</span>';
+    return '<div style="display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap;padding:7px 0;border-top:1px solid var(--line);">'+
+      '<div style="flex:1;min-width:220px;"><b>'+esc(f.a.nombre||"")+'</b><div class="mini" style="margin-top:2px;">'+det+'</div></div>'+btn+'</div>';
+  }).join("");
+  var mas=filas.length>8?('<div class="mini" style="padding-top:8px;">y '+(filas.length-8)+' más en tu lista de alumnos</div>'):"";
+  box.style.display="";
+  box.innerHTML='<div style="border:1px solid var(--line);border-left:4px solid var(--amber);border-radius:8px;padding:14px 16px;margin:10px 0 16px;">'+
+    '<div style="display:flex;gap:12px;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;">'+
+      '<div style="flex:1;min-width:240px;">'+
+        '<b style="font-size:16px;">'+tit+'</b>'+
+        '<div class="hint" style="margin:4px 0 0;">Escríbeles para que las usen. Si alguien no puede venir, dale más tiempo cambiándole la fecha en su ficha, en «Vence el».</div>'+
+      '</div>'+
+      '<button type="button" class="plat-volver" id="btnVenceOk">Ocultar por hoy</button>'+
+    '</div>'+
+    '<div style="margin-top:8px;">'+lineas+mas+'</div>'+
+  '</div>';
+  var b=el("btnVenceOk");
+  if(b) b.addEventListener("click",function(){
+    try{ localStorage.setItem("bt_vence_ok_"+(TENANT_SLUG||"x"),hoyLima()); }catch(e){}
+    renderVenceBanner();
+    toast("Listo. Te lo vuelvo a mostrar mañana.");
+  });
+}
 function renderSinPlanBanner(){
   var box=el("sinPlanBanner"); if(!box) return;
   box.style.display="none"; box.innerHTML="";
@@ -10088,59 +10492,119 @@ var _bCuD=el("btnCulqiDesconectar"); if(_bCuD) _bCuD.addEventListener("click",fu
   apiPost('/app/api/admin/culqi/desconectar',{}).then(function(){ toast("Culqi desconectado"); refrescarCulqiEstado(); })
     .catch(function(e){ toast((e&&e.message)||"No se pudo desconectar"); });
 });
-/* ---------- Cambio de plan (Perfil > Tu plan) ---------- */
-var PLAN_NOMBRES={gratis:"Gratis",profe:"Profe",profe_duo:"Profe Dúo",profe_trio:"Profe Trío",academia:"Academia",xl:"Academia XL",por_alumno:"Academia por alumno"};
-var PLAN_CARGADO=false;
-function refrescarPlan(){
-  var pill=el("planActual"); if(!pill) return;
-  fetch('/app/api/t/me',{headers:hdr()}).then(function(r){return r.json().catch(function(){return {};});}).then(function(d){
-    if(!d || d.error) return;
-    var p=d.plan||"profe";
-    var estadoTxt=d.anual?(" · plan anual hasta "+String(d.anual_hasta||"").slice(0,10)):(d.suscrito?" · suscripción activa":(p==="gratis"?" · gratis para siempre":" · en prueba"));
-    pill.className="pill green"; pill.textContent="Tu plan: "+(PLAN_NOMBRES[p]||p)+estadoTxt;
-    // Link de afiliado (Recomienda Batuta): el slug ya está en la sesión.
-    try{ var af=el("afLink"); if(af && d.slug){ af.value=location.origin+"/app/registro?ref="+d.slug; } }catch(e){}
-    ["profe","profe_duo","profe_trio","academia","xl","por_alumno"].forEach(function(k){
-      var b=document.querySelector('[data-plan="'+k+'"]'); if(!b) return;
-      b.disabled=(k===p);
-      b.style.opacity=(k===p)?".45":"";
+/* ---------- Conecta tu Claude (MCP + API v1, 21-ago-2026) ---------- */
+(function(){
+  function pintarToken(d){
+    if(!d || !d.token) return;
+    el("apiTokenBox").style.display="";
+    el("apiToken").value = d.token;
+    el("apiMcpUrl").value = d.mcp_url || "";
+  }
+  var bV = el("btnApiToken");
+  if (bV) bV.addEventListener("click", function(){
+    bV.disabled = true;
+    apiPost('/app/api/admin/api-token', {}).then(function(d){ pintarToken(d); bV.disabled=false; })
+      .catch(function(e){ toast((e&&e.message)||"No se pudo obtener tu llave"); bV.disabled=false; });
+  });
+  var bR = el("btnApiRotar");
+  if (bR) bR.addEventListener("click", function(){
+    if(!confirm("Vas a generar una llave nueva. La anterior deja de funcionar al instante y tendrás que pegar la nueva donde la hayas usado. ¿Seguimos?")) return;
+    bR.disabled = true;
+    apiPost('/app/api/admin/api-token', {accion:"rotar"}).then(function(d){ pintarToken(d); toast("Listo: llave nueva"); bR.disabled=false; })
+      .catch(function(e){ toast((e&&e.message)||"No se pudo generar"); bR.disabled=false; });
+  });
+})();
+
+/* ---------- Tu Batuta: packs (20-ago-2026) ----------
+   Ya no hay planes que elegir. Hay una base gratis y packs que se suman a un solo cobro
+   mensual. El dueño mueve cantidades con + y −, ve el total en vivo y aplica una vez. */
+var PACKS_CAT={}, PACKS_BASE={}, PACKS_TENIDOS={}, PACKS_EDIT={}, PACKS_USO={};
+function packsMonto(sel){
+  var s=0; for(var k in sel){ if(PACKS_CAT[k]) s+=PACKS_CAT[k].precio*sel[k]; } return Math.round(s*100)/100;
+}
+function packsIguales(a,b){
+  var ks={}; Object.keys(a).forEach(function(k){ks[k]=1;}); Object.keys(b).forEach(function(k){ks[k]=1;});
+  for(var k in ks){ if((a[k]||0)!==(b[k]||0)) return false; } return true;
+}
+function packsLimites(sel){
+  var l={alumnos:PACKS_BASE.alumnos||20,profes:PACKS_BASE.profes||1,ia:PACKS_BASE.ia||5};
+  for(var k in sel){ var pk=PACKS_CAT[k]; if(pk&&pk.suma) l[pk.fam]+=pk.suma*sel[k]; }
+  return l;
+}
+function packsPintarUso(){
+  var cont=el("packsUso"); if(!cont) return;
+  var lim=packsLimites(PACKS_EDIT);
+  var filas=[
+    {t:"Alumnos", usa:PACKS_USO.alumnos||0, max:lim.alumnos},
+    {t:"Profesores", usa:PACKS_USO.profes||0, max:lim.profes},
+    {t:"Conversaciones del asistente", usa:PACKS_USO.ia||0, max:lim.ia, mes:true}
+  ];
+  cont.innerHTML=filas.map(function(f){
+    var pct=f.max?Math.min(100,Math.round(f.usa*100/f.max)):0;
+    return '<div class="pu'+(f.usa>=f.max?' lleno':'')+'"><b>'+f.usa+' de '+f.max+'</b><span>'+f.t+(f.mes?' este mes':'')+'</span><i><em style="width:'+pct+'%"></em></i></div>';
+  }).join("");
+}
+function packsPintarCat(){
+  var cont=el("packsCat"); if(!cont) return;
+  var fams=[
+    {id:"alumnos",t:"Más alumnos"},
+    {id:"profes",t:"Más profesores (van de 5 en 5)"},
+    {id:"ia",t:"Conversaciones del asistente de WhatsApp"}
+  ];
+  cont.innerHTML=fams.map(function(f){
+    var filas=Object.keys(PACKS_CAT).filter(function(k){return PACKS_CAT[k].fam===f.id;}).map(function(k){
+      var pk=PACKS_CAT[k], n=PACKS_EDIT[k]||0;
+      return '<div class="packrow"><div><div class="pn">'+pk.nombre+'</div><div class="pp">S/'+pk.precio+' al mes</div></div>'+
+        '<div class="packctl"><button type="button" data-pk="'+k+'" data-d="-1"'+(n?'':' disabled')+'>−</button>'+
+        '<span id="pkn_'+k+'">'+n+'</span><button type="button" data-pk="'+k+'" data-d="1">+</button></div></div>';
+    }).join("");
+    return '<div class="packfam"><h3>'+f.t+'</h3>'+filas+'</div>';
+  }).join("");
+  cont.querySelectorAll("[data-pk]").forEach(function(b){
+    b.addEventListener("click",function(){
+      var k=b.dataset.pk, d=parseInt(b.dataset.d,10);
+      var n=Math.max(0,Math.min(20,(PACKS_EDIT[k]||0)+d));
+      if(n) PACKS_EDIT[k]=n; else delete PACKS_EDIT[k];
+      packsPintarCat(); packsPintarUso(); packsPintarPie();
     });
-    // Estimado del plan por alumno (alumnos activos × precio)
-    var h=el("porAlumnoHint");
-    if(h && typeof d.alumnos_activos!=="undefined"){
-      if(el("paCount")) el("paCount").textContent=d.alumnos_activos;
-      if(el("paMonto")) el("paMonto").textContent="S/ "+(d.por_alumno_monto_pen||0);
-      h.style.display="";
-    }
+  });
+}
+function packsPintarPie(){
+  var tot=el("packsTotal"), nota=el("packsNota"), btn=el("btnPacksAplicar");
+  var monto=packsMonto(PACKS_EDIT), cambio=!packsIguales(PACKS_EDIT,PACKS_TENIDOS);
+  if(tot) tot.textContent="S/"+monto;
+  if(nota) nota.textContent = monto? (cambio?"· se cobra por Mercado Pago":"· cobro vigente") : "· estás en la Batuta gratis";
+  if(btn){ btn.disabled=!cambio; btn.textContent=cambio?"Aplicar cambios":"Sin cambios"; }
+}
+function refrescarPlan(){
+  if(!el("packsCat")) return;
+  fetch('/app/api/t/me',{headers:hdr()}).then(function(r){return r.json().catch(function(){return {};});}).then(function(d){
+    if(!d || d.error || !d.packs) return;
+    PACKS_CAT=d.packs.catalogo||{}; PACKS_BASE=d.packs.base||{};
+    PACKS_TENIDOS=JSON.parse(JSON.stringify(d.packs.comprados||{}));
+    PACKS_EDIT=JSON.parse(JSON.stringify(d.packs.comprados||{}));
+    PACKS_USO={alumnos:d.alumnos_activos||0, profes:(d.asientos&&d.asientos.usados)||1, ia:(d.wa_cupo&&d.wa_cupo.usados)||0};
+    try{ var af=el("afLink"); if(af && d.slug){ af.value=location.origin+"/app/registro?ref="+d.slug; } }catch(e){}
+    packsPintarCat(); packsPintarUso(); packsPintarPie();
   }).catch(function(){});
 }
-document.querySelectorAll("[data-plan]").forEach(function(b){
-  b.addEventListener("click",function(){
-    var plan=b.dataset.plan, nombre=PLAN_NOMBRES[plan]||plan;
-    if(!confirm("Cambiar al plan "+nombre+"? Si tienes suscripción activa, el nuevo monto rige desde tu siguiente cobro. Sin penalidad.")) return;
-    b.disabled=true;
-    apiPost('/app/api/t/cambiar-plan',{plan:plan}).then(function(d){
-      if(d && d.init_point){ location.href=d.init_point; return; } // por_alumno con sub previa: reconfirma en MP
-      if(d && d.gracia){ toast("Plan "+nombre+" elegido: tienes 7 días para activar tu suscripción en /app/suscribir"); setTimeout(function(){ location.href="/app/suscribir"; }, 1500); return; }
-      toast(d.modo==="actualizado" ? ("Listo: plan "+nombre+" desde tu siguiente cobro") : ("Plan "+nombre+" elegido: se aplica al activar tu suscripción"));
-      refrescarPlan();
-    }).catch(function(e){ toast((e&&e.message)||"No se pudo cambiar el plan"); b.disabled=false; });
-  });
-});
-/* Pago ANUAL desde Perfil (2 meses gratis): usa el plan actual del tenant. */
 (function(){
-  var bA=el("btnPlanAnualPerfil"); if(!bA) return;
-  bA.addEventListener("click",function(){
-    fetch('/app/api/t/me',{headers:hdr()}).then(function(r){return r.json().catch(function(){return {};});}).then(function(d){
-      var p=(d&&d.plan)||"profe";
-      if(p==="por_alumno"||p==="gratis") p="profe"; // anual aplica a planes fijos; gratis paga Profe anual
-      if(!confirm("Pagar 1 año del plan "+(PLAN_NOMBRES[p]||p)+" (12 meses al precio de 10)? Es un solo pago por Mercado Pago.")) return;
-      bA.disabled=true;
-      apiPost('/app/api/t/plan-anual/checkout',{plan:p}).then(function(dd){
-        if(dd && dd.init_point){ location.href=dd.init_point; return; }
-        toast((dd&&dd.error)||"No se pudo iniciar el pago anual"); bA.disabled=false;
-      }).catch(function(e){ toast((e&&e.message)||"No se pudo iniciar el pago anual"); bA.disabled=false; });
-    });
+  var b=el("btnPacksAplicar"); if(!b) return;
+  b.addEventListener("click",function(){
+    var monto=packsMonto(PACKS_EDIT);
+    var msg=monto? ("Tu cobro mensual queda en S/"+monto+". Si ya tienes suscripción activa se ajusta sola desde tu siguiente cobro, sin volver a poner tu tarjeta. Continuar?")
+                 : "Vas a soltar todos tus packs y volver a la Batuta gratis. No se borra ningún dato, pero no vas a poder dar de alta más allá del límite gratis. Continuar?";
+    if(!confirm(msg)) return;
+    b.disabled=true;
+    apiPost('/app/api/t/packs',{packs:PACKS_EDIT}).then(function(d){
+      if(d && d.init_point){ location.href=d.init_point; return; }
+      if(d && d.mp_status && d.mp_status!=="authorized"){
+        toast("Mercado Pago pide que confirmes el monto nuevo. Te escribimos para ayudarte.");
+      } else {
+        toast(d && d.modo==="base" ? "Listo: volviste a la Batuta gratis" : "Listo: tu cobro queda en S/"+monto+" al mes");
+      }
+      refrescarPlan();
+    }).catch(function(e){ toast((e&&e.message)||"No se pudo aplicar"); b.disabled=false; });
   });
 })();
 /* Copiar link de afiliado */
@@ -10339,6 +10803,9 @@ function marcarMenuPendiente(p){
    nadie. Y el botón de compartir es a la vez el marketing más barato que existe. */
 function celebrarPrimerCobro(pc){
   if(!pc || el("celebraCobro")) return;
+  /* 21-ago-2026: el confeti se comía la alerta roja. Si hay alumnos con un plan roto (pagaron
+     y les sale 0), eso manda: la celebración espera al siguiente ingreso al panel. */
+  try{ if(alumnosConPlanRoto().length) return; }catch(e){}
   var monto="S/ "+(Number(pc.monto)||0);
   var quien=(pc.quien||"").trim();
   var titular=quien ? ("Tu academia acaba de cobrar solita: "+monto+" de "+quien)
@@ -11217,6 +11684,26 @@ window.batutaInit = batutaInit;
 .wz-agregar input{flex:1;min-width:180px;padding:10px;}
 .wz-web{width:100%;height:400px;border:1px solid var(--line);border-radius:12px;background:#fff;}
 .wz-link{font-family:var(--mono,monospace);font-size:.85rem;color:var(--amber,#d99a3c);word-break:break-all;}
+
+/* ---- Packs (20-ago-2026): "Tu Batuta" en Perfil ---- */
+.packs-uso{display:flex;gap:10px;flex-wrap:wrap;margin:10px 0 14px}
+.packs-uso .pu{flex:1;min-width:150px;border:1px solid var(--line);border-radius:12px;padding:10px 12px}
+.packs-uso .pu b{display:block;font-size:1.15rem;line-height:1.2}
+.packs-uso .pu span{font-size:.78rem;color:var(--muted)}
+.packs-uso .pu i{display:block;height:5px;border-radius:99px;background:var(--line);margin-top:7px;overflow:hidden}
+.packs-uso .pu i em{display:block;height:100%;border-radius:99px;background:var(--acento)}
+.packs-uso .pu.lleno i em{background:#e8604f}
+.packfam{border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:10px}
+.packfam h3{font-size:.92rem;margin:0 0 8px}
+.packrow{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:6px 0}
+.packrow+.packrow{border-top:1px solid var(--line)}
+.packrow .pn{font-size:.88rem}
+.packrow .pp{font-size:.78rem;color:var(--muted)}
+.packctl{display:flex;align-items:center;gap:8px}
+.packctl button{width:28px;height:28px;border-radius:8px;border:1px solid var(--line);background:transparent;color:inherit;font-size:1rem;cursor:pointer;line-height:1}
+.packctl button:disabled{opacity:.35;cursor:default}
+.packctl span{min-width:16px;text-align:center;font-weight:600}
+.packs-pie{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-top:12px}
 </style>
 <div id="wzVeil" hidden><div class="wz-card">
   <div class="wz-paso"><span id="wzPaso"></span><span class="wz-salir hidden" id="wzSalir">Lo termino después</span></div>
@@ -11445,10 +11932,31 @@ function wzPintar(){
       '<p class="wz-sub">Esta es tu página real, ya publicada: <span class="wz-link">'+esc(linkPub)+'</span></p>'+
       '<iframe class="wz-web" src="/app/a/'+encodeURIComponent(TENANT_SLUG)+'/web" loading="lazy" title="Tu página web"></iframe>'+
       (sinCobro?'<p class="wz-sub" style="margin-top:10px;color:var(--amber,#d99a3c);">Tu web mostrará los precios cuando pongas tu Yape o conectes tarjeta (Ajustes → Cobros, 1 minuto).</p>':"")+
+      /* 21-ago-2026: el asistente dejaba la academia "lista" SIN horario, y sin horario nadie
+         puede reservar: la página se ve linda y no sirve. En producción solo 2 de 11 academias
+         tenían horario y solo 1 tenía reservas. Por eso el paso que falta va acá, primero y
+         con nombre claro, antes que "compartir". */
+      '<div id="wzFaltaHorario"></div>'+
       '<div class="wz-acciones">'+
         '<button class="wz-btn" id="wzCompartir">Compartir mi página por WhatsApp</button>'+
         '<button class="wz-atras" id="wzFin">Entrar a mi panel</button>'+
       '</div>';
+    /* 21-ago-2026: el asistente daba la academia por "lista" SIN horario, y sin horario nadie
+       puede reservar: la página se ve linda y no vende. En producción solo 2 de 11 academias
+       tenían horario y solo 1 tenía reservas. La disponibilidad no vive en `db`, así que se
+       consulta acá y, si está vacía, el paso que falta aparece arriba de todo. */
+    fetch("/app/api/admin/disponibilidad",{headers:hdr()}).then(function(r){return r.json();}).then(function(dd){
+      if((dd&&dd.disponibilidad&&dd.disponibilidad.length)||!el("wzFaltaHorario")) return;
+      el("wzFaltaHorario").innerHTML='<p class="wz-sub" style="margin-top:10px;color:var(--amber,#d99a3c);">'+
+        '<b>Te falta tu horario.</b> Hasta que marques a qué horas dictas, tus alumnos ven tu página pero no pueden reservar nada.</p>'+
+        '<button class="wz-btn" id="wzHorario" style="margin-top:6px;">Poner mi horario ahora</button>';
+      var bh=el("wzHorario");
+      if(bh) bh.onclick=function(){
+        wzFinalizar();
+        var nav=document.querySelector('[data-ira="agenda"]');
+        if(nav) nav.click();
+      };
+    }).catch(function(){});
     el("wzCompartir").onclick=function(){
       var msg="¡Ya puedes ver los cursos de "+(db.academia||"mi academia")+" y reservar en línea! "+linkPub;
       window.open("https://wa.me/?text="+encodeURIComponent(msg),"_blank");
