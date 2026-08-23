@@ -2673,11 +2673,58 @@ async function telemetriaActivacion(env){
    Para origen='registro-abandonado' el copy parte de "empezaste a crear tu academia"
    (decirle "descargaste la plantilla" seria falso para ese lead).
    Copy empoderador, cero autodesprecio. Mudo sin RESEND_API_KEY (degrada con gracia). */
+/* Lo que se le manda AL INSTANTE al que probó la demo y dejó su correo. Es lo que se le
+   ofreció, no un "gracias por tu interés": cómo meter su lista de alumnos.
+   Se eligió ese gancho y no "te guardo el enlace de tu demo" por lo que dicen los números:
+   de 7 academias registradas, SEIS nunca cargaron un solo alumno. Cargar la lista es el
+   muro real, así que la oferta es tumbarle ese muro, no darle un enlace que muere en 24h. */
+function correoDemoLead(){
+  const d = MARCA.dominio;
+  return {
+    subject: "Cómo meter tu lista de alumnos a Batuta en 10 minutos",
+    html:
+      '<div style="font-family:Arial,Helvetica,sans-serif;max-width:480px;margin:0 auto;color:#1a1a1a;font-size:15px;line-height:1.6">' +
+      '<p>Hola. Acabas de probar la demo de Batuta, así que ya viste cómo se ve por dentro.</p>' +
+      '<p>Lo que separa esa demo de tu academia de verdad es una sola cosa: <b>tu lista de alumnos</b>. ' +
+      'Y esa parte es más corta de lo que parece.</p>' +
+      '<p><b>Si los tienes en Excel o Google Sheets:</b> exporta la hoja como CSV y súbela en ' +
+      '<i>Mis alumnos → Traer mis alumnos</i>. Batuta empareja los nombres solo, incluso con tildes ' +
+      'y con los cursos escritos distinto, y te enseña lo que va a hacer <b>antes</b> de guardar nada.</p>' +
+      '<p><b>Si vienes de otro sistema</b> (Punchpass y compañía): baja tu export y súbelo igual. ' +
+      'Te dice si le falta algún archivo y qué pedirles.</p>' +
+      '<p><b>Si están en un cuaderno:</b> con el nombre basta para empezar. Lo demás se llena solo con el uso.</p>' +
+      '<p><a href="' + d + '/app/registro?f=demo-lead"><b>Crear mi academia y subir mi lista</b></a> — es gratis y son 2 minutos.</p>' +
+      '<p>Si te trabas en cualquier punto, respóndeme este correo y lo vemos.</p>' +
+      '<p>Andrés, de Batuta.</p></div>'
+  };
+}
 function correoLeadMagnet(paso, origen){
   const wrap = (inner) =>
     '<div style="font-family:Arial,Helvetica,sans-serif;max-width:480px;margin:0 auto;color:#1a1a1a;font-size:15px;line-height:1.6">' +
     inner +
     '<p>Andres, de Batuta.</p></div>';
+  /* Quien vino de la DEMO ya vio el producto: no hay que venderle qué es, hay que sacarlo
+     del muro de "todavía no cargué a mis alumnos". Copy propio, no el genérico del Excel. */
+  if (origen === "demo"){
+    if (paso === 1) return {
+      subject: "¿Te quedaste con ganas de ver tu academia adentro?",
+      html: wrap(
+        '<p>Hola. Hace un par de días probaste la demo de Batuta y te mandé cómo traer tu lista de alumnos.</p>' +
+        '<p>Si no le has entrado todavía, casi siempre es por lo mismo: da flojera pensar de dónde sacar la lista. ' +
+        'No hace falta que esté perfecta: <b>con los nombres basta para arrancar</b>, y el resto se llena solo con el uso.</p>' +
+        '<p>Una academia real corriendo sobre Batuta, con números: <a href="' + MARCA.dominio + '/casos/profesormvt"><b>el caso ProfesorMVT</b></a>.</p>' +
+        '<p><a href="' + MARCA.dominio + '/app/registro?f=demo-nurture1"><b>Crear mi academia</b></a> — gratis, 2 minutos.</p>')
+    };
+    return {
+      subject: "Última nota, y te dejo en paz",
+      html: wrap(
+        '<p>Hola. No te escribo más sobre esto.</p>' +
+        '<p>Batuta es gratis con el producto completo: 20 alumnos, tu portal, tus cobros y tu agenda. ' +
+        'Si algún día creces de ahí, recién ahí se paga.</p>' +
+        '<p>Si probaste la demo y algo no te cuadró, respóndeme y dime qué fue. Me sirve más eso que un registro.</p>' +
+        '<p><a href="' + MARCA.dominio + '/app/registro?f=demo-nurture2"><b>Crear mi academia</b></a></p>')
+    };
+  }
   if (origen === "registro-abandonado"){
     if (paso === 1) return {
       subject: "Tu academia quedo a un paso de existir",
@@ -9227,6 +9274,69 @@ export default {
       /* ---------- Rescate de registro abandonado (público): lo dispara el sendBeacon de /app/registro.
            Guarda el lead en lead_magnet con origen='registro-abandonado' (el nurture de scheduled()
            lo levanta con copy propio) y avisa a Andres al instante. ---------- */
+
+      /* ---------- EL QUE PROBÓ LA DEMO Y SE FUE (23-ago-2026) ----------
+         Medido ese día: 129 personas abrieron la demo en 30 días y Batuta capturó CERO. La
+         demo crea un tenant con correo falso (`demo+xxxx@batuta.lat`) que se borra a las 24h,
+         así que el visitante más caliente que existe —uno que YA entró y le dio clics al
+         producto— se iba sin dejar forma de escribirle. En el mismo mes se registró UNA
+         academia.
+         Hasta hoy la demo tenía una sola salida: "crea tu academia gratis", que son 2 minutos
+         de formulario. Esta es la puerta barata de al lado: el correo, y nada más.
+         No se inventa infraestructura: cae en `lead_magnet`, que ya existe y ya tiene su
+         nurture de día 2 y día 5 en `scheduled()`. Lo único que faltaba era alimentarlo. */
+      if (path === "/app/api/demo-lead" && request.method === "POST"){
+        try {
+          const ipDl = clientIp(request);
+          if (ipDl && await chatbotPasoTope(env, "dlead:" + ipDl, 8)) return json({ ok: true });
+          let bDl = {};
+          try { bDl = await request.json(); } catch (e) { return json({ error: "JSON invalido" }, 400); }
+          const emailDl = String(bDl.email || "").trim().toLowerCase().slice(0, 200);
+          if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailDl)) return json({ error: "Escribe un correo válido" }, 400);
+          if (correoNoEntregable(emailDl)) return json({ error: "Ese correo no existe. Escribe uno al que llegues." }, 400);
+          /* si ya es cliente, no es un lead: no se le mete en el nurture de captación */
+          const yaEsDl = await env.DB.prepare("SELECT id FROM tenants WHERE email = ?1").bind(emailDl).first();
+          if (yaEsDl) return json({ ok: true, ya: true });
+          const waDl = String(bDl.whatsapp || "").replace(/[^\d+]/g, "").slice(0, 20);
+          let nuevoDl = false;
+          try {
+            await env.DB.prepare("ALTER TABLE lead_magnet ADD COLUMN whatsapp TEXT DEFAULT ''").run();
+          } catch (e) { /* ya existe */ }
+          try {
+            const ins = await env.DB.prepare(
+              "INSERT OR IGNORE INTO lead_magnet (email, origen, fecha, whatsapp) VALUES (?1, 'demo', ?2, ?3)"
+            ).bind(emailDl, hoyLima(), waDl).run();
+            nuevoDl = !!(ins && ins.meta && (ins.meta.changes ?? ins.meta.rows_written));
+          } catch (e) { return json({ error: "No se pudo guardar. Intenta de nuevo." }, 500); }
+          /* 🔒 Tope por BUZÓN, no solo por IP. El de arriba es 8 por IP y por hora; sin este,
+             alguien podría poner el correo de un tercero desde varias IPs y usar a Batuta para
+             bombardearlo. Dos por hora y por dirección: le alcanza a quien reintenta de buena
+             fe porque el primero se le fue a spam, y no le alcanza a nadie más.
+             Va DESPUÉS de guardar: aunque no se le mande el correo, el lead ya está adentro y
+             el nurture lo levanta igual. */
+          const puedeMandar = !(await chatbotPasoTope(env, "dlmail:" + emailDl, 2));
+          /* La promesa se cumple AHORA, no en dos días: se le manda lo que se le ofreció.
+             Si el correo no sale, el lead ya quedó guardado igual y el nurture lo levanta. */
+          ctx.waitUntil((async () => {
+            if (puedeMandar){
+              try { await enviarCorreo(env, Object.assign({ to: emailDl }, correoDemoLead())); } catch (e) {}
+            }
+            if (nuevoDl){
+              try {
+                await alertaCorreoAndres(env,
+                  "DEMO: alguien la probó y dejó su correo — " + emailDl,
+                  "Es el lead más caliente que da Batuta: entró a la demo, le dio clics y dejó su correo.\n" +
+                  "Correo: " + emailDl + "\n" +
+                  "WhatsApp: " + (waDl || "-") +
+                  (waDl ? "\nEscríbele ahora: https://wa.me/" + waDl.replace(/\D/g, "") : "") +
+                  "\n\nYa le salió el correo con cómo traer su lista. El nurture le escribe al día 2 y al día 5.");
+              } catch (e) {}
+            }
+          })());
+          return json({ ok: true });
+        } catch (e) { return json({ error: "No se pudo guardar" }, 500); }
+      }
+
       if (path === "/app/api/registro-abandono" && request.method === "POST"){
         try {
           const ipRa = clientIp(request);

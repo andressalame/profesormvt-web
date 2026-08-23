@@ -569,6 +569,17 @@
   .trialbar{display:none;align-items:center;justify-content:center;gap:12px;flex-wrap:wrap;background:var(--accent);color:var(--bg);font-family:var(--mono);font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;padding:9px 16px;text-align:center;}
   .trialbar.show{display:flex;}
   .trialbar a,.trialbar button{color:var(--bg);text-decoration:underline;background:none;border:0;font:inherit;cursor:pointer;padding:0;}
+  /* La puerta barata de la demo: dejar el correo en 5 segundos */
+  .dl-wrap{display:inline-flex;align-items:center;gap:7px;flex-wrap:wrap;justify-content:center;}
+  .dl-tx{opacity:.9;}
+  .trialbar .dl-in{background:rgba(0,0,0,.14);border:1px solid rgba(0,0,0,.28);border-radius:4px;color:var(--bg);font:inherit;text-transform:none;letter-spacing:normal;padding:5px 9px;width:190px;max-width:52vw;}
+  .trialbar .dl-in::placeholder{color:rgba(0,0,0,.5);}
+  .trialbar .dl-in:focus{outline:none;border-color:rgba(0,0,0,.55);}
+  .trialbar .dl-btn{text-decoration:none;border:1px solid rgba(0,0,0,.35);border-radius:4px;padding:5px 11px;background:rgba(0,0,0,.1);}
+  .trialbar .dl-btn:hover{background:rgba(0,0,0,.2);}
+  .trialbar .dl-btn[disabled]{opacity:.55;cursor:default;}
+  .dl-msg{text-transform:none;letter-spacing:normal;}
+  @media(max-width:700px){ .dl-solodesk{display:none;} .trialbar{gap:8px;padding:8px 12px;} .trialbar .dl-in{width:150px;} }
   #ovPaywall{z-index:200;}
   #ovPaywall .modal{border-color:var(--accent);}
   /* multi-profesor: lo que solo ve el dueno se esconde para el rol profesor */
@@ -2975,6 +2986,28 @@ function demoArm(){
 function demoAvisoImport(on){
   var a=el("impAvisoDemo"); if(a) a.style.display=on?"block":"none";
 }
+/* El correo del que probó la demo. Cae en `lead_magnet`, que ya existe y ya tiene su
+   nurture: acá solo se le abre la puerta. Nada de esto puede tumbar la demo, así que
+   todo va con su red. */
+function demoLeadEnganchar(){
+  var b=el("dlBtn"), i=el("dlEmail"), m=el("dlMsg"), w=el("dlWrap");
+  if(!b||!i||!m) return;
+  var mandar=function(){
+    var v=(i.value||"").trim();
+    if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)){ m.textContent="Escribe un correo válido."; i.focus(); return; }
+    b.disabled=true; m.textContent="Mandando…";
+    fetch("/app/api/demo-lead",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({email:v})})
+      .then(function(r){ return r.json().catch(function(){return {};}).then(function(d){ return {ok:r.ok,d:d}; }); })
+      .then(function(res){
+        if(!res.ok){ b.disabled=false; m.textContent=(res.d&&res.d.error)||"No se pudo. Intenta de nuevo."; return; }
+        /* se reemplaza el formulario entero: si sigue ahí, la gente lo manda dos veces */
+        if(w) w.innerHTML='<span class="dl-msg">Listo, te lo mandé a '+esc(v)+'. Revisa tu correo.</span>';
+      })
+      .catch(function(){ b.disabled=false; m.textContent="No se pudo. Intenta de nuevo."; });
+  };
+  b.addEventListener("click",mandar);
+  i.addEventListener("keydown",function(e){ if(e.key==="Enter"){ e.preventDefault(); mandar(); } });
+}
 function pintarTrialBar(d){
   var bar=el("trialBar"); if(!bar) return;
   if(d && d.demo){
@@ -2985,9 +3018,24 @@ function pintarTrialBar(d){
     /* 21-ago-2026: decía "Demo pública: cualquiera ve lo que subas", que dejó de ser cierto
        el 19-ago (cada visitante entra a SU demo, que se borra sola a las 24h). Además restaba:
        le decía "esto es público" justo a quien está probando el producto. */
-    bar.innerHTML='Esta demo es solo tuya y se borra sola en 24 horas. Para probar, usa nombres inventados.'
-      +' · <a href="/app/registro?f='+f+'">Crea tu academia gratis en 2 minutos</a>';
+    /* 🔴 23-ago-2026 · LA PUERTA BARATA. Medido ese día: 129 personas abrieron la demo en 30
+       días y se registró UNA academia. La única salida que había era "crea tu academia", que
+       son 2 minutos de formulario: el que no lo hace, se va y no queda forma de escribirle.
+       Acá al lado va la salida de 5 segundos —el correo— y con una oferta que ataca el muro
+       real: de 7 academias registradas, SEIS nunca cargaron un alumno. */
+    /* En celular la barra se comía el 19% de la pantalla, justo donde la persona está
+       juzgando el producto. El aviso de "usa nombres inventados" se esconde ahí: donde de
+       verdad hace falta es pegado al importador (`impAvisoDemo`), que es donde alguien sube
+       la lista real de su academia, y ahí sigue entero. */
+    bar.innerHTML='Esta demo es solo tuya y se borra sola en 24 horas.<span class="dl-solodesk"> Para probar, usa nombres inventados.</span>'
+      +' · <a href="/app/registro?f='+f+'">Crea tu academia gratis en 2 minutos</a>'
+      +'<span class="dl-wrap" id="dlWrap">'
+      +'<label class="dl-tx" for="dlEmail">¿Te mando cómo traer tu lista de alumnos?</label>'
+      +'<input class="dl-in" id="dlEmail" type="email" inputmode="email" autocomplete="email" placeholder="tu@correo.com" maxlength="200" />'
+      +'<button class="dl-btn" id="dlBtn" type="button">Mándamelo</button>'
+      +'<span class="dl-msg" id="dlMsg"></span></span>';
     bar.classList.add("show");
+    demoLeadEnganchar();
     demoAvisoImport(true);
     var p1=el("btnPushOn"); if(p1) p1.style.display="none";
     var p2=el("btnPushTest"); if(p2) p2.style.display="none";
