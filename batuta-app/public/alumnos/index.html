@@ -42,6 +42,10 @@
   :root{
     --bg:#0d0b0a; --panel:#141210; --panel2:#191613;
     --accent:#E8A13D; --cream:#f3ede0; --muted:#8a8276; --line:#2A2926;
+    /* 21-ago-2026: el borde de los campos era --line (contraste 1.35 sobre el fondo) y el
+       alumno no veía dónde escribir. WCAG pide 3.0 para controles: este da 3.36. La línea
+       decorativa se queda suave; lo que se toca, se ve. */
+    --line-campo:#6B6459;
     --green:#5f8a52; --amber:#d99a3c; --red:#cc3a1f;
     --mono:'JetBrains Mono',ui-monospace,monospace;
     /* Tipografia 01-ago-2026: fuera Anton (era la de MVT) y fuera Space Grotesk (lista negra
@@ -111,7 +115,7 @@
   .atab.active{color:var(--bg);background:var(--accent);border-color:var(--accent);font-weight:700;}
   .field{margin-bottom:14px;}
   .field label{display:block;font-family:var(--mono);text-transform:uppercase;letter-spacing:.08em;font-size:10.5px;color:var(--muted);margin-bottom:6px;}
-  .field input,.field select{width:100%;background:var(--panel);border:1px solid var(--line);color:var(--cream);
+  .field input,.field select{width:100%;background:var(--panel);border:1px solid var(--line-campo);color:var(--cream);
     font-family:var(--body);font-size:15px;padding:11px 12px;border-radius:3px;}
   .check{display:flex;gap:10px;align-items:flex-start;font-size:13px;color:var(--muted);margin:14px 0 4px;line-height:1.5;}
   .check input{width:16px;height:16px;margin-top:2px;accent-color:var(--accent);flex:0 0 auto;}
@@ -285,14 +289,18 @@
 
   /* ---------- MÓVIL: sidebar -> tabs inferiores ---------- */
   @media (max-width:859px){
-    .side{top:auto;bottom:0;left:0;right:0;width:100%;height:64px;flex-direction:row;align-items:stretch;
+    .side{top:auto;bottom:0;left:0;right:0;width:100%;height:70px;flex-direction:row;align-items:stretch;
       padding:0;border-right:0;border-top:1px solid var(--line);}
     .side .logo,.side .slab,.side-out{display:none;}
     .side nav{flex-direction:row;margin:0;gap:0;width:100%;flex:1;}
     .side nav a{flex:1;flex-direction:column;justify-content:center;align-items:center;gap:0;
       padding:6px 0;border-left:0;border-top:3px solid transparent;border-radius:0;}
-    .side nav a span{display:none;} /* 7 tabs: solo íconos en móvil (aria-label/title presentes) */
-    .side nav a svg{width:21px;height:21px;}
+    /* 21-ago-2026: los 7 íconos iban SIN una sola palabra. Un carrito y un regalo no dicen
+       "Comprar" ni "Beneficios" a nadie que entra por primera vez, y el estándar de la casa es
+       que una señora de 50 lo use sin pensar. La etiqueta vuelve, chiquita y en una línea. */
+    .side nav a span{display:block;font-size:8.5px;line-height:1.1;margin-top:3px;letter-spacing:0;text-transform:none;
+      max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:0 2px;}
+    .side nav a svg{width:19px;height:19px;}
     .side nav a.active{border-left:0;border-top-color:var(--accent);background:transparent;}
     .main{margin-left:0;padding:26px 18px 110px;}
     .plan-grid{grid-template-columns:1fr;}
@@ -349,7 +357,9 @@
   @media (prefers-reduced-motion: reduce){ .tour-hole{transition:none;} }
 
   /* ---------- IA de onboarding (Claude Haiku, tope 10 mensajes) ---------- */
-  .oia-fab{position:fixed;bottom:24px;right:24px;z-index:300;width:54px;height:54px;border-radius:50%;border:1px solid var(--accent);cursor:pointer;background:var(--accent);color:var(--bg);font-family:var(--mono);font-weight:700;font-size:18px;box-shadow:0 6px 24px rgba(232,80,31,.35);}
+  /* 21-ago-2026: a 24px del borde, este botón tapaba la etiqueta "Mi cuenta" de la barra
+     de abajo (70px de alto en móvil). Sube por encima de la barra. */
+  .oia-fab{position:fixed;bottom:86px;right:18px;z-index:300;width:54px;height:54px;border-radius:50%;border:1px solid var(--accent);cursor:pointer;background:var(--accent);color:var(--bg);font-family:var(--mono);font-weight:700;font-size:18px;box-shadow:0 6px 24px rgba(232,80,31,.35);}
   .oia-panel{position:fixed;bottom:88px;right:24px;z-index:300;width:340px;max-width:calc(100vw - 32px);height:440px;max-height:calc(100vh - 130px);display:flex;flex-direction:column;overflow:hidden;background:var(--panel);border:1px solid var(--line);border-radius:8px;box-shadow:0 18px 50px rgba(0,0,0,.55);}
   .oia-panel[hidden]{display:none;}
   .oia-head{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:12px 14px;border-bottom:1px solid var(--line);background:var(--accent);flex:0 0 auto;}
@@ -426,6 +436,9 @@
   <div class="eyebrow" id="invEyebrow">// TU PORTAL</div>
   <h1 id="invTitulo">Entrando a tu <em>portal</em></h1>
   <div class="sub" id="invSub">Un segundo…</div>
+  <div id="invConfirma" class="hidden">
+    <button class="btn full" id="btnInvEntrar">Entrar a mi portal</button>
+  </div>
   <div id="invForm" class="hidden">
     <hr class="rule" />
     <div class="field"><label for="i_email">Tu correo</label><input id="i_email" type="email" autocomplete="email" placeholder="tucorreo@gmail.com" /></div>
@@ -433,6 +446,10 @@
     <button class="btn full" id="btnInv">Entrar a mi portal</button>
   </div>
   <div class="err" id="invErr"></div>
+  <div id="invReenvio" class="hidden">
+    <button class="btn full" id="btnInvReenvio">Mándame otro enlace</button>
+    <p class="auth-hint" style="margin:8px 0 0">Te llega al mismo correo de siempre. No necesitas contraseña.</p>
+  </div>
   <p class="auth-hint hidden" id="invSalida">¿Ya tienes tu cuenta? <a href="#" id="invLogin">Ingresa con tu correo y contraseña</a>.</p>
 </section>
 
@@ -1029,10 +1046,25 @@ function limpiarUrlToken(){
 }
 function entrarConSesion(tk){ setTok(tk); limpiarUrlToken(); cargarMe(); }
 
+/* Deja la pantalla lista y ESPERA el clic. Un robot que abre el enlace no llega hasta aquí. */
+function ofrecerInvitacion(){
+  $("invTitulo").innerHTML = "Tu <em>portal</em> te está esperando";
+  $("invSub").textContent = "Dale al botón y entras. No necesitas contraseña.";
+  $("invConfirma").classList.remove("hidden");
+}
+if($("btnInvEntrar")){
+  $("btnInvEntrar").addEventListener("click", function(){
+    $("btnInvEntrar").disabled = true;
+    $("invTitulo").innerHTML = "Entrando a tu <em>portal</em>";
+    $("invSub").textContent = "Un segundo…";
+    canjearInvitacion("");
+  });
+}
 /* Canjea la invitacion. Sin correo en su ficha, el servidor responde necesita_email
    y recien ahi se le pide UNO (nunca una contraseña). */
 function canjearInvitacion(email){
   $("invErr").textContent = "";
+  $("invConfirma").classList.add("hidden");
   var btn = $("btnInv"); if(btn) btn.disabled = true;
   var cuerpo = { token: INV_TOKEN };
   if(email) cuerpo.email = email;
@@ -1050,9 +1082,20 @@ function canjearInvitacion(email){
       entrarConSesion(d.token);
     })
     .catch(function(e){
+      var d = (e && e.data) || {};
       $("invErr").textContent = (e && e.message) || "No pudimos abrir tu portal. Pídele otro enlace a tu academia.";
+      if(d.puede_reenviar){
+        /* el enlace ya se usó: no la dejamos tirada, que se mande otro sola. Ella no tiene
+           contraseña con la que entrar por su cuenta, así que este es su único camino. */
+        $("invTitulo").innerHTML = "Ese enlace ya se <em>usó</em>";
+        $("invSub").textContent = "Por seguridad cada enlace sirve una sola vez. Te mandamos uno nuevo y entras.";
+        $("invReenvio").classList.remove("hidden");
+        return;
+      }
       $("invSalida").classList.remove("hidden");
       if(btn) btn.disabled = false;
+      /* que pueda reintentar sin recargar: el enlace sigue vivo si el canje no llegó a hacerse */
+      var bE = $("btnInvEntrar"); if(bE){ bE.disabled = false; $("invConfirma").classList.remove("hidden"); }
     });
 }
 if($("btnInv")){
@@ -1062,6 +1105,21 @@ if($("btnInv")){
     canjearInvitacion(em);
   });
   $("i_email").addEventListener("keydown",function(e){ if(e.key==="Enter") $("btnInv").click(); });
+}
+if($("btnInvReenvio")){
+  $("btnInvReenvio").addEventListener("click", function(){
+    var b = $("btnInvReenvio"); b.disabled = true; $("invErr").textContent = "";
+    api("/app/api/invitacion/reenviar",{method:"POST",body:JSON.stringify({token:INV_TOKEN})})
+      .then(function(d){
+        $("invReenvio").classList.add("hidden");
+        $("invTitulo").innerHTML = "Listo, <em>revisa tu correo</em>";
+        $("invSub").textContent = "Te mandamos un enlace nuevo a " + (d.email || "tu correo") + ". Ábrelo y entras.";
+      })
+      .catch(function(e){
+        $("invErr").textContent = (e && e.message) || "No pudimos mandarlo. Escríbele a tu academia.";
+        b.disabled = false;
+      });
+  });
 }
 if($("invLogin")){
   $("invLogin").addEventListener("click",function(e){
@@ -1299,16 +1357,31 @@ function renderInicio(){
   var a = ME.alumno;
   if(a){
     show("iPkg"); hide("iVacio");
-    $("iPlanLine").textContent = (a.curso||"") + " · " + (a.paquete||"");
-    var est=$("iEstado"); est.textContent=ME.estado;
-    est.className = "pill " + (ME.estado==="Activo"?"green":(ME.estado==="Renovar pronto"?"amber":"gray"));
+    /* 🐛 23-ago-2026 · el título nombraba `a.paquete`, la etiqueta congelada de la ficha, que
+       con multi-pase suele ser un pase YA VENCIDO. Medido contra Elevate: 3 alumnas veían
+       titulado un pase muerto teniendo otro vivo — Andrea leía «48 clases de Pilates» (0 de 48,
+       vencido) cuando lo que le queda son 6 clases de Mat, que es otra disciplina. El título
+       dice lo que puede USAR; sin pases vigentes, se queda como estaba. */
+    var pasesVivos = (a.pases||[]).filter(function(p){ return !p.vencido; });
+    $("iPlanLine").textContent = pasesVivos.length
+      ? pasesVivos.map(function(p){ return p.n; }).join(" + ")
+      : ((a.curso||"") + " · " + (a.paquete||""));
+    /* Con el plan sin enlazar el estado real es "no se puede calcular", no "Renovar pronto":
+       ese cartel le echa la culpa a quien ya pagó (21-ago-2026). */
+    var est=$("iEstado");
+    est.textContent = a.noExiste ? "En revisión" : ME.estado;
+    est.className = "pill " + (a.noExiste ? "gray" : (ME.estado==="Activo"?"green":(ME.estado==="Renovar pronto"?"amber":"gray")));
     if(a.pases && a.pases.length){
       /* VARIOS PASES ACTIVOS (11-ago-2026): cada pase con SU saldo y SU vencimiento.
          12 de Barré + 4 de Máquinas no es "16 clases": acá se ven por separado. */
       $("iLab").textContent = "Tus pases";
       $("iRest").style.fontSize = "";
       $("iRest").textContent = (Number(a.restantes)>=9999) ? "∞" : a.restantes;
-      $("iDe").textContent = "clases en " + a.pases.length + " pases";
+      /* Se cuentan los pases VIGENTES: decir "6 clases en 2 pases" cuando uno está muerto
+         infla lo que la alumna cree tener. Los vencidos siguen listándose abajo, en gris. */
+      $("iDe").textContent = pasesVivos.length
+        ? ("clases en " + pasesVivos.length + (pasesVivos.length===1 ? " pase" : " pases"))
+        : "sin pases vigentes";
       var sp="";
       for(var pi=0; pi<a.pases.length; pi++){
         var pp=a.pases[pi];
@@ -1318,6 +1391,19 @@ function renderInicio(){
               (pp.vence?' <small>· hasta '+esc(fechaBonita(pp.vence))+'</small>':'')+'</b></div>';
       }
       $("iStubs").innerHTML = sp;
+      if($("iStubCap")) $("iStubCap").style.display = "none";
+    } else if(a.noExiste){
+      /* Plan que la academia renombró o borró (21-ago-2026). Antes acá salía un "0 de 0"
+         gigante y el botón "Renovar pronto": la alumna pagó y el portal la trataba como si
+         se le hubieran acabado las clases. No es su problema y no lo resuelve renovando, así
+         que se le dice la verdad en corto y se le da la salida (escribirle a su academia). */
+      $("iLab").textContent = "Tu plan";
+      $("iRest").textContent = "En revisión";
+      $("iRest").style.fontSize = "1.4em";
+      $("iDe").textContent = "";
+      $("iStubs").innerHTML = '<p class="note" style="margin:8px 0 0;max-width:520px;">'
+        + 'Tu academia cambió su lista de planes y el tuyo quedó sin enlazar, así que por ahora no podemos mostrarte tus clases. '
+        + 'Ya lo ven en su panel. Escríbeles y lo dejan al día en el momento; <b>no pierdes nada de lo que pagaste</b>.</p>';
       if($("iStubCap")) $("iStubCap").style.display = "none";
     } else if(a.ilim){
       /* Mensualidad: sin contador de clases; lo que importa es hasta cuándo va (vence). */
@@ -1335,18 +1421,37 @@ function renderInicio(){
          "de 9" cuando compró un paquete de 8 se lee como un error del sistema, no como premio. */
       $("iDe").textContent = "de " + a.compradas +
         ((Number(a.bonus)||0) > 0 ? " (incluye "+a.bonus+" de regalo por referir)" : "");
-      var s=""; for(var i=0;i<a.compradas;i++) s += '<div class="stub'+(i<a.usadas?" used":"")+'"></div>';
+      /* 🔴 22-ago-2026 · los tickets se pintaban con `usadas`, que INCLUYE las clases ya
+         apartadas, mientras el número grande usa `restantes`, al que el modo "se descuenta
+         al asistir" le devuelve esas mismas apartadas. Los dos números viven en la misma
+         pantalla y se contradecían: Verónica Grandez, paquete de 8 con 7 apartadas, leía
+         "7 clases restantes" con los 8 tickets apagados. Le pasa a 11 alumnas de Elevate.
+         Ahora los tickets se cuentan DESDE el número que se le enseña, y las apartadas se
+         nombran, que es lo que hace que el 7 se entienda. */
+      var apartadas = (String(a.modo_saldo||"")==="asistencia") ? Math.max(0, Number(a.reservadas)||0) : 0;
+      var gastadas = Math.max(0, (Number(a.compradas)||0) - (Number(a.restantes)||0));
+      var s=""; for(var i=0;i<a.compradas;i++) s += '<div class="stub'+(i<gastadas?" used":"")+'"></div>';
       $("iStubs").innerHTML = s;
-      if($("iStubCap")) $("iStubCap").style.display = "";
+      if($("iStubCap")){
+        $("iStubCap").style.display = "";
+        $("iStubCap").textContent = apartadas
+          ? ("Cada ticket = una clase de tu paquete · los apagados ya se usaron · tienes " + apartadas +
+             " ya reservada" + (apartadas===1?"":"s") + ", que te descuentan recién cuando vas")
+          : "Cada ticket = una clase de tu paquete · los apagados ya se usaron";
+      }
     }
-    if(ME.estado==="Renovar pronto" && !ME.compraPendiente) show("iRenov"); else hide("iRenov");
+    if(ME.estado==="Renovar pronto" && !ME.compraPendiente && !a.noExiste) show("iRenov"); else hide("iRenov");
     /* Beneficios (10-ago-2026, Elevate): el servidor solo los manda con cuenta activa. */
     try{ renderBeneficios(); }catch(e){}
     $("iPlan").innerHTML =
       (a.ilim ? kv("Tu mensualidad", "Clases sin límite hasta el "+esc(fechaBonita(a.vence)))
               : kv("Reprogramaciones disponibles", (Number(a.reprogRestantes)>=9999) ? '∞' : (a.reprogRestantes+' <small>de '+a.reprogPermitidas+'</small>')))+
       kv("Horario fijo", esc((a.horarioFijo&&a.horarioFijo.length)?a.horarioFijo.join(" · "):(a.horario||"Por definir")))+
-      kv("Paquete", esc(a.paquete||"—")+(a.monto?' <small>· S/ '+a.monto+'</small>':''))+
+      /* Misma regla que el título: con varios pases, «Paquete» lista los VIGENTES. El precio
+         suelto se omite ahí porque es el de UN plan y ya no describe lo que tiene contratado. */
+      kv("Paquete", pasesVivos.length
+           ? esc(pasesVivos.map(function(p){ return p.n; }).join(" + "))
+           : (esc(a.paquete||"—")+(a.monto?' <small>· S/ '+a.monto+'</small>':'')))+
       kv("Pago", esc(a.pago||"—"))+
       (a.vence ? kv("Tu paquete vence", esc(fmtFechaLocal(a.vence+"T23:59:59Z"))+' <small>('+diasHasta(a.vence)+')</small>') : "");
     renderVencePausa(a);
@@ -1434,6 +1539,13 @@ function tiersDeMe(){
 function descRefDe(pk){
   var r = (ME && ME.referidos) || {};
   if(!r.tengoDesc || !r.descModo) return 0;
+  /* 🔴 22-ago-2026 · el servidor (`refElegible`) deja la clase de prueba FUERA del programa
+     —"es la puerta de entrada, no una compra"— y acá no se miraba. Un amigo que llega con
+     código y todavía no es alumno es justo a quien se le enseña esa primera clase: veía el
+     precio tachado y al pagar se le cobraba entero. Con la configuración de hoy no le pasa a
+     nadie (la única academia con descuento prendido pide mínimo 4 clases y tiene la prueba en
+     S/0), pero la regla tiene que decir lo mismo en los dos lados. */
+  if(pk === "Clase de prueba") return 0;
   var precio = (ME.precios && ME.precios[pk]) || 0;
   if(!(precio>0)) return 0;
   var info = (ME.paquetes||[]).filter(function(p){ return p.pk===pk; })[0];
@@ -2265,25 +2377,46 @@ var AG_DIA = "";
 var AG_MESES = ["enero","febrero","marzo","abril","mayo","junio","julio","agosto","setiembre","octubre","noviembre","diciembre"];
 var DIAS_LARGO = ["domingo","lunes","martes","miércoles","jueves","viernes","sábado"];
 
+/* 🔴 22-ago-2026 · estas dos pintaban la fecha y la hora en la zona del NAVEGADOR. La clase
+   ocurre en Lima: con el celular en otra zona, una clase del lunes 20:00 se leía "martes 25,
+   01:00 a.m." en UTC y "03:00 a.m." en Madrid — otro día y otra hora, y la alumna la pierde.
+   El panel del dueño SÍ fija `America/Lima` en sus seis formatos; el portal no lo hacía en
+   ninguno de los dos. El respaldo también: `getHours()` es del navegador igual. */
+var TZ_LIMA = { timeZone: "America/Lima" };
+function partesLima(iso){ return new Date(Date.parse(iso) - 5*3600000); }   // en UTC = hora de Lima
 function fmtFechaLocal(iso){
   var d = new Date(iso);
-  try{ return d.toLocaleDateString("es-PE",{weekday:"long",day:"numeric",month:"long"}); }
-  catch(e){ return DIAS_LARGO[d.getDay()]+" "+d.getDate(); }
+  try{ return d.toLocaleDateString("es-PE",{weekday:"long",day:"numeric",month:"long",timeZone:"America/Lima"}); }
+  catch(e){ var l=partesLima(iso); return DIAS_LARGO[l.getUTCDay()]+" "+l.getUTCDate(); }
 }
 function fmtHoraLocal(iso){
   var d = new Date(iso);
-  try{ return d.toLocaleTimeString("es-PE",{hour:"2-digit",minute:"2-digit"}); }
-  catch(e){ return ("0"+d.getHours()).slice(-2)+":"+("0"+d.getMinutes()).slice(-2); }
+  try{ return d.toLocaleTimeString("es-PE",{hour:"2-digit",minute:"2-digit",timeZone:"America/Lima"}); }
+  catch(e){ var l=partesLima(iso); return ("0"+l.getUTCHours()).slice(-2)+":"+("0"+l.getUTCMinutes()).slice(-2); }
 }
 function diasHasta(fechaYmd){
-  var ms = Date.parse(fechaYmd+"T23:59:59Z") - Date.now();
-  var d = Math.ceil(ms/86400000);
-  if(d<0) return "vencido";
+  /* 🔴 22-ago-2026 · esto cortaba a las 23:59:59 UTC y el servidor corta a las 23:59:59 de
+     LIMA (`venceVencido`: mismo instante + 5h). Barridas las 24 horas del día: durante 19 de
+     ellas —de 00:30 a 18:30 del día SIGUIENTE al vencimiento— el portal decía «vence hoy»
+     mientras el servidor ya lo daba por muerto. La alumna se levanta, lee que le vence hoy,
+     intenta reservar y no la deja. 61 alumnas de Elevate tienen fecha, así que le toca a
+     alguna casi todos los días. Mismo corte que el worker, y `Math.floor` en vez de `ceil`
+     (con ceil, un plan que vence hoy decía «mañana»). */
+  var fin = Date.parse(fechaYmd+"T23:59:59Z") + 5*3600000;
+  if(!isFinite(fin)) return "";
+  var ms = fin - Date.now();
+  if(ms < 0) return "vencido";
+  var d = Math.floor(ms/86400000);
   if(d===0) return "hoy";
   return d===1 ? "mañana" : "en "+d+" días";
 }
 function renderVencePausa(a){
-  if(!a.vence){ hide("iPausaWrap"); return; }
+  /* 🔴 22-ago-2026 · se miraba SOLO el vence de la ficha, pero el servidor congela también
+     los pases: un alumno multi-pase sin fecha en la ficha y con fechas en sus pases podía
+     congelar y el portal le escondía el botón. Le pasa a Rebecca, de Elevate: sus dos pases
+     vencen el 19-set y su ficha no tiene fecha. */
+  var tieneFechaEnPases = !!(a.pases && a.pases.some && a.pases.some(function(px){ return px && px.vence && !px.vencido; }));
+  if(!a.vence && !tieneFechaEnPases){ hide("iPausaWrap"); return; }
   /* Congelamiento POR PLAN (7-ago-2026): el servidor manda las reglas del plan del alumno.
      Plan que no congela, o que ya agotó sus días o bloques del ciclo -> el botón no existe. */
   var cg=a.congela||null;
@@ -2328,9 +2461,21 @@ function renderAgenda(){
   $("agSinPaquete").style.display="none"; $("agConPaquete").style.display="";
 
   var rest = Number(a.restantes)||0;
-  $("agSaldo").textContent = a.ilim
-    ? ("Clases sin límite hasta el "+fechaBonita(a.vence)+" (tu mensualidad · "+(a.paquete||"")+")")
-    : ("Te quedan "+rest+" clase"+(rest===1?"":"s")+" en tu paquete "+(a.paquete||""));
+  /* 🔴 22-ago-2026 · acá se sumaban TODOS los pases y se le pegaba el nombre de UNO solo
+     (`a.paquete` es el espejo del pase principal). Resultado: 6 de las 16 alumnas con varios
+     pases leían una frase imposible — "Te quedan 20 clases en tu paquete 8 clases de Mat", o
+     "Te quedan 5 clases en tu paquete 1 clase de Mat". La pantalla de inicio ya lo hacía bien
+     ("Tus pases", uno por uno); a la agenda no había llegado. */
+  if(a.ilim){
+    $("agSaldo").textContent = "Clases sin límite hasta el "+fechaBonita(a.vence)+" (tu mensualidad · "+(a.paquete||"")+")";
+  } else if(a.pases && a.pases.length > 1){
+    var vivos = a.pases.filter(function(p){ return !p.vencido; });
+    $("agSaldo").textContent = "Te quedan "+rest+" clase"+(rest===1?"":"s")+" entre tus "+
+      vivos.length+" plan"+(vivos.length===1?"":"es")+": "+
+      vivos.map(function(p){ return p.n+" ("+(p.ilim?"sin límite":p.restantes)+")"; }).join(" · ");
+  } else {
+    $("agSaldo").textContent = "Te quedan "+rest+" clase"+(rest===1?"":"s")+" en tu paquete "+(a.paquete||"");
+  }
 
   var prox = ME.proximasClases || [];
   if(prox.length===0){
@@ -2340,11 +2485,15 @@ function renderAgenda(){
       var badge = '<span class="rtag">'+(r.tipo==="fija"?"FIJA":"SUELTA")+'</span>';
       agSyncReprog();
       var horas = (Date.parse(r.inicio_utc) - Date.now()) / 3600000;
-      var puede = horas >= AG_CANCELA_MIN_H;
+      /* 🔴 22-ago-2026 · acá se usaba el número GLOBAL para todas las clases, pero el servidor
+         aplica el de SU categoría. Ahora cada clase trae el suyo (`cancel_h`) y esto solo lo
+         lee; el global queda de respaldo por si la respuesta es vieja. */
+      var minH = (Number(r.cancel_h)>=1 && Number(r.cancel_h)<=72) ? Number(r.cancel_h) : AG_CANCELA_MIN_H;
+      var puede = horas >= minH;
       var boton = !AG_REPROG_ON ? ''
         : (puede
         ? '<button class="btn ghost sm" data-cancelar="'+esc(r.id)+'">Reprogramar</button>'
-        : '<button class="btn ghost sm" disabled title="Falta menos de '+AG_CANCELA_MIN_H+'h, ya no se puede reprogramar">Reprogramar</button>');
+        : '<button class="btn ghost sm" disabled title="Falta menos de '+minH+'h, ya no se puede reprogramar">Reprogramar</button>');
       return '<div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--line);">'+
         '<div style="flex:1;min-width:0;">'+
           '<div style="font-weight:600;text-transform:capitalize;">'+esc(fmtFechaLocal(r.inicio_utc))+'</div>'+
@@ -2948,7 +3097,12 @@ function initAlumno(){
   try{
     /* Los links del correo/WhatsApp mandan sobre la sesion guardada: si el alumno abre SU
        invitacion, entra como el, aunque en ese navegador quedara abierta otra cuenta. */
-    if(INV_TOKEN){ setPantalla("viewInv"); canjearInvitacion(""); }
+    /* 🔒 23-ago-2026 · antes esto canjeaba SOLO al cargar. Los antivirus de correo
+       corporativo (Outlook Safe Links, Proofpoint) abren los enlaces y EJECUTAN el JavaScript:
+       quemaban la invitación antes de que la alumna la viera y la dejaban fuera de su portal.
+       La casa ya reconoce esa amenaza en `/app/inv/baja` ("los antivirus de correo abren los
+       links solos"). Ahora hace falta un gesto humano: un clic. */
+    if(INV_TOKEN){ setPantalla("viewInv"); ofrecerInvitacion(); }
     else if(RESET_TOKEN){ setPantalla("viewReset"); setTimeout(function(){ try{ $("rs_pass").focus(); }catch(e){} }, 60); }
     else if(getTok()){ cargarMe(); }
     else { setAuthTab(REF_URL ? "reg" : "login"); setPantalla("viewAuth"); }

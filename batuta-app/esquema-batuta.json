@@ -1,0 +1,74 @@
+{
+ "tomado": "2026-08-23",
+ "tablas": {
+  "alumnos": {
+   "columnas": [
+    "id",
+    "tenant_id",
+    "codigo",
+    "nombre",
+    "whatsapp",
+    "curso",
+    "paquete",
+    "fecha",
+    "pago",
+    "horario",
+    "notas",
+    "ciclo",
+    "recordatorio_fecha",
+    "recordatorio_ciclo",
+    "winback_ciclo",
+    "vence",
+    "aviso_vence_ciclo",
+    "profesor_id",
+    "sede_id",
+    "migrado_usadas",
+    "migrado_ciclo",
+    "activado",
+    "caducado",
+    "apellido",
+    "email",
+    "nacimiento",
+    "invitado_el",
+    "invitado_canal",
+    "no_email",
+    "pases",
+    "bonus_clases",
+    "bonus_ciclo",
+    "mkt_ok",
+    "mkt_fecha",
+    "mkt_origen",
+    "mkt_token",
+    "resena_pedida",
+    "cal_token",
+    "vence_manual"
+   ],
+   "ddl": "CREATE TABLE alumnos (\n  id                  TEXT PRIMARY KEY,\n  tenant_id           TEXT NOT NULL,\n  codigo              TEXT NOT NULL,\n  nombre              TEXT NOT NULL,\n  whatsapp            TEXT DEFAULT '',\n  curso               TEXT DEFAULT '',\n  paquete             TEXT DEFAULT '',\n  fecha               TEXT DEFAULT '',\n  pago                TEXT DEFAULT '',\n  horario             TEXT DEFAULT '',\n  notas               TEXT DEFAULT '',\n  ciclo               INTEGER DEFAULT 1,\n  recordatorio_fecha  TEXT DEFAULT '',\n  recordatorio_ciclo  INTEGER DEFAULT 0,\n  winback_ciclo       INTEGER DEFAULT 0,\n  vence               TEXT DEFAULT '',\n  aviso_vence_ciclo   INTEGER DEFAULT 0\n, profesor_id TEXT DEFAULT NULL, sede_id TEXT DEFAULT '', migrado_usadas INTEGER DEFAULT 0, migrado_ciclo INTEGER DEFAULT 0, activado TEXT DEFAULT '', caducado INTEGER DEFAULT 0, apellido TEXT DEFAULT '', email TEXT DEFAULT '', nacimiento TEXT DEFAULT '', invitado_el TEXT DEFAULT '', invitado_canal TEXT DEFAULT '', no_email INTEGER DEFAULT 0, pases TEXT DEFAULT '', bonus_clases INTEGER DEFAULT 0, bonus_ciclo  INTEGER DEFAULT 0, mkt_ok     INTEGER DEFAULT 0, mkt_fecha  TEXT DEFAULT '', mkt_origen TEXT DEFAULT '', mkt_token  TEXT DEFAULT '', resena_pedida INTEGER DEFAULT 0, cal_token TEXT DEFAULT '', vence_manual INTEGER DEFAULT 0)"
+  },
+  "registro": {
+   "columnas": [
+    "id",
+    "tenant_id",
+    "fecha",
+    "alumno_id",
+    "curso",
+    "estado",
+    "trabajo",
+    "tarea",
+    "tarea_audio",
+    "plan",
+    "ciclo",
+    "profesor_id"
+   ],
+   "ddl": "CREATE TABLE registro (\n  id         TEXT PRIMARY KEY,\n  tenant_id  TEXT NOT NULL,\n  fecha      TEXT DEFAULT '',\n  alumno_id  TEXT NOT NULL,\n  curso      TEXT DEFAULT '',\n  estado     TEXT DEFAULT '',\n  trabajo    TEXT DEFAULT '',\n  tarea      TEXT DEFAULT '',\n  tarea_audio TEXT DEFAULT '',\n  plan       TEXT DEFAULT '',\n  ciclo      INTEGER DEFAULT 1\n, profesor_id TEXT DEFAULT '')"
+  },
+  "precios": {
+   "columnas": [
+    "tenant_id",
+    "paquete",
+    "precio"
+   ],
+   "ddl": "CREATE TABLE precios (\n  tenant_id TEXT NOT NULL,\n  paquete   TEXT NOT NULL,\n  precio    REAL NOT NULL DEFAULT 0,\n  PRIMARY KEY (tenant_id, paquete)\n)"
+  }
+ }
+}

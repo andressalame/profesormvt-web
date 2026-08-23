@@ -931,6 +931,21 @@ function precioPorClase(precio, pk){
   if (!p || c < 1) return 0;
   return Math.round((p / c) * 100) / 100;
 }
+/* ¿Esta persona YA era de la casa antes de llegar con el código? Vive aparte porque la
+   preguntan DOS: `refElegible` al cobrar y el portal al prometer. Estaba escrita solo en la
+   primera, así que el portal tachaba el precio y el server cobraba entero. */
+async function yaEraAlumnoDe(env, tenantId, alumnoId){
+  if (!alumnoId) return false;
+  const al = await env.DB.prepare(
+    "SELECT COALESCE(migrado_usadas,0) AS mu, COALESCE(pases,'') AS pases FROM alumnos WHERE id = ?1 AND tenant_id = ?2"
+  ).bind(alumnoId, tenantId).first().catch(() => null);
+  if (al && (Number(al.mu) > 0 || String(al.pases || ""))) return true;
+  const hist = await env.DB.prepare(
+    "SELECT (SELECT COUNT(*) FROM registro WHERE tenant_id = ?1 AND alumno_id = ?2) + " +
+    "(SELECT COUNT(*) FROM reservas WHERE tenant_id = ?1 AND alumno_id = ?2) AS n"
+  ).bind(tenantId, alumnoId).first().catch(() => null);
+  return !!(hist && Number(hist.n));
+}
 /* ¿Esta compra activa el beneficio de referidos? Una sola funcion para los DOS lados (el
    descuento del amigo al comprar y el premio del que refirio al confirmarse el pago): si
    se separaran, tarde o temprano uno cobra y el otro no.
@@ -955,17 +970,7 @@ async function refElegible(env, tenantId, cu, paquete, pk, rc, excluirCompraId){
   /* "alumno nuevo que nunca compro NI asistio": la compra ya quedo descartada arriba, falta
      el que llega con historial en la casa (tipico de una academia que migro sus alumnos de
      otro sistema: la ficha vieja existe con sus clases dictadas y su saldo arrastrado). */
-  if (rc.soloNuevos && cu.alumno_id){
-    const al = await env.DB.prepare(
-      "SELECT COALESCE(migrado_usadas,0) AS mu, COALESCE(pases,'') AS pases FROM alumnos WHERE id = ?1 AND tenant_id = ?2"
-    ).bind(cu.alumno_id, tenantId).first().catch(() => null);
-    if (al && (Number(al.mu) > 0 || String(al.pases || ""))) return { ok: false, motivo: "ya era alumno" };
-    const hist = await env.DB.prepare(
-      "SELECT (SELECT COUNT(*) FROM registro WHERE tenant_id = ?1 AND alumno_id = ?2) + " +
-      "(SELECT COUNT(*) FROM reservas WHERE tenant_id = ?1 AND alumno_id = ?2) AS n"
-    ).bind(tenantId, cu.alumno_id).first().catch(() => null);
-    if (hist && Number(hist.n)) return { ok: false, motivo: "ya era alumno" };
-  }
+  if (rc.soloNuevos && await yaEraAlumnoDe(env, tenantId, cu.alumno_id)) return { ok: false, motivo: "ya era alumno" };
   return { ok: true };
 }
 /* Lo que paga el alumno por un paquete, con sus dos descuentos posibles. Vive en una sola
@@ -1167,8 +1172,16 @@ function atribuirPases(lista, paqMap, eventos, reprogTotal){
   /* `futuro` = el consumo viene de una clase APARTADA que todavía no se dicta. Se cuenta por
      pase (21-ago-2026) para que la academia que descuenta "al asistir" pueda ver, pase por
      pase, el mismo número que ve en el total. Sin esto el total decía 21 y el desglose 9. */
-  const cobrar = (tipo, futuro, cuando) => {
-    const marcar = (e) => { e.usadas++; if (futuro) e.futuras = (e.futuras || 0) + 1; };
+  /* De qué pase salió cada clase, y POR QUÉ (23-ago-2026, pedido de Andrés: "es importante
+     mostrar de qué pase se cobró cada clase"). No se guarda en la base: se recalcula con el
+     saldo, que es la única forma de que nunca discrepen. El `via` importa tanto como el pase:
+     sin él la pantalla tendría que adivinar el motivo y ya se vio que adivina mal. */
+  const cargos = [];
+  const cobrar = (tipo, futuro, cuando, esClase) => {
+    const marcar = (e, via) => {
+      e.usadas++; if (futuro) e.futuras = (e.futuras || 0) + 1;
+      if (esClase) cargos.push({ cuando: cuando || "", tipo: tipo || "", idx: e.idx, n: e.n, via: via });
+    };
     /* 22-ago-2026: vencido AL MOMENTO DE LA CLASE, no vencido hoy. Ver `vencidoAl`. */
     const muerto = (e) => vencidoAl(e.vence, cuando);
     let candidatos = est.filter(e => !muerto(e) && paqueteCubre(e.pk, tipo || ""));
@@ -1197,8 +1210,8 @@ function atribuirPases(lista, paqMap, eventos, reprogTotal){
       });
     }
     let con = candidatos.find(e => restanteDe(e) > 0);
-    if (con){ marcar(con); return; }
-    if (candidatos.length){ marcar(candidatos[0]); return; }
+    if (con){ marcar(con, "cubre"); return; }
+    if (candidatos.length){ marcar(candidatos[0], "sinSaldo"); return; }
     /* ---- Último recurso: la clase se dictó sin NINGÚN plan que la cubriera ----
        Pasa de verdad: Maria Jose Tobar Basabe (Elevate) tomó 7 clases del 17 al 21 de agosto
        con sus dos planes ya vencidos (15 y 16). El consumo no se pierde, se le cobra a alguien.
@@ -1209,7 +1222,7 @@ function atribuirPases(lista, paqMap, eventos, reprogTotal){
        cubrirla), y a empate manda el orden original. Es estable: editar fechas ya no mueve
        nada de lo que ya pasó. */
     const vivo = est.find(e => !muerto(e));
-    if (vivo){ marcar(vivo); return; }
+    if (vivo){ marcar(vivo, "vivoNoCubre"); return; }
     /* 🔴 Primer intento (22-ago): "el que venció más tarde, o sea el que casi la cubrió".
        Sonaba mejor y NO servía: esa regla también mira `vence`, que es justo el campo que se
        está editando, así que al mover la fecha los números simplemente se invertían. La
@@ -1218,16 +1231,19 @@ function atribuirPases(lista, paqMap, eventos, reprogTotal){
        en la ficha. Es arbitrario, sí, pero no se mueve nunca, y este caso solo aparece cuando
        la academia dejó asistir a alguien sin plan vigente, que ya es una anomalía aparte. */
     const estable = est.slice().sort((a, b) => a.idx - b.idx)[0];
-    if (estable) marcar(estable);
+    /* Acá NINGÚN pase estaba vivo ese día. Decir "el único vivo" sería falso: es el caso de
+       Maria Jose, que tomó 7 clases con sus dos planes ya vencidos. */
+    if (estable) marcar(estable, "ninguno");
   };
-  for (const ev of eventos) cobrar(ev.tipo, !!ev.futuro, ev.cuando);
+  for (const ev of eventos) cobrar(ev.tipo, !!ev.futuro, ev.cuando, true);
   const permitidas = est.reduce((s, e) => s + (e.pk.reprog || 0), 0);
   const exceso = Math.max(0, (Number(reprogTotal) || 0) - permitidas);
-  for (let i = 0; i < exceso; i++) cobrar("");
+  /* el exceso de reprogramaciones consume saldo pero NO es una clase: no entra en el detalle */
+  for (let i = 0; i < exceso; i++) cobrar("", false, "", false);
   for (const e of est){
     e.restantes = e.vencido ? 0 : (e.ilim ? 9999 : Math.max(0, (e.compradas || 0) - e.usadas));
   }
-  return { pases: est, reprogPermitidas: permitidas };
+  return { pases: est, reprogPermitidas: permitidas, cargos };
 }
 /* ¿Con qué puede reservar ESTE tipo de clase? Devuelve el detalle para dar el error justo. */
 function multiParaTipo(cm, tipo){
@@ -1284,6 +1300,17 @@ function saldoMostrado(c, modo){
    salía con 9 clases donde tiene 12, y Ekaterina Gamarra con 6 donde tiene 7.
    Compartido a propósito: que el octavo llamador no pueda nacer mutilado.
    Familia de `memoria: leccion-columna-nueva-no-llega-por-select-enumerado`. */
+/* Lo que el alumno tiene VIVO en la lista de espera: su turno, todavia sin dictarse.
+   Una clase que ya paso no es una espera, es historia. */
+/* 🔴 23-ago-2026 · el nombre con el que se le enseña un alumno a una PERSONA que tiene que
+   elegir entre varios. Iba suelto en cada consulta y por eso quedó a medias: la agenda del
+   panel se arregló el 14-ago (José: «19 nombres repetidos entre 39 personas»), pero la de la
+   API/MCP, la lista de invitaciones y el resumen de pagos siguieron con el nombre pelado.
+   Elevate tiene 27 «Andrea», 20 «Claudia» y 17 «Fiorella», y 38 alumnas de la agenda del
+   último mes se confunden con otra. Una expresión, un sitio. */
+const SQL_NOMBRE_COMPLETO = a => "TRIM(COALESCE(" + a + ".nombre,'') || ' ' || COALESCE(" + a + ".apellido,''))";
+const SQL_ESPERA_MIA = "WHERE tenant_id = ?1 AND alumno_id = ?2 AND estado IN ('esperando','avisado') " +
+  "AND inicio_utc > ?3 ORDER BY inicio_utc ASC";
 const SQL_REGS_CICLO = "SELECT estado, fecha, COALESCE(curso,'') AS curso FROM registro " +
   "WHERE tenant_id = ?1 AND alumno_id = ?2 AND COALESCE(ciclo,1) = ?3";
 
@@ -1454,6 +1481,9 @@ async function computeMulti(env, tid, alumno, paqMap, precios, excluirReservaId,
       noExiste: !!e.noExiste,
       /* clases cobradas a este pase por encima de su capacidad: sin esto se perdían */
       sobreconsumo: e.ilim ? 0 : Math.max(0, (e.usadas || 0) - (e.compradas || 0)) })),
+    /* De qué pase salió cada clase. Va SOLO en el multi-pase: con un solo plan la respuesta
+       es obvia y ensuciaría la pantalla del 99% (en Elevate son 16 de 1.447 alumnas). */
+    cargos: at.cargos || [],
     compradas, ilim: false, usadas: usadasTot, sobreconsumo,
     bonus: bonusM,
     restantes,
@@ -1657,6 +1687,35 @@ function parseClases(valor){
     if (out.length >= CLASES_MAX) break;
   }
   return out;
+}
+/* ---------- El plan VIGENTE de un alumno (23-ago-2026) ----------
+   La ficha (`alumnos.paquete` y `alumnos.vence`) queda CONGELADA en la etiqueta y la fecha del
+   PRIMER plan: no se reescriben cuando el alumno compra otro pase. Medido contra Elevate:
+   **11 de sus 16 alumnos con varios pases tienen en la ficha una fecha que no es la de NINGUNO
+   de sus pases.** A Maria Jose el correo de "hace días que no vienes" le decía "acuérdate que
+   tu plan vence el 13 de noviembre" con sus DOS pases muertos desde el 15 y 16 de agosto.
+   Devuelve el nombre de los pases VIVOS y la fecha del que vence PRIMERO (el próximo plazo de
+   verdad). Sin pases vivos cae a la ficha, que es exactamente lo que había. */
+function planVigenteDe(cm, alumno){
+  const todos = (cm && cm.pases) || [];
+  /* Acepta las dos formas de lista de pases que hay en el worker: la de `computeMulti`, que
+     ya trae `vencido` resuelto, y la cruda de `pasesDe()`, que solo trae la fecha. La regla de
+     "¿ya venció?" es la misma de siempre (`venceVencido`), no una copia. */
+  const muerto = (p) => (typeof p.vencido === "boolean") ? p.vencido : !!(p.vence && venceVencido(p.vence));
+  const vivos = todos.filter(p => p && !muerto(p));
+  const orden = (arr) => arr.filter(p => p.vence).sort((x, y) => (x.vence < y.vence ? -1 : 1));
+  if (vivos.length){
+    const conFecha = orden(vivos);
+    return { nombre: vivos.map(p => p.n).join(" + "), vence: conFecha.length ? conFecha[0].vence : "" };
+  }
+  /* Tiene pases pero TODOS vencidos: la fecha honesta es la del último que murió, no la de la
+     ficha. A Maria Jose la ficha le pone noviembre y sus dos pases murieron en agosto. */
+  if (todos.length){
+    const conFecha = orden(todos);
+    return { nombre: todos.map(p => p.n).join(" + "),
+             vence: conFecha.length ? conFecha[conFecha.length - 1].vence : "" };
+  }
+  return { nombre: (alumno && alumno.paquete) || "", vence: (alumno && alumno.vence) || "" };
 }
 function clasesDeCfg(cfg){ return parseClases(cfg && cfg.clases); }
 /* Reglas de reserva efectivas para una etiqueta de franja: manda lo de la categoria si el
@@ -3169,7 +3228,7 @@ async function ensureWaUsoSchema(env){
 function waPlanEfectivo(tW){ const p = (tW && tW.plan) || ""; return (!p || (tW && tW.estado) === "vencido") ? "gratis" : p; }
 /* Packs (20-ago-2026): TODO periodo es mensual. Las 5 de la base y las compradas se
    resetean el 1 de cada mes; ya no existe la bolsa "de por vida" del plan gratis viejo. */
-function waPeriodo(){ return mesActualUTC(); }
+function waPeriodo(){ return mesLima(); }
 /* Es conversacion NUEVA (nueva ventana de 24h)? Solo las nuevas consumen cupo; las
    continuaciones dentro de las 24h no. Se mide con wa_conv.actualizado (aun no reescrito). */
 async function waEsNuevaConversacion(env, tenantId, telefono){
@@ -3325,7 +3384,7 @@ async function negocioLeadUpsert(env, negId, from, nombre, texto){
    Atomico (usados < cap en el WHERE). Fail-open ante error de DB. */
 async function negocioConsumirConv(env, negId, cap){
   await ensureWaUsoSchema(env);
-  const tid = "neg:" + negId, periodo = mesActualUTC(), ahora = new Date().toISOString(), tope = Number(cap) > 0 ? Number(cap) : 1000;
+  const tid = "neg:" + negId, periodo = mesLima(), ahora = new Date().toISOString(), tope = Number(cap) > 0 ? Number(cap) : 1000;
   try {
     await env.DB.prepare("INSERT OR IGNORE INTO wa_uso (tenant_id, periodo, usados, actualizado) VALUES (?1, ?2, 0, ?3)").bind(tid, periodo, ahora).run();
     const r = await env.DB.prepare("UPDATE wa_uso SET usados = usados + 1, actualizado = ?4 WHERE tenant_id = ?1 AND periodo = ?2 AND usados < ?3").bind(tid, periodo, tope, ahora).run();
@@ -3527,6 +3586,12 @@ const ONBOARDING_LIMITE_ADMIN_90D = 30;        // idem, tenant con mas de 90 dia
 const ONBOARDING_LIMITE_ALUMNO = 15;           // mensajes/mes por cuenta de alumno
 const ONBOARDING_LIMITE_ALUMNOS_TENANT = 150;  // techo mensual de TODOS los alumnos de un tenant
 function mesActualUTC(){ return new Date().toISOString().slice(0, 7); }
+/* El mes de LIMA. Los TOPES QUE VIVE UN CLIENTE ("5 conversaciones al mes") se cuentan en su
+   mes, no en el de Greenwich: con el mes UTC, entre las 19:00 y medianoche del último día el
+   cupo se reseteaba 5 horas antes de tiempo. Es la misma corrección que ya se hizo en la caja,
+   que agrupa por `hoyLima().slice(0,7)`. Los LIBROS (comisiones, pagos de MP) siguen en UTC a
+   propósito: son registros, no cupos, y moverlos reescribiría historia. */
+function mesLima(){ return hoyLima().slice(0, 7); }
 /* Paquetes de mensajes EXTRA del soporte IA (precios de Andres, 14-jul-2026): 30->S/5,
    60->S/10, 120->S/15. Dos vias de venta: self-service en el chat del panel (checkout MP
    de pago unico, tabla packs_compras) o manual por WhatsApp (su/mensajes-pack). Se
@@ -3645,6 +3710,18 @@ async function confirmarAnualCompra(env, compraId, paymentId){
    Alta manual via su/afiliado; los tenants que comparten su slug se auto-registran como
    afiliados al traer su primer referido. */
 const AFILIADO_COMISION = 0.30;
+/* 🔴 22-ago-2026 · lo que ESE tenant paga al mes, de verdad. El 21-ago se arregló acá abajo
+   (`otorgarComision`) porque con el modelo de packs el plan es 'base' y `PLANES` no lo tiene,
+   así que daba 0 y el afiliado se quedaba sin comisión en silencio. El mismo `PLANES[plan]`
+   seguía vivo en las DOS funciones hermanas: `aplicarCreditosAfiliados` (que por eso NUNCA
+   pagaba a un afiliado-tenant: precio 0 → `continue`) y `liquidarCreditoAfiliado`, que le
+   restaura el precio a su cobro de MercadoPago — o sea que ahí el número equivocado le cambia
+   lo que se le cobra. Una regla, un sitio. */
+async function montoMensualTenant(env, tenant){
+  if (!tenant) return 0;
+  try { const m = Number((await packsDe(env, tenant.id)).monto) || 0; if (m > 0) return m; } catch (e) {}
+  return Number(PLANES[tenant.plan]) || 0;   // tenants legacy sin migrar
+}
 const AFILIADO_TOPE_MESES = 12;
 const AFILIADO_PAYOUT_MIN = 50; // S/. saldo minimo para disparar payout (evita micropagos)
 let AFILIADOS_OK = false;
@@ -3677,6 +3754,21 @@ async function ensureAfiliadosSchema(env){
   } catch (e) {}
 }
 function normRefCode(s){ return String(s || "").trim().toLowerCase().replace(/[^a-z0-9-]/g, "").slice(0, 60); }
+/* De donde sale el codigo de afiliado de un registro: lo explicito (?ref= / body.ref) y si no
+   la cookie `batuta_ref` (60 dias) que siembra cualquier pagina de batuta.lat.
+   🐛 23-ago-2026: esto vivia SUELTO dentro del registro por correo. Batuta tiene DOS puertas
+   (correo y "Registrarme con Google") y la de Google nacio sin ello: el referido entraba, la
+   academia se creaba y la comision del afiliado (30% x 12 meses) se perdia en silencio. La
+   atribucion es INMUTABLE, asi que despues no habia forma de recuperarla.
+   El decodeURIComponent va protegido: una cookie con un `%` suelto tiraba 500 en el registro. */
+function refDePeticion(request, explicito){
+  let code = normRefCode(explicito);
+  if (!code){
+    const m = /(?:^|;\s*)batuta_ref=([^;]+)/.exec((request && request.headers && request.headers.get("cookie")) || "");
+    if (m){ try { code = normRefCode(decodeURIComponent(m[1])); } catch (e) { code = normRefCode(m[1]); } }
+  }
+  return code;
+}
 async function afiliadoPorCodigo(env, codigo){
   const c = normRefCode(codigo);
   if (!c) return null;
@@ -3735,10 +3827,7 @@ async function otorgarComision(env, tenant, pago, mpPaymentId){
        silencio. Ahora, si MP no mandó el monto en el webhook, se usa lo que ese tenant paga
        de packs, que es exactamente su mensualidad. */
     let base = Number((pago && (pago.transaction_amount || (pago.payment && pago.payment.transaction_amount))) || 0);
-    if (!(base > 0)){
-      try { base = (await packsDe(env, tenant.id)).monto || 0; } catch (e) { base = 0; }
-      if (!(base > 0)) base = PLANES[tenant.plan] || 0;   // tenants legacy sin migrar
-    }
+    if (!(base > 0)) base = await montoMensualTenant(env, tenant);
     if (!(base > 0)) return null;
     const comision = Math.round(base * AFILIADO_COMISION * 100) / 100;
     const pagoRealId = String((pago && pago.payment && pago.payment.id) || "");
@@ -3788,8 +3877,8 @@ async function aplicarCreditosAfiliados(env){
       if (saldo < AFILIADO_PAYOUT_MIN) continue;
       const t = await env.DB.prepare("SELECT * FROM tenants WHERE id = ?1").bind(af.tenant_id).first();
       if (!t || t.estado !== "activo" || t.mp_sub_status !== "authorized" || !t.mp_preapproval_id) continue;
-      const precio = PLANES[t.plan] || 0;
-      if (!(precio > 0)) continue; // gratis/por_alumno/anual: no hay cobro fijo que descontar (queda en saldo)
+      const precio = await montoMensualTenant(env, t);
+      if (!(precio > 0)) continue; // no paga nada este mes: no hay cobro que descontar (queda en saldo)
       const aplicable = Math.min(saldo, precio - 1); // MP no acepta monto 0: siempre queda >= S/1
       if (!(aplicable > 0)) continue;
       const up = await mpFetch(env, "/preapproval/" + encodeURIComponent(t.mp_preapproval_id), {
@@ -3818,7 +3907,7 @@ async function liquidarCreditoAfiliado(env, tenant){
       "INSERT INTO comisiones (id, codigo, tenant_id, tipo, mes, monto, fecha) VALUES (?1,?2,?3,'payout_credito',?4,?5,?6)"
     ).bind(crypto.randomUUID(), af.codigo, tenant.id, mesActualUTC(), -usado, new Date().toISOString()).run();
     await env.DB.prepare("UPDATE afiliados SET descuento_pen = 0 WHERE codigo = ?1").bind(af.codigo).run();
-    const precio = PLANES[tenant.plan] || 0;
+    const precio = await montoMensualTenant(env, tenant);
     if (precio > 0 && tenant.mp_preapproval_id && env.MP_ACCESS_TOKEN){
       const up = await mpFetch(env, "/preapproval/" + encodeURIComponent(tenant.mp_preapproval_id), {
         method: "PUT", body: { auto_recurring: { transaction_amount: precio, currency_id: "PEN" } }
@@ -4616,34 +4705,155 @@ async function generarSlots(env, tenantId, prof){
   return (await generarSlotsDetalle(env, tenantId, prof)).slots;
 }
 
+/* ¿Este alumno puede TOMAR de verdad la clase que se liberó? Vive aparte porque la preguntan
+   los DOS caminos de `promoverEspera`: el automático (que reserva) y el aviso clásico (que
+   antes no la preguntaba y le escribía a cualquiera). Devuelve además lo ya calculado, para
+   que el que reserva no lo vuelva a pedir. */
+async function esperaElegible(env, tenantId, alumnoId, iso, sala){
+  const no = m => ({ ok: false, motivo: m });
+  const alE = await env.DB.prepare("SELECT * FROM alumnos WHERE id = ?1 AND tenant_id = ?2").bind(alumnoId, tenantId).first();
+  if (!alE) return no("sin ficha");
+  const paqMapPE = (await loadPaquetes(env, tenantId)).map;
+  const pasesPE = pasesDe(alE);
+  const pkE = pasesPE ? pkUnionPases(pasesPE, paqMapPE) : resolverPk(paqMapPE, alE.paquete);
+  /* con varios pases el vencimiento es POR PASE (lo resuelve computeMulti); el vence de
+     la ficha es solo el espejo del principal y no puede vetar a los demás pases */
+  if (!pkE || Number(alE.caducado) || (!pasesPE && venceVencido(alE.vence))) return no("plan vencido o caducado");
+  const cicloE = Number(alE.ciclo) || 1;
+  const { results: regsE } = await env.DB.prepare(SQL_REGS_CICLO).bind(tenantId, alE.id, cicloE).all();
+  const rUsE = await reservasUsadasCount(env, tenantId, alE.id, cicloE);
+  const preciosE = await loadPrecios(env, tenantId);
+  const cmE = pasesPE ? await computeMulti(env, tenantId, alE, paqMapPE, preciosE) : null;
+  const restE = cmE ? cmE.restantes : compute(alE, regsE || [], preciosE, rUsE, pkE).restantes;
+  const profE = await profeDeAlumno(env, tenantId, alE);
+  const { franja: frE, ambigua: ambE } = await resolverFranja(env, tenantId, iso, profE, String(sala || ""));
+  if (!frE || ambE) return no("no encuentro esa clase");
+  const yaE = await env.DB.prepare(
+    "SELECT 1 AS ok FROM reservas WHERE tenant_id = ?1 AND inicio_utc = ?2 AND alumno_id = ?3 AND estado IN ('reservada','completada')"
+  ).bind(tenantId, iso, alE.id).first();
+  if (yaE) return no("ya la tiene reservada");
+  const cubreE = cmE ? multiParaTipo(cmE, frE.curso || "").ok : paqueteCubre(pkE, frE.curso || "");
+  if (!cubreE) return no("su plan no cubre esa clase");
+  if (!(restE >= 1)) return no("no le quedan clases");
+  return { ok: true, alE, pkE, cmE, cicloE, profE, frE, salaE: frE.sala || "" };
+}
+/* ---- El cron de la re-oferta (23-ago-2026) ----
+   Recorre lo avisado hace más de la ventana y lo devuelve a la cola para que le toque a la
+   siguiente. Es barato a propósito: UNA consulta indexada por `estado`, tope por corrida, y
+   de noche ni se molesta en mirar. Si la avisada YA reservó, la fila se cierra como convertida
+   en vez de re-ofrecerse (red de seguridad: hay caminos de reserva que no la marcan). */
+async function reofrecerEsperas(env){
+  let hechas = 0;
+  try {
+    await ensureErpSchema(env);
+    if (!esperaEnHorario()) return 0;
+    const ahoraIso = new Date().toISOString();
+    const corte = new Date(Date.now() - ESPERA_VENTANA_MIN * 60000).toISOString();
+    /* `avisado_utc` vacío entra a propósito: son filas de antes de que existiera el sello y
+       están atascadas desde siempre; tratarlas como vencidas es lo único que las libera. */
+    const { results } = await env.DB.prepare(
+      "SELECT id, tenant_id, alumno_id, inicio_utc, COALESCE(sala,'') AS sala FROM espera " +
+      "WHERE estado = 'avisado' AND inicio_utc > ?1 AND COALESCE(avisado_utc,'') <= ?2 " +
+      "ORDER BY inicio_utc ASC LIMIT 20"
+    ).bind(ahoraIso, corte).all();
+    for (const e of (results || [])){
+      if (hechas >= 10) break;
+      try {
+        const ya = await env.DB.prepare(
+          "SELECT 1 AS ok FROM reservas WHERE tenant_id = ?1 AND alumno_id = ?2 AND inicio_utc = ?3 AND estado IN ('reservada','completada') LIMIT 1"
+        ).bind(e.tenant_id, e.alumno_id, e.inicio_utc).first();
+        if (ya){
+          await env.DB.prepare("UPDATE espera SET estado = 'convertida' WHERE id = ?1 AND tenant_id = ?2 AND estado = 'avisado'")
+            .bind(e.id, e.tenant_id).run();
+          continue;
+        }
+        /* se reclama el turno dentro del UPDATE: dos corridas a la vez no re-ofrecen dos veces */
+        const r = await env.DB.prepare(
+          "UPDATE espera SET estado = 'esperando', ofertas = COALESCE(ofertas,0) + 1 WHERE id = ?1 AND tenant_id = ?2 AND estado = 'avisado'"
+        ).bind(e.id, e.tenant_id).run();
+        if (!(r && r.meta && (r.meta.changes ?? 0))) continue;
+        await promoverEspera(env, e.tenant_id, e.inicio_utc, e.sala, { reoferta: true });
+        hechas++;
+      } catch (e2) { console.error("reofrecer una espera", e.id, e2); }
+    }
+  } catch (e) { console.error("reofrecer esperas", e); }
+  return hechas;
+}
+
 /* Lista de espera: al liberarse un cupo en <iso> (una cancelacion), avisa al PRIMERO en la cola
    de ese slot (orden de llegada). NO auto-reserva (evita liar creditos/consentimiento): avisa por
    correo + push y el alumno entra a reservar. Marca 'avisado' para no re-spamear ni saltar la fila.
    Best-effort total: cualquier fallo se traga, jamas rompe la cancelacion que lo dispara. */
-async function promoverEspera(env, tenantId, iso, sala){
+/* ---- Re-ofrecer el cupo que nadie tomó (23-ago-2026) ----
+   Hasta hoy `avisado` era un estado sin salida: si la avisada no entraba a reservar, el cupo
+   moría con ella y nadie más se enteraba. Ahora, pasada la ventana, vuelve a la cola y le toca
+   a la siguiente.
+   Los tres topes NO son decoración: esto manda correos a alumnas de verdad.
+     · VENTANA  — cuánto tiene para entrar antes de que le toque a otra
+     · CADA_H   — a UNA MISMA alumna no se le escribe más seguido que esto, contando TODAS sus
+                  filas: sin esto, quien está en 6 listas de espera recibe 6 correos de golpe
+     · TURNOS   — techo duro por fila, para que una cola de una sola persona no sea un bucle
+     · HORAS    — de noche no se le escribe a nadie */
+const ESPERA_VENTANA_MIN = 30;
+const ESPERA_CADA_H = 2;
+const ESPERA_TURNOS_MAX = 3;
+const ESPERA_HORA_DESDE = 8, ESPERA_HORA_HASTA = 21;
+function esperaEnHorario(){ const h = limaParts(new Date()).h; return h >= ESPERA_HORA_DESDE && h < ESPERA_HORA_HASTA; }
+/* ¿A esta alumna se le escribió hace poco, por CUALQUIER slot? */
+async function esperaAvisadaHacePoco(env, tenantId, alumnoId){
+  try {
+    const corte = new Date(Date.now() - ESPERA_CADA_H * 3600000).toISOString();
+    const r = await env.DB.prepare(
+      "SELECT 1 AS ok FROM espera WHERE tenant_id = ?1 AND alumno_id = ?2 AND COALESCE(avisado_utc,'') > ?3 LIMIT 1"
+    ).bind(tenantId, alumnoId, corte).first();
+    return !!r;
+  } catch (e) { return false; }
+}
+async function promoverEspera(env, tenantId, iso, sala, opciones){
   try {
     /* Con salas, el cupo liberado es DE UNA SALA: se avisa al primero de la cola de esa sala
        (las esperas legacy sin sala cuentan para cualquiera). Fallback si la columna no existe. */
-    let row = null;
+    let cola = null;
     try {
-      row = await env.DB.prepare(
-        "SELECT e.id AS eid, e.alumno_id, c.id AS cuenta_id, c.email AS email, c.nombre AS nombre " +
+      cola = (await env.DB.prepare(
+        "SELECT e.id AS eid, e.alumno_id, COALESCE(e.ofertas,0) AS ofertas, COALESCE(e.avisado_utc,'') AS avisado_utc, " +
+        "c.id AS cuenta_id, c.email AS email, c.nombre AS nombre " +
         "FROM espera e JOIN cuentas c ON c.alumno_id = e.alumno_id AND c.tenant_id = e.tenant_id " +
         "WHERE e.tenant_id = ?1 AND e.inicio_utc = ?2 AND e.estado = 'esperando' " +
-        "AND (COALESCE(e.sala,'') = ?3 OR COALESCE(e.sala,'') = '') ORDER BY e.creado ASC LIMIT 1"
-      ).bind(tenantId, iso, String(sala || "")).first();
+        "AND (COALESCE(e.sala,'') = ?3 OR COALESCE(e.sala,'') = '') ORDER BY e.creado ASC LIMIT 12"
+      ).bind(tenantId, iso, String(sala || "")).all()).results;
     } catch (e) {
-      row = await env.DB.prepare(
+      cola = (await env.DB.prepare(
         "SELECT e.id AS eid, e.alumno_id, c.id AS cuenta_id, c.email AS email, c.nombre AS nombre " +
         "FROM espera e JOIN cuentas c ON c.alumno_id = e.alumno_id AND c.tenant_id = e.tenant_id " +
-        "WHERE e.tenant_id = ?1 AND e.inicio_utc = ?2 AND e.estado = 'esperando' ORDER BY e.creado ASC LIMIT 1"
-      ).bind(tenantId, iso).first();
+        "WHERE e.tenant_id = ?1 AND e.inicio_utc = ?2 AND e.estado = 'esperando' ORDER BY e.creado ASC LIMIT 12"
+      ).bind(tenantId, iso).all()).results;
     }
-    if (!row) return;
+    if (!cola || !cola.length) return;
+    /* ⚠️ El tope de turnos y el orden por turnos aplican SOLO a la re-oferta del cron. Una
+       CANCELACIÓN de verdad conserva el orden de llegada de siempre: si no, alguien a quien se
+       le pasaron tres turnos de madrugada quedaría excluida en silencio del cupo real de las
+       8am, y quien se apuntó hace 5 minutos pasaría por delante de quien lleva una semana. */
+    const esReoferta = !!(opciones && opciones.reoferta);
+    if (esReoferta){
+      cola = cola.filter(r => (Number(r.ofertas) || 0) < ESPERA_TURNOS_MAX);
+      cola.sort((x, y) => (Number(x.ofertas) || 0) - (Number(y.ofertas) || 0));
+      if (!cola.length) return;
+    }
     const tenant = await env.DB.prepare("SELECT academia, slug FROM tenants WHERE id = ?1").bind(tenantId).first().catch(() => null);
     const cuando = fmtLima(iso);
-    const primer = (row.nombre || "").split(" ")[0] || "Hola";
     const cfgEsp = await loadConfig(env, tenantId).catch(() => ({}));
+
+  /* 🔴 22-ago-2026 · antes se tomaba SOLO al primero de la cola y se le avisaba sin mirar si
+     podía tomar la clase. Dos daños encadenados: al que está en cero se le decía "se liberó un
+     cupo, resérvalo antes de que lo tomen" y no podía; y al marcarlo 'avisado' salía de la cola
+     PARA SIEMPRE —nadie vuelve a ponerlo en 'esperando'— así que el cupo no se le ofrecía al
+     siguiente y moría ahí. Ahora se recorre la cola en orden de llegada y se avisa al primero
+     que de verdad pueda tomarla. */
+  for (const row of cola){
+    const primer = (row.nombre || "").split(" ")[0] || "Hola";
+    const elE = await esperaElegible(env, tenantId, row.alumno_id, iso, sala).catch(() => ({ ok: false }));
+    if (!elE.ok) continue;
 
     /* Modo AUTOMÁTICO (7-ago-2026, reunión Elevate; config espera_auto="1"): en vez de solo
        avisar, se le RESERVA el cupo al primero de la cola y se le avisa que quedó dentro.
@@ -4651,29 +4861,9 @@ async function promoverEspera(env, tenantId, iso, sala){
        aviso clásico de siempre. Best-effort igual que el resto de la función. */
     if (String(cfgEsp.espera_auto || "") === "1" && Date.parse(iso) > Date.now()){
       try {
-        const alE = await env.DB.prepare("SELECT * FROM alumnos WHERE id = ?1 AND tenant_id = ?2").bind(row.alumno_id, tenantId).first();
-        const paqMapPE = alE ? (await loadPaquetes(env, tenantId)).map : null;
-        const pasesPE = alE ? pasesDe(alE) : null;
-        const pkE = alE ? (pasesPE ? pkUnionPases(pasesPE, paqMapPE) : resolverPk(paqMapPE, alE.paquete)) : null;
-        /* con varios pases el vencimiento es POR PASE (lo resuelve computeMulti); el vence de
-           la ficha es solo el espejo del principal y no puede vetar a los demás pases */
-        const vivo = alE && pkE && !Number(alE.caducado) && (pasesPE ? true : !venceVencido(alE.vence));
-        if (vivo){
-          const cicloE = Number(alE.ciclo) || 1;
-          const { results: regsE } = await env.DB.prepare(
-            SQL_REGS_CICLO
-          ).bind(tenantId, alE.id, cicloE).all();
-          const rUsE = await reservasUsadasCount(env, tenantId, alE.id, cicloE);
-          const cmE = pasesPE ? await computeMulti(env, tenantId, alE, paqMapPE, await loadPrecios(env, tenantId)) : null;
-          const restE = cmE ? cmE.restantes : compute(alE, regsE || [], await loadPrecios(env, tenantId), rUsE, pkE).restantes;
-          const profE = await profeDeAlumno(env, tenantId, alE);
-          const { franja: frE, ambigua: ambE } = await resolverFranja(env, tenantId, iso, profE, String(sala || ""));
-          const yaE = await env.DB.prepare(
-            "SELECT 1 AS ok FROM reservas WHERE tenant_id = ?1 AND inicio_utc = ?2 AND alumno_id = ?3 AND estado IN ('reservada','completada')"
-          ).bind(tenantId, iso, alE.id).first();
-          const cubreE = cmE ? (frE ? multiParaTipo(cmE, frE.curso || "").ok : false) : (frE ? paqueteCubre(pkE, frE.curso || "") : false);
-          if (restE >= 1 && frE && !ambE && !yaE && cubreE){
-            const salaE = frE.sala || "";
+        {
+          const { alE, cicloE, profE, frE, salaE } = elE;
+          {
             const cupoE = await cupoDeSlot(env, tenantId, iso, profE, cfgEsp, salaE);
             const ocE = await ocupacionSlot(env, tenantId, iso, profE, salaE);
             if (!ocE.bloqueado && ocE.n < cupoE){
@@ -4709,21 +4899,49 @@ async function promoverEspera(env, tenantId, iso, sala){
       } catch (e) {}
     }
 
-    await env.DB.prepare("UPDATE espera SET estado = 'avisado', avisado_utc = ?1 WHERE id = ?2 AND tenant_id = ?3")
-      .bind(new Date().toISOString(), row.eid, tenantId).run();
+    /* 🔴 23-ago-2026 · el aviso clásico NUNCA miraba la ocupación. Hoy no dolía porque el único
+       disparador era una cancelación (el cupo acababa de liberarse por construcción), pero la
+       re-oferta por reloj rompe ese invariante: entre el aviso y los 30 minutos, cualquiera
+       pudo tomar el cupo desde el portal. Se comprueba con la franja y el profesor de LA
+       PERSONA a la que se le va a escribir, no con los de otra. */
+    if (Date.parse(iso) > Date.now()){
+      try {
+        const cupoV = await cupoDeSlot(env, tenantId, iso, elE.profE, cfgEsp, elE.salaE);
+        const ocV = await ocupacionSlot(env, tenantId, iso, elE.profE, elE.salaE);
+        if (ocV.bloqueado || ocV.n >= cupoV) return;   // ya no hay cupo: no se le miente a nadie
+      } catch (e) { /* si no se puede verificar, se sigue como siempre */ }
+    }
+    /* De noche no se escribe, y a la misma alumna no más de una vez cada ESPERA_CADA_H —
+       contando TODAS sus filas: quien está en 6 listas no puede recibir 6 correos de golpe. */
+    if (esReoferta){
+      if (!esperaEnHorario()) return;
+      if (await esperaAvisadaHacePoco(env, tenantId, row.alumno_id)) continue;
+    }
+    /* se reclama DENTRO del UPDATE: si dos corridas coinciden, solo una avisa */
+    const marcaE = await env.DB.prepare(
+      "UPDATE espera SET estado = 'avisado', avisado_utc = ?1 WHERE id = ?2 AND tenant_id = ?3 AND estado = 'esperando'"
+    ).bind(new Date().toISOString(), row.eid, tenantId).run().catch(() => null);
+    if (!(marcaE && marcaE.meta && (marcaE.meta.changes ?? 0))) continue;
     if (row.email && env.RESEND_API_KEY && tenant){
       const link = "https://batuta.lat/app/a/" + (tenant.slug || "");
       try {
         const msgsE = mensajesDeCfg(await loadConfig(env, tenantId).catch(() => ({})));
         const datosE = { alumno: primer, academia: tenant.academia || "tu academia", fecha: cuando, curso: "", curso_de: "", con_profe: "", vence_frase: "" };
+        /* El plazo se añade ACÁ y no en la plantilla: `mensajesDeCfg` deja que la academia
+           reescriba el cuerpo, y si el reloj viviera ahí, quien personalizó su texto mandaría
+           un correo sin decir que hay cronómetro. Si el aviso es real, no puede ser opcional. */
+        const pieE = '<p style="font-size:13px;opacity:.75;">Tienes unos ' + ESPERA_VENTANA_MIN +
+          ' minutos para reservarlo. Pasado ese rato le toca a la siguiente de la lista.</p>';
         await enviarCorreo(env, { tenantId: tenantId,
           to: row.email,
           subject: msgAsunto(msgsE.espera.asunto, datosE),
-          html: msgHtml(msgsE.espera.cuerpo, datosE, { url: link, texto: "Reservar ahora" })
+          html: msgHtml(msgsE.espera.cuerpo, datosE, { url: link, texto: "Reservar ahora" }) + pieE
         });
       } catch (e) {}
     }
     try { await avisarPushAlumno(env, tenantId, row.cuenta_id, { title: "Se liberó tu horario", body: "Cupo libre el " + cuando + ". Reserva antes de que lo tomen.", url: tenant ? ("https://batuta.lat/app/a/" + (tenant.slug || "")) : "" }); } catch (e) {}
+    return;   /* avisado el primero que puede: la cola se detiene acá */
+  }
   } catch (e) {}
 }
 
@@ -4810,7 +5028,7 @@ function paginaRegistro(googleOn){
     "try{if(!refc){var mck=/(?:^|;\\s*)batuta_ref=([^;]+)/.exec(document.cookie);if(mck){refc=decodeURIComponent(mck[1]);}}}catch(e){}" +
     "try{if(refc){sessionStorage.setItem('batuta_ref',refc);document.cookie='batuta_ref='+encodeURIComponent(refc)+';max-age=5184000;path=/;samesite=lax';}else{refc=sessionStorage.getItem('batuta_ref')||'';}}catch(e){}" +
     "var planReg='';try{planReg=(new URLSearchParams(location.search).get('plan')||'');}catch(e){}" +
-    "if(planReg==='gratis'){try{var pill=document.querySelector('.pill');if(pill)pill.textContent='Plan Gratis: 1 profesor, hasta 15 alumnos, para siempre';var sub=document.querySelector('.sub');if(sub)sub.textContent='Sin tarjeta y sin fecha de vencimiento. Cuando crezcas, subes de plan.';var bt=document.querySelector('#f button[type=submit]');if(bt)bt.textContent='Crear mi cuenta gratis';}catch(e){}}" +
+    "if(planReg==='gratis'){try{var pill=document.querySelector('.pill');if(pill)pill.textContent='Batuta gratis: " + BASE_LIMITES.profes + " profesor, hasta " + BASE_LIMITES.alumnos + " alumnos, para siempre';var sub=document.querySelector('.sub');if(sub)sub.textContent='Sin tarjeta y sin fecha de vencimiento. Cuando crezcas, subes de plan.';var bt=document.querySelector('#f button[type=submit]');if(bt)bt.textContent='Crear mi cuenta gratis';}catch(e){}}" +
     // Rescate de registros abandonados: email valido tecleado + se va sin terminar el submit
     // -> sendBeacon lo guarda como lead. regEnviado (flag del submit) evita disparar en el flujo feliz.
     "var regEnviado=false;var abandonoEmail='';" +
@@ -4843,7 +5061,13 @@ function paginaRegistro(googleOn){
     "var d=await r.json();" +
     "if(!r.ok){err.textContent=d.error||'No se pudo crear tu cuenta.'; btn.disabled=false; regEnviado=false; return;}" +
     "localStorage.setItem('batuta_t', d.token);" +
-    "location.href=(d.plan==='gratis')?'/app/panel':'/app/suscribir';" +
+    /* 🐛 23-ago-2026: esto decia (d.plan==='gratis')?'/app/panel':'/app/suscribir'. Con packs
+       (20-ago) el servidor pasó a responder plan:"base", así que la condición era SIEMPRE falsa
+       y toda academia recién creada aterrizaba en la página de comprar packs — después de darle
+       a "Empezar gratis" en una página que promete "sin tarjeta". La puerta de Google sí entra
+       al panel (irCon(token,"/app/panel")): las dos puertas tienen que llevar al mismo sitio.
+       Ya no hay checkout en el alta: siempre al panel. */
+    "location.href='/app/panel';" +
     "}catch(ex){err.textContent='Error de conexion. Intenta de nuevo.'; btn.disabled=false; regEnviado=false;}" +
     "});";
   return paginaBase("Crea tu academia — Batuta", cuerpo, script);
@@ -5400,10 +5624,15 @@ async function ensureMultiprofesorSchema(env){
   } catch (e) {}
   try { await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_profesores_tenant ON profesores (tenant_id)").run(); } catch (e) {}
   try { await env.DB.prepare("CREATE UNIQUE INDEX IF NOT EXISTS idx_profesores_email ON profesores (tenant_id, email)").run(); } catch (e) {}
+  /* `registro` se suma el 23-ago-2026: la bitácora no guardaba QUIÉN DICTÓ, así que la
+     liquidación le acreditaba la clase al profesor ASIGNADO al alumno. Con David dando la
+     clase de una alumna de Fiorella, cobraba Fiorella. Va con default '' (no NULL) porque
+     el lector distingue "no lo sé" de "lo dictó nadie" con NULLIF(...,''). */
   // Columnas profesor_id (nullable) en las tablas que se scopean por profesor.
   for (const tabla of ["alumnos", "reservas", "disponibilidad", "grupos", "compras"]){
     try { await env.DB.prepare("ALTER TABLE " + tabla + " ADD COLUMN profesor_id TEXT DEFAULT NULL").run(); } catch (e) { /* ya existe */ }
   }
+  try { await env.DB.prepare("ALTER TABLE registro ADD COLUMN profesor_id TEXT DEFAULT ''").run(); } catch (e) { /* ya existe */ }
 }
 
 /* Backfill idempotente: por cada tenant sin dueño, crea 1 profesor rol='dueno' copiando
@@ -5504,6 +5733,10 @@ async function ensureErpSchema(env){
   } catch (e) {}
   try { await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_espera_slot ON espera (tenant_id, inicio_utc, estado)").run(); } catch (e) {}
   try { await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_espera_alumno ON espera (tenant_id, alumno_id, estado)").run(); } catch (e) {}
+  /* Re-oferta del cupo (23-ago-2026): `ofertas` = cuántos turnos se le han dado a ESA fila.
+     El índice por estado es para que el cron barra sin recorrer la tabla entera. */
+  try { await env.DB.prepare("ALTER TABLE espera ADD COLUMN ofertas INTEGER DEFAULT 0").run(); } catch (e) { /* ya existe */ }
+  try { await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_espera_estado ON espera (estado, inicio_utc)").run(); } catch (e) {}
   try {
     await env.DB.prepare(
       "CREATE TABLE IF NOT EXISTS gastos (id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, fecha TEXT DEFAULT '', concepto TEXT NOT NULL, categoria TEXT DEFAULT '', monto REAL DEFAULT 0, creado TEXT DEFAULT '')"
@@ -5751,6 +5984,9 @@ async function ensureInvitacionesSchema(env){
     ).run();
   } catch (e) {}
   try { await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_invitaciones_alumno ON invitaciones (tenant_id, alumno_id)").run(); } catch (e) {}
+  /* Por si la tabla se creó antes de que existiera la columna: sin esto el UPDATE de
+     "ya se usó" falla y el enlace queda eterno sin que nadie se entere. */
+  try { await env.DB.prepare("ALTER TABLE invitaciones ADD COLUMN usada_el TEXT DEFAULT ''").run(); } catch (e) { /* ya existe */ }
   /* invitado_el / invitado_canal = el registro de a quien YA se le aviso (lo que el dueno
      necesita ver para no repetirse). no_email = se dio de baja de los correos (Ley 29733). */
   for (const [c, tipo] of [["invitado_el", "TEXT DEFAULT ''"], ["invitado_canal", "TEXT DEFAULT ''"], ["no_email", "INTEGER DEFAULT 0"]]){
@@ -6019,7 +6255,12 @@ async function tipoDeSlot(env, tenantId, iso, prof, sala){
    La demo y los tenants vencidos jamas mandan. Sin RESEND_API_KEY degrada mudo. */
 function fmtLima(iso){
   const p = limaParts(new Date(Date.parse(iso)));
-  return DIAS_FIJO[p.dow] + " " + String(p.d).padStart(2, "0") + "/" + String(p.m).padStart(2, "0") + " a las " + hhmm(p) + " (hora de Lima)";
+  /* 🔴 22-ago-2026 · `limaParts` devuelve el mes en base 0 (como `getUTCMonth`) y acá se
+     imprimía tal cual: una clase del 24 de AGOSTO salía "24/07", y enero saldría "00".
+     Los otros cinco sitios que usan `p.m` sí hacen el +1; este era el único que no.
+     Va en los correos recordatorios de 24h y 1h: **307 ya salieron así** a alumnas de
+     Elevate (159 de 24h + 148 de 1h) y en el aviso de cupo liberado de la lista de espera. */
+  return DIAS_FIJO[p.dow] + " " + String(p.d).padStart(2, "0") + "/" + String(p.m + 1).padStart(2, "0") + " a las " + hhmm(p) + " (hora de Lima)";
 }
 /* Plantillas de la academia, cacheadas por corrida del cron (un loadConfig por tenant,
    no uno por correo: una academia con 40 recordatorios haria 40 lecturas iguales). */
@@ -6230,6 +6471,7 @@ async function recordatorioRenovacion(env){
    academias. Una campaña que se gane reportes de spam se lleva puesta la entregabilidad de los
    recordatorios de clase de todo el mundo. De ahi las tandas y el tope diario, igual que en las
    invitaciones al portal. */
+const CAMPANA_RECLAMO_MIN = 10;   /* un envío no tarda 10 min: pasado eso, la corrida murió */
 const CAMPANA_TANDA = 40;        // por corrida del cron (cada 15 min) y por academia
 const CAMPANA_TOPE_DIA = 300;    // techo diario por academia: calienta el dominio, no lo quema
 const CAMPANA_SEGMENTOS = ["todos", "activos", "inactivos"];
@@ -6348,10 +6590,17 @@ async function enviarCampanas(env){
       await env.DB.prepare("UPDATE campanas SET estado = 'cancelada' WHERE id = ?1").bind(c.id).run().catch(() => {});
       continue;
     }
-    /* tope diario POR ACADEMIA, contando todas sus campañas del día */
+    /* tope diario POR ACADEMIA, contando todas sus campañas del día.
+       🔴 23-ago-2026 · el día se contaba en UTC (`substr(enviado_utc,1,10)`) contra un
+       `hoyLima()`. Como la ventana legal de envío cierra a las 20:00 de Lima y las 19:00 de
+       Lima ya son las 00:00 UTC del día siguiente, el contador SE REINICIABA en la última
+       hora de envío: la academia mandaba hasta 160 correos de más sobre un tope de 300, y al
+       día siguiente arrancaba con esa cuota ya mordida. Exactamente el mismo fallo que se
+       arregló en `crearInvitacion` y que esta función, más nueva, repitió. El tope existe
+       para no quemar `batuta.lat`, que es el dominio de los recordatorios de TODOS. */
     const yaHoy = await env.DB.prepare(
       "SELECT COUNT(*) AS n FROM campana_destinos d JOIN campanas k ON k.id = d.campana_id " +
-      "WHERE k.tenant_id = ?1 AND d.estado = 'enviado' AND substr(d.enviado_utc,1,10) = ?2"
+      "WHERE k.tenant_id = ?1 AND d.estado = 'enviado' AND date(d.enviado_utc,'-5 hours') = ?2"
     ).bind(c.tenant_id, hoyL).first().catch(() => null);
     const restanHoy = CAMPANA_TOPE_DIA - ((yaHoy && Number(yaHoy.n)) || 0);
     if (restanHoy <= 0) continue;
@@ -6360,14 +6609,29 @@ async function enviarCampanas(env){
       "SELECT d.alumno_id, a.nombre, COALESCE(a.email,'') AS email, COALESCE(a.no_email,0) AS no_email, " +
       "COALESCE(a.mkt_ok,0) AS mkt_ok, COALESCE(a.mkt_fecha,'') AS mkt_fecha, COALESCE(a.mkt_token,'') AS mkt_token " +
       "FROM campana_destinos d JOIN alumnos a ON a.id = d.alumno_id AND a.tenant_id = ?1 " +
-      "WHERE d.campana_id = ?2 AND d.estado = 'pendiente' LIMIT ?3"
-    ).bind(c.tenant_id, c.id, cupo).all().catch(() => ({ results: [] }));
+      /* 🔴 23-ago-2026 · también se reintentan los que quedaron 'enviando' de una corrida que
+         murió a mitad. Sin este corte, un worker que se cae deja a alguien sin su correo para
+         siempre y la campaña se declara terminada igual. */
+      "WHERE d.campana_id = ?2 AND (d.estado = 'pendiente' OR (d.estado = 'enviando' AND COALESCE(d.enviado_utc,'') < ?4)) LIMIT ?3"
+    ).bind(c.tenant_id, c.id, cupo, new Date(Date.now() - CAMPANA_RECLAMO_MIN * 60000).toISOString()).all().catch(() => ({ results: [] }));
     if (!destinos || !destinos.length){
       await env.DB.prepare("UPDATE campanas SET estado = 'terminada' WHERE id = ?1").bind(c.id).run().catch(() => {});
       continue;
     }
     const cfg = await loadConfig(env, c.tenant_id).catch(() => ({}));
     for (const d of destinos){
+      /* 🔴 23-ago-2026 · el destino se marcaba DESPUÉS de mandar el correo. El cron corre cada
+         15 minutos y una campaña grande tarda: si una corrida se solapa con la anterior, las dos
+         leen el mismo 'pendiente' y **la misma persona recibe el correo comercial dos veces** —
+         que es justo lo que la Ley 28493 castiga (S/55 por correo). Todavía no hay ninguna
+         campaña en producción, así que no le pasó a nadie. Ahora se RECLAMA antes de mandar:
+         el que no gana el UPDATE, no manda. Mismo patrón que `confirmarCompra` y la pausa. */
+      const reclamo = await env.DB.prepare(
+        "UPDATE campana_destinos SET estado = 'enviando', enviado_utc = ?1 " +
+        "WHERE campana_id = ?2 AND alumno_id = ?3 AND (estado = 'pendiente' OR (estado = 'enviando' AND COALESCE(enviado_utc,'') < ?4))"
+      ).bind(new Date().toISOString(), c.id, d.alumno_id,
+             new Date(Date.now() - CAMPANA_RECLAMO_MIN * 60000).toISOString()).run().catch(() => null);
+      if (!(reclamo && reclamo.meta && (reclamo.meta.changes ?? 0))) continue;   // otra corrida se lo llevó
       /* Se revalida EN EL MOMENTO del envío, no solo al armar la lista: entre que la campaña
          se creó y le toca el turno, el alumno pudo darse de baja. Mandarle igual sería
          exactamente la infracción del art. 6 de la Ley 28493. */
@@ -6401,7 +6665,9 @@ async function enviarCampanas(env){
     }
     /* contadores de la campaña, siempre desde la verdad (los destinos), nunca sumando a ojo */
     const res = await env.DB.prepare(
-      "SELECT SUM(estado = 'enviado') AS env, SUM(estado = 'fallido') AS fal, SUM(estado = 'pendiente') AS pen FROM campana_destinos WHERE campana_id = ?1"
+      /* 'enviando' cuenta como pendiente: si no, un destino colgado dejaría la campaña
+         declarada «terminada» con alguien sin recibir nada, en silencio. */
+      "SELECT SUM(estado = 'enviado') AS env, SUM(estado = 'fallido') AS fal, SUM(estado IN ('pendiente','enviando')) AS pen FROM campana_destinos WHERE campana_id = ?1"
     ).bind(c.id).first().catch(() => null);
     if (res){
       await env.DB.prepare("UPDATE campanas SET enviados = ?1, fallidos = ?2, estado = ?3, ultima = ?4 WHERE id = ?5")
@@ -6718,11 +6984,13 @@ async function winbackAlumnos(env){
     const msgsW = await mensajesTenant(env, cacheMsg, a.tenant_id);
     const datosW = {
       alumno: nombreCorto, academia: a.academia || "", curso: a.curso || "",
-      paquete: a.paquete || "paquete", saldo: saldoTxt, dias: diasQuieto,
-      vence: a.vence || "",
+      /* 🐛 23-ago-2026: el 22-ago se arregló el NÚMERO de este correo (usa `computeMulti`) y se
+         dejaron sin migrar la etiqueta y la fecha, que seguían saliendo de la ficha congelada. */
+      paquete: planVigenteDe(cmW, alumno).nombre || "paquete", saldo: saldoTxt, dias: diasQuieto,
+      vence: planVigenteDe(cmW, alumno).vence || "",
       /* Elevate pidio que este correo recuerde el vencimiento; si ese plan no vence por
          fecha, la frase entera desaparece en vez de dejar "vence el ." */
-      vence_frase: a.vence ? (" Acuérdate que tu plan vence el " + a.vence + ".") : "",
+      vence_frase: planVigenteDe(cmW, alumno).vence ? (" Acuérdate que tu plan vence el " + planVigenteDe(cmW, alumno).vence + ".") : "",
       curso_de: a.curso ? " de " + a.curso : "", con_profe: ""
     };
     let ok = false;
@@ -6815,7 +7083,10 @@ async function cerrarAsistenciasAuto(env){
          del marcado manual (una clase dictada por alumno + día de Lima + ciclo), así que el
          dedupe de reservasUsadasPuro sigue impidiendo que la clase se cobre dos veces. */
       const { results: aCerrar } = await env.DB.prepare(
-        "SELECT id, alumno_id, inicio_utc, COALESCE(curso,'') AS curso, COALESCE(ciclo,1) AS ciclo FROM reservas " +
+        /* ⚠️ columnas ENUMERADAS: `profesor_id` va acá o el cierre automático no tiene
+           con qué decir quién dictó (la trampa de siempre en este archivo). */
+        "SELECT id, alumno_id, inicio_utc, COALESCE(curso,'') AS curso, COALESCE(ciclo,1) AS ciclo, " +
+        "COALESCE(profesor_id,'') AS profesor_id, COALESCE(sala,'') AS sala FROM reservas " +
         "WHERE tenant_id = ?1 AND estado = 'reservada' AND alumno_id IS NOT NULL AND tipo != 'bloqueo' AND fin_utc <= ?2 " +
         "ORDER BY inicio_utc ASC LIMIT 500"
       ).bind(t.id, corte).all();
@@ -6826,7 +7097,8 @@ async function cerrarAsistenciasAuto(env){
       ).bind(t.id, corte).run();
       cerradas += (r && r.meta && (r.meta.changes ?? 0)) || 0;
       for (const rv of aCerrar){
-        try { await anotarClaseDictada(env, t.id, rv.alumno_id, rv.inicio_utc, rv.curso, rv.ciclo, "Asistió"); }
+        try { await anotarClaseDictada(env, t.id, rv.alumno_id, rv.inicio_utc, rv.curso, rv.ciclo, "Asistió",
+                                       { sala: rv.sala, grilla: rv.profesor_id, fallback: rv.profesor_id }); }
         catch (e) { console.error("asistencia auto: no se pudo anotar la clase", rv.id, e); }
       }
     } catch (e) { console.error("asistencia auto", t.id, e); }
@@ -6838,7 +7110,24 @@ async function cerrarAsistenciasAuto(env){
    escribía y ahí nació el bug de las clases invisibles de Elevate. Devuelve true si anotó.
    Idempotente: una fila por alumno + día de Lima + ciclo, que es lo que espera el dedupe de
    reservasUsadasPuro para no cobrar la misma clase dos veces. */
-async function anotarClaseDictada(env, tenantId, alumnoId, inicioUtc, curso, ciclo, estado){
+/* ---- QUIÉN DICTÓ esa clase (23-ago-2026) ----
+   La única fuente que distingue de verdad a los profesores es el HORARIO: `disponibilidad.profe`.
+   Medido en Elevate: sus 316 reservas y sus 1.447 alumnas cuelgan del dueño, mientras el horario
+   dice que Sheila da 16 franjas, David 15 y Fiorella 5. Si esto mirara `reservas.profesor_id`
+   o `alumnos.profesor_id` —como hacía la liquidación— contestaría "José" siempre, que es
+   justo el bug. `grilla` es de quién es la agenda (para encontrar la franja), `fallback` lo
+   que se usa si el horario no dice nada, y vacío significa honestamente "no lo sé". */
+async function profeQueDicta(env, tenantId, inicioUtc, quien){
+  try {
+    const { franja } = await resolverFranja(env, tenantId, inicioUtc,
+      { id: (quien && quien.grilla) || "", esDueno: true }, (quien && quien.sala) || "");
+    if (franja && franja.profe) return String(franja.profe);
+  } catch (e) { /* sin horario resuelto se cae al fallback */ }
+  return String((quien && quien.fallback) || "");
+}
+/* `quien` = {sala, grilla, fallback}: de ahí sale QUIÉN DICTÓ. Se pasa un objeto y no un
+   parámetro suelto a propósito: los positionales de este archivo ya me costaron un bug. */
+async function anotarClaseDictada(env, tenantId, alumnoId, inicioUtc, curso, ciclo, estado, quien){
   if (!alumnoId) return false;
   const fechaL = fechaLimaDe(inicioUtc);
   if (!fechaL) return false;
@@ -6857,8 +7146,9 @@ async function anotarClaseDictada(env, tenantId, alumnoId, inicioUtc, curso, cic
   ).bind(tenantId, alumnoId, cicloR, fechaL, String(curso || "")).first();
   if (ya) return false;
   await env.DB.prepare(
-    "INSERT INTO registro (id,tenant_id,fecha,alumno_id,curso,estado,trabajo,tarea,ciclo,tarea_audio,plan) VALUES (?1,?2,?3,?4,?5,?6,'','',?7,'','')"
-  ).bind(crypto.randomUUID(), tenantId, fechaL, alumnoId, curso || "", (estado === "Falta" ? "Falta" : "Asistió"), cicloR).run();
+    "INSERT INTO registro (id,tenant_id,fecha,alumno_id,curso,estado,trabajo,tarea,ciclo,tarea_audio,plan,profesor_id) VALUES (?1,?2,?3,?4,?5,?6,'','',?7,'','',?8)"
+  ).bind(crypto.randomUUID(), tenantId, fechaL, alumnoId, curso || "", (estado === "Falta" ? "Falta" : "Asistió"), cicloR,
+         await profeQueDicta(env, tenantId, inicioUtc, quien)).run();
   return true;
 }
 
@@ -7362,6 +7652,36 @@ async function apiResumen(env, t){
   };
 }
 
+/* 🔴 22-ago-2026 · SQLite no pliega acentos y su `lower()` solo baja ASCII, así que
+   `nombre LIKE '%Garcia%'` NO encuentra a «García». Medido en Elevate: **244 de 1.447 alumnas
+   (17%) tienen tilde o ñ**, y buscar "Garcia" devolvía 15 mientras "García" devolvía 12 —dos
+   conjuntos distintos y ninguno completo—; "Muñoz" 4 contra "Munoz" 2. El panel del dueño SÍ
+   pliega (`impNorm`), así que José encontraba a las 27 en su pantalla y su Claude (el MCP) le
+   decía que no existen. Una regla, un sitio: esto es el equivalente en SQL de `impNorm`. */
+const TILDES = [["á","a"],["é","e"],["í","i"],["ó","o"],["ú","u"],["ü","u"],["ñ","n"],
+                ["Á","a"],["É","e"],["Í","i"],["Ó","o"],["Ú","u"],["Ü","u"],["Ñ","n"]];
+function sinTildesSQL(expr){
+  return TILDES.reduce((s, [de, a]) => "replace(" + s + ",'" + de + "','" + a + "')", "lower(" + expr + ")");
+}
+function sinTildesJS(s){
+  return String(s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+}
+/* 🔴 22-ago-2026 · y la segunda mitad del mismo bug: el panel parte lo escrito en PALABRAS y
+   pide que estén todas (en cualquier orden, sobre nombre+apellido+correo+whatsapp), mientras
+   acá se hacía un solo LIKE con la frase entera. «adriana sanchez» encontraba a Adriana
+   Salazar Sánchez en el panel y NADA por la API. Mismo pajar y misma regla que `impNorm`. */
+const HENO_ALUMNO = "COALESCE(nombre,'') || ' ' || COALESCE(apellido,'') || ' ' || " +
+                    "COALESCE(email,'') || ' ' || COALESCE(whatsapp,'') || ' ' || COALESCE(codigo,'')";
+function palabrasDe(q){ return sinTildesJS(q).split(/\s+/).filter(Boolean).slice(0, 6); }
+/* 🔴 22-ago-2026 · y la tercera del mismo tronco: SQLite ordena por bytes, así que las
+   MAYÚSCULAS van antes que las minúsculas y «ALAN» sale antes que «Abadezza». Medido con las
+   1.447 alumnas de Elevate: el orden del servidor difiere del panel (que usa `localeCompare`)
+   en **1.443 de 1.447 posiciones**, y como `apiFichaAlumno` hace `ORDER BY nombre LIMIT 1`,
+   **34 búsquedas devuelven a OTRA alumna**: pedirle a Claude «la ficha de andrea» traía a
+   ANDREA TIPE GARCIA cuando el panel muestra a Andrea Ariana Quintanilla. Ordenando por el
+   nombre plegado, la diferencia baja a 54 posiciones y todas son empates entre el mismo
+   nombre escrito en dos capitalizaciones. */
+const ORDEN_NOMBRE = " ORDER BY " + sinTildesSQL("COALESCE(nombre,'')") + ", nombre";
 async function apiAlumnos(env, t, q, limite){
   const lim = Math.max(1, Math.min(100, parseInt(limite, 10) || 25));
   const busca = String(q || "").trim();
@@ -7370,13 +7690,17 @@ async function apiAlumnos(env, t, q, limite){
      Resultado medido en Elevate: 48 alumnas con MÁS clases en la API que en el panel (187
      clases fantasma). Va `SELECT *`, como la ficha, para que agregar una columna nueva no
      vuelva a romper esto en silencio. Ver `memoria: leccion-columna-nueva-no-llega-por-select-enumerado`. */
+  const palabras = palabrasDe(busca);
+  const heno = sinTildesSQL(HENO_ALUMNO);
   const filtro = " FROM alumnos WHERE tenant_id = ?1" +
-                 (busca ? " AND (nombre LIKE ?2 OR COALESCE(apellido,'') LIKE ?2 OR COALESCE(codigo,'') LIKE ?2)" : "");
-  const sql = "SELECT *" + filtro + " ORDER BY nombre LIMIT " + lim;
-  const st = busca ? env.DB.prepare(sql).bind(t.id, "%" + busca + "%") : env.DB.prepare(sql).bind(t.id);
+                 (palabras.length ? " AND " + palabras.map((_, i) => heno + " LIKE ?" + (i + 2)).join(" AND ") : "");
+  const sql = "SELECT *" + filtro + ORDEN_NOMBRE + " LIMIT " + lim;
+  /* la aguja va plegada igual que la columna: si no, la comparación queda coja de un lado */
+  const agujas = palabras.map(w => "%" + w + "%");
+  const st = palabras.length ? env.DB.prepare(sql).bind(t.id, ...agujas) : env.DB.prepare(sql).bind(t.id);
   const { results } = await st.all();
   const cSql = "SELECT COUNT(*) AS n" + filtro;
-  const cSt = busca ? env.DB.prepare(cSql).bind(t.id, "%" + busca + "%") : env.DB.prepare(cSql).bind(t.id);
+  const cSt = palabras.length ? env.DB.prepare(cSql).bind(t.id, ...agujas) : env.DB.prepare(cSql).bind(t.id);
   const totalReal = Number(((await cSt.first().catch(() => null)) || {}).n) || 0;
   const paqMap = (await loadPaquetes(env, t.id)).map;
   const precios = await loadPrecios(env, t.id);
@@ -7416,10 +7740,12 @@ async function apiAlumnos(env, t, q, limite){
     } catch (e) {}
     out.push({
       id: al.id, codigo: al.codigo, nombre: [al.nombre, al.apellido].filter(Boolean).join(" "),
-      curso: al.curso, plan: al.paquete, horario: al.horario || "",
+      /* `plan` y `vence` = el plan VIGENTE, no la etiqueta congelada de la ficha (23-ago-2026).
+         El saldo de esta lista ya usaba `computeMulti`; el nombre y la fecha se habían quedado. */
+      curso: al.curso, plan: planVigenteDe(c, al).nombre, horario: al.horario || "",
       clases_restantes: c ? c.restantes : null,
       clases_compradas: c ? c.compradas : null,
-      vence: (c && c.vence) || al.vence || "",
+      vence: planVigenteDe(c, al).vence,
       pago: al.pago || ""
     });
   }
@@ -7434,8 +7760,10 @@ async function apiFichaAlumno(env, t, idOnombre){
   let al = await env.DB.prepare("SELECT * FROM alumnos WHERE tenant_id = ?1 AND id = ?2").bind(t.id, clave).first().catch(() => null);
   if (!al){
     al = await env.DB.prepare(
-      "SELECT * FROM alumnos WHERE tenant_id = ?1 AND (nombre LIKE ?2 OR COALESCE(codigo,'') = ?3) ORDER BY nombre LIMIT 1"
-    ).bind(t.id, "%" + clave + "%", clave).first().catch(() => null);
+      "SELECT * FROM alumnos WHERE tenant_id = ?1 AND " +
+      (palabrasDe(clave).map((_, i) => sinTildesSQL(HENO_ALUMNO) + " LIKE ?" + (i + 2)).join(" AND ") || "1=1") +
+      ORDEN_NOMBRE + " LIMIT 1"
+    ).bind(t.id, ...palabrasDe(clave).map(w => "%" + w + "%")).first().catch(() => null);
   }
   if (!al) return { error: "No encontré a ese alumno en " + t.academia + "." };
   const paqMap = (await loadPaquetes(env, t.id)).map;
@@ -7458,7 +7786,7 @@ async function apiFichaAlumno(env, t, idOnombre){
   ).bind(t.id, al.id).all();
   return {
     id: al.id, codigo: al.codigo, nombre: [al.nombre, al.apellido].filter(Boolean).join(" "),
-    curso: al.curso, plan: al.paquete, horario: al.horario || "", notas: al.notas || "",
+    curso: al.curso, plan: planVigenteDe(c, al).nombre, horario: al.horario || "", notas: al.notas || "",
     saldo: c ? { restantes: c.restantes, compradas: c.compradas, usadas: c.usadas, reservadas: c.reservadas,
                  vence: c.vence || "", pases: (c.pases || []).map(x => ({ plan: x.n, restantes: x.restantes, compradas: x.compradas, vence: x.vence })) } : null,
     proximas_clases: (prox || []).map(r => ({ cuando: r.inicio_utc, clase: r.curso })),
@@ -7471,7 +7799,7 @@ async function apiAgenda(env, t, dias){
   const desde = new Date().toISOString();
   const hasta = new Date(Date.now() + d * 86400000).toISOString();
   const { results } = await env.DB.prepare(
-    "SELECT r.inicio_utc, r.fin_utc, COALESCE(r.curso,'') AS curso, COALESCE(a.nombre,'') AS alumno, COALESCE(p.nombre,'') AS profesor " +
+    "SELECT r.inicio_utc, r.fin_utc, COALESCE(r.curso,'') AS curso, " + SQL_NOMBRE_COMPLETO("a") + " AS alumno, COALESCE(p.nombre,'') AS profesor " +
     "FROM reservas r LEFT JOIN alumnos a ON a.id = r.alumno_id LEFT JOIN profesores p ON p.id = r.profesor_id " +
     "WHERE r.tenant_id = ?1 AND r.estado = 'reservada' AND r.inicio_utc BETWEEN ?2 AND ?3 ORDER BY r.inicio_utc ASC LIMIT 200"
   ).bind(t.id, desde, hasta).all();
@@ -7539,11 +7867,14 @@ async function apiPorRenovar(env, t){
     if (!c) continue;
     const vencido = !!(c.vencido || c.caducado);
     const porSaldo = !vencido && c.restantes !== null && c.restantes <= 2 && !c.ilim;
-    const v = String(c.vence || al.vence || "");
+    /* 🐛 23-ago-2026 · esta fecha decide QUIÉN entra a la lista de "por renovar", y con
+       multi-pase salía de la ficha congelada: a Michelle su pase muere HOY y la ficha decía
+       27 de setiembre, así que no aparecía. Ahora es la del pase vivo que vence primero. */
+    const v = String(planVigenteDe(c, al).vence || "");
     const porFecha = !vencido && /^\d{4}-\d{2}-\d{2}$/.test(v) && v >= hoy10 && v <= en10;
     if (!vencido && !porSaldo && !porFecha) continue;
     out.push({ id: al.id, nombre: [al.nombre, al.apellido].filter(Boolean).join(" "), curso: al.curso,
-               plan: al.paquete, clases_restantes: c.restantes, vence: v,
+               plan: planVigenteDe(c, al).nombre, clases_restantes: c.restantes, vence: v,
                motivo: vencido ? "se le venció el plan" : (porSaldo ? "se le acaban las clases" : "se le vence el plan") });
   }
   /* primero el que está peor: menos clases, y a igual saldo el que vence antes */
@@ -9315,7 +9646,18 @@ export default {
             ).all();
             tenantsCo = (r.results || []).filter(t => !esTenantDemo(t));
           } catch (e) {}
+          /* 🐛 23-ago-2026 · `PLANES[t.plan]` otra vez. Con packs el plan es 'base' y `PLANES` no
+             lo tiene, asi que TODA academia daba 0 Y ADEMAS no caia en ningun cubo (el de gratis
+             preguntaba por el plan muerto 'gratis'): el informe decia 18 nuevas · 0 pagando ·
+             0 gratis · 0 en trial · 0 caidas. Medido contra produccion: 18 de 18 sin clasificar.
+             Lo que paga un tenant vive en `montoMensualTenant` desde el 22-ago; el 21 se migraron
+             las tres funciones de afiliados y esta, la cuarta consumidora, quedo fuera.
+             Los montos se resuelven ANTES del bucle porque `montoMensualTenant` es async. */
+          const montoDe = new Map();
+          for (const t of tenantsCo) montoDe.set(t.id, await montoMensualTenant(env, t));
           const mrrDe = t => {
+            const packs = montoDe.get(t.id) || 0;
+            if (packs > 0) return packs;                                   // packs comprados: eso es lo que paga
             if (t.mp_sub_status === "authorized" && t.estado === "activo") return PLANES[t.plan] || 0;
             if (t.mp_sub_status === "anual") return Math.round(((PLANES_ANUAL[t.plan] || 0) / 12) * 100) / 100;
             return 0;
@@ -9326,10 +9668,12 @@ export default {
             if (!cohortes[mes]) cohortes[mes] = { mes, nuevos: 0, pagando_hoy: 0, gratis: 0, trial: 0, vencidos: 0, mrr_pen: 0 };
             cohortes[mes].nuevos++;
             const m = mrrDe(t);
+            /* Los cubos son EXHAUSTIVOS: nuevos = pagando + gratis + trial + vencidos, siempre.
+               Quien no paga y no esta en trial ni caido, esta en la Batuta base = gratis. */
             if (m > 0){ cohortes[mes].pagando_hoy++; cohortes[mes].mrr_pen += m; }
-            else if ((t.plan || "") === "gratis") cohortes[mes].gratis++;
-            else if (t.estado === "trial") cohortes[mes].trial++;
             else if (t.estado === "vencido") cohortes[mes].vencidos++;
+            else if (t.estado === "trial") cohortes[mes].trial++;
+            else cohortes[mes].gratis++;
           }
           // GPV por tenant (30d): el dato que valida el fee sobre el rail MP y la tesis payments.
           let gpv = [];
@@ -9600,21 +9944,27 @@ export default {
             for (let i = 0; i < 6; i++){ const c = slugify(nombre || "academia") + "-" + randHex(2); const ya = await env.DB.prepare("SELECT id FROM tenants WHERE slug = ?1").bind(c).first(); if (!ya){ slug = c; break; } }
             if (!slug) slug = "academia-" + randHex(4);
             const salt = randHex(16); const hash = await hashPass(randHex(24), salt); // pass aleatoria: entra por Google
-            /* Freemium (23-jul-2026): TODO registro nuevo nace en el plan Gratis permanente
-               (igual que el registro por email). Este canal quedo sin migrar y seguia creando
-               'profe'/'trial' con redirect a la pagina de pago, contradiciendo el "Gratis para
-               siempre, sin tarjeta" del mismo formulario, y a los 30 dias caia en el cron. */
+            /* Packs (20-ago-2026): nace en la Batuta base, IGUAL que el registro por correo.
+               🐛 23-ago-2026: este canal se quedo en 'gratis', el plan del freemium viejo que el
+               modelo retiro. No es cosmetico: `convCapDe` hace max(base, PLAN_CONV_CAP[plan]) y
+               PLAN_CONV_CAP.gratis = 20, asi que quien entraba por Google se llevaba 20
+               conversaciones del asistente al mes en vez de las 5 de la Batuta gratis. */
             const trialHasta = new Date(Date.now() + TRIAL_DIAS * 86400000).toISOString();
+            const refCode = refDePeticion(request, "");
+            await ensureAfiliadosSchema(env); // la columna ref_code nace aca; sin esto un deploy limpio tira 500
             await env.DB.prepare(
-              "INSERT INTO tenants (id,slug,academia,profe_nombre,email,whatsapp,pass_hash,pass_salt,plan,estado,trial_hasta,creado,fuente,google_id) " +
-              "VALUES (?1,?2,?3,?4,?5,'',?6,?7,'gratis','activo',?8,?9,'google','g')"
-            ).bind(id, slug, nombre, nombre, perfil.email, hash, salt, trialHasta, new Date().toISOString()).run();
+              "INSERT INTO tenants (id,slug,academia,profe_nombre,email,whatsapp,pass_hash,pass_salt,plan,estado,trial_hasta,creado,fuente,google_id,ref_code) " +
+              "VALUES (?1,?2,?3,?4,?5,'',?6,?7,'base','activo',?8,?9,'google','g',?10)"
+            ).bind(id, slug, nombre, nombre, perfil.email, hash, salt, trialHasta, new Date().toISOString(), refCode).run();
             const stmts = [];
             /* sin siembra de precios de musica (03-ago-2026): paquetes vacios de verdad,
                igual que el registro por email — el panel guia a crear el primero */
             stmts.push(env.DB.prepare("INSERT INTO config (tenant_id, clave, valor) VALUES (?1,'paquetes','[]')").bind(id));
             stmts.push(env.DB.prepare("INSERT INTO config (tenant_id, clave, valor) VALUES (?1,'profe_nombre',?2)").bind(id, nombre));
             try { await env.DB.batch(stmts); } catch (e) {}
+            /* Afiliados: misma regla que el registro por correo (la atribucion queda en
+               tenants.ref_code, inmutable, y la fila comisionable en `referidos`). */
+            if (refCode){ try { await registrarReferido(env, id, refCode); } catch (e) { console.error("registrarReferido google", e); } }
             ctx.waitUntil(alertaCorreoAndres(env, "CUENTA GRATIS NUEVA en Batuta (Google): " + nombre, "Academia: " + nombre + "\nEmail: " + perfil.email + "\nEntró con Google.\nSlug: " + slug));
             const token = await crearSesion(env, "T:" + id);
             return irCon(token, "/app/panel");
@@ -9665,13 +10015,8 @@ export default {
         const tam = String(b.tam || "").trim().slice(0, 20);
         // Afiliados: ?ref= = codigo de quien lo refirio (slug de un tenant o codigo externo).
         // Fallback server-side: cookie batuta_ref (60 dias, la siembra cualquier pagina de batuta.lat).
-        let refCode = normRefCode(b.ref);
-        if (!refCode){
-          const mCk = /(?:^|;\s*)batuta_ref=([^;]+)/.exec(request.headers.get("cookie") || "");
-          if (mCk) refCode = normRefCode(decodeURIComponent(mCk[1]));
-        }
+        const refCode = refDePeticion(request, b.ref);
         // Plan GRATIS directo desde la landing (?plan=gratis): estado 'activo' sin trial ni checkout.
-        const esGratis = String(b.plan || "").trim() === "gratis";
 
         if (academia.length < 2) return json({ error: "Escribe el nombre de tu academia." }, 400);
         if (nombre.length < 2) return json({ error: "Escribe tu nombre." }, 400);
@@ -9704,7 +10049,7 @@ export default {
                /* Packs (20-ago-2026): todo registro nuevo nace en la Batuta base ('base', activo):
                   producto completo, 20 alumnos, 1 profesor y 5 conversaciones al mes. Los packs
                   se agregan después desde Perfil > Tu Batuta. Ya no hay trial ni planes que elegir
-                  (se conserva esGratis por si algún día se reintroduce un trial vía ?plan). */
+                  el ?plan= solo cambia el texto de la página, ya no el alta). */
                "base", "activo", refCode).run();
 
         // config default para el tenant nuevo. Los paquetes nacen VACIOS a proposito
@@ -9874,7 +10219,7 @@ export default {
         let primerCobro = null;
         if (Number(nComp && nComp.n) > 0 && String(cfgAct.primer_cobro_celebrado || "") !== "1"){
           const pc = await env.DB.prepare(
-            "SELECT c.monto, c.fecha, COALESCE(a.nombre, cu.nombre, '') AS quien " +
+            "SELECT c.monto, c.fecha, COALESCE(NULLIF(" + SQL_NOMBRE_COMPLETO("a") + ",''), cu.nombre, '') AS quien " +
             "FROM compras c " +
             "LEFT JOIN cuentas cu ON cu.id = c.cuenta_id AND cu.tenant_id = c.tenant_id " +
             "LEFT JOIN alumnos a ON a.id = cu.alumno_id AND a.tenant_id = c.tenant_id " +
@@ -10521,7 +10866,7 @@ export default {
         let profesoresPub = [];
         try {
           const { results: profs } = await env.DB.prepare(
-            "SELECT id, nombre, foto, rol FROM profesores WHERE tenant_id = ?1 AND estado != 'suspendido' ORDER BY CASE rol WHEN 'dueno' THEN 0 ELSE 1 END, nombre"
+            "SELECT id, nombre, foto, rol FROM profesores WHERE tenant_id = ?1 AND estado != 'suspendido' ORDER BY CASE rol WHEN 'dueno' THEN 0 ELSE 1 END, " + sinTildesSQL("COALESCE(nombre,'')") + ", nombre"
           ).bind(t.id).all();
           profesoresPub = (profs || []).map(p => ({ id: p.id, nombre: p.nombre || "", foto: p.foto || "" }));
         } catch (e) {}
@@ -10677,6 +11022,47 @@ export default {
          Publico a proposito (va antes del gate de trial): un alumno no tiene por que
          quedarse afuera porque a su academia se le vencio la prueba.
          ============================================================ */
+      /* ---- "Mándame otro enlace" (23-ago-2026) ----
+         La otra mitad de que la invitación muera al primer uso. Por diseño la alumna NUNCA
+         escribe una contraseña, así que sin esto un enlace quemado la deja fuera hasta que
+         alguien de la academia se acuerde de reenviárselo.
+         🔒 El correo sale SOLO a la dirección que ya está en su ficha o en su cuenta: quien
+         tenga el enlace no puede redirigirlo a otro buzón. Y va con el mismo tope por IP que
+         el canje, para que no sirva de máquina de mandar correos. */
+      if (path === "/app/api/invitacion/reenviar" && request.method === "POST"){
+        const ipR = clientIp(request);
+        if (ipR && await chatbotPasoTope(env, "invre:" + ipR, 5)){
+          return json({ error: "Demasiados intentos. Espera un rato." }, 429);
+        }
+        const bR = await request.json().catch(() => ({}));
+        const tkR = String(bR.token || "").trim();
+        if (!/^[0-9a-f]{32,64}$/.test(tkR)) return json({ error: "Ese enlace no es válido. Pídele otro a tu academia." }, 400);
+        await ensureInvitacionesSchema(env);
+        const rowR = await env.DB.prepare("SELECT * FROM invitaciones WHERE token_hash = ?1").bind(await sha256Hex(tkR)).first();
+        if (!rowR) return json({ error: "Ese enlace no es válido. Pídele otro a tu academia." }, 400);
+        const tR = await env.DB.prepare("SELECT * FROM tenants WHERE id = ?1").bind(rowR.tenant_id).first();
+        const alR = await env.DB.prepare("SELECT * FROM alumnos WHERE id = ?1 AND tenant_id = ?2").bind(rowR.alumno_id, rowR.tenant_id).first();
+        if (!tR || !alR) return json({ error: "Ese enlace ya no corresponde a nadie. Escríbele a tu academia." }, 400);
+        if (Number(alR.no_email)) return json({ error: "Te diste de baja de nuestros correos. Escríbele a tu academia y te ayudan." }, 400);
+        /* la dirección sale de la ficha o de su cuenta; NUNCA del cuerpo de la petición */
+        let destino = String(alR.email || "").trim().toLowerCase();
+        if (!emailOk(destino)){
+          const cuR = await env.DB.prepare("SELECT email FROM cuentas WHERE tenant_id = ?1 AND alumno_id = ?2").bind(tR.id, alR.id).first();
+          destino = String((cuR && cuR.email) || "").trim().toLowerCase();
+        }
+        if (!emailOk(destino)) return json({ error: "No tenemos tu correo guardado. Pídele el enlace a tu academia." }, 400);
+        const cfgR = await loadConfig(env, tR.id).catch(() => ({}));
+        const invR = await crearInvitacion(env, tR, alR.id, "reenvio");
+        const mailR = correoInvitacionAlumno(tR, alR, cfgR, invR.url, MARCA.dominio + "/app/inv/baja?t=" + invR.token);
+        let okR = false;
+        try { okR = await enviarCorreo(env, { tenantId: tR.id, to: destino, subject: mailR.subject, html: mailR.html }); } catch (e) {}
+        if (!okR) return json({ error: "No pudimos mandarte el correo. Escríbele a tu academia." }, 502);
+        /* se devuelve el correo ENMASCARADO: confirma que llegó al buzón correcto sin
+           revelárselo a quien tenga el enlace en la mano */
+        const tapado = destino.replace(/^(.).*(.)@/, (m, a2, b2) => a2 + "•••" + b2 + "@");
+        return json({ ok: true, email: tapado });
+      }
+
       if (path === "/app/api/invitacion/canjear" && request.method === "POST"){
         const ipInv = clientIp(request);
         if (ipInv && await chatbotPasoTope(env, "inv:" + ipInv, 20)){
@@ -10692,11 +11078,28 @@ export default {
         if (invRow.expira && Date.parse(invRow.expira) < Date.now()){
           return json({ error: "Tu enlace venció. Pídele otro a tu academia y entras al toque." }, 400);
         }
+        /* 🔒 UN SOLO USO (23-ago-2026, decisión de Andrés). El enlace entra sin contraseña, así
+           que mientras siga vivo es una llave suelta: si se reenvía, se filtra o queda en el
+           historial de un teléfono prestado, cualquiera abre el portal de esa alumna. Con datos
+           de menores de por medio, muere en cuanto se usa.
+           No es un error seco: se le ofrece que se mande otro sola (`puede_reenviar`), porque
+           por diseño ella NUNCA tiene contraseña con la que entrar por su cuenta. */
+        if (String(invRow.usada_el || "").trim()){
+          return json({ error: "Este enlace ya se usó y por seguridad no vuelve a abrirse.",
+                        usado: true, puede_reenviar: true }, 410);
+        }
         const tI = await env.DB.prepare("SELECT * FROM tenants WHERE id = ?1").bind(invRow.tenant_id).first();
         const alI = await env.DB.prepare("SELECT * FROM alumnos WHERE id = ?1 AND tenant_id = ?2").bind(invRow.alumno_id, invRow.tenant_id).first();
         if (!tI || !alI) return json({ error: "Ese enlace ya no corresponde a nadie. Escríbele a tu academia." }, 400);
+        /* Se queman TODOS los enlaces vivos de esa alumna, no solo el que abrió: `crearInvitacion`
+           deja los viejos a propósito (el dueño manda correo Y WhatsApp), así que matar uno solo
+           dejaría la otra llave puesta. Ya está adentro: no necesita ninguna. */
         const marcarUsada = async () => {
-          try { await env.DB.prepare("UPDATE invitaciones SET usada_el = ?1 WHERE token_hash = ?2").bind(new Date().toISOString(), hashI).run(); } catch (e) {}
+          const ahoraU = new Date().toISOString();
+          try { await env.DB.prepare("UPDATE invitaciones SET usada_el = ?1 WHERE token_hash = ?2").bind(ahoraU, hashI).run(); } catch (e) {}
+          try { await env.DB.prepare(
+            "UPDATE invitaciones SET usada_el = ?1 WHERE tenant_id = ?2 AND alumno_id = ?3 AND COALESCE(usada_el,'') = ''"
+          ).bind(ahoraU, invRow.tenant_id, invRow.alumno_id).run(); } catch (e) {}
         };
         // 1) Ya tiene cuenta vinculada -> adentro, sin preguntar nada.
         const cuYa = await env.DB.prepare("SELECT * FROM cuentas WHERE tenant_id = ?1 AND alumno_id = ?2").bind(tI.id, alI.id).first();
@@ -11344,20 +11747,29 @@ export default {
           alumno = await env.DB.prepare("SELECT * FROM alumnos WHERE id = ?1 AND tenant_id = ?2").bind(cu.alumno_id, tid).first();
           if (alumno){
             const ciclo = alumno.ciclo || 1;
+            /* 🔴 23-ago-2026 · esto traía SOLO el ciclo actual y el portal lo usa para DOS cosas:
+               la cuenta del saldo (que sí es por ciclo) y la tabla «Mis clases» (que no). Arriba,
+               en la misma pantalla, «N clases tomadas en total» cuenta TODOS los ciclos, así que
+               las dos se contradecían: Ana Paula Dondoni Braz leía «4 clases tomadas en total»
+               con 3 filas en la tabla, y Daniela Guerra-Garcia «4» con 2. La ficha del panel
+               siempre mostró la historia entera; el portal de la alumna, no.
+               Ahora se trae la historia COMPLETA (una sola consulta) y el saldo se calcula con
+               las filas de su ciclo, que es lo que el motor necesita. */
             const { results } = await env.DB.prepare(
-              "SELECT fecha, estado, trabajo, tarea, COALESCE(plan,'') AS plan, COALESCE(tarea_audio,'') AS tarea_audio FROM registro WHERE tenant_id = ?1 AND alumno_id = ?2 AND COALESCE(ciclo,1) = ?3 ORDER BY fecha ASC, id ASC"
-            ).bind(tid, alumno.id, ciclo).all();
+              "SELECT fecha, estado, trabajo, tarea, COALESCE(plan,'') AS plan, COALESCE(tarea_audio,'') AS tarea_audio, COALESCE(ciclo,1) AS ciclo FROM registro WHERE tenant_id = ?1 AND alumno_id = ?2 ORDER BY fecha ASC, id ASC"
+            ).bind(tid, alumno.id).all();
             /* adjuntos FIRMADOS: el portal los pinta como <audio src>, sin Authorization */
             historial = [];
             for (const r of (results || [])){
               historial.push(Object.assign({}, r, { tarea_audios: await firmarAudios(env, r.tarea_audio, "m") }));
             }
+            const histCiclo = historial.filter(r => (Number(r.ciclo) || 1) === ciclo);
             const rUsadas = await reservasUsadasCount(env, tid, alumno.id, ciclo);
             const paqMap = (await loadPaquetes(env, tid)).map;
             const pasesMe = pasesDe(alumno);
             computed = pasesMe
               ? await computeMulti(env, tid, alumno, paqMap, precios)
-              : compute(alumno, historial, precios, rUsadas, resolverPk(paqMap, alumno.paquete));
+              : compute(alumno, histCiclo, precios, rUsadas, resolverPk(paqMap, alumno.paquete));
             /* la academia que descuenta "al asistir" ve acá el mismo número que en su panel */
             computed = saldoMostrado(computed, (config && config.saldo_modo) || "");
     computed = conReprogPortal(computed, await reprogPortalDe(env, tid, alumno.id, ciclo));
@@ -11365,6 +11777,17 @@ export default {
             proximasClases = (await env.DB.prepare(
               "SELECT id, inicio_utc, fin_utc, tipo, curso FROM reservas WHERE tenant_id = ?1 AND alumno_id = ?2 AND estado = 'reservada' AND inicio_utc >= ?3 ORDER BY inicio_utc ASC"
             ).bind(tid, alumno.id, new Date().toISOString()).all()).results || [];
+            /* 🔴 22-ago-2026 · el portal decidía si todavía se puede reprogramar con UN número
+               global (`reprog_min_h`) y el servidor lo hace cumplir POR CATEGORÍA de clase
+               (`reglasDeClase`, pedido de Elevate el 28-jul). Si una categoría pide más horas
+               que el global, el portal enseña el botón habilitado y el servidor lo rechaza; si
+               pide menos, le esconde un botón que sí podía usar y pierde la clase. Hoy ninguna
+               academia real las tiene distintas, pero las 16 demos SÍ —y la demo es lo que ve
+               un cliente probando Batuta: decía 4h con el motor exigiendo 12. Ahora cada clase
+               viaja con SU número y el portal no calcula nada. */
+            for (const r of proximasClases){
+              r.cancel_h = reglasDeClase(config, r.curso || "").cancelH;
+            }
             const ch = await env.DB.prepare(
               "SELECT COUNT(*) AS n FROM registro WHERE tenant_id = ?1 AND alumno_id = ?2 AND estado = 'Asistió'"
             ).bind(tid, alumno.id).first();
@@ -11393,7 +11816,14 @@ export default {
         ).bind(tid, cu.id).first();
 
         const refStats = await env.DB.prepare(
-          "SELECT COUNT(*) AS registrados, COALESCE(SUM(CASE WHEN alumno_id IS NOT NULL THEN 1 ELSE 0 END),0) AS compraron FROM cuentas WHERE tenant_id = ?1 AND ref_por = ?2"
+          /* 🔴 22-ago-2026 · "ya compraron" contaba a quien tuviera FICHA de alumno, que se
+             crea al registrarse. El portal le decia al alumno "2 ya compraron" y su premio
+             no llegaba. Ahora cuenta lo que dice la palabra: compra confirmada, y sin la
+             clase de prueba, igual que `refElegible`. */
+          "SELECT COUNT(*) AS registrados, COALESCE(SUM(CASE WHEN EXISTS(" +
+          "SELECT 1 FROM compras p WHERE p.tenant_id = c.tenant_id AND p.cuenta_id = c.id " +
+          "AND p.estado = 'confirmada' AND p.paquete != 'Clase de prueba') THEN 1 ELSE 0 END),0) AS compraron " +
+          "FROM cuentas c WHERE c.tenant_id = ?1 AND c.ref_por = ?2"
         ).bind(tid, refCode).first();
         /* ¿A este alumno le toca el descuento de bienvenida? Se pregunta aparte y no sobre la
            lista de `pagos` (que viene topada en 20 filas): un tope de paginacion no puede ser
@@ -11401,6 +11831,11 @@ export default {
         const refPrimera = await env.DB.prepare(
           "SELECT COUNT(*) AS n FROM compras WHERE tenant_id = ?1 AND cuenta_id = ?2 AND estado = 'confirmada' AND paquete != 'Clase de prueba'"
         ).bind(tid, cu.id).first();
+
+        /* la misma pregunta que hace `refElegible` al cobrar, para que el portal no prometa
+           un descuento que el server va a negar (Elevate tiene `ref_solo_nuevos` prendido) */
+        const rcMePrev = refCfg(config);
+        const yaEraAlumnoMe = rcMePrev.soloNuevos ? await yaEraAlumnoDe(env, tid, cu.alumno_id) : false;
 
         const cursoAl = alumno ? (alumno.curso || "") : "";
         const cursosAl = cursoAl.split(",").map(s => s.trim()).filter(Boolean);
@@ -11471,7 +11906,11 @@ export default {
           beneficios: beneficiosMe,
           estado: estadoMe,
           alumno: (alumno && computed) ? {
-            curso: alumno.curso || "", paquete: alumno.paquete || "",
+            /* `paquete` y `vence` = el plan VIGENTE, no la etiqueta congelada de la ficha.
+               De acá cuelgan CUATRO pantallas del portal (el título de inicio, la fila
+               «Paquete», la línea de la agenda y «Tu paquete vence»): arreglarlo en el
+               volcado las deja a las cuatro diciendo lo mismo. */
+            curso: alumno.curso || "", paquete: planVigenteDe(computed, alumno).nombre,
             horario: alumno.horario || "", horarioFijo: horarioFijo, pago: alumno.pago || "",
             compradas: computed.compradas, usadas: computed.usadas, restantes: computed.restantes,
             /* clases de regalo por referir que trae este ciclo: el portal las nombra aparte
@@ -11489,7 +11928,7 @@ export default {
             /* varios pases activos (11-ago-2026): el portal pinta cada uno con su saldo */
             pases: computed.multi ? computed.pases.map(p => ({ n: p.n, compradas: p.compradas, ilim: p.ilim, usadas: p.usadas, restantes: p.restantes, vence: p.vence, vencido: p.vencido })) : undefined,
             reprogPermitidas: computed.reprogPermitidas, reprogRestantes: computed.reprogRestantes,
-            monto: computed.monto, vence: alumno.vence || "",
+            monto: computed.monto, vence: planVigenteDe(computed, alumno).vence,
             congela: congelaMe,
             historial: historial.slice().reverse()
           } : null,
@@ -11528,7 +11967,7 @@ export default {
               descModo: rcMe.descModo,
               descValor: rcMe.descValor,
               minClases: rcMe.minClases,
-              tengoDesc: !!(rcMe.hayDescuento && String(cu.ref_por || "").trim() && !(refPrimera && Number(refPrimera.n)))
+              tengoDesc: !!(rcMe.hayDescuento && String(cu.ref_por || "").trim() && !(refPrimera && Number(refPrimera.n)) && !yaEraAlumnoMe)
             };
           })(),
           recursos,
@@ -12576,7 +13015,7 @@ export default {
         /* Techo por tenant para alumnos ANTES de la bolsa por cuenta: el registro de alumnos
            es abierto (cuentas frescas = bolsas frescas), este techo acota el gasto real. */
         if (!who.admin){
-          const techoT = await onboardingContar(env, "alumnos:" + who.cu.tenant_id + ":" + mesActualUTC(), ONBOARDING_LIMITE_ALUMNOS_TENANT);
+          const techoT = await onboardingContar(env, "alumnos:" + who.cu.tenant_id + ":" + mesLima(), ONBOARDING_LIMITE_ALUMNOS_TENANT);
           if (techoT.tope){
             return json({ error: "El asistente de tu academia llego a su tope del mes. Escribele a tu profe por el chat del portal." }, 429);
           }
@@ -12722,7 +13161,13 @@ export default {
         const sinProfeS = String(((await loadConfig(env, cu.tenant_id).catch(() => ({}))).portal_sin_profe) || "") === "1";
         return json({ slots: det.slots, llenos: det.llenos, fuera: det.fuera, detalle: det.detalle,
                       franjas: det.franjas, salas: det.salas,
-                      plan: { nombre: (alS && alS.paquete) || "", tipos: (pkS && pkS.tipos) || [] },
+                      /* 🐛 23-ago-2026 · SEXTO lector de la etiqueta congelada, y el que peor se lee:
+                         el portal arma con esto la frase "Tu plan <X> no incluye <Y>". Con multi-pase,
+                         <X> salía de la ficha (el pase viejo) mientras <Y> se calcula con la UNIÓN de
+                         los pases VIVOS. A Andrea le decía «Tu plan 48 clases de Pilates no incluye
+                         Pilates Máquinas» — su plan de Pilates no incluye Pilates. Ahora se nombran
+                         los pases vigentes, los mismos con los que se decidió qué queda fuera. */
+                      plan: { nombre: planVigenteDe({ pases: pasesS || [] }, alS).nombre, tipos: (pkS && pkS.tipos) || [] },
                       profe: sinProfeS ? { nombre: "", foto: "" } : { nombre: profS.nombre || "", foto: profS.foto || "" } });
       }
 
@@ -12803,9 +13248,13 @@ export default {
         } else {
           /* Mensualidad ilimitada: no descuenta clases, pero vence por fecha. Sin este freno,
              un alumno con la mensualidad vencida reservaría para siempre (fuga de ingresos). */
-          if (pkR.ilim && alumno.vence){
-            const vms = Date.parse(alumno.vence + "T23:59:59Z");
-            if (!isNaN(vms) && vms < Date.now()) return json({ error: "Tu mensualidad venció. Renuévala para seguir reservando." }, 409);
+          /* 🔴 23-ago-2026 · esto se hacía la cuenta a mano, SIN el corte de Lima, mientras
+             tres líneas más abajo el plan por clases usa `venceVencido`. Dos reglas para la
+             misma pregunta, una al lado de la otra: a la alumna con mensualidad se le decía
+             «venció» desde las 19:00 del último día, cinco horas antes que a su compañera con
+             paquete. Elevate tiene 2 con mensualidad y fecha. Ahora las dos usan la misma. */
+          if (pkR.ilim && venceVencido(alumno.vence)){
+            return json({ error: "Tu mensualidad venció. Renuévala para seguir reservando." }, 409);
           }
           /* Vigencia y caducidad del paquete por clases (28-jul-2026, Elevate). compute() ya
              deja el saldo en 0, pero un mensaje claro evita el ticket de soporte. */
@@ -12948,19 +13397,24 @@ export default {
       }
 
       /* ---- Lista de espera (clases llenas): entrar / salir / ver la mia ---- */
+      /* 🔴 22-ago-2026 · esto no miraba la fecha, y la lista no se limpia sola: el portal
+         seguia diciendo "en lista de espera, te aviso si se libera un cupo" —y peor, "se
+         libero un cupo, reservalo abajo"— de clases ya pasadas. Habia 3 vivas: dos del
+         4-ago (18 dias) y una alumna de Elevate esperando el 15-ago (7 dias). El mismo
+         WHERE en las DOS consultas, que antes estaba escrito dos veces. */
       if (path === "/app/api/agenda/espera" && request.method === "GET"){
         const cu = await cuentaDeSesion(env, request);
         if (!cu || !cu.alumno_id) return json({ error: "Sesion expirada" }, 401);
         let rows = [];
         try {
           rows = (await env.DB.prepare(
-            "SELECT id, inicio_utc, curso, estado, COALESCE(sala,'') AS sala FROM espera WHERE tenant_id = ?1 AND alumno_id = ?2 AND estado IN ('esperando','avisado') ORDER BY inicio_utc ASC"
-          ).bind(cu.tenant_id, cu.alumno_id).all()).results || [];
+            "SELECT id, inicio_utc, curso, estado, COALESCE(sala,'') AS sala FROM espera " + SQL_ESPERA_MIA
+          ).bind(cu.tenant_id, cu.alumno_id, new Date().toISOString()).all()).results || [];
         } catch (e) {
           try {
             rows = (await env.DB.prepare(
-              "SELECT id, inicio_utc, curso, estado FROM espera WHERE tenant_id = ?1 AND alumno_id = ?2 AND estado IN ('esperando','avisado') ORDER BY inicio_utc ASC"
-            ).bind(cu.tenant_id, cu.alumno_id).all()).results || [];
+              "SELECT id, inicio_utc, curso, estado FROM espera " + SQL_ESPERA_MIA
+            ).bind(cu.tenant_id, cu.alumno_id, new Date().toISOString()).all()).results || [];
           } catch (e2) {}
         }
         return json({ espera: rows });
@@ -13101,16 +13555,40 @@ export default {
         if (!teniaVence && !pasesPausa){
           return json({ error: "Tu plan no vence por fecha, así que no hace falta congelarlo: tus clases te esperan sin límite de tiempo.", sin_efecto: true }, 400);
         }
-        await env.DB.batch([
-          env.DB.prepare("INSERT INTO pausas (id,tenant_id,alumno_id,ciclo,motivo,dias,creada) VALUES (?1,?2,?3,?4,?5,?6,?7)")
-            .bind(crypto.randomUUID(), tid, al.id, ciclo, motivo, dias, new Date().toISOString()),
+        /* 🔴 22-ago-2026 · el cupo se leía ANTES y se escribía DESPUÉS: con dos peticiones a la
+           vez (un doble clic, un reintento) las dos leían "0 usados", las dos pasaban el
+           control y al alumno se le corría el vencimiento DOS veces gastándole el doble de su
+           cupo de congelamiento. La comprobación de arriba se queda por el mensaje, pero el
+           freno de verdad va DENTRO del INSERT, y la fecha solo se mueve si ese INSERT entró.
+           Hoy no hay ni una pausa en producción, así que no le pasó a nadie. */
+        const pausaId = crypto.randomUUID();
+        const SQL_PAUSA = "INSERT INTO pausas (id,tenant_id,alumno_id,ciclo,motivo,dias,creada) " +
+          "SELECT ?1,?2,?3,?4,?5,?6,?7 WHERE " +
+          "(SELECT COALESCE(SUM(dias),0) FROM pausas WHERE tenant_id = ?2 AND alumno_id = ?3 AND ciclo = ?4) + ?6 <= ?8 " +
+          "AND (?9 = 0 OR (SELECT COUNT(*) FROM pausas WHERE tenant_id = ?2 AND alumno_id = ?3 AND ciclo = ?4) < ?9)";
+        /* el movimiento de fecha cuelga del MISMO hecho: si la pausa no entró, no se mueve nada */
+        /* ⚠️ el número del parámetro es POSICIONAL: acá va ?4 porque es el cuarto `bind`.
+           Lo puse ?9 copiando el INSERT y el UPDATE dejó de aplicar nunca — la pausa se
+           cobraba y la fecha no se movía. Lo cazó la prueba, no la lectura. */
+        const EXISTE = " AND EXISTS (SELECT 1 FROM pausas WHERE id = ?4)";
+        const res = await env.DB.batch([
+          env.DB.prepare(SQL_PAUSA)
+            .bind(pausaId, tid, al.id, ciclo, motivo, dias, new Date().toISOString(), maxDias, maxBloques || 0),
           /* la ficha solo se toca si TENÍA fecha; los pases van por su cuenta */
           (pasesPausa && !teniaVence)
-            ? env.DB.prepare("UPDATE alumnos SET pases = ?1 WHERE id = ?2 AND tenant_id = ?3").bind(pasesPausa, al.id, tid)
+            ? env.DB.prepare("UPDATE alumnos SET pases = ?1 WHERE id = ?2 AND tenant_id = ?3" + EXISTE).bind(pasesPausa, al.id, tid, pausaId)
             : pasesPausa
-              ? env.DB.prepare("UPDATE alumnos SET vence = ?1, pases = ?4 WHERE id = ?2 AND tenant_id = ?3").bind(nuevoVence, al.id, tid, pasesPausa)
-              : env.DB.prepare("UPDATE alumnos SET vence = ?1 WHERE id = ?2 AND tenant_id = ?3").bind(nuevoVence, al.id, tid)
+              ? env.DB.prepare("UPDATE alumnos SET vence = ?1, pases = ?4 WHERE id = ?2 AND tenant_id = ?3" + " AND EXISTS (SELECT 1 FROM pausas WHERE id = ?5)").bind(nuevoVence, al.id, tid, pasesPausa, pausaId)
+              : env.DB.prepare("UPDATE alumnos SET vence = ?1 WHERE id = ?2 AND tenant_id = ?3" + EXISTE).bind(nuevoVence, al.id, tid, pausaId)
         ]);
+        if (!res || !res[0] || !res[0].meta || !res[0].meta.changes){
+          /* otra petición idéntica se le adelantó y ya gastó el cupo: se le dice, no se le
+             responde "ok" a algo que no pasó */
+          const ahora = await env.DB.prepare(
+            "SELECT COALESCE(SUM(dias),0) AS n FROM pausas WHERE tenant_id = ?1 AND alumno_id = ?2 AND ciclo = ?3"
+          ).bind(tid, al.id, ciclo).first();
+          return json({ error: "Ya usaste " + (Number(ahora && ahora.n) || 0) + " de " + maxDias + " dias de congelamiento de este ciclo." }, 400);
+        }
         try { await avisarPush(env, tid, { title: "Pausa por " + motivo + ": " + al.nombre }); } catch (e) {}
         /* `dias_disponibles` sale del tope QUE APLICA (el del plan si lo define), no del
            global: con un plan de 7 días la respuesta decía 14 menos lo usado. */
@@ -13231,7 +13709,7 @@ export default {
           await ensureAlumnoExtraSchema(env);
           await ensureInvitacionesSchema(env);
           const { results: filas } = await env.DB.prepare(
-            "SELECT a.id, a.nombre, COALESCE(a.email,'') AS email, COALESCE(a.whatsapp,'') AS whatsapp, " +
+            "SELECT a.id, " + SQL_NOMBRE_COMPLETO("a") + " AS nombre, COALESCE(a.email,'') AS email, COALESCE(a.whatsapp,'') AS whatsapp, " +
             "COALESCE(a.invitado_el,'') AS invitado_el, COALESCE(a.invitado_canal,'') AS invitado_canal, " +
             "COALESCE(a.no_email,0) AS no_email, " +
             "(SELECT COUNT(*) FROM cuentas c WHERE c.tenant_id = a.tenant_id AND c.alumno_id = a.id) AS tiene_cuenta " +
@@ -13252,7 +13730,9 @@ export default {
           const envioReal = String(cfgInv.invitaciones_envio || "") === "on" && !esTenantDemo(t);
           const ejemplo = porCorreo[0] || faltan[0] || todos[0] || { nombre: "Maria", email: "", curso: "" };
           const prev = correoInvitacionAlumno(t, ejemplo, cfgInv, MARCA.dominio + "/app/a/" + t.slug + "?inv=EJEMPLO", MARCA.dominio + "/app/inv/baja?t=EJEMPLO");
-          const liviano = a => ({ id: a.id, nombre: a.nombre, email: a.email, whatsapp: a.whatsapp, invitado_el: a.invitado_el, canal: a.invitado_canal });
+          /* `apellido` va incluido a propósito: el riel de invitaciones lista personas de a una
+             para escribirles por WhatsApp, y sin apellido no se distingue a una «Andrea» de otra. */
+          const liviano = a => ({ id: a.id, nombre: a.nombre, apellido: a.apellido || "", email: a.email, whatsapp: a.whatsapp, invitado_el: a.invitado_el, canal: a.invitado_canal });
           return json({
             total: todos.length,
             con_portal: conPortal.length,
@@ -13305,8 +13785,13 @@ export default {
              una fila sin destinatario rompe el envio del dueno. Los que no tienen correo siguen
              saliendo por el riel de WhatsApp, que ya existe arriba en la misma pantalla. */
           const { results: filasC } = await env.DB.prepare(
-            "SELECT id, nombre, COALESCE(email,'') AS email, COALESCE(whatsapp,'') AS whatsapp " +
-            "FROM alumnos WHERE tenant_id = ?1 AND COALESCE(no_email,0) = 0 AND COALESCE(email,'') != '' ORDER BY nombre"
+            /* 🔴 23-ago-2026 · sin el apellido, el CSV de enlaces PERSONALES es una lista donde
+               807 alumnas de Elevate no se distinguen entre sí (221 nombres repetidos: 27 «Andrea»,
+               20 «Claudia», 17 «Fiorella»…). El dueño abre esa lista para mandarle a cada una su
+               link por WhatsApp: equivocarse de fila le da a alguien el portal de otra persona,
+               y ese link vive 45 días. Es la misma queja que José ya hizo por la tabla el 12-ago. */
+            "SELECT id, nombre, COALESCE(apellido,'') AS apellido, COALESCE(email,'') AS email, COALESCE(whatsapp,'') AS whatsapp " +
+            "FROM alumnos WHERE tenant_id = ?1 AND COALESCE(no_email,0) = 0 AND COALESCE(email,'') != ''" + ORDEN_NOMBRE
           ).bind(tid).all();
           const candC = (filasC || []).filter(a => emailOk(String(a.email || "").trim().toLowerCase())).slice(0, INVITACION_CSV_TOPE);
           if (!candC.length){
@@ -13324,7 +13809,8 @@ export default {
               "INSERT INTO invitaciones (token_hash, tenant_id, alumno_id, canal, creada, expira, usada_el) VALUES (?1,?2,?3,'csv',?4,?5,'')"
             ).bind(await sha256Hex(tkC), tid, a.id, creadaC, expiraC));
             filasCsv.push({
-              nombre: a.nombre || "", email: String(a.email || "").trim(), whatsapp: a.whatsapp || "",
+              nombre: [a.nombre, a.apellido].filter(Boolean).join(" ").trim() || (a.nombre || ""),
+              email: String(a.email || "").trim(), whatsapp: a.whatsapp || "",
               url: MARCA.dominio + "/app/a/" + t.slug + "?inv=" + tkC
             });
           }
@@ -13861,9 +14347,17 @@ export default {
             "WHERE tenant_id = ?1 AND estado = 'confirmada' AND fecha LIKE ?2 GROUP BY COALESCE(profesor_id, ?3)"
           ).bind(tid, mesL + "%", (duenoRow && duenoRow.id) || "").all();
           const { results: clsRows } = await env.DB.prepare(
-            "SELECT COALESCE(a.profesor_id, ?3) AS pid, COUNT(*) AS n FROM registro r " +
+            /* 🐛 23-ago-2026 · esto atribuía la clase al profesor ASIGNADO AL ALUMNO, no al que
+               la dictó: con David dando la clase de una alumna de Fiorella, cobraba Fiorella.
+               Ahora manda `registro.profesor_id`. Las filas viejas (sin ese dato) caen al
+               asignado, exactamente como antes: la historia no se mueve. */
+            "SELECT COALESCE(NULLIF(r.profesor_id,''), a.profesor_id, ?3) AS pid, COUNT(*) AS n FROM registro r " +
             "JOIN alumnos a ON a.id = r.alumno_id AND a.tenant_id = r.tenant_id " +
-            "WHERE r.tenant_id = ?1 AND r.estado = 'Asistió' AND r.fecha LIKE ?2 GROUP BY COALESCE(a.profesor_id, ?3)"
+            /* el GROUP BY tiene que agrupar por LO MISMO que selecciona: con la expresión vieja
+               acá, SQLite juntaba en un solo grupo clases de dos profesores distintos y devolvía
+               el pid de una fila cualquiera. Lo cazó la prueba antes de desplegar. */
+            "WHERE r.tenant_id = ?1 AND r.estado = 'Asistió' AND r.fecha LIKE ?2 " +
+            "GROUP BY COALESCE(NULLIF(r.profesor_id,''), a.profesor_id, ?3)"
           ).bind(tid, mesL + "%", (duenoRow && duenoRow.id) || "").all();
           /* + clases cerradas desde la AGENDA (reservas 'completada') que no tienen fila en registro:
              sin esto, marcar "Asistió" en la agenda no contaba para la tarifa por clase (hallazgo del review).
@@ -14270,23 +14764,20 @@ export default {
           } else {
             stmts.push(env.DB.prepare("UPDATE reservas SET estado = ?1 WHERE id = ?2 AND tenant_id = ?3").bind(nuevo, id, tid));
           }
-          /* Escribir la bitacora de la clase dictada para que el PANEL del profe (que calcula el
-             saldo solo con registro) coincida con el PORTAL del alumno. Es seguro tras el dedupe
-             de reservasUsadasCount: una reserva con fila de registro del dia ya no cuenta doble.
-             Idempotente: no inserta si ya hay registro de ese alumno+fecha-Lima+ciclo. */
-          if ((nuevo === "completada" || nuevo === "falta") && rv.tipo !== "bloqueo" && rv.alumno_id){
-            const fechaL = fechaLimaDe(rv.inicio_utc);
-            const cicloR = Number(rv.ciclo) || 1;
-            const yaReg = await env.DB.prepare(
-              "SELECT 1 FROM registro WHERE tenant_id = ?1 AND alumno_id = ?2 AND COALESCE(ciclo,1) = ?3 AND fecha = ?4 AND estado != 'Reprogramó' LIMIT 1"
-            ).bind(tid, rv.alumno_id, cicloR, fechaL).first();
-            if (!yaReg){
-              stmts.push(env.DB.prepare(
-                "INSERT INTO registro (id,tenant_id,fecha,alumno_id,curso,estado,trabajo,tarea,ciclo,tarea_audio,plan) VALUES (?1,?2,?3,?4,?5,?6,'','',?7,'','')"
-              ).bind(crypto.randomUUID(), tid, fechaL, rv.alumno_id, rv.curso || "", (nuevo === "completada" ? "Asistió" : "Falta"), cicloR));
-            }
-          }
           await env.DB.batch(stmts);
+          /* 🔴 22-ago-2026 · acá vivía una COPIA A MANO de la guarda de `anotarClaseDictada`, y
+             se quedó con la versión vieja: deduplicaba por alumno+fecha, sin mirar el curso. Este
+             es el camino que más se usa —marcar asistencia desde el panel—, así que a la alumna
+             con dos clases el mismo día (Barré a las 8, Pilates Mat a las 9) la segunda no se le
+             anotaba nunca. Se arregló la función compartida y la copia se quedó rota: por eso ya
+             no hay copia. La bitácora se escribe con la MISMA función que el cierre automático.
+             `anotarClaseDictada` es idempotente, así que va después del batch sin riesgo. */
+          if ((nuevo === "completada" || nuevo === "falta") && rv.tipo !== "bloqueo" && rv.alumno_id){
+            try { await anotarClaseDictada(env, tid, rv.alumno_id, rv.inicio_utc, rv.curso, rv.ciclo,
+                                           nuevo === "completada" ? "Asistió" : "Falta",
+                                           { sala: rv.sala, grilla: rv.profesor_id, fallback: rv.profesor_id }); }
+            catch (e) { console.error("marcar: no se pudo anotar la clase", id, e); }
+          }
           if (nuevo === "cancelada" && rv.tipo !== "bloqueo") await promoverEspera(env, tid, rv.inicio_utc, rv.sala || "");   // cupo liberado en esa sala: avisar lista de espera
           return json({ ok: true });
         }
@@ -14310,17 +14801,30 @@ export default {
           ).bind(alumnoId, tid, esDueno ? 1 : 0, profeActorId || "").first();
           if (!alA) return json({ error: "Ese alumno no esta en tu lista." }, 404);
           const cicloA = Number(b.ciclo) || Number(alA.ciclo) || 1;
-          /* la bitácora de ese día se va entera: es lo que el dueño ve como "la clase" */
+          /* 🔴 22-ago-2026 · esto borraba y cancelaba el DÍA ENTERO, sin mirar de qué clase.
+             La bitácora se escribe por día Y CURSO (ver `anotarClaseDictada`) y el panel pinta
+             un botón «Anular» POR FILA, con su curso al lado: el dueño cree que deshace UNA
+             clase. A quien tenía dos el mismo día —Elevate tiene 16 casos vivos, daniella el
+             21-ago con Barré a las 8 y Pilates Mat a las 9— se le cancelaban las DOS y se le
+             devolvían dos clases cuando el dueño quiso devolver una.
+             Ahora el botón manda su curso y el borrado se acota. Sin curso (fila vieja sin
+             clase anotada, o JS en caché) se mantiene el comportamiento de antes: es lo
+             correcto cuando ese día solo hubo una clase, que es el caso de siempre. */
+          const cursoA = (b.curso === undefined || b.curso === null) ? null : String(b.curso);
+          const acotar = !!(cursoA && cursoA.trim());
           const delReg = await env.DB.prepare(
-            "DELETE FROM registro WHERE tenant_id = ?1 AND alumno_id = ?2 AND COALESCE(ciclo,1) = ?3 AND fecha = ?4"
-          ).bind(tid, alumnoId, cicloA, fecha).run();
-          /* y las reservas de ese mismo día de LIMA (date(...,'-5 hours') = fechaLimaDe), porque
+            "DELETE FROM registro WHERE tenant_id = ?1 AND alumno_id = ?2 AND COALESCE(ciclo,1) = ?3 AND fecha = ?4" +
+            (acotar ? " AND COALESCE(curso,'') = ?5" : "")
+          ).bind(...(acotar ? [tid, alumnoId, cicloA, fecha, cursoA] : [tid, alumnoId, cicloA, fecha])).run();
+          /* y la reserva de ese mismo día de LIMA (date(...,'-5 hours') = fechaLimaDe), porque
              una reserva viva sigue apartando crédito aunque su bitácora ya no exista */
           const delRes = await env.DB.prepare(
             "UPDATE reservas SET estado = 'cancelada', cancelada_utc = ?1, cancelada_por = ?2 " +
             "WHERE tenant_id = ?3 AND alumno_id = ?4 AND COALESCE(ciclo,1) = ?5 AND date(inicio_utc,'-5 hours') = ?6 " +
-            "AND estado != 'cancelada' AND tipo != 'bloqueo'"
-          ).bind(new Date().toISOString(), (esDueno ? "dueno" : "profesor") + ":" + (profeActorId || "") + ":anulada", tid, alumnoId, cicloA, fecha).run();
+            "AND estado != 'cancelada' AND tipo != 'bloqueo'" + (acotar ? " AND COALESCE(curso,'') = ?7" : "")
+          ).bind(...(acotar
+            ? [new Date().toISOString(), (esDueno ? "dueno" : "profesor") + ":" + (profeActorId || "") + ":anulada", tid, alumnoId, cicloA, fecha, cursoA]
+            : [new Date().toISOString(), (esDueno ? "dueno" : "profesor") + ":" + (profeActorId || "") + ":anulada", tid, alumnoId, cicloA, fecha])).run();
           const nReg = (delReg && delReg.meta && (delReg.meta.changes ?? 0)) || 0;
           const nRes = (delRes && delRes.meta && (delRes.meta.changes ?? 0)) || 0;
           if (!nReg && !nRes) return json({ error: "Esa clase ya no existe." }, 404);
@@ -14461,16 +14965,17 @@ export default {
             "INSERT INTO reservas (id,tenant_id,alumno_id,inicio_utc,fin_utc,tipo,serie_id,estado,curso,nota,ciclo,creada,profesor_id,sala) VALUES (?1,?2,?3,?4,?5,'suelta','','completada',?6,?7,?8,?9,?10,?11)"
           ).bind(crypto.randomUUID(), tid, alumnoId, isoT, new Date(t0 + CLASE_MIN * 60000).toISOString(),
                  curso, "Vino sin reservar (registrado a mano)", ciclo, nowIso, target.id || null, sala)];
-          /* misma guarda idempotente que /agenda/marcar: una clase dictada por alumno+día+ciclo */
-          const yaReg = await env.DB.prepare(
-            "SELECT 1 FROM registro WHERE tenant_id = ?1 AND alumno_id = ?2 AND COALESCE(ciclo,1) = ?3 AND fecha = ?4 AND estado != 'Reprogramó' LIMIT 1"
-          ).bind(tid, alumnoId, ciclo, fechaL).first();
-          if (!yaReg){
-            stmts.push(env.DB.prepare(
-              "INSERT INTO registro (id,tenant_id,fecha,alumno_id,curso,estado,trabajo,tarea,ciclo,tarea_audio,plan) VALUES (?1,?2,?3,?4,?5,'Asistió','','',?6,'','')"
-            ).bind(crypto.randomUUID(), tid, fechaL, alumnoId, curso, ciclo));
-          }
           await env.DB.batch(stmts);
+          /* 🔴 22-ago-2026 · TERCERA copia a mano de la misma guarda, también con la versión
+             vieja (dedupe por alumno+día, sin mirar el curso). Con dos clases distintas el mismo
+             día, la segunda no se anotaba. Ya no hay copias: la bitácora se escribe siempre con
+             `anotarClaseDictada`, que es idempotente y sí distingue el curso. */
+          /* acá la franja ya se resolvió arriba: se usa SU profe, que es el dato bueno. */
+          let yaReg = false;
+          try { yaReg = !(await anotarClaseDictada(env, tid, alumnoId, isoT, curso, ciclo, "Asistió",
+                            { sala, grilla: target && target.id,
+                              fallback: (franja && franja.profe) || (target && target.id) })); }
+          catch (e) { console.error("vino: no se pudo anotar la clase", alumnoId, e); }
           /* devolver el saldo YA recalculado: el dueño ve el efecto sin recargar ni dudar */
           let saldoTx = "";
           try {
@@ -14535,7 +15040,7 @@ export default {
              El 1 a 1 (MVT) no se toca: ahí `disponibilidad.profe` está vacío, `mias` queda en
              cero y el resultado es idéntico al de siempre. */
           const todosAl = (await env.DB.prepare(
-            "SELECT * FROM alumnos WHERE tenant_id = ?1 ORDER BY nombre"
+            "SELECT * FROM alumnos WHERE tenant_id = ?1" + ORDEN_NOMBRE
           ).bind(tid).all()).results || [];
           let alumnos = todosAl;
           if (!esDueno){
@@ -14592,7 +15097,7 @@ export default {
              más para TODAS las reservas del tenant (Elevate: 80 filas para 1,447 alumnos) y el
              resto en memoria — cero consultas por alumno. */
           const resvAll = (await env.DB.prepare(
-            "SELECT id, alumno_id, inicio_utc, COALESCE(curso,'') AS curso, COALESCE(tipo,'') AS tipo, COALESCE(ciclo,1) AS ciclo " +
+            "SELECT id, alumno_id, inicio_utc, COALESCE(curso,'') AS curso, COALESCE(tipo,'') AS tipo, COALESCE(ciclo,1) AS ciclo, estado " +
             "FROM reservas WHERE tenant_id = ?1 AND estado IN ('reservada','completada','falta') ORDER BY inicio_utc ASC"
           ).bind(tid).all()).results || [];
           /* cancelaciones que hizo el ALUMNO desde su portal, en lote: sin esto el panel
@@ -14639,6 +15144,17 @@ export default {
               }
               a.saldo = saldoMostrado(a.saldo, modoSaldo);
               a.saldo = conReprogPortal(a.saldo, reprogPortalPor.get(a.id + "|" + ciA) || 0);
+              /* 🔴 23-ago-2026 · clases que YA se dieron y no llegaron a su bitácora. La ficha
+                 las sacaba de `AG_RESERVAS`, que es el arreglo de la AGENDA y **viene con una
+                 ventana de 7 días**: el mismo dato servía para dos cosas con reglas distintas y
+                 5 de las 16 de Elevate ya habían caído fuera —invisibles otra vez, y cada día
+                 se cae una más—. Ahora las calcula el servidor sobre TODA la historia, sin
+                 ventana y sin una sola consulta extra: `resvAll` y `registroAll` ya están acá. */
+              const anotadas = new Set((regsPorAlumno.get(a.id) || []).map(g => (g.fecha || "") + "|" + (g.curso || "")));
+              a.sinAnotar = (resvPorAlumno.get(a.id) || [])
+                .filter(r => (r.estado === "completada" || r.estado === "falta") && r.tipo !== "bloqueo" &&
+                             !anotadas.has(fechaLimaDe(r.inicio_utc) + "|" + (r.curso || "")))
+                .map(r => ({ id: r.id, inicio_utc: r.inicio_utc, curso: r.curso || "", estado: r.estado, ciclo: r.ciclo }));
             }
           } catch (e) { console.error("saldo panel", e && e.message); }   // el panel cae a su cálculo viejo
           const cuentasAll = (await env.DB.prepare(
@@ -14716,7 +15232,7 @@ export default {
           let equipo = [];
           try {
             const { results: eqRows } = await env.DB.prepare(
-              "SELECT id, nombre, email, rol, estado, foto, COALESCE(sede_id,'') AS sede_id FROM profesores WHERE tenant_id = ?1 ORDER BY CASE rol WHEN 'dueno' THEN 0 ELSE 1 END, nombre"
+              "SELECT id, nombre, email, rol, estado, foto, COALESCE(sede_id,'') AS sede_id FROM profesores WHERE tenant_id = ?1 ORDER BY CASE rol WHEN 'dueno' THEN 0 ELSE 1 END, " + sinTildesSQL("COALESCE(nombre,'')") + ", nombre"
             ).bind(tid).all();
             equipo = eqRows || [];
           } catch (e) {}
@@ -14895,7 +15411,18 @@ export default {
           await ensureAlumnoExtraSchema(env);
           /* `paquete` entra acá el 15-ago-2026: hace falta para saber si el dueño le acaba de
              ACTIVAR un plan a un alumno que no tenía, y avisarle por correo (ver avisarPlan). */
-          const colsPrev = "id, vence, ciclo, aviso_vence_ciclo, recordatorio_fecha, recordatorio_ciclo, profesor_id, COALESCE(paquete,'') AS paquete, winback_ciclo, COALESCE(sede_id,'') AS sede_id";
+          /* Lo mismo para la BITÁCORA (23-ago-2026). Este guardado también hace DELETE + INSERT
+             de todo el `registro`, y el panel manda las filas tal como se las dio el servidor.
+             Pero una pestaña abierta DESDE ANTES del cambio no conoce `profesor_id` y no lo
+             manda: sin esta foto previa, el primer guardado del dueño borraría de un golpe
+             quién dictó cada clase. Se preserva por id cuando el cliente no lo trae. */
+          let prevReg = new Map();
+          try {
+            const { results: rowsReg } = await env.DB.prepare(
+              "SELECT id, COALESCE(profesor_id,'') AS profesor_id FROM registro WHERE tenant_id = ?1"
+            ).bind(tid).all();
+            prevReg = new Map((rowsReg || []).map(r => [r.id, r.profesor_id || ""]));
+          } catch (e) { prevReg = new Map(); }
           let prevRows = [];
           /* `SELECT *` a propósito, no una lista de columnas: este guardado hace DELETE +
              INSERT de todos los alumnos, así que TODO lo que no vuelva a escribirse se pierde.
@@ -15155,11 +15682,33 @@ export default {
             /* profesor: solo registro de alumnos de su snapshot (no puede tocar clases ajenas) */
             if (!esDueno && !idsSnapshot.has(aid)) continue;
             stmts.push(env.DB.prepare(
-              "INSERT INTO registro (id,tenant_id,fecha,alumno_id,curso,estado,trabajo,tarea,ciclo,tarea_audio,plan) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11)"
+              "INSERT INTO registro (id,tenant_id,fecha,alumno_id,curso,estado,trabajo,tarea,ciclo,tarea_audio,plan,profesor_id) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12)"
             ).bind(
               r.id, tid, r.fecha || "", aid,
               r.curso || "", r.estado || "", r.trabajo || "", r.tarea || "", r.ciclo || 1,
-              desfirmarAudios(r.tarea_audio), r.plan || ""
+              desfirmarAudios(r.tarea_audio), r.plan || "",
+              /* Quién dictó. Si el cliente lo manda, manda el cliente; si no —pestaña vieja, o
+                 fila que el panel creó a mano— se conserva lo que había.
+                 🔒 Pero se VALIDA, que este endpoint se alcanza con un curl: solo un id de
+                 profesor de ESTA academia, y un profesor solo puede ponerse a sí mismo. Sin
+                 esto, un profe podía estamparse en las clases de sus colegas y cobrarlas. */
+              (function(){
+                const pedido = (r.profesor_id !== undefined && r.profesor_id !== null)
+                  ? String(r.profesor_id || "") : null;
+                const previo = prevReg.get(r.id) || "";
+                if (pedido === null) return previo;
+                if (!pedido) return "";
+                if (!profesValidos.has(pedido)) return previo;
+                /* 🔒 Un profesor NO puede reescribir quién dictó una clase que ya tiene dueño,
+                   ni siquiera para ponerse a sí mismo: la alumna puede estar asignada a él y la
+                   clase haberla dado un colega. Solo puede firmar una que esté sin firmar, y
+                   solo con su propio nombre. Reasignar es cosa del dueño.
+                   (La primera versión de este candado dejaba pasar exactamente ese caso y lo
+                   cazó la auditoría en vivo: Fiorella se puso la clase de David con un curl.) */
+                if (!esDueno && previo && previo !== pedido) return previo;
+                if (!esDueno && pedido !== (profeActorId || "")) return previo;
+                return pedido;
+              })()
             ));
           }
           if (esDueno){
@@ -16058,6 +16607,10 @@ export default {
        vive 24h. Va en CADA corrida y no en la diaria para que la base no cargue un día
        entero de copias muertas. */
     try { await limpiarDemosPrivadas(env); } catch (e) { console.error("limpiar demos privadas", e); }
+    /* Re-oferta del cupo: va en CADA corrida porque la ventana es de 30 minutos y con el cron
+       diario simplemente no existiría. Es una consulta indexada sobre `estado='avisado'`, que
+       hoy tiene 0 filas en toda la base: no cuesta nada cuando no hay nada que hacer. */
+    try { await reofrecerEsperas(env); } catch (e) { console.error("reofrecer esperas", e); }
     /* Campañas: en CADA corrida (cada 15 min), no en la diaria. La ley solo deja enviar de
        07:00 a 20:00 de lunes a viernes, así que hay que ir despachando tandas a lo largo del
        día; con una sola corrida diaria no entrarían ni 300 correos. La propia función se
@@ -16161,7 +16714,7 @@ export default {
             if (okPre) await env.DB.prepare("UPDATE tenants SET aviso_anual = 'pre' WHERE id = ?1").bind(t.id).run();
           } catch (e) {}
         } else if (venceMs && ahora > venceMs + 7 * 86400000 && avisoA !== "post"){
-          try { await env.DB.prepare("UPDATE tenants SET estado = 'activo', plan = 'gratis', mp_sub_status = '', mp_preapproval_id = '', aviso_anual = 'post' WHERE id = ?1").bind(t.id).run(); } catch (e) {}
+          try { await env.DB.prepare("UPDATE tenants SET estado = 'activo', plan = 'base', mp_sub_status = '', mp_preapproval_id = '', aviso_anual = 'post' WHERE id = ?1").bind(t.id).run(); } catch (e) {}
           try { await enviarCorreo(env, correoAnual(t, "post")); } catch (e) {}
           try { await alertaCorreoAndres(env, "Plan anual vencido sin renovar: " + t.academia, "Tenant: " + (t.academia || "") + " (" + (t.email || "") + ")\nCumplió su año el " + String(t.trial_hasta).slice(0, 10) + " + 7 días de cortesía.\nCayó al plan Gratis; le salió el correo de renovación."); } catch (e) {}
         }
@@ -16177,7 +16730,7 @@ export default {
         const suscritoMPCron = t.mp_sub_status === "authorized" || t.mp_sub_status === "anual";
         if (suscritoMPCron) continue; // cliente de pago: ni degradar ni mandarle nurture de trial
         // Limpia el preapproval muerto (igual que el gate): la re-suscripcion futura se atribuye por payer_email.
-        try { await env.DB.prepare("UPDATE tenants SET estado = 'activo', plan = 'gratis', mp_preapproval_id = '', mp_sub_status = '' WHERE id = ?1").bind(t.id).run(); } catch (e) {}
+        try { await env.DB.prepare("UPDATE tenants SET estado = 'activo', plan = 'base', mp_preapproval_id = '', mp_sub_status = '' WHERE id = ?1").bind(t.id).run(); } catch (e) {}
         if ((t.paso | 0) < 5){
           etapa = "vencido"; pasoNuevo = 5;
           try { await alertaCorreoAndres(env, "Trial vencido sin convertir: " + t.academia, "Tenant: " + t.academia + " (" + t.email + ")\nVenció: " + t.trial_hasta + "\nCayó al plan Gratis (web y portal siguen vivos). Le salió el correo con el link de suscripción."); } catch (e) {}

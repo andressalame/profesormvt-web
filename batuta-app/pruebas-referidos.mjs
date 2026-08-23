@@ -31,7 +31,7 @@ function cortar(nombre, tipo){
   return SRC.slice(ini, i);
 }
 const CONSTS = ["PAQUETES", "CLASES_MAX", "PAQUETES_MAX", "CREDITO_REFERIDO", "REF_PREMIO_MODOS", "LIMA_OFFSET_MS"];
-const FUNCS = ["parsePaquetes", "resolverPk", "refCfg", "precioPorClase", "refElegible",
+const FUNCS = ["parsePaquetes", "normPaqNombre", "resolverPk", "refCfg", "precioPorClase", "yaEraAlumnoDe", "refElegible",
                "calcularCobro", "compute", "venceVencido"];
 const fuente =
   CONSTS.map(n => cortar(n, "const")).join("\n") + "\n" +

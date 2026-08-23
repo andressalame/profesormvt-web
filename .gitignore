@@ -6,3 +6,6 @@ src/env.d.ts
 .DS_Store
 .admin-token.local
 batuta-app/.wrangler/
+
+# respaldos temporales de una sesión de trabajo, no van al repo
+*.bak-*

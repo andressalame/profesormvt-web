@@ -19,7 +19,7 @@ function cortar(nombre){
    un suite que revienta al arrancar se ve tan callado como uno que pasa. Lo usa fechaLimaDe().
    Ver `memoria: leccion-verificar-que-el-dato-venga`. */
 const FN = ["categoriaDe","paqueteCubre","resolverPk","venceVencido","pasesDe","pasesOrdenConsumo",
-            "atribuirPases","limaParts","fechaLimaDe","diaVecino","eventosConsumo","computeMulti"];
+            "vencidoAl","atribuirPases","limaParts","fechaLimaDe","diaVecino","eventosConsumo","computeMulti"];
 /* las constantes que esas funciones usan, cortadas del mismo archivo */
 function cortarConst(nombre){
   const m = new RegExp("^const " + nombre + "\\s*=", "m").exec(SRC);
@@ -119,6 +119,43 @@ verificar(
   cm2.pases.length === 2 && p1.usadas === 1 && p1.restantes === 3 && p2.usadas === 1 && p2.restantes === 7 && cm2.restantes === 10,
   "los dos planes sobreviven: Máquinas 1/4 (le quedan 3) y Mat 1/8 (le quedan 7), total 10",
   `${cm2.pases.length} planes · Máquinas ${p1 && p1.usadas}/${p1 && p1.compradas} rest ${p1 && p1.restantes} · Mat ${p2 && p2.usadas}/${p2 && p2.compradas} rest ${p2 && p2.restantes} · total ${cm2.restantes}`);
+
+
+/* ============================================================
+   CASO 3 (22-ago-2026) — Úrsula Gamio, la alumna del audio de José.
+   Terminó su plan de 12, renovó PAGANDO POR FUERA, y José le cargó el plan nuevo a mano.
+   El plan viejo seguía apareciendo primero y no la dejaba reservar, así que José le movió
+   la fecha de vencimiento a AYER para sacarlo del medio. Efecto: las 3 clases que ya había
+   tomado bajo el plan viejo se las cobró el plan NUEVO, y quedó en 9 de 12 cuando debería
+   estar en 12 de 12.
+   La causa: `atribuirPases` preguntaba "¿este pase está vencido HOY?" para decidir si podía
+   cobrarle una clase. Nunca preguntaba "¿estaba vencido EL DÍA de la clase?". Al vencer el
+   plan viejo, TODA su historia se mudaba al plan que quedara vivo.
+   Lo que esta prueba defiende: una clase dictada se cobra al plan que estaba vigente ESE DÍA.
+   La historia no se muda.
+   ============================================================ */
+const ALUMNO3 = { id:"msqu8xulrlcva", nombre:"Ursula", ciclo:1,
+  paquete:"12 clases de Mat", migrado_usadas:9, migrado_ciclo:1,
+  pases: JSON.stringify({ c:1, p:[
+    { n:"12 clases de Mat", usadas:9, vence:"2026-08-21", av:1 },   /* el viejo, ya vencido */
+    { n:"12 clases de Mat", usadas:0, vence:"" }]}) };              /* el nuevo, sin estrenar */
+const RESERVAS3 = [   /* las 3 que sí dictó, TODAS anteriores al vencimiento del plan viejo */
+  { id:"u1", inicio_utc:"2026-08-13T14:00:00.000Z", curso:"Fuerza", tipo:"suelta", estado:"completada" },
+  { id:"u2", inicio_utc:"2026-08-15T14:00:00.000Z", curso:"Fuerza", tipo:"suelta", estado:"completada" },
+  { id:"u3", inicio_utc:"2026-08-18T14:00:00.000Z", curso:"Fuerza", tipo:"suelta", estado:"completada" }];
+const PAQ3 = { "12 clases de Mat": { clases:12, reprog:3, ilim:false, tipos:[] } };
+const env3 = { DB: { prepare(sql){
+  return { bind(){ return this; },
+    async all(){ return { results: /FROM reservas/.test(sql) ? RESERVAS3 : [] }; } };
+}}};
+
+const cm3 = await computeMulti(env3, "tenant", ALUMNO3, PAQ3, {});
+pintar("Úrsula Gamio — plan viejo vencido ayer + plan nuevo, 3 clases dictadas ANTES del vencimiento", cm3);
+const viejo3 = cm3.pases[0], nuevo3 = cm3.pases[1];
+verificar(
+  nuevo3 && nuevo3.usadas === 0 && nuevo3.restantes === 12,
+  "el plan NUEVO queda intacto en 12 de 12: las 3 clases se las cobra el viejo, que estaba vigente esos días",
+  `viejo ${viejo3 && viejo3.usadas}/12 rest ${viejo3 && viejo3.restantes} · nuevo ${nuevo3 && nuevo3.usadas}/12 rest ${nuevo3 && nuevo3.restantes} (el nuevo debería estar en 0 usadas y 12 restantes)`);
 
 console.log(fallas === 0 ? "TODO EN VERDE" : `${fallas} prueba(s) en rojo`);
 process.exit(fallas === 0 ? 0 : 1);

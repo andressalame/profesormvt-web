@@ -1026,7 +1026,7 @@ button[data-ayuda],a[data-ayuda],select[data-ayuda],input[data-ayuda],label[data
   </section>
 
   <section class="panel" id="panel-grupos">
-    <div style="margin-bottom:10px;"><button class="btn" id="btnNuevoGrupo">+ Nuevo grupo</button></div>
+    <div style="margin-bottom:10px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;"><button class="btn" id="btnNuevoGrupo">+ Nuevo grupo</button><select id="grFiltroSede" title="Filtrar por sede" style="display:none;width:auto;"></select></div>
     <p class="hint quees"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="7.6" r="3.2"/><path d="M6.4 19.6a5.6 5.6 0 0 1 11.2 0"/><circle cx="4.5" cy="10.4" r="2.1"/><path d="M1.2 17.8A3.8 3.8 0 0 1 4.5 14.6"/><circle cx="19.5" cy="10.4" r="2.1"/><path d="M22.8 17.8a3.8 3.8 0 0 0-3.3-3.2"/></svg><b>Un grupo es un atajo para pasar asistencia.</b> Le pones nombre, alumnos y horario, y con "Registrar clase" los marcas a todos de un clic (cada uno consume 1 clase de su propio paquete). Para que varios reserven el MISMO horario desde el portal no necesitas grupos: eso es el <b>aforo</b> de la hora, en <b><a href="#" data-ira="agenda">Mis clases</a></b>.</p>
     <div class="tablewrap">
       <table id="tablaGrupos">
@@ -1209,7 +1209,7 @@ button[data-ayuda],a[data-ayuda],select[data-ayuda],input[data-ayuda],label[data
     <div class="tablewrap">
       <table id="tablaRegistro">
         <thead><tr>
-          <th>Fecha</th><th>Alumno</th><th>Curso</th><th>Estado</th><th>¿Qué se trabajó?</th><th>Tarea</th><th>Próxima clase</th><th></th>
+          <th>Fecha</th><th>Alumno</th><th>Curso</th><th>La dictó</th><th>Estado</th><th>¿Qué se trabajó?</th><th>Tarea</th><th>Próxima clase</th><th></th>
         </tr></thead>
         <tbody></tbody>
       </table>
@@ -1661,7 +1661,7 @@ button[data-ayuda],a[data-ayuda],select[data-ayuda],input[data-ayuda],label[data
     </div>
     <div class="group solo-dueno" data-aj="academia">
       <h2>Sedes de tu academia</h2>
-      <p class="hint">¿Tienes más de un local? Crea tus sedes y asígnalas a tus profesores, alumnos y grupos (en Mis alumnos y Mi academia → Mis profesores). Todo se filtra por sede en un solo panel. Si tienes un solo local, ignora esta sección.</p>
+      <p class="hint">¿Tienes más de un local? Crea tus sedes y asígnalas a tus profesores, alumnos y grupos (en Mis alumnos y Mi academia → Mis profesores). Cada alumno ve su sede y su dirección en su portal, y <b>Mis alumnos</b> y <b>Grupos</b> se pueden filtrar por local. La caja y los informes siguen sumando toda la academia junta. Si tienes un solo local, ignora esta sección.</p>
       <div id="sedesLista" style="display:flex;flex-direction:column;gap:8px;"></div>
       <div class="cfgrow" style="margin-top:8px;"><span class="pk">Nueva sede</span>
         <input id="sd_nombre" type="text" placeholder="Sede Miraflores" style="flex:1;min-width:140px;" />
@@ -2499,11 +2499,39 @@ function paquetesTenant(){
   return paquetesDefPanel();
 }
 function pkMap(){ var m={}; paquetesTenant().forEach(function(p){ m[p.n]={clases:p.c,reprog:p.r,ilim:p.u,dias:p.d||0,inicio:p.i||"compra"}; }); return m; }
-function pkDe(nombre){ var m=pkMap(); if(m[nombre])return m[nombre]; if(PAQUETES[nombre])return {clases:PAQUETES[nombre].clases,reprog:PAQUETES[nombre].reprog,ilim:false,dias:0,inicio:"compra"}; return {clases:0,reprog:0,ilim:false,dias:0,inicio:"compra"}; }
+/* 🔴 23-ago-2026 · esto solo comparaba EXACTO, mientras `resolverPk` del worker tolera tildes,
+   mayúsculas, espacios de más y el prefijo numérico. Un plan renombrado de «Barré» a «Barre» y
+   el servidor le sigue dando sus clases mientras el panel muestra 0 de 0 — que es exactamente
+   lo que pasó el 20-ago con 9 alumnas de Elevate y llegó por WhatsApp del cliente. Hoy ninguna
+   alumna real depende de esa tolerancia (medido: 0), pero el nombre lo escribe el dueño.
+   Misma regla que `resolverPk`, y `pruebas-plan-se-empareja-igual.mjs` corre las dos. */
+function normPaqPanel(s){
+  return String(s||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^a-z0-9]+/g," ").trim();
+}
+function pkDe(nombre){
+  var m=pkMap();
+  if(m[nombre])return m[nombre];
+  var objetivo=normPaqPanel(nombre);
+  if(objetivo){
+    var claves=Object.keys(m);
+    var iguales=claves.filter(function(k){ return normPaqPanel(k)===objetivo; });
+    if(iguales.length===1) return m[iguales[0]];
+    var numObj=(objetivo.match(/^\d+/)||[""])[0];
+    if(numObj){
+      var cand=claves.filter(function(k){
+        var nk=normPaqPanel(k);
+        if(((nk.match(/^\d+/)||[""])[0])!==numObj) return false;
+        return objetivo.indexOf(nk+" ")===0 || nk.indexOf(objetivo+" ")===0;
+      });
+      if(cand.length===1) return m[cand[0]];
+    }
+  }
+  if(PAQUETES[nombre])return {clases:PAQUETES[nombre].clases,reprog:PAQUETES[nombre].reprog,ilim:false,dias:0,inicio:"compra"};
+  return {clases:0,reprog:0,ilim:false,dias:0,inicio:"compra",noExiste:true};
+}
 function pkNombres(){ return paquetesTenant().map(function(p){return p.n;}); }
 function opcionesPaquete(actual){ var o=pkNombres().slice(); if(actual&&o.indexOf(actual)<0)o.unshift(actual); return o.map(function(p){return '<option>'+esc(p)+'</option>';}).join(""); }
 /* "2026-08-20" -> "20 ago" (vencimiento de la mensualidad) */
-function fechaBonita(iso){ if(!iso) return "—"; var p=String(iso).split("-"); if(p.length<3) return iso; var m=["ene","feb","mar","abr","may","jun","jul","ago","sep","oct","nov","dic"]; return parseInt(p[2],10)+" "+(m[parseInt(p[1],10)-1]||""); }
 /* ---------- Clases de 2 niveles: categoría + aforo + variantes (27-jul-2026) ----------
    Fuente de verdad: config.clases (JSON). config.cursos se deriva de acá (los nombres de
    las categorías) para que ficha, registro, material y web sigan funcionando igual. */
@@ -2512,7 +2540,10 @@ function clasesTenant(){
   if(raw){ try{ var a=JSON.parse(raw);
     if(Array.isArray(a)&&a.length){
       var lee=function(x,max){ var k=parseInt(x,10); return (isFinite(k)&&k>=0&&k<=max)?k:-1; };
-      var out=a.map(function(c){ return {n:String((c&&c.n)||"").trim().slice(0,40), a:parseInt(c&&c.a,10)||0, v:(Array.isArray(c&&c.v)?c.v:[]).map(function(x){return String(x||"").trim();}).filter(Boolean), ah:lee(c&&c.ah,168), am:lee(c&&c.am,365), ch:lee(c&&c.ch,168)}; }).filter(function(c){return c.n;});
+      /* el aforo se valida IGUAL que en `parseClases` del worker (1..60, si no 0): el servidor
+         sanea al guardar, pero si alguna vez entra otro valor la pantalla no puede decir "999". */
+      var afo=function(x){ var k=parseInt(x,10); return (isFinite(k)&&k>=1&&k<=60)?k:0; };
+      var out=a.map(function(c){ return {n:String((c&&c.n)||"").trim().slice(0,40), a:afo(c&&c.a), v:(Array.isArray(c&&c.v)?c.v:[]).map(function(x){return String(x||"").trim();}).filter(Boolean), ah:lee(c&&c.ah,168), am:lee(c&&c.am,365), ch:lee(c&&c.ch,168)}; }).filter(function(c){return c.n;});
       if(out.length) return out;
     }
   }catch(e){} }
@@ -2767,9 +2798,21 @@ function recargar(){
 /* ---------- Multi-profesor: rol del actor y vistas por rol ---------- */
 var ROL="dueno", PROFE_ID="", EQUIPO=[];
 function esEquipoMulti(){ return EQUIPO && EQUIPO.filter(function(p){return p.estado!=="suspendido";}).length>1; }
+/* Quién dictó la clase que se está anotando A MANO (23-ago-2026). Si quien la anota es un
+   PROFESOR, la dictó él. Si la anota el dueño, el panel NO tiene forma de saberlo, así que se
+   deja vacío a propósito: el servidor cae entonces al profesor asignado al alumno, que es como
+   se repartía antes. Prefiero no decir nada a decir que la dictó José cuando la dio Fiorella. */
+function quienDicta(){ return (ROL === "profesor" && PROFE_ID) ? PROFE_ID : ""; }
+/* 🔴 22-ago-2026 · esta función estaba declarada DOS veces en el mismo archivo. La segunda
+   (la de la agenda, que solo miraba AG_PROFES) pisaba a esta por hoisting, así que la tabla
+   de alumnos y el importador —que se pintan sin haber abierto nunca la Agenda, con AG_PROFES
+   todavía en null— mostraban "?" en la casilla del profesor de las 1,447 filas. Una regla,
+   un sitio: ahora mira las dos listas y la copia de abajo se fue. */
 function nombreProfe(pid){
-  var p=(EQUIPO||[]).find(function(x){return x.id===pid;});
-  return p?p.nombre:"";
+  if(!pid) return "";
+  var p=(EQUIPO||[]).find(function(x){return x.id===pid;})
+      || (AG_PROFES||[]).find(function(x){return x.id===pid;});
+  return (p&&p.nombre)||"";
 }
 function aplicarRol(){
   document.body.classList.toggle("rol-profesor", ROL==="profesor");
@@ -3033,7 +3076,10 @@ el("btnLogoutAdmin").addEventListener("click",function(){
 function venceVencidoPanel(v){
   var s=String(v||"").trim();
   if(!/^\d{4}-\d{2}-\d{2}$/.test(s)) return false;
-  var ms=Date.parse(s+"T23:59:59");
+  /* 🔴 23-ago-2026 · sin la «Z» esto se parsea en la zona del NAVEGADOR: en Lima daba bien
+     por casualidad, y en cualquier otra zona el pase se moría a otra hora que en el servidor.
+     Mismo corte que `venceVencido` del worker: 23:59:59 de LIMA. */
+  var ms=Date.parse(s+"T23:59:59Z")+5*3600000;
   return isFinite(ms) && ms<Date.now();
 }
 /* ---------- Cálculo (ciclo actual) ---------- */
@@ -3072,7 +3118,11 @@ function pasesResumen(a){
       return { n:px.n, ilim:!!def.ilim, comp:comp, rest:muerto?0:Math.max(0,comp-us),
                vence:px.vence||"", vencido:muerto };
     });
-    return { lista:lista, ilim:lista.some(function(x){ return x.ilim; }),
+    /* 🔴 22-ago-2026 · este numero sale de `usadas` GUARDADO en la ficha: no descuenta las
+       clases ya dictadas del ciclo ni las apartadas. Medido contra el motor con los 16 de
+       Elevate, 13 saldrian inflados (Kiran 12 en vez de 5, Camila 24 en vez de 17). Solo
+       corre si el calculo del servidor revento, y hasta hoy lo hacia en silencio. */
+    return { lista:lista, aprox:true, ilim:lista.some(function(x){ return x.ilim; }),
       comp:lista.reduce(function(s,x){ return s+(x.ilim?0:x.comp); },0),
       rest:lista.reduce(function(s,x){ return s+(x.ilim?0:x.rest); },0) };
   }catch(e){ return null; }
@@ -3100,6 +3150,27 @@ function estadoDeSaldo(a,saldo,ilim,vencido,caduco){
   if(saldo===1) return {estado:"⚠ Última clase",clase:"amber"};
   return {estado:"Activo",clase:"green"};
 }
+/* Lo que un alumno tiene contratado, en soles. 🐛 23-ago-2026: era `db.precios[a.paquete]`,
+   el precio de UN SOLO pase. Con multi-pase eso ignora todo lo demás que compró: medido contra
+   Elevate, sus 16 alumnos con varios pases suman S/24,706 y el panel contaba S/16,754 — 32%
+   menos, en la tarjeta "MRR proyectado", en la columna de la tabla y en el CSV que se baja a
+   Excel. Los tres leen `c.monto`, así que la suma vive ACÁ y no en cada pantalla.
+   `soloRecurrentes` saca los pases de 1 clase: una clase suelta no es mensualidad. */
+function montoDeAlumno(a, pases, soloRecurrentes){
+  var lista = (Array.isArray(pases) && pases.length)
+    ? pases.map(function(p){ return p && p.n; })
+    : [a && a.paquete];
+  var s = 0;
+  lista.forEach(function(nom){
+    if(!nom) return;
+    if(soloRecurrentes){
+      var pk = pkDe(nom);
+      if((!pk.ilim && pk.clases === 1) || nom === "Clase suelta") return;
+    }
+    s += Number(db.precios[nom]) || 0;
+  });
+  return s;
+}
 function computeAlumno(a){
   /* 12-ago-2026: el saldo lo calcula AHORA EL SERVIDOR, con el mismo código que el portal
      del alumno (`a.saldo` viene en /app/api/admin/data). El cálculo local de abajo quedó como
@@ -3115,7 +3186,7 @@ function computeAlumno(a){
             reprogPermit:sv.reprogPermitidas||0,
             reprogRest:(sv.reprogRestantes==null?Infinity:sv.reprogRestantes),
             pases:sv.pases||null,
-            estado:e.estado, clase:e.clase, monto:db.precios[a.paquete]||0};
+            estado:e.estado, clase:e.clase, monto:montoDeAlumno(a, sv.pases, false)};
   }
   var pk = pkDe(a.paquete);
   var ciclo = a.ciclo||1;
@@ -3140,7 +3211,7 @@ function computeAlumno(a){
     if(vms){ if(vms<Date.now()){est="Mensualidad vencida";cl="red";} else if(vms<=Date.now()+3*86400000){est="Renovar mensualidad";cl="amber";} }
     return {compradas:null,ilim:true,usadas:usadas,restantes:Infinity,
             reprogPermit:pk.reprog,reprogRest:(pk.reprog?Math.max(0,pk.reprog-reprogramo):Infinity),
-            estado:est,clase:cl,monto:db.precios[a.paquete]||0};
+            estado:est,clase:cl,monto:montoDeAlumno(a, null, false)};
   }
   var saldo=pk.clases-usadas;
   /* Vigencia y caducidad (28-jul-2026, Elevate). Espejo de compute() en el worker: un plan
@@ -3201,7 +3272,10 @@ function renderResumen(){
   var ultima=cs.filter(function(c){return c.estado==="⚠ Última clase";}).length;
   var compl=cs.filter(function(c){return c.estado==="Completado — renovar";}).length;
   // MRR: plan mensual de alumnos activos; excluye paquetes de 1 clase (no recurrentes). Ilimitada SÍ suma.
-  var mrr=cs.reduce(function(s,c,i){ var a=db.alumnos[i]; if(!a) return s; var _p=pkDe(a.paquete); if((!_p.ilim && _p.clases===1) || a.paquete==="Clase suelta") return s; return (c.estado==="Activo"||c.estado==="⚠ Última clase"||c.estado==="Renovar mensualidad") ? s+(Number(c.monto)||0) : s; },0);
+  /* El pase de 1 clase se descarta POR PASE, no el alumno entero: antes, quien tenía
+     "1 clase de Mat" + "4 clases de Mat" no sumaba nada, ni siquiera las 4. */
+  var mrr=cs.reduce(function(s,c,i){ var a=db.alumnos[i]; if(!a) return s;
+    return (c.estado==="Activo"||c.estado==="⚠ Última clase"||c.estado==="Renovar mensualidad") ? s+montoDeAlumno(a, c.pases, true) : s; },0);
   var mkt=db.cuentas.filter(function(c){return c.marketing;}).length;
 
   /* ── Poda de "Hoy" (17-ago-2026, fase 3 del plan de UX) ────────────────────────────
@@ -3222,8 +3296,12 @@ function renderResumen(){
   db.alumnos.forEach(function(a,i){
     var c=cs[i]; if(!c) return;
     var det=(c.saldo!=null? (c.saldo+" clases") : "")+(a.paquete?(" · "+a.paquete):"");
-    if(c.estado==="⚠ Última clase") gUltima.push({nombre:a.nombre,whatsapp:a.whatsapp,detalle:det});
-    else if(c.estado==="Completado — renovar") gCompl.push({nombre:a.nombre,whatsapp:a.whatsapp,detalle:det});
+    /* 🐛 23-ago-2026 · estas dos tarjetas son la TAREA del día ("hablar renovación", con su
+       botón de WhatsApp) y nombraban solo por el nombre de pila. De las 88 alumnas de Elevate
+       con plan puesto, **8 comparten nombre con otra**: la tarjeta le decía a José "Andrea" y
+       él tenía que adivinar cuál. Misma etiqueta que el resto del panel. */
+    if(c.estado==="⚠ Última clase") gUltima.push({nombre:alumnoEtiqueta(a),whatsapp:a.whatsapp,detalle:det});
+    else if(c.estado==="Completado — renovar") gCompl.push({nombre:alumnoEtiqueta(a),whatsapp:a.whatsapp,detalle:det});
   });
   el("resHoy").innerHTML =
     card("Pagos por confirmar",pend,pend>0?"red":"")+
@@ -3417,10 +3495,22 @@ function renderAlumnos(){
          "6 de 12" cuando la celda de al lado muestra tres pases parece un error. El desglose
          por pase está ahí mismo, en la columna del plan. */
       '<td>'+(function(pr){
-        if(pr) return pr.ilim
-          ? '<span class="mini" style="font-weight:600;">Mensualidad + pases</span><br><span class="mini">'+pr.lista.length+' pases activos</span>'
-          : '<span class="big">'+pr.rest+'</span> <span class="mini">/ '+pr.comp+'</span>'+
-            '<br><span class="mini">sumando sus '+pr.lista.length+' pases</span>';
+        if(pr){
+          /* 🔴 22-ago-2026 · con varios pases la celda se quedaba en el numero y perdia las dos
+             lineas que lo explican, que el de un solo pase si veia: las apartadas —7 alumnas de
+             Elevate las tienen, Abigayl 10— y los cambios de horario que le quedan. Con el ajuste
+             "se descuenta al asistir" de Elevate, las apartadas son justo lo que hace que el
+             numero se entienda. */
+          var apart=saldoApartadas(a);
+          var extra=(apart?('<br><span class="mini" title="Ya las reservó pero todavía no las toma. Con tu ajuste de «se descuenta cuando asiste», estas todavía no le bajan el saldo.">'+apart+' apartada'+(apart===1?'':'s')+'</span>'):'')+
+            '<br><span class="mini" title="Veces que le quedan para cambiar de horario sin perder la clase">'+c.reprogRest+' de '+c.reprogPermit+' cambios</span>'+
+            /* el numero de respaldo puede estar inflado: se dice, no se disimula */
+            (pr.aprox?'<br><span class="mini" style="color:#b8860b;font-weight:600" title="No pude confirmar este saldo con el servidor, así que sale de lo último guardado en la ficha: no descuenta las clases ya dictadas ni las apartadas, y puede estar de más. Recarga la página.">sin confirmar</span>':'');
+          return (pr.ilim
+            ? '<span class="mini" style="font-weight:600;">Mensualidad + pases</span><br><span class="mini">'+pr.lista.length+' pases activos</span>'
+            : '<span class="big">'+pr.rest+'</span> <span class="mini">/ '+pr.comp+'</span>'+
+              '<br><span class="mini">sumando sus '+pr.lista.length+' pases</span>')+extra;
+        }
         if(!a.paquete) return '<span class="mini">—</span>';
         return c.ilim
           ? '<span class="mini" style="font-weight:600;">Mensual</span><br><span class="mini">vence '+esc(fechaBonita(a.vence))+'</span>'
@@ -3488,19 +3578,24 @@ function renderRegistro(){
   if(selA){
     var prev=selA.value;
     selA.innerHTML='<option value="">Todos los alumnos</option>'+
-      db.alumnos.slice().sort(function(a,b){return (a.nombre||"").localeCompare(b.nombre||"");})
+      /* 🐛 23-ago-2026 · ordenaba por el NOMBRE DE PILA mientras la etiqueta muestra el nombre
+         completo: las 27 Andreas de Elevate salían en orden de carga (Wilson, Guzman, Espinoza,
+         Calderon…) y había que leerlas todas para encontrar una. Medido: **726 de 1.447 alumnas
+         en distinta posición** que en el otro selector del mismo panel, que sí ordena bien.
+         Misma regla que `pintarSelAlumno`: se ordena por lo que se lee. */
+      db.alumnos.slice().sort(function(a,b){return alumnoEtiqueta(a).localeCompare(alumnoEtiqueta(b));})
         .map(function(a){return '<option value="'+esc(a.id)+'">'+esc(nombreCompleto(a))+'</option>';}).join("");
     selA.value=prev;
   }
   var cont=el("regContador");
   if(db.registro.length===0){
-    tb.innerHTML='<tr><td colspan="8" class="empty">Aún no anotas ninguna clase. Se anotan solas cuando marcas Asistió o Falta en la Agenda.</td></tr>';
+    tb.innerHTML='<tr><td colspan="9" class="empty">Aún no anotas ninguna clase. Se anotan solas cuando marcas Asistió o Falta en la Agenda.</td></tr>';
     if(cont) cont.textContent="";
     return;
   }
   var rows=regFiltrados().slice().sort(function(x,y){return (y.fecha||"").localeCompare(x.fecha||"");});
   if(cont) cont.textContent=rows.length+" / "+db.registro.length+" clases";
-  if(rows.length===0){ tb.innerHTML='<tr><td colspan="8" class="empty">Nada coincide con el filtro</td></tr>'; return; }
+  if(rows.length===0){ tb.innerHTML='<tr><td colspan="9" class="empty">Nada coincide con el filtro</td></tr>'; return; }
   tb.innerHTML=rows.map(function(r){
     var pc=r.estado==="Asistió"?"green":(r.estado==="Reprogramó"?"amber":"red");
     var audios=parseAudios(r.tarea_audio);
@@ -3513,6 +3608,10 @@ function renderRegistro(){
       '<td class="mini">'+esc(r.fecha||'')+'</td>'+
       '<td class="name">'+esc(nombreDe(r.alumnoId||r.alumno_id))+'</td>'+
       '<td>'+esc(r.curso||'')+'</td>'+
+      /* Quién dictó: es el dato con el que se le paga al equipo, así que tiene que VERSE.
+         Sin dato se muestra a quién se le acredita por defecto (el profe del alumno) en gris
+         y con "(por defecto)", que es exactamente lo que hace la liquidación. */
+      '<td class="mini">'+quienDictoTxt(r)+'</td>'+
       '<td><span class="pill '+pc+'">'+esc(r.estado)+'</span></td>'+
       '<td class="notes">'+esc(r.trabajo||'')+'</td>'+
       '<td class="notes">'+esc(r.tarea||'')+'</td>'+
@@ -3835,12 +3934,14 @@ function renderWaCupo(){
   var box=el("waCupoBox"); if(!box) return;
   function pinta(c){
     if(!c){ box.textContent="Cupo de conversaciones: —"; return; }
-    var esVida=(c.periodo==="total"||c.plan==="gratis");
+    /* 🐛 23-ago-2026: quedaba el "de por vida" del freemium viejo. Con packs TODO cupo es
+       MENSUAL (`waPeriodo()` devuelve el mes de Lima siempre) y el que se cae de una
+       suscripción llega acá con plan "gratis" desde `waPlanEfectivo`: le decíamos "de por vida"
+       y "hasta que subas de plan" cuando en realidad se le repone el 1 del mes. Ya no hay
+       planes que subir: hay packs que comprar. */
     var restan=Math.max(0,(c.cap||0)-(c.usados||0));
-    var lapso=esVida?"de por vida (plan Gratis)":"este mes";
-    var top=(c.usados>=c.cap)
-      ? (esVida?" Ya lo topaste: la IA queda en pausa hasta que subas de plan.":" Ya lo topaste: la IA queda en pausa hasta el próximo mes o hasta que subas de plan.")
-      : "";
+    var lapso="este mes";
+    var top=(c.usados>=c.cap)?" Ya lo topaste: la IA vuelve el 1 del próximo mes, o le sumas un pack ahora mismo.":"";
     box.innerHTML="<b>Conversaciones del asistente:</b> "+(c.usados||0)+" de "+(c.cap||0)+" "+lapso+" · quedan "+restan+"."+top;
   }
   if(window.__WA_CUPO){ pinta(window.__WA_CUPO); return; }
@@ -4051,6 +4152,14 @@ function fillSelects(){
 /* "hoy" en hora de Lima (UTC-5): sin esto, desde las 7pm el dot, la caja y la
    liquidación saltaban al día/mes siguiente (hallazgo del review). */
 function hoyLima(){ return new Date(Date.now()-5*3600000).toISOString().slice(0,10); }
+/* El día de LIMA de una hora UTC. Mismo resultado que `fechaLimaDe()` del worker y que el
+   `date(inicio_utc,'-5 hours')` de sus consultas: sin esto, una clase de las 8pm de Lima se
+   compara contra el día de mañana. */
+function diaLimaDe(iso){
+  var t=Date.parse(iso);
+  if(!isFinite(t)) return "";
+  return new Date(t-5*3600000).toISOString().slice(0,10);
+}
 var ETAPAS=[
   {k:"nuevo",n:"Nuevo"},{k:"contactado",n:"Contactado"},{k:"prueba",n:"Prueba agendada"},
   {k:"alumno",n:"Alumno ✓"},{k:"perdido",n:"Perdido"}];
@@ -4434,12 +4543,6 @@ if(el("disp_profe")) el("disp_profe").addEventListener("change",function(){
   }
   AG_PROFE=v; cargarAgenda();
 });
-/* Nombre de un profesor por id (para "la dicta X" en la grilla y el modal de franja). */
-function nombreProfe(id){
-  if(!id) return "";
-  var p=(AG_PROFES||[]).filter(function(x){ return x.id===id; })[0];
-  return (p&&p.nombre)||"";
-}
 /* Nombre corto LEGIBLE para la celda (10-ago-2026): antes abreviaba a "MÁQ·REF" y nadie
    sabía qué clase era. Ahora se queda con la variante ("Pilates Máquinas · Reformer" ->
    "Reformer") y el CSS le pone puntos suspensivos si no entra. */
@@ -4976,9 +5079,23 @@ function opcionesDeTipo(sel){
   if(sel && h.indexOf('value="'+esc(sel)+'"')===-1) h+='<option value="'+esc(sel)+'">'+esc(sel)+' (escrito a mano)</option>';
   return h;
 }
+/* 🔴 22-ago-2026 · esto partía por "·" a secas y el worker parte por " · " CON ESPACIOS
+   (`SEP_CLASE`), y solo si el separador no está al principio. Una clase que el dueño llame
+   "Yoga·Flow" —el nombre se guarda tal cual, `parseClases` solo lo recorta— el worker la
+   encuentra y deja entrar a 8; el panel se quedaba con "Yoga", no la encontraba, y pintaba
+   "1 de 1". La pantalla decía lleno con la sala vacía. Hoy ninguna academia tiene un nombre
+   así (comparadas las 60 etiquetas reales de las 21 academias: 0 divergencias), pero el
+   nombre lo escribe el dueño. Misma regla que `categoriaDe()` del worker, letra por letra. */
+function categoriaDePanel(etiqueta){
+  var s=String(etiqueta||"").trim();
+  if(!s) return "";
+  var i=s.indexOf(" \u00b7 ");
+  return i>0 ? s.slice(0,i).trim() : s;
+}
 function aforoDelTipo(t){
   if(!t) return 0;
-  var cat=String(t).split("·")[0].trim();
+  var cat=categoriaDePanel(t);
+  if(!cat) return 0;
   var c=clasesTenant().find(function(x){return x.n===cat;});
   return (c&&c.a)||0;
 }
@@ -5959,6 +6076,7 @@ document.body.addEventListener("click",function(e){
   }
 });
 if(el("alFiltroSede")) el("alFiltroSede").addEventListener("change",renderAlumnos);
+if(el("grFiltroSede")) el("grFiltroSede").addEventListener("change",renderGrupos);
 /* asignar sede a un profe directo desde la tabla (select por fila) */
 document.body.addEventListener("change",function(e){
   var ps=e.target.closest("[data-pfsede]"); if(!ps) return;
@@ -6599,15 +6717,37 @@ el("regLimpiar").addEventListener("click",function(){
 function renderGrupos(){
   var tw=el("tablaGrupos"); if(!tw) return;
   var tb=tw.querySelector("tbody");
-  var gs=db.grupos||[];
+  /* Filtro por sede, igual que en Mis alumnos. 🔴 23-ago-2026 · la ayuda de Ajustes prometía
+     "todo se filtra por sede" y el ÚNICO sitio que filtraba era Mis alumnos: los grupos ya
+     pintaban su sede en una etiqueta pero no había forma de quedarse con los de un local. */
+  var fsel=el("grFiltroSede");
+  if(fsel){
+    var ssF=db.sedes||[];
+    if(ssF.length){
+      var prevFs=fsel.value;
+      fsel.innerHTML='<option value="">Todas las sedes</option>'+ssF.map(function(s){return '<option value="'+esc(s.id)+'">'+esc(s.nombre)+'</option>';}).join("");
+      fsel.value=prevFs; if(fsel.value!==prevFs) fsel.value="";
+      fsel.style.display="";
+    } else { fsel.style.display="none"; fsel.value=""; }
+  }
+  var fsG=(fsel&&fsel.value)||"";
+  var gs=(db.grupos||[]);
   if(!gs.length){ tb.innerHTML='<tr><td colspan="5" class="empty">Sin grupos todavía. Crea el primero.</td></tr>'; return; }
+  if(fsG){
+    gs=gs.filter(function(g){ return (g.sede_id||"")===fsG; });
+    if(!gs.length){ tb.innerHTML='<tr><td colspan="5" class="empty">Sin grupos en esa sede</td></tr>'; return; }
+  }
   tb.innerHTML=gs.map(function(g){
-    var nombres=(g.miembros||[]).map(function(id){ var a=db.alumnos.find(function(x){return x.id===id;}); return a?a.nombre:null; }).filter(Boolean);
+    /* Misma etiqueta que el resto del panel, y los miembros cuya ficha ya no existe se DICEN
+       en vez de desaparecer del conteo: un grupo de 5 que muestra "(3)" no se entiende. */
+    var ids=(g.miembros||[]);
+    var nombres=ids.map(function(id){ var a=db.alumnos.find(function(x){return x.id===id;}); return a?alumnoEtiqueta(a):null; }).filter(Boolean);
+    var fantasmas=ids.length-nombres.length;
     return '<tr>'+
       '<td class="name">'+esc(g.nombre)+((g.sede_id&&nombreSede(g.sede_id))?' <span class="pill gray">'+esc(nombreSede(g.sede_id))+'</span>':'')+'</td>'+
       '<td>'+esc(g.curso||"—")+'</td>'+
       '<td>'+esc(g.horario||"—")+'</td>'+
-      '<td class="notes">'+(nombres.length?esc(nombres.join(", ")):'<span class="mini">Sin alumnos</span>')+' <span class="mini">('+nombres.length+')</span></td>'+
+      '<td class="notes">'+(nombres.length?esc(nombres.join(", ")):'<span class="mini">Sin alumnos</span>')+' <span class="mini">('+nombres.length+(fantasmas?' + '+fantasmas+' sin ficha':'')+')</span></td>'+
       '<td><div class="rowact">'+
         '<button class="btn sm" data-gclase="'+g.id+'"'+(nombres.length?'':' disabled')+'>Registrar clase</button>'+
         '<button class="btn ghost sm" data-geditar="'+g.id+'">Editar</button>'+
@@ -6750,7 +6890,8 @@ function guardarAsistenciaGrupo(){
     var al=row.dataset.al; var alumno=db.alumnos.find(function(x){return x.id===al;});
     if(!alumno) return;
     nuevos.push({ id:uid(), fecha:fecha, alumnoId:al, alumno_id:al, curso:curso, estado:estado,
-      trabajo:trabajo, tarea:tarea, plan:plan, tarea_audio:tarea_audio, ciclo:alumno.ciclo||1 });
+      trabajo:trabajo, tarea:tarea, plan:plan, tarea_audio:tarea_audio, ciclo:alumno.ciclo||1,
+      profesor_id:quienDicta() });
   });
   if(!nuevos.length){ toast("Marca al menos un alumno (todos están en Omitir)"); return; }
   nuevos.forEach(function(r){ db.registro.push(r); });
@@ -6787,7 +6928,21 @@ if(el("tablaGrupos")) el("tablaGrupos").addEventListener("click",function(e){
 var REG_GRUPO = [];   /* ids de los alumnos EXTRA de la clase (sin el titular) */
 var REG_EJ = [];      /* ids de ejercicios que se adjuntan en este guardado */
 
-function nombreAlumnoReg(id){ var a=(db.alumnos||[]).find(function(x){return x.id===id;}); return a?a.nombre:""; }
+/* 🐛 23-ago-2026 · devolvía solo el NOMBRE. Esta es la pantalla con la que se registra una
+   clase GRUPAL, y lo que se registra descuenta clases: los chips decían «Andrea» y en Elevate
+   hay **27 Andreas**. Se usa la misma etiqueta que el resto del panel (nombre + apellido);
+   1,441 de sus 1,447 alumnas tienen apellido cargado. */
+/* El nombre de quien dictó una clase, con la MISMA regla que usa la liquidación:
+   manda `registro.profesor_id`; si no hay, se le acredita al profesor del alumno y se dice
+   que es por defecto, para que el dueño sepa cuál está estimado y cuál es un hecho. */
+function quienDictoTxt(r){
+  var pid = r && r.profesor_id;
+  if(pid){ var p=(EQUIPO||[]).find(function(x){return x.id===pid;}); return esc(p?p.nombre:"—"); }
+  var a=(db.alumnos||[]).find(function(x){return x.id===(r.alumnoId||r.alumno_id);});
+  var q=a&&a.profesor_id ? (EQUIPO||[]).find(function(x){return x.id===a.profesor_id;}) : null;
+  return '<span style="opacity:.55;">'+esc(q?q.nombre:"—")+' <small>(por defecto)</small></span>';
+}
+function nombreAlumnoReg(id){ var a=(db.alumnos||[]).find(function(x){return x.id===id;}); return a?alumnoEtiqueta(a):""; }
 function chipsRegHTML(items, attr){
   return items.map(function(it){
     return '<span class="gchip" title="'+esc(it.n)+'"><span class="gchipn">'+esc(it.n)+'</span>'+
@@ -6805,9 +6960,13 @@ function pintarGrupoReg(){
 function fillGrupales(){
   var box=el("r_grupales"); if(!box) return;
   var main=el("r_alumno").value;
-  var q=((el("r_gbuscar")&&el("r_gbuscar").value)||"").trim().toLowerCase();
+  var q=vnNorm(((el("r_gbuscar")&&el("r_gbuscar").value)||"").trim());
   var lista=(db.alumnos||[]).filter(function(a){
-    return a.id!==main && REG_GRUPO.indexOf(a.id)===-1 && (!q || (a.nombre||"").toLowerCase().indexOf(q)!==-1);
+    /* 🐛 23-ago-2026 · buscaba solo por NOMBRE y sin plegar tildes, mientras la lista de abajo
+       muestra el nombre completo: escribir el apellido no encontraba a nadie, y «principe» no
+       encontraba a «Príncipe». Misma regla que el buscador de alumnos (`vnNorm` + etiqueta). */
+    return a.id!==main && REG_GRUPO.indexOf(a.id)===-1 &&
+           (!q || vnNorm(alumnoEtiqueta(a)+" "+(a.email||"")+" "+(a.whatsapp||"")).indexOf(q)!==-1);
   });
   box.innerHTML = lista.length
     ? lista.map(function(a){ return '<button type="button" data-sumagrupo="'+esc(a.id)+'">'+esc(nombreCompleto(a))+'</button>'; }).join("")
@@ -6895,13 +7054,13 @@ el("btnGuardarRegistro").addEventListener("click",function(){
     // editar: conservamos lo que el modal no toca (adjuntos, ciclo)
     db.registro=db.registro.map(function(x){ return x.id===editId ? Object.assign({},x,campos) : x; });
   } else {
-    db.registro.push(Object.assign({ id:uid(), ciclo:(a&&a.ciclo)||1 }, campos));
+    db.registro.push(Object.assign({ id:uid(), ciclo:(a&&a.ciclo)||1, profesor_id:quienDicta() }, campos));
     // clase grupal: la misma clase para cada alumno sumado, cada uno con su propio ciclo
     REG_GRUPO.forEach(function(idAl){
       if(idAl===alumnoId) return;
       var al=db.alumnos.find(function(x){return x.id===idAl;});
       if(!al) return;
-      db.registro.push(Object.assign({}, campos, { id:uid(), ciclo:al.ciclo||1, alumnoId:idAl, alumno_id:idAl }));
+      db.registro.push(Object.assign({}, campos, { id:uid(), ciclo:al.ciclo||1, alumnoId:idAl, alumno_id:idAl, profesor_id:quienDicta() }));
       nRegistrados++;
     });
   }
@@ -7194,7 +7353,7 @@ function renderInvitar(){
     h+='<div id="invWaLista" style="max-height:280px;overflow:auto;border-top:1px solid var(--line);margin-top:12px;">'+
        waPend.concat((INV.lista_wa||[]).filter(function(a){ return a.invitado_el; })).map(function(a){
          return '<div style="display:flex;gap:10px;align-items:center;justify-content:space-between;padding:9px 2px;border-bottom:1px solid var(--line);">'+
-           '<div><b>'+esc(a.nombre)+'</b><br><span class="mini">'+esc(a.whatsapp||"")+
+           '<div><b>'+esc(alumnoEtiqueta(a))+'</b><br><span class="mini">'+esc(a.whatsapp||"")+
              (a.invitado_el?(' · <span style="color:var(--accent);">ya le avisaste el '+esc(a.invitado_el)+'</span>'):'')+'</span></div>'+
            '<button class="btn '+(a.invitado_el?'ghost ':'')+'sm" data-invwa="'+esc(a.id)+'" style="white-space:nowrap;">'+(a.invitado_el?'Reenviar':'Abrir WhatsApp')+'</button>'+
          '</div>';
@@ -7327,7 +7486,10 @@ function pintarVencimientos(a){
     VENCE_PASES=pj;
     box.innerHTML=pj.p.map(function(px,i){
       return '<div style="display:flex;gap:8px;align-items:center;margin:0 0 6px;flex-wrap:wrap;">'+
-        '<span style="flex:1 1 140px;font-size:13px;">'+esc(px.n||"")+'</span>'+
+        /* mismo número que la ficha de clases ("se cobró de X (plan 2)"): sin esto el dueño ve
+           "plan 2" arriba y una lista sin numerar abajo, y tiene que adivinar cuál es cuál. */
+        '<span style="flex:1 1 140px;font-size:13px;">'+esc(px.n||"")+
+          (pj.p.filter(function(o){return o.n===px.n;}).length>1?(' <span class="mini" style="opacity:.6;">(plan '+(i+1)+')</span>'):'')+'</span>'+
         '<input type="date" class="a-vence-pase" data-i="'+i+'" value="'+esc(px.vence||"")+'" style="flex:0 0 auto;" />'+
         '<button type="button" class="a-quitar-pase" data-i="'+i+'" title="Quitar este plan" '+
         'style="flex:0 0 auto;border:1px solid #d9534f;background:#fff;color:#d9534f;border-radius:6px;'+
@@ -7389,6 +7551,47 @@ function quitarPase(i){
   PASE_QUITADO=true;
   toast("Plan quitado. Dale Guardar para aplicarlo.");
 }
+/* ---- De qué pase salió cada clase (23-ago-2026, pedido de Andrés) ----
+   Lo calcula el servidor junto con el saldo (`a.saldo.cargos`) y acá SOLO se pinta: si se
+   recalculara en el panel, tarde o temprano diría algo distinto que la liquidación.
+   Se enseña únicamente a quien tiene VARIOS pases: con un plan solo la respuesta es obvia
+   (en Elevate son 16 alumnas de 1.447).
+   ⚠️ El motivo se pinta tal cual lo dice el motor. Nada de "es el único que le queda vivo":
+   en la rama en que ningún plan estaba vigente eso es falso, y ese caso existe de verdad. */
+function pasesDeFicha(a){
+  var sv=a&&a.saldo;
+  return (sv && Array.isArray(sv.pases) && sv.pases.length>1) ? sv.pases : null;
+}
+/* El nombre del pase, numerado SOLO si hay homónimos, y por su posición en la ficha —el mismo
+   número que usa la lista de vencimientos, para que no haya dos numeraciones del mismo alumno. */
+function nombrePase(pases, idx){
+  var p=pases[idx]; if(!p) return "—";
+  var repes=pases.filter(function(x){ return x.n===p.n; }).length>1;
+  return p.n + (repes ? (" (plan "+(idx+1)+")") : "");
+}
+function detalleCargo(pases, c){
+  if(!c) return "";
+  var nom=esc(nombrePase(pases, c.idx));
+  var motivo = c.via==="sinSaldo"      ? " · ya estaba sin saldo"
+             : c.via==="vivoNoCubre"   ? " · ese plan no cubría esa clase"
+             : c.via==="ninguno"       ? " · ese día no tenía ningún plan vigente"
+             : "";
+  return ' · <span class="mini" style="opacity:.75;">se cobró de <b>'+nom+'</b>'+motivo+'</span>';
+}
+/* Empareja cada clase con su cargo. Se consume de una copia para que dos clases iguales el
+   mismo día no se queden las dos con el mismo cargo. */
+function buscadorDeCargos(a){
+  var sv=a&&a.saldo, pool=(sv&&Array.isArray(sv.cargos))?sv.cargos.slice():[];
+  return function(fecha, curso){
+    for(var i=0;i<pool.length;i++){
+      var c=pool[i];
+      if(String(c.cuando||"").slice(0,10)===String(fecha||"").slice(0,10) && String(c.tipo||"")===String(curso||"")){
+        pool.splice(i,1); return c;
+      }
+    }
+    return null;
+  };
+}
 function pintarClasesDeAlumno(a){
   var wrap=el("a_clases_wrap"), box=el("a_clases");
   if(!wrap||!box) return;
@@ -7409,6 +7612,27 @@ function pintarClasesDeAlumno(a){
   var tomadas=(db.registro||[]).filter(function(r){
     return (r.alumnoId||r.alumno_id)===a.id && (r.estado==="Asistió"||r.estado==="Falta");
   }).sort(function(x,y){ return String(y.fecha||"").localeCompare(String(x.fecha||"")); });
+  /* 🔴 22-ago-2026 · una clase que YA se dio pero que no llegó a su bitácora no aparecía en
+     NINGUNA de las tres listas: no es futura, no está sin marcar, y "Ya tomadas" se arma solo
+     con `registro`. Elevate tiene 16 así hoy —días en que la alumna tuvo dos clases y solo se
+     anotó una— y la ficha le muestra al dueño UNA donde hubo DOS. La clase existe en `reservas`
+     con estado 'completada'; se enseña de todos modos y se dice que le falta la anotación. */
+  /* 🔴 23-ago-2026 · esto se sacaba de `AG_RESERVAS`, que es el arreglo de la AGENDA y viene
+     con una ventana de 7 días: las clases sin anotar más viejas volvían a desaparecer (5 de las
+     16 de Elevate ya se habían caído). Ahora las manda el servidor calculadas sobre toda su
+     historia (`a.sinAnotar`); el filtro local queda solo de respaldo si la respuesta es vieja. */
+  var sinAnotar;
+  if(a.sinAnotar && a.sinAnotar.length!==undefined){
+    sinAnotar=a.sinAnotar.slice();
+  } else {
+    var yaAnotadas={};
+    tomadas.forEach(function(r){ yaAnotadas[(r.fecha||"")+"|"+(r.curso||"")]=1; });
+    sinAnotar=mias.filter(function(r){
+      if(r.estado!=="completada" && r.estado!=="falta") return false;
+      return !yaAnotadas[diaLimaDe(r.inicio_utc)+"|"+(r.curso||"")];
+    });
+  }
+  sinAnotar.sort(function(x,y){ return String(y.inicio_utc).localeCompare(String(x.inicio_utc)); });
 
   function fila(izq, botones){
     return '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:4px 0;border-bottom:1px solid var(--line,rgba(255,255,255,.07));">'+
@@ -7421,6 +7645,9 @@ function pintarClasesDeAlumno(a){
     return '<b style="font-size:12.5px;'+(color?('color:'+color+';'):'')+'">'+t+'</b>'+
            (n?(' <span class="hint" style="margin:0;">('+n+')</span>'):'');
   }
+
+  var PASES_F = pasesDeFicha(a);
+  var buscarCargo = PASES_F ? buscadorDeCargos(a) : function(){ return null; };
 
   var h='';
   if(sinMarcar.length){
@@ -7443,17 +7670,29 @@ function pintarClasesDeAlumno(a){
   }).join(""));
   h+='</div>';
 
-  h+='<div style="margin-top:12px;">'+titulo("Ya tomadas", tomadas.length);
-  if(!tomadas.length) h+='<p class="hint" style="margin:3px 0 0;">Todavía no tiene clases anotadas.</p>';
-  else h+=lista(tomadas.map(function(r){
+  h+='<div style="margin-top:12px;">'+titulo("Ya tomadas", tomadas.length+sinAnotar.length);
+  if(!tomadas.length && !sinAnotar.length) h+='<p class="hint" style="margin:3px 0 0;">Todavía no tiene clases anotadas.</p>';
+  if(sinAnotar.length) h+=lista(sinAnotar.map(function(r){
+    return fila(esc(fechaBonita(diaLimaDe(r.inicio_utc)))+(r.curso?(' · '+esc(r.curso)):'')+
+      ' · <span class="hint" style="margin:0;">'+(r.estado==="falta"?"faltó":"vino")+'</span>'+
+      ' <span class="mini" style="color:#b8860b;font-weight:600" title="La clase se dio y su saldo ya la descontó, pero no quedó anotada en su historial (ese día tenía otra clase y solo se anotó una). Márcala de nuevo desde la agenda si quieres que aparezca en su bitácora.">sin anotar en su historial</span>',
+      '<button type="button" class="btn ghost sm" data-anularclase="'+esc(diaLimaDe(r.inicio_utc))+'" data-al="'+esc(a.id)+'" data-ciclo="'+esc(r.ciclo||a.ciclo||1)+'" data-curso="'+esc(r.curso||"")+'" title="Borra la clase y le devuelve el crédito">Anular</button>');
+  }).join(""));
+  /* ojo: `if` propio y no `else`, que el `else` de arriba se comía la lista de las anotadas */
+  if(tomadas.length) h+=lista(tomadas.map(function(r){
     return fila(esc(fechaBonita(r.fecha))+(r.curso?(' · '+esc(r.curso)):'')+
-      ' · <span class="hint" style="margin:0;">'+(r.estado==="Falta"?"faltó":"vino")+'</span>',
+      ' · <span class="hint" style="margin:0;">'+(r.estado==="Falta"?"faltó":"vino")+'</span>'+
+      (PASES_F ? detalleCargo(PASES_F, buscarCargo(r.fecha, r.curso)) : ''),
       '<button type="button" class="btn ghost sm" data-editreg="'+esc(r.id)+'">Editar</button> '+
       /* "Anular" (15-ago-2026, José/Elevate): *"en lugar de reprogramó debería ser simplemente
          eliminar y hacer de cuenta que nunca pasó y se le devuelve el crédito"*. Marcar
          "Reprogramó" no servía para eso: gasta su cuota de reprogramaciones y está pensado para
          cuando el alumno mueve su clase, no para deshacer un error del dueño. */
-      '<button type="button" class="btn ghost sm" data-anularclase="'+esc(r.fecha||"")+'" data-al="'+esc(a.id)+'" data-ciclo="'+esc(r.ciclo||a.ciclo||1)+'" title="Borra la clase y le devuelve el crédito">Anular</button>');
+      /* 🔴 22-ago-2026 · el botón mandaba solo el día, y el server borraba y cancelaba el día
+         ENTERO. La fila dice su curso ("21 ago · Barré · vino"), así que el dueño cree que
+         deshace UNA clase; a quien tenía dos ese día (Barré 8am y Pilates Mat 9am) se le
+         cancelaban las dos. Ahora viaja el curso de ESTA fila. */
+      '<button type="button" class="btn ghost sm" data-anularclase="'+esc(r.fecha||"")+'" data-al="'+esc(a.id)+'" data-ciclo="'+esc(r.ciclo||a.ciclo||1)+'" data-curso="'+esc(r.curso||"")+'" title="Borra la clase y le devuelve el crédito">Anular</button>');
   }).join(""));
   h+='</div>';
 
@@ -7527,7 +7766,7 @@ if(el("ovAlumno")) el("ovAlumno").addEventListener("click",function(e){
   e.preventDefault();
   if(!confirm("¿Anular esta clase?\n\nSe borra de su historial y la clase vuelve a su saldo, como si nunca hubiera pasado. No le gasta ninguna reprogramación.")) return;
   b.disabled=true;
-  apiPost("/app/api/admin/clase/anular",{alumno_id:b.dataset.al, fecha:b.dataset.anularclase, ciclo:b.dataset.ciclo})
+  apiPost("/app/api/admin/clase/anular",{alumno_id:b.dataset.al, fecha:b.dataset.anularclase, ciclo:b.dataset.ciclo, curso:(b.dataset.curso||"")})
     .then(function(d){
       AG_RESERVAS_LISTAS=false;
       return Promise.all([
@@ -8408,7 +8647,10 @@ el("btnBackupSrv").addEventListener("click",function(){
 el("btnCsv").addEventListener("click",function(){
   var head=["Alumno","WhatsApp","Curso","Paquete","Ciclo","Fecha compra","Monto","Estado pago","Horario","Clases compradas","Clases usadas","Clases restantes","Reprog restantes","Estado","Notas"];
   var rows=db.alumnos.map(function(a){ var c=computeAlumno(a);
-    return [a.nombre,a.whatsapp,a.curso,a.paquete,(a.ciclo||1),a.fecha,c.monto,a.pago,a.horario,(c.ilim?"Ilimitado (mensual)":c.compradas),c.usadas,(c.ilim?("vence "+(a.vence||"")):c.restantes),(c.ilim?"":c.reprogRest),c.estado,a.notas]; });
+    /* 🔴 23-ago-2026 · el CSV exportaba `a.nombre` a secas mientras la tabla, la API y el
+       buscador usan nombre + apellido. Con 1.441 de 1.447 alumnas con apellido cargado, el
+       archivo salía con 27 filas que decían solo «Andrea», 20 «Claudia», 17 «Fiorella»… */
+    return [alumnoEtiqueta(a),a.whatsapp,a.curso,a.paquete,(a.ciclo||1),a.fecha,c.monto,a.pago,a.horario,(c.ilim?"Ilimitado (mensual)":c.compradas),c.usadas,(c.ilim?("vence "+(a.vence||"")):c.restantes),(c.ilim?"":c.reprogRest),c.estado,a.notas]; });
   descargaCsv(head,rows,"alumnos-"+MARCA.archivoExport+".csv");
 });
 el("btnCsvEmails").addEventListener("click",function(){

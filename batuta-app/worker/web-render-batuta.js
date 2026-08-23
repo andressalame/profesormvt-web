@@ -420,6 +420,44 @@ export function htmlDocumento(data, ctx, opciones){
   var d = mezclar(data);
   var titulo = (d.hero.titulo || ctx.tenant.academia);
   var desc = d.hero.sub || (ctx.cursos.length ? "Clases de " + ctx.cursos.join(", ") + "." : "Reserva y paga tus clases online.");
+  /* ---- SEO de la página de la academia (21-ago-2026) ----
+     El <title> era el nombre pelado ("Elevate Studio"): nadie busca eso, y sin qué enseña
+     Google no la muestra a quien busca "pilates". Se le pega lo que dicta, con tope de 62
+     caracteres para que no salga cortado en los resultados. Si la academia escribió su propio
+     título, manda el suyo y no se toca. */
+  var tituloSeo = titulo;
+  if (!d.hero.titulo && ctx.cursos.length){
+    var dosCursos = ctx.cursos.slice(0, 2).join(" y ");
+    var cand = titulo + " · " + dosCursos;
+    if (cand.length <= 62 && titulo.toLowerCase().indexOf(ctx.cursos[0].toLowerCase()) < 0) tituloSeo = cand;
+  }
+  var slugCanon = String((ctx.tenant && ctx.tenant.slug) || "").trim();
+  var urlCanon = slugCanon ? ("https://batuta.lat/a/" + encodeURIComponent(slugCanon)) : "";
+  /* Datos estructurados: SOLO lo que la academia ya publicó. Nada de dirección ni teléfono
+     inventados — schema.org no los exige para EducationalOrganization y poner un dato que no
+     tenemos sería publicar información falsa de un negocio real. */
+  var jsonLd = "";
+  if (urlCanon){
+    var ld = {
+      "@context": "https://schema.org",
+      "@type": "EducationalOrganization",
+      name: titulo,
+      url: urlCanon,
+      description: desc
+    };
+    if (ctx.cfg && ctx.cfg.brand_logo) ld.image = "https://batuta.lat" + ctx.cfg.brand_logo;
+    if (ctx.cursos.length){
+      ld.hasOfferCatalog = {
+        "@type": "OfferCatalog",
+        name: "Clases",
+        itemListElement: ctx.cursos.slice(0, 12).map(function (c){
+          return { "@type": "Offer", itemOffered: { "@type": "Service", name: c } };
+        })
+      };
+    }
+    jsonLd = "<script type=\"application/ld+json\">" +
+      JSON.stringify(ld).replace(/</g, "\\u003c") + "</scr" + "ipt>";
+  }
   var href = fuentesHref(d, ctx.cfg);
   var editorCss = o.editable
     ? "[data-ed]{transition:outline .1s}[data-ed]:hover{outline:2px dashed var(--acento);outline-offset:3px;cursor:pointer}"
@@ -429,11 +467,13 @@ export function htmlDocumento(data, ctx, opciones){
     : (o.beacon || "");
   return "<!doctype html><html lang=\"es\"><head><meta charset=\"utf-8\">" +
     "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">" +
-    "<title>" + esc(titulo) + "</title>" +
+    "<title>" + esc(tituloSeo) + "</title>" +
+    (urlCanon ? "<link rel=\"canonical\" href=\"" + esc(urlCanon) + "\">" : "") +
     "<meta name=\"description\" content=\"" + esc(desc) + "\">" +
     "<meta property=\"og:title\" content=\"" + esc(titulo) + "\">" +
     "<meta property=\"og:description\" content=\"" + esc(desc) + "\">" +
     (ctx.cfg.brand_logo ? "<meta property=\"og:image\" content=\"https://batuta.lat" + esc(ctx.cfg.brand_logo) + "\">" : "") +
+    jsonLd +
     "<link rel=\"preconnect\" href=\"https://fonts.googleapis.com\">" +
     "<link rel=\"preconnect\" href=\"https://fonts.gstatic.com\" crossorigin>" +
     (href ? "<link href=\"" + esc(href) + "\" rel=\"stylesheet\">" : "") +
