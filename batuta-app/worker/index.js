@@ -5567,7 +5567,12 @@ async function academiasListables(env){
     "(SELECT COUNT(*) FROM alumnos a WHERE a.tenant_id = t.id) AS nal, " +
     "(SELECT valor FROM config c WHERE c.tenant_id = t.id AND c.clave = 'paquetes') AS paq " +
     "FROM tenants t WHERE t.estado != 'vencido' AND t.email NOT LIKE 'demo%@batuta.lat' " +
-    "AND t.email NOT LIKE '%@example.com' AND t.email != 'andressalame@gmail.com' " +
+    /* 🔴 23-ago-2026 · acá se excluía el correo de Andrés A MANO, para que sus cuentas de
+   prueba no salieran en el directorio. Dejó de servir el día que ProfesorMVT entró como
+   academia de verdad: una lista negra de correos no sabe distinguir una prueba de un
+   negocio. Quien no quiera salir usa `config.directorio = 'off'`, que ya existe y ya se
+   respeta unas líneas más abajo — y que además el dueño controla desde su panel. */
+"AND t.email NOT LIKE '%@example.com' " +
     "ORDER BY t.creado ASC LIMIT 300"
   ).all();
   const PALABRAS = /\b(academia|academy|estudio|studio|centro|escuela|instituto|school|taller|gimnasio|gym|club|conservatorio|dance|danza|music|música|arte|pilates|yoga|box|sport|kids|company|corp|sac|eirl|srl)\b|\bs\.a\.c?\.?|\be\.i\.r\.l/i;
@@ -8643,7 +8648,12 @@ export default {
         "(SELECT COUNT(*) FROM sedes s WHERE s.tenant_id = t.id AND COALESCE(s.direccion,'') != '') AS n_sedes, " +
         "(SELECT valor FROM config c WHERE c.tenant_id = t.id AND c.clave = 'web_direccion_off') AS dir_off " +
         "FROM tenants t WHERE t.estado != 'vencido' AND t.email NOT LIKE 'demo%@batuta.lat' " +
-        "AND t.email NOT LIKE '%@example.com' AND t.email != 'andressalame@gmail.com' " +
+        /* 🔴 23-ago-2026 · acá se excluía el correo de Andrés A MANO, para que sus cuentas de
+   prueba no salieran en el directorio. Dejó de servir el día que ProfesorMVT entró como
+   academia de verdad: una lista negra de correos no sabe distinguir una prueba de un
+   negocio. Quien no quiera salir usa `config.directorio = 'off'`, que ya existe y ya se
+   respeta unas líneas más abajo — y que además el dueño controla desde su panel. */
+"AND t.email NOT LIKE '%@example.com' " +
         "ORDER BY t.creado ASC LIMIT 300"
       ).all();
       /* ⚖️ Ley 29733: el nombre de una ACADEMIA (persona jurídica o nombre comercial) no es dato

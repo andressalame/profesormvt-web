@@ -6,9 +6,17 @@ Lee la base de MVT (`profesormvt-crm`) y escribe una academia dentro de Batuta
 (`batuta-app`). Por defecto va a un tenant DE PRUEBA que se puede borrar entero,
 para poder mirar el resultado antes de decidir nada.
 
-  python3 migrar-mvt.py --ensayo          # crea el tenant de prueba y migra
-  python3 migrar-mvt.py --ensayo --borrar # lo borra
   python3 migrar-mvt.py --plan            # no escribe nada: solo dice qué haría
+  python3 migrar-mvt.py --ensayo          # tenant desechable, para mirar
+  python3 migrar-mvt.py --ensayo --borrar # lo borra
+  python3 migrar-mvt.py --real            # la academia DE VERDAD, con los correos apagados
+  python3 migrar-mvt.py --real --refrescar# vuelve a traer los datos (por si pasaron días)
+
+EL ORDEN IMPORTA, y es lo único delicado de todo esto: MVT tiene 8 motores que le
+escriben a los alumnos y Batuta tiene los suyos. Si los dos corren sobre la misma
+gente, todo llega DOS VECES. Por eso `--real` deja la academia de Batuta con los
+correos neutralizados: los datos están, se puede revisar todo, y no sale ni un
+mensaje. El cambio de guardia (encender Batuta y apagar MVT) es un paso aparte.
 
 🔴 NUNCA escribe en la base de MVT. Solo lee.
 
@@ -24,6 +32,12 @@ DIR = "/Users/andres/Code/mvt/web"
 DIRB = "/Users/andres/Code/mvt/web/batuta-app"
 TID_ENSAYO = "MVTDRY-T"
 SLUG_ENSAYO = "profesormvt-ensayo"
+TID_REAL = "MVT-PROFESORMVT"
+SLUG_REAL = "profesormvt"
+# `tramboyos@gmail.com` y no `andressalame@`: ese último ya lo ocupa el tenant
+# `profedeprueba` (que tiene una cuenta y una compra dentro, así que no se borra).
+# Se puede cambiar desde Ajustes cuando `hola@profesormvt.com` tenga su ruta.
+EMAIL_REAL = "tramboyos@gmail.com"
 
 # Renombres reales entre los dos esquemas (medidos, no supuestos)
 RENOMBRES = {"bono_clases": "bonus_clases", "bono_ciclo": "bonus_ciclo"}
@@ -72,12 +86,18 @@ def lit(v):
 
 def main():
     ensayo = "--ensayo" in sys.argv
+    real = "--real" in sys.argv
     solo_plan = "--plan" in sys.argv
     borrar = "--borrar" in sys.argv
-    if not (ensayo or solo_plan):
-        print("Usa --ensayo (a un tenant de prueba) o --plan (no escribe nada).")
+    refrescar = "--refrescar" in sys.argv
+    if not (ensayo or solo_plan or real):
+        print("Usa --plan, --ensayo o --real.")
         return 1
-    tid = TID_ENSAYO
+    if real and borrar:
+        print("🔴 --borrar solo funciona con --ensayo. La academia de verdad se borra a mano, a propósito.")
+        return 1
+    tid = TID_REAL if real else TID_ENSAYO
+    slug = SLUG_REAL if real else SLUG_ENSAYO
 
     if borrar:
         tablas_bat = " ".join(TABLAS) + " profesores sesiones invitaciones"
@@ -147,14 +167,42 @@ def main():
         print("\n   (--plan: no se escribió nada)")
         return 0
 
-    print(f"\n   creando el tenant de ensayo {tid} …")
-    d1(BAT, f"DELETE FROM tenants WHERE id = '{tid}'", DIRB, True)
-    d1(BAT, "INSERT INTO tenants (id,slug,academia,profe_nombre,email,whatsapp,pass_hash,pass_salt,"
-            "trial_hasta,plan,estado,creado) VALUES "
-            f"('{tid}','{SLUG_ENSAYO}','ProfesorMVT (ensayo)','Andrés','mvt-ensayo@ejemplo.invalid','',"
-            "'NOSIRVE','NOSIRVE','2027-01-01','base','activo','2026-08-23T00:00:00Z')", DIRB, True)
-    d1(BAT, f"INSERT INTO profesores (id,tenant_id,nombre,email,rol,estado,creado) VALUES "
-            f"('{tid}-D','{tid}','Andrés','mvt-ensayo@ejemplo.invalid','dueno','activo','2026-08-23')", DIRB, True)
+    # 🔴 `alumnos.id` (y compañía) es PRIMARY KEY GLOBAL, no por academia: si el ensayo
+    # sigue vivo tiene secuestrados los ids de MVT y cada INSERT OR IGNORE se salta en
+    # SILENCIO. La primera corrida de --real dijo "420 de 420 aplicadas" y metió CERO filas.
+    if real:
+        vivo = d1(BAT, f"SELECT COUNT(*) n FROM tenants WHERE id = '{TID_ENSAYO}'", DIRB)[0]["n"]
+        if vivo:
+            print(f"   🔴 el ensayo {TID_ENSAYO} sigue vivo y tiene secuestrados los ids de MVT.")
+            print(f"      Bórralo primero:  python3 migrar-mvt.py --ensayo --borrar")
+            return 1
+
+    nombre = "ProfesorMVT" if real else "ProfesorMVT (ensayo)"
+    correo = EMAIL_REAL if real else "mvt-ensayo@ejemplo.invalid"
+    print(f"\n   {'refrescando' if refrescar else 'creando'} el tenant {tid} ({slug}) …")
+    if refrescar:
+        # se vacían sus tablas pero NO se borra el tenant: conserva su llave de API,
+        # su contraseña y sus ajustes
+        for t in TABLAS:
+            try:
+                d1(BAT, f"DELETE FROM {t} WHERE tenant_id = '{tid}'", DIRB, True)
+            except Exception:
+                pass
+    else:
+        for t in TABLAS + ["profesores"]:
+            try:
+                d1(BAT, f"DELETE FROM {t} WHERE tenant_id = '{tid}'", DIRB, True)
+            except Exception:
+                pass
+        d1(BAT, f"DELETE FROM tenants WHERE id = '{tid}'", DIRB, True)
+        # 🔒 la contraseña la pone ÉL, no yo: entra con "olvidé mi contraseña" y le llega
+        # a su correo. Acá jamás se escribe una contraseña de nadie.
+        d1(BAT, "INSERT INTO tenants (id,slug,academia,profe_nombre,email,whatsapp,pass_hash,pass_salt,"
+                "trial_hasta,plan,estado,creado,rubro) VALUES "
+                f"('{tid}','{slug}','{nombre}','Andrés','{correo}','',"
+                f"'SIN-CLAVE','SIN-CLAVE','2027-01-01','base','activo','2026-08-23T00:00:00Z','música')", DIRB, True)
+        d1(BAT, f"INSERT INTO profesores (id,tenant_id,nombre,email,rol,estado,creado) VALUES "
+                f"('{tid}-D','{tid}','Andrés','{correo}','dueno','activo','2026-08-23')", DIRB, True)
 
     print("   escribiendo…")
     hechas = 0
@@ -193,13 +241,38 @@ def main():
     else:
         print("   contraseñas anuladas, correos neutralizados: el ensayo no le puede escribir a nadie")
 
+    if real:
+        # Sale en el directorio de Batuta: es una academia de verdad a la que alguien
+        # se puede matricular. Es lo que pidió Andrés.
+        d1(BAT, f"INSERT INTO config (tenant_id,clave,valor) VALUES ('{tid}','directorio','si') "
+                f"ON CONFLICT(tenant_id,clave) DO UPDATE SET valor='si'", DIRB, True)
     r = d1(BAT, f"SELECT (SELECT COUNT(*) FROM alumnos WHERE tenant_id='{tid}') alumnos,"
                 f"(SELECT COUNT(*) FROM registro WHERE tenant_id='{tid}') clases,"
                 f"(SELECT COUNT(*) FROM cuentas WHERE tenant_id='{tid}') cuentas,"
                 f"(SELECT COUNT(*) FROM reservas WHERE tenant_id='{tid}') reservas,"
                 f"(SELECT COUNT(*) FROM compras WHERE tenant_id='{tid}') compras", DIRB)[0]
     print(f"\n   quedó adentro: {r}")
-    print(f"   míralo en: https://batuta.lat/a/{SLUG_ENSAYO}")
+    # 🔴 Una migración que mueve cero filas NO puede verse igual que una que funcionó.
+    # Se compara contra el ORIGEN, no contra "no hubo errores": los INSERT OR IGNORE
+    # se saltan solos y el script diría "todo bien" con la academia vacía.
+    esperado = d1(MVT, "SELECT (SELECT COUNT(*) FROM alumnos) alumnos,(SELECT COUNT(*) FROM registro) clases,"
+                       "(SELECT COUNT(*) FROM cuentas) cuentas,(SELECT COUNT(*) FROM reservas) reservas,"
+                       "(SELECT COUNT(*) FROM compras) compras", DIR)[0]
+    faltan = {k: (esperado[k], r[k]) for k in esperado if esperado[k] != r[k]}
+    if faltan:
+        print("   🔴 NO CUADRA CONTRA EL ORIGEN (origen, destino):")
+        for k, (a, b) in faltan.items():
+            print(f"      {k}: {a} → {b}")
+        print("   La academia quedó incompleta. NO la uses.")
+        return 1
+    print("   ✅ cuadra fila por fila contra el origen")
+    print(f"   míralo en: https://batuta.lat/a/{slug}")
+    if real:
+        print("\n   🔴 LOS CORREOS ESTÁN APAGADOS. Los datos están completos, pero ni Batuta")
+        print("      ni nadie le puede escribir a estos alumnos todavía. Es a propósito:")
+        print("      mientras MVT siga con sus motores encendidos, encender los de Batuta")
+        print("      les mandaría todo DOS VECES.")
+        print("      El cambio de guardia es el paso siguiente y va aparte.")
     return 0
 
 

@@ -600,8 +600,39 @@ async function avisarCompra(env, info){
 /* ---------- Email transaccional a CUALQUIER destinatario (via Resend, plan gratis).
    Requiere el secreto RESEND_API_KEY y el dominio verificado en Resend. Best-effort:
    si falla o aun no esta configurado, devuelve false y la captura del lead no se rompe. ---------- */
+/* Los correos de los alumnos que YA viven en Batuta. Se lee una vez por isolate: son 40
+   filas y MVT manda pocos correos. Existe para el corte de abajo. */
+let _ALUMNOS_MIGRADOS = null;
+async function correosDeAlumnos(env){
+  if (_ALUMNOS_MIGRADOS) return _ALUMNOS_MIGRADOS;
+  const set = new Set();
+  try {
+    const { results } = await env.DB.prepare(
+      "SELECT LOWER(email) AS e FROM cuentas WHERE COALESCE(email,'') != '' " +
+      "UNION SELECT LOWER(email) FROM alumnos WHERE COALESCE(email,'') != ''"
+    ).all();
+    for (const r of (results || [])) if (r.e) set.add(r.e);
+  } catch (e) { /* si no se puede leer, no se corta nada: mejor duplicar que callar de más */ }
+  _ALUMNOS_MIGRADOS = set;
+  return set;
+}
+
 async function enviarCorreo(env, { to, subject, html, text, from }){
   if (!env.RESEND_API_KEY || !to || !subject) return false;
+  /* 🔒 23-ago-2026 · EL CORTE DEL CAMBIO DE GUARDIA. Con el portal ya en Batuta, los
+     alumnos reciben sus recordatorios, renovaciones y avisos DESDE ALLÁ. Si los motores
+     de acá siguieran escribiéndoles, cada alumno recibiría todo dos veces.
+     Se corta acá, en la salida ÚNICA, y no apagando los 17 motores del cron uno por uno:
+     esa lista envejece, y el motor que alguien agregue mañana nacería encendido.
+     Solo se callan los correos A LOS ALUMNOS: los avisos a Andrés y los correos a
+     interesados (que no están en Batuta) siguen saliendo igual. */
+  if (await portalMigrado(env)){
+    const dests = (Array.isArray(to) ? to : [to]).map(x => String(x || "").toLowerCase().trim());
+    const migrados = await correosDeAlumnos(env);
+    const quedan = dests.filter(d => !migrados.has(d));
+    if (!quedan.length) return true;   /* true: no es un fallo, es que ya no nos toca */
+    to = Array.isArray(to) ? quedan : quedan[0];
+  }
   const remitente = (from && from.email)
     ? ((from.name ? from.name + " " : "") + "<" + from.email + ">")
     : (MARCA.profe + " de " + MARCA.nombre + " <hola@" + MARCA.dominio.replace(/^https?:\/\//, "") + ">");
@@ -3478,9 +3509,40 @@ async function cerrarAsistenciasAuto(env){
   } catch (e) { console.error("asistencia auto", e); return 0; }
 }
 
+/* ═══ EL PORTAL SE MUDÓ A BATUTA (23-ago-2026) ═══════════════════════════════
+   Decisión de Andrés: profesormvt.com sigue siendo la puerta —la web, el blog, el
+   curso grabado— pero al entrar A SU PORTAL, el alumno va al suyo dentro de Batuta.
+   (El 15-ago había decidido lo contrario; el 23-ago cambió de parecer.)
+
+   🔒 UN SOLO INTERRUPTOR, en la base y no en el código: `config.portal_migrado`.
+   Con "1" se redirige el portal Y se callan los motores que le escriben al alumno.
+   Está así a propósito: MVT es el sustento de Andrés. Si algo sale mal, se apaga con
+   un UPDATE de una línea y todo vuelve al instante, sin esperar un deploy.
+
+   Y se apagan JUNTOS a propósito. MVT tiene ocho motores que le escriben al alumno y
+   Batuta tiene los suyos: si el portal se muda pero los motores de acá siguen vivos,
+   cada alumno recibe todo DOS VECES. Un interruptor, las dos cosas. */
+const PORTAL_EN_BATUTA = "https://batuta.lat/app/a/profesormvt";
+let _MIGRADO = null;
+async function portalMigrado(env){
+  if (_MIGRADO !== null) return _MIGRADO;
+  try {
+    const r = await env.DB.prepare("SELECT valor FROM config WHERE clave = 'portal_migrado'").first();
+    _MIGRADO = !!(r && String(r.valor) === "1");
+  } catch (e) { _MIGRADO = false; }   /* ante la duda, NO se muda nada */
+  return _MIGRADO;
+}
+
 export default {
   async fetch(request, env, ctx){
     const url = new URL(request.url);
+
+    /* El portal del alumno vive en Batuta. Se redirige con 302 y no 301: un 301 se le
+       queda cacheado en el navegador para siempre y volver atrás dejaría de funcionar
+       aunque se apague el interruptor. */
+    if (/^\/alumnos(\/|$)/.test(url.pathname) && await portalMigrado(env)){
+      return Response.redirect(PORTAL_EN_BATUTA, 302);
+    }
 
     /* ---- Canje de la invitación al portal (15-ago-2026) ----
        Va ANTES del guard de assets porque es una página propia, no un archivo estático.
