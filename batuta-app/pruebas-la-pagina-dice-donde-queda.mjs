@@ -113,6 +113,24 @@ const sucio = pagina([malicioso, BORJA]);
 /query=%3C%2Fp%3E/.test(sucio) ? ok("el enlace a Maps va codificado, no roto")
                                : no("el enlace a Maps no escapó el contenido");
 
+console.log("\n── 9. El enlace propio de la academia (cursos grabados, etc.) ──");
+/* Nació para que ProfesorMVT mande a sus cursos grabados desde la sección de planes.
+   Es CONFIGURABLE y no clavado: el renderizador lo usan todas las academias. */
+const conExtra = htmlDocumento({}, contexto(TENANT, Object.assign({}, CFG, {
+  extra_url: "https://profesormvt.com/cursos/", extra_txt: "Ver mis cursos grabados" }), PRECIOS, PAQ, { cobroOn: true, sedes: [] }), {});
+/profesormvt\.com\/cursos/.test(conExtra) ? ok("con la config puesta, el enlace sale") : no("no sale el enlace");
+/Ver mis cursos grabados/.test(conExtra) ? ok("con su texto") : no("sin texto");
+/rel="noopener"/.test(conExtra) ? ok("y abre seguro en otra pestaña") : no("sin rel=noopener");
+/* se buscan las ETIQUETAS, no el nombre de la clase: el primer "bt-paq-extra" del
+   documento está en el CSS, mucho antes del marcado, y comparar esas posiciones da un
+   fallo que no existe (me pasó al escribir esto). */
+const iExtra = conExtra.indexOf('<p class="bt-paq-extra"'), iPaqs = conExtra.indexOf('<div class="bt-paqs"');
+(iPaqs > 0 && iExtra > iPaqs) ? ok("va DEBAJO de los paquetes, que es donde se decide comprar") : no("quedó fuera de la sección de planes");
+!/profesormvt/.test(base) ? ok("y una academia SIN esa config no lo ve (no es un enlace clavado)") : no("🚨 le sale a todas las academias");
+const sucioExtra = htmlDocumento({}, contexto(TENANT, Object.assign({}, CFG, {
+  extra_url: "javascript:alert(1)", extra_txt: "x" }), PRECIOS, PAQ, { cobroOn: true, sedes: [] }), {});
+!/javascript:alert/.test(sucioExtra) ? ok("y un `javascript:` en la config se descarta") : no("🚨 se puede meter javascript: por la config");
+
 console.log();
 if (mal) { console.log("🔴 " + mal + " fallo(s)"); process.exit(1); }
 console.log("✅ la página dice dónde queda, y solo si la academia quiere");

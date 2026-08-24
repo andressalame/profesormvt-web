@@ -48,6 +48,29 @@ import Layout from '../layouts/Layout.astro';
       </div>
     </section>
 
+    <!-- Ya lo compré: acá se entra a VER. Desde el 23-ago los cursos se ven en esta
+         página y no dentro del portal, porque el portal se mudó a Batuta. -->
+    <section class="cu-mios">
+      <div class="container-narrow">
+        <div id="cuSesion" class="cu-ses">
+          <div class="cu-ses-tx">
+            <b>¿Ya compraste tu curso?</b>
+            <span>Entra con el mismo correo con el que pagaste y míralo acá.</span>
+          </div>
+          <form class="cu-ses-form" id="cuForm">
+            <input id="cuMail" type="email" inputmode="email" autocomplete="email" placeholder="tu@correo.com" required />
+            <input id="cuPass" type="password" autocomplete="current-password" placeholder="tu contraseña" required />
+            <button type="submit" id="cuEntrar">Entrar</button>
+          </form>
+          <p class="cu-ses-msg" id="cuMsg"></p>
+        </div>
+        <div id="cuDentro" class="cu-dentro" hidden>
+          <span id="cuHola"></span>
+          <button type="button" id="cuSalir">Salir</button>
+        </div>
+      </div>
+    </section>
+
     <section class="cu-temario">
       <div class="container-narrow">
         <div class="cu-tabs">
@@ -91,6 +114,36 @@ import Layout from '../layouts/Layout.astro';
   .cu-precio{font-family:var(--display,'Oswald',sans-serif);font-size:2.1rem;margin-top:6px;}
   .cu-cta{margin-top:16px;display:block;text-align:center;background:var(--naranja,#e8501f);color:#160a04;font-family:var(--mono,'JetBrains Mono',monospace);font-weight:700;font-size:.76rem;letter-spacing:.1em;text-transform:uppercase;padding:14px;border-radius:3px;text-decoration:none;box-shadow:4px 4px 0 #000;}
 
+  .cu-mios{padding:26px 0 0;}
+  /* 🔴 `display:flex` le gana a la regla `[hidden]{display:none}` del navegador, así que
+     sin esto se veían los DOS bloques a la vez: el de "entra" y el de "ya estás dentro". */
+  .cu-ses[hidden],.cu-dentro[hidden]{display:none;}
+  .cu-ses{background:rgba(255,255,255,.035);border:1px solid rgba(235,229,214,.14);border-radius:6px;padding:18px 20px;display:flex;gap:14px;flex-wrap:wrap;align-items:center;justify-content:space-between;}
+  .cu-ses-tx{display:flex;flex-direction:column;gap:3px;}
+  .cu-ses-tx b{font-size:.98rem;}
+  .cu-ses-tx span{font-size:.85rem;opacity:.7;}
+  .cu-ses-form{display:flex;gap:8px;flex-wrap:wrap;}
+  .cu-ses-form input{background:rgba(0,0,0,.3);border:1px solid rgba(235,229,214,.2);border-radius:4px;color:inherit;font:inherit;font-size:.9rem;padding:9px 11px;width:190px;max-width:44vw;}
+  .cu-ses-form input:focus{outline:none;border-color:var(--naranja,#e8501f);}
+  .cu-ses-form button{background:var(--naranja,#e8501f);color:#160a04;border:0;border-radius:3px;font-family:var(--mono,'JetBrains Mono',monospace);font-weight:700;font-size:.74rem;letter-spacing:.09em;text-transform:uppercase;padding:10px 16px;cursor:pointer;}
+  .cu-ses-form button[disabled]{opacity:.55;cursor:default;}
+  .cu-ses-msg{margin:10px 0 0;font-size:.85rem;color:var(--naranja,#e8501f);}
+  .cu-ses-msg:empty{display:none;}
+  .cu-dentro{display:flex;gap:12px;align-items:center;justify-content:space-between;background:rgba(255,255,255,.035);border:1px solid rgba(235,229,214,.14);border-radius:6px;padding:14px 20px;font-size:.92rem;}
+  .cu-dentro button{background:transparent;border:1px solid rgba(235,229,214,.25);border-radius:3px;color:inherit;font:inherit;font-size:.8rem;padding:6px 12px;cursor:pointer;}
+  .cu-lec{border-bottom:1px solid rgba(235,229,214,.1);}
+  .cu-lec:last-child{border-bottom:0;}
+  .cu-cab{width:100%;text-align:left;background:transparent;border:0;color:inherit;font:inherit;display:flex;gap:10px;align-items:center;justify-content:space-between;padding:11px 2px;cursor:pointer;}
+  .cu-lec.bloq .cu-cab{cursor:default;opacity:.55;}
+  .cu-lec.visto .cu-tit{opacity:.6;}
+  .cu-dur{font-family:var(--mono,'JetBrains Mono',monospace);font-size:.7rem;opacity:.55;flex:0 0 auto;}
+  .cu-free{font-family:var(--mono,'JetBrains Mono',monospace);font-size:.6rem;letter-spacing:.1em;background:var(--naranja,#e8501f);color:#160a04;border-radius:2px;padding:2px 6px;flex:0 0 auto;}
+  .cu-body{padding:0 2px 16px;}
+  .cu-video{position:relative;padding-top:56.25%;border-radius:5px;overflow:hidden;background:#000;margin-bottom:12px;}
+  .cu-video iframe{position:absolute;inset:0;width:100%;height:100%;border:0;}
+  .cu-desc{font-size:.9rem;opacity:.8;line-height:1.55;}
+  .cu-visto{background:transparent;border:1px solid rgba(235,229,214,.25);border-radius:3px;color:inherit;font:inherit;font-size:.78rem;padding:7px 13px;cursor:pointer;margin-top:8px;}
+  .cu-prog{font-family:var(--mono,'JetBrains Mono',monospace);font-size:.72rem;letter-spacing:.07em;opacity:.6;margin-bottom:12px;}
   .cu-temario{padding:44px 0 10px;}
   .cu-tabs{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:18px;}
   .cu-tab{background:transparent;border:1px solid rgba(235,229,214,.18);color:#8a8279;font-family:var(--mono,'JetBrains Mono',monospace);font-size:.7rem;letter-spacing:.1em;text-transform:uppercase;padding:9px 14px;border-radius:3px;cursor:pointer;}
@@ -106,19 +159,51 @@ import Layout from '../layouts/Layout.astro';
 
 <script>
 (function(){
-  var cache = {};
+  /* 23-ago-2026 · Esta página era solo de VENTA: el temario en texto y un botón de comprar.
+     Los cursos se VEÍAN dentro del portal del alumno, y el portal se mudó a Batuta, así que
+     acá vive ahora también el reproductor. Una sola URL para las dos cosas: quien no compró
+     ve el temario, quien compró ve sus videos. Es lo que hace cualquier producto de cursos,
+     y evita que alguien tenga que acordarse de dos direcciones.
+     La sesión es la MISMA de siempre (`/api/login`), así que quien ya tenía cuenta entra con
+     su contraseña de toda la vida. */
+  /* MISMA clave que el portal (`pmvt_sesion`): quien ya estaba dentro del portal entra a
+     sus cursos sin volver a escribir nada, y quien entra acá queda dentro del portal
+     mientras exista. Una sesión, no dos. */
+  var KEY = 'pmvt_sesion';
+  var cache = {}, ABIERTA = null;
+  function tok(){ try { return localStorage.getItem(KEY); } catch(e){ return null; } }
+  function setTok(t){ try { t ? localStorage.setItem(KEY, t) : localStorage.removeItem(KEY); } catch(e){} }
+  function esc(x){ return String(x == null ? '' : x); }
+
   function pinta(c){
     var cont = document.getElementById('cuTemario');
     if (cache[c]){ render(cache[c]); return; }
-    cont.textContent = 'Cargando temario…';
-    fetch('/api/curso-publico?c=' + encodeURIComponent(c))
-      .then(function(r){ return r.json(); })
-      .then(function(d){ cache[c] = d; render(d); })
-      .catch(function(){ cont.textContent = 'No se pudo cargar el temario. Recarga la página.'; });
+    cont.textContent = 'Cargando…';
+    /* con sesión se pide el curso COMPLETO (videos y avance); sin ella, el temario público */
+    var t = tok();
+    var url = t ? ('/api/curso?c=' + encodeURIComponent(c)) : ('/api/curso-publico?c=' + encodeURIComponent(c));
+    var opts = t ? { headers: { authorization: 'Bearer ' + t } } : {};
+    fetch(url, opts)
+      .then(function(r){
+        /* la sesión caducó: se cae al temario público en vez de dejar la página muerta */
+        if (r.status === 401){ setTok(null); pintarSesion(); return fetch('/api/curso-publico?c=' + encodeURIComponent(c)).then(function(x){ return x.json(); }); }
+        return r.json();
+      })
+      .then(function(d){ if (!d) return; d.curso = d.curso || c; cache[c] = d; render(d); })
+      .catch(function(){ cont.textContent = 'No se pudo cargar. Recarga la página.'; });
   }
   function render(d){
     var cont = document.getElementById('cuTemario');
     if (!d || !d.secciones || !d.secciones.length){ cont.textContent = 'Temario en preparación.'; return; }
+    /* Las lecciones del alumno traen objetos ({titulo, video, puede…}); el temario público,
+       texto pelado. Se distingue por eso y no por si hay sesión: así una respuesta a medias
+       no rompe la página. */
+    var conVideo = typeof (d.secciones[0].lecciones || [])[0] === 'object';
+    if (!conVideo) return renderTemario(d, cont);
+    renderLecciones(d, cont);
+  }
+
+  function renderTemario(d, cont){
     cont.innerHTML = d.secciones.map(function(s){
       return '<div class="cu-sec"><h3></h3><ul>' +
         s.lecciones.map(function(){ return '<li></li>'; }).join('') + '</ul></div>';
@@ -130,10 +215,100 @@ import Layout from '../layouts/Layout.astro';
       var lis = secs[i].querySelectorAll('li');
       s.lecciones.forEach(function(l, j){ lis[j].textContent = l; });
     });
-    var meta = d.curso === 'composicion' ? 'metaCompo' : 'metaCanto';
-    var el = document.getElementById(meta);
-    if (el) el.textContent = d.secciones.length + ' secciones · ' + d.total + ' lecciones';
+    meta(d);
   }
+
+  function renderLecciones(d, cont){
+    var total = 0, vistas = 0;
+    d.secciones.forEach(function(s){ (s.lecciones || []).forEach(function(l){ total++; if (l.visto) vistas++; }); });
+    var html = d.comprado
+      ? '<p class="cu-prog">' + vistas + ' de ' + total + ' lecciones vistas</p>'
+      : '<p class="cu-prog">Estás dentro, pero este curso todavía no es tuyo. Las lecciones gratis las puedes ver ya.</p>';
+    d.secciones.forEach(function(s){
+      html += '<div class="cu-sec"><h3 data-t="' + encodeURIComponent(s.nombre || 'Lecciones') + '"></h3>';
+      (s.lecciones || []).forEach(function(l){
+        var abierta = ABIERTA === l.id;
+        html += '<div class="cu-lec' + (l.puede ? '' : ' bloq') + (l.visto ? ' visto' : '') + '">' +
+          '<button class="cu-cab" type="button" data-id="' + esc(l.id) + '" data-puede="' + (l.puede ? '1' : '0') + '">' +
+            '<span class="cu-tit" data-t="' + encodeURIComponent(l.titulo || '') + '"></span>' +
+            (l.duracion ? '<span class="cu-dur" data-t="' + encodeURIComponent(l.duracion) + '"></span>' : '') +
+            (l.gratis && !d.comprado ? '<span class="cu-free">GRATIS</span>' : '') +
+          '</button>';
+        if (abierta && l.puede){
+          html += '<div class="cu-body">' +
+            (l.video
+              ? '<div class="cu-video"><iframe src="https://www.youtube-nocookie.com/embed/' + encodeURIComponent(l.video) +
+                '" title="Lección" allowfullscreen referrerpolicy="strict-origin-when-cross-origin" loading="lazy"></iframe></div>'
+              : '<p class="cu-desc">Esta lección todavía no tiene video.</p>') +
+            (l.descripcion ? '<p class="cu-desc" data-t="' + encodeURIComponent(l.descripcion) + '"></p>' : '') +
+            '<button class="cu-visto" type="button" data-id="' + esc(l.id) + '" data-visto="' + (l.visto ? '1' : '0') + '">' +
+              (l.visto ? 'Marcar como no vista' : 'Marcar como vista') + '</button>' +
+          '</div>';
+        }
+        html += '</div>';
+      });
+      html += '</div>';
+    });
+    cont.innerHTML = html;
+    /* todo el texto que viene de la base entra como TEXTO, nunca como HTML */
+    cont.querySelectorAll('[data-t]').forEach(function(n){ n.textContent = decodeURIComponent(n.getAttribute('data-t')); });
+    cont.querySelectorAll('.cu-cab').forEach(function(b){
+      b.addEventListener('click', function(){
+        if (b.dataset.puede !== '1'){ msg('Esa lección se abre al comprar el curso.'); return; }
+        ABIERTA = (ABIERTA === b.dataset.id) ? null : b.dataset.id;
+        render(d);
+      });
+    });
+    cont.querySelectorAll('.cu-visto').forEach(function(b){
+      b.addEventListener('click', function(){
+        var quiero = b.dataset.visto !== '1';
+        b.disabled = true;
+        fetch('/api/curso/visto', { method: 'POST',
+          headers: { authorization: 'Bearer ' + tok(), 'content-type': 'application/json' },
+          body: JSON.stringify({ leccion_id: b.dataset.id, visto: quiero }) })
+          .then(function(){ cache = {}; pinta(activa()); })
+          .catch(function(){ b.disabled = false; });
+      });
+    });
+    meta(d);
+  }
+
+  function meta(d){
+    var el = document.getElementById(d.curso === 'composicion' ? 'metaCompo' : 'metaCanto');
+    var n = 0; (d.secciones || []).forEach(function(s){ n += (s.lecciones || []).length; });
+    if (el) el.textContent = d.secciones.length + ' secciones · ' + (d.total || n) + ' lecciones';
+  }
+  function activa(){ var b = document.querySelector('.cu-tab.active'); return (b && b.dataset.c) || 'canto'; }
+  function msg(t){ var m = document.getElementById('cuMsg'); if (m) m.textContent = t || ''; }
+
+  function pintarSesion(){
+    var fuera = document.getElementById('cuSesion'), dentro = document.getElementById('cuDentro');
+    var hay = !!tok();
+    if (fuera) fuera.hidden = hay;
+    if (dentro) dentro.hidden = !hay;
+    var h = document.getElementById('cuHola');
+    if (h && hay) h.textContent = 'Estás dentro. Abajo tienes tus lecciones.';
+  }
+  var form = document.getElementById('cuForm');
+  if (form) form.addEventListener('submit', function(e){
+    e.preventDefault();
+    var b = document.getElementById('cuEntrar');
+    var mail = (document.getElementById('cuMail').value || '').trim();
+    var pass = document.getElementById('cuPass').value || '';
+    b.disabled = true; msg('Entrando…');
+    fetch('/api/login', { method: 'POST', headers: { 'content-type': 'application/json' },
+                          body: JSON.stringify({ email: mail, password: pass }) })
+      .then(function(r){ return r.json().catch(function(){ return {}; }).then(function(d){ return { ok: r.ok, d: d }; }); })
+      .then(function(res){
+        b.disabled = false;
+        if (!res.ok || !res.d.token){ msg((res.d && res.d.error) || 'No pudimos entrar.'); return; }
+        setTok(res.d.token); msg(''); pintarSesion(); cache = {}; pinta(activa());
+      })
+      .catch(function(){ b.disabled = false; msg('No se pudo. Intenta de nuevo.'); });
+  });
+  var salir = document.getElementById('cuSalir');
+  if (salir) salir.addEventListener('click', function(){ setTok(null); pintarSesion(); cache = {}; ABIERTA = null; pinta(activa()); });
+  pintarSesion();
   document.querySelectorAll('.cu-tab').forEach(function(b){
     b.addEventListener('click', function(){
       document.querySelectorAll('.cu-tab').forEach(function(x){ x.classList.remove('active'); });

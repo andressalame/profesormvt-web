@@ -276,9 +276,13 @@ function secPrecios(d, ctx){
       '<span class="bt-paq-cl">' + esc(linea) + "</span>" +
       '<a class="bt-paq-cta" href="' + esc(ctx.base) + "/pagar?p=" + encodeURIComponent(pk) + '">Comprar →</a></div>';
   }).join("");
+  var extra = ctx.extra
+    ? '<p class="bt-paq-extra"><a href="' + esc(ctx.extra.url) + '" target="_blank" rel="noopener">' +
+      esc(ctx.extra.txt) + " \u2192</a></p>"   /* la flecha literal, no una entidad escrita a mano */
+    : "";
   return '<section class="bt-sec"><h2 data-ed="precios.titulo">' + esc(p.titulo || "Planes y precios") + "</h2>" +
     (p.intro ? '<p class="bt-sec-intro" data-ed="precios.intro">' + esc(p.intro) + "</p>" : "") +
-    '<div class="bt-paqs">' + cards + "</div></section>";
+    '<div class="bt-paqs">' + cards + "</div>" + extra + "</section>";
 }
 
 function secGaleria(d){
@@ -333,6 +337,8 @@ function css(){
     "a{color:inherit}",
     "h1,h2,h3{font-family:var(--ft),var(--fc),sans-serif;line-height:1.1;letter-spacing:-.01em}",
     /* se alinean con el <h2> y los botones de la sección, no centradas por su cuenta */
+    ".bt-paq-extra{margin:18px 0 0;font-size:.95rem}",
+    ".bt-paq-extra a{text-decoration:none;border-bottom:1px solid var(--acento);padding-bottom:2px}",
     ".bt-sedes{display:flex;flex-wrap:wrap;gap:14px 32px;margin:2px 0 20px}",
     ".bt-sede{display:flex;flex-direction:column;gap:1px}",
     ".bt-sede-n{font-size:13px;color:var(--muted);letter-spacing:.02em}",
@@ -413,7 +419,8 @@ export function contexto(tenant, cfg, precios, paq, opciones){
      en un JSON embebido, salen todos los datos bancarios de golpe. Lista blanca: si un render
      nuevo necesita otra clave, se agrega ACÁ a propósito — que es justo el punto. */
   var cfgPublica = {};
-  ["brand_color", "brand_font", "brand_logo", "clases", "cursos", "whatsapp_profe"].forEach(function (k){
+  ["brand_color", "brand_font", "brand_logo", "clases", "cursos", "whatsapp_profe",
+   "extra_url", "extra_txt"].forEach(function (k){
     if (cfg && cfg[k] !== undefined) cfgPublica[k] = cfg[k];
   });
   /* Los locales de la academia, para que su página diga DÓNDE queda (23-ago-2026).
@@ -425,8 +432,18 @@ export function contexto(tenant, cfg, precios, paq, opciones){
                                 direccion: String((x && x.direccion) || "").trim() }; })
     .filter(function (x){ return x.direccion; })
     .slice(0, 20);
+  /* Un enlace propio de la academia al lado de sus planes (23-ago-2026). Nació porque
+     ProfesorMVT vende sus cursos grabados en su propia web y quería mandar ahí desde acá,
+     pero se hizo configurable en vez de clavado: este renderizador lo usan TODAS las
+     academias, y un link a profesormvt.com le saldría también a Elevate. La URL pasa por
+     `urlSegura`, que es lo que impide que alguien meta un `javascript:` en su config. */
+  var extra = null;
+  var extraUrl = urlSegura(cfg && cfg.extra_url);
+  if (extraUrl){
+    extra = { url: extraUrl, txt: String((cfg && cfg.extra_txt) || "Ver más").trim().slice(0, 60) };
+  }
   return {
-    tenant: tenant, cfg: cfgPublica, precios: precios, sedes: sedes,
+    tenant: tenant, cfg: cfgPublica, precios: precios, sedes: sedes, extra: extra,
     cursos: cursos, clases: clases, wa: wa, cobroOn: !!o.cobroOn, paquetes: paquetes,
     base: "/app/a/" + tenant.slug,
     waMsg: encodeURIComponent("Hola! Vi la página de " + tenant.academia + " y quiero más información :)"),
