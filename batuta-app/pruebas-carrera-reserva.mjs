@@ -36,7 +36,11 @@ comprobar("la mensualidad ilimitada nunca sobregira", /c\.ilim\) return false/.t
 comprobar("ante un error NO deshace una reserva buena", /catch \(e\) \{ return false; \}/.test(helper));
 
 console.log("\n── 3. Con datos REALES: el candado nuevo no salta de gratis ──");
-const D = "/private/tmp/claude-502/-Users-andres-Desktop-Second-Brain/18d2d106-1cd9-4836-b82f-78ec10ff774b/scratchpad";
+/* Volcados de la D1 de Elevate, anonimizados y versionados con el repo. Se regeneran
+   con `node bin/fixtures.mjs`; por que ya no viven en /tmp, ver el encabezado de ese
+   script. Se resuelve contra la ubicacion de ESTE archivo, no contra el cwd, para que
+   la prueba de igual corrida suelta que desde pruebas.sh. (24-ago-2026) */
+const D = new URL("datos/fixtures", import.meta.url).pathname;
 const leer = f => JSON.parse(readFileSync(`${D}/${f}.json`, "utf8"))[0].results;
 const M = await cargarMotor(["compute","computeMulti","pasesDe","parsePaquetes","resolverPk","reservasUsadasPuro"]);
 const paqMap = M.parsePaquetes(leer("paquetes")[0].valor).map;
@@ -55,13 +59,16 @@ for (const a of alumnos){
                          : M.compute(a, regs, {}, M.reservasUsadasPuro(resv, regs, ""), M.resolverPk(paqMap, a.paquete));
   if (!c || c.ilim) continue;
   const sobregira = (Number(c.sobreconsumo) > 0) || (Number.isFinite(c.compradas) && (Number(c.usadas) || 0) > (Number(c.compradas) || 0));
-  if (sobregira) marcados.push(`${a.nombre} ${a.apellido || ""}`.trim() + ` (${c.usadas} de ${c.compradas})`);
+  if (sobregira) marcados.push({ id: a.id, txt: `${a.nombre} ${a.apellido || ""}`.trim() + ` [${a.id}] (${c.usadas} de ${c.compradas})` });
 }
-/* Luciana es el caso conocido: su plan «36 clases de Mat» ya no está en el catálogo, así que
-   `compradas` sale 0. Está en el tablero desde antes; no es una carrera. */
-const inesperados = marcados.filter(m => !/Luciana/.test(m));
+/* El caso conocido: su plan «36 clases de Mat» ya no está en el catálogo, así que `compradas`
+   sale 0. Está en el tablero desde antes; no es una carrera.
+   Se reconoce por `id`, NO por nombre: los volcados van anonimizados (ver bin/fixtures.mjs) y
+   un filtro por nombre real se rompía solo además de meter a una alumna en el repo. */
+const CONOCIDOS = new Set(["msqu8xumdkfjn"]);
+const inesperados = marcados.filter(m => !CONOCIDOS.has(m.id));
 comprobar("nadie sobregira hoy salvo el caso ya conocido", inesperados.length === 0,
-  marcados.length ? `marcados: ${marcados.join(" · ")}` : `${alumnos.length} alumnos limpios`);
+  marcados.length ? `marcados: ${marcados.map(m => m.txt).join(" · ")}` : `${alumnos.length} alumnos limpios`);
 
 console.log(fallos ? `\n🔴 ${fallos} EN ROJO` : "\n✅ TODO EN VERDE");
 process.exit(fallos ? 1 : 0);

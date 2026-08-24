@@ -13,7 +13,11 @@
    ───────────────────────────────────────────────────────────────────────────── */
 import { cargarMotor, envConDatos, envVacio } from "./motor-real.mjs";
 import { readFileSync } from "node:fs";
-const D = "/private/tmp/claude-502/-Users-andres-Desktop-Second-Brain/18d2d106-1cd9-4836-b82f-78ec10ff774b/scratchpad";
+/* Volcados de la D1 de Elevate, anonimizados y versionados con el repo. Se regeneran
+   con `node bin/fixtures.mjs`; por que ya no viven en /tmp, ver el encabezado de ese
+   script. Se resuelve contra la ubicacion de ESTE archivo, no contra el cwd, para que
+   la prueba de igual corrida suelta que desde pruebas.sh. (24-ago-2026) */
+const D = new URL("datos/fixtures", import.meta.url).pathname;
 const leer = f => JSON.parse(readFileSync(`${D}/${f}.json`, "utf8"))[0].results;
 let fallos = 0;
 const comprobar = (t, ok, extra) => { console.log(`  ${ok ? "✅" : "🔴"} ${t}${extra ? " · " + extra : ""}`); if (!ok) fallos++; };
@@ -63,14 +67,27 @@ for (const modo of ["", "asistencia"]){
 }
 
 console.log("\n── la D1 falsa sirve de verdad: el motor la usa ──");
-/* Si la D1 falsa devolviera vacío, todo cuadraría por casualidad y la prueba no valdría nada. */
+/* Si la D1 falsa devolviera vacío, todo cuadraría por casualidad y la prueba no valdría nada.
+   🔄 24-ago-2026: esto miraba SOLO a conPases[0]. Dos problemas. Uno: si a ese alumno le da
+   igual tener datos o no (no tiene registro ni reservas en su ciclo), la prueba se ponía roja
+   sin que nada estuviera mal — y pasó, al ordenar los volcados por id cambió quién era el
+   primero. Dos, peor: si el primero SÍ variaba, tapaba el caso de que la D1 falsa estuviera
+   muerta para todos los demás. Ahora se barren TODOS: basta uno que cambie para demostrar que
+   el motor lee de verdad, y si no cambia NINGUNO esa sí es la alarma que esta prueba existe
+   para dar. No depende del orden de las filas. */
 const conPases = alumnos.filter(a => M.pasesDe(a));
-const unMulti = conPases[0];
-const conDatos = await M.computeMulti(env, "t", unMulti, paqMap, {});
-const sinDatos = await M.computeMulti(envVacio, "t", unMulti, paqMap, {});
+const restantesDe = c => JSON.stringify((c && c.pases || []).map(p => p.restantes));
+let leeDeVerdad = null;
+for (const a of conPases){
+  const cd = restantesDe(await M.computeMulti(env,      "t", a, paqMap, {}));
+  const sd = restantesDe(await M.computeMulti(envVacio, "t", a, paqMap, {}));
+  if (cd !== sd){ leeDeVerdad = { a, cd, sd }; break; }
+}
 comprobar("con datos y sin datos el motor da distinto (o sea: los está leyendo)",
-  JSON.stringify(conDatos.pases.map(p => p.restantes)) !== JSON.stringify(sinDatos.pases.map(p => p.restantes)),
-  `${unMulti.nombre}: con datos [${conDatos.pases.map(p=>p.restantes)}] vs sin datos [${sinDatos.pases.map(p=>p.restantes)}]`);
+  leeDeVerdad !== null,
+  leeDeVerdad
+    ? `${leeDeVerdad.a.nombre} [${leeDeVerdad.a.id}]: con datos ${leeDeVerdad.cd} vs sin datos ${leeDeVerdad.sd}`
+    : `NINGUNO de los ${conPases.length} multi-pase cambia: la D1 falsa no está devolviendo nada`);
 
 console.log(fallos ? `\n🔴 ${fallos} EN ROJO` : "\n✅ TODO EN VERDE");
 process.exit(fallos ? 1 : 0);

@@ -44,7 +44,11 @@ comprobar("una fecha de ayer mata el plan aunque le sobren clases", M.venceVenci
 comprobar("y sin fecha no muere nunca", M.venceVencido("") === false);
 
 console.log("\n── 3. Con datos REALES: a cuántos alcanzaba ──");
-const D = "/private/tmp/claude-502/-Users-andres-Desktop-Second-Brain/18d2d106-1cd9-4836-b82f-78ec10ff774b/scratchpad";
+/* Volcados de la D1 de Elevate, anonimizados y versionados con el repo. Se regeneran
+   con `node bin/fixtures.mjs`; por que ya no viven en /tmp, ver el encabezado de ese
+   script. Se resuelve contra la ubicacion de ESTE archivo, no contra el cwd, para que
+   la prueba de igual corrida suelta que desde pruebas.sh. (24-ago-2026) */
+const D = new URL("datos/fixtures", import.meta.url).pathname;
 const alumnos = JSON.parse(readFileSync(`${D}/alumnos.json`, "utf8"))[0].results;
 const planes = JSON.parse(JSON.parse(readFileSync(`${D}/paquetes.json`, "utf8"))[0].results[0].valor);
 const congelaDe = n => { const p = planes.find(x => x.n === n); return p ? p.g : undefined; };

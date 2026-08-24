@@ -8,7 +8,11 @@
    ───────────────────────────────────────────────────────────────────────────── */
 import { cargarMotor, envVacio } from "./motor-real.mjs";
 import { readFileSync } from "node:fs";
-const D = "/private/tmp/claude-502/-Users-andres-Desktop-Second-Brain/18d2d106-1cd9-4836-b82f-78ec10ff774b/scratchpad";
+/* Volcados de la D1 de Elevate, anonimizados y versionados con el repo. Se regeneran
+   con `node bin/fixtures.mjs`; por que ya no viven en /tmp, ver el encabezado de ese
+   script. Se resuelve contra la ubicacion de ESTE archivo, no contra el cwd, para que
+   la prueba de igual corrida suelta que desde pruebas.sh. (24-ago-2026) */
+const D = new URL("datos/fixtures", import.meta.url).pathname;
 const leer = f => JSON.parse(readFileSync(`${D}/${f}.json`, "utf8"))[0].results;
 const M = await cargarMotor(["compute","computeMulti","pasesDe","parsePaquetes","resolverPk",
                              "reservasUsadasPuro","saldoMostrado","venceVencido","multiParaTipo","paqueteCubre"]);

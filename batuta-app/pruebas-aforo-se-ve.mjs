@@ -29,7 +29,11 @@ comprobar("fuera del horario semanal NO inventa aforo",
   /curso===null\)/.test(cuerpo) && /filaClaseDia\(fkey,hh,"Fuera del horario semanal"[^)]*,null\)/.test(PANEL));
 
 console.log("\n── 2. Con los datos REALES de Elevate ──");
-const D = "/private/tmp/claude-502/-Users-andres-Desktop-Second-Brain/18d2d106-1cd9-4836-b82f-78ec10ff774b/scratchpad";
+/* Volcados de la D1 de Elevate, anonimizados y versionados con el repo. Se regeneran
+   con `node bin/fixtures.mjs`; por que ya no viven en /tmp, ver el encabezado de ese
+   script. Se resuelve contra la ubicacion de ESTE archivo, no contra el cwd, para que
+   la prueba de igual corrida suelta que desde pruebas.sh. (24-ago-2026) */
+const D = new URL("datos/fixtures", import.meta.url).pathname;
 const leer = f => JSON.parse(readFileSync(`${D}/${f}.json`, "utf8"))[0].results;
 /* las funciones REALES del panel, cortadas — nunca copiadas */
 const cortar = (nom) => { const k = PANEL.indexOf("function " + nom + "("); let d = 0, j = PANEL.indexOf("{", k);

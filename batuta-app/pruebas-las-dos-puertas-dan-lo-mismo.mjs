@@ -175,7 +175,11 @@ const PLAN_SERVIDOR = mPlan ? mPlan[1] : "";
 const mRedir = /"location\.href=([^;]*);" \+/.exec(SRC.slice(SRC.indexOf("function paginaRegistro")));
 comprobar("la página de registro tiene su redirección", !!mRedir);
 const destino = mRedir ? eval("(function(d){ return " + mRedir[1].replace(/\\'/g, "'") + "; })")({ plan: PLAN_SERVIDOR }) : "";
-const mGoogle = /return irCon\(token, "([^"]+)"\)/.exec(BLOQUE_GOOGLE + SRC.slice(SRC.indexOf(BLOQUE_GOOGLE) + BLOQUE_GOOGLE.length, SRC.indexOf(BLOQUE_GOOGLE) + BLOQUE_GOOGLE.length + 200));
+/* 24-ago-2026: `irCon` pasó a recibir una TERCERA cosa, la llave de localStorage con la que
+   cada pantalla lee su sesión (el panel usa `batuta_t` y el portal del alumno `batuta_sesion`;
+   escribir siempre la primera dejaba al alumno fuera de su propio portal). Lo que esta prueba
+   vigila no cambia —que las dos puertas aterricen en el mismo sitio—, solo la firma. */
+const mGoogle = /return irCon\(token, "([^"]+)", "[^"]+"\)/.exec(BLOQUE_GOOGLE + SRC.slice(SRC.indexOf(BLOQUE_GOOGLE) + BLOQUE_GOOGLE.length, SRC.indexOf(BLOQUE_GOOGLE) + BLOQUE_GOOGLE.length + 200));
 comprobar("por correo NO cae en la página de comprar packs", destino === "/app/panel", "plan=" + PLAN_SERVIDOR + " → " + destino);
 comprobar("las dos puertas aterrizan igual", !!mGoogle && destino === mGoogle[1], "correo=" + destino + " · google=" + (mGoogle ? mGoogle[1] : "?"));
 

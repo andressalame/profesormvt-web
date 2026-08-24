@@ -8,6 +8,21 @@
 # 🔴 El límite NO es decorativo: ese mismo día una prueba se quedó colgada 66 minutos y
 #    wedgeó la batería entera sin decir nada. Una prueba que no termina es una prueba que falla.
 cd "$(dirname "$0")" || exit 1
+
+# ---- Datos de prueba del motor (24-ago-2026) ----
+# 13 baterias corren el motor REAL contra volcados de la D1. Hasta hoy vivian en el
+# scratchpad de una sesion de Claude: cuando la sesion murio, la carpeta quedo vacia y
+# las 13 se pusieron rojas PARA SIEMPRE con un ENOENT que parecia un bug del producto.
+# Nadie las genero nunca con un script, por eso nadie supo como arreglarlas.
+# Ahora se rehacen solas y en un solo sitio. No van al repo (es publico): ver .gitignore.
+if [ ! -f datos/fixtures/alumnos.json ]; then
+  echo "· Faltan los datos de prueba del motor. Generandolos desde la D1 (solo esta vez)..."
+  if ! node bin/fixtures.mjs; then
+    echo "🔴 No se pudieron generar. Hace falta wrangler con sesion iniciada: wrangler login"
+    exit 1
+  fi
+  echo
+fi
 LIMITE=${LIMITE:-180}
 ok=0; mal=0; rotas=()
 for t in pruebas-*.mjs; do

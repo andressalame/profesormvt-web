@@ -8287,6 +8287,18 @@ export default {
       const tMcp = await tenantPorApiToken(env, path.slice("/app/mcp/".length));
       if (!tMcp) return json({ error: "Token invalido" }, 401);
       if (request.method === "GET"){
+        /* El cliente MCP abre un GET con Accept: text/event-stream para escuchar al servidor.
+           Batuta no habla SSE, y el protocolo manda responder 405: eso significa "no insistas".
+           Devolverle 200 con el JSON de abajo le hacia leer el stream como caido y reconectar
+           sin pausa ni error: 201,936 requests en un dia quemaron el tope diario de la cuenta
+           ENTERA de Cloudflare y tumbaron Batuta Y ProfesorMVT a la vez (24-ago-2026). El JSON
+           es solo para el humano que pega la URL en el navegador. */
+        if (String(request.headers.get("accept") || "").includes("text/event-stream")){
+          return new Response(JSON.stringify({ error: "Este MCP no expone stream SSE: habla por POST." }), {
+            status: 405,
+            headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store", "allow": "POST" }
+          });
+        }
         return json({ servidor: "batuta", version: API_V1, academia: tMcp.academia,
                       herramientas: API_TOOLS.map(x => x.name),
                       como_usar: "Pega esta misma URL como servidor MCP en tu Claude." });
@@ -10349,9 +10361,19 @@ export default {
         const perfil = await googleIntercambiar(env, code);
         if (!perfil || !perfil.email) return paginaError("No pudimos leer tu cuenta de Google.", "/app/login");
         if (!perfil.email_verified) return paginaError("Tu correo de Google no está verificado.", "/app/login");
-        const irCon = function(token, destino){
+        /* 🔑 LA LLAVE DEPENDE DE ADONDE VA (24-ago-2026).
+           El panel del profesor lee `batuta_t` (TOKEN_KEY en public/panel/index.html) y el
+           portal del alumno lee `batuta_sesion` (KEY en public/alumnos/index.html). Esto
+           escribia SIEMPRE `batuta_t`, asi que el alumno completaba el login de Google, se le
+           creaba la sesion buena, volvia a su portal... y el portal no encontraba nada y lo
+           mandaba de vuelta al login. Sin un solo error en pantalla ni en los logs.
+           Estaba latente desde que se escribio esta rama: nadie podia llegar hasta hoy, que
+           el boton del alumno existe. Primer alumno que lo usó, primer reporte.
+           Si algun dia nace una tercera superficie, su llave se pasa aca; no se adivina.
+           Lo cuida `pruebas-la-llave-de-la-sesion.mjs`. */
+        const irCon = function(token, destino, llave){
           return htmlResponse(paginaBase("Entrando — Batuta", "<h1>Entrando…</h1><p class=\"sub\">Un momento.</p>",
-            "try{localStorage.setItem('batuta_t','" + token + "');}catch(e){};location.replace('" + destino + "');"));
+            "try{localStorage.setItem('" + llave + "','" + token + "');}catch(e){};location.replace('" + destino + "');"));
         };
         await ensureGoogleSchema(env);
         if (st.intent === "profesor"){
@@ -10387,10 +10409,10 @@ export default {
             if (refCode){ try { await registrarReferido(env, id, refCode); } catch (e) { console.error("registrarReferido google", e); } }
             ctx.waitUntil(alertaCorreoAndres(env, "CUENTA GRATIS NUEVA en Batuta (Google): " + nombre, "Academia: " + nombre + "\nEmail: " + perfil.email + "\nEntró con Google.\nSlug: " + slug));
             const token = await crearSesion(env, "T:" + id);
-            return irCon(token, "/app/panel");
+            return irCon(token, "/app/panel", "batuta_t");
           }
           const token = await crearSesion(env, "T:" + t.id);
-          return irCon(token, "/app/panel");
+          return irCon(token, "/app/panel", "batuta_t");
         } else {
           // Alumno: dentro de la academia del slug.
           const t = await env.DB.prepare("SELECT * FROM tenants WHERE slug = ?1").bind(st.slug).first();
@@ -10412,7 +10434,7 @@ export default {
             cu = { id };
           }
           const token = await crearSesion(env, cu.id);
-          return irCon(token, "/app/a/" + t.slug);
+          return irCon(token, "/app/a/" + t.slug, "batuta_sesion");
         }
       }
 
@@ -11300,7 +11322,12 @@ export default {
             grupal: academiaEsGrupal(cfg),
             sin_profe: String(cfg.portal_sin_profe || "") === "1"
           },
-          marca: { color: cfg.brand_color || "", font: cfg.brand_font || "", logo: cfg.brand_logo || "" }
+          marca: { color: cfg.brand_color || "", font: cfg.brand_font || "", logo: cfg.brand_logo || "" },
+          /* El portal del alumno es un asset estatico: no puede saber si Google esta
+             configurado, asi que se lo decimos aca y el pinta el boton solo si es true.
+             Mismo "degrada con gracia" que las paginas del profe. Es un booleano, nunca
+             el client_id: este endpoint es publico (24-ago-2026). */
+          google: googleConfigurado(env)
           /* FUGA CERRADA (11-ago-2026): aqui viajaba el bloque `pago` — numero de Yape, titular,
              cuenta BCP/Scotia, CCI y wallet — a cualquiera que pasara el slug, que es publico.
              Nadie lo consumia: el portal pinta el recuadro de pago con `ME.config`, que sale de
@@ -13346,7 +13373,6 @@ export default {
         ).bind(compraIdPk, actorPk.tenant.id, packKey, cantPk, Number(packKey), new Date().toISOString()).run();
         const prefPk = await mpFetch(env, "/checkout/preferences", { method: "POST", body: {
           items: [{ title: "Batuta - " + cantPk + " mensajes extra del asistente (mes en curso)", quantity: 1, unit_price: Number(packKey), currency_id: "PEN" }],
-          statement_descriptor: "BATUTA",   // ver comentario en el pago anual (12-ago-2026)
           external_reference: "btpk:" + compraIdPk,
           notification_url: MARCA.dominio + "/app/api/mp/webhook",
           back_urls: {
@@ -13355,6 +13381,18 @@ export default {
             pending: MARCA.dominio + "/app/panel?pack=pendiente"
           },
           auto_return: "approved",
+          /* Fijo "BATUTA", NO el nombre de la academia: este cobro es de Batuta, no del profe
+             (ver el bloque de arriba). Los dos cobros AL ALUMNO si llevan el nombre de SU
+             academia, porque ahi cobra el token de cada una (buscar `statement_descriptor`).
+             Puesto el 12-ago-2026 junto con el del plan anual; ese flujo ya no arma su propia
+             preference, asi que el `// ver comentario en el pago anual` que traia la copia de
+             arriba apuntaba al vacio. Estaba escrito DOS VECES en este mismo objeto (mismo
+             valor, asi que no cambiaba nada, pero wrangler lo avisaba en cada deploy): queda
+             una sola y la razon aca. (24-ago-2026)
+             ⚠️ PENDIENTE, no es de este cobro: los dos de arriba recortan a 22, pero la nota
+             del tablero (12-ago, con link a la doc de MP) dice que en preferencias el tope es
+             de 13. Si es 13, un nombre de academia largo se manda pasado. Verificar y corregir
+             ALLA; aca no aplica porque "BATUTA" son 6. */
           statement_descriptor: "BATUTA",
           metadata: { batuta_tenant: actorPk.tenant.id, batuta_pack_compra: compraIdPk }
         }});

@@ -25,7 +25,11 @@ comprobar("sigue ignorando las filas de «Reprogramó»", /estado != 'Reprogram�
 comprobar("repetir el cierre de la MISMA clase sigue sin duplicar", /if \(ya\) return false;/.test(fn));
 
 console.log("\n── 2. Con datos REALES: el síntoma existe ──");
-const D = "/private/tmp/claude-502/-Users-andres-Desktop-Second-Brain/18d2d106-1cd9-4836-b82f-78ec10ff774b/scratchpad";
+/* Volcados de la D1 de Elevate, anonimizados y versionados con el repo. Se regeneran
+   con `node bin/fixtures.mjs`; por que ya no viven en /tmp, ver el encabezado de ese
+   script. Se resuelve contra la ubicacion de ESTE archivo, no contra el cwd, para que
+   la prueba de igual corrida suelta que desde pruebas.sh. (24-ago-2026) */
+const D = new URL("datos/fixtures", import.meta.url).pathname;
 const leer = f => JSON.parse(readFileSync(`${D}/${f}.json`, "utf8"))[0].results;
 const M = await cargarMotor(["compute","computeMulti","pasesDe","parsePaquetes","resolverPk","reservasUsadasPuro","fechaLimaDe"]);
 const paqMap = M.parsePaquetes(leer("paquetes")[0].valor).map;
@@ -51,7 +55,14 @@ for (const a of alumnos){
   }
 }
 comprobar("hay días reales con dos clases del mismo alumno", diasDobles > 0, `${diasDobles} días`);
-comprobar("y clases que se quedaron sin anotar en la bitácora", sinAnotar > 0, `${sinAnotar} clases invisibles en el portal`);
+/* 🔄 24-ago-2026: esta línea pedía `sinAnotar > 0`, o sea exigía que el bug SIGUIERA VIVO.
+   Servía el día que se escribió (era la evidencia de que la guarda vieja se comía una de las
+   dos clases del día), pero al arreglarse la guarda quedó condenada a rojo para siempre: hoy
+   los 17 días dobles reales están anotados enteros. Invertida, que es lo que sirve de aquí en
+   adelante: el escenario existe en datos reales Y ninguna clase se pierde. Una prueba de
+   regresión afirma que el bug NO está, nunca que está. */
+comprobar("y ninguna de esas clases se queda sin anotar en la bitácora", sinAnotar === 0,
+  sinAnotar ? `${sinAnotar} clases invisibles en el portal` : `${diasDobles} días dobles, todos anotados enteros`);
 
 console.log("\n── 3. Lo que arrastra: el emparejamiento es por FECHA, no por clase ──");
 /* `eventosConsumo` empareja cada fila de bitácora con UNA reserva de ese día, sin mirar de qué

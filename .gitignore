@@ -9,3 +9,9 @@ batuta-app/.wrangler/
 
 # respaldos temporales de una sesión de trabajo, no van al repo
 *.bak-*
+
+# Volcados reales de la D1 para las pruebas del motor (bin/fixtures.mjs los regenera).
+# 🔒 NO van al repo: este repo es PUBLICO y esto es la operacion de un cliente
+#    (horarios, asistencia, planes, ~1600 fichas). Van anonimizados, pero anonimizado
+#    no es publicable. pruebas.sh los rehace solo si faltan. (24-ago-2026)
+batuta-app/datos/fixtures/

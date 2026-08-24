@@ -55,7 +55,11 @@ comprobar("bloquea ANTES de cancelar la reserva",
 comprobar("un plan sin cuota definida no se bloquea", /if \(cuotaCancel > 0\)/.test(cancelar));
 
 console.log("\n── 6. Con datos REALES: a quién le cambia el número ──");
-const D = "/private/tmp/claude-502/-Users-andres-Desktop-Second-Brain/18d2d106-1cd9-4836-b82f-78ec10ff774b/scratchpad";
+/* Volcados de la D1 de Elevate, anonimizados y versionados con el repo. Se regeneran
+   con `node bin/fixtures.mjs`; por que ya no viven en /tmp, ver el encabezado de ese
+   script. Se resuelve contra la ubicacion de ESTE archivo, no contra el cwd, para que
+   la prueba de igual corrida suelta que desde pruebas.sh. (24-ago-2026) */
+const D = new URL("datos/fixtures", import.meta.url).pathname;
 const leer = f => JSON.parse(readFileSync(`${D}/${f}.json`, "utf8"))[0].results;
 const planes = JSON.parse(leer("paquetes")[0].valor);
 const cuotaDe = n => { const p = planes.find(x => x.n === n); return p ? (Number(p.r) || 0) : 0; };
