@@ -11,6 +11,7 @@ para poder mirar el resultado antes de decidir nada.
   python3 migrar-mvt.py --ensayo --borrar # lo borra
   python3 migrar-mvt.py --real            # la academia DE VERDAD, con los correos apagados
   python3 migrar-mvt.py --real --refrescar# vuelve a traer los datos (por si pasaron días)
+  python3 migrar-mvt.py --cambiar-guardia # devuelve correos y contraseñas: Batuta toma el relevo
 
 EL ORDEN IMPORTA, y es lo único delicado de todo esto: MVT tiene 8 motores que le
 escriben a los alumnos y Batuta tiene los suyos. Si los dos corren sobre la misma
@@ -55,10 +56,18 @@ def d1(base, sql, cwd, escribir=False):
         i = txt.find("{")
     if i < 0:
         raise RuntimeError(f"sin respuesta de {base}: {(r.stdout + r.stderr)[:300]}")
-    d = json.loads(txt[i:])
+    # `json.loads` entero falla con "Extra data" porque wrangler a veces imprime algo más
+    # después del JSON. `raw_decode` lee el PRIMER documento y se olvida del resto.
+    try:
+        d, _ = json.JSONDecoder().raw_decode(txt[i:])
+    except json.JSONDecodeError as e:
+        raise RuntimeError(f"{base}: respuesta ilegible ({e}) para: {sql[:120]}")
     if isinstance(d, dict) and d.get("error"):
-        raise RuntimeError(f"{base}: {json.dumps(d['error'])[:300]}")
-    return d[0]["results"] if isinstance(d, list) else d["result"][0]["results"]
+        raise RuntimeError(f"{base}: {json.dumps(d['error'])[:200]} | SQL: {sql[:120]}")
+    try:
+        return d[0]["results"] if isinstance(d, list) else d["result"][0]["results"]
+    except Exception:
+        raise RuntimeError(f"{base}: forma inesperada para: {sql[:120]}")
 
 
 def columnas(base, tabla, cwd):
@@ -90,6 +99,46 @@ def main():
     solo_plan = "--plan" in sys.argv
     borrar = "--borrar" in sys.argv
     refrescar = "--refrescar" in sys.argv
+    if "--cambiar-guardia" in sys.argv:
+        # ── EL RELEVO ─────────────────────────────────────────────────────────────────
+        # Devuelve a la academia de Batuta los correos y las contraseñas REALES, que
+        # `--real` dejó neutralizados para que nadie recibiera nada dos veces. Se corre
+        # DESPUÉS de encender `portal_migrado` en MVT: primero se calla el de allá, después
+        # habla el de acá. Al revés habría un rato con los dos escribiendo.
+        # Las contraseñas viajan tal cual: el algoritmo es el mismo en los dos sistemas
+        # (PBKDF2, verificado), así que cada alumno entra con la suya de siempre.
+        filas = d1(MVT, "SELECT id, LOWER(email) AS email, pass_hash, pass_salt FROM cuentas "
+                        "WHERE COALESCE(email,'') != ''", DIR)
+        n = 0
+        for f in filas:
+            try:
+                d1(BAT, "UPDATE cuentas SET email = " + lit(f["email"]) +
+                        ", pass_hash = " + lit(f["pass_hash"]) + ", pass_salt = " + lit(f["pass_salt"]) +
+                        f" WHERE id = {lit(f['id'])} AND tenant_id = '{TID_REAL}'", DIRB, True)
+                n += 1
+            except Exception as e:
+                print(f"   ⚠️  {f['email']}: {str(e)[:90]}")
+        # Los alumnos de MVT no tienen las mismas columnas que los de Batuta (MVT ni siquiera
+        # guarda `email` en `alumnos`: los correos viven solo en `cuentas`). Se restaura lo
+        # que EXISTA en las dos puntas, leyendo los esquemas, y no una lista escrita a mano.
+        colM, colB = set(columnas(MVT, "alumnos", DIR)), set(columnas(BAT, "alumnos", DIRB))
+        campos = [c for c in ("email", "whatsapp") if c in colM and c in colB]
+        if campos:
+            als = d1(MVT, "SELECT id, " + ", ".join("COALESCE(" + c + ",'') AS " + c for c in campos) + " FROM alumnos", DIR)
+            for a in als:
+                sets = ", ".join(c + " = " + lit(a[c]) for c in campos)
+                d1(BAT, f"UPDATE alumnos SET {sets} WHERE id = {lit(a['id'])} AND tenant_id = '{TID_REAL}'", DIRB, True)
+            print(f"   alumnos: restaurado {', '.join(campos)} en {len(als)} fichas")
+        else:
+            print("   alumnos: MVT no guarda correo ni WhatsApp en la ficha (viven en `cuentas`)")
+        for clave in ("recordatorios_clase", "recordatorio_renovacion"):
+            d1(BAT, f"DELETE FROM config WHERE tenant_id = '{TID_REAL}' AND clave = '{clave}'", DIRB, True)
+        r = d1(BAT, f"SELECT (SELECT COUNT(*) FROM cuentas WHERE tenant_id='{TID_REAL}' AND email NOT LIKE '%@ejemplo.invalid') c,"
+                    f"(SELECT COUNT(*) FROM cuentas WHERE tenant_id='{TID_REAL}' AND pass_hash NOT IN ('NOSIRVE','SIN-CLAVE','')) p", DIRB)[0]
+        print(f"   {n} cuentas actualizadas · con correo real: {r['c']} · con su contraseña: {r['p']}")
+        print("   ✅ Batuta toma el relevo" if r["c"] else "   🔴 no quedó ningún correo real")
+        return 0 if r["c"] else 1
+
     if not (ensayo or solo_plan or real):
         print("Usa --plan, --ensayo o --real.")
         return 1

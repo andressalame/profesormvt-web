@@ -3523,13 +3523,24 @@ async function cerrarAsistenciasAuto(env){
    Batuta tiene los suyos: si el portal se muda pero los motores de acá siguen vivos,
    cada alumno recibe todo DOS VECES. Un interruptor, las dos cosas. */
 const PORTAL_EN_BATUTA = "https://batuta.lat/app/a/profesormvt";
-let _MIGRADO = null;
+/* 🔴 23-ago-2026 · esto se cacheaba PARA SIEMPRE por isolate y con eso el interruptor
+   dejaba de ser un interruptor: encender funcionaba, pero APAGAR no hacía nada hasta que
+   Cloudflare reciclara los isolates, que puede tardar lo que quiera. O sea que la promesa
+   —"si algo sale mal, se revierte en diez segundos sin desplegar"— era falsa justo el día
+   que hiciera falta. Lo cazó la prueba de apagarlo, no la de encenderlo: por eso el
+   rollback se prueba, no se supone.
+   Con 30 segundos de vida, apagar surte efecto casi al instante y son 2 lecturas por
+   minuto y por isolate: nada. */
+const MIGRADO_TTL_MS = 30000;
+let _MIGRADO = null, _MIGRADO_T = 0;
 async function portalMigrado(env){
-  if (_MIGRADO !== null) return _MIGRADO;
+  const ahora = Date.now();
+  if (_MIGRADO !== null && (ahora - _MIGRADO_T) < MIGRADO_TTL_MS) return _MIGRADO;
   try {
     const r = await env.DB.prepare("SELECT valor FROM config WHERE clave = 'portal_migrado'").first();
     _MIGRADO = !!(r && String(r.valor) === "1");
   } catch (e) { _MIGRADO = false; }   /* ante la duda, NO se muda nada */
+  _MIGRADO_T = ahora;
   return _MIGRADO;
 }
 

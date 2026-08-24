@@ -22,7 +22,11 @@ binding = "ASSETS"
 # /invitacion es una PÁGINA que arma el worker (el canje del acceso al portal), no un archivo
 # de dist/: sin esto los assets responden primero y devuelven 404. (15-ago-2026)
 # /baja es igual: la confirmación del opt-out de correos, armada por el worker. (16-ago-2026)
-run_worker_first = ["/api/*", "/r/*", "/invitacion", "/baja"]
+# /alumnos es el portal: desde el 23-ago el worker decide si lo sirve o si redirige a
+# Batuta (config.portal_migrado). Sin esto los assets responden primero y el worker ni se
+# entera — el interruptor no hacía nada. Con el interruptor apagado el worker devuelve el
+# mismo archivo de dist/ (cae en env.ASSETS.fetch), así que apagar sigue siendo instantáneo.
+run_worker_first = ["/api/*", "/r/*", "/invitacion", "/baja", "/alumnos", "/alumnos/*"]
 
 [[d1_databases]]
 binding = "DB"
