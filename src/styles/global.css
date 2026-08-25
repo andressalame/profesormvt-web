@@ -16,25 +16,25 @@
 
 :root {
   /* ── LOS 3 COLORES DE MARCA (dirección "Ficha clínica", elegida el 24-ago-2026) ── */
-  --papel:  #F1EBE0;   /* 1 · el papel del expediente */
+  --papel:  #F8F2E8;   /* 1 · papel. Subido de #F1EBE0 el 25-ago: estaba turbio
+                          y apagaba todo. Más limpio = el acento rebota más y el
+                          rango tinta/papel sube de 13.91 a 14.82. */
   --tinta:  #17211E;   /* 2 · la tinta (verde muy oscuro, no negro) */
-  --sello:  #C42D12;   /* 3 · bermellón. Subido de #B23A22 el 25-ago: el anterior
-                          tiraba a ladrillo y la página se leía apagada. Este
-                          da 4.74 sobre papel y 4.74 con papel encima: pasa AA
-                          en los dos sentidos, así que sirve como texto Y como
-                          relleno. Medido, no elegido a ojo. */
+  --sello:  #CE300D;   /* 3 · bermellón vivo. De #C42D12 (91% de saturación) a
+                          #CE300D (94%). Da 4.65 sobre el papel nuevo: pasa AA
+                          como texto Y como relleno. Es el tope: un paso más
+                          (#D43308) cae a 4.41 y ya no pasa. Medido. */
 
   /* ── Derivados: SOLO mezclas de los tres de arriba ── */
-  --papel-2:      #EDE7DC;   /* papel sombreado. Con el bermellón nuevo (#C42D12)
-                                un tinte más oscuro tiraba el acento a 4.34 y no
-                                pasaba AA. A #EDE7DC da 4.57. Calculado, no a ojo. */
+  --papel-2:      #F5EFE5;   /* tinte del panel. Con el bermellón nuevo, cualquier
+                                tono más oscuro que este lo tira bajo 4.5. */
   --filete-2:     #DCD3C3;   /* ese tono se queda, pero como línea */
   --hoja:         #FFFFFF;   /* la lámina blanca sobre el papel cálido */
   --tinta-media:  #4E5B55;
   --filete:       rgba(23, 33, 30, .16);
   --filete-fuerte:rgba(23, 33, 30, .38);
-  --papel-media:  rgba(241, 235, 224, .72);
-  --filete-papel: rgba(241, 235, 224, .28);
+  --papel-media:  rgba(248, 242, 232, .72);
+  --filete-papel: rgba(248, 242, 232, .28);
 
   /* Roles semánticos (lo que usan los componentes) */
   --fondo:        var(--papel);
@@ -70,10 +70,10 @@
     --fondo-2:      #1F2B27;
     --lamina:       #1F2B27;
     --texto:        var(--papel);
-    --texto-2:      #A9B3AE;
+    --texto-2:      #AEB8B3;
     --linea:        var(--filete-papel);
     --linea-fuerte: var(--papel);
-    --acento:       #E0714F;
+    --acento:       #FF7A4D;
     --sobre-acento: var(--tinta);
     --invertido-fondo: var(--papel);
     --invertido-texto: var(--tinta);
@@ -86,10 +86,10 @@
   --fondo-2:      #1F2B27;
   --lamina:       #1F2B27;
   --texto:        var(--papel);
-  --texto-2:      #A9B3AE;
+  --texto-2:      #AEB8B3;
   --linea:        var(--filete-papel);
   --linea-fuerte: var(--papel);
-  --acento:       #E0714F;
+  --acento:       #FF7A4D;
   --sobre-acento: var(--tinta);
   --invertido-fondo: var(--papel);
   --invertido-texto: var(--tinta);
@@ -285,7 +285,7 @@ select:focus-visible, textarea:focus-visible, summary:focus-visible {
   padding-inline: calc(50vw - 50%);
   /* Dentro del bloque oscuro el bermellón no llega a AA: se aclara mezclándolo
      con papel. Sigue siendo la misma tinta de marca. */
-  --acento: #E86A47;
+  --acento: #FF7A4D;
 }
 .bloque.oscuro h2, .bloque.oscuro h3 { color: var(--invertido-texto); }
 .bloque.oscuro .folio { color: var(--acento); }
