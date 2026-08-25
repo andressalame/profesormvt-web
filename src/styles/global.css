@@ -18,13 +18,16 @@
   /* ── LOS 3 COLORES DE MARCA (dirección "Ficha clínica", elegida el 24-ago-2026) ── */
   --papel:  #F1EBE0;   /* 1 · el papel del expediente */
   --tinta:  #17211E;   /* 2 · la tinta (verde muy oscuro, no negro) */
-  --sello:  #B23A22;   /* 3 · el bermellón: SOLO marca el camino a seguir */
+  --sello:  #C42D12;   /* 3 · bermellón. Subido de #B23A22 el 25-ago: el anterior
+                          tiraba a ladrillo y la página se leía apagada. Este
+                          da 4.74 sobre papel y 4.74 con papel encima: pasa AA
+                          en los dos sentidos, así que sirve como texto Y como
+                          relleno. Medido, no elegido a ojo. */
 
   /* ── Derivados: SOLO mezclas de los tres de arriba ── */
-  --papel-2:      #E9E1D4;   /* papel sombreado: tinte MUY suave.
-                                Con el #DCD3C3 original (que en la maqueta era color
-                                de FILETE, no de panel) el bermellón sobre él caía a
-                                4.02 y no pasaba AA en 12 vistas. */
+  --papel-2:      #EDE7DC;   /* papel sombreado. Con el bermellón nuevo (#C42D12)
+                                un tinte más oscuro tiraba el acento a 4.34 y no
+                                pasaba AA. A #EDE7DC da 4.57. Calculado, no a ojo. */
   --filete-2:     #DCD3C3;   /* ese tono se queda, pero como línea */
   --hoja:         #FFFFFF;   /* la lámina blanca sobre el papel cálido */
   --tinta-media:  #4E5B55;
@@ -225,10 +228,6 @@ select:focus-visible, textarea:focus-visible, summary:focus-visible {
   display: block; width: 46px; height: 2px;
   background: var(--acento); flex: none;
 }
-.folio span {
-  display: block; color: var(--texto-2);
-  letter-spacing: .13em; margin-top: 6px; font-weight: 500;
-}
 
 .lead {
   font-size: 21px;
@@ -255,14 +254,45 @@ select:focus-visible, textarea:focus-visible, summary:focus-visible {
   padding: 0 var(--margen);
 }
 
-/* Bloque con riel de folio a la izquierda (la firma editorial del sitio) */
+/* Bloque de sección. SIN riel lateral: el riel de folio a la izquierda dejaba un
+   hueco enorme a la izquierda y empujaba todas las figuras a la derecha, así que
+   la página se leía descentrada (feedback de Andrés, 25-ago-2026). Ahora el folio
+   es una etiqueta encima del titular y el contenido ocupa el ancho completo,
+   centrado en la página. */
 .bloque {
-  display: grid;
-  grid-template-columns: minmax(140px, 2fr) minmax(0, 10fr);
-  gap: clamp(20px, 3vw, 56px);
-  padding: clamp(48px, 6vw, 104px) 0;
+  padding: clamp(40px, 5vw, 84px) 0;
   border-top: 2px solid var(--linea-fuerte);
 }
+.bloque > .folio { margin-bottom: 14px; }
+.folio {
+  display: flex; align-items: baseline; gap: 12px;
+  font-family: var(--lectura); font-weight: 600; font-size: 18px;
+  text-transform: uppercase; letter-spacing: .13em; color: var(--acento);
+}
+.folio span {
+  display: inline; margin-top: 0; color: var(--texto-2); font-weight: 500;
+}
+.folio span::before { content: '·'; margin-right: 12px; color: var(--texto-2); }
+
+/* Sección a sangre en tinta. Sin esto la página es un solo beige de punta a
+   punta y el color "no llama la atención" (feedback de Andrés). Alternar papel
+   y tinta le da ritmo sin agregar un cuarto color. */
+.bloque.oscuro {
+  background: var(--invertido-fondo);
+  color: var(--invertido-texto);
+  border-top: 0;
+  margin-inline: calc(50% - 50vw);
+  padding-inline: calc(50vw - 50%);
+  /* Dentro del bloque oscuro el bermellón no llega a AA: se aclara mezclándolo
+     con papel. Sigue siendo la misma tinta de marca. */
+  --acento: #E86A47;
+}
+.bloque.oscuro h2, .bloque.oscuro h3 { color: var(--invertido-texto); }
+.bloque.oscuro .folio { color: var(--acento); }
+.bloque.oscuro .folio span { color: var(--invertido-texto-2); }
+.bloque.oscuro .folio span::before { color: var(--invertido-texto-2); }
+.bloque.oscuro p, .bloque.oscuro li, .bloque.oscuro .note { color: var(--invertido-texto-2); }
+.bloque.oscuro b, .bloque.oscuro strong { color: var(--invertido-texto); }
 
 /* Encabezado de sección para las páginas que ya usan .sec-head */
 .sec-head { margin-bottom: clamp(24px, 3vw, 40px); }
@@ -448,7 +478,7 @@ a.btn-cta, button.btn-cta, .btn-cta { color: var(--sobre-acento); }
   body { font-size: 19px; }
   .antetitulo, .eyebrow { display: block; margin-bottom: 22px; }
   .antetitulo i, .eyebrow i { width: 40px; margin-bottom: 14px; }
-  .bloque { grid-template-columns: 1fr; gap: 24px; padding: 44px 0; }
+  .bloque { padding: 36px 0; }
   .planes { grid-template-columns: 1fr; }
   .plan { border-left: 0; padding: 22px 0 26px; }
   .plan.elegido, .plan.destacado { padding-left: 18px; padding-right: 18px; }

@@ -107,7 +107,7 @@ import Layout from '../layouts/Layout.astro';
 
   .cu-grid-wrap{padding:26px 0 10px;}
   .cu-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px;}
-  .cu-card{background:rgba(23, 21, 15, .05);border:1px solid rgba(23, 21, 15,.14);border-radius: 0;padding:24px 22px;display:flex;flex-direction:column;}
+  .cu-card{background:transparent;border:1px solid var(--filete-fuerte);border-radius: 0;padding:24px 22px;display:flex;flex-direction:column;}
   .cu-k{font-family:var(--mono,var(--lectura));font-size: 18px;text-transform:uppercase;letter-spacing:.14em;color:var(--naranja,var(--acento));margin-bottom:8px;}
   .cu-d{font-size: 18px;opacity:.8;line-height:1.55;margin-top:10px;}
   .cu-meta{font-family:var(--mono,var(--lectura));font-size: 18px;letter-spacing:.08em;opacity:.55;margin-top:14px;text-transform:uppercase;}
@@ -118,7 +118,7 @@ import Layout from '../layouts/Layout.astro';
   /* 🔴 `display:flex` le gana a la regla `[hidden]{display:none}` del navegador, así que
      sin esto se veían los DOS bloques a la vez: el de "entra" y el de "ya estás dentro". */
   .cu-ses[hidden],.cu-dentro[hidden]{display:none;}
-  .cu-ses{background:rgba(23, 21, 15, .05);border:1px solid rgba(23, 21, 15,.14);border-radius: 0;padding:18px 20px;display:flex;gap:14px;flex-wrap:wrap;align-items:center;justify-content:space-between;}
+  .cu-ses{background:transparent;border:1px solid var(--filete-fuerte);border-radius: 0;padding:18px 20px;display:flex;gap:14px;flex-wrap:wrap;align-items:center;justify-content:space-between;}
   .cu-ses-tx{display:flex;flex-direction:column;gap:3px;}
   .cu-ses-tx b{font-size: 18px;}
   .cu-ses-tx span{font-size: 18px;opacity:.7;}
@@ -129,7 +129,7 @@ import Layout from '../layouts/Layout.astro';
   .cu-ses-form button[disabled]{opacity:.55;cursor:default;}
   .cu-ses-msg{margin:10px 0 0;font-size: 18px;color:var(--naranja,var(--acento));}
   .cu-ses-msg:empty{display:none;}
-  .cu-dentro{display:flex;gap:12px;align-items:center;justify-content:space-between;background:rgba(23, 21, 15, .05);border:1px solid rgba(23, 21, 15,.14);border-radius: 0;padding:14px 20px;font-size: 18px;}
+  .cu-dentro{display:flex;gap:12px;align-items:center;justify-content:space-between;background:transparent;border:1px solid var(--filete-fuerte);border-radius: 0;padding:14px 20px;font-size: 18px;}
   .cu-dentro button{background:transparent;border:1px solid rgba(23, 21, 15,.25);border-radius: 0;color:inherit;font:inherit;font-size: 18px;padding:6px 12px;cursor:pointer;}
   .cu-lec{border-bottom:1px solid rgba(23, 21, 15,.1);}
   .cu-lec:last-child{border-bottom:0;}

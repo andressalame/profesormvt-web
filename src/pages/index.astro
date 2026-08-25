@@ -49,7 +49,11 @@ const faqSchema = {
 
 <div class="hoja-w">
 
-  <!-- ══ PORTADA ══ -->
+  <!-- ══ PORTADA ══
+       El dibujo va ARRIBA, no en una sección de más abajo: lo que Andrés quería
+       de esta dirección es abrir la página y ver una imagen de frente, no texto.
+       La ficha (5.0 · precio · dónde) baja a una tira compacta bajo la portada,
+       así el precio sigue quedando en la primera pantalla. -->
   <header class="portada">
     <div class="p-texto">
       <p class="antetitulo"><i></i>Clases 1 a 1 para adultos · Miraflores y online</p>
@@ -61,48 +65,46 @@ const faqSchema = {
       </div>
     </div>
 
-    <aside class="ficha">
-      <p class="ficha-tit">Ficha</p>
-      <dl class="ficha-datos">
-        <div><dt>Opiniones</dt><dd><b>5.0</b>
-          <span class="estrellas" role="img" aria-label="5 de 5 estrellas">
-            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2.6l2.9 6 6.6.9-4.8 4.6 1.2 6.5-5.9-3.1-5.9 3.1 1.2-6.5L2.5 9.5l6.6-.9z"/></svg>
-            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2.6l2.9 6 6.6.9-4.8 4.6 1.2 6.5-5.9-3.1-5.9 3.1 1.2-6.5L2.5 9.5l6.6-.9z"/></svg>
-            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2.6l2.9 6 6.6.9-4.8 4.6 1.2 6.5-5.9-3.1-5.9 3.1 1.2-6.5L2.5 9.5l6.6-.9z"/></svg>
-            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2.6l2.9 6 6.6.9-4.8 4.6 1.2 6.5-5.9-3.1-5.9 3.1 1.2-6.5L2.5 9.5l6.6-.9z"/></svg>
-            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2.6l2.9 6 6.6.9-4.8 4.6 1.2 6.5-5.9-3.1-5.9 3.1 1.2-6.5L2.5 9.5l6.6-.9z"/></svg>
-          </span></dd>
-          <dd class="nt"><a class="lnk-sobrio" href="https://g.page/r/CevbO7ON9f4CEAE/review" target="_blank" rel="noopener noreferrer">11 opiniones en Google</a></dd>
-        </div>
-        <div><dt>Desde</dt><dd><b>S/320</b> al mes</dd><dd class="nt">4 clases de 1 hora</dd></div>
-        <div><dt>Dónde</dt><dd><b>Miraflores</b> u online</dd><dd class="nt">Lima, Perú</dd></div>
-      </dl>
-    </aside>
+    <figure class="portada-fig">
+      <figcaption class="lam-tit">Fig. 1 · El aparato de la voz</figcaption>
+      <div class="lam-dibujo" set:html={`<svg viewBox="0 0 470 500" role="img" aria-label="Diagrama del aparato de la voz: aire, fuente y filtro" style="width:100%;height:auto"> <g fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"> <g stroke-opacity=".26" stroke-width="1.2"> <path d="M16 20h12M22 14v12M442 20h12M448 14v12M16 480h12M22 474v12M442 480h12M448 474v12"/> </g> <!-- perfil: frente, nariz, labios, mentón, cuello --> <path d="M240 50c-32 0-54 22-56 52 0 10-3 15-7 20l-11 24c-4 6-2 11 5 12l6 1c-5 4-6 9-1 11-4 4-3 9 3 11 2 6 6 10 14 11 14 1 26 3 34 8-4 14-6 24-8 38-2 12-18 18-40 26l-26 10c-16 6-22 18-22 36v142"/> <!-- perfil: cráneo, nuca, espalda --> <path d="M240 50c32 0 58 22 58 58 0 28-6 44-14 56-6 8-8 16-8 26l-2 50c2 12 14 19 32 26l24 10c16 6 22 18 22 36v138"/> <!-- corte inferior --> <path d="M133 452c56 10 162 10 219 0" stroke-opacity=".3" stroke-dasharray="3 7"/> <!-- oreja --> <path d="M248 122c12-3 17 8 12 20-2 6-7 8-12 6" stroke-opacity=".5"/> <!-- paladar y lengua --> <g stroke-opacity=".55"> <path d="M182 158c18-8 40-8 54-2"/> <path d="M186 174c18 6 38 0 52-10"/> </g> <!-- faringe --> <g stroke-opacity=".55"> <path d="M240 158c6 16 6 34 4 48M258 154c8 18 8 38 6 54"/> </g> <!-- laringe --> <path d="M232 208h22c5 0 8 4 8 10v14c0 7-4 11-10 11h-14c-6 0-10-4-10-11v-16c0-5 0-8 4-8z"/> <path d="M233 222l12 4M260 222l-11 4" stroke-width="2"/> <!-- tráquea --> <path d="M235 243v49M255 243v49"/> <g stroke-opacity=".45"><path d="M235 254h20M235 264h20M235 274h20M235 284h20"/></g> <!-- bronquios --> <path d="M235 292c-11 10-23 18-35 24M255 292c11 10 23 18 35 24"/> <!-- costillas --> <g stroke-opacity=".33"> <path d="M160 316c42-18 130-18 172 0M150 342c46-18 148-18 194 0M146 368c48-18 152-18 200 0M148 394c48-16 148-16 196 0"/> </g> <!-- diafragma --> <path d="M146 428c52-36 148-36 200 0" stroke-width="3"/> <g stroke-opacity=".26"><path d="M152 446c50-32 138-32 188 0"/></g> <!-- recorrido del aire --> <g stroke="var(--acento)" stroke-width="2.6"> <path d="M245 412c-2-32 2-62 0-94 0-24 0-52 0-74 0-18 0-30 0-38 0-20-3-38-13-48-11-9-27-9-38-4-14 6-28 2-42-8"/> <path d="M165 145l-13 2 7 11"/> </g> <!-- guías y marcadores --> <g stroke-opacity=".5" stroke-width="1.2"> <path d="M393 424h-42l-8 4M393 226h-127M61 116h91l62 30"/> </g> <g fill="currentColor" stroke="none"><circle cx="343" cy="428" r="3"/><circle cx="266" cy="226" r="3"/><circle cx="216" cy="147" r="3"/></g> <g stroke="var(--acento)" fill="#FFFFFF" stroke-width="1.6"> <circle cx="410" cy="424" r="17"/><circle cx="410" cy="226" r="17"/><circle cx="44" cy="116" r="17"/> </g> <g fill="var(--acento)" stroke="none" font-family="Cabinet" font-size="19" font-weight="700" text-anchor="middle"> <text x="410" y="431">1</text><text x="410" y="233">2</text><text x="44" y="123">3</text> </g> </g> </svg>`} />
+      <ol class="claves-mini">
+        <li><span class="n">1</span><span class="tx"><b>Aire.</b> Empuja desde el diafragma.</span></li>
+        <li><span class="n">2</span><span class="tx"><b>Pliegues.</b> Vibran y cierran.</span></li>
+        <li><span class="n">3</span><span class="tx"><b>Espacio.</b> Da el color.</span></li>
+      </ol>
+    </figure>
   </header>
 
-  <!-- ══ 01 · CÓMO FUNCIONA LA VOZ ══ -->
-  <section class="bloque" id="metodo">
-    <div class="folio">01<span>Cómo funciona</span></div>
-    <div>
-      <h2>Tres partes, un solo sistema.</h2>
-      <figure class="lamina lamina-voz">
-        <figcaption class="lam-tit">Fig. 1 · El aparato de la voz</figcaption>
-        <div class="lam-cuerpo">
-          <div class="lam-dibujo" set:html={`<svg viewBox="0 0 470 500" role="img" aria-label="Diagrama del aparato de la voz: aire, fuente y filtro" style="width:100%;height:auto"> <g fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"> <g stroke-opacity=".26" stroke-width="1.2"> <path d="M16 20h12M22 14v12M442 20h12M448 14v12M16 480h12M22 474v12M442 480h12M448 474v12"/> </g> <!-- perfil: frente, nariz, labios, mentón, cuello --> <path d="M240 50c-32 0-54 22-56 52 0 10-3 15-7 20l-11 24c-4 6-2 11 5 12l6 1c-5 4-6 9-1 11-4 4-3 9 3 11 2 6 6 10 14 11 14 1 26 3 34 8-4 14-6 24-8 38-2 12-18 18-40 26l-26 10c-16 6-22 18-22 36v142"/> <!-- perfil: cráneo, nuca, espalda --> <path d="M240 50c32 0 58 22 58 58 0 28-6 44-14 56-6 8-8 16-8 26l-2 50c2 12 14 19 32 26l24 10c16 6 22 18 22 36v138"/> <!-- corte inferior --> <path d="M133 452c56 10 162 10 219 0" stroke-opacity=".3" stroke-dasharray="3 7"/> <!-- oreja --> <path d="M248 122c12-3 17 8 12 20-2 6-7 8-12 6" stroke-opacity=".5"/> <!-- paladar y lengua --> <g stroke-opacity=".55"> <path d="M182 158c18-8 40-8 54-2"/> <path d="M186 174c18 6 38 0 52-10"/> </g> <!-- faringe --> <g stroke-opacity=".55"> <path d="M240 158c6 16 6 34 4 48M258 154c8 18 8 38 6 54"/> </g> <!-- laringe --> <path d="M232 208h22c5 0 8 4 8 10v14c0 7-4 11-10 11h-14c-6 0-10-4-10-11v-16c0-5 0-8 4-8z"/> <path d="M233 222l12 4M260 222l-11 4" stroke-width="2"/> <!-- tráquea --> <path d="M235 243v49M255 243v49"/> <g stroke-opacity=".45"><path d="M235 254h20M235 264h20M235 274h20M235 284h20"/></g> <!-- bronquios --> <path d="M235 292c-11 10-23 18-35 24M255 292c11 10 23 18 35 24"/> <!-- costillas --> <g stroke-opacity=".33"> <path d="M160 316c42-18 130-18 172 0M150 342c46-18 148-18 194 0M146 368c48-18 152-18 200 0M148 394c48-16 148-16 196 0"/> </g> <!-- diafragma --> <path d="M146 428c52-36 148-36 200 0" stroke-width="3"/> <g stroke-opacity=".26"><path d="M152 446c50-32 138-32 188 0"/></g> <!-- recorrido del aire --> <g stroke="var(--acento)" stroke-width="2.6"> <path d="M245 412c-2-32 2-62 0-94 0-24 0-52 0-74 0-18 0-30 0-38 0-20-3-38-13-48-11-9-27-9-38-4-14 6-28 2-42-8"/> <path d="M165 145l-13 2 7 11"/> </g> <!-- guías y marcadores --> <g stroke-opacity=".5" stroke-width="1.2"> <path d="M393 424h-42l-8 4M393 226h-127M61 116h91l62 30"/> </g> <g fill="currentColor" stroke="none"><circle cx="343" cy="428" r="3"/><circle cx="266" cy="226" r="3"/><circle cx="216" cy="147" r="3"/></g> <g stroke="var(--acento)" fill="#FFFFFF" stroke-width="1.6"> <circle cx="410" cy="424" r="17"/><circle cx="410" cy="226" r="17"/><circle cx="44" cy="116" r="17"/> </g> <g fill="var(--acento)" stroke="none" font-family="Cabinet" font-size="19" font-weight="700" text-anchor="middle"> <text x="410" y="431">1</text><text x="410" y="233">2</text><text x="44" y="123">3</text> </g> </g> </svg>`} />
-          <ol class="lam-claves">
-            <li><span class="n">1</span><span class="tx"><b>El aire</b> empuja. Sale del diafragma, no de la garganta.</span></li>
-            <li><span class="n">2</span><span class="tx"><b>Los pliegues</b> vibran. Se cierran bien o se escapan.</span></li>
-            <li><span class="n">3</span><span class="tx"><b>El espacio</b> da el color. Garganta y boca, no fuerza.</span></li>
-          </ol>
-        </div>
-        <p class="lam-pie">Casi todo lo que se llama «no tengo voz» pasa en la primera parte.</p>
-      </figure>
+  <!-- Tira de evidencia: responde precio, nota y lugar sin ocupar media pantalla. -->
+  <div class="tira">
+    <div class="tira-item">
+      <span class="tira-et">Opiniones</span>
+      <span class="tira-vl"><b>5.0</b>
+        <span class="estrellas" role="img" aria-label="5 de 5 estrellas">
+          <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2.6l2.9 6 6.6.9-4.8 4.6 1.2 6.5-5.9-3.1-5.9 3.1 1.2-6.5L2.5 9.5l6.6-.9z"/></svg>
+          <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2.6l2.9 6 6.6.9-4.8 4.6 1.2 6.5-5.9-3.1-5.9 3.1 1.2-6.5L2.5 9.5l6.6-.9z"/></svg>
+          <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2.6l2.9 6 6.6.9-4.8 4.6 1.2 6.5-5.9-3.1-5.9 3.1 1.2-6.5L2.5 9.5l6.6-.9z"/></svg>
+          <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2.6l2.9 6 6.6.9-4.8 4.6 1.2 6.5-5.9-3.1-5.9 3.1 1.2-6.5L2.5 9.5l6.6-.9z"/></svg>
+          <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2.6l2.9 6 6.6.9-4.8 4.6 1.2 6.5-5.9-3.1-5.9 3.1 1.2-6.5L2.5 9.5l6.6-.9z"/></svg>
+        </span></span>
+      <a class="tira-nt lnk-sobrio" href="https://g.page/r/CevbO7ON9f4CEAE/review" target="_blank" rel="noopener noreferrer">11 opiniones en Google</a>
     </div>
-  </section>
+    <div class="tira-item">
+      <span class="tira-et">Desde</span>
+      <span class="tira-vl"><b>S/320</b> al mes</span>
+      <span class="tira-nt">4 clases de 1 hora</span>
+    </div>
+    <div class="tira-item">
+      <span class="tira-et">Dónde</span>
+      <span class="tira-vl"><b>Miraflores</b> u online</span>
+      <span class="tira-nt">Lima, Perú</span>
+    </div>
+  </div>
 
-  <!-- ══ 02 · FORZAR VS COORDINAR ══ -->
+  <!-- ══ 01 · FORZAR VS COORDINAR ══ -->
   <section class="bloque">
-    <div class="folio">02<span>El punto de partida</span></div>
+    <div class="folio">01<span>El punto de partida</span></div>
     <div>
       <h2>Casi nadie canta mal. La mayoría empuja.</h2>
       <div class="dos-figs">
@@ -121,8 +123,8 @@ const faqSchema = {
   </section>
 
   <!-- ══ 03 · LOS TRES EJES (el ángulo holístico) ══ -->
-  <section class="bloque" id="ejes">
-    <div class="folio">03<span>Cómo trabajamos</span></div>
+  <section class="bloque oscuro" id="ejes">
+    <div class="folio">02<span>Cómo trabajamos</span></div>
     <div>
       <h2>La voz no es solo garganta.</h2>
       <figure class="lamina">
@@ -155,7 +157,7 @@ const faqSchema = {
 
   <!-- ══ 04 · POR QUÉ 1 A 1 ══ -->
   <section class="bloque">
-    <div class="folio">04<span>Por qué uno a uno</span></div>
+    <div class="folio">03<span>Por qué uno a uno</span></div>
     <div>
       <h2>Cada voz llega desbalanceada distinto.</h2>
       <figure class="lamina">
@@ -194,7 +196,7 @@ const faqSchema = {
 
   <!-- ══ 05 · LA EDAD ══ -->
   <section class="bloque" id="edad">
-    <div class="folio">05<span>La edad</span></div>
+    <div class="folio">04<span>La edad</span></div>
     <div>
       <h2>Empezar a los 45 no es empezar tarde.</h2>
       <figure class="lamina">
@@ -230,7 +232,7 @@ const faqSchema = {
 
   <!-- ══ 06 · CURSOS ══ -->
   <section class="bloque" id="cursos">
-    <div class="folio">06<span>Los cursos</span></div>
+    <div class="folio">05<span>Los cursos</span></div>
     <div>
       <h2>Tres. El tercero es el que recomiendo.</h2>
 
@@ -287,8 +289,8 @@ const faqSchema = {
   </section>
 
   <!-- ══ 07 · LA RUTA ══ -->
-  <section class="bloque" id="ruta">
-    <div class="folio">07<span>La ruta</span></div>
+  <section class="bloque oscuro" id="ruta">
+    <div class="folio">06<span>La ruta</span></div>
     <div>
       <h2>Los primeros tres meses.</h2>
       <ol class="ruta">
@@ -311,7 +313,7 @@ const faqSchema = {
 
   <!-- ══ 08 · QUIÉN ENSEÑA ══ -->
   <section class="bloque" id="quien">
-    <div class="folio">08<span>Quién enseña</span></div>
+    <div class="folio">07<span>Quién enseña</span></div>
     <div>
       <h2>Andrés Salamé-Córdova</h2>
       <p class="lead lead-corto">Aquí nadie se ríe de nadie. Todo lo que suena mal hoy es simplemente lo siguiente que vamos a entrenar.</p>
@@ -327,7 +329,7 @@ const faqSchema = {
 
   <!-- ══ 09 · OPINIONES ══ -->
   <section class="bloque" id="opiniones">
-    <div class="folio">09<span>Opiniones</span></div>
+    <div class="folio">08<span>Opiniones</span></div>
     <div class="opinion">
       <div>
         <p class="nota-grande">5.0</p>
@@ -350,7 +352,7 @@ const faqSchema = {
   <!-- ══ 10 · PLANES ══ -->
   <span id="precios" class="ancla-alias" aria-hidden="true"></span>
   <section class="bloque" id="planes">
-    <div class="folio">10<span>Planes</span></div>
+    <div class="folio">09<span>Planes</span></div>
     <div>
       <h2>Mientras más horas, menos cuesta la hora.</h2>
       <table class="tabla-planes">
@@ -386,7 +388,7 @@ const faqSchema = {
 
   <!-- ══ 11 · DUDAS ══ -->
   <section class="bloque" id="faq">
-    <div class="folio">11<span>Dudas</span></div>
+    <div class="folio">10<span>Dudas</span></div>
     <div class="faq">
       {FAQ.map((f) => (<details><summary>{f.q}</summary><p>{f.a}</p></details>))}
     </div>
@@ -417,19 +419,52 @@ const faqSchema = {
    Regla dura: ningún rótulo de figura puede apagarse en móvil.
    ─────────────────────────────────────────────────────────────── */
 
-.hoja-w { max-width: var(--ancho); margin: 0 auto; padding: 0 var(--margen); }
+/* 1180px, no 1400: con el ancho anterior el contenido se desparramaba y
+   la página se leía descentrada. */
+.hoja-w { max-width: 1180px; margin: 0 auto; padding: 0 var(--margen); }
 .ancla-alias { display: block; height: 0; scroll-margin-top: 80px; }
 
 /* ══ PORTADA ══ */
 .portada {
   display: grid;
-  grid-template-columns: minmax(0, 7fr) minmax(290px, 4fr);
-  column-gap: clamp(28px, 5vw, 80px);
-  align-items: start;
-  padding: clamp(34px, 5vw, 84px) 0 clamp(38px, 4.5vw, 64px);
+  grid-template-columns: minmax(0, 6fr) minmax(280px, 5fr);
+  column-gap: clamp(28px, 4.5vw, 70px);
+  align-items: center;
+  padding: clamp(28px, 4vw, 62px) 0 clamp(26px, 3.4vw, 46px);
 }
 .entrada { font-size: 21px; line-height: 1.55; max-width: 34ch; color: var(--texto-2); margin-top: 22px; }
 .acciones { margin-top: clamp(26px, 3vw, 38px); display: flex; align-items: center; gap: 24px; flex-wrap: wrap; }
+
+/* Figura de portada: es lo primero que se ve, antes que cualquier párrafo. */
+.portada-fig { background: var(--lamina); border: 1px solid var(--linea); padding: 0; overflow: hidden; }
+.portada-fig .lam-tit {
+  background: var(--acento); color: var(--sobre-acento);
+  margin: 0; padding: 12px clamp(16px, 2vw, 24px);
+}
+.portada-fig .lam-dibujo { padding: clamp(18px, 2.4vw, 30px) clamp(16px, 2vw, 26px) 0; }
+.portada-fig .claves-mini { margin: 16px clamp(16px, 2vw, 26px) clamp(18px, 2vw, 24px); }
+.portada-fig .lam-dibujo { max-width: 300px; margin: 0 auto; }
+.claves-mini { list-style: none; display: grid; gap: 10px; margin-top: 16px; border-top: 1px solid var(--linea); padding-top: 16px; }
+.claves-mini li { display: grid; grid-template-columns: 30px minmax(0, 1fr); gap: 12px; align-items: center; font-size: 18px; color: var(--texto-2); }
+.claves-mini b { color: var(--texto); font-weight: 600; }
+.claves-mini .n {
+  width: 30px; height: 30px; background: var(--acento); color: var(--sobre-acento);
+  display: flex; align-items: center; justify-content: center; border-radius: 50%;
+  font-family: var(--display); font-weight: 700; font-size: 18px; flex: none;
+}
+
+/* Tira de evidencia bajo la portada */
+.tira {
+  display: grid; grid-template-columns: repeat(3, 1fr);
+  border-top: 2px solid var(--linea-fuerte); border-bottom: 1px solid var(--linea);
+}
+.tira-item { padding: 16px clamp(14px, 2vw, 28px) 18px; border-left: 1px solid var(--linea); }
+.tira-item:first-child { border-left: 0; padding-left: 0; }
+.tira-et { display: block; font-size: 18px; color: var(--texto-2); }
+.tira-vl { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; font-size: 19px; margin-top: 2px; }
+.tira-vl b { font-family: var(--display); font-weight: 800; font-size: clamp(24px, 2.2vw, 29px); line-height: 1.1; }
+.tira-nt { display: block; font-size: 18px; color: var(--texto-2); margin-top: 2px; }
+a.tira-nt { min-height: 44px; align-items: center; }
 
 .ficha { border-top: 2px solid var(--linea-fuerte); padding-top: 20px; margin-top: 12px; }
 .ficha-tit { font-size: 18px; font-weight: 600; text-transform: uppercase; letter-spacing: .14em; color: var(--texto-2); }
@@ -460,6 +495,7 @@ const faqSchema = {
   font-size: 18px; font-weight: 600; text-transform: uppercase; letter-spacing: .13em;
   color: var(--acento); margin-bottom: 18px;
   display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  border-left: 4px solid var(--acento); padding-left: 12px;
 }
 .sello-ej {
   border: 1px solid var(--filete-fuerte); color: var(--texto-2);
@@ -488,9 +524,22 @@ const faqSchema = {
 
 /* Fig. 3 · los tres ejes */
 .ejes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0; }
+.bloque.oscuro .lamina { background: transparent; border-color: var(--invertido-linea); }
+.bloque.oscuro .lamina::before, .bloque.oscuro .lamina::after { border-color: var(--invertido-linea); }
+.bloque.oscuro .lam-pie { color: var(--invertido-texto-2); border-top-color: var(--invertido-linea); }
+.bloque.oscuro .lam-pie b { color: var(--invertido-texto); }
 .ejes .eje { padding: 4px clamp(14px, 1.8vw, 26px); border-left: 1px solid var(--linea); }
+.bloque.oscuro .ejes .eje { border-left-color: var(--invertido-linea); }
+.bloque.oscuro .ruta { border-top-color: var(--acento); }
+.bloque.oscuro .ruta li { border-left-color: var(--invertido-linea); }
+/* Estos dos traen su propio color y le ganan en especificidad a la regla
+   genérica del bloque oscuro: quedaban en 2.32 sobre tinta. */
+.bloque.oscuro .ejes p,
+.bloque.oscuro .ruta-d { color: var(--invertido-texto-2); }
+.bloque.oscuro .ruta-t { color: var(--invertido-texto); }
+.bloque.oscuro .ruta-s { color: var(--acento); }
 .ejes .eje:first-child { border-left: 0; padding-left: 0; }
-.ejes svg { width: 42px; height: 42px; color: var(--acento); margin-bottom: 14px; }
+.ejes svg { width: 52px; height: 52px; color: var(--acento); margin-bottom: 16px; }
 .ejes h3 { font-size: clamp(22px, 2.1vw, 27px); }
 .ejes p { font-size: 19px; color: var(--texto-2); margin-top: 8px; line-height: 1.45; }
 
@@ -615,7 +664,14 @@ const faqSchema = {
   /* La barra fija de abajo come 60px, así que el pliegue útil son ~784px.
      Se aprieta el aire de la portada para que "Desde S/320" quede por ENCIMA
      de la barra y no detrás. Medido, no calculado a ojo. */
-  .portada { grid-template-columns: 1fr; row-gap: 16px; padding: 16px 0 22px; }
+  /* En móvil el dibujo va PRIMERO: la idea es abrir y ver una imagen. */
+  .portada { grid-template-columns: 1fr; row-gap: 18px; padding: 14px 0 18px; }
+  .portada-fig { order: -1; padding: 14px; }
+  .portada-fig .lam-dibujo { max-width: 210px; }
+  .claves-mini { margin-top: 12px; padding-top: 12px; }
+  .tira { grid-template-columns: 1fr; }
+  .tira-item { border-left: 0; border-top: 1px solid var(--linea); padding: 12px 0 14px; }
+  .tira-item:first-child { border-top: 0; padding-left: 0; }
   .ficha { margin-top: 0; padding-top: 16px; }
   .entrada { max-width: none; margin-top: 14px; font-size: 20px; }
   .acciones { margin-top: 2px; gap: 10px; }
