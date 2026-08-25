@@ -5072,9 +5072,9 @@ function paginaBase(titulo, cuerpo, script){
 
 function paginaRegistro(googleOn){
   const cuerpo =
-    "<div class=\"pill\">Plan Gratis para siempre, sin tarjeta</div>" +
+    "<div class=\"pill\">Batuta gratis para siempre, sin tarjeta</div>" +
     "<h1>Crea tu academia en Batuta</h1>" +
-    "<p class=\"sub\">Gratis para siempre hasta 15 alumnos. Tu panel listo en un minuto.</p>" +
+    "<p class=\"sub\">Gratis para siempre hasta " + BASE_LIMITES.alumnos + " alumnos. Tu panel listo en un minuto.</p>" +
     (googleOn ? botonGoogle("profesor", "", "Registrarme con Google") + "<div class=\"gsep\">o con tu correo</div>" : "") +
     "<form id=\"f\">" +
       "<label>Nombre de tu academia</label><input id=\"academia\" required>" +
@@ -5106,7 +5106,7 @@ function paginaRegistro(googleOn){
     "try{if(!refc){var mck=/(?:^|;\\s*)batuta_ref=([^;]+)/.exec(document.cookie);if(mck){refc=decodeURIComponent(mck[1]);}}}catch(e){}" +
     "try{if(refc){sessionStorage.setItem('batuta_ref',refc);document.cookie='batuta_ref='+encodeURIComponent(refc)+';max-age=5184000;path=/;samesite=lax';}else{refc=sessionStorage.getItem('batuta_ref')||'';}}catch(e){}" +
     "var planReg='';try{planReg=(new URLSearchParams(location.search).get('plan')||'');}catch(e){}" +
-    "if(planReg==='gratis'){try{var pill=document.querySelector('.pill');if(pill)pill.textContent='Batuta gratis: " + BASE_LIMITES.profes + " profesor, hasta " + BASE_LIMITES.alumnos + " alumnos, para siempre';var sub=document.querySelector('.sub');if(sub)sub.textContent='Sin tarjeta y sin fecha de vencimiento. Cuando crezcas, subes de plan.';var bt=document.querySelector('#f button[type=submit]');if(bt)bt.textContent='Crear mi cuenta gratis';}catch(e){}}" +
+    "if(planReg==='gratis'){try{var pill=document.querySelector('.pill');if(pill)pill.textContent='Batuta gratis: " + BASE_LIMITES.profes + " profesor, hasta " + BASE_LIMITES.alumnos + " alumnos, para siempre';var sub=document.querySelector('.sub');if(sub)sub.textContent='Sin tarjeta y sin fecha de vencimiento. Cuando crezcas, le sumas packs de capacidad.';var bt=document.querySelector('#f button[type=submit]');if(bt)bt.textContent='Crear mi cuenta gratis';}catch(e){}}" +
     // Rescate de registros abandonados: email valido tecleado + se va sin terminar el submit
     // -> sendBeacon lo guarda como lead. regEnviado (flag del submit) evita disparar en el flujo feliz.
     "var regEnviado=false;var abandonoEmail='';" +

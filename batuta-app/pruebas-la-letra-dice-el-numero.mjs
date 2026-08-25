@@ -78,5 +78,31 @@ console.log("\n── 4. El mensaje del tope, que sale del propio worker ──"
     /"Tu Batuta llega hasta " \+ capAl \+ " alumnos/.test(SRC));
 }
 
+console.log("\n── 5. La PANTALLA DE REGISTRO, que vive en el worker y no en el panel ──");
+{
+  /* 🔴 24-ago-2026 · el bloque 1 mira `public/panel/index.html` y por eso nunca vio esto:
+     `/app/registro` se arma DENTRO del worker. Decia "Gratis para siempre hasta 15 alumnos"
+     cuando BASE_LIMITES ya daba 20 desde el 20-ago. La landing prometia 20, el visitante
+     hacia clic en "Empezar gratis" y el paso siguiente le bajaba a 15: la web se desmentia
+     sola en la unica pantalla por la que pasa TODO cliente nuevo. */
+  const i = SRC.indexOf("\nfunction paginaRegistro(");
+  comprobar("se encuentra `paginaRegistro`", i >= 0);
+  if (i >= 0){
+    let k = SRC.indexOf("{", i), d = 0, fin = -1;
+    for (let z = k; z < SRC.length; z++){ if (SRC[z] === "{") d++; else if (SRC[z] === "}" && --d === 0){ fin = z + 1; break; } }
+    const REG = SRC.slice(i, fin);
+
+    /* ningun tope de alumnos escrito a mano que contradiga la constante */
+    const topes = [...REG.matchAll(/hasta (\d+) alumnos/g)].map(m => Number(m[1]));
+    comprobar("no hay topes de alumnos escritos a mano", topes.length === 0,
+      topes.length ? "encontrados: " + topes.join(", ") + " (el worker da " + LIM.alumnos + ")" : "sale de BASE_LIMITES");
+    comprobar("el tope que promete sale de la constante", /BASE_LIMITES\.alumnos/.test(REG));
+
+    /* nombres del modelo que murio el 20-ago-2026 (se acabaron los planes, quedan packs) */
+    for (const muerto of ["Plan Gratis", "subes de plan", "sube de plan", "Academia XL"])
+      comprobar(`no nombra «${muerto}»`, REG.indexOf(muerto) === -1);
+  }
+}
+
 console.log(fallos ? `\n🔴 ${fallos} fallo(s)` : "\n✅ la letra dice el número que el servidor hace cumplir");
 process.exit(fallos ? 1 : 0);
