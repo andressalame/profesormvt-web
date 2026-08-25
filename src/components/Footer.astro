@@ -1,5 +1,6 @@
 ---
-// Footer compartido entre home y blog
+// Footer compartido. Rediseño 2026-08-24: tokens de global.css (papel/tinta/sello,
+// Cabinet Grotesk + Switzer). Nada bajo 18px, targets de 44px.
 ---
 
 <footer>
@@ -9,7 +10,7 @@
         <div class="logo">profesor<em class="mark">mvt</em><span class="dot"></span></div>
         <p>
           Canto con MVT, composición con Hook Theory, o los dos juntos en sesiones de 2 horas.
-          Para adultos entre 20 y 45 años que quieren tomarse la música en serio.
+          Para adultos que quieren tomarse la música en serio, empiecen a la edad que empiecen.
         </p>
         <p class="footer-address">Miraflores · Lima</p>
       </div>
@@ -26,7 +27,7 @@
         <h4>Sitio</h4>
         <ul>
           <li><a href="/#precios">Precios</a></li>
-          <li><a href="/#sobre">Sobre mí</a></li>
+          <li><a href="/#quien">Quién enseña</a></li>
           <li><a href="/#faq">FAQ</a></li>
           <li><a href="/politicas/">Políticas</a></li>
           <li><a href="/blog">Blog</a></li>
@@ -58,85 +59,52 @@
 
 <style>
 footer {
-  background: var(--color-ink-soft);
-  color: var(--color-bone);
-  padding: 80px 0 32px;
-  position: relative;
-  z-index: 2;
-  border-top: 1px solid var(--color-line);
+  border-top: 2px solid var(--linea-fuerte);
+  background: var(--fondo);
+  color: var(--texto-2);
+  padding: clamp(44px, 5vw, 72px) 0 clamp(36px, 4vw, 56px);
 }
 .footer-grid {
   display: grid;
-  grid-template-columns: 1.4fr 1fr 1fr 1fr;
-  gap: 48px;
-  margin-bottom: 56px;
+  grid-template-columns: minmax(0, 2.2fr) repeat(3, minmax(0, 1fr));
+  gap: clamp(24px, 3.4vw, 56px);
 }
 .footer-brand .logo {
-  color: var(--color-bone);
-  font-size: 26px;
-  margin-bottom: 16px;
-  font-family: 'Fraunces', serif;
-  font-weight: 500;
-  display: flex; align-items: baseline; gap: 8px;
+  font-family: var(--display); font-weight: 800; font-size: 22px;
+  text-transform: uppercase; letter-spacing: .06em; color: var(--texto);
 }
-.footer-brand .logo .mark { color: var(--color-ember); font-style: italic; }
-.footer-brand .logo .dot {
-  width: 6px; height: 6px;
-  border-radius: 50%;
-  background: var(--color-ember);
-  display: inline-block;
-  transform: translateY(-3px);
-}
-.footer-brand p {
-  font-size: 14px;
-  color: var(--color-bone-mute);
-  line-height: 1.6;
-  max-width: 340px;
-  margin-bottom: 8px;
-}
-.footer-address {
-  font-family: 'JetBrains Mono', monospace !important;
-  font-size: 11px !important;
-  color: var(--color-text-mute) !important;
-  letter-spacing: 0.05em;
-}
+.footer-brand .logo em { font-style: normal; color: var(--acento); }
+.footer-brand .logo .dot { display: none; }
+.footer-brand p { font-size: 18px; line-height: 1.55; margin-top: 14px; max-width: 42ch; }
+.footer-address { font-weight: 600; color: var(--texto); }
+
 .footer-col h4 {
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 11px;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  color: var(--color-ember);
-  font-weight: 500;
-  margin-bottom: 18px;
+  font-family: var(--lectura); font-weight: 600; font-size: 18px;
+  text-transform: uppercase; letter-spacing: .13em; color: var(--acento);
 }
-.footer-col ul { list-style: none; }
-.footer-col ul li { margin-bottom: 10px; }
-.footer-col ul li a {
-  font-size: 14px;
-  color: var(--color-bone-mute);
-  transition: color 0.2s;
-  display: flex;
-  align-items: center;
+.footer-col ul { list-style: none; margin-top: 12px; }
+.footer-col li { margin: 0; }
+.footer-col a {
+  display: inline-flex; align-items: center; min-height: 44px;
+  font-size: 18px; color: var(--texto-2);
 }
-.footer-col ul li a:hover { color: var(--color-ember); }
-.footer-col ul li a svg { fill: var(--color-bone-mute); transition: fill 0.2s; }
-.footer-col ul li a:hover svg { fill: var(--color-ember); }
+.footer-col a:hover { color: var(--texto); border-bottom: 1px solid var(--acento); }
+.footer-col a svg { flex: none; }
+
 .footer-bottom {
-  border-top: 1px solid var(--color-line);
-  padding-top: 28px;
-  display: flex; justify-content: space-between; align-items: center;
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 11px;
-  color: var(--color-text-mute);
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
+  margin-top: clamp(32px, 4vw, 52px);
+  padding-top: 22px;
+  border-top: 1px solid var(--linea);
+  display: flex; flex-wrap: wrap; gap: 8px clamp(20px, 3vw, 44px);
+  font-size: 18px; color: var(--texto-2);
 }
 
-@media (max-width: 960px) {
-  .footer-grid { grid-template-columns: 1fr 1fr; gap: 32px; }
+@media (max-width: 900px) {
+  .footer-grid { grid-template-columns: 1fr 1fr; gap: 28px; }
+  .footer-brand { grid-column: 1 / -1; }
+  .footer-bottom { flex-direction: column; gap: 6px; }
 }
-@media (max-width: 540px) {
+@media (max-width: 520px) {
   .footer-grid { grid-template-columns: 1fr; }
-  .footer-bottom { flex-direction: column; gap: 12px; text-align: center; }
 }
 </style>

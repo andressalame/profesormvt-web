@@ -6,7 +6,6 @@ const { curso = "canto" } = Astro.props;
 
 const TESTIMONIOS = {
   canto: { cita: "Por fin entendí qué hacía mal con mi voz. En un mes mi agudo cambió por completo.", quien: "María José", meta: "Canto" },
-  piano: { cita: "Llegué tocando dos canciones de memoria. Hoy leo, acompaño y entiendo lo que toco.", quien: "Diego", meta: "Piano" },
   composicion: { cita: "Andrés no te llena de teoría. Te hace componer desde la primera clase.", quien: "Lucía", meta: "Composición" },
 };
 const t = TESTIMONIOS[curso] || TESTIMONIOS.canto;
@@ -27,27 +26,35 @@ const t = TESTIMONIOS[curso] || TESTIMONIOS.canto;
 </section>
 
 <style>
-  .ps { padding: 40px 18px; display: flex; justify-content: center; }
+  /* Rediseño 2026-08-24: antes era una tarjeta redondeada con barrita de color al
+     costado (lo que la marca prohíbe explícitamente) y centrada en móvil.
+     Ahora: filetes, tinta sobre papel y alineado a la izquierda. */
+  .ps { padding: clamp(32px, 4vw, 52px) 0; }
   .ps-wrap {
-    width: 100%; max-width: 720px; display: grid; gap: 22px;
-    grid-template-columns: 1fr 1.3fr; align-items: center;
+    width: 100%; max-width: var(--ancho-angosto); margin: 0 auto;
+    display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr);
+    gap: clamp(22px, 3vw, 48px); align-items: start;
+    border-top: 2px solid var(--linea-fuerte); padding-top: 24px;
   }
-  .ps-stars { color: #e8a13d; font-size: 22px; letter-spacing: 2px; }
-  .ps-line { font-family: "Space Grotesk", system-ui, sans-serif; color: #cfc7b6; font-size: 15px; margin: 8px 0 6px; }
-  .ps-line b { color: #f3ede0; font-size: 18px; }
-  .ps-link { font-family: "JetBrains Mono", monospace; font-size: 12.5px; letter-spacing: .04em; color: #e8501f; text-decoration: none; }
-  .ps-link:hover { text-decoration: underline; }
-  .ps-testi {
-    margin: 0; background: #15110f; border: 1px solid #2A2926; border-left: 3px solid #e8501f;
-    border-radius: 10px; padding: 20px 22px;
+  .ps-stars { color: var(--acento); font-size: 22px; letter-spacing: 2px; display: block; }
+  .ps-line { font-family: var(--lectura); color: var(--texto-2); font-size: 19px; margin: 10px 0 4px; }
+  .ps-line b { color: var(--texto); font-family: var(--display); font-weight: 800; font-size: 30px; }
+  .ps-link {
+    display: inline-flex; align-items: center; min-height: 44px;
+    font-size: 18px; font-weight: 500; color: var(--acento);
+    border-bottom: 1px solid var(--acento);
   }
-  .ps-verif { font-family: "JetBrains Mono", monospace; text-transform: uppercase; letter-spacing: .12em; font-size: 10px; color: #8a8276; }
-  .ps-testi p { font-family: "Space Grotesk", system-ui, sans-serif; font-size: 16px; line-height: 1.5; color: #f3ede0; margin: 8px 0 12px; }
-  .ps-testi footer { font-family: "Space Grotesk", system-ui, sans-serif; font-size: 13.5px; color: #cfc7b6; }
-  .ps-name { color: #f3ede0; font-weight: 500; }
-  .ps-meta { color: #8a8276; }
-  @media (max-width: 640px) {
-    .ps-wrap { grid-template-columns: 1fr; gap: 18px; text-align: center; }
-    .ps-testi { text-align: left; }
+  .ps-testi { margin: 0; border-left: 2px solid var(--acento); padding: 2px 0 2px 22px; }
+  .ps-verif {
+    font-family: var(--lectura); text-transform: uppercase; letter-spacing: .13em;
+    font-size: 18px; font-weight: 600; color: var(--texto-2);
+  }
+  .ps-testi p { font-family: var(--lectura); font-size: 20px; line-height: 1.55; color: var(--texto); margin: 10px 0 14px; }
+  .ps-testi footer { font-family: var(--lectura); font-size: 18px; color: var(--texto-2); }
+  .ps-name { color: var(--texto); font-weight: 600; }
+  .ps-meta { color: var(--texto-2); }
+  @media (max-width: 720px) {
+    .ps-wrap { grid-template-columns: 1fr; gap: 20px; }
+    .ps-testi { padding-left: 18px; }
   }
 </style>

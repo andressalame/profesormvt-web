@@ -158,18 +158,18 @@ import Layout from '../layouts/Layout.astro';
   .regla {
     background: var(--color-ink-soft);
     border: 1px solid var(--color-line);
-    border-radius: 14px;
+    border-radius: 0;
     padding: 30px 28px;
     margin: 0 0 16px;
   }
   /* la regla que más se rompe va marcada, no escondida entre las demás */
   .regla.destacada { border-color: var(--color-ember); }
   .regla h2 { font-size: clamp(21px, 3vw, 27px); margin: 0 0 14px; line-height: 1.25; }
-  .regla p { color: var(--color-bone-mute); font-size: 16px; line-height: 1.65; margin: 0 0 12px; }
+  .regla p { color: var(--color-bone-mute); font-size: 18px; line-height: 1.65; margin: 0 0 12px; }
   .regla p:last-child { margin-bottom: 0; }
   .regla strong { color: var(--color-bone); }
   .regla .nota {
-    font-size: 15px; color: var(--color-text-mute);
+    font-size: 18px; color: var(--color-text-mute);
     border-left: 2px solid var(--color-line); padding-left: 14px; margin-top: 16px;
   }
 
@@ -179,9 +179,9 @@ import Layout from '../layouts/Layout.astro';
     padding: 11px 0; border-bottom: 1px solid var(--color-line);
   }
   .lista-planes li:last-child { border-bottom: 0; }
-  .lista-planes .plan { color: var(--color-bone); font-size: 16px; }
+  .lista-planes .plan { color: var(--color-bone); font-size: 18px; }
   .lista-planes .cant {
-    font-family: 'JetBrains Mono', monospace; font-size: 14px;
+    font-family: var(--lectura); font-size: 18px;
     color: var(--color-ember); white-space: nowrap;
   }
 
@@ -189,24 +189,24 @@ import Layout from '../layouts/Layout.astro';
   .pol-fin h2 { font-size: clamp(26px, 4vw, 38px); margin: 0 0 14px; }
   .pol-fin .lead {
     max-width: 580px; margin: 0 auto 26px;
-    font-size: 17px; color: var(--color-bone-mute); line-height: 1.6;
+    font-size: 18px; color: var(--color-bone-mute); line-height: 1.6;
   }
   .fin-cta { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; }
-  .note { color: var(--color-text-mute); font-size: 13px; margin: 26px 0 0; }
+  .note { color: var(--color-text-mute); font-size: 18px; margin: 26px 0 0; }
 
   /* Astro aísla los estilos por página, así que los botones se declaran acá.
      Copiados de horarios.astro para que se vean idénticos en todo el sitio. */
   .btn-cta {
     display: inline-block; background: var(--color-ember);
-    color: var(--color-bone) !important; font-weight: 600;
-    padding: 15px 30px; border-radius: 6px; font-size: 16px;
+    color: var(--sobre-acento) !important; font-weight: 600;
+    padding: 15px 30px; border-radius: 0; font-size: 18px;
     transition: background .2s;
   }
   .btn-cta:hover { background: var(--wine-deep); }
   .btn-ghost {
     display: inline-block; border: 1px solid var(--hairline-strong);
     color: var(--color-bone) !important; font-weight: 600;
-    padding: 15px 30px; border-radius: 6px; font-size: 16px;
+    padding: 15px 30px; border-radius: 0; font-size: 18px;
     transition: border-color .15s, color .15s;
   }
   .btn-ghost:hover { border-color: var(--color-ember); color: var(--color-ember) !important; }

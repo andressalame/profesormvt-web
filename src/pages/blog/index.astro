@@ -52,7 +52,11 @@ const formatDate = (d: Date) => {
       <span class="cat-label">FILTRAR POR:</span>
       <button class="cat-pill active" data-filter="all">Todos</button>
       <button class="cat-pill cat-voz" data-filter="voz"><span class="dot"></span>Voz</button>
-      <button class="cat-pill cat-piano" data-filter="piano"><span class="dot"></span>Piano</button>
+      <!-- Filtro "Piano" retirado el 24-ago-2026: piano salió de la oferta el 25-jul y
+           no se promociona. Los 5 artículos de piano NO se borran (son SEO acumulado y
+           astro.config.mjs mantiene sus redirects a propósito): siguen indexados y
+           accesibles por buscador, pero la web ya no ofrece piano como categoría.
+           Si Andrés prefiere borrarlos del todo, es una línea. -->
       <button class="cat-pill cat-comp" data-filter="composicion"><span class="dot"></span>Composición</button>
       <button class="cat-pill cat-teoria" data-filter="teoria"><span class="dot"></span>Teoría</button>
       <button class="cat-pill cat-metodo" data-filter="metodo"><span class="dot"></span>Método</button>
@@ -65,7 +69,7 @@ const formatDate = (d: Date) => {
     <div class="container">
       <div class="featured-card">
         <a href={`/blog/${featured.slug}`} class={`featured-img ${categoryMeta[featured.data.category].cls}`} style={featured.data.image ? `background-image: url(${featured.data.image}); background-size: cover; background-position: center;` : ''}>
-          <span class="featured-img-tag">⭐ DESTACADO</span>
+          <span class="featured-img-tag"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" width="16" height="16"><path d="M12 2.6l2.9 6.1 6.6.9-4.8 4.6 1.2 6.7L12 17.6 5.9 20.9l1.2-6.7-4.8-4.6 6.6-.9z"/></svg>Destacado</span>
           {!featured.data.image && (
             <>
               <div class="featured-img-pattern"></div>

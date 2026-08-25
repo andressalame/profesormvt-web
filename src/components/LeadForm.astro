@@ -40,25 +40,25 @@ const { fuente = "web" } = Astro.props;
 
 <style>
   .lf{ padding:44px 18px; display:flex; justify-content:center; position:relative; z-index:1; }
-  .lf-box{ width:100%; max-width:600px; background:#15110f; border:1px solid #2A2926; border-radius:12px; padding:clamp(24px,4vw,34px) clamp(20px,3.5vw,30px); }
-  .lf-eyebrow{ font-family:"JetBrains Mono",monospace; text-transform:uppercase; letter-spacing:.2em; font-size:11px; color:#e8501f; font-weight:700; }
-  .lf-h{ font-family:"Oswald",Impact,sans-serif;font-weight:600; text-transform:uppercase; font-size:clamp(28px,5vw,42px); line-height:1; letter-spacing:.005em; color:#f3ede0; margin:8px 0 10px; }
-  .lf-h .lf-o{ color:#e8501f; }
-  .lf-p{ font-family:"Space Grotesk",system-ui,sans-serif; font-size:15px; line-height:1.55; color:#cfc7b6; margin:0 0 18px; max-width:50ch; }
+  .lf-box{ width:100%; max-width:600px; background:var(--fondo-2); border:1px solid var(--linea); border-radius: 0; padding:clamp(24px,4vw,34px) clamp(20px,3.5vw,30px); }
+  .lf-eyebrow{ font-family:var(--lectura); text-transform:uppercase; letter-spacing:.2em; font-size: 18px; color:var(--acento); font-weight:700; }
+  .lf-h{ font-family:var(--display);font-weight:600; text-transform:uppercase; font-size:clamp(28px,5vw,42px); line-height:1; letter-spacing:.005em; color:var(--texto); margin:8px 0 10px; }
+  .lf-h .lf-o{ color:var(--acento); }
+  .lf-p{ font-family:var(--lectura); font-size: 18px; line-height:1.55; color:var(--texto-2); margin:0 0 18px; max-width:50ch; }
   .lf-form{ display:flex; gap:10px; flex-wrap:wrap; }
-  .lf-email{ flex:1 1 220px; font-family:"Space Grotesk",system-ui,sans-serif; font-size:16px; padding:14px 15px; border-radius:6px; border:1px solid #2A2926; background:#0d0b0a; color:#f3ede0; }
-  .lf-email::placeholder{ color:#6f6a60; }
-  .lf-email:focus{ outline:none; border-color:#e8501f; }
+  .lf-email{ flex:1 1 220px; font-family:var(--lectura); font-size: 18px; padding:14px 15px; border-radius: 0; border:1px solid var(--linea); background:var(--fondo); color:var(--texto); }
+  .lf-email::placeholder{ color:var(--texto-2); }
+  .lf-email:focus{ outline:none; border-color:var(--acento); }
   .lf-hp{ position:absolute; left:-9999px; width:0; height:0; opacity:0; }
-  .lf-btn{ font-family:"JetBrains Mono",monospace; text-transform:uppercase; letter-spacing:.06em; font-size:13px; font-weight:700; padding:14px 20px; border-radius:6px; border:2px solid #e8501f; background:#e8501f; color:#160a04; cursor:pointer; transition:.15s; white-space:nowrap; }
-  .lf-btn:hover{ transform:translateY(-2px); box-shadow:3px 3px 0 #f3ede0; }
+  .lf-btn{ font-family:var(--lectura); text-transform:uppercase; letter-spacing:.06em; font-size: 18px; font-weight:700; padding:14px 20px; border-radius: 0; border:2px solid var(--acento); background:var(--acento); color:var(--sobre-acento); cursor:pointer; transition:.15s; white-space:nowrap; }
+  .lf-btn:hover{ transform:translateY(-2px); box-shadow:3px 3px 0 var(--texto); }
   .lf-btn:disabled{ opacity:.6; transform:none; box-shadow:none; cursor:default; }
   .lf-btn-link{ display:inline-block; text-decoration:none; margin-top:6px; }
-  .lf-tel-block{ margin-top:22px; padding-top:18px; border-top:1px solid #2A2926; }
+  .lf-tel-block{ margin-top:22px; padding-top:18px; border-top:1px solid var(--linea); }
   .lf-tel-p{ margin-bottom:12px; }
-  .lf-tel-ok{ margin-top:16px; color:#e8501f; font-size:12px; }
-  .lf-micro{ font-family:"JetBrains Mono",monospace; font-size:10.5px; letter-spacing:.04em; color:#8a8276; margin-top:9px; }
-  .lf-err{ color:#ff6a35; font-size:13px; margin-top:8px; }
+  .lf-tel-ok{ margin-top:16px; color:var(--acento); font-size: 18px; }
+  .lf-micro{ font-family:var(--lectura); font-size: 18px; letter-spacing:.04em; color:var(--texto-2); margin-top:9px; }
+  .lf-err{ color:var(--acento); font-size: 18px; margin-top:8px; }
   @media (max-width:520px){ .lf-btn{ width:100%; } }
 </style>
 

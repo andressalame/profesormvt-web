@@ -158,12 +158,6 @@ import PruebaSocial from '../components/PruebaSocial.astro';
           <p class="note">Elige tu plan y arranca. Desde la primera clase sales con tu diagnóstico y tu ruta de trabajo.</p>
         </div>
         <div class="grid4">
-          <article class="plan plan-gancho">
-            <p class="plan-tag">Sin plan mensual</p>
-            <h3>Clase suelta</h3>
-            <p class="plan-precio">S/90</p>
-            <p class="plan-desc">Una clase puntual, si prefieres arrancar sin comprometerte a un plan mensual todavía.</p>
-          </article>
           <article class="plan">
             <h3>Esencial</h3>
             <p class="plan-precio">S/320<span>/mes</span></p>
@@ -179,6 +173,12 @@ import PruebaSocial from '../components/PruebaSocial.astro';
             <h3>Plan Estrella</h3>
             <p class="plan-precio">S/780<span> · 12 clases</span></p>
             <p class="plan-desc">Un paquete robusto de 12 clases para meterte de lleno y no soltar el hábito.</p>
+          </article>
+          <article class="plan plan-gancho">
+            <p class="plan-tag mudo">Última carta</p>
+            <h3>Clase suelta</h3>
+            <p class="plan-precio">S/90</p>
+            <p class="plan-desc">Una clase puntual, solo si prefieres no comprometerte todavía a un plan mensual. El avance real está en el plan.</p>
           </article>
         </div>
         <div class="cc-que-head" style="margin-top:30px">
@@ -265,17 +265,17 @@ import PruebaSocial from '../components/PruebaSocial.astro';
   .cc { position: relative; z-index: 2; }
 
   .label {
-    font-family: 'JetBrains Mono', monospace; text-transform: uppercase;
-    letter-spacing: .2em; font-size: 12px; color: var(--color-ember);
+    font-family: var(--lectura); text-transform: uppercase;
+    letter-spacing: .2em; font-size: 18px; color: var(--color-ember);
     font-weight: 700; margin: 0;
   }
-  .note { color: var(--color-text-mute); font-size: 14px; margin: 14px 0 0; }
+  .note { color: var(--color-text-mute); font-size: 18px; margin: 14px 0 0; }
 
   /* Hero */
-  .cc-hero { padding: 80px 0 40px; text-align: center; }
+  .cc-hero { padding: 80px 0 40px; }
   .cc-hero h1 {
     font-size: clamp(34px, 5.4vw, 60px); line-height: 1.05; margin: 16px 0 0;
-    max-width: 880px; margin-left: auto; margin-right: auto;
+    max-width: 880px; 
   }
   .cc-hero h1 em { color: var(--color-ember); font-style: normal; }
   .cc-hero .lead {
@@ -287,21 +287,21 @@ import PruebaSocial from '../components/PruebaSocial.astro';
   /* Buttons (mismo patrón que horarios) */
   .btn-cta {
     display: inline-block; background: var(--color-ember);
-    color: var(--color-bone) !important; font-weight: 600;
-    padding: 15px 30px; border-radius: 6px; font-size: 16px;
+    color: var(--sobre-acento) !important; font-weight: 600;
+    padding: 15px 30px; border-radius: 0; font-size: 18px;
     transition: background .2s;
   }
   .btn-cta:hover { background: var(--wine-deep); }
   .btn-ghost {
     display: inline-block; border: 1px solid var(--hairline-strong);
     color: var(--color-bone) !important; font-weight: 600;
-    padding: 15px 30px; border-radius: 6px; font-size: 16px;
+    padding: 15px 30px; border-radius: 0; font-size: 18px;
     transition: border-color .15s, color .15s;
   }
   .btn-ghost:hover { border-color: var(--color-ember); color: var(--color-ember) !important; }
 
   /* Secciones de texto */
-  .cc-angle { padding: 30px 0; text-align: center; }
+  .cc-angle { padding: 30px 0; }
   .cc-angle h2 { font-size: clamp(28px, 4vw, 42px); max-width: 720px; margin: 0 auto; }
   .cc-angle .lead {
     max-width: 660px; margin: 20px auto 0;
@@ -310,7 +310,7 @@ import PruebaSocial from '../components/PruebaSocial.astro';
 
   /* Qué entrenas */
   .cc-que { padding: 50px 0 30px; }
-  .cc-que-head { text-align: center; margin-bottom: 26px; }
+  .cc-que-head { margin-bottom: 26px; }
   .cc-que-head h2 { font-size: clamp(28px, 4vw, 40px); }
   .grid3 {
     display: grid; grid-template-columns: repeat(3, 1fr);
@@ -319,18 +319,17 @@ import PruebaSocial from '../components/PruebaSocial.astro';
   .card {
     background: var(--color-ink-soft);
     border: 1px solid var(--color-line);
-    border-radius: 12px; padding: 26px 24px;
+    border-radius: 0; padding: 26px 24px;
   }
   .card h3 { font-size: 20px; margin: 0 0 8px; color: var(--color-ember); }
-  .card p { color: var(--color-bone-mute); font-size: 15px; margin: 0; line-height: 1.55; }
+  .card p { color: var(--color-bone-mute); font-size: 18px; margin: 0; line-height: 1.55; }
 
   /* Método */
   .cc-metodo { padding: 50px 0 30px; }
-  .cc-metodo h2 { font-size: clamp(28px, 4vw, 40px); text-align: center; }
+  .cc-metodo h2 { font-size: clamp(28px, 4vw, 40px); }
   .cc-metodo .lead {
     max-width: 680px; margin: 20px auto 0;
-    font-size: 18px; color: var(--color-bone-mute); line-height: 1.65; text-align: center;
-  }
+    font-size: 18px; color: var(--color-bone-mute); line-height: 1.65; }
   .bullets {
     list-style: none; padding: 0; max-width: 720px;
     margin: 26px auto 0; display: grid; gap: 12px;
@@ -339,23 +338,22 @@ import PruebaSocial from '../components/PruebaSocial.astro';
     background: var(--color-ink-soft);
     border: 1px solid var(--color-line);
     border-left: 3px solid var(--color-ember);
-    border-radius: 10px; padding: 16px 20px;
-    color: var(--color-bone-mute); font-size: 15.5px; line-height: 1.55;
+    border-radius: 0; padding: 16px 20px;
+    color: var(--color-bone-mute); font-size: 18px; line-height: 1.55;
   }
   .bullets li b { color: var(--color-bone); }
 
   /* Para quién */
   .cc-quien { padding: 40px 0 30px; }
-  .cc-quien h2 { font-size: clamp(28px, 4vw, 40px); text-align: center; }
+  .cc-quien h2 { font-size: clamp(28px, 4vw, 40px); }
   .cc-quien .lead {
     max-width: 680px; margin: 20px auto 0;
-    font-size: 18px; color: var(--color-bone-mute); line-height: 1.6; text-align: center;
-  }
+    font-size: 18px; color: var(--color-bone-mute); line-height: 1.6; }
   .cc-quien .bullets li { border-left-color: var(--color-ember); }
-  .cc-quien .note { text-align: center; max-width: 620px; margin-left: auto; margin-right: auto; }
+  .cc-quien .note { max-width: 620px; }
 
   /* Credenciales */
-  .cc-cred { padding: 40px 0 30px; text-align: center; }
+  .cc-cred { padding: 40px 0 30px; }
   .cc-cred h2 { font-size: clamp(28px, 4vw, 40px); }
   .cc-cred .lead {
     max-width: 680px; margin: 20px auto 0;
@@ -371,36 +369,35 @@ import PruebaSocial from '../components/PruebaSocial.astro';
   .plan {
     background: var(--color-ink-soft);
     border: 1px solid var(--color-line);
-    border-radius: 14px; padding: 26px 22px; text-align: center;
-    display: flex; flex-direction: column;
+    border-radius: 0; padding: 26px 22px; display: flex; flex-direction: column;
   }
   .plan-gancho { border-color: var(--color-ember); }
   .plan-pop { border-color: var(--hairline-strong); box-shadow: 0 0 0 1px var(--color-ember) inset; }
   .plan-tag {
-    font-family: 'JetBrains Mono', monospace; text-transform: uppercase;
-    letter-spacing: .12em; font-size: 11px; color: var(--color-ember);
+    font-family: var(--lectura); text-transform: uppercase;
+    letter-spacing: .12em; font-size: 18px; color: var(--color-ember);
     font-weight: 700; margin: 0 0 8px;
   }
   .plan h3 { font-size: 21px; margin: 0 0 10px; }
   .plan-precio {
-    font-family:"Oswald", Impact, sans-serif;font-weight:600; font-size: 34px; line-height: 1;
+    font-family:var(--display);font-weight:600; font-size: 34px; line-height: 1;
     color: var(--color-bone); margin: 0 0 12px;
   }
-  .plan-precio span { font-family: 'JetBrains Mono', monospace; font-size: 14px; color: var(--color-text-mute); }
-  .plan-desc { color: var(--color-bone-mute); font-size: 14.5px; margin: 0; line-height: 1.5; }
+  .plan-precio span { font-family: var(--lectura); font-size: 18px; color: var(--color-text-mute); }
+  .plan-desc { color: var(--color-bone-mute); font-size: 18px; margin: 0; line-height: 1.5; }
 
   /* FAQ */
   .cc-faq { padding: 50px 0 30px; }
-  .cc-faq h2 { font-size: clamp(28px, 4vw, 40px); text-align: center; margin-bottom: 26px; }
+  .cc-faq h2 { font-size: clamp(28px, 4vw, 40px); margin-bottom: 26px; }
   .faq { max-width: 720px; margin: 0 auto; display: grid; gap: 12px; }
   .faq details {
     background: var(--color-ink-soft);
     border: 1px solid var(--color-line);
-    border-radius: 10px; padding: 4px 20px;
+    border-radius: 0; padding: 4px 20px;
   }
   .faq summary {
     cursor: pointer; list-style: none; padding: 16px 0;
-    font-size: 17px; font-weight: 600; color: var(--color-bone);
+    font-size: 18px; font-weight: 600; color: var(--color-bone);
     display: flex; justify-content: space-between; align-items: center; gap: 14px;
   }
   .faq summary::-webkit-details-marker { display: none; }
@@ -410,12 +407,12 @@ import PruebaSocial from '../components/PruebaSocial.astro';
   }
   .faq details[open] summary::after { content: "−"; }
   .faq details p {
-    color: var(--color-bone-mute); font-size: 15px; line-height: 1.6;
+    color: var(--color-bone-mute); font-size: 18px; line-height: 1.6;
     margin: 0 0 16px; max-width: 64ch;
   }
 
   /* Cierre */
-  .cc-fin { padding: 50px 0 90px; text-align: center; }
+  .cc-fin { padding: 50px 0 90px; }
   .cc-fin h2 { font-size: clamp(28px, 4vw, 44px); max-width: 640px; margin: 0 auto; }
   .cc-fin .lead {
     color: var(--color-bone-mute); font-size: 18px;

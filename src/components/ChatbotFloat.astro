@@ -26,18 +26,20 @@ const WA = 'https://wa.me/51904056197';
 </div>
 
 <style>
-  /* Colores propios para que el widget funcione igual en páginas con Layout y en la home
-     standalone (que no carga global.css). Definidos en .cbot, cascadean a fab y panel. */
+  /* Rediseño 2026-08-24: los tokens locales se remapean al sistema de global.css.
+     Ya no hacen falta colores propios (desde el rediseño el home también usa Layout),
+     pero se conservan los nombres para no tocar 150 líneas de reglas. */
   .cbot{
-    --color-ember:#e8501f; --color-bone:#f3ede0; --color-ink:#0d0b0a;
-    --color-ink-soft:#161514; --color-line:#2a2926; --color-bone-mute:#9b9384;
+    --color-ember: var(--acento); --color-bone: var(--invertido-texto);
+    --color-ink: var(--invertido-fondo); --color-ink-soft: var(--invertido-fondo);
+    --color-line: var(--invertido-linea); --color-bone-mute: var(--invertido-texto-2);
   }
   .cbot-fab{
     position: fixed; bottom: 24px; right: 24px; z-index: 200;
-    width: 58px; height: 58px; border-radius: 50%; border: none; cursor: pointer;
-    background: var(--color-ember); color: var(--color-bone);
+    width: 58px; height: 58px; border-radius: 0; cursor: pointer;
+    background: var(--invertido-fondo); color: var(--invertido-texto);
+    border: 2px solid var(--acento);
     display: flex; align-items: center; justify-content: center;
-    box-shadow: 0 6px 24px rgba(208,74,28,.4), 0 2px 8px rgba(0,0,0,.25);
     transition: transform .18s ease, background .18s ease;
   }
   .cbot-fab:hover{ transform: translateY(-2px); }
@@ -51,7 +53,7 @@ const WA = 'https://wa.me/51904056197';
     width: 360px; max-width: calc(100vw - 32px); height: 480px; max-height: calc(100vh - 130px);
     display: flex; flex-direction: column; overflow: hidden;
     background: var(--color-ink-soft); border: 1px solid var(--color-line);
-    border-radius: 12px; box-shadow: 0 18px 50px rgba(0,0,0,.5);
+    border-radius: 0; box-shadow: 0 18px 50px rgba(0,0,0,.5);
   }
   .cbot-panel[hidden]{ display: none; }
   .cbot-head{
@@ -59,35 +61,39 @@ const WA = 'https://wa.me/51904056197';
     padding: 14px 16px; border-bottom: 1px solid var(--color-line); flex: 0 0 auto;
     background: var(--color-ember);
   }
-  .cbot-title{ font-family: 'JetBrains Mono', monospace; font-size: 12px; letter-spacing: .04em; text-transform: uppercase; font-weight: 700; color: var(--color-bone); }
+  .cbot-title{ font-family: var(--lectura); font-size: 18px; letter-spacing: .06em; text-transform: uppercase; font-weight: 600; color: var(--color-bone); }
   .cbot-x{ background: none; border: none; color: var(--color-bone); font-size: 22px; line-height: 1; cursor: pointer; padding: 0 4px; }
 
   .cbot-msgs{ flex: 1 1 auto; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 10px; }
-  .cbot-msg{ max-width: 85%; padding: 10px 13px; border-radius: 12px; font-size: 14px; line-height: 1.45; white-space: pre-wrap; word-wrap: break-word; }
-  .cbot-msg.bot{ align-self: flex-start; background: #232220; color: var(--color-bone); border-bottom-left-radius: 3px; }
-  .cbot-msg.user{ align-self: flex-end; background: var(--color-ember); color: var(--color-bone); border-bottom-right-radius: 3px; }
+  .cbot-msg{ max-width: 85%; padding: 10px 13px; border-radius: 0; font-size: 18px; line-height: 1.45; white-space: pre-wrap; word-wrap: break-word; }
+  .cbot-msg.bot{ align-self: flex-start; background: var(--fondo-2); color: var(--color-bone); border-bottom-left-radius: 3px; }
+  .cbot-msg.user{ align-self: flex-end; background: var(--color-ember); color: var(--sobre-acento); border-bottom-right-radius: 3px; }
   .cbot-msg a{ color: inherit; text-decoration: underline; }
-  .cbot-typing{ align-self: flex-start; color: var(--color-bone-mute); font-size: 13px; font-style: italic; }
+  .cbot-typing{ align-self: flex-start; color: var(--color-bone-mute); font-size: 18px; font-style: italic; }
 
   .cbot-input{ display: flex; gap: 8px; padding: 12px; border-top: 1px solid var(--color-line); flex: 0 0 auto; }
   .cbot-input input{
     flex: 1 1 auto; background: var(--color-ink); border: 1px solid var(--color-line);
-    border-radius: 8px; padding: 10px 12px; color: var(--color-bone); font-size: 14px; font-family: inherit;
+    border-radius: 0; padding: 10px 12px; color: var(--color-bone); font-size: 18px; font-family: inherit;
   }
   .cbot-input input:focus{ outline: none; border-color: var(--color-ember); }
   .cbot-send{
-    flex: 0 0 auto; width: 42px; border: none; border-radius: 8px; cursor: pointer;
-    background: var(--color-ember); color: var(--color-bone); display: flex; align-items: center; justify-content: center;
+    flex: 0 0 auto; width: 42px; border: none; border-radius: 0; cursor: pointer;
+    background: var(--color-ember); color: var(--sobre-acento); display: flex; align-items: center; justify-content: center;
   }
   .cbot-send svg{ width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
   .cbot-send:disabled{ opacity: .5; cursor: default; }
 
-  .cbot-wa{ text-align: center; padding: 9px; font-family: 'JetBrains Mono', monospace; font-size: 11px; letter-spacing: .03em; text-transform: uppercase; color: var(--color-bone-mute); border-top: 1px solid var(--color-line); flex: 0 0 auto; }
+  .cbot-wa{ display:flex; align-items:center; justify-content:center; min-height:48px; padding: 9px; font-family: var(--lectura); font-size: 18px; letter-spacing: .03em; color: var(--color-bone-mute); border-top: 1px solid var(--color-line); flex: 0 0 auto; }
   .cbot-wa:hover{ color: var(--color-ember); }
 
-  @media (max-width: 520px){
-    .cbot-fab{ bottom: 16px; right: 16px; width: 52px; height: 52px; }
-    .cbot-panel{ bottom: 80px; right: 16px; }
+  /* 76px, no 16px: en móvil la home tiene una barra fija de 60px con
+     "Reservar una clase". Con bottom:16px el botón del chat se le montaba
+     encima y tapaba justo el acceso a WhatsApp. Verificado midiendo el
+     solape real de los dos rectángulos, no a ojo. */
+  @media (max-width: 900px){
+    .cbot-fab{ bottom: 76px; right: 16px; width: 52px; height: 52px; }
+    .cbot-panel{ bottom: 140px; right: 16px; }
   }
   @media (prefers-reduced-motion: reduce){ .cbot-fab{ transition: none; } }
 </style>

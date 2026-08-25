@@ -14,6 +14,8 @@ export interface Props {
   image?: string;
   /** Fecha de publicación (solo artículos) */
   publishedTime?: string;
+  /** JSON-LD adicional de la página (ej. FAQPage del home). Se inyecta tal cual. */
+  extraSchema?: unknown;
 }
 
 const {
@@ -23,6 +25,7 @@ const {
   type = 'website',
   image = '/og-image.jpg',
   publishedTime,
+  extraSchema,
 } = Astro.props;
 
 // URL canónica: debe coincidir EXACTO con la URL servida y la del sitemap (con
@@ -108,11 +111,15 @@ const localBusinessSchema = {
   <meta name="twitter:image" content={socialImage} />
 
   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-  <!-- Fuentes de marca (el global.css las usa pero no las cargaba en las páginas con Layout) -->
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Fraunces:ital,wght@0,400;0,600;1,400&family=JetBrains+Mono:wght@400;500;700&family=Space+Grotesk:wght@300;400;500;700&display=swap" rel="stylesheet" />
+  <!-- Fuentes de marca AUTO-ALOJADAS (Cabinet Grotesk + Switzer). Nada de Google Fonts:
+       Oswald/Space Grotesk/JetBrains Mono/Fraunces quedaron prohibidas en el rediseño
+       del 24-ago-2026. Se precargan las dos que pintan el primer texto visible. -->
+  <link rel="preload" href="/fonts/CabinetGrotesk-800.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="preload" href="/fonts/Switzer-400.woff2" as="font" type="font/woff2" crossorigin />
+  <meta name="theme-color" content="#F2EDE4" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#17150F" media="(prefers-color-scheme: dark)" />
   <script type="application/ld+json" set:html={JSON.stringify(localBusinessSchema)} is:inline></script>
+  {extraSchema && <script type="application/ld+json" set:html={JSON.stringify(extraSchema)} is:inline></script>}
 </head>
 <body>
   <Nav activeNav={activeNav} />

@@ -15,3 +15,9 @@ batuta-app/.wrangler/
 #    (horarios, asistencia, planes, ~1600 fichas). Van anonimizados, pero anonimizado
 #    no es publicable. pruebas.sh los rehace solo si faltan. (24-ago-2026)
 batuta-app/datos/fixtures/
+
+# Maquetas del rediseño (24-ago-2026): se ven en local con `astro dev` para elegir
+# dirección, pero NO deben publicarse. Viven en public/ solo para que /fonts/ resuelva.
+# Antes de desplegar: borrar public/_dirs/ (o dejarlas acá, que no viajan al repo).
+public/_dirs/
+public/_fonttest.html

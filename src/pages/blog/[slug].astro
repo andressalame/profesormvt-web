@@ -75,10 +75,10 @@ const postURL = new URL(`/blog/${post.slug}/`, Astro.site).href;
       <Content />
     </div>
 
-    <aside style="max-width:640px;margin:36px auto;padding:26px 24px;background:#15110f;border:1px solid #2A2926;border-left:3px solid #e8501f;border-radius:12px;">
-      <h3 style="font-family:"Oswald",Impact,sans-serif;font-weight:600;text-transform:uppercase;font-size:24px;letter-spacing:.01em;color:#f3ede0;margin:0 0 8px;">¿Listo para dar el paso?</h3>
-      <p style="font-family:'Space Grotesk',system-ui,sans-serif;font-size:15.5px;line-height:1.55;color:#cfc7b6;margin:0 0 18px;">Clases 1 a 1, con un plan armado a tu medida desde la primera sesión. Planes mensuales desde S/320.</p>
-      <a href="/prueba/?f=blog" style="display:inline-block;font-family:'JetBrains Mono',monospace;text-transform:uppercase;letter-spacing:.06em;font-size:13px;font-weight:700;padding:13px 22px;border-radius:6px;background:#e8501f;color:#160a04;text-decoration:none;">Quiero empezar →</a>
+    <aside style="max-width:640px;margin:36px auto;padding:26px 24px;background:var(--fondo-2);border:1px solid var(--linea);border-left:3px solid var(--acento);border-radius: 0;">
+      <h3 style="font-family:var(--display);font-weight:600;text-transform:uppercase;font-size:24px;letter-spacing:.01em;color:var(--texto);margin:0 0 8px;">¿Listo para dar el paso?</h3>
+      <p style="font-family:var(--lectura);font-size: 18px;line-height:1.55;color:var(--texto-2);margin:0 0 18px;">Clases 1 a 1, con un plan armado a tu medida desde la primera sesión. Planes mensuales desde S/320.</p>
+      <a href="/prueba/?f=blog" style="display:inline-block;font-family:var(--lectura);text-transform:uppercase;letter-spacing:.06em;font-size: 18px;font-weight:700;padding:13px 22px;border-radius: 0;background:var(--acento);color:var(--sobre-acento);text-decoration:none;">Quiero empezar →</a>
     </aside>
 
     <footer class="post-footer">

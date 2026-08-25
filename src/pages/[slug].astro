@@ -146,7 +146,7 @@ const activeNav = cursoKey === 'composicion' ? 'composicion' : cursoKey;
             <p>Los planes arrancan en S/320 al mes e incluyen tu diagnóstico desde la primera clase. <a href={`/prueba/?curso=${cursoKey}&f=landing-${cursoKey}-${distrito.slug}`}>Elige tu plan aquí</a> y elige el horario que te acomode.</p>
           </details>
         </div>
-        <p class="note" style="text-align:center; margin-top:18px;">
+        <p class="note" style="margin-top:18px;">
           Quieres el detalle completo del curso? Mira <a href={curso.pagLima}>{curso.pagLimaLabel}</a>.
         </p>
       </div>
@@ -154,7 +154,7 @@ const activeNav = cursoKey === 'composicion' ? 'composicion' : cursoKey;
 
     <PruebaSocial curso={cursoKey} />
 
-    <section class="cc-hero" style="text-align:center;">
+    <section class="cc-hero" style="">
       <div class="container-narrow">
         <h2>Empieza tu {curso.nombre} desde {distrito.nombre}</h2>
         <p class="lead">Elige tu plan y arranca. Desde la primera clase sales sabiendo exactamente qué trabajar.</p>
@@ -170,17 +170,17 @@ const activeNav = cursoKey === 'composicion' ? 'composicion' : cursoKey;
 <style>
   .cc { position: relative; z-index: 2; }
   .label {
-    font-family: 'JetBrains Mono', monospace; text-transform: uppercase;
-    letter-spacing: .2em; font-size: 12px; color: var(--color-ember);
+    font-family: var(--lectura); text-transform: uppercase;
+    letter-spacing: .2em; font-size: 18px; color: var(--color-ember);
     font-weight: 700; margin: 0;
   }
-  .note { color: var(--color-text-mute); font-size: 14px; margin: 14px 0 0; }
+  .note { color: var(--color-text-mute); font-size: 18px; margin: 14px 0 0; }
   .note a { color: var(--color-ember); }
 
-  .cc-hero { padding: 80px 0 40px; text-align: center; }
+  .cc-hero { padding: 80px 0 40px; }
   .cc-hero h1 {
     font-size: clamp(32px, 5vw, 54px); line-height: 1.05; margin: 16px 0 0;
-    max-width: 880px; margin-left: auto; margin-right: auto;
+    max-width: 880px; 
   }
   .cc-hero h1 em { color: var(--color-ember); font-style: normal; }
   .cc-hero .lead {
@@ -190,20 +190,20 @@ const activeNav = cursoKey === 'composicion' ? 'composicion' : cursoKey;
   .cc-cta { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; margin-top: 30px; }
   .btn-cta {
     display: inline-block; background: var(--color-ember);
-    color: var(--color-bone) !important; font-weight: 600;
-    padding: 15px 30px; border-radius: 6px; font-size: 16px;
+    color: var(--sobre-acento) !important; font-weight: 600;
+    padding: 15px 30px; border-radius: 0; font-size: 18px;
     transition: background .2s;
   }
   .btn-cta:hover { background: var(--wine-deep); }
   .btn-ghost {
     display: inline-block; border: 1px solid var(--hairline-strong);
     color: var(--color-bone) !important; font-weight: 600;
-    padding: 15px 30px; border-radius: 6px; font-size: 16px;
+    padding: 15px 30px; border-radius: 0; font-size: 18px;
     transition: border-color .15s, color .15s;
   }
   .btn-ghost:hover { border-color: var(--color-ember); color: var(--color-ember) !important; }
 
-  .cc-angle { padding: 30px 0; text-align: center; }
+  .cc-angle { padding: 30px 0; }
   .cc-angle h2 { font-size: clamp(28px, 4vw, 42px); max-width: 720px; margin: 0 auto; }
   .cc-angle .lead {
     max-width: 660px; margin: 20px auto 0;
@@ -211,7 +211,7 @@ const activeNav = cursoKey === 'composicion' ? 'composicion' : cursoKey;
   }
 
   .cc-que { padding: 50px 0 30px; }
-  .cc-que-head { text-align: center; margin-bottom: 26px; }
+  .cc-que-head { margin-bottom: 26px; }
   .cc-que-head h2 { font-size: clamp(28px, 4vw, 40px); }
   .grid3 {
     display: grid; grid-template-columns: repeat(3, 1fr);
@@ -220,25 +220,25 @@ const activeNav = cursoKey === 'composicion' ? 'composicion' : cursoKey;
   .card {
     background: var(--color-ink-soft);
     border: 1px solid var(--color-line);
-    border-radius: 12px; padding: 26px 24px;
+    border-radius: 0; padding: 26px 24px;
   }
   .card h3 { font-size: 20px; margin: 0 0 8px; color: var(--color-ember); }
-  .card p { color: var(--color-bone-mute); font-size: 15px; margin: 0; line-height: 1.55; }
+  .card p { color: var(--color-bone-mute); font-size: 18px; margin: 0; line-height: 1.55; }
 
   .cc-faq { padding: 50px 0 30px; }
-  .cc-faq h2 { font-size: clamp(26px, 4vw, 38px); text-align: center; margin-bottom: 26px; }
+  .cc-faq h2 { font-size: clamp(26px, 4vw, 38px); margin-bottom: 26px; }
   .faq { max-width: 720px; margin: 0 auto; display: grid; gap: 12px; }
   .faq details {
     background: var(--color-ink-soft);
     border: 1px solid var(--color-line);
-    border-radius: 10px; padding: 0 20px;
+    border-radius: 0; padding: 0 20px;
   }
   .faq summary {
     cursor: pointer; list-style: none; font-weight: 600;
-    padding: 16px 0; color: var(--color-bone); font-size: 16px;
+    padding: 16px 0; color: var(--color-bone); font-size: 18px;
   }
   .faq summary::-webkit-details-marker { display: none; }
-  .faq details p { color: var(--color-bone-mute); font-size: 15px; line-height: 1.6; padding-bottom: 16px; margin: 0; }
+  .faq details p { color: var(--color-bone-mute); font-size: 18px; line-height: 1.6; padding-bottom: 16px; margin: 0; }
   .faq details p a { color: var(--color-ember); }
 
   @media (max-width: 860px) {

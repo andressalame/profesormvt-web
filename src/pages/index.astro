@@ -1,1141 +1,556 @@
 ---
-// Home oficial · ProfesorMVT — rediseño punk (reemplaza la versión anterior)
-// Página standalone (sin Layout) para controlar 100% el diseño, conservando Meta Pixel + SEO.
-import Nav from '../components/Nav.astro';
-import ChatbotFloat from '../components/ChatbotFloat.astro';
+// Home de ProfesorMVT · rediseño "Conservatorio editorial" (2026-08-24).
+// Reemplaza la home punk standalone (Oswald + Space Grotesk + JetBrains Mono).
+//
+// AHORA USA Layout.astro. Antes era una página suelta con su propio <head>, lo que
+// partía el sitio en DOS sistemas de diseño (la home por un lado, el resto con
+// global.css por el otro). Todo el SEO que vivía acá (FAQ schema, OG, pixel) se
+// conserva: el FAQPage entra por la prop extraSchema y el resto ya está en Layout.
+//
+// Dirección ganadora de un panel de 4 jueces (promedios: 1=8.25 · 3=7.75 · 2=5.5),
+// con injertos de la dirección 3 (aritmética del combo, ruta de 3 meses, dibujos a
+// mano) y de la 2 ("nadie se ríe de nadie", los rótulos de la sesión de 2 horas).
+import Layout from '../layouts/Layout.astro';
+
 const title = "Profesor MVT · Clases de canto y composición para adultos en Lima";
-const description = "Clases 1 a 1 de canto (método MVT) y composición para adultos en Lima (Miraflores) y online. Con Andrés Salame, músico real. Planes mensuales desde S/320.";
+const description = "Clases 1 a 1 de canto (método MVT) y composición para adultos en Lima (Miraflores) y online. Con Andrés Salamé, músico real. Planes mensuales desde S/320.";
+
+// Precio por hora: es el argumento honesto para subir de plan, y sale de dividir.
+// 320/4 = 80 · 580/8 = 72.50 · 780/12 = 65. Si cambia el precio, cambia acá.
+const PLANES = [
+  { nom: 'Esencial',  clases: '4 clases de 1 hora',  horas: '4 horas al mes',  precio: 320, hora: '80',    desc: 'Una clase por semana. El ritmo mínimo para que algo se sostenga.', tag: 'Para empezar' },
+  { nom: 'Constante', clases: '8 clases de 1 hora',  horas: '8 horas al mes',  precio: 580, hora: '72.50', desc: 'Dos por semana. Es donde la voz empieza a responder sola.',       tag: 'El más elegido', elegido: true },
+  { nom: 'Intensivo', clases: '12 clases de 1 hora', horas: '12 horas al mes', precio: 780, hora: '65',    desc: 'Tres por semana. Para quien tiene una fecha o un proyecto encima.', tag: 'Para avanzar' },
+];
+
+const RUTA = [
+  { s: 'Semana 1',    t: 'Evaluación',   d: 'Medimos dónde estás hoy. Sale tu diagnóstico vocal en PDF.' },
+  { s: 'Semanas 2-4', t: 'Coordinación', d: 'Respiración, apoyo y cierre. El objetivo es que deje de doler.' },
+  { s: 'Semanas 5-8', t: 'Repertorio',   d: 'Entramos a canciones que quieres cantar, no a ejercicios sueltos.' },
+  { s: 'Semanas 9-12',t: 'Autonomía',    d: 'Tu propio calentamiento y criterio para ensayar solo.' },
+];
+
+const FAQ = [
+  { q: 'Necesito saber música para empezar?', a: 'No. Diseñamos el punto de partida según tu nivel real, desde cero o desde donde lo dejaste.' },
+  { q: 'Soy adulto y siento que ya es tarde.', a: 'No lo es. El método está pensado para la forma en que aprende un adulto, con objetivos claros y resultados que se sienten rápido.' },
+  { q: 'Las clases online funcionan igual que las presenciales?', a: 'Sí. La estructura 1 a 1 se traslada completa al formato en vivo, con la misma atención y el mismo seguimiento.' },
+  { q: 'Qué incluye mi primera clase?', a: 'Una sesión completa 1 a 1 más un diagnóstico vocal en PDF con tu punto de partida y tu plan de trabajo, incluido en tu plan mensual desde la primera clase.' },
+  { q: 'Puedo llevar canto y composición juntos?', a: 'Sí, y es el formato que más recomiendo: sesiones de 2 horas seguidas donde entrenas la voz y escribes tus canciones. Va desde 8 horas al mes (S/580) y sale mejor por hora que llevarlos por separado.' },
+  { q: 'Cómo pago, desde Perú o del extranjero?', a: 'Desde Perú pagas con Yape, Plin, Sip, tarjeta de crédito o débito, o transferencia. La tarjeta se procesa al instante y activa tu paquete solo. Desde el extranjero, con tarjeta o cripto.' },
+];
+
 const faqSchema = {
-  "@context":"https://schema.org","@type":"FAQPage","mainEntity":[
-    {"@type":"Question","name":"Necesito saber música para empezar?","acceptedAnswer":{"@type":"Answer","text":"No. Diseñamos el punto de partida según tu nivel real, desde cero o desde donde lo dejaste."}},
-    {"@type":"Question","name":"Soy adulto y siento que ya es tarde.","acceptedAnswer":{"@type":"Answer","text":"No lo es. El método está pensado para la forma en que aprende un adulto, con objetivos claros y resultados que se sienten rápido."}},
-    {"@type":"Question","name":"Las clases online funcionan igual que las presenciales?","acceptedAnswer":{"@type":"Answer","text":"Sí. La estructura 1 a 1 se traslada completa al formato en vivo, con la misma atención y el mismo seguimiento."}},
-    {"@type":"Question","name":"Qué incluye mi primera clase?","acceptedAnswer":{"@type":"Answer","text":"Una sesión completa 1 a 1 más un diagnóstico vocal en PDF con tu punto de partida y tu plan de trabajo, incluido en tu plan mensual desde la primera clase."}},
-    {"@type":"Question","name":"Puedo llevar canto y composición juntos?","acceptedAnswer":{"@type":"Answer","text":"Sí, y es el formato que más recomiendo: sesiones de 2 horas seguidas donde entrenas la voz y escribes tus canciones. Va desde 8 horas al mes (S/580) y sale mejor por hora que llevarlos por separado."}},
-    {"@type":"Question","name":"Cómo pago, desde Perú o del extranjero?","acceptedAnswer":{"@type":"Answer","text":"Desde Perú pagas con Yape, Plin, Sip, tarjeta de crédito o débito, o transferencia. La tarjeta se procesa al instante y activa tu paquete solo. Desde el extranjero, con tarjeta o cripto."}}
-  ]
-};
-// Schema de negocio local: ayuda a Google a entender que es un servicio de Lima (refuerza el pack local).
-const localBusinessSchema = {
-  "@context":"https://schema.org","@type":["LocalBusiness","MusicSchool"],
-  "@id":"https://profesormvt.com/#business",
-  "name":"ProfesorMVT",
-  "alternateName":"Andrés Salamé-Córdova · Clases de canto y composición",
-  "description":"Clases 1 a 1 de canto (método MVT) y composición para adultos en Lima (Miraflores) y online.",
-  "url":"https://profesormvt.com/",
-  "telephone":"+51989077928",
-  "image":"https://profesormvt.com/og-image.jpg",
-  "priceRange":"S/90 - S/780",
-  "areaServed":[{"@type":"City","name":"Lima"},{"@type":"AdministrativeArea","name":"Lima Metropolitana"}],
-  // Sede presencial: MIRAFLORES. A propósito va SOLO el distrito, sin calle:
-  // la dirección actual (Calle Toribio Polo 322) es temporal, Andrés se muda a fin
-  // de agosto de 2026. Una calle equivocada en el schema rompe la coherencia NAP
-  // con Google Business y penaliza; el distrito es lo que de verdad da SEO local.
-  "address":{"@type":"PostalAddress","addressLocality":"Miraflores","addressRegion":"Lima","addressCountry":"PE"},
-  // ⚠️ Coordenada APROXIMADA del centro de Miraflores, NO de la puerta. Poner el pin
-  // exacto del perfil de Google Business solo cuando la mudanza esté cerrada.
-  "geo":{"@type":"GeoCoordinates","latitude":-12.1200,"longitude":-77.0300},
-  "knowsAbout":["Clases de canto","Técnica vocal MVT","Composición musical","Teoría musical"],
-  "sameAs":[
-    "https://www.instagram.com/asalamecordova/",
-    "https://www.facebook.com/profile.php?id=61588980507102",
-    "https://www.tiktok.com/@profesormvt.com"
-  ]
+  "@context": "https://schema.org", "@type": "FAQPage",
+  mainEntity: FAQ.map(f => ({ "@type": "Question", name: f.q, acceptedAnswer: { "@type": "Answer", text: f.a } })),
 };
 ---
-<!DOCTYPE html>
-<html lang="es">
-<head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<meta name="facebook-domain-verification" content="szhzkjwzaz4ru1v5rd3tgk854t74oq" />
-<title>{title}</title>
-<meta name="description" content={description} />
-<link rel="canonical" href="https://profesormvt.com/" />
-<meta name="robots" content="index, follow" />
-<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
 
-<script is:inline>
-  !function(f,b,e,v,n,t,s){if(f.fbq)return;n=f.fbq=function(){n.callMethod?n.callMethod.apply(n,arguments):n.queue.push(arguments)};if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';n.queue=[];t=b.createElement(e);t.async=!0;t.src=v;s=b.getElementsByTagName(e)[0];s.parentNode.insertBefore(t,s)}(window,document,'script','https://connect.facebook.net/en_US/fbevents.js');
-  fbq('init','1281275673536185');fbq('track','PageView');
-</script>
-<noscript><img height="1" width="1" style="display:none" src="https://www.facebook.com/tr?id=1281275673536185&ev=PageView&noscript=1"/></noscript>
+<Layout title={title} description={description} activeNav="home" extraSchema={faqSchema}>
 
-<meta property="og:title" content={title} />
-<meta property="og:description" content={description} />
-<meta property="og:type" content="website" />
-<meta property="og:url" content="https://profesormvt.com/" />
-<meta property="og:image" content="https://profesormvt.com/og-image.png" />
-<meta property="og:locale" content="es_PE" />
-<meta property="og:site_name" content="Profesor MVT" />
-<meta name="twitter:card" content="summary_large_image" />
-<meta name="twitter:title" content={title} />
-<meta name="twitter:description" content={description} />
-<meta name="twitter:image" content="https://profesormvt.com/og-image.png" />
+<div class="hoja">
 
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600&family=Space+Grotesk:wght@400;500;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
-<script type="application/ld+json" set:html={JSON.stringify(faqSchema)} is:inline></script>
-<script type="application/ld+json" set:html={JSON.stringify(localBusinessSchema)} is:inline></script>
-<!-- Fonts -->
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600&family=JetBrains+Mono:wght@400;500;700&family=Space+Grotesk:wght@300;400;500;700&display=swap" rel="stylesheet">
-
-<script is:inline>
-  /* Add hook for animated state only when motion is allowed + JS works.
-     Without it, all content stays visible (no-JS / reduced-motion safe). */
-  (function () {
-    try {
-      if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
-        document.documentElement.classList.add('js-anim');
-      }
-    } catch (e) {}
-  })();
-</script>
-
-<style is:inline>
-/* ============ RESET / BASE ============ */
-*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-:root{
-  --bg:#0d0b0a;
-  --panel:#15110f;
-  --orange:#e8501f;
-  --orange2:#ff6a35;
-  --cream:#f3ede0;
-  --gray:#8a8276;
-  --line:#2A2926;
-  --radius:2px;
-  --maxw:1240px;
-  --pad:clamp(20px,5vw,64px);
-  --eq-h:clamp(64px,9vh,104px);
-  --sticky-nav:64px;
-}
-html{
-  -webkit-text-size-adjust:100%;
-  scroll-behavior:smooth;
-  scrollbar-color:var(--orange) #100c0a;
-}
-html,body{background:#0d0b0a}
-body{
-  font-family:"Space Grotesk",system-ui,sans-serif;
-  color:var(--cream);
-  line-height:1.5;
-  overflow-x:hidden;
-  position:relative;
-  -webkit-font-smoothing:antialiased;
-  text-rendering:optimizeLegibility;
-}
-::selection{background:var(--orange);color:#0d0b0a}
-img{max-width:100%;display:block}
-a{color:inherit;text-decoration:none}
-button{font:inherit;color:inherit;cursor:pointer;background:none;border:none}
-
-/* themed scrollbar (webkit) */
-::-webkit-scrollbar{width:11px}
-::-webkit-scrollbar-track{background:#100c0a}
-::-webkit-scrollbar-thumb{background:var(--orange);border:2px solid #100c0a}
-
-/* ============ ATMOSPHERE LAYERS ============ */
-.bg-layer{position:fixed;inset:0;z-index:-3;background:var(--bg);will-change:background-color}
-.glow{
-  position:fixed;left:50%;top:42%;width:120vmax;height:120vmax;z-index:-2;
-  transform:translate(-50%,-50%);
-  background:radial-gradient(closest-side, rgba(232,80,31,.42), rgba(232,80,31,.12) 42%, transparent 70%);
-  opacity:.12;pointer-events:none;will-change:opacity,transform;filter:blur(8px);
-}
-.grain{
-  position:fixed;inset:-120px;z-index:60;pointer-events:none;
-  opacity:.06;mix-blend-mode:soft-light;
-  animation:grainShift 1.2s steps(3) infinite;
-}
-@keyframes grainShift{
-  0%{transform:translate(0,0)}33%{transform:translate(-30px,18px)}66%{transform:translate(22px,-26px)}100%{transform:translate(0,0)}
-}
-
-/* persistent reactive equalizer */
-#eq{
-  position:fixed;left:0;right:0;bottom:0;height:var(--eq-h);width:100%;
-  z-index:40;pointer-events:none;display:block;
-  -webkit-mask-image:linear-gradient(to top, #000 38%, transparent);
-          mask-image:linear-gradient(to top, #000 38%, transparent);
-}
-.eq-base{
-  position:fixed;left:0;right:0;bottom:0;height:1px;background:var(--line);z-index:41;pointer-events:none;
-}
-
-/* ============ TYPE HELPERS ============ */
-.mono{font-family:"JetBrains Mono",ui-monospace,monospace;letter-spacing:.18em;text-transform:uppercase}
-.eyebrow{
-  font-family:"JetBrains Mono",monospace;font-size:clamp(.66rem,1.4vw,.82rem);
-  letter-spacing:.32em;text-transform:uppercase;color:var(--orange2);
-  display:inline-flex;align-items:center;gap:.7em;margin-bottom:1.6rem;
-}
-.eyebrow::before{content:"";width:34px;height:2px;background:var(--orange);display:inline-block}
-.display{
-  font-family:"Oswald",Impact,sans-serif;font-weight:600;text-transform:uppercase;
-  line-height:.95;letter-spacing:-.005em;font-weight:400;
-}
-.h1{font-size:clamp(3.1rem,12.5vw,11.5rem)}
-.h2{font-size:clamp(2.5rem,8.4vw,7rem)}
-.h3{font-size:clamp(1.9rem,5vw,3.4rem)}
-.fire{color:var(--orange)}
-.lead{font-size:clamp(1.05rem,1.7vw,1.3rem);color:#cfc7b6;max-width:62ch}
-.sub{font-size:clamp(1.15rem,2.4vw,1.6rem);color:var(--cream);font-weight:500}
-.kicker{font-family:"JetBrains Mono",monospace;letter-spacing:.24em;text-transform:uppercase;font-size:.78rem;color:var(--gray)}
-
-/* ============ LAYOUT ============ */
-.wrap{max-width:var(--maxw);margin-inline:auto;padding-inline:var(--pad);width:100%}
-section{position:relative;z-index:1}
-.pad{padding-block:clamp(96px,13vh,170px)}
-.screen{min-height:100vh;min-height:100svh;display:flex;align-items:center}
-.stage{position:relative}
-/* spotlight that "turns on" per section */
-.spot{
-  position:absolute;inset:0;z-index:0;pointer-events:none;opacity:0;
-  background:radial-gradient(60% 55% at 50% 38%, rgba(232,80,31,.16), transparent 70%);
-  will-change:opacity;
-}
-.stage > .wrap{position:relative;z-index:1}
-
-/* ============ BUTTONS ============ */
-.btn{
-  --bw:2px;
-  display:inline-flex;align-items:center;gap:.6em;
-  font-family:"JetBrains Mono",monospace;font-weight:700;letter-spacing:.12em;text-transform:uppercase;
-  font-size:.82rem;padding:1.05em 1.7em;border-radius:var(--radius);
-  border:var(--bw) solid var(--cream);position:relative;transition:transform .18s ease, background-color .18s ease, color .18s ease, box-shadow .18s ease;
-  will-change:transform;
-}
-.btn:focus-visible{outline:3px solid var(--orange2);outline-offset:3px}
-.btn .arr{transition:transform .2s ease}
-.btn:hover .arr{transform:translateX(4px)}
-.btn-primary{background:var(--orange);border-color:var(--orange);color:#160a04;box-shadow:6px 6px 0 #000}
-.btn-primary:hover{background:var(--orange2);transform:translate(-2px,-2px);box-shadow:9px 9px 0 #000}
-.btn-primary:active{transform:translate(2px,2px);box-shadow:3px 3px 0 #000}
-.btn-ghost{background:transparent;color:var(--cream)}
-.btn-ghost:hover{background:var(--cream);color:#160a04;transform:translate(-2px,-2px)}
-.btn-lg{font-size:.95rem;padding:1.25em 2.1em}
-
-/* ============ NAV ============ */
-.nav{
-  position:fixed;top:0;left:0;right:0;z-index:50;height:var(--sticky-nav);
-  display:flex;align-items:center;justify-content:space-between;
-  padding-inline:var(--pad);
-  border-bottom:1px solid transparent;transition:background-color .3s ease, border-color .3s ease, backdrop-filter .3s ease;
-}
-.nav.scrolled{background:rgba(13,11,10,.72);backdrop-filter:blur(10px);border-bottom-color:var(--line)}
-.brand{font-family:"Oswald",sans-serif;font-weight:600;text-transform:uppercase;font-size:1.15rem;letter-spacing:.04em;display:flex;align-items:center;gap:.55em}
-.brand .horns{width:1.1em;height:1.1em;color:var(--orange);flex:none;filter:drop-shadow(0 0 8px var(--orange))}
-.nav-links{display:flex;align-items:center;gap:2rem}
-.nav-links a.lnk{font-family:"JetBrains Mono",monospace;font-size:.74rem;letter-spacing:.18em;text-transform:uppercase;color:var(--gray);transition:color .2s}
-.nav-links a.lnk:hover{color:var(--cream)}
-.nav .btn{padding:.7em 1.15em;font-size:.72rem}
-
-/* ============ HERO ============ */
-.hero{padding-top:calc(var(--sticky-nav) + 4vh)}
-.hero .wrap{display:flex;flex-direction:column;justify-content:center;min-height:100svh;padding-bottom:calc(var(--eq-h) + 3vh)}
-.hero-eyebrow{margin-bottom:2.2rem}
-.hero h1{margin:0 0 1.6rem;max-width:14ch}
-.hero h1 .fire{display:inline-block}
-.hero .sub{margin-bottom:1.3rem}
-.hero .lead{margin-bottom:2.6rem}
-.hero-cta{display:flex;flex-wrap:wrap;gap:1rem;align-items:center}
-.scroll-cue{display:flex;align-items:center;gap:.8em;margin-top:3.4rem;color:var(--gray)}
-.scroll-cue .bar{position:relative;width:46px;height:2px;background:var(--line);overflow:hidden}
-.scroll-cue .bar::after{content:"";position:absolute;inset:0;width:40%;background:var(--orange);animation:cue 1.8s ease-in-out infinite}
-@keyframes cue{0%{transform:translateX(-110%)}60%,100%{transform:translateX(260%)}}
-
-/* hero floating sticker */
-.sticker{
-  font-family:"JetBrains Mono",monospace;font-weight:700;letter-spacing:.14em;text-transform:uppercase;
-  font-size:.7rem;padding:.55em .8em;border:2px solid var(--cream);border-radius:var(--radius);
-  background:var(--bg);color:var(--cream);display:inline-block;line-height:1;
-}
-.sticker.fire{background:var(--orange);border-color:var(--orange);color:#160a04}
-.hero-stickers{position:absolute;inset:0;pointer-events:none;z-index:2}
-.hero-stickers .sticker{position:absolute}
-.s-1{top:18%;right:6%;transform:rotate(8deg)}
-.s-2{top:60%;right:11%;transform:rotate(-6deg)}
-.s-3{top:38%;right:3%;transform:rotate(-3deg)}
-
-/* ============ MARQUEE ============ */
-.marquee{
-  overflow:hidden;border-top:1px solid var(--line);border-bottom:1px solid var(--line);
-  background:var(--panel);padding-block:.9rem;position:relative;z-index:3;
-  transform:skewX(var(--mskew,0deg));transition:transform .25s ease;
-}
-.marquee.fire{background:var(--orange)}
-.marquee-track{display:inline-flex;white-space:nowrap;will-change:transform}
-.marquee-track span{
-  font-family:"Oswald",sans-serif;font-weight:600;text-transform:uppercase;font-size:clamp(1.6rem,4vw,2.8rem);
-  letter-spacing:.02em;padding-inline:1.1rem;display:inline-flex;align-items:center;gap:1.1rem;color:var(--cream)
-}
-.marquee.fire .marquee-track span{color:#160a04}
-.marquee-track .sep{color:var(--orange);font-size:.7em}
-.marquee.fire .marquee-track .sep{color:#160a04}
-
-/* ============ MANIFIESTO ============ */
-.manifiesto{text-align:center}
-.manifiesto .wrap{max-width:1100px}
-.manifiesto h2{margin:0 auto 2rem;max-width:18ch}
-.manifiesto .lead{margin-inline:auto;text-align:center}
-.manifiesto .rule{width:90px;height:3px;background:var(--orange);margin:0 auto 2.4rem}
-
-/* ============ CREDENCIALES ============ */
-.cred-head{display:flex;flex-direction:column;gap:.4rem;margin-bottom:3.4rem}
-.cred-head h2{max-width:16ch}
-.cred-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:1px;background:var(--line);border:1px solid var(--line)}
-.cred-cell{padding:clamp(1.6rem,3vw,2.6rem);background:var(--panel)}
-.cred-val{font-family:"Oswald",sans-serif;font-weight:600;font-size:clamp(2.6rem,6.5vw,5rem);line-height:.9;color:var(--cream)}
-.cred-cell:nth-child(odd) .cred-val{color:var(--orange)}
-.cred-val .plus{color:var(--orange2)}
-.cred-label{font-family:"JetBrains Mono",monospace;font-size:.74rem;letter-spacing:.16em;text-transform:uppercase;color:var(--gray);margin-top:.9rem}
-.cred-label a{color:inherit;text-decoration:none;border-bottom:1px dotted var(--gray);transition:color .2s,border-color .2s}
-.cred-label a:hover{color:var(--orange);border-bottom-color:var(--orange)}
-
-/* ============ FAMILIAR (pain) ============ */
-.familiar h2{margin-bottom:.6rem}
-.familiar .intro{color:var(--gray);max-width:48ch;margin-bottom:3rem}
-.pain-list{display:grid;grid-template-columns:repeat(2,1fr);gap:0;border-top:1px solid var(--line)}
-.pain{
-  display:flex;gap:1.2rem;align-items:flex-start;padding:1.9rem 0;
-  border-bottom:1px solid var(--line);
-}
-.pain:nth-child(odd){border-right:1px solid var(--line);padding-right:2.4rem}
-.pain:nth-child(even){padding-left:2.4rem}
-.pain .x{
-  flex:none;width:34px;height:34px;border:2px solid var(--orange);border-radius:var(--radius);
-  display:grid;place-items:center;color:var(--orange);font-family:"JetBrains Mono",monospace;font-weight:700;
-  transform:rotate(-4deg);
-}
-.pain p{font-size:clamp(1.05rem,1.8vw,1.32rem);color:var(--cream)}
-.pain p b{color:var(--orange2);font-weight:500}
-.familiar .closer{margin-top:2.8rem;font-family:"Oswald",sans-serif;font-weight:600;text-transform:uppercase;font-size:clamp(1.4rem,3.4vw,2.4rem);line-height:1}
-.familiar .closer .fire{color:var(--orange)}
-
-/* ============ METHODS ============ */
-.method{overflow:hidden}
-.method .wrap{display:grid;grid-template-columns:1.05fr .95fr;gap:clamp(2rem,5vw,5rem);align-items:center}
-.method .idx{font-family:"JetBrains Mono",monospace;color:var(--orange);letter-spacing:.2em;font-size:.8rem;margin-bottom:1.1rem}
-.method .word{font-family:"Oswald",sans-serif;font-weight:600;text-transform:uppercase;font-size:clamp(3.4rem,11vw,9rem);line-height:.92;letter-spacing:-.01em}
-.method .kick{display:block;font-family:"JetBrains Mono",monospace;font-size:.8rem;letter-spacing:.2em;text-transform:uppercase;color:var(--gray);margin-top:1.2rem}
-.method .tag{font-size:clamp(1.2rem,2.4vw,1.7rem);color:var(--orange2);font-weight:500;margin:1.8rem 0 1.1rem}
-.method .body{color:#cfc7b6;font-size:clamp(1rem,1.5vw,1.15rem);max-width:46ch}
-.method .feats{display:grid;grid-template-columns:1fr 1fr;gap:0;border:1px solid var(--line);border-radius:var(--radius)}
-.feat{padding:1.35rem 1.4rem;border-right:1px solid var(--line);border-bottom:1px solid var(--line)}
-.feat:nth-child(2n){border-right:none}
-.feat:nth-child(n+3){border-bottom:none}
-.feat .n{font-family:"JetBrains Mono",monospace;color:var(--orange);font-size:.72rem;letter-spacing:.18em}
-.feat .t{font-family:"Oswald",sans-serif;font-weight:600;text-transform:uppercase;font-size:clamp(1.1rem,2.2vw,1.5rem);margin-top:.5rem;line-height:1}
-.method.flip .wrap{grid-template-columns:.95fr 1.05fr}
-.method.flip .copy{order:2}
-.method.flip .visual{order:1}
-/* Métodos fusionados en 3 columnas */
-.metodo-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--line);border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;margin-top:clamp(2rem,4vw,3rem)}
-.metodo-card{background:#130d0a;padding:clamp(1.6rem,2.4vw,2.2rem)}
-.metodo-card .idx{font-family:"JetBrains Mono",monospace;color:var(--orange);letter-spacing:.2em;font-size:.74rem;margin-bottom:1rem}
-.mword{font-family:"Oswald",sans-serif;font-weight:600;text-transform:uppercase;font-size:clamp(2rem,3.4vw,2.9rem);line-height:.95;letter-spacing:-.01em}
-.mkick{display:block;font-family:"JetBrains Mono",monospace;font-size:.72rem;letter-spacing:.2em;text-transform:uppercase;color:var(--gray);margin-top:.6rem}
-.mtag{font-size:clamp(1rem,1.4vw,1.15rem);color:var(--orange2);font-weight:500;margin:1.2rem 0 .8rem}
-.mbody{color:#cfc7b6;font-size:.98rem;line-height:1.55}
-.mfeats{list-style:none;margin:1.3rem 0 0;padding:0;display:flex;flex-wrap:wrap;gap:.5em}
-.mfeats li{font-family:"JetBrains Mono",monospace;font-size:.66rem;letter-spacing:.1em;text-transform:uppercase;color:var(--cream);border:1px solid var(--line);border-radius:var(--radius);padding:.45em .7em}
-@media(max-width:820px){.metodo-grid{grid-template-columns:1fr}}
-.visual{position:relative}
-.frame{
-  border:3px solid var(--cream);border-radius:var(--radius);padding:clamp(1.5rem,3vw,2.4rem);
-  background:linear-gradient(160deg,#1c1411,#120d0b);box-shadow:10px 10px 0 var(--orange);position:relative;overflow:hidden;
-}
-.frame::after{content:"";position:absolute;inset:0;background:radial-gradient(70% 60% at 70% 20%, rgba(255,106,53,.16), transparent 60%);pointer-events:none}
-.frame .biglabel{font-family:"Oswald",sans-serif;font-weight:600;text-transform:uppercase;font-size:clamp(2.4rem,5.5vw,4rem);line-height:.86;color:var(--cream)}
-.frame .biglabel .fire{color:var(--orange)}
-.wave-svg{width:100%;height:88px;margin-top:1.4rem;display:block}
-.wave-svg path{fill:none;stroke:var(--orange);stroke-width:3;stroke-linecap:round}
-.wave-svg .w2{stroke:var(--cream);opacity:.5;stroke-width:2}
-
-/* ============ PROCESO ============ */
-.proceso h2{margin-bottom:3.2rem;max-width:14ch}
-.steps{display:grid;grid-template-columns:repeat(4,1fr);gap:0;border-top:2px solid var(--orange)}
-.step{padding:2rem 1.6rem 2.4rem 0;border-right:1px solid var(--line);position:relative}
-.step:last-child{border-right:none}
-.step .num{font-family:"Oswald",sans-serif;font-weight:600;font-size:clamp(2.2rem,5vw,3.4rem);color:var(--orange);line-height:.9}
-.step .t{font-family:"Oswald",sans-serif;font-weight:600;text-transform:uppercase;font-size:clamp(1.15rem,2.4vw,1.6rem);margin:.9rem 0 .7rem;line-height:1}
-.step p{color:var(--gray);font-size:.97rem}
-
-/* ============ ANDRES ============ */
-.andres .wrap{display:grid;grid-template-columns:.9fr 1.1fr;gap:clamp(2rem,5vw,5rem);align-items:center}
-.andres .portrait{
-  position:relative;border:3px solid var(--cream);border-radius:var(--radius);
-  background:linear-gradient(155deg,#241813,#16100d);box-shadow:12px 12px 0 var(--orange);
-  aspect-ratio:4/5;display:flex;flex-direction:column;justify-content:flex-end;padding:clamp(1.4rem,3vw,2.2rem);overflow:hidden;
-}
-.andres .portrait::before{
-  content:"";position:absolute;inset:0;z-index:1;
-  background:linear-gradient(180deg, rgba(13,11,10,.08) 0%, rgba(13,11,10,.5) 55%, rgba(13,11,10,.92) 100%);
-  pointer-events:none;
-}
-.andres .portrait .pphoto{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center 18%;filter:grayscale(.2) contrast(1.05);z-index:0}
-.andres .portrait .monogram{display:none}
-.andres .portrait .pname,.andres .portrait .prole,.andres .portrait .pstickers{z-index:2}
-.andres .monogram{
-  position:absolute;top:6%;left:50%;transform:translateX(-50%);
-  font-family:"Oswald",sans-serif;font-weight:600;font-size:clamp(7rem,20vw,15rem);line-height:.8;color:rgba(243,237,224,.06);letter-spacing:-.04em;
-}
-.andres .pname{position:relative;font-family:"Oswald",sans-serif;font-weight:600;text-transform:uppercase;font-size:clamp(2.6rem,6vw,4.6rem);line-height:.86}
-.andres .prole{position:relative;font-family:"JetBrains Mono",monospace;font-size:.74rem;letter-spacing:.2em;text-transform:uppercase;color:var(--orange2);margin-top:.7rem}
-.andres .pstickers{position:absolute;inset:0;pointer-events:none}
-.andres .pstickers .sticker{position:absolute}
-.p-1{top:8%;right:7%;transform:rotate(7deg)}
-.p-2{top:30%;left:7%;transform:rotate(-7deg)}
-.andres h2{margin-bottom:1rem}
-.andres .tag{font-size:clamp(1.3rem,2.6vw,1.9rem);color:var(--orange2);font-weight:500;margin-bottom:1.6rem;max-width:18ch}
-.andres .body{color:#cfc7b6;font-size:clamp(1rem,1.5vw,1.15rem);max-width:52ch;margin-bottom:2rem}
-.chips{display:flex;flex-wrap:wrap;gap:.6rem}
-.chip{font-family:"JetBrains Mono",monospace;font-size:.72rem;letter-spacing:.14em;text-transform:uppercase;color:var(--cream);border:1px solid var(--line);border-radius:var(--radius);padding:.55em .8em}
-.chip b{color:var(--orange);font-weight:700}
-
-/* ============ TESTIMONIOS ============ */
-.testi-head{display:flex;flex-direction:column;align-items:flex-start;gap:1rem;margin-bottom:3rem}
-.stars{display:inline-flex;gap:.25rem;color:var(--orange);font-size:1.3rem;letter-spacing:.1em}
-.rating-line{font-family:"Oswald",sans-serif;font-weight:600;text-transform:uppercase;font-size:clamp(1.6rem,4.4vw,3rem);line-height:.95}
-.rating-line .fire{color:var(--orange)}
-.rating-link{font-family:"JetBrains Mono",monospace;font-size:.78rem;letter-spacing:.08em;color:var(--orange);text-decoration:none;border-bottom:1px solid var(--orange);padding-bottom:2px;opacity:.9;transition:opacity .2s}
-.rating-link:hover{opacity:1}
-.testi-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:1.4rem}
-.testi{
-  border:1px solid var(--line);border-radius:var(--radius);background:var(--panel);
-  padding:clamp(1.5rem,3vw,2.2rem);position:relative;transition:transform .2s ease, border-color .2s ease;
-}
-.testi:hover{transform:translateY(-4px);border-color:var(--orange)}
-.testi .stars{font-size:1rem;margin-bottom:1.1rem}
-.testi blockquote{font-size:clamp(1.05rem,1.8vw,1.28rem);line-height:1.45;color:var(--cream);margin-bottom:1.4rem}
-.testi .who{display:flex;justify-content:space-between;align-items:center;gap:1rem;border-top:1px solid var(--line);padding-top:1.1rem}
-.testi .name{font-weight:700}
-.testi .meta{font-family:"JetBrains Mono",monospace;font-size:.7rem;letter-spacing:.14em;text-transform:uppercase;color:var(--gray)}
-.verif{position:absolute;top:0;right:1.4rem;transform:translateY(-50%) rotate(-3deg);font-family:"JetBrains Mono",monospace;font-size:.62rem;letter-spacing:.14em;text-transform:uppercase;background:var(--orange);color:#160a04;padding:.4em .65em;border-radius:var(--radius);font-weight:700}
-
-/* ============ PRECIOS ============ */
-.precios h2{margin-bottom:.4rem;max-width:12ch}
-.precios .intro{color:var(--gray);margin-bottom:3.2rem;max-width:44ch}
-.plans{display:grid;grid-template-columns:repeat(3,1fr);gap:1.4rem;align-items:stretch}
-.plan{
-  border:1px solid var(--line);border-radius:var(--radius);background:var(--panel);
-  padding:clamp(1.7rem,3vw,2.4rem);display:flex;flex-direction:column;position:relative;transition:transform .2s ease, border-color .2s ease;
-}
-.plan:hover{transform:translateY(-5px)}
-.plan .pname{font-family:"Oswald",sans-serif;font-weight:600;text-transform:uppercase;font-size:clamp(1.6rem,3vw,2.2rem);line-height:.95}
-.plan .hours{font-family:"JetBrains Mono",monospace;font-size:.74rem;letter-spacing:.16em;text-transform:uppercase;color:var(--gray);margin-top:.55rem}
-.plan .price{font-family:"Oswald",sans-serif;font-weight:600;font-size:clamp(2.8rem,6vw,4.2rem);line-height:.9;margin:1.5rem 0 .2rem;color:var(--cream)}
-.plan .price .cur{color:var(--orange);font-size:.5em;vertical-align:.18em;margin-right:.08em}
-.plan .per{font-family:"JetBrains Mono",monospace;font-size:.72rem;letter-spacing:.14em;text-transform:uppercase;color:var(--gray)}
-.plan .blurb{color:#cfc7b6;margin:1.3rem 0 1.5rem;font-size:.98rem}
-.plan ul{list-style:none;display:flex;flex-direction:column;gap:.75rem;margin-bottom:2rem}
-.plan li{display:flex;gap:.7rem;align-items:flex-start;font-size:.95rem;color:var(--cream)}
-.plan li::before{content:"";flex:none;width:8px;height:8px;background:var(--orange);margin-top:.5em;border-radius:1px}
-.plan .btn{width:100%;justify-content:center;margin-top:auto}
-.plan.feat{border-color:var(--orange);box-shadow:0 0 0 1px var(--orange), 0 22px 50px -22px rgba(232,80,31,.5);transform:translateY(-8px)}
-.plan.feat:hover{transform:translateY(-13px)}
-.plan .badge{position:absolute;top:0;left:50%;transform:translate(-50%,-50%);background:var(--orange);color:#160a04;font-family:"JetBrains Mono",monospace;font-weight:700;font-size:.66rem;letter-spacing:.16em;text-transform:uppercase;padding:.5em .9em;border-radius:var(--radius);white-space:nowrap}
-
-.trial{
-  margin-top:1.8rem;border:2px dashed var(--orange);border-radius:var(--radius);
-  background:linear-gradient(120deg,rgba(232,80,31,.08),transparent);
-  padding:clamp(1.5rem,3vw,2.2rem);display:flex;flex-wrap:wrap;gap:1.4rem;align-items:center;justify-content:space-between;
-}
-.trial .tinfo{max-width:60ch}
-.trial .tprice{font-family:"Oswald",sans-serif;font-weight:600;text-transform:uppercase;font-size:clamp(1.4rem,3vw,2.1rem);line-height:1}
-.trial .tprice .fire{color:var(--orange)}
-.trial p{color:#cfc7b6;margin-top:.5rem;font-size:.97rem}
-.trial .thint{color:#9b9384;font-size:.86rem;margin-top:.55rem}
-.trial .tcta{display:flex;flex-direction:column;gap:.7rem;flex-shrink:0}
-.trial .tcta .btn{justify-content:center;white-space:nowrap}
-.pay{margin-top:2rem;display:flex;flex-wrap:wrap;gap:1rem 1.6rem;align-items:center;border-top:1px solid var(--line);padding-top:1.6rem}
-.pay .pl{font-family:"JetBrains Mono",monospace;font-size:.7rem;letter-spacing:.18em;text-transform:uppercase;color:var(--gray)}
-.pay .pl b{color:var(--orange);font-weight:700;margin-right:.6em}
-.pay .pchip{font-family:"JetBrains Mono",monospace;font-size:.72rem;letter-spacing:.12em;text-transform:uppercase;border:1px solid var(--line);border-radius:var(--radius);padding:.5em .8em}
-
-/* ============ FAQ ============ */
-.faq h2{margin-bottom:2.8rem;max-width:12ch}
-.faq-list{border-top:1px solid var(--line)}
-.faq-item{border-bottom:1px solid var(--line)}
-.faq-q{
-  width:100%;text-align:left;display:flex;justify-content:space-between;align-items:center;gap:1.5rem;
-  padding:1.6rem 0;font-family:"Space Grotesk",sans-serif;font-weight:500;
-  font-size:clamp(1.1rem,2.2vw,1.45rem);color:var(--cream);
-}
-.faq-q:hover{color:var(--orange2)}
-.faq-q:focus-visible{outline:2px solid var(--orange2);outline-offset:4px}
-.faq-q .ico{flex:none;width:30px;height:30px;border:2px solid var(--orange);border-radius:var(--radius);position:relative;transition:transform .3s ease, background-color .3s ease}
-.faq-q .ico::before,.faq-q .ico::after{content:"";position:absolute;background:var(--orange);transition:opacity .3s, background-color .3s}
-.faq-q .ico::before{left:50%;top:7px;bottom:7px;width:2px;transform:translateX(-50%)}
-.faq-q .ico::after{top:50%;left:7px;right:7px;height:2px;transform:translateY(-50%)}
-.faq-item.open .faq-q .ico{background:var(--orange);transform:rotate(180deg)}
-.faq-item.open .faq-q .ico::before{opacity:0}
-.faq-item.open .faq-q .ico::after{background:#160a04}
-.faq-a{overflow:hidden;height:0}
-.faq-a p{color:var(--gray);max-width:64ch;padding-bottom:1.7rem;font-size:1.02rem;line-height:1.55}
-
-/* ============ CTA FINAL ============ */
-.cta{text-align:center;overflow:hidden}
-.cta .wrap{display:flex;flex-direction:column;align-items:center}
-.cta h2{margin:0 auto 1.4rem;max-width:14ch}
-.cta .sub{color:#cfc7b6;margin-bottom:2.6rem}
-.cta .mono{color:var(--gray);margin-top:2.6rem;font-size:.74rem}
-
-/* ============ FOOTER ============ */
-footer{border-top:1px solid var(--line);background:#0b0908;padding-block:clamp(3rem,6vh,5rem);position:relative;z-index:1}
-footer .wrap{display:grid;grid-template-columns:1.4fr 1fr 1fr 1fr;gap:2.4rem;align-items:start}
-footer .brand{font-size:1.6rem;margin-bottom:1rem}
-footer .ftag{color:var(--gray);max-width:34ch;font-size:.95rem}
-footer .fcol h4{font-family:"JetBrains Mono",monospace;font-size:.7rem;letter-spacing:.2em;text-transform:uppercase;color:var(--orange2);margin-bottom:1rem}
-footer .fcol p,footer .fcol a{display:block;color:var(--cream);font-size:.92rem;margin-bottom:.55rem}
-footer .fcol a:hover{color:var(--orange2)}
-.foot-bottom{margin-top:3rem;padding-top:1.6rem;border-top:1px solid var(--line);display:flex;flex-wrap:wrap;gap:1rem;justify-content:space-between;align-items:center}
-.foot-bottom .mono{font-size:.68rem;color:var(--gray)}
-
-/* reveal base states (only when JS+motion) */
-.js-anim .reveal-title,
-.js-anim .reveal-up,
-.js-anim .reveal-stagger > *{opacity:0}
-
-/* ============ RESPONSIVE ============ */
-@media (max-width:1024px){
-  .cred-grid{grid-template-columns:repeat(2,1fr)}
-  .steps{grid-template-columns:repeat(2,1fr)}
-  .step{border-bottom:1px solid var(--line);padding-right:1.6rem}
-  .step:nth-child(2n){border-right:none}
-  .step:nth-child(n+3){border-bottom:none}
-  .plans{grid-template-columns:1fr;gap:1.2rem}
-  .plan.feat{transform:none}
-  .plan.feat:hover{transform:translateY(-5px)}
-}
-@media (max-width:860px){
-  .nav-links a.lnk{display:none}
-  .method .wrap,.method.flip .wrap,.andres .wrap{grid-template-columns:1fr;gap:2.4rem}
-  .method.flip .copy{order:1}.method.flip .visual{order:2}
-  .testi-grid{grid-template-columns:1fr}
-  footer .wrap{grid-template-columns:1fr 1fr}
-  .andres .portrait{aspect-ratio:3/2;max-width:480px}
-  .hero-stickers{display:none}
-}
-@media (max-width:560px){
-  .pain-list{grid-template-columns:1fr}
-  .pain:nth-child(odd){border-right:none;padding-right:0}
-  .pain:nth-child(even){padding-left:0}
-  .method .feats{grid-template-columns:1fr}
-  .feat{border-right:none}
-  .feat:nth-child(n){border-bottom:1px solid var(--line)}
-  .feat:last-child{border-bottom:none}
-  footer .wrap{grid-template-columns:1fr}
-  .cred-grid{grid-template-columns:1fr}
-  .trial{flex-direction:column;align-items:flex-start}
-  .btn{width:100%;justify-content:center}
-  .hero-cta .btn{width:100%}
-  .nav .btn{width:auto}
-}
-
-/* ============ REDUCED MOTION ============ */
-@media (prefers-reduced-motion: reduce){
-  html{scroll-behavior:auto}
-  .grain,.scroll-cue .bar::after{animation:none}
-  .marquee-track{transform:none !important}
-  *{transition-duration:.01ms !important}
-}
-.manifiesto .eyebrow::after,.cta .eyebrow::after{content:"";width:34px;height:2px;background:var(--orange);display:inline-block}
-</style>
-</head>
-<body>
-
-<!-- atmosphere -->
-<div class="bg-layer" id="bgLayer"></div>
-<div class="glow" id="glow" aria-hidden="true"></div>
-<canvas id="eq" aria-hidden="true"></canvas>
-<div class="eq-base" aria-hidden="true"></div>
-<svg class="grain" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
-  <filter id="grainf"><feTurbulence type="fractalNoise" baseFrequency="0.82" numOctaves="2" stitchTiles="stitch"/></filter>
-  <rect width="100%" height="100%" filter="url(#grainf)"/>
-</svg>
-
-<!-- NAV -->
-<Nav />
-
-<span id="top"></span>
-
-<!-- 1 · HERO -->
-<header class="hero stage" data-bg="#0d0b0a" data-glow=".16">
-  <div class="spot"></div>
-  <div class="wrap">
-    <span class="eyebrow hero-eyebrow reveal-up">Método MVT · Para adultos · Miraflores y online</span>
-    <h1 class="display h1 reveal-title">La música <span class="fire">se entrena</span>.</h1>
-    <p class="sub reveal-up">Clases 1 a 1 de canto y composición.</p>
-    <p class="lead reveal-up">Método real, no academia genérica. Te enseña alguien que vivió de la música.</p>
-    <div class="hero-cta reveal-up">
-      <a class="btn btn-primary btn-lg" href="/prueba/?f=home">Quiero empezar <span class="arr">→</span></a>
-      <a class="btn btn-ghost btn-lg" href="#precios">Ver paquetes</a>
+  <!-- ══ PORTADA ══
+       Orden en móvil (grid-areas): antetítulo → titular → FICHA en una fila →
+       botón → microcopy. La primera pantalla NO puede quedarse sin acción. -->
+  <header class="portada">
+    <div class="p-texto">
+      <div class="antetitulo"><i></i>Clases 1 a 1 para adultos · Miraflores y online</div>
+      <h1>La voz se entrena.<span class="segunda">La edad nunca fue el problema.</span></h1>
+      <p class="entrada">
+        Canto, composición y teoría con un profesor músico. Sesiones privadas,
+        sin público y al ritmo de <strong>cada quien</strong>. Se empieza donde estás hoy,
+        no donde deberías haber estado.
+      </p>
     </div>
-  </div>
-</header>
 
-<!-- 2 · MANIFIESTO -->
-<section class="manifiesto screen stage" data-bg="#22100a" data-glow=".2">
-  <div class="spot"></div>
-  <div class="wrap">
-    <span class="eyebrow reveal-up" style="display:inline-flex">El método MVT</span>
-    <h2 class="display h2 reveal-title">Con el método correcto, todo cambia.</h2>
-    <div class="rule reveal-up"></div>
-    <p class="lead reveal-up">Lo que te frena no es tu oído ni tu edad. Es la forma en que aprendiste hasta hoy.</p>
-  </div>
-</section>
-
-<!-- 3 · TE SUENA FAMILIAR -->
-<section class="familiar pad stage" data-bg="#16100c" data-glow=".12">
-  <div class="spot"></div>
-  <div class="wrap">
-    <span class="eyebrow reveal-up">Diagnóstico</span>
-    <h2 class="display h2 reveal-title">Te suena familiar?</h2>
-    <p class="intro reveal-up">Si te identificas con alguno de estos puntos, no es casualidad. Es el resultado de aprender sin un método pensado para ti.</p>
-    <div class="pain-list reveal-stagger">
-      <div class="pain"><span class="x">!</span><p>El agudo te sale apretado y forzado.</p></div>
-      <div class="pain"><span class="x">!</span><p>Llevas años con la misma canción a medio escribir en las notas del celular.</p></div>
-      <div class="pain"><span class="x">!</span><p><b>«Apoya más fuerte»</b>, te lo repitieron mil veces y nada cambió.</p></div>
-      <div class="pain"><span class="x">!</span><p>Escuchas la armonía pero no entiendes qué está pasando.</p></div>
-    </div>
-    <p class="closer reveal-up">Nada de esto es falta de talento. <span class="fire">Es método.</span></p>
-  </div>
-</section>
-
-<!-- METHODS -->
-<div id="metodo"></div>
-
-<!-- 5 · MÉTODOS (canto + composición + el combo de los dos) -->
-<section class="metodos pad stage" data-bg="#1a0f0a" data-glow=".16">
-  <div class="spot"></div>
-  <div class="wrap">
-    <span class="eyebrow reveal-up">Los tres métodos</span>
-    <h2 class="display h2 reveal-title">Un camino para cada quién.</h2>
-    <div class="metodo-grid reveal-stagger">
-      <div class="metodo-card">
-        <div class="idx mono">01 / Canto</div>
-        <h3 class="mword">Canto</h3>
-        <span class="mkick">Modern Vocal Training</span>
-        <p class="mtag">Lo opuesto a apoya más fuerte.</p>
-        <p class="mbody">Tu voz funciona por coordinación, no por fuerza. Resonancia, cierre cordal y libertad para que el agudo salga fácil.</p>
-        <ul class="mfeats"><li>Coordinación</li><li>Resonancia</li><li>Cierre cordal</li><li>Sin constricción</li></ul>
-      </div>
-      <div class="metodo-card">
-        <div class="idx mono">02 / Composición</div>
-        <h3 class="mword">Composición</h3>
-        <span class="mkick">De oyente a autor</span>
-        <p class="mtag">De entender canciones a escribir las tuyas.</p>
-        <p class="mbody">Diseccionas las canciones que amas con hook theory y análisis funcional, y pasas de entenderlas a escribir las tuyas.</p>
-        <ul class="mfeats"><li>Hook theory</li><li>Análisis funcional</li><li>Estructura y armonía</li><li>Tu propia voz</li></ul>
-      </div>
-      <div class="metodo-card">
-        <div class="idx mono">03 / Canto y composición</div>
-        <h3 class="mword">Los dos</h3>
-        <span class="mkick">Sesiones de 2 horas</span>
-        <p class="mtag">Cantar lo que tú mismo escribiste.</p>
-        <p class="mbody">Los dos métodos en una sola sesión de 2 horas seguidas: entrenas la voz y escribes tus canciones. Sale mejor por hora que llevarlos por separado.</p>
-        <ul class="mfeats"><li>2 horas seguidas</li><li>Desde 8 horas al mes</li><li>Voz + autoría</li><li>Mejor precio por hora</li></ul>
-      </div>
-    </div>
-  </div>
-</section>
-
-<!-- 6 · PROCESO -->
-<section class="proceso pad stage" data-bg="#130d0a" data-glow=".12">
-  <div class="spot"></div>
-  <div class="wrap">
-    <span class="eyebrow reveal-up">Así es una clase</span>
-    <h2 class="display h2 reveal-title">Cuatro momentos. Una clase.</h2>
-    <div class="steps reveal-stagger">
-      <div class="step"><div class="num">01</div><div class="t">Calentamiento</div><p>Preparamos cuerpo, voz y oído. Pocos minutos que cambian toda la sesión.</p></div>
-      <div class="step"><div class="num">02</div><div class="t">Técnico</div><p>Trabajamos la habilidad del día con ejercicios diseñados para ti.</p></div>
-      <div class="step"><div class="num">03</div><div class="t">Tu canción</div><p>Aplicamos todo a una canción que te importa. Aprendes tocando lo que amas.</p></div>
-      <div class="step"><div class="num">04</div><div class="t">Para casa</div><p>Te llevas un plan claro y breve para practicar con dirección.</p></div>
-    </div>
-  </div>
-</section>
-
-<!-- 9 · ANDRES -->
-<section class="andres pad stage" data-bg="#1a0f0a" data-glow=".22">
-  <div class="spot"></div>
-  <div class="wrap">
-    <div class="visual reveal-up">
-      <div class="portrait">
-        <img src="/andres-banjo-escenario.jpg" alt="Andrés Salame, vocalista de Tramboyos, en escenario" class="pphoto">
-        <span class="monogram" aria-hidden="true">A</span>
-        <div class="pstickers" aria-hidden="true">
-          <span class="sticker fire p-1">Tramboyos</span>
-          <span class="sticker p-2">Punk</span>
+    <aside class="ficha">
+      <div class="ficha-tit">Ficha</div>
+      <div class="dato">
+        <div class="et">Opiniones</div>
+        <div class="vl">5.0
+          <span class="estrellas" role="img" aria-label="5 de 5 estrellas">
+            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2.6l2.9 6.1 6.6.9-4.8 4.6 1.2 6.7L12 17.6 5.9 20.9l1.2-6.7-4.8-4.6 6.6-.9z"/></svg>
+            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2.6l2.9 6.1 6.6.9-4.8 4.6 1.2 6.7L12 17.6 5.9 20.9l1.2-6.7-4.8-4.6 6.6-.9z"/></svg>
+            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2.6l2.9 6.1 6.6.9-4.8 4.6 1.2 6.7L12 17.6 5.9 20.9l1.2-6.7-4.8-4.6 6.6-.9z"/></svg>
+            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2.6l2.9 6.1 6.6.9-4.8 4.6 1.2 6.7L12 17.6 5.9 20.9l1.2-6.7-4.8-4.6 6.6-.9z"/></svg>
+            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2.6l2.9 6.1 6.6.9-4.8 4.6 1.2 6.7L12 17.6 5.9 20.9l1.2-6.7-4.8-4.6 6.6-.9z"/></svg>
+          </span>
         </div>
-        <div class="pname">Andrés</div>
-        <div class="prole">Músico · Compositor · Productor</div>
+        <div class="nt">
+          <a class="lnk-sobrio" href="https://g.page/r/CevbO7ON9f4CEAE/review" target="_blank" rel="noopener noreferrer">11 opiniones verificadas en Google</a>
+        </div>
       </div>
-    </div>
-    <div class="copy">
-      <span class="eyebrow reveal-up">Quién te enseña</span>
-      <h2 class="display h2 reveal-title">Andrés</h2>
-      <p class="tag reveal-up">Un músico que enseña, no un profesor que toca.</p>
-      <p class="body reveal-up">Vocalista de Tramboyos, la banda de punk. Vivió de la música de verdad, del escenario, la composición y la producción, y estudió cómo aprende la mente. Esa mezcla es su método: técnica real de escenario y una forma de enseñar pensada para adultos.</p>
-      <div class="chips reveal-stagger">
-        <span class="chip"><b>+200</b> canciones</span>
-        <span class="chip"><b>+20</b> conciertos</span>
-        <span class="chip">Música <b>UPC</b></span>
-        <span class="chip">Psicología <b>ULima</b></span>
-        <span class="chip">Nivel 1 <b>Modern Vocal Training</b></span>
-        <span class="chip">Management <b>Kids on Coffee</b></span>
+      <div class="dato">
+        <div class="et">Planes desde</div>
+        <div class="vl">S/320 al mes</div>
+        <div class="nt">4 clases de 1 hora</div>
       </div>
-    </div>
-  </div>
-</section>
+      <div class="dato">
+        <div class="et">Dónde</div>
+        <div class="vl">Miraflores u online</div>
+        <div class="nt">Lima, Perú. Y online desde cualquier lugar.</div>
+      </div>
+    </aside>
 
-<!-- 10 · TESTIMONIOS -->
-<section class="pad stage" data-bg="#140e0b" data-glow=".12">
-  <div class="spot"></div>
-  <div class="wrap">
-    <div class="testi-head">
-      <span class="eyebrow reveal-up">Lo que dicen</span>
-      <span class="stars reveal-up" aria-label="5 de 5 estrellas">★★★★★</span>
-      <h2 class="rating-line display reveal-title"><span class="fire">5.0</span> · 11 opiniones verificadas</h2>
-      <a class="rating-link reveal-up" href="https://g.page/r/CevbO7ON9f4CEAE/review" target="_blank" rel="noopener noreferrer">Déjame tu reseña en Google →</a>
+    <div class="acciones">
+      <a href="/prueba/?f=home" class="btn">Reservar una clase</a>
+      <p class="pie-accion">
+        Se coordina por WhatsApp, sin llamadas.
+        <a class="lnk-sobrio" href="https://wa.me/51904056197" target="_blank" rel="noopener noreferrer">Escribir por WhatsApp</a>
+      </p>
     </div>
-    <div class="testi-grid reveal-stagger">
-      <article class="testi"><span class="verif">Verificado</span><span class="stars">★★★★★</span>
-        <blockquote>Por fin entendí qué hacía mal con mi voz. En un mes mi agudo cambió por completo.</blockquote>
-        <div class="who"><span class="name">María José</span><span class="meta">Canto</span></div>
+  </header>
+
+  <!-- ══ REENCUADRE + SUMARIO ══ (injerto de la dirección 3)
+       Le quita la culpa antes de que lea el primer precio. -->
+  <section class="reencuadre">
+    <h2>Casi nadie canta mal. La mayoría empuja.</h2>
+    <p class="lead">
+      Lo que suena forzado casi nunca es falta de oído: es el cuerpo apretando donde
+      debería soltar. Eso es coordinación muscular, y la coordinación se entrena a
+      cualquier edad.
+    </p>
+  </section>
+
+  <nav class="sumario" aria-label="Los tres cursos">
+    <a href="#cursos"><span class="num">I</span><span class="tx"><b>Vocal coaching</b><i>Clases de 1 hora</i></span></a>
+    <a href="#cursos"><span class="num">II</span><span class="tx"><b>Composición y teoría</b><i>Clases de 1 hora</i></span></a>
+    <a href="#combo"><span class="num">III</span><span class="tx"><b>Canto + Composición</b><i>Sesiones de 2 horas seguidas</i></span></a>
+  </nav>
+
+  <!-- ══ CURSOS ══ -->
+  <span id="metodo" class="ancla-alias" aria-hidden="true"></span>
+  <section class="bloque" id="cursos">
+    <div class="folio">Cursos<span>Tres, no más</span></div>
+    <div>
+      <h2>Tres cursos. El tercero es el que recomiendo.</h2>
+      <p class="dice">Los tres se dan uno a uno, presencial en Miraflores u online, con el mismo método y el mismo profesor.</p>
+
+      <article class="curso">
+        <div class="rom">I</div>
+        <div>
+          <h3>Vocal coaching</h3>
+          <p>Técnica con el método Modern Vocal Training: respiración, apoyo, registro, afinación y resistencia. Se trabaja sobre las canciones que quieres cantar, no sobre ejercicios sueltos.</p>
+        </div>
+        <div class="lado">
+          <div class="l">Clases de 1 hora</div>
+          <div class="p">Desde S/320 al mes</div>
+          <a href="#planes" class="btn-ghost">Ver los planes</a>
+        </div>
       </article>
-      <article class="testi"><span class="verif">Verificado</span><span class="stars">★★★★★</span>
-        <blockquote>Llegué tocando dos canciones de memoria. Hoy leo, acompaño y entiendo lo que toco.</blockquote>
-        <div class="who"><span class="name">Diego</span><span class="meta">Piano</span></div>
+
+      <article class="curso">
+        <div class="rom">II</div>
+        <div>
+          <h3>Composición y teoría</h3>
+          <p>Armonía, melodía, letra y estructura. Terminar las canciones que tienes a medias y entender por qué funcionan las que te gustan. Sirve igual si nunca escribiste una.</p>
+        </div>
+        <div class="lado">
+          <div class="l">Clases de 1 hora</div>
+          <div class="p">Desde S/320 al mes</div>
+          <a href="#planes" class="btn-ghost">Ver los planes</a>
+        </div>
       </article>
-      <article class="testi"><span class="verif">Verificado</span><span class="stars">★★★★★</span>
-        <blockquote>Andrés no te llena de teoría. Te hace componer desde la primera clase.</blockquote>
-        <div class="who"><span class="name">Lucía</span><span class="meta">Composición</span></div>
+
+      <!-- El curso estrella: el único bloque de tinta llena de todo el sitio. -->
+      <article class="curso destacado invertido" id="combo">
+        <div class="rom">III</div>
+        <div>
+          <span class="marcaje">El que recomiendo</span>
+          <h3>Canto + Composición</h3>
+          <p>
+            Dos horas seguidas: la primera en la voz, la segunda en tus canciones.
+            Lo que aprendes cantando entra directo en lo que escribes, y la hora
+            sale mejor que llevando los dos cursos por separado.
+          </p>
+
+          <!-- Injerto de la dirección 3, con los rótulos de la 2 fusionados.
+               REGLA PERMANENTE: los rótulos son texto real fuera de la barra.
+               Prohibido font-size:0 en media queries: un gráfico no puede
+               cargar significado en una etiqueta que se pueda apagar. -->
+          <figure class="comparativo">
+            <figcaption class="comp-tit">Mismo tiempo pagado, más trabajo real</figcaption>
+
+            <div class="comp-fila">
+              <div class="comp-et">Dos clases de 1 hora, en días distintos</div>
+              <div class="comp-barra" role="img" aria-label="Dos clases de una hora: 15 minutos de calentamiento y 45 de trabajo, dos veces. Noventa minutos de trabajo real.">
+                <span class="seg seg-cal" style="flex:15"></span>
+                <span class="seg seg-tra" style="flex:45"></span>
+                <span class="seg seg-gap" style="flex:4"></span>
+                <span class="seg seg-cal" style="flex:15"></span>
+                <span class="seg seg-tra" style="flex:45"></span>
+              </div>
+              <div class="comp-pie">15' calentar + 45' trabajar, dos veces · <b>90 minutos de trabajo</b></div>
+            </div>
+
+            <div class="comp-fila">
+              <div class="comp-et">Una sesión de 2 horas seguidas</div>
+              <div class="comp-barra" role="img" aria-label="Una sesión de dos horas: 15 minutos de calentamiento y 105 de trabajo. Ciento cinco minutos de trabajo real.">
+                <span class="seg seg-cal" style="flex:15"></span>
+                <span class="seg seg-voz" style="flex:50"></span>
+                <span class="seg seg-com" style="flex:55"></span>
+              </div>
+              <div class="comp-pie">15' calentar + 50' técnica vocal + 55' composición y letra · <b>105 minutos de trabajo</b></div>
+            </div>
+
+            <p class="comp-remate">Se calienta una vez en lugar de dos: <b>15 minutos más de trabajo real</b> por el mismo tiempo pagado.</p>
+          </figure>
+        </div>
+        <div class="lado">
+          <div class="l">Sesiones de 2 horas · mínimo 8 horas al mes</div>
+          <div class="p">S/580 · 8 h<br />S/780 · 12 h</div>
+          <a href="#planes" class="btn-ghost">Ver los planes</a>
+        </div>
       </article>
-      <article class="testi"><span class="verif">Verificado</span><span class="stars">★★★★★</span>
-        <blockquote>Pensé que ya era tarde para aprender. Estaba equivocado por completo.</blockquote>
-        <div class="who"><span class="name">Renzo</span><span class="meta">Canto y piano</span></div>
-      </article>
     </div>
-  </div>
-</section>
+  </section>
 
-<!-- 11 · PRECIOS -->
-<section class="precios pad stage" id="precios" data-bg="#22100a" data-glow=".2">
-  <div class="spot"></div>
-  <div class="wrap">
-    <span class="eyebrow reveal-up">Paquetes mensuales</span>
-    <h2 class="display h2 reveal-title">Elige tu ritmo.</h2>
-    <p class="intro reveal-up">Planes mensuales 1 a 1, presenciales en Miraflores o en vivo online. Tu plan se arma a tu medida.</p>
+  <!-- ══ LA RUTA ══ (injerto de la dirección 3, comprimido a una línea) -->
+  <section class="bloque" id="ruta">
+    <div class="folio">La ruta<span>Primeros 3 meses</span></div>
+    <div>
+      <h2>Qué pasa si te comprometes tres meses.</h2>
+      <ol class="ruta">
+        {RUTA.map((r) => (
+          <li>
+            <span class="ruta-s">{r.s}</span>
+            <span class="ruta-t">{r.t}</span>
+            <span class="ruta-d">{r.d}</span>
+          </li>
+        ))}
+      </ol>
+      <p class="note ruta-pie">Es un mapa, no un cronómetro: cada quien avanza a su ritmo.</p>
+    </div>
+  </section>
 
-    <div class="plans reveal-stagger">
-      <div class="plan">
-        <div class="pname">Esencial</div>
-        <div class="hours">4 horas al mes</div>
-        <div class="price"><span class="cur">S/</span>320</div>
-        <div class="per">al mes</div>
-        <p class="blurb">Para empezar con constancia y construir base sólida.</p>
-        <ul>
-          <li>4 clases 1 a 1 al mes</li>
-          <li>Plan personalizado</li>
-          <li>Material para casa</li>
-          <li>Seguimiento de avance</li>
-        </ul>
-        <a class="btn btn-ghost" href="/alumnos/">Crear mi cuenta <span class="arr">→</span></a>
-      </div>
+  <!-- ══ QUIÉN ENSEÑA ══ -->
+  <section class="bloque" id="quien">
+    <div class="folio">Quién enseña<span>El profesor</span></div>
+    <div>
+      <div class="perfil">
+        <div>
+          <h2 class="perfil-nom">Andrés Salamé-Córdova</h2>
+          <div class="perfil-rol">Profesor MVT · Músico y compositor</div>
+          <p>
+            Enseño canto y composición a adultos que llegan con las mismas dos frases:
+            «nunca aprendí» y «ya estoy grande para esto». Ninguna de las dos ha
+            resultado cierta todavía.
+          </p>
+          <p>
+            Trabajo uno a uno, en Miraflores u online. En canto, la primera clase de tu
+            plan incluye la sesión completa y un diagnóstico vocal en PDF: dónde estás
+            hoy, qué se entrena primero y en qué orden.
+          </p>
+        </div>
+        <blockquote class="cita">
+          Aquí nadie se ríe de nadie, y todo lo que suena mal hoy es simplemente lo
+          siguiente que vamos a entrenar.
+          <span class="cita-pie">Nunca vas a cantar delante de otro alumno: no hay clases grupales, nunca las hubo.</span>
+        </blockquote>
 
-      <div class="plan feat">
-        <span class="badge">El más elegido</span>
-        <div class="pname">Intensivo</div>
-        <div class="hours">8 horas al mes</div>
-        <div class="price"><span class="cur">S/</span>580</div>
-        <div class="per">al mes</div>
-        <p class="blurb">El equilibrio perfecto para avanzar rápido y ver resultados.</p>
-        <ul>
-          <li>8 clases 1 a 1 al mes</li>
-          <li>Plan personalizado</li>
-          <li>Material para casa</li>
-          <li>Seguimiento cercano</li>
-        </ul>
-        <a class="btn btn-primary" href="/alumnos/">Crear mi cuenta <span class="arr">→</span></a>
-      </div>
-
-      <div class="plan">
-        <div class="pname">Estrella</div>
-        <div class="hours">12 horas al mes</div>
-        <div class="price"><span class="cur">S/</span>780</div>
-        <div class="per">al mes</div>
-        <p class="blurb">Para progreso acelerado y dedicación total a tu música.</p>
-        <ul>
-          <li>12 clases 1 a 1 al mes</li>
-          <li>Plan personalizado</li>
-          <li>Prioridad de horarios</li>
-          <li>Acompañamiento total</li>
-        </ul>
-        <a class="btn btn-ghost" href="/alumnos/">Crear mi cuenta <span class="arr">→</span></a>
+        <dl class="credenciales">
+          <div class="cred"><dt>Método</dt><dd>Modern Vocal Training</dd></div>
+          <div class="cred"><dt>Música</dt><dd>Estudios en la UPC</dd></div>
+          <div class="cred"><dt>Psicología</dt><dd>Estudios en la Universidad de Lima</dd></div>
+          <div class="cred"><dt>Escenario</dt><dd>Ex vocalista de Tramboyos, banda peruana</dd></div>
+          <div class="cred"><dt>Formato</dt><dd>Uno a uno, presencial en Miraflores u online</dd></div>
+        </dl>
       </div>
     </div>
+  </section>
 
-    <div class="trial reveal-up">
-      <div class="tinfo">
-        <div class="tprice">Empieza desde <span class="fire">S/320</span> al mes</div>
-        <p>Tu plan incluye, desde la primera clase, una sesión completa y un diagnóstico vocal en PDF con tu punto de partida y tu ruta.</p>
-        <p class="thint">Mira los espacios libres antes de decidir. Sin escribir ni crear cuenta.</p>
+  <!-- ══ OPINIONES ══ -->
+  <section class="bloque" id="opiniones">
+    <div class="folio">Opiniones<span>Google</span></div>
+    <div class="opinion">
+      <div>
+        <div class="nota-grande">5.0</div>
+        <div class="nota-pie">
+          <span class="estrellas" role="img" aria-label="5 de 5 estrellas">
+            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2.6l2.9 6.1 6.6.9-4.8 4.6 1.2 6.7L12 17.6 5.9 20.9l1.2-6.7-4.8-4.6 6.6-.9z"/></svg>
+            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2.6l2.9 6.1 6.6.9-4.8 4.6 1.2 6.7L12 17.6 5.9 20.9l1.2-6.7-4.8-4.6 6.6-.9z"/></svg>
+            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2.6l2.9 6.1 6.6.9-4.8 4.6 1.2 6.7L12 17.6 5.9 20.9l1.2-6.7-4.8-4.6 6.6-.9z"/></svg>
+            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2.6l2.9 6.1 6.6.9-4.8 4.6 1.2 6.7L12 17.6 5.9 20.9l1.2-6.7-4.8-4.6 6.6-.9z"/></svg>
+            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2.6l2.9 6.1 6.6.9-4.8 4.6 1.2 6.7L12 17.6 5.9 20.9l1.2-6.7-4.8-4.6 6.6-.9z"/></svg>
+          </span>
+        </div>
       </div>
-      <div class="tcta">
-        <a class="btn btn-primary" href="/prueba/?f=home">Quiero empezar <span class="arr">→</span></a>
-        <a class="btn btn-ghost" href="/horarios/">Ver horarios disponibles <span class="arr">→</span></a>
-      </div>
-    </div>
-
-    <div class="pay reveal-up">
-      <span class="pl"><b>Perú</b> Yape · Plin · Sip · Tarjeta</span>
-      <span class="pchip">Yape</span><span class="pchip">Plin</span><span class="pchip">Sip</span><span class="pchip">Tarjeta</span>
-      <span class="pl" style="margin-left:.6rem"><b>Extranjero</b> Tarjeta · Cripto</span>
-      <span class="pchip">Tarjeta</span><span class="pchip">Cripto</span>
-    </div>
-  </div>
-</section>
-
-<!-- 12 · FAQ -->
-<section class="faq pad stage" id="faq" data-bg="#110c0a" data-glow=".1">
-  <div class="spot"></div>
-  <div class="wrap">
-    <span class="eyebrow reveal-up">Preguntas</span>
-    <h2 class="display h2 reveal-title">Dudas frecuentes.</h2>
-    <div class="faq-list reveal-up">
-      <div class="faq-item">
-        <button class="faq-q" aria-expanded="false"><span>Necesito saber música para empezar?</span><span class="ico" aria-hidden="true"></span></button>
-        <div class="faq-a"><p>No. Diseñamos el punto de partida según tu nivel real, desde cero o desde donde lo dejaste.</p></div>
-      </div>
-      <div class="faq-item">
-        <button class="faq-q" aria-expanded="false"><span>Soy adulto y siento que ya es tarde.</span><span class="ico" aria-hidden="true"></span></button>
-        <div class="faq-a"><p>No lo es. El método está pensado para la forma en que aprende un adulto, con objetivos claros y resultados que se sienten rápido.</p></div>
-      </div>
-      <div class="faq-item">
-        <button class="faq-q" aria-expanded="false"><span>Las clases online funcionan igual que las presenciales?</span><span class="ico" aria-hidden="true"></span></button>
-        <div class="faq-a"><p>Sí. La estructura 1 a 1 se traslada completa al formato en vivo, con la misma atención y el mismo seguimiento.</p></div>
-      </div>
-      <div class="faq-item">
-        <button class="faq-q" aria-expanded="false"><span>Qué incluye mi primera clase?</span><span class="ico" aria-hidden="true"></span></button>
-        <div class="faq-a"><p>Una sesión completa 1 a 1 más un diagnóstico vocal en PDF con tu punto de partida y tu plan de trabajo, incluido en tu plan mensual desde la primera clase.</p></div>
-      </div>
-      <div class="faq-item">
-        <button class="faq-q" aria-expanded="false"><span>Puedo llevar canto y composición juntos?</span><span class="ico" aria-hidden="true"></span></button>
-        <div class="faq-a"><p>Sí, y es el formato que más recomiendo: sesiones de 2 horas seguidas donde entrenas la voz y escribes tus canciones. Va desde 8 horas al mes (S/580) y sale mejor por hora que llevarlos por separado.</p></div>
-      </div>
-      <div class="faq-item">
-        <button class="faq-q" aria-expanded="false"><span>Cómo pago, desde Perú o del extranjero?</span><span class="ico" aria-hidden="true"></span></button>
-        <div class="faq-a"><p>Desde Perú pagas con Yape, Plin, Sip, tarjeta de crédito o débito, o transferencia. La tarjeta se procesa al instante y activa tu paquete solo. Desde el extranjero, con tarjeta o cripto.</p></div>
-      </div>
-      <!-- 13-ago-2026: la regla existía en el sistema pero no estaba escrita en ninguna parte
-           pública, así que cada caso se discutía por WhatsApp. Acá la ve el lead ANTES de comprar. -->
-      <div class="faq-item">
-        <button class="faq-q" aria-expanded="false"><span>Y si un día no puedo llegar a mi clase?</span><span class="ico" aria-hidden="true"></span></button>
-        <div class="faq-a"><p>La mueves tú mismo desde tu portal, hasta 6 horas antes. Tu plan trae cambios incluidos: 2 al mes en el de 4 horas, 3 en el de 8 y 4 en el de 12. A menos de 6 horas ya no se puede mover y la clase cuenta como usada, porque esa hora quedó apartada solo para ti. Todo el detalle está en <a href="/politicas/">políticas de reprogramación</a>.</p></div>
+      <div>
+        <h2>Once opiniones verificadas. Todas de cinco estrellas.</h2>
+        <p>Están publicadas en el perfil de Google de Profesor MVT, con nombre y fecha. Ahí se leen completas, sin editar.</p>
+        <p style="margin-top:22px">
+          <a class="lnk" href="https://g.page/r/CevbO7ON9f4CEAE/review" target="_blank" rel="noopener noreferrer">
+            Leerlas en Google
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M5 12h13M13 6l6 6-6 6"/></svg>
+          </a>
+        </p>
       </div>
     </div>
-  </div>
-</section>
+  </section>
 
-<!-- 13 · CTA FINAL -->
-<section class="cta screen stage" data-bg="#2a1206" data-glow=".24">
-  <div class="spot"></div>
-  <div class="wrap">
-    <span class="eyebrow reveal-up" style="display:inline-flex">Empieza hoy</span>
-    <h2 class="display h2 reveal-title">Elige tu plan y arranca.</h2>
-    <p class="sub reveal-up">Un diagnóstico de tu voz y un plan claro desde la primera clase. Puede ser esta semana.</p>
-    <a class="btn btn-primary btn-lg reveal-up" href="/prueba/?f=home">Quiero empezar <span class="arr">→</span></a>
-    <div class="mono reveal-up">Miraflores · Online en vivo</div>
-  </div>
-</section>
+  <!-- ══ PLANES ══ -->
+  <span id="precios" class="ancla-alias" aria-hidden="true"></span>
+  <section class="bloque" id="planes">
+    <div class="folio">Planes<span>Mensuales</span></div>
+    <div>
+      <h2>Un plan al mes. Sin permanencia.</h2>
+      <p class="dice">Los tres planes aplican a cualquiera de los tres cursos. Se paga por mes y se agenda contigo un horario fijo.</p>
 
-<!-- FOOTER -->
-<footer>
-  <div class="wrap">
-    <div class="fcol">
-      <div class="brand"><svg class="horns" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="5" y="2.5" width="3.2" height="12.5" rx="1.6"/><rect x="15.8" y="2.5" width="3.2" height="12.5" rx="1.6"/><rect x="8.7" y="9" width="3.1" height="6.5" rx="1.55"/><rect x="12.2" y="9" width="3.1" height="6.5" rx="1.55"/><rect x="4.6" y="12" width="14.8" height="9" rx="4"/><rect x="2.8" y="12.2" width="5.5" height="3.3" rx="1.65"/></svg>PROFESORMVT</div>
-      <p class="ftag">Clases 1 a 1 de canto y composición para adultos. Método real, no academia genérica.</p>
+      <div class="planes">
+        {PLANES.map((p) => (
+          <div class={p.elegido ? 'plan elegido' : 'plan'}>
+            <span class={p.elegido ? 'sello-plan' : 'sello-plan mudo'}>{p.tag}</span>
+            <div class="nom">{p.nom}</div>
+            <div class="cant">{p.clases}</div>
+            <div class="precio">S/{p.precio}</div>
+            <div class="por-hora">Sale a S/{p.hora} la hora</div>
+            <div class="desc">{p.desc}</div>
+          </div>
+        ))}
+      </div>
+
+      <div class="notas">
+        <p><b>Canto + Composición.</b> Las sesiones son de 2 horas seguidas y el mínimo son 8 horas al mes (S/580) o 12 horas (S/780). Las horas se cuentan sobre el mismo plan.</p>
+        <p>
+          <b>Incluido.</b> En canto, la primera clase de tu plan trae la sesión completa y el diagnóstico vocal en PDF.<br />
+          <b>Pagos.</b> Yape, Plin, tarjeta o transferencia. Desde el extranjero, tarjeta o cripto.<br />
+          <b>Clase suelta.</b> S/90. Existe, pero no es la oferta: el plan mensual es lo que hace que la voz avance.
+        </p>
+      </div>
+
+      <div class="cierre-planes">
+        <a href="/prueba/?f=home-planes" class="btn">Reservar una clase</a>
+        <p class="pie-accion">Me escribes, vemos horario y curso, y quedas agendado.</p>
+      </div>
     </div>
-    <div class="fcol">
-      <h4>Dónde</h4>
-      <p>Miraflores, Lima</p>
-      <p>Online en vivo</p>
-      <a href="#metodo">El método</a>
+  </section>
+
+  <!-- ══ DUDAS ══ -->
+  <section class="bloque" id="faq">
+    <div class="folio">Dudas<span>Frecuentes</span></div>
+    <div class="faq">
+      {FAQ.map((f) => (
+        <details>
+          <summary>{f.q}</summary>
+          <p>{f.a}</p>
+        </details>
+      ))}
     </div>
-    <div class="fcol">
-      <h4>Empezar</h4>
-      <a href="#precios">Paquetes</a>
-      <a href="/horarios/">Horarios disponibles</a>
-      <a href="/politicas/">Políticas de reprogramación</a>
-      <a href="/prueba/">Empezar clases</a>
-      <a href="/alumnos/" class="fire" style="color:var(--orange2)">Crear mi cuenta</a>
-    </div>
-    <div class="fcol">
-      <h4>Clases</h4>
-      <a href="/clases-canto-lima/">Clases de canto</a>
-      <a href="/clases-canto-online/">Canto online</a>
-      <a href="/clases-composicion-lima/">Composición</a>
-      <a href="/clases-composicion-online/">Composición online</a>
-    </div>
-  </div>
-  <div class="wrap foot-bottom">
-    <span class="mono">© 2026 ProfesorMVT · Método MVT</span>
-    <span class="mono">Andrés Salamé-Córdova Reina · RUC 10707468152</span>
-    <span class="mono">Yape · Plin · Sip · Tarjeta · Cripto</span>
-  </div>
-</footer>
+  </section>
 
-<ChatbotFloat />
+  <!-- ══ CIERRE ══ -->
+  <section class="cierre">
+    <h2>Empezar a los 45 no es empezar tarde. Es empezar con criterio.</h2>
+    <p class="sub">
+      Escríbeme y lo decidimos en cinco minutos. No hay audición ni examen de entrada.
+    </p>
+    <p><a class="tel" href="https://wa.me/51904056197" target="_blank" rel="noopener noreferrer">+51 904 056 197</a></p>
+  </section>
 
-<!-- GSAP -->
-<script is:inline src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
-<script is:inline src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js"></script>
-<script is:inline>
-(function () {
-  "use strict";
+</div>
 
-  var REDUCED = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  var hasGSAP = (typeof window.gsap !== 'undefined');
+<!-- Barra fija en móvil: la red de seguridad de quien lee a la mitad y decide. -->
+<div class="barra-movil">
+  <a href="/prueba/?f=home-barra" class="barra-cta">Reservar una clase</a>
+  <a href="https://wa.me/51904056197" class="barra-tel" target="_blank" rel="noopener noreferrer" aria-label="Escribir por WhatsApp">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" aria-hidden="true">
+      <path d="M21 15.5v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 1.1 2.7 2 2 0 0 1 3.1.5h3a2 2 0 0 1 2 1.7c.1 1 .3 1.9.6 2.8a2 2 0 0 1-.4 2.1L7.1 8.3a16 16 0 0 0 6 6l1.2-1.2a2 2 0 0 1 2.1-.5c.9.3 1.8.5 2.8.6a2 2 0 0 1 1.7 2Z" transform="translate(0 1.5)"/>
+    </svg>
+  </a>
+</div>
 
-  /* ---------------- NAV scrolled state ---------------- */
-  var nav = document.getElementById('nav');
-  function onScrollNav(){
-    if (window.scrollY > 40) nav.classList.add('scrolled');
-    else nav.classList.remove('scrolled');
+</Layout>
+
+<style>
+/* ────────────────────────────────────────────────────────────────
+   Home. Los tokens, botones, planes, faq y credenciales viven en
+   global.css; acá solo va lo propio de esta página.
+   ──────────────────────────────────────────────────────────────── */
+
+/* Anclas heredadas (#metodo, #precios) de la home anterior: los links ya
+   repartidos en anuncios y WhatsApp tienen que seguir cayendo donde deben. */
+.ancla-alias { display: block; height: 0; scroll-margin-top: 80px; }
+
+/* ══ PORTADA ══ */
+.portada {
+  display: grid;
+  grid-template-columns: minmax(0, 7fr) minmax(300px, 4fr);
+  column-gap: clamp(28px, 5vw, 88px);
+  grid-template-areas: "texto ficha" "accion ficha";
+  align-items: start;
+  padding: clamp(40px, 6vw, 96px) 0 clamp(44px, 5vw, 72px);
+}
+.p-texto { grid-area: texto; }
+.acciones { grid-area: accion; margin-top: clamp(30px, 3.4vw, 44px); display: flex; align-items: center; gap: 28px; flex-wrap: wrap; }
+.ficha { grid-area: ficha; border-top: 2px solid var(--linea-fuerte); padding-top: 22px; margin-top: 13px; }
+.entrada { font-size: 21px; line-height: 1.6; max-width: 44ch; color: var(--texto-2); margin-top: clamp(24px, 3.4vw, 44px); }
+.entrada strong { font-weight: 600; color: var(--texto); }
+
+.ficha-tit { font-size: 18px; font-weight: 600; text-transform: uppercase; letter-spacing: .14em; color: var(--texto-2); }
+.dato { padding: 20px 0; border-bottom: 1px solid var(--linea); }
+.dato:first-of-type { margin-top: 12px; border-top: 1px solid var(--linea); }
+.dato .et { font-size: 18px; color: var(--texto-2); font-weight: 500; }
+.dato .vl {
+  font-family: var(--display); font-weight: 700;
+  font-size: clamp(26px, 2.5vw, 32px); line-height: 1.12; margin-top: 4px;
+  display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap;
+}
+.dato .nt { font-size: 18px; color: var(--texto-2); margin-top: 4px; }
+
+/* Enlace sobrio: subrayado discreto, área táctil de 44px, sin competir con el botón */
+.lnk-sobrio {
+  display: inline-flex; align-items: center; min-height: 44px;
+  color: var(--acento); border-bottom: 1px solid var(--acento); font-weight: 500;
+}
+.pie-accion .lnk-sobrio { margin-top: 2px; }
+
+/* ══ REENCUADRE ══ */
+.reencuadre { padding: clamp(30px, 4vw, 56px) 0 clamp(34px, 4vw, 60px); border-top: 2px solid var(--linea-fuerte); }
+.reencuadre h2 { max-width: 20ch; }
+.reencuadre .lead { margin-top: 20px; }
+
+/* ══ SUMARIO ══ */
+.sumario { border-top: 1px solid var(--linea); border-bottom: 2px solid var(--linea-fuerte); display: grid; grid-template-columns: repeat(3, 1fr); }
+.sumario a { display: flex; align-items: flex-start; gap: 14px; min-height: 44px; padding: 22px clamp(16px, 2vw, 32px) 24px clamp(16px, 2vw, 32px); border-left: 1px solid var(--linea); }
+.sumario a:first-child { border-left: 0; padding-left: 0; }
+.sumario a:hover { background: var(--fondo-2); }
+.sumario .num { font-size: 19px; padding-top: 3px; }
+.sumario .tx { font-size: 19px; font-weight: 500; line-height: 1.35; }
+.sumario .tx b { display: block; font-weight: 600; font-size: 20px; }
+.sumario .tx i { display: block; font-style: normal; font-size: 18px; color: var(--texto-2); margin-top: 2px; }
+
+/* ══ CURSOS ══ */
+.dice { font-size: 20px; color: var(--texto-2); max-width: 52ch; margin-top: 20px; }
+.curso {
+  display: grid;
+  grid-template-columns: minmax(0, 52px) minmax(0, 1fr) minmax(0, 290px);
+  column-gap: clamp(16px, 2.2vw, 34px); row-gap: 14px;
+  padding: clamp(28px, 3.4vw, 44px) 0; border-bottom: 1px solid var(--linea);
+}
+.curso:first-of-type { border-top: 1px solid var(--linea); }
+.curso .rom { font-family: var(--display); font-weight: 800; font-size: clamp(24px, 2.4vw, 34px); line-height: 1; color: var(--acento); padding-top: 4px; }
+.curso h3 { font-size: clamp(25px, 2.6vw, 34px); }
+.curso p { font-size: 20px; line-height: 1.58; color: var(--texto-2); margin-top: 14px; max-width: 52ch; }
+.curso .lado { padding-top: 6px; border-left: 1px solid var(--linea); padding-left: clamp(18px, 2vw, 32px); }
+.curso .lado .l { font-size: 18px; color: var(--texto-2); font-weight: 500; }
+.curso .lado .p { font-family: var(--display); font-weight: 700; font-size: 24px; margin-top: 2px; margin-bottom: 18px; line-height: 1.25; }
+
+/* El bloque de tinta: cuerpo en papel PURO, no gris. Es el curso que se vende. */
+.curso.destacado {
+  border-bottom: 0; margin-top: clamp(20px, 2.4vw, 32px);
+  padding: clamp(30px, 3.8vw, 52px) clamp(20px, 3vw, 44px);
+}
+.curso.destacado .rom { color: var(--invertido-texto); }
+.curso.destacado h3 { font-size: clamp(27px, 3vw, 40px); }
+.curso.destacado p { color: var(--invertido-texto); font-size: 20px; }
+.curso.destacado .lado { border-left-color: var(--invertido-linea); }
+.curso.destacado .lado .l { color: var(--invertido-texto-2); }
+.curso.destacado .lado .p { color: var(--invertido-texto); }
+
+/* ══ COMPARATIVO DE LA SESIÓN DE 2 HORAS ══ */
+.comparativo { margin-top: clamp(26px, 3vw, 38px); border-top: 1px solid var(--invertido-linea); padding-top: 24px; }
+.comp-tit { font-size: 18px; font-weight: 600; text-transform: uppercase; letter-spacing: .13em; color: var(--invertido-texto-2); margin-bottom: 20px; }
+.comp-fila { margin-bottom: 22px; }
+.comp-et { font-size: 19px; font-weight: 600; color: var(--invertido-texto); margin-bottom: 8px; }
+.comp-barra { display: flex; height: 26px; width: 100%; gap: 0; }
+.seg { display: block; height: 100%; }
+.seg-cal { background: var(--invertido-linea); }
+.seg-tra { background: var(--invertido-texto); }
+.seg-voz { background: var(--invertido-texto); }
+.seg-com { background: var(--acento); }
+.seg-gap { background: transparent; }
+.comp-pie { font-size: 18px; color: var(--invertido-texto-2); margin-top: 8px; line-height: 1.45; }
+.comp-pie b { color: var(--invertido-texto); font-weight: 600; }
+.comp-remate { font-size: 19px; color: var(--invertido-texto) !important; border-top: 1px solid var(--invertido-linea); padding-top: 16px; margin-top: 6px; }
+.comp-remate b { font-weight: 600; }
+
+/* ══ RUTA ══ */
+.ruta { list-style: none; display: grid; grid-template-columns: repeat(4, 1fr); margin-top: clamp(24px, 3vw, 38px); border-top: 2px solid var(--linea-fuerte); }
+.ruta li { padding: 22px clamp(14px, 1.6vw, 26px) 8px 0; border-left: 1px solid var(--linea); padding-left: clamp(14px, 1.6vw, 26px); }
+.ruta li:first-child { border-left: 0; padding-left: 0; }
+.ruta-s { display: block; font-size: 18px; font-weight: 600; text-transform: uppercase; letter-spacing: .12em; color: var(--acento); }
+.ruta-t { display: block; font-family: var(--display); font-weight: 700; font-size: 24px; margin-top: 8px; }
+.ruta-d { display: block; font-size: 18px; color: var(--texto-2); margin-top: 8px; line-height: 1.5; }
+.ruta-pie { margin-top: 22px; }
+
+/* ══ QUIÉN ENSEÑA ══ */
+.perfil { display: grid; grid-template-columns: minmax(0, 7fr) minmax(0, 5fr); column-gap: clamp(24px, 4vw, 72px); row-gap: clamp(30px, 3.4vw, 46px); align-items: start; }
+.perfil-nom { font-size: clamp(29px, 3.4vw, 44px); }
+.perfil-rol { font-size: 18px; font-weight: 600; text-transform: uppercase; letter-spacing: .14em; color: var(--texto-2); margin-top: 14px; }
+.perfil p { font-size: 20px; line-height: 1.62; color: var(--texto-2); max-width: 56ch; margin-top: 22px; }
+.cita { font-style: italic; font-size: clamp(23px, 2.2vw, 29px); line-height: 1.38; color: var(--texto); border-top: 2px solid var(--acento); padding-top: 20px; max-width: 30ch; }
+.cita-pie { display: block; font-style: normal; font-size: 18px; color: var(--texto-2); margin-top: 18px; line-height: 1.5; }
+.credenciales { grid-column: 1 / -1; border-top: 1px solid var(--linea); }
+.credenciales .cred:last-child { border-bottom: 0; }
+
+/* ══ OPINIONES ══ */
+.opinion { display: grid; grid-template-columns: minmax(0, auto) minmax(0, 1fr); gap: clamp(24px, 4vw, 72px); align-items: start; }
+.nota-pie { margin-top: 18px; }
+.opinion h2 { max-width: 20ch; }
+.opinion p { font-size: 20px; color: var(--texto-2); max-width: 46ch; margin-top: 20px; }
+
+/* ══ PLANES ══ */
+.notas { margin-top: clamp(30px, 3.6vw, 44px); display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: clamp(20px, 3vw, 56px); border-top: 1px solid var(--linea); padding-top: 26px; }
+.notas p { font-size: 19px; color: var(--texto-2); line-height: 1.55; }
+.notas b { color: var(--texto); font-weight: 600; }
+.cierre-planes { margin-top: clamp(32px, 4vw, 52px); display: flex; align-items: center; gap: 28px; flex-wrap: wrap; }
+
+/* ══ CIERRE ══ */
+.cierre { border-top: 2px solid var(--linea-fuerte); padding: clamp(56px, 7vw, 110px) 0 clamp(50px, 6vw, 80px); }
+.cierre h2 { font-size: clamp(31px, 4.4vw, 58px); max-width: 18ch; }
+.cierre .sub { font-size: 21px; color: var(--texto-2); margin-top: 24px; max-width: 42ch; }
+.cierre .tel { margin-top: clamp(28px, 3vw, 40px); font-family: var(--display); font-weight: 700; font-size: clamp(26px, 3vw, 38px); display: inline-flex; align-items: center; min-height: 56px; border-bottom: 2px solid var(--acento); }
+
+/* ══ BARRA MÓVIL ══ */
+.barra-movil { display: none; }
+
+/* ══ MÓVIL ══ */
+@media (max-width: 900px) {
+  /* La evidencia (5.0 · S/320 · Miraflores) va ANTES del botón:
+     primero la confianza, después el pedido. Y el botón entra en la 1.ª pantalla. */
+  .portada { grid-template-columns: 1fr; grid-template-areas: "texto" "ficha" "accion"; row-gap: 26px; padding: 26px 0 30px; }
+  .acciones { margin-top: 0; gap: 16px; }
+  .ficha { margin-top: 0; }
+  .dato { padding: 14px 0; }
+  .dato .vl { font-size: 24px; }
+  .entrada { margin-top: 20px; font-size: 20px; }
+
+  .sumario { grid-template-columns: 1fr; }
+  .sumario a { border-left: 0; border-top: 1px solid var(--linea); padding: 18px 0; }
+  .sumario a:first-child { border-top: 0; }
+
+  .curso, .curso.destacado { grid-template-columns: 1fr; column-gap: 0; row-gap: 12px; }
+  .curso { padding: 28px 0; }
+  .curso.destacado { padding: 30px 20px 32px; margin-left: calc(var(--margen) * -1); margin-right: calc(var(--margen) * -1); }
+  .curso .rom { padding-top: 0; }
+  .curso .lado { border-left: 0; padding-left: 0; border-top: 1px solid var(--linea); padding-top: 18px; margin-top: 4px; }
+  .curso.destacado .lado { border-top-color: var(--invertido-linea); margin-top: 8px; }
+
+  .ruta { grid-template-columns: 1fr; }
+  .ruta li { border-left: 0; border-top: 1px solid var(--linea); padding: 18px 0 10px; }
+  .ruta li:first-child { border-top: 0; }
+
+  .perfil { grid-template-columns: 1fr; gap: 26px; }
+  .cita { max-width: none; }
+  .opinion { grid-template-columns: 1fr; gap: 18px; }
+  .notas { grid-template-columns: 1fr; gap: 18px; }
+  .cierre-planes { gap: 18px; }
+
+  /* Barra fija: 60px de alto, aparece siempre en móvil. */
+  .barra-movil {
+    display: flex; position: fixed; left: 0; right: 0; bottom: 0; z-index: 40;
+    background: var(--invertido-fondo); border-top: 2px solid var(--acento);
   }
-  onScrollNav();
-  window.addEventListener('scroll', onScrollNav, {passive:true});
-
-  /* ---------------- FAQ accordion (works without GSAP) ---------------- */
-  var faqItems = document.querySelectorAll('.faq-item');
-  faqItems.forEach(function(item){
-    var q = item.querySelector('.faq-q');
-    var a = item.querySelector('.faq-a');
-    q.addEventListener('click', function(){
-      var willOpen = !item.classList.contains('open');
-      // close others for clean accordion
-      faqItems.forEach(function(other){
-        if (other !== item && other.classList.contains('open')){
-          other.classList.remove('open');
-          other.querySelector('.faq-q').setAttribute('aria-expanded','false');
-          animateFaq(other.querySelector('.faq-a'), false);
-        }
-      });
-      item.classList.toggle('open', willOpen);
-      q.setAttribute('aria-expanded', willOpen ? 'true' : 'false');
-      animateFaq(a, willOpen);
-    });
-  });
-  function animateFaq(el, open){
-    if (hasGSAP && !REDUCED){
-      if (open) gsap.to(el, {height:'auto', duration:0.42, ease:'power2.out'});
-      else gsap.to(el, {height:0, duration:0.3, ease:'power2.in'});
-    } else {
-      el.style.height = open ? 'auto' : '0px';
-    }
+  .barra-cta {
+    flex: 1; display: inline-flex; align-items: center; justify-content: center;
+    min-height: 60px; color: var(--invertido-texto);
+    font-family: var(--display); font-weight: 700; font-size: 20px;
   }
-
-  /* ---------------- EQUALIZER (canvas, reacts to scroll) ---------------- */
-  var canvas = document.getElementById('eq');
-  var ctx = canvas ? canvas.getContext('2d') : null;
-  var W=0, H=0, dpr=1, grad=null;
-  var BARS = 70;
-  var vel = 0;      // smoothed scroll velocity 0..1
-  var prog = 0;     // scroll progress 0..1
-  var lastY = window.scrollY, lastT = performance.now();
-
-  function sizeEq(){
-    if (!canvas) return;
-    dpr = Math.min(window.devicePixelRatio || 1, 2);
-    W = canvas.clientWidth; H = canvas.clientHeight;
-    canvas.width = Math.max(1, Math.floor(W*dpr));
-    canvas.height = Math.max(1, Math.floor(H*dpr));
-    ctx.setTransform(dpr,0,0,dpr,0,0);
-    grad = ctx.createLinearGradient(0,H,0,0);
-    grad.addColorStop(0, '#ff6a35');
-    grad.addColorStop(0.55, '#e8501f');
-    grad.addColorStop(1, '#f3ede0');
-    BARS = W < 520 ? 44 : (W < 900 ? 56 : 70);
+  .barra-tel {
+    flex: none; width: 68px; display: inline-flex; align-items: center; justify-content: center;
+    min-height: 60px; color: var(--invertido-texto); border-left: 1px solid var(--invertido-linea);
   }
-
-  // fallback scroll velocity if ScrollTrigger not present
-  function rawVelocity(){
-    var now = performance.now();
-    var y = window.scrollY;
-    var dt = Math.max(now - lastT, 16);
-    var v = Math.abs(y - lastY) / dt; // px per ms
-    lastY = y; lastT = now;
-    var max = (document.documentElement.scrollHeight - window.innerHeight) || 1;
-    prog = Math.min(Math.max(y / max, 0), 1);
-    return Math.min(v / 3, 1);
-  }
-
-  function drawEq(t){
-    if (!ctx) return;
-    ctx.clearRect(0,0,W,H);
-    vel *= 0.9; // decay
-    var bw = W / BARS;
-    for (var i=0;i<BARS;i++){
-      var x = i*bw;
-      // travelling base wave (shifts with scroll progress)
-      var phase = i*0.34 + t*0.0022 + prog*Math.PI*5;
-      var base = (Math.sin(phase)*0.5 + 0.5);
-      var jitter = (Math.sin(i*0.7 + t*0.011)*0.5 + 0.5);
-      var amp = base*0.30 + vel*0.62*jitter + 0.04;
-      if (amp > 1) amp = 1;
-      var h = 3 + amp * (H*0.92);
-      ctx.globalAlpha = 0.22 + amp*0.78;
-      ctx.fillStyle = grad;
-      ctx.fillRect(x + bw*0.16, H - h, Math.max(1, bw*0.62), h);
-    }
-    ctx.globalAlpha = 1;
-  }
-
-  /* ---------------- MAIN ---------------- */
-  function init(){
-    sizeEq();
-
-    if (!hasGSAP){
-      // Static-friendly fallback: ensure everything visible, draw one idle eq frame.
-      document.documentElement.classList.remove('js-anim');
-      if (ctx){ vel=0.12; drawEq(0); }
-      // simple rAF idle eq even without GSAP
-      if (ctx && !REDUCED){
-        (function loop(now){ vel = Math.max(vel, rawVelocity()); drawEq(now); requestAnimationFrame(loop); })(performance.now());
-      }
-      return;
-    }
-
-    gsap.registerPlugin(ScrollTrigger);
-    var bg = document.getElementById('bgLayer');
-    var glow = document.getElementById('glow');
-
-    if (REDUCED){
-      // Reveal everything, no scrubbing, gentle static atmosphere.
-      gsap.set('.reveal-title, .reveal-up, .reveal-stagger > *', {opacity:1, clearProps:'transform,filter'});
-      gsap.set(bg, {backgroundColor:'#16100c'});
-      gsap.set(glow, {opacity:0.16});
-      if (ctx){ vel=0.1; drawEq(0); }
-      return;
-    }
-
-    /* --- title reveals: scale + blur to focus --- */
-    gsap.utils.toArray('.reveal-title').forEach(function(el){
-      gsap.fromTo(el,
-        {opacity:0, scale:1.22, filter:'blur(16px)', yPercent:8},
-        {opacity:1, scale:1, filter:'blur(0px)', yPercent:0, duration:1.1, ease:'power3.out',
-         scrollTrigger:{trigger:el, start:'top 82%'}});
-    });
-
-    /* --- simple up reveals --- */
-    gsap.utils.toArray('.reveal-up').forEach(function(el){
-      gsap.fromTo(el,
-        {opacity:0, y:34},
-        {opacity:1, y:0, duration:0.9, ease:'power3.out',
-         scrollTrigger:{trigger:el, start:'top 88%'}});
-    });
-
-    /* --- staggered groups --- */
-    gsap.utils.toArray('.reveal-stagger').forEach(function(group){
-      gsap.fromTo(group.children,
-        {opacity:0, y:40},
-        {opacity:1, y:0, duration:0.8, ease:'power3.out', stagger:0.09,
-         scrollTrigger:{trigger:group, start:'top 84%'}});
-    });
-
-    /* --- animated counters --- */
-    gsap.utils.toArray('.count').forEach(function(el){
-      var end = parseInt(el.getAttribute('data-count'), 10) || 0;
-      var obj = {v:0};
-      gsap.to(obj, {v:end, duration:1.9, ease:'power2.out', snap:{v:1},
-        scrollTrigger:{trigger:el, start:'top 88%'},
-        onUpdate:function(){ el.textContent = Math.round(obj.v); }});
-    });
-
-    /* --- per-section background + spotlight + glow journey --- */
-    gsap.utils.toArray('[data-bg]').forEach(function(sec){
-      var col = sec.getAttribute('data-bg');
-      var gi = parseFloat(sec.getAttribute('data-glow') || '0.12');
-      var spot = sec.querySelector('.spot');
-      ScrollTrigger.create({
-        trigger: sec,
-        start: 'top 65%',
-        end: 'bottom 35%',
-        onToggle: function(self){
-          if (self.isActive){
-            gsap.to(bg, {backgroundColor:col, duration:1.1, ease:'power2.out', overwrite:'auto'});
-            gsap.to(glow, {opacity:gi, duration:1.1, ease:'power2.out', overwrite:'auto'});
-          }
-        }
-      });
-      if (spot){
-        // spotlight "turns on" as the section enters the frame
-        gsap.fromTo(spot, {opacity:0},
-          {opacity:1, ease:'none',
-           scrollTrigger:{trigger:sec, start:'top 80%', end:'top 30%', scrub:true}});
-        gsap.to(spot, {opacity:0, ease:'none',
-           scrollTrigger:{trigger:sec, start:'bottom 60%', end:'bottom 10%', scrub:true}});
-      }
-    });
-
-    /* --- parallax on framed visuals + portrait --- */
-    gsap.utils.toArray('.frame, .andres .portrait, .hero-stickers, .pstickers').forEach(function(el, i){
-      var sect = el.closest('section') || el.closest('header');
-      if (!sect) return;
-      gsap.fromTo(el, {y: 50},
-        {y: -50, ease:'none',
-         scrollTrigger:{trigger:sect, start:'top bottom', end:'bottom top', scrub:1}});
-    });
-
-    /* --- marquees: continuous + velocity skew --- */
-    var mqTracks = gsap.utils.toArray('.marquee-track');
-    mqTracks.forEach(function(track, idx){
-      var dir = (track.closest('.fire')) ? 1 : -1;
-      gsap.fromTo(track, {xPercent: dir<0 ? 0 : -50},
-        {xPercent: dir<0 ? -50 : 0, duration: 22, ease:'none', repeat:-1});
-    });
-
-    /* --- master scroll listener for eq + marquee skew --- */
-    ScrollTrigger.create({
-      start: 0, end: 'max',
-      onUpdate: function(self){
-        prog = self.progress;
-        var v = Math.abs(self.getVelocity());
-        var nv = Math.min(v / 1600, 1);
-        if (nv > vel) vel = nv;
-        var sk = self.getVelocity() / -340;
-        if (sk > 6) sk = 6; if (sk < -6) sk = -6;
-        document.documentElement.style.setProperty('--mskew', sk.toFixed(2)+'deg');
-      }
-    });
-
-    // eq render loop
-    (function loop(now){ drawEq(now); requestAnimationFrame(loop); })(performance.now());
-
-    // refresh after fonts load (layout shift safe)
-    if (document.fonts && document.fonts.ready){
-      document.fonts.ready.then(function(){ ScrollTrigger.refresh(); });
-    }
-    window.addEventListener('load', function(){ ScrollTrigger.refresh(); });
-  }
-
-  // resize handling
-  var rzT;
-  window.addEventListener('resize', function(){
-    clearTimeout(rzT);
-    rzT = setTimeout(function(){
-      sizeEq();
-      if (hasGSAP && window.ScrollTrigger) ScrollTrigger.refresh();
-    }, 180);
-  });
-
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
-  else init();
-})();
-</script>
-</body>
-</html>
+  .barra-tel svg { width: 24px; height: 24px; }
+  body { padding-bottom: 60px; }
+}
+</style>

@@ -1,7 +1,9 @@
 ---
-// Nav compartido del sitio (mismo diseño punk del home en TODAS las páginas).
-// Autocontenido: colores y fuentes literales para que se vea idéntico tanto en el home
-// (standalone, sin variables globales) como en las páginas con Layout.
+// Nav compartido del sitio. Rediseño 2026-08-24: usa los tokens de global.css
+// (papel/tinta/sello + Cabinet Grotesk/Switzer). Ya NO necesita colores literales:
+// desde el rediseño el home también usa Layout, así que hay UN solo sistema.
+// Se conserva intacto el comportamiento: barra pegajosa, Políticas siempre visible
+// (pedido de Andrés el 13-ago) y el menú de hamburguesa del 16-ago.
 export interface Props {
   activeNav?: string;
 }
@@ -12,9 +14,9 @@ const { activeNav } = Astro.props;
     <svg class="snav-horns" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="5" y="2.5" width="3.2" height="12.5" rx="1.6"/><rect x="15.8" y="2.5" width="3.2" height="12.5" rx="1.6"/><rect x="8.7" y="9" width="3.1" height="6.5" rx="1.55"/><rect x="12.2" y="9" width="3.1" height="6.5" rx="1.55"/><rect x="4.6" y="12" width="14.8" height="9" rx="4"/><rect x="2.8" y="12.2" width="5.5" height="3.3" rx="1.65"/></svg>PROFESORMVT
   </a>
   <div class="snav-links">
-    <a class="snav-link" href="/#metodo">Método</a>
+    <a class="snav-link" href="/#cursos">Cursos</a>
     <a href="/horarios/" class:list={["snav-link", { active: activeNav === 'horarios' }]}>Horarios</a>
-    <a class="snav-link" href="/#precios">Precios</a>
+    <a class="snav-link" href="/#planes">Precios</a>
     <a class="snav-link" href="/#faq">FAQ</a>
     <!-- 13-ago-2026: va en el header a pedido de Andrés, para que nadie pueda alegar que la
          política de reprogramación "estaba escondida". Lleva `siempre` porque en móvil el
@@ -22,7 +24,7 @@ const { activeNav } = Astro.props;
     <a href="/politicas/" class:list={["snav-link", "siempre", { active: activeNav === 'politicas' }]}>Políticas</a>
     <a class="snav-ghost" href="/alumnos/">Ingresar</a>
     <!-- dos etiquetas: en el celular no caben la marca, Políticas y "Quiero empezar" a la vez -->
-    <a class="snav-cta" href="/prueba/"><span class="larga">Quiero empezar →</span><span class="corta">Empezar →</span></a>
+    <a class="snav-cta" href="/prueba/">Reservar una clase</a>
     <!-- 16-ago-2026: hasta hoy el celular ocultaba Método, Horarios, Precios, FAQ e Ingresar y
          no había nada que los reemplazara. O sea que el lead que llega desde la bio de Instagram
          (casi todo el tráfico) no podía ver precios ni horarios, y el alumno no encontraba por
@@ -34,108 +36,118 @@ const { activeNav } = Astro.props;
   </div>
 </nav>
 <div class="snav-panel" id="navMenu" hidden>
-  <a href="/#metodo">Método</a>
+  <a href="/#cursos">Cursos</a>
   <a href="/horarios/">Horarios</a>
-  <a href="/#precios">Precios</a>
+  <a href="/#planes">Precios</a>
   <a href="/#faq">FAQ</a>
   <a href="/politicas/">Políticas</a>
   <a href="/sorteo/">Sorteo</a>
   <a class="destacado" href="/alumnos/">Ingresar a mi portal</a>
 </div>
 <style>
+  /* Barra: papel, filete y nada de sombras de sticker. */
   .snav{
-    position: sticky; top: 0; z-index: 50; height: 64px;
-    display: flex; align-items: center; justify-content: space-between;
-    padding-inline: clamp(20px, 5vw, 64px);
-    border-bottom: 1px solid transparent;
-    transition: background-color .3s ease, border-color .3s ease, backdrop-filter .3s ease;
+    position: sticky; top: 0; z-index: 50; min-height: 68px;
+    display: flex; align-items: center; justify-content: space-between; gap: 20px;
+    padding-inline: var(--margen);
+    background: var(--fondo);
+    border-bottom: 1px solid var(--linea);
+    transition: border-color .2s ease;
   }
-  .snav.scrolled{ background: rgba(13,11,10,.82); backdrop-filter: blur(10px); border-bottom-color: #2A2926; }
-  .snav-brand{
-    font-family:"Oswald", Impact, sans-serif;font-weight:600; text-transform: uppercase;
-    font-size: 1.15rem; letter-spacing: .04em; color: #f3ede0;
-    display: flex; align-items: center; gap: .55em; text-decoration: none;
-  }
-  .snav-horns{ width: 1.1em; height: 1.1em; color: #e8501f; flex: none; filter: drop-shadow(0 0 8px #e8501f); }
-  .snav-links{ display: flex; align-items: center; gap: 1.7rem; }
-  .snav-link{
-    font-family: "JetBrains Mono", monospace; font-size: .74rem; letter-spacing: .16em;
-    text-transform: uppercase; color: #8a8276; transition: color .2s; text-decoration: none;
-    white-space: nowrap; display: inline-flex; align-items: center; gap: .4em;
-  }
-  .snav-link:hover{ color: #f3ede0; }
-  .snav-link.active{ color: #e8501f; }
-  .snav-ghost, .snav-cta{
-    font-family: "JetBrains Mono", monospace; font-weight: 700; letter-spacing: .1em;
-    text-transform: uppercase; font-size: .7rem; padding: .72em 1.2em; border-radius: 2px;
-    text-decoration: none; white-space: nowrap; transition: transform .15s ease, background-color .15s ease, color .15s ease, border-color .15s ease;
-  }
-  .snav-ghost{ background: transparent; color: #f3ede0; border: 2px solid rgba(243,237,224,.35); }
-  .snav-ghost:hover{ border-color: #e8501f; color: #e8501f; }
-  .snav-cta{ background: #e8501f; color: #160a04; border: 2px solid #e8501f; box-shadow: 4px 4px 0 #000; }
-  .snav-cta:hover{ background: #ff6a35; border-color: #ff6a35; transform: translate(-2px,-2px); box-shadow: 6px 6px 0 #000; }
+  .snav.scrolled{ border-bottom-color: var(--linea-fuerte); }
 
-  /* Botón del menú: solo existe en pantallas chicas, donde los enlaces se ocultan. */
-  .snav-burger{
-    display: none; background: transparent; border: 2px solid rgba(243,237,224,.35);
-    border-radius: 2px; padding: .34em .4em; cursor: pointer; color: #f3ede0; line-height: 0;
+  .snav-brand{
+    font-family: var(--display); font-weight: 800; text-transform: uppercase;
+    font-size: 21px; letter-spacing: .06em; color: var(--texto);
+    display: inline-flex; align-items: center; gap: .5em;
+    min-height: 44px; flex: none;
   }
-  .snav-burger svg{ width: 22px; height: 22px; fill: currentColor; }
-  .snav-burger[aria-expanded="true"]{ border-color: #e8501f; color: #e8501f; }
+  .snav-horns{ width: .95em; height: .95em; color: var(--acento); flex: none; }
+
+  .snav-links{ display: flex; align-items: center; gap: clamp(16px, 2vw, 34px); }
+  .snav-link{
+    font-family: var(--lectura); font-weight: 500; font-size: 19px;
+    color: var(--texto-2); white-space: nowrap;
+    display: inline-flex; align-items: center; min-height: 44px;
+    transition: color .15s ease;
+  }
+  .snav-link:hover{ color: var(--texto); }
+  .snav-link.active{ color: var(--texto); border-bottom: 2px solid var(--acento); }
+
+  /* "Ingresar" es para el alumno que ya paga: enlace sobrio, no botón. */
+  .snav-ghost{
+    font-family: var(--lectura); font-weight: 500; font-size: 19px;
+    color: var(--texto-2); white-space: nowrap;
+    display: inline-flex; align-items: center; min-height: 44px;
+  }
+  .snav-ghost:hover{ color: var(--texto); }
+
+  /* El CTA de la barra: subrayado de acento, NO relleno. El único botón
+     relleno de cada vista vive en el contenido, no en la cabecera. */
+  .snav-cta{
+    font-family: var(--lectura); font-weight: 600; font-size: 19px;
+    color: var(--texto); white-space: nowrap;
+    display: inline-flex; align-items: center; min-height: 44px;
+    border-bottom: 2px solid var(--acento);
+  }
+  .snav-cta:hover{ color: var(--acento); }
+
+  .snav-burger{
+    display: none; background: transparent; border: 2px solid var(--filete-fuerte);
+    cursor: pointer; color: var(--texto); line-height: 0;
+    width: 48px; height: 48px; align-items: center; justify-content: center;
+  }
+  .snav-burger svg{ width: 24px; height: 24px; fill: currentColor; }
+  .snav-burger[aria-expanded="true"]{ border-color: var(--acento); color: var(--acento); }
 
   .snav-panel{
-    position: sticky; top: 64px; z-index: 49;
-    background: rgba(13,11,10,.97); backdrop-filter: blur(10px);
-    border-bottom: 2px solid #e8501f; padding: 8px clamp(20px, 5vw, 64px) 18px;
+    position: sticky; top: 68px; z-index: 49;
+    background: var(--fondo);
+    border-bottom: 2px solid var(--linea-fuerte);
+    padding: 4px var(--margen) 16px;
     display: flex; flex-direction: column;
   }
   .snav-panel a{
-    font-family: "JetBrains Mono", monospace; font-size: .82rem; letter-spacing: .12em;
-    text-transform: uppercase; color: #f3ede0; text-decoration: none;
-    padding: 15px 2px; border-bottom: 1px solid #2A2926;
+    font-family: var(--lectura); font-weight: 500; font-size: 20px;
+    color: var(--texto); display: flex; align-items: center;
+    min-height: 56px; border-bottom: 1px solid var(--linea);
   }
   .snav-panel a:last-child{ border-bottom: 0; }
-  .snav-panel a.destacado{ color: #e8501f; }
-  /* El `display:flex` de arriba pisa al atributo `hidden` (que solo trae display:none desde la
-     hoja del navegador), así que el panel nacía ABIERTO en cada carga. Cazado en el celular. */
+  .snav-panel a.destacado{ font-weight: 600; color: var(--acento); }
+  /* 🔴 IMPRESCINDIBLE: `display:flex` le gana a la regla `[hidden]{display:none}` del
+     navegador, así que sin esta línea el panel nace ABIERTO y empuja el hero ~460px
+     hacia abajo en móvil. Se perdió al restilizar el 24-ago y se detectó midiendo el
+     pliegue, no leyendo el CSS. No borrar. */
   .snav-panel[hidden]{ display: none; }
+  /* En escritorio los enlaces viven en la barra: el panel no debe existir nunca. */
+  @media (min-width: 981px){ .snav-panel{ display: none !important; } }
 
+  /* Bajo 980px la barra se queda con marca + Políticas + CTA + hamburguesa.
+     Políticas lleva `siempre` porque es el que no puede desaparecer. */
   @media (max-width: 980px){
-    .snav-links{ gap: 1.1rem; }
-    .snav-link, .snav-ghost{ display: none; }
-    /* La excepción va DESPUÉS de la regla que oculta: a igual especificidad manda el orden.
-       Si se sube arriba, `display:none` la pisa y el enlace no sale en el celular, que es
-       justo donde llega la mayoría de los leads. */
-    .snav-link.siempre{ display: inline-flex; }
-    .snav-burger{ display: inline-block; }
+    .snav{ min-height: 64px; gap: 12px; }
+    .snav-brand{ font-size: 19px; }
+    .snav-links{ gap: 14px; }
+    .snav-link{ display: none; }
+    .snav-link.siempre{ display: inline-flex; font-size: 18px; }
+    .snav-ghost{ display: none; }
+    .snav-cta{ font-size: 18px; }
+    .snav-burger{ display: inline-flex; }
+    .snav-panel{ top: 64px; }
   }
-  /* Arriba de 980px los enlaces están todos a la vista: el panel no debe poder abrirse ni
-     quedarse abierto si el visitante agranda la ventana con el menú desplegado. */
-  @media (min-width: 981px){
-    .snav-panel{ display: none !important; }
-  }
-  /* En el celular quedan tres cosas en la barra: marca, Políticas y el botón. Sin esto se
-     leían pegadas ("PROFESORMVTPOLÍTICAS") y el botón se salía por la derecha. Se acorta el
-     botón, se encoge la marca y se fuerza un aire mínimo que el `space-between` no garantiza
-     cuando el contenido llena la barra. */
-  .snav-cta .corta{ display: none; }
   @media (max-width: 560px){
-    .snav-brand{ font-size: 1rem; }
-    .snav-links{ gap: .9rem; margin-left: .9rem; }
-    .snav-link.siempre{ font-size: .68rem; letter-spacing: .1em; }
-    .snav-cta{ font-size: .64rem; padding: .7em .9em; }
-    .snav-cta .larga{ display: none; }
-    .snav-cta .corta{ display: inline; }
+    .snav-cta{ display: none; }   /* en el celular manda la barra fija de abajo */
+    .snav-link.siempre{ font-size: 18px; }
   }
-  /* Con el botón de menú ya no caben marca + POLÍTICAS + burger + CTA en un teléfono angosto:
-     se salía por la derecha. Políticas pasa al panel, donde sigue siendo el primer bloque
-     visible al abrir el menú, así que no queda escondida (que era el punto de tenerla arriba). */
-  @media (max-width: 460px){
-    .snav-link.siempre{ display: none; }
-    .snav-links{ gap: .7rem; }
-  }
-  @media (prefers-reduced-motion: reduce){
-    .snav, .snav-cta{ transition: none; }
+  /* 320px (iPhone SE y Androids chicos): con la marca a 19px la barra se desbordaba
+     48px por la derecha. Políticas NO se puede ocultar (pedido de Andrés del 13-ago),
+     así que lo que cede es el tamaño de la marca y el margen lateral.
+     Medido a 320/360/390/430/768/1440, no calculado a ojo. */
+  @media (max-width: 360px){
+    .snav{ padding-inline: 14px; gap: 8px; }
+    .snav-brand{ font-size: 16px; letter-spacing: .04em; gap: .35em; }
+    .snav-link.siempre{ font-size: 17px; }
+    .snav-burger{ width: 44px; height: 44px; }
   }
 </style>
 <script>

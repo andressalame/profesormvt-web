@@ -54,7 +54,7 @@ import Layout from '../layouts/Layout.astro';
           <div class="pg-err" id="errp"></div>
         </form>
         <div id="okp" class="pg-card pg-ok" style="display:none">
-          <h2>Listo 🎉</h2>
+          <h2>Listo</h2>
           <p id="okmsg"></p>
         </div>
         <p class="note pg-foot">Ya tienes cuenta? <a href="/alumnos/">Entra a tu portal</a></p>
@@ -64,28 +64,28 @@ import Layout from '../layouts/Layout.astro';
 </Layout>
 
 <style>
-  .pagar{background:var(--negro,#0d0b0a);color:var(--crema,#EBE5D6);}
+  .pagar{background:var(--negro,var(--fondo));color:var(--crema,var(--texto));}
   .pg-hero{padding:72px 0 28px;}
-  .pg-hero .label{font-family:var(--mono,'JetBrains Mono',monospace);text-transform:uppercase;letter-spacing:.14em;font-size:.72rem;color:var(--naranja,#e8501f);margin-bottom:10px;}
-  .pg-hero h1{font-family:var(--display,'Oswald',sans-serif);font-size:clamp(2rem,6vw,3.2rem);line-height:1.02;text-transform:uppercase;}
-  .pg-hero h1 em{color:var(--naranja,#e8501f);font-style:normal;}
+  .pg-hero .label{font-family:var(--mono,var(--lectura));text-transform:uppercase;letter-spacing:.14em;font-size: 18px;color:var(--naranja,var(--acento));margin-bottom:10px;}
+  .pg-hero h1{font-family:var(--display,var(--display));font-size:clamp(2rem,6vw,3.2rem);line-height:1.02;text-transform:uppercase;}
+  .pg-hero h1 em{color:var(--naranja,var(--acento));font-style:normal;}
   .pg-hero .lead{margin-top:14px;max-width:520px;opacity:.85;}
-  .pg-sorteo{display:block;margin-top:20px;max-width:520px;background:rgba(232,80,31,.1);border:1px solid rgba(232,80,31,.45);border-radius:6px;padding:14px 16px;text-decoration:none;color:inherit;transition:border-color .15s;}
-  .pg-sorteo:hover{border-color:var(--naranja,#e8501f);}
-  .pg-sorteo b{display:block;font-family:var(--mono,'JetBrains Mono',monospace);font-size:.68rem;text-transform:uppercase;letter-spacing:.14em;color:var(--naranja,#e8501f);margin-bottom:5px;}
-  .pg-sorteo span{font-size:.9rem;opacity:.88;}
+  .pg-sorteo{display:flex;align-items:center;min-height:44px;display:block;margin-top:20px;max-width:520px;background:rgba(138, 46, 23,.1);border:1px solid rgba(138, 46, 23,.45);border-radius: 0;padding:14px 16px;text-decoration:none;color:inherit;transition:border-color .15s;}
+  .pg-sorteo:hover{border-color:var(--naranja,var(--acento));}
+  .pg-sorteo b{display:block;font-family:var(--mono,var(--lectura));font-size: 18px;text-transform:uppercase;letter-spacing:.14em;color:var(--naranja,var(--acento));margin-bottom:5px;}
+  .pg-sorteo span{font-size: 18px;opacity:.88;}
   .pg-form{padding:12px 0 84px;}
-  .pg-card{background:rgba(255,255,255,.035);border:1px solid rgba(235,229,214,.14);border-radius:6px;padding:26px 22px;max-width:520px;}
-  .pg-card label{display:block;font-family:var(--mono,'JetBrains Mono',monospace);font-size:.7rem;text-transform:uppercase;letter-spacing:.12em;opacity:.75;margin:16px 0 6px;}
+  .pg-card{background:rgba(23, 21, 15, .05);border:1px solid rgba(23, 21, 15,.14);border-radius: 0;padding:26px 22px;max-width:520px;}
+  .pg-card label{display:block;font-family:var(--mono,var(--lectura));font-size: 18px;text-transform:uppercase;letter-spacing:.12em;opacity:.75;margin:16px 0 6px;}
   .pg-card label:first-child{margin-top:0;}
-  .pg-card input,.pg-card select{width:100%;background:#151210;border:1px solid rgba(235,229,214,.2);border-radius:4px;color:inherit;padding:11px 12px;font:inherit;}
-  .pg-card input:focus,.pg-card select:focus{outline:none;border-color:var(--naranja,#e8501f);}
-  .pg-info{margin:12px 0 2px;white-space:pre-line;font-size:.9rem;color:var(--naranja,#e8501f);}
+  .pg-card input,.pg-card select{width:100%;background:#151210;border:1px solid rgba(23, 21, 15,.2);border-radius: 0;color:inherit;padding:11px 12px;font:inherit;}
+  .pg-card input:focus,.pg-card select:focus{outline:none;border-color:var(--naranja,var(--acento));}
+  .pg-info{margin:12px 0 2px;white-space:pre-line;font-size: 18px;color:var(--naranja,var(--acento));}
   .pg-card .btn-cta{margin-top:20px;width:100%;cursor:pointer;border:none;}
-  .pg-err{color:#ff6b4a;font-size:.9rem;margin-top:10px;min-height:1.2em;}
-  .pg-ok h2{font-family:var(--display,'Oswald',sans-serif);text-transform:uppercase;font-size:1.6rem;margin-bottom:8px;}
+  .pg-err{color:#ff6b4a;font-size: 18px;margin-top:10px;min-height:1.2em;}
+  .pg-ok h2{font-family:var(--display,var(--display));text-transform:uppercase;font-size:1.6rem;margin-bottom:8px;}
   .pg-foot{margin-top:18px;}
-  .pg-foot a{color:var(--naranja,#e8501f);}
+  .pg-foot a{color:var(--naranja,var(--acento));}
 </style>
 
 <script>
