@@ -15,7 +15,7 @@
 import Layout from '../layouts/Layout.astro';
 
 const title = "Profesor MVT · Clases de canto y composición para adultos en Lima";
-const description = "Clases 1 a 1 de canto (método MVT) y composición para adultos en Lima (Miraflores) y online. Técnica, cabeza y música, con un plan armado después de escucharte. Desde S/320 al mes.";
+const description = "Clases 1 a 1 de canto (método MVT) y composición en Lima (Miraflores) y online. Técnica, cabeza y música, con un plan armado después de escucharte. Desde S/320 al mes.";
 
 const PLANES = [
   { nom: 'Esencial',  clases: '4 clases',  horas: '4 h',  precio: 320, hora: '80',    nota: 'Una por semana.' },
@@ -32,7 +32,7 @@ const RUTA = [
 
 const FAQ = [
   { q: '¿Y si de verdad canto mal?', a: 'Casi nadie canta mal: la mayoría empuja. Lo que suena forzado es tensión, no falta de talento, y la tensión se desarma con técnica.' },
-  { q: '¿Soy muy mayor para empezar?', a: 'No. La coordinación muscular se entrena a cualquier edad y el oído se educa a cualquier edad. Lo único que cambia con los años es que llegas sabiendo qué quieres cantar, que es una ventaja.' },
+  { q: '¿No es muy tarde si no empecé de niño?', a: 'No. La coordinación se entrena a cualquier edad y el oído se educa. Quien empezó de chico lleva ventaja en horas acumuladas, no en capacidad, y las horas se hacen.' },
   { q: '¿Me van a hacer cantar delante de gente?', a: 'Nunca. Todas las clases son uno a uno, a puerta cerrada. No hay clases grupales ni las hubo.' },
   { q: '¿Necesito saber música?', a: 'No. El punto de partida se diseña según tu nivel real, desde cero o desde donde lo dejaste.' },
   { q: '¿Puedo llevar canto y composición juntos?', a: 'Sí, y es el formato que más recomiendo: sesiones de 2 horas seguidas. Va desde 8 horas al mes (S/580) y sale mejor por hora que llevarlos por separado.' },
@@ -198,34 +198,34 @@ const faqSchema = {
   <section class="bloque" id="edad">
     <div class="folio">04<span>La edad</span></div>
     <div>
-      <h2>Empezar a los 45 no es empezar tarde.</h2>
+      <h2>No empezaste tarde.</h2>
       <figure class="lamina">
-        <figcaption class="lam-tit">Fig. 5 · Qué cambia y qué no con los años</figcaption>
+        <figcaption class="lam-tit">Fig. 5 · Empezar de adulto contra empezar de niño</figcaption>
         <div class="tabla-edad">
           <div class="col-edad">
             <p class="col-tit col-no">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
-              No cambia con la edad
+              El mito
             </p>
             <ul>
-              <li>La coordinación muscular se entrena.</li>
-              <li>El oído se educa.</li>
-              <li>Los pliegues responden al mismo trabajo.</li>
+              <li>«Si no empezaste de niño, ya fue.»</li>
+              <li>«O naces con oído o no.»</li>
+              <li>«A esta edad la voz ya está hecha.»</li>
             </ul>
           </div>
           <div class="col-edad">
             <p class="col-tit col-si">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 13l4 4L19 7"/></svg>
-              Sí cambia, y juega a favor
+              Lo que pasa de verdad
             </p>
             <ul>
-              <li>Sabes exactamente qué quieres cantar.</li>
-              <li>Entiendes una explicación técnica a la primera.</li>
-              <li>Practicas por decisión, no porque te mandan.</li>
+              <li>La coordinación se entrena a cualquier edad.</li>
+              <li>El oído se educa; no es un don que te tocó o no.</li>
+              <li>Llegas sabiendo qué quieres cantar, y eso acelera todo.</li>
             </ul>
           </div>
         </div>
-        <p class="lam-pie">Lo único que de verdad se pierde con los años es el tiempo que pasaste creyendo que no podías.</p>
+        <p class="lam-pie">El que empezó de niño lleva ventaja en horas, no en capacidad. Las horas se hacen.</p>
       </figure>
     </div>
   </section>
@@ -234,7 +234,7 @@ const faqSchema = {
   <section class="bloque" id="cursos">
     <div class="folio">05<span>Los cursos</span></div>
     <div>
-      <h2>Tres. El tercero es el que recomiendo.</h2>
+      <h2>Canto, composición, o los dos juntos.</h2>
 
       <div class="cursos-2">
         <article class="curso-min">

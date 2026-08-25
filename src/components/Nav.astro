@@ -47,13 +47,13 @@ const { activeNav } = Astro.props;
 <style>
   /* Barra slim, centrada, al estilo del header de Batuta (pedido de Andrés):
      poca altura, contenido centrado en un ancho fijo y nada de banda gruesa.
-     Diferencia con Batuta: allá el texto va a 11px; acá el lector tiene 45+,
-     así que se mantiene legible (18px) y la altura se gana apretando el aire
-     vertical, no encogiendo la letra. */
+     25-ago: el público objetivo pasó a 20-35 años, así que ya no aplica el piso
+     de 18px que se había puesto para lectores de 45+. La barra baja a 46px con
+     texto de 15px, como la de Batuta. El área táctil sigue en 44px. */
   .snav{
-    position: sticky; top: 0; z-index: 50; min-height: 54px;
+    position: sticky; top: 0; z-index: 50; min-height: 46px;
     display: flex; align-items: center; justify-content: center; gap: clamp(14px, 1.8vw, 26px);
-    padding: 4px var(--margen);
+    padding: 0 var(--margen);
     background: var(--fondo);
     border-bottom: 1px solid var(--linea);
   }
@@ -63,15 +63,15 @@ const { activeNav } = Astro.props;
 
   .snav-brand{
     font-family: var(--display); font-weight: 800; text-transform: uppercase;
-    font-size: 18px; letter-spacing: .12em; color: var(--texto);
+    font-size: 15px; letter-spacing: .14em; color: var(--texto);
     display: inline-flex; align-items: center; gap: .5em;
-    min-height: 44px; flex: none; margin-right: clamp(10px, 1.6vw, 26px);
+    min-height: 44px; flex: none; margin-right: clamp(10px, 1.6vw, 24px);
   }
-  .snav-horns{ width: 1em; height: 1em; color: var(--acento); flex: none; }
+  .snav-horns{ width: 1.05em; height: 1.05em; color: var(--acento); flex: none; }
 
-  .snav-links{ display: flex; align-items: center; gap: clamp(14px, 1.7vw, 26px); }
+  .snav-links{ display: flex; align-items: center; gap: clamp(12px, 1.5vw, 22px); }
   .snav-link{
-    font-family: var(--lectura); font-weight: 500; font-size: 18px;
+    font-family: var(--lectura); font-weight: 500; font-size: 15px;
     color: var(--texto-2); white-space: nowrap;
     display: inline-flex; align-items: center; min-height: 44px;
     transition: color .15s ease;
@@ -81,7 +81,7 @@ const { activeNav } = Astro.props;
 
   /* "Ingresar" es para el alumno que ya paga: enlace sobrio, no botón. */
   .snav-ghost{
-    font-family: var(--lectura); font-weight: 500; font-size: 18px;
+    font-family: var(--lectura); font-weight: 500; font-size: 15px;
     color: var(--texto-2); white-space: nowrap;
     display: inline-flex; align-items: center; min-height: 44px;
   }
@@ -90,7 +90,7 @@ const { activeNav } = Astro.props;
   /* El CTA de la barra: subrayado de acento, NO relleno. El único botón
      relleno de cada vista vive en el contenido, no en la cabecera. */
   .snav-cta{
-    font-family: var(--lectura); font-weight: 600; font-size: 18px;
+    font-family: var(--lectura); font-weight: 600; font-size: 15px;
     color: var(--texto); white-space: nowrap;
     display: inline-flex; align-items: center; min-height: 44px;
     border-bottom: 2px solid var(--acento);
@@ -100,13 +100,15 @@ const { activeNav } = Astro.props;
   .snav-burger{
     display: none; background: transparent; border: 2px solid var(--filete-fuerte);
     cursor: pointer; color: var(--texto); line-height: 0;
-    width: 48px; height: 48px; align-items: center; justify-content: center;
+    /* 44px, no 40: en móvil es el ÚNICO acceso al menú, así que no puede
+       bajar del mínimo táctil aunque la barra sea slim (mide 46px). */
+    width: 44px; height: 44px; align-items: center; justify-content: center;
   }
   .snav-burger svg{ width: 24px; height: 24px; fill: currentColor; }
   .snav-burger[aria-expanded="true"]{ border-color: var(--acento); color: var(--acento); }
 
   .snav-panel{
-    position: sticky; top: 54px; z-index: 49;
+    position: sticky; top: 46px; z-index: 49;
     background: var(--fondo);
     border-bottom: 2px solid var(--linea-fuerte);
     padding: 4px var(--margen) 16px;
@@ -130,15 +132,15 @@ const { activeNav } = Astro.props;
   /* Bajo 980px la barra se queda con marca + Políticas + CTA + hamburguesa.
      Políticas lleva `siempre` porque es el que no puede desaparecer. */
   @media (max-width: 980px){
-    .snav{ min-height: 54px; gap: 10px; justify-content: space-between; }
-    .snav-brand{ font-size: 18px; margin-right: 0; }
+    .snav{ min-height: 46px; gap: 10px; justify-content: space-between; }
+    .snav-brand{ font-size: 15px; margin-right: 0; }
     .snav-links{ gap: 14px; }
     .snav-link{ display: none; }
-    .snav-link.siempre{ display: inline-flex; font-size: 18px; }
+    .snav-link.siempre{ display: inline-flex; font-size: 15px; }
     .snav-ghost{ display: none; }
-    .snav-cta{ font-size: 18px; }
+    .snav-cta{ font-size: 15px; }
     .snav-burger{ display: inline-flex; }
-    .snav-panel{ top: 54px; }
+    .snav-panel{ top: 46px; }
   }
   @media (max-width: 560px){
     .snav-cta{ display: none; }   /* en el celular manda la barra fija de abajo */
@@ -150,8 +152,8 @@ const { activeNav } = Astro.props;
      Medido a 320/360/390/430/768/1440, no calculado a ojo. */
   @media (max-width: 360px){
     .snav{ padding-inline: 14px; gap: 8px; justify-content: space-between; }
-    .snav-brand{ font-size: 16px; letter-spacing: .04em; gap: .35em; }
-    .snav-link.siempre{ font-size: 17px; }
+    .snav-brand{ font-size: 14px; letter-spacing: .08em; gap: .3em; }
+    .snav-link.siempre{ font-size: 14px; }
     .snav-burger{ width: 44px; height: 44px; }
   }
 </style>
