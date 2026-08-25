@@ -275,7 +275,7 @@
   object-fit: cover;
   object-position: center 30%;
   background: var(--gold-soft);
-  border: 1.5px solid rgba(138, 46, 23, 0.5);
+  border: 1.5px solid rgba(178, 58, 34, 0.5);
   display: block;
   flex-shrink: 0;
 }

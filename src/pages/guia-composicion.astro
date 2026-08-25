@@ -131,10 +131,10 @@ const description = "Descarga gratis la guía para empezar a componer tu primera
            (+51 / 51 / 0 de más). Sin esto el navegador frenaría con su burbuja nativa
            números que en realidad sí son buenos, antes de que se puedan limpiar. -->
       <form id="telForm" class="telform" novalidate>
-        <input type="tel" id="telInput" placeholder="Tu WhatsApp (ej. 989 077 928)"
+        <input type="tel" id="telInput" placeholder="Tu WhatsApp (ej. 904 056 197)"
                autocomplete="tel" inputmode="tel" maxlength="18"
                pattern="([+]?51)?[ -]?9[ -]?[0-9]{2}[ -]?[0-9]{3}[ -]?[0-9]{3}"
-               title="Celular peruano: 9 dígitos que empiezan en 9 (ej. 989 077 928)" />
+               title="Celular peruano: 9 dígitos que empiezan en 9 (ej. 904 056 197)" />
         <button type="submit" class="btn" id="telBtn">Enviar →</button>
       </form>
       <div class="micro">Opcional. Solo para responderte, cero spam.</div>
@@ -214,7 +214,7 @@ const description = "Descarga gratis la guía para empezar a componer tu primera
       var tel = normTelPE(telCrudo);
       if (!tel){ telErr.textContent = 'Déjame tu WhatsApp y te escribo :)'; telInput.focus(); return; }
       if (!esCelularPE(tel) && !esInternacional(telCrudo, tel)){
-        telErr.textContent = 'Ese número no se ve bien. Un celular peruano son 9 dígitos y empieza en 9 (ej. 989 077 928). Si es del extranjero, agrégale el + y el código del país.';
+        telErr.textContent = 'Ese número no se ve bien. Un celular peruano son 9 dígitos y empieza en 9 (ej. 904 056 197). Si es del extranjero, agrégale el + y el código del país.';
         telInput.focus(); return;
       }
       telBtn.disabled = true; telBtn.textContent = 'Enviando...';

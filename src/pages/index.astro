@@ -1,42 +1,42 @@
 ---
-// Home de ProfesorMVT · rediseño "Conservatorio editorial" (2026-08-24).
-// Reemplaza la home punk standalone (Oswald + Space Grotesk + JetBrains Mono).
+// Home de ProfesorMVT · dirección "Ficha clínica" (elegida por Andrés el 24-ago-2026).
 //
-// AHORA USA Layout.astro. Antes era una página suelta con su propio <head>, lo que
-// partía el sitio en DOS sistemas de diseño (la home por un lado, el resto con
-// global.css por el otro). Todo el SEO que vivía acá (FAQ schema, OG, pixel) se
-// conserva: el FAQPage entra por la prop extraSchema y el resto ya está en Layout.
+// Criterio de esta versión: MENOS TEXTO. Lo que se puede demostrar con un dibujo no
+// se explica con un párrafo. Cada lámina lleva una figura y dos frases, no cinco.
+// El argumento central: cantar es coordinación (cuerpo), cabeza y música a la vez,
+// y como cada persona llega desbalanceada distinto, el plan se arma DESPUÉS de
+// escucharla. Eso es lo que justifica el uno a uno y lo que hace que la edad no importe.
 //
-// Dirección ganadora de un panel de 4 jueces (promedios: 1=8.25 · 3=7.75 · 2=5.5),
-// con injertos de la dirección 3 (aritmética del combo, ruta de 3 meses, dibujos a
-// mano) y de la 2 ("nadie se ríe de nadie", los rótulos de la sesión de 2 horas).
+// Reglas que no se tocan:
+//  - Ningún gráfico puede cargar significado en una etiqueta que se pueda apagar.
+//    `font-size:0` está PROHIBIDO en media queries (bug real de la maqueta original).
+//  - Nada bajo 18px. Targets de 44px. Un solo botón relleno por vista.
+//  - Cero emojis: todos los íconos son SVG dibujados con stroke.
 import Layout from '../layouts/Layout.astro';
 
 const title = "Profesor MVT · Clases de canto y composición para adultos en Lima";
-const description = "Clases 1 a 1 de canto (método MVT) y composición para adultos en Lima (Miraflores) y online. Con Andrés Salamé, músico real. Planes mensuales desde S/320.";
+const description = "Clases 1 a 1 de canto (método MVT) y composición para adultos en Lima (Miraflores) y online. Técnica, cabeza y música, con un plan armado después de escucharte. Desde S/320 al mes.";
 
-// Precio por hora: es el argumento honesto para subir de plan, y sale de dividir.
-// 320/4 = 80 · 580/8 = 72.50 · 780/12 = 65. Si cambia el precio, cambia acá.
 const PLANES = [
-  { nom: 'Esencial',  clases: '4 clases de 1 hora',  horas: '4 horas al mes',  precio: 320, hora: '80',    desc: 'Una clase por semana. El ritmo mínimo para que algo se sostenga.', tag: 'Para empezar' },
-  { nom: 'Constante', clases: '8 clases de 1 hora',  horas: '8 horas al mes',  precio: 580, hora: '72.50', desc: 'Dos por semana. Es donde la voz empieza a responder sola.',       tag: 'El más elegido', elegido: true },
-  { nom: 'Intensivo', clases: '12 clases de 1 hora', horas: '12 horas al mes', precio: 780, hora: '65',    desc: 'Tres por semana. Para quien tiene una fecha o un proyecto encima.', tag: 'Para avanzar' },
+  { nom: 'Esencial',  clases: '4 clases',  horas: '4 h',  precio: 320, hora: '80',    nota: 'Una por semana.' },
+  { nom: 'Constante', clases: '8 clases',  horas: '8 h',  precio: 580, hora: '72.50', nota: 'Dos por semana. Es donde la voz empieza a responder sola.', elegido: true },
+  { nom: 'Intensivo', clases: '12 clases', horas: '12 h', precio: 780, hora: '65',    nota: 'Tres por semana.' },
 ];
 
 const RUTA = [
-  { s: 'Semana 1',    t: 'Evaluación',   d: 'Medimos dónde estás hoy. Sale tu diagnóstico vocal en PDF.' },
-  { s: 'Semanas 2-4', t: 'Coordinación', d: 'Respiración, apoyo y cierre. El objetivo es que deje de doler.' },
-  { s: 'Semanas 5-8', t: 'Repertorio',   d: 'Entramos a canciones que quieres cantar, no a ejercicios sueltos.' },
-  { s: 'Semanas 9-12',t: 'Autonomía',    d: 'Tu propio calentamiento y criterio para ensayar solo.' },
+  { s: 'Semana 1',     t: 'Te escucho',   d: 'Sale tu diagnóstico vocal en PDF.' },
+  { s: 'Semanas 2-4',  t: 'Coordinación', d: 'Que deje de doler y deje de forzarse.' },
+  { s: 'Semanas 5-8',  t: 'Repertorio',   d: 'Tus canciones, no ejercicios sueltos.' },
+  { s: 'Semanas 9-12', t: 'Autonomía',    d: 'Criterio para ensayar solo.' },
 ];
 
 const FAQ = [
-  { q: 'Necesito saber música para empezar?', a: 'No. Diseñamos el punto de partida según tu nivel real, desde cero o desde donde lo dejaste.' },
-  { q: 'Soy adulto y siento que ya es tarde.', a: 'No lo es. El método está pensado para la forma en que aprende un adulto, con objetivos claros y resultados que se sienten rápido.' },
-  { q: 'Las clases online funcionan igual que las presenciales?', a: 'Sí. La estructura 1 a 1 se traslada completa al formato en vivo, con la misma atención y el mismo seguimiento.' },
-  { q: 'Qué incluye mi primera clase?', a: 'Una sesión completa 1 a 1 más un diagnóstico vocal en PDF con tu punto de partida y tu plan de trabajo, incluido en tu plan mensual desde la primera clase.' },
-  { q: 'Puedo llevar canto y composición juntos?', a: 'Sí, y es el formato que más recomiendo: sesiones de 2 horas seguidas donde entrenas la voz y escribes tus canciones. Va desde 8 horas al mes (S/580) y sale mejor por hora que llevarlos por separado.' },
-  { q: 'Cómo pago, desde Perú o del extranjero?', a: 'Desde Perú pagas con Yape, Plin, Sip, tarjeta de crédito o débito, o transferencia. La tarjeta se procesa al instante y activa tu paquete solo. Desde el extranjero, con tarjeta o cripto.' },
+  { q: '¿Y si de verdad canto mal?', a: 'Casi nadie canta mal: la mayoría empuja. Lo que suena forzado es tensión, no falta de talento, y la tensión se desarma con técnica.' },
+  { q: '¿Soy muy mayor para empezar?', a: 'No. La coordinación muscular se entrena a cualquier edad y el oído se educa a cualquier edad. Lo único que cambia con los años es que llegas sabiendo qué quieres cantar, que es una ventaja.' },
+  { q: '¿Me van a hacer cantar delante de gente?', a: 'Nunca. Todas las clases son uno a uno, a puerta cerrada. No hay clases grupales ni las hubo.' },
+  { q: '¿Necesito saber música?', a: 'No. El punto de partida se diseña según tu nivel real, desde cero o desde donde lo dejaste.' },
+  { q: '¿Puedo llevar canto y composición juntos?', a: 'Sí, y es el formato que más recomiendo: sesiones de 2 horas seguidas. Va desde 8 horas al mes (S/580) y sale mejor por hora que llevarlos por separado.' },
+  { q: '¿Cómo pago?', a: 'Desde Perú, con Yape, Plin, tarjeta o transferencia. Desde el extranjero, tarjeta o cripto.' },
 ];
 
 const faqSchema = {
@@ -47,172 +47,258 @@ const faqSchema = {
 
 <Layout title={title} description={description} activeNav="home" extraSchema={faqSchema}>
 
-<div class="hoja">
+<div class="hoja-w">
 
-  <!-- ══ PORTADA ══
-       Orden en móvil (grid-areas): antetítulo → titular → FICHA en una fila →
-       botón → microcopy. La primera pantalla NO puede quedarse sin acción. -->
+  <!-- ══ PORTADA ══ -->
   <header class="portada">
     <div class="p-texto">
-      <div class="antetitulo"><i></i>Clases 1 a 1 para adultos · Miraflores y online</div>
-      <h1>La voz se entrena.<span class="segunda">La edad nunca fue el problema.</span></h1>
-      <p class="entrada">
-        Canto, composición y teoría con un profesor músico. Sesiones privadas,
-        sin público y al ritmo de <strong>cada quien</strong>. Se empieza donde estás hoy,
-        no donde deberías haber estado.
-      </p>
+      <p class="antetitulo"><i></i>Clases 1 a 1 para adultos · Miraflores y online</p>
+      <h1>Cantar no es un don.<span class="segunda">Es coordinación, y se entrena.</span></h1>
+      <p class="entrada">A cualquier edad. Primero te escucho, después armamos el plan.</p>
+      <div class="acciones">
+        <a href="/prueba/?f=home" class="btn">Reservar una clase</a>
+        <p class="pie-accion">Se coordina por WhatsApp, sin llamadas.</p>
+      </div>
     </div>
 
     <aside class="ficha">
-      <div class="ficha-tit">Ficha</div>
-      <div class="dato">
-        <div class="et">Opiniones</div>
-        <div class="vl">5.0
+      <p class="ficha-tit">Ficha</p>
+      <dl class="ficha-datos">
+        <div><dt>Opiniones</dt><dd><b>5.0</b>
           <span class="estrellas" role="img" aria-label="5 de 5 estrellas">
-            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2.6l2.9 6.1 6.6.9-4.8 4.6 1.2 6.7L12 17.6 5.9 20.9l1.2-6.7-4.8-4.6 6.6-.9z"/></svg>
-            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2.6l2.9 6.1 6.6.9-4.8 4.6 1.2 6.7L12 17.6 5.9 20.9l1.2-6.7-4.8-4.6 6.6-.9z"/></svg>
-            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2.6l2.9 6.1 6.6.9-4.8 4.6 1.2 6.7L12 17.6 5.9 20.9l1.2-6.7-4.8-4.6 6.6-.9z"/></svg>
-            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2.6l2.9 6.1 6.6.9-4.8 4.6 1.2 6.7L12 17.6 5.9 20.9l1.2-6.7-4.8-4.6 6.6-.9z"/></svg>
-            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2.6l2.9 6.1 6.6.9-4.8 4.6 1.2 6.7L12 17.6 5.9 20.9l1.2-6.7-4.8-4.6 6.6-.9z"/></svg>
-          </span>
+            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2.6l2.9 6 6.6.9-4.8 4.6 1.2 6.5-5.9-3.1-5.9 3.1 1.2-6.5L2.5 9.5l6.6-.9z"/></svg>
+            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2.6l2.9 6 6.6.9-4.8 4.6 1.2 6.5-5.9-3.1-5.9 3.1 1.2-6.5L2.5 9.5l6.6-.9z"/></svg>
+            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2.6l2.9 6 6.6.9-4.8 4.6 1.2 6.5-5.9-3.1-5.9 3.1 1.2-6.5L2.5 9.5l6.6-.9z"/></svg>
+            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2.6l2.9 6 6.6.9-4.8 4.6 1.2 6.5-5.9-3.1-5.9 3.1 1.2-6.5L2.5 9.5l6.6-.9z"/></svg>
+            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2.6l2.9 6 6.6.9-4.8 4.6 1.2 6.5-5.9-3.1-5.9 3.1 1.2-6.5L2.5 9.5l6.6-.9z"/></svg>
+          </span></dd>
+          <dd class="nt"><a class="lnk-sobrio" href="https://g.page/r/CevbO7ON9f4CEAE/review" target="_blank" rel="noopener noreferrer">11 opiniones en Google</a></dd>
         </div>
-        <div class="nt">
-          <a class="lnk-sobrio" href="https://g.page/r/CevbO7ON9f4CEAE/review" target="_blank" rel="noopener noreferrer">11 opiniones verificadas en Google</a>
-        </div>
-      </div>
-      <div class="dato">
-        <div class="et">Planes desde</div>
-        <div class="vl">S/320 al mes</div>
-        <div class="nt">4 clases de 1 hora</div>
-      </div>
-      <div class="dato">
-        <div class="et">Dónde</div>
-        <div class="vl">Miraflores u online</div>
-        <div class="nt">Lima, Perú. Y online desde cualquier lugar.</div>
-      </div>
+        <div><dt>Desde</dt><dd><b>S/320</b> al mes</dd><dd class="nt">4 clases de 1 hora</dd></div>
+        <div><dt>Dónde</dt><dd><b>Miraflores</b> u online</dd><dd class="nt">Lima, Perú</dd></div>
+      </dl>
     </aside>
-
-    <div class="acciones">
-      <a href="/prueba/?f=home" class="btn">Reservar una clase</a>
-      <p class="pie-accion">
-        Se coordina por WhatsApp, sin llamadas.
-        <a class="lnk-sobrio" href="https://wa.me/51904056197" target="_blank" rel="noopener noreferrer">Escribir por WhatsApp</a>
-      </p>
-    </div>
   </header>
 
-  <!-- ══ REENCUADRE + SUMARIO ══ (injerto de la dirección 3)
-       Le quita la culpa antes de que lea el primer precio. -->
-  <section class="reencuadre">
-    <h2>Casi nadie canta mal. La mayoría empuja.</h2>
-    <p class="lead">
-      Lo que suena forzado casi nunca es falta de oído: es el cuerpo apretando donde
-      debería soltar. Eso es coordinación muscular, y la coordinación se entrena a
-      cualquier edad.
-    </p>
+  <!-- ══ 01 · CÓMO FUNCIONA LA VOZ ══ -->
+  <section class="bloque" id="metodo">
+    <div class="folio">01<span>Cómo funciona</span></div>
+    <div>
+      <h2>Tres partes, un solo sistema.</h2>
+      <figure class="lamina lamina-voz">
+        <figcaption class="lam-tit">Fig. 1 · El aparato de la voz</figcaption>
+        <div class="lam-cuerpo">
+          <div class="lam-dibujo" set:html={`<svg viewBox="0 0 470 500" role="img" aria-label="Diagrama del aparato de la voz: aire, fuente y filtro" style="width:100%;height:auto"> <g fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"> <g stroke-opacity=".26" stroke-width="1.2"> <path d="M16 20h12M22 14v12M442 20h12M448 14v12M16 480h12M22 474v12M442 480h12M448 474v12"/> </g> <!-- perfil: frente, nariz, labios, mentón, cuello --> <path d="M240 50c-32 0-54 22-56 52 0 10-3 15-7 20l-11 24c-4 6-2 11 5 12l6 1c-5 4-6 9-1 11-4 4-3 9 3 11 2 6 6 10 14 11 14 1 26 3 34 8-4 14-6 24-8 38-2 12-18 18-40 26l-26 10c-16 6-22 18-22 36v142"/> <!-- perfil: cráneo, nuca, espalda --> <path d="M240 50c32 0 58 22 58 58 0 28-6 44-14 56-6 8-8 16-8 26l-2 50c2 12 14 19 32 26l24 10c16 6 22 18 22 36v138"/> <!-- corte inferior --> <path d="M133 452c56 10 162 10 219 0" stroke-opacity=".3" stroke-dasharray="3 7"/> <!-- oreja --> <path d="M248 122c12-3 17 8 12 20-2 6-7 8-12 6" stroke-opacity=".5"/> <!-- paladar y lengua --> <g stroke-opacity=".55"> <path d="M182 158c18-8 40-8 54-2"/> <path d="M186 174c18 6 38 0 52-10"/> </g> <!-- faringe --> <g stroke-opacity=".55"> <path d="M240 158c6 16 6 34 4 48M258 154c8 18 8 38 6 54"/> </g> <!-- laringe --> <path d="M232 208h22c5 0 8 4 8 10v14c0 7-4 11-10 11h-14c-6 0-10-4-10-11v-16c0-5 0-8 4-8z"/> <path d="M233 222l12 4M260 222l-11 4" stroke-width="2"/> <!-- tráquea --> <path d="M235 243v49M255 243v49"/> <g stroke-opacity=".45"><path d="M235 254h20M235 264h20M235 274h20M235 284h20"/></g> <!-- bronquios --> <path d="M235 292c-11 10-23 18-35 24M255 292c11 10 23 18 35 24"/> <!-- costillas --> <g stroke-opacity=".33"> <path d="M160 316c42-18 130-18 172 0M150 342c46-18 148-18 194 0M146 368c48-18 152-18 200 0M148 394c48-16 148-16 196 0"/> </g> <!-- diafragma --> <path d="M146 428c52-36 148-36 200 0" stroke-width="3"/> <g stroke-opacity=".26"><path d="M152 446c50-32 138-32 188 0"/></g> <!-- recorrido del aire --> <g stroke="var(--acento)" stroke-width="2.6"> <path d="M245 412c-2-32 2-62 0-94 0-24 0-52 0-74 0-18 0-30 0-38 0-20-3-38-13-48-11-9-27-9-38-4-14 6-28 2-42-8"/> <path d="M165 145l-13 2 7 11"/> </g> <!-- guías y marcadores --> <g stroke-opacity=".5" stroke-width="1.2"> <path d="M393 424h-42l-8 4M393 226h-127M61 116h91l62 30"/> </g> <g fill="currentColor" stroke="none"><circle cx="343" cy="428" r="3"/><circle cx="266" cy="226" r="3"/><circle cx="216" cy="147" r="3"/></g> <g stroke="var(--acento)" fill="#FFFFFF" stroke-width="1.6"> <circle cx="410" cy="424" r="17"/><circle cx="410" cy="226" r="17"/><circle cx="44" cy="116" r="17"/> </g> <g fill="var(--acento)" stroke="none" font-family="Cabinet" font-size="19" font-weight="700" text-anchor="middle"> <text x="410" y="431">1</text><text x="410" y="233">2</text><text x="44" y="123">3</text> </g> </g> </svg>`} />
+          <ol class="lam-claves">
+            <li><span class="n">1</span><span class="tx"><b>El aire</b> empuja. Sale del diafragma, no de la garganta.</span></li>
+            <li><span class="n">2</span><span class="tx"><b>Los pliegues</b> vibran. Se cierran bien o se escapan.</span></li>
+            <li><span class="n">3</span><span class="tx"><b>El espacio</b> da el color. Garganta y boca, no fuerza.</span></li>
+          </ol>
+        </div>
+        <p class="lam-pie">Casi todo lo que se llama «no tengo voz» pasa en la primera parte.</p>
+      </figure>
+    </div>
   </section>
 
-  <nav class="sumario" aria-label="Los tres cursos">
-    <a href="#cursos"><span class="num">I</span><span class="tx"><b>Vocal coaching</b><i>Clases de 1 hora</i></span></a>
-    <a href="#cursos"><span class="num">II</span><span class="tx"><b>Composición y teoría</b><i>Clases de 1 hora</i></span></a>
-    <a href="#combo"><span class="num">III</span><span class="tx"><b>Canto + Composición</b><i>Sesiones de 2 horas seguidas</i></span></a>
-  </nav>
-
-  <!-- ══ CURSOS ══ -->
-  <span id="metodo" class="ancla-alias" aria-hidden="true"></span>
-  <section class="bloque" id="cursos">
-    <div class="folio">Cursos<span>Tres, no más</span></div>
+  <!-- ══ 02 · FORZAR VS COORDINAR ══ -->
+  <section class="bloque">
+    <div class="folio">02<span>El punto de partida</span></div>
     <div>
-      <h2>Tres cursos. El tercero es el que recomiendo.</h2>
-      <p class="dice">Los tres se dan uno a uno, presencial en Miraflores u online, con el mismo método y el mismo profesor.</p>
+      <h2>Casi nadie canta mal. La mayoría empuja.</h2>
+      <div class="dos-figs">
+        <figure class="lamina">
+          <figcaption class="lam-tit">Fig. 2a · Forzar</figcaption>
+          <div class="lam-dibujo" set:html={`<svg viewBox="0 0 300 168" role="img" aria-label="Un tubo apretado en el medio: el aire entra y se corta antes de salir" style="width:100%;height:auto"><g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 52c70 0 84 22 128 22s58-22 128-22"/><path d="M22 116c70 0 84-22 128-22s58 22 128 22"/><g stroke-width="1.6"><path d="M150 20v20M144 34l6 8 6-8M150 148v-20M144 134l6-8 6 8"/></g><g stroke="var(--acento)" stroke-width="2.4"><path d="M34 84h26l16-8 16 14 12-6"/><path d="M174 86h12M198 88h10M220 86h7" stroke-opacity=".5"/></g></g></svg>`} />
+          <p class="lam-pie">Más presión, menos sonido. El cuello aprieta y el aire se corta.</p>
+        </figure>
+        <figure class="lamina">
+          <figcaption class="lam-tit">Fig. 2b · Coordinar</figcaption>
+          <div class="lam-dibujo" set:html={`<svg viewBox="0 0 300 168" role="img" aria-label="Un tubo abierto y parejo: el mismo aire pasa entero y sale sonando" style="width:100%;height:auto"><g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 54c78-3 152-3 216 1"/><path d="M22 114c78 3 152 3 216-1"/><g stroke="var(--acento)" stroke-width="2.4"><path d="M34 84c66-5 140 5 194 0"/><path d="M226 78l14 6-14 6"/></g><g stroke="var(--acento)" stroke-width="1.8" stroke-opacity=".45"><path d="M256 68c7 10 7 22 0 32M272 60c9 14 9 34 0 48"/></g></g></svg>`} />
+          <p class="lam-pie">El mismo aire, el tubo abierto. Menos esfuerzo, más sonido.</p>
+        </figure>
+      </div>
+    </div>
+  </section>
 
-      <article class="curso">
-        <div class="rom">I</div>
-        <div>
+  <!-- ══ 03 · LOS TRES EJES (el ángulo holístico) ══ -->
+  <section class="bloque" id="ejes">
+    <div class="folio">03<span>Cómo trabajamos</span></div>
+    <div>
+      <h2>La voz no es solo garganta.</h2>
+      <figure class="lamina">
+        <figcaption class="lam-tit">Fig. 3 · Los tres ejes de cada clase</figcaption>
+        <div class="ejes">
+          <div class="eje">
+            <svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="24" cy="11" r="6"/><path d="M24 17v16M14 24h20M17 45l7-12 7 12"/></svg>
+            <h3>Cuerpo</h3>
+            <p>Respiración, apoyo, cierre y resonancia. Lo mecánico.</p>
+          </div>
+          <div class="eje">
+            <svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M31 40v-5a8 8 0 0 1 3-6 12 12 0 1 0-19-9.5"/><path d="M15 21a12 12 0 0 0 4 9 8 8 0 0 1 3 6v4"/><path d="M19 44h13"/></svg>
+            <h3>Cabeza</h3>
+            <p>El miedo al juicio y la tensión que produce. Se entrena igual que lo físico.</p>
+          </div>
+          <div class="eje">
+            <svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="14" cy="36" r="6"/><circle cx="36" cy="31" r="6"/><path d="M20 36V11l22-4v24"/><path d="M20 18l22-4"/></svg>
+            <h3>Música</h3>
+            <p>Oído, ritmo y repertorio. Entender lo que estás cantando.</p>
+          </div>
+        </div>
+        <p class="lam-pie">
+          <b>Los tres se trabajan juntos, no por turnos.</b> Andrés estudió Música en la UPC
+          y Psicología en la Universidad de Lima: de ahí sale que la clase mire la tensión
+          y el miedo con el mismo detalle que el cierre cordal.
+        </p>
+      </figure>
+    </div>
+  </section>
+
+  <!-- ══ 04 · POR QUÉ 1 A 1 ══ -->
+  <section class="bloque">
+    <div class="folio">04<span>Por qué uno a uno</span></div>
+    <div>
+      <h2>Cada voz llega desbalanceada distinto.</h2>
+      <figure class="lamina">
+        <figcaption class="lam-tit">Fig. 4 · Dos puntos de partida <span class="sello-ej">Ejemplo</span></figcaption>
+        <div class="perfiles">
+          <div class="perfil-col">
+            <p class="perfil-nom">Llega afinando bien, se queda sin aire</p>
+            <ul class="barras">
+              <li><span class="bl">Aire</span><span class="bar"><i style="width:30%"></i></span><span class="bv">bajo</span></li>
+              <li><span class="bl">Cierre</span><span class="bar"><i style="width:55%"></i></span><span class="bv">medio</span></li>
+              <li><span class="bl">Resonancia</span><span class="bar"><i style="width:45%"></i></span><span class="bv">medio</span></li>
+              <li><span class="bl">Oído</span><span class="bar"><i style="width:85%"></i></span><span class="bv">alto</span></li>
+              <li><span class="bl">Confianza</span><span class="bar"><i style="width:70%"></i></span><span class="bv">alto</span></li>
+            </ul>
+            <p class="perfil-plan"><b>Su plan empieza por</b> respiración y apoyo.</p>
+          </div>
+          <div class="perfil-col">
+            <p class="perfil-nom">Tiene aire de sobra, se traba al subir</p>
+            <ul class="barras">
+              <li><span class="bl">Aire</span><span class="bar"><i style="width:80%"></i></span><span class="bv">alto</span></li>
+              <li><span class="bl">Cierre</span><span class="bar"><i style="width:25%"></i></span><span class="bv">bajo</span></li>
+              <li><span class="bl">Resonancia</span><span class="bar"><i style="width:35%"></i></span><span class="bv">bajo</span></li>
+              <li><span class="bl">Oído</span><span class="bar"><i style="width:50%"></i></span><span class="bv">medio</span></li>
+              <li><span class="bl">Confianza</span><span class="bar"><i style="width:30%"></i></span><span class="bv">bajo</span></li>
+            </ul>
+            <p class="perfil-plan"><b>Su plan empieza por</b> cierre y miedo al agudo.</p>
+          </div>
+        </div>
+        <p class="lam-pie">
+          Los dos quieren «cantar mejor» y necesitan lo contrario. Por eso el plan se arma
+          <b>después</b> de escucharte, y por eso no hay clases grupales.
+        </p>
+      </figure>
+    </div>
+  </section>
+
+  <!-- ══ 05 · LA EDAD ══ -->
+  <section class="bloque" id="edad">
+    <div class="folio">05<span>La edad</span></div>
+    <div>
+      <h2>Empezar a los 45 no es empezar tarde.</h2>
+      <figure class="lamina">
+        <figcaption class="lam-tit">Fig. 5 · Qué cambia y qué no con los años</figcaption>
+        <div class="tabla-edad">
+          <div class="col-edad">
+            <p class="col-tit col-no">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+              No cambia con la edad
+            </p>
+            <ul>
+              <li>La coordinación muscular se entrena.</li>
+              <li>El oído se educa.</li>
+              <li>Los pliegues responden al mismo trabajo.</li>
+            </ul>
+          </div>
+          <div class="col-edad">
+            <p class="col-tit col-si">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 13l4 4L19 7"/></svg>
+              Sí cambia, y juega a favor
+            </p>
+            <ul>
+              <li>Sabes exactamente qué quieres cantar.</li>
+              <li>Entiendes una explicación técnica a la primera.</li>
+              <li>Practicas por decisión, no porque te mandan.</li>
+            </ul>
+          </div>
+        </div>
+        <p class="lam-pie">Lo único que de verdad se pierde con los años es el tiempo que pasaste creyendo que no podías.</p>
+      </figure>
+    </div>
+  </section>
+
+  <!-- ══ 06 · CURSOS ══ -->
+  <section class="bloque" id="cursos">
+    <div class="folio">06<span>Los cursos</span></div>
+    <div>
+      <h2>Tres. El tercero es el que recomiendo.</h2>
+
+      <div class="cursos-2">
+        <article class="curso-min">
+          <span class="rom">I</span>
           <h3>Vocal coaching</h3>
-          <p>Técnica con el método Modern Vocal Training: respiración, apoyo, registro, afinación y resistencia. Se trabaja sobre las canciones que quieres cantar, no sobre ejercicios sueltos.</p>
-        </div>
-        <div class="lado">
-          <div class="l">Clases de 1 hora</div>
-          <div class="p">Desde S/320 al mes</div>
-          <a href="#planes" class="btn-ghost">Ver los planes</a>
-        </div>
-      </article>
-
-      <article class="curso">
-        <div class="rom">II</div>
-        <div>
+          <p>Técnica con el método Modern Vocal Training.</p>
+          <p class="curso-meta">Clases de 1 hora · desde <b>S/320</b> al mes</p>
+        </article>
+        <article class="curso-min">
+          <span class="rom">II</span>
           <h3>Composición y teoría</h3>
-          <p>Armonía, melodía, letra y estructura. Terminar las canciones que tienes a medias y entender por qué funcionan las que te gustan. Sirve igual si nunca escribiste una.</p>
-        </div>
-        <div class="lado">
-          <div class="l">Clases de 1 hora</div>
-          <div class="p">Desde S/320 al mes</div>
-          <a href="#planes" class="btn-ghost">Ver los planes</a>
-        </div>
-      </article>
+          <p>Terminar las canciones que tienes a medias.</p>
+          <p class="curso-meta">Clases de 1 hora · desde <b>S/320</b> al mes</p>
+        </article>
+      </div>
 
-      <!-- El curso estrella: el único bloque de tinta llena de todo el sitio. -->
-      <article class="curso destacado invertido" id="combo">
-        <div class="rom">III</div>
-        <div>
+      <article class="combo" id="combo">
+        <div class="combo-cab">
           <span class="marcaje">El que recomiendo</span>
-          <h3>Canto + Composición</h3>
-          <p>
-            Dos horas seguidas: la primera en la voz, la segunda en tus canciones.
-            Lo que aprendes cantando entra directo en lo que escribes, y la hora
-            sale mejor que llevando los dos cursos por separado.
-          </p>
-
-          <!-- Injerto de la dirección 3, con los rótulos de la 2 fusionados.
-               REGLA PERMANENTE: los rótulos son texto real fuera de la barra.
-               Prohibido font-size:0 en media queries: un gráfico no puede
-               cargar significado en una etiqueta que se pueda apagar. -->
-          <figure class="comparativo">
-            <figcaption class="comp-tit">Mismo tiempo pagado, más trabajo real</figcaption>
-
-            <div class="comp-fila">
-              <div class="comp-et">Dos clases de 1 hora, en días distintos</div>
-              <div class="comp-barra" role="img" aria-label="Dos clases de una hora: 15 minutos de calentamiento y 45 de trabajo, dos veces. Noventa minutos de trabajo real.">
-                <span class="seg seg-cal" style="flex:15"></span>
-                <span class="seg seg-tra" style="flex:45"></span>
-                <span class="seg seg-gap" style="flex:4"></span>
-                <span class="seg seg-cal" style="flex:15"></span>
-                <span class="seg seg-tra" style="flex:45"></span>
-              </div>
-              <div class="comp-pie">15' calentar + 45' trabajar, dos veces · <b>90 minutos de trabajo</b></div>
-            </div>
-
-            <div class="comp-fila">
-              <div class="comp-et">Una sesión de 2 horas seguidas</div>
-              <div class="comp-barra" role="img" aria-label="Una sesión de dos horas: 15 minutos de calentamiento y 105 de trabajo. Ciento cinco minutos de trabajo real.">
-                <span class="seg seg-cal" style="flex:15"></span>
-                <span class="seg seg-voz" style="flex:50"></span>
-                <span class="seg seg-com" style="flex:55"></span>
-              </div>
-              <div class="comp-pie">15' calentar + 50' técnica vocal + 55' composición y letra · <b>105 minutos de trabajo</b></div>
-            </div>
-
-            <p class="comp-remate">Se calienta una vez en lugar de dos: <b>15 minutos más de trabajo real</b> por el mismo tiempo pagado.</p>
-          </figure>
+          <h3><span class="rom">III</span> Canto + Composición</h3>
+          <p class="combo-sub">Dos horas seguidas: la voz y tus canciones en la misma cita.</p>
         </div>
-        <div class="lado">
-          <div class="l">Sesiones de 2 horas · mínimo 8 horas al mes</div>
-          <div class="p">S/580 · 8 h<br />S/780 · 12 h</div>
-          <a href="#planes" class="btn-ghost">Ver los planes</a>
-        </div>
+
+        <figure class="lamina lamina-oscura">
+          <figcaption class="lam-tit">Fig. 6 · Mismo tiempo pagado, más trabajo real</figcaption>
+          <div class="comp-fila">
+            <p class="comp-et">Dos clases de 1 hora, en días distintos</p>
+            <div class="comp-barra" role="img" aria-label="Dos clases de una hora: quince minutos de calentamiento y cuarenta y cinco de trabajo, dos veces. Noventa minutos de trabajo real.">
+              <span class="seg seg-cal" style="flex:15"></span>
+              <span class="seg seg-tra" style="flex:45"></span>
+              <span class="seg seg-gap" style="flex:4"></span>
+              <span class="seg seg-cal" style="flex:15"></span>
+              <span class="seg seg-tra" style="flex:45"></span>
+            </div>
+            <p class="comp-pie">Calientas dos veces · <b>90 minutos de trabajo</b></p>
+          </div>
+          <div class="comp-fila">
+            <p class="comp-et">Una sesión de 2 horas seguidas</p>
+            <div class="comp-barra" role="img" aria-label="Una sesión de dos horas: quince minutos de calentamiento, cincuenta de técnica vocal y cincuenta y cinco de composición. Ciento cinco minutos de trabajo real.">
+              <span class="seg seg-cal" style="flex:15"></span>
+              <span class="seg seg-voz" style="flex:50"></span>
+              <span class="seg seg-com" style="flex:55"></span>
+            </div>
+            <p class="comp-pie">Calientas una vez · <b>105 minutos de trabajo</b></p>
+          </div>
+          <p class="lam-pie"><b>15 minutos más de trabajo real</b> por el mismo tiempo pagado.</p>
+        </figure>
+
+        <p class="combo-precio">Desde <b>S/580</b> al mes (8 h) · <b>S/780</b> (12 h)</p>
       </article>
     </div>
   </section>
 
-  <!-- ══ LA RUTA ══ (injerto de la dirección 3, comprimido a una línea) -->
+  <!-- ══ 07 · LA RUTA ══ -->
   <section class="bloque" id="ruta">
-    <div class="folio">La ruta<span>Primeros 3 meses</span></div>
+    <div class="folio">07<span>La ruta</span></div>
     <div>
-      <h2>Qué pasa si te comprometes tres meses.</h2>
+      <h2>Los primeros tres meses.</h2>
       <ol class="ruta">
-        {RUTA.map((r) => (
+        {RUTA.map((r, i) => (
           <li>
+            <span class="ruta-pin" aria-hidden="true">
+              {i === 0
+                ? <svg viewBox="0 0 22 22"><circle cx="11" cy="11" r="8" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="11" cy="11" r="3.4" fill="currentColor"/></svg>
+                : <svg viewBox="0 0 22 22"><circle cx="11" cy="11" r="8" fill="none" stroke="currentColor" stroke-width="2"/></svg>}
+            </span>
             <span class="ruta-s">{r.s}</span>
             <span class="ruta-t">{r.t}</span>
             <span class="ruta-d">{r.d}</span>
@@ -223,99 +309,72 @@ const faqSchema = {
     </div>
   </section>
 
-  <!-- ══ QUIÉN ENSEÑA ══ -->
+  <!-- ══ 08 · QUIÉN ENSEÑA ══ -->
   <section class="bloque" id="quien">
-    <div class="folio">Quién enseña<span>El profesor</span></div>
+    <div class="folio">08<span>Quién enseña</span></div>
     <div>
-      <div class="perfil">
-        <div>
-          <h2 class="perfil-nom">Andrés Salamé-Córdova</h2>
-          <div class="perfil-rol">Profesor MVT · Músico y compositor</div>
-          <p>
-            Enseño canto y composición a adultos que llegan con las mismas dos frases:
-            «nunca aprendí» y «ya estoy grande para esto». Ninguna de las dos ha
-            resultado cierta todavía.
-          </p>
-          <p>
-            Trabajo uno a uno, en Miraflores u online. En canto, la primera clase de tu
-            plan incluye la sesión completa y un diagnóstico vocal en PDF: dónde estás
-            hoy, qué se entrena primero y en qué orden.
-          </p>
-        </div>
-        <blockquote class="cita">
-          Aquí nadie se ríe de nadie, y todo lo que suena mal hoy es simplemente lo
-          siguiente que vamos a entrenar.
-          <span class="cita-pie">Nunca vas a cantar delante de otro alumno: no hay clases grupales, nunca las hubo.</span>
-        </blockquote>
-
-        <dl class="credenciales">
-          <div class="cred"><dt>Método</dt><dd>Modern Vocal Training</dd></div>
-          <div class="cred"><dt>Música</dt><dd>Estudios en la UPC</dd></div>
-          <div class="cred"><dt>Psicología</dt><dd>Estudios en la Universidad de Lima</dd></div>
-          <div class="cred"><dt>Escenario</dt><dd>Ex vocalista de Tramboyos, banda peruana</dd></div>
-          <div class="cred"><dt>Formato</dt><dd>Uno a uno, presencial en Miraflores u online</dd></div>
-        </dl>
-      </div>
+      <h2>Andrés Salamé-Córdova</h2>
+      <p class="lead lead-corto">Aquí nadie se ríe de nadie. Todo lo que suena mal hoy es simplemente lo siguiente que vamos a entrenar.</p>
+      <dl class="credenciales">
+        <div class="cred"><dt>Método</dt><dd>Modern Vocal Training</dd></div>
+        <div class="cred"><dt>Música</dt><dd>Estudios en la UPC</dd></div>
+        <div class="cred"><dt>Psicología</dt><dd>Estudios en la Universidad de Lima</dd></div>
+        <div class="cred"><dt>Escenario</dt><dd>Ex vocalista de Tramboyos, banda peruana</dd></div>
+        <div class="cred"><dt>Formato</dt><dd>Uno a uno, a puerta cerrada. Nunca en grupo.</dd></div>
+      </dl>
     </div>
   </section>
 
-  <!-- ══ OPINIONES ══ -->
+  <!-- ══ 09 · OPINIONES ══ -->
   <section class="bloque" id="opiniones">
-    <div class="folio">Opiniones<span>Google</span></div>
+    <div class="folio">09<span>Opiniones</span></div>
     <div class="opinion">
       <div>
-        <div class="nota-grande">5.0</div>
-        <div class="nota-pie">
-          <span class="estrellas" role="img" aria-label="5 de 5 estrellas">
-            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2.6l2.9 6.1 6.6.9-4.8 4.6 1.2 6.7L12 17.6 5.9 20.9l1.2-6.7-4.8-4.6 6.6-.9z"/></svg>
-            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2.6l2.9 6.1 6.6.9-4.8 4.6 1.2 6.7L12 17.6 5.9 20.9l1.2-6.7-4.8-4.6 6.6-.9z"/></svg>
-            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2.6l2.9 6.1 6.6.9-4.8 4.6 1.2 6.7L12 17.6 5.9 20.9l1.2-6.7-4.8-4.6 6.6-.9z"/></svg>
-            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2.6l2.9 6.1 6.6.9-4.8 4.6 1.2 6.7L12 17.6 5.9 20.9l1.2-6.7-4.8-4.6 6.6-.9z"/></svg>
-            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2.6l2.9 6.1 6.6.9-4.8 4.6 1.2 6.7L12 17.6 5.9 20.9l1.2-6.7-4.8-4.6 6.6-.9z"/></svg>
-          </span>
-        </div>
+        <p class="nota-grande">5.0</p>
+        <span class="estrellas" role="img" aria-label="5 de 5 estrellas">
+          <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2.6l2.9 6 6.6.9-4.8 4.6 1.2 6.5-5.9-3.1-5.9 3.1 1.2-6.5L2.5 9.5l6.6-.9z"/></svg>
+          <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2.6l2.9 6 6.6.9-4.8 4.6 1.2 6.5-5.9-3.1-5.9 3.1 1.2-6.5L2.5 9.5l6.6-.9z"/></svg>
+          <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2.6l2.9 6 6.6.9-4.8 4.6 1.2 6.5-5.9-3.1-5.9 3.1 1.2-6.5L2.5 9.5l6.6-.9z"/></svg>
+          <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2.6l2.9 6 6.6.9-4.8 4.6 1.2 6.5-5.9-3.1-5.9 3.1 1.2-6.5L2.5 9.5l6.6-.9z"/></svg>
+          <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2.6l2.9 6 6.6.9-4.8 4.6 1.2 6.5-5.9-3.1-5.9 3.1 1.2-6.5L2.5 9.5l6.6-.9z"/></svg>
+        </span>
       </div>
       <div>
-        <h2>Once opiniones verificadas. Todas de cinco estrellas.</h2>
-        <p>Están publicadas en el perfil de Google de Profesor MVT, con nombre y fecha. Ahí se leen completas, sin editar.</p>
-        <p style="margin-top:22px">
-          <a class="lnk" href="https://g.page/r/CevbO7ON9f4CEAE/review" target="_blank" rel="noopener noreferrer">
-            Leerlas en Google
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M5 12h13M13 6l6 6-6 6"/></svg>
-          </a>
-        </p>
+        <h3 class="op-tit">Once opiniones verificadas. Todas de cinco estrellas.</h3>
+        <p><a class="lnk" href="https://g.page/r/CevbO7ON9f4CEAE/review" target="_blank" rel="noopener noreferrer">Leerlas en Google
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M5 12h13M13 6l6 6-6 6"/></svg></a></p>
       </div>
     </div>
   </section>
 
-  <!-- ══ PLANES ══ -->
+  <!-- ══ 10 · PLANES ══ -->
   <span id="precios" class="ancla-alias" aria-hidden="true"></span>
   <section class="bloque" id="planes">
-    <div class="folio">Planes<span>Mensuales</span></div>
+    <div class="folio">10<span>Planes</span></div>
     <div>
-      <h2>Un plan al mes. Sin permanencia.</h2>
-      <p class="dice">Los tres planes aplican a cualquiera de los tres cursos. Se paga por mes y se agenda contigo un horario fijo.</p>
-
-      <div class="planes">
-        {PLANES.map((p) => (
-          <div class={p.elegido ? 'plan elegido' : 'plan'}>
-            <span class={p.elegido ? 'sello-plan' : 'sello-plan mudo'}>{p.tag}</span>
-            <div class="nom">{p.nom}</div>
-            <div class="cant">{p.clases}</div>
-            <div class="precio">S/{p.precio}</div>
-            <div class="por-hora">Sale a S/{p.hora} la hora</div>
-            <div class="desc">{p.desc}</div>
-          </div>
-        ))}
-      </div>
+      <h2>Mientras más horas, menos cuesta la hora.</h2>
+      <table class="tabla-planes">
+        <thead>
+          <tr><th scope="col">Al mes</th><th scope="col">Horas</th><th scope="col">Precio</th><th scope="col">Sale a</th></tr>
+        </thead>
+        <tbody>
+          {PLANES.map((p) => (
+            <tr class={p.elegido ? 'elegido' : ''}>
+              <th scope="row">{p.nom}<span class="tp-nota">{p.nota}</span></th>
+              <td data-l="Horas">{p.clases} · {p.horas}</td>
+              <td data-l="Precio"><b>S/{p.precio}</b></td>
+              <td data-l="Sale a"><span class="tp-hora">S/{p.hora} la hora</span></td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <p class="tp-elegido"><b>El más elegido:</b> Constante, 8 horas al mes.</p>
 
       <div class="notas">
-        <p><b>Canto + Composición.</b> Las sesiones son de 2 horas seguidas y el mínimo son 8 horas al mes (S/580) o 12 horas (S/780). Las horas se cuentan sobre el mismo plan.</p>
-        <p>
-          <b>Incluido.</b> En canto, la primera clase de tu plan trae la sesión completa y el diagnóstico vocal en PDF.<br />
-          <b>Pagos.</b> Yape, Plin, tarjeta o transferencia. Desde el extranjero, tarjeta o cripto.<br />
-          <b>Clase suelta.</b> S/90. Existe, pero no es la oferta: el plan mensual es lo que hace que la voz avance.
-        </p>
+        <p><b>Canto + Composición</b> va en sesiones de 2 horas, mínimo 8 horas al mes.</p>
+        <p><b>Incluido:</b> la primera clase de tu plan trae el diagnóstico vocal en PDF.</p>
+        <p><b>Pagos:</b> Yape, Plin, tarjeta o transferencia. Del extranjero, tarjeta o cripto.</p>
+        <p class="note"><b>Clase suelta S/90.</b> Existe, pero no es la oferta.</p>
       </div>
 
       <div class="cierre-planes">
@@ -325,232 +384,278 @@ const faqSchema = {
     </div>
   </section>
 
-  <!-- ══ DUDAS ══ -->
+  <!-- ══ 11 · DUDAS ══ -->
   <section class="bloque" id="faq">
-    <div class="folio">Dudas<span>Frecuentes</span></div>
+    <div class="folio">11<span>Dudas</span></div>
     <div class="faq">
-      {FAQ.map((f) => (
-        <details>
-          <summary>{f.q}</summary>
-          <p>{f.a}</p>
-        </details>
-      ))}
+      {FAQ.map((f) => (<details><summary>{f.q}</summary><p>{f.a}</p></details>))}
     </div>
   </section>
 
   <!-- ══ CIERRE ══ -->
   <section class="cierre">
-    <h2>Empezar a los 45 no es empezar tarde. Es empezar con criterio.</h2>
-    <p class="sub">
-      Escríbeme y lo decidimos en cinco minutos. No hay audición ni examen de entrada.
-    </p>
+    <h2>Te escucho una vez y sabemos por dónde empezar.</h2>
+    <p class="sub">Sin audición ni examen de entrada.</p>
     <p><a class="tel" href="https://wa.me/51904056197" target="_blank" rel="noopener noreferrer">+51 904 056 197</a></p>
   </section>
 
 </div>
 
-<!-- Barra fija en móvil: la red de seguridad de quien lee a la mitad y decide. -->
 <div class="barra-movil">
   <a href="/prueba/?f=home-barra" class="barra-cta">Reservar una clase</a>
   <a href="https://wa.me/51904056197" class="barra-tel" target="_blank" rel="noopener noreferrer" aria-label="Escribir por WhatsApp">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" aria-hidden="true">
-      <path d="M21 15.5v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 1.1 2.7 2 2 0 0 1 3.1.5h3a2 2 0 0 1 2 1.7c.1 1 .3 1.9.6 2.8a2 2 0 0 1-.4 2.1L7.1 8.3a16 16 0 0 0 6 6l1.2-1.2a2 2 0 0 1 2.1-.5c.9.3 1.8.5 2.8.6a2 2 0 0 1 1.7 2Z" transform="translate(0 1.5)"/>
-    </svg>
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 16.9v2.6a1.7 1.7 0 0 1-1.9 1.7 17 17 0 0 1-7.4-2.6 16.6 16.6 0 0 1-5.1-5.1A17 17 0 0 1 4 6.1 1.7 1.7 0 0 1 5.7 4.2h2.6a1.7 1.7 0 0 1 1.7 1.5c.1.9.3 1.7.6 2.5a1.7 1.7 0 0 1-.4 1.8l-1 1a13.4 13.4 0 0 0 5.1 5.1l1-1a1.7 1.7 0 0 1 1.8-.4c.8.3 1.6.5 2.5.6a1.7 1.7 0 0 1 1.4 1.6z"/></svg>
   </a>
 </div>
 
 </Layout>
 
 <style>
-/* ────────────────────────────────────────────────────────────────
-   Home. Los tokens, botones, planes, faq y credenciales viven en
-   global.css; acá solo va lo propio de esta página.
-   ──────────────────────────────────────────────────────────────── */
+/* ───────────────────────────────────────────────────────────────
+   Home · "Ficha clínica". Los tokens, botones, planes, faq y
+   credenciales viven en global.css; acá solo lo propio de la página.
+   Regla dura: ningún rótulo de figura puede apagarse en móvil.
+   ─────────────────────────────────────────────────────────────── */
 
-/* Anclas heredadas (#metodo, #precios) de la home anterior: los links ya
-   repartidos en anuncios y WhatsApp tienen que seguir cayendo donde deben. */
+.hoja-w { max-width: var(--ancho); margin: 0 auto; padding: 0 var(--margen); }
 .ancla-alias { display: block; height: 0; scroll-margin-top: 80px; }
 
 /* ══ PORTADA ══ */
 .portada {
   display: grid;
-  grid-template-columns: minmax(0, 7fr) minmax(300px, 4fr);
-  column-gap: clamp(28px, 5vw, 88px);
-  grid-template-areas: "texto ficha" "accion ficha";
+  grid-template-columns: minmax(0, 7fr) minmax(290px, 4fr);
+  column-gap: clamp(28px, 5vw, 80px);
   align-items: start;
-  padding: clamp(40px, 6vw, 96px) 0 clamp(44px, 5vw, 72px);
+  padding: clamp(34px, 5vw, 84px) 0 clamp(38px, 4.5vw, 64px);
 }
-.p-texto { grid-area: texto; }
-.acciones { grid-area: accion; margin-top: clamp(30px, 3.4vw, 44px); display: flex; align-items: center; gap: 28px; flex-wrap: wrap; }
-.ficha { grid-area: ficha; border-top: 2px solid var(--linea-fuerte); padding-top: 22px; margin-top: 13px; }
-.entrada { font-size: 21px; line-height: 1.6; max-width: 44ch; color: var(--texto-2); margin-top: clamp(24px, 3.4vw, 44px); }
-.entrada strong { font-weight: 600; color: var(--texto); }
+.entrada { font-size: 21px; line-height: 1.55; max-width: 34ch; color: var(--texto-2); margin-top: 22px; }
+.acciones { margin-top: clamp(26px, 3vw, 38px); display: flex; align-items: center; gap: 24px; flex-wrap: wrap; }
 
+.ficha { border-top: 2px solid var(--linea-fuerte); padding-top: 20px; margin-top: 12px; }
 .ficha-tit { font-size: 18px; font-weight: 600; text-transform: uppercase; letter-spacing: .14em; color: var(--texto-2); }
-.dato { padding: 20px 0; border-bottom: 1px solid var(--linea); }
-.dato:first-of-type { margin-top: 12px; border-top: 1px solid var(--linea); }
-.dato .et { font-size: 18px; color: var(--texto-2); font-weight: 500; }
-.dato .vl {
-  font-family: var(--display); font-weight: 700;
-  font-size: clamp(26px, 2.5vw, 32px); line-height: 1.12; margin-top: 4px;
-  display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap;
+.ficha-datos { margin-top: 10px; }
+.ficha-datos > div { padding: 16px 0; border-bottom: 1px solid var(--linea); }
+.ficha-datos > div:first-child { border-top: 1px solid var(--linea); }
+.ficha-datos dt { font-size: 18px; color: var(--texto-2); font-weight: 500; }
+.ficha-datos dd { font-size: 20px; margin-top: 4px; display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.ficha-datos dd b { font-family: var(--display); font-weight: 800; font-size: clamp(25px, 2.4vw, 31px); line-height: 1.1; }
+.ficha-datos dd.nt { font-size: 18px; color: var(--texto-2); margin-top: 2px; }
+.lnk-sobrio { display: inline-flex; align-items: center; min-height: 44px; color: var(--acento); border-bottom: 1px solid var(--acento); font-weight: 500; }
+
+/* ══ LÁMINAS ══ (hoja blanca sobre el papel cálido, con marcas de registro) */
+.lamina {
+  background: var(--lamina);
+  border: 1px solid var(--linea);
+  padding: clamp(20px, 2.6vw, 34px);
+  margin-top: clamp(22px, 2.6vw, 34px);
+  position: relative;
 }
-.dato .nt { font-size: 18px; color: var(--texto-2); margin-top: 4px; }
-
-/* Enlace sobrio: subrayado discreto, área táctil de 44px, sin competir con el botón */
-.lnk-sobrio {
-  display: inline-flex; align-items: center; min-height: 44px;
-  color: var(--acento); border-bottom: 1px solid var(--acento); font-weight: 500;
+.lamina::before, .lamina::after {
+  content: ''; position: absolute; width: 9px; height: 9px;
+  border: 1px solid var(--filete); pointer-events: none;
 }
-.pie-accion .lnk-sobrio { margin-top: 2px; }
+.lamina::before { top: 9px; left: 9px; border-right: 0; border-bottom: 0; }
+.lamina::after  { bottom: 9px; right: 9px; border-left: 0; border-top: 0; }
+.lam-tit {
+  font-size: 18px; font-weight: 600; text-transform: uppercase; letter-spacing: .13em;
+  color: var(--acento); margin-bottom: 18px;
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+}
+.sello-ej {
+  border: 1px solid var(--filete-fuerte); color: var(--texto-2);
+  padding: 2px 9px; letter-spacing: .1em; font-size: 18px;
+}
+.lam-pie { font-size: 19px; color: var(--texto-2); line-height: 1.5; margin-top: 20px; border-top: 1px solid var(--linea); padding-top: 16px; }
+.lam-pie b { color: var(--texto); font-weight: 600; }
+.lam-dibujo { color: var(--texto); }
+.lam-dibujo :global(svg) { display: block; width: 100%; height: auto; }
 
-/* ══ REENCUADRE ══ */
-.reencuadre { padding: clamp(30px, 4vw, 56px) 0 clamp(34px, 4vw, 60px); border-top: 2px solid var(--linea-fuerte); }
-.reencuadre h2 { max-width: 20ch; }
-.reencuadre .lead { margin-top: 20px; }
+/* Fig. 1 · aparato de la voz */
+.lam-cuerpo { display: grid; grid-template-columns: minmax(0, 300px) minmax(0, 1fr); gap: clamp(20px, 3vw, 48px); align-items: center; }
+.lam-claves { list-style: none; display: grid; gap: 18px; }
+.lam-claves li { display: grid; grid-template-columns: 38px minmax(0, 1fr); gap: 14px; align-items: start; font-size: 19px; color: var(--texto-2); line-height: 1.45; }
+.lam-claves .tx { display: block; }
+.lam-claves b { color: var(--texto); font-weight: 600; }
+.lam-claves .n {
+  width: 34px; height: 34px; border: 2px solid var(--acento); color: var(--acento);
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--display); font-weight: 700; font-size: 19px; border-radius: 50%;
+}
 
-/* ══ SUMARIO ══ */
-.sumario { border-top: 1px solid var(--linea); border-bottom: 2px solid var(--linea-fuerte); display: grid; grid-template-columns: repeat(3, 1fr); }
-.sumario a { display: flex; align-items: flex-start; gap: 14px; min-height: 44px; padding: 22px clamp(16px, 2vw, 32px) 24px clamp(16px, 2vw, 32px); border-left: 1px solid var(--linea); }
-.sumario a:first-child { border-left: 0; padding-left: 0; }
-.sumario a:hover { background: var(--fondo-2); }
-.sumario .num { font-size: 19px; padding-top: 3px; }
-.sumario .tx { font-size: 19px; font-weight: 500; line-height: 1.35; }
-.sumario .tx b { display: block; font-weight: 600; font-size: 20px; }
-.sumario .tx i { display: block; font-style: normal; font-size: 18px; color: var(--texto-2); margin-top: 2px; }
+/* Fig. 2 · dos tubos */
+.dos-figs { display: grid; grid-template-columns: 1fr 1fr; gap: clamp(16px, 2vw, 28px); }
+.dos-figs .lamina { margin-top: clamp(22px, 2.6vw, 34px); }
+
+/* Fig. 3 · los tres ejes */
+.ejes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0; }
+.ejes .eje { padding: 4px clamp(14px, 1.8vw, 26px); border-left: 1px solid var(--linea); }
+.ejes .eje:first-child { border-left: 0; padding-left: 0; }
+.ejes svg { width: 42px; height: 42px; color: var(--acento); margin-bottom: 14px; }
+.ejes h3 { font-size: clamp(22px, 2.1vw, 27px); }
+.ejes p { font-size: 19px; color: var(--texto-2); margin-top: 8px; line-height: 1.45; }
+
+/* Fig. 4 · dos perfiles */
+.perfiles { display: grid; grid-template-columns: 1fr 1fr; gap: clamp(20px, 3vw, 44px); }
+.perfil-nom { font-family: var(--display); font-weight: 700; font-size: 21px; line-height: 1.25; margin-bottom: 16px; }
+.barras { list-style: none; display: grid; gap: 10px; }
+.barras li { display: grid; grid-template-columns: 96px 1fr 62px; gap: 12px; align-items: center; font-size: 18px; }
+.bl { color: var(--texto-2); }
+.bar { display: block; height: 14px; background: var(--papel-2); }
+.bar i { display: block; height: 100%; background: var(--acento); }
+.bv { color: var(--texto-2); text-align: right; }
+.perfil-plan { font-size: 19px; color: var(--texto-2); margin-top: 16px; }
+.perfil-plan b { color: var(--texto); font-weight: 600; }
+
+/* Fig. 5 · la edad */
+.tabla-edad { display: grid; grid-template-columns: 1fr 1fr; gap: clamp(20px, 3vw, 44px); }
+.col-tit { display: flex; align-items: center; gap: 10px; font-family: var(--display); font-weight: 700; font-size: 21px; margin-bottom: 14px; }
+.col-tit svg { width: 24px; height: 24px; flex: none; }
+.col-no svg { color: var(--texto-2); }
+.col-si svg { color: var(--acento); }
+.col-edad ul { list-style: none; display: grid; gap: 10px; }
+.col-edad li { font-size: 19px; color: var(--texto-2); line-height: 1.45; padding-left: 16px; position: relative; }
+.col-edad li::before { content: ''; position: absolute; left: 0; top: 12px; width: 7px; height: 1px; background: var(--texto-2); }
 
 /* ══ CURSOS ══ */
-.dice { font-size: 20px; color: var(--texto-2); max-width: 52ch; margin-top: 20px; }
-.curso {
-  display: grid;
-  grid-template-columns: minmax(0, 52px) minmax(0, 1fr) minmax(0, 290px);
-  column-gap: clamp(16px, 2.2vw, 34px); row-gap: 14px;
-  padding: clamp(28px, 3.4vw, 44px) 0; border-bottom: 1px solid var(--linea);
-}
-.curso:first-of-type { border-top: 1px solid var(--linea); }
-.curso .rom { font-family: var(--display); font-weight: 800; font-size: clamp(24px, 2.4vw, 34px); line-height: 1; color: var(--acento); padding-top: 4px; }
-.curso h3 { font-size: clamp(25px, 2.6vw, 34px); }
-.curso p { font-size: 20px; line-height: 1.58; color: var(--texto-2); margin-top: 14px; max-width: 52ch; }
-.curso .lado { padding-top: 6px; border-left: 1px solid var(--linea); padding-left: clamp(18px, 2vw, 32px); }
-.curso .lado .l { font-size: 18px; color: var(--texto-2); font-weight: 500; }
-.curso .lado .p { font-family: var(--display); font-weight: 700; font-size: 24px; margin-top: 2px; margin-bottom: 18px; line-height: 1.25; }
+.cursos-2 { display: grid; grid-template-columns: 1fr 1fr; gap: clamp(16px, 2vw, 28px); margin-top: clamp(20px, 2.4vw, 30px); }
+.curso-min { border-top: 2px solid var(--linea-fuerte); padding-top: 18px; }
+.curso-min .rom { font-family: var(--display); font-weight: 800; font-size: 21px; color: var(--acento); }
+.curso-min h3 { font-size: clamp(23px, 2.2vw, 29px); margin-top: 6px; }
+.curso-min p { font-size: 19px; color: var(--texto-2); margin-top: 10px; line-height: 1.45; }
+.curso-meta { font-size: 18px; }
+.curso-meta b { color: var(--texto); font-weight: 600; }
 
-/* El bloque de tinta: cuerpo en papel PURO, no gris. Es el curso que se vende. */
-.curso.destacado {
-  border-bottom: 0; margin-top: clamp(20px, 2.4vw, 32px);
-  padding: clamp(30px, 3.8vw, 52px) clamp(20px, 3vw, 44px);
+.combo {
+  margin-top: clamp(24px, 3vw, 40px);
+  background: var(--invertido-fondo); color: var(--invertido-texto);
+  padding: clamp(22px, 3vw, 40px);
+  /* El bermellón de marca (#B23A22) sobre tinta da 2.77 y no llega a AA. Dentro del
+     bloque oscuro se redefine el token: al ser el MISMO color aclarado con papel,
+     sigue siendo la misma tinta de marca y todo lo que usa var(--acento) hereda
+     el arreglo solo. Medido, no supuesto. */
+  --acento: #E0714F;
 }
-.curso.destacado .rom { color: var(--invertido-texto); }
-.curso.destacado h3 { font-size: clamp(27px, 3vw, 40px); }
-.curso.destacado p { color: var(--invertido-texto); font-size: 20px; }
-.curso.destacado .lado { border-left-color: var(--invertido-linea); }
-.curso.destacado .lado .l { color: var(--invertido-texto-2); }
-.curso.destacado .lado .p { color: var(--invertido-texto); }
+.combo .marcaje { background: var(--invertido-texto); color: var(--invertido-fondo); }
+.combo h3 { color: var(--invertido-texto); font-size: clamp(26px, 2.8vw, 36px); margin-top: 12px; display: flex; align-items: baseline; gap: 14px; }
+.combo h3 .rom { color: var(--acento); font-size: 24px; }
+.combo-sub { font-size: 20px; color: var(--invertido-texto); margin-top: 12px; }
+.combo-precio { font-size: 21px; color: var(--invertido-texto); margin-top: 22px; }
+.combo-precio b { font-family: var(--display); font-weight: 800; font-size: 27px; }
+.lamina-oscura { background: transparent; border-color: var(--invertido-linea); }
+.lamina-oscura .lam-tit { color: var(--acento); }
+.lamina-oscura .lam-pie { color: var(--invertido-texto); border-top-color: var(--invertido-linea); }
+.lamina-oscura .lam-pie b { color: var(--invertido-texto); }
+.lamina-oscura::before, .lamina-oscura::after { border-color: var(--invertido-linea); }
 
-/* ══ COMPARATIVO DE LA SESIÓN DE 2 HORAS ══ */
-.comparativo { margin-top: clamp(26px, 3vw, 38px); border-top: 1px solid var(--invertido-linea); padding-top: 24px; }
-.comp-tit { font-size: 18px; font-weight: 600; text-transform: uppercase; letter-spacing: .13em; color: var(--invertido-texto-2); margin-bottom: 20px; }
-.comp-fila { margin-bottom: 22px; }
+.comp-fila { margin-bottom: 20px; }
 .comp-et { font-size: 19px; font-weight: 600; color: var(--invertido-texto); margin-bottom: 8px; }
-.comp-barra { display: flex; height: 26px; width: 100%; gap: 0; }
+.comp-barra { display: flex; height: 24px; width: 100%; }
 .seg { display: block; height: 100%; }
 .seg-cal { background: var(--invertido-linea); }
-.seg-tra { background: var(--invertido-texto); }
-.seg-voz { background: var(--invertido-texto); }
+.seg-tra, .seg-voz { background: var(--invertido-texto); }
 .seg-com { background: var(--acento); }
 .seg-gap { background: transparent; }
-.comp-pie { font-size: 18px; color: var(--invertido-texto-2); margin-top: 8px; line-height: 1.45; }
+.comp-pie { font-size: 18px; color: var(--invertido-texto-2); margin-top: 8px; }
 .comp-pie b { color: var(--invertido-texto); font-weight: 600; }
-.comp-remate { font-size: 19px; color: var(--invertido-texto) !important; border-top: 1px solid var(--invertido-linea); padding-top: 16px; margin-top: 6px; }
-.comp-remate b { font-weight: 600; }
 
 /* ══ RUTA ══ */
-.ruta { list-style: none; display: grid; grid-template-columns: repeat(4, 1fr); margin-top: clamp(24px, 3vw, 38px); border-top: 2px solid var(--linea-fuerte); }
-.ruta li { padding: 22px clamp(14px, 1.6vw, 26px) 8px 0; border-left: 1px solid var(--linea); padding-left: clamp(14px, 1.6vw, 26px); }
+.ruta { list-style: none; display: grid; grid-template-columns: repeat(4, 1fr); margin-top: clamp(22px, 2.6vw, 34px); border-top: 2px solid var(--linea-fuerte); }
+.ruta li { padding: 20px clamp(12px, 1.5vw, 24px) 6px 0; border-left: 1px solid var(--linea); padding-left: clamp(12px, 1.5vw, 24px); }
 .ruta li:first-child { border-left: 0; padding-left: 0; }
+.ruta-pin { display: block; color: var(--acento); margin-bottom: 10px; }
+.ruta-pin svg { width: 22px; height: 22px; }
 .ruta-s { display: block; font-size: 18px; font-weight: 600; text-transform: uppercase; letter-spacing: .12em; color: var(--acento); }
-.ruta-t { display: block; font-family: var(--display); font-weight: 700; font-size: 24px; margin-top: 8px; }
-.ruta-d { display: block; font-size: 18px; color: var(--texto-2); margin-top: 8px; line-height: 1.5; }
-.ruta-pie { margin-top: 22px; }
+.ruta-t { display: block; font-family: var(--display); font-weight: 700; font-size: 23px; margin-top: 6px; }
+.ruta-d { display: block; font-size: 18px; color: var(--texto-2); margin-top: 6px; line-height: 1.45; }
+.ruta-pie { margin-top: 20px; }
 
-/* ══ QUIÉN ENSEÑA ══ */
-.perfil { display: grid; grid-template-columns: minmax(0, 7fr) minmax(0, 5fr); column-gap: clamp(24px, 4vw, 72px); row-gap: clamp(30px, 3.4vw, 46px); align-items: start; }
-.perfil-nom { font-size: clamp(29px, 3.4vw, 44px); }
-.perfil-rol { font-size: 18px; font-weight: 600; text-transform: uppercase; letter-spacing: .14em; color: var(--texto-2); margin-top: 14px; }
-.perfil p { font-size: 20px; line-height: 1.62; color: var(--texto-2); max-width: 56ch; margin-top: 22px; }
-.cita { font-style: italic; font-size: clamp(23px, 2.2vw, 29px); line-height: 1.38; color: var(--texto); border-top: 2px solid var(--acento); padding-top: 20px; max-width: 30ch; }
-.cita-pie { display: block; font-style: normal; font-size: 18px; color: var(--texto-2); margin-top: 18px; line-height: 1.5; }
-.credenciales { grid-column: 1 / -1; border-top: 1px solid var(--linea); }
+/* ══ QUIÉN ENSEÑA · OPINIONES ══ */
+.lead-corto { max-width: 46ch; margin-top: 16px; font-style: italic; }
+.credenciales { border-top: 1px solid var(--linea); margin-top: clamp(22px, 2.6vw, 32px); }
 .credenciales .cred:last-child { border-bottom: 0; }
+.opinion { display: grid; grid-template-columns: minmax(0, auto) minmax(0, 1fr); gap: clamp(22px, 4vw, 64px); align-items: center; }
+.nota-grande { font-family: var(--display); font-weight: 800; font-size: clamp(70px, 9vw, 124px); line-height: .84; letter-spacing: -.045em; }
+.op-tit { font-size: clamp(23px, 2.4vw, 32px); max-width: 20ch; }
+.opinion p { margin-top: 16px; }
 
-/* ══ OPINIONES ══ */
-.opinion { display: grid; grid-template-columns: minmax(0, auto) minmax(0, 1fr); gap: clamp(24px, 4vw, 72px); align-items: start; }
-.nota-pie { margin-top: 18px; }
-.opinion h2 { max-width: 20ch; }
-.opinion p { font-size: 20px; color: var(--texto-2); max-width: 46ch; margin-top: 20px; }
-
-/* ══ PLANES ══ */
-.notas { margin-top: clamp(30px, 3.6vw, 44px); display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: clamp(20px, 3vw, 56px); border-top: 1px solid var(--linea); padding-top: 26px; }
-.notas p { font-size: 19px; color: var(--texto-2); line-height: 1.55; }
+/* ══ TABLA DE PLANES ══ */
+.tabla-planes { width: 100%; border-collapse: collapse; margin-top: clamp(20px, 2.4vw, 30px); }
+.tabla-planes th, .tabla-planes td { text-align: left; padding: 18px 14px; border-bottom: 1px solid var(--linea); font-size: 19px; }
+.tabla-planes thead th {
+  font-family: var(--lectura); font-weight: 600; font-size: 18px; text-transform: uppercase;
+  letter-spacing: .12em; color: var(--texto-2); border-bottom: 2px solid var(--linea-fuerte); padding-bottom: 12px;
+}
+.tabla-planes tbody th { font-family: var(--display); font-weight: 700; font-size: 23px; padding-left: 0; }
+.tp-nota { display: block; font-family: var(--lectura); font-weight: 400; font-size: 18px; color: var(--texto-2); margin-top: 4px; }
+.tabla-planes td b { font-family: var(--display); font-weight: 800; font-size: 27px; }
+.tp-hora { color: var(--acento); font-weight: 600; }
+/* La fila elegida se marca con FILETE, no con relleno. Con un tinte de fondo el
+   acento de "sale a S/x la hora" caía a 4.02 (no pasa AA), y `color-mix` además
+   no existe en el Chrome de esta Mac: resolvía a casi negro. Filete y ya. */
+.tabla-planes tr.elegido { background: transparent; box-shadow: inset 3px 0 0 var(--acento); }
+.tabla-planes tr.elegido th { padding-left: 16px; }
+.tabla-planes tr.elegido th, .tabla-planes tr.elegido td { border-bottom-color: var(--acento); }
+.tp-elegido { font-size: 19px; color: var(--texto-2); margin-top: 14px; }
+.tp-elegido b { color: var(--acento); }
+.notas { margin-top: clamp(24px, 3vw, 36px); display: grid; gap: 10px; border-top: 1px solid var(--linea); padding-top: 20px; }
+.notas p { font-size: 19px; color: var(--texto-2); line-height: 1.5; }
 .notas b { color: var(--texto); font-weight: 600; }
-.cierre-planes { margin-top: clamp(32px, 4vw, 52px); display: flex; align-items: center; gap: 28px; flex-wrap: wrap; }
+.cierre-planes { margin-top: clamp(26px, 3vw, 40px); display: flex; align-items: center; gap: 24px; flex-wrap: wrap; }
 
 /* ══ CIERRE ══ */
-.cierre { border-top: 2px solid var(--linea-fuerte); padding: clamp(56px, 7vw, 110px) 0 clamp(50px, 6vw, 80px); }
-.cierre h2 { font-size: clamp(31px, 4.4vw, 58px); max-width: 18ch; }
-.cierre .sub { font-size: 21px; color: var(--texto-2); margin-top: 24px; max-width: 42ch; }
-.cierre .tel { margin-top: clamp(28px, 3vw, 40px); font-family: var(--display); font-weight: 700; font-size: clamp(26px, 3vw, 38px); display: inline-flex; align-items: center; min-height: 56px; border-bottom: 2px solid var(--acento); }
+.cierre { border-top: 2px solid var(--linea-fuerte); padding: clamp(48px, 6vw, 96px) 0 clamp(44px, 5vw, 72px); }
+.cierre h2 { font-size: clamp(29px, 4vw, 52px); max-width: 20ch; }
+.cierre .sub { font-size: 21px; color: var(--texto-2); margin-top: 20px; }
+.cierre .tel { margin-top: clamp(24px, 3vw, 36px); font-family: var(--display); font-weight: 700; font-size: clamp(25px, 3vw, 36px); display: inline-flex; align-items: center; min-height: 56px; border-bottom: 2px solid var(--acento); }
 
-/* ══ BARRA MÓVIL ══ */
 .barra-movil { display: none; }
 
 /* ══ MÓVIL ══ */
 @media (max-width: 900px) {
-  /* La evidencia (5.0 · S/320 · Miraflores) va ANTES del botón:
-     primero la confianza, después el pedido. Y el botón entra en la 1.ª pantalla. */
-  .portada { grid-template-columns: 1fr; grid-template-areas: "texto" "ficha" "accion"; row-gap: 26px; padding: 26px 0 30px; }
-  .acciones { margin-top: 0; gap: 16px; }
-  .ficha { margin-top: 0; }
-  .dato { padding: 14px 0; }
-  .dato .vl { font-size: 24px; }
-  .entrada { margin-top: 20px; font-size: 20px; }
+  /* La barra fija de abajo come 60px, así que el pliegue útil son ~784px.
+     Se aprieta el aire de la portada para que "Desde S/320" quede por ENCIMA
+     de la barra y no detrás. Medido, no calculado a ojo. */
+  .portada { grid-template-columns: 1fr; row-gap: 16px; padding: 16px 0 22px; }
+  .ficha { margin-top: 0; padding-top: 16px; }
+  .entrada { max-width: none; margin-top: 14px; font-size: 20px; }
+  .acciones { margin-top: 2px; gap: 10px; }
+  .ficha-datos { margin-top: 6px; }
+  .ficha-datos > div { padding: 12px 0; }
 
-  .sumario { grid-template-columns: 1fr; }
-  .sumario a { border-left: 0; border-top: 1px solid var(--linea); padding: 18px 0; }
-  .sumario a:first-child { border-top: 0; }
-
-  .curso, .curso.destacado { grid-template-columns: 1fr; column-gap: 0; row-gap: 12px; }
-  .curso { padding: 28px 0; }
-  .curso.destacado { padding: 30px 20px 32px; margin-left: calc(var(--margen) * -1); margin-right: calc(var(--margen) * -1); }
-  .curso .rom { padding-top: 0; }
-  .curso .lado { border-left: 0; padding-left: 0; border-top: 1px solid var(--linea); padding-top: 18px; margin-top: 4px; }
-  .curso.destacado .lado { border-top-color: var(--invertido-linea); margin-top: 8px; }
-
+  .lam-cuerpo { grid-template-columns: 1fr; gap: 22px; }
+  .lam-cuerpo .lam-dibujo { max-width: 260px; margin: 0 auto; }
+  .dos-figs { grid-template-columns: 1fr; }
+  .ejes { grid-template-columns: 1fr; }
+  .ejes .eje { border-left: 0; border-top: 1px solid var(--linea); padding: 20px 0 4px; }
+  .ejes .eje:first-child { border-top: 0; padding-top: 0; }
+  .perfiles { grid-template-columns: 1fr; gap: 28px; }
+  .tabla-edad { grid-template-columns: 1fr; gap: 26px; }
+  .cursos-2 { grid-template-columns: 1fr; }
   .ruta { grid-template-columns: 1fr; }
-  .ruta li { border-left: 0; border-top: 1px solid var(--linea); padding: 18px 0 10px; }
+  .ruta li { border-left: 0; border-top: 1px solid var(--linea); padding: 16px 0 8px; }
   .ruta li:first-child { border-top: 0; }
+  .opinion { grid-template-columns: 1fr; gap: 14px; }
 
-  .perfil { grid-template-columns: 1fr; gap: 26px; }
-  .cita { max-width: none; }
-  .opinion { grid-template-columns: 1fr; gap: 18px; }
-  .notas { grid-template-columns: 1fr; gap: 18px; }
-  .cierre-planes { gap: 18px; }
+  /* La tabla de planes se convierte en fichas apiladas CON su rótulo de columna
+     (data-l). Prohibido dejar "4 clases / S/320" sin etiqueta. */
+  .tabla-planes thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .tabla-planes, .tabla-planes tbody, .tabla-planes tr, .tabla-planes th, .tabla-planes td { display: block; width: 100%; }
+  .tabla-planes tr { border-top: 2px solid var(--linea-fuerte); padding: 16px 0 14px; }
+  .tabla-planes tr.elegido { border-top-color: var(--acento); box-shadow: none; border-left: 3px solid var(--acento); padding-left: 14px; }
+  .tabla-planes tbody th { padding: 0 0 10px; border-bottom: 0; }
+  .tabla-planes td { padding: 4px 0; border-bottom: 0; display: flex; justify-content: space-between; gap: 16px; align-items: baseline; }
+  .tabla-planes td::before { content: attr(data-l); color: var(--texto-2); font-size: 18px; }
 
-  /* Barra fija: 60px de alto, aparece siempre en móvil. */
   .barra-movil {
     display: flex; position: fixed; left: 0; right: 0; bottom: 0; z-index: 40;
     background: var(--invertido-fondo); border-top: 2px solid var(--acento);
   }
-  .barra-cta {
-    flex: 1; display: inline-flex; align-items: center; justify-content: center;
-    min-height: 60px; color: var(--invertido-texto);
-    font-family: var(--display); font-weight: 700; font-size: 20px;
-  }
-  .barra-tel {
-    flex: none; width: 68px; display: inline-flex; align-items: center; justify-content: center;
-    min-height: 60px; color: var(--invertido-texto); border-left: 1px solid var(--invertido-linea);
-  }
+  .barra-cta { flex: 1; display: inline-flex; align-items: center; justify-content: center; min-height: 60px; color: var(--invertido-texto); font-family: var(--display); font-weight: 700; font-size: 20px; }
+  .barra-tel { flex: none; width: 68px; display: inline-flex; align-items: center; justify-content: center; min-height: 60px; color: var(--invertido-texto); border-left: 1px solid var(--invertido-linea); }
   .barra-tel svg { width: 24px; height: 24px; }
   body { padding-bottom: 60px; }
+}
+@media (max-width: 520px) {
+  .barras li { grid-template-columns: 84px 1fr 54px; gap: 8px; font-size: 18px; }
 }
 </style>

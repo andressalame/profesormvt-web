@@ -15,22 +15,28 @@
 @import './fonts.css';
 
 :root {
-  /* ── LOS 3 COLORES DE MARCA ── */
-  --papel:  #F2EDE4;   /* 1 · el papel */
-  --tinta:  #17150F;   /* 2 · la tinta */
-  --sello:  #8A2E17;   /* 3 · el sello (acento, marca el camino a seguir) */
+  /* ── LOS 3 COLORES DE MARCA (dirección "Ficha clínica", elegida el 24-ago-2026) ── */
+  --papel:  #F1EBE0;   /* 1 · el papel del expediente */
+  --tinta:  #17211E;   /* 2 · la tinta (verde muy oscuro, no negro) */
+  --sello:  #B23A22;   /* 3 · el bermellón: SOLO marca el camino a seguir */
 
   /* ── Derivados: SOLO mezclas de los tres de arriba ── */
-  --papel-2:      #E7E0D3;
-  --tinta-media:  #57524A;
-  --filete:       rgba(23, 21, 15, .16);
-  --filete-fuerte:rgba(23, 21, 15, .38);
-  --papel-media:  rgba(242, 237, 228, .72);
-  --filete-papel: rgba(242, 237, 228, .28);
+  --papel-2:      #E9E1D4;   /* papel sombreado: tinte MUY suave.
+                                Con el #DCD3C3 original (que en la maqueta era color
+                                de FILETE, no de panel) el bermellón sobre él caía a
+                                4.02 y no pasaba AA en 12 vistas. */
+  --filete-2:     #DCD3C3;   /* ese tono se queda, pero como línea */
+  --hoja:         #FFFFFF;   /* la lámina blanca sobre el papel cálido */
+  --tinta-media:  #4E5B55;
+  --filete:       rgba(23, 33, 30, .16);
+  --filete-fuerte:rgba(23, 33, 30, .38);
+  --papel-media:  rgba(241, 235, 224, .72);
+  --filete-papel: rgba(241, 235, 224, .28);
 
   /* Roles semánticos (lo que usan los componentes) */
   --fondo:        var(--papel);
   --fondo-2:      var(--papel-2);
+  --lamina:       var(--hoja);
   --texto:        var(--tinta);
   --texto-2:      var(--tinta-media);
   --linea:        var(--filete);
@@ -58,12 +64,13 @@
 :root:not([data-theme="light"]) {
   @media (prefers-color-scheme: dark) {
     --fondo:        var(--tinta);
-    --fondo-2:      #1F1C15;
+    --fondo-2:      #1F2B27;
+    --lamina:       #1F2B27;
     --texto:        var(--papel);
-    --texto-2:      #B3ADA1;
+    --texto-2:      #A9B3AE;
     --linea:        var(--filete-papel);
     --linea-fuerte: var(--papel);
-    --acento:       #D9714E;
+    --acento:       #E0714F;
     --sobre-acento: var(--tinta);
     --invertido-fondo: var(--papel);
     --invertido-texto: var(--tinta);
@@ -73,12 +80,13 @@
 }
 :root[data-theme="dark"] {
   --fondo:        var(--tinta);
-  --fondo-2:      #1F1C15;
+  --fondo-2:      #1F2B27;
+  --lamina:       #1F2B27;
   --texto:        var(--papel);
-  --texto-2:      #B3ADA1;
+  --texto-2:      #A9B3AE;
   --linea:        var(--filete-papel);
   --linea-fuerte: var(--papel);
-  --acento:       #D9714E;
+  --acento:       #E0714F;
   --sobre-acento: var(--tinta);
   --invertido-fondo: var(--papel);
   --invertido-texto: var(--tinta);

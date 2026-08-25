@@ -52,11 +52,10 @@ const formatDate = (d: Date) => {
       <span class="cat-label">FILTRAR POR:</span>
       <button class="cat-pill active" data-filter="all">Todos</button>
       <button class="cat-pill cat-voz" data-filter="voz"><span class="dot"></span>Voz</button>
-      <!-- Filtro "Piano" retirado el 24-ago-2026: piano salió de la oferta el 25-jul y
-           no se promociona. Los 5 artículos de piano NO se borran (son SEO acumulado y
-           astro.config.mjs mantiene sus redirects a propósito): siguen indexados y
-           accesibles por buscador, pero la web ya no ofrece piano como categoría.
-           Si Andrés prefiere borrarlos del todo, es una línea. -->
+      <!-- Piano SÍ se queda en el blog: son 5 artículos que rankean y Andrés los
+           quiere por el SEO extra (decisión del 24-ago-2026). Es la única parte del
+           sitio donde aparece piano: no se vende como curso en ningún otro lado. -->
+      <button class="cat-pill cat-piano" data-filter="piano"><span class="dot"></span>Piano</button>
       <button class="cat-pill cat-comp" data-filter="composicion"><span class="dot"></span>Composición</button>
       <button class="cat-pill cat-teoria" data-filter="teoria"><span class="dot"></span>Teoría</button>
       <button class="cat-pill cat-metodo" data-filter="metodo"><span class="dot"></span>Método</button>
