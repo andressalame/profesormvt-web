@@ -23,13 +23,6 @@ const PLANES = [
   { nom: 'Intensivo', clases: '12 clases', horas: '12 h', precio: 780, hora: '65',    nota: 'Tres por semana.' },
 ];
 
-const RUTA = [
-  { s: 'Semana 1',     t: 'Te escucho',   d: 'Sale tu diagnóstico vocal en PDF.' },
-  { s: 'Semanas 2-4',  t: 'Coordinación', d: 'Que deje de doler y deje de forzarse.' },
-  { s: 'Semanas 5-8',  t: 'Repertorio',   d: 'Tus canciones, no ejercicios sueltos.' },
-  { s: 'Semanas 9-12', t: 'Autonomía',    d: 'Criterio para ensayar solo.' },
-];
-
 const FAQ = [
   { q: '¿Y si de verdad canto mal?', a: 'Casi nadie canta mal: la mayoría empuja. Lo que suena forzado es tensión, no falta de talento, y la tensión se desarma con técnica.' },
   { q: '¿No es muy tarde si no empecé de niño?', a: 'No. La coordinación se entrena a cualquier edad y el oído se educa. Quien empezó de chico lleva ventaja en horas acumuladas, no en capacidad, y las horas se hacen.' },
@@ -67,7 +60,7 @@ const faqSchema = {
 
     <figure class="portada-fig">
       <figcaption class="lam-tit">Fig. 1 · El aparato de la voz</figcaption>
-      <div class="lam-dibujo" set:html={`<svg viewBox="0 0 470 500" role="img" aria-label="Diagrama del aparato de la voz: aire, fuente y filtro" style="width:100%;height:auto"> <g fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"> <g stroke-opacity=".26" stroke-width="1.2"> <path d="M16 20h12M22 14v12M442 20h12M448 14v12M16 480h12M22 474v12M442 480h12M448 474v12"/> </g> <!-- perfil: frente, nariz, labios, mentón, cuello --> <path d="M240 50c-32 0-54 22-56 52 0 10-3 15-7 20l-11 24c-4 6-2 11 5 12l6 1c-5 4-6 9-1 11-4 4-3 9 3 11 2 6 6 10 14 11 14 1 26 3 34 8-4 14-6 24-8 38-2 12-18 18-40 26l-26 10c-16 6-22 18-22 36v142"/> <!-- perfil: cráneo, nuca, espalda --> <path d="M240 50c32 0 58 22 58 58 0 28-6 44-14 56-6 8-8 16-8 26l-2 50c2 12 14 19 32 26l24 10c16 6 22 18 22 36v138"/> <!-- corte inferior --> <path d="M133 452c56 10 162 10 219 0" stroke-opacity=".3" stroke-dasharray="3 7"/> <!-- oreja --> <path d="M248 122c12-3 17 8 12 20-2 6-7 8-12 6" stroke-opacity=".5"/> <!-- paladar y lengua --> <g stroke-opacity=".55"> <path d="M182 158c18-8 40-8 54-2"/> <path d="M186 174c18 6 38 0 52-10"/> </g> <!-- faringe --> <g stroke-opacity=".55"> <path d="M240 158c6 16 6 34 4 48M258 154c8 18 8 38 6 54"/> </g> <!-- laringe --> <path d="M232 208h22c5 0 8 4 8 10v14c0 7-4 11-10 11h-14c-6 0-10-4-10-11v-16c0-5 0-8 4-8z"/> <path d="M233 222l12 4M260 222l-11 4" stroke-width="2"/> <!-- tráquea --> <path d="M235 243v49M255 243v49"/> <g stroke-opacity=".45"><path d="M235 254h20M235 264h20M235 274h20M235 284h20"/></g> <!-- bronquios --> <path d="M235 292c-11 10-23 18-35 24M255 292c11 10 23 18 35 24"/> <!-- costillas --> <g stroke-opacity=".33"> <path d="M160 316c42-18 130-18 172 0M150 342c46-18 148-18 194 0M146 368c48-18 152-18 200 0M148 394c48-16 148-16 196 0"/> </g> <!-- diafragma --> <path d="M146 428c52-36 148-36 200 0" stroke-width="3"/> <g stroke-opacity=".26"><path d="M152 446c50-32 138-32 188 0"/></g> <!-- recorrido del aire --> <g stroke="var(--acento)" stroke-width="2.6"> <path d="M245 412c-2-32 2-62 0-94 0-24 0-52 0-74 0-18 0-30 0-38 0-20-3-38-13-48-11-9-27-9-38-4-14 6-28 2-42-8"/> <path d="M165 145l-13 2 7 11"/> </g> <!-- guías y marcadores --> <g stroke-opacity=".5" stroke-width="1.2"> <path d="M393 424h-42l-8 4M393 226h-127M61 116h91l62 30"/> </g> <g fill="currentColor" stroke="none"><circle cx="343" cy="428" r="3"/><circle cx="266" cy="226" r="3"/><circle cx="216" cy="147" r="3"/></g> <g stroke="var(--acento)" fill="#FFFFFF" stroke-width="1.6"> <circle cx="410" cy="424" r="17"/><circle cx="410" cy="226" r="17"/><circle cx="44" cy="116" r="17"/> </g> <g fill="var(--acento)" stroke="none" font-family="Cabinet" font-size="19" font-weight="700" text-anchor="middle"> <text x="410" y="431">1</text><text x="410" y="233">2</text><text x="44" y="123">3</text> </g> </g> </svg>`} />
+      <div class="lam-dibujo" set:html={`<svg viewBox="0 0 470 520" role="img" aria-label="Corte del aparato de la voz: los pulmones y el diafragma empujan el aire, los pliegues vocales lo hacen vibrar en la laringe, y el espacio de la faringe y la boca le da el color" style="width:100%;height:auto"> <g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"> <g stroke-opacity=".26" stroke-width="1.2"> <path d="M16 20h12M22 14v12M442 20h12M448 14v12M16 500h12M22 494v12M442 500h12M448 494v12"/> </g> <!-- ═══ 3 · EL ESPACIO (tracto vocal) pintado como espacio ═══ Va de los pliegues hacia arriba y sale por la boca. No toca la nariz. --> <path d="M232 250 C230 232 232 214 240 202 C248 190 256 180 256 166 C256 154 248 148 234 146 C214 143 190 146 172 154 C162 158 158 164 160 170 C163 178 174 182 188 186 C204 190 214 196 214 208 L214 232 C214 242 220 250 232 250 Z" fill="var(--acento)" fill-opacity=".14" stroke="none"/> <!-- ═══ CABEZA + CUELLO, un solo contorno cerrado ═══ --> <path d="M268 44 C214 44 178 82 177 128 C176 139 171 146 163 153 C155 160 150 165 150 171 C150 177 156 180 162 181 C158 187 160 192 166 194 C163 200 166 205 173 206 C172 214 178 220 187 221 C196 222 205 220 212 218 C212 228 210 238 204 246 C198 254 196 262 196 274 L196 300"/> <path d="M268 44 C314 44 340 78 340 124 C340 154 331 174 320 187 C311 197 307 208 307 222 L307 300"/> <!-- oreja --> <path d="M296 128 C308 124 314 136 309 149 C306 157 300 160 295 158" stroke-opacity=".45"/> <!-- paladar / velo --> <path d="M166 168 C188 160 216 162 234 168 C246 172 254 180 256 192" stroke-opacity=".55"/> <!-- lengua --> <path d="M172 198 C192 184 218 184 234 194 C242 199 244 206 240 212 C230 222 202 224 184 216 C175 212 170 205 172 198" stroke-opacity=".55"/> <!-- pared faríngea --> <path d="M258 152 C262 176 262 208 256 234" stroke-opacity=".55"/> <!-- epiglotis --> <path d="M236 246 C242 240 250 240 254 246" stroke-opacity=".55"/> <!-- ═══ 2 · LARINGE, encajada en el cuello ═══ --> <path d="M214 252 h42 c7 0 12 5 12 13 v24 c0 8-5 13-12 13 h-42 c-7 0-12-5-12-13 v-24 c0-8 5-13 12-13 z"/> <!-- pliegues vocales: dos cuñas que se juntan al centro --> <g stroke-width="2.6" stroke="var(--acento)"> <path d="M206 268 L233 278"/> <path d="M264 268 L237 278"/> </g> <path d="M206 290 C220 284 250 284 264 290" stroke-opacity=".35"/> <!-- ═══ TRÁQUEA ═══ --> <path d="M218 302 v34M252 302 v34"/> <g stroke-opacity=".4"><path d="M218 311h34M218 320h34M218 329h34"/></g> <!-- ═══ BRONQUIOS -> entran a cada pulmón ═══ --> <path d="M228 336 C220 350 206 358 190 364"/> <path d="M242 336 C250 350 264 358 280 364"/> <!-- ═══ PULMONES, colgando de los bronquios ═══ --> <path d="M196 360 C170 366 150 388 143 416 C136 444 140 462 150 466 C166 471 190 462 202 446 C211 434 214 416 214 396 C214 372 208 358 196 360 Z"/> <path d="M274 360 C300 366 320 388 327 416 C334 444 330 462 320 466 C304 471 280 462 268 446 C259 434 256 416 256 396 C256 372 262 358 274 360 Z"/> <g stroke-opacity=".2"> <path d="M162 398 C176 394 192 396 202 404M156 420 C172 414 190 416 204 424 M308 398 C294 394 278 396 268 404M314 420 C298 414 280 416 266 424"/> </g> <!-- ═══ 1 · DIAFRAGMA ═══ --> <path d="M132 468 C182 434 288 434 338 468" stroke-width="3.4"/> <g stroke-opacity=".28" stroke-dasharray="4 7"> <path d="M132 492 C182 460 288 460 338 492"/> </g> <g stroke="var(--acento)" stroke-width="2.2" stroke-opacity=".8"> <path d="M180 490 v-16M174 480l6-8 6 8"/> <path d="M235 496 v-16M229 486l6-8 6 8"/> <path d="M290 490 v-16M284 480l6-8 6 8"/> </g> <!-- caja torácica --> <g stroke-opacity=".26"> <path d="M138 380 C186 366 284 366 332 380M132 404 C182 388 288 388 338 404 M130 428 C180 412 290 412 340 428"/> </g> <!-- ═══ RECORRIDO DEL AIRE ═══ --> <g stroke="var(--acento)" stroke-width="2.8"> <path d="M235 452 C235 420 235 380 235 350 L235 306"/> <path d="M235 300 L235 262"/> <path d="M235 256 C235 236 240 216 236 202 C231 188 212 182 190 180 C176 179 166 180 158 182"/> <path d="M164 172 L150 182 L164 192"/> </g> <!-- ═══ GUÍAS Y MARCADORES ═══ --> <g stroke-opacity=".45" stroke-width="1.2"> <path d="M392 452 h-58"/> <path d="M392 278 h-121"/> <path d="M80 214 h108"/> </g> <g fill="currentColor" stroke="none"> <circle cx="334" cy="452" r="3"/><circle cx="271" cy="278" r="3"/><circle cx="188" cy="214" r="3"/> </g> <g stroke="var(--acento)" fill="var(--lamina, #FFFFFF)" stroke-width="1.8"> <circle cx="410" cy="452" r="17"/><circle cx="410" cy="278" r="17"/><circle cx="62" cy="214" r="17"/> </g> <g fill="var(--acento)" stroke="none" font-family="'Cabinet Grotesk', sans-serif" font-size="19" font-weight="700" text-anchor="middle"> <text x="410" y="459">1</text><text x="410" y="285">2</text><text x="62" y="221">3</text> </g> </g> </svg>`} />
       <ol class="claves-mini">
         <li><span class="n">1</span><span class="tx"><b>Aire.</b> Empuja desde el diafragma.</span></li>
         <li><span class="n">2</span><span class="tx"><b>Pliegues.</b> Vibran y cierran.</span></li>
@@ -122,34 +115,45 @@ const faqSchema = {
     </div>
   </section>
 
-  <!-- ══ 03 · LOS TRES EJES (el ángulo holístico) ══ -->
+  <!-- ══ 02 · DE QUÉ DEPENDE TU PLAN ══
+       Reemplaza a "los tres ejes" (esos nombres los inventé yo) y ABSORBE la vieja
+       sección "La ruta". Corrección de Andrés (25-ago): la ruta de cada alumno
+       depende de sus desbalances + oído y afinación + confianza o ansiedad + sus
+       objetivos. La línea de tiempo fija de 12 semanas se eliminó: era inventada y
+       encima se contradecía con la Fig. 4 de al lado, que dice que el plan se arma
+       DESPUÉS de escuchar. -->
   <section class="bloque oscuro" id="ejes">
     <div class="folio">02<span>Cómo trabajamos</span></div>
     <div>
-      <h2>La voz no es solo garganta.</h2>
+      <h2>Tu plan sale de cuatro cosas, no de un temario.</h2>
       <figure class="lamina">
-        <figcaption class="lam-tit">Fig. 3 · Los tres ejes de cada clase</figcaption>
-        <div class="ejes">
+        <figcaption class="lam-tit">Fig. 3 · Lo que define tu ruta</figcaption>
+        <div class="ejes ejes-4">
           <div class="eje">
-            <svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="24" cy="11" r="6"/><path d="M24 17v16M14 24h20M17 45l7-12 7 12"/></svg>
-            <h3>Cuerpo</h3>
-            <p>Respiración, apoyo, cierre y resonancia. Lo mecánico.</p>
+            <svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 30c6-4 10-4 14 0s10 6 16 0"/><path d="M6 18c6-4 10-4 14 0s10 6 16 0" stroke-opacity=".45"/><path d="M42 12v24"/></svg>
+            <h3>Tus desbalances</h3>
+            <p>Aire, cierre, resonancia. Qué sobra y qué falta en tu voz hoy.</p>
+          </div>
+          <div class="eje">
+            <svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 8v32"/><path d="M14 16v16M30 14v20M6 22v8M38 20v12"/></svg>
+            <h3>Oído y afinación</h3>
+            <p>Si reconoces la nota, si la reproduces, y qué tan fino está el oído.</p>
           </div>
           <div class="eje">
             <svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M31 40v-5a8 8 0 0 1 3-6 12 12 0 1 0-19-9.5"/><path d="M15 21a12 12 0 0 0 4 9 8 8 0 0 1 3 6v4"/><path d="M19 44h13"/></svg>
-            <h3>Cabeza</h3>
-            <p>El miedo al juicio y la tensión que produce. Se entrena igual que lo físico.</p>
+            <h3>Confianza o ansiedad</h3>
+            <p>Cuánto te aprieta el juicio ajeno. Eso también se entrena.</p>
           </div>
           <div class="eje">
-            <svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="14" cy="36" r="6"/><circle cx="36" cy="31" r="6"/><path d="M20 36V11l22-4v24"/><path d="M20 18l22-4"/></svg>
-            <h3>Música</h3>
-            <p>Oído, ritmo y repertorio. Entender lo que estás cantando.</p>
+            <svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="24" cy="24" r="16"/><circle cx="24" cy="24" r="8"/><circle cx="24" cy="24" r="1.6" fill="currentColor"/></svg>
+            <h3>Tus objetivos</h3>
+            <p>No es lo mismo cantar en una boda que grabar tu disco.</p>
           </div>
         </div>
         <p class="lam-pie">
-          <b>Los tres se trabajan juntos, no por turnos.</b> Andrés estudió Música en la UPC
-          y Psicología en la Universidad de Lima: de ahí sale que la clase mire la tensión
-          y el miedo con el mismo detalle que el cierre cordal.
+          <b>Por eso no hay temario ni cronograma.</b> Dos personas con la misma edad
+          y las mismas ganas pueden necesitar lo contrario, y el orden lo decide lo
+          que escucho en la primera clase.
         </p>
       </figure>
     </div>
@@ -288,32 +292,9 @@ const faqSchema = {
     </div>
   </section>
 
-  <!-- ══ 07 · LA RUTA ══ -->
-  <section class="bloque oscuro" id="ruta">
-    <div class="folio">06<span>La ruta</span></div>
-    <div>
-      <h2>Los primeros tres meses.</h2>
-      <ol class="ruta">
-        {RUTA.map((r, i) => (
-          <li>
-            <span class="ruta-pin" aria-hidden="true">
-              {i === 0
-                ? <svg viewBox="0 0 22 22"><circle cx="11" cy="11" r="8" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="11" cy="11" r="3.4" fill="currentColor"/></svg>
-                : <svg viewBox="0 0 22 22"><circle cx="11" cy="11" r="8" fill="none" stroke="currentColor" stroke-width="2"/></svg>}
-            </span>
-            <span class="ruta-s">{r.s}</span>
-            <span class="ruta-t">{r.t}</span>
-            <span class="ruta-d">{r.d}</span>
-          </li>
-        ))}
-      </ol>
-      <p class="note ruta-pie">Es un mapa, no un cronómetro: cada quien avanza a su ritmo.</p>
-    </div>
-  </section>
-
   <!-- ══ 08 · QUIÉN ENSEÑA ══ -->
   <section class="bloque" id="quien">
-    <div class="folio">07<span>Quién enseña</span></div>
+    <div class="folio">06<span>Quién enseña</span></div>
     <div>
       <h2>Andrés Salamé-Córdova</h2>
       <p class="lead lead-corto">Aquí nadie se ríe de nadie. Todo lo que suena mal hoy es simplemente lo siguiente que vamos a entrenar.</p>
@@ -329,7 +310,7 @@ const faqSchema = {
 
   <!-- ══ 09 · OPINIONES ══ -->
   <section class="bloque" id="opiniones">
-    <div class="folio">08<span>Opiniones</span></div>
+    <div class="folio">07<span>Opiniones</span></div>
     <div class="opinion">
       <div>
         <p class="nota-grande">5.0</p>
@@ -352,7 +333,7 @@ const faqSchema = {
   <!-- ══ 10 · PLANES ══ -->
   <span id="precios" class="ancla-alias" aria-hidden="true"></span>
   <section class="bloque" id="planes">
-    <div class="folio">09<span>Planes</span></div>
+    <div class="folio">08<span>Planes</span></div>
     <div>
       <h2>Mientras más horas, menos cuesta la hora.</h2>
       <table class="tabla-planes">
@@ -388,7 +369,7 @@ const faqSchema = {
 
   <!-- ══ 11 · DUDAS ══ -->
   <section class="bloque" id="faq">
-    <div class="folio">10<span>Dudas</span></div>
+    <div class="folio">09<span>Dudas</span></div>
     <div class="faq">
       {FAQ.map((f) => (<details><summary>{f.q}</summary><p>{f.a}</p></details>))}
     </div>
@@ -524,20 +505,18 @@ a.tira-nt { min-height: 44px; align-items: center; }
 
 /* Fig. 3 · los tres ejes */
 .ejes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0; }
+.ejes-4 { grid-template-columns: repeat(4, 1fr); }
+/* Los párrafos de los ejes traen su propio color y le ganan a la regla genérica
+   del bloque oscuro: sin esto quedan en 2.32 sobre tinta. */
+.bloque.oscuro .ejes p { color: var(--invertido-texto-2); }
 .bloque.oscuro .lamina { background: transparent; border-color: var(--invertido-linea); }
 .bloque.oscuro .lamina::before, .bloque.oscuro .lamina::after { border-color: var(--invertido-linea); }
 .bloque.oscuro .lam-pie { color: var(--invertido-texto-2); border-top-color: var(--invertido-linea); }
 .bloque.oscuro .lam-pie b { color: var(--invertido-texto); }
 .ejes .eje { padding: 4px clamp(14px, 1.8vw, 26px); border-left: 1px solid var(--linea); }
 .bloque.oscuro .ejes .eje { border-left-color: var(--invertido-linea); }
-.bloque.oscuro .ruta { border-top-color: var(--acento); }
-.bloque.oscuro .ruta li { border-left-color: var(--invertido-linea); }
 /* Estos dos traen su propio color y le ganan en especificidad a la regla
    genérica del bloque oscuro: quedaban en 2.32 sobre tinta. */
-.bloque.oscuro .ejes p,
-.bloque.oscuro .ruta-d { color: var(--invertido-texto-2); }
-.bloque.oscuro .ruta-t { color: var(--invertido-texto); }
-.bloque.oscuro .ruta-s { color: var(--acento); }
 .ejes .eje:first-child { border-left: 0; padding-left: 0; }
 .ejes svg { width: 52px; height: 52px; color: var(--acento); margin-bottom: 16px; }
 .ejes h3 { font-size: clamp(22px, 2.1vw, 27px); }
@@ -607,16 +586,6 @@ a.tira-nt { min-height: 44px; align-items: center; }
 .comp-pie { font-size: 18px; color: var(--invertido-texto-2); margin-top: 8px; }
 .comp-pie b { color: var(--invertido-texto); font-weight: 600; }
 
-/* ══ RUTA ══ */
-.ruta { list-style: none; display: grid; grid-template-columns: repeat(4, 1fr); margin-top: clamp(22px, 2.6vw, 34px); border-top: 2px solid var(--linea-fuerte); }
-.ruta li { padding: 20px clamp(12px, 1.5vw, 24px) 6px 0; border-left: 1px solid var(--linea); padding-left: clamp(12px, 1.5vw, 24px); }
-.ruta li:first-child { border-left: 0; padding-left: 0; }
-.ruta-pin { display: block; color: var(--acento); margin-bottom: 10px; }
-.ruta-pin svg { width: 22px; height: 22px; }
-.ruta-s { display: block; font-size: 18px; font-weight: 600; text-transform: uppercase; letter-spacing: .12em; color: var(--acento); }
-.ruta-t { display: block; font-family: var(--display); font-weight: 700; font-size: 23px; margin-top: 6px; }
-.ruta-d { display: block; font-size: 18px; color: var(--texto-2); margin-top: 6px; line-height: 1.45; }
-.ruta-pie { margin-top: 20px; }
 
 /* ══ QUIÉN ENSEÑA · OPINIONES ══ */
 .lead-corto { max-width: 46ch; margin-top: 16px; font-style: italic; }
@@ -687,9 +656,6 @@ a.tira-nt { min-height: 44px; align-items: center; }
   .perfiles { grid-template-columns: 1fr; gap: 28px; }
   .tabla-edad { grid-template-columns: 1fr; gap: 26px; }
   .cursos-2 { grid-template-columns: 1fr; }
-  .ruta { grid-template-columns: 1fr; }
-  .ruta li { border-left: 0; border-top: 1px solid var(--linea); padding: 16px 0 8px; }
-  .ruta li:first-child { border-top: 0; }
   .opinion { grid-template-columns: 1fr; gap: 14px; }
 
   /* La tabla de planes se convierte en fichas apiladas CON su rótulo de columna
