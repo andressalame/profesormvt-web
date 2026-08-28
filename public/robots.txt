@@ -30,5 +30,28 @@ Allow: /
 User-agent: TelegramBot
 Allow: /
 
+
+# Motores de respuesta con IA: bienvenidos, el contenido es para ser citado.
+# OJO: si en produccion NO se ve este bloque, Cloudflare esta pisando este archivo
+# con su robots.txt gestionado. Se apaga en el panel, en Bots > rastreadores de IA.
+User-agent: GPTBot
+Allow: /
+User-agent: OAI-SearchBot
+Allow: /
+User-agent: ChatGPT-User
+Allow: /
+User-agent: ClaudeBot
+Allow: /
+User-agent: Claude-Web
+Allow: /
+User-agent: PerplexityBot
+Allow: /
+User-agent: Google-Extended
+Allow: /
+User-agent: Applebot-Extended
+Allow: /
+User-agent: CCBot
+Allow: /
+
 # Sitemap
 Sitemap: https://profesormvt.com/sitemap-index.xml
