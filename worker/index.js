@@ -1699,10 +1699,18 @@ async function smokeTestDiario(env){
     });
     if (!r.ok) throw new Error("Mercado Pago rechaza el token: HTTP " + r.status);
   });
-  await prueba("Home publica", async function(){
-    const r = await fetch("https://profesormvt.com/", { headers: { "user-agent": "smoke-mvt/1" } });
-    if (!r.ok) throw new Error("HTTP " + r.status);
-  });
+  /* ❌ 28-ago-2026 · SE FUE el check "Home publica", y no se vuelve a poner ACA.
+     Hacia fetch("https://profesormvt.com/") desde ESTE mismo worker, y eso no mide la
+     home de nadie: una subpeticion de un Worker a su propia zona no vuelve al Worker,
+     Cloudflare la manda al ORIGEN — y aqui no hay origen, el sitio son este worker mas
+     los assets de Astro. De ahi el 522 TODOS LOS DIAS mientras la home respondia 200 a
+     todo el mundo (medido el 28-ago: 200 en 0.3s, tambien con el user-agent del smoke).
+     Un aviso que grita a diario sin que nada este roto es PEOR que no tener aviso:
+     entrena a ignorarlo, y el dia que se rompa de verdad nadie lo va a mirar.
+     La home SI se vigila, desde fuera de Cloudflare, que es el unico lente que sirve
+     para esto: `watchdog-funnel-diario` en la Mac, check `mvt.home`, verde a diario.
+     Lo que queda aca arriba es lo que SOLO se puede ver desde adentro (D1, precios,
+     config, el token de Mercado Pago). */
   if (fallas.length){
     await avisarTelegram(env, "🔴 SMOKE TEST MVT: " + fallas.length + " falla(s) hoy\n\n- " + fallas.join("\n- ") + "\n\nAlgo de lo que cobra esta roto: revisar el worker.");
   }
@@ -2858,6 +2866,45 @@ const CLASE_MIN = 60;             // duración de la clase
 const HORIZONTE_SEMANAS = 4;      // hasta cuándo se puede reservar adelante
 const SERIE_SEMANAS = 4;          // una reserva fija aparta las próximas 4 semanas ("de 4 en 4")
 const ANTICIPACION_MIN_H = 12;    // no se puede reservar con menos de 12h de anticipación
+
+/* ═══════ REUNIÓN DE VENTA DE WEB EXPRESS, SIN CUENTA (31-ago-2026) ═══════
+   webexpress.pe/horarios-disponibles necesitaba agenda y el motor ya estaba escrito acá:
+   disponibilidad + anticipación + horizonte + freebusy del Google Calendar de Andrés. Lo
+   único que no servía era `/api/agenda/reservar`, que exige sesión de alumno y descuenta
+   del paquete. Este es su hermano público: mismo motor, cero cuenta, cero paquete.
+
+   Por qué escribe una fila en `reservas` y no se conforma con el evento de Google: el
+   candado real contra dos personas que eligen el mismo horario a la vez es el UNIQUE INDEX
+   idx_reservas_slot_unico, no el calendario. `gcalBusy` es best-effort a propósito (si
+   Google falla devuelve [] y no bloquea nada), así que confiar solo en él dejaría abierta
+   justo la puerta que más duele. Con la fila, la segunda reunión rebota en el INSERT.
+
+   Es prima de `tipo = 'bloqueo'`, que ya existía: una reserva sin alumno_id. Por eso el
+   cierre automático de clases ya la ignora sin tocarlo (pide `alumno_id IS NOT NULL`).
+
+   ⚠️ El bloqueo cruzado NO es simétrico y hay que saberlo: las clases que hoy viven en
+   Batuta sí tapan estos horarios (Batuta las publica en el mismo calendario y acá las lee
+   gcalBusy, verificado el 31-ago), pero Batuta NO lee freebusy, así que una reunión
+   agendada acá no le desaparece un slot al portal del alumno. Ver la nota al pie. */
+const REUNION_MIN = 20;                 // los 20 minutos que promete la página
+const REUNION_MAX_IP_24H = 3;           // freno por visitante
+const REUNION_MAX_DIA = 6;              // techo global: que nadie le llene la agenda en una noche
+const REUNION_MAX_EMAIL_ABIERTAS = 1;   // una reunión futura por correo, no se acaparan horarios
+const REUNION_ORIGENES = ["https://webexpress.pe", "https://www.webexpress.pe"];
+
+/* Encabezados CORS de la agenda de Web Express. Ojo con lo que esto NO es: CORS solo lo
+   respeta un navegador, un `curl` lo ignora entero. El freno anti-abuso son los topes de
+   arriba, esto es higiene. */
+function corsReunion(request){
+  const o = String(request.headers.get("origin") || "");
+  return {
+    "Access-Control-Allow-Origin": REUNION_ORIGENES.includes(o) ? o : REUNION_ORIGENES[0],
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Access-Control-Allow-Headers": "content-type",
+    "Access-Control-Max-Age": "86400",
+    "Vary": "Origin"
+  };
+}
 const CANCELA_MIN_H = 4;          // default; el profesor puede cambiarlo en Ajustes (reprog_min_h)
 /* Reprogramación configurable por el profesor (10-jul-2026):
    reprog_activo '' = ON (default) | '0' = el alumno no reprograma solo.
@@ -3170,8 +3217,10 @@ async function gcalCrearEvento(env, info){
     const cfg = await loadConfig(env);
     const calId = cfg.gcal_calendar_id || "primary";
     const evt = {
-      summary: "Clase" + (info.curso ? " de " + info.curso : "") + (info.alumnoNombre ? " · " + info.alumnoNombre : ""),
-      description: "Clase reservada desde el portal de " + MARCA.nombre + ".",
+      /* título y descripción propios para quien no es una clase (la reunión de venta de
+         Web Express); sin ellos se comporta igual que siempre */
+      summary: info.titulo || ("Clase" + (info.curso ? " de " + info.curso : "") + (info.alumnoNombre ? " · " + info.alumnoNombre : "")),
+      description: info.descripcion || ("Clase reservada desde el portal de " + MARCA.nombre + "."),
       start: { dateTime: info.inicio_utc, timeZone: "America/Lima" },
       end:   { dateTime: info.fin_utc,    timeZone: "America/Lima" },
       reminders: { useDefault: true },
@@ -3452,6 +3501,13 @@ async function ensureSchema(env){
     if (!tieneCancUtc) await env.DB.prepare("ALTER TABLE reservas ADD COLUMN cancelada_utc TEXT DEFAULT ''").run();
     const tieneCancPor = (infoReservas.results || []).some(c => c.name === "cancelada_por");
     if (!tieneCancPor) await env.DB.prepare("ALTER TABLE reservas ADD COLUMN cancelada_por TEXT DEFAULT ''").run();
+    // v21 (31-ago-2026): reuniones de venta de Web Express. `contacto` es el correo de quien
+    // agendó y `ip_hash` el visitante hasheado; los dos existen para poder FRENAR el abuso de
+    // un endpoint que vive abierto a internet sin sesión. El IP nunca se guarda en claro.
+    const tieneContacto = (infoReservas.results || []).some(c => c.name === "contacto");
+    if (!tieneContacto) await env.DB.prepare("ALTER TABLE reservas ADD COLUMN contacto TEXT DEFAULT ''").run();
+    const tieneIpHash = (infoReservas.results || []).some(c => c.name === "ip_hash");
+    if (!tieneIpHash) await env.DB.prepare("ALTER TABLE reservas ADD COLUMN ip_hash TEXT DEFAULT ''").run();
     _schemaChecked = true;
   } catch (e) { /* otra invocación pudo correrla en paralelo; se reintenta en la próxima request */ }
 }
@@ -3634,7 +3690,12 @@ export default {
     if (!url.pathname.startsWith("/api/") && !url.pathname.startsWith("/r/")){
       return env.ASSETS ? env.ASSETS.fetch(request) : json({ error: "No encontrado" }, 404);
     }
-    if (request.method === "OPTIONS") return new Response(null, { status: 204 });
+    if (request.method === "OPTIONS"){
+      /* La agenda de Web Express se llama desde OTRO dominio, así que su preflight sí
+         necesita los encabezados. El resto del API sigue con el 204 pelado de siempre. */
+      if (url.pathname === "/api/agenda/reunion") return new Response(null, { status: 204, headers: corsReunion(request) });
+      return new Response(null, { status: 204 });
+    }
 
     try {
       await ensureSchema(env);
@@ -5128,6 +5189,96 @@ export default {
         // Vitrina también embebida en academiakanta.com (segunda marca): solo lectura, sin datos personales
         r.headers.set("Access-Control-Allow-Origin", "*");
         return r;
+      }
+
+      /* ===== AGENDA: REUNIÓN DE VENTA de Web Express (pública, sin cuenta) =====
+         Hermano de /api/agenda/reservar. Ese exige sesión y descuenta del paquete; este no
+         toca ni cuentas ni paquetes: valida, aparta el horario y crea el evento con Meet.
+         El detalle de por qué escribe en `reservas` está arriba, en REUNION_MIN. */
+      if (url.pathname === "/api/agenda/reunion" && request.method === "POST"){
+        const ch = corsReunion(request);
+        const jr = (data, status) => {
+          const r = json(data, status);
+          for (const k in ch) r.headers.set(k, ch[k]);
+          return r;
+        };
+        const b = await request.json().catch(() => ({}));
+
+        /* Trampa para bots: un campo que el formulario esconde con CSS y que una persona no
+           puede llenar. Se responde 200 A PROPÓSITO y sin apartar nada: con un error, el bot
+           aprende cuál es el campo y lo deja vacío en el siguiente intento. */
+        if (String(b.confirmacion || "").trim()) return jr({ ok: true, agendada: true });
+
+        const nombre = String(b.nombre || "").replace(/\s+/g, " ").trim().slice(0, 80);
+        const email  = String(b.email || "").trim().toLowerCase().slice(0, 120);
+        let   web    = String(b.web || "").trim().slice(0, 160);
+        if (nombre.length < 2) return jr({ error: "Escribe tu nombre, para saber con quién hablo." }, 400);
+        if (!/^[^\s@]+@[^\s@]+\.[a-z]{2,}$/i.test(email)) return jr({ error: "Revisa tu correo, ahí te llega la invitación con el enlace." }, 400);
+        if (web.length < 4) return jr({ error: "Escribe la web de tu negocio. Si todavía no tienes, escribe el nombre." }, 400);
+        /* Se guarda tal como la escribió, con el https:// puesto SOLO si parece dominio. Al
+           que no tiene web se le acepta el nombre del negocio: rechazar un lead por un regex
+           es el peor final posible para esta página. */
+        if (!/^https?:\/\//i.test(web) && /^[a-z0-9.-]+\.[a-z]{2,}(\/.*)?$/i.test(web)) web = "https://" + web;
+
+        const iso = String(b.inicio_utc || "");
+        /* El mismo portero de las clases: día y hora habilitados, 12h de anticipación, dentro
+           del horizonte, y que el Google Calendar de Andrés no lo tenga ocupado. */
+        if (!(await slotValido(env, iso))) return jr({ error: "Ese horario ya no está libre. Elige otro." }, 409);
+
+        const ahora = Date.now();
+        const nowIso = new Date(ahora).toISOString();
+        const desde24 = new Date(ahora - 86400000).toISOString();
+        /* El IP va HASHEADO con sal: alcanza para contar y frenar, y no deja un dato personal
+           guardado en la base (Ley 29733). */
+        const ipHash = (await sha256Hex("reunion|" + (request.headers.get("CF-Connecting-IP") || "") + "|" + MARCA.dominio)).slice(0, 32);
+
+        const cuenta = async (sql, ...args) => {
+          const row = await env.DB.prepare(sql).bind(...args).first().catch(() => null);
+          return Number((row && row.n) || 0);
+        };
+        const porIp = await cuenta(
+          "SELECT COUNT(*) AS n FROM reservas WHERE tipo = 'reunion' AND ip_hash = ?1 AND creada >= ?2", ipHash, desde24);
+        if (porIp >= REUNION_MAX_IP_24H) return jr({ error: "Ya agendaste varias reuniones desde aquí. Escríbeme por WhatsApp y lo vemos directo." }, 429);
+        const porDia = await cuenta(
+          "SELECT COUNT(*) AS n FROM reservas WHERE tipo = 'reunion' AND creada >= ?1", desde24);
+        if (porDia >= REUNION_MAX_DIA) return jr({ error: "Se llenaron las reuniones de hoy. Escríbeme por WhatsApp y te busco un espacio." }, 429);
+        const porEmail = await cuenta(
+          "SELECT COUNT(*) AS n FROM reservas WHERE tipo = 'reunion' AND contacto = ?1 AND estado = 'reservada' AND inicio_utc >= ?2", email, nowIso);
+        if (porEmail >= REUNION_MAX_EMAIL_ABIERTAS) return jr({ error: "Ya tienes una reunión agendada con ese correo. Si quieres moverla, respóndeme la invitación." }, 409);
+
+        const rid = crypto.randomUUID();
+        const fin = new Date(Date.parse(iso) + REUNION_MIN * 60000).toISOString();
+        const nota = "Web Express · " + nombre + " · " + email + " · " + web;
+        try {
+          await env.DB.prepare(
+            "INSERT INTO reservas (id,alumno_id,inicio_utc,fin_utc,tipo,serie_id,estado,curso,nota,ciclo,creada,contacto,ip_hash) " +
+            "VALUES (?1,NULL,?2,?3,'reunion','','reservada','',?4,1,?5,?6,?7)"
+          ).bind(rid, iso, fin, nota, nowIso, email, ipHash).run();
+        } catch (e){
+          /* el UNIQUE INDEX del slot: alguien lo tomó entre la validación y el INSERT */
+          return jr({ error: "Justo tomaron ese horario. Elige otro." }, 409);
+        }
+
+        const eid = await gcalCrearEvento(env, {
+          inicio_utc: iso, fin_utc: fin, email: email,
+          titulo: "Reunión Web Express · " + nombre,
+          descripcion: "Reunión de venta de " + REUNION_MIN + " minutos, agendada desde webexpress.pe/horarios-disponibles.\n\n" +
+                       "Nombre: " + nombre + "\nCorreo: " + email + "\nNegocio: " + web
+        });
+        if (eid){
+          await env.DB.prepare("UPDATE reservas SET gcal_event_id = ?1 WHERE id = ?2").bind(eid, rid).run();
+        } else {
+          /* Google falló. El horario YA quedó apartado, así que el lead no se pierde; lo que
+             falta es la invitación con el Meet, y eso lo tiene que mandar Andrés a mano. Se
+             avisa por AVISOS, que no depende de Resend. Devolver error acá sería tirar a la
+             basura un prospecto que ya hizo todo bien. */
+          await alertaCorreoAndres(env,
+            "Reunión agendada SIN evento en Google",
+            "Se apartó el horario pero Google Calendar no creó el evento, así que esta persona NO recibió invitación.\n\n" +
+            "Cuándo: " + iso + " (UTC)\n" + nota + "\n\nMándale tú el enlace de la reunión."
+          ).catch(() => {});
+        }
+        return jr({ ok: true, agendada: true, inicio_utc: iso, minutos: REUNION_MIN, invitacion: !!eid });
       }
 
       if (url.pathname === "/api/agenda/slots" && request.method === "GET"){
