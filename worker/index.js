@@ -1852,7 +1852,18 @@ const SORTEO = {
      eran de esa campaña. Este sorteo arranca sin invitados; se agregan solo si Andrés lo pide,
      y el caso típico son los alumnos SIN cuenta del portal, cuyas renovaciones no dejan fila
      en `compras` y por eso no entran solas (ver el comentario de sorteoParticipantes). */
-  invitados: []
+  invitados: [
+    /* Aaron A. — pagó S/320 (Paquete 4) el 31-ago-2026 por Yape, dentro de la ventana.
+       Califica con 1 boleto igual que cualquier Paquete 4 comprado por la web.
+       POR QUÉ va a dedo y por qué NO por `alumno_id`: MVT se mudó a Batuta el 23-ago, así
+       que su compra y su ficha viven ALLÁ (tenant MVT-PROFESORMVT, alumno
+       372530d8-0d37-4c48-b8e0-1e23d9030d63). En esta base no existe en ninguna tabla, así
+       que un `alumno_id` acá no resolvería y el `continue` lo dejaría fuera sin avisar.
+       ⚠️ Esto NO es un caso aislado, es el síntoma: `compras` de este CRM lleva 0 filas
+       desde el 16-ago porque ya nadie compra por acá. El próximo sorteo tiene que leer de
+       Batuta, o nace con cero participantes otra vez. */
+    { nombre: "Aaron A.", boletos: 1 }
+  ]
 };
 
 /* "Andrés Salamé Córdova" -> "Andrés S." · la lista del sorteo es pública, así que
@@ -1899,13 +1910,23 @@ async function sorteoParticipantes(env){
     if (!b) continue;
     const email = String((inv && inv.email) || "").trim().toLowerCase();
     const alumnoId = String((inv && inv.alumno_id) || "").trim();
-    if (!email && !alumnoId) continue;
+    /* Tercera forma, 31-ago-2026: SOLO un nombre para mostrar, sin nada que buscar en esta
+       base. Hizo falta porque MVT se mudó a Batuta el 23-ago y desde entonces hay alumnos
+       reales de MVT que NO tienen fila acá: ni en `compras`, ni en `cuentas`, ni en
+       `alumnos`. Con `alumno_id` el SELECT de abajo no los encuentra y el `continue` los
+       deja fuera EN SILENCIO, que es la peor forma de fallar: el sorteo diría 0
+       participantes teniendo un comprador que califica.
+       🔒 El repo es PÚBLICO: acá va el nombre corto que la lista ya muestra ("Aaron A."),
+       nunca el apellido completo ni el correo. */
+    const nombreSuelto = String((inv && inv.nombre) || "").trim();
+    if (!email && !alumnoId && !nombreSuelto) continue;
 
     let cu = null, alumno = null;
     if (email){
       cu = await env.DB.prepare("SELECT id, nombre, email FROM cuentas WHERE lower(email) = ?1")
         .bind(email).first();
-    } else {
+      if (!cu) continue;                                // email que no existe en `cuentas`
+    } else if (alumnoId){
       alumno = await env.DB.prepare("SELECT id, nombre FROM alumnos WHERE id = ?1").bind(alumnoId).first();
       if (!alumno) continue;                            // alumno borrado: se ignora la invitación
       // Si ese alumno YA tiene cuenta, se usa la cuenta: así sus compras y su boleto de
@@ -1913,10 +1934,14 @@ async function sorteoParticipantes(env){
       cu = await env.DB.prepare("SELECT id, nombre, email FROM cuentas WHERE alumno_id = ?1")
         .bind(alumno.id).first();
     }
-    if (!cu && !alumno) continue;                       // email que no existe en `cuentas`
+    /* con solo nombre no se resuelve contra nada: `cu` y `alumno` quedan en null a propósito.
+       Si gana, no hay correo que mandarle ni ficha que abonarle acá, y el aviso a Andrés ya
+       dice exactamente eso ("SIN CORREO... avísale tú") — que es la verdad, porque sus
+       clases viven en Batuta y el premio se le abona allá, a mano. */
 
-    const clave = cu ? cu.id : ("alu:" + alumno.id);    // sin cuenta se indexa por alumno
-    const nombre = (cu && cu.nombre) || (alumno && alumno.nombre) || "";
+    const clave = cu ? cu.id
+                     : (alumno ? "alu:" + alumno.id : "inv:" + nombreSuelto.toLowerCase());
+    const nombre = (cu && cu.nombre) || (alumno && alumno.nombre) || nombreSuelto;
     const prev = porCuenta.get(clave);
     if (prev){
       if (prev.boletos < b) prev.boletos = b;
