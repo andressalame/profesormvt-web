@@ -1989,20 +1989,33 @@ button[data-ayuda],a[data-ayuda],select[data-ayuda],input[data-ayuda],label[data
       <p class="hint">Plantilla que se usa cuando le das clic a "Enviar mensaje" en la tabla de Alumnos. Usa <code>{nombre}</code> y <code>{curso}</code> — se reemplazan solos. Si lo dejas vacío, se usa el mensaje por defecto.</p>
       <div class="field"><label>Mensaje de renovación</label><textarea id="cfg_msg_renovacion" style="min-height:110px;" placeholder="Hola {nombre}, ¡qué tal! Vamos cerrando tu paquete de {curso}…"></textarea></div>
     </div>
-    <div class="group" data-aj="avanzado">
-      <h2>Google Calendar</h2>
-      <p class="hint">Se conecta al activar tu plan. En tu plan pago, cada reserva cae en tu calendario con link de Meet y el alumno recibe la invitación.</p>
-      <div class="cfgrow"><span class="pk">Google Client ID (portal)</span><input id="cfg_google_client_id" type="text" placeholder="xxxxx.apps.googleusercontent.com" disabled /></div>
-      <p class="hint" style="margin-top:-4px;">Enciende el botón "Entrar con Google" del portal de tus alumnos. Se conecta al activar tu plan.</p>
-      <div class="cfgrow"><span class="pk">Client ID</span><input id="cfg_gcal_client_id" type="text" placeholder="xxxxx.apps.googleusercontent.com" disabled /></div>
-      <div class="cfgrow"><span class="pk">Client Secret</span><input id="cfg_gcal_client_secret" type="password" placeholder="GOCSPX-..." disabled /><button type="button" class="btn ghost sm" id="btnVerGcalSecret" style="flex:0 0 auto;" disabled>Mostrar</button></div>
-      <div class="cfgrow"><span class="pk">Calendario</span><input id="cfg_gcal_calendar_id" type="text" placeholder="primary" disabled /></div>
-      <div class="cfgrow"><span class="pk">Redirect URI (cópialo en Google Cloud)</span><input id="cfg_gcal_redirect" type="text" readonly style="opacity:.85" disabled /></div>
+    <!-- 27-ago-2026 · Esta pantalla estaba MUERTA y parecía viva. Llegó heredada del CRM de
+         MVT cuando el portal se mudó a Batuta: todos los campos `disabled`, la etiqueta
+         "se conecta al activar tu plan" (frase del modelo de planes, muerto desde el 20-ago)
+         y detrás NINGÚN endpoint. Ahora conectar es UN clic con la app de Google de Batuta;
+         lo de la app propia se fue a "avanzadas", que es donde va lo que casi nadie toca.
+         También se cayó el campo "Google Client ID (portal)": el botón de Google del portal
+         sale de los secrets de la plataforma y esa clave no la leía NADIE. -->
+    <div class="group solo-dueno" data-aj="avanzado">
+      <h2>Tus clases en tu Google Calendar</h2>
+      <p class="hint">Conéctalo una vez y cada clase que te reserven aparece sola en tu Google Calendar, con el nombre del alumno y el curso. Si se cancela, el evento se borra. Se mantienen al día los próximos 45 días.</p>
       <div class="rowact" style="margin-top:8px;">
-        <span class="pill gray" id="gcalEstado">— se conecta al activar tu plan —</span>
-        <button class="btn ghost" id="btnGcalConectar" disabled>Conectar Google Calendar</button>
-        <button class="btn ghost" id="btnGcalDesconectar" disabled>Desconectar</button>
+        <span class="pill gray" id="gcalEstado">Revisando…</span>
+        <button class="btn" id="btnGcalConectar">Conectar Google Calendar</button>
+        <button class="btn ghost" id="btnGcalSync" style="display:none;">Sincronizar ahora</button>
+        <button class="btn ghost" id="btnGcalDesconectar" style="display:none;">Desconectar</button>
       </div>
+      <p class="hint" id="gcalDetalle" style="margin:8px 0 0;"></p>
+      <div class="cfgrow" id="gcalMeetRow" style="display:none;margin-top:10px;"><span class="pk">Link de Google Meet en cada clase</span><select id="cfg_gcal_meet" data-ayuda="Útil si das clases online: cada evento nace con su link de Meet. En un estudio presencial solo ensucia el calendario."><option value="">No</option><option value="1">Sí, crear un link de Meet</option></select></div>
+      <details style="margin-top:12px;">
+        <summary class="hint" style="cursor:pointer;margin:0;">Opciones avanzadas — no las necesitas</summary>
+        <div class="cfgrow" style="margin-top:10px;"><span class="pk">Calendario</span><input id="cfg_gcal_calendar_id" type="text" placeholder="primary" /></div>
+        <p class="hint" style="margin-top:-4px;">Déjalo en <b>primary</b> y tus clases van a tu calendario principal. Si prefieres uno aparte, créalo en Google Calendar y pega aquí su ID.</p>
+        <div class="cfgrow"><span class="pk">Client ID</span><input id="cfg_gcal_client_id" type="text" placeholder="xxxxx.apps.googleusercontent.com" /></div>
+        <div class="cfgrow"><span class="pk">Client Secret</span><input id="cfg_gcal_client_secret" type="password" placeholder="GOCSPX-..." /><button type="button" class="btn ghost sm" id="btnVerGcalSecret" style="flex:0 0 auto;">Mostrar</button></div>
+        <div class="cfgrow"><span class="pk">Redirect URI</span><input id="cfg_gcal_redirect" type="text" readonly style="opacity:.85" /></div>
+        <p class="hint" style="margin-top:-4px;">Solo si quieres usar <b>tu propia</b> app de Google Cloud en vez de la de Batuta. Pega tu Client ID y tu Secret, guarda, y copia el Redirect URI de arriba en las credenciales de tu app. Si los cambias se corta la conexión y hay que volver a conectar.</p>
+      </details>
     </div>
     <div class="ajsave"><button class="btn" id="btnGuardarAjustes">Guardar ajustes</button>
       <span class="hint" style="margin:0;">Guarda todas las pestañas de golpe.</span></div>
@@ -4017,7 +4030,6 @@ function renderAjustes(){
   MODULOS_DEF.forEach(function(m){
     var s=el("cfg_mod_"+m.id); if(s) s.value=offModsR.indexOf(m.id)!==-1?"off":"";
   });
-  el("cfg_google_client_id").value=(db.config&&db.config.google_client_id)||"";
   el("cfg_bcp_cuenta").value=(db.config&&db.config.bcp_cuenta)||"";
   el("cfg_bcp_cci").value=(db.config&&db.config.bcp_cci)||"";
   el("cfg_scotia_cuenta").value=(db.config&&db.config.scotia_cuenta)||"";
@@ -4039,6 +4051,7 @@ function renderAjustes(){
   el("cfg_gcal_client_id").value=(db.config&&db.config.gcal_client_id)||"";
   el("cfg_gcal_client_secret").value=(db.config&&db.config.gcal_client_secret)||"";
   el("cfg_gcal_calendar_id").value=(db.config&&db.config.gcal_calendar_id)||"primary";
+  if(el("cfg_gcal_meet")) el("cfg_gcal_meet").value=(db.config&&db.config.gcal_meet)||"";
   gcalRefrescarEstado();
 }
 
@@ -6297,7 +6310,7 @@ function cargarProfesores(){
   fetch("/app/api/admin/profesores",{headers:hdr()}).then(function(r){return r.json();}).then(function(d){
     if(d.error){ toast(d.error); return; }
     var st=el("profeAsientos");
-    if(st && d.asientos) st.textContent="Asientos: "+d.asientos.usados+" de "+d.asientos.max+" (plan "+(d.plan||"profe")+")";
+    if(st && d.asientos) st.textContent="Asientos de profesor: "+d.asientos.usados+" de "+d.asientos.max;
     var tb=el("tablaProfes")?el("tablaProfes").querySelector("tbody"):null; if(!tb) return;
     var ps=d.profesores||[];
     tb.innerHTML=ps.map(function(p){
@@ -6667,10 +6680,24 @@ function getCursosAlumno(){
   var box=el("a_cursos"); if(!box) return "";
   return [].slice.call(box.querySelectorAll("input:checked")).map(function(c){return c.value;}).join(", ");
 }
-function setCursosAlumno(str){
+/* 🔴 29-ago-2026 · el curso que ya no esta en la lista de la academia desaparecia sin avisar.
+   Las casillas se dibujan SOLO con los cursos del catalogo, asi que un alumno cuyo curso se
+   renombro (MVT paso de "Canto" a "Vocal coaching" el 25-jul) abre su ficha con NADA marcado, y
+   al guardar cualquier otra cosa —un telefono— su curso se perdia y caia en el "Canto" por
+   defecto del bloque MARCA. Es el MISMO agujero que el importador ya tapo el 11-ago para Jose,
+   por la otra puerta. Ahora el curso huerfano se dibuja marcado y DICE que ya no esta en la
+   lista: se conserva al guardar y el dueno ve por que. */
+function cursoHuerfanoHtml(v){
+  return '<label title="Ya no esta en tus cursos. Se conserva hasta que lo cambies." style="display:flex;align-items:center;gap:6px;cursor:pointer;font-family:var(--body);opacity:.78;"><input type="checkbox" value="'+esc(v)+'" checked style="width:auto;"> '+esc(v)+' <span style="font-size:11px;color:var(--muted);">(ya no esta en tu lista)</span></label>';
+}
+function setCursosAlumno(str,soloExistentes){
   var box=el("a_cursos"); if(!box) return;
   var set=cursosDe(str);
   [].slice.call(box.querySelectorAll("input")).forEach(function(c){ c.checked=set.indexOf(c.value)>=0; });
+  if(soloExistentes) return;
+  var hay=[].slice.call(box.querySelectorAll("input")).map(function(c){return c.value;});
+  set.filter(function(v){ return hay.indexOf(v)<0; })
+     .forEach(function(v){ box.insertAdjacentHTML("beforeend",cursoHuerfanoHtml(v)); });
 }
 /* Elevate (6-ago-2026): al elegir un paquete, sus cursos se marcan solos desde el "Incluye"
    del plan (siguen editables). Solo en el cambio manual del select: al abrir un alumno
@@ -6701,7 +6728,7 @@ el("btnNuevoAlumno").addEventListener("click",function(){
   el("a_id").value=""; el("a_codigo").value=""; el("a_ciclo").value="1";
   el("a_nombre").value=""; el("a_whatsapp").value="";
   ["a_apellido","a_email","a_nacimiento"].forEach(function(k){ if(el(k)) el(k).value=""; });
-  setCursosAlumno(MARCA.cursoDefault); fillSelects(); el("a_paquete").value=pkNombres()[0]||"";
+  setCursosAlumno(MARCA.cursoDefault,true); fillSelects(); el("a_paquete").value=pkNombres()[0]||"";
   el("a_fecha").value=hoyLima(); el("a_pago").value="Pagado";
   el("a_horario").value=""; el("a_notas").value=""; el("a_horario_derivado").textContent=""; pintarClasesDeAlumno(null);
   fillProfeSelect("");
@@ -6720,7 +6747,9 @@ function guardarAlumnoModal(encadenar){
   var sedeSel=(wrapSd&&wrapSd.style.display!=="none")?el("a_sede").value:((prev&&prev.sede_id)||"");
   var obj={ id:id||uid(), codigo:el("a_codigo").value||uid().slice(-6).toUpperCase(),
     ciclo:Number(el("a_ciclo").value)||1,
-    nombre:nombre, whatsapp:el("a_whatsapp").value.trim(), curso:getCursosAlumno()||MARCA.cursoDefault,
+    /* sin curso marcado = SIN curso. El "Canto" por defecto del bloque MARCA le ponia clases
+       de canto a un estudio de pilates (mismo error que el importador arreglo el 11-ago). */
+    nombre:nombre, whatsapp:el("a_whatsapp").value.trim(), curso:getCursosAlumno(),
     paquete:el("a_paquete").value, fecha:el("a_fecha").value, pago:el("a_pago").value,
     horario:el("a_horario").value.trim(), notas:el("a_notas").value.trim(), profesor_id:profeSel||undefined, sede_id:sedeSel||"",
     /* el arrastre de clases migradas no se edita acá: se conserva tal cual (el server también
@@ -8287,7 +8316,6 @@ el("btnGuardarAjustes").addEventListener("click",function(){
             modulos_off:MODULOS_DEF.filter(function(m){var s=el("cfg_mod_"+m.id);return s&&s.value==="off";}).map(function(m){return m.id;}).join(","),
             pago_numero:el("cfg_pago_numero").value.trim(),
             pago_titular:el("cfg_pago_titular").value.trim(),
-            google_client_id:el("cfg_google_client_id").value.trim(),
             bcp_cuenta:el("cfg_bcp_cuenta").value.trim(),
             bcp_cci:el("cfg_bcp_cci").value.trim(),
             scotia_cuenta:el("cfg_scotia_cuenta").value.trim(),
@@ -8309,7 +8337,8 @@ el("btnGuardarAjustes").addEventListener("click",function(){
             msg_renovacion:el("cfg_msg_renovacion").value.trim(),
             gcal_client_id:el("cfg_gcal_client_id").value.trim(),
             gcal_client_secret:el("cfg_gcal_client_secret").value.trim(),
-            gcal_calendar_id:el("cfg_gcal_calendar_id").value.trim()||"primary" };
+            gcal_calendar_id:el("cfg_gcal_calendar_id").value.trim()||"primary",
+            gcal_meet:(el("cfg_gcal_meet")?el("cfg_gcal_meet").value:"") };
   /* 10-ago-2026: si el campo de WhatsApp quedó vacío NO se manda la clave, para que el
      worker no pise (ni espeje en blanco) un número que la cuenta ya tenía cargado desde
      el alta. Vaciarlo a propósito no es un caso real; perderlo en silencio, sí lo era. */
@@ -8402,7 +8431,9 @@ var BS_INDICE=[
   {t:"Apagar módulos que no uso", tab:"ajustes", aj:"academia", k:"modulos ocultar apagar esconder limpiar menu simplificar"},
   {t:"Asistente de WhatsApp con IA", tab:"ajustes", aj:"wa", k:"whatsapp wa ia bot asistente automatico responder chatbot mensajes"},
   {t:"Avisos en mi celular (push)", tab:"ajustes", aj:"avanzado", k:"push notificaciones avisos celular app movil telefono instalar"},
-  {t:"Google Calendar", tab:"ajustes", aj:"avanzado", k:"google calendar calendario meet sincronizar"}
+  {t:"Google Calendar", tab:"ajustes", aj:"avanzado", k:"google calendar calendario meet sincronizar"},
+  {t:"Trae a un amigo (el premio de tus alumnos por recomendarte)", tab:"ajustes", aj:"referidos", k:"referido referidos amigo amigos trae traer recomendar recomendacion premio descuento invitar codigo boca a boca"},
+  {t:"El texto de los correos que Batuta manda por ti", tab:"ajustes", aj:"mensajes", k:"correo correos mensaje mensajes texto redactar escribir plantilla bienvenida recordatorio automatico firma"}
 ];
 /* sin tildes ni mayúsculas: "Anticipación" tiene que salir escribiendo "anticipacion" */
 function bsNorm(s){ return String(s||"").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,""); }
@@ -8611,24 +8642,65 @@ if(el("btnVerGcalSecret")) el("btnVerGcalSecret").addEventListener("click",funct
   inp.type=mostrar?"text":"password";
   this.textContent=mostrar?"Ocultar":"Mostrar";
 });
+/* El estado lo dice el SERVIDOR después de pedirle un token de verdad a Google: un
+   refresh_token guardado no prueba nada (se revoca desde la cuenta de Google sin avisar).
+   Por eso hay tres estados y no dos — conectado, caído y sin conectar. */
 function gcalRefrescarEstado(){
+  /* Solo el dueño: al profesor contratado el endpoint le responde 403 y la pantalla
+     acabaría diciéndole "Google no está disponible", que es falso y no es asunto suyo. */
+  if(typeof esDuenoPanel === "function" && !esDuenoPanel()) return;
   fetch("/app/api/admin/google/estado",{headers:hdr()}).then(function(r){return r.json();}).then(function(d){
     if(el("cfg_gcal_redirect")) el("cfg_gcal_redirect").value=d.redirect_uri||"";
     var p=el("gcalEstado"); if(!p) return;
-    if(d.conectado){ p.textContent="Conectado ✓"; p.className="pill green"; }
-    else if(d.tieneCredenciales){ p.textContent="Listo para conectar"; p.className="pill amber"; }
-    else { p.textContent="Falta Client ID / Secret"; p.className="pill gray"; }
+    var det=el("gcalDetalle"), meet=el("gcalMeetRow");
+    var bCon=el("btnGcalConectar"), bSync=el("btnGcalSync"), bDes=el("btnGcalDesconectar");
+    var txt="";
+    if(d.conectado){
+      p.textContent="Conectado ✓"; p.className="pill green";
+      bCon.style.display="none"; bSync.style.display=""; bDes.style.display="";
+      if(meet) meet.style.display="";
+      txt = d.publicadas + " clase" + (d.publicadas===1?"":"s") + " en tu calendario";
+      /* el tope de llamadas por corrida se DICE: "listo" con cola pendiente es mentira */
+      if(d.faltan) txt += " · faltan " + d.faltan + ", se publican solas en unos minutos";
+      if(d.credenciales_propias) txt += " · con tu propia app de Google";
+    } else if(d.revocado){
+      p.textContent="Se cayó la conexión"; p.className="pill red";
+      bCon.style.display=""; bCon.textContent="Volver a conectar";
+      bSync.style.display="none"; bDes.style.display="";
+      if(meet) meet.style.display="none";
+      txt = "Google dejó de aceptar el permiso: se lo quitaste desde tu cuenta, o cambiaste las credenciales. Vuelve a conectar y sigue igual que antes.";
+    } else {
+      p.textContent="Sin conectar"; p.className="pill gray";
+      bCon.style.display=""; bCon.textContent="Conectar Google Calendar";
+      bSync.style.display="none"; bDes.style.display="none";
+      if(meet) meet.style.display="none";
+      txt = d.tieneCredenciales ? "" : "Google no está disponible ahora mismo. Escríbenos y lo vemos.";
+    }
+    if(det) det.textContent=txt;
   }).catch(function(){});
 }
 el("btnGcalConectar").addEventListener("click",function(){
+  /* La pestaña se abre AHORA, dentro del clic. Si se abriera al resolver la promesa,
+     el bloqueador de pop-ups la mata y el dueño ve que "no pasa nada" al conectar. */
+  var w=null; try{ w=window.open("about:blank","_blank"); }catch(e){}
   apiPost("/app/api/admin/google/url",{}).then(function(d){
-    if(d.url) window.open(d.url,"_blank","noopener");
-    toast("Aprueba en la ventana de Google y vuelve. Refresco el estado en unos segundos.");
-    setTimeout(gcalRefrescarEstado, 9000);
-  }).catch(function(e){ toast(e.message||"No se pudo iniciar la conexión"); });
+    if(!d.url) throw new Error("No se pudo iniciar la conexión");
+    if(w) w.location.href=d.url; else window.location.href=d.url;
+    toast("Acepta los permisos en la ventana de Google y vuelve acá.");
+    setTimeout(gcalRefrescarEstado, 8000);
+    setTimeout(gcalRefrescarEstado, 20000);
+  }).catch(function(e){ if(w) w.close(); toast(e.message||"No se pudo iniciar la conexión"); });
+});
+el("btnGcalSync").addEventListener("click",function(){
+  var b=this; if(b.disabled) return; b.disabled=true; var t=b.textContent; b.textContent="Publicando…";
+  apiPost("/app/api/admin/google/sincronizar",{}).then(function(d){
+    toast(d.creados||d.borrados ? ("Listo: "+d.creados+" publicadas, "+d.borrados+" borradas"+(d.faltan?" · quedan "+d.faltan:"")) : "Tu calendario ya estaba al día");
+    gcalRefrescarEstado();
+  }).catch(function(e){ toast(e.message||"No se pudo sincronizar"); })
+    .finally(function(){ b.disabled=false; b.textContent=t; });
 });
 el("btnGcalDesconectar").addEventListener("click",function(){
-  if(!confirm("¿Desconectar Google Calendar? Las reservas seguirán funcionando, pero ya no se crearán eventos.")) return;
+  if(!confirm("¿Desconectar Google Calendar? Se borran de tu calendario las clases que publicó Batuta. Tus reservas no se tocan.")) return;
   apiPost("/app/api/admin/google/desconectar",{}).then(function(){ toast("Desconectado"); gcalRefrescarEstado(); }).catch(function(){});
 });
 el("gcalEstado").addEventListener("click", gcalRefrescarEstado);
@@ -10968,7 +11040,7 @@ var _bCuD=el("btnCulqiDesconectar"); if(_bCuD) _bCuD.addEventListener("click",fu
 /* ---------- Tu Batuta: packs (20-ago-2026) ----------
    Ya no hay planes que elegir. Hay una base gratis y packs que se suman a un solo cobro
    mensual. El dueño mueve cantidades con + y −, ve el total en vivo y aplica una vez. */
-var PACKS_CAT={}, PACKS_BASE={}, PACKS_TENIDOS={}, PACKS_EDIT={}, PACKS_USO={};
+var PACKS_CAT={}, PACKS_BASE={}, PACKS_TENIDOS={}, PACKS_EDIT={}, PACKS_USO={}, PACKS_LIM_SRV=null;
 function packsMonto(sel){
   var s=0; for(var k in sel){ if(PACKS_CAT[k]) s+=PACKS_CAT[k].precio*sel[k]; } return Math.round(s*100)/100;
 }
@@ -10976,10 +11048,28 @@ function packsIguales(a,b){
   var ks={}; Object.keys(a).forEach(function(k){ks[k]=1;}); Object.keys(b).forEach(function(k){ks[k]=1;});
   for(var k in ks){ if((a[k]||0)!==(b[k]||0)) return false; } return true;
 }
-function packsLimites(sel){
-  var l={alumnos:PACKS_BASE.alumnos||20,profes:PACKS_BASE.profes||1,ia:PACKS_BASE.ia||5};
-  for(var k in sel){ var pk=PACKS_CAT[k]; if(pk&&pk.suma) l[pk.fam]+=pk.suma*sel[k]; }
+function packsAporte(sel){
+  var l={alumnos:0,profes:0,ia:0};
+  for(var k in sel){ var pk=PACKS_CAT[k]; if(pk&&pk.suma) l[pk.fam]+=pk.suma*(sel[k]||0); }
   return l;
+}
+/* 🔴 26-ago-2026 · El tope lo manda el SERVIDOR, no esta pantalla.
+   Antes se sumaba base + packs comprados y punto: la capacidad de CORTESIA (los planes viejos
+   migrados y los tratos especiales) y los asientos extra del superadmin no existian aca. A
+   Elevate, que tiene 4 packs de +500 alumnos y 2 de +5 profes de cortesia, el medidor le decia
+   "7 de 1 profesores" en rojo. Ahora se parte del tope real y solo se le aplica el DELTA de lo
+   que el dueno esta moviendo con los + y -, para que siga actualizandose en vivo. */
+function packsLimites(sel){
+  var ap=packsAporte(sel);
+  if(PACKS_LIM_SRV){
+    var ya=packsAporte(PACKS_TENIDOS);
+    return {
+      alumnos:Math.max(0,(PACKS_LIM_SRV.alumnos||0)-ya.alumnos+ap.alumnos),
+      profes: Math.max(0,(PACKS_LIM_SRV.profes ||0)-ya.profes +ap.profes),
+      ia:     Math.max(0,(PACKS_LIM_SRV.ia     ||0)-ya.ia     +ap.ia)
+    };
+  }
+  return {alumnos:(PACKS_BASE.alumnos||20)+ap.alumnos, profes:(PACKS_BASE.profes||1)+ap.profes, ia:(PACKS_BASE.ia||5)+ap.ia};
 }
 function packsPintarUso(){
   var cont=el("packsUso"); if(!cont) return;
@@ -11033,7 +11123,11 @@ function refrescarPlan(){
     PACKS_CAT=d.packs.catalogo||{}; PACKS_BASE=d.packs.base||{};
     PACKS_TENIDOS=JSON.parse(JSON.stringify(d.packs.comprados||{}));
     PACKS_EDIT=JSON.parse(JSON.stringify(d.packs.comprados||{}));
-    PACKS_USO={alumnos:d.alumnos_activos||0, profes:(d.asientos&&d.asientos.usados)||1, ia:(d.wa_cupo&&d.wa_cupo.usados)||0};
+    PACKS_LIM_SRV=(d.packs&&d.packs.limites)||null;
+    /* alumnos = el TOTAL cargado, que es lo que cuenta el candado del alta. Con los activos
+       (los que estan al dia) el medidor decia "61 de 2020" con 1445 alumnas dentro. */
+    PACKS_USO={alumnos:(d.alumnos_total!==undefined&&d.alumnos_total!==null)?d.alumnos_total:(d.alumnos_activos||0),
+               profes:(d.asientos&&d.asientos.usados)||1, ia:(d.wa_cupo&&d.wa_cupo.usados)||0};
     try{ var af=el("afLink"); if(af && d.slug){ af.value=location.origin+"/app/registro?ref="+d.slug; } }catch(e){}
     packsPintarCat(); packsPintarUso(); packsPintarPie();
   }).catch(function(){});
@@ -11176,7 +11270,10 @@ function aplicarMarcaCursos(){
     box.innerHTML=cursos.map(function(c){
       var ck=marcados.indexOf(c)!==-1?" checked":"";
       return '<label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-family:var(--body);"><input type="checkbox" value="'+esc(c)+'"'+ck+' style="width:auto;"> '+esc(c)+'</label>';
-    }).join("");
+    }).join("")
+    /* los cursos marcados que YA NO estan en el catalogo sobreviven al redibujado: si no,
+       fillSelects() los borraba justo antes de guardar y volviamos al mismo bug. */
+    + marcados.filter(function(v){ return cursos.indexOf(v)<0; }).map(cursoHuerfanoHtml).join("");
   }
 }
 function aplicarMarcaTextos(){

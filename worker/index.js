@@ -1462,22 +1462,22 @@ async function correoSorteo(env, lead){
   const html =
     '<div style="font-family:Arial,Helvetica,sans-serif;max-width:480px;margin:0 auto;color:#1a1a1a;font-size:15px;line-height:1.6">' +
       '<p>Hola,</p>' +
-      '<p>Te escribo corto: hasta el <b>lunes 1 de setiembre</b> estoy sorteando <b>4 clases extra</b> entre todos los que arrancan con un paquete de clases este mes.</p>' +
+      '<p>Te escribo corto porque hoy se acaba: <b>hasta las 11:59 de esta noche</b> estoy sorteando <b>4 clases extra</b> entre todos los que arrancan con un paquete de clases este mes.</p>' +
       '<p>Funciona simple. Entras con cualquier plan y mientras más clases, más chances:</p>' +
       '<ul style="padding-left:18px">' +
         '<li><b>4 clases</b> → 1 boleto</li>' +
         '<li style="margin-top:4px"><b>8 clases</b> → 2 boletos</li>' +
         '<li style="margin-top:4px"><b>12 clases</b> → 3 boletos</li>' +
       '</ul>' +
-      '<p>El ganador se elige solo el 1 de setiembre a las 8 p.m. y se publica en la web.</p>' +
+      '<p>El ganador se elige solo esta noche a las 11:59 y se publica en la web.</p>' +
       '<p style="text-align:center;margin:26px 0"><a href="' + url + '" style="background:#e8501f;color:#ffffff;text-decoration:none;font-weight:bold;padding:14px 26px;border-radius:6px;display:inline-block">Ver el sorteo</a></p>' +
       '<p>Si llevabas rato pensando en empezar a cantar o a componer, es buen momento. Y si el sorteo te da igual, las clases son las mismas de siempre: 1 a 1, personalizadas, para adultos que empiezan de grandes.</p>' +
       '<p>Un abrazo,<br><b>' + MARCA.profe + '</b><br>' + MARCA.nombre + '</p>' +
       '<p style="font-size:12px;color:#888888;margin-top:26px">' + dominioLimpio + ' · Canto y composición para adultos</p>' +
       pieBaja +
     '</div>';
-  const text = 'Hola,\n\nTe escribo corto: hasta el lunes 1 de setiembre estoy sorteando 4 clases extra entre todos los que arrancan con un paquete de clases este mes.\n\nFunciona simple. Entras con cualquier plan y mientras más clases, más chances: 4 clases = 1 boleto, 8 = 2 boletos, 12 = 3 boletos.\n\nEl ganador se elige solo el 1 de setiembre a las 8 p.m. y se publica acá: ' + url + '\n\nSi llevabas rato pensando en empezar a cantar o a componer, es buen momento. Y si el sorteo te da igual, las clases son las mismas de siempre: 1 a 1, personalizadas, para adultos que empiezan de grandes.\n\nUn abrazo,\n' + MARCA.profe + ' - ' + MARCA.nombre + '\n' + dominioLimpio + (linkBaja ? '\n\nPara no recibir más correos míos: ' + linkBaja : '');
-  return enviarCorreo(env, { to: lead.email, subject: "Estoy sorteando 4 clases (hasta el 1 de setiembre)", html: html, text: text });
+  const text = 'Hola,\n\nTe escribo corto porque hoy se acaba: hasta las 11:59 de esta noche estoy sorteando 4 clases extra entre todos los que arrancan con un paquete de clases este mes.\n\nFunciona simple. Entras con cualquier plan y mientras más clases, más chances: 4 clases = 1 boleto, 8 = 2 boletos, 12 = 3 boletos.\n\nEl ganador se elige solo el 1 de setiembre a las 8 p.m. y se publica acá: ' + url + '\n\nSi llevabas rato pensando en empezar a cantar o a componer, es buen momento. Y si el sorteo te da igual, las clases son las mismas de siempre: 1 a 1, personalizadas, para adultos que empiezan de grandes.\n\nUn abrazo,\n' + MARCA.profe + ' - ' + MARCA.nombre + '\n' + dominioLimpio + (linkBaja ? '\n\nPara no recibir más correos míos: ' + linkBaja : '');
+  return enviarCorreo(env, { to: lead.email, subject: "Hoy se acaba: 4 clases de regalo, hasta las 11:59", html: html, text: text });
 }
 
 async function procesarBlastSorteo(env){
@@ -1825,7 +1825,7 @@ const SORTEO = {
   titulo: "Sorteo de setiembre",
   premio: "4 clases extra, gratis",
   premioDetalle: "4 horas de clase valorizadas en S/320, del curso que ya llevas. Se abonan como clases de cortesía sobre el paquete que tengas vigente.",
-  cierraUTC: "2026-09-02T01:00:00Z",          // 1-set-2026, 20:00 Lima (UTC-5)
+  cierraUTC: "2026-09-02T04:59:00Z",          // 1-set-2026, 23:59 Lima (UTC-5). Movido de las 20:00 por decisión de Andrés el 1-set 16:45
   desdeFecha: "2026-08-16",                   // compras.fecha (UTC) desde
   hastaFecha: "2026-09-02",                   // compras.fecha (UTC) hasta — cubre la noche del 1 en Lima
   boletos: { "Paquete 4": 1, "Paquete 8": 2, "Paquete 12": 3 },  // clase suelta NO entra

@@ -6,7 +6,11 @@
    ───────────────────────────────────────────────────────────────────────────── */
 import { cargarMotor, envVacio } from "./motor-real.mjs";
 import { readFileSync } from "node:fs";
-const D = "/private/tmp/claude-502/-Users-andres-Desktop-Second-Brain/18d2d106-1cd9-4836-b82f-78ec10ff774b/scratchpad";
+/* 🔴 29-ago-2026 · esto era la ruta del scratchpad de UNA sesión, que muere con ella.
+   El auditor llevaba días sin poder correrse: reventaba con ENOENT antes de mirar un solo
+   alumno. La carpeta de volcados se pasa por argumento o por BATUTA_DUMPS. */
+const D = process.argv[2] || process.env.BATUTA_DUMPS;
+if (!D){ console.error("uso: node auditor-estados-raros.mjs <carpeta-con-los-volcados>  (o BATUTA_DUMPS=...)"); process.exit(2); }
 const leer = f => JSON.parse(readFileSync(`${D}/${f}.json`, "utf8"))[0].results;
 
 const M = await cargarMotor(["compute","computeMulti","pasesDe","parsePaquetes","resolverPk",

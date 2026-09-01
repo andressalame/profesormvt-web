@@ -95,6 +95,13 @@ const NUEVAS = [
   ["¿Publicas tu dirección?", "publicas tu direccion"],
   ["lista de espera", "lista de espera"],
   ["referidos de la academia", "trae a un amigo"],
+  /* 27-ago-2026: las cuatro que el manual no conocia. Google Calendar y el campo del
+     codigo son de esta semana; Sugerencias y Beneficios llevaban semanas construidas
+     y el bot nunca supo de ellas, que es la forma silenciosa del mismo problema. */
+  ["Google Calendar del dueño", "google calendar"],
+  ["donde pone el alumno el codigo del amigo", "paso de comprar"],
+  ["el modo Sugerencias del asistente de WhatsApp", "sugerencias"],
+  ["beneficios y convenios para los alumnos", "beneficios y convenios"],
 ];
 for (const [nombre, aguja] of NUEVAS){
   DUENO_P.includes(aguja) ? ok("conoce " + nombre) : no("NO conoce " + nombre);

@@ -10,7 +10,7 @@
    Ahora la guarda es por día Y CURSO. El SALDO no cambia: una reserva sin su fila
    de bitácora ya contaba igual, por el emparejamiento de `eventosConsumo`.
    ───────────────────────────────────────────────────────────────────────────── */
-import { cargarMotor, envConDatos } from "./motor-real.mjs";
+import { cargarMotor, envConDatos, ahoraDeFixtures } from "./motor-real.mjs";
 import { readFileSync } from "node:fs";
 const SRC = readFileSync(process.env.BATUTA_WORKER || (process.env.HOME + "/Code/mvt/web/batuta-app/worker/index.js"), "utf8");
 let fallos = 0;
@@ -34,7 +34,11 @@ const leer = f => JSON.parse(readFileSync(`${D}/${f}.json`, "utf8"))[0].results;
 const M = await cargarMotor(["compute","computeMulti","pasesDe","parsePaquetes","resolverPk","reservasUsadasPuro","fechaLimaDe"]);
 const paqMap = M.parsePaquetes(leer("paquetes")[0].valor).map;
 const alumnos = leer("alumnos"), reservas = leer("reservas"), registro = leer("registro");
-const ahora = Date.now();
+/* 🔴 26-ago-2026 · el "ahora" es el de la FOTO, no el del reloj. Con Date.now() esta prueba
+   se ponía roja sola con cada día que pasaba: las reservas que eran futuras cuando se tomó
+   la foto se volvían pasadas, y su fila de bitácora nunca iba a estar en la foto (se escribió
+   después). Cantaba 10 "clases invisibles" de gente que en producción está bien anotada. */
+const ahora = ahoraDeFixtures();
 const rv = new Map(), rg = new Map();
 for (const r of reservas) (rv.get(r.alumno_id) || rv.set(r.alumno_id, []).get(r.alumno_id)).push(r);
 for (const g of registro) (rg.get(g.alumno_id) || rg.set(g.alumno_id, []).get(g.alumno_id)).push(g);

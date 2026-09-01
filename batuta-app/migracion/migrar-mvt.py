@@ -46,6 +46,68 @@ RENOMBRES = {"bono_clases": "bonus_clases", "bono_ciclo": "bonus_ciclo"}
 TABLAS = ["config", "precios", "alumnos", "cuentas", "registro", "reservas",
           "compras", "disponibilidad", "recursos", "ejercicios", "grupos", "pausas"]
 
+# ── LOS ARCHIVOS (26-ago-2026) ────────────────────────────────────────────────
+# Mover las FILAS no mueve los ARCHIVOS. Los audios, PDFs y comprobantes viven en
+# R2, y son DOS cosas distintas que hay que traer:
+#   1. la RUTA que la fila guarda: MVT sirve en /api/... y Batuta en /app/api/...
+#   2. los BYTES: bucket `profesormvt-recursos` -> bucket `batuta-app-archivos`
+# La primera corrida no hizo ninguna de las dos y la migración se dio por buena porque
+# cuadraba fila por fila: 92 filas con la ruta rota y 90 archivos que no existían del
+# otro lado. Lo notó una alumna tres días después, no el script.
+RUTA_MVT = "/api/recurso/archivo/"
+RUTA_BAT = "/app/api/recurso/archivo/"
+BUCKET_MVT = "profesormvt-recursos"
+BUCKET_BAT = "batuta-app-archivos"
+RE_KEY = re.compile(r"([0-9a-f-]{36}\.(?:pdf|mp3|m4a|ogg|wav|png|jpg|jpeg))")
+MIME = {"pdf": "application/pdf", "mp3": "audio/mpeg", "m4a": "audio/mp4", "ogg": "audio/ogg",
+        "wav": "audio/wav", "png": "image/png", "jpg": "image/jpeg", "jpeg": "image/jpeg"}
+
+
+def reescribir(v):
+    """La ruta de un archivo tal como Batuta la sirve. Idempotente: si ya viene con
+    /app/ no se toca (si no, una segunda pasada dejaría /app/app/api/...)."""
+    if not isinstance(v, str) or RUTA_MVT not in v or RUTA_BAT in v:
+        return v
+    return v.replace(RUTA_MVT, RUTA_BAT)
+
+
+def claves_de(v):
+    """Las keys de R2 que menciona un valor. Sirve igual para `ejercicios.url` (una),
+    para `registro.tarea_audio` (un JSON con varias) y para `compras.comprobante`
+    (la key pelada, sin ruta)."""
+    return RE_KEY.findall(v) if isinstance(v, str) else []
+
+
+def copiar_archivos(claves, cwd):
+    """Trae los bytes de R2. Idempotente: lo que ya está del otro lado no se vuelve a
+    subir. Devuelve las claves que NO se pudieron traer."""
+    import os, tempfile
+    faltan = []
+    tmp = tempfile.mkdtemp(prefix="mvt-r2-")
+    for i, k in enumerate(sorted(set(claves)), 1):
+        ya = subprocess.run(["npx", "wrangler", "r2", "object", "get", f"{BUCKET_BAT}/{k}",
+                             "--remote", "--pipe"], cwd=cwd, capture_output=True)
+        if ya.returncode == 0 and len(ya.stdout) > 100:
+            continue
+        dst = os.path.join(tmp, k)
+        with open(dst, "wb") as fh:
+            src = subprocess.run(["npx", "wrangler", "r2", "object", "get", f"{BUCKET_MVT}/{k}",
+                                  "--remote", "--pipe"], cwd=cwd, stdout=fh, stderr=subprocess.PIPE)
+        if src.returncode != 0 or os.path.getsize(dst) < 100:
+            faltan.append(k)
+            continue
+        ct = MIME.get(k.rsplit(".", 1)[-1].lower(), "application/octet-stream")
+        put = subprocess.run(["npx", "wrangler", "r2", "object", "put", f"{BUCKET_BAT}/{k}",
+                              "--remote", "--file", dst, "--ct", ct, "--cd", "inline"],
+                             cwd=cwd, capture_output=True)
+        if put.returncode != 0:
+            faltan.append(k)
+        os.remove(dst)
+        if i % 10 == 0:
+            print(f"      archivos: {i}/{len(set(claves))}")
+    return faltan
+
+
 
 def d1(base, sql, cwd, escribir=False):
     cmd = ["npx", "wrangler", "d1", "execute", base, "--remote", "--json", "--command", sql]
@@ -162,6 +224,7 @@ def main():
 
     informe, total = [], 0
     lotes = []
+    claves_r2 = set()          # los archivos de R2 que estas filas mencionan
     for tabla in TABLAS:
         cm = columnas(MVT, tabla, DIR)
         cb = columnas(BAT, tabla, DIRB)
@@ -186,7 +249,10 @@ def main():
             for f in filas:
                 f["__tid"] = tid
         for f in filas:
-            vals = [lit(f.get(x[0])) for x in pares]
+            crudos = [f.get(x[0]) for x in pares]
+            for v in crudos:
+                claves_r2.update(claves_de(v))
+            vals = [lit(reescribir(v)) for v in crudos]
             if "__tid" in f:
                 vals.append(lit(tid))
             lotes.append(f"INSERT OR IGNORE INTO {tabla} ({', '.join(destinos)}) VALUES ({', '.join(vals)});")
@@ -197,6 +263,7 @@ def main():
     for t, n, p, det in informe:
         print(f"   {t:16} {n:5}   {det if p else '—'}")
     print(f"\n   total de filas a mover: {total}")
+    print(f"   archivos de R2 a traer ({BUCKET_MVT} → {BUCKET_BAT}): {len(claves_r2)}")
     # Lo que NO tiene dónde ir. Se dice fuerte: una migración que pierde algo en silencio
     # es peor que una que no se hace.
     huerfanas = []
@@ -264,6 +331,19 @@ def main():
             print(f"   ⚠️  lote {i//20}: {str(e)[:160]}")
     print(f"   {hechas} de {len(lotes)} sentencias aplicadas")
 
+    # ── LOS ARCHIVOS ─────────────────────────────────────────────────────────
+    # Va DESPUÉS de las filas y antes de cualquier "quedó bien": un audio que no está
+    # en el bucket de Batuta es una pantalla de error en el portal del alumno.
+    if claves_r2:
+        print(f"   trayendo {len(claves_r2)} archivos de R2…")
+        sin_traer = copiar_archivos(claves_r2, DIRB)
+        if sin_traer:
+            print(f"   🔴 {len(sin_traer)} archivos NO se pudieron traer (el portal los va a mostrar rotos):")
+            for k in sin_traer[:10]:
+                print(f"      {k}")
+        else:
+            print(f"   ✅ los {len(claves_r2)} archivos están en {BUCKET_BAT}")
+
     # ── 🔒 EL ENSAYO NO PUEDE TOCAR A NADIE ─────────────────────────────────────
     # Un tenant de ensayo nace 'activo', así que TODOS los crones de Batuta lo tratan como
     # una academia de verdad: recordatorios de clase, aviso de renovación, win-back, pedido
@@ -315,6 +395,15 @@ def main():
         print("   La academia quedó incompleta. NO la uses.")
         return 1
     print("   ✅ cuadra fila por fila contra el origen")
+    # Cuadrar fila por fila NO dice nada de lo que hay DENTRO de la fila. Una ruta
+    # /api/... apunta al worker de MVT y en batuta.lat es un 404.
+    rotas = d1(BAT, "SELECT (SELECT COUNT(*) FROM registro WHERE tenant_id='" + tid + "' AND instr(COALESCE(tarea_audio,''),'" + RUTA_MVT + "')>0 AND instr(COALESCE(tarea_audio,''),'" + RUTA_BAT + "')=0) registro,"
+                    "(SELECT COUNT(*) FROM ejercicios WHERE tenant_id='" + tid + "' AND instr(COALESCE(url,''),'" + RUTA_MVT + "')>0 AND instr(COALESCE(url,''),'" + RUTA_BAT + "')=0) ejercicios,"
+                    "(SELECT COUNT(*) FROM recursos WHERE tenant_id='" + tid + "' AND instr(COALESCE(url,''),'" + RUTA_MVT + "')>0 AND instr(COALESCE(url,''),'" + RUTA_BAT + "')=0) recursos", DIRB)[0]
+    if any(rotas.values()):
+        print(f"   🔴 quedaron rutas de MVT sin reescribir: {rotas}")
+        return 1
+    print("   ✅ ninguna fila apunta al worker viejo")
     print(f"   míralo en: https://batuta.lat/a/{slug}")
     if real:
         print("\n   🔴 LOS CORREOS ESTÁN APAGADOS. Los datos están completos, pero ni Batuta")

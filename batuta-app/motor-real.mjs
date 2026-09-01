@@ -7,7 +7,7 @@
    Regla de oro: si copias la lógica, pruebas tu copia. Acá siempre se prueba el worker.
    Uso:  const M = await cargarMotor(["computeMulti","compute","pasesDe"]);
    ───────────────────────────────────────────────────────────────────────────── */
-import { readFileSync, writeFileSync, mkdtempSync } from "node:fs";
+import { readFileSync, writeFileSync, mkdtempSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -220,4 +220,24 @@ export function envConDatos({ reservas = [], registro = [], alumnos = [] } = {})
       async run(){ return {}; }
     };
   } } };
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   EL "AHORA" DE LAS FIXTURES                                    (26-ago-2026)
+   Las fixtures son una FOTO de la D1. Comparar esa foto contra `Date.now()` hace
+   que la prueba se pudra sola: todo lo que era futuro cuando se tomo la foto se
+   vuelve pasado, y lo que paso despues no esta en la foto. Cualquier prueba que
+   necesite "ahora" sobre datos de fixtures pide este sello.
+   Cae con gracia: si no hay `sellado.json` (fixtures viejas) usa la fecha del
+   archivo, y solo en ultima instancia el reloj de verdad.
+   ───────────────────────────────────────────────────────────────────────────── */
+export function ahoraDeFixtures(){
+  const dir = new URL("datos/fixtures/", import.meta.url).pathname;
+  try {
+    const j = JSON.parse(readFileSync(dir + "sellado.json", "utf8"));
+    const t = Date.parse(j.generado);
+    if (t) return t;
+  } catch (e) {}
+  try { return statSync(dir + "reservas.json").mtimeMs; } catch (e) {}
+  return Date.now();
 }

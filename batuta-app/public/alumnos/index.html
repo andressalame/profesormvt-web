@@ -683,6 +683,17 @@
           <a class="btn ghost" id="btnWaRef" target="_blank" rel="noopener">Compartir por WhatsApp</a>
         </div>
       </div>
+      <!-- El que llegó SIN el link de un amigo también tiene que poder escribir su código.
+           Antes esto solo existía en el formulario de registro, o sea: una sola vez en la vida. -->
+      <div class="card hidden" id="cardPonerRef" style="margin-top:14px;">
+        <div class="lab">// ¿TE RECOMENDARON?</div>
+        <p class="note" id="ponerRefTxt" style="margin:0 0 10px;">Si un amigo te pasó su código, ponlo acá antes de tu primera compra.</p>
+        <div style="display:flex;gap:8px;">
+          <input id="r2_ref" type="text" maxlength="12" autocapitalize="characters" spellcheck="false" placeholder="AB12CD" style="flex:1 1 auto;" />
+          <button type="button" class="btn" id="btnAplicarRef2" style="flex:0 0 auto;">Aplicar</button>
+        </div>
+        <div class="err" id="refErr2"></div>
+      </div>
       <div class="grid2">
         <div class="card stat"><div class="num" id="rReg">0</div><div class="lab">amigos registrados</div></div>
         <div class="card stat"><div class="num" id="rCom">0</div><div class="lab">ya compraron</div></div>
@@ -790,6 +801,20 @@
         <div class="lab">Total a pagar</div>
         <div class="montoview" id="c_monto">S/ 0</div>
         <div class="montonote" id="c_montoNote"></div>
+        <!-- 27-ago-2026 · Acá NO había dónde poner el código de un amigo, y era el único
+             sitio donde hace falta. `ref_por` se escribía solo en el registro: quien creó
+             su cuenta sin el link se quedaba sin el beneficio para siempre. Se muestra solo
+             a quien todavía está a tiempo (ME.referidos.puedeUsarCodigo lo decide el
+             servidor con las mismas reglas del cobro). -->
+        <div id="wizRefWrap" class="hidden" style="margin-top:12px;">
+          <label for="c_ref" style="display:block;font-size:12px;margin:0 0 5px;">¿Alguien te recomendó? Pon su código</label>
+          <div style="display:flex;gap:8px;">
+            <input id="c_ref" type="text" maxlength="12" autocapitalize="characters" spellcheck="false" placeholder="AB12CD" style="flex:1 1 auto;" />
+            <button type="button" class="btn ghost" id="btnAplicarRef" style="flex:0 0 auto;">Aplicar</button>
+          </div>
+          <div class="err" id="refErr"></div>
+          <p class="note" id="refNota" style="margin:6px 0 0;"></p>
+        </div>
         <div class="err" id="wizErr1"></div>
         <div class="modal-actions">
           <button class="btn ghost" data-close>Cancelar</button>
@@ -1759,11 +1784,10 @@ function abrirCompra(pk){
   ensureOpcionTarjeta();
   if(!ME) return;
   if(ME.compraPendiente){ toast("Ya tienes un pago en verificación"); return; }
-  $("c_paquete").innerHTML = tiersDeMe().filter(function(t){ return ME.precios && (Number(ME.precios[t.pk])||0)>0 && (!t.primera || !ME.alumno); })
-    .map(function(t){ var c=calc(t.pk); var et=(t.primera?'1 clase':(t.ilim?'mensual':t.horas+(t.horas===1?' clase':' clases'))); return '<option value="'+esc(t.pk)+'">'+esc(t.nombre)+' — '+et+' · S/ '+c.final+'</option>'; }).join("");
-  if(pk) $("c_paquete").value = pk;
+  pintarOpcionesPaquete(pk);
   if(ME.alumno && ME.alumno.curso) $("c_curso").value = ME.alumno.curso;
   actualizaMonto();
+  pintarCampoRef();
   COMPRA_SLOT = null; COMPRA_SLOTS_CACHE = null;
   actualizaSlotWrap();
   var mets = ajustarMetodosPago();  // filtra por lo que el profe configuró y elige el primero disponible
@@ -2090,11 +2114,77 @@ function textoDescuentoRef(){
   if(!v) return "";
   return r.descModo === "pct" ? (v+"% de descuento") : ("S/"+v+" de descuento");
 }
+/* Cada opción del selector lleva el precio YA con sus descuentos, así que hay que
+   repintarlas cada vez que ese precio puede haber cambiado (al abrir el modal y al
+   aplicar un código). Vive en UNA función a propósito: escrita dos veces, una de las
+   dos se queda con el precio viejo y el alumno elige un número y paga otro. */
+function pintarOpcionesPaquete(pkSel){
+  var sel = $("c_paquete"); if(!sel) return;
+  var actual = pkSel || sel.value;
+  sel.innerHTML = tiersDeMe().filter(function(t){ return ME.precios && (Number(ME.precios[t.pk])||0)>0 && (!t.primera || !ME.alumno); })
+    .map(function(t){ var c=calc(t.pk); var et=(t.primera?'1 clase':(t.ilim?'mensual':t.horas+(t.horas===1?' clase':' clases'))); return '<option value="'+esc(t.pk)+'">'+esc(t.nombre)+' — '+et+' · S/ '+c.final+'</option>'; }).join("");
+  if(actual) sel.value = actual;
+}
+
+/* ---------- "¿Alguien te recomendó?" DESPUÉS del registro (27-ago-2026) ----------
+   Lo pidió una alumna de Elevate que le estaba comprando el plan a su suegra: creó la
+   cuenta sin el link del amigo y al pagar no había dónde poner el código. El campo se
+   muestra SOLO si el servidor dice que todavía está a tiempo (`puedeUsarCodigo`: sin
+   código puesto, sin compras y sin historial en la casa si la academia pide alumnos
+   nuevos). Enseñárselo a quien ya compró sería ofrecerle algo que el cobro le va a
+   negar, que es la forma más rápida de que un descuento se vuelva un reclamo. */
+function pintarCampoRef(){
+  var r = (ME && ME.referidos) || {};
+  var puede = !!r.puedeUsarCodigo;
+  var w = $("wizRefWrap"), c = $("cardPonerRef");
+  if(w) w.classList.toggle("hidden", !puede);
+  if(c) c.classList.toggle("hidden", !puede);
+  var nota = $("refNota");
+  if(nota){
+    var t = textoDescuentoRef();
+    var min = Number(r.minClases) || 0;
+    nota.textContent = t
+      ? ("Con el código de un amigo te llevas " + t + " en esta primera compra" + (min ? " (de " + min + " clases para arriba)." : "."))
+      : "";
+  }
+}
+function aplicarCodigoRef(inpId, errId, btn){
+  var inp = $(inpId), err = $(errId);
+  if(!inp) return;
+  var cod = (inp.value || "").trim().toUpperCase();
+  if(err) err.textContent = "";
+  if(!cod){ if(err) err.textContent = "Escribe el código de tu amigo."; return; }
+  if(btn) btn.disabled = true;
+  api("/app/api/cuenta/referido", { method:"POST", body: JSON.stringify({ codigo: cod }) })
+    .then(function(){ return api("/app/api/me"); })
+    .then(function(d){
+      ME = d;
+      toast("Listo, código aplicado");
+      /* el precio cambia en TRES sitios a la vez: las tarjetas de la vista Comprar, las
+         opciones del selector y el total del wizard. Se repintan los tres o el alumno ve
+         un número distinto en cada uno. */
+      renderActive();
+      pintarOpcionesPaquete();
+      actualizaMonto();
+      pintarCampoRef();
+      if(typeof renderPaybox === "function" && $("c_metodo") && $("c_metodo").value) renderPaybox();
+    })
+    .catch(function(e){ if(err) err.textContent = (e && e.message) || "No se pudo aplicar el código."; })
+    .finally(function(){ if(btn) btn.disabled = false; });
+}
+if($("btnAplicarRef")) $("btnAplicarRef").addEventListener("click", function(){ aplicarCodigoRef("c_ref", "refErr", this); });
+if($("btnAplicarRef2")) $("btnAplicarRef2").addEventListener("click", function(){ aplicarCodigoRef("r2_ref", "refErr2", this); });
+["c_ref","r2_ref"].forEach(function(id){
+  var i = $(id); if(!i) return;
+  i.addEventListener("keydown", function(e){ if(e.key === "Enter"){ e.preventDefault(); $(id === "c_ref" ? "btnAplicarRef" : "btnAplicarRef2").click(); } });
+});
+
 function renderReferidos(){
   var code = ME.ref_code || "——";
   $("rCode").textContent = code;
   $("rReg").textContent = (ME.referidos && ME.referidos.registrados) || 0;
   $("rCom").textContent = (ME.referidos && ME.referidos.compraron) || 0;
+  pintarCampoRef();
   var r = (ME && ME.referidos) || {};
   var dTxt = textoDescuentoRef();
   var min = Number(r.minClases) || 0;

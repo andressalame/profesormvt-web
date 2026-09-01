@@ -88,4 +88,11 @@ for (const [nombre, sql] of Object.entries(CONSULTAS)){
   console.log(`  ✅ ${nombre.padEnd(10)} ${String(filas.length).padStart(5)} filas`);
   total += filas.length;
 }
+/* 🔴 26-ago-2026 · LA FOTO LLEVA FECHA. Las fixtures son un volcado congelado, pero el reloj
+   de las pruebas seguia corriendo: una reserva que el 24-ago estaba en el FUTURO hoy esta en el
+   pasado, y su fila de bitacora nunca va a aparecer en esta foto porque se escribio despues.
+   Asi se puso roja `pruebas-dos-clases-el-mismo-dia` sin que nadie tocara nada: cantaba 10
+   "clases invisibles" que en produccion estan perfectamente anotadas. Las pruebas que comparan
+   contra "ahora" usan ESTE sello, no Date.now(). */
+writeFileSync(SALIDA + "sellado.json", JSON.stringify({ generado: new Date().toISOString(), filas: total }) + "\n");
 console.log(`\n${total} filas en ${SALIDA}`);

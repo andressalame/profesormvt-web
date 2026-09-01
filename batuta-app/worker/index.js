@@ -129,6 +129,22 @@ function paquetesDefault(){
 }
 /* ¿Este paquete deja reservar esta franja? Paquete sin tipos = todo permitido.
    Franja sin etiqueta = permitida siempre (la academia no la clasificó, no se le cierra la puerta). */
+/* ¿Qué curso lleva esta compra? (29-ago-2026)
+   Las 4 rutas de compra caían en `cursosT[0]` cuando el comprador no mandaba curso, así que
+   TODAS las compras de Elevate quedaron marcadas "Pilates Máquinas" — incluidas las de los
+   planes de Mat, que ni siquiera cubren esa clase. Y ese curso se le COPIA al alumno al
+   confirmar: Mei Ling Kong (17-ago) compró "12 clases de Mat" y su ficha dice Pilates Máquinas.
+   Ahora manda el plan: si el paquete declara qué incluye, eso es el curso; si no declara nada,
+   ninguno. Inventar el primero del catálogo es la misma trampa que el importador tapó el
+   11-ago para José, por otra puerta. Sin curso es un estado normal (1.430 de los 1.447 de
+   Elevate viven así) y no cierra ninguna: `paqueteCubre` con etiqueta vacía deja pasar. */
+function cursoDeCompra(cursosT, pedido, pk){
+  const cur = cursosT || [];
+  const partes = String(pedido || "").split(",").map(s => s.trim()).filter(Boolean);
+  if (partes.length && partes.every(c => cur.indexOf(c) !== -1)) return partes.join(", ");
+  const cubiertos = ((pk && pk.tipos) || []).filter(c => cur.indexOf(c) !== -1);
+  return cubiertos.length ? cubiertos.join(", ") : "";
+}
 function paqueteCubre(pk, etiquetaSlot){
   const tipos = (pk && pk.tipos) || [];
   if (!tipos.length) return true;
@@ -336,6 +352,26 @@ async function alumCapDe(env, tenantId, plan){
   const lim = await packsDe(env, tenantId);
   return Math.max(lim.alumnos, ALUM_CAP[plan] || 0);
 }
+/* 🔴 26-ago-2026 · EL TOPE QUE DE VERDAD APLICA EL CANDADO, en un solo sitio.
+   El candado del alta (PUT /admin/data) sumaba `alum_extra` por su cuenta, así que el
+   número que topaba y el que el panel mostraba podían no ser el mismo. Todo el que
+   MUESTRE un tope de alumnos llama a esta función, no a `alumCapDe` pelada. */
+async function capAlumnosDe(env, tenantId, plan){
+  let extra = 0;
+  try {
+    const r = await env.DB.prepare("SELECT valor FROM config WHERE tenant_id = ?1 AND clave = 'alum_extra'").bind(tenantId).first();
+    extra = parseInt((r && r.valor) || "0", 10) || 0;
+  } catch (e) {}
+  return (await alumCapDe(env, tenantId, plan)) + extra;
+}
+/* El número de alumnos que MIDE el candado: el total cargado, no los que están al día.
+   El medidor de "Tu Batuta" enseñaba los activos contra este tope y por eso mentía. */
+async function totalAlumnosDe(env, tenantId){
+  try {
+    const r = await env.DB.prepare("SELECT COUNT(*) AS n FROM alumnos WHERE tenant_id = ?1").bind(tenantId).first();
+    return Number(r && r.n) || 0;
+  } catch (e) { return 0; }
+}
 /* El vencido (suscripción caída) baja al cupo base, no se queda con lo que compró. */
 async function convCapDe(env, tenantId, vencido, plan){
   if (vencido) return BASE_LIMITES.ia;
@@ -399,6 +435,13 @@ async function recalcularPorAlumno(env){
   } catch (e) { return; }
   for (const t of filas){
     try {
+      /* 🔒 31-ago-2026 · candado de seguridad: si el tenant tiene packs COMPRADOS, su cobro
+         mensual es la suma de esos packs y este cron no tiene nada que decir. Sin esto, un
+         solo tenant mal etiquetado como 'por_alumno' le veria su suscripcion de MP reescrita
+         a max(5, activos) x S/5, un precio que nunca acepto. La causa ya esta tapada en
+         `planDePreapprovalMP`; esto es para que no vuelva a poder pasar por otra puerta. */
+      const packsT = await packsDe(env, t.id);
+      if (Object.keys(packsT.comprados || {}).length) continue;
       const activos = await contarAlumnosActivos(env, t.id);
       const monto = montoPorAlumno(activos);
       const ultimo = Number(t.ultimo) || 0;
@@ -456,16 +499,26 @@ function esPlanNuestroMP(planId){
   return Object.values(MP_PLAN_IDS).filter(Boolean).indexOf(id) !== -1;
 }
 /* Plan que corresponde a un preapproval de MP ya verificado como nuestro: reverso de
-   MP_PLAN_IDS para los planes fijos; un preapproval directo (sin plan asociado) solo lo
-   creamos nosotros para el dinamico "por alumno". Con esto tenants.plan se escribe RECIEN
-   cuando MP confirma 'authorized', derivado del preapproval realmente pagado. */
+   MP_PLAN_IDS para los planes fijos. Con esto tenants.plan se escribe RECIEN cuando MP
+   confirma 'authorized', derivado del preapproval realmente pagado.
+   🔴 31-ago-2026 · ACA se devolvia "por_alumno" para todo preapproval DIRECTO (sin
+   preapproval_plan_id). Eso era cierto hasta el 20-ago, cuando el unico preapproval
+   directo que creabamos era el dinamico por alumno. Con el MODELO DE PACKS el checkout
+   de packs es JUSTAMENTE un preapproval directo (es la unica forma de cobrar un monto
+   dinamico), asi que el webhook y /vincular-sub le estampaban plan='por_alumno' al
+   primer cliente que pagara, en el mismo instante de pagar. Y eso le regalaba las dos
+   familias de packs que NO compro: ALUM_CAP.por_alumno = 1,000,000 alumnos y
+   PLAN_CONV_CAP.por_alumno = 6,000 conversaciones. Encima `recalcularPorAlumno` (cron
+   diario) barre por plan='por_alumno' y le habria PISADO el monto de su suscripcion en
+   MP con max(5, activos) x S/5 — un precio que el cliente nunca acepto.
+   `crearPreapprovalMP` (el unico productor legitimo de un directo "por alumno") no tiene
+   un solo llamador desde la mudanza a packs, asi que un directo hoy es SIEMPRE packs.
+   Devolver "" significa "no toques tenants.plan": los packs mandan solos, por config. */
 function planDePreapprovalMP(pre){
   const pid = String((pre && pre.preapproval_plan_id) || "").trim();
-  if (pid){
-    for (const k of Object.keys(MP_PLAN_IDS)){ if (MP_PLAN_IDS[k] === pid) return k; }
-    return "";
-  }
-  return "por_alumno";
+  if (!pid) return "";
+  for (const k of Object.keys(MP_PLAN_IDS)){ if (MP_PLAN_IDS[k] === pid) return k; }
+  return "";
 }
 
 const json = (data, status) => new Response(JSON.stringify(data), {
@@ -583,6 +636,268 @@ async function googleIntercambiar(env, code){
 }
 async function ensureGoogleSchema(env){
   try { await env.DB.prepare("ALTER TABLE tenants ADD COLUMN google_id TEXT DEFAULT ''").run(); } catch (e) { /* ya existe */ }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   GOOGLE CALENDAR DE LA ACADEMIA (27-ago-2026)
+   Cada clase que le reserven al dueño aparece sola en su Google Calendar, con
+   el alumno y el curso; si la clase se cancela, el evento se va.
+
+   ⚠️ Por qué estaba roto: la pantalla de Ajustes > Google Calendar se heredó del
+   CRM viejo de MVT cuando el portal se mudó a Batuta (23-ago) pero el MOTOR se
+   quedó allá. Los campos vivían `disabled`, `/app/api/admin/google/estado` no
+   existía en NINGUNA versión del worker, y encima `admin/config` descartaba en
+   silencio `gcal_client_id`/`gcal_client_secret`/`gcal_calendar_id`, que nunca
+   entraron a su lista blanca de claves (el mismo agujero que se llevó `saldo_modo`
+   el 13-ago). El dueño pegaba sus credenciales, veía "Guardado ✓" y no pasaba nada.
+
+   Tres decisiones que conviene no deshacer:
+
+   1. LAS CREDENCIALES DE BATUTA SON EL DEFAULT. Una academia normal no va a abrir
+      un proyecto en Google Cloud en su vida. Se usa el OAuth de la plataforma (el
+      mismo par GOOGLE_CLIENT_ID/SECRET del "Entrar con Google") y conectar es UN
+      clic. Si la academia carga SU propio Client ID + Secret, mandan los suyos:
+      eso es lo que tenía MVT y por eso su refresh_token migrado sigue sirviendo.
+
+   2. EL `state` VA FIRMADO Y LLEVA EL TENANT. El callback de Google llega sin
+      sesión y sin cookies: si el state no dijera de quién es, no habría forma de
+      saber a qué academia guardarle el token. Se firma con el HMAC del ADMIN_TOKEN
+      que ya usa el login (firmarState/verificarState), y NO con el `gcal_nonce`
+      global del CRM viejo, que en multi-tenant se pisaría entre academias.
+
+   3. SE RECONCILIA, NO SE ENGANCHA. Hay TRECE sitios que crean o cancelan reservas
+      (portal, panel, importador, compras, grupos, reprogramaciones). Colgar un
+      `gcalCrearEvento` de cada uno es exactamente la trampa que ya costó cara con
+      las seis rutas de compra: la número catorce se olvida en silencio. `gcalSync`
+      compara la agenda contra lo ya publicado y arregla la diferencia. Corre al
+      toque en las rutas que tocan agenda y, de red, en el cron de 15 minutos, así
+      que una ruta nueva que nadie conecte se arregla sola en el siguiente cuarto
+      de hora. La reprogramación tampoco necesita caso propio: el sistema cancela
+      la vieja y crea otra, y eso ya es un borrado más una creación.
+
+   Todo es best-effort: si Google falla, la reserva del alumno se hace igual.
+   ═══════════════════════════════════════════════════════════════════════════ */
+const GCAL_REDIRECT_URI = MARCA.dominio + "/app/api/admin/google/callback";
+/* `calendar.events` alcanza para crear y borrar. NO se pide el scope ancho de
+   calendario: en la pantalla de permisos de Google asusta y no hace falta. El
+   token que MVT trajo migrado se otorgó con el ancho y sirve igual (lo incluye). */
+const GCAL_SCOPE = "https://www.googleapis.com/auth/calendar.events";
+const GCAL_DIAS = 45;             // ventana de agenda que se mantiene espejada
+const GCAL_MAX_LLAMADAS = 30;     // techo de llamadas a Google por corrida
+const GCAL_TIPOS_FUERA = ["bloqueo", "aparta"];   // no son clases de nadie
+
+/* Credenciales a usar: las de la academia si cargó las suyas, si no las de Batuta. */
+function gcalCreds(env, cfg){
+  const id = String((cfg && cfg.gcal_client_id) || "").trim();
+  const sec = String((cfg && cfg.gcal_client_secret) || "").trim();
+  if (id && sec) return { id, secret: sec, propias: true };
+  if (env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET){
+    return { id: env.GOOGLE_CLIENT_ID, secret: env.GOOGLE_CLIENT_SECRET, propias: false };
+  }
+  return null;
+}
+function gcalCalendario(cfg){ return String((cfg && cfg.gcal_calendar_id) || "").trim() || "primary"; }
+
+/* Access tokens por academia. El isolate puede atender a varias, así que el caché
+   es un Map y no la variable suelta del CRM viejo (ahí una academia se llevaba el
+   token de la otra). Se guarda también el fallo, para que `estado` sepa distinguir
+   "no conectado" de "conectado pero Google lo rechaza" (token revocado). */
+const _gcalTok = new Map();       // tenant_id -> { value, exp }
+const _gcalFallo = new Map();     // tenant_id -> true si el ultimo refresh fallo
+async function gcalAccessToken(env, tenantId, cfg){
+  const cache = _gcalTok.get(tenantId);
+  if (cache && Date.now() < cache.exp - 60000) return cache.value;
+  cfg = cfg || await loadConfig(env, tenantId).catch(() => null);
+  const rt = String((cfg && cfg.gcal_refresh_token) || "").trim();
+  const cr = gcalCreds(env, cfg);
+  if (!rt || !cr) return null;    // sin conectar: no es una caída, no se marca fallo
+  let r;
+  try {
+    r = await fetch("https://oauth2.googleapis.com/token", {
+      method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        client_id: cr.id, client_secret: cr.secret, refresh_token: rt, grant_type: "refresh_token"
+      }).toString()
+    });
+  } catch (e) { _gcalFallo.set(tenantId, true); return null; }
+  if (!r.ok){ _gcalFallo.set(tenantId, true); return null; }
+  const d = await r.json().catch(() => null);
+  if (!d || !d.access_token){ _gcalFallo.set(tenantId, true); return null; }
+  _gcalFallo.set(tenantId, false);
+  _gcalTok.set(tenantId, { value: d.access_token, exp: Date.now() + (Number(d.expires_in) || 3600) * 1000 });
+  return d.access_token;
+}
+function gcalOlvidarToken(tenantId){ _gcalTok.delete(tenantId); _gcalFallo.delete(tenantId); }
+
+/* Título y detalle del evento. El alumno va en el TÍTULO porque es lo único que se
+   lee en la vista de mes del celular, que es donde el dueño mira su día. */
+function gcalEventoDe(info, cfg){
+  const quien = String(info.alumno || "").trim();
+  const curso = String(info.curso || "").trim();
+  const titulo = (curso || "Clase") + (quien ? " · " + quien : "");
+  const detalle = [];
+  if (quien) detalle.push("Alumno: " + quien + (info.email ? " <" + info.email + ">" : ""));
+  if (info.profesor) detalle.push("Profesor: " + info.profesor);
+  if (info.sala) detalle.push("Sala: " + info.sala);
+  detalle.push("Reservada desde " + MARCA.nombre + " · " + MARCA.dominio + "/app/panel");
+  const evt = {
+    summary: titulo,
+    description: detalle.join("\n"),
+    start: { dateTime: info.inicio_utc, timeZone: "America/Lima" },
+    end:   { dateTime: info.fin_utc,    timeZone: "America/Lima" },
+    reminders: { useDefault: true },
+    /* Marca de agua para reconocer los nuestros si alguien mira el calendario crudo. */
+    source: { title: MARCA.nombre, url: MARCA.dominio }
+  };
+  /* Link de Meet: OPCIONAL y apagado por defecto. Para MVT (clases 1 a 1, muchas
+     online) es justo lo que quería; para un estudio con 30 clases presenciales al
+     día es basura en cada evento. Lo prende la academia en Ajustes.
+     ⚠️ Al alumno NO se le invita: metería a Google a mandarle correos desde la
+     cuenta del dueño a los 1,447 alumnos de una academia migrada, que nadie pidió.
+     Su nombre y su correo van en el detalle, que es lo que hacía falta. */
+  if (String((cfg && cfg.gcal_meet) || "") === "1"){
+    evt.conferenceData = { createRequest: { requestId: crypto.randomUUID(), conferenceSolutionKey: { type: "hangoutsMeet" } } };
+  }
+  return evt;
+}
+
+/* Crea el evento y devuelve su id, o "" si no se pudo (nunca tumba la reserva). */
+async function gcalCrearEvento(env, tenantId, cfg, info){
+  try {
+    const tok = await gcalAccessToken(env, tenantId, cfg);
+    if (!tok) return "";
+    const evt = gcalEventoDe(info, cfg);
+    const r = await fetch(
+      "https://www.googleapis.com/calendar/v3/calendars/" + encodeURIComponent(gcalCalendario(cfg)) +
+      "/events" + (evt.conferenceData ? "?conferenceDataVersion=1" : ""),
+      { method: "POST", headers: { "authorization": "Bearer " + tok, "content-type": "application/json" }, body: JSON.stringify(evt) }
+    );
+    if (!r.ok) return "";
+    const d = await r.json().catch(() => null);
+    return (d && d.id) || "";
+  } catch (e) { return ""; }
+}
+
+/* true = el evento ya no está en el calendario (lo borramos ahora, o ya no existía).
+   false = Google falló y sigue vivo; el llamador NO limpia gcal_event_id, así la
+   siguiente corrida lo reintenta (si se limpiara, el evento queda huérfano para
+   siempre en el calendario del dueño y nadie se entera). */
+async function gcalBorrarEvento(env, tenantId, cfg, eventId){
+  try {
+    if (!eventId) return true;
+    const tok = await gcalAccessToken(env, tenantId, cfg);
+    if (!tok) return false;
+    const r = await fetch(
+      "https://www.googleapis.com/calendar/v3/calendars/" + encodeURIComponent(gcalCalendario(cfg)) +
+      "/events/" + encodeURIComponent(eventId),
+      { method: "DELETE", headers: { "authorization": "Bearer " + tok } }
+    );
+    return r.ok || r.status === 404 || r.status === 410;
+  } catch (e) { return false; }
+}
+
+/* ¿Qué le falta al calendario para estar igual que la agenda? Sin tocar Google:
+   sirve para el estado del panel (decir "faltan 12" en vez de mentir "al día"). */
+async function gcalPendientes(env, tenantId){
+  const ahora = Date.now();
+  const desde = new Date(ahora - 2 * 3600000).toISOString();
+  const hasta = new Date(ahora + GCAL_DIAS * 86400000).toISOString();
+  const fueraSql = GCAL_TIPOS_FUERA.map(t => "'" + t + "'").join(",");
+  const f = await env.DB.prepare(
+    "SELECT COUNT(*) AS n FROM reservas WHERE tenant_id = ?1 AND COALESCE(gcal_event_id,'') = '' " +
+    "AND estado IN ('reservada','completada') AND COALESCE(tipo,'') NOT IN (" + fueraSql + ") " +
+    "AND inicio_utc >= ?2 AND inicio_utc <= ?3"
+  ).bind(tenantId, desde, hasta).first().catch(() => null);
+  const p = await env.DB.prepare(
+    "SELECT COUNT(*) AS n FROM reservas WHERE tenant_id = ?1 AND COALESCE(gcal_event_id,'') != '' AND inicio_utc >= ?2"
+  ).bind(tenantId, desde).first().catch(() => null);
+  return { faltan: Number(f && f.n) || 0, publicadas: Number(p && p.n) || 0 };
+}
+
+/* EL RECONCILIADOR. Publica lo que falta y borra lo que sobra. Idempotente: correrlo
+   de más no cuesta nada (dos consultas indexadas que devuelven 0 filas). */
+async function gcalSync(env, tenantId){
+  const cfg = await loadConfig(env, tenantId).catch(() => null);
+  if (!cfg || !String(cfg.gcal_refresh_token || "").trim()) return { ok: false, motivo: "sin conectar" };
+  const tok = await gcalAccessToken(env, tenantId, cfg);
+  if (!tok) return { ok: false, motivo: "token rechazado" };
+
+  const ahora = Date.now();
+  const desde = new Date(ahora - 2 * 3600000).toISOString();
+  const hasta = new Date(ahora + GCAL_DIAS * 86400000).toISOString();
+  const fueraSql = GCAL_TIPOS_FUERA.map(t => "'" + t + "'").join(",");
+  let creados = 0, borrados = 0, llamadas = 0, quedaron = 0;
+
+  /* 1) Lo que ya no debe estar: canceladas y anuladas que dejaron su evento. Va
+        PRIMERO: si hay tope de llamadas, es peor dejar en el calendario una clase
+        que ya no existe (el dueño va) que tardar en publicar una nueva. */
+  try {
+    const { results: fuera } = await env.DB.prepare(
+      "SELECT id, gcal_event_id FROM reservas WHERE tenant_id = ?1 AND COALESCE(gcal_event_id,'') != '' " +
+      "AND estado NOT IN ('reservada','completada') LIMIT 60"
+    ).bind(tenantId).all();
+    for (const r of (fuera || [])){
+      if (llamadas >= GCAL_MAX_LLAMADAS){ quedaron++; continue; }
+      llamadas++;
+      if (await gcalBorrarEvento(env, tenantId, cfg, r.gcal_event_id)){
+        await env.DB.prepare("UPDATE reservas SET gcal_event_id = '' WHERE id = ?1 AND tenant_id = ?2").bind(r.id, tenantId).run();
+        borrados++;
+      }
+    }
+  } catch (e) { console.error("gcalSync borrar", tenantId, e); }
+
+  /* 2) Lo que falta: clases vivas de la ventana que todavía no tienen evento. */
+  try {
+    const { results: faltan } = await env.DB.prepare(
+      "SELECT r.id, r.inicio_utc, r.fin_utc, COALESCE(r.curso,'') AS curso, COALESCE(r.sala,'') AS sala, " +
+      /* nombre + APELLIDO: Elevate tiene tres Andrea, y "Pilates · Andrea" en el calendario
+         no le dice a nadie cuál de las tres viene (SQL_NOMBRE_COMPLETO, 23-ago-2026). */
+      SQL_NOMBRE_COMPLETO("a") + " AS alumno, COALESCE(a.email,'') AS email, COALESCE(p.nombre,'') AS profesor " +
+      "FROM reservas r " +
+      "LEFT JOIN alumnos a ON a.id = r.alumno_id AND a.tenant_id = r.tenant_id " +
+      "LEFT JOIN profesores p ON p.id = r.profesor_id AND p.tenant_id = r.tenant_id " +
+      "WHERE r.tenant_id = ?1 AND COALESCE(r.gcal_event_id,'') = '' AND r.estado IN ('reservada','completada') " +
+      "AND COALESCE(r.tipo,'') NOT IN (" + fueraSql + ") AND r.inicio_utc >= ?2 AND r.inicio_utc <= ?3 " +
+      "ORDER BY r.inicio_utc LIMIT 60"
+    ).bind(tenantId, desde, hasta).all();
+    for (const r of (faltan || [])){
+      if (llamadas >= GCAL_MAX_LLAMADAS){ quedaron++; continue; }
+      llamadas++;
+      const eid = await gcalCrearEvento(env, tenantId, cfg, r);
+      if (eid){
+        await env.DB.prepare("UPDATE reservas SET gcal_event_id = ?1 WHERE id = ?2 AND tenant_id = ?3").bind(eid, r.id, tenantId).run();
+        creados++;
+      }
+    }
+  } catch (e) { console.error("gcalSync crear", tenantId, e); }
+
+  /* El tope NUNCA es mudo: si quedó cola, queda dicho en el log y el cron de 15
+     minutos la termina. Una academia recién migrada puede tener 300 clases por
+     publicar y "listo" a secas sería mentira. */
+  if (quedaron) console.log("gcalSync", tenantId, "tope de", GCAL_MAX_LLAMADAS, "llamadas; quedaron", quedaron, "para la proxima corrida");
+  return { ok: true, creados, borrados, quedaron };
+}
+
+/* Publica sin hacer esperar al alumno. Se llama donde el alumno TOCA su agenda desde
+   el portal, que es el "apenas la reserven" del pedido; lo que el dueño mueve desde su
+   panel ya lo sabe él y lo recoge el cron del cuarto de hora. Si la academia no conectó
+   nada, gcalSync sale en una consulta de config y no cuesta nada. */
+function gcalAvisar(env, ctx, tenantId){
+  try { if (ctx && ctx.waitUntil) ctx.waitUntil(gcalSync(env, tenantId).catch(() => {})); } catch (e) {}
+}
+
+/* Barrido del cron: sincroniza TODA academia conectada. */
+async function gcalSyncTodos(env){
+  let filas = [];
+  try {
+    const r = await env.DB.prepare(
+      "SELECT DISTINCT tenant_id FROM config WHERE clave = 'gcal_refresh_token' AND COALESCE(valor,'') != ''"
+    ).all();
+    filas = r.results || [];
+  } catch (e) { return; }
+  for (const f of filas){
+    try { await gcalSync(env, f.tenant_id); } catch (e) { console.error("gcalSyncTodos", f.tenant_id, e); }
+  }
 }
 /* Columnas de tenants agregadas por ALTER perezoso (fuente/rubro/tam_alumnos/google_id):
    asegurarlas para que su/tenants no dé 500 en una D1 recién reconstruida desde schema.sql. */
@@ -814,7 +1129,18 @@ async function firmaHex(env, key, exp, scope){
 }
 async function firmarRuta(env, ruta, scope){
   const r = String(ruta || "");
-  if (r.indexOf("/app/api/recurso/archivo/") !== 0) return r;
+  if (r.indexOf("/app/api/recurso/archivo/") !== 0){
+    /* 🔴 26-ago-2026 · Una ruta de archivo NUESTRA que no lleva este prefijo sale de aqui
+       SIN FIRMA y sin una sola queja. El portal la pinta igual en un <audio src=...>, y un
+       <audio> es una peticion del navegador sin cabecera `authorization`: la firma es su
+       UNICA credencial. Resultado: reproductor muerto, y el unico que se entera es el
+       alumno. Paso con las 92 filas que la mudanza de MVT trajo apuntando a
+       /api/recurso/archivo/ (el prefijo del worker viejo) — 46 clases de 28 alumnos, tres
+       dias sin que nada lo dijera. Un enlace externo (una playlist de Spotify en
+       `recursos.url`) si pasa de largo: es legitimo y no lleva firma. */
+    if (r.indexOf("/recurso/archivo/") >= 0) console.warn("firmarRuta: ruta de archivo sin el prefijo de Batuta, sale SIN FIRMA y el alumno no la va a poder abrir -> " + r);
+    return r;
+  }
   const key = r.slice("/app/api/recurso/archivo/".length).split("?")[0];
   const sc = (scope === "c") ? "c" : "m";
   /* exp redondeado a la hora: misma URL durante una hora -> el navegador cachea y el
@@ -2935,7 +3261,10 @@ async function confirmarCompra(env, tenantId, tenant, compra){
   if (!renovado){
     const nuevoId = crypto.randomUUID();
     alumnoIdNuevo = nuevoId;
-    const cursoNuevo = compra.curso || cursosDeCfg(await loadConfig(env, tenantId))[0];
+    /* 29-ago-2026: antes caía en el PRIMER curso del catálogo. Con `cursoDeCompra` el vacío
+       ya es una respuesta legítima ("este plan no dice qué incluye"), y volver a rellenarlo
+       aquí resucitaba el bug en la ficha del alumno nuevo. */
+    const cursoNuevo = compra.curso || "";
     /* multi-profesor: el alumno nuevo nace asignado al profe atribuido en la compra, o al dueno */
     let profeNuevo = compra.profesor_id || null;
     if (!profeNuevo){
@@ -3058,7 +3387,7 @@ async function confirmarCompra(env, tenantId, tenant, compra){
         const rid = crypto.randomUUID();
         await env.DB.prepare(
           "INSERT INTO reservas (id,tenant_id,alumno_id,inicio_utc,fin_utc,tipo,serie_id,estado,curso,ciclo,creada) VALUES (?1,?2,?3,?4,?5,'suelta','','reservada',?6,1,?7)"
-        ).bind(rid, tenantId, alumnoIdNuevo, compra.slot_deseado, finIso, compra.curso || "Canto", new Date().toISOString()).run();
+        ).bind(rid, tenantId, alumnoIdNuevo, compra.slot_deseado, finIso, compra.curso || "", new Date().toISOString()).run();
       }
     } catch (e) { /* alguien tomo ese horario mientras tanto; el alumno lo reserva desde el portal */ }
   }
@@ -7936,7 +8265,7 @@ async function apiResumen(env, t){
   const hoyL = hoyLima();
   const mes = hoyL.slice(0, 7);
   const activos = await contarAlumnosActivos(env, tid);
-  const totAl = await env.DB.prepare("SELECT COUNT(*) AS n FROM alumnos WHERE tenant_id = ?1").bind(tid).first();
+  const totAl = await totalAlumnosDe(env, tid);
   const ingresos = await env.DB.prepare(
     "SELECT COALESCE(SUM(monto),0) AS s, COUNT(*) AS n FROM compras WHERE tenant_id = ?1 AND estado = 'confirmada' AND substr(fecha,1,7) = ?2"
   ).bind(tid, mes).first();
@@ -7952,7 +8281,7 @@ async function apiResumen(env, t){
   const lim = await packsDe(env, tid);
   return {
     academia: t.academia, fecha: hoyL,
-    alumnos: { activos, total: Number(totAl && totAl.n) || 0, tope: await alumCapDe(env, tid, t.plan) },
+    alumnos: { activos, total: totAl, tope: await capAlumnosDe(env, tid, t.plan) },
     profesores: { activos: Number(profes && profes.n) || 0, tope: await maxProfesDe(env, tid, t.plan) },
     ingresos_del_mes: { pen: Math.round((Number(ingresos && ingresos.s) || 0) * 100) / 100, pagos: Number(ingresos && ingresos.n) || 0 },
     cobros_por_confirmar: Number(pend && pend.n) || 0,
@@ -10339,6 +10668,60 @@ export default {
       /* ============================================================
          REGISTRO / LOGIN / LOGOUT / ME de TENANT (profesor)
          ============================================================ */
+      /* ---------- Google Calendar: callback del OAuth de la academia ----------
+         Vive ACÁ ARRIBA, fuera del gate de /app/api/admin/, a propósito: Google
+         redirige el NAVEGADOR a esta URL y el navegador no lleva el token Bearer
+         del panel, así que el gate lo rebotaría con un 401 sin explicación. Quien
+         autoriza es el `state` firmado, que además dice de qué academia es. */
+      if (path === "/app/api/admin/google/callback" && request.method === "GET"){
+        const pagina = function(titulo, detalle){
+          return htmlResponse(paginaBase("Google Calendar — Batuta",
+            "<h1>" + esc(titulo) + "</h1><p class=\"sub\">" + esc(detalle) + "</p>" +
+            "<div class=\"foot\"><a href=\"/app/panel\">Volver a mi panel</a></div>", ""));
+        };
+        const st = await verificarState(env, url.searchParams.get("state") || "");
+        if (!st || st.k !== "gcal" || !st.t){
+          return pagina("No pude validar la conexión", "El enlace venció o no vino de tu panel. Vuelve a Ajustes > Google Calendar y toca Conectar otra vez.");
+        }
+        const errG = url.searchParams.get("error") || "";
+        if (errG) return pagina("Google canceló la conexión", "Google respondió \"" + errG + "\". Vuelve a intentarlo y acepta los permisos de calendario.");
+        const codeG = url.searchParams.get("code") || "";
+        if (!codeG) return pagina("Google no devolvió el permiso", "Vuelve a Ajustes > Google Calendar y toca Conectar otra vez.");
+        const cfgG = await loadConfig(env, st.t).catch(() => null);
+        const crG = gcalCreds(env, cfgG);
+        if (!crG) return pagina("Falta configurar Google", "No hay credenciales de Google disponibles. Escríbenos y lo vemos.");
+        let dG = null;
+        try {
+          const rG = await fetch("https://oauth2.googleapis.com/token", {
+            method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" },
+            body: new URLSearchParams({
+              code: codeG, client_id: crG.id, client_secret: crG.secret,
+              redirect_uri: GCAL_REDIRECT_URI, grant_type: "authorization_code"
+            }).toString()
+          });
+          dG = await rG.json().catch(() => null);
+        } catch (e) { dG = null; }
+        /* Sin refresh_token no hay integración: pasa cuando el usuario ya había
+           autorizado antes y Google no lo repite. Por eso el pedido va con
+           prompt=consent, pero si igual llega vacío hay que DECIRLO en vez de
+           guardar un token de una hora y que se caiga sola mañana. */
+        if (!dG || !dG.refresh_token){
+          return pagina("Google no devolvió el permiso permanente",
+            "Entra a myaccount.google.com/permissions, quítale el acceso a Batuta y vuelve a conectar desde tu panel.");
+        }
+        try {
+          await setConfigValor(env, st.t, "gcal_refresh_token", dG.refresh_token);
+          if (!String((cfgG && cfgG.gcal_calendar_id) || "").trim()) await setConfigValor(env, st.t, "gcal_calendar_id", "primary");
+        } catch (e) {
+          return pagina("No pude guardar la conexión", "Intenta de nuevo en un minuto.");
+        }
+        gcalOlvidarToken(st.t);
+        /* La primera tanda sale ya: el dueño acaba de conectar y quiere ver sus
+           clases en el calendario AHORA, no en el próximo cuarto de hora. */
+        gcalAvisar(env, ctx, st.t);
+        return pagina("¡Google Calendar conectado! 🎉", "Tus clases empiezan a aparecer en tu calendario en unos segundos. Ya puedes cerrar esta pestaña.");
+      }
+
       /* ---------- Login con Google: inicio del flujo OAuth ---------- */
       if (path === "/app/api/auth/google/start" && request.method === "GET"){
         if (!googleConfigurado(env)) return json({ error: "Login con Google no configurado." }, 501);
@@ -10714,6 +11097,8 @@ export default {
           asientos = { usados: Number(nP && nP.n) || 1, max: await maxProfesDe(env, t.id, t.plan) };
         } catch (e) {}
         const activosMe = await contarAlumnosActivos(env, t.id);
+        /* El medidor de "Tu Batuta" cuenta LO MISMO que el candado: el total cargado. */
+        const totalMe = await totalAlumnosDe(env, t.id);
         // Cupo del asistente de WhatsApp con IA por plan (freemium 23-jul-2026): el panel muestra
         // "X de N conversaciones" y avisa "sube de plan" al toparse (usados >= cap).
         const packsMe = await packsDe(env, t.id);
@@ -10737,6 +11122,7 @@ export default {
           profesor: actorMe.profesor ? { id: actorMe.profesor.id, nombre: actorMe.profesor.nombre } : null,
           // Estimado del plan "por alumno": alumnos activos + monto (para mostrar en Perfil > Tu plan).
           alumnos_activos: activosMe,
+          alumnos_total: totalMe,
           por_alumno_monto_pen: montoPorAlumno(activosMe),
           wa_cupo,
           asientos,
@@ -10746,7 +11132,7 @@ export default {
             base: BASE_LIMITES,
             comprados: packsMe.comprados,
             cortesia: packsMe.cortesia,
-            limites: { alumnos: await alumCapDe(env, t.id, t.plan), profes: asientos ? asientos.max : packsMe.profes, ia: await convCapDe(env, t.id, false, t.plan) },
+            limites: { alumnos: await capAlumnosDe(env, t.id, t.plan), profes: asientos ? asientos.max : packsMe.profes, ia: await convCapDe(env, t.id, false, t.plan) },
             items: packsMe.items,
             monto_mensual: packsMe.monto,
             catalogo: PACKS
@@ -12029,6 +12415,60 @@ export default {
         });
       }
 
+      /* ---------- "¿Quién te recomendó?" DESPUÉS de haberse registrado (27-ago-2026) ----------
+         Lo destapó una alumna de Elevate: le iba a comprar un plan a su suegra, le creó la
+         cuenta sin el link de referido y al pagar no había dónde poner el código. Y era
+         verdad: `cuentas.ref_por` se escribía SOLO en el registro (formulario, invitación o
+         Google), así que quien no llegaba por el link de un amigo se quedaba sin el
+         beneficio para siempre, sin ninguna pantalla donde arreglarlo.
+
+         Esto NO afloja ninguna regla del programa: sigue siendo un código por persona, nunca
+         el propio, solo antes de la primera compra y con el filtro de "alumnos nuevos" de la
+         academia. Lo único que cambia es CUÁNDO se puede escribir. Y se valida acá y no en el
+         cobro a propósito: si el código no sirve, hay que decírselo mientras todavía puede
+         hacer algo, no descontarle S/0 y que se entere yapeando de más. */
+      if (path === "/app/api/cuenta/referido" && request.method === "POST"){
+        const cuRef = await cuentaDeSesion(env, request);
+        if (!cuRef) return json({ error: "Sesion expirada" }, 401);
+        const bRef = await request.json().catch(() => ({}));
+        const codigoRef = String(bRef.codigo || "").trim().toUpperCase();
+        if (!codigoRef) return json({ error: "Escribe el código de tu amigo." }, 400);
+        const tidRef = cuRef.tenant_id;
+
+        const yaTiene = String(cuRef.ref_por || "").trim().toUpperCase();
+        if (yaTiene) {
+          return yaTiene === codigoRef
+            ? json({ ok: true, ya_estaba: true, codigo: yaTiene })
+            : json({ error: "Ya tienes el código " + yaTiene + " aplicado. Solo se puede usar uno." }, 409);
+        }
+        if (codigoRef === String(cuRef.ref_code || "").trim().toUpperCase()){
+          return json({ error: "Ese es tu propio código: es para que se lo pases a un amigo." }, 400);
+        }
+        const dueno = await buscarRefCode(env, tidRef, codigoRef);
+        if (!dueno) return json({ error: "Ese código no existe en esta academia. Revísalo con tu amigo." }, 404);
+
+        /* Primera compra: la misma pregunta que hace `refElegible` al cobrar. Si ya compró,
+           el código no le va a servir y decirlo ahora es mejor que aceptarlo y no aplicarlo. */
+        const previasRef = await env.DB.prepare(
+          "SELECT COUNT(*) AS n FROM compras WHERE tenant_id = ?1 AND cuenta_id = ?2 AND estado = 'confirmada' AND paquete != 'Clase de prueba'"
+        ).bind(tidRef, cuRef.id).first().catch(() => null);
+        if (previasRef && Number(previasRef.n)){
+          return json({ error: "El código de un amigo solo vale para tu primera compra." }, 409);
+        }
+        const cfgRef = await loadConfig(env, tidRef).catch(() => ({}));
+        const rcRef = refCfg(cfgRef);
+        if (rcRef.soloNuevos && await yaEraAlumnoDe(env, tidRef, cuRef.alumno_id)){
+          return json({ error: "Esta promoción es para alumnos que recién empiezan en la academia." }, 409);
+        }
+
+        await env.DB.prepare("UPDATE cuentas SET ref_por = ?1 WHERE id = ?2 AND tenant_id = ?3")
+          .bind(dueno, cuRef.id, tidRef).run();
+        /* El descuento REAL lo calcula `calcularCobro` en el cobro; acá solo se dice si hay
+           uno esperándolo, para que el portal repinte el precio sin prometer nada por su
+           cuenta (el "S/50 escrito a mano" de agosto ya costó una promesa incumplida). */
+        return json({ ok: true, codigo: dueno, hay_descuento: !!rcRef.hayDescuento, min_clases: rcRef.minClases });
+      }
+
       if (path === "/app/api/cuenta/marketing" && request.method === "POST"){
         const cu = await cuentaDeSesion(env, request);
         if (!cu) return json({ error: "Sesion expirada" }, 401);
@@ -12410,7 +12850,13 @@ export default {
               descModo: rcMe.descModo,
               descValor: rcMe.descValor,
               minClases: rcMe.minClases,
-              tengoDesc: !!(rcMe.hayDescuento && String(cu.ref_por || "").trim() && !(refPrimera && Number(refPrimera.n)) && !yaEraAlumnoMe)
+              tengoDesc: !!(rcMe.hayDescuento && String(cu.ref_por || "").trim() && !(refPrimera && Number(refPrimera.n)) && !yaEraAlumnoMe),
+              /* Con qué código llegó (vacío = con ninguno) y si TODAVÍA está a tiempo de
+                 escribir uno. Es lo que decide si el portal le muestra el campo "¿quién te
+                 recomendó?" al comprar: mostrárselo a quien ya compró sería ofrecerle algo
+                 que el servidor le va a negar. Mismas condiciones que POST cuenta/referido. */
+              codigoUsado: String(cu.ref_por || "").trim(),
+              puedeUsarCodigo: !String(cu.ref_por || "").trim() && !(refPrimera && Number(refPrimera.n)) && !yaEraAlumnoMe
             };
           })(),
           recursos,
@@ -12700,11 +13146,6 @@ export default {
         const b = await request.json().catch(() => ({}));
         const paquete = String(b.paquete || "");
         const cursosT = cursosDeCfg(await loadConfig(env, tid));
-        const cursoPedido = String(b.curso || "").trim();
-        // acepta combinaciones ("Canto, Piano"): cada parte debe ser un curso del tenant
-        const partesCurso = cursoPedido.split(",").map(s => s.trim()).filter(Boolean);
-        const curso = (partesCurso.length && partesCurso.every(c => cursosT.indexOf(c) !== -1))
-          ? partesCurso.join(", ") : cursosT[0];
         const op = String(b.op_numero || "").trim().slice(0, 40);
         const metodo = String(b.metodo || "").trim().slice(0, 40);
         const comprobante = typeof b.comprobante === "string" ? b.comprobante : "";
@@ -12713,6 +13154,8 @@ export default {
         const paqMapC = (await loadPaquetes(env, tid)).map;
         if (!paqMapC[paquete]) return json({ error: "Paquete no valido." }, 400);
         if (paquete === "Clase de prueba" && cu.alumno_id) return json({ error: "La clase de prueba es solo para tu primera clase. Elige un paquete para seguir." }, 400);
+        // acepta combinaciones ("Canto, Piano"): cada parte debe ser un curso del tenant
+        const curso = cursoDeCompra(cursosT, b.curso, paqMapC[paquete]);
 
         let slotDeseado = "";
         if (paquete === "Clase de prueba" && b.slot_deseado) {
@@ -12851,10 +13294,7 @@ export default {
         if (!paqMapMp[paquete]) return json({ error: "Paquete no valido." }, 400);
         if (paquete === "Clase de prueba" && cu.alumno_id) return json({ error: "La clase de prueba es solo para tu primera clase." }, 400);
         const cursosT = cursosDeCfg(await loadConfig(env, tid));
-        const cursoPedido = String(b.curso || "").trim();
-        const partesCurso = cursoPedido.split(",").map(s => s.trim()).filter(Boolean);
-        const curso = (partesCurso.length && partesCurso.every(c => cursosT.indexOf(c) !== -1))
-          ? partesCurso.join(", ") : cursosT[0];
+        const curso = cursoDeCompra(cursosT, b.curso, paqMapMp[paquete]);
 
         const ya = await env.DB.prepare(
           "SELECT id FROM compras WHERE tenant_id = ?1 AND cuenta_id = ?2 AND estado = 'pendiente'"
@@ -13051,8 +13491,7 @@ export default {
         if (!paqMapS[paquete]) return json({ error: "Paquete no valido." }, 400);
         if (paquete === "Clase de prueba" && cu.alumno_id) return json({ error: "La clase de prueba es solo para tu primera clase." }, 400);
         const cursosT = cursosDeCfg(await loadConfig(env, tid));
-        const partesCurso = String(b.curso || "").split(",").map(s => s.trim()).filter(Boolean);
-        const curso = (partesCurso.length && partesCurso.every(c => cursosT.indexOf(c) !== -1)) ? partesCurso.join(", ") : cursosT[0];
+        const curso = cursoDeCompra(cursosT, b.curso, paqMapS[paquete]);
         const ya = await env.DB.prepare("SELECT id FROM compras WHERE tenant_id = ?1 AND cuenta_id = ?2 AND estado = 'pendiente'").bind(tid, cu.id).first();
         if (ya) return json({ error: "Ya tienes un pago en verificacion. Te confirmo apenas lo vea." }, 409);
         let slotDeseado = "";
@@ -13213,8 +13652,7 @@ export default {
         if (!paqMapC[paquete]) return json({ error: "Paquete no valido." }, 400);
         if (paquete === "Clase de prueba" && cu.alumno_id) return json({ error: "La clase de prueba es solo para tu primera clase." }, 400);
         const cursosT = cursosDeCfg(await loadConfig(env, tid));
-        const partesCurso = String(b.curso || "").split(",").map(s => s.trim()).filter(Boolean);
-        const curso = (partesCurso.length && partesCurso.every(c => cursosT.indexOf(c) !== -1)) ? partesCurso.join(", ") : cursosT[0];
+        const curso = cursoDeCompra(cursosT, b.curso, paqMapC[paquete]);
         const ya = await env.DB.prepare("SELECT id FROM compras WHERE tenant_id = ?1 AND cuenta_id = ?2 AND estado = 'pendiente'").bind(tid, cu.id).first();
         if (ya) return json({ error: "Ya tienes un pago en verificacion. Te confirmo apenas lo vea." }, 409);
         let slotDeseado = "";
@@ -13532,6 +13970,7 @@ export default {
             "- Mi web (tu pagina publica): pestana 'Mi web' del panel. Haces clic en cualquier parte de la vista previa (portada, Sobre nosotros, Cursos, Precios, Galeria, Contacto) y la editas ahi mismo; los cambios se ven al instante y recien quedan en vivo al darle 'Publicar'. Sin editar nada, Batuta arma igual una landing con tus datos reales. Vive en tu link corto (batuta.lat/a/tu-academia) y tambien en tu propio subdominio (tuacademia.batuta.lat): compartelo en tu bio de Instagram o Google Business. Es DISTINTA del portal de alumnos: la web es publica y la ve cualquiera, el portal es solo para los que ya son tus alumnos.\n" +
             "- Si Inicio muestra el aviso 'Tu web NO muestra precios': es porque tus paquetes estan en S/0 o todavia no conectaste Yape/Mercado Pago en Ajustes > Cobros. El boton del aviso lleva directo a la pantalla que falta.\n" +
             "- Modulos del panel: en Ajustes > Academia > 'Modulos de tu panel' ocultas lo que no uses (Grupos, Material, Interesados, Caja, Reportes); los puedes reactivar cuando quieras. El Chat no se puede ocultar (tus alumnos te escriben por ahi).\n" +
+            "- Asistente de WhatsApp, automatico o a mano (Ajustes > WhatsApp e IA): en 'Cuando esta encendido' eliges 'Automatico' (la IA le responde sola a tu alumno) o 'Sugerencias' (la IA escribe el borrador y tu lo copias y lo mandas). En Sugerencias los borradores se acumulan ahi mismo, en 'Borradores de la IA por enviar', y cada uno se marca 'Listo' cuando ya lo enviaste. Es lo util mientras no conectes tu numero.\n" +
             "- WhatsApp: cada fila de Alumnos e Interesados tiene boton de WhatsApp con el mensaje ya escrito, sale desde TU numero. Ademas tienes el ASISTENTE DE WHATSAPP CON IA, que responde solo a tus alumnos e interesados 24/7: se configura en Mi academia > Mi asistente de WhatsApp. La base gratis incluye 5 conversaciones al mes y con un pack subes a 300, 1,000, 3,000 o 10,000.\n" +
             "- App + avisos: el panel se instala como app ('Agregar a pantalla de inicio' en el celular) y en Ajustes > Avanzado > 'Avisos en tu telefono' activas notificaciones de pagos y reservas.\n" +
             "- Vencimiento de un plan a mano: en la ficha del alumno, campo 'Vence el' (debajo de Fecha de compra). Se le pone la fecha que sea y Batuta la respeta: deja de recalcularla por los dias del plan. Vacio = vuelve al automatico. Si el alumno tiene varios pases sale un campo POR PASE, porque cada uno vence por su cuenta.\n" +
@@ -13539,9 +13978,11 @@ export default {
             "- Aviso de plan que ya no esta en tu lista: si renombraste o borraste un plan que algun alumno tenia, Inicio lo avisa en rojo con su nombre y un boton para abrir su ficha. A ese alumno le sale 0 clases aunque haya pagado y no puede reservar hasta que se le elija el plan que le corresponde hoy; en SU portal ve 'Tu plan: En revision' con el aviso de que no pierde nada de lo pagado.\n" +
             "- De que pase se descuenta cuando el alumno tiene varios: si la clase entra en dos de sus planes se descuenta del que sirve para MAS tipos de clase, para conservarle el especializado; y si lo que cubre un plan cabe entero dentro de otro, se gasta primero el mas especifico. El total del alumno nunca cambia por esto.\n" +
             "- Saldo al reservar o al asistir: Ajustes > Reservas. Con 'al asistir' las clases ya apartadas siguen contando como disponibles hasta que se dictan, y el numero de cada plan y el total dicen lo mismo.\n" +
-            "- Trae a un amigo (referidos de TU academia): Mi academia > Todos los ajustes > pestana Referidos. Cada alumno tuyo tiene su link para invitar; tu decides el premio del que trae (monto fijo, un % de lo que pago su amigo, el precio de X clases, X clases gratis o un descuento) y el descuento del que llega, con compra minima y a quien cuenta como nuevo. NO lo confundas con el PROGRAMA DE AFILIADOS de arriba: ese es para que TU ganes 30% recomendando Batuta a otras academias; este es el premio que TUS alumnos ganan trayendo alumnos a TI.\n" +
+            "- Trae a un amigo (referidos de TU academia): Mi academia > Todos los ajustes > pestana Referidos. Cada alumno tuyo tiene su link para invitar; tu decides el premio del que trae (monto fijo, un % de lo que pago su amigo, el precio de X clases, X clases gratis o un descuento) y el descuento del que llega, con compra minima y a quien cuenta como nuevo. NO lo confundas con el PROGRAMA DE AFILIADOS de arriba: ese es para que TU ganes 30% recomendando Batuta a otras academias; este es el premio que TUS alumnos ganan trayendo alumnos a TI. Donde pone el codigo el que llega: tu alumno lo escribe en su portal, en el paso de comprar (debajo del total) o en su pestana Referidos, y no hace falta que haya entrado por el link. Solo vale ANTES de su primera compra, nunca el suyo propio, y tiene que ser de esta academia; si el campo no le aparece es que ya no esta a tiempo.\n" +
+            "- Beneficios y convenios para tus alumnos (Ajustes > Academia > 'Beneficios para tus alumnos'): si tienes descuentos o convenios con otras empresas los anotas ahi, con link opcional, y tus alumnos CON CUENTA ACTIVA los ven en su portal, al pie de su pestana Referidos. El que dejo de pagar no los ve.\n" +
             "- Campanita (arriba a la derecha, al lado del buscador): novedades de Batuta y tus pagos (quien pago, cuanto y si falta que lo confirmes; el pago lleva a Cobros de un clic). Los pagos SOLO los ve el dueno; un profesor del equipo ve unicamente las novedades. Punto ambar = falta confirmarlo, verde = ya entro.\n" +
             "- Conecta tu Claude (Ajustes > Avanzado): genera tu llave y la pegas en Claude o en cualquier programa que use MCP, para preguntarle cosas de tu academia en tu idioma. Es de SOLO LECTURA y solo de tu academia. Se guarda como una contraseña, y si se te escapa generas una nueva y la anterior muere al instante.\n" +
+            "- Tus clases en tu Google Calendar (Ajustes > Avanzado, solo el dueno): un clic en 'Conectar Google Calendar' y cada clase que te reserven aparece sola en tu calendario, con el nombre del alumno y el curso; si se cancela, el evento se borra. Se mantienen al dia los proximos 45 dias: se actualiza al instante cuando el alumno reserva o cancela, y de red se revisa solo cada 15 minutos. Hay boton 'Sincronizar ahora' si quieres empujarlo tu. Al alumno NO se le invita al evento. El link de Google Meet es opcional y viene apagado; se prende ahi mismo.\n" +
             "- Publicar o no tu direccion: Ajustes > Academia > 'Tus locales y tu direccion' > '¿Publicas tu direccion?'. En 'No' desaparece de tu pagina publica, del directorio y de Google; tus alumnos la siguen viendo en su portal y en sus recordatorios. Aunque tengas UN solo local, crealo con su direccion: de ahi sale lo que ven en el portal, en el recordatorio, en el calendario del celular y en tu web.\n" +
             "- Filtrar por local (multi-sede): Mis alumnos y Grupos se filtran por sede. La caja y los informes NO: siempre suman toda la academia junta.\n" +
             "- Directorio publico: las academias salen en batuta.lat/academias con su pagina propia, y esas paginas se mandan a Google. Se sale desde Ajustes > Avanzado > Aparecer en el directorio.\n" +
@@ -13561,6 +14002,8 @@ export default {
             "- Hablar con tu profe: el chat del portal. Si el chat sale bloqueado, casi siempre es porque no tienes paquete activo: compra o renueva y se desbloquea.\n" +
             "- Olvidaste tu contrasena: escribele a tu profe, el te la restablece. Te cambiaste de celular: entra de nuevo al link de tu academia con tu correo y contrasena, todo sigue ahi.\n" +
             "- App + avisos: el portal se instala como app (iPhone: Compartir > 'Agregar a inicio'; Android: menu > 'Instalar aplicacion') y en Mi cuenta activas los avisos de tus clases.\n" +
+            "- Tus beneficios y convenios: al pie de la pestana Referidos, si tu academia cargo alguno. Solo se ven con tu cuenta al dia; si no te aparece nada es que tu academia no tiene convenios cargados.\n" +
+            "- Te pasaron el codigo de un amigo: escribelo en el paso de comprar, debajo del total, o en la pestana Referidos, y dale Aplicar. Solo vale antes de tu primera compra y no puede ser el tuyo. Si el campo no te aparece es porque en tu caso ya no aplica.\n" +
             "- Tus clases en tu calendario: en Mi cuenta, boton 'Agregar mis clases a mi calendario'. Tocalo desde el celular y aceptas la suscripcion; despues se actualiza solo cada vez que reservas o cancelas, no hay que volver a hacer nada.\n" +
             "Si la duda es de tu profe (precios, horarios, cambios de clase), deriva al chat del portal. NUNCA inventes funciones.");
         /* Contexto de SESION (bloque chico sin cache): el manual es fijo, pero el que
@@ -13772,6 +14215,7 @@ export default {
             return json({ error: "Se te acabaron las clases justo ahora. Renueva para reservar mas." }, 409);
           }
           try { await env.DB.prepare("UPDATE espera SET estado = 'convertida' WHERE tenant_id = ?1 AND inicio_utc = ?2 AND alumno_id = ?3 AND estado IN ('esperando','avisado')").bind(tid, iso, alumno.id).run(); } catch (e) {}
+          gcalAvisar(env, ctx, tid);
           return json({ ok: true, reservadas: 1, tipo: "suelta" });
         }
 
@@ -13802,6 +14246,7 @@ export default {
           creadas++;
         }
         if (creadas === 0) return json({ error: "No pude apartar el horario fijo (sin cupos esas semanas o sin clases en tu paquete)." }, 409);
+        gcalAvisar(env, ctx, tid);
         return json({ ok: true, reservadas: creadas, tipo: "fija", saltadas });
       }
 
@@ -13854,6 +14299,7 @@ export default {
           return json({ error: "Esa clase ya se dio por dictada. Escríbele a tu profesor si hubo un error." }, 409);
         }
         await promoverEspera(env, tid, r.inicio_utc, r.sala || "");   // se libero un cupo EN ESA SALA: avisar a su lista de espera
+        gcalAvisar(env, ctx, tid);
         return json({ ok: true, mensaje: "Listo, libere tu horario. Elige tu nuevo horario abajo." });
       }
 
@@ -15943,11 +16389,8 @@ export default {
              bloquea es el neto que lo pasa. Los vencidos también topan, si no el freemium no existe. */
           if (t && !esTenantDemo(t)){
             /* alum_extra (cortesía en unidades de alumno, la pone el superadmin) sigue sumando. */
-            let extraAl = 0;
-            try { const cfgAl = await loadConfig(env, tid); extraAl = parseInt(cfgAl.alum_extra, 10) || 0; } catch (e) {}
-            const capAl = (await alumCapDe(env, tid, t.plan)) + extraAl;
-            const totActRow = await env.DB.prepare("SELECT COUNT(*) AS n FROM alumnos WHERE tenant_id = ?1").bind(tid).first();
-            const totActual = Number(totActRow && totActRow.n) || 0;
+            const capAl = await capAlumnosDe(env, tid, t.plan);
+            const totActual = await totalAlumnosDe(env, tid);
             const totNuevo = esDueno ? body.alumnos.length : (totActual - (prevRows ? prevRows.length : 0)) + body.alumnos.length;
             if (totNuevo > capAl && totNuevo > totActual){
               /* "un pack" la primera vez, "otro pack" si ya compró: se decide por lo que tiene,
@@ -16301,6 +16744,80 @@ export default {
           return json({ ok: true, token, mcp_url: MARCA.dominio + "/app/mcp/" + token, api_url: MARCA.dominio + "/app/api/v1" });
         }
 
+        /* ---------- Google Calendar: estado / conectar / desconectar ----------
+           El calendario es del DUEÑO de la academia: un profesor contratado no
+           conecta ni desconecta el de su jefe (misma regla que los cobros). */
+        if (path === "/app/api/admin/google/estado" && request.method === "GET"){
+          if (!esDueno) return json({ error: "La conexión con Google la maneja el dueño." }, 403);
+          const cfgE = await loadConfig(env, tid);
+          const crE = gcalCreds(env, cfgE);
+          const hayToken = !!String(cfgE.gcal_refresh_token || "").trim();
+          /* `conectado` se responde DESPUÉS de pedirle de verdad un token a Google.
+             Un refresh_token guardado no prueba nada: se revoca desde la cuenta de
+             Google sin avisarle a nadie, y un panel que se cree a sí mismo miente. */
+          const tokE = hayToken ? await gcalAccessToken(env, tid, cfgE) : null;
+          const cuentaE = hayToken ? await gcalPendientes(env, tid).catch(() => ({ faltan: 0, publicadas: 0 })) : { faltan: 0, publicadas: 0 };
+          return json({
+            conectado: !!tokE,
+            token_guardado: hayToken,
+            revocado: hayToken && !tokE,          // había token y Google lo rechazó
+            tieneCredenciales: !!crE,
+            credenciales_propias: !!(crE && crE.propias),
+            calendario: gcalCalendario(cfgE),
+            meet: String(cfgE.gcal_meet || "") === "1",
+            redirect_uri: GCAL_REDIRECT_URI,
+            publicadas: cuentaE.publicadas,
+            faltan: cuentaE.faltan,
+            dias: GCAL_DIAS
+          });
+        }
+        if (path === "/app/api/admin/google/url" && request.method === "POST"){
+          if (!esDueno) return json({ error: "La conexión con Google la maneja el dueño." }, 403);
+          const cfgU = await loadConfig(env, tid);
+          const crU = gcalCreds(env, cfgU);
+          if (!crU) return json({ error: "Google no está disponible ahora mismo. Escríbenos y lo vemos." }, 503);
+          if (!env.ADMIN_TOKEN) return json({ error: "Falta configurar el servidor. Escríbenos y lo vemos." }, 503);
+          /* El `state` lleva la academia porque el callback llega sin sesión, y va
+             firmado con HMAC para que nadie pueda inventarse uno de otra academia. */
+          const stateU = await firmarState(env, { k: "gcal", t: tid, exp: Date.now() + 15 * 60 * 1000, n: randHex(8) });
+          const u = "https://accounts.google.com/o/oauth2/v2/auth?" + new URLSearchParams({
+            client_id: crU.id, redirect_uri: GCAL_REDIRECT_URI, response_type: "code",
+            scope: GCAL_SCOPE, access_type: "offline", prompt: "consent",
+            include_granted_scopes: "true", state: stateU
+          }).toString();
+          return json({ url: u });
+        }
+        if (path === "/app/api/admin/google/desconectar" && request.method === "POST"){
+          if (!esDueno) return json({ error: "La conexión con Google la maneja el dueño." }, 403);
+          /* Los eventos ya publicados se BORRAN del calendario antes de soltar el
+             token: si se corta primero, quedan colgados ahí para siempre y el dueño
+             no tiene desde dónde limpiarlos. Lo que no alcance a borrarse queda con
+             su gcal_event_id y muere en el próximo sync, mientras el token viva. */
+          try { await gcalSync(env, tid); } catch (e) {}
+          try {
+            const cfgD = await loadConfig(env, tid);
+            const { results: vivos } = await env.DB.prepare(
+              "SELECT id, gcal_event_id FROM reservas WHERE tenant_id = ?1 AND COALESCE(gcal_event_id,'') != '' LIMIT 60"
+            ).bind(tid).all();
+            for (const rD of (vivos || [])){
+              if (await gcalBorrarEvento(env, tid, cfgD, rD.gcal_event_id)){
+                await env.DB.prepare("UPDATE reservas SET gcal_event_id = '' WHERE id = ?1 AND tenant_id = ?2").bind(rD.id, tid).run();
+              }
+            }
+          } catch (e) { console.error("gcal desconectar limpiar", tid, e); }
+          await setConfigValor(env, tid, "gcal_refresh_token", "");
+          gcalOlvidarToken(tid);
+          return json({ ok: true });
+        }
+        /* Publicar AHORA lo que falte (el botón "Sincronizar" del panel). */
+        if (path === "/app/api/admin/google/sincronizar" && request.method === "POST"){
+          if (!esDueno) return json({ error: "La conexión con Google la maneja el dueño." }, 403);
+          const rS = await gcalSync(env, tid);
+          if (!rS.ok) return json({ error: rS.motivo === "sin conectar" ? "Todavía no conectaste tu Google Calendar." : "Google rechazó tu conexión. Vuelve a conectarla." }, 400);
+          const pS = await gcalPendientes(env, tid).catch(() => ({ faltan: 0, publicadas: 0 }));
+          return json({ ok: true, creados: rS.creados, borrados: rS.borrados, faltan: pS.faltan, publicadas: pS.publicadas });
+        }
+
         if (path === "/app/api/admin/config" && request.method === "POST"){
           /* config del tenant (cobros, marca, cupo, cursos): SOLO el dueno */
           if (!esDueno) return json({ error: "Los ajustes de la academia los maneja el dueno." }, 403);
@@ -16335,7 +16852,22 @@ export default {
                           /* "off" apaga el rescate de compras abandonadas (15-ago-2026) */
                           "rescate_activo", "review_link", "resena_activa", "resena_min_clases",
                           /* domicilio de la academia: obligatorio en los correos de campaña */
-                          "direccion_fiscal"];
+                          "direccion_fiscal",
+                          /* 🔴 27-ago-2026 · Google Calendar. Estas cuatro claves NUNCA estuvieron
+                             en la lista: el panel las mandaba, esto las tiraba a `ignoradas` y el
+                             dueño veía "Guardado ✓" con el Client ID sin guardar. Es el mismo
+                             agujero de `saldo_modo` (13-ago), ahora con la integración entera.
+                             `gcal_refresh_token` NO va acá a propósito: lo escribe solo el
+                             callback del OAuth, nunca el navegador. */
+                          "gcal_client_id", "gcal_client_secret", "gcal_calendar_id", "gcal_meet"];
+          /* Cambiar de app de Google invalida el permiso que dio la anterior: el
+             refresh_token pertenece al client_id que lo emitió. Si no se soltara acá,
+             el panel diría "conectado" contra credenciales que ya no son las suyas. */
+          let gcalCredsAntes = null;
+          if ("gcal_client_id" in b || "gcal_client_secret" in b){
+            const cfgAntes = await loadConfig(env, tid).catch(() => ({}));
+            gcalCredsAntes = { id: String(cfgAntes.gcal_client_id || ""), sec: String(cfgAntes.gcal_client_secret || "") };
+          }
           const stmts = [];
           /* > 0 = cuantos planes quedaron fuera por el tope, para decirselo en la respuesta */
           let avisoPaquetes = 0;
@@ -16595,6 +17127,14 @@ export default {
             const waAcademia = String(b.whatsapp_profe || "").replace(/\D/g, "").slice(0, 15);
             if (waAcademia){
               try { await env.DB.prepare("UPDATE tenants SET whatsapp = ?1 WHERE id = ?2").bind(waAcademia, tid).run(); } catch (e) {}
+            }
+          }
+          if (gcalCredsAntes){
+            const idAhora  = ("gcal_client_id" in b)     ? String(b.gcal_client_id || "").trim()     : gcalCredsAntes.id;
+            const secAhora = ("gcal_client_secret" in b) ? String(b.gcal_client_secret || "").trim() : gcalCredsAntes.sec;
+            if (idAhora !== gcalCredsAntes.id.trim() || secAhora !== gcalCredsAntes.sec.trim()){
+              try { await setConfigValor(env, tid, "gcal_refresh_token", ""); } catch (e) {}
+              gcalOlvidarToken(tid);
             }
           }
           /* 🔒 Rastro contra el bug de `saldo_modo` (13-ago-2026): si el panel manda una clave que
@@ -17098,6 +17638,11 @@ export default {
        diario simplemente no existiría. Es una consulta indexada sobre `estado='avisado'`, que
        hoy tiene 0 filas en toda la base: no cuesta nada cuando no hay nada que hacer. */
     try { await reofrecerEsperas(env); } catch (e) { console.error("reofrecer esperas", e); }
+    /* Google Calendar: la RED del reconciliador, en cada corrida. El portal ya publica al
+       toque cuando el alumno reserva o cancela; esto barre todo lo demás (lo que el dueño
+       mueve desde su panel, el importador, las compras) y reintenta lo que Google rechazó.
+       Sin academias conectadas es UNA consulta a `config` que devuelve cero filas. */
+    try { await gcalSyncTodos(env); } catch (e) { console.error("gcal sync", e); }
     /* Campañas: en CADA corrida (cada 15 min), no en la diaria. La ley solo deja enviar de
        07:00 a 20:00 de lunes a viernes, así que hay que ir despachando tandas a lo largo del
        día; con una sola corrida diaria no entrarían ni 300 correos. La propia función se

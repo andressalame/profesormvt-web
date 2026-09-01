@@ -44,7 +44,15 @@ borrar_academias(){
   for t in $tablas; do sql="$sql DELETE FROM $t WHERE tenant_id LIKE '$patron';"; done
   # lo que cuelga de otra clave, no de tenant_id
   sql="$sql DELETE FROM campana_destinos WHERE campana_id NOT IN (SELECT id FROM campanas);"
+  # 🔴 27-ago-2026: esto SOLO borraba las sesiones de alumno (cuenta_id = cuentas.id).
+  #    La del DUEÑO es 'P:'+profesores.id y nunca empezaba por el patrón, así que
+  #    sobrevivía a su academia. Como `token` es PRIMARY KEY, la siguiente auditoría
+  #    que reusaba el mismo token fijo veía su INSERT rebotar en silencio y leía la
+  #    fila vieja, que apuntaba a un profesor muerto: "Sesion expirada" en las 3
+  #    preguntas del dueño, y cinco fallos que no eran del bot.
   sql="$sql DELETE FROM sesiones WHERE cuenta_id LIKE '${patron%\%}%';"
+  sql="$sql DELETE FROM sesiones WHERE cuenta_id LIKE 'P:${patron%\%}%';"
+  sql="$sql DELETE FROM sesiones WHERE cuenta_id LIKE 'T:${patron%\%}%';"
   sql="$sql DELETE FROM tenants WHERE id LIKE '$patron';"
   npx wrangler d1 execute batuta-app --remote --command "$sql" >/dev/null 2>&1
 }
@@ -58,6 +66,12 @@ verificar_sin_huerfanos(){
     [ -n "$sel" ] && sel="$sel,"
     sel="$sel (SELECT COUNT(*) FROM $t WHERE tenant_id NOT IN (SELECT id FROM tenants)) AS $t"
   done
+  # `sesiones` no tiene tenant_id, así que el barrido de arriba no la miraba NUNCA y
+  # el "✅ sin huérfanas" salía verde con 68 filas colgando (27-ago-2026). Sus tres
+  # formas: 'P:'+profesores.id · 'T:'+tenants.id · cuentas.id pelado.
+  sel="$sel, (SELECT COUNT(*) FROM sesiones WHERE cuenta_id LIKE 'P:%' AND substr(cuenta_id,3) NOT IN (SELECT id FROM profesores)) AS sesiones_de_profe"
+  sel="$sel, (SELECT COUNT(*) FROM sesiones WHERE cuenta_id LIKE 'T:%' AND substr(cuenta_id,3) NOT IN (SELECT id FROM tenants)) AS sesiones_de_academia"
+  sel="$sel, (SELECT COUNT(*) FROM sesiones WHERE cuenta_id NOT LIKE 'P:%' AND cuenta_id NOT LIKE 'T:%' AND cuenta_id NOT IN (SELECT id FROM cuentas)) AS sesiones_de_alumno"
   npx wrangler d1 execute batuta-app --remote --json --command "SELECT $sel" 2>/dev/null |
   python3 -c "
 import sys, json
