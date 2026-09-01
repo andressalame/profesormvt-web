@@ -1862,7 +1862,15 @@ const SORTEO = {
        ⚠️ Esto NO es un caso aislado, es el síntoma: `compras` de este CRM lleva 0 filas
        desde el 16-ago porque ya nadie compra por acá. El próximo sorteo tiene que leer de
        Batuta, o nace con cero participantes otra vez. */
-    { nombre: "Aaron A.", boletos: 1 }
+    { nombre: "Aaron A.", boletos: 1 },
+    /* Danielle C. — pagó S/320 (Paquete 4) por Yape desde el portal de Batuta el 1-set-2026,
+       dentro de la ventana. MISMO caso que Aaron y por la MISMA causa de fondo: su compra vive
+       en `compras` de batuta-app (tenant MVT-PROFESORMVT, rowid 895, estado confirmada) y el
+       sorteo lee `compras` de este CRM, que no la ve.
+       🔴 Es el SEGUNDO que hay que meter a mano en un mismo sorteo. Ya no es un caso aislado:
+       cualquiera que renueve desde el portal de Batuta queda fuera en silencio. El próximo
+       sorteo tiene que leer de Batuta o nace con este agujero. */
+    { nombre: "Danielle C.", boletos: 1 }
   ]
 };
 
