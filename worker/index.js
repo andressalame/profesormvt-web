@@ -1862,16 +1862,12 @@ const SORTEO = {
        ⚠️ Esto NO es un caso aislado, es el síntoma: `compras` de este CRM lleva 0 filas
        desde el 16-ago porque ya nadie compra por acá. El próximo sorteo tiene que leer de
        Batuta, o nace con cero participantes otra vez. */
-    { nombre: "Aaron A.", boletos: 1 },
-    /* Danielle C. — pagó S/320 (Paquete 4) por Yape desde el portal de Batuta el 1-set-2026,
-       dentro de la ventana. MISMO caso que Aaron y por la MISMA causa de fondo: su compra vive
-       en `compras` de batuta-app (tenant MVT-PROFESORMVT, rowid 895, estado confirmada) y el
-       sorteo lee `compras` de este CRM, que no la ve.
-       🔴 Es el SEGUNDO que hay que meter a mano en un mismo sorteo. Ya no es un caso aislado:
-       cualquiera que renueve desde el portal de Batuta queda fuera en silencio. El próximo
-       sorteo tiene que leer de Batuta o nace con este agujero. */
-    { nombre: "Danielle C.", boletos: 1 }
-  ]
+    /* ⚠️ Aaron se queda a mano porque NO tiene fila de compra en NINGUNA de las dos bases:
+       pagó por Yape y se registró por fuera. Danielle SÍ la tiene (en Batuta) y por eso salió
+       de acá el 1-set: desde que el sorteo lee las dos bases, entra sola y ponerla también
+       acá la habría contado dos veces. */
+    { nombre: "Aaron A.", boletos: 1 }
+]
 };
 
 /* "Andrés Salamé Córdova" -> "Andrés S." · la lista del sorteo es pública, así que
@@ -1884,15 +1880,44 @@ function nombreCortoSorteo(nombre){
 }
 
 /* Lista viva de participantes, una entrada por PERSONA (no por compra) con sus boletos sumados. */
+/* Las compras de MVT viven en DOS sitios desde que MVT se mudó a Batuta el 23-ago-2026:
+   las de este CRM (`env.DB`, cada vez menos) y las del portal de Batuta (`env.BATUTA`,
+   tenant MVT-PROFESORMVT), que es por donde compra y renueva la gente hoy.
+   Se leen las dos y se juntan. Sin esto el sorteo dejaba fuera EN SILENCIO a cualquiera que
+   pagara por Batuta: pasó con Aaron y con Danielle el mismo día del cierre. */
+async function sorteoComprasBatuta(env, paquetes){
+  if (!env.BATUTA) return [];                 // sin binding no se cae el sorteo, solo lee menos
+  try {
+    const marcas = paquetes.map((_, i) => "?" + (i + 3)).join(",");
+    const { results } = await env.BATUTA.prepare(
+      "SELECT c.id, c.cuenta_id, c.paquete, c.fecha, c.estado, cu.nombre, cu.email " +
+      "FROM compras c JOIN cuentas cu ON cu.id = c.cuenta_id " +
+      "WHERE c.tenant_id = 'MVT-PROFESORMVT' " +
+      "AND c.estado IN ('confirmada','pendiente') AND c.fecha >= ?1 AND c.fecha <= ?2 " +
+      "AND c.paquete IN (" + marcas + ") ORDER BY c.fecha ASC, c.id ASC"
+    ).bind(SORTEO.desdeFecha, SORTEO.hastaFecha, ...paquetes).all();
+    /* el id se prefija para que una compra de Batuta y una de acá no puedan colisionar,
+       y la cuenta también, porque son espacios de id distintos */
+    return (results || []).map(r => ({ ...r, id: "bt:" + r.id, cuenta_id: "bt:" + r.cuenta_id }));
+  } catch (e) {
+    console.error("sorteo: no se pudo leer Batuta", e);
+    return [];                                 // ante la duda, el sorteo sigue con lo que sí tiene
+  }
+}
+
 async function sorteoParticipantes(env){
   const paquetes = Object.keys(SORTEO.boletos);
   const marcas = paquetes.map((_, i) => "?" + (i + 3)).join(",");
-  const { results } = await env.DB.prepare(
+  const propias = await env.DB.prepare(
     "SELECT c.id, c.cuenta_id, c.paquete, c.fecha, c.estado, cu.nombre, cu.email " +
     "FROM compras c JOIN cuentas cu ON cu.id = c.cuenta_id " +
     "WHERE c.estado IN ('confirmada','pendiente') AND c.fecha >= ?1 AND c.fecha <= ?2 " +
     "AND c.paquete IN (" + marcas + ") ORDER BY c.fecha ASC, c.id ASC"
   ).bind(SORTEO.desdeFecha, SORTEO.hastaFecha, ...paquetes).all();
+
+  const deBatuta = await sorteoComprasBatuta(env, paquetes);
+  const results = [...(propias.results || []), ...deBatuta]
+    .sort((a, b) => String(a.fecha).localeCompare(String(b.fecha)) || String(a.id).localeCompare(String(b.id)));
 
   const porCuenta = new Map();
   for (const r of (results || [])){
