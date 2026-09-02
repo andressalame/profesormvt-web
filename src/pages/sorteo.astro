@@ -32,7 +32,7 @@ import Layout from '../layouts/Layout.astro';
             <div><b id="cdM">--</b><span>min</span></div>
             <div><b id="cdS">--</b><span>seg</span></div>
           </div>
-          <p class="so-cierra">Cierra <b>hoy martes 1 de setiembre a las 11:59 p.m.</b> (hora de Lima)</p>
+          <p class="so-cierra" id="soCierra">Cierra el <b>martes 1 de setiembre a las 11:59 p.m.</b> (hora de Lima)</p>
         </div>
       </div>
     </section>
@@ -54,7 +54,7 @@ import Layout from '../layouts/Layout.astro';
         <ol class="so-pasos">
           <li><b>Compras</b> tu paquete de 4, 8 o 12 clases en la web.</li>
           <li><b>Entras solo</b>: apenas se registra tu pago, tu nombre aparece en la lista de abajo.</li>
-          <li><b>Esta noche a las 11:59 p.m.</b> se elige al ganador en esta misma página.</li>
+          <li id="soEstaNoche"><b>El 1 de setiembre a las 11:59 p.m.</b> se elige al ganador en esta misma página.</li>
         </ol>
 
         <h3>Mientras más clases, más chances</h3>
@@ -215,7 +215,12 @@ import Layout from '../layouts/Layout.astro';
 
     // ---- Cerrado ----
     reloj.hidden = true;
-    label.textContent = 'Sorteo cerrado · 5 de agosto de 2026';
+    // 2-set-2026: decia '5 de agosto de 2026' a mano, la fecha del sorteo ANTERIOR. La fecha
+    // sale del worker (cierraUTC), en hora de Lima, para que no vuelva a quedarse vieja.
+    var fCierre = d.cierraUTC ? new Date(d.cierraUTC) : null;
+    label.textContent = 'Sorteo cerrado' + (fCierre ? ' · ' + fCierre.toLocaleDateString('es-PE', {day:'numeric', month:'long', year:'numeric', timeZone:'America/Lima'}) : '');
+    var soC = document.getElementById('soCierra'); if (soC) soC.hidden = true;
+    var soN = document.getElementById('soEstaNoche'); if (soN) soN.textContent = 'El ganador ya se eligió en esta misma página y se le avisó por WhatsApp.';
     if (d.ganador){
       res.hidden = false;
       // Ruleta solo para quien estaba mirando cuando cerró; el que llega después ve el resultado directo.
