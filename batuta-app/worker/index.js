@@ -10162,6 +10162,10 @@ export default {
             return json({ ok: r.ok, status: r.status, meta: data }, r.ok ? 200 : 502);
           } catch (e) { return json({ ok: false, error: String(e && e.message) }, 502); }
         }
+        if (path === "/app/api/su/wa-log" && request.method === "GET"){
+          const { results } = await env.DB.prepare("SELECT ts, firma_ok, motivo, resumen FROM wa_webhook_log ORDER BY ts DESC LIMIT 20").all().catch(() => ({ results: [] }));
+          return json({ ok: true, ultimos: results || [] });
+        }
         /* Envio de prueba con respuesta cruda de Meta (para diagnosticar sin adivinar). */
         if (path === "/app/api/su/wa-test" && request.method === "POST"){
           if (!env.WHATSAPP_TOKEN) return json({ ok: false, error: "Sin WHATSAPP_TOKEN cargado" }, 501);
@@ -10170,11 +10174,17 @@ export default {
           const to = String(b.to || "").replace(/\D/g, "");
           const texto = String(b.texto || "Prueba de Batuta: el envio de WhatsApp funciona ✅").slice(0, 1000);
           if (!phoneId || !to) return json({ error: "Manda phone_id y to (solo digitos, con codigo de pais)" }, 400);
+          /* 2-set-2026: fuera de la ventana de 24 h Meta ACEPTA un texto libre (200 + wamid) y despues
+             lo marca failed por webhook (131047). Para abrir conversacion hay que mandar PLANTILLA:
+             {"template":"hello_world","lang":"en_US"}. */
+          const cuerpo = b.template
+            ? { messaging_product: "whatsapp", to: to, type: "template", template: { name: String(b.template), language: { code: String(b.lang || "en_US") } } }
+            : { messaging_product: "whatsapp", to: to, type: "text", text: { body: texto } };
           try {
             const r = await fetch("https://graph.facebook.com/v21.0/" + phoneId + "/messages", {
               method: "POST",
               headers: { "Authorization": "Bearer " + env.WHATSAPP_TOKEN, "Content-Type": "application/json" },
-              body: JSON.stringify({ messaging_product: "whatsapp", to: to, type: "text", text: { body: texto } })
+              body: JSON.stringify(cuerpo)
             });
             const data = await r.json().catch(() => ({}));
             return json({ ok: r.ok, status: r.status, meta: data }, r.ok ? 200 : 502);
@@ -11502,6 +11512,26 @@ export default {
            Se valida ANTES de tocar la IA, la DB o mandar un WhatsApp de salida. */
         const rawBuf = await request.arrayBuffer();
         const firma = await validarFirmaMeta(env, rawBuf, request.headers.get("x-hub-signature-256"));
+        /* Bitacora persistente de lo que llega (2-set-2026): wrangler tail no es fiable para esto
+           y sin registro no se puede saber si Meta esta posteando o no. Guarda tipo y resumen, nunca el texto. */
+        ctx.waitUntil((async () => {
+          try {
+            await env.DB.prepare("CREATE TABLE IF NOT EXISTS wa_webhook_log (ts TEXT, firma_ok INTEGER, motivo TEXT, resumen TEXT)").run();
+            let resumen = "";
+            try {
+              const b = JSON.parse(new TextDecoder().decode(rawBuf));
+              const v = b && b.entry && b.entry[0] && b.entry[0].changes && b.entry[0].changes[0] && b.entry[0].changes[0].value;
+              if (v){
+                const pid = (v.metadata && v.metadata.phone_number_id) || "";
+                const msgs = (v.messages || []).map(m => m.type + " de " + String(m.from || "").slice(-4));
+                const sts = (v.statuses || []).map(x => x.status + (x.errors && x.errors[0] ? " err " + x.errors[0].code : ""));
+                resumen = "phone " + pid + " | msgs " + JSON.stringify(msgs) + " | statuses " + JSON.stringify(sts);
+              } else resumen = "sin value: " + JSON.stringify(b).slice(0, 200);
+            } catch (e) { resumen = "body no-json (" + rawBuf.byteLength + " B)"; }
+            await env.DB.prepare("INSERT INTO wa_webhook_log (ts, firma_ok, motivo, resumen) VALUES (?1, ?2, ?3, ?4)")
+              .bind(new Date().toISOString(), firma.ok ? 1 : 0, String(firma.motivo || ""), resumen.slice(0, 500)).run();
+          } catch (e) {}
+        })());
         if (!firma.ok){
           console.error("wa webhook: POST rechazado (401) —", firma.motivo);
           return new Response("unauthorized", { status: 401 });
