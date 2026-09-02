@@ -8695,6 +8695,35 @@ export default {
       return htmlResponse(paginaSuscribir());
     }
     if (path === "/app/demo" && request.method === "GET"){
+      /* 🔴 1-set-2026: LA DEMO SE APAGA. Decisión de Andrés, textual: "nuestra demo de Batuta
+         es una mierda para colmo. Mejor llevarlos de frente a crearse su cuenta y su academia
+         como Dios manda."
+
+         Qué era y por qué no servía: metía un token en localStorage y hacía location.replace
+         a /app/panel, o sea que el visitante caía dentro del panel REAL con datos de mentira,
+         sin saber dónde estaba, y con una barra pidiéndole el correo. Medido: la puerta de
+         captura de esa barra llevaba 8 DÍAS con lead_magnet origen='demo' = 0. Cero correos.
+
+         Por qué es un REDIRECT y no un borrado: hay 68 enlaces a /app/demo repartidos por la
+         web y, sobre todo, DENTRO de las frases de ~50 posts del blog ("la demo está abierta",
+         "demo real editable"). Borrar la ruta los rompería todos de golpe. Redirigiendo, los 68
+         siguen llevando a un sitio útil mientras se arregla el copy con calma.
+
+         El `?f=` que traían se conserva, así que la atribución de origen no se pierde. */
+      const qDemo = url.searchParams.get("f") || url.searchParams.get("utm_source") || "demo";
+      /* 🔴 Location RELATIVO, no absoluto. Con url.origin el visitante que venía de batuta.lat
+         terminaba en batuta-app.andressalame.workers.dev, porque detrás de Vercel el worker ve
+         SU propio origen y no el dominio público. Un Location relativo es HTTP válido y deja al
+         visitante en el host por el que entró, sea cual sea. Medido en vivo el 1-set-2026. */
+      return new Response(null, {
+        status: 302,
+        headers: { "Location": "/app/registro?f=" + encodeURIComponent(qDemo) }
+      });
+    }
+
+    /* ⬇️ DEMO VIEJA: desactivada el 1-set-2026 con `if (false &&`, no borrada, para
+       poder leer qué hacía si algún día se rehace. El redirect de arriba la sustituye. */
+    if (false && path === "/app/demo" && request.method === "GET"){
       /* Una demo PRIVADA por visitante (19-ago-2026): tenant propio, sembrado al vuelo y
          borrado a las 24h. Lo que escribe uno no lo ve nadie más. Si la creación falla o se
          topa el freno del día, se cae a la demo compartida de siempre: el botón nunca
@@ -15356,6 +15385,11 @@ export default {
           return json({ disponibilidad: rows });
         }
         if (path === "/app/api/admin/disponibilidad" && request.method === "POST"){
+          /* agenda_editar (1-set-2026): otro permiso del catalogo que no frenaba nada.
+             El dueno se lo quita a un profe para que no se mueva el horario solo. */
+          if (!puedeProfe(esDueno, profeActor, "agenda_editar")){
+            return json({ error: "Tu academia no te dejó cambiar tu horario." }, 403);
+          }
           const b = await request.json().catch(() => ({}));
           const target = await resolverProfeTarget(b.profe);
           if (!target) return json({ error: "Profesor no encontrado" }, 404);
@@ -16070,7 +16104,14 @@ export default {
           const cuentas = esDueno ? cuentasAll : cuentasAll.filter(c => c.alumno_id && idsScope.has(c.alumno_id));
           const idsCuentasScope = new Set(cuentas.map(c => c.id));
           const comprasAll = (await env.DB.prepare("SELECT * FROM compras WHERE tenant_id = ?1 AND estado != 'iniciada' ORDER BY CASE estado WHEN 'pendiente' THEN 0 ELSE 1 END, fecha DESC").bind(tid).all()).results || [];
-          const compras = esDueno ? comprasAll : comprasAll.filter(c => c.profesor_id === profeActorId || idsCuentasScope.has(c.cuenta_id));
+          /* pagos_ver (1-set-2026): el permiso vivia en el catalogo desde el 28-jul y no lo
+             miraba NADIE — ni el worker ni el panel. El dueno lo marcaba y no pasaba nada.
+             Un profe sin el permiso ya no recibe las compras: se le mandan vacias, que es
+             el unico freno real (esconder la pestana no sirve, los datos ya estarian en
+             el navegador). El saldo NO depende de esto: computeAlumno no lee compras. */
+          const compras = esDueno
+            ? comprasAll
+            : (permisosDe(profeActor).puede("pagos_ver") ? comprasAll.filter(c => c.profesor_id === profeActorId || idsCuentasScope.has(c.cuenta_id)) : []);
           const recursos = (await env.DB.prepare("SELECT * FROM recursos WHERE tenant_id = ?1 ORDER BY fecha DESC, rowid DESC").bind(tid).all()).results || [];
           const ejercicios = (await env.DB.prepare("SELECT * FROM ejercicios WHERE tenant_id = ?1 ORDER BY fecha DESC, rowid DESC").bind(tid).all()).results || [];
           /* URLs firmadas para el panel (11-ago-2026): tambien pinta <audio src> y <a href>,

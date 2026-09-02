@@ -1425,8 +1425,8 @@ async function procesarPuenteWhatsApp(env){
    Lima, con margen por los dos lados. Si se enciende un domingo, no manda nada hasta el lunes
    a las 7 a.m., solo. No hay que acordarse de nada.
    ═══════════════════════════════════════════════════════════════════════════ */
-const SORTEO_BLAST_TANDA = 25;      // por corrida horaria
-const SORTEO_BLAST_TOPE_DIA = 70;   // por día UTC: deja aire para el puente en la cuota de Resend (100/día free)
+const SORTEO_BLAST_TANDA = 45;      // por corrida horaria (45 el 1-set: quedaban 2 corridas y 142 por barrer)
+const SORTEO_BLAST_TOPE_DIA = 45;   // por día UTC: deja aire para el puente en la cuota de Resend (100/día free)
 /* Feriados peruanos que caen en día hábil dentro de la campaña. (30-ago, Santa Rosa, cae
    domingo en 2026, así que la lista va vacía a propósito: se llena si la campaña se alarga.) */
 const FERIADOS_PE = [];
@@ -1434,12 +1434,19 @@ const FERIADOS_PE = [];
 /* ¿Se puede mandar correo comercial ahora mismo? Todo en UTC: entre las 12:00 y las 23:00 UTC
    la fecha UTC y la de Lima son el mismo día, así que el día de la semana no se desfasa. */
 function ventanaComercialAbierta(d){
+  /* Todo se calcula en hora de LIMA (UTC-5 fijo, Perú no mueve el reloj). Antes se calculaba
+     en UTC y la ventana topaba a las 23:00 UTC para no cruzar la medianoche UTC, que habría
+     desfasado el día de la semana. El costo de ese atajo: la ventana cerraba a las 6 p.m. de
+     Lima en vez de a las 8 p.m. que dice la ley, y el cron de las 23:00 UTC caía JUSTO fuera.
+     El 1-set-2026 eso se comió las dos últimas corridas del día del cierre del sorteo.
+     Pasando a hora de Lima el día de la semana ya no se desfasa y la ventana es la real. */
   const ahora = d || new Date();
-  const hora = ahora.getUTCHours();
-  if (hora < 12 || hora >= 23) return false;              // fuera de 7 a.m.-6 p.m. de Lima
-  const dia = ahora.getUTCDay();
+  const lima = new Date(ahora.getTime() - 5 * 3600 * 1000);
+  const hora = lima.getUTCHours();
+  if (hora < 7 || hora >= 20) return false;               // ley: nada de 8 p.m. a 7 a.m.
+  const dia = lima.getUTCDay();
   if (dia === 0 || dia === 6) return false;               // domingo o sábado
-  if (FERIADOS_PE.indexOf(ahora.toISOString().slice(0, 10)) !== -1) return false;
+  if (FERIADOS_PE.indexOf(lima.toISOString().slice(0, 10)) !== -1) return false;
   return true;
 }
 

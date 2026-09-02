@@ -903,7 +903,7 @@ button[data-ayuda],a[data-ayuda],select[data-ayuda],input[data-ayuda],label[data
     <div class="sb-tools">
       <span class="syncdot" id="syncdot">—</span>
       <details class="solo-dueno">
-        <summary>Datos y respaldo</summary>
+        <summary id="datosRespaldo">Datos y respaldo</summary>
         <div class="sb-toolsbox">
           <button class="btn ghost sm" id="btnExport">Exportar JSON</button>
           <button class="btn ghost sm" id="btnBackupSrv" title="Corre el respaldo del servidor (R2) y lo descarga">Backup servidor</button>
@@ -6410,7 +6410,12 @@ function aplicarPermisosPropios(){
   if(negados.indexOf("alumnos_editar")>=0) css.push("[data-edit]");
   if(negados.indexOf("alumnos_borrar")>=0) css.push("[data-del]");
   if(negados.indexOf("clases_borrar")>=0) css.push("[data-delreg]");
-  if(negados.indexOf("exportar")>=0) css.push("#btnExportar,#btnExportCsv");
+  if(negados.indexOf("exportar")>=0) css.push("#btnExport,#btnCsv,#btnCsvEmails,#btnBackupSrv");
+  /* 1-set-2026: los ids de arriba decian #btnExportar y #btnExportCsv, que NO EXISTEN.
+     El permiso se marcaba y no escondia nada. Los reales son los cuatro de la caja
+     "Datos y respaldo". Y estos dos de abajo no tenian regla ninguna. */
+  if(negados.indexOf("pagos_ver")>=0) css.push('.tab[data-tab="pagos"]');
+  if(negados.indexOf("agenda_editar")>=0) css.push("#btnGuardarDisp,#btnDispFila,#btnDispCopiar");
   if(css.length){
     var st=document.getElementById("permCss")||document.createElement("style");
     st.id="permCss"; st.textContent=css.join(",")+"{display:none !important;}";
@@ -6578,6 +6583,10 @@ function tabVisiblePorReglas(nombre){
   var b=document.querySelector('.tab[data-tab="'+nombre+'"]');
   if(!b) return false;
   if(b.classList.contains("mod-off")) return false;
+  /* 1-set-2026: una pestana que los permisos escondieron tampoco existe para el
+     buscador. Sin esto, un profe sin `pagos_ver` escribia "pagos" y el Ctrl+K lo
+     mandaba a una pestana invisible: pantalla en blanco y cara de bug. */
+  try{ if(getComputedStyle(b).display==="none") return false; }catch(e){}
   if(document.body.classList.contains("rol-profesor")&&b.classList.contains("solo-dueno")) return false;
   return true;
 }
@@ -8390,50 +8399,126 @@ window.addEventListener("resize",function(){ try{ arreglarTablas(); }catch(e){} 
    {t: título, tab: sección, aj: sub-pestaña de Ajustes, act: acción, k: sinónimos}
    ═══════════════════════════════════════════════════════════════════ */
 var BS_INDICE=[
-  {t:"Inicio — tu día de un vistazo", tab:"resumen", k:"home resumen inicio dashboard tablero hoy"},
-  /* acciones directas: hacen la cosa, no solo llevan a la pantalla */
-  {t:"Dar de alta un alumno nuevo", tab:"alumnos", act:"btnNuevoAlumno", k:"nuevo alumno crear agregar inscribir matricular registrar persona"},
-  {t:"Traer mis alumnos de otro sistema (o de Excel)", tab:"alumnos", act:"btnImportCsv", k:"importar csv excel lista migrar traer masivo subir punchpass mindbody glofox zen planner trainingym mudar cambiar de sistema planes pases saldo"},
-  {t:"Registrar una clase dictada", tab:"registro", act:"btnNuevoRegistro", k:"registrar clase dictada asistencia marcar pasar lista bitacora dictar"},
-  {t:"Crear un grupo", tab:"grupos", act:"btnNuevoGrupo", k:"grupo grupal crear clase grupal"},
-  /* secciones */
-  {t:"Alumnos — lista, saldos y estado", tab:"alumnos", k:"alumnos estudiantes clientes lista saldo restantes deudores fichas"},
-  {t:"Quién está por vencer o ya sin clases", tab:"alumnos", k:"vencer vence vencimiento vencidos renovar renovacion caducar acabar sin clases deben deudor moroso retencion recuperar"},
-  {t:"Grupos — clases grupales", tab:"grupos", k:"grupos grupales coro banda equipo"},
-  {t:"Profesores — asientos y comisiones", tab:"profesores", k:"profesores profes staff equipo asientos comisiones instructores"},
-  {t:"Cuentas de alumnos — la entrada de cada uno a su portal", tab:"cuentas", k:"acceso accesos cuenta cuentas clave contrasena portal login entrar alumno password"},
-  {t:"Interesados — los que preguntaron y no compraron", tab:"leads", k:"interesados leads prospectos crm ventas seguimiento"},
-  {t:"Agenda — tu horario y las reservas por venir", tab:"agenda", k:"agenda horario disponibilidad reservas calendario franjas futuro proximas bloquear"},
-  {t:"Aforo y cupos de una franja", tab:"agenda", k:"aforo cupo cupos capacidad cuantos entran maximo personas limite cabida salas sala clases en paralelo dos clases misma hora"},
-  {t:"Asistencia — las clases que YA dictaste", tab:"registro", k:"asistencia registro historial bitacora dictadas pasado faltas"},
-  {t:"Chat con tus alumnos", tab:"chat", k:"chat mensajes conversacion hablar escribir"},
-  {t:"Pagos — confirmar y ver comprobantes", tab:"pagos", k:"pagos cobros confirmar comprobante voucher recibo boleta pagar cobrar plata dinero"},
-  {t:"Caja — gastos y neto del mes", tab:"caja", k:"caja gastos egresos neto ganancia utilidad balance"},
-  {t:"Reportes — números de tu academia", tab:"reportes", k:"reportes reporte metricas numeros estadisticas grafico ingresos"},
-  {t:"Material para tus alumnos", tab:"recursos", k:"material recursos pdf audio archivos tareas compartir"},
-  {t:"Tu biblioteca de ejercicios", tab:"ejercicios", k:"biblioteca ejercicios repertorio banco material propio"},
-  {t:"Mi web — editar mi página pública", tab:"web", k:"web pagina sitio landing publica editar diseno online internet subdominio dominio tuacademia batuta lat"},
-  {t:"Mi perfil y mi plan de Batuta", tab:"perfil", k:"perfil plan suscripcion pagar batuta foto nombre subir bajar plan afiliados referir"},
-  {t:"Campañas de publicidad", tab:"campanas", k:"campanas ads publicidad meta facebook instagram anuncios"},
-  {t:"Correos a mis alumnos", tab:"correos", k:"correos mails masivos campana email newsletter promocion boletin masivo"},
-  {t:"Servicios", tab:"servicios", k:"servicios extras"},
-  {t:"Ideas y errores — reportar algo", tab:"feedback", k:"feedback idea error bug problema sugerencia ayuda reportar reclamo"},
-  /* Ajustes, por sub-pestaña: acá es donde más se pierde la gente */
-  {t:"Tus clases y su aforo", tab:"ajustes", aj:"clases", k:"clases tipos modalidad curso cursos categoria variantes aforo cupo materia disciplina salas sala crear sala"},
-  {t:"Paquetes, precios y qué incluye cada plan", tab:"ajustes", aj:"clases", k:"precios precio paquetes planes tarifa costo cuanto cobro mensualidad incluye acceso"},
-  {t:"Cómo reservan tus alumnos (anticipación, reprogramar)", tab:"ajustes", aj:"reservas", k:"reservas reservar anticipacion reprogramar cancelar recordatorios cupo general politica"},
-  {t:"Recordatorios automáticos de clase y de renovación", tab:"ajustes", aj:"reservas", k:"recordatorio recordatorios aviso avisos correo automatico renovacion vencimiento"},
-  {t:"Mi número de Yape / Plin y mis cuentas de banco", tab:"ajustes", aj:"cobros", k:"yape plin banco bcp scotiabank cci transferencia cuenta cripto usdt numero cobrar"},
-  {t:"Cobrar con tarjeta (Mercado Pago / Culqi / Stripe)", tab:"ajustes", aj:"cobros", k:"tarjeta mercadopago mercado pago culqi stripe visa online pasarela"},
-  {t:"Facturación electrónica SUNAT (boletas)", tab:"ajustes", aj:"cobros", k:"sunat boleta factura ruc nubefact igv facturacion electronica comprobante"},
-  {t:"Mi logo, mi color y mi tipografía", tab:"ajustes", aj:"academia", k:"marca logo color tipografia fuente branding identidad personalizar"},
-  {t:"Sedes de mi academia", tab:"ajustes", aj:"academia", k:"sede sedes local locales sucursal direccion"},
-  {t:"Apagar módulos que no uso", tab:"ajustes", aj:"academia", k:"modulos ocultar apagar esconder limpiar menu simplificar"},
-  {t:"Asistente de WhatsApp con IA", tab:"ajustes", aj:"wa", k:"whatsapp wa ia bot asistente automatico responder chatbot mensajes"},
-  {t:"Avisos en mi celular (push)", tab:"ajustes", aj:"avanzado", k:"push notificaciones avisos celular app movil telefono instalar"},
-  {t:"Google Calendar", tab:"ajustes", aj:"avanzado", k:"google calendar calendario meet sincronizar"},
-  {t:"Trae a un amigo (el premio de tus alumnos por recomendarte)", tab:"ajustes", aj:"referidos", k:"referido referidos amigo amigos trae traer recomendar recomendacion premio descuento invitar codigo boca a boca"},
-  {t:"El texto de los correos que Batuta manda por ti", tab:"ajustes", aj:"mensajes", k:"correo correos mensaje mensajes texto redactar escribir plantilla bienvenida recordatorio automatico firma"}
+  /* 1-set-2026: medido con 237 consultas escritas como las tipea una duena de verdad.
+     18 dejaban la pantalla en blanco y estas dos eran funciones QUE SI EXISTEN y que
+     el indice no nombraba: la campanita (en produccion desde el 23-ago) y la caja de
+     exportar. Una funcion que el buscador no conoce no da error: da una lista vacia,
+     y la duena concluye que Batuta no lo hace. */
+  {t:"Novedades y quién te pagó — la campanita", act:"btnCampana",
+   k:"campanita campana campanilla novedades novedad avisos aviso alertas notificaciones notificacion que hay de nuevo nuevo quien me pago pagos recientes globito"},
+  {t:"Exportar mis datos y hacer un respaldo", soloDueno:true, act:"datosRespaldo",
+   /* sin "csv" ni "excel" a proposito: con esas dos gana IMPORTAR, que es lo que
+      busca quien recien llega con su lista del sistema viejo. Medido en la bateria. */
+   k:"exportar exportacion exporto descargar descarga bajar bajarme sacar llevarme mis datos respaldo respaldar backup copia de seguridad seguridad json guardar copia"},
+  {t:"Hoy — tu día de un vistazo", tab:"resumen", k:"hoy home inicio resumen dashboard tablero principal empezar arrancar quien viene hoy clases de hoy que tengo hoy pendientes"},
+
+  /* acciones directas: hacen la cosa, no solo llevan a la pantalla.
+     Solo botones que abren un formulario. Nada que publique, borre o cobre. */
+  {t:"Nuevo alumno", tab:"alumnos", act:"btnNuevoAlumno", k:"nuevo alumno alumnos alumna crear agregar anadir meter sumar inscribir matricular registrar dar de alta persona estudiante ficha nueva"},
+  {t:"Traer mis alumnos (de otro sistema o de Excel)", tab:"alumnos", act:"btnImportCsv", k:"importar importacion csv excel xls google sheets lista listado migrar migracion traer subir cargar masivo punchpass mindbody glofox zen planner trainingym mudarme cambiar de sistema pasar mis datos pases"},
+  {t:"Registrar clase individual", tab:"registro", act:"btnNuevoRegistro", k:"registrar clase dictada dictar anotar asistencia individual bitacora clase dada ya dicte apuntar"},
+  {t:"Registrar clase grupal", tab:"registro", act:"btnNuevoRegistroGrupal", k:"registrar clase grupal grupo varios alumnos a la vez asistencia grupal anotar taller"},
+  {t:"Nuevo grupo", tab:"grupos", act:"btnNuevoGrupo", k:"nuevo grupo grupos crear agregar armar clase grupal coro banda ensamble equipo taller"},
+  {t:"Invitar profesor", tab:"profesores", act:"btnInvitarProfe", k:"invitar invitacion profesor profesores profesoras profe profes maestro maestra agregar nuevo profesor sumar equipo staff asiento asientos cupo de profesor darle acceso"},
+  {t:"Interesado — anotar a alguien que preguntó", tab:"leads", act:"btnNuevoLead", k:"interesado interesados lead leads prospecto prospectos anotar agregar nuevo consulta pregunto no compro"},
+
+  /* ---------- las secciones del día a día ---------- */
+  {t:"Alumnos — lista, saldos y estado", tab:"alumnos", k:"alumnos alumnas estudiantes clientes gente lista listado saldo saldos restantes clases restantes fichas ficha nota notas observacion observaciones comentario comentarios apuntar anotar buscar alumno ver editar dar de baja borrar eliminar archivar retirar congelar suspender inactivos"},
+  {t:"Quién está por vencer o ya sin clases", tab:"alumnos", k:"vencer vence vencen vencimiento vencidos renovar renovacion renovaciones caducar caducidad caduca deuda deudas debe deben debiendo cobranza cobranzas moroso morosos acabar sin clases se le acabaron deben debe deudores morosos me deben quien me debe retencion recuperar enfriados"},
+  {t:"Cargarle o renovarle el plan a un alumno", tab:"alumnos", k:"cargar cargarle renovar renovarle asignar ponerle darle su plan su paquete activar recargar cobrarle me pago por yape pago manual saldo"},
+  {t:"Grupos — clases grupales", tab:"grupos", k:"grupos grupales grupo coro banda ensamble equipo taller varios alumnos juntos clase colectiva"},
+  {t:"Profesores — asientos y comisiones", tab:"profesores", k:"profesores profesoras profesor profes profe maestros staff equipo asientos comisiones sueldo pago al profe liquidacion cuanto le pago porcentaje asignar alumnos"},
+  {t:"Cuentas de alumnos — la entrada de cada uno a su portal", tab:"cuentas", k:"cuenta cuentas acceso accesos clave contrasena password portal login entrar vincular vinculado sin vincular enlazar invitar al portal"},
+  {t:"Interesados — los que preguntaron y no compraron", tab:"leads", k:"interesados leads prospectos crm ventas seguimiento embudo etapas prueba agendada clase de prueba cotizacion no compro"},
+  {t:"Mis clases — tu horario y las reservas por venir", tab:"agenda", k:"agenda agendar horario horarios disponibilidad reservas reserva calendario franja franjas proximas abrir cupos programar una clase poner una clase bloquear vacaciones feriado no puedo ese dia cancelar clase reponer"},
+  {t:"Aforo y cupos de una franja", tab:"agenda", k:"aforo cupo cupos capacidad cuantos entran maximo personas limite cabida vacantes lugares"},
+  {t:"Asistencia — las clases que YA dictaste", tab:"registro", k:"asistencia asistencias registro historial bitacora dictadas dadas pasado faltas falto inasistencia presente ausente marcar pasar lista quien vino"},
+  {t:"Chat con tus alumnos", tab:"chat", k:"chat mensajes conversacion hablar escribir responder mensajeria"},
+  {t:"Correos a mis alumnos", tab:"correos", k:"correos correo mails masivos masivo campana de correo email newsletter promocion boletin escribirles a todos mandar correo difusion"},
+  {t:"Pagos — confirmar y ver comprobantes", tab:"pagos", k:"pagos pago cobros confirmar comprobante comprobantes voucher recibo boleta pagar cobrar plata dinero deposito anotar un pago registrar un pago me pagaron entro plata ingresos"},
+  {t:"Caja — gastos y neto del mes", tab:"caja", k:"caja gastos gasto egresos neto ganancia utilidad balance cuanto gane cuanto me queda alquiler sueldos"},
+  {t:"Reportes — tus números y tu facturación", tab:"reportes", k:"reportes reporte metricas de mi academia numeros estadisticas grafico graficos ingresos facturacion cuanto facturo activos crecimiento"},
+  {t:"Para tus alumnos — el material que ellos ven", tab:"recursos", k:"material recursos pdf pdfs audio audios videos archivos tareas partituras compartir subir documentos links"},
+  {t:"Tu biblioteca — tu material privado", tab:"ejercicios", k:"biblioteca ejercicios repertorio banco material propio privado apuntes solo yo"},
+
+  /* ---------- la puerta "Mi academia" y la de Ajustes ----------
+     Eran el hueco más grande: quien sabía que quería "ajustes" no llegaba a Ajustes. */
+  {t:"Mi academia — todo lo que se configura, en un solo lugar", tab:"academia", k:"mi academia academia opciones preferencias panel de control sala de maquinas mi negocio mi estudio mi escuela datos de mi academia"},
+  {t:"Todos los ajustes", tab:"ajustes", aj:"academia", k:"ajustes ajuste configuracion configurar opciones preferencias avanzado sala de maquinas donde se configura"},
+
+  /* ---------- Ajustes · Academia ---------- */
+  {t:"Tu marca — tu logo, tu color y tu tipografía", tab:"ajustes", aj:"academia", k:"marca logo logotipo isotipo icono imagen imagenes foto fotito escudo emblema insignia color colores tipografia fuente letra letras tipo de letra branding identidad personalizar personalizacion cabecera encabezado subir cambiar poner quitar sacar mi diseno que se vea como mi academia"},
+  {t:"Tu WhatsApp — el número de tu academia", tab:"ajustes", aj:"academia", k:"whatsapp whatsap wasap wasapp wsp mi whatsapp numero mi numero telefono celular de la academia contacto cambiar numero linea"},
+  {t:"Beneficios para tus alumnos", tab:"ajustes", aj:"academia", k:"beneficios beneficio convenios convenio perks ventajas regalos alianzas que ofrezco agregar beneficio"},
+  {t:"Tus locales y tu dirección", tab:"ajustes", aj:"academia", k:"local locales sede sedes sucursal sucursales direccion mi direccion donde queda donde estoy ubicacion mapa segundo local nuevo local mudanza multisede agregar local"},
+  {t:"Módulos de tu panel — apagar lo que no uso", tab:"ajustes", aj:"academia", k:"modulos modulo ocultar apagar esconder limpiar menu simplificar quitar pestanas prender encender activar desactivar no uso"},
+
+  /* ---------- Ajustes · Clases y planes ---------- */
+  {t:"Tus paquetes y precios — cuánto cobras por cada uno de tus planes", tab:"ajustes", aj:"clases", k:"precios precio paquetes paquete planes tarifa tarifas costo beca becas becado media beca descuento descuentos cuanto cobro cuanto cobrar mensualidad matricula incluye que incluye clases incluidas subir precios cambiar precio agregar paquete pases bonos"},
+  {t:"Tus clases y cuántos entran", tab:"ajustes", aj:"clases", k:"instrumento instrumentos clases clase tipos tipo de clase modalidad curso cursos categoria variantes aforo cupo materia materias especialidad nivel niveles crear clase agregar tipo de clase"},
+  {t:"Salas o espacios (clases en paralelo)", tab:"ajustes", aj:"clases", k:"salas sala espacios espacio aula aulas salon salones ambiente ambientes cuarto cuartos dos clases a la vez clases en paralelo al mismo tiempo simultaneas dos profesores a la vez crear sala"},
+
+  /* ---------- Ajustes · Reservas ---------- */
+  {t:"Cómo reservan tus alumnos", tab:"ajustes", aj:"reservas", k:"reservas reservar reserva anticipacion minima reprogramar reprogramacion cancelar cancelacion politica politicas politica de cancelacion cupo general horario fijo semanal chat del portal nombres de profesores"},
+  {t:"Lista de espera al liberarse un cupo", tab:"ajustes", aj:"reservas", k:"lista de espera espera cola waitlist se libero un cupo alguien cancelo avisar cuando haya cupo primero de la cola automatico"},
+  {t:"Pedir reseñas de Google", tab:"ajustes", aj:"reservas", k:"resenas resena reviews review opiniones opinion comentarios estrellas calificacion google maps google business que me recomienden pedir resenas link de resenas prueba social"},
+  {t:"Recordatorios automáticos de clase y de renovación", tab:"ajustes", aj:"reservas", k:"recordatorio recordatorios aviso avisos correo automatico automaticos renovacion vencimiento 24 horas antes apagar prender"},
+  {t:"¿Cuándo se le descuenta la clase?", tab:"ajustes", aj:"reservas", k:"descuenta descontar saldo cuando reserva cuando asiste al reservar al asistir baja la clase se le resta punchpass"},
+  {t:"¿Cómo se marca la asistencia?", tab:"ajustes", aj:"reservas", k:"asistencia automatica a mano una por una doy por asistidas marco al que falto horas de espera margen"},
+  {t:"Que caduquen los planes que nunca se usaron", tab:"ajustes", aj:"reservas", k:"caducan caducar sin usar compro y nunca vino no arranca vence sin empezar apagar saldo meses"},
+  {t:"Pedir fecha de nacimiento al comprar", tab:"ajustes", aj:"reservas", k:"fecha de nacimiento cumpleanos edad menores apoderado datos personales campos del formulario apellido"},
+  {t:"Rescatar compras a medias", tab:"ajustes", aj:"reservas", k:"rescatar carrito abandonado compra a medias no termino de pagar checkout sin pagar recuperar venta"},
+
+  /* ---------- Ajustes · Mensajes ---------- */
+  {t:"Los correos que Batuta manda por ti", tab:"ajustes", aj:"mensajes", k:"correos automaticos correo automatico plantilla plantillas texto del correo que dice el correo editar correos mensajes automaticos redactar firma remitente asunto email personalizar"},
+
+  /* ---------- Ajustes · Cobros ----------
+     Stripe y Culqi NO tienen entrada propia: nacen ocultos. Sus palabras van acá. */
+  {t:"Cómo te pagan tus alumnos (Yape, Plin o transferencia)", tab:"ajustes", aj:"cobros", k:"yape yapear plin banco bcp bbva interbank scotiabank cci cuenta cuentas transferencia deposito numero de yape mi yape cripto usdt donde me pagan"},
+  {t:"Que paguen solos por internet: tarjeta (Mercado Pago)", tab:"ajustes", aj:"cobros", k:"tarjeta tarjetas mercadopago mercado pago visa mastercard online pasarela pagar por internet link de pago checkout cobro automatico suscripcion stripe culqi internacional dolares"},
+  {t:"Facturación electrónica (SUNAT) · solo con RUC", tab:"ajustes", aj:"cobros", k:"sunat boleta boletas factura facturas ruc nubefact igv facturacion electronica comprobante comprobantes emitir declarar impuestos"},
+
+  /* ---------- Ajustes · Referidos ----------
+     Las 4 secciones (Trae a un amigo · El que trae al amigo · El amigo que llega ·
+     Las condiciones) viven en la misma sub-pestaña y ningún <h2> tiene id: no hay
+     forma de hacer scroll a una sola. Van en una entrada. */
+  {t:"Trae a un amigo — el programa de referidos", tab:"ajustes", aj:"referidos", k:"referidos referido referir amigo amigos recomendar recomendacion descuento descuentos cupon cupones codigo codigos codigo de descuento premio premios regalo boca a boca traer gente el que trae al amigo el amigo que llega las condiciones"},
+
+  /* ---------- Ajustes · WhatsApp e IA ---------- */
+  {t:"Asistente de WhatsApp con IA", tab:"ajustes", aj:"wa", k:"asistente bot chatbot robot inteligencia artificial responder solo automatico 24 horas conectar qr vincular borradores sugerencias de la ia"},
+  {t:"La voz de tu asistente", tab:"ajustes", aj:"wa", k:"voz la voz del asistente tono personalidad como habla el bot estilo instrucciones que diga formal amigable"},
+
+  /* ---------- Ajustes · Avanzado ---------- */
+  {t:"Aparecer en el directorio de Batuta", tab:"ajustes", aj:"avanzado", k:"directorio aparecer salir en batuta que me encuentren publico visible busqueda promocionarme listado figurar"},
+  {t:"Conecta tu Claude a tu academia", tab:"ajustes", aj:"avanzado", k:"claude token api llave conectar conexion mcp integrar chatgpt inteligencia artificial preguntarle a claude"},
+  {t:"Avisos en tu teléfono (app + push)", tab:"ajustes", aj:"avanzado", k:"push notificaciones notificacion avisos celular telefono app movil instalar la app pantalla de inicio alertas"},
+  {t:"Google Calendar", tab:"ajustes", aj:"avanzado", k:"google calendar calendario meet sincronizar sincronizacion conectar cuenta de google"},
+
+  /* ---------- Mi web ----------
+     Cada página va con su `pg`, que bsIr() abre dándole click al botón de
+     #webPages. Los nombres están copiados de esos botones: si allá cambia un
+     data-pg, acá deja de llegar (sin error, se queda en Portada).
+     "Publicar" va SIN act a propósito: publicar desde el buscador sería irreversible. */
+  {t:"Mi web — editar mi página pública", tab:"web", k:"web pagina sitio landing publica editar online internet subdominio dominio tuacademia batuta lat como me ven seo aparecer en google salir en google que me encuentren en google secciones paginas"},
+  {t:"Mi web · Portada", tab:"web", pg:"hero", k:"portada hero inicio arriba de todo titular foto principal encabezado primera pantalla banner lo primero que ven"},
+  {t:"Mi web · Nosotros", tab:"web", pg:"sobre", k:"nosotros sobre mi sobre nosotros quienes somos mi historia biografia trayectoria presentacion mi equipo"},
+  {t:"Mi web · Cursos", tab:"web", pg:"cursos", k:"pagina de cursos de mi web lo que enseño publicado catalogo de clases en mi web"},
+  {t:"Mi web · Precios", tab:"web", pg:"precios", k:"precios publicados en mi web mostrar los precios en mi web planes en la web lista de precios publica"},
+  {t:"Mi web · Galería", tab:"web", pg:"galeria", k:"galeria fotos foto imagenes album carrusel fotos del local fotos de mi academia"},
+  {t:"Mi web · Contacto", tab:"web", pg:"contacto", k:"contacto formulario que me escriban mapa mi direccion en la web mi telefono en la web"},
+  {t:"Mi web · Diseño", tab:"web", pg:"estilo", k:"diseno estilo colores de mi web tipografia de mi web apariencia look tema paleta"},
+  {t:"Publicar los cambios de mi web", tab:"web", k:"publicar publicacion subir cambios que se vea salir al aire actualizar mi web deshacer descartar borrador"},
+
+  /* ---------- Perfil ---------- */
+  {t:"Tu Batuta — tu suscripción, tus packs y tus límites", tab:"perfil", k:"packs pack plan mi plan suscripcion cuanto pago de batuta limite limites mas alumnos mas profesores conversaciones de ia subir bajar cancelar suscripcion cobro mensual gratis"},
+  {t:"Recomienda Batuta — gana 30% por cada academia", tab:"perfil", k:"recomienda afiliado afiliados referir batuta comision comisiones mi link ganar plata programa de afiliados"},
+  {t:"Perfil — mis datos y mi contraseña", tab:"perfil", k:"perfil mi cuenta mis datos nombre foto correo contrasena password cambiar clave cerrar sesion salir"},
+
+  /* ---------- el resto de las secciones ---------- */
+  {t:"Campañas — anuncios en Facebook e Instagram", tab:"campanas", k:"campanas campana campanas de publicidad ads publicidad meta facebook instagram anuncios pauta marketing promocionar conseguir alumnos presupuesto"},
+  {t:"Servicios — que lo hagamos por ti", tab:"servicios", k:"servicios servicio extras acompanamiento activacion asistida migracion capacitacion con ia capacitacion del equipo servicio evolutivo que lo hagan por mi contratar"},
+  {t:"Ideas y errores — reportar algo", tab:"feedback", k:"feedback idea ideas error errores bug bugs problema falla sugerencia reportar reclamo no funciona se rompio quejarme mejora"},
+  {t:"Ayuda y soporte — hablar con alguien", tab:"resumen", act:"oiaFab", k:"ayuda soporte auxilio no entiendo no se como como funciona tutorial guia manual hablar con alguien una persona atencion perdido explicame"}
 ];
 /* sin tildes ni mayúsculas: "Anticipación" tiene que salir escribiendo "anticipacion" */
 function bsNorm(s){ return String(s||"").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,""); }
@@ -8457,34 +8542,286 @@ function bsIndicePropio(){
   return out;
 }
 function bsDisponible(it){
+  /* 1-set-2026: la campanita y la caja de respaldo viven en la barra de arriba y en
+     el menu, no dentro de una pestana. Sin esto quedaban FUERA del buscador para
+     siempre, porque `tabVisiblePorReglas(undefined)` no encuentra pestana y da false. */
+  if(it.soloDueno && document.body && document.body.classList.contains("rol-profesor")) return false;
+  if(!it.tab) return true;
   /* fase 3: los .tab viven ocultos en #tabsLegacy (miden 0 siempre), así que la
      disponibilidad se decide por reglas (mod-off / rol), no por geometría */
   return tabVisiblePorReglas(it.tab);
 }
-function bsBuscar(q){
+/* ═══ MOTOR DEL BUSCADOR (reescrito el 31-ago-2026) ═══════════════════════════
+   Antes: "toda palabra tiene que aparecer" (Y puro) + comparación por substring.
+   Eso mataba la búsqueda entera por una palabra desconocida y encontraba "ruc"
+   dentro de "instRUCciones". Ahora cada entrada saca un PUNTAJE y las mejores
+   se muestran; nada se mata por una palabra suelta y nada se compara por
+   pedazos de palabra: solo palabra igual, misma raíz, o empieza igual.
+
+   Todo lo de acá abajo está medido por la batería `bin/prueba-buscador.mjs`,
+   que saca ESTE mismo código del HTML y le pasa 116 consultas. Si tocas algo,
+   córrela: `node bin/prueba-buscador.mjs`.
+   ─────────────────────────────────────────────────────────────────────────── */
+
+/* Palabras de relleno. No se buscan (nadie busca "de"), pero si la consulta es
+   SOLO relleno se usan igual para no dejar a la dueña con la pantalla vacía.
+   Se arma con Object.create(null) y NO con {}: un objeto normal hereda de
+   Object.prototype, así que BS_RELLENO["constructor"] devolvía una función y
+   buscar "constructor" se leía como consulta vacía. Medido: devolvía 8
+   resultados que no tenían nada que ver. Ahora devuelve 0. */
+var BS_RELLENO = (function(){
+  var m = Object.create(null);
+  ("de del la el los las un una unos unas y o u a al en con por para que se su sus lo me te le mi mis "+
+   "tu tus es son esta este eso esa ese como cuando donde cual cuales quiero queria necesito puedo hay "+
+   "ya muy mas si no").split(" ").forEach(function(p){ m[p]=1; });
+  return m;
+})();
+
+/* Corta en palabras: fuera tildes, ñ, guiones, comas, comillas y rayas del título. */
+function bsPartir(s){
+  var cr=bsNorm(s).split(/[^a-z0-9]+/), out=[], i;
+  for(i=0;i<cr.length;i++) if(cr[i]) out.push(cr[i]);
+  return out;
+}
+
+/* RAÍZ: le quita el plural y el género a una palabra para que "colores" y
+   "color", o "profesora" y "profesor", sean la MISMA cosa (bug medido el
+   31-ago: "color" traía Tu marca y "colores" NADA). No es un diccionario,
+   son tres tijeretazos en este orden:
+     1) termina en "es" → se lo quita   (colores→color, planes→plan)
+     2) o termina en "s" → se lo quita  (alumnas→alumna, salas→sala)
+     3) termina en a/e/o → se lo quita  (profesora→profesor, clase→clas)
+   Palabras de menos de 4 letras no se tocan ("ruc", "web", "ia" quedan enteras).
+   OJO: "marca"→"marc" pero "marcar"→"marcar". Distintas a propósito: es lo que
+   impide que buscar "marca" caiga en la entrada de marcar asistencia. */
+var BS_RAICES=Object.create(null);   /* Object.create(null) por lo mismo que arriba */
+function bsRaiz(p){
+  var c=BS_RAICES[p]; if(c!==undefined) return c;
+  var r=p;
+  if(p.length>=4){
+    if(r.length>=5 && r.slice(-2)==="es") r=r.slice(0,-2);
+    else if(r.length>=4 && r.slice(-1)==="s") r=r.slice(0,-1);
+    if(r.length>=4 && "aeo".indexOf(r.slice(-1))!==-1) r=r.slice(0,-1);
+    if(r.length<3) r=p;
+  }
+  BS_RAICES[p]=r; return r;
+}
+
+/* Cada entrada se parte UNA sola vez. Dos niveles de caché a propósito:
+   it._tk es la vía rápida para las 71 entradas fijas (son siempre los mismos
+   objetos), y BS_TOK por texto es la red para bsIndicePropio(), que arma
+   objetos NUEVOS en cada tecla — ahí it._tk no acierta NUNCA y la academia con
+   muchas clases se volvía lenta. Medido con 30 clases y 20 packs: 0.87 ms por
+   tecla con un solo caché contra 0.18 ms con los dos.
+   Acá también se calcula `cabeza`: la primera palabra REAL del título, saltando
+   la muletilla. 26 de los 71 títulos arrancan con "Tu", "Mis", "Los", "Tus", y
+   como las muletillas nunca se buscan, el bono de cabeza no se cobraba justo en
+   las entradas principales (buscar "clases" caía en "Quién está por vencer" en
+   vez de "Mis clases"). */
+var BS_TOK=Object.create(null), BS_TOKN=0;
+function bsTokens(it){
+  if(it._tk) return it._tk;
+  var clave=it.t+"\n"+(it.k||"");
+  var c=BS_TOK[clave];
+  if(c){ it._tk=c; return c; }
+  if(BS_TOKN>400){ BS_TOK=Object.create(null); BS_TOKN=0; }   /* la dueña renombra clases: no dejamos crecer el caché */
+  var t=bsPartir(it.t), k=bsPartir(it.k||""), rt=[], rk=[], i, cabeza=-1;
+  for(i=0;i<t.length;i++){
+    rt.push(bsRaiz(t[i]));
+    if(cabeza<0 && !BS_RELLENO[t[i]]) cabeza=i;
+  }
+  for(i=0;i<k.length;i++) rk.push(bsRaiz(k[i]));
+  c={t:t,k:k,rt:rt,rk:rk,n:t.length+k.length,cabeza:cabeza};
+  BS_TOK[clave]=c; BS_TOKN++; it._tk=c; return c;
+}
+
+/* PESO DE CADA PALABRA. "alumnos" está en 16 de las 71 entradas: no distingue
+   nada. "reprogramar" está en una sola: vale oro. Se cuenta una vez y se guarda.
+   Sin esto, "crear un paquete nuevo" caía en "Nuevo grupo" por la palabra
+   "nuevo", que está por todas partes. */
+var BS_DF=null, BS_TOPE=1;
+function bsDF(){
+  if(BS_DF) return BS_DF;
+  BS_DF=Object.create(null); BS_TOPE=Math.log(1+BS_INDICE.length);
+  for(var e=0;e<BS_INDICE.length;e++){
+    var tk=bsTokens(BS_INDICE[e]), vistas=Object.create(null), i;
+    for(i=0;i<tk.rt.length;i++) vistas[tk.rt[i]]=1;
+    for(i=0;i<tk.rk.length;i++) vistas[tk.rk[i]]=1;
+    for(var r in vistas) BS_DF[r]=(BS_DF[r]||0)+1;
+  }
+  return BS_DF;
+}
+function bsPeso(raiz){
+  var df=bsDF()[raiz]||1;                           /* lo que no está en el índice cuenta como raro */
+  return Math.log(1+BS_INDICE.length/df)/BS_TOPE;   /* 1.00 rarísima … 0.24 comunísima */
+}
+
+/* Cuánto vale que una palabra calce, según DÓNDE y CÓMO:
+     igual   = la misma palabra
+     raíz    = la misma palabra en plural/femenino  (colores ↔ color)
+     empieza = lo tecleado es el arranque de la palabra del índice (profe → profesor)
+   Nunca se busca EN MEDIO de una palabra: ahí vivían los falsos positivos
+   medidos ('ruc' dentro de instRUCciones, 'marca' dentro de marcAR, 'plin'
+   dentro de disciPLINas, y 'ida' que traía 10 entradas de la nada). */
+function bsCalce(p,rp,lista,raices,vIgual,vRaiz,vEmpieza,cabeza){
+  var mejor=0,i,tk,val;
+  for(i=0;i<lista.length;i++){
+    tk=lista[i]; val=0;
+    if(tk===p) val=vIgual;                                                    /* la misma palabra */
+    else if(p.length>=4 && raices[i]===rp) val=vRaiz;                         /* colores ↔ color */
+    else if(p.length>=3 && tk.length>p.length && tk.lastIndexOf(p,0)===0) val=vEmpieza;  /* profe → profesor */
+    if(!val) continue;
+    if(i===cabeza) val+=2;                            /* calzó con la primera palabra real del título: manda */
+    if(val>mejor){ mejor=val; if(mejor>=vIgual+2) break; }
+  }
+  return mejor;
+}
+
+/* ── RESCATE POR TIPEO ────────────────────────────────────────────────────────
+   Sus usuarias son profesoras y el dueño es disléxico. La raíz y el arranque
+   solo perdonan el FINAL de la palabra: cualquier error en el MEDIO mataba la
+   búsqueda igual que el Y viejo, y con el mismo síntoma, la lista en blanco que
+   ella lee como "Batuta no hace eso". Medido antes: 'llape', 'asistensia',
+   'orario', 'alunos', 'profezora', 'fatura', 'bibloteca', 'resivos', 'watsap',
+   'cuposs' y 'notifiaciones' daban las 11 CERO resultados.
+
+   🔒 Esta capa corre SOLO cuando la lista sale vacía, así que no puede empeorar
+   ninguna búsqueda que ya funcionaba. Es la garantía de que no hay regresión.
+
+   Cómo: se compara por CLAVE FONÉTICA peruana (la h no suena, ll=y, v=b, s=c=z,
+   qu=k, las letras dobles valen una). Si la clave calza exacto, se corrige. Si
+   no, se acepta UNA letra de diferencia, y solo en palabras de 6 letras o más y
+   con la misma inicial: sin ese candado, "pizza" (→"pisa") rescataba "visa"
+   (→"bisa") y mandaba a Mercado Pago. */
+function bsFonetica(p){
+  var s=p;
+  s=s.replace(/h/g,"");                          /* h muda: "orario"="horario", "watsap"="whatsapp" */
+  s=s.replace(/ll/g,"y");                        /* "llape"="yape" */
+  s=s.replace(/v/g,"b");                         /* "resivos"="recibos" */
+  s=s.replace(/z/g,"s");                         /* "profezora"="profesora" */
+  s=s.replace(/ce/g,"se").replace(/ci/g,"si");   /* "asistensia"="asistencia" */
+  s=s.replace(/qu/g,"k").replace(/[cq]/g,"k");   /* "kilo"="quilo", "fatura"≈"factura" */
+  s=s.replace(/ge/g,"je").replace(/gi/g,"ji");
+  s=s.replace(/(.)\1+/g,"$1");                   /* letras dobles: "cuposs"="cupos" */
+  return s;
+}
+/* ¿"a" y "b" se diferencian en UNA sola letra? (cambiada, metida o de más).
+   No es Levenshtein completo: solo necesitamos saber si la distancia es ≤1. */
+function bsUnaLetra(a,b){
+  var la=a.length, lb=b.length;
+  if(Math.abs(la-lb)>1) return false;
+  var i=0, j=0, fallo=0;
+  while(i<la && j<lb){
+    if(a[i]===b[j]){ i++; j++; continue; }
+    if(++fallo>1) return false;
+    if(la===lb){ i++; j++; }
+    else if(la>lb) i++;
+    else j++;
+  }
+  return fallo + (la-i) + (lb-j) <= 1;
+}
+/* Diccionario fonético del índice: clave → la palabra tal como está escrita. */
+var BS_FON=null;
+function bsFon(){
+  if(BS_FON) return BS_FON;
+  BS_FON=Object.create(null);
+  for(var e=0;e<BS_INDICE.length;e++){
+    var tk=bsTokens(BS_INDICE[e]), todas=tk.t.concat(tk.k), i, f;
+    for(i=0;i<todas.length;i++){
+      if(todas[i].length<4) continue;
+      f=bsFonetica(todas[i]);
+      if(f.length>=3 && BS_FON[f]===undefined) BS_FON[f]=todas[i];
+    }
+  }
+  return BS_FON;
+}
+/* Devuelve la consulta corregida, o null si no había nada que corregir. */
+function bsRescate(palabras){
+  var fon=bsFon(), out=[], cambio=false, i, p, f, hit, k;
+  for(i=0;i<palabras.length;i++){
+    p=palabras[i];
+    if(p.length<4){ out.push(p); continue; }
+    f=bsFonetica(p);
+    hit=fon[f];
+    if(hit===undefined && p.length>=6){
+      for(k in fon){
+        if(k.charAt(0)!==f.charAt(0)) continue;     /* misma inicial: corta el trabajo y los rescates locos */
+        if(bsUnaLetra(k,f)){ hit=fon[k]; break; }
+      }
+    }
+    if(hit!==undefined && hit!==p){ out.push(hit); cambio=true; }
+    else out.push(p);
+  }
+  return cambio?out.join(" "):null;
+}
+
+var BS_PISO=2.0;        /* debajo de esto no se muestra nada: basura fuera */
+var BS_RELATIVO=0.34;   /* y tampoco lo que valga menos de un tercio del mejor */
+
+function bsBuscar(q,sinRescate){
   var n=bsNorm(q).trim();
   var base=BS_INDICE.concat(bsIndicePropio()).filter(bsDisponible);
   if(!n) return BS_INDICE.filter(bsDisponible).slice(0,8);   // sin texto: los atajos generales
-  var palabras=n.split(/\s+/);
-  return base.map(function(it){
-    var heno=bsNorm(it.t+" "+(it.k||""));
-    var titulo=bsNorm(it.t);
-    var puntos=0;
-    for(var i=0;i<palabras.length;i++){
-      var p=palabras[i];
-      if(heno.indexOf(p)===-1) return null;            // toda palabra debe aparecer
-      if(titulo.indexOf(p)===0) puntos+=3;
-      else if(titulo.indexOf(p)!==-1) puntos+=2;
-      else puntos+=1;
+  var crudas=bsPartir(n), palabras=[], i;
+  for(i=0;i<crudas.length;i++) if(!BS_RELLENO[crudas[i]]) palabras.push(crudas[i]);
+  /* si escribió puro relleno ("el la de") no hay nada que buscar: los atajos */
+  if(!palabras.length) return BS_INDICE.filter(bsDisponible).slice(0,8);
+  var raices=[], pesos=[];
+  for(i=0;i<palabras.length;i++){ raices.push(bsRaiz(palabras[i])); pesos.push(bsPeso(raices[i])); }
+
+  var res=[], mejor=0;
+  for(var e=0;e<base.length;e++){
+    var it=base[e], tk=bsTokens(it), ptsT=0, ptsK=0, calzadas=0;
+    for(i=0;i<palabras.length;i++){
+      var enT=bsCalce(palabras[i],raices[i],tk.t,tk.rt,10,8,6,tk.cabeza);
+      var enK=bsCalce(palabras[i],raices[i],tk.k,tk.rk,6,5,3,-1);
+      if(enT>=enK && enT>0){ ptsT+=enT*pesos[i]; calzadas++; }
+      else if(enK>0){ ptsK+=enK*pesos[i]; calzadas++; }
     }
-    return {it:it,p:puntos};
-  }).filter(Boolean).sort(function(a,b){ return b.p-a.p; }).map(function(x){ return x.it; }).slice(0,10);
+    if(!calzadas) continue;
+    /* LASTRE: solo sobre las keywords. "Traer mis alumnos" tiene 30 sinónimos y
+       si no, ganaría por volumen. El título no paga lastre: es corto y curado. */
+    var lastre=1+Math.min(0.35,Math.max(0,tk.n-14)*0.012);
+    /* COBERTURA: la entrada que calza 3 de 3 palabras vale mucho más que la que
+       calza 1 de 3. Esto reemplaza al viejo "Y": ya no mata, solo pesa. */
+    var cob=0.30+0.70*(calzadas/palabras.length);
+    var crudo=ptsT+ptsK/lastre;
+    var pts=crudo*cob;
+    if(pts>mejor) mejor=pts;
+    res.push({it:it,p:pts,c:crudo,o:e,act:it.act?1:0});
+  }
+  /* EL PISO VA SOBRE EL PUNTAJE CRUDO, NO SOBRE EL YA MULTIPLICADO POR LA
+     COBERTURA. Medido: aplicándolo al final, una palabra buena dentro de una
+     frase larga nunca llegaba a 2.0 y la lista salía VACÍA — "quiero mandarle
+     un mensajito lindo a mis alumnas por navidad" y "clases manana ayer senora
+     chico" daban CERO teniendo alumnas y clases indexadas. Que es exactamente
+     el bug que este motor vino a matar, entrando por otra puerta. */
+  var corte=mejor*BS_RELATIVO;
+  var salida=res.filter(function(x){ return x.c>=BS_PISO && x.p>=corte; })
+                /* Empate: primero la que solo LLEVA a la pantalla, después la que
+                   abre un formulario. Escribir "alumno" y que salte solo el alta
+                   de un alumno nuevo es un susto, no una respuesta; el formulario
+                   se pide con el verbo ("nuevo alumno", "agregar alumno"), que sí
+                   le gana por cobertura. Si siguen empatadas, manda el orden de
+                   BS_INDICE: por eso esa lista no está ordenada por gusto. */
+                .sort(function(a,b){ return (b.p-a.p)||(a.act-b.act)||(a.o-b.o); })
+                .map(function(x){ return x.it; }).slice(0,10);
+  /* Última carta antes de la pantalla en blanco: ¿estaba mal escrito? */
+  if(!salida.length && !sinRescate){
+    var arreglada=bsRescate(palabras);
+    if(arreglada) return bsBuscar(arreglada,1);
+  }
+  return salida;
 }
+
 function bsPintar(){
   var box=el("bsList");
   if(!BS_RES.length){ box.innerHTML='<div class="bsvacio">Nada con eso. Prueba con "precio", "aforo", "yape" o "alumno".</div>'; return; }
   box.innerHTML=BS_RES.map(function(it,i){
-    var donde=it.aj?("Ajustes · "+({academia:"Academia",clases:"Clases y planes",reservas:"Reservas",cobros:"Cobros",wa:"WhatsApp e IA",avanzado:"Avanzado"}[it.aj]||"")):(TITULOS[it.tab]||"");
+    /* 31-ago-2026: faltaban "mensajes" y "referidos" y sus resultados salían con el
+       lugar en blanco ("Ajustes · "). Los nombres se copian de los botones de #ajNav:
+       si agregas una sub-pestaña allá, agrégala también acá. */
+    var donde=it.aj?("Ajustes · "+({academia:"Academia",clases:"Clases y planes",reservas:"Reservas",mensajes:"Mensajes",cobros:"Cobros",referidos:"Referidos",wa:"WhatsApp e IA",avanzado:"Avanzado"}[it.aj]||"")):(TITULOS[it.tab]||"");
     return '<div class="bsit'+(i===BS_SEL?" sel":"")+'" data-i="'+i+'"><span class="bsit-t">'+esc(it.t)+'</span><span class="bsit-s">'+esc(donde)+'</span></div>';
   }).join("");
   var sel=box.querySelector(".bsit.sel"); if(sel) sel.scrollIntoView({block:"nearest"});
@@ -8495,6 +8832,15 @@ function bsIr(it){
   var t=document.querySelector('.tab[data-tab="'+it.tab+'"]');
   if(t) t.click();
   if(it.aj) setTimeout(function(){ try{ ajTab(it.aj); }catch(e){} },30);
+  /* 31-ago-2026: las 7 páginas de Mi web se navegan con `pg`. No hay función
+     global que las abra (irA() vive dentro del módulo del editor), así que se le
+     da click al botón real de #webPages, que es justo lo que el editor escucha.
+     Si el botón no está (data-pg renombrado allá), no pasa nada y se queda en
+     la pestaña Mi web: nunca un error en la cara de la dueña. */
+  if(it.pg) setTimeout(function(){
+    var b=document.querySelector('#webPages .webpg[data-pg="'+it.pg+'"]');
+    if(b) b.click();
+  },30);
   if(it.act) setTimeout(function(){ var b=el(it.act); if(b) b.click(); },80);
 }
 function bsAbrir(){
