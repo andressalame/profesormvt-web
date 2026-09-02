@@ -698,6 +698,42 @@ function gcalCreds(env, cfg){
 }
 function gcalCalendario(cfg){ return String((cfg && cfg.gcal_calendar_id) || "").trim() || "primary"; }
 
+/* ── freeBusy: que una reunión FUERA de Batuta también tape el horario ──────────
+   1-set-2026. Hasta hoy `generarSlotsDetalle` solo miraba la tabla `disponibilidad`
+   y las reservas de la propia academia, así que el bloqueo iba en UNA sola dirección:
+   una clase de Batuta sí tapaba la agenda de ventas de Web Express (que corre sobre
+   el motor de MVT y sí pide freeBusy), pero una reunión de venta a las 3pm NO impedía
+   que un alumno reservara clase a las 3pm. Portado del worker de MVT y adaptado a
+   multi-tenant: el token y el calendario son por academia.
+   Si Google falla devuelve [] y NO se filtra nada: quedarse sin horarios por una caída
+   de Google es peor que un choque ocasional. */
+async function gcalBusy(env, tenantId, cfg, timeMinIso, timeMaxIso){
+  try {
+    const tok = await gcalAccessToken(env, tenantId, cfg);
+    if (!tok) return [];
+    const calId = gcalCalendario(cfg);
+    const r = await fetch("https://www.googleapis.com/calendar/v3/freeBusy", {
+      method: "POST",
+      headers: { "authorization": "Bearer " + tok, "content-type": "application/json" },
+      body: JSON.stringify({ timeMin: timeMinIso, timeMax: timeMaxIso, items: [{ id: calId }] })
+    });
+    if (!r.ok) return [];
+    const d = await r.json().catch(() => null);
+    const cals = d && d.calendars;
+    const cal = cals && (cals[calId] || cals.primary);
+    return ((cal && cal.busy) || [])
+      .map(x => [Date.parse(x.start), Date.parse(x.end)])
+      .filter(x => Number.isFinite(x[0]) && Number.isFinite(x[1]));
+  } catch (e) { return []; }
+}
+
+/* ¿El slot [ms, ms+duracion) pisa algún bloque ocupado del calendario? */
+function chocaConBusy(busy, ms, minutos){
+  const ini = ms, fin = ms + (Number(minutos) || 60) * 60000;
+  for (const b of busy){ if (ini < b[1] && fin > b[0]) return true; }
+  return false;
+}
+
 /* Access tokens por academia. El isolate puede atender a varias, así que el caché
    es un Map y no la variable suelta del CRM viejo (ahí una academia se llevaba el
    token de la otra). Se guarda también el fallo, para que `estado` sepa distinguir
@@ -5088,6 +5124,28 @@ async function generarSlotsDetalle(env, tenantId, prof, opts){
     if (mejor.estado === "libre") slots.push(iso);
     else if (mejor.estado === "lleno") llenos.push(iso);
     else fuera.push(iso);
+  }
+  /* 1-set-2026: lo que el dueño tenga en su Google Calendar (una reunión de venta,
+     por ejemplo) sale de la lista de horarios libres. Solo se descartan los que YA
+     estaban libres: no se resucita ninguno, y si Google no contesta no se toca nada. */
+  if (slots.length){
+    try {
+      const ordenados = slots.slice().sort();
+      const busy = await gcalBusy(env, tenantId, cfgT,
+        ordenados[0], new Date(Date.parse(ordenados[ordenados.length - 1]) + 3 * 3600000).toISOString());
+      if (busy.length){
+        const dur = Number(cfgT && cfgT.duracion_clase) || 60;
+        for (let i = slots.length - 1; i >= 0; i--){
+          const ms = Date.parse(slots[i]);
+          if (Number.isFinite(ms) && chocaConBusy(busy, ms, dur)){
+            const iso = slots[i];
+            slots.splice(i, 1);
+            llenos.push(iso);
+            if (detalle[iso]) detalle[iso].motivo = "ocupado en tu calendario";
+          }
+        }
+      }
+    } catch (e) { console.error("gcalBusy en slots", e); }
   }
   slots.sort(); llenos.sort(); fuera.sort();
   return { slots, llenos, fuera, detalle, franjas, salas: salasDeCfg(cfgT) };
@@ -13089,7 +13147,7 @@ export default {
                   pending: MARCA.dominio + "/app/a/" + t.slug + "?pago=pendiente"
                 },
                 auto_return: "approved",
-                statement_descriptor: String(t.academia || "BATUTA").slice(0, 22),
+                statement_descriptor: String(t.academia || "BATUTA").slice(0, 13) /* 2-set-2026: MP dice "hasta 13 caracteres" en Checkout Pro (docs/checkout-pro/additional-settings/invoice-description); antes cortaba a 22 y "Elevate Studio" (14) ya se pasaba */,
                 metadata: { batuta_tenant: t.id, batuta_compra: compraId }
               }))
             });
@@ -13375,7 +13433,7 @@ export default {
                 pending: MARCA.dominio + "/app/a/" + t.slug + "?pago=pendiente"
               },
               auto_return: "approved",
-              statement_descriptor: String(t.academia || "BATUTA").slice(0, 22),
+              statement_descriptor: String(t.academia || "BATUTA").slice(0, 13) /* 2-set-2026: MP dice "hasta 13 caracteres" en Checkout Pro (docs/checkout-pro/additional-settings/invoice-description); antes cortaba a 22 y "Elevate Studio" (14) ya se pasaba */,
               metadata: { batuta_tenant: tid, batuta_compra: compraId }
             }))
           });
