@@ -10116,6 +10116,34 @@ export default {
 
         /* WhatsApp Cloud API (Fase B): diagnostico del token + numeros de la WABA de Batuta
            y que tenants tienen numero conectado. Si el token expiro, Meta responde 401 aqui. */
+        /* 2-set-2026: lo consulta la secuencia de cierre del asistente de WhatsApp de MVT
+           (wa-asistentes/src/seguimiento.js) para NO escribirle a quien ya pago o ya reservo.
+           tel = numero con o sin el 51; se compara por los ultimos 9 digitos contra
+           alumnos.whatsapp (que viene en todos los formatos: '987602588', '+51 947 540 679').
+           Devuelve {pagado, reservas} y no expone nada mas del alumno.
+           curl "https://batuta.lat/app/api/su/wa-pagado?tel=51984769281" -H "Authorization: Bearer $ADMIN_TOKEN" */
+        if (path === "/app/api/su/wa-pagado" && request.method === "GET"){
+          const telQ = String(url.searchParams.get("tel") || "").replace(/\D/g, "");
+          const tenantQ = String(url.searchParams.get("tenant") || "MVT-PROFESORMVT").slice(0, 64);
+          if (telQ.length < 9) return json({ error: "tel: van al menos los ultimos 9 digitos del numero" }, 400);
+          const colaTel = telQ.slice(-9);
+          const { results: alsTel } = await env.DB.prepare(
+            "SELECT id, pago FROM alumnos WHERE tenant_id = ?1 AND whatsapp != '' AND " +
+            "REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(whatsapp,' ',''),'+',''),'-',''),'(',''),')','') LIKE ?2"
+          ).bind(tenantQ, "%" + colaTel).all().catch(() => ({ results: [] }));
+          const listaTel = alsTel || [];
+          const pagadoTel = listaTel.some(a => String(a.pago || "") === "Pagado");
+          let reservasTel = 0;
+          if (listaTel.length){
+            const idsTel = listaTel.map(a => a.id);
+            const marcasTel = idsTel.map((_, i) => "?" + (i + 3)).join(",");
+            const rowTel = await env.DB.prepare(
+              "SELECT COUNT(*) AS n FROM reservas WHERE tenant_id = ?1 AND estado = 'reservada' AND inicio_utc > ?2 AND alumno_id IN (" + marcasTel + ")"
+            ).bind(tenantQ, new Date().toISOString(), ...idsTel).first().catch(() => null);
+            reservasTel = Number((rowTel && rowTel.n) || 0);
+          }
+          return json({ pagado: pagadoTel, reservas: reservasTel, alumnos: listaTel.length });
+        }
         if (path === "/app/api/su/wa-status" && request.method === "GET"){
           if (!env.WHATSAPP_TOKEN) return json({ ok: false, error: "Sin WHATSAPP_TOKEN cargado" }, 501);
           /* 2-set-2026: la WABA se elige por variable de entorno (la nueva cuelga de Tramboyos);
