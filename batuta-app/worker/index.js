@@ -10130,7 +10130,16 @@ export default {
               "(SELECT valor FROM config WHERE tenant_id = c.tenant_id AND clave = 'wa_enabled') AS enabled " +
               "FROM config c LEFT JOIN tenants t ON t.id = c.tenant_id WHERE c.clave = 'wa_phone_id' AND c.valor != ''"
             ).all().catch(() => ({ results: [] }));
-            return json({ ok: true, numeros: (data && data.data) || [], tenants_conectados: results || [] });
+            /* 2-set-2026: quien es el dueno de la WABA y en que estado esta (para saber si la
+               verificacion del negocio le aplica antes de colgar un numero real). */
+            let waba = null;
+            try {
+              const r2 = await fetch("https://graph.facebook.com/v21.0/" + WABA_ID + "?fields=id,name,owner_business_info,account_review_status,business_verification_status,ownership_type", {
+                headers: { "Authorization": "Bearer " + env.WHATSAPP_TOKEN }
+              });
+              waba = await r2.json().catch(() => null);
+            } catch (e) { waba = { error: String(e && e.message) }; }
+            return json({ ok: true, waba: waba, numeros: (data && data.data) || [], tenants_conectados: results || [] });
           } catch (e) { return json({ ok: false, error: String(e && e.message) }, 502); }
         }
         /* Envio de prueba con respuesta cruda de Meta (para diagnosticar sin adivinar). */
