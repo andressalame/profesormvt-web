@@ -21,3 +21,4 @@ batuta-app/datos/fixtures/
 # Antes de desplegar: borrar public/_dirs/ (o dejarlas acá, que no viajan al repo).
 public/_dirs/
 public/_fonttest.html
+batuta-app/.wa-verify-token.local

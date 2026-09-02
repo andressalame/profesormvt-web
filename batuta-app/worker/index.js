@@ -10194,6 +10194,26 @@ export default {
           const { results } = await env.DB.prepare("SELECT ts, firma_ok, motivo, resumen FROM wa_webhook_log ORDER BY ts DESC LIMIT 20").all().catch(() => ({ results: [] }));
           return json({ ok: true, ultimos: results || [] });
         }
+        /* Alta de un numero real en la Cloud API (2-set-2026): pedir codigo, verificarlo y registrarlo.
+           Tres pasos de Meta, expuestos tal cual para no adivinar. Solo con ADMIN_TOKEN. */
+        if ((path === "/app/api/su/wa-request-code" || path === "/app/api/su/wa-verify-code" || path === "/app/api/su/wa-register") && request.method === "POST"){
+          if (!env.WHATSAPP_TOKEN) return json({ ok: false, error: "Sin WHATSAPP_TOKEN cargado" }, 501);
+          const b = await request.json().catch(() => ({}));
+          const phoneId = String(b.phone_id || "").replace(/\D/g, "");
+          if (!phoneId) return json({ error: "manda phone_id" }, 400);
+          let accion = "", cuerpo = {};
+          if (path.endsWith("wa-request-code")){ accion = "request_code"; cuerpo = { code_method: String(b.method || "SMS"), language: String(b.lang || "es") }; }
+          else if (path.endsWith("wa-verify-code")){ accion = "verify_code"; cuerpo = { code: String(b.code || "").replace(/\D/g, "") }; if (!cuerpo.code) return json({ error: "manda code" }, 400); }
+          else { accion = "register"; cuerpo = { messaging_product: "whatsapp", pin: String(b.pin || "").replace(/\D/g, "") }; if (cuerpo.pin.length !== 6) return json({ error: "pin de 6 digitos" }, 400); }
+          try {
+            const r = await fetch("https://graph.facebook.com/v21.0/" + phoneId + "/" + accion, {
+              method: "POST", headers: { "Authorization": "Bearer " + env.WHATSAPP_TOKEN, "Content-Type": "application/json" },
+              body: JSON.stringify(cuerpo)
+            });
+            const data = await r.json().catch(() => ({}));
+            return json({ ok: r.ok, status: r.status, accion: accion, meta: data }, r.ok ? 200 : 502);
+          } catch (e) { return json({ ok: false, error: String(e && e.message) }, 502); }
+        }
         /* Envio de prueba con respuesta cruda de Meta (para diagnosticar sin adivinar). */
         if (path === "/app/api/su/wa-test" && request.method === "POST"){
           if (!env.WHATSAPP_TOKEN) return json({ ok: false, error: "Sin WHATSAPP_TOKEN cargado" }, 501);
