@@ -10118,7 +10118,9 @@ export default {
            y que tenants tienen numero conectado. Si el token expiro, Meta responde 401 aqui. */
         if (path === "/app/api/su/wa-status" && request.method === "GET"){
           if (!env.WHATSAPP_TOKEN) return json({ ok: false, error: "Sin WHATSAPP_TOKEN cargado" }, 501);
-          const WABA_ID = "1532220315245141";
+          /* 2-set-2026: la WABA se elige por variable de entorno (la nueva cuelga de Tramboyos);
+             el valor fijo es la de prueba vieja de batuta.lat, por si la variable no esta. */
+          const WABA_ID = String(env.WABA_ID || "1532220315245141");
           try {
             const r = await fetch("https://graph.facebook.com/v21.0/" + WABA_ID + "/phone_numbers?fields=id,display_phone_number,verified_name,quality_rating,platform_type", {
               headers: { "Authorization": "Bearer " + env.WHATSAPP_TOKEN }
@@ -10138,8 +10140,26 @@ export default {
                 headers: { "Authorization": "Bearer " + env.WHATSAPP_TOKEN }
               });
               waba = await r2.json().catch(() => null);
+              const r3 = await fetch("https://graph.facebook.com/v21.0/" + WABA_ID + "/subscribed_apps", {
+                headers: { "Authorization": "Bearer " + env.WHATSAPP_TOKEN }
+              });
+              const apps = await r3.json().catch(() => null);
+              if (waba && typeof waba === "object") waba.subscribed_apps = (apps && apps.data) || apps;
             } catch (e) { waba = { error: String(e && e.message) }; }
             return json({ ok: true, waba: waba, numeros: (data && data.data) || [], tenants_conectados: results || [] });
+          } catch (e) { return json({ ok: false, error: String(e && e.message) }, 502); }
+        }
+        /* Suscribe la app (la del token) a la WABA para recibir sus webhooks. Idempotente:
+           Meta responde {success:true} aunque ya estuviera suscrita. 2-set-2026. */
+        if (path === "/app/api/su/wa-suscribir" && request.method === "POST"){
+          if (!env.WHATSAPP_TOKEN) return json({ ok: false, error: "Sin WHATSAPP_TOKEN cargado" }, 501);
+          const WABA_ID = String(env.WABA_ID || "1532220315245141");
+          try {
+            const r = await fetch("https://graph.facebook.com/v21.0/" + WABA_ID + "/subscribed_apps", {
+              method: "POST", headers: { "Authorization": "Bearer " + env.WHATSAPP_TOKEN }
+            });
+            const data = await r.json().catch(() => ({}));
+            return json({ ok: r.ok, status: r.status, meta: data }, r.ok ? 200 : 502);
           } catch (e) { return json({ ok: false, error: String(e && e.message) }, 502); }
         }
         /* Envio de prueba con respuesta cruda de Meta (para diagnosticar sin adivinar). */
