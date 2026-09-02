@@ -2,6 +2,32 @@
 <!-- Portal de alumnos v3 (Dashboard 2.0) · Batuta — destino: public/alumnos/index.html -->
 <html lang="es">
 <head>
+<script>
+/* 2-set-2026: el color de acento lo pone cada academia (d.marca.color). Sobre ese relleno el
+   texto era siempre var(--bg): en oscuro daba 8.9 de contraste, en claro (crema sobre el
+   naranja de MVT) daba 3.3 y no pasa AA. Ahora el texto sobre el acento y la "tinta" de
+   acento para texto se ELIGEN por contraste, en cada tema. Nada a ojo. */
+(function(){
+  function lum(h){h=h.replace('#','');if(h.length===3)h=h.replace(/(.)/g,'$1$1');var c=[0,2,4].map(function(i){var v=parseInt(h.substr(i,2),16)/255;return v<=0.03928?v/12.92:Math.pow((v+0.055)/1.055,2.4);});return 0.2126*c[0]+0.7152*c[1]+0.0722*c[2];}
+  function ratio(a,b){var x=lum(a),y=lum(b);return (Math.max(x,y)+0.05)/(Math.min(x,y)+0.05);}
+  function oscurecer(h,f){h=h.replace('#','');return '#'+[0,2,4].map(function(i){return ('0'+Math.round(parseInt(h.substr(i,2),16)*f).toString(16)).slice(-2);}).join('');}
+  function aclarar(h,f){h=h.replace('#','');return '#'+[0,2,4].map(function(i){var v=parseInt(h.substr(i,2),16);return ('0'+Math.round(v+(255-v)*f).toString(16)).slice(-2);}).join('');}
+  window.aplicarAcento=function(hex){
+    var r=document.documentElement,oscuro=r.getAttribute('data-theme')==='dark';
+    var acc=(hex&&/^#[0-9a-fA-F]{6}$/.test(hex))?hex:getComputedStyle(r).getPropertyValue('--accent').trim()||'#E8A13D';
+    var ink=oscuro?'#0d0b0a':'#17130C',crema=oscuro?'#f3ede0':'#F7F3EB',panel=oscuro?'#141210':'#FFFDF8';
+    r.style.setProperty('--accent',acc);
+    r.style.setProperty('--sobre-acento',ratio(ink,acc)>=ratio(crema,acc)?ink:crema);
+    var tinta=acc,i=0;
+    while(ratio(tinta,panel)<4.5&&i++<12){tinta=oscuro?aclarar(tinta,0.12):oscurecer(tinta,0.88);}
+    r.style.setProperty('--accent-ink',tinta);
+  };
+})();
+</script>
+
+<script>(function(){try{var t=localStorage.getItem("batuta-theme")||"light";document.documentElement.setAttribute("data-theme",t);var m=document.querySelector("meta[name=theme-color]");if(m)m.content=t==="dark"?"#12100e":"#F7F3EB";}catch(e){}})();</script>
+<script>try{window.aplicarAcento(null)}catch(e){}</script>
+
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <meta name="robots" content="noindex, nofollow" />
@@ -39,56 +65,90 @@
 @font-face{font-family:'JetBrains Mono';src:url('/app/fonts/JetBrainsMono-700-latin-ext.woff2') format('woff2');font-weight:700;font-style:normal;font-display:swap;unicode-range:U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF;}
 </style>
 <style>
+  /* ── TEMA (2-set-2026) ───────────────────────────────────────────────────────
+     Claro por defecto, como la landing (pedido de Andres del 19-ago). El oscuro queda a un
+     clic y se recuerda en localStorage con la MISMA llave que batuta.lat ('batuta-theme').
+     Cada par texto/fondo esta medido (WCAG AA) en los dos temas; el script que escribio esto
+     no guarda si un par no pasa (de paso: el rojo oscuro viejo daba 3.73, no llegaba).
+     --accent es RELLENO (boton) y --accent-ink es TEXTO en color de acento. */
   :root{
-    --bg:#0d0b0a; --panel:#141210; --panel2:#191613;
-    --accent:#E8A13D; --cream:#f3ede0; --muted:#8a8276; --line:#2A2926;
-    /* 21-ago-2026: el borde de los campos era --line (contraste 1.35 sobre el fondo) y el
-       alumno no veía dónde escribir. WCAG pide 3.0 para controles: este da 3.36. La línea
-       decorativa se queda suave; lo que se toca, se ve. */
-    --line-campo:#6B6459;
-    --green:#5f8a52; --amber:#d99a3c; --red:#cc3a1f;
+    --bg:#F7F3EB;
+    --panel:#FFFDF8;
+    --panel2:#F0EADD;
+    --ink:#17130C;
+    --muted:#6E6656;
+    --line:#E1DACD;
+    --line-campo:#8C8373;
+    --accent:#E8A13D;
+    --accent-ink:#905A14;
+    --sobre-acento:#17130C;
+    --green:#277550;
+    --amber:#8A5A0F;
+    --red:#B3321A;
     --mono:'JetBrains Mono',ui-monospace,monospace;
-    /* Tipografia 01-ago-2026: fuera Anton (era la de MVT) y fuera Space Grotesk (lista negra
-       de "look AI" de Andres). Cabinet Grotesk + Switzer, self-hosted desde Fontshare. */
     --display:'Cabinet Grotesk',system-ui,sans-serif;
     --body:'Switzer',system-ui,sans-serif;
+    --cream:var(--ink);
+    color-scheme:light;
   }
+  :root[data-theme='dark']{
+    --bg:#0d0b0a;
+    --panel:#141210;
+    --panel2:#191613;
+    --ink:#f3ede0;
+    --muted:#8a8276;
+    --line:#2A2926;
+    --line-campo:#6B6459;
+    --accent:#E8A13D;
+    --accent-ink:#E8A13D;
+    --sobre-acento:#0d0b0a;
+    --green:#5f8a52;
+    --amber:#d99a3c;
+    --red:#E8705C;
+    --cream:var(--ink);
+    color-scheme:dark;
+  }
+  /* boton de tema (2-set-2026): 44x44 (regla +45), icono dibujado, nunca emoji */
+  .tema-btn{width:44px;height:44px;display:inline-flex;align-items:center;justify-content:center;background:var(--panel);color:var(--ink);border:1px solid var(--line-campo);border-radius:12px;cursor:pointer;padding:0}
+  .tema-btn:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  :root[data-theme='dark'] .tema-btn .ic-luna{display:none}
+  :root:not([data-theme='dark']) .tema-btn .ic-sol{display:none}
   *{box-sizing:border-box}
   body::before{content:"";position:fixed;inset:0;z-index:9999;pointer-events:none;opacity:.04;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")}
   html,body{margin:0}
   body{background:var(--bg);color:var(--cream);font-family:var(--body);font-size:15.5px;line-height:1.5;-webkit-font-smoothing:antialiased;}
-  a{color:var(--accent);text-decoration:none}
+  a{color:var(--accent-ink);text-decoration:none}
   button{cursor:pointer;font-family:var(--body)}
   .hidden{display:none!important}
   a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--accent);outline-offset:2px;}
 
-  .eyebrow{font-family:var(--mono);text-transform:uppercase;letter-spacing:.18em;font-size:11.5px;color:var(--accent);font-weight:700;}
+  .eyebrow{font-family:var(--mono);text-transform:uppercase;letter-spacing:.18em;font-size:11.5px;color:var(--accent-ink);font-weight:700;}
   #authLogo img{max-height:64px;max-width:190px;display:block;margin:0 0 14px;}
   h1{font-family:var(--display);font-weight:700;font-size:clamp(28px,5.5vw,40px);margin:.18em 0 .08em;line-height:1.14;}
-  h1 em{font-style:italic;color:var(--accent);}
+  h1 em{font-style:italic;color:var(--accent-ink);}
   .sub{font-family:var(--mono);text-transform:uppercase;letter-spacing:.12em;font-size:11px;color:var(--muted);}
   .rule{height:3px;background:var(--accent);border:0;margin:14px 0 22px;}
   .lab{font-family:var(--mono);text-transform:uppercase;letter-spacing:.1em;font-size:11px;color:var(--muted);}
   .note{font-size:13px;color:var(--muted);line-height:1.55;}
 
   .btn{font-family:var(--mono);text-transform:uppercase;letter-spacing:.08em;font-size:12.5px;font-weight:700;
-    padding:12px 18px;border-radius:3px;border:1px solid var(--accent);background:var(--accent);color:var(--bg);
+    padding:12px 18px;border-radius:3px;border:1px solid var(--accent);background:var(--accent);color:var(--sobre-acento);
     display:inline-block;transition:filter .12s;}
   .btn:hover{filter:brightness(1.12);}
   .btn:active{transform:scale(.98);}
   .btn[disabled]{opacity:.55;cursor:not-allowed;}
   .btn.ghost{background:transparent;color:var(--cream);border-color:var(--line);font-weight:500;}
-  .btn.ghost:hover{border-color:var(--accent);color:var(--accent);filter:none;}
+  .btn.ghost:hover{border-color:var(--accent-ink);color:var(--accent-ink);filter:none;}
   .btn.sm{padding:8px 13px;font-size:11.5px;}
   .calmes{font-family:var(--mono);font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--cream);margin:0 0 12px;}
   .cal{display:grid;grid-template-columns:repeat(7,1fr);gap:5px;}
   .cal .cdow{font-family:var(--mono);font-size:10px;color:var(--muted);text-align:center;text-transform:uppercase;padding:2px 0 4px;}
   .calc{min-height:40px;display:flex;align-items:center;justify-content:center;border:1px solid transparent;border-radius:6px;font-size:14px;color:var(--muted);}
   .calc.has{color:var(--cream);border:1px solid var(--line);background:var(--panel2);cursor:pointer;font-weight:600;}
-  .calc.has:hover{border-color:var(--accent);color:var(--accent);}
-  .calc.sel{background:var(--accent);color:var(--bg)!important;border-color:var(--accent);font-weight:700;}
+  .calc.has:hover{border-color:var(--accent-ink);color:var(--accent-ink);}
+  .calc.sel{background:var(--accent);color:var(--sobre-acento)!important;border-color:var(--accent-ink);font-weight:700;}
   .agslotsdia{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;}
-  .agslotsdia .btn.sel{background:var(--accent);color:var(--bg)!important;border-color:var(--accent);font-weight:700;}
+  .agslotsdia .btn.sel{background:var(--accent);color:var(--sobre-acento)!important;border-color:var(--accent-ink);font-weight:700;}
   .btn.no{background:transparent;border-color:var(--line);color:var(--muted);font-weight:500;}
   .btn.no:hover{border-color:var(--red);color:var(--red);}
 
@@ -99,20 +159,20 @@
   .pill.gray{background:transparent;color:var(--muted);border:1px solid var(--line);}
 
   .card{background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:20px 22px;margin-bottom:14px;}
-  .card.nudge{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent) inset;}
-  .card h3{font-family:var(--mono);text-transform:uppercase;letter-spacing:.12em;font-size:11px;color:var(--accent);font-weight:700;margin:0 0 12px;}
+  .card.nudge{border-color:var(--accent-ink);box-shadow:0 0 0 1px var(--accent) inset;}
+  .card h3{font-family:var(--mono);text-transform:uppercase;letter-spacing:.12em;font-size:11px;color:var(--accent-ink);font-weight:700;margin:0 0 12px;}
   .banner{border:1px dashed var(--amber);border-radius:4px;padding:14px 16px;margin-bottom:14px;
     font-size:14px;color:var(--amber);background:rgba(217,154,60,.07);}
   .banner strong{font-family:var(--mono);font-size:11.5px;text-transform:uppercase;letter-spacing:.06em;}
-  .banner.naranja{border-color:var(--accent);color:var(--cream);background:rgba(232,161,61,.08);}
-  .banner.naranja strong{color:var(--accent);}
+  .banner.naranja{border-color:var(--accent-ink);color:var(--cream);background:rgba(232,161,61,.08);}
+  .banner.naranja strong{color:var(--accent-ink);}
 
   /* ---------- AUTH ---------- */
   .auth-card{max-width:440px;margin:6vh auto 0;padding:0 20px 70px;}
   .authtabs{display:flex;gap:6px;margin-bottom:20px;}
   .atab{flex:1;font-family:var(--mono);text-transform:uppercase;letter-spacing:.09em;font-size:12px;font-weight:500;
     color:var(--muted);background:transparent;border:1px solid var(--line);padding:11px 10px;border-radius:2px;transition:all .12s;}
-  .atab.active{color:var(--bg);background:var(--accent);border-color:var(--accent);font-weight:700;}
+  .atab.active{color:var(--sobre-acento);background:var(--accent);border-color:var(--accent-ink);font-weight:700;}
   .field{margin-bottom:14px;}
   .field label{display:block;font-family:var(--mono);text-transform:uppercase;letter-spacing:.08em;font-size:10.5px;color:var(--muted);margin-bottom:6px;}
   .field input,.field select{width:100%;background:var(--panel);border:1px solid var(--line-campo);color:var(--cream);
@@ -131,7 +191,7 @@
     font-weight:700;cursor:pointer;text-decoration:none;transition:background .12s;}
   .gbtn:hover{background:#f1f3f4;}
   .gbtn svg{flex:0 0 18px;}
-  .check input{width:16px;height:16px;margin-top:2px;accent-color:var(--accent);flex:0 0 auto;}
+  .check input{width:16px;height:16px;margin-top:2px;accent-color:var(--accent-ink);flex:0 0 auto;}
   .btn.full{width:100%;margin-top:14px;}
   .err{color:var(--red);font-size:13.5px;margin-top:12px;min-height:1.2em;}
   .auth-hint{margin-top:18px;font-size:13px;color:var(--muted);line-height:1.55;}
@@ -144,7 +204,7 @@
   .side{width:230px;flex:0 0 230px;position:fixed;top:0;bottom:0;left:0;background:var(--panel);
     border-right:1px solid var(--line);display:flex;flex-direction:column;padding:24px 14px 18px;z-index:50;}
   .side .logo{font-family:var(--display);font-weight:700;font-size:21px;color:var(--cream);padding:0 10px;display:block;}
-  .side .logo em{font-style:italic;color:var(--accent);}
+  .side .logo em{font-style:italic;color:var(--accent-ink);}
   .side .logo .dot{display:inline-block;width:5px;height:5px;border-radius:50%;background:var(--accent);margin-left:3px;transform:translateY(-8px);}
   .side .slab{font-family:var(--mono);font-size:9.5px;letter-spacing:.18em;text-transform:uppercase;color:var(--muted);padding:4px 10px 0;}
   .side nav{display:flex;flex-direction:column;gap:4px;margin-top:26px;flex:1;}
@@ -152,7 +212,7 @@
     font-size:12px;font-weight:500;color:var(--muted);padding:11px 12px;border-radius:3px;border-left:3px solid transparent;transition:all .12s;}
   .side nav a svg{width:17px;height:17px;flex:0 0 auto;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;}
   .side nav a:hover{color:var(--cream);background:var(--panel2);}
-  .side nav a.active{color:var(--accent);background:rgba(232,161,61,.08);border-left-color:var(--accent);font-weight:700;}
+  .side nav a.active{color:var(--accent-ink);background:rgba(232,161,61,.08);border-left-color:var(--accent-ink);font-weight:700;}
   .side-out{background:none;border:1px solid var(--line);border-radius:3px;color:var(--muted);font-family:var(--mono);
     font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;padding:9px 10px;}
   .side-out:hover{border-color:var(--red);color:var(--red);}
@@ -163,7 +223,7 @@
 
   /* ---------- INICIO ---------- */
   .hero-num{margin:6px 0 2px;}
-  .hero-num .big{font-family:var(--display);font-weight:700;font-size:clamp(64px,14vw,96px);line-height:.95;color:var(--accent);}
+  .hero-num .big{font-family:var(--display);font-weight:700;font-size:clamp(64px,14vw,96px);line-height:.95;color:var(--accent-ink);}
   .hero-num .of{font-family:var(--display);font-style:italic;font-size:clamp(18px,4vw,26px);color:var(--muted);margin-left:8px;}
   .stubs{display:flex;gap:8px;flex-wrap:wrap;margin:16px 0 6px;}
   .stub{width:28px;height:44px;background:var(--accent);border-radius:3px;position:relative;flex:0 0 auto;}
@@ -185,7 +245,7 @@
   .tablewrap{overflow-x:auto;}
   table{border-collapse:collapse;width:100%;min-width:520px;}
   th,td{text-align:left;padding:11px 12px;border-bottom:1px solid var(--line);vertical-align:top;}
-  th{font-family:var(--mono);text-transform:uppercase;letter-spacing:.07em;font-size:10.5px;color:var(--accent);font-weight:700;}
+  th{font-family:var(--mono);text-transform:uppercase;letter-spacing:.07em;font-size:10.5px;color:var(--accent-ink);font-weight:700;}
   tr:last-child td{border-bottom:0;}
   td.mono{font-family:var(--mono);font-size:12px;color:var(--muted);white-space:nowrap;}
   td.mut,span.mut{color:var(--muted);font-size:13.5px;}
@@ -197,10 +257,10 @@
   /* ---------- COMPRAR ---------- */
   .tiers{display:grid;grid-template-columns:repeat(auto-fit,minmax(235px,1fr));gap:14px;}
   .tier{background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:22px;position:relative;display:flex;flex-direction:column;gap:6px;}
-  .tier.featured{border-color:var(--accent);}
-  .tier .badge{position:absolute;top:-11px;left:18px;background:var(--accent);color:var(--bg);font-family:var(--mono);
+  .tier.featured{border-color:var(--accent-ink);}
+  .tier .badge{position:absolute;top:-11px;left:18px;background:var(--accent);color:var(--sobre-acento);font-family:var(--mono);
     font-size:10px;font-weight:700;letter-spacing:.08em;padding:4px 9px;border-radius:2px;}
-  .tier .tlab{font-family:var(--mono);text-transform:uppercase;letter-spacing:.12em;font-size:11px;color:var(--accent);font-weight:700;}
+  .tier .tlab{font-family:var(--mono);text-transform:uppercase;letter-spacing:.12em;font-size:11px;color:var(--accent-ink);font-weight:700;}
   .tier h3{font-family:var(--display);font-weight:700;font-size:21px;margin:0;}
   .tier .tprecio{font-family:var(--display);font-size:34px;margin:6px 0 2px;}
   .tier .tprecio .cur{font-size:16px;color:var(--muted);margin-right:2px;}
@@ -209,7 +269,7 @@
   .tier .btn{margin-top:14px;text-align:center;}
 
   /* ---------- REFERIDOS ---------- */
-  .refcode{font-family:var(--mono);font-size:clamp(30px,7vw,44px);letter-spacing:.3em;color:var(--accent);font-weight:700;margin:10px 0 16px;}
+  .refcode{font-family:var(--mono);font-size:clamp(30px,7vw,44px);letter-spacing:.3em;color:var(--accent-ink);font-weight:700;margin:10px 0 16px;}
   .ctas{display:flex;gap:10px;flex-wrap:wrap;}
   .grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
   .stat .num{font-family:var(--display);font-size:42px;line-height:1;color:var(--cream);}
@@ -220,7 +280,7 @@
   .rec p{margin:0 0 12px;font-size:14px;color:var(--muted);}
   .rec-top{display:flex;justify-content:space-between;align-items:center;}
   .rtag{font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;
-    color:var(--accent);border:1px solid var(--accent);padding:3px 8px;border-radius:2px;}
+    color:var(--accent-ink);border:1px solid var(--accent);padding:3px 8px;border-radius:2px;}
   .rfecha{font-family:var(--mono);font-size:10.5px;color:var(--muted);}
 
   /* ---------- CUENTA ---------- */
@@ -233,13 +293,13 @@
   .overlay.open{display:flex;}
   .modal{background:var(--panel);border:1px solid var(--accent);border-radius:4px;max-width:480px;width:100%;padding:26px;}
   .modal h3{font-family:var(--display);font-size:24px;margin:0 0 4px;}
-  .modal h3 em{font-style:italic;color:var(--accent);}
-  .mlab{font-family:var(--mono);text-transform:uppercase;letter-spacing:.1em;font-size:10.5px;color:var(--accent);margin-bottom:16px;}
+  .modal h3 em{font-style:italic;color:var(--accent-ink);}
+  .mlab{font-family:var(--mono);text-transform:uppercase;letter-spacing:.1em;font-size:10.5px;color:var(--accent-ink);margin-bottom:16px;}
   .paybox{background:var(--bg);border:1px solid var(--line);border-radius:3px;padding:14px;margin:12px 0;}
-  .paybox .num{font-family:var(--mono);font-size:22px;letter-spacing:.12em;color:var(--accent);font-weight:700;}
+  .paybox .num{font-family:var(--mono);font-size:22px;letter-spacing:.12em;color:var(--accent-ink);font-weight:700;}
   .steps{font-size:13.5px;color:var(--cream);margin:10px 0 0;padding-left:18px;line-height:1.7;}
   .modal-actions{display:flex;gap:10px;justify-content:flex-end;margin-top:18px;flex-wrap:wrap;}
-  .montoview{font-family:var(--display);font-size:30px;color:var(--accent);}
+  .montoview{font-family:var(--display);font-size:30px;color:var(--accent-ink);}
   .montonote{font-family:var(--mono);font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--green);min-height:1.2em;}
 
   /* ---------- WIZARD DE COMPRA ---------- */
@@ -250,23 +310,23 @@
   .wiz-grupo-lab:first-child{margin-top:0;}
 
   .loading{font-family:var(--mono);font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);padding:60px 0;text-align:center;}
-  .toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%) translateY(20px);background:var(--accent);color:var(--bg);
+  .toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%) translateY(20px);background:var(--accent);color:var(--sobre-acento);
     font-family:var(--mono);font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;
     padding:11px 18px;border-radius:3px;opacity:0;transition:all .2s;pointer-events:none;z-index:99;}
   .toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
 
   /* ---------- CHAT ---------- */
   .chat{position:fixed;top:0;right:0;bottom:0;width:300px;background:var(--panel);border-left:1px solid var(--line);display:flex;flex-direction:column;z-index:70;}
-  .chat-head{font-family:var(--mono);font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--accent);font-weight:700;padding:15px 14px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;flex:0 0 auto;}
+  .chat-head{font-family:var(--mono);font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--accent-ink);font-weight:700;padding:15px 14px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;flex:0 0 auto;}
   .chat-tab{background:none;border:1px solid var(--line);border-radius:3px;color:var(--muted);font-family:var(--mono);font-size:10px;letter-spacing:.06em;text-transform:uppercase;padding:3px 7px;cursor:pointer;}
-  .chat-tab.active{border-color:var(--accent);color:var(--accent);}
+  .chat-tab.active{border-color:var(--accent-ink);color:var(--accent-ink);}
   .chat-head button{background:none;border:1px solid var(--line);border-radius:3px;color:var(--muted);font-family:var(--mono);font-size:11px;padding:3px 9px;cursor:pointer;}
-  .chat-head button:hover{border-color:var(--accent);color:var(--accent);}
+  .chat-head button:hover{border-color:var(--accent-ink);color:var(--accent-ink);}
   .chat-msgs{flex:1;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:10px;}
   .chat-msg{max-width:88%;align-self:flex-start;}
   .chat-msg.mio{align-self:flex-end;text-align:right;background:rgba(232,161,61,.08);border:1px solid var(--line);border-radius:4px;padding:6px 9px;}
   .chat-meta{font-family:var(--mono);font-size:9.5px;color:var(--muted);letter-spacing:.05em;margin-bottom:2px;}
-  .chat-profe{color:var(--bg);background:var(--accent);font-weight:700;padding:1px 5px;border-radius:2px;margin-right:5px;font-size:9px;}
+  .chat-profe{color:var(--sobre-acento);background:var(--accent);font-weight:700;padding:1px 5px;border-radius:2px;margin-right:5px;font-size:9px;}
   .chat-texto{font-size:13.5px;line-height:1.45;overflow-wrap:break-word;}
   .chat-input{display:flex;gap:8px;padding:10px;border-top:1px solid var(--line);flex:0 0 auto;}
   .chat-input input{flex:1;min-width:0;background:var(--bg);border:1px solid var(--line);color:var(--cream);padding:9px 10px;border-radius:3px;font-family:var(--body);font-size:13.5px;}
@@ -278,7 +338,7 @@
   .chat-strip svg{width:19px;height:19px;color:var(--cream);}
   .chat-fab svg{width:24px;height:24px;color:var(--bg);}
   .chat-dot{position:absolute;top:6px;right:6px;width:11px;height:11px;border-radius:50%;background:var(--accent);border:2px solid var(--panel);}
-  .chat-fab .chat-dot{background:#fff;border-color:var(--accent);top:4px;right:4px;}
+  .chat-fab .chat-dot{background:#fff;border-color:var(--accent-ink);top:4px;right:4px;}
   /* Chat apagado por la academia (7-ago-2026): desaparece todo el chat y aparece el botón de WhatsApp */
   body.sin-chat .chat,body.sin-chat .chat-strip,body.sin-chat .chat-fab{display:none!important;}
   body.sin-chat .main{margin-right:0!important;}
@@ -314,7 +374,7 @@
     .side nav a span{display:block;font-size:8.5px;line-height:1.1;margin-top:3px;letter-spacing:0;text-transform:none;
       max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:0 2px;}
     .side nav a svg{width:19px;height:19px;}
-    .side nav a.active{border-left:0;border-top-color:var(--accent);background:transparent;}
+    .side nav a.active{border-left:0;border-top-color:var(--accent-ink);background:transparent;}
     .main{margin-left:0;padding:26px 18px 110px;}
     .plan-grid{grid-template-columns:1fr;}
     .grid2{grid-template-columns:1fr;}
@@ -340,7 +400,7 @@
   .atab{transition:all .15s ease;}
   @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important;}}
   /* ===== dibujitos punk ===== */
-  .eyebrow::before,.card h3::before{content:"\2726  ";color:var(--accent)}
+  .eyebrow::before,.card h3::before{content:"\2726  ";color:var(--accent-ink)}
   .btn:not(.ghost):not(.no):hover{box-shadow:3px 3px 0 var(--cream)}
   body::after{content:"";position:fixed;left:-44px;bottom:-44px;width:230px;height:230px;z-index:0;pointer-events:none;opacity:.06;background:no-repeat center/contain url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100' fill='none' stroke='%23E8A13D' stroke-width='4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M50 6 L59 41 L94 50 L59 59 L50 94 L41 59 L6 50 L41 41 Z'/%3E%3C/svg%3E")}
   /* punk-bg.svg no existe: pedirlo tiraba un 404 en cada carga del portal por una textura
@@ -350,7 +410,7 @@
   .onb-steps li{font-size:14px;color:#cfc7b8;line-height:1.5;border-left:3px solid var(--accent);padding:5px 0 5px 14px}
   .onb-steps b{color:var(--cream);font-weight:700}
   .onb-guide{margin-top:20px;border-top:1px solid var(--line);padding-top:16px;text-align:left}
-  .onb-h{font-family:var(--mono);font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--accent);font-weight:700;margin-bottom:10px}
+  .onb-h{font-family:var(--mono);font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--accent-ink);font-weight:700;margin-bottom:10px}
   .onb-guide ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:7px}
   .onb-guide li{font-size:13.5px;color:var(--muted);line-height:1.45}
   .onb-guide b{color:var(--cream);font-weight:700}
@@ -365,14 +425,14 @@
   .tour-actions{display:flex;justify-content:space-between;align-items:center;gap:10px;}
   .tour-skip{background:none;border:0;color:var(--muted);font-family:var(--mono);font-size:11px;letter-spacing:.06em;text-transform:uppercase;padding:6px 4px;cursor:pointer;}
   .tour-skip:hover{color:var(--cream);}
-  .tour-next{font-family:var(--mono);text-transform:uppercase;letter-spacing:.08em;font-size:12px;font-weight:700;padding:10px 18px;border-radius:3px;border:1px solid var(--accent);background:var(--accent);color:var(--bg);cursor:pointer;}
+  .tour-next{font-family:var(--mono);text-transform:uppercase;letter-spacing:.08em;font-size:12px;font-weight:700;padding:10px 18px;border-radius:3px;border:1px solid var(--accent);background:var(--accent);color:var(--sobre-acento);cursor:pointer;}
   .tour-next:hover{filter:brightness(1.08);}
   @media (prefers-reduced-motion: reduce){ .tour-hole{transition:none;} }
 
   /* ---------- IA de onboarding (Claude Haiku, tope 10 mensajes) ---------- */
   /* 21-ago-2026: a 24px del borde, este botón tapaba la etiqueta "Mi cuenta" de la barra
      de abajo (70px de alto en móvil). Sube por encima de la barra. */
-  .oia-fab{position:fixed;bottom:86px;right:18px;z-index:300;width:54px;height:54px;border-radius:50%;border:1px solid var(--accent);cursor:pointer;background:var(--accent);color:var(--bg);font-family:var(--mono);font-weight:700;font-size:18px;box-shadow:0 6px 24px rgba(232,80,31,.35);}
+  .oia-fab{position:fixed;bottom:86px;right:18px;z-index:300;width:54px;height:54px;border-radius:50%;border:1px solid var(--accent);cursor:pointer;background:var(--accent);color:var(--sobre-acento);font-family:var(--mono);font-weight:700;font-size:18px;box-shadow:0 6px 24px rgba(232,80,31,.35);}
   .oia-panel{position:fixed;bottom:88px;right:24px;z-index:300;width:340px;max-width:calc(100vw - 32px);height:440px;max-height:calc(100vh - 130px);display:flex;flex-direction:column;overflow:hidden;background:var(--panel);border:1px solid var(--line);border-radius:8px;box-shadow:0 18px 50px rgba(0,0,0,.55);}
   .oia-panel[hidden]{display:none;}
   .oia-head{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:12px 14px;border-bottom:1px solid var(--line);background:var(--accent);flex:0 0 auto;}
@@ -382,13 +442,13 @@
   .oia-msgs{flex:1 1 auto;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:9px;}
   .oia-msg{max-width:88%;padding:9px 12px;border-radius:10px;font-size:13.5px;line-height:1.42;white-space:pre-wrap;word-wrap:break-word;}
   .oia-msg.bot{align-self:flex-start;background:var(--panel2);color:var(--cream);border-bottom-left-radius:2px;}
-  .oia-msg.user{align-self:flex-end;background:var(--accent);color:var(--bg);border-bottom-right-radius:2px;}
+  .oia-msg.user{align-self:flex-end;background:var(--accent);color:var(--sobre-acento);border-bottom-right-radius:2px;}
   .oia-typing{align-self:flex-start;color:var(--muted);font-size:12px;font-style:italic;}
   .oia-input{display:flex;gap:7px;padding:10px;border-top:1px solid var(--line);flex:0 0 auto;}
   .oia-input input{flex:1 1 auto;background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:9px 10px;color:var(--cream);font-size:13.5px;font-family:inherit;}
-  .oia-input input:focus{outline:none;border-color:var(--accent);}
+  .oia-input input:focus{outline:none;border-color:var(--accent-ink);}
   .oia-input input:disabled{opacity:.5;}
-  .oia-send{flex:0 0 auto;padding:0 13px;border:none;border-radius:6px;cursor:pointer;background:var(--accent);color:var(--bg);font-family:var(--mono);font-weight:700;font-size:12px;}
+  .oia-send{flex:0 0 auto;padding:0 13px;border:none;border-radius:6px;cursor:pointer;background:var(--accent);color:var(--sobre-acento);font-family:var(--mono);font-weight:700;font-size:12px;}
   .oia-send:disabled{opacity:.5;cursor:default;}
   #app.hidden ~ .oia-fab,#app.hidden ~ .oia-panel{display:none!important;}
 </style>
@@ -498,6 +558,7 @@
     <a class="logo" href="#inicio" id="logoSidebar"><span class="dot"></span></a>
     <div class="slab" id="slabSidebar">con Batuta</div>
     <nav aria-label="Navegación del portal">
+      <button type="button" id="temaBtn" class="tema-btn" aria-label="Cambiar entre tema claro y oscuro" title="Tema claro / oscuro"><svg class="ic-sol" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4.9 4.9l1.4 1.4m11.4 11.4 1.4 1.4M2 12h2m16 0h2M4.9 19.1l1.4-1.4m11.4-11.4 1.4-1.4"/></svg><svg class="ic-luna" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg></button>
       <a href="#inicio" data-v="inicio" aria-label="Inicio" title="Inicio"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11l9-8 9 8"/><path d="M5 9.5V21h14V9.5"/></svg><span>Inicio</span></a>
       <a href="#clases" data-v="clases" aria-label="Mis clases" title="Mis clases"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16M4 12h16M4 19h10"/></svg><span>Mis clases</span></a>
       <a href="#agenda" data-v="agenda" aria-label="Agenda" title="Agenda"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M3 9h18M8 2v4M16 2v4"/></svg><span>Agenda</span></a>
@@ -623,7 +684,7 @@
                sus clases aparecen solas en el calendario que ya usa; si reserva o cancela, se
                le actualiza sin hacer nada. No se integra con Google a propósito: eso pediría
                conectar su cuenta y dar permisos, y esto funciona igual en iPhone y Outlook. -->
-          <div style="margin-top:14px;padding-top:12px;border-top:1px solid rgba(255,255,255,.08);">
+          <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--line);">
             <button class="btn ghost sm" type="button" id="btnCalendario">Agregar mis clases a mi calendario</button>
             <p class="note" style="margin:8px 0 0;">Se agregan solas cada vez que reservas o cancelas. Funciona con Google, iPhone y Outlook.</p>
             <div id="calBox" style="display:none;margin-top:12px;">
@@ -2682,7 +2743,7 @@ function pintarProfe(){
   var ini = (AG_PROFE.nombre||"?").trim().slice(0,1).toUpperCase();
   var foto = AG_PROFE.foto
     ? '<img src="'+esc(AG_PROFE.foto)+'" alt="" style="width:44px;height:44px;border-radius:50%;object-fit:cover;flex:none;">'
-    : '<div style="width:44px;height:44px;border-radius:50%;background:var(--accent,#7c6cf0);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;flex:none;">'+esc(ini)+'</div>';
+    : '<div style="width:44px;height:44px;border-radius:50%;background:var(--accent,#E8A13D);color:var(--sobre-acento,#17130C);display:flex;align-items:center;justify-content:center;font-weight:700;flex:none;">'+esc(ini)+'</div>';
   box.innerHTML = '<div style="display:flex;align-items:center;gap:10px;">'+foto+
     '<div><div class="note" style="margin:0;font-size:12px;">Tu clase con</div>'+
     '<div style="font-weight:700;">'+esc(AG_PROFE.nombre)+'</div></div></div>';
@@ -2719,7 +2780,7 @@ function itemsAgenda(){
 // Chips de la clase: tipo (Mat / Máquinas), sala, quién la dicta y cupos libres.
 function slotMeta(it){
   var out="";
-  if(it.curso) out += '<span style="display:inline-block;font-size:10px;font-weight:700;letter-spacing:.03em;text-transform:uppercase;background:var(--accent,#7c6cf0);color:#fff;border-radius:6px;padding:1px 6px;margin-left:6px;">'+esc(it.curso)+'</span>';
+  if(it.curso) out += '<span style="display:inline-block;font-size:10px;font-weight:700;letter-spacing:.03em;text-transform:uppercase;background:var(--accent,#E8A13D);color:var(--sobre-acento,#17130C);border-radius:6px;padding:1px 6px;margin-left:6px;">'+esc(it.curso)+'</span>';
   if(it.sala) out += '<span style="display:inline-block;font-size:10px;font-weight:700;letter-spacing:.03em;text-transform:uppercase;border:1px solid var(--line,#444);border-radius:6px;padding:1px 6px;margin-left:6px;opacity:.85;">'+esc(it.sala)+'</span>';
   if(it.profe) out += '<span style="font-size:11px;opacity:.75;margin-left:6px;">con '+esc(it.profe)+'</span>';
   var cupo=Number(it.cupo)||0;
@@ -2791,7 +2852,7 @@ function pintarSlots(){
     if(it.estado==="lleno"){
       return '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:6px 0;">'+
         '<span style="font-weight:600;opacity:.55;">'+esc(fmtHoraLocal(it.iso))+'</span>'+slotMeta(it)+
-        '<span style="font-size:11px;font-weight:700;color:var(--amber,#c47f16);">LLENO</span>'+
+        '<span style="font-size:11px;font-weight:700;color:var(--amber,#d99a3c);">LLENO</span>'+
         '<button class="btn ghost sm" data-espera="'+esc(it.iso)+'" data-esala="'+esc(it.sala)+'">Lista de espera</button>'+
       '</div>';
     }
@@ -2820,7 +2881,7 @@ function renderEspera(list){
     return '<div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--line);">'+
       '<div style="flex:1;min-width:0;">'+
         '<div style="font-weight:600;text-transform:capitalize;">'+esc(fmtFechaLocal(e.inicio_utc))+' · '+esc(fmtHoraLocal(e.inicio_utc))+(e.curso?' · '+esc(e.curso):'')+(e.sala?' · '+esc(e.sala):'')+'</div>'+
-        '<div class="note" style="margin:0;">'+(av?'<span style="color:var(--accent,#7c6cf0);font-weight:700;">¡Se liberó un cupo! Resérvalo abajo 👇</span>':'En lista de espera · te aviso si se libera un cupo')+'</div>'+
+        '<div class="note" style="margin:0;">'+(av?'<span style="color:var(--accent-ink,#905A14);font-weight:700;">¡Se liberó un cupo! Resérvalo abajo 👇</span>':'En lista de espera · te aviso si se libera un cupo')+'</div>'+
       '</div>'+
       '<button class="btn ghost sm" data-salir-espera="'+esc(e.id)+'">Salir</button>'+
     '</div>';
@@ -3194,7 +3255,7 @@ function initAlumno(){
       /* branding del tenant (logo + color + tipografía, editables en Ajustes del panel del profe) */
       if(d.marca){
         var root = document.documentElement;
-        if(d.marca.color && /^#[0-9a-fA-F]{6}$/.test(d.marca.color)){ root.style.setProperty("--accent", d.marca.color); }
+        if(d.marca.color && /^#[0-9a-fA-F]{6}$/.test(d.marca.color)){ window.aplicarAcento(d.marca.color); } else { window.aplicarAcento(null); }
         /* "" = fuente propia de Batuta, ya cargada en este portal: no hay nada que pedir.
            Se prueba con hasOwnProperty, no por verdad, o esas dos se ignorarian. */
         var fontLinks = { "Cabinet Grotesk":"", "Switzer":"",
@@ -3324,5 +3385,6 @@ window.initAlumno = initAlumno;
   });
 })();
 </script>
+<script>(function(){var b=document.getElementById("temaBtn");if(!b)return;b.addEventListener("click",function(){var d=document.documentElement,n=d.getAttribute("data-theme")==="dark"?"light":"dark";d.setAttribute("data-theme",n);try{localStorage.setItem("batuta-theme",n)}catch(e){}try{window.aplicarAcento(null)}catch(e){}var m=document.querySelector("meta[name=theme-color]");if(m)m.content=n==="dark"?"#12100e":"#F7F3EB";});})();</script>
 </body>
 </html>

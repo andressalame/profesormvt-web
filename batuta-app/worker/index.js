@@ -3092,7 +3092,7 @@ function correoLeadMagnet(paso, origen){
       subject: "Tu academia quedo a un paso de existir",
       html: wrap(
         '<p>Hola. Hace un par de dias empezaste a crear tu academia en Batuta y algo te interrumpio: tranquilo, tu sitio sigue esperandote.</p>' +
-        '<p>Si prefieres mirar antes de decidir, entra a la <a href="' + MARCA.dominio + '/app/demo"><b>demo en vivo</b></a> sin registrarte: es una academia de muestra con alumnos, cobros y agenda andando.</p>' +
+        '<p>Si prefieres mirar antes de decidir, entra a la <a href="' + MARCA.dominio + '/demo"><b>vista del panel</b></a> sin registrarte: es una academia de muestra con alumnos, cobros y agenda andando.</p>' +
         '<p>Y si quieres numeros de verdad, publicamos el caso de una academia real corriendo sobre Batuta: <a href="' + MARCA.dominio + '/casos/profesormvt"><b>el caso ProfesorMVT</b></a>.</p>')
     };
     return {
@@ -3115,7 +3115,7 @@ function correoLeadMagnet(paso, origen){
     html: wrap(
       '<p>Hola. Ultima idea sobre tu plantilla, y no te escribo mas.</p>' +
       '<p>Hay 3 cosas que ninguna hoja de calculo hara por ti: avisarle al alumno que le quedan 2 clases, cobrarle sin que tu escribas, y dejarle su material en un portal con tu marca.</p>' +
-      '<p>Eso es exactamente lo que Batuta hace solo, con tus alumnos reales, en el plan Gratis para siempre y sin tarjeta: <a href="' + MARCA.dominio + '/app/registro?f=magnet"><b>crea tu academia aqui</b></a>. Y si prefieres mirar antes, entra a la <a href="' + MARCA.dominio + '/app/demo">demo en vivo</a> sin registrarte.</p>')
+      '<p>Eso es exactamente lo que Batuta hace solo, con tus alumnos reales, en el plan Gratis para siempre y sin tarjeta: <a href="' + MARCA.dominio + '/app/registro?f=magnet"><b>crea tu academia aqui</b></a>. Y si prefieres mirar antes, entra a la <a href="' + MARCA.dominio + '/demo">vista del panel</a> sin registrarte.</p>')
   };
 }
 
@@ -5420,7 +5420,8 @@ function paginaBase(titulo, cuerpo, script){
     "try{var _bq=new URLSearchParams(location.search),_bf=_bq.get('f')||_bq.get('utm_source')||'';" +
     "if(!_bf&&document.referrer){var _bu=new URL(document.referrer);if(_bu.host!==location.host)_bf=_bu.host;}" +
     "navigator.sendBeacon('/app/api/beacon',JSON.stringify({pagina:location.pathname,fuente:_bf}));}catch(e){}";
-  script = beaconEmbudo + (script || "");
+  const bootTema = "try{var _t=localStorage.getItem('batuta-theme')||'light';document.documentElement.setAttribute('data-theme',_t);}catch(e){}";
+  script = bootTema + beaconEmbudo + (script || "");
   return "<!doctype html><html lang=\"es\"><head><meta charset=\"utf-8\">" +
     "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">" +
     "<title>" + esc(titulo) + "</title>" +
@@ -5438,21 +5439,24 @@ function paginaBase(titulo, cuerpo, script){
     "<meta name=\"twitter:image\" content=\"https://batuta.lat/og-image.png\">" +
     "<link rel=\"icon\" type=\"image/svg+xml\" href=\"https://batuta.lat/favicon.svg\">" +
     "<style>" + FUENTES_BATUTA_CSS +
-    ":root{--bg:#0F1115;--acento:#E8A13D;--texto:#F3EDE0;--muted:#8a8276}" +
+    /* 2-set-2026: tema claro por defecto (como la landing) y oscuro con la misma llave
+   localStorage 'batuta-theme'. Pares medidos WCAG AA en el portal con estos mismos valores. */
+      ":root{--bg:#F7F3EB;--card:#FFFDF8;--campo:#FFFFFF;--linea:#E1DACD;--linea-campo:#8C8373;--acento:#E8A13D;--acento-ink:#905A14;--sobre-acento:#17130C;--texto:#17130C;--muted:#6E6656;--red:#B3321A;color-scheme:light}" +
+      ":root[data-theme='dark']{--bg:#0F1115;--card:#161920;--campo:#0F1115;--linea:#262a33;--linea-campo:#3a404c;--acento:#E8A13D;--acento-ink:#E8A13D;--sobre-acento:#0F1115;--texto:#F3EDE0;--muted:#8a8276;--red:#e8604f;color-scheme:dark}" +
     "*{box-sizing:border-box}" +
     "body{margin:0;background:var(--bg);color:var(--texto);font-family:'Switzer',system-ui,sans-serif;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px}" +
     "h1{font-family:'Cabinet Grotesk',system-ui,sans-serif;font-weight:700;font-size:26px;margin:0 0 6px}" +
-    ".card{max-width:420px;width:100%;background:#161920;border:1px solid #262a33;border-radius:14px;padding:32px}" +
+    ".card{max-width:420px;width:100%;background:var(--card);border:1px solid var(--linea);border-radius:14px;padding:32px}" +
     ".sub{color:var(--muted);font-size:14px;margin:0 0 24px}" +
     "label{display:block;font-size:13px;color:var(--muted);margin:14px 0 6px}" +
-    "input{width:100%;background:#0F1115;border:1px solid #2c303a;border-radius:8px;padding:11px 12px;color:var(--texto);font-family:inherit;font-size:15px}" +
+    "input{width:100%;background:var(--campo);border:1px solid var(--linea-campo);border-radius:8px;padding:11px 12px;color:var(--texto);font-family:inherit;font-size:15px}" +
     "input:focus{outline:none;border-color:var(--acento)}" +
-    "button{width:100%;margin-top:22px;background:var(--acento);color:#0F1115;border:none;border-radius:8px;padding:13px;font-weight:600;font-size:15px;cursor:pointer;font-family:inherit}" +
+    "button{width:100%;margin-top:22px;background:var(--acento);color:var(--sobre-acento);border:none;border-radius:8px;padding:13px;font-weight:600;font-size:15px;cursor:pointer;font-family:inherit}" +
     "button:disabled{opacity:0.6;cursor:default}" +
-    ".pill{display:inline-block;background:rgba(232,161,61,0.12);color:var(--acento);font-size:12px;padding:4px 10px;border-radius:20px;margin-bottom:14px}" +
-    ".err{color:#e8604f;font-size:13px;margin-top:12px;min-height:16px}" +
+    ".pill{display:inline-block;background:rgba(232,161,61,0.14);color:var(--acento-ink);font-size:12px;padding:4px 10px;border-radius:20px;margin-bottom:14px}" +
+    ".err{color:var(--red);font-size:13px;margin-top:12px;min-height:16px}" +
     ".foot{text-align:center;margin-top:18px;font-size:13px;color:var(--muted)}" +
-    ".foot a{color:var(--acento);text-decoration:none}" +
+    ".foot a{color:var(--acento-ink);text-decoration:none}" +
     GOOGLE_BTN_CSS +
     "</style></head><body><div class=\"card\">" + cuerpo + "</div><script>" + script + "</script></body></html>";
 }
@@ -5469,12 +5473,12 @@ function paginaRegistro(googleOn){
       "<label>Email</label><input id=\"email\" type=\"email\" required>" +
       "<label>WhatsApp</label><input id=\"whatsapp\" placeholder=\"51987654321\" required>" +
       "<label>Que ensenas?</label>" +
-      "<select id=\"rubro\" required style=\"width:100%;background:#0F1115;border:1px solid #2c303a;border-radius:8px;padding:11px 12px;color:var(--texto);font-family:inherit;font-size:15px\">" +
+      "<select id=\"rubro\" required style=\"width:100%;background:var(--campo);border:1px solid var(--linea-campo);border-radius:8px;padding:11px 12px;color:var(--texto);font-family:inherit;font-size:15px\">" +
         "<option value=\"\" disabled selected>Elige tu rubro</option>" +
         "<option>Musica</option><option>Idiomas</option><option>Danza</option><option>Refuerzo escolar</option><option>Ajedrez</option><option>Arte</option><option>Deporte</option><option>Otro</option>" +
       "</select>" +
       "<label>Cuantos alumnos tienes hoy?</label>" +
-      "<select id=\"tam\" required style=\"width:100%;background:#0F1115;border:1px solid #2c303a;border-radius:8px;padding:11px 12px;color:var(--texto);font-family:inherit;font-size:15px\">" +
+      "<select id=\"tam\" required style=\"width:100%;background:var(--campo);border:1px solid var(--linea-campo);border-radius:8px;padding:11px 12px;color:var(--texto);font-family:inherit;font-size:15px\">" +
         "<option value=\"\" disabled selected>Elige un rango</option>" +
         "<option>Recien empiezo</option><option>1-10</option><option>11-30</option><option>31-80</option><option>Mas de 80</option>" +
       "</select>" +
@@ -5542,7 +5546,7 @@ const GOOGLE_BTN_CSS =
   ".gbtn{display:flex;align-items:center;justify-content:center;gap:10px;width:100%;margin-top:14px;background:#fff;color:#1f1f1f;border:1px solid #dadce0;border-radius:8px;padding:11px;font-weight:600;font-size:14px;cursor:pointer;text-decoration:none;font-family:inherit}" +
   ".gbtn:hover{background:#f8f9fa}" +
   ".gsep{display:flex;align-items:center;gap:10px;color:var(--muted);font-size:12px;margin:18px 0 4px}" +
-  ".gsep::before,.gsep::after{content:'';flex:1;height:1px;background:#2c303a}";
+  ".gsep::before,.gsep::after{content:'';flex:1;height:1px;background:var(--linea-campo)}";
 const GOOGLE_SVG = "<svg width=\"18\" height=\"18\" viewBox=\"0 0 48 48\"><path fill=\"#EA4335\" d=\"M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z\"/><path fill=\"#4285F4\" d=\"M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z\"/><path fill=\"#FBBC05\" d=\"M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z\"/><path fill=\"#34A853\" d=\"M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z\"/></svg>";
 function botonGoogle(intent, slug, texto){
   const q = intent === "alumno" ? "?intent=alumno&slug=" + encodeURIComponent(slug || "") : "?intent=profesor";
@@ -5559,7 +5563,7 @@ function paginaLogin(googleOn){
       "<div class=\"err\" id=\"err\"></div>" +
     "</form>" +
     (googleOn ? botonGoogle("profesor", "", "Continuar con Google") : "") +
-    "<div class=\"foot\">No tienes cuenta? <a href=\"/app/registro\">Crea tu academia</a> · <a href=\"/app/demo\">Mira la demo</a></div>";
+    "<div class=\"foot\">No tienes cuenta? <a href=\"/app/registro\">Crea tu academia</a> · <a href=\"/demo\">Mira la demo</a></div>";
   const script =
     "document.getElementById('f').addEventListener('submit', async function(e){" +
     "e.preventDefault();" +
@@ -5609,7 +5613,7 @@ function paginaLanding(){
     "<h1>Batuta</h1>" +
     "<p class=\"sub\">El panel para gestionar tu academia.</p>" +
     "<a href=\"/app/registro\"><button type=\"button\">Empezar gratis</button></a>" +
-    "<div class=\"foot\">Ya tienes cuenta? <a href=\"/app/login\">Ingresa aqui</a> · <a href=\"/app/demo\">Mira la demo</a></div>";
+    "<div class=\"foot\">Ya tienes cuenta? <a href=\"/app/login\">Ingresa aqui</a> · <a href=\"/demo\">Mira la demo</a></div>";
   // Si ya tiene sesion de profesor, directo a su panel.
   const script = "try{ if(localStorage.getItem('batuta_t')){ location.replace('/app/panel'); } }catch(e){}";
   return paginaBase("Batuta", cuerpo, script);
