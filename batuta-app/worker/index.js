@@ -1697,7 +1697,11 @@ const SQL_REGS_CICLO = "SELECT estado, fecha, COALESCE(curso,'') AS curso FROM r
 async function reprogPortalDe(env, tenantId, alumnoId, ciclo){
   try {
     const r = await env.DB.prepare(
-      "SELECT COUNT(*) AS n FROM reservas WHERE tenant_id = ?1 AND alumno_id = ?2 " +
+      /* 3-set-2026 · un CAMBIO es una SESIÓN, no un bloque de una hora. Las clases de 2 horas
+         (Canto + Composición de MVT) se reservan como dos filas seguidas: cancelar esa sesión
+         gastaba DOS cambios y Yaritza se quedó sin cuota con tres cambios reales. Se cuentan
+         días distintos de Lima, igual que la bitácora del dueño (que ya era por día). */
+      "SELECT COUNT(DISTINCT date(inicio_utc,'-5 hours')) AS n FROM reservas WHERE tenant_id = ?1 AND alumno_id = ?2 " +
       "AND COALESCE(ciclo,1) = ?3 AND estado = 'cancelada' AND COALESCE(cancelada_por,'') LIKE 'alumno:%'"
     ).bind(tenantId, alumnoId, Number(ciclo) || 1).first();
     return Math.max(0, Number(r && r.n) || 0);
