@@ -10229,6 +10229,14 @@ export default {
             return json({ ok: r.ok, status: r.status, accion: accion, meta: data }, r.ok ? 200 : 502);
           } catch (e) { return json({ ok: false, error: String(e && e.message) }, 502); }
         }
+        /* 2-set-2026: de que cuenta de Mercado Pago es el token de Batuta (para repartir marcas por cuenta). */
+        if (path === "/app/api/su/mp-cuenta" && request.method === "GET"){
+          const tok = env.MP_ACCESS_TOKEN || env.MP_TOKEN || "";
+          if (!tok) return json({ ok: false, error: "sin token de MP en el worker" }, 501);
+          const r = await fetch("https://api.mercadopago.com/users/me", { headers: { "Authorization": "Bearer " + tok } });
+          const d = await r.json().catch(() => ({}));
+          return json({ ok: r.ok, id: d.id, nickname: d.nickname, email: d.email, tipo: d.status && d.status.mercadopago_account_type, negocio: d.company && d.company.brand_name, en_tarjeta: d.company && d.company.soft_descriptor, sitio: d.status && d.status.site_status, vende: d.status && d.status.sell });
+        }
         /* Envio de prueba con respuesta cruda de Meta (para diagnosticar sin adivinar). */
         if (path === "/app/api/su/wa-test" && request.method === "POST"){
           if (!env.WHATSAPP_TOKEN) return json({ ok: false, error: "Sin WHATSAPP_TOKEN cargado" }, 501);
