@@ -21,4 +21,7 @@ batuta-app/datos/fixtures/
 # Antes de desplegar: borrar public/_dirs/ (o dejarlas acá, que no viajan al repo).
 public/_dirs/
 public/_fonttest.html
-batuta-app/.wa-verify-token.local
+# 2-set-2026: la ruta con carpeta solo tapaba UNA de las dos copias. La otra vive en
+# web/.wa-verify-token.local desde el 10-jul y `git add -A` la staged hoy sin avisar.
+# El patron pelado las tapa en cualquier carpeta.
+.wa-verify-token.local

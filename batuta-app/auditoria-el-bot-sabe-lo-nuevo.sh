@@ -57,13 +57,26 @@ echo "── 4. Alumna: donde veo los convenios de mi academia ──"
 R=$(pregunta "$TA" "Mi academia dijo que tiene convenios con descuentos, donde los veo?"); V4="$R"; echo "   → $R"
 { tiene "$R" "referidos" || tiene "$R" "beneficios"; } && ok "sabe donde estan" || no "no sabe donde estan los beneficios"
 
-echo "── 5. Ni una palabra de voseo (le habla a academias peruanas) ──"
-VOSEO="tenes |podes |queres |saltas a|mira vos| vos |sos |anda a|fijate|hace clic"
+echo "── 5. Alumna: quiero el portal en claro (o en oscuro) ──"
+# 2-set-2026: el portal paso a claro por defecto y estreno el boton de sol/luna.
+R=$(pregunta "$TA" "Como pongo el portal en modo oscuro?"); V5="$R"; echo "   → $R"
+{ tiene "$R" "sol" || tiene "$R" "luna" || tiene "$R" "boton"; } && ok "sabe que hay un boton" || no "no sabe del boton de tema"
+
+echo "── 6. Alumna: reserve una clase y no la veo en Mis clases ──"
+# 2-set-2026: Aaron reservo su primera clase y Mis clases solo listaba el historial.
+R=$(pregunta "$TA" "Reserve una clase para el jueves y no la veo en Mis clases, se perdio?"); V6="$R"; echo "   → $R"
+{ tiene "$R" "proximas clases" || tiene "$R" "mis clases" || tiene "$R" "agenda"; } && ok "la manda donde si sale" || no "no sabe donde se ve lo reservado"
+
+echo "── 7. Ni una palabra de voseo (le habla a academias peruanas) ──"
+# 2-set-2026: sin frontera de palabra, `sos ` marcaba "recursos", "cursos", "esos" y
+# "pasos" como voseo. Recursos es hasta el nombre de una pestana del portal: el detector
+# delataba respuestas perfectas. Todas las formas van con \b.
+VOSEO="\\btenes\\b|\\bpodes\\b|\\bqueres\\b|\\bsaltas a\\b|\\bmira vos\\b|\\bvos\\b|\\bsos\\b|\\banda a\\b|\\bfijate\\b|\\bhace clic\\b"
 malv=0
-for T in "$V1" "$V2" "$V3" "$V4"; do
+for T in "$V1" "$V2" "$V3" "$V4" "$V5" "$V6"; do
   echo "$T" | tr 'A-ZÁÉÍÓÚ' 'a-záéíóú' | grep -qE "$VOSEO" && { no "voseo en: $(echo "$T" | cut -c1-90)"; malv=1; }
 done
-[ $malv -eq 0 ] && ok "las 4 respuestas hablan de tu"
+[ $malv -eq 0 ] && ok "las 6 respuestas hablan de tu"
 
 echo
 [ $mal -eq 0 ] && echo "✅ el bot contesta lo nuevo" || echo "🔴 $mal fallo(s)"

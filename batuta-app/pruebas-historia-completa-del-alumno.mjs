@@ -77,18 +77,28 @@ console.log("\n── 3. La pantalla de «Mis clases» pinta lo que le llega ─
     let z = H.indexOf("{", k), d = 0;
     for (; z < H.length; z++){ if (H[z] === "{") d++; else if (H[z] === "}" && --d === 0) return H.slice(k + 1, z + 1); } return ""; };
   const cajas = {};
-  const caja = id => (cajas[id] = cajas[id] || { textContent: "", innerHTML: "", style: {}, querySelector: () => ({ innerHTML: "" }) });
-  ["cProx","cProxTxt","cProxMeta","cTarea","cTareaTxt","cTareaAudio","cTareaMeta","cWrap","cVacio"].forEach(caja);
+  const caja = id => (cajas[id] = cajas[id] || { textContent: "", innerHTML: "", style: {},
+    classList: { add(){}, remove(){} }, querySelector: () => ({ innerHTML: "" }) });
+  ["cProx","cProxTxt","cProxMeta","cTarea","cTareaTxt","cTareaAudio","cTareaMeta","cWrap","cVacio",
+   "cAgendadas","cAgendadasLista"].forEach(caja);
   const tbody = { innerHTML: "" };
   cajas.cTabla = { querySelector: () => tbody };
-  const ME = { alumno: { historial: filas.map(([id, f, e, c]) => ({ fecha: f, estado: e, trabajo: "", tarea: "", plan: "", ciclo: c })) } };
-  const f = new Function("$", "ME", "esc", "show", "hide", "audiosDe", "adjuntosHtml",
-    cortar("renderClases") + "\nreturn renderClases;")(
-    caja, ME, x => String(x == null ? "" : x), () => {}, () => {}, () => [], () => "");
+  /* 2-set-2026: renderClases arranca llamando a pintarAgendadas (la tarjeta "Tus próximas
+     clases" que se agregó porque Aaron reservó y no la veía). Sin cortarla también, la
+     pantalla revienta con "pintarAgendadas is not defined" y los 3 checks salen rojos por
+     el arnés, no por el producto. Se corta la de verdad para que la prueba la cubra. */
+  const ME = { alumno: { historial: filas.map(([id, f, e, c]) => ({ fecha: f, estado: e, trabajo: "", tarea: "", plan: "", ciclo: c })) },
+    proximasClases: [{ inicio_utc: "2026-09-05T15:00:00Z", curso: "Canto", tipo: "suelta" }] };
+  const f = new Function("$", "ME", "esc", "show", "hide", "audiosDe", "adjuntosHtml", "window", "fmtFechaLocal", "fmtHoraLocal",
+    cortar("pintarAgendadas") + cortar("renderClases") + "\nreturn renderClases;")(
+    caja, ME, x => String(x == null ? "" : x), () => {}, () => {}, () => [], () => "",
+    { ME }, () => "sábado 5 de septiembre", () => "10:00 a.m.");
   try { f(); } catch (e) { comprobar("la pantalla no revienta", false, e.message); }
   const filasPintadas = (tbody.innerHTML.match(/<tr>/g) || []).length;
   comprobar("pinta las 4 filas que recibe", filasPintadas === 4, filasPintadas + " filas");
   comprobar("y se ve la clase de junio", /2026-06-10/.test(tbody.innerHTML));
+  comprobar("y arriba sale la clase que ya reservó", /septiembre/.test(cajas.cAgendadasLista.innerHTML),
+    cajas.cAgendadasLista.innerHTML.slice(0, 60) || "(vacía)");
 }
 
 console.log(fallos ? `\n🔴 ${fallos} fallo(s)` : "\n✅ ve toda su historia y su saldo no se movió");

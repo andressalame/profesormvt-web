@@ -2146,6 +2146,21 @@ const PERMISOS = [
   ["exportar", "Descargar la lista en Excel/CSV"]
 ];
 const PERMISOS_CLAVES = PERMISOS.map(p => p[0]);
+/* Como se lo explica el bot al profesor (2-set-2026). La etiqueta del catalogo esta
+   escrita para el DUENO que marca la casilla ("Cambiar su horario de disponibilidad") y
+   no se parece a como lo pregunta el profesor ("quiero abrir mas horarios"): con la
+   etiqueta sola el bot no lo reconocia y le daba los pasos igual. Aca va el vocabulario
+   real, con sinonimos. Si manana nace un permiso sin frase, cae en la etiqueta y no
+   desaparece en silencio. */
+const PERMISOS_EN_PALABRAS = {
+  alumnos_crear:  "dar de alta alumnos nuevos (el boton + Nuevo alumno, importar o pegar una lista)",
+  alumnos_editar: "tocar la ficha de sus alumnos: paquete, curso, horario, datos, vencimiento, clases restantes",
+  alumnos_borrar: "borrar alumnos",
+  clases_borrar:  "borrar o anular clases ya registradas",
+  agenda_editar:  "abrir mas horarios, cerrar o mover franjas, ampliar el rango de horas, o cualquier otro cambio a su disponibilidad en Clases > Agenda",
+  pagos_ver:      "ver pagos, montos, cobros, caja y reportes de plata",
+  exportar:       "descargar o exportar sus listas en Excel o CSV"
+};
 function permisosDe(profe){
   const crudo = String((profe && profe.permisos) || "").trim();
   const negados = new Set(crudo ? crudo.split(",").map(x => x.trim()).filter(Boolean) : []);
@@ -14195,11 +14210,12 @@ export default {
             "COMO SE HACE:\n" +
             "- Reservar clase: Agenda > eliges horario libre (fijo semanal o clase suelta). Si no ves horarios libres, tu profe aun no abrio cupos o ya se tomaron: escribele por el chat.\n" +
             "- Comprar o renovar: Comprar > eliges paquete > pagas por Yape/Plin/transferencia y subes tu captura (tu profe confirma el mismo dia), o con tarjeta si tu profe la activo (se confirma sola al instante).\n" +
-            "- Tu material y tareas: Recursos (si hay audio de tarea, lo escuchas ahi). Tu saldo de clases: Mis clases.\n" +
+            "- Tu material y tareas: Recursos (si hay audio de tarea, lo escuchas ahi). Tu saldo de clases y tu historial: Mis clases; arriba del todo, en 'Tus proximas clases', salen tambien las que ya reservaste, con su fecha y hora y un link para reprogramar.\n" +
             "- Tus pagos: en Mi cuenta ves tu historial (fecha, paquete, monto y estado). Si necesitas el recibo de un pago, pideselo a tu profe por el chat del portal y el te manda el link.\n" +
             "- Hablar con tu profe: el chat del portal. Si el chat sale bloqueado, casi siempre es porque no tienes paquete activo: compra o renueva y se desbloquea.\n" +
             "- Olvidaste tu contrasena: escribele a tu profe, el te la restablece. Te cambiaste de celular: entra de nuevo al link de tu academia con tu correo y contrasena, todo sigue ahi.\n" +
             "- App + avisos: el portal se instala como app (iPhone: Compartir > 'Agregar a inicio'; Android: menu > 'Instalar aplicacion') y en Mi cuenta activas los avisos de tus clases.\n" +
+            "- Modo claro u oscuro: el portal viene CLARO y se cambia con el boton de sol/luna que esta arriba del menu, al lado del logo. Se recuerda en ese telefono o computadora.\n" +
             "- Tus beneficios y convenios: al pie de la pestana Referidos, si tu academia cargo alguno. Solo se ven con tu cuenta al dia; si no te aparece nada es que tu academia no tiene convenios cargados.\n" +
             "- Te pasaron el codigo de un amigo: escribelo en el paso de comprar, debajo del total, o en la pestana Referidos, y dale Aplicar. Solo vale antes de tu primera compra y no puede ser el tuyo. Si el campo no te aparece es porque en tu caso ya no aplica.\n" +
             "- Tus clases en tu calendario: en Mi cuenta, boton 'Agregar mis clases a mi calendario'. Tocalo desde el celular y aceptas la suscripcion; despues se actualiza solo cada vez que reservas o cancelas, no hay que volver a hacer nada.\n" +
@@ -14214,7 +14230,18 @@ export default {
             const offIA = String((cfgIA && cfgIA.modulos_off) || "").split(",").map(s => s.trim()).filter(Boolean);
             if (offIA.length) extraSys += "OJO: esta academia tiene OCULTOS estos modulos del panel: " + offIA.join(", ") + ". Si preguntan por uno, el paso es reactivarlo en Ajustes > Academia > 'Modulos de tu panel' (solo el dueno puede).\n";
           } catch (e) {}
-          if (!who.esDueno) extraSys += "OJO: el usuario es PROFESOR del equipo, NO el dueno: no ve Profesores, Interesados, Caja, Perfil, Ajustes ni Servicios. Para todo lo de esas pestanas (precios, plan, marca, boletas, modulos), indicale que lo coordine con el dueno de su academia.";
+          if (!who.esDueno){
+            extraSys += "OJO: el usuario es PROFESOR del equipo, NO el dueno: no ve Profesores, Interesados, Caja, Mi web, Perfil, Ajustes, Correos a mis alumnos, Campanas ni Servicios. Para todo lo de esas pestanas (precios, plan, marca, boletas, modulos), indicale que lo coordine con el dueno de su academia. NO le des pasos que empiecen en una de esas pestanas.\n";
+            /* Permisos recortados (2-set-2026): el manual solo sabia "eres profesor, no dueno",
+               asi que a una profesora con `alumnos_editar` negado le explicaba como editar la
+               ficha y el servidor se lo rechazaba despues. Elevate le quito 6 de los 7 permisos
+               a dos profesoras reales, o sea que era el caso normal, no el raro. */
+            const negadosIA = [...permisosDe(who.profesor).negados];
+            if (negadosIA.length){
+              const etiquetasIA = PERMISOS.filter(x => negadosIA.includes(x[0])).map(x => PERMISOS_EN_PALABRAS[x[0]] || x[1].toLowerCase());
+              extraSys += "OJO, ESTO PISA AL MANUAL: el dueno de esta academia le QUITO a este profesor estos permisos: " + etiquetasIA.join("; ") + ". Aunque el manual de arriba explique como se hace, si lo que pide cae en esa lista NO le des NINGUN paso ni nombre de pantalla: contestale en UNA frase que su academia no se lo tiene habilitado y que se lo pida al dueno. Antes de responder cualquier cosa, revisa si lo que te piden cae en esa lista. Todo lo que NO este en la lista se le explica normal.";
+            }
+          }
         }
         const reply = await llamarClaudeOnboarding(env, system, mensajes, extraSys);
         if (!reply) return json({ error: "El asistente no esta disponible ahora mismo." }, 502);

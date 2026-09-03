@@ -47,7 +47,13 @@ const IDX = [...H.matchAll(/\{t:"([^"]+)",\s*tab:"ajustes",\s*aj:"([a-z]+)",\s*k
 comprobar("el indice del buscador se pudo leer", IDX.length >= 10, IDX.length + " entradas");
 
 /* 1) DESTINO: la pestaña declarada tiene que ser la que mas palabras comparte */
+/* Menos UNA: "Todos los ajustes" es el COMODIN, no apunta a una sub-pestaña sino a la
+   pantalla entera, y aterriza en la primera (Academia) a proposito. Su vocabulario es
+   generico ("ajustes", "opciones", "configuracion"), asi que por diseno se parece a
+   TODAS las pestañas y esta regla siempre la va a dar por perdida. 2-set-2026. */
+const COMODINES = ["Todos los ajustes"];
 for (const e of IDX){
+  if (COMODINES.includes(e.t)) continue;
   const palabras = [...new Set(norm(e.t + " " + e.k).replace(/[^a-z0-9 ]/g, " ").split(/\s+/).filter(p => p.length >= 5))];
   const puntaje = {};
   for (const t of TABS) puntaje[t.aj] = palabras.filter(p => (porTab[t.aj] || "").includes(p)).length;

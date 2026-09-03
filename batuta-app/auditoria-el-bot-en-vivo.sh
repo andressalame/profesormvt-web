@@ -53,7 +53,10 @@ tiene "$R" "ctrl" && no "le ofrece Ctrl+K y el portal no tiene buscador" || ok "
 tiene "$R" "agenda" && ok "la manda a Agenda" || no "no la manda a Agenda"
 
 echo "── 4. Ni una palabra de voseo (le habla a academias peruanas) ──"
-VOSEO="tenes |podes |queres |saltas a|mira vos| vos |sos |anda a|fijate|hace clic"
+# 2-set-2026: sin frontera de palabra, `sos ` marcaba "recursos", "cursos", "esos" y
+# "pasos" como voseo. Recursos es hasta el nombre de una pestana del portal: el detector
+# delataba respuestas perfectas. Todas las formas van con \b.
+VOSEO="\\btenes\\b|\\bpodes\\b|\\bqueres\\b|\\bsaltas a\\b|\\bmira vos\\b|\\bvos\\b|\\bsos\\b|\\banda a\\b|\\bfijate\\b|\\bhace clic\\b"
 malv=0
 for T in "$V1" "$V2" "$V3"; do
   echo "$T" | tr 'A-ZÁÉÍÓÚ' 'a-záéíóú' | grep -qE "$VOSEO" && { no "voseo en: $(echo "$T" | cut -c1-90)"; malv=1; }

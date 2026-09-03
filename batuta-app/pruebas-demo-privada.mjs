@@ -125,10 +125,18 @@ t("limpiarDemosPrivadas asegura el esquema antes de borrar", () => {
   const f = /async function limpiarDemosPrivadas\(env\)\{([\s\S]*?)\n\}/.exec(S)[1];
   if (!/ensureSedesSchema\(env\)/.test(f)) throw new Error("sin ensure*, un DELETE contra tabla inexistente tumba el batch");
 });
-t("/app/demo cae a la demo compartida si la privada falla", () => {
+/* 🔴 2-set-2026: esta prueba exigía que /app/demo CREARA la demo privada y llevaba en rojo
+   desde el 1-set, cuando Andrés apagó la demo a propósito ("mejor llevarlos de frente a
+   crearse su cuenta"). Una prueba que exige lo contrario de la decisión no es una red: es
+   ruido que enseña a ignorar el ROJO del tablero. Ahora comprueba LA DECISIÓN. */
+t("/app/demo redirige al registro y NO revive la demo", () => {
   const r = /if \(path === "\/app\/demo"[\s\S]*?\n    \}/.exec(S)[0];
-  if (!/const priv = await crearDemoPrivada\(env\)/.test(r)) throw new Error("no crea la privada");
-  if (!/bind\(DEMO_EMAIL\)/.test(r)) throw new Error("no quedó el fallback a la compartida");
+  if (!/status: 302/.test(r)) throw new Error("ya no redirige: la demo volvió a abrirse sola");
+  if (!/"Location": "\/app\/registro\?f="/.test(r)) throw new Error("el Location no es relativo a /app/registro");
+  if (/^\s*const priv = await crearDemoPrivada/m.test(r)) throw new Error("el bloque activo volvió a crear la demo privada");
+});
+t("la demo vieja sigue desactivada, no borrada", () => {
+  if (!/if \(false && path === "\/app\/demo"/.test(S)) throw new Error("o la reactivaron o la borraron; se guarda apagada a propósito");
 });
 
 console.log("\n" + (mal ? "✗ " + mal + " fallas" : "✓ todo bien") + " (" + ok + " pruebas)\n");
