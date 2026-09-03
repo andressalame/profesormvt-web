@@ -642,6 +642,13 @@
       <div class="eyebrow">// MIS CLASES</div>
       <h1>Mis <em>clases</em></h1>
       <hr class="rule" />
+      <!-- 2-set-2026: Aaron reservó su primera clase y "no la veía en Mis clases" porque esta
+           vista solo listaba el historial. Lo agendado ahora aparece acá arriba, no solo en Agenda. -->
+      <div class="card hidden" id="cAgendadas">
+        <h3>// TUS PRÓXIMAS CLASES</h3>
+        <div id="cAgendadasLista"></div>
+        <p class="note" style="margin:10px 0 0;"><a href="#agenda">Reprogramar o reservar otra →</a></p>
+      </div>
       <div class="card tarea hidden" id="cProx">
         <h3>// LO QUE VIENE</h3>
         <div class="t" id="cProxTxt"></div>
@@ -1592,6 +1599,7 @@ function renderInicio(){
 
 /* ---------- VISTA: MIS CLASES ---------- */
 function renderClases(){
+  pintarAgendadas();
   var h = (ME.alumno && ME.alumno.historial) || [];
   /* historial viene en orden ascendente: el último con tarea/plan es el más reciente */
   var con = null, prox = null;
@@ -2560,6 +2568,22 @@ var DIAS_LARGO = ["domingo","lunes","martes","miércoles","jueves","viernes","s�
    ninguno de los dos. El respaldo también: `getHours()` es del navegador igual. */
 var TZ_LIMA = { timeZone: "America/Lima" };
 function partesLima(iso){ return new Date(Date.parse(iso) - 5*3600000); }   // en UTC = hora de Lima
+function pintarAgendadas(){
+  var box = $("cAgendadas"), lista = $("cAgendadasLista");
+  if(!box || !lista) return;
+  var prox = (window.ME && ME.proximasClases) || [];
+  if(prox.length === 0){ box.classList.add("hidden"); return; }
+  lista.innerHTML = prox.map(function(r){
+    return '<div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--line);">'+
+      '<div style="flex:1;min-width:0;">'+
+        '<div style="font-weight:600;text-transform:capitalize;">'+esc(fmtFechaLocal(r.inicio_utc))+'</div>'+
+        '<div class="note" style="margin:0;">'+esc(fmtHoraLocal(r.inicio_utc))+(r.curso?' · '+esc(r.curso):'')+
+          ' <span class="rtag">'+(r.tipo==="fija"?"FIJA":"SUELTA")+'</span></div>'+
+      '</div>'+
+    '</div>';
+  }).join("");
+  box.classList.remove("hidden");
+}
 function fmtFechaLocal(iso){
   var d = new Date(iso);
   try{ return d.toLocaleDateString("es-PE",{weekday:"long",day:"numeric",month:"long",timeZone:"America/Lima"}); }
