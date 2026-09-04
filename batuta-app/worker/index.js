@@ -16676,6 +16676,16 @@ export default {
              ⚠️ El tope de abajo no es decorativo: este endpoint recibe el snapshot COMPLETO de
              la lista, así que sin él una importación de 1,447 alumnos manda 1,447 correos. */
           const avisarPlan = [];
+          /* 🔴 3-set-2026 · LA RENOVACIÓN A MANO DEJABA CLASES FUTURAS SIN COBRAR.
+             `confirmarCompra` muda al ciclo nuevo las reservas futuras que el paquete viejo ya
+             no cubre (líneas ~3247). Este guardado, que es la OTRA puerta al mismo hecho (el
+             dueño le sube el ciclo porque le cobró por fuera), nunca las tocaba: se quedaban en
+             el ciclo viejo, invisibles para el motor de saldos, que filtra por ciclo. El aforo
+             y la agenda SÍ las ven (esas consultas no miran ciclo), así que la alumna ocupaba
+             su máquina y su ficha decía "0 apartadas" — clases gratis en silencio.
+             Caso real: Victoria García Poultier (Elevate), 2 Reformer del 10 y 17 de setiembre
+             en ciclo 1 con la ficha en ciclo 2. `memoria: leccion-dos-puertas-un-solo-riel`. */
+          const renovManual = [];
           for (const a of body.alumnos){
             const pr = prev.get(a.id);
             /* profesor: todo lo suyo; dueno: respeta la asignacion del payload si es valida,
@@ -16695,6 +16705,7 @@ export default {
             const cicloAl = Number(a.ciclo) || 1;
             const cicloPrev = (pr && Number(pr.ciclo)) || 1;
             const esRenovManual = !!pr && cicloAl > cicloPrev;
+            if (esRenovManual) renovManual.push({ prev: pr, cicloNuevo: cicloAl });
             let venceAl = (pr && pr.vence) || "";
             let avisoAl = (pr && pr.aviso_vence_ciclo) || 0;
             /* ---- Vencimiento a mano (21-ago-2026) ----
@@ -16903,6 +16914,34 @@ export default {
              máquinas contadas eso significa rechazar a una alumna real por el cupo de alguien
              que ya no está. Va al final del batch, cuando los alumnos ya se reinsertaron.
              `bloqueo` y `aparta` se quedan fuera: esos NO tienen alumno por diseño. */
+          /* Renovación a mano: mudar al ciclo nuevo SOLO las reservas futuras que el paquete
+             viejo ya no alcanza a cubrir, igual que `confirmarCompra`. Las que ese paquete ya
+             pagó se quedan donde se pagaron (bug Daniela Guerra-García, 14-ago). Si algo falla
+             acá, se cae al comportamiento de siempre y no se muda ninguna: nunca se cobra de más. */
+          if (renovManual.length){
+            const ahoraISO = new Date().toISOString();
+            for (const rm of renovManual){
+              try {
+                const al = rm.prev;
+                const cicloAnt = Number(al.ciclo) || 1;
+                const pkAnt = resolverPk(paqPut, al.paquete);
+                const { results: regsAnt } = await env.DB.prepare(SQL_REGS_CICLO)
+                  .bind(tid, al.id, cicloAnt).all();
+                const cAnt = pasesDe(al)
+                  ? await computeMulti(env, tid, al, paqPut, {}, "", { resv: [], regs: regsAnt || [] })
+                  : compute(al, regsAnt || [], {}, 0, pkAnt);
+                const cubiertas = cAnt.ilim ? 1e9 : Math.max(0, (Number(cAnt.compradas) || 0) - (Number(cAnt.usadas) || 0));
+                const { results: futuras } = await env.DB.prepare(
+                  "SELECT id FROM reservas WHERE tenant_id = ?1 AND alumno_id = ?2 AND estado = 'reservada' " +
+                  "AND inicio_utc >= ?3 AND COALESCE(ciclo,1) = ?4 ORDER BY inicio_utc ASC"
+                ).bind(tid, al.id, ahoraISO, cicloAnt).all();
+                for (const r of (futuras || []).slice(cubiertas)){
+                  stmts.push(env.DB.prepare("UPDATE reservas SET ciclo = ?1 WHERE id = ?2 AND tenant_id = ?3")
+                    .bind(rm.cicloNuevo, r.id, tid));
+                }
+              } catch (e){ console.error("renovacion manual: reservas futuras", e); }
+            }
+          }
           stmts.push(env.DB.prepare(
             "DELETE FROM reservas WHERE tenant_id = ?1 AND tipo NOT IN ('bloqueo','aparta') " +
             "AND COALESCE(alumno_id,'') != '' " +

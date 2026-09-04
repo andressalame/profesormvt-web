@@ -24,7 +24,18 @@ comprobar("y su botón se llama «Reprogramar»", /">Reprogramar<\/button>|Repro
 console.log("\n── 2. El servidor cuenta lo que el alumno cancela por su cuenta ──");
 comprobar("existe `reprogPortalDe`", /async function reprogPortalDe\(/.test(SRC));
 const i = SRC.indexOf("async function reprogPortalDe(");
-const helper = SRC.slice(i, i + 700);
+/* 🔴 3-set-2026 · esto cortaba 700 caracteres FIJOS y se puso rojo solo: un comentario nuevo
+   dentro de la funcion empujo el SQL fuera de la ventana y la prueba denunciaba un candado
+   que si estaba puesto. Un rojo cronico que no es del producto ensena a ignorar el rojo.
+   Ahora se corta la funcion de verdad, contando llaves. */
+const helper = (function(){
+  let j = SRC.indexOf("{", i), prof = 0;
+  for (; j < SRC.length; j++){
+    if (SRC[j] === "{") prof++;
+    else if (SRC[j] === "}"){ prof--; if (!prof){ j++; break; } }
+  }
+  return SRC.slice(i, j);
+})();
 comprobar("cuenta solo lo cancelado POR EL ALUMNO", /cancelada_por,''\) LIKE 'alumno:%'/.test(helper));
 comprobar("y solo de su ciclo actual", /COALESCE\(ciclo,1\) = \?3/.test(helper));
 
