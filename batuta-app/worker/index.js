@@ -1125,6 +1125,30 @@ function nombreArchivoLimpio(n){
   }
   return out.slice(0, 80) || "archivo";
 }
+/* ¿Qué pedazo del archivo pide el reproductor? (5-set-2026)
+   Devuelve null si no pidió rango (se sirve entero), {malo:true} si el rango es imposible
+   (416), o {ini,fin} recortado al tamaño real. Vive aparte para poder probarla: la regla
+   de "recorta el final pero rechaza el inicio" es justo donde se equivoca uno. */
+function rangoPedido(cabecera, tam){
+  const m = /^bytes=(\d*)-(\d*)$/.exec(String(cabecera || "").trim());
+  if (!m) return null;
+  const T = Math.max(0, Number(tam) || 0);
+  if (!T) return { malo: true };
+  let ini, fin;
+  if (m[1] === ""){
+    const n = parseInt(m[2], 10);                 /* "bytes=-500": los ultimos 500 */
+    if (!Number.isFinite(n) || n <= 0) return { malo: true };
+    ini = Math.max(0, T - n); fin = T - 1;
+  } else {
+    ini = parseInt(m[1], 10);
+    fin = m[2] === "" ? T - 1 : parseInt(m[2], 10);
+    if (!Number.isFinite(ini) || ini < 0 || ini >= T) return { malo: true };
+    if (!Number.isFinite(fin) || fin >= T) fin = T - 1;   /* pedir de mas se recorta */
+    if (fin < ini) fin = ini;
+  }
+  return { ini, fin };
+}
+
 function parseAudios(valor){
   const v = String(valor == null ? "" : valor).trim();
   if (!v) return [];
@@ -10597,8 +10621,18 @@ export default {
           await env.DB.prepare(
             "INSERT INTO config (tenant_id, clave, valor) VALUES (?1,'alum_extra',?2) ON CONFLICT(tenant_id, clave) DO UPDATE SET valor = ?2"
           ).bind(tAE.id, String(packsAE * 50)).run();
-          const capBase = ALUM_CAP[tAE.plan || "profe"] || 1000000;
-          return json({ ok: true, academia: tAE.academia, packs: packsAE, alumnos_extra: packsAE * 50, tope_total: capBase >= 1000000 ? "ilimitado" : capBase + packsAE * 50, precio_mensual: "S/" + (39 * packsAE) + " (cobro manual por WhatsApp)" });
+          /* 🔴 4-set-2026 · EL TOTAL QUE MIENTE. Esto devolvia el tope leyendo `ALUM_CAP[plan]`,
+             y con el modelo de packs el plan es 'base': `ALUM_CAP['base']` es undefined, caia al
+             `|| 1000000` y contestaba **"ilimitado"** para una academia que en realidad topa en
+             20 + packs + este extra. Y `precio_mensual` daba S/39 por unidad aunque el tenant
+             pague packs de otra familia. Ahora el numero sale del MISMO sitio que topa de verdad
+             (`capAlumnosDe`) y el precio, del desglose real de packs comprados. */
+          const capReal = await capAlumnosDe(env, tAE.id, tAE.plan);
+          const limAE = await packsDe(env, tAE.id);
+          return json({ ok: true, academia: tAE.academia, packs: packsAE, alumnos_extra: packsAE * 50,
+                        tope_total: capReal >= 1000000 ? "ilimitado" : capReal,
+                        packs_cobrados: limAE.items || [],
+                        precio_mensual: "S/" + limAE.monto + " al mes por sus packs (este extra de " + (packsAE * 50) + " alumnos es cortesia, no se cobra)" });
         }
 
         /* -------- Cohortes y metricas para compradores (15-jul-2026): la historia que un
@@ -12273,19 +12307,60 @@ export default {
         }
         if (!permitido) return json({ error: "No autorizado" }, 401);
 
-        const obj = await env.RECURSOS_R2.get(key);
-        if (!obj) return json({ error: "Archivo no encontrado" }, 404);
-        const ct = (obj.httpMetadata && obj.httpMetadata.contentType) || MIME_ARCHIVO[m[1]] || "application/octet-stream";
-        return new Response(obj.body, {
-          headers: {
-            "content-type": ct,
-            "content-disposition": (obj.httpMetadata && obj.httpMetadata.contentDisposition) || "inline",
-            /* "private": con URL firmada, un cache compartido no debe guardar una copia
-               que luego sirva a otro. El logo publico si puede cachearse. */
-            "cache-control": clase === "publico" ? "public, max-age=3600" : "private, max-age=300",
-            "x-content-type-options": "nosniff"
+        /* ═══ RANGE, o el audio no suena en el celular (5-set-2026) ═══════════════════
+           Lo reportaron alumnas de MVT: "no se escuchan los audios de las tareas". Los
+           archivos estaban, las rutas firmaban bien y el endpoint devolvia 200 con el mp3
+           entero. El problema es que devolvia SIEMPRE el archivo entero: ignoraba la
+           cabecera `Range` y no anunciaba `accept-ranges`.
+
+           Un <audio> no descarga y reproduce: pide un pedacito, mira la cabecera del mp3 y
+           va pidiendo el resto. Safari en iPhone es el mas estricto — manda `Range` y si no
+           recibe un 206 sencillamente no reproduce — pero el dano es para todos: sin rangos
+           NADIE puede adelantar ni retroceder el audio, y cada play se baja los 6 MB
+           completos otra vez.
+
+           Medido antes de tocar nada: `Range: bytes=0-1023` devolvia `200` con
+           content-length 6277141 y sin `accept-ranges`. R2 ya sabe entregar rangos; solo
+           habia que pedirselo y contestar 206. */
+        const cabRango = String(request.headers.get("range") || "").trim();
+        let obj = null, estado = 200, contentRange = "", largo = 0;
+
+        if (cabRango){
+          const cab = await env.RECURSOS_R2.head(key);
+          if (!cab) return json({ error: "Archivo no encontrado" }, 404);
+          const tam = Number(cab.size) || 0;
+          const rg = rangoPedido(cabRango, tam);
+          if (rg && rg.malo){
+            return new Response(null, { status: 416, headers: { "content-range": "bytes */" + tam, "accept-ranges": "bytes" } });
           }
-        });
+          if (rg){
+            largo = rg.fin - rg.ini + 1;
+            obj = await env.RECURSOS_R2.get(key, { range: { offset: rg.ini, length: largo } });
+            if (!obj) return json({ error: "Archivo no encontrado" }, 404);
+            estado = 206;
+            contentRange = "bytes " + rg.ini + "-" + rg.fin + "/" + tam;
+          }
+        }
+        if (!obj){
+          obj = await env.RECURSOS_R2.get(key);
+          if (!obj) return json({ error: "Archivo no encontrado" }, 404);
+          largo = Number(obj.size) || 0;
+        }
+
+        const ct = (obj.httpMetadata && obj.httpMetadata.contentType) || MIME_ARCHIVO[m[1]] || "application/octet-stream";
+        const cabeceras = {
+          "content-type": ct,
+          "content-disposition": (obj.httpMetadata && obj.httpMetadata.contentDisposition) || "inline",
+          /* "private": con URL firmada, un cache compartido no debe guardar una copia
+             que luego sirva a otro. El logo publico si puede cachearse. */
+          "cache-control": clase === "publico" ? "public, max-age=3600" : "private, max-age=300",
+          "x-content-type-options": "nosniff",
+          /* se anuncia SIEMPRE: es como el reproductor sabe que puede pedir pedazos */
+          "accept-ranges": "bytes"
+        };
+        if (largo > 0) cabeceras["content-length"] = String(largo);
+        if (contentRange) cabeceras["content-range"] = contentRange;
+        return new Response(obj.body, { status: estado, headers: cabeceras });
       }
 
       /* ============================================================
@@ -14368,6 +14443,10 @@ export default {
         if (regR.maxDias > 0 && faltanH / 24 > regR.maxDias){
           return json({ error: "Para " + (categoriaDe(tipoSlot) || "esta clase") + " puedes reservar hasta " + regR.maxDias + " día" + (regR.maxDias === 1 ? "" : "s") + " antes. Vuelve más cerca de la fecha." }, 400);
         }
+        /* cuántas semanas seguidas puede apartar: lo que le quede de saldo, que se calcula
+           distinto según tenga pases o un paquete simple. Se declara ACÁ, fuera de las dos
+           ramas, porque el horario fijo lo necesita después de que ambas terminan. */
+        let restantesFija = 0;
         if (pasesRes){
           /* ---- VARIOS PASES ACTIVOS (11-ago-2026) ----
              Cada pase vence y se agota SOLO, y solo cubre SUS tipos: 12 de Barré + 4 de
@@ -14386,6 +14465,10 @@ export default {
             const sp = detR.vivos[0];
             return json({ error: 'Se te acabaron las clases de tu pase "' + sp.n + '". Renuévalo para reservar más de ' + (categoriaDe(tipoSlot) || "esta clase") + "." }, 409);
           }
+          /* con varios pases, lo que puede reservar de ESTE tipo es la suma de los que lo
+             cubren y siguen vivos; el ilimitado no topa por saldo, topa por semanas */
+          restantesFija = detR.conSaldo.reduce(
+            (acc, e) => acc + (e.ilim ? SERIE_SEMANAS : Math.max(0, Number(e.restantes) || 0)), 0);
         } else {
           /* Mensualidad ilimitada: no descuenta clases, pero vence por fecha. Sin este freno,
              un alumno con la mensualidad vencida reservaría para siempre (fuga de ingresos). */
@@ -14414,6 +14497,7 @@ export default {
             if (apart > 0) return json({ error: "Ya tienes " + apart + " clase" + (apart === 1 ? "" : "s") + " reservada" + (apart === 1 ? "" : "s") + " y con eso usas todo tu paquete. Toma una o cancélala para poder reservar otra." }, 409);
             return json({ error: "No te quedan clases en tu paquete. Renueva para reservar mas." }, 409);
           }
+          restantesFija = cR.ilim ? SERIE_SEMANAS : Math.max(0, Number(cR.restantes) || 0);
         }
 
         const nowIso = new Date().toISOString();
@@ -14456,7 +14540,14 @@ export default {
           return json({ ok: true, reservadas: 1, tipo: "suelta" });
         }
 
-        const objetivo = Math.min(SERIE_SEMANAS, restantes);
+        /* 🔴 5-set-2026 · acá decía `restantes` a secas, una variable que NO EXISTE en este
+           endpoint. Vino del worker viejo de MVT, donde la línea era `comp.restantes`; al
+           portar Batuta se perdió el `comp.` y nadie lo notó porque un módulo ES corre en
+           modo estricto: leer una variable no declarada LANZA, el catch de arriba lo
+           convierte en 500 "Error del servidor" y el alumno solo ve que no puede.
+           O sea que "reservar todas las semanas con el mismo horario" NUNCA funcionó en
+           Batuta, desde el primer commit. Lo reportaron alumnas de MVT el 5-set. */
+        const objetivo = Math.min(SERIE_SEMANAS, restantesFija);
         const serie = crypto.randomUUID();
         let creadas = 0;
         const saltadas = [];
