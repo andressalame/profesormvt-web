@@ -7,6 +7,8 @@
 <meta name="robots" content="noindex, nofollow" />
 <title>Batuta · Panel</title>
 <link rel="manifest" href="/app/manifest-panel.json">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="/favicon.ico" sizes="any">
 <link rel="apple-touch-icon" href="/icons/batuta-180.png">
 <meta name="theme-color" content="#12100e">
 <meta name="mobile-web-app-capable" content="yes">
@@ -3193,6 +3195,18 @@ function venceVencidoPanel(v){
    multi-pase: sin eso, el camino clásico queda intacto). Vive acá porque lo usan DOS celdas:
    la del plan (pinta uno por línea) y la de "Le quedan" — que antes mostraba el saldo de UNO
    solo mientras al costado se veían tres pases, y eso se lee como un error del sistema. */
+/* "2 pases vigentes" / "sin pases vigentes": el numero manda el plural (4-set-2026) */
+function frasePases(n,adj){
+  if(!n) return "sin pases "+adj+"s";
+  return n+" pase"+(n===1?"":"s")+" "+adj+(n===1?"":"s");
+}
+/* cuantos pases VIGENTES tiene (4-set-2026): el conteo que se muestra al lado del saldo
+   nunca puede incluir los vencidos, porque el saldo tampoco los incluye. */
+function pasesVivosN(pr){
+  if(!pr) return 0;
+  if(pr.vivos!=null) return pr.vivos;
+  return (pr.lista||[]).filter(function(x){ return !x.vencido; }).length;
+}
 function pasesResumen(a){
   /* 12-ago-2026: si el servidor mandó el desglose ya repartido, ese manda. El de abajo leía
      `usadas` GUARDADO en cada pase, que no incluye ni las clases dictadas del ciclo ni las
@@ -3208,9 +3222,17 @@ function pasesResumen(a){
                rest:p.ilim?0:Math.max(0,Number(p.restantes)||0), vence:p.vence||"",
                vencido:!!p.vencido, noExiste:!!p.noExiste };
     });
-    return { lista:lst, ilim:lst.some(function(x){return x.ilim;}),
-      comp:lst.reduce(function(s,x){return s+(x.ilim?0:x.comp);},0),
-      rest:lst.reduce(function(s,x){return s+(x.ilim?0:x.rest);},0) };
+    /* 🔴 4-set-2026 · EL TOTAL CONTRA SU PROPIO DESGLOSE. `comp` sumaba TAMBIEN los pases
+       vencidos, mientras `rest` (que ya llega en 0 desde el server) los deja fuera: Andrea
+       Trujillo salia "6 / 68 sumando sus 2 pases" con la celda de al lado diciendo que uno de
+       esos dos vencio el 16 de agosto. Y su portal, que desde el 11-ago solo cuenta los
+       vigentes, le decia "6 clases en 1 pase". 4 alumnas de Elevate. El denominador y el
+       conteo van SOLO sobre lo vigente, igual que el portal; la lista completa (con los
+       vencidos en gris) sigue saliendo en la columna del plan. */
+    var vivosL=lst.filter(function(x){return !x.vencido;});
+    return { lista:lst, vivos:vivosL.length, ilim:lst.some(function(x){return x.ilim;}),
+      comp:vivosL.reduce(function(s,x){return s+(x.ilim?0:x.comp);},0),
+      rest:vivosL.reduce(function(s,x){return s+(x.ilim?0:x.rest);},0) };
   }
   try{
     var pj=JSON.parse((a&&a.pases)||"");
@@ -3227,9 +3249,11 @@ function pasesResumen(a){
        clases ya dictadas del ciclo ni las apartadas. Medido contra el motor con los 16 de
        Elevate, 13 saldrian inflados (Kiran 12 en vez de 5, Camila 24 en vez de 17). Solo
        corre si el calculo del servidor revento, y hasta hoy lo hacia en silencio. */
-    return { lista:lista, aprox:true, ilim:lista.some(function(x){ return x.ilim; }),
-      comp:lista.reduce(function(s,x){ return s+(x.ilim?0:x.comp); },0),
-      rest:lista.reduce(function(s,x){ return s+(x.ilim?0:x.rest); },0) };
+    /* mismo criterio que arriba: el respaldo tambien cuenta solo lo vigente */
+    var vivosF=lista.filter(function(x){ return !x.vencido; });
+    return { lista:lista, aprox:true, vivos:vivosF.length, ilim:lista.some(function(x){ return x.ilim; }),
+      comp:vivosF.reduce(function(s,x){ return s+(x.ilim?0:x.comp); },0),
+      rest:vivosF.reduce(function(s,x){ return s+(x.ilim?0:x.rest); },0) };
   }catch(e){ return null; }
 }
 /* Clases ya reservadas que todavía no se dictan. Solo tiene sentido mostrarlas cuando la
@@ -3612,9 +3636,9 @@ function renderAlumnos(){
             /* el numero de respaldo puede estar inflado: se dice, no se disimula */
             (pr.aprox?'<br><span class="mini" style="color:#b8860b;font-weight:600" title="No pude confirmar este saldo con el servidor, así que sale de lo último guardado en la ficha: no descuenta las clases ya dictadas ni las apartadas, y puede estar de más. Recarga la página.">sin confirmar</span>':'');
           return (pr.ilim
-            ? '<span class="mini" style="font-weight:600;">Mensualidad + pases</span><br><span class="mini">'+pr.lista.length+' pases activos</span>'
+            ? '<span class="mini" style="font-weight:600;">Mensualidad + pases</span><br><span class="mini">'+frasePases(pasesVivosN(pr),"activo")+'</span>'
             : '<span class="big">'+pr.rest+'</span> <span class="mini">/ '+pr.comp+'</span>'+
-              '<br><span class="mini">sumando sus '+pr.lista.length+' pases</span>')+extra;
+              '<br><span class="mini">'+(pasesVivosN(pr)===1?"de su \u00fanico pase vigente":("sumando sus "+frasePases(pasesVivosN(pr),"vigente")))+'</span>')+extra;
         }
         if(!a.paquete) return '<span class="mini">—</span>';
         return c.ilim
