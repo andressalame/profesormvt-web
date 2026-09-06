@@ -53,5 +53,11 @@ Allow: /
 User-agent: CCBot
 Allow: /
 
-# Sitemap
+# Sitemap. Se declaran los DOS nombres a propósito: `sitemap.xml` es el que prueban a
+# ciegas Google, Bing y los auditores, y `sitemap-index.xml` es el que genera Astro. Son
+# el mismo índice, con las mismas URLs absolutas adentro.
+Sitemap: https://profesormvt.com/sitemap.xml
 Sitemap: https://profesormvt.com/sitemap-index.xml
+
+# Resumen del negocio para motores de respuesta con IA (formato llms.txt):
+# https://profesormvt.com/llms.txt  ·  version larga: /llms-full.txt

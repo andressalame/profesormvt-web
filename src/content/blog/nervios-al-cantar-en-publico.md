@@ -1,5 +1,6 @@
 ---
 title: 'Por qué te pones nervioso al cantar frente a otros (y cómo entrenarlo)'
+seoTitle: 'Nervios al cantar en público: cómo se entrenan'
 excerpt: 'Se te seca la boca, te tiembla la voz y olvidas lo que ibas a cantar apenas alguien te escucha. No es falta de talento, es una respuesta entrenable. Te explico qué pasa y cómo trabajarlo.'
 category: 'voz'
 date: 2026-06-15

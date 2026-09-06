@@ -1,5 +1,6 @@
 ---
 title: 'Clases de composición musical en Lima: qué esperar y cómo elegir bien'
+seoTitle: 'Clases de composición musical en Lima: cómo elegir'
 excerpt: 'Si quieres terminar las canciones que tienes a medias, esto es lo que de verdad se trabaja en una clase de composición para adultos, y cómo saber si el profesor te sirve antes de pagar el primer mes.'
 category: 'composicion'
 date: 2026-08-24

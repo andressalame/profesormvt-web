@@ -3,6 +3,7 @@ import '../styles/global.css';
 import Nav from '../components/Nav.astro';
 import Footer from '../components/Footer.astro';
 import ChatbotFloat from '../components/ChatbotFloat.astro';
+import { NEGOCIO_ID, PERSONA_ID, openingHours, CLASE_SUELTA } from '../lib/seo';
 
 export interface Props {
   title: string;
@@ -38,8 +39,8 @@ const socialImage = new URL(image, Astro.site).href;
 
 // Schema de negocio local: ayuda a Google a entender que es un servicio de Lima (refuerza el pack local).
 const localBusinessSchema = {
-  "@context":"https://schema.org","@type":["LocalBusiness","MusicSchool"],
-  "@id":"https://profesormvt.com/#business",
+  "@type":["LocalBusiness","MusicSchool"],
+  "@id":NEGOCIO_ID,
   "name":"ProfesorMVT",
   "alternateName":"Andrés Salamé-Córdova · Clases de canto y composición",
   "legalName":"SALAME-CORDOVA REINA ANDRES",
@@ -50,21 +51,64 @@ const localBusinessSchema = {
   "image":"https://profesormvt.com/og-image.jpg",
   "priceRange":"S/90 - S/780",
   "areaServed":[{"@type":"City","name":"Lima"},{"@type":"AdministrativeArea","name":"Lima Metropolitana"}],
-  // Sede presencial: MIRAFLORES. A propósito va SOLO el distrito, sin calle:
-  // la dirección actual (Calle Toribio Polo 322) es temporal, Andrés se muda a fin
-  // de agosto de 2026. Una calle equivocada en el schema rompe la coherencia NAP
-  // con Google Business y penaliza; el distrito es lo que de verdad da SEO local.
-  "address":{"@type":"PostalAddress","addressLocality":"Miraflores","addressRegion":"Lima","addressCountry":"PE"},
+  // Sede presencial: MIRAFLORES, Av. El Ejército. Va la AVENIDA, nunca el número:
+  // el departamento exacto no se publica (se da recién después del pago). Una calle
+  // equivocada en el schema rompe la coherencia NAP con Google Business y penaliza;
+  // la avenida + el distrito es lo que de verdad da SEO local.
+  "address":{"@type":"PostalAddress","streetAddress":"Av. El Ejército","addressLocality":"Miraflores","addressRegion":"Lima","addressCountry":"PE"},
   // ⚠️ Coordenada APROXIMADA del centro de Miraflores, NO de la puerta. Poner el pin
   // exacto del perfil de Google Business solo cuando la mudanza esté cerrada.
   "geo":{"@type":"GeoCoordinates","latitude":-12.1200,"longitude":-77.0300},
+  // Horario REAL, sacado de la disponibilidad publicada del portal (no inventado):
+  // lunes a viernes 9-12 y 14-21, sábados 9-12 y 14-16 (hora de Lima).
+  "openingHoursSpecification": openingHours(),
+  "currenciesAccepted":"PEN",
+  "paymentAccepted":"Yape, Plin, transferencia bancaria, tarjeta",
+  "founder":{"@id":PERSONA_ID},
+  "employee":{"@id":PERSONA_ID},
   "knowsAbout":["Clases de canto","Técnica vocal MVT","Composición musical","Teoría musical"],
+  "hasOfferCatalog":{
+    "@type":"OfferCatalog",
+    "name":"Clases 1 a 1 de canto y composición",
+    "itemListElement":[
+      {"@type":"Offer","name":"Plan Esencial · 4 clases al mes","price":"320","priceCurrency":"PEN","url":"https://profesormvt.com/prueba/"},
+      {"@type":"Offer","name":"Plan Intensivo · 8 clases al mes","price":"580","priceCurrency":"PEN","url":"https://profesormvt.com/prueba/"},
+      {"@type":"Offer","name":"Plan Estrella · 12 clases al mes","price":"780","priceCurrency":"PEN","url":"https://profesormvt.com/prueba/"},
+      {"@type":"Offer","name":"Clase suelta","price":String(CLASE_SUELTA),"priceCurrency":"PEN","url":"https://profesormvt.com/prueba/"}
+    ]
+  },
   "sameAs":[
     "https://www.instagram.com/asalamecordova/",
     "https://www.facebook.com/profile.php?id=61588980507102",
     "https://www.tiktok.com/@profesormvt.com"
   ]
 };
+
+// Quién enseña. OJO: NADA de `alumniOf` — en schema.org significa haber salido titulado
+// y la credencial exacta de Andrés es "estudios en", no "egresado". Se dice en el texto
+// de `description`, que es literal y verificable.
+const personaSchema = {
+  "@type":"Person",
+  "@id":PERSONA_ID,
+  "name":"Andrés Salamé-Córdova",
+  "alternateName":"Profesor MVT",
+  "jobTitle":"Profesor de canto y composición",
+  "description":"Compositor y multiinstrumentista peruano, ex-frontman de la banda Tramboyos. Con estudios en Música en la UPC y en Psicología en la Universidad de Lima. Enseña él mismo todas las clases de ProfesorMVT.",
+  "url":"https://profesormvt.com/",
+  "image":"https://profesormvt.com/andres-avatar.jpg",
+  "nationality":{"@type":"Country","name":"PE"},
+  "worksFor":{"@id":NEGOCIO_ID},
+  "knowsLanguage":["es","en"],
+  "knowsAbout":["Técnica vocal","Método MVT","Composición de canciones","Teoría musical","Hook Theory"],
+  "sameAs":[
+    "https://www.instagram.com/asalamecordova/",
+    "https://www.tiktok.com/@profesormvt.com"
+  ]
+};
+
+// Un solo bloque con los dos nodos: así el @id del negocio y el de la persona se
+// resuelven entre ellos sin que Google tenga que cruzar dos scripts sueltos.
+const baseSchema = { "@context":"https://schema.org", "@graph":[localBusinessSchema, personaSchema] };
 ---
 
 <!DOCTYPE html>
@@ -120,7 +164,8 @@ const localBusinessSchema = {
   <link rel="preload" href="/fonts/Switzer-400.woff2" as="font" type="font/woff2" crossorigin />
   <meta name="theme-color" content="#F8F2E8" media="(prefers-color-scheme: light)" />
   <meta name="theme-color" content="#17211E" media="(prefers-color-scheme: dark)" />
-  <script type="application/ld+json" set:html={JSON.stringify(localBusinessSchema)} is:inline></script>
+  <link rel="alternate" type="text/plain" href="https://profesormvt.com/llms.txt" title="llms.txt" />
+  <script type="application/ld+json" set:html={JSON.stringify(baseSchema)} is:inline></script>
   {extraSchema && <script type="application/ld+json" set:html={JSON.stringify(extraSchema)} is:inline></script>}
 </head>
 <body>

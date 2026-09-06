@@ -1,5 +1,6 @@
 ---
 title: 'Clases de canto y composición para adultos en Lima: cómo elegir bien a tu profesor'
+seoTitle: 'Clases de canto y composición para adultos en Lima'
 excerpt: 'Si estás buscando clases de música para adultos en Lima —presenciales en Miraflores u online— esta guía te ayuda a elegir bien y no perder plata ni meses con el profesor equivocado. Qué mirar, qué preguntar y qué evitar.'
 category: 'metodo'
 date: 2026-05-12

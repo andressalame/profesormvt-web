@@ -1,5 +1,6 @@
 ---
 title: 'Cuál es tu rango vocal y por qué no define lo que puedes cantar'
+seoTitle: 'Cuál es tu rango vocal y qué significa de verdad'
 excerpt: 'Casi todo el mundo se etiqueta mal: "soy barítono", "no llego a los agudos". El rango vocal es un dato útil, no una sentencia. Te explico cómo medir el tuyo en diez minutos y qué parte de él sí se puede ampliar con entrenamiento.'
 category: 'voz'
 date: 2026-08-03

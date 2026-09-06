@@ -1,5 +1,6 @@
 ---
 title: '¿Es muy tarde para aprender a cantar de adulto? La verdad sin rodeos'
+seoTitle: '¿Es muy tarde para aprender a cantar de adulto?'
 excerpt: 'La duda que frena a casi todos mis alumnos antes de empezar: "ya estoy grande para esto". Te explico, desde la fisiología y la práctica real, por qué aprender a cantar de adulto no solo es posible, sino que tienes ventajas que un niño no tiene.'
 category: 'voz'
 date: 2026-05-24

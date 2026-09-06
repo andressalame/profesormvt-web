@@ -1,12 +1,52 @@
 ---
 import Layout from '../layouts/Layout.astro';
 import PruebaSocial from '../components/PruebaSocial.astro';
+import { cursoSchema, faqSchema, grafo } from '../lib/seo';
+
+// Fuente ÚNICA de la FAQ: de acá salen las preguntas que se ven Y el FAQPage del
+// JSON-LD. Escribirlas dos veces es cómo el schema termina prometiendo algo que la
+// página no dice, y Google lo trata como marcado engañoso.
+const FAQ = [
+  {
+    "q": "¿Cuánto cuestan las clases de canto en Lima?",
+    "a": "Los planes mensuales son S/320 por 4 clases, S/580 por 8 clases y S/780 por 12 clases, todas de 1 hora y uno a uno. También hay clase suelta a S/90. Si llevas canto y composición juntos, van en sesiones de 2 horas seguidas desde S/580 al mes (8 horas). El diagnóstico va incluido en la primera clase de tu plan, no se cobra aparte.",
+    "html": "Los planes mensuales son S/320 por 4 clases, S/580 por 8 clases y S/780 por 12 clases, todas de 1 hora y uno a uno. También hay clase suelta a S/90. Si llevas canto y composición juntos, van en sesiones de 2 horas seguidas desde S/580 al mes (8 horas). El <a href=\"/prueba/\">diagnóstico</a> va incluido en la primera clase de tu plan, no se cobra aparte."
+  },
+  {
+    "q": "¿Y si de verdad canto muy mal?",
+    "a": "\"Cantar mal\" casi siempre es una voz sin entrenar, no una voz sin arreglo. Justamente por eso empezamos con un diagnóstico: para ver de dónde partes y construir desde ahí. Nadie llega afinado."
+  },
+  {
+    "q": "¿Soy muy mayor para empezar?",
+    "a": "No. La voz es músculo y el músculo responde al entrenamiento a cualquier edad. Estas clases están pensadas precisamente para adultos."
+  },
+  {
+    "q": "¿Las clases son presenciales u online?",
+    "a": "Las dos. Presencial en Miraflores (Lima) u online, con la misma estructura. Tú eliges lo que te quede mejor al reservar tu horario. Si estás fuera de Lima, mira las clases de canto online.",
+    "html": "Las dos. Presencial en Miraflores (Lima) u online, con la misma estructura. Tú eliges lo que te quede mejor al reservar tu horario. Si estás fuera de Lima, mira las <a href=\"/clases-canto-online/\">clases de canto online</a>."
+  },
+  {
+    "q": "¿Necesito saber algo antes de empezar?",
+    "a": "Nada. Solo ganas de cantar y un lugar donde puedas usar la voz sin pena. El resto lo armamos juntos."
+  },
+  {
+    "q": "¿Qué pasa en mi primera clase?",
+    "a": "Es una clase de verdad: escucho tu voz, identifico qué te está frenando y te muestro tu primer ejercicio. Sales sabiendo exactamente qué entrenar."
+  },
+  {
+    "q": "¿Dónde quedan las clases presenciales?",
+    "a": "Presencial en Miraflores, Lima, en la Av. El Ejército; la dirección exacta se coordina al reservar. Y online por videollamada, desde donde estés. Eliges la modalidad clase por clase."
+  }
+];
+
+const schema = grafo(cursoSchema('canto'), faqSchema(FAQ));
 ---
 
 <Layout
-  title="Clases de canto en Lima | Técnica vocal para adultos (Miraflores y online) | ProfesorMVT"
-  description="Clases de canto 1 a 1 en Lima con técnica vocal real (método MVT): deja de forzar y de quebrarte. Para adultos, en Miraflores y online. Planes mensuales desde S/320."
+  title="Clases de canto en Lima para adultos | ProfesorMVT"
+  description="Clases de canto 1 a 1 para adultos en Miraflores, Lima, u online. Técnica vocal real: dejas de forzar y de quebrarte. Planes desde S/320 al mes."
   activeNav="canto"
+  extraSchema={schema}
 >
   <main class="cc">
     <!-- ===== HERO ===== -->
@@ -195,42 +235,18 @@ import PruebaSocial from '../components/PruebaSocial.astro';
       <div class="container-narrow">
         <h2>Preguntas rápidas</h2>
         <div class="faq">
-          <details>
-            <summary>Y si de verdad canto muy mal?</summary>
-            <p>
-              "Cantar mal" casi siempre es una voz sin entrenar, no una voz sin arreglo. Justamente por eso
-              empezamos con un diagnóstico: para ver de dónde partes y construir desde ahí. Nadie llega afinado.
-            </p>
-          </details>
-          <details>
-            <summary>Soy muy mayor para empezar?</summary>
-            <p>
-              No. La voz es músculo y el músculo responde al entrenamiento a cualquier edad. Estas clases
-              están pensadas precisamente para adultos.
-            </p>
-          </details>
-          <details>
-            <summary>Las clases son presenciales u online?</summary>
-            <p>
-              Las dos. Presencial en Miraflores (Lima) u online, con la misma estructura. Tú eliges
-              lo que te quede mejor al reservar tu horario. Si estás fuera de Lima, mira las
-              <a href="/clases-canto-online/">clases de canto online</a>.
-            </p>
-          </details>
-          <details>
-            <summary>Necesito saber algo antes de empezar?</summary>
-            <p>
-              Nada. Solo ganas de cantar y un lugar donde puedas usar la voz sin pena. El resto lo armamos juntos.
-            </p>
-          </details>
-          <details>
-            <summary>Qué pasa en mi primera clase?</summary>
-            <p>
-              Es una clase de verdad: escucho tu voz, identifico qué te está frenando y te muestro tu primer
-              ejercicio. Sales sabiendo exactamente qué entrenar.
-            </p>
-          </details>
+          {FAQ.map((f) => (
+            <details>
+              <summary>{f.q}</summary>
+              <p set:html={f.html ?? f.a} />
+            </details>
+          ))}
         </div>
+        <p class="note" style="margin-top:22px;">
+          ¿Vienes de otro distrito? Mira la página de tu zona:
+          <span set:html={`<a href="/clases-de-canto-en-miraflores/">Miraflores</a> · <a href="/clases-de-canto-en-surco/">Surco</a> · <a href="/clases-de-canto-en-san-borja/">San Borja</a> · <a href="/clases-de-canto-en-la-molina/">La Molina</a> · <a href="/clases-de-canto-en-barranco/">Barranco</a> · <a href="/clases-de-canto-en-jesus-maria/">Jesús María</a>`} />.
+          O revisa <a href="/prueba/">los tres cursos y sus precios</a>.
+        </p>
       </div>
     </section>
 

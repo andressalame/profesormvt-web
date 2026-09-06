@@ -1,5 +1,6 @@
 ---
 title: 'El círculo de quintas explicado simple (y para qué sirve de verdad)'
+seoTitle: 'El círculo de quintas, explicado simple'
 excerpt: 'El círculo de quintas parece un diagrama intimidante de teoría avanzada, pero es en realidad un mapa práctico que te ahorra memorizar y te ayuda a componer y tocar. Te lo explico sin que te dé dolor de cabeza.'
 category: 'teoria'
 date: 2026-03-31

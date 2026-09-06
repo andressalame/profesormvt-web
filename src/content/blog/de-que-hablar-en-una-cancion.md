@@ -1,5 +1,6 @@
 ---
 title: 'De qué hablar en una canción: cómo encontrar tu tema (y escribir letras que conecten)'
+seoTitle: 'De qué hablar en una canción: cómo hallar tu tema'
 excerpt: 'El bloqueo más frecuente al componer no es musical, es de tema: "no sé sobre qué escribir". Te muestro cómo encontrar de qué hablar y por qué lo específico emociona más que lo universal.'
 category: 'composicion'
 date: 2026-04-12

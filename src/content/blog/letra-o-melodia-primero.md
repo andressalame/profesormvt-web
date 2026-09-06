@@ -1,5 +1,6 @@
 ---
 title: '¿Letra o melodía primero? Cómo componen de verdad los que saben'
+seoTitle: '¿Letra o melodía primero? Cómo componen los que saben'
 excerpt: 'Una de las dudas más comunes al componer: ¿escribo primero la letra o la música? No hay una respuesta única, pero sí enfoques que funcionan mejor según el tipo de canción. Te muestro los métodos reales que usan los compositores.'
 category: 'composicion'
 date: 2026-04-15

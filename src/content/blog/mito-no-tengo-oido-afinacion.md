@@ -1,5 +1,6 @@
 ---
 title: 'El mito del "no tengo oído": cómo entrenar la afinación de verdad'
+seoTitle: 'El mito del «no tengo oído»: entrenar la afinación'
 excerpt: '"Es que yo desafino, no tengo oído." Es la excusa más repetida y casi siempre falsa. La afinación se entrena, no se hereda. Te explico por qué desafinas y cómo trabajar el oído paso a paso.'
 category: 'voz'
 date: 2026-04-09

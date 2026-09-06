@@ -1,5 +1,6 @@
 ---
 title: 'Cómo escribir una canción que puedas cantar (y no una que te quede grande)'
+seoTitle: 'Cómo escribir una canción que puedas cantar'
 excerpt: 'Muchas canciones propias mueren en el ensayo porque están escritas en una zona de la voz que no le queda cómoda a quien las canta. Se arregla antes de escribir la letra, no después.'
 category: 'composicion'
 date: 2026-08-17

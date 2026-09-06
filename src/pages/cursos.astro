@@ -6,12 +6,62 @@
   duplicar el temario en el HTML es garantía de que un día digan cosas distintas.
 */
 import Layout from '../layouts/Layout.astro';
+import { NEGOCIO_ID, PERSONA_ID, faqSchema, grafo } from '../lib/seo';
+
+// Los dos cursos GRABADOS son un producto distinto de las clases 1 a 1: pago único de S/297,
+// acceso para siempre, sin horario. Van con su propio Course + Offer para que Google y las IAs
+// no los confundan con los planes mensuales (que son S/320-780 y sí llevan profesor en vivo).
+// `PreOrder`: al 6-set-2026 las lecciones todavía se están publicando y la página lo dice.
+const cursoGrabado = (id: string, name: string, description: string, teaches: string[]) => ({
+  '@type': 'Course',
+  '@id': `https://profesormvt.com/cursos/#${id}`,
+  name,
+  description,
+  url: 'https://profesormvt.com/cursos/',
+  inLanguage: 'es-PE',
+  educationalLevel: 'Desde cero · adultos',
+  teaches,
+  provider: { '@id': NEGOCIO_ID },
+  author: { '@id': PERSONA_ID },
+  offers: {
+    '@type': 'Offer',
+    price: '297',
+    priceCurrency: 'PEN',
+    availability: 'https://schema.org/PreOrder',
+    url: 'https://profesormvt.com/cursos/',
+    category: 'Pago único, acceso permanente',
+  },
+  hasCourseInstance: {
+    '@type': 'CourseInstance',
+    courseMode: 'Online',
+    courseWorkload: 'PT10H',
+    instructor: { '@id': PERSONA_ID },
+  },
+});
+
+const FAQ = [
+  { q: '¿Es para mí si nunca canté (ni escribí) nada?', a: 'Sí. Los dos cursos están hechos justamente para el adulto que empieza de cero o retoma después de años.' },
+  { q: '¿Cuánto dura el acceso?', a: 'Para siempre. Se paga una vez: S/297 por curso.' },
+  { q: '¿Reemplaza las clases 1 a 1?', a: 'No. El curso te da el método y el orden; las clases te dan corrección sobre TU voz, que es lo que un video no puede hacer. Muchos hacen las dos cosas.' },
+  { q: '¿Cómo pago?', a: 'Con tarjeta, Yape, Plin o transferencia, igual que las clases.' },
+];
+
+const schema = grafo(
+  cursoGrabado('canto-desde-cero', 'Canto desde cero (curso grabado)',
+    'Curso grabado de canto para adultos que empiezan de cero: registros, afinación, resistencia de cuerda, vocales y consonantes, salud vocal y escenario, con los vocalizos del método MVT. Pago único de S/297 y acceso permanente.',
+    ['Técnica vocal', 'Afinación', 'Registros vocales', 'Salud vocal']),
+  cursoGrabado('escribe-tus-canciones', 'Escribe tus canciones (curso grabado)',
+    'Curso grabado de composición para adultos: cómo se arma una canción de principio a fin, con armonía, estructura y letra. Pago único de S/297 y acceso permanente.',
+    ['Composición musical', 'Estructura de canciones', 'Armonía', 'Escritura de letras']),
+  faqSchema(FAQ),
+);
 ---
 
 <Layout
   title="Cursos grabados de canto y composición | ProfesorMVT"
-  description="Dos cursos grabados para adultos que empiezan de cero: canto y composición. A tu ritmo, para siempre, S/297 cada uno."
+  description="Dos cursos grabados para adultos que empiezan de cero, canto y composición. A tu ritmo y para siempre, S/297 cada uno. Por Andrés Salamé, en Lima."
   image="/og-image.jpg"
+  extraSchema={schema}
 >
   <main class="cur">
     <section class="cu-hero">
@@ -86,12 +136,12 @@ import Layout from '../layouts/Layout.astro';
       <div class="container-narrow">
         <h2>Lo que siempre preguntan</h2>
         <ul>
-          <li><b>¿Es para mí si nunca canté (ni escribí) nada?</b> Sí. Los dos cursos están hechos justamente para el adulto que empieza de cero o retoma después de años.</li>
-          <li><b>¿Cuánto dura el acceso?</b> Para siempre. Se paga una vez.</li>
-          <li><b>¿Reemplaza las clases 1 a 1?</b> No. El curso te da el método y el orden; las clases te dan corrección sobre TU voz, que es lo que un video no puede hacer. Muchos hacen las dos cosas.</li>
-          <li><b>¿Cómo pago?</b> Con tarjeta, Yape, Plin o transferencia, igual que las clases.</li>
+          {FAQ.map((f) => <li><b>{f.q}</b> {f.a}</li>)}
         </ul>
-        <p class="cu-nota">¿Dudas antes de comprar? Escríbeme por el chat de esta página.</p>
+        <p class="cu-nota">
+          ¿Dudas antes de comprar? Escríbeme por el chat de esta página. Y si prefieres clases
+          en vivo, mira <a href="/prueba/">los tres cursos 1 a 1 y sus precios</a>.
+        </p>
       </div>
     </section>
   </main>

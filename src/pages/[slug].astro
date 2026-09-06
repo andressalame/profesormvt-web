@@ -9,6 +9,7 @@
 // Voz de la casa: positiva y empoderadora, nunca menospreciar al alumno.
 import Layout from '../layouts/Layout.astro';
 import PruebaSocial from '../components/PruebaSocial.astro';
+import { cursoSchema, faqSchema, grafo } from '../lib/seo';
 
 // Sede presencial única. Si vuelve a mudarse, se cambia SOLO acá y en el JSON-LD
 // del Layout/index (y en MARCA.ciudad del worker).
@@ -73,16 +74,43 @@ export function getStaticPaths() {
 
 const { distrito, curso, cursoKey } = Astro.props;
 // En la página de la sede no se repite "(Miraflores y online)" después de "en Miraflores".
-const titleSEO = distrito.esSede
-  ? `Clases de ${curso.nombre} en ${SEDE} | Adultos, 1 a 1 (presencial y online) | ProfesorMVT`
-  : `Clases de ${curso.nombre} en ${distrito.nombre} | Adultos, 1 a 1 (${SEDE} y online) | ProfesorMVT`;
+// El título tenía hasta 95 caracteres y Google corta en ~60: la marca y la mitad del
+// distrito no se veían nunca. Ahora entra completo, con el distrito adelante (que es
+// lo único que distingue a estas 12 páginas entre sí).
+const titleSEO = `Clases de ${curso.nombre} en ${distrito.nombre} | ProfesorMVT`;
 const descSEO = distrito.esSede
-  ? `Clases de ${curso.nombre} 1 a 1 para adultos en ${SEDE}: presenciales u online. Planes mensuales desde S/320.`
-  : `Clases de ${curso.nombre} 1 a 1 para adultos de ${distrito.nombre}: presencial en ${SEDE} u online. Planes mensuales desde S/320.`;
+  ? `Clases de ${curso.nombre} 1 a 1 para adultos en ${SEDE}, Lima, presenciales u online. Planes desde S/320 al mes.`
+  : `Clases de ${curso.nombre} 1 a 1 para adultos de ${distrito.nombre}: presencial en ${SEDE} u online. Desde S/320 al mes.`;
 const activeNav = cursoKey === 'composicion' ? 'composicion' : cursoKey;
+const url = `/prueba/?curso=${cursoKey}&f=landing-${cursoKey}-${distrito.slug}`;
+
+// Las preguntas SE DEFINEN ACÁ, una sola vez, y de acá salen las dos cosas: lo que ve el
+// visitante y el FAQPage del JSON-LD. Si se escriben dos veces, tarde o temprano dicen
+// cosas distintas y Google marca el schema como contenido que no está en la página.
+// `html` es lo que se pinta (puede llevar enlaces); `q`/`a` es el texto plano del schema.
+const FAQ = [
+  {
+    q: `¿Las clases son en ${distrito.nombre}?`,
+    a: distrito.esSede
+      ? `Sí. La sede presencial está en ${SEDE}, en la Av. El Ejército: la clase es en tu propio distrito, sin cruzar la ciudad. Y si un día no puedes moverte, la misma clase funciona online.`
+      : `La sede presencial está en ${SEDE}, en la Av. El Ejército. Desde ${distrito.nombre}, ${distrito.nota}. Y la clase online funciona igual de bien: mismo profesor, mismo método, sin traslado.`,
+  },
+  {
+    q: `Nunca he tomado clases de ${curso.nombre}. ¿Puedo empezar de cero?`,
+    a: 'Sí, y es lo más común. La primera clase incluye un diagnóstico: escucho dónde estás hoy y armo el plan desde ahí. Empezar de adulto no es una desventaja: entiendes lo que practicas.',
+  },
+  {
+    q: '¿Cuánto cuesta y cómo empiezo?',
+    a: 'Los planes mensuales son S/320 por 4 clases, S/580 por 8 y S/780 por 12, e incluyen tu diagnóstico desde la primera clase. También hay clase suelta a S/90. Se empieza creando la cuenta en el portal: eliges tu plan, pagas por Yape o transferencia y reservas tú mismo tus horarios.',
+    html: 'Los planes mensuales son S/320 por 4 clases, S/580 por 8 y S/780 por 12, e incluyen tu diagnóstico desde la primera clase. También hay clase suelta a S/90. Se empieza creando la cuenta en el portal: eliges tu plan, pagas por Yape o transferencia y reservas tú mismo tus horarios. ' +
+      `<a href="${url}">Elige tu plan aquí</a>.`,
+  },
+];
+
+const schema = grafo(cursoSchema(cursoKey === 'canto' ? 'canto' : 'composicion'), faqSchema(FAQ));
 ---
 
-<Layout title={titleSEO} description={descSEO} activeNav={activeNav}>
+<Layout title={titleSEO} description={descSEO} activeNav={activeNav} extraSchema={schema}>
   <main class="cc">
     <section class="cc-hero">
       <div class="container-narrow">
@@ -129,25 +157,16 @@ const activeNav = cursoKey === 'composicion' ? 'composicion' : cursoKey;
       <div class="container-narrow">
         <h2>Preguntas de alumnos de {distrito.nombre}</h2>
         <div class="faq">
-          <details>
-            <summary>Las clases son en {distrito.nombre}?</summary>
-            <p>
-              {distrito.esSede
-                ? `Sí. La sede presencial está en ${SEDE}: la clase es en tu propio distrito, sin cruzar la ciudad. Y si un día no puedes moverte, la misma clase funciona online.`
-                : `La sede presencial está en ${SEDE}. Desde ${distrito.nombre}, ${distrito.nota}. Y la clase online funciona igual de bien: mismo profesor, mismo método, sin traslado.`}
-            </p>
-          </details>
-          <details>
-            <summary>Nunca he tomado clases de {curso.nombre}. Puedo empezar de cero?</summary>
-            <p>Sí, y es lo más común. La primera clase incluye un diagnóstico: escucho dónde estás hoy y armo el plan desde ahí. Empezar de adulto no es una desventaja: entiendes lo que practicas.</p>
-          </details>
-          <details>
-            <summary>Cuánto cuesta y cómo empiezo?</summary>
-            <p>Los planes arrancan en S/320 al mes e incluyen tu diagnóstico desde la primera clase. <a href={`/prueba/?curso=${cursoKey}&f=landing-${cursoKey}-${distrito.slug}`}>Elige tu plan aquí</a> y elige el horario que te acomode.</p>
-          </details>
+          {FAQ.map((f) => (
+            <details>
+              <summary>{f.q}</summary>
+              <p set:html={f.html ?? f.a} />
+            </details>
+          ))}
         </div>
         <p class="note" style="margin-top:18px;">
-          Quieres el detalle completo del curso? Mira <a href={curso.pagLima}>{curso.pagLimaLabel}</a>.
+          ¿Quieres el detalle completo del curso? Mira <a href={curso.pagLima}>{curso.pagLimaLabel}</a>,
+          o los <a href="/prueba/">tres cursos y sus precios</a>.
         </p>
       </div>
     </section>

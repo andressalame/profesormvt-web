@@ -1,5 +1,6 @@
 ---
 title: 'Independencia de manos al piano: cómo dejar de trabarte tocando con las dos'
+seoTitle: 'Independencia de manos al piano: cómo lograrla'
 excerpt: 'Tu mano derecha va bien, tu izquierda va bien, pero juntas se traban. No es falta de talento ni de oído: es una habilidad concreta que se entrena. Te explico cómo, con el método que uso en clase.'
 category: 'piano'
 date: 2026-06-19

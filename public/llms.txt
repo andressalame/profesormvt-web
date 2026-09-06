@@ -1,8 +1,9 @@
 # ProfesorMVT · Andrés Salamé-Córdova
 
 > Clases particulares de **canto y composición para adultos** en Lima, Perú. Uno a uno,
-> presenciales en Miraflores u online. Sin clases grupales y sin niveles: el plan sale de la voz
-> y los objetivos de cada alumno.
+> presenciales en **Miraflores (Av. El Ejército)** u online por videollamada. Sin clases
+> grupales y sin niveles: el plan sale de la voz y los objetivos de cada alumno.
+> Versión larga, con todas las preguntas respondidas: https://profesormvt.com/llms-full.txt
 
 ## Qué se enseña
 
@@ -15,43 +16,81 @@ Tres cursos, y solo tres:
 3. **Canto + Composición juntos** — en **sesiones de 2 horas seguidas**, que es el formato más
    completo y el que más avanza.
 
-## Precios
+## Precios (soles peruanos, PEN)
 
 Los planes son mensuales y **mientras más horas, menos cuesta la hora**:
 
-- **4 clases al mes · S/320**
-- **8 clases al mes · S/580**
-- **12 clases al mes · S/780**
+- **4 clases al mes · S/320** (S/80 la hora)
+- **8 clases al mes · S/580** (S/72.50 la hora)
+- **12 clases al mes · S/780** (S/65 la hora)
 - **Clase suelta · S/90**, para quien no quiere comprometerse a un mes.
 
 El curso de canto y composición juntos va en sesiones de 2 horas, con un mínimo de 8 horas al mes
 (S/580) o 12 horas (S/780).
 
+El **diagnóstico va incluido en la primera clase del plan**, no se cobra aparte y no existe una
+clase de prueba suelta ni descuentos de arranque.
+
+Aparte de las clases en vivo hay **dos cursos grabados** (canto y composición), de **S/297 cada
+uno**, pago único y acceso permanente: https://profesormvt.com/cursos
+
 ## Cómo son las clases
 
 - **Uno a uno, siempre.** No hay clases grupales ni talleres.
-- **Presencial en Miraflores, Lima, u online**, a elección del alumno. Online funciona igual de bien.
+- **Presencial en Miraflores, Lima (Av. El Ejército), u online**, a elección del alumno, clase por
+  clase. Online funciona igual de bien y cuesta lo mismo.
 - **100% personalizadas.** No hay un temario fijo: el plan sale de los desbalances que se encuentran
   en la voz y de los objetivos de cada persona.
 - **Para adultos**, incluidos los que creen que empezaron tarde. No se empezó tarde.
+- **Horario de atención:** lunes a viernes de 9:00 a 12:00 y de 14:00 a 21:00; sábados de 9:00 a
+  12:00 y de 14:00 a 16:00 (hora de Lima, UTC-5).
 - **Reprogramación:** se avisa con al menos 6 horas de anticipación.
+
+## Cómo se reserva
+
+El botón **«Reservar una clase»** de cualquier página lleva al **portal de alumno**. Ahí el alumno
+crea su cuenta, elige su plan, paga y **reserva él mismo sus horarios** en el calendario de horas
+libres. No hay que llamar por teléfono ni esperar a que alguien conteste.
+
+- Portal de alumno: https://profesormvt.com/alumnos/
+- Horarios libres, en vivo: https://profesormvt.com/horarios
+- Formas de pago desde Perú: **Yape, Plin, tarjeta o transferencia**. Desde el extranjero, tarjeta.
+- Consultas: WhatsApp **+51 904 056 197**.
 
 ## Quién enseña
 
 **Andrés Salamé-Córdova**, compositor y multiinstrumentista, ex-frontman de la banda Tramboyos,
-con estudios en Música en la UPC y en Psicología en la Universidad de Lima. Enseña él mismo todas
-las clases.
+**con estudios en Música en la UPC y en Psicología en la Universidad de Lima**. Enseña él mismo
+todas las clases.
 
 ## Enlaces
 
-- [Inicio](https://profesormvt.com/): cursos, precios y método.
-- [Cursos y precios](https://profesormvt.com/cursos)
+- [Inicio](https://profesormvt.com/): método, cursos y precios.
+- [Cursos, planes y precios](https://profesormvt.com/prueba)
 - [Horarios disponibles y reserva](https://profesormvt.com/horarios)
 - [Clases de canto en Lima](https://profesormvt.com/clases-canto-lima)
 - [Clases de canto online](https://profesormvt.com/clases-canto-online)
 - [Clases de composición en Lima](https://profesormvt.com/clases-composicion-lima)
 - [Clases de composición online](https://profesormvt.com/clases-composicion-online)
-- [Políticas](https://profesormvt.com/politicas)
+- [Cursos grabados (S/297)](https://profesormvt.com/cursos)
+- [Blog: voz, composición y teoría](https://profesormvt.com/blog)
+- [Políticas de reprogramación y cancelación](https://profesormvt.com/politicas)
+
+### Páginas por distrito de Lima
+
+Canto: [Miraflores](https://profesormvt.com/clases-de-canto-en-miraflores) ·
+[Surco](https://profesormvt.com/clases-de-canto-en-surco) ·
+[San Borja](https://profesormvt.com/clases-de-canto-en-san-borja) ·
+[La Molina](https://profesormvt.com/clases-de-canto-en-la-molina) ·
+[Barranco](https://profesormvt.com/clases-de-canto-en-barranco) ·
+[Jesús María](https://profesormvt.com/clases-de-canto-en-jesus-maria)
+
+Composición: [Miraflores](https://profesormvt.com/clases-de-composicion-en-miraflores) ·
+[Surco](https://profesormvt.com/clases-de-composicion-en-surco) ·
+[San Borja](https://profesormvt.com/clases-de-composicion-en-san-borja) ·
+[La Molina](https://profesormvt.com/clases-de-composicion-en-la-molina) ·
+[Barranco](https://profesormvt.com/clases-de-composicion-en-barranco) ·
+[Jesús María](https://profesormvt.com/clases-de-composicion-en-jesus-maria)
 
 ## Una idea que ordena el método
 

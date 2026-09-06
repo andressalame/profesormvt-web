@@ -1,12 +1,47 @@
 ---
 import Layout from '../layouts/Layout.astro';
 import PruebaSocial from '../components/PruebaSocial.astro';
+import { cursoSchema, faqSchema, grafo } from '../lib/seo';
+
+// Fuente ÚNICA de la FAQ: de acá salen las preguntas que se ven Y el FAQPage del
+// JSON-LD. Escribirlas dos veces es cómo el schema termina prometiendo algo que la
+// página no dice, y Google lo trata como marcado engañoso.
+const FAQ = [
+  {
+    "q": "¿Cuánto cuestan las clases de composición online?",
+    "a": "Los planes mensuales son S/320 por 4 clases, S/580 por 8 clases y S/780 por 12 clases, todas de 1 hora y uno a uno. También hay clase suelta a S/90. Si llevas canto y composición juntos, van en sesiones de 2 horas seguidas desde S/580 al mes (8 horas). El diagnóstico va incluido en la primera clase de tu plan, no se cobra aparte.",
+    "html": "Los planes mensuales son S/320 por 4 clases, S/580 por 8 clases y S/780 por 12 clases, todas de 1 hora y uno a uno. También hay clase suelta a S/90. Si llevas canto y composición juntos, van en sesiones de 2 horas seguidas desde S/580 al mes (8 horas). El <a href=\"/prueba/\">diagnóstico</a> va incluido en la primera clase de tu plan, no se cobra aparte."
+  },
+  {
+    "q": "¿Necesito saber teoría o leer partitura?",
+    "a": "No. Empezamos desde donde estés. La teoría que necesites te la doy aplicada, en el momento en que sirve para tu canción."
+  },
+  {
+    "q": "¿Tengo que tocar un instrumento?",
+    "a": "Ayuda, pero no es obligatorio. Si ya tocas algún instrumento, lo aprovechamos. Si no, podemos componer igual y, si quieres, sumar instrumento en paralelo."
+  },
+  {
+    "q": "¿Las clases online funcionan igual que las presenciales?",
+    "a": "Sí. Componer se presta perfecto a la videollamada: compartimos pantalla, trabajamos tu idea en vivo y sales con avances concretos. Solo necesitas internet estable, desde cualquier ciudad o país."
+  },
+  {
+    "q": "¿Voy a salir con una canción terminada?",
+    "a": "Ese es el objetivo. El ritmo depende de ti, pero cada clase avanza una pieza concreta. No coleccionas apuntes, coleccionas canciones."
+  },
+  {
+    "q": "¿Cómo reservo?",
+    "a": "Mira los horarios disponibles, crea tu cuenta y eliges tu plan en un minuto. Sin esperar respuesta por chat."
+  }
+];
+
+const schema = grafo(cursoSchema('composicion'), faqSchema(FAQ));
 ---
 
 <Layout
-  title="Clases de composición musical online 1 a 1 (en español) | ProfesorMVT"
-  description="Clases de composición de canciones online en vivo para adultos. Pasa de oyente a autor: escribe tu primera canción con Hook Theory, estructura y letra, 1 a 1 por videollamada desde donde estés. Planes mensuales desde S/320."
+  title="Clases de composición musical online 1 a 1 | ProfesorMVT"
+  description="Clases de composición de canciones online, 1 a 1 y en español. Armonía, estructura y letra con Hook Theory, por videollamada. Desde S/320 al mes."
   activeNav="composicion"
+  extraSchema={schema}
 >
   <main class="comp">
     <!-- ===== HERO ===== -->
@@ -181,27 +216,18 @@ import PruebaSocial from '../components/PruebaSocial.astro';
       <div class="container-narrow">
         <h2>Preguntas frecuentes</h2>
         <div class="faq">
-          <details>
-            <summary>Necesito saber teoría o leer partitura?</summary>
-            <p>No. Empezamos desde donde estés. La teoría que necesites te la doy aplicada, en el momento en que sirve para tu canción.</p>
-          </details>
-          <details>
-            <summary>Tengo que tocar un instrumento?</summary>
-            <p>Ayuda, pero no es obligatorio. Si ya tocas algún instrumento, lo aprovechamos. Si no, podemos componer igual y, si quieres, sumar instrumento en paralelo.</p>
-          </details>
-          <details>
-            <summary>Las clases online funcionan igual que las presenciales?</summary>
-            <p>Sí. Componer se presta perfecto a la videollamada: compartimos pantalla, trabajamos tu idea en vivo y sales con avances concretos. Solo necesitas internet estable, desde cualquier ciudad o país.</p>
-          </details>
-          <details>
-            <summary>Voy a salir con una canción terminada?</summary>
-            <p>Ese es el objetivo. El ritmo depende de ti, pero cada clase avanza una pieza concreta. No coleccionas apuntes, coleccionas canciones.</p>
-          </details>
-          <details>
-            <summary>Cómo reservo?</summary>
-            <p>Mira los horarios disponibles, crea tu cuenta y eliges tu plan en un minuto. Sin esperar respuesta por chat.</p>
-          </details>
+          {FAQ.map((f) => (
+            <details>
+              <summary>{f.q}</summary>
+              <p set:html={f.html ?? f.a} />
+            </details>
+          ))}
         </div>
+        <p class="note" style="margin-top:22px;">
+          ¿Estás en Lima y prefieres presencial? Mira las
+          <a href="/clases-composicion-lima/">clases de composición en Lima</a>,
+          o revisa <a href="/prueba/">los tres cursos y sus precios</a>.
+        </p>
       </div>
     </section>
 

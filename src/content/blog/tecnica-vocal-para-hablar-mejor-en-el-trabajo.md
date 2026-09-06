@@ -1,5 +1,6 @@
 ---
 title: 'Técnica vocal para hablar mejor en el trabajo: tu voz también se entrena'
+seoTitle: 'Técnica vocal para hablar mejor en el trabajo'
 excerpt: 'Terminas el día afónico, en las reuniones te piden repetir y tu voz suena insegura aunque sepas de lo que hablas. La voz hablada usa el mismo instrumento que la cantada, y se entrena igual. Esto es lo que la técnica vocal puede hacer por tu vida profesional.'
 category: 'voz'
 date: 2026-08-04

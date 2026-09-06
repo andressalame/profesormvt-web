@@ -1,12 +1,52 @@
 ---
 import Layout from '../layouts/Layout.astro';
 import PruebaSocial from '../components/PruebaSocial.astro';
+import { cursoSchema, faqSchema, grafo } from '../lib/seo';
+
+// Fuente ÚNICA de la FAQ: de acá salen las preguntas que se ven Y el FAQPage del
+// JSON-LD. Escribirlas dos veces es cómo el schema termina prometiendo algo que la
+// página no dice, y Google lo trata como marcado engañoso.
+const FAQ = [
+  {
+    "q": "¿Cuánto cuestan las clases de composición en Lima?",
+    "a": "Los planes mensuales son S/320 por 4 clases, S/580 por 8 clases y S/780 por 12 clases, todas de 1 hora y uno a uno. También hay clase suelta a S/90. Si llevas canto y composición juntos, van en sesiones de 2 horas seguidas desde S/580 al mes (8 horas). El diagnóstico va incluido en la primera clase de tu plan, no se cobra aparte.",
+    "html": "Los planes mensuales son S/320 por 4 clases, S/580 por 8 clases y S/780 por 12 clases, todas de 1 hora y uno a uno. También hay clase suelta a S/90. Si llevas canto y composición juntos, van en sesiones de 2 horas seguidas desde S/580 al mes (8 horas). El <a href=\"/prueba/\">diagnóstico</a> va incluido en la primera clase de tu plan, no se cobra aparte."
+  },
+  {
+    "q": "¿Necesito saber teoría o leer partitura?",
+    "a": "No. Empezamos desde donde estés. La teoría que necesites te la doy aplicada, en el momento en que sirve para tu canción."
+  },
+  {
+    "q": "¿Tengo que tocar un instrumento?",
+    "a": "Ayuda, pero no es obligatorio. Si ya tocas algún instrumento, lo aprovechamos. Si no, podemos componer igual y, si quieres, sumar instrumento en paralelo."
+  },
+  {
+    "q": "¿Las clases son presenciales u online?",
+    "a": "Las dos. Presencial en Miraflores (Lima) u online por videollamada, como te quede mejor. La calidad de la clase es la misma. Si estás fuera de Lima, mira las clases de composición online.",
+    "html": "Las dos. Presencial en Miraflores (Lima) u online por videollamada, como te quede mejor. La calidad de la clase es la misma. Si estás fuera de Lima, mira las <a href=\"/clases-composicion-online/\">clases de composición online</a>."
+  },
+  {
+    "q": "¿Voy a salir con una canción terminada?",
+    "a": "Ese es el objetivo. El ritmo depende de ti, pero cada clase avanza una pieza concreta. No coleccionas apuntes, coleccionas canciones."
+  },
+  {
+    "q": "¿Cómo reservo?",
+    "a": "Mira los horarios disponibles, crea tu cuenta y eliges tu plan en un minuto. Sin esperar respuesta por chat."
+  },
+  {
+    "q": "¿Dónde quedan las clases presenciales?",
+    "a": "Presencial en Miraflores, Lima, en la Av. El Ejército; la dirección exacta se coordina al reservar. Y online por videollamada, desde donde estés. Eliges la modalidad clase por clase."
+  }
+];
+
+const schema = grafo(cursoSchema('composicion'), faqSchema(FAQ));
 ---
 
 <Layout
   title="Clases de composición musical en Lima | ProfesorMVT"
-  description="Clases de composición de canciones para adultos en Lima (Miraflores) y online. Pasa de oyente a autor: escribe tu primera canción con Hook Theory, estructura y letra. Planes mensuales desde S/320."
+  description="Clases de composición de canciones para adultos en Miraflores, Lima, u online. Armonía, estructura y letra con Hook Theory. Desde S/320 al mes."
   activeNav="composicion"
+  extraSchema={schema}
 >
   <main class="comp">
     <!-- ===== HERO ===== -->
@@ -181,27 +221,18 @@ import PruebaSocial from '../components/PruebaSocial.astro';
       <div class="container-narrow">
         <h2>Preguntas frecuentes</h2>
         <div class="faq">
-          <details>
-            <summary>Necesito saber teoría o leer partitura?</summary>
-            <p>No. Empezamos desde donde estés. La teoría que necesites te la doy aplicada, en el momento en que sirve para tu canción.</p>
-          </details>
-          <details>
-            <summary>Tengo que tocar un instrumento?</summary>
-            <p>Ayuda, pero no es obligatorio. Si ya tocas algún instrumento, lo aprovechamos. Si no, podemos componer igual y, si quieres, sumar instrumento en paralelo.</p>
-          </details>
-          <details>
-            <summary>Las clases son presenciales u online?</summary>
-            <p>Las dos. Presencial en Miraflores (Lima) u online por videollamada, como te quede mejor. La calidad de la clase es la misma. Si estás fuera de Lima, mira las <a href="/clases-composicion-online/">clases de composición online</a>.</p>
-          </details>
-          <details>
-            <summary>Voy a salir con una canción terminada?</summary>
-            <p>Ese es el objetivo. El ritmo depende de ti, pero cada clase avanza una pieza concreta. No coleccionas apuntes, coleccionas canciones.</p>
-          </details>
-          <details>
-            <summary>Cómo reservo?</summary>
-            <p>Mira los horarios disponibles, crea tu cuenta y eliges tu plan en un minuto. Sin esperar respuesta por chat.</p>
-          </details>
+          {FAQ.map((f) => (
+            <details>
+              <summary>{f.q}</summary>
+              <p set:html={f.html ?? f.a} />
+            </details>
+          ))}
         </div>
+        <p class="note" style="margin-top:22px;">
+          ¿Vienes de otro distrito? Mira la página de tu zona:
+          <span set:html={`<a href="/clases-de-composicion-en-miraflores/">Miraflores</a> · <a href="/clases-de-composicion-en-surco/">Surco</a> · <a href="/clases-de-composicion-en-san-borja/">San Borja</a> · <a href="/clases-de-composicion-en-la-molina/">La Molina</a> · <a href="/clases-de-composicion-en-barranco/">Barranco</a> · <a href="/clases-de-composicion-en-jesus-maria/">Jesús María</a>`} />.
+          O revisa <a href="/prueba/">los tres cursos y sus precios</a>.
+        </p>
       </div>
     </section>
 

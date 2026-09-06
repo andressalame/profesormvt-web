@@ -1,5 +1,6 @@
 ---
 title: 'Cantar y componer tus propias canciones: por qué conviene entrenarlas juntas'
+seoTitle: 'Cantar y componer: por qué se entrenan juntos'
 excerpt: 'Mucha gente estudia canto por un lado y composición por otro, y termina con una voz que no sabe qué cantar o con canciones que no puede interpretar. Entrenar las dos a la vez resuelve las dos cosas más rápido.'
 category: 'voz'
 date: 2026-07-27

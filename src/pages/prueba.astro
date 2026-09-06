@@ -1,5 +1,6 @@
 ---
 import Layout from '../layouts/Layout.astro';
+import { cursoSchema, faqSchema, grafo } from '../lib/seo';
 
 // Embudo phone-first de alto intento: la landing a la que apuntar los anuncios.
 // Vende PLANES MENSUALES de frente. La clase de prueba S/50 se retiró el 25-jul-2026
@@ -33,12 +34,61 @@ const CURSOS = [
     d: 'Los dos métodos en una sola sesión de 2 horas seguidas: entrenas la voz y escribes tus canciones. Sale mejor por hora que llevarlos por separado.',
     precio: 'Desde S/580 al mes (8 horas) · sesiones de 2 horas' },
 ];
+
+// AEO (6-set-2026): esta es la página de precios, y hasta hoy era la ÚNICA landing de venta
+// sin una sola pregunta respondida en texto. Las IAs y el bloque de respuestas de Google citan
+// frases que contestan la pregunta tal cual la escribe la gente, con el número adentro. Las
+// respuestas son cortas y factuales, con los números reales de arriba: si suben los precios,
+// se cambian en PLANES y acá, y el JSON-LD sale de estas mismas frases.
+const FAQ = [
+  {
+    q: '¿Cuánto cuestan las clases de canto en Lima?',
+    a: 'Los planes mensuales de ProfesorMVT son S/320 por 4 clases, S/580 por 8 clases y S/780 por 12 clases, todas de 1 hora y uno a uno. La clase suelta cuesta S/90. Mientras más clases al mes, menos cuesta la hora: de S/80 en el plan de 4 a S/65 en el de 12.',
+  },
+  {
+    q: '¿Cuánto cuesta llevar canto y composición juntos?',
+    a: 'El curso combinado va en sesiones de 2 horas seguidas, con un mínimo de 8 horas al mes: S/580 por 8 horas o S/780 por 12 horas. Sale mejor por hora que llevar los dos cursos por separado.',
+  },
+  {
+    q: '¿Se puede tomar las clases online?',
+    a: 'Sí. Todas las clases se dan presenciales en Miraflores (Lima) o en vivo por videollamada, con el mismo método y el mismo precio. Eliges la modalidad al reservar cada clase, así que puedes alternar.',
+  },
+  {
+    q: '¿Dónde quedan las clases presenciales?',
+    a: 'En Miraflores, Lima, en la Av. El Ejército. La dirección exacta se coordina al reservar. Hay alumnos que vienen de Surco, San Borja, Barranco, Jesús María y La Molina, y también quien lleva todo online.',
+  },
+  {
+    q: '¿Cómo reservo mi primera clase?',
+    a: 'Desde el botón "Reservar una clase", que lleva al portal de alumno: creas tu cuenta, eliges tu plan, pagas con Yape, Plin, transferencia o tarjeta y reservas tú mismo tus horarios en el calendario. No hace falta llamar ni esperar respuesta.',
+    html: 'Desde el botón «Reservar una clase», que lleva al <a href="/alumnos/#comprar">portal de alumno</a>: creas tu cuenta, eliges tu plan, pagas con Yape, Plin, transferencia o tarjeta y reservas tú mismo tus horarios en el <a href="/horarios/">calendario de horarios libres</a>. No hace falta llamar ni esperar respuesta.',
+  },
+  {
+    q: '¿Qué pasa en la primera clase?',
+    a: 'Es una clase completa, no una muestra. Andrés escucha tu voz o revisa tus ideas, identifica qué te está frenando y arma tu plan desde ahí. El diagnóstico va incluido en la primera clase de tu plan, no se cobra aparte.',
+  },
+  {
+    q: '¿Necesito saber música para empezar?',
+    a: 'No. El punto de partida se arma según tu nivel real, desde cero o desde donde lo dejaste. Las clases son para adultos y siempre uno a uno: no hay clases grupales ni exámenes.',
+  },
+  {
+    q: '¿Quién da las clases?',
+    a: 'Andrés Salamé-Córdova, compositor y multiinstrumentista, ex-frontman de la banda Tramboyos, con estudios en Música en la UPC y en Psicología en la Universidad de Lima. Da él mismo todas las clases.',
+  },
+];
+
+const schema = grafo(
+  cursoSchema('canto'),
+  cursoSchema('composicion'),
+  cursoSchema('combo'),
+  faqSchema(FAQ),
+);
 ---
 
 <Layout
-  title="Clases de canto y composición en Lima | Planes desde S/320 | ProfesorMVT"
-  description="Vocal coaching, composición y teoría musical 1 a 1 para adultos, o los dos juntos en sesiones de 2 horas. Planes desde S/320 al mes. Presencial en Miraflores u online. Elige tu plan y reserva tu horario en línea."
+  title="Precios de clases de canto y composición | ProfesorMVT"
+  description="Planes mensuales de S/320 (4 clases), S/580 (8) y S/780 (12), o clase suelta a S/90. Canto y composición 1 a 1 en Miraflores, Lima, u online."
   activeNav="prueba"
+  extraSchema={schema}
 >
   <main class="pr">
     <!-- HERO + FORM -->
@@ -134,6 +184,28 @@ const CURSOS = [
             <p>Pruebas cómo se siente cantar coordinado en vez de forzado, o ver tu idea suelta convertirse en algo con forma. En una clase ya notas la diferencia.</p>
           </article>
         </div>
+      </div>
+    </section>
+
+    <!-- PREGUNTAS (AEO): respuestas directas, con los números reales -->
+    <section class="pr-faq">
+      <div class="pr-wrap">
+        <h2>Preguntas frecuentes</h2>
+        <div class="pr-faq-lista">
+          {FAQ.map((f) => (
+            <details>
+              <summary>{f.q}</summary>
+              <p set:html={f.html ?? f.a} />
+            </details>
+          ))}
+        </div>
+        <p class="pr-suelta">
+          ¿Buscas la página de tu curso? <a href="/clases-canto-lima/">Clases de canto en Lima</a> ·
+          <a href="/clases-composicion-lima/">Clases de composición en Lima</a> ·
+          <a href="/clases-canto-online/">Canto online</a> ·
+          <a href="/clases-composicion-online/">Composición online</a> ·
+          <a href="/horarios/">Horarios libres</a>
+        </p>
       </div>
     </section>
 
@@ -254,6 +326,17 @@ const CURSOS = [
   .pr-num { font-family:var(--display);font-weight:600; font-size:22px; color:var(--orange,var(--acento)); }
   .pr-step h3 { font-family:var(--lectura); font-weight:700; font-size: 18px; color:var(--cream,var(--texto)); margin:8px 0 8px; }
   .pr-step p { font-family:var(--lectura); font-size: 18px; color:var(--texto-2); line-height:1.55; margin:0; }
+
+  /* FAQ: mismos tokens que el resto de la página (fondo-2 + linea, sin radio, 18px mínimo). */
+  .pr-faq { padding:34px 0 10px; }
+  .pr-faq h2 { text-align:center; }
+  .pr-faq-lista { display:grid; gap:12px; margin-top:24px; text-align:left; }
+  .pr-faq-lista details { background:var(--fondo-2); border:1px solid var(--linea); padding:0 20px; }
+  .pr-faq-lista summary { cursor:pointer; list-style:none; font-family:var(--lectura); font-weight:700; font-size:18px; line-height:1.5; color:var(--cream,var(--texto)); padding:16px 0; min-height:44px; box-sizing:border-box; display:flex; align-items:center; }
+  .pr-faq-lista summary::-webkit-details-marker { display:none; }
+  .pr-faq-lista details p { font-family:var(--lectura); font-size:18px; line-height:1.6; color:var(--texto-2); margin:0; padding:0 0 18px; }
+  .pr-faq-lista details p a { color:var(--orange,var(--acento)); }
+  .pr-suelta a { color:var(--orange,var(--acento)); }
 
   .pr-cierre { padding:40px 0 70px; text-align:center; }
   .pr-cierre h2 { font-family:var(--display);font-weight:600; text-transform:uppercase; font-size:clamp(26px,4.5vw,40px); color:var(--cream,var(--texto)); margin:0; }

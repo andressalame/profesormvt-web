@@ -13,9 +13,10 @@
 //  - Nada bajo 18px. Targets de 44px. Un solo botón relleno por vista.
 //  - Cero emojis: todos los íconos son SVG dibujados con stroke.
 import Layout from '../layouts/Layout.astro';
+import { cursoSchema, faqSchema, grafo } from '../lib/seo';
 
-const title = "Profesor MVT · Clases de canto y composición para adultos en Lima";
-const description = "Clases 1 a 1 de canto (método MVT) y composición en Lima (Miraflores) y online. Técnica, cabeza y música, con un plan armado después de escucharte. Desde S/320 al mes.";
+const title = "Clases de canto y composición en Lima | ProfesorMVT";
+const description = "Clases 1 a 1 de canto y composición para adultos, en Miraflores (Lima) u online. El plan se arma después de escucharte. Desde S/320 al mes.";
 
 const PLANES = [
   { nom: 'Esencial',  clases: '4 clases',  horas: '4 h',  precio: 320, hora: '80',    nota: 'Una por semana.' },
@@ -32,13 +33,18 @@ const FAQ = [
   { q: '¿Cómo pago?', a: 'Desde Perú, con Yape, Plin, tarjeta o transferencia. Desde el extranjero, tarjeta o cripto.' },
 ];
 
-const faqSchema = {
-  "@context": "https://schema.org", "@type": "FAQPage",
-  mainEntity: FAQ.map(f => ({ "@type": "Question", name: f.q, acceptedAnswer: { "@type": "Answer", text: f.a } })),
-};
+// La home lleva los 3 cursos con sus precios en PEN además del FAQPage: es la página que
+// más citan las IAs y la que Google usa como entrada de la marca, así que tiene que poder
+// contestar "qué enseña y cuánto cuesta" sin que nadie navegue a otra.
+const homeSchema = grafo(
+  cursoSchema('canto'),
+  cursoSchema('composicion'),
+  cursoSchema('combo'),
+  faqSchema(FAQ),
+);
 ---
 
-<Layout title={title} description={description} activeNav="home" extraSchema={faqSchema}>
+<Layout title={title} description={description} activeNav="home" extraSchema={homeSchema}>
 
 <div class="hoja-w">
 

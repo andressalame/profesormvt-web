@@ -1,5 +1,6 @@
 ---
 title: 'Calentamiento vocal en 5 minutos: la rutina mínima que sí importa'
+seoTitle: 'Calentamiento vocal en 5 minutos: la rutina mínima'
 excerpt: 'No necesitas media hora de ejercicios para cuidar tu voz antes de cantar. Te dejo una rutina de calentamiento vocal de 5 minutos, qué hace cada paso y por qué saltártelo te pasa factura.'
 category: 'voz'
 date: 2026-05-03

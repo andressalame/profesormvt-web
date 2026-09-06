@@ -1,6 +1,7 @@
 ---
-title: 'Piano para adultos: la técnica que te hace tocar tus canciones en un mes'
-excerpt: 'Te dijeron que el piano de adulto es lento, aburrido y "para niños". Es mentira. Con la técnica correcta —fuerza en los dedos, independencia y coordinación a dos manos— tocas tus canciones favoritas en menos de un mes. Te explico cómo.'
+title: 'Piano para adultos: cómo se entrena la técnica que te deja tocar tus canciones'
+seoTitle: 'Piano para adultos: qué técnica se entrena'
+excerpt: 'Te dijeron que el piano de adulto es lento, aburrido y "para niños". No es así. Te explico qué se entrena de verdad —fuerza en los dedos, independencia y coordinación a dos manos— para llegar antes a tus propias canciones.'
 category: 'piano'
 date: 2026-04-28
 readTime: '5 MIN'
@@ -38,4 +39,4 @@ Frecuencia le gana a duración: 15 a 20 minutos diarios rinden muchísimo más q
 
 ## Empieza
 
-La mejor forma de saber qué tan rápido avanzarías *tú* es empezar: en tu primera clase vemos tu punto de partida y armamos el plan. Elige tu plan o crea tu cuenta en [profesormvt.com](https://profesormvt.com), y en un mes estás tocando algo que hoy te parece lejos.
+La mejor forma de saber qué tan rápido avanzarías *tú* es empezar: en tu primera clase vemos tu punto de partida y armamos el plan. Elige tu plan o crea tu cuenta en [profesormvt.com](https://profesormvt.com) y empezamos por ahí.

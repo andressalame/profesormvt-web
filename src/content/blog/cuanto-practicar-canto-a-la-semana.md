@@ -1,5 +1,6 @@
 ---
 title: 'Cuánto deberías practicar canto a la semana (la respuesta honesta)'
+seoTitle: 'Cuánto practicar canto a la semana, en serio'
 excerpt: 'No es una hora diaria ni son diez minutos sueltos. Te explico cuánta práctica de canto necesitas de verdad a la semana, por qué la frecuencia le gana a la duración y cómo repartirla si trabajas todo el día.'
 category: 'voz'
 date: 2026-08-10

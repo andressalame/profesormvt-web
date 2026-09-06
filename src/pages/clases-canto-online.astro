@@ -1,12 +1,51 @@
 ---
 import Layout from '../layouts/Layout.astro';
 import PruebaSocial from '../components/PruebaSocial.astro';
+import { cursoSchema, faqSchema, grafo } from '../lib/seo';
+
+// Fuente ÚNICA de la FAQ: de acá salen las preguntas que se ven Y el FAQPage del
+// JSON-LD. Escribirlas dos veces es cómo el schema termina prometiendo algo que la
+// página no dice, y Google lo trata como marcado engañoso.
+const FAQ = [
+  {
+    "q": "¿Cuánto cuestan las clases de canto online?",
+    "a": "Los planes mensuales son S/320 por 4 clases, S/580 por 8 clases y S/780 por 12 clases, todas de 1 hora y uno a uno. También hay clase suelta a S/90. Si llevas canto y composición juntos, van en sesiones de 2 horas seguidas desde S/580 al mes (8 horas). El diagnóstico va incluido en la primera clase de tu plan, no se cobra aparte.",
+    "html": "Los planes mensuales son S/320 por 4 clases, S/580 por 8 clases y S/780 por 12 clases, todas de 1 hora y uno a uno. También hay clase suelta a S/90. Si llevas canto y composición juntos, van en sesiones de 2 horas seguidas desde S/580 al mes (8 horas). El <a href=\"/prueba/\">diagnóstico</a> va incluido en la primera clase de tu plan, no se cobra aparte."
+  },
+  {
+    "q": "¿Y si de verdad canto muy mal?",
+    "a": "\"Cantar mal\" casi siempre es una voz sin entrenar, no una voz sin arreglo. Justamente por eso empezamos con un diagnóstico: para ver de dónde partes y construir desde ahí. Nadie llega afinado."
+  },
+  {
+    "q": "¿Soy muy mayor para empezar?",
+    "a": "No. La voz es músculo y el músculo responde al entrenamiento a cualquier edad. Estas clases están pensadas precisamente para adultos."
+  },
+  {
+    "q": "¿Las clases online funcionan igual que las presenciales?",
+    "a": "Sí. La estructura 1 a 1 se traslada completa al formato en vivo por videollamada: la misma atención, los mismos ejercicios y el mismo seguimiento. Solo necesitas internet estable, audífonos y un lugar donde puedas usar la voz sin pena."
+  },
+  {
+    "q": "¿Desde qué países puedo tomar las clases?",
+    "a": "Desde donde estés. Al ser en vivo online, da igual si estás en Lima, en otra ciudad del Perú o fuera del país: si hablas español y tienes conexión, entras a tu clase."
+  },
+  {
+    "q": "¿Necesito saber algo antes de empezar?",
+    "a": "Nada. Solo ganas de cantar y un lugar donde puedas usar la voz sin pena. El resto lo armamos juntos."
+  },
+  {
+    "q": "¿Qué pasa en mi primera clase?",
+    "a": "Es una clase de verdad: escucho tu voz, identifico qué te está frenando y te muestro tu primer ejercicio. Sales sabiendo exactamente qué entrenar."
+  }
+];
+
+const schema = grafo(cursoSchema('canto'), faqSchema(FAQ));
 ---
 
 <Layout
-  title="Clases de canto online 1 a 1 para adultos (en español) | ProfesorMVT"
-  description="Clases de canto online en vivo, 1 a 1, con técnica vocal real (método MVT): deja de forzar y de quebrarte. Para adultos, desde donde estés. Planes mensuales desde S/320."
+  title="Clases de canto online 1 a 1 para adultos | ProfesorMVT"
+  description="Clases de canto online en vivo, 1 a 1 y en español, con técnica vocal real. Para adultos, desde donde estés. Planes desde S/320 al mes."
   activeNav="canto"
+  extraSchema={schema}
 >
   <main class="cc">
     <!-- ===== HERO ===== -->
@@ -195,49 +234,18 @@ import PruebaSocial from '../components/PruebaSocial.astro';
       <div class="container-narrow">
         <h2>Preguntas rápidas</h2>
         <div class="faq">
-          <details>
-            <summary>Y si de verdad canto muy mal?</summary>
-            <p>
-              "Cantar mal" casi siempre es una voz sin entrenar, no una voz sin arreglo. Justamente por eso
-              empezamos con un diagnóstico: para ver de dónde partes y construir desde ahí. Nadie llega afinado.
-            </p>
-          </details>
-          <details>
-            <summary>Soy muy mayor para empezar?</summary>
-            <p>
-              No. La voz es músculo y el músculo responde al entrenamiento a cualquier edad. Estas clases
-              están pensadas precisamente para adultos.
-            </p>
-          </details>
-          <details>
-            <summary>Las clases online funcionan igual que las presenciales?</summary>
-            <p>
-              Sí. La estructura 1 a 1 se traslada completa al formato en vivo por videollamada: la misma
-              atención, los mismos ejercicios y el mismo seguimiento. Solo necesitas internet estable,
-              audífonos y un lugar donde puedas usar la voz sin pena.
-            </p>
-          </details>
-          <details>
-            <summary>Desde qué países puedo tomar las clases?</summary>
-            <p>
-              Desde donde estés. Al ser en vivo online, da igual si estás en Lima, en otra ciudad del Perú
-              o fuera del país: si hablas español y tienes conexión, entras a tu clase.
-            </p>
-          </details>
-          <details>
-            <summary>Necesito saber algo antes de empezar?</summary>
-            <p>
-              Nada. Solo ganas de cantar y un lugar donde puedas usar la voz sin pena. El resto lo armamos juntos.
-            </p>
-          </details>
-          <details>
-            <summary>Qué pasa en mi primera clase?</summary>
-            <p>
-              Es una clase de verdad: escucho tu voz, identifico qué te está frenando y te muestro tu primer
-              ejercicio. Sales sabiendo exactamente qué entrenar.
-            </p>
-          </details>
+          {FAQ.map((f) => (
+            <details>
+              <summary>{f.q}</summary>
+              <p set:html={f.html ?? f.a} />
+            </details>
+          ))}
         </div>
+        <p class="note" style="margin-top:22px;">
+          ¿Estás en Lima y prefieres presencial? Mira las
+          <a href="/clases-canto-lima/">clases de canto en Lima</a>,
+          o revisa <a href="/prueba/">los tres cursos y sus precios</a>.
+        </p>
       </div>
     </section>
 

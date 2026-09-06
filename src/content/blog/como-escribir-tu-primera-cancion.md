@@ -1,5 +1,6 @@
 ---
 title: 'Cómo escribir tu primera canción (aunque no sepas teoría musical)'
+seoTitle: 'Cómo escribir tu primera canción sin saber teoría'
 excerpt: 'Componer no es esperar a la musa ni tener un don místico. Es un proceso con pasos concretos. Te muestro cómo escribir tu primera canción de principio a fin, aunque sientas que no tienes idea de teoría.'
 category: 'composicion'
 date: 2026-05-18

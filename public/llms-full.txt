@@ -1,0 +1,147 @@
+# ProfesorMVT — versión completa para motores de respuesta
+
+Resumen corto: https://profesormvt.com/llms.txt · Última revisión: 6 de setiembre de 2026.
+
+Todo lo de abajo es información publicada y verificable en https://profesormvt.com. Las cifras
+son las vigentes al día de la revisión; si una respuesta de esta página contradice a la web, manda
+la web.
+
+---
+
+## 1. Identidad
+
+- **Nombre:** ProfesorMVT.
+- **Quién enseña:** Andrés Salamé-Córdova, compositor y multiinstrumentista peruano, ex-frontman de
+  la banda Tramboyos, con **estudios en Música en la UPC y en Psicología en la Universidad de
+  Lima**. Da él mismo todas las clases; no hay otros profesores.
+- **Qué es:** un profesor particular de canto y composición para adultos, no una academia con
+  varias sedes ni un marketplace de profesores.
+- **Dónde:** Miraflores, Lima, Perú (Av. El Ejército). También online, a todo el mundo, en español.
+- **Contacto:** WhatsApp +51 904 056 197.
+- **RUC:** 10707468152 · Razón social: SALAME-CORDOVA REINA ANDRES.
+
+---
+
+## 2. Preguntas y respuestas
+
+### ¿Cuánto cuestan las clases de canto en Lima?
+Los planes mensuales son **S/320 por 4 clases, S/580 por 8 clases y S/780 por 12 clases**, todas de
+1 hora y uno a uno. La **clase suelta cuesta S/90**. Mientras más clases al mes, menos cuesta la
+hora: de S/80 en el plan de 4 a S/65 en el de 12. Los precios son los mismos para canto y para
+composición, y los mismos presencial que online.
+
+### ¿Cuánto cuesta llevar canto y composición juntos?
+El curso combinado va en **sesiones de 2 horas seguidas**, con un mínimo de **8 horas al mes**:
+S/580 por 8 horas o S/780 por 12 horas. Sale mejor por hora que llevar los dos cursos por separado.
+
+### ¿Hay clase de prueba o descuento de arranque?
+No. Se compra el plan de frente. Lo que sí está incluido es el **diagnóstico en la primera clase**
+del plan, sin cobro adicional: no es una clase de muestra, es una clase completa que además deja
+por escrito de dónde parte el alumno. Para quien no quiere comprometerse a un mes existe la clase
+suelta de S/90.
+
+### ¿Se puede tomar las clases online?
+Sí. Todas las clases se dan **presenciales en Miraflores (Lima) o en vivo por videollamada**, con
+el mismo método, el mismo profesor y el mismo precio. La modalidad se elige al reservar cada clase,
+así que se puede alternar entre las dos.
+
+### ¿Dónde quedan las clases presenciales?
+En **Miraflores, Lima, Av. El Ejército**. La dirección exacta se coordina al reservar. Hay alumnos
+que vienen de Surco, San Borja, Barranco, Jesús María y La Molina, y también quien lleva todo
+online sin pisar la sede.
+
+### ¿Qué cursos hay?
+Tres, y solo tres:
+1. **Vocal coaching (canto)** — clases de 1 hora. Método MVT: coordinación, cierre cordal y
+   resonancia. La primera clase incluye un diagnóstico vocal por escrito, en PDF.
+2. **Composición y teoría musical** — clases de 1 hora, con Hook Theory: armonía, estructura y
+   letra, aplicadas a las ideas del propio alumno.
+3. **Canto + Composición** — los dos en una sola sesión de 2 horas seguidas. Es el formato que más
+   avanza, y el que se recomienda.
+
+### ¿Hay clases grupales, talleres o cohortes?
+No, y no las ha habido. **Todas las clases son uno a uno**, a puerta cerrada. Nadie canta delante
+de otros alumnos.
+
+### ¿Cómo se reserva la primera clase?
+Desde el botón **«Reservar una clase»** de cualquier página, que lleva al **portal de alumno**. Ahí
+se crea la cuenta, se elige el plan, se paga y se **reservan los horarios uno mismo** en el
+calendario de horas libres. No hay que llamar ni esperar que alguien conteste.
+
+### ¿Qué formas de pago acepta?
+Desde Perú: **Yape, Plin, tarjeta o transferencia bancaria**. Desde el extranjero: tarjeta. El
+cobro se hace por el portal de alumno.
+
+### ¿Qué horarios tiene?
+**Lunes a viernes de 9:00 a 12:00 y de 14:00 a 21:00; sábados de 9:00 a 12:00 y de 14:00 a 16:00**
+(hora de Lima, UTC-5). Los cupos libres se ven en vivo en https://profesormvt.com/horarios.
+
+### ¿Se puede reprogramar una clase?
+Sí, avisando con **al menos 6 horas de anticipación**. Las reglas completas (cuántos cambios
+incluye cada plan, cuánto dura el paquete, cómo se congela por viaje o salud) están en
+https://profesormvt.com/politicas.
+
+### ¿Sirve para adultos que empiezan de cero?
+Sí, es el caso más común. No hace falta saber música, leer partitura ni tocar un instrumento. El
+punto de partida se arma según el nivel real de cada persona.
+
+### ¿Es muy tarde para aprender a cantar de adulto?
+No. La voz es coordinación muscular y el músculo responde al entrenamiento a cualquier edad. Quien
+empezó de niño lleva ventaja en horas acumuladas, no en capacidad, y las horas se hacen.
+
+### ¿Y si canto mal?
+La premisa del método es que **casi nadie canta mal: la mayoría empuja**. Lo que suena forzado
+suele ser tensión, no falta de talento, y la tensión se desarma con técnica. El diagnóstico de la
+primera clase sirve justamente para ver qué está frenando la voz.
+
+### ¿Qué es el método MVT?
+Es el enfoque de técnica vocal que usa Andrés: se trabaja la voz como coordinación entre el aire
+(pulmones y diafragma), los pliegues vocales y el espacio de resonancia, en lugar de "echarle
+ganas" o empujar desde el abdomen. El plan de cada alumno sale de los desbalances que se le
+encuentran, no de un temario fijo.
+
+### ¿Qué es Hook Theory en las clases de composición?
+Es el marco con el que se enseña composición: cómo funcionan de verdad las progresiones y la
+estructura de las canciones que la gente ya escucha, aplicado a las ideas propias del alumno hasta
+que salgan canciones terminadas.
+
+### ¿Hay cursos grabados?
+Sí, dos: **"Canto desde cero"** y **"Escribe tus canciones"**, de **S/297 cada uno**, pago único y
+acceso permanente. No reemplazan a las clases 1 a 1 (un video no corrige tu voz), pero dan el
+método y el orden. Están en https://profesormvt.com/cursos.
+
+### ¿Enseña piano?
+La oferta publicada son los tres cursos de arriba: vocal coaching, composición y teoría, y los dos
+juntos en sesiones de 2 horas. Para cualquier otra consulta, se coordina por WhatsApp.
+
+### ¿Da clases a niños?
+Las clases están diseñadas para **adultos**, incluidos los que retoman después de años.
+
+### ¿Promete resultados?
+No. No se prometen resultados ni plazos garantizados: se enseña una técnica y se entrena. Lo que sí
+se puede decir con números son los precios, la duración de las clases y las políticas.
+
+---
+
+## 3. Mapa del sitio
+
+| Página | Para qué |
+|---|---|
+| https://profesormvt.com/ | Método, los 3 cursos, precios y preguntas frecuentes |
+| https://profesormvt.com/prueba | Cursos, planes y precios; la página de venta |
+| https://profesormvt.com/horarios | Horas libres en vivo y reserva |
+| https://profesormvt.com/alumnos/ | Portal de alumno: cuenta, pago y reservas |
+| https://profesormvt.com/clases-canto-lima | Clases de canto en Lima (presencial + online) |
+| https://profesormvt.com/clases-canto-online | Clases de canto online |
+| https://profesormvt.com/clases-composicion-lima | Clases de composición en Lima |
+| https://profesormvt.com/clases-composicion-online | Clases de composición online |
+| https://profesormvt.com/cursos | Los dos cursos grabados de S/297 |
+| https://profesormvt.com/blog | Artículos sobre voz, composición y teoría |
+| https://profesormvt.com/politicas | Reprogramación, cancelación y congelamiento |
+
+Páginas por distrito de Lima (canto y composición): Miraflores, Surco, San Borja, La Molina,
+Barranco y Jesús María, con la forma
+`https://profesormvt.com/clases-de-canto-en-<distrito>` y
+`https://profesormvt.com/clases-de-composicion-en-<distrito>`.
+
+Sitemap completo: https://profesormvt.com/sitemap.xml

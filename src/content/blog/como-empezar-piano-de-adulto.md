@@ -1,5 +1,6 @@
 ---
 title: 'Cómo empezar a tocar piano de adulto desde cero (guía honesta)'
+seoTitle: 'Cómo empezar a tocar piano de adulto desde cero'
 excerpt: 'Sin solfeo eterno, sin "Para Elisa" forzado, sin tres meses de escalas aburridas. Te explico cómo se empieza a tocar piano de adulto de forma que avances rápido y sin abandonar — con el método que uso en clase.'
 category: 'piano'
 date: 2026-05-21

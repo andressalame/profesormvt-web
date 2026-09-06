@@ -1,5 +1,6 @@
 ---
 title: 'Acordes o partitura: ¿qué deberías aprender primero en piano?'
+seoTitle: 'Acordes o partitura: ¿qué aprender primero?'
 excerpt: 'El eterno debate de quien empieza piano de adulto. La respuesta corta: depende de tu objetivo. Te explico qué te conviene según quieras acompañarte cantando, tocar tus canciones favoritas o leer música clásica.'
 category: 'piano'
 date: 2026-04-27

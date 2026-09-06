@@ -36,11 +36,37 @@ const related = allPosts
 
 const postImageURL = new URL(post.data.image || '/og-image.jpg', Astro.site).href;
 const postURL = new URL(`/blog/${post.slug}/`, Astro.site).href;
+
+// SEO de los 36 posts, 6-set-2026. Dos cosas estaban rotas de fábrica y en TODOS:
+//
+//  · La meta description era el `excerpt` entero (176-258 caracteres). Google corta en ~155
+//    y lo que sobra no se muestra: el post se anunciaba con una frase partida a la mitad.
+//    Acá se recorta en el último límite de palabra antes del tope, así que la frase termina
+//    entera. El excerpt COMPLETO se sigue viendo en la página y en el listado del blog: esto
+//    solo toca la etiqueta <meta>, no el texto visible.
+//  · El título llevaba " · Profesor MVT" pegado siempre, 15 caracteres que empujaban casi
+//    todos los posts por encima de los 60. La marca solo se agrega cuando entra.
+//
+// `seoTitle` y `metaDescription` en el frontmatter pisan lo automático cuando un post
+// necesita algo escrito a mano.
+const recortar = (txt: string, tope: number) => {
+  const t = (txt || '').replace(/\s+/g, ' ').trim();
+  if (t.length <= tope) return t;
+  // El "…" también cuenta: si se recorta a `tope` y luego se pega, el resultado sale en
+  // tope+1 y vuelve a pasarse. Se reserva su carácter ANTES de cortar.
+  const corte = t.slice(0, tope);
+  const fin = Math.max(corte.lastIndexOf(' '), 0);
+  return corte.slice(0, fin).replace(/[,;:·\-–—]+$/, '').trim() + '…';
+};
+
+const tituloBase = (post.data as any).seoTitle || post.data.title;
+const tituloSEO = tituloBase.length + 15 <= 60 ? `${tituloBase} · Profesor MVT` : recortar(tituloBase, 60);
+const descSEO = recortar((post.data as any).metaDescription || post.data.excerpt, 155);
 ---
 
 <Layout
-  title={`${post.data.title} · Profesor MVT`}
-  description={post.data.excerpt}
+  title={tituloSEO}
+  description={descSEO}
   type="article"
   image={post.data.image || '/og-image.jpg'}
   publishedTime={post.data.date.toISOString()}

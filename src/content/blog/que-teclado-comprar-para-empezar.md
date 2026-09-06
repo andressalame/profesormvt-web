@@ -1,5 +1,6 @@
 ---
 title: '¿61 u 88 teclas? Qué teclado comprar para empezar a tocar piano'
+seoTitle: '¿61 u 88 teclas? Qué teclado comprar para empezar'
 excerpt: 'Antes de gastar en un teclado, esto es lo que de verdad importa: número de teclas, sensibilidad al toque y un par de detalles que casi nadie te explica. Guía sin tecnicismos para no comprar de más ni de menos.'
 category: 'piano'
 date: 2026-04-30
