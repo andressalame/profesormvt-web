@@ -3772,12 +3772,14 @@ async function enviarWhatsAppEx(env, phoneId, to, text){
   } catch (e) { return { ok: false, error: String(e && e.message) }; }
 }
 /* Plantilla aprobada por Meta (la única forma de escribir fuera de la ventana de 24 h). */
-async function enviarPlantillaWA(env, phoneId, to, nombre, lang, params){
+async function enviarPlantillaWA(env, phoneId, to, nombre, lang, params, botonSufijo){
   if (!env.WHATSAPP_TOKEN || !phoneId || !to || !nombre) return { ok: false, error: "faltan datos" };
   const comps = [];
   if (Array.isArray(params) && params.length){
     comps.push({ type: "body", parameters: params.map(p => ({ type: "text", text: String(p).slice(0, 500) })) });
   }
+  /* botón URL dinámico: la plantilla trae https://dominio/ruta/{{1}} y acá va solo el sufijo */
+  if (botonSufijo) comps.push({ type: "button", sub_type: "url", index: "0", parameters: [{ type: "text", text: String(botonSufijo).slice(0, 500) }] });
   try {
     const r = await fetch("https://graph.facebook.com/v21.0/" + encodeURIComponent(phoneId) + "/messages", {
       method: "POST",
@@ -4247,9 +4249,12 @@ async function waSeguimientoTenant(env, tid, cfg, deps){
       if (mal){ r.saltados.push({ telefono: tel, motivo: "texto rechazado: " + mal }); continue; }
       envio = d.enviarTexto ? await d.enviarTexto(tel, texto) : await enviarWhatsAppEx(env, phoneId, tel, texto);
     } else {
-      const param = waSegFraseCurso(tema);
-      texto = "[plantilla " + plantillas[dec.toque] + "] " + param;
-      envio = d.enviarPlantilla ? await d.enviarPlantilla(tel, plantillas[dec.toque], [param]) : await enviarPlantillaWA(env, phoneId, tel, plantillas[dec.toque], plantillas.lang, [param]);
+      /* mvt_toque_1 lleva {{1}} tema y {{2}} cierre (la pregunta de modalidad solo si no la dijo);
+         mvt_toque_2 solo {{1}}. Los cuerpos viven en Meta, aprobados; acá solo van los huecos. */
+      const params = [waSegFraseCurso(tema)];
+      if (dec.toque === 1) params.push(tema.faltaModalidad ? "Prefieres presencial u online?" : "El horario lo eliges ahí mismo, en la modalidad que me dijiste.");
+      texto = "[plantilla " + plantillas[dec.toque] + "] " + params.join(" | ");
+      envio = d.enviarPlantilla ? await d.enviarPlantilla(tel, plantillas[dec.toque], params) : await enviarPlantillaWA(env, phoneId, tel, plantillas[dec.toque], plantillas.lang, params);
       modo = "plantilla";
     }
     const ok = !!(envio && envio.ok);
@@ -10929,6 +10934,12 @@ export default {
             if (!name || !body) return json({ error: "manda name y body" }, 400);
             const comps = [{ type: "BODY", text: body }];
             if (Array.isArray(b.example) && b.example.length) comps[0].example = { body_text: [b.example.map(String)] };
+            /* botón URL opcional: {text, url: "https://dominio/ruta/{{1}}", example: "sufijo-de-ejemplo"} */
+            if (b.url_button && b.url_button.url){
+              const btn = { type: "URL", text: String(b.url_button.text || "Abrir").slice(0, 25), url: String(b.url_button.url) };
+              if (b.url_button.example) btn.example = [String(b.url_button.example)];
+              comps.push({ type: "BUTTONS", buttons: [btn] });
+            }
             const cuerpo = { name, language: String(b.language || "es"), category: String(b.category || "MARKETING").toUpperCase(), components: comps };
             if (b.allow_category_change !== false) cuerpo.allow_category_change = true;
             const r = await fetch("https://graph.facebook.com/v21.0/" + WABA_ID + "/message_templates", {
@@ -10958,6 +10969,30 @@ export default {
             }
           }
           return json({ ok: true, resultado: res, enviados, hilo });
+        }
+        /* Manda una plantilla aprobada con sus huecos (y sufijo del botón URL si lo tiene). Lo usa
+           mvt-invitar-portal después del corte: POST {phone_id, to, template, lang, params[], button_suffix} */
+        if (path === "/app/api/su/wa-plantilla-enviar" && request.method === "POST"){
+          const b = await request.json().catch(() => ({}));
+          const phoneId = String(b.phone_id || "").replace(/\D/g, "");
+          const to = String(b.to || "").replace(/\D/g, "");
+          if (!phoneId || !to || !b.template) return json({ error: "manda phone_id, to y template" }, 400);
+          const r = await enviarPlantillaWA(env, phoneId, to, String(b.template), String(b.lang || "es"), Array.isArray(b.params) ? b.params : [], b.button_suffix ? String(b.button_suffix) : "");
+          return json(r, r.ok ? 200 : 502);
+        }
+        /* Lectura cruda de la Graph API con el token del worker (solo GET, solo superadmin):
+           ?path=<id>/<edge>&fields=... Para ver WABAs del negocio, números y sus estados sin adivinar. */
+        if (path === "/app/api/su/wa-graph" && request.method === "GET"){
+          if (!env.WHATSAPP_TOKEN) return json({ ok: false, error: "Sin WHATSAPP_TOKEN cargado" }, 501);
+          const gp = String(url.searchParams.get("path") || "").replace(/^\/+/, "");
+          if (!/^[A-Za-z0-9_.\/-]{1,200}$/.test(gp)) return json({ error: "path inválido" }, 400);
+          const qs = new URLSearchParams();
+          for (const k of ["fields", "limit", "after"]){ const v = url.searchParams.get(k); if (v) qs.set(k, v); }
+          try {
+            const r = await fetch("https://graph.facebook.com/v21.0/" + gp + (qs.toString() ? "?" + qs.toString() : ""), { headers: { "Authorization": "Bearer " + env.WHATSAPP_TOKEN } });
+            const d = await r.json().catch(() => ({}));
+            return json({ ok: r.ok, status: r.status, data: d }, r.ok ? 200 : 502);
+          } catch (e) { return json({ ok: false, error: String(e && e.message) }, 502); }
         }
         /* Envio de prueba con respuesta cruda de Meta (para diagnosticar sin adivinar). */
         if (path === "/app/api/su/wa-test" && request.method === "POST"){
