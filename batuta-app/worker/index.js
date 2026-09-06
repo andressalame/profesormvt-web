@@ -7550,12 +7550,13 @@ async function pedirResenas(env){
     for (const f of filas){
       const token = randHex(32);
       const tokenHash = await sha256Hex(token);
+      /* El token se guarda ANTES porque el correo lo lleva dentro. El SELLO (`resena_pedida`)
+         no: ese va después de que el envío conteste que salió. Ver el bloque de abajo. */
       try {
         await env.DB.batch([
           env.DB.prepare("DELETE FROM resenas WHERE alumno_id = ?1 AND tenant_id = ?2 AND usado = 0").bind(f.id, t.id),
           env.DB.prepare("INSERT INTO resenas (token_hash, tenant_id, alumno_id, nota, usado, creada) VALUES (?1,?2,?3,0,0,?4)")
-            .bind(tokenHash, t.id, f.id, new Date().toISOString()),
-          env.DB.prepare("UPDATE alumnos SET resena_pedida = 1 WHERE id = ?1 AND tenant_id = ?2").bind(f.id, t.id)
+            .bind(tokenHash, t.id, f.id, new Date().toISOString())
         ]);
       } catch (e) { continue; }
       const nombre = ((f.nombre || "").trim().split(/\s+/)[0]) || "";
@@ -7569,7 +7570,25 @@ async function pedirResenas(env){
           '<p style="font-size:13px;color:#666;text-align:center">1 = puede mejorar mucho · 5 = excelente</p>' +
           '<p>Un toque y listo. Tu respuesta llega directo y ayuda a que cada clase sume más.</p>' +
         '</div>';
-      if (await enviarCorreo(env, { tenantId: t.id, to: f._email, subject: "¿Cómo van tus clases en " + esc(academia) + "?", html })) enviados++;
+      /* 6-set-2026: el sello iba en el mismo batch que el token, o sea ANTES de enviar. Y
+         `resena_pedida` es de UNA VEZ EN LA VIDA del alumno (el motor filtra por = 0): si
+         Resend fallaba —cuota, rebote, un 500 suyo— el alumno quedaba marcado como "ya se le
+         pidió" y NADIE le iba a pedir su opinión nunca más, sin un solo error a la vista.
+         El orden correcto es el que ya usaba rescatarComprasAbandonadas: enviar, y sellar solo
+         si el envío contestó que sí. Si no salió, se borra el token para no dejar vivo un pase
+         de una petición que nadie recibió. */
+      let okResena = false;
+      try {
+        okResena = await enviarCorreo(env, { tenantId: t.id, to: f._email, subject: "¿Cómo van tus clases en " + esc(academia) + "?", html });
+      } catch (e) { okResena = false; }
+      if (okResena){
+        enviados++;
+        await env.DB.prepare("UPDATE alumnos SET resena_pedida = 1 WHERE id = ?1 AND tenant_id = ?2")
+          .bind(f.id, t.id).run().catch(() => {});
+      } else {
+        await env.DB.prepare("DELETE FROM resenas WHERE token_hash = ?1 AND tenant_id = ?2")
+          .bind(tokenHash, t.id).run().catch(() => {});
+      }
     }
   }
   return enviados;
@@ -12468,6 +12487,19 @@ export default {
         await env.DB.prepare(
           "INSERT INTO cuentas (id,tenant_id,email,nombre,whatsapp,pass_hash,pass_salt,marketing,alumno_id,creada,ref_code,ref_por,credito) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,0)"
         ).bind(id, t.id, email, nombre, whatsapp, hash, salt, marketing, alumnoVinc, hoyLima(), refCode, refPor || "").run();
+        /* 6-set-2026: el "sí" de la casilla del registro se guardaba SOLO en `cuentas.marketing`,
+           que no lo lee nadie. El consentimiento que de verdad cuenta —el que filtra las campañas
+           (`campanaWhere`), el que pinta la casilla de "Mi cuenta" y el que hay que poder probar
+           ante Indecopi con su fecha— vive en la FICHA, en `alumnos.mkt_ok`. Medido en producción
+           ese día: 48 alumnos reales habían dicho que sí al registrarse (34 de Elevate, 14 de
+           MVT) y sus academias veían 0 destinatarios. Dos puertas al mismo hecho y la del
+           registro escribía en un cajón que nadie abre. */
+        if (marketing && alumnoVinc){
+          await ensureAlumnoExtraSchema(env).catch(() => {});
+          await env.DB.prepare(
+            "UPDATE alumnos SET mkt_ok = 1, mkt_fecha = ?1, mkt_origen = 'registro', no_email = 0 WHERE id = ?2 AND tenant_id = ?3"
+          ).bind(hoyLima(), alumnoVinc, t.id).run().catch(() => {});
+        }
         /* La escribio el mismo en el formulario: es SUYA y cambiarla exige la actual. */
         await marcarPassPuesta(env, id);
 
@@ -12789,6 +12821,11 @@ export default {
               "UPDATE alumnos SET mkt_ok = 0, mkt_origen = 'portal' WHERE id = ?1 AND tenant_id = ?2"
             ).bind(cu.alumno_id, cu.tenant_id).run();
           }
+          /* Un solo riel: la ficha manda, pero `cuentas.marketing` se mueve con ella. Si no,
+             la fila de la cuenta se queda con el "sí" del día del registro para siempre y
+             cualquiera que la lea después resucita un permiso ya revocado. */
+          await env.DB.prepare("UPDATE cuentas SET marketing = ?1 WHERE id = ?2 AND tenant_id = ?3")
+            .bind(quiere ? 1 : 0, cu.id, cu.tenant_id).run().catch(() => {});
         } catch (e) { return json({ error: "No se pudo guardar. Intenta de nuevo." }, 500); }
         return json({ ok: true, acepto: quiere });
       }

@@ -3217,7 +3217,11 @@ function aplicarMarca(){
   $("logoSidebar").innerHTML = MARCA.logoHtml + '<span class="dot"></span>';
   $("eyebrowAuth").textContent = "// " + MARCA.nombre.toUpperCase();
   $("eyebrowInicio").textContent = "// " + MARCA.nombre.toUpperCase() + " — PORTAL DE ALUMNO";
-  $("txtMktCheck").textContent = "Quiero recibir novedades, tips y promociones por correo. (Opcional)";
+  /* La casilla del registro tiene que decir DE QUIÉN son las promociones, igual que la de
+     "Mi cuenta": el consentimiento del art. 58.1.e de la Ley 29571 es para un anunciante
+     concreto, y "promociones por correo" a secas no dice cuál. Son las dos puertas al mismo
+     permiso: dicen lo mismo o no dicen nada. */
+  $("txtMktCheck").textContent = "Quiero recibir novedades y promociones de " + (MARCA.nombre || "mi academia") + " por correo. (Opcional)";
   $("c_curso").innerHTML = MARCA.cursos.map(function(c){ return "<option>"+esc(c)+"</option>"; }).join("");
   $("txtOnbPaso1").textContent = textoOnbPaso1();
   $("txtOnbRef").textContent = "S/" + MARCA.referidoSoles;
