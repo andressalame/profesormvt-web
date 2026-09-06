@@ -14039,7 +14039,11 @@ export default {
           let pref = null;
           /* mp_solo_tarjeta (7-ago-2026, Elevate): MP queda SOLO para tarjeta — Yape dentro de MP
              le come comisión a la academia; el Yape directo (sin comisión) ya es otro método. */
-          const mpSoloT1 = String(((await loadConfig(env, t.id).catch(() => ({}))).mp_solo_tarjeta) || "") === "1";
+          const cfgFeeT1 = await loadConfig(env, t.id).catch(() => ({}));
+          const mpSoloT1 = String(cfgFeeT1.mp_solo_tarjeta || "") === "1";
+          /* 6-set-2026: el 1% NO se cobra a los tenants fundadores (config.fundador=on, Elevate) ni a
+             quien tenga sin_fee=1. Andrés se lo dijo a José por correo ese día; esta guarda lo cumple. */
+          const feeT1 = env.FEE_MARKETPLACE_ON === "1" && String(cfgFeeT1.fundador || "") !== "on" && String(cfgFeeT1.sin_fee || "") !== "1";
           try {
             const pr = await fetch("https://api.mercadopago.com/checkout/preferences", {
               method: "POST",
@@ -14052,7 +14056,7 @@ export default {
                  para Batuta via marketplace_fee sobre el rail MP del profe. Se enciende con la
                  secret FEE_MARKETPLACE_ON=1 SOLO despues del RUC de Andres + test en sandbox
                  (application_fee con Yape). PROHIBIDO recargarlo al alumno (T&C MP 12-may-2025). */
-              }, env.FEE_MARKETPLACE_ON === "1" ? { marketplace_fee: Math.round(monto * 0.01 * 100) / 100 } : {}, {
+              }, feeT1 ? { marketplace_fee: Math.round(monto * 0.01 * 100) / 100 } : {}, {
                 back_urls: {
                   success: MARCA.dominio + "/app/a/" + t.slug + "?pago=ok",
                   failure: MARCA.dominio + "/app/a/" + t.slug + "?pago=error",
@@ -14328,7 +14332,9 @@ export default {
         // Preferencia con el token del PROFE: la plata cae en SU cuenta de MP
         let pref = null;
         /* mp_solo_tarjeta (7-ago-2026, Elevate): ver comentario en pagar-directo. */
-        const mpSoloT2 = String(((await loadConfig(env, tid).catch(() => ({}))).mp_solo_tarjeta) || "") === "1";
+        const cfgFeeT2 = await loadConfig(env, tid).catch(() => ({}));
+        const mpSoloT2 = String(cfgFeeT2.mp_solo_tarjeta || "") === "1";
+        const feeT2 = env.FEE_MARKETPLACE_ON === "1" && String(cfgFeeT2.fundador || "") !== "on" && String(cfgFeeT2.sin_fee || "") !== "1";
         try {
           const pr = await fetch("https://api.mercadopago.com/checkout/preferences", {
             method: "POST",
@@ -14338,7 +14344,7 @@ export default {
               external_reference: "btc:" + compraId,
               notification_url: MARCA.dominio + "/app/api/mp/webhook-alumno?t=" + encodeURIComponent(tid),
             /* Mismo fee gated OFF que el otro rail de cobro al alumno (ver comentario alla). */
-            }, env.FEE_MARKETPLACE_ON === "1" ? { marketplace_fee: Math.round(monto * 0.01 * 100) / 100 } : {}, {
+            }, feeT2 ? { marketplace_fee: Math.round(monto * 0.01 * 100) / 100 } : {}, {
               back_urls: {
                 success: MARCA.dominio + "/app/a/" + t.slug + "?pago=ok",
                 failure: MARCA.dominio + "/app/a/" + t.slug + "?pago=error",
