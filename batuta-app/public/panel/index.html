@@ -4149,7 +4149,8 @@ function abrirWaChat(tel){
       var conv=d.conv||{}; WA_CHAT_PAUSA=conv.pausa||"";
       var nombre=(conv.nombre||(d.lead&&d.lead.nombre)||("+"+tel));
       head.innerHTML='<div><b>'+esc(nombre)+'</b> <span class="hint" style="margin:0;">+'+esc(tel)+(d.lead&&d.lead.etapa?' · '+esc(d.lead.etapa):'')+'</span></div>'
-        +'<span class="hint" style="margin:0;">'+(WA_CHAT_PAUSA==="on"?'<b style="color:#e8a33d;">IA en pausa: lo llevas tú</b>':'La IA responde sola')+'</span>';
+        +'<span class="hint" style="margin:0;">'+(WA_CHAT_PAUSA==="on"?'<b style="color:#e8a33d;">IA en pausa: lo llevas tú</b>':'La IA responde sola')+'</span>'
+        +(d.ventana_abierta===false?'<div class="hint" style="flex-basis:100%;margin:4px 0 0;color:#e8a33d;">Hace más de 24 h que no te escribe. Tu mensaje saldrá como plantilla de retomo (Meta cobra unos céntimos), no como texto libre.</div>':'');
       var et={lead:"Interesado",ia:"Asistente",dueno:"Tú",seguimiento:"Seguimiento",sistema:"Sistema"};
       hilo.innerHTML=(d.hilo||[]).map(function(m){
         var mio=m.quien!=="lead";
@@ -4170,7 +4171,7 @@ function abrirWaChat(tel){
     be.disabled=true;
     apiPost('/app/api/admin/wa/responder',{telefono:WA_CHAT_TEL,texto:txt}).then(function(d){
       be.disabled=false; el("waChatTxt").value="";
-      toast(d&&d.ok?"Enviado. La IA queda en pausa en este chat.":("No se pudo enviar: "+((d&&d.error)||"")));
+      toast(d&&d.ok?(d.modo==="plantilla"?"Enviado como plantilla de retomo. La IA queda en pausa en este chat.":"Enviado. La IA queda en pausa en este chat."):("No se pudo enviar: "+((d&&d.error)||"")+((d&&d.nota)?" · "+d.nota:"")));
       abrirWaChat(WA_CHAT_TEL);
     }).catch(function(){ be.disabled=false; toast("No se pudo enviar"); });
   });

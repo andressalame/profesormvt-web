@@ -3793,6 +3793,21 @@ async function enviarPlantillaWA(env, phoneId, to, nombre, lang, params, botonSu
   } catch (e) { return { ok: false, error: String(e && e.message) }; }
 }
 
+/* Ventana de servicio de Meta: 24 h desde el ÚLTIMO mensaje del lead. Fuera de ella un texto libre
+   NO se entrega (Meta lo acepta con 200 y lo marca failed por webhook, 131047): hay que ir por
+   plantilla. Margen de 30 min para no chocar con el borde. Sin último mensaje, se asume cerrada. */
+const WA_VENTANA_MS = 24 * 3600000;
+const WA_VENTANA_MARGEN_MS = 30 * 60000;
+function waVentanaServicioAbierta(ultimoIn, ahora){
+  const t = typeof ultimoIn === "number" ? ultimoIn : (Date.parse(String(ultimoIn || "")) || 0);
+  if (!t) return false;
+  return (ahora || Date.now()) - t < WA_VENTANA_MS - WA_VENTANA_MARGEN_MS;
+}
+/* Un hueco de plantilla no admite saltos de línea, tabs ni espacios seguidos (Meta lo rechaza). */
+function waParamPlantilla(texto, max){
+  return String(texto || "").replace(/[\r\n\t]+/g, " ").replace(/ {2,}/g, " ").trim().slice(0, max || 600);
+}
+
 /* La persona pide un humano. Acentos fuera, minúsculas, y las formas que se ven en chats reales. */
 function waTextoPideHumano(texto){
   const t = String(texto || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
@@ -18270,7 +18285,7 @@ export default {
           const hilo = await waHiloCargar(env, tid, telC, 80);
           const conv = await waConvDe(env, tid, telC);
           const leadC = await env.DB.prepare("SELECT id, nombre, etapa, nota FROM leads WHERE tenant_id = ?1 AND whatsapp = ?2").bind(tid, telC).first().catch(() => null);
-          return json({ ok: true, hilo, conv: conv || null, lead: leadC || null });
+          return json({ ok: true, hilo, conv: conv || null, lead: leadC || null, ventana_abierta: waVentanaServicioAbierta(conv && conv.ultimo_in), ultimo_in: (conv && conv.ultimo_in) || "" });
         }
         if (path === "/app/api/admin/wa/responder" && request.method === "POST"){
           if (!esDueno) return json({ error: "Solo el dueno" }, 403);
@@ -18280,14 +18295,32 @@ export default {
           if (!telR || !textoR) return json({ error: "manda telefono y texto" }, 400);
           const cfgR = await loadConfig(env, tid);
           if (!cfgR.wa_phone_id) return json({ error: "Esta academia no tiene su numero conectado a la API de WhatsApp." }, 400);
-          const envioR = await enviarWhatsAppEx(env, cfgR.wa_phone_id, telR, textoR);
+          const convR = await waConvDe(env, tid, telR);
+          const abiertaR = waVentanaServicioAbierta(convR && convR.ultimo_in);
+          let envioR, modoR = "texto", textoHiloR = textoR, notaR = "";
+          if (abiertaR){
+            envioR = await enviarWhatsAppEx(env, cfgR.wa_phone_id, telR, textoR);
+          } else {
+            /* Pasadas las 24 h del último mensaje del lead, Meta no entrega texto libre: sale la plantilla
+               de retomo (aprobada en Meta, compartida por toda la WABA) con el texto del dueño en su hueco. */
+            const tRowR = await env.DB.prepare("SELECT academia, COALESCE(profe_nombre,'') AS profe FROM tenants WHERE id = ?1").bind(tid).first().catch(() => null);
+            const remitenteR = tRowR ? (tRowR.profe ? tRowR.profe + ", de " + tRowR.academia : String(tRowR.academia || "la academia")) : "la academia";
+            const leadR = await env.DB.prepare("SELECT nombre FROM leads WHERE tenant_id = ?1 AND whatsapp = ?2").bind(tid, telR).first().catch(() => null);
+            const nombreR = waSegNombreDe((convR && convR.nombre) || (leadR && leadR.nombre) || "", []) || "de nuevo";
+            const plantillaR = String(cfgR.wa_plantilla_retoma || "batuta_dueno_retoma");
+            const cuerpoR = waParamPlantilla(textoR, 600);
+            envioR = await enviarPlantillaWA(env, cfgR.wa_phone_id, telR, plantillaR, String(cfgR.wa_plantilla_lang || "es"), [nombreR, waParamPlantilla(remitenteR, 80), cuerpoR]);
+            modoR = "plantilla";
+            textoHiloR = "Hola " + nombreR + "! Te escribe " + remitenteR + ". Retomo lo que conversamos por acá. " + cuerpoR + " Si quieres, seguimos por este chat.";
+            notaR = envioR.ok ? "Hacía más de 24 h que no te escribía: salió como plantilla de retomo (Meta la cobra)." : "Pasadas las 24 h solo entra la plantilla de retomo, y Meta no la aceptó (si todavía no está aprobada, hay que esperar).";
+          }
           if (envioR.ok){
-            await waHiloAgregar(env, tid, telR, "dueno", textoR);
+            await waHiloAgregar(env, tid, telR, "dueno", textoHiloR);
             await waPausaSet(env, tid, telR, true);
             const prevR = await waHistorialCargar(env, tid, telR);
-            await waHistorialGuardar(env, tid, telR, prevR.concat([{ role: "assistant", content: textoR }]));
+            await waHistorialGuardar(env, tid, telR, prevR.concat([{ role: "assistant", content: textoHiloR }]));
           }
-          return json({ ok: envioR.ok, wamid: envioR.wamid || "", error: envioR.error || "", nota: envioR.ok ? "Si la persona no te escribio en las ultimas 24 h, Meta acepta el mensaje pero no lo entrega (regla de la ventana de servicio)." : "" }, envioR.ok ? 200 : 502);
+          return json({ ok: envioR.ok, modo: modoR, wamid: envioR.wamid || "", error: envioR.error || "", nota: notaR }, envioR.ok ? 200 : 502);
         }
         if (path === "/app/api/admin/wa/pausa" && request.method === "POST"){
           if (!esDueno) return json({ error: "Solo el dueno" }, 403);

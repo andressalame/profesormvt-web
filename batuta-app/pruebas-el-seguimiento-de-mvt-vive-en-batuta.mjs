@@ -43,10 +43,10 @@ function cortar(nombre, tipo){
   for (; i < SRC.length; i++){ if (SRC[i] === "{") prof++; else if (SRC[i] === "}"){ prof--; if (prof === 0){ i++; break; } } }
   return SRC.slice(ini, i);
 }
-const CONSTS = ["LIMA_OFFSET_MS", "WA_SEG_H", "WA_SEG_CONF", "WA_SEG_STOP", "WA_SEG_DIJO_NO", "WA_SEG_DIJO_PAGO", "WA_SEG_HABLA_DE_TIEMPO", "WA_SEG_PROHIBIDO", "WA_SEG_DIAS", "WA_AVISO_MOTIVOS", "waSegSaltar", "waSegHoras"];
+const CONSTS = ["LIMA_OFFSET_MS", "WA_VENTANA_MS", "WA_VENTANA_MARGEN_MS", "WA_SEG_H", "WA_SEG_CONF", "WA_SEG_STOP", "WA_SEG_DIJO_NO", "WA_SEG_DIJO_PAGO", "WA_SEG_HABLA_DE_TIEMPO", "WA_SEG_PROHIBIDO", "WA_SEG_DIAS", "WA_AVISO_MOTIVOS", "waSegSaltar", "waSegHoras"];
 const FUNCS = ["limaParts", "waSegNorm", "waSegLima", "waSegVentanaAbierta", "waSegCapitalizar", "waSegNombreDe", "waSegExtraerTema", "waSegAnalizarHilo",
   "waSegDecidir", "waSegFmtHora", "waSegLista", "waSegSlotsQueCalzan", "waSegTextoDias", "waSegFraseCurso", "waSegFraseHorarios", "waSegFrasePaso",
-  "waSegValidarTexto", "waSegSanear", "waSegRedactarToque1", "waTextoPideHumano", "waExtraerAviso"];
+  "waSegValidarTexto", "waSegSanear", "waSegRedactarToque1", "waTextoPideHumano", "waExtraerAviso", "waVentanaServicioAbierta", "waParamPlantilla"];
 const fuente = CONSTS.map(n => cortar(n, "const")).join("\n") + "\n" + FUNCS.map(n => cortar(n)).join("\n\n") + "\nexport { " + CONSTS.concat(FUNCS).join(", ") + " };";
 const W = await import("data:text/javascript," + encodeURIComponent(fuente));
 
@@ -169,8 +169,20 @@ console.log("\n── 8. El cableado en el worker ──");
   for (const r of ["admin/wa/chats", "admin/wa/chat", "admin/wa/responder", "admin/wa/pausa", "su/wa-templates", "su/wa-simular"]){
     comprobar("existe /app/api/" + r, LIMPIO.indexOf('path === "/app/api/' + r + '"') !== -1, true);
   }
-  comprobar("responder a mano PAUSA la IA en ese chat", /await waHiloAgregar\(env, tid, telR, "dueno", textoR\);\s*await waPausaSet\(env, tid, telR, true\);/.test(LIMPIO), true);
+  comprobar("responder a mano PAUSA la IA en ese chat", /await waHiloAgregar\(env, tid, telR, "dueno", textoHiloR\);\s*await waPausaSet\(env, tid, telR, true\);/.test(LIMPIO), true);
   comprobar("🔴 la ley: el prefijo de 'asistente virtual' sigue en el primer mensaje", /Te responde el asistente virtual de/.test(LIMPIO), true);
 }
+
+console.log("\n── 9. El dueño responde después de las 24 h: va por la plantilla de retomo ──");
+comprobar("🔴 a las 23 h del último mensaje del lead la ventana sigue abierta", W.waVentanaServicioAbierta(iso(AHORA - 23 * H), AHORA), true);
+comprobar("a las 23 h 40 ya no (margen de 30 min para no chocar con el borde)", W.waVentanaServicioAbierta(iso(AHORA - 23.7 * H), AHORA), false);
+comprobar("🔴 a las 30 h está cerrada: el texto libre no se entregaría", W.waVentanaServicioAbierta(iso(AHORA - 30 * H), AHORA), false);
+comprobar("sin último mensaje del lead se asume cerrada", W.waVentanaServicioAbierta("", AHORA), false);
+comprobar("🔴 el hueco de la plantilla no lleva saltos de línea ni espacios dobles", W.waParamPlantilla("Hola!\n\nSí tengo cupo   el jueves.\tTe lo aparto?"), "Hola! Sí tengo cupo el jueves. Te lo aparto?");
+comprobar("y se recorta al tope", W.waParamPlantilla("x".repeat(700)).length, 600);
+comprobar("🔴 responder fuera de la ventana usa la plantilla de retomo", /wa_plantilla_retoma \|\| "batuta_dueno_retoma"/.test(SRC), true);
+comprobar("el chat le dice al panel si la ventana está abierta", /ventana_abierta: waVentanaServicioAbierta\(conv && conv\.ultimo_in\)/.test(SRC), true);
+comprobar("y el panel avisa antes de enviar", /Hace más de 24 h que no te escribe/.test(readFileSync(HOME + "/public/panel/index.html", "utf8")), true);
+
 console.log("\n" + (mal ? "🔴 " + mal + " en rojo, " : "✅ ") + ok + " verdes\n");
 process.exit(mal ? 1 : 0);
