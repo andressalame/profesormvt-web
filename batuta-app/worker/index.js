@@ -3547,7 +3547,7 @@ async function llamarClaudeOnboarding(env, system, mensajes, extraSystem, modelo
          (rol del actor, modulos ocultos) va en un bloque chico aparte SIN cache, para no
          fragmentar el cache del manual por cada combinacion. */
       const sysBlocks = [{ type: "text", text: system, cache_control: { type: "ephemeral" } }];
-      if (extra) sysBlocks.push({ type: "text", text: extra });
+      if (extra) sysBlocks.push({ type: "text", text: extra, cache_control: { type: "ephemeral" } });
       const resp = await fetch("https://api.anthropic.com/v1/messages", {
         method: "POST",
         headers: {
@@ -3586,12 +3586,13 @@ async function llamarClaudeOnboarding(env, system, mensajes, extraSystem, modelo
    el prompt PROHIBE promesas de resultado/ingresos (regla permanente de la casa). */
 const WA_VENDEDOR_SYS =
   "Eres el asistente de recepcion de una academia, atendiendo por WhatsApp a una persona interesada en tomar clases. " +
-  "Tu trabajo: dar la bienvenida, entender que quiere aprender, responder precios y horarios con los DATOS de abajo, y motivarla a agendar una clase de prueba. El profesor humano cierra; tu abres la puerta.\n" +
+  "Tu trabajo: dar la bienvenida, entender que quiere aprender, responder precios y horarios con los DATOS de abajo, y motivarla a dar el siguiente paso que indique la academia en sus instrucciones (si la academia ofrece clase de prueba, agendarla; si NO la ofrece, jamas la menciones ni la inventes: su paso sera elegir un plan o crear su cuenta). El profesor humano cierra; tu abres la puerta.\n" +
   "TRANSPARENCIA (obligatorio): eres un asistente virtual, no una persona. Si te preguntan si eres humano, un bot o una IA, dilo de frente y sin rodeos, y ofrece pasar la conversacion a una persona. Nunca digas ni des a entender que eres el profesor o una persona del equipo.\n" +
   "ESTILO (estricto): espanol claro y calido, de tu, maximo 3 frases por mensaje, directo, sin relleno. Sin em dash. Sin signos de apertura invertidos (nada de ¿ ni ¡, solo los de cierre). Sin markdown, sin asteriscos, sin vinetas: es WhatsApp, texto plano. Un emoji ocasional esta bien, con mesura. Nunca suenes a robot.\n" +
-  "QUE HACES: saludas (por el nombre si lo tienes), preguntas que le gustaria aprender, respondes cursos/precios/horarios SOLO desde los DATOS, e invitas a agendar una clase de prueba o a dejar sus datos para que el profesor le escriba.\n" +
+  "QUE HACES: saludas (por el nombre si lo tienes), preguntas que le gustaria aprender, respondes cursos/precios/horarios SOLO desde los DATOS, e invitas al siguiente paso que indique la academia (o a dejar sus datos para que el profesor le escriba).\n" +
   "REGLAS DURAS: NUNCA prometes resultados, progreso garantizado ni ingresos (nada de 'vas a aprender en X semanas' ni 'garantizado'). NUNCA inventas precios, horarios, promos ni cursos que no esten en los DATOS. NUNCA cierras un pago ni pides datos de tarjeta por el chat: para pagar, el profesor coordina. NUNCA hablas mal de nadie, tono positivo. Si es un reclamo, un problema serio o piden hablar con una persona: di que el profesor le escribe en breve, no improvises. Si algo no esta en los DATOS, dilo con honestidad y ofrece que el profesor lo confirme.\n" +
-  "CIERRE: siempre dejas una puerta abierta concreta (agendar prueba o 'el profesor te escribe hoy'). Nunca cierras en seco.";
+  "CIERRE: siempre dejas una puerta abierta concreta (el siguiente paso de la academia, o 'el profesor te escribe hoy'). Nunca cierras en seco.\n" +
+  "AVISO AL DUENO (obligatorio cuando aplique): si la persona esta lista para inscribirse o pagar (dice que si, pregunta como pagar, da un dia u hora), si pide hablar con una persona, si se queja o tiene un problema, o si pregunta algo que NO esta en los DATOS, termina tu respuesta con una linea aparte EXACTAMENTE asi: [[AVISO:motivo|resumen en una linea]] donde motivo es uno de lead_caliente, humano_solicitado, queja_o_problema, pregunta_sin_respuesta. Esa linea se le quita antes de enviarla: la persona nunca la ve. Ante la duda entre avisar y no avisar, avisa.";
 
 async function contextoVentaWA(env, tenant, cfg){
   let lineas = "DATOS DE ESTA ACADEMIA:\n- Nombre: " + (tenant.academia || "la academia") + "\n";
@@ -3613,7 +3614,7 @@ async function contextoVentaWA(env, tenant, cfg){
   /* Base de conocimiento libre editable por el dueno (Ajustes > WhatsApp): FAQ, promos,
      politicas, cualquier dato que el asistente deba saber y que no salga de cursos/precios. */
   const kb = String((cfg && cfg.wa_kb) || "").trim();
-  if (kb) lineas += "- Informacion adicional que te dio la academia (usala como fuente):\n" + kb.slice(0, 2000) + "\n";
+  if (kb) lineas += "- Informacion adicional que te dio la academia (usala como fuente):\n" + kb.slice(0, 12000) + "\n";
   lineas += "Si algun dato viene vacio, no lo menciones: ofrece que el profesor lo confirme.";
   return lineas;
 }
@@ -3631,12 +3632,655 @@ const WA_TONOS = {
 };
 function bloqueVozWA(cfg){
   const tono = WA_TONOS[String((cfg && cfg.wa_tono) || "").trim()] || "";
-  const instr = String((cfg && cfg.wa_instrucciones) || "").trim().slice(0, 800);
+  const instr = String((cfg && cfg.wa_instrucciones) || "").trim().slice(0, 2000);
   if (!tono && !instr) return "";
-  let b = "\nVOZ DE ESTA ACADEMIA (respetala siempre; manda sobre el estilo por defecto, jamas sobre las REGLAS DURAS):";
+  let b = "\nVOZ E INSTRUCCIONES DE ESTA ACADEMIA (respetalas siempre: PISAN al manual base en todo lo que se contradigan, salvo las REGLAS DURAS y la TRANSPARENCIA, que nunca ceden):";
   if (tono) b += "\n- " + tono;
   if (instr) b += "\n- Instrucciones del dueno: " + instr;
   return b;
+}
+
+
+/* ═══════════════════════════════════════════════════════════════════════════════════════
+   WHATSAPP OFICIAL POR ACADEMIA, CON TODO LO QUE EL BOT VIEJO DE MVT SABÍA HACER (6-set-2026)
+
+   MVT migra su número (+51 904 056 197) del chip con QR (Baileys, puerto 3401) a la Cloud API,
+   sobre la MISMA WABA de Batuta. La rama de academia del webhook ya atendía con IA y creaba el
+   lead, pero le faltaba lo que hacía que el bot viejo funcionara de verdad:
+
+     · un HILO completo con hora y quién habló (la IA de Claude solo guarda 8 mensajes sin fecha)
+     · PAUSA por chat: cuando el dueño toma la conversación, la IA se calla
+     · "quiero hablar con alguien": el prefijo legal lo PROMETÍA y nada actuaba al escribirlo
+     · AVISOS al dueño (lead listo, pide humano, queja, pregunta sin respuesta), que en el bot
+       viejo salían por WhatsApp a Andrés y acá salen por correo + push
+     · la SECUENCIA DE CIERRE (toque a las 24 h y última carta a las 72 h) portada de
+       `wa-asistentes/src/seguimiento.js`, con sus mismas reglas, horario de Lima y vetos
+     · una BANDEJA en el panel para leer el hilo, responder a mano y pausar
+
+   Ojo con la ventana de 24 h de Meta: fuera de ella solo entran PLANTILLAS aprobadas.
+   El toque 1 se manda a las 22.5 h del último mensaje del lead (texto libre, gratis); si el
+   horario de Lima no deja, cae a plantilla. El toque 2 (72 h) va SIEMPRE por plantilla.
+   ═══════════════════════════════════════════════════════════════════════════════════════ */
+let WA_HILO_OK = false;
+async function ensureWaHiloSchema(env){
+  if (WA_HILO_OK) return;
+  try {
+    await env.DB.prepare(
+      "CREATE TABLE IF NOT EXISTS wa_hilo (tenant_id TEXT NOT NULL, telefono TEXT NOT NULL, ts TEXT NOT NULL, quien TEXT NOT NULL, texto TEXT DEFAULT '')"
+    ).run();
+    await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_wa_hilo ON wa_hilo (tenant_id, telefono, ts)").run();
+    await env.DB.prepare(
+      "CREATE TABLE IF NOT EXISTS wa_aviso (id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, telefono TEXT NOT NULL, ts TEXT NOT NULL, motivo TEXT NOT NULL, resumen TEXT DEFAULT '')"
+    ).run();
+    await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_wa_aviso ON wa_aviso (tenant_id, ts)").run();
+    await env.DB.prepare(
+      "CREATE TABLE IF NOT EXISTS wa_seguimiento (id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, telefono TEXT NOT NULL, toque INTEGER NOT NULL, ts TEXT NOT NULL, modo TEXT DEFAULT '', wamid TEXT DEFAULT '', texto TEXT DEFAULT '')"
+    ).run();
+    await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_wa_seg ON wa_seguimiento (tenant_id, ts)").run();
+    /* columnas nuevas de wa_conv (una fila por tenant+telefono): ALTER idempotente */
+    for (const col of ["pausa TEXT DEFAULT ''", "ultimo_in TEXT DEFAULT ''", "ultimo_out TEXT DEFAULT ''", "nombre TEXT DEFAULT ''"]){
+      try { await env.DB.prepare("ALTER TABLE wa_conv ADD COLUMN " + col).run(); } catch (e) {}
+    }
+    WA_HILO_OK = true;
+  } catch (e) {}
+}
+
+/* Una línea del hilo, con hora y quién: lead | ia | dueno | seguimiento | sistema.
+   También mantiene wa_conv (ultimo_in / ultimo_out / nombre) para consultas baratas. */
+async function waHiloAgregar(env, tenantId, telefono, quien, texto, nombre){
+  await ensureWaHiloSchema(env);
+  const ahora = new Date().toISOString();
+  try {
+    await env.DB.prepare("INSERT INTO wa_hilo (tenant_id, telefono, ts, quien, texto) VALUES (?1,?2,?3,?4,?5)")
+      .bind(tenantId, telefono, ahora, quien, String(texto || "").slice(0, 2000)).run();
+    const esIn = quien === "lead";
+    await env.DB.prepare(
+      "INSERT INTO wa_conv (tenant_id, telefono, historial, actualizado, " + (esIn ? "ultimo_in" : "ultimo_out") + ", nombre) VALUES (?1,?2,'[]',?3,?3,?4) " +
+      "ON CONFLICT(tenant_id, telefono) DO UPDATE SET " + (esIn ? "ultimo_in" : "ultimo_out") + " = ?3, nombre = CASE WHEN ?4 != '' THEN ?4 ELSE nombre END"
+    ).bind(tenantId, telefono, ahora, String(nombre || "").slice(0, 80)).run();
+  } catch (e) {}
+}
+async function waHiloCargar(env, tenantId, telefono, n){
+  await ensureWaHiloSchema(env);
+  try {
+    const { results } = await env.DB.prepare(
+      "SELECT ts, quien, texto FROM wa_hilo WHERE tenant_id = ?1 AND telefono = ?2 ORDER BY ts DESC LIMIT ?3"
+    ).bind(tenantId, telefono, Number(n) || 40).all();
+    return (results || []).reverse();
+  } catch (e) { return []; }
+}
+async function waConvDe(env, tenantId, telefono){
+  await ensureWaHiloSchema(env);
+  try {
+    return await env.DB.prepare("SELECT COALESCE(pausa,'') AS pausa, COALESCE(ultimo_in,'') AS ultimo_in, COALESCE(ultimo_out,'') AS ultimo_out, COALESCE(nombre,'') AS nombre FROM wa_conv WHERE tenant_id = ?1 AND telefono = ?2")
+      .bind(tenantId, telefono).first();
+  } catch (e) { return null; }
+}
+async function waPausaSet(env, tenantId, telefono, on){
+  await ensureWaHiloSchema(env);
+  const ahora = new Date().toISOString();
+  try {
+    await env.DB.prepare(
+      "INSERT INTO wa_conv (tenant_id, telefono, historial, actualizado, pausa) VALUES (?1,?2,'[]',?3,?4) " +
+      "ON CONFLICT(tenant_id, telefono) DO UPDATE SET pausa = ?4"
+    ).bind(tenantId, telefono, ahora, on ? "on" : "").run();
+  } catch (e) {}
+}
+async function waAvisoGuardar(env, tenantId, telefono, motivo, resumen){
+  await ensureWaHiloSchema(env);
+  try {
+    await env.DB.prepare("INSERT INTO wa_aviso (id, tenant_id, telefono, ts, motivo, resumen) VALUES (?1,?2,?3,?4,?5,?6)")
+      .bind(crypto.randomUUID(), tenantId, telefono, new Date().toISOString(), String(motivo || ""), String(resumen || "").slice(0, 300)).run();
+  } catch (e) {}
+}
+
+/* ¿Ya es alumno que pagó, o tiene una reserva futura? La misma pregunta que hacía el bot
+   viejo por `su/wa-pagado`; ahora vive adentro y el endpoint la llama. */
+async function waLeadPago(env, tenantId, telefono){
+  const colaTel = String(telefono || "").replace(/\D/g, "").slice(-9);
+  if (colaTel.length < 9) return { pagado: false, reservas: 0, alumnos: 0 };
+  const { results: als } = await env.DB.prepare(
+    "SELECT id, pago FROM alumnos WHERE tenant_id = ?1 AND whatsapp != '' AND " +
+    "REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(whatsapp,' ',''),'+',''),'-',''),'(',''),')','') LIKE ?2"
+  ).bind(tenantId, "%" + colaTel).all().catch(() => ({ results: [] }));
+  const lista = als || [];
+  const pagado = lista.some(a => String(a.pago || "") === "Pagado");
+  let reservas = 0;
+  if (lista.length){
+    const ids = lista.map(a => a.id);
+    const marcas = ids.map((_, i) => "?" + (i + 3)).join(",");
+    const row = await env.DB.prepare(
+      "SELECT COUNT(*) AS n FROM reservas WHERE tenant_id = ?1 AND estado = 'reservada' AND inicio_utc > ?2 AND alumno_id IN (" + marcas + ")"
+    ).bind(tenantId, new Date().toISOString(), ...ids).first().catch(() => null);
+    reservas = Number((row && row.n) || 0);
+  }
+  return { pagado, reservas, alumnos: lista.length };
+}
+
+/* Envío con la respuesta cruda de Meta: el wamid sirve para cruzar con los statuses del log. */
+async function enviarWhatsAppEx(env, phoneId, to, text){
+  if (!env.WHATSAPP_TOKEN || !phoneId || !to || !text) return { ok: false, error: "faltan datos" };
+  try {
+    const r = await fetch("https://graph.facebook.com/v21.0/" + encodeURIComponent(phoneId) + "/messages", {
+      method: "POST",
+      headers: { "Authorization": "Bearer " + env.WHATSAPP_TOKEN, "Content-Type": "application/json" },
+      body: JSON.stringify({ messaging_product: "whatsapp", to: String(to), type: "text", text: { body: String(text).slice(0, 1000) } })
+    });
+    const d = await r.json().catch(() => ({}));
+    const wamid = (d && d.messages && d.messages[0] && d.messages[0].id) || "";
+    return { ok: r.ok, status: r.status, wamid, error: r.ok ? "" : JSON.stringify((d && d.error) || d).slice(0, 300) };
+  } catch (e) { return { ok: false, error: String(e && e.message) }; }
+}
+/* Plantilla aprobada por Meta (la única forma de escribir fuera de la ventana de 24 h). */
+async function enviarPlantillaWA(env, phoneId, to, nombre, lang, params){
+  if (!env.WHATSAPP_TOKEN || !phoneId || !to || !nombre) return { ok: false, error: "faltan datos" };
+  const comps = [];
+  if (Array.isArray(params) && params.length){
+    comps.push({ type: "body", parameters: params.map(p => ({ type: "text", text: String(p).slice(0, 500) })) });
+  }
+  try {
+    const r = await fetch("https://graph.facebook.com/v21.0/" + encodeURIComponent(phoneId) + "/messages", {
+      method: "POST",
+      headers: { "Authorization": "Bearer " + env.WHATSAPP_TOKEN, "Content-Type": "application/json" },
+      body: JSON.stringify({ messaging_product: "whatsapp", to: String(to), type: "template",
+        template: { name: String(nombre), language: { code: String(lang || "es") }, components: comps } })
+    });
+    const d = await r.json().catch(() => ({}));
+    const wamid = (d && d.messages && d.messages[0] && d.messages[0].id) || "";
+    return { ok: r.ok, status: r.status, wamid, error: r.ok ? "" : JSON.stringify((d && d.error) || d).slice(0, 300) };
+  } catch (e) { return { ok: false, error: String(e && e.message) }; }
+}
+
+/* La persona pide un humano. Acentos fuera, minúsculas, y las formas que se ven en chats reales. */
+function waTextoPideHumano(texto){
+  const t = String(texto || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  return /hablar con (alguien|una persona|un humano|el profe|la profe|el profesor|la profesora|andres)|con una persona real|quiero (un|una) (humano|persona)|no eres? (un )?(bot|robot|ia)|eres (un )?(bot|robot)/.test(t);
+}
+/* La IA deja al final una etiqueta [[AVISO:motivo|resumen]] cuando algo amerita avisar al dueño.
+   Se saca del texto ANTES de mandarlo: la persona nunca la ve. */
+const WA_AVISO_MOTIVOS = ["lead_caliente", "humano_solicitado", "queja_o_problema", "pregunta_sin_respuesta"];
+function waExtraerAviso(reply){
+  const s = String(reply || "");
+  const m = /\[\[AVISO:([a-z_]+)\|([^\]]{0,300})\]\]/i.exec(s);
+  if (!m) return { texto: s.trim(), aviso: null };
+  const motivo = String(m[1] || "").toLowerCase();
+  const texto = s.replace(m[0], "").replace(/\n{3,}/g, "\n\n").trim();
+  if (WA_AVISO_MOTIVOS.indexOf(motivo) === -1) return { texto, aviso: null };
+  return { texto, aviso: { motivo, resumen: String(m[2] || "").trim().slice(0, 300) } };
+}
+const WA_AVISO_TITULOS = {
+  lead_caliente: "Lead listo para inscribirse",
+  humano_solicitado: "Pide hablar con una persona",
+  queja_o_problema: "Queja o problema",
+  pregunta_sin_respuesta: "Pregunta que el asistente no supo responder",
+  seguimiento_enviado: "Se le mandó un toque de seguimiento"
+};
+/* Aviso al dueño por correo (Resend) + push si el navegador está suscrito. Lleva el motivo,
+   el resumen, las últimas líneas del hilo y el wa.me para contestar desde su propio celular. */
+async function avisarDuenoWA(env, tenantId, aviso){
+  try {
+    const t = await env.DB.prepare("SELECT id, academia, slug, email, profe_nombre FROM tenants WHERE id = ?1").bind(tenantId).first();
+    if (!t) return false;
+    const tel = String(aviso.telefono || "").replace(/\D/g, "");
+    const titulo = WA_AVISO_TITULOS[aviso.motivo] || "Novedad en WhatsApp";
+    const quien = (aviso.nombre ? String(aviso.nombre).slice(0, 60) + " · " : "") + "+" + tel;
+    const hilo = await waHiloCargar(env, tenantId, tel, 5);
+    const lineas = hilo.map(h => (h.quien === "lead" ? "Lead" : h.quien === "ia" ? "Asistente" : h.quien === "dueno" ? "Tú" : "Sistema") + ": " + String(h.texto || "").slice(0, 200));
+    const panel = "https://batuta.lat/app/panel/";
+    const texto = titulo + " · " + (t.academia || "") + "\n" + quien + "\n\n" + (aviso.resumen || "") + "\n\nÚltimos mensajes:\n" + lineas.join("\n") +
+      "\n\nResponder desde tu celular: https://wa.me/" + tel + "\nVer el hilo, responder o pausar la IA: " + panel;
+    const html = "<div style=\"font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:#1c1813;line-height:1.55\">" +
+      "<h2 style=\"margin:0 0 6px\">" + esc(titulo) + "</h2>" +
+      "<p style=\"margin:0 0 12px;color:#555\">" + esc(quien) + "</p>" +
+      (aviso.resumen ? "<p style=\"margin:0 0 14px\"><b>" + esc(String(aviso.resumen)) + "</b></p>" : "") +
+      (lineas.length ? "<p style=\"margin:0 0 4px;color:#555;font-size:13px\">Últimos mensajes</p><pre style=\"white-space:pre-wrap;background:#f6f4ef;padding:10px;border-radius:6px;font:14px/1.5 inherit\">" + esc(lineas.join("\n")) + "</pre>" : "") +
+      "<p style=\"margin:16px 0 6px\"><a href=\"https://wa.me/" + tel + "\" style=\"background:#25D366;color:#fff;text-decoration:none;font-weight:bold;padding:11px 18px;border-radius:6px;display:inline-block\">Responder por WhatsApp</a></p>" +
+      "<p style=\"margin:0;color:#777;font-size:13px\">Ver el hilo, responder desde el panel o pausar la IA: <a href=\"" + panel + "\">" + panel + "</a></p></div>";
+    if (t.email){
+      await enviarCorreo(env, { to: t.email, subject: "WhatsApp " + (t.academia || "") + ": " + titulo + " (" + quien + ")", html, text: texto, from: { name: "Batuta", email: "hola@batuta.lat" }, tenantId });
+    }
+    try { await avisarPush(env, tenantId, { title: titulo, body: quien + (aviso.resumen ? " · " + String(aviso.resumen).slice(0, 90) : ""), url: panel }); } catch (e) {}
+    return true;
+  } catch (e) { return false; }
+}
+
+/* ═══════ ATENDER UN MENSAJE DE UNA ACADEMIA (lo que antes vivía inline en el webhook) ═══════
+   Vive aparte para poder SIMULARLO sin Meta (`su/wa-simular`): mismo código, envío fingido.
+   ctx: { phoneId, from, texto, nombre, enviar?, simulado? }. Devuelve lo que pasó. */
+async function waAtenderTenant(env, ctx){
+  const phoneId = String(ctx.phoneId || ""), from = String(ctx.from || ""), texto = String(ctx.texto || ""), nombre = String(ctx.nombre || "");
+  const simulado = !!ctx.simulado;
+  const enviar = ctx.enviar || (async (to, t) => enviarWhatsAppEx(env, phoneId, to, t));
+  const salida = { atendido: false, motivo: "", reply: "", aviso: null, pausa: "" };
+  const cfgRow = await env.DB.prepare("SELECT tenant_id FROM config WHERE clave = 'wa_phone_id' AND valor = ?1").bind(phoneId).first().catch(() => null);
+  if (!cfgRow){ salida.motivo = "ningún tenant tiene ese phone_id"; return salida; }
+  const tW = await env.DB.prepare("SELECT id, academia, slug, estado, plan FROM tenants WHERE id = ?1").bind(cfgRow.tenant_id).first();
+  if (!tW){ salida.motivo = "tenant no existe"; return salida; }
+  const cfgW = await loadConfig(env, tW.id);
+  if (String(cfgW.wa_enabled || "") !== "on"){ salida.motivo = "asistente apagado (wa_enabled)"; return salida; }
+  if (!simulado && await chatbotPasoTope(env, "wa:" + tW.id + ":" + from, 12)){ salida.motivo = "tope de 12 por hora"; return salida; }
+  await ensureErpSchema(env);
+  await ensureWaHiloSchema(env);
+  await waHiloAgregar(env, tW.id, from, "lead", texto, nombre);
+  /* --- CRM: una fila por teléfono, etapa contactado, seguir hoy --- */
+  const yaLead = await env.DB.prepare("SELECT id FROM leads WHERE tenant_id = ?1 AND whatsapp = ?2").bind(tW.id, from).first().catch(() => null);
+  if (yaLead){
+    await env.DB.prepare("UPDATE leads SET nota = ?1, etapa = CASE WHEN etapa IN ('alumno','perdido') THEN etapa ELSE 'contactado' END, seguir_el = ?2, actualizado = ?2 WHERE id = ?3 AND tenant_id = ?4")
+      .bind(("Escribió por WhatsApp: " + texto).slice(0, 500), hoyLima(), yaLead.id, tW.id).run();
+  } else {
+    await env.DB.prepare("INSERT INTO leads (id,tenant_id,email,marca,fuente,interes,fecha,nombre,whatsapp,etapa,nota,seguir_el,actualizado) VALUES (?1,?2,'','Batuta','whatsapp','',?3,?4,?5,'contactado',?6,?3,?3)")
+      .bind(crypto.randomUUID(), tW.id, hoyLima(), String(nombre).slice(0, 80), from, ("Escribió por WhatsApp: " + texto).slice(0, 500)).run();
+  }
+  /* --- pausa: el dueño tomó este chat desde la bandeja, o la persona pidió humano --- */
+  const convW = await waConvDe(env, tW.id, from);
+  salida.pausa = (convW && convW.pausa) || "";
+  if (salida.pausa === "on"){
+    const hiloP = await waHiloCargar(env, tW.id, from, 6);
+    const ultOut = [...hiloP].reverse().find(h => h.quien !== "lead");
+    if (ultOut && ultOut.quien === "seguimiento"){
+      /* en un chat pausado nadie mira el panel: si contesta al toque, se avisa (regla del bot viejo) */
+      await waAvisoGuardar(env, tW.id, from, "lead_caliente", "Respondió al toque de seguimiento: " + texto.slice(0, 160));
+      if (!simulado) await avisarDuenoWA(env, tW.id, { motivo: "lead_caliente", telefono: from, nombre, resumen: "Respondió al toque de seguimiento y la IA está en pausa en este chat: \"" + texto.slice(0, 160) + "\"" });
+    }
+    salida.motivo = "chat en pausa: lo lleva el dueño"; return salida;
+  }
+  if (waTextoPideHumano(texto)){
+    await waPausaSet(env, tW.id, from, true);
+    const avisoH = "Listo, le aviso para que te escriba por aca en cuanto pueda.";
+    const envH = await enviar(from, avisoH);
+    if (envH && envH.ok) await waHiloAgregar(env, tW.id, from, "sistema", avisoH);
+    await waAvisoGuardar(env, tW.id, from, "humano_solicitado", texto.slice(0, 200));
+    if (!simulado) await avisarDuenoWA(env, tW.id, { motivo: "humano_solicitado", telefono: from, nombre, resumen: texto.slice(0, 200) });
+    salida.atendido = true; salida.reply = avisoH; salida.pausa = "on"; salida.aviso = { motivo: "humano_solicitado" }; salida.motivo = "pidió humano: pausa + aviso";
+    return salida;
+  }
+  /* --- IA conversacional con la voz y los datos de la academia --- */
+  const planW = waPlanEfectivo(tW);
+  const esConvNuevaW = await waEsNuevaConversacion(env, tW.id, from);
+  if (esConvNuevaW && !simulado){
+    const cupo = await waConsumirConversacion(env, tW.id, planW);
+    if (!cupo.ok){ salida.motivo = "cupo de conversaciones agotado"; return salida; }
+  }
+  const tCtx = { id: tW.id, academia: tW.academia, slug: tW.slug, whatsapp: cfgW.whatsapp_profe || "" };
+  const datos = await contextoVentaWA(env, tCtx, cfgW);
+  const previo = await waHistorialCargar(env, tW.id, from);
+  /* el manual + la voz de la academia van en el bloque CON cache (fijo por academia); el
+     nombre de la persona va con los datos, en el bloque de sesión: así el cache no se
+     fragmenta por cada lead nuevo */
+  const sysW = WA_VENDEDOR_SYS + bloqueVozWA(cfgW);
+  const extraW = datos + (nombre ? "\nLa persona se llama " + String(nombre).split(" ")[0] + "." : "");
+  const conversacion = previo.concat([{ role: "user", content: texto }]);
+  let reply = await llamarClaudeOnboarding(env, sysW, conversacion, extraW);
+  if (!reply){
+    reply = (nombre ? nombre.split(" ")[0] : "Hola") + ", gracias por escribir a " + (tW.academia || "la academia") + ". Cuentame que te gustaria aprender y un profesor te responde en breve.";
+  }
+  const avisoW = waExtraerAviso(reply);
+  reply = avisoW.texto || reply;
+  if (avisoW.aviso){
+    await waAvisoGuardar(env, tW.id, from, avisoW.aviso.motivo, avisoW.aviso.resumen);
+    if (!simulado) await avisarDuenoWA(env, tW.id, { motivo: avisoW.aviso.motivo, telefono: from, nombre, resumen: avisoW.aviso.resumen });
+    salida.aviso = avisoW.aviso;
+  }
+  const waModo = String(cfgW.wa_modo || "auto").trim() === "sugerencias" ? "sugerencias" : "auto";
+  if (waModo === "sugerencias"){
+    await waSugerenciaGuardar(env, tW.id, from, nombre, texto, reply);
+    await waHistorialGuardar(env, tW.id, from, conversacion);
+    salida.atendido = true; salida.reply = reply; salida.motivo = "modo sugerencias: borrador guardado, no se envía";
+    return salida;
+  }
+  /* Ley 32521 / D.S. 115-2025-PCM: la persona sabe que habla con una IA, en el primer mensaje
+     de cada conversación, como prefijo determinista (la ley no se la salta el modelo). */
+  const salidaTxt = esConvNuevaW
+    ? ("Te responde el asistente virtual de " + (tW.academia || "la academia") +
+       ". Si prefieres hablar con una persona, escribe: quiero hablar con alguien.\n\n" + reply)
+    : reply;
+  const envio = await enviar(from, salidaTxt);
+  if (envio && envio.ok){
+    await waHistorialGuardar(env, tW.id, from, conversacion.concat([{ role: "assistant", content: reply }]));
+    await waHiloAgregar(env, tW.id, from, "ia", reply);
+    salida.atendido = true; salida.reply = salidaTxt; salida.motivo = "respondió la IA";
+  } else {
+    salida.motivo = "Meta no aceptó el envío: " + String((envio && envio.error) || "");
+  }
+  return salida;
+}
+
+/* ═══════════════ SECUENCIA DE CIERRE (toque 24 h / última carta 72 h) ═══════════════
+   Portada de wa-asistentes/src/seguimiento.js (2-set-2026) con las mismas reglas:
+   solo leads con aviso lead_caliente o pregunta_sin_respuesta, nunca a quien pagó o
+   reservó, nunca a quien dijo que no o respondió después, 9:00-20:00 de Lima, L-S, sin
+   feriados, 10 al día y 5 por corrida, y NUNCA un tercer toque. Todo lo que decide es puro
+   (entra por parámetros) para poder probarlo sin red. */
+const WA_SEG_H = 3600000;
+const WA_SEG_CONF = {
+  ventanaDias: 14, toque1Ms: 22.5 * WA_SEG_H, ventana24Ms: 23.75 * WA_SEG_H, toque2Ms: 72 * WA_SEG_H,
+  horaDesde: 9, horaHasta: 20, topeDia: 10, topePorCorrida: 5, ritmoMs: [20000, 45000],
+  feriados: ["2026-10-08", "2026-11-01", "2026-12-08", "2026-12-09", "2026-12-25"],
+  tiposLead: ["lead_caliente", "pregunta_sin_respuesta"]
+};
+function waSegNorm(s){ return String(s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, ""); }
+const WA_SEG_STOP = new Set(["hola", "buenas", "buenos", "gracias", "quiero", "clases", "canto", "info", "hey", "ok"]);
+const WA_SEG_DIJO_NO = /\bno (me interesa|gracias|quiero|puedo|por ahora|voy a poder)|ya no|dejalo|dejenlo|no molest|no me escrib|no insist/;
+const WA_SEG_DIJO_PAGO = /ya (pague|pago|yapee|hice el (pago|deposito|yape)|reserve|compre|me inscribi|tengo (mi )?cuenta)|te (deposite|yapee|pague)/;
+const WA_SEG_HABLA_DE_TIEMPO = /\bhoy\b|\bma[ñn]ana\b|\bpasado ma[ñn]ana\b|\besta (semana|tarde|noche)\b|\bde \d{1,2} a \d{1,2}\b|\ba las? \d{1,2}\b|\b\d{1,2}\s*(am|pm|a\.m\.|p\.m\.|h|hrs)\b|\b(lunes|martes|mi[eé]rcoles|jueves|viernes|s[aá]bado|domingo)\b|\btengo (espacio|libre|un cupo)\b|\bpuedo (hoy|ma[ñn]ana)\b/i;
+const WA_SEG_PROHIBIDO = [
+  [/\bprueba\b/i, "menciona clase de prueba"],
+  [/descuento|promoci[oó]n|\boferta\b|\bgratis\b|%/i, "menciona descuento o promoción"],
+  [/toribio|miraflores|nevera|direcci[oó]n|\bsede\b/i, "da la dirección o la zona del studio"],
+  [/grupal|\bgrupos?\b|\btaller\b|cohorte/i, "menciona grupos"],
+  [/[¿¡]/, "signos de apertura"],
+  [/[—–]/, "guion largo"],
+  [/\bllamada\b|\bllamar\b|te llamo/i, "propone llamada"],
+  [/garantiz|te aseguro|vas a lograr|resultados garantizados/i, "promete resultados"],
+  [/sigues interesad|a[uú]n te interesa|todav[ií]a te interesa/i, "pregunta si sigue interesado"],
+  [/\p{Extended_Pictographic}/u, "emoji"],
+  [/\bfaber\b/i, "menciona Faber"]
+];
+const WA_SEG_DIAS = ["domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"];
+function waSegLima(ts){
+  const p = limaParts(new Date(ts));
+  /* mes 1-12 (limaParts lo da 0-11): si no, los feriados de octubre se buscaban en setiembre y nunca calzaban */
+  return { fecha: p.y + "-" + String(p.m + 1).padStart(2, "0") + "-" + String(p.d).padStart(2, "0"), dow: p.dow, hora: p.h, min: p.min, d: p.d };
+}
+function waSegVentanaAbierta(ts, conf){
+  const p = waSegLima(ts);
+  if (p.dow === 0) return false;
+  if ((conf.feriados || []).indexOf(p.fecha) !== -1) return false;
+  return p.hora >= conf.horaDesde && p.hora < conf.horaHasta;
+}
+function waSegCapitalizar(s){ return s ? s.charAt(0).toUpperCase() + s.slice(1).toLowerCase() : s; }
+function waSegNombreDe(nombrePerfil, delLead){
+  const texto = delLead.map(m => String(m.texto)).join(" ");
+  const intro = texto.match(/\b(?:soy|me llamo|mi nombre es)\s+([\p{L}]{2,})/iu);
+  if (intro && !WA_SEG_STOP.has(waSegNorm(intro[1]))) return waSegCapitalizar(intro[1]);
+  const push = String(nombrePerfil || "").replace(/[^\p{L} ]/gu, " ").trim().split(/\s+/)[0] || "";
+  if (push.length >= 3 && /^\p{L}+$/u.test(push) && !WA_SEG_STOP.has(waSegNorm(push))) return waSegCapitalizar(push);
+  return null;
+}
+function waSegExtraerTema(delLead, salientes){
+  const leadTxt = waSegNorm(delLead.map(m => m.texto).join(" \n "));
+  const ultimoLead = waSegNorm(delLead.length ? delLead[delLead.length - 1].texto : "");
+  const botTxt = waSegNorm(salientes.map(m => m.texto).join(" \n "));
+  const cantoL = /\bcant|vocal|\bvoz\b|desafin|entonar/.test(leadTxt);
+  const compoL = /compos|componer|teoria|escribir cancion|hacer cancion|crear cancion|hook theory/.test(leadTxt);
+  let curso = cantoL && compoL ? "combo" : compoL ? "composicion" : cantoL ? "canto" : null;
+  if (!curso){
+    if (/llevar los dos|ambos cursos/.test(botTxt)) curso = "combo";
+    else if (/clases de composicion son 1 a 1/.test(botTxt)) curso = "composicion";
+    else if (/clases de canto son 1 a 1/.test(botTxt)) curso = "canto";
+  }
+  const rePres = /presencial/, reOnline = /\bonline\b|en linea|virtual|remot|\bzoom\b|\bmeet\b|desde casa|a distancia/;
+  let modalidad = null;
+  if (rePres.test(ultimoLead) && !reOnline.test(ultimoLead)) modalidad = "presencial";
+  else if (reOnline.test(ultimoLead) && !rePres.test(ultimoLead)) modalidad = "online";
+  else if (rePres.test(leadTxt) && !reOnline.test(leadTxt)) modalidad = "presencial";
+  else if (reOnline.test(leadTxt) && !rePres.test(leadTxt)) modalidad = "online";
+  else if (/presencial entonces/.test(botTxt)) modalidad = "presencial";
+  else if (/online entonces/.test(botTxt)) modalidad = "online";
+  const mixto = /mixt|\bica\b|provincia|viaj|combinar/.test(leadTxt);
+  if (mixto && !modalidad) modalidad = "mixto";
+  const dias = [];
+  const reDia = [[1, /\blunes\b/], [2, /\bmartes\b/], [3, /\bmiercoles\b/], [4, /\bjueves\b/], [5, /\bviernes\b/], [6, /\bsabados?\b/], [0, /\bdomingos?\b/]];
+  for (const [dow, re] of reDia) if (re.test(leadTxt)) dias.push(dow);
+  if (/fin(es)? de semana|\bfindes?\b|\bfds\b/.test(leadTxt)) for (const d of [6, 0]) if (dias.indexOf(d) === -1) dias.push(d);
+  let franja = null;
+  if (/\bnoches?\b|de noche|\b(7|8|9) ?pm\b|\b(19|20|21)(:00)? ?h?\b|despues de las (6|7|8)|saliendo del trabajo/.test(leadTxt)) franja = "noche";
+  else if (/\btardes?\b/.test(leadTxt)) franja = "tarde";
+  else if (/(en la|por la|de|las) mananas?\b|\bmananas\b|temprano/.test(leadTxt)) franja = "manana";
+  return {
+    curso, modalidad, dias, franja, mixto,
+    preguntoHorarios: dias.length > 0 || franja !== null || /horario|disponib|cupo|que dias|que hora|a que hora|cuando (puedo|podria|seria|empiezo)|agenda/.test(leadTxt),
+    preguntoQuien: /quien(es)? (son|es|da|dicta|ensena)|\bprofes\b|profesor|maestr[oa]|\bensena\b/.test(leadTxt),
+    respondioQuien: /te las da|te ensena|andres,? quien|estudios en musica|las doy yo/.test(botTxt),
+    preguntoDuracion: /\bdura\b|duracion|cuanto tiempo|minutos/.test(leadTxt),
+    respondioDuracion: /\b1 hora\b|una hora|2 horas seguidas|dos horas/.test(botTxt),
+    faltaModalidad: !modalidad
+  };
+}
+/* Lee un hilo de wa_hilo (con ts ISO y quien) y saca lo que la decisión necesita. */
+function waSegAnalizarHilo(hilo, nombrePerfil){
+  const filas = (hilo || []).map(h => ({ ts: Date.parse(h.ts) || 0, quien: h.quien, texto: String(h.texto || "") }));
+  const delLead = filas.filter(m => m.quien === "lead");
+  const salientes = filas.filter(m => m.quien !== "lead");
+  const max = lista => lista.reduce((a, m) => Math.max(a, m.ts || 0), 0);
+  const ultimos = delLead.slice(-3).map(m => waSegNorm(m.texto)).join(" \n ");
+  return {
+    delLead, salientes,
+    ultimoIn: max(delLead), ultimoOut: max(salientes),
+    ultimoOutReal: max(salientes.filter(m => m.quien !== "seguimiento")),
+    dijoNo: WA_SEG_DIJO_NO.test(ultimos), dijoPago: WA_SEG_DIJO_PAGO.test(ultimos),
+    tema: waSegExtraerTema(delLead, salientes), nombre: waSegNombreDe(nombrePerfil, delLead)
+  };
+}
+const waSegSaltar = motivo => ({ accion: "saltar", motivo });
+const waSegHoras = ms => Math.max(1, Math.round(ms / WA_SEG_H));
+/* Pura. pago: {pagado, reservas} o null (no se pudo verificar = no se manda). */
+function waSegDecidir({ analisis, toques, ahora, conf, pago, excluido, avisoTs }){
+  const a = analisis, c = conf || WA_SEG_CONF;
+  if (!a || !(a.delLead.length + a.salientes.length)) return waSegSaltar("sin hilo");
+  if (excluido) return waSegSaltar("está en no-tocar o ya es alumno/perdido");
+  if (!a.ultimoOut) return waSegSaltar("nunca se le respondió: eso es un turno de la IA, no un seguimiento");
+  if (a.ultimoIn > a.ultimoOut) return waSegSaltar("respondió después del último saliente: le toca a la IA o al dueño");
+  if (a.dijoNo) return waSegSaltar("dijo que no");
+  if (a.dijoPago) return waSegSaltar("dice que ya pagó o reservó");
+  const actividad = Math.max(avisoTs || 0, a.ultimoIn, a.ultimoOutReal);
+  if (actividad < ahora - c.ventanaDias * 86400000) return waSegSaltar("fuera de la ventana de " + c.ventanaDias + " días");
+  const enviados = (toques || []).filter(t => t.modo !== "fallo");
+  const n = enviados.length;
+  if (n >= 2) return waSegSaltar("ya recibió los 2 toques: nunca un tercero");
+  const fallosRecientes = (toques || []).filter(t => t.modo === "fallo" && ahora - (t.ts || 0) < 6 * WA_SEG_H).length;
+  if (fallosRecientes) return waSegSaltar("un envío falló hace menos de 6 h: se espera");
+  if (pago === null || pago === undefined) return waSegSaltar("no se pudo verificar si pagó: no se envía");
+  if (pago.pagado) return waSegSaltar("ya pagó (alumno)");
+  if (Number(pago.reservas) > 0) return waSegSaltar("ya tiene una reserva futura");
+  if (n === 0){
+    const desdeLead = ahora - a.ultimoIn;
+    if (desdeLead < c.toque1Ms) return waSegSaltar("faltan " + waSegHoras(c.toque1Ms - desdeLead) + " h para el toque 1");
+    /* dentro de la ventana de 24 h de Meta va texto libre (gratis); si se pasó, plantilla */
+    return { accion: "toque", toque: 1, modo: desdeLead < c.ventana24Ms ? "texto" : "plantilla" };
+  }
+  const silencio = ahora - a.ultimoOutReal;
+  const desdeToque1 = ahora - (enviados[0].ts || 0);
+  if (silencio < c.toque2Ms) return waSegSaltar("faltan " + waSegHoras(c.toque2Ms - silencio) + " h para el toque 2");
+  if (desdeToque1 < 24 * WA_SEG_H) return waSegSaltar("el toque 1 salió hace " + waSegHoras(desdeToque1) + " h: el 2 espera 24 h");
+  return { accion: "toque", toque: 2, modo: "plantilla" };
+}
+/* ---- el texto del toque 1 (texto libre), determinista salvo la retoma de una pregunta ---- */
+function waSegFmtHora(h){ const h12 = h % 12 === 0 ? 12 : h % 12; return h12 + " " + (h < 12 ? "a.m." : "p.m."); }
+function waSegLista(items){ return items.length <= 1 ? items.join("") : items.slice(0, -1).join(", ") + " y " + items[items.length - 1]; }
+function waSegSlotsQueCalzan(slots, tema, ahora){
+  const maxDias = 3, maxPorDia = 4;
+  if (!Array.isArray(slots) || !slots.length) return { dias: [] };
+  const parse = slots.map(s => (typeof s === "string" ? s : (s && (s.inicio_utc || s.iso || s.inicio)) || "")).filter(Boolean)
+    .map(iso => ({ iso, ts: Date.parse(iso) })).filter(s => s.ts > ahora).map(s => ({ ...s, lima: waSegLima(s.ts) }));
+  const porFranja = s => !tema.franja || (tema.franja === "manana" && s.lima.hora < 12) || (tema.franja === "tarde" && s.lima.hora >= 12 && s.lima.hora < 18) || (tema.franja === "noche" && s.lima.hora >= 18);
+  const porDia = s => !tema.dias.length || tema.dias.indexOf(s.lima.dow) !== -1;
+  let horizonte = 7;
+  let elegidos = parse.filter(s => s.ts <= ahora + horizonte * 86400000 && porDia(s) && porFranja(s));
+  if (!elegidos.length && (tema.dias.length || tema.franja)){ horizonte = 14; elegidos = parse.filter(s => s.ts <= ahora + horizonte * 86400000 && porDia(s) && porFranja(s)); }
+  const grupos = new Map();
+  for (const s of elegidos){
+    const k = s.lima.fecha;
+    if (!grupos.has(k)) grupos.set(k, { etiqueta: WA_SEG_DIAS[s.lima.dow] + " " + s.lima.d, horas: [], mas: false });
+    const g = grupos.get(k);
+    if (g.horas.length < maxPorDia) g.horas.push(waSegFmtHora(s.lima.hora)); else g.mas = true;
+  }
+  return { dias: [...grupos.values()].slice(0, maxDias) };
+}
+function waSegTextoDias(tema){
+  const nombres = tema.dias.map(d => WA_SEG_DIAS[d]);
+  if (nombres.length) return waSegLista(nombres);
+  return tema.franja === "noche" ? "noche" : tema.franja === "tarde" ? "tarde" : tema.franja === "manana" ? "mañana" : "";
+}
+function waSegFraseCurso(tema){
+  const c = tema.curso === "combo" ? "canto y composición" : tema.curso === "composicion" ? "composición" : tema.curso === "canto" ? "canto" : null;
+  const m = tema.modalidad === "presencial" ? " presencial" : tema.modalidad === "online" ? " online" : "";
+  return c ? "las clases de " + c + m : "las clases";
+}
+function waSegFraseHorarios(tema, slots, ahora, urls){
+  const dias = waSegTextoDias(tema);
+  if (slots === null || slots === undefined){
+    return (dias ? "Los horarios de " + dias + " que quedan libres" : "Los horarios que quedan libres") + " los ves en vivo en " + urls.horarios + " y se actualizan solos.";
+  }
+  const calzan = waSegSlotsQueCalzan(slots, tema, ahora);
+  if (!calzan.dias.length){
+    return dias
+      ? "Los horarios de " + dias + " están tomados por ahora, pero quedan cupos otros días y los ves en vivo en " + urls.horarios + " sin crear cuenta."
+      : "Quedan pocos cupos estas semanas y los ves en vivo en " + urls.horarios + " sin crear cuenta.";
+  }
+  const cuales = dias ? "los horarios de " + dias + " que quedan libres" : "los horarios que quedan libres estos días";
+  const detalle = calzan.dias.map(g => g.etiqueta + " a las " + waSegLista(g.horas) + (g.mas ? " (y alguno más)" : "")).join("; ");
+  return "Te paso " + cuales + ": " + detalle + (detalle.endsWith(".") ? "" : ".");
+}
+function waSegFrasePaso(tema, urls, precios){
+  const p = precios || {};
+  const plan = tema.curso === "combo"
+    ? "8 horas al mes a S/" + (p.p8 || 580) + " o 12 a S/" + (p.p12 || 780) + ", en sesiones de 2 horas"
+    : "4 clases al mes a S/" + (p.p4 || 320) + " u 8 a S/" + (p.p8 || 580);
+  const paso = "creas tu cuenta en " + urls.portal + " y ahí mismo eliges tu plan, " + plan + ", y reservas tu horario.";
+  return tema.faltaModalidad ? "Prefieres presencial u online? Con eso, para dejarlo cerrado: " + paso : "Para dejarlo cerrado: " + paso;
+}
+function waSegValidarTexto(texto, preciosOk, urls){
+  if (!texto || texto.trim().length < 20) return "texto vacío o muy corto";
+  for (const [re, motivo] of WA_SEG_PROHIBIDO) if (re.test(texto)) return motivo;
+  for (const m of texto.matchAll(/S\/\s?(\d[\d,.]*\d|\d)/g)){
+    if (!preciosOk.has(m[1].replace(/[.,]/g, ""))) return "precio que no existe: S/" + m[1];
+  }
+  if (/https?:\/\/\S+[.,;:)](?=\s|$)/.test(texto)) return "link con puntuación pegada";
+  if (/horarios y ah[ií] mismo pagas/i.test(texto)) return "dice que se paga en /horarios";
+  if (/\bpagas?\b|\bpago\b|\bplan\b/i.test(texto) && texto.indexOf(urls.portal) === -1) return "habla de pagar o del plan sin el link del portal";
+  return null;
+}
+function waSegSanear(t){
+  return String(t || "").replace(/[¿¡]/g, "").replace(/\*\*(.+?)\*\*/g, "*$1*").replace(/^#{1,6}\s+/gm, "").replace(/\s*[—–]\s*/g, ", ").replace(/[ \t]+\n/g, "\n").trim();
+}
+/* Redacta el toque 1 en texto libre. retomaIA: función opcional que contesta la pregunta
+   colgada con la kb (se valida entera; si rompe una regla, va la línea genérica). */
+async function waSegRedactarToque1({ analisis, slots, ahora, urls, precios, preciosOk, ultimoAviso, retomaIA }){
+  const tema = analisis.tema, nombre = analisis.nombre;
+  const saludo = nombre ? "Hola " + nombre + "!" : "Hola!";
+  const extras = [];
+  if (tema.preguntoQuien && !tema.respondioQuien) extras.push("Las clases las doy yo, Andrés, siempre 1 a 1.");
+  if (tema.preguntoDuracion && !tema.respondioDuracion) extras.push(tema.curso === "combo" ? "Cada sesión dura 2 horas." : "Cada clase dura 1 hora.");
+  const armar = retoma => saludo + " " + [retoma, ...extras].join(" ") + "\n\n" + waSegFrasePaso(tema, urls, precios);
+  const generica = "Te escribo por " + waSegFraseCurso(tema) + " que conversamos hace unos días.";
+  if (ultimoAviso && ultimoAviso.motivo === "pregunta_sin_respuesta" && retomaIA){
+    let ia = null;
+    try { ia = await retomaIA({ analisis, aviso: ultimoAviso }); } catch (e) { ia = null; }
+    ia = ia ? waSegSanear(ia) : "";
+    if (ia && nombre){
+      ia = ia.replace(new RegExp(",\\s*" + nombre + "(?=[.!?,])", "g"), "").replace(new RegExp("^" + nombre + "[,!]?\\s+"), "").replace(/^([a-záéíóúñ])/, c => c.toUpperCase());
+    }
+    if (ia && ia.split(/\s+/).length <= 60 && !WA_SEG_HABLA_DE_TIEMPO.test(ia) && waSegValidarTexto(armar(ia), preciosOk, urls) === null) return armar(ia);
+    return armar(generica);
+  }
+  if (tema.preguntoHorarios) return armar(waSegFraseHorarios(tema, slots, ahora, urls));
+  return armar(generica);
+}
+/* La IA contesta la pregunta que quedó colgada, solo la retoma (sin saludo, cierre, links ni precios). */
+async function waSegRetomaIA(env, cfg, tenant, { analisis, aviso }){
+  const conv = [...analisis.delLead, ...analisis.salientes].sort((a, b) => a.ts - b.ts).slice(-14).map(m => {
+    const p = waSegLima(m.ts || 0);
+    return "[" + p.fecha + " " + String(p.hora).padStart(2, "0") + ":" + String(p.min).padStart(2, "0") + "] " +
+      (m.quien === "lead" ? "LEAD" : m.quien === "dueno" ? "DUEÑO" : "ASISTENTE") + ": " + m.texto.slice(0, 400);
+  }).join("\n");
+  const hoy = waSegLima(Date.now());
+  const system = "Eres el asistente de WhatsApp de " + (tenant.academia || "la academia") + " y escribes en primera persona como el profesor. Vas a escribir SOLO la primera parte, una o dos frases y máximo 45 palabras, de un mensaje de seguimiento: contestas la pregunta que quedó sin responder usando la base de conocimiento de abajo. Sin saludo, sin cierre, sin links, sin precios, sin emojis, sin signos de apertura (¿ ¡), sin guiones largos.\n" +
+    "OJO CON EL TIEMPO: cada línea del chat lleva su fecha y hora de Lima, y hoy es " + hoy.fecha + ". Un \"hoy\" o \"mañana\" dentro del chat es de ESE día, ya pasó. Nunca digas \"hoy\", \"mañana\" ni una hora o día concreto de disponibilidad.\n" +
+    "Prohibido: clase de prueba, descuentos, la dirección o el distrito, clases grupales, llamadas, promesas de resultados, inventar datos. Si la base no responde la pregunta, escribe una sola frase honesta diciendo que lo confirmas y le avisas.\n\n---\n\n" +
+    String(cfg.wa_kb || "").slice(0, 12000);
+  const r = await llamarClaudeOnboarding(env, system, [{ role: "user", content: "Aviso que dejó el asistente: " + (aviso.resumen || "") + "\n\nCONVERSACIÓN:\n" + conv + "\n\nEscribe la retoma." }], "");
+  return r || null;
+}
+/* Un pase de la secuencia sobre un tenant. deps para pruebas: { ahora, enviarTexto, enviarPlantilla, slots, dormir, pagoDe, hiloDe, convDe, toquesDe, retomaIA }. */
+async function waSeguimientoTenant(env, tid, cfg, deps){
+  const d = deps || {};
+  const conf = Object.assign({}, WA_SEG_CONF, d.conf || {});
+  const ahora = d.ahora || Date.now();
+  const r = { tenant: tid, enviados: [], saltados: [], motivo: "" };
+  if (!waSegVentanaAbierta(ahora, conf)){ r.motivo = "fuera del horario (9-20 Lima, L-S, sin feriados)"; return r; }
+  const phoneId = String(cfg.wa_phone_id || "");
+  if (!phoneId && !d.enviarTexto){ r.motivo = "sin wa_phone_id"; return r; }
+  const hoy00 = (() => { const p = waSegLima(ahora); return limaToUtc(Number(p.fecha.slice(0, 4)), Number(p.fecha.slice(5, 7)) - 1, Number(p.fecha.slice(8, 10)), "00:00").toISOString(); })();
+  const hoyRow = await env.DB.prepare("SELECT COUNT(*) AS n FROM wa_seguimiento WHERE tenant_id = ?1 AND ts >= ?2 AND modo != 'fallo'").bind(tid, hoy00).first().catch(() => null);
+  let hoyEnviados = Number((hoyRow && hoyRow.n) || 0);
+  if (hoyEnviados >= conf.topeDia){ r.motivo = "tope del día (" + conf.topeDia + ") alcanzado"; return r; }
+  const desdeIso = new Date(ahora - conf.ventanaDias * 86400000).toISOString();
+  const marcas = conf.tiposLead.map((_, i) => "?" + (i + 3)).join(",");
+  const { results: cands } = await env.DB.prepare(
+    "SELECT telefono, MAX(ts) AS ts, motivo FROM wa_aviso WHERE tenant_id = ?1 AND ts >= ?2 AND motivo IN (" + marcas + ") GROUP BY telefono ORDER BY ts DESC LIMIT 60"
+  ).bind(tid, desdeIso, ...conf.tiposLead).all().catch(() => ({ results: [] }));
+  const urls = { horarios: String(cfg.wa_url_horarios || ("https://batuta.lat/app/a/" + (cfg.slug || ""))), portal: String(cfg.wa_url_portal || ("https://batuta.lat/app/a/" + (cfg.slug || ""))) };
+  let precios = null, preciosOk = new Set(["90", "320", "580", "780"]);
+  try {
+    const pr = await loadPrecios(env, tid); const pq = await loadPaquetes(env, tid);
+    const por = {}; for (const n of (pq.list || [])){ const pk = pq.map[n] || {}; if (pr[n] != null) por["p" + pk.clases] = pr[n]; }
+    precios = por; preciosOk = new Set(Object.values(pr).map(v => String(Math.round(Number(v)))).concat(["90"]));
+  } catch (e) {}
+  const noTocar = new Set(String(cfg.wa_no_tocar || "").split(",").map(s => s.replace(/\D/g, "")).filter(Boolean));
+  const plantillas = { 1: String(cfg.wa_plantilla_toque1 || "mvt_toque_1"), 2: String(cfg.wa_plantilla_toque2 || "mvt_toque_2"), lang: String(cfg.wa_plantilla_lang || "es") };
+  const dormir = d.dormir || (ms => new Promise(res => setTimeout(res, ms)));
+  const tenantRow = await env.DB.prepare("SELECT id, academia, slug FROM tenants WHERE id = ?1").bind(tid).first().catch(() => ({ id: tid, academia: "" }));
+  let porCorrida = 0;
+  for (const c of (cands || [])){
+    if (porCorrida >= conf.topePorCorrida || hoyEnviados >= conf.topeDia) break;
+    const tel = String(c.telefono || "").replace(/\D/g, "");
+    if (!tel) continue;
+    const hilo = d.hiloDe ? await d.hiloDe(tel) : await waHiloCargar(env, tid, tel, 60);
+    const conv = d.convDe ? await d.convDe(tel) : await waConvDe(env, tid, tel);
+    const analisis = waSegAnalizarHilo(hilo, conv && conv.nombre);
+    const toques = d.toquesDe ? await d.toquesDe(tel) : ((await env.DB.prepare("SELECT toque, ts, modo FROM wa_seguimiento WHERE tenant_id = ?1 AND telefono = ?2 ORDER BY ts ASC").bind(tid, tel).all().catch(() => ({ results: [] }))).results || []).map(x => ({ toque: Number(x.toque), ts: Date.parse(x.ts) || 0, modo: x.modo }));
+    const lead = await env.DB.prepare("SELECT etapa FROM leads WHERE tenant_id = ?1 AND whatsapp = ?2").bind(tid, tel).first().catch(() => null);
+    const excluido = noTocar.has(tel.slice(-9)) || noTocar.has(tel) || (lead && ["alumno", "perdido"].indexOf(String(lead.etapa || "")) !== -1);
+    let pago = null;
+    try { pago = d.pagoDe ? await d.pagoDe(tel) : await waLeadPago(env, tid, tel); } catch (e) { pago = null; }
+    const dec = waSegDecidir({ analisis, toques, ahora, conf, pago, excluido, avisoTs: Date.parse(c.ts) || 0 });
+    if (dec.accion !== "toque"){ r.saltados.push({ telefono: tel, motivo: dec.motivo }); continue; }
+    const tema = analisis.tema;
+    let texto = "", modo = dec.modo, envio = null;
+    if (dec.toque === 1 && modo === "texto"){
+      let slots = null;
+      try { slots = d.slots !== undefined ? d.slots : await generarSlots(env, tid, await profeDeAlumno(env, tid, null)); } catch (e) { slots = null; }
+      const retomaIA = d.retomaIA !== undefined ? d.retomaIA : (args => waSegRetomaIA(env, cfg, tenantRow, args));
+      texto = await waSegRedactarToque1({ analisis, slots, ahora, urls, precios, preciosOk, ultimoAviso: { motivo: c.motivo }, retomaIA });
+      const mal = waSegValidarTexto(texto, preciosOk, urls);
+      if (mal){ r.saltados.push({ telefono: tel, motivo: "texto rechazado: " + mal }); continue; }
+      envio = d.enviarTexto ? await d.enviarTexto(tel, texto) : await enviarWhatsAppEx(env, phoneId, tel, texto);
+    } else {
+      const param = waSegFraseCurso(tema);
+      texto = "[plantilla " + plantillas[dec.toque] + "] " + param;
+      envio = d.enviarPlantilla ? await d.enviarPlantilla(tel, plantillas[dec.toque], [param]) : await enviarPlantillaWA(env, phoneId, tel, plantillas[dec.toque], plantillas.lang, [param]);
+      modo = "plantilla";
+    }
+    const ok = !!(envio && envio.ok);
+    await env.DB.prepare("INSERT INTO wa_seguimiento (id, tenant_id, telefono, toque, ts, modo, wamid, texto) VALUES (?1,?2,?3,?4,?5,?6,?7,?8)")
+      .bind(crypto.randomUUID(), tid, tel, dec.toque, new Date(ahora).toISOString(), ok ? modo : "fallo", (envio && envio.wamid) || "", ok ? texto.slice(0, 1500) : ("FALLO: " + String((envio && envio.error) || "")).slice(0, 500)).run().catch(() => {});
+    if (ok){
+      await waHiloAgregar(env, tid, tel, "seguimiento", texto);
+      r.enviados.push({ telefono: tel, toque: dec.toque, modo, texto });
+      porCorrida++; hoyEnviados++;
+      if (!d.sinAviso) await avisarDuenoWA(env, tid, { motivo: "seguimiento_enviado", telefono: tel, nombre: analisis.nombre || "", resumen: "Toque " + dec.toque + " (" + modo + "): " + texto.slice(0, 160) });
+      await dormir(conf.ritmoMs[0] + Math.floor(Math.random() * (conf.ritmoMs[1] - conf.ritmoMs[0])));
+    } else {
+      r.saltados.push({ telefono: tel, motivo: "Meta rechazó el envío: " + String((envio && envio.error) || "") });
+    }
+  }
+  return r;
+}
+/* Corre en el cron cada 15 min para las academias con wa_seguimiento=on. */
+async function seguimientoWA(env){
+  await ensureWaHiloSchema(env);
+  const { results } = await env.DB.prepare("SELECT tenant_id FROM config WHERE clave = 'wa_seguimiento' AND valor = 'on'").all().catch(() => ({ results: [] }));
+  const out = [];
+  for (const row of (results || [])){
+    try {
+      const cfg = await loadConfig(env, row.tenant_id);
+      const t = await env.DB.prepare("SELECT slug FROM tenants WHERE id = ?1").bind(row.tenant_id).first().catch(() => null);
+      if (t) cfg.slug = t.slug;
+      out.push(await waSeguimientoTenant(env, row.tenant_id, cfg));
+    } catch (e) { console.error("seguimiento wa", row.tenant_id, e); }
+  }
+  return out;
 }
 
 /* ============ Sugerencias del asistente (modo "sugerencias": IA propone, el staff envia) ============
@@ -10188,23 +10832,7 @@ export default {
           const telQ = String(url.searchParams.get("tel") || "").replace(/\D/g, "");
           const tenantQ = String(url.searchParams.get("tenant") || "MVT-PROFESORMVT").slice(0, 64);
           if (telQ.length < 9) return json({ error: "tel: van al menos los ultimos 9 digitos del numero" }, 400);
-          const colaTel = telQ.slice(-9);
-          const { results: alsTel } = await env.DB.prepare(
-            "SELECT id, pago FROM alumnos WHERE tenant_id = ?1 AND whatsapp != '' AND " +
-            "REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(whatsapp,' ',''),'+',''),'-',''),'(',''),')','') LIKE ?2"
-          ).bind(tenantQ, "%" + colaTel).all().catch(() => ({ results: [] }));
-          const listaTel = alsTel || [];
-          const pagadoTel = listaTel.some(a => String(a.pago || "") === "Pagado");
-          let reservasTel = 0;
-          if (listaTel.length){
-            const idsTel = listaTel.map(a => a.id);
-            const marcasTel = idsTel.map((_, i) => "?" + (i + 3)).join(",");
-            const rowTel = await env.DB.prepare(
-              "SELECT COUNT(*) AS n FROM reservas WHERE tenant_id = ?1 AND estado = 'reservada' AND inicio_utc > ?2 AND alumno_id IN (" + marcasTel + ")"
-            ).bind(tenantQ, new Date().toISOString(), ...idsTel).first().catch(() => null);
-            reservasTel = Number((rowTel && rowTel.n) || 0);
-          }
-          return json({ pagado: pagadoTel, reservas: reservasTel, alumnos: listaTel.length });
+          return json(await waLeadPago(env, tenantQ, telQ));
         }
         if (path === "/app/api/su/wa-status" && request.method === "GET"){
           if (!env.WHATSAPP_TOKEN) return json({ ok: false, error: "Sin WHATSAPP_TOKEN cargado" }, 501);
@@ -10283,6 +10911,53 @@ export default {
           const r = await fetch("https://api.mercadopago.com/users/me", { headers: { "Authorization": "Bearer " + tok } });
           const d = await r.json().catch(() => ({}));
           return json({ ok: r.ok, id: d.id, nickname: d.nickname, email: d.email, tipo: d.status && d.status.mercadopago_account_type, negocio: d.company && d.company.brand_name, en_tarjeta: d.company && d.company.soft_descriptor, sitio: d.status && d.status.site_status, vende: d.status && d.status.sell });
+        }
+        /* Plantillas de la WABA (6-set-2026): listar y crear. Las de MVT se llaman mvt_*; las de
+           Batuta no se tocan desde aca. GET lista; POST {name, language, category, body, example[]}. */
+        if (path === "/app/api/su/wa-templates" && (request.method === "GET" || request.method === "POST")){
+          if (!env.WHATSAPP_TOKEN) return json({ ok: false, error: "Sin WHATSAPP_TOKEN cargado" }, 501);
+          const WABA_ID = String(env.WABA_ID || "1532220315245141");
+          try {
+            if (request.method === "GET"){
+              const r = await fetch("https://graph.facebook.com/v21.0/" + WABA_ID + "/message_templates?fields=name,status,category,language,components,rejected_reason&limit=100", { headers: { "Authorization": "Bearer " + env.WHATSAPP_TOKEN } });
+              const d = await r.json().catch(() => ({}));
+              return json({ ok: r.ok, status: r.status, plantillas: (d && d.data) || [], meta: r.ok ? null : d }, r.ok ? 200 : 502);
+            }
+            const b = await request.json().catch(() => ({}));
+            const name = String(b.name || "").trim().toLowerCase().replace(/[^a-z0-9_]/g, "");
+            const body = String(b.body || "").trim();
+            if (!name || !body) return json({ error: "manda name y body" }, 400);
+            const comps = [{ type: "BODY", text: body }];
+            if (Array.isArray(b.example) && b.example.length) comps[0].example = { body_text: [b.example.map(String)] };
+            const cuerpo = { name, language: String(b.language || "es"), category: String(b.category || "MARKETING").toUpperCase(), components: comps };
+            if (b.allow_category_change !== false) cuerpo.allow_category_change = true;
+            const r = await fetch("https://graph.facebook.com/v21.0/" + WABA_ID + "/message_templates", {
+              method: "POST", headers: { "Authorization": "Bearer " + env.WHATSAPP_TOKEN, "Content-Type": "application/json" }, body: JSON.stringify(cuerpo)
+            });
+            const d = await r.json().catch(() => ({}));
+            return json({ ok: r.ok, status: r.status, meta: d }, r.ok ? 200 : 502);
+          } catch (e) { return json({ ok: false, error: String(e && e.message) }, 502); }
+        }
+        /* Simula un mensaje entrante a una academia SIN Meta: corre la misma rama del webhook con
+           el envio fingido. Para probar el cableado antes del corte. POST {phone_id, telefono, texto, nombre, keep} */
+        if (path === "/app/api/su/wa-simular" && request.method === "POST"){
+          const b = await request.json().catch(() => ({}));
+          const phoneIdS = String(b.phone_id || "").replace(/\D/g, "");
+          const telS = String(b.telefono || "").replace(/\D/g, "");
+          if (!phoneIdS || !telS || !b.texto) return json({ error: "manda phone_id, telefono y texto" }, 400);
+          const enviados = [];
+          const res = await waAtenderTenant(env, { phoneId: phoneIdS, from: telS, texto: String(b.texto).slice(0, 500), nombre: String(b.nombre || "").slice(0, 80), simulado: true,
+            enviar: async (to, t) => { enviados.push({ to, texto: t }); return { ok: true, wamid: "simulado", simulado: true }; } });
+          const hilo = await waHiloCargar(env, (await env.DB.prepare("SELECT tenant_id FROM config WHERE clave = 'wa_phone_id' AND valor = ?1").bind(phoneIdS).first().catch(() => ({}))||{}).tenant_id || "", telS, 20);
+          if (!b.keep){
+            const tidS = (await env.DB.prepare("SELECT tenant_id FROM config WHERE clave = 'wa_phone_id' AND valor = ?1").bind(phoneIdS).first().catch(() => null) || {}).tenant_id;
+            if (tidS){
+              for (const q of ["DELETE FROM wa_hilo WHERE tenant_id = ?1 AND telefono = ?2", "DELETE FROM wa_conv WHERE tenant_id = ?1 AND telefono = ?2", "DELETE FROM wa_aviso WHERE tenant_id = ?1 AND telefono = ?2", "DELETE FROM wa_seguimiento WHERE tenant_id = ?1 AND telefono = ?2", "DELETE FROM leads WHERE tenant_id = ?1 AND whatsapp = ?2 AND fuente = 'whatsapp'"]){
+                await env.DB.prepare(q).bind(tidS, telS).run().catch(() => {});
+              }
+            }
+          }
+          return json({ ok: true, resultado: res, enviados, hilo });
         }
         /* Envio de prueba con respuesta cruda de Meta (para diagnosticar sin adivinar). */
         if (path === "/app/api/su/wa-test" && request.method === "POST"){
@@ -11687,70 +12362,7 @@ export default {
             // academia de abajo queda intacto. Si lo maneja (respondio, apagado o sin cupo), corta aca.
             if (await manejarNegocioWA(env, { phoneId, from, texto, nombre })) return;
             // resolver el tenant dueno de ese numero (config wa_phone_id)
-            const cfgRow = await env.DB.prepare("SELECT tenant_id FROM config WHERE clave = 'wa_phone_id' AND valor = ?1").bind(phoneId).first().catch(() => null);
-            if (!cfgRow) return;
-            const tW = await env.DB.prepare("SELECT id, academia, slug, estado, plan FROM tenants WHERE id = ?1").bind(cfgRow.tenant_id).first();
-            if (!tW) return; // freemium: los tenants gratis/vencidos tambien pueden tener asistente (capado por plan)
-            const cfgW = await loadConfig(env, tW.id);
-            if (String(cfgW.wa_enabled || "") !== "on") return; // apagado por defecto
-            // freno de abuso: maximo ~12 respuestas IA por lead por hora (misma ventana horaria)
-            if (await chatbotPasoTope(env, "wa:" + tW.id + ":" + from, 12)) return;
-            await ensureErpSchema(env);
-            // crea/actualiza el lead (una fila por telefono), etapa contactado, seguir hoy
-            const yaLead = await env.DB.prepare("SELECT id FROM leads WHERE tenant_id = ?1 AND whatsapp = ?2").bind(tW.id, from).first().catch(() => null);
-            if (yaLead){
-              await env.DB.prepare("UPDATE leads SET nota = ?1, etapa = CASE WHEN etapa IN ('alumno','perdido') THEN etapa ELSE 'contactado' END, seguir_el = ?2, actualizado = ?2 WHERE id = ?3 AND tenant_id = ?4")
-                .bind(("Escribió por WhatsApp: " + texto).slice(0, 500), hoyLima(), yaLead.id, tW.id).run();
-            } else {
-              await env.DB.prepare("INSERT INTO leads (id,tenant_id,email,marca,fuente,interes,fecha,nombre,whatsapp,etapa,nota,seguir_el,actualizado) VALUES (?1,?2,'','Batuta','whatsapp','',?3,?4,?5,'contactado',?6,?3,?3)")
-                .bind(crypto.randomUUID(), tW.id, hoyLima(), String(nombre).slice(0, 80), from, ("Escribió por WhatsApp: " + texto).slice(0, 500)).run();
-            }
-            /* Respuesta CONVERSACIONAL con IA: contexto de venta del tenant + historial rolling.
-               Reusa llamarClaudeOnboarding (Claude Haiku + fallback Workers AI + saneo de estilo). */
-            // Cupo de conversaciones del asistente por plan (freemium 23-jul-2026): solo las
-            // conversaciones NUEVAS (ventana de 24h) consumen cupo. Al agotarse, no se llama a la
-            // IA (el dueno ve el uso en su panel via /me y sube de plan). El lead ya quedo
-            // registrado arriba, asi que el dueno puede responderle a mano.
-            const planW = waPlanEfectivo(tW);
-            const esConvNuevaW = await waEsNuevaConversacion(env, tW.id, from);
-            if (esConvNuevaW){
-              const cupo = await waConsumirConversacion(env, tW.id, planW);
-              if (!cupo.ok) return;
-            }
-            const tCtx = { id: tW.id, academia: tW.academia, slug: tW.slug, whatsapp: cfgW.whatsapp_profe || "" };
-            const datos = await contextoVentaWA(env, tCtx, cfgW);
-            const previo = await waHistorialCargar(env, tW.id, from);
-            // Voz editable del tenant (tono + instrucciones del dueno) inyectada al system prompt.
-            const sysConNombre = WA_VENDEDOR_SYS + bloqueVozWA(cfgW) + (nombre ? "\nLa persona se llama " + String(nombre).split(" ")[0] + "." : "");
-            const conversacion = previo.concat([{ role: "user", content: texto }]);
-            let reply = await llamarClaudeOnboarding(env, sysConNombre, conversacion, datos);
-            if (!reply){
-              // sin IA disponible: primer-toque calido de respaldo (no deja al lead sin respuesta)
-              reply = (nombre ? nombre.split(" ")[0] : "Hola") + ", gracias por escribir a " + (tW.academia || "la academia") + ". Cuentame que te gustaria aprender y un profesor te responde en breve.";
-            }
-            /* MODO del asistente (freemium 24-jul): 'auto' = la IA responde sola; 'sugerencias' =
-               la IA arma el borrador pero NO lo envia, queda para que el dueno lo mande a mano.
-               (El master ON/OFF es wa_enabled arriba: OFF = "solo yo respondo".) */
-            const waModo = String(cfgW.wa_modo || "auto").trim() === "sugerencias" ? "sugerencias" : "auto";
-            if (waModo === "sugerencias"){
-              await waSugerenciaGuardar(env, tW.id, from, nombre, texto, reply);
-              // guarda el turno del cliente para dar contexto a la proxima sugerencia (sin el borrador)
-              await waHistorialGuardar(env, tW.id, from, conversacion);
-            } else {
-              /* ⚖️ 21-ago-2026 · transparencia algorítmica. El Reglamento de la Ley 31814
-                 (D.S. 115-2025-PCM, vigente desde el 22-ene-2026) obliga a informar a la
-                 persona que está interactuando con una IA. Va como prefijo determinista del
-                 PRIMER mensaje de cada conversación, no como instrucción al modelo: el modelo
-                 se la puede saltar y la ley no. Y le decimos cómo pedir un humano. */
-              const salida = esConvNuevaW
-                ? ("Te responde el asistente virtual de " + (tW.academia || "la academia") +
-                   ". Si prefieres hablar con una persona, escribe: quiero hablar con alguien.\n\n" + reply)
-                : reply;
-              const enviado = await enviarWhatsApp(env, phoneId, from, salida);
-              if (enviado){
-                await waHistorialGuardar(env, tW.id, from, conversacion.concat([{ role: "assistant", content: reply }]));
-              }
-            }
+            await waAtenderTenant(env, { phoneId, from, texto, nombre });
           } catch (e) { console.error("wa webhook", e); }
         })());
         return new Response("ok", { status: 200 });
@@ -17238,7 +17850,7 @@ export default {
           /* config del tenant (cobros, marca, cupo, cursos): SOLO el dueno */
           if (!esDueno) return json({ error: "Los ajustes de la academia los maneja el dueno." }, 403);
           const b = await request.json().catch(() => ({}));
-          const claves = ["pago_numero", "pago_titular", "bcp_cuenta", "bcp_cci", "scotia_cuenta", "scotia_cci", "crypto_moneda", "crypto_red", "crypto_wallet", "stripe_moneda", "profe_nombre", "profe_marca", "profe_foto", "whatsapp_profe", "cursos", "brand_color", "brand_font", "agenda_cupo", "recordatorios_clase", "recordatorio_renovacion", "nubefact_ruta", "nubefact_token", "fact_serie_boleta", "fact_igv", "fact_proximo_numero", "wa_phone_id", "wa_enabled", "wa_modo", "wa_tono", "wa_instrucciones", "wa_kb", "reprog_activo", "reprog_min_h", "paquetes", "modulos_off", "clases", "anticipacion_h", "web_direccion_off",
+          const claves = ["pago_numero", "pago_titular", "bcp_cuenta", "bcp_cci", "scotia_cuenta", "scotia_cci", "crypto_moneda", "crypto_red", "crypto_wallet", "stripe_moneda", "profe_nombre", "profe_marca", "profe_foto", "whatsapp_profe", "cursos", "brand_color", "brand_font", "agenda_cupo", "recordatorios_clase", "recordatorio_renovacion", "nubefact_ruta", "nubefact_token", "fact_serie_boleta", "fact_igv", "fact_proximo_numero", "wa_phone_id", "wa_enabled", "wa_modo", "wa_tono", "wa_instrucciones", "wa_kb", "wa_seguimiento", "wa_no_tocar", "wa_url_horarios", "wa_url_portal", "reprog_activo", "reprog_min_h", "paquetes", "modulos_off", "clases", "anticipacion_h", "web_direccion_off",
                           /* Elevate (28-jul-2026) */
                           "caduca_meses", "asistencia_auto", "asistencia_horas", "mensajes",
                           /* que datos extra pide el formulario publico de compra (02-ago-2026) */
@@ -17476,8 +18088,10 @@ export default {
               if (k === "wa_enabled" && valor && valor !== "on") valor = "";
               if (k === "wa_modo" && ["auto", "sugerencias"].indexOf(valor) === -1) valor = "auto";
               if (k === "wa_tono" && valor && Object.keys(WA_TONOS).indexOf(valor) === -1) valor = "";
-              if (k === "wa_instrucciones") valor = valor.slice(0, 800);
-              if (k === "wa_kb") valor = valor.slice(0, 2000);
+              if (k === "wa_instrucciones") valor = valor.slice(0, 2000);
+              if (k === "wa_kb") valor = valor.slice(0, 12000);
+              if (k === "wa_seguimiento" && valor && valor !== "on") valor = "";
+              if (k === "wa_no_tocar") valor = valor.split(",").map(x => x.replace(/\D/g, "")).filter(Boolean).join(",").slice(0, 2000);
               if (k === "wa_phone_id") valor = valor.replace(/\D/g, "").slice(0, 25);
               if (k === "fact_proximo_numero" && valor){
                 const np = parseInt(valor, 10);
@@ -17600,6 +18214,65 @@ export default {
         }
         /* Sugerencias pendientes del asistente (modo 'sugerencias'): las lista el dueno para copiarlas
            y enviarlas a mano. GET = lista; POST {id, accion:'listo'} = marca enviada (la quita). */
+        /* ===== Bandeja de WhatsApp de la academia (6-set-2026): leer el hilo, responder a mano y
+           pausar la IA. Solo el dueno. Responder a mano PAUSA la IA en ese chat (regla de oro del
+           bot viejo de MVT: si el humano habla, el bot se calla). ===== */
+        if (path === "/app/api/admin/wa/chats" && request.method === "GET"){
+          if (!esDueno) return json({ error: "Solo el dueno" }, 403);
+          await ensureWaHiloSchema(env);
+          const { results } = await env.DB.prepare(
+            "SELECT c.telefono, COALESCE(c.nombre,'') AS nombre, COALESCE(c.pausa,'') AS pausa, c.actualizado, COALESCE(c.ultimo_in,'') AS ultimo_in, COALESCE(c.ultimo_out,'') AS ultimo_out, " +
+            "(SELECT texto FROM wa_hilo h WHERE h.tenant_id = c.tenant_id AND h.telefono = c.telefono ORDER BY ts DESC LIMIT 1) AS ultimo, " +
+            "(SELECT quien FROM wa_hilo h WHERE h.tenant_id = c.tenant_id AND h.telefono = c.telefono ORDER BY ts DESC LIMIT 1) AS ultimo_quien " +
+            "FROM wa_conv c WHERE c.tenant_id = ?1 ORDER BY COALESCE(NULLIF(c.ultimo_in,''), c.actualizado) DESC LIMIT 100"
+          ).bind(tid).all().catch(() => ({ results: [] }));
+          return json({ ok: true, chats: results || [] });
+        }
+        if (path === "/app/api/admin/wa/chat" && request.method === "GET"){
+          if (!esDueno) return json({ error: "Solo el dueno" }, 403);
+          const telC = String(url.searchParams.get("telefono") || "").replace(/\D/g, "");
+          if (!telC) return json({ error: "manda telefono" }, 400);
+          const hilo = await waHiloCargar(env, tid, telC, 80);
+          const conv = await waConvDe(env, tid, telC);
+          const leadC = await env.DB.prepare("SELECT id, nombre, etapa, nota FROM leads WHERE tenant_id = ?1 AND whatsapp = ?2").bind(tid, telC).first().catch(() => null);
+          return json({ ok: true, hilo, conv: conv || null, lead: leadC || null });
+        }
+        if (path === "/app/api/admin/wa/responder" && request.method === "POST"){
+          if (!esDueno) return json({ error: "Solo el dueno" }, 403);
+          const bR = await request.json().catch(() => ({}));
+          const telR = String(bR.telefono || "").replace(/\D/g, "");
+          const textoR = String(bR.texto || "").trim().slice(0, 1000);
+          if (!telR || !textoR) return json({ error: "manda telefono y texto" }, 400);
+          const cfgR = await loadConfig(env, tid);
+          if (!cfgR.wa_phone_id) return json({ error: "Esta academia no tiene su numero conectado a la API de WhatsApp." }, 400);
+          const envioR = await enviarWhatsAppEx(env, cfgR.wa_phone_id, telR, textoR);
+          if (envioR.ok){
+            await waHiloAgregar(env, tid, telR, "dueno", textoR);
+            await waPausaSet(env, tid, telR, true);
+            const prevR = await waHistorialCargar(env, tid, telR);
+            await waHistorialGuardar(env, tid, telR, prevR.concat([{ role: "assistant", content: textoR }]));
+          }
+          return json({ ok: envioR.ok, wamid: envioR.wamid || "", error: envioR.error || "", nota: envioR.ok ? "Si la persona no te escribio en las ultimas 24 h, Meta acepta el mensaje pero no lo entrega (regla de la ventana de servicio)." : "" }, envioR.ok ? 200 : 502);
+        }
+        if (path === "/app/api/admin/wa/pausa" && request.method === "POST"){
+          if (!esDueno) return json({ error: "Solo el dueno" }, 403);
+          const bP = await request.json().catch(() => ({}));
+          const telP = String(bP.telefono || "").replace(/\D/g, "");
+          if (!telP) return json({ error: "manda telefono" }, 400);
+          const on = String(bP.pausa || "") === "on";
+          await waPausaSet(env, tid, telP, on);
+          return json({ ok: true, telefono: telP, pausa: on ? "on" : "" });
+        }
+        if (path === "/app/api/admin/wa/borrar-chat" && request.method === "POST"){
+          if (!esDueno) return json({ error: "Solo el dueno" }, 403);
+          const bB = await request.json().catch(() => ({}));
+          const telB = String(bB.telefono || "").replace(/\D/g, "");
+          if (!telB) return json({ error: "manda telefono" }, 400);
+          for (const q of ["DELETE FROM wa_hilo WHERE tenant_id = ?1 AND telefono = ?2", "DELETE FROM wa_conv WHERE tenant_id = ?1 AND telefono = ?2", "DELETE FROM wa_aviso WHERE tenant_id = ?1 AND telefono = ?2", "DELETE FROM wa_seguimiento WHERE tenant_id = ?1 AND telefono = ?2"]){
+            await env.DB.prepare(q).bind(tid, telB).run().catch(() => {});
+          }
+          return json({ ok: true });
+        }
         if (path === "/app/api/admin/wa/sugerencias" && request.method === "GET"){
           if (!esDueno) return json({ error: "Solo el dueno." }, 403);
           await ensureWaSugSchema(env);
@@ -18064,6 +18737,7 @@ export default {
        día; con una sola corrida diaria no entrarían ni 300 correos. La propia función se
        encarga de no hacer nada fuera de la ventana. */
     try { await enviarCampanas(env); } catch (e) { console.error("campanas", e); }
+    try { await seguimientoWA(env); } catch (e) { console.error("seguimiento wa", e); }
     const dSched = new Date((event && event.scheduledTime) || Date.now());
     if (!(dSched.getUTCHours() === 14 && dSched.getUTCMinutes() === 0)) return;
     /* ---- desde aqui: SOLO la corrida diaria de las 9am Lima ---- */

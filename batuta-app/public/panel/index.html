@@ -1900,8 +1900,8 @@ button[data-ayuda],a[data-ayuda],select[data-ayuda],input[data-ayuda],label[data
         <option value="cordial">Cordial</option>
         <option value="serio">Serio</option>
       </select></div>
-      <div class="field"><label>Instrucciones para la IA (opcional)</label><textarea id="cfg_wa_instrucciones" maxlength="800" style="min-height:80px;" placeholder="Ej: Salúdame con 'buenas'. Ofrece siempre la clase de prueba gratis. No uses signos de apertura ni dos puntos."></textarea></div>
-      <div class="field"><label>Qué debe saber (FAQ, promos, políticas)</label><textarea id="cfg_wa_kb" maxlength="2000" style="min-height:100px;" placeholder="Ej: Estamos en San Isidro. La clase de prueba es gratis y dura 45 min. Aceptamos Yape y tarjeta. Horario de lunes a sábado 9am-8pm."></textarea></div>
+      <div class="field"><label>Instrucciones para la IA (opcional)</label><textarea id="cfg_wa_instrucciones" maxlength="2000" style="min-height:80px;" placeholder="Ej: Salúdame con 'buenas'. Ofrece siempre la clase de prueba gratis. No uses signos de apertura ni dos puntos."></textarea></div>
+      <div class="field"><label>Qué debe saber (FAQ, promos, políticas)</label><textarea id="cfg_wa_kb" maxlength="12000" style="min-height:100px;" placeholder="Ej: Estamos en San Isidro. La clase de prueba es gratis y dura 45 min. Aceptamos Yape y tarjeta. Horario de lunes a sábado 9am-8pm."></textarea></div>
       <div class="field" style="margin-top:10px;padding-top:10px;border-top:1px dashed var(--line,#2a2a2a);">
         <label>Prueba tu asistente (no envía nada, no gasta cupo)</label>
         <div style="display:flex;gap:8px;align-items:flex-start;flex-wrap:wrap;">
@@ -1909,6 +1909,27 @@ button[data-ayuda],a[data-ayuda],select[data-ayuda],input[data-ayuda],label[data
           <button class="btn ghost" id="btnWaProbar" type="button">Probar</button>
         </div>
         <div id="waTestOut" class="hint" style="margin-top:8px;white-space:pre-wrap;"></div>
+      </div>
+    </div>
+    <div class="group solo-dueno" data-aj="wa">
+      <h2>Seguimiento automático a interesados</h2>
+      <p class="hint">Cuando alguien escribe, se interesa y se queda callado, tu asistente le manda <b>un toque al día siguiente</b> retomando su tema y <b>una última carta a los 3 días</b>. Nunca un tercero, nunca a quien ya pagó o reservó, nunca a quien dijo que no. Solo de 9 a.m. a 8 p.m., de lunes a sábado, sin feriados, máximo 10 al día. Los mensajes fuera de las 24 horas salen por plantillas aprobadas por Meta.</p>
+      <div class="cfgrow"><span class="pk">Seguimiento automático</span><select id="cfg_wa_seguimiento"><option value="">Apagado</option><option value="on">Encendido</option></select></div>
+      <div class="field"><label>Números a los que NUNCA se les escribe solo (separados por coma)</label><input id="cfg_wa_no_tocar" type="text" placeholder="51999888777, 51988777666" /></div>
+    </div>
+    <div class="group solo-dueno" id="grpWaChats" data-aj="wa">
+      <h2>Conversaciones de WhatsApp</h2>
+      <p class="hint">Lo que tu asistente conversa por tu número oficial. <b>Si respondes desde acá, la IA se pausa en ese chat</b> y lo llevas tú; la puedes reanudar cuando quieras. Si la persona no te escribió en las últimas 24 horas, Meta no entrega tu mensaje (es su regla), así que ahí conviene escribirle desde tu propio WhatsApp.</p>
+      <div id="waChatsList" class="hint">Cargando…</div>
+      <div id="waChatBox" style="display:none;margin-top:10px;border-top:1px dashed var(--line,#2a2a2a);padding-top:10px;">
+        <div id="waChatHead" style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px;"></div>
+        <div id="waChatHilo" style="max-height:340px;overflow:auto;display:flex;flex-direction:column;gap:6px;padding:4px 0;"></div>
+        <textarea id="waChatTxt" style="min-height:64px;margin-top:8px;" placeholder="Escribe tu respuesta…"></textarea>
+        <div class="rowact" style="margin-top:6px;">
+          <button class="btn sm" id="btnWaEnviar" type="button">Enviar</button>
+          <button class="btn ghost sm" id="btnWaPausa" type="button">Pausar IA</button>
+          <a class="btn ghost sm" id="waChatWa" target="_blank" rel="noopener" href="#">Abrir en mi WhatsApp</a>
+        </div>
       </div>
     </div>
     <div class="group" id="grpWaSug" data-aj="wa" style="display:none;">
@@ -4048,8 +4069,10 @@ function renderAjustes(){
   if(el("cfg_wa_tono")) el("cfg_wa_tono").value=(db.config&&db.config.wa_tono)||"";
   if(el("cfg_wa_instrucciones")) el("cfg_wa_instrucciones").value=(db.config&&db.config.wa_instrucciones)||"";
   if(el("cfg_wa_kb")) el("cfg_wa_kb").value=(db.config&&db.config.wa_kb)||"";
+  if(el("cfg_wa_seguimiento")) el("cfg_wa_seguimiento").value=(db.config&&db.config.wa_seguimiento)||"";
+  if(el("cfg_wa_no_tocar")) el("cfg_wa_no_tocar").value=(db.config&&db.config.wa_no_tocar)||"";
   if(el("cfg_wa_phone_id")) el("cfg_wa_phone_id").value=(db.config&&db.config.wa_phone_id)||"";
-  renderWaCupo(); cargarWaSugerencias();
+  renderWaCupo(); cargarWaSugerencias(); cargarWaChats();
   var offModsR=modulosOff();
   MODULOS_DEF.forEach(function(m){
     var s=el("cfg_mod_"+m.id); if(s) s.value=offModsR.indexOf(m.id)!==-1?"off":"";
@@ -4098,6 +4121,65 @@ function renderWaCupo(){
   fetch('/app/api/t/me',{headers:hdr()}).then(function(r){return r.json().catch(function(){return {};});})
     .then(function(d){ if(d&&d.wa_cupo){ window.__WA_CUPO=d.wa_cupo; pinta(d.wa_cupo); } else pinta(null); }).catch(function(){ pinta(null); });
 }
+/* ---------- Bandeja de WhatsApp de la academia (6-set-2026) ---------- */
+var WA_CHAT_TEL="", WA_CHAT_PAUSA="";
+function waHace(iso){ if(!iso) return ""; var m=Math.round((Date.now()-Date.parse(iso))/60000); if(!(m>=0)) return ""; if(m<60) return "hace "+m+" min"; var h=Math.round(m/60); if(h<48) return "hace "+h+" h"; return "hace "+Math.round(h/24)+" días"; }
+function cargarWaChats(){
+  var grp=el("grpWaChats"), list=el("waChatsList"); if(!grp||!list) return;
+  if(typeof esDuenoPanel==="function" && !esDuenoPanel()){ grp.style.display="none"; return; }
+  fetch('/app/api/admin/wa/chats',{headers:hdr()}).then(function(r){return r.json().catch(function(){return {};});})
+    .then(function(d){
+      var arr=(d&&d.chats)||[];
+      if(!arr.length){ list.innerHTML="Todavía no hay conversaciones por tu número oficial."; return; }
+      list.innerHTML=arr.map(function(c){
+        var quien=c.ultimo_quien==="lead"?"":(c.ultimo_quien==="dueno"?"Tú: ":"Asistente: ");
+        return '<div class="group" style="margin:6px 0;padding:8px 10px;cursor:pointer;'+(c.telefono===WA_CHAT_TEL?'border-color:var(--acento,#e8a33d);':'')+'" data-watel="'+esc(c.telefono)+'">'
+          +'<div style="display:flex;justify-content:space-between;gap:8px;"><b>'+esc(c.nombre||("+"+c.telefono))+'</b><span class="hint" style="margin:0;">'+(c.pausa==="on"?'<span style="color:#e8a33d;font-weight:700;">IA en pausa · </span>':'')+esc(waHace(c.ultimo_in||c.actualizado))+'</span></div>'
+          +'<div class="hint" style="margin:2px 0 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+esc(quien+(c.ultimo||""))+'</div></div>';
+      }).join("");
+      Array.prototype.forEach.call(list.querySelectorAll("[data-watel]"),function(b){ b.addEventListener("click",function(){ abrirWaChat(b.getAttribute("data-watel")); }); });
+    }).catch(function(){ list.innerHTML="No se pudo cargar la bandeja."; });
+}
+function abrirWaChat(tel){
+  WA_CHAT_TEL=tel;
+  fetch('/app/api/admin/wa/chat?telefono='+encodeURIComponent(tel),{headers:hdr()}).then(function(r){return r.json().catch(function(){return {};});})
+    .then(function(d){
+      var box=el("waChatBox"), hilo=el("waChatHilo"), head=el("waChatHead"); if(!box) return;
+      box.style.display="";
+      var conv=d.conv||{}; WA_CHAT_PAUSA=conv.pausa||"";
+      var nombre=(conv.nombre||(d.lead&&d.lead.nombre)||("+"+tel));
+      head.innerHTML='<div><b>'+esc(nombre)+'</b> <span class="hint" style="margin:0;">+'+esc(tel)+(d.lead&&d.lead.etapa?' · '+esc(d.lead.etapa):'')+'</span></div>'
+        +'<span class="hint" style="margin:0;">'+(WA_CHAT_PAUSA==="on"?'<b style="color:#e8a33d;">IA en pausa: lo llevas tú</b>':'La IA responde sola')+'</span>';
+      var et={lead:"Interesado",ia:"Asistente",dueno:"Tú",seguimiento:"Seguimiento",sistema:"Sistema"};
+      hilo.innerHTML=(d.hilo||[]).map(function(m){
+        var mio=m.quien!=="lead";
+        return '<div style="max-width:88%;align-self:'+(mio?'flex-end':'flex-start')+';background:'+(mio?'rgba(232,163,61,.12)':'rgba(255,255,255,.05)')+';border:1px solid var(--line,#2a2a2a);border-radius:10px;padding:6px 9px;">'
+          +'<div class="hint" style="margin:0 0 2px;font-size:11px;">'+esc(et[m.quien]||m.quien)+' · '+esc(waHace(m.ts))+'</div>'
+          +'<div style="white-space:pre-wrap;">'+esc(m.texto||"")+'</div></div>';
+      }).join("")||'<div class="hint">Sin mensajes todavía.</div>';
+      hilo.scrollTop=hilo.scrollHeight;
+      el("btnWaPausa").textContent=WA_CHAT_PAUSA==="on"?"Reanudar IA":"Pausar IA";
+      el("waChatWa").href="https://wa.me/"+tel;
+      cargarWaChats();
+    }).catch(function(){ toast("No se pudo abrir el chat"); });
+}
+(function(){
+  var be=el("btnWaEnviar"), bp=el("btnWaPausa");
+  if(be) be.addEventListener("click",function(){
+    var txt=(el("waChatTxt").value||"").trim(); if(!WA_CHAT_TEL||!txt) return;
+    be.disabled=true;
+    apiPost('/app/api/admin/wa/responder',{telefono:WA_CHAT_TEL,texto:txt}).then(function(d){
+      be.disabled=false; el("waChatTxt").value="";
+      toast(d&&d.ok?"Enviado. La IA queda en pausa en este chat.":("No se pudo enviar: "+((d&&d.error)||"")));
+      abrirWaChat(WA_CHAT_TEL);
+    }).catch(function(){ be.disabled=false; toast("No se pudo enviar"); });
+  });
+  if(bp) bp.addEventListener("click",function(){
+    if(!WA_CHAT_TEL) return;
+    var on=WA_CHAT_PAUSA!=="on";
+    apiPost('/app/api/admin/wa/pausa',{telefono:WA_CHAT_TEL,pausa:on?"on":"off"}).then(function(){ toast(on?"IA pausada en este chat":"IA reanudada"); abrirWaChat(WA_CHAT_TEL); }).catch(function(){ toast("No se pudo cambiar"); });
+  });
+})();
 function cargarWaSugerencias(){
   var grp=el("grpWaSug"), list=el("waSugList"); if(!grp||!list) return;
   fetch('/app/api/admin/wa/sugerencias',{headers:hdr()}).then(function(r){return r.json().catch(function(){return {};});})
@@ -4145,7 +4227,9 @@ function cargarWaSugerencias(){
       texto:texto,
       wa_tono:(el("cfg_wa_tono")?el("cfg_wa_tono").value:""),
       wa_instrucciones:(el("cfg_wa_instrucciones")?el("cfg_wa_instrucciones").value.trim():""),
-      wa_kb:(el("cfg_wa_kb")?el("cfg_wa_kb").value.trim():"")
+      wa_kb:(el("cfg_wa_kb")?el("cfg_wa_kb").value.trim():""),
+            wa_seguimiento:(el("cfg_wa_seguimiento")?el("cfg_wa_seguimiento").value:""),
+            wa_no_tocar:(el("cfg_wa_no_tocar")?el("cfg_wa_no_tocar").value.trim():"")
     }).then(function(d){
       if(out){
         if(d&&d.respuesta) out.innerHTML="<b>Tu asistente respondería:</b>\n"+esc(d.respuesta);
@@ -8345,6 +8429,8 @@ el("btnGuardarAjustes").addEventListener("click",function(){
             wa_tono:(el("cfg_wa_tono")?el("cfg_wa_tono").value:""),
             wa_instrucciones:(el("cfg_wa_instrucciones")?el("cfg_wa_instrucciones").value.trim():""),
             wa_kb:(el("cfg_wa_kb")?el("cfg_wa_kb").value.trim():""),
+            wa_seguimiento:(el("cfg_wa_seguimiento")?el("cfg_wa_seguimiento").value:""),
+            wa_no_tocar:(el("cfg_wa_no_tocar")?el("cfg_wa_no_tocar").value.trim():""),
             wa_phone_id:(el("cfg_wa_phone_id")?el("cfg_wa_phone_id").value.trim():""),
             modulos_off:MODULOS_DEF.filter(function(m){var s=el("cfg_mod_"+m.id);return s&&s.value==="off";}).map(function(m){return m.id;}).join(","),
             pago_numero:el("cfg_pago_numero").value.trim(),
