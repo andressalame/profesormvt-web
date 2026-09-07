@@ -43,7 +43,7 @@ echo "── 1. La 21 se frena, y lo dice bien ──"
 R=$(guardar 21)
 if echo "$R" | grep -qi '"error"'; then ok "la frena"; else mal "DEJÓ pasar la 21: $(echo "$R" | head -c 140)"; fi
 echo "$R" | grep -q "llega hasta 20 alumnos" && ok "dice el tope real (20)" || mal "el mensaje no dice 20: $(echo "$R" | head -c 140)"
-echo "$R" | grep -q "S/39" && ok "y nombra el pack de +50 a S/39" || mal "no nombra el precio del pack"
+echo "$R" | grep -q "S/29" && ok "y nombra el pack de +100 a S/29" || mal "no nombra el precio del pack"
 echo "$R" | grep -q '"cap":20' && ok "manda el tope en el JSON" || mal "sin cap en la respuesta"
 N=$(cuantos); if [ "$N" = "20" ]; then ok "y no escribió nada: siguen 20"; else mal "la base quedó en $N"; fi
 

@@ -25,8 +25,8 @@ globalThis.fetch = async () => respuesta;
 const apiPut=globalThis.apiPut, apiPost=globalThis.apiPost;
 if(typeof apiPut!=='function'||typeof apiPost!=='function') throw new Error('el arnes no cargo las funciones');
 
-const MSG_ALUM = "Tu Batuta llega hasta 20 alumnos. Agrega un pack de +50 alumnos (S/39 al mes) en Perfil > Tu Batuta y sigues creciendo hoy mismo.";
-const MSG_PROF = "Tu Batuta tiene 1 asiento de profesor. Los profesores van de 5 en 5: agrega un pack de +5 (S/59 al mes) en Perfil > Tu Batuta.";
+const MSG_ALUM = "Tu Batuta llega hasta 20 alumnos activos. Agrega un pack de +100 alumnos (S/29 al mes) en Perfil > Tu Batuta y sigues creciendo hoy mismo.";
+const MSG_PROF = "Tu Batuta tiene 1 asiento de profesor. Los profesores van de 5 en 5: agrega un pack de +5 (S/49 al mes) en Perfil > Tu Batuta.";
 
 function resp(status, body){
   return { status, ok:false, json: async()=>body };
@@ -43,9 +43,9 @@ async function caso(nombre, fn, status, body, espera){
 
 let todo = true;
 todo &= await caso("cap de ALUMNOS (PUT) muestra el pack real, no el paywall",
-  ()=>apiPut(), 402, {error:MSG_ALUM, upgrade:true, cap:20}, "S/39");
+  ()=>apiPut(), 402, {error:MSG_ALUM, upgrade:true, cap:20}, "S/29");
 todo &= await caso("cap de PROFESORES (POST) muestra el pack real",
-  ()=>apiPost("/x",{}), 402, {error:MSG_PROF, upgrade:true}, "S/59");
+  ()=>apiPost("/x",{}), 402, {error:MSG_PROF, upgrade:true}, "S/49");
 todo &= await caso("cuenta en pausa de verdad (PUT) sigue mostrando el paywall",
   ()=>apiPut(), 402, {error:"trial_vencido"}, "PAYWALL");
 todo &= await caso("cuenta en pausa de verdad (POST) sigue mostrando el paywall",
@@ -55,7 +55,7 @@ todo &= await caso("cuenta en pausa de verdad (POST) sigue mostrando el paywall"
 pantalla=[]; respuesta=resp(402,{error:MSG_ALUM,upgrade:true});
 try{ await apiPut(); }catch(e){ if(!(e&&e.paywall)) pantalla.push("ERROR: "+((e&&e.message)||e)); }
 const texto = pantalla.join(" ");
-const sinPaywall = texto.includes("S/39") && !texto.includes("PAYWALL");
+const sinPaywall = texto.includes("S/29") && !texto.includes("PAYWALL");
 console.log((sinPaywall?"OK  ":"FALLA")+"  el tope YA NO dispara el paywall");
 todo &= sinPaywall;
 console.log(todo ? "\nTODAS EN VERDE" : "\nHAY FALLAS");

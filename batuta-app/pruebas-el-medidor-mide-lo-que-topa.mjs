@@ -68,7 +68,7 @@ const TENANTS = [
   { slug: "rodasli-academia",    comprados: {}, cortesia: { profes_5: 1, ia_3000: 1 },              profes_extra: 0, plan: "base" },
   { slug: "julio-armando",       comprados: {}, cortesia: { ia_1000: 1 },                            profes_extra: 0, plan: "base" },
   /* y uno que SÍ paga packs, para que el delta en vivo también quede cubierto */
-  { slug: "(academia que paga)", comprados: { alum_150: 1, profes_5: 1 }, cortesia: {},              profes_extra: 0, plan: "base" }
+  { slug: "(academia que paga)", comprados: { alum_300: 1, profes_5: 1 }, cortesia: {},              profes_extra: 0, plan: "base" }
 ];
 
 for (const t of TENANTS){
@@ -91,9 +91,9 @@ for (const t of TENANTS){
   comprobar(`${t.slug}: asistente IA`, visto.ia === srv.ia, `medidor ${visto.ia} · servidor ${srv.ia}`);
 
   /* 2 · y sigue vivo: agregar un pack tiene que sumar EXACTAMENTE su capacidad */
-  const conMas = correr(Object.assign({}, t.comprados, { alum_50: (t.comprados.alum_50 || 0) + 1 }));
-  comprobar(`${t.slug}: al agregar +50 en pantalla, el tope sube 50`,
-    conMas.alumnos === srv.alumnos + PACKS.alum_50.suma, `${srv.alumnos} → ${conMas.alumnos}`);
+  const conMas = correr(Object.assign({}, t.comprados, { alum_100: (t.comprados.alum_100 || 0) + 1 }));
+  comprobar(`${t.slug}: al agregar +100 en pantalla, el tope sube 100`,
+    conMas.alumnos === srv.alumnos + PACKS.alum_100.suma, `${srv.alumnos} → ${conMas.alumnos}`);
   /* 3 · y soltar lo comprado NO puede llevarse la cortesía por delante */
   const sinNada = correr({});
   const aporteComprado = Object.keys(t.comprados).reduce((s, k) => s + (PACKS[k] && PACKS[k].fam === "alumnos" ? PACKS[k].suma * t.comprados[k] : 0), 0);
@@ -112,7 +112,7 @@ if (asigna){
     !/alumnos:\s*d\.alumnos_activos/.test(txt.replace(/\s+/g, "")) && !/alumnos:d\.alumnos_activos/.test(txt.replace(/\s+/g, "")));
 }
 comprobar("`/app/api/t/me` manda `alumnos_total`", /alumnos_total:\s*totalMe/.test(SRC));
-comprobar("y ese total sale de contar la tabla, no de los activos", !!cortarFn(SRC, "totalAlumnosDe"));
+comprobar("y ese total sale de `totalAlumnosDe` (desde el 7-set cuenta activos: vigentes o con clase en 60 días)", !!cortarFn(SRC, "totalAlumnosDe"));
 
 /* ══ 3 · una regla, un sitio: el candado y lo que se muestra usan el MISMO tope ══ */
 console.log("\n── 3. El tope se calcula en un solo sitio ──");

@@ -69,12 +69,12 @@ comprobar("las 18 de la Batuta base no se pierden", cuadra(c1), "sin clasificar:
 comprobar("y salen contadas como gratis", (c1["2026-08"] || {}).gratis === 18, "gratis=" + (c1["2026-08"] || {}).gratis);
 
 console.log("\n── 2. quien compró packs, paga lo que suman ──");
-packs("conpacks", "packs", { ia_1000: 1, profes_5: 1 });          // 69 + 59 = 128
+packs("conpacks", "packs", { ia_2000: 1, profes_5: 1 });          // 99 + 49 = 148 (precios del 7-set)
 packs("cortesia", "packs_cortesia", { ia_3000: 1, alum_500: 4 }); // regalado: no es MRR
 const c2 = await informe([T("conpacks"), T("cortesia"), T("pelado")]);
 const r2 = c2["2026-08"];
 comprobar("el que compró cuenta como pagando", r2.pagando_hoy === 1, "pagando=" + r2.pagando_hoy);
-comprobar("y su MRR es la suma de sus packs", r2.mrr_pen === 128, "mrr=" + r2.mrr_pen);
+comprobar("y su MRR es la suma de sus packs", r2.mrr_pen === 148, "mrr=" + r2.mrr_pen);
 comprobar("la cortesía NO es MRR", r2.gratis === 2, "gratis=" + r2.gratis);
 comprobar("la cuenta cierra igual", cuadra(c2), "sin clasificar: " + sinClasificar(c2));
 

@@ -255,17 +255,41 @@ function webJsonDe(cfg){
    ahí viven los planes viejos migrados y los tratos especiales (Elevate).
    ═══════════════════════════════════════════════════════════════════════════ */
 const BASE_LIMITES = { alumnos: 20, profes: 1, ia: 5 };
+/* 7-set-2026 · PACKS A LA MITAD (decisión de Andrés del 6-set, nota «Batuta - packs baratos»):
+   alumnos e IA a la mitad por unidad, profesores +5 S/49 · +20 S/99. Los packs viejos se
+   quedan como LEGADO: no se venden (el POST /t/packs los rechaza) pero siguen sumando
+   capacidad, porque la cortesía de Elevate, MVT, Park Kids, Rodasli y Julio los nombra
+   por su clave vieja. Todo texto que nombre un precio sale de aquí (textoPacks / packChico),
+   nunca escrito a mano: `memoria: leccion-el-hueco-de-precio-no-calla-niega`. */
 const PACKS = {
-  alum_50:   { fam: "alumnos", suma: 50,    precio: 39,  nombre: "+50 alumnos" },
-  alum_150:  { fam: "alumnos", suma: 150,   precio: 89,  nombre: "+150 alumnos" },
-  alum_500:  { fam: "alumnos", suma: 500,   precio: 199, nombre: "+500 alumnos" },
-  profes_5:  { fam: "profes",  suma: 5,     precio: 59,  nombre: "+5 profesores" },
-  profes_20: { fam: "profes",  suma: 20,    precio: 189, nombre: "+20 profesores" },
-  ia_300:    { fam: "ia",      suma: 300,   precio: 29,  nombre: "300 conversaciones del asistente" },
-  ia_1000:   { fam: "ia",      suma: 1000,  precio: 69,  nombre: "1,000 conversaciones del asistente" },
-  ia_3000:   { fam: "ia",      suma: 3000,  precio: 169, nombre: "3,000 conversaciones del asistente" },
-  ia_10000:  { fam: "ia",      suma: 10000, precio: 449, nombre: "10,000 conversaciones del asistente" }
+  alum_100:  { fam: "alumnos", suma: 100,   precio: 29,  nombre: "+100 alumnos" },
+  alum_300:  { fam: "alumnos", suma: 300,   precio: 59,  nombre: "+300 alumnos" },
+  alum_1000: { fam: "alumnos", suma: 1000,  precio: 129, nombre: "+1,000 alumnos" },
+  profes_5:  { fam: "profes",  suma: 5,     precio: 49,  nombre: "+5 profesores" },
+  profes_20: { fam: "profes",  suma: 20,    precio: 99,  nombre: "+20 profesores" },
+  ia_500:    { fam: "ia",      suma: 500,   precio: 29,  nombre: "500 conversaciones del asistente" },
+  ia_2000:   { fam: "ia",      suma: 2000,  precio: 99,  nombre: "2,000 conversaciones del asistente" },
+  ia_5000:   { fam: "ia",      suma: 5000,  precio: 229, nombre: "5,000 conversaciones del asistente" },
+  /* legado (20-ago-2026 → 6-set-2026): solo cortesía, no se venden */
+  alum_50:   { fam: "alumnos", suma: 50,    precio: 39,  nombre: "+50 alumnos", legado: true },
+  alum_150:  { fam: "alumnos", suma: 150,   precio: 89,  nombre: "+150 alumnos", legado: true },
+  alum_500:  { fam: "alumnos", suma: 500,   precio: 199, nombre: "+500 alumnos", legado: true },
+  ia_300:    { fam: "ia",      suma: 300,   precio: 29,  nombre: "300 conversaciones del asistente", legado: true },
+  ia_1000:   { fam: "ia",      suma: 1000,  precio: 69,  nombre: "1,000 conversaciones del asistente", legado: true },
+  ia_3000:   { fam: "ia",      suma: 3000,  precio: 169, nombre: "3,000 conversaciones del asistente", legado: true },
+  ia_10000:  { fam: "ia",      suma: 10000, precio: 449, nombre: "10,000 conversaciones del asistente", legado: true }
 };
+/* Funciones (no consts): motor-real.mjs las recorta por nombre para las pruebas. */
+function packsEnVenta(fam){
+  return Object.values(PACKS).filter(p => !p.legado && (!fam || p.fam === fam)).sort((a, b) => a.precio - b.precio);
+}
+function numPack(n){ return Number(n).toLocaleString("en-US"); }
+/* «+100 por S/29 · +300 por S/59 · +1,000 por S/129» (alumnos/profes) · «500 por S/29 · …» (ia) */
+function textoPacks(fam, sep){
+  return packsEnVenta(fam).map(p => (fam === "ia" ? "" : "+") + numPack(p.suma) + " por S/" + p.precio).join(sep || " · ");
+}
+/* El pack más barato de una familia: el que se nombra cuando alguien topa. */
+function packChico(fam){ return packsEnVenta(fam)[0]; }
 
 /* Suma packs comprados + de cortesía y devuelve los límites vivos del tenant.
    El monto mensual sale SOLO de los comprados: la cortesía no se cobra. */
@@ -364,11 +388,21 @@ async function capAlumnosDe(env, tenantId, plan){
   } catch (e) {}
   return (await alumCapDe(env, tenantId, plan)) + extra;
 }
-/* El número de alumnos que MIDE el candado: el total cargado, no los que están al día.
-   El medidor de "Tu Batuta" enseñaba los activos contra este tope y por eso mentía. */
+/* 7-set-2026 · EL TOPE CUENTA SOLO ALUMNOS ACTIVOS (decisión de Andrés del 6-set).
+   Activo = con plan vigente (vence >= hoy) O con una clase registrada o reservada en los
+   últimos 60 días (reservas futuras incluidas). Las fichas dormidas no topan ni se borran.
+   Medido el 7-set: Elevate 1,450 fichas → 75 activos; MVT 31 → 21; Sonata 6 → 5.
+   Esta función es la ÚNICA que cuenta para el candado y para el medidor de «Tu Batuta»:
+   los dos tienen que decir el mismo número. */
 async function totalAlumnosDe(env, tenantId){
   try {
-    const r = await env.DB.prepare("SELECT COUNT(*) AS n FROM alumnos WHERE tenant_id = ?1").bind(tenantId).first();
+    const hoy = hoyLima();
+    const desde = new Date(Date.now() - 60 * 86400000).toISOString();
+    const r = await env.DB.prepare(
+      "SELECT COUNT(*) AS n FROM alumnos a WHERE a.tenant_id = ?1 AND (COALESCE(a.vence,'') >= ?2" +
+      " OR a.id IN (SELECT r.alumno_id FROM registro r WHERE r.tenant_id = ?1 AND r.fecha >= ?3)" +
+      " OR a.id IN (SELECT rv.alumno_id FROM reservas rv WHERE rv.tenant_id = ?1 AND rv.inicio_utc >= ?4))"
+    ).bind(tenantId, hoy, desde.slice(0, 10), desde).first();
     return Number(r && r.n) || 0;
   } catch (e) { return 0; }
 }
@@ -2864,7 +2898,7 @@ function correoNurtureTrial(tenant, etapa, extras){
     subject: "Tu prueba termina pronto",
     html: wrap(
       '<p>' + hola + '</p>' +
-      '<p>Sigues probando Batuta con ' + (tenant.academia ? "<b>" + esc(tenant.academia) + "</b>" : "tu academia") + '. Batuta es gratis para siempre (20 alumnos, 1 profesor, 5 conversaciones del asistente al mes) y no se te vence nada. Cuando se te llene, agregas un pack desde el panel: +50 alumnos por S/39, +5 profesores por S/59 o 1,000 conversaciones del asistente por S/69 al mes.</p>' +
+      '<p>Sigues probando Batuta con ' + (tenant.academia ? "<b>" + esc(tenant.academia) + "</b>" : "tu academia") + '. Batuta es gratis para siempre (20 alumnos, 1 profesor, 5 conversaciones del asistente al mes) y no se te vence nada. Cuando se te llene, agregas un pack desde el panel: ' + packChico("alumnos").nombre + ' por S/' + packChico("alumnos").precio + ', ' + packChico("profes").nombre + ' por S/' + packChico("profes").precio + ' o ' + packChico("ia").nombre + ' por S/' + packChico("ia").precio + ' al mes. Y el tope cuenta solo a tus alumnos activos.</p>' +
       '<p>Si algo no te cerro, respondeme por WhatsApp y lo vemos antes de que venza.</p>' +
       '<p><a href="' + panel + '"><b>Activar mi plan</b></a></p>')
   };
@@ -6297,9 +6331,9 @@ function paginaSuscribir(){
     "<h1>Batuta es gratis</h1>" +
     "<p class=\"sub\">Ya no hay planes que activar. Tu Batuta incluye el producto completo con <b>20 alumnos</b>, <b>1 profesor</b> y <b>5 conversaciones</b> del asistente al mes, sin tarjeta y sin vencimiento.</p>" +
     "<div id=\"packs\">" +
-      "<div class=\"planopt\"><div class=\"planopt-t\">Mas alumnos</div><div class=\"planopt-p\">desde S/39<span>/mes · +50 alumnos</span></div></div>" +
-      "<div class=\"planopt\"><div class=\"planopt-t\">Mas profesores</div><div class=\"planopt-p\">desde S/59<span>/mes · +5 profesores</span></div></div>" +
-      "<div class=\"planopt\"><div class=\"planopt-t\">Asistente de WhatsApp con IA</div><div class=\"planopt-p\">desde S/29<span>/mes · 300 conversaciones</span></div></div>" +
+      "<div class=\"planopt\"><div class=\"planopt-t\">Mas alumnos</div><div class=\"planopt-p\">desde S/" + packChico("alumnos").precio + "<span>/mes · " + packChico("alumnos").nombre + "</span></div></div>" +
+      "<div class=\"planopt\"><div class=\"planopt-t\">Mas profesores</div><div class=\"planopt-p\">desde S/" + packChico("profes").precio + "<span>/mes · " + packChico("profes").nombre + "</span></div></div>" +
+      "<div class=\"planopt\"><div class=\"planopt-t\">Asistente de WhatsApp con IA</div><div class=\"planopt-p\">desde S/" + packChico("ia").precio + "<span>/mes · " + numPack(packChico("ia").suma) + " conversaciones</span></div></div>" +
     "</div>" +
     "<p class=\"sub\" style=\"margin:14px 0 0;font-size:13px\">Los packs se agregan y se sueltan solos desde tu panel, en <b>Mi cuenta y mi plan</b>. Se suman a un solo cobro mensual por Mercado Pago y no tienen permanencia.</p>" +
     "<a href=\"/app/panel\"><button type=\"button\">Ir a mi panel</button></a>" +
@@ -11354,7 +11388,7 @@ export default {
                         batch_status: (dataPT.batch_header && dataPT.batch_header.batch_status) || null, detalle: dataPT }, resPT.ok ? 200 : 502);
         }
 
-        /* -------- Packs +50 alumnos (Academia/XL, S/39 c/u por WhatsApp): sube el tope sin salto de plan. --------
+        /* -------- Cortesía de alumnos en bloques de 50 (alum_extra, la pone el superadmin): sube el tope sin salto de plan. --------
            curl -X POST .../su/alumnos-extra -d '{"tenant":"...","packs":1}' */
         if (path === "/app/api/su/alumnos-extra" && request.method === "POST"){
           const bAE = await request.json().catch(() => ({}));
@@ -12118,7 +12152,7 @@ export default {
             limites: { alumnos: await capAlumnosDe(env, t.id, t.plan), profes: asientos ? asientos.max : packsMe.profes, ia: await convCapDe(env, t.id, false, t.plan) },
             items: packsMe.items,
             monto_mensual: packsMe.monto,
-            catalogo: PACKS
+            catalogo: PACKS   /* incluye los legado (la cortesía los nombra); el panel no los vende */
           }
         });
       }
@@ -12221,7 +12255,7 @@ export default {
         const bPk = await request.json().catch(() => ({}));
         const pedidos = {};
         for (const k of Object.keys((bPk && bPk.packs) || {})){
-          if (!PACKS[k]) return json({ error: "Pack no valido: " + k }, 400);
+          if (!PACKS[k] || PACKS[k].legado) return json({ error: "Pack no valido: " + k }, 400);
           const n = Math.max(0, Math.min(20, parseInt(bPk.packs[k], 10) || 0));
           if (n) pedidos[k] = n;
         }
@@ -14943,11 +14977,31 @@ export default {
           .slice(-6); // 3 turnos bastan de contexto; menos historial = menos tokens por mensaje
         const mensajes = historial.concat([{ role: "user", content: texto }]);
 
+        /* EL 1% DEL COBRO CON TARJETA, EN EL MANUAL DEL BOT      (7-set-2026)
+           Se publico el 6-set en batuta.lat (home, /precios y Terminos) y este manual no lo
+           tenia. Preguntado en vivo, el bot contesto "Batuta no cobra comision por los pagos
+           de tus alumnos, el dinero entra completo a ti" (falso desde el 6-set) y en otra
+           pregunta se invento "Mercado Pago descuenta 3%", un numero que Batuta no publica.
+           Va con el vocabulario de QUIEN pregunta: la condicion es la MISMA que cobra
+           (`feeT1`/`feeT2`), para que manual y cobro no puedan divergir.
+           `memoria: leccion-el-manual-no-sabe-quien-pregunta` */
+        let lineaFee = "";
+        if (who.admin && who.tenant){
+          const cfgFeeBot = await loadConfig(env, who.tenant.id).catch(() => ({}));
+          const cobraFee = env.FEE_MARKETPLACE_ON === "1"
+            && String(cfgFeeBot.fundador || "") !== "on"
+            && String(cfgFeeBot.sin_fee || "") !== "1";
+          lineaFee = cobraFee
+            ? "COMISION DE BATUTA SOBRE LOS COBROS A TUS ALUMNOS: lo que registras por Yape, Plin, efectivo o transferencia NO paga NINGUNA comision de Batuta. Solo el pago con TARJETA por Mercado Pago hecho dentro de Batuta paga 1% por pago procesado (ya con IGV), que se descuenta de lo que recibes y NUNCA se le recarga al alumno. Ese 1% lo cobra BATUTA: NUNCA digas que ese 1% es de Mercado Pago ni que lo cobran ellos (los terminos de Mercado Pago lo prohiben). La plata cae en TU cuenta de Mercado Pago, no en la de Batuta. Ese 1% es lo UNICO que Batuta cobra sobre los cobros a tus alumnos, y no tiene nada que ver con la comision que TU le pagas a TUS profesores (esa la fijas tu en Mi academia > Mis profesores > Comision). La comision que Mercado Pago cobra por procesar es de ellos y va aparte: NO digas ni estimes ningun porcentaje de Mercado Pago, ni hagas la cuenta de cuanto le queda; para ese numero manda a mercadopago.com.pe.\n"
+            : "COMISION DE BATUTA SOBRE LOS COBROS A TUS ALUMNOS: esta academia NO paga ninguna comision de Batuta por ningun medio de cobro, ni siquiera el 1% del pago con tarjeta que figura en batuta.lat. Si pregunta, dile que en su caso es cero. No lo confundas con la comision que TU le pagas a TUS profesores (esa la fijas tu en Mi academia > Mis profesores > Comision). La comision que Mercado Pago cobra por procesar es de ellos y va aparte: NO digas ni estimes ningun porcentaje de Mercado Pago ni hagas la cuenta.\n";
+        }
+
         const system = who.admin
           ? ("Eres el SOPORTE de Batuta (batuta.lat, SaaS de gestion para academias y profesores particulares de cualquier materia). Atiendes al PROFESOR o DUENO dentro de su panel: resuelves dudas de uso, de planes y de cobros.\n" +
-            "ESTILO (estricto): espanol claro de TU (nunca VOS ni voseo: jamas escribas tenes, podes, saltas, queres, hace clic, mira vos; siempre tienes, puedes, saltas a con tu, quieres, haz clic), maximo 3 frases, SIEMPRE con el paso concreto (pestana > boton). Sin em dash. Sin signos de apertura invertidos (nada de ¿ ni ¡). Sin markdown ni asteriscos: el chat es texto plano. Sin saludos ni relleno: directo a la respuesta. Si la pregunta es amplia, da el primer paso y ofrece seguir.\n" +
+            "ESTILO (estricto): espanol claro de TU (nunca VOS ni voseo: jamas escribas la palabra vos ni un verbo voseado, o sea nada que termine en -as/-es/-is acentuado: tenes, podes, queres, recibis, absorbes, decis, elegis, hace clic, mira vos; siempre tienes, puedes, quieres, recibes, absorbes tu, dices, eliges, haz clic), maximo 3 frases, SIEMPRE con el paso concreto (pestana > boton). Sin em dash. Sin signos de apertura invertidos (nada de ¿ ni ¡). Sin markdown ni asteriscos: el chat es texto plano. Sin saludos ni relleno: directo a la respuesta. Si la pregunta es amplia, da el primer paso y ofrece seguir.\n" +
             "EL PANEL (menu izquierdo de 5 botones, desde el 10-ago-2026): Hoy (lo pendiente del dia + tu link de alumnos) · Mis alumnos (pestanas: Alumnos, Interesados, Grupos, Cuentas de alumnos) · Mis clases (pestanas: Agenda, Asistencia, Chat) · Cobros (pestanas: Pagos, Caja, Reportes) · Mi academia (indice de tarjetas: Mi pagina web, Mis precios y planes, Como me pagan, Mi asistente de WhatsApp, Todos los ajustes, Mis profesores, Mi cuenta y mi plan, Material para tus alumnos, Tu biblioteca privada, Anuncios en Facebook e Instagram, Servicios extra; e Ideas y errores al pie). El boton '+' flotante agrega alumno/pago/clase/asistencia desde cualquier pantalla.\n" +
-            "PLANES Y PRECIOS (los unicos vigentes, en soles via Mercado Pago): Batuta NO tiene planes. Hay UNA sola Batuta, GRATIS PARA SIEMPRE y con el producto completo (agenda, alumnos, cobros por Yape/Plin/tarjeta, portal del alumno, reservas, recordatorios, renovaciones, liquidacion del equipo, CRM, caja y pagina publica), que incluye 20 alumnos, 1 profesor y 5 conversaciones del asistente de WhatsApp con IA al mes. Nunca se cobra por PODER usar una funcion, solo por usarla MUCHO: cuando necesitas mas capacidad agregas PACKS mensuales que se suman a un solo cobro. PACKS DE ALUMNOS: +50 por S/39/mes · +150 por S/89/mes · +500 por S/199/mes. PACKS DE PROFESORES (van de 5 en 5, nunca de a uno): +5 por S/59/mes · +20 por S/189/mes. PACKS DEL ASISTENTE DE WHATSAPP CON IA: 300 conversaciones por S/29/mes · 1,000 por S/69/mes · 3,000 por S/169/mes · 10,000 por S/449/mes; las conversaciones se resetean cada mes. Los packs se agregan y se sueltan solos desde Mi academia > Mi cuenta y mi plan (Tu Batuta), sin penalidad y sin volver a poner la tarjeta; el cambio rige desde el siguiente cobro. Si sueltas un pack NO se borra ningun dato: solo dejas de poder dar de alta mas alla del limite gratis hasta que vuelvas a comprar. Academias muy grandes o redes: escribenos por WhatsApp. PROGRAMA DE AFILIADOS: comparte tu link batuta.lat/?ref=<tu-slug> y ganas 30% de lo que pague cada academia referida durante sus primeros 12 meses; cuando tu saldo pasa S/50 se descuenta AUTOMATICO de tu siguiente cobro de Batuta (detalle en batuta.lat/afiliados).\n" +
+            "PLANES Y PRECIOS (los unicos vigentes, en soles via Mercado Pago): Batuta NO tiene planes. Hay UNA sola Batuta, GRATIS PARA SIEMPRE y con el producto completo (agenda, alumnos, cobros por Yape/Plin/tarjeta, portal del alumno, reservas, recordatorios, renovaciones, liquidacion del equipo, CRM, caja y pagina publica), que incluye 20 alumnos, 1 profesor y 5 conversaciones del asistente de WhatsApp con IA al mes. Nunca se cobra por PODER usar una funcion, solo por usarla MUCHO: cuando necesitas mas capacidad agregas PACKS mensuales que se suman a un solo cobro. PACKS DE ALUMNOS (al mes): " + textoPacks("alumnos") + ". EL TOPE DE ALUMNOS CUENTA SOLO A LOS ACTIVOS: alumno con plan vigente o con una clase registrada o reservada en los ultimos 60 dias; las fichas dormidas no cuentan, no se borran y se ven igual. PACKS DE PROFESORES (van de 5 en 5, nunca de a uno, al mes): " + textoPacks("profes") + ". PACKS DEL ASISTENTE DE WHATSAPP CON IA (conversaciones al mes): " + textoPacks("ia") + "; las conversaciones se resetean cada mes. Los packs se agregan y se sueltan solos desde Mi academia > Mi cuenta y mi plan (Tu Batuta), sin penalidad y sin volver a poner la tarjeta; el cambio rige desde el siguiente cobro. Si sueltas un pack NO se borra ningun dato: solo dejas de poder dar de alta mas alla del limite gratis hasta que vuelvas a comprar. Academias muy grandes o redes: escribenos por WhatsApp. PROGRAMA DE AFILIADOS: comparte tu link batuta.lat/?ref=<tu-slug> y ganas 30% de lo que pague cada academia referida durante sus primeros 12 meses; cuando tu saldo pasa S/50 se descuenta AUTOMATICO de tu siguiente cobro de Batuta (detalle en batuta.lat/afiliados).\n" +
+            lineaFee +
             "SERVICIOS OPCIONALES (Mi academia > Servicios extra, se coordinan por WhatsApp): Activacion asistida S/350 una vez (te dejamos todo andando: alumnos, pagos, marca) · Migracion desde Excel u otro software S/200 · Capacitacion con IA S/49.50 POR PERSONA (curso Batuta 101 + examen ORAL por voz con la examinadora IA en batuta.lat/aprende/examen, 15 min, con nota; se contrata por WhatsApp y se recibe un codigo) · Capacitacion del equipo en vivo (humana) S/199.50 por sesion o S/499.50 por 3 · Acompanamiento de primer nivel S/129/mes (soporte prioritario + revision mensual de numeros). Ademas hay un curso GRATIS con certificado: Batuta 101 en batuta.lat/aprende (4 modulos con quiz; el certificado se comparte en LinkedIn).\n" +
             "MENSAJES DE ESTE ASISTENTE: cada mes tienes una bolsa de mensajes incluida. Si se te acaba, el dueno puede comprar un pack extra AQUI MISMO en el chat pagando en linea (Mercado Pago: tarjeta o Yape): 30 mensajes por S/5, 60 por S/10, o 120 por S/15 (rigen solo el mes en curso); al agotarse la bolsa aparecen los botones de compra en esta misma ventana y el saldo se acredita solo al pagar. Tambien se puede coordinar por WhatsApp.\n" +
             "BUSCADOR: si el dueno no encuentra algo, la respuesta mas rapida es Ctrl+K (Cmd+K en Mac) o el boton Buscar de la barra de arriba: escribe lo que quiere HACER (aforo, precios, yape, vencer) y salta a la pantalla exacta; tambien entiende los nombres de sus propias clases.\n" +
@@ -15002,6 +15056,7 @@ export default {
             "COMO SE HACE:\n" +
             "- Reservar clase: Agenda > eliges horario libre (fijo semanal o clase suelta). Si no ves horarios libres, tu profe aun no abrio cupos o ya se tomaron: escribele por el chat.\n" +
             "- Comprar o renovar: Comprar > eliges paquete > pagas por Yape/Plin/transferencia y subes tu captura (tu profe confirma el mismo dia), o con tarjeta si tu profe la activo (se confirma sola al instante).\n" +
+            "- Pagar con tarjeta NO te cuesta nada extra: pagas exactamente el precio del paquete, sin recargos ni comisiones para ti.\n" +
             "- Tu material y tareas: Recursos (si hay audio de tarea, lo escuchas ahi). Tu saldo de clases y tu historial: Mis clases; arriba del todo, en 'Tus proximas clases', salen tambien las que ya reservaste, con su fecha y hora y un link para reprogramar.\n" +
             "- Tus pagos: en Mi cuenta ves tu historial (fecha, paquete, monto y estado). Si necesitas el recibo de un pago, pideselo a tu profe por el chat del portal y el te manda el link.\n" +
             "- Hablar con tu profe: el chat del portal. Si el chat sale bloqueado, casi siempre es porque no tienes paquete activo: compra o renueva y se desbloquea.\n" +
@@ -15989,7 +16044,7 @@ export default {
             const maxA = await maxProfesDe(env, tid, t.plan);
             const nAct = await env.DB.prepare("SELECT COUNT(*) AS n FROM profesores WHERE tenant_id = ?1 AND estado != 'suspendido'").bind(tid).first();
             if ((Number(nAct && nAct.n) || 0) >= maxA){
-              return json({ error: "Tu Batuta tiene " + maxA + " asiento" + (maxA === 1 ? "" : "s") + " de profesor. Los profesores van de 5 en 5: agrega un pack de +5 (S/59 al mes) en Perfil > Tu Batuta.", upgrade: true }, 402);
+              return json({ error: "Tu Batuta tiene " + maxA + " asiento" + (maxA === 1 ? "" : "s") + " de profesor. Los profesores van de 5 en 5: agrega un pack de +5 (S/" + packChico("profes").precio + " al mes) en Perfil > Tu Batuta.", upgrade: true }, 402);
             }
             const ya = await env.DB.prepare("SELECT id FROM profesores WHERE tenant_id = ?1 AND email = ?2").bind(tid, emailP).first();
             if (ya) return json({ error: "Ya hay un profesor con ese correo en tu academia." }, 409);
@@ -17431,19 +17486,22 @@ export default {
           /* Packs (20-ago-2026): el tope de alumnos ya no depende del plan ni del estado, sale
              de la base (20) más los packs comprados. Sigue valiendo la regla de siempre: se puede
              GUARDAR estando por encima del tope (no se rompe a nadie ni se borra nada), lo que se
-             bloquea es el neto que lo pasa. Los vencidos también topan, si no el freemium no existe. */
+             bloquea es el neto que lo pasa. Desde el 7-set-2026 cuentan solo los ACTIVOS. */
           if (t && !esTenantDemo(t)){
             /* alum_extra (cortesía en unidades de alumno, la pone el superadmin) sigue sumando. */
             const capAl = await capAlumnosDe(env, tid, t.plan);
             const totActual = await totalAlumnosDe(env, tid);
-            const totNuevo = esDueno ? body.alumnos.length : (totActual - (prevRows ? prevRows.length : 0)) + body.alumnos.length;
-            if (totNuevo > capAl && totNuevo > totActual){
+            /* 7-set-2026: como el tope cuenta activos, lo que topa es activos + fichas NUEVAS
+               (ids que no existían). Guardar lo que ya estaba nunca se bloquea. */
+            const nuevas = body.alumnos.filter(a => !a || !a.id || !prev.has(a.id)).length;
+            const totNuevo = totActual + nuevas;
+            if (nuevas > 0 && totNuevo > capAl){
               /* "un pack" la primera vez, "otro pack" si ya compró: se decide por lo que tiene,
                  no por un plan que ya no existe. */
               const yaTienePacks = Object.keys((await packsDe(env, tid)).comprados || {}).length > 0;
               const msgCap = yaTienePacks
-                ? "Tu Batuta llega hasta " + capAl + " alumnos. Agrega otro pack en Perfil > Tu Batuta (+50 por S/39, +150 por S/89 o +500 por S/199 al mes)."
-                : "Tu Batuta llega hasta " + capAl + " alumnos. Agrega un pack de +50 alumnos (S/39 al mes) en Perfil > Tu Batuta y sigues creciendo hoy mismo.";
+                ? "Tu Batuta llega hasta " + capAl + " alumnos activos. Agrega otro pack en Perfil > Tu Batuta (" + textoPacks("alumnos", ", ") + " al mes)."
+                : "Tu Batuta llega hasta " + capAl + " alumnos activos. Agrega un pack de " + packChico("alumnos").nombre + " (S/" + packChico("alumnos").precio + " al mes) en Perfil > Tu Batuta y sigues creciendo hoy mismo.";
               return json({ error: msgCap, upgrade: true, cap: capAl }, 402);
             }
           }

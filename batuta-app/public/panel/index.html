@@ -1605,7 +1605,7 @@ button[data-ayuda],a[data-ayuda],select[data-ayuda],input[data-ayuda],label[data
     </div>
     <div class="group">
       <h2>Tu Batuta</h2>
-      <p class="hint">Batuta es <b>gratis para siempre</b>: 20 alumnos, 1 profesor y 5 conversaciones del asistente al mes. Cuando necesites más, agregas un pack y pagas solo eso. Puedes soltarlo cuando quieras: no se borra nada, solo dejas de dar de alta nuevos hasta que bajes o vuelvas a comprar.</p>
+      <p class="hint">Batuta es <b>gratis para siempre</b>: 20 alumnos, 1 profesor y 5 conversaciones del asistente al mes. Cuando necesites más, agregas un pack y pagas solo eso. Puedes soltarlo cuando quieras: no se borra nada, solo dejas de dar de alta nuevos hasta que bajes o vuelvas a comprar. El tope cuenta solo a tus <b>alumnos activos</b> (con plan vigente o con clase en los últimos 60 días): las fichas dormidas no cuentan y tampoco se borran.</p>
       <div id="packsUso" class="packs-uso"></div>
       <div id="packsCat"></div>
       <div class="packs-pie">
@@ -11536,7 +11536,7 @@ function packsPintarUso(){
   var cont=el("packsUso"); if(!cont) return;
   var lim=packsLimites(PACKS_EDIT);
   var filas=[
-    {t:"Alumnos", usa:PACKS_USO.alumnos||0, max:lim.alumnos},
+    {t:"Alumnos activos", usa:PACKS_USO.alumnos||0, max:lim.alumnos},
     {t:"Profesores", usa:PACKS_USO.profes||0, max:lim.profes},
     {t:"Conversaciones del asistente", usa:PACKS_USO.ia||0, max:lim.ia, mes:true}
   ];
@@ -11553,7 +11553,7 @@ function packsPintarCat(){
     {id:"ia",t:"Conversaciones del asistente de WhatsApp"}
   ];
   cont.innerHTML=fams.map(function(f){
-    var filas=Object.keys(PACKS_CAT).filter(function(k){return PACKS_CAT[k].fam===f.id;}).map(function(k){
+    var filas=Object.keys(PACKS_CAT).filter(function(k){return PACKS_CAT[k].fam===f.id&&!PACKS_CAT[k].legado;}).map(function(k){
       var pk=PACKS_CAT[k], n=PACKS_EDIT[k]||0;
       return '<div class="packrow"><div><div class="pn">'+pk.nombre+'</div><div class="pp">S/'+pk.precio+' al mes</div></div>'+
         '<div class="packctl"><button type="button" data-pk="'+k+'" data-d="-1"'+(n?'':' disabled')+'>−</button>'+

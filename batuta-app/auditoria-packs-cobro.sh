@@ -50,11 +50,12 @@ q "INSERT INTO sesiones (token,cuenta_id,expira) VALUES ('$TP','P:ZP-P','2027-01
 guardar(){ python3 -c "
 import json,sys
 n=int(sys.argv[1])
-print(json.dumps({'alumnos':[{'id':'ZP-A%03d'%i,'codigo':'C%03d'%i,'nombre':'Alumna %03d'%i,'curso':'Canto','paquete':'8 clases','pago':'Pagado','ciclo':1} for i in range(n)],'registro':[],'precios':{}}))" "$1" > /tmp/zp.json
+print(json.dumps({'alumnos':[{'id':'ZP-A%03d'%i,'codigo':'C%03d'%i,'nombre':'Alumna %03d'%i,'curso':'Canto','paquete':'8 clases','pago':'Pagado','ciclo':1,'vence':'2099-12-31'} for i in range(n)],'registro':[],'precios':{}}))" "$1" > /tmp/zp.json
   curl -s -m 60 -X PUT "$U/app/api/admin/data" -H "Authorization: Bearer $TD" -H "Content-Type: application/json" --data @/tmp/zp.json; }
 cuantas(){ uno "SELECT COUNT(*) n FROM alumnos WHERE tenant_id='ZP-T'"; }
 # 🔴 el JSON va SIN escapar: si se le meten barras invertidas, packsDe() no lo parsea,
 # se cae al catch y devuelve {} — y toda la auditoría pasa en verde sin probar nada.
+# 7-set-2026: las alumnas van con vence futuro porque el tope cuenta solo ACTIVOS.
 # Por eso cada escritura se RELEE y se comprueba que el motor la ve.
 packs(){ q "INSERT INTO config (tenant_id,clave,valor) VALUES ('ZP-T','$1','$2') ON CONFLICT(tenant_id,clave) DO UPDATE SET valor='$2'"
   local v; v=$(uno "SELECT valor FROM config WHERE tenant_id='ZP-T' AND clave='$1'")
@@ -76,23 +77,23 @@ else no "🚨 el pack pendiente YA da capacidad: se puede abandonar el checkout 
 echo
 echo "── 3. El pack comprado sí da capacidad, y cobra lo que dice la tabla ──"
 q "DELETE FROM config WHERE tenant_id='ZP-T' AND clave='packs_pendientes'"
-packs packs '{"alum_50":1}'
-R=$(guardar 70); N=$(cuantas)
-[ "$N" = "70" ] && ok "con +50 alumnos (S/39) llega a 70" || no "con el pack solo llegó a $N: $(echo "$R" | head -c 130)"
-R=$(guardar 71)
-echo "$R" | grep -qi '"error"' && ok "y la 71 se frena" || no "dejó pasar la 71 con tope 70"
-echo "$R" | grep -q "70" && ok "el mensaje dice el tope real (70)" || echo "  ⚠️  el mensaje no menciona 70: $(echo "$R" | head -c 120)"
+packs packs '{"alum_100":1}'
+R=$(guardar 120); N=$(cuantas)
+[ "$N" = "120" ] && ok "con +100 alumnos (S/29) llega a 120" || no "con el pack solo llegó a $N: $(echo "$R" | head -c 130)"
+R=$(guardar 121)
+echo "$R" | grep -qi '"error"' && ok "y la 121 se frena" || no "dejó pasar la 121 con tope 120"
+echo "$R" | grep -q "120" && ok "el mensaje dice el tope real (120)" || echo "  ⚠️  el mensaje no menciona 120: $(echo "$R" | head -c 120)"
 
 echo
 echo "── 4. Soltar el pack: no se borra nadie, solo se bloquea el alta ──"
 packs packs '{}'
-N=$(cuantas); [ "$N" = "70" ] && ok "las 70 alumnas siguen ahí" || no "🚨 al soltar el pack quedaron $N alumnas: se borraron $((70-N))"
-R=$(guardar 70); N=$(cuantas)
-if echo "$R" | grep -qi '"error"'; then no "ya no la deja ni GUARDAR sus 70 (queda en solo lectura de verdad, no como dice la regla)"
-else ok "puede seguir guardando sus 70 (nada se pierde)"; fi
-[ "$N" = "70" ] && ok "y siguen las 70" || no "quedaron $N"
-R=$(guardar 71)
-echo "$R" | grep -qi '"error"' && ok "pero la 71 sí se bloquea" || no "dejó dar de alta estando por encima del tope"
+N=$(cuantas); [ "$N" = "120" ] && ok "las 120 alumnas siguen ahí" || no "🚨 al soltar el pack quedaron $N alumnas: se borraron $((120-N))"
+R=$(guardar 120); N=$(cuantas)
+if echo "$R" | grep -qi '"error"'; then no "ya no la deja ni GUARDAR sus 120 (queda en solo lectura de verdad, no como dice la regla)"
+else ok "puede seguir guardando sus 120 (nada se pierde)"; fi
+[ "$N" = "120" ] && ok "y siguen las 120" || no "quedaron $N"
+R=$(guardar 121)
+echo "$R" | grep -qi '"error"' && ok "pero la 121 sí se bloquea" || no "dejó dar de alta estando por encima del tope"
 
 echo
 echo "── 5. El tope de profesores obedece al pack ──"
@@ -101,7 +102,7 @@ R=$(inv 9)
 if echo "$R" | grep -qi '"error"'; then ok "sin pack de profesores, no deja sumar otro (base = 1)"; else echo "  ⚠️  dejó invitar sin pack: $(echo "$R" | head -c 140)"; fi
 packs packs '{"profes_5":1}'
 R=$(inv 8)
-if echo "$R" | grep -qi '"error"'; then no "con +5 profesores (S/59) SIGUE sin dejar invitar: $(echo "$R" | head -c 140)"; else ok "con el pack de +5 sí deja invitar"; fi
+if echo "$R" | grep -qi '"error"'; then no "con +5 profesores (S/49) SIGUE sin dejar invitar: $(echo "$R" | head -c 140)"; else ok "con el pack de +5 sí deja invitar"; fi
 NP=$(uno "SELECT COUNT(*) n FROM profesores WHERE tenant_id='ZP-T'")
 echo "   profesores en la academia: $NP"
 

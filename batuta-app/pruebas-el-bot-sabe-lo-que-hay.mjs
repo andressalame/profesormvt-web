@@ -78,11 +78,24 @@ for (const m of MUERTOS){
 }
 
 console.log("\n── 5. Los precios del manual son los del código ──");
-/* los packs viven en el worker; si alguien cambia uno, el manual tiene que seguirlo */
-const PACKS = ["+50 por s/39", "+150 por s/89", "+500 por s/199", "+5 por s/59", "+20 por s/189", "300 conversaciones por s/29", "1,000 por s/69", "3,000 por s/169", "10,000 por s/449"];
-for (const p of PACKS){
-  DUENO_P.includes(p) ? ok("recita «" + p + "»") : no("perdió el pack «" + p + "»");
+/* 7-set-2026: los precios ya no se escriben a mano en el manual. El manual llama a
+   textoPacks(fam), que lee la constante PACKS del worker, así que NO PUEDEN divergir.
+   Se comprueba (a) que el manual llame a la función para las tres familias y (b) que la
+   función diga los precios decididos el 6-set (packs a la mitad). */
+import { cargarMotor } from "./motor-real.mjs";
+const MP = await cargarMotor(["textoPacks", "packChico"]);
+for (const fam of ["alumnos", "profes", "ia"]){
+  DUENO.includes('textoPacks("' + fam + '")') ? ok("el manual recita los packs de " + fam + " desde el código") : no("el manual NO llama a textoPacks(\"" + fam + "\")");
 }
+const PACKS = ["+100 por s/29", "+300 por s/59", "+1,000 por s/129", "+5 por s/49", "+20 por s/99", "500 por s/29", "2,000 por s/99", "5,000 por s/229"];
+const RECITADO = pelar(["alumnos", "profes", "ia"].map(f => MP.textoPacks(f)).join(" · "));
+for (const p of PACKS){
+  RECITADO.includes(p) ? ok("recita «" + p + "»") : no("perdió el pack «" + p + "»");
+}
+for (const viejo of ["+50 por s/39", "+150 por s/89", "+500 por s/199", "+5 por s/59", "+20 por s/189", "300 conversaciones por s/29", "10,000 por s/449"]){
+  RECITADO.includes(viejo) ? no("sigue recitando el precio viejo «" + viejo + "»") : ok("ya no dice «" + viejo + "»");
+}
+DUENO_P.includes("cuenta solo a los activos") ? ok("y explica que el tope cuenta solo alumnos activos") : no("no explica que el tope cuenta solo activos");
 /* y la Batuta gratis con sus tres topes */
 for (const t of ["20 alumnos", "1 profesor", "5 conversaciones"]){
   DUENO_P.includes(t) ? ok("recita el tope «" + t + "»") : no("perdió el tope «" + t + "»");

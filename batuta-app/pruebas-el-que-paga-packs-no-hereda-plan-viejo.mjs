@@ -50,18 +50,18 @@ t("un preapproval sin preapproval_plan_id devuelve vacío, no 'por_alumno'", pla
 
 console.log("\n── Y por eso pagar un pack no regala las otras dos familias ──");
 /* Paga S/29: SOLO conversaciones. No compró ni un alumno extra. */
-const env1 = envCon({ packs: { ia_300: 1 } });
+const env1 = envCon({ packs: { ia_500: 1 } });
 const capAlum = await capAlumnosDe(env1, "t-1", plan);
 const capIA   = await convCapDe(env1, "t-1", false, plan);
 t("no le da alumnos ilimitados: se queda en los 20 de la base", capAlum === 20, capAlum + " alumnos");
-t("le da 305 conversaciones (5 de base + 300 del pack), no 6,000", capIA === 305, capIA + " conversaciones");
+t("le da 505 conversaciones (5 de base + 500 del pack), no 6,000", capIA === 505, capIA + " conversaciones");
 t("el cobro mensual es el del pack comprado, S/29",
-  limitesDePacks({ ia_300: 1 }, null).monto === 29, "S/" + limitesDePacks({ ia_300: 1 }, null).monto);
+  limitesDePacks({ ia_500: 1 }, null).monto === 29, "S/" + limitesDePacks({ ia_500: 1 }, null).monto);
 
 console.log("\n── El que sí compra alumnos los recibe ──");
-const env2 = envCon({ packs: { alum_150: 1, profes_5: 1 } });
-t("+150 alumnos sobre la base = 170", await capAlumnosDe(env2, "t-2", "") === 170);
-t("y su cobro es S/89 + S/59 = S/148", limitesDePacks({ alum_150: 1, profes_5: 1 }, null).monto === 148);
+const env2 = envCon({ packs: { alum_300: 1, profes_5: 1 } });
+t("+300 alumnos sobre la base = 320", await capAlumnosDe(env2, "t-2", "") === 320);
+t("y su cobro es S/59 + S/49 = S/108", limitesDePacks({ alum_300: 1, profes_5: 1 }, null).monto === 108);
 
 console.log("\n── La cortesía y los planes viejos siguen intactos ──");
 const env3 = envCon({ packs_cortesia: { alum_500: 4, profes_5: 2, ia_3000: 1 } });   // Elevate

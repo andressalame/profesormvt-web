@@ -28,14 +28,17 @@ const cortarFn = nombre => {
   for (let k = j; k < H.length; k++){ if (H[k] === "{") n++; else if (H[k] === "}" && --n === 0) return H.slice(i, k + 1); }
   return null;
 };
-const ancla = H.indexOf("'<br><span class=\"mini\">sumando sus '");
+/* 🔴 4-set-2026 · el ancla era el TEXTO de la celda ("sumando sus "). Se reescribio
+   esa frase (ahora cuenta solo los pases vigentes) y la prueba se puso roja sin que el
+   producto tuviera nada. El ancla va sobre la ESTRUCTURA, que no cambia con el copy. */
+const ancla = H.indexOf("})(pasesResumen(a))");
 const ini = H.lastIndexOf("(function(pr){", ancla);
 const fin = H.indexOf("})(pasesResumen(a))", ancla) + "})(pasesResumen(a))".length;
 comprobar("encuentro la celda en el panel", ini > 0 && fin > ini);
 if (ini < 0) process.exit(1);
 const CELDA = H.slice(ini, fin).replace("(pasesResumen(a))", "(pasesResumen(a))");
 
-const scope = ["venceVencidoPanel", "pasesResumen", "saldoApartadas"].map(cortarFn).filter(Boolean).join("\n");
+const scope = ["venceVencidoPanel", "frasePases", "pasesVivosN", "pasesResumen", "saldoApartadas"].map(cortarFn).filter(Boolean).join("\n");
 const hacerCelda = new Function("a", "c", "db", "pkMap", "esc", "fechaBonita",
   scope + "\nreturn " + CELDA + ";");
 const esc = x => String(x == null ? "" : x);

@@ -17,16 +17,16 @@ console.log("── 1. Control positivo: la Batuta gratis ──");
 const base = M.limitesDePacks({}, null);
 eq("sin packs", { a: base.alumnos, p: base.profes, i: base.ia, m: base.monto }, { a: 20, p: 1, i: 5, m: 0 });
 
-console.log("\n── 2. Los precios del 20-ago se cobran tal cual ──");
+console.log("\n── 2. Los precios del 7-set (packs a la mitad) se cobran tal cual ──");
 const casos = [
-  [{ alum_50: 1 }, 39, 70, 1, 5],
-  [{ alum_150: 1 }, 89, 170, 1, 5],
-  [{ alum_500: 1 }, 199, 520, 1, 5],
-  [{ profes_5: 1 }, 59, 20, 6, 5],
-  [{ profes_20: 1 }, 189, 20, 21, 5],
-  [{ ia_300: 1 }, 29, 20, 1, 305],
-  [{ ia_10000: 1 }, 449, 20, 1, 10005],
-  [{ alum_500: 4, profes_5: 2, ia_3000: 1 }, 199 * 4 + 59 * 2 + 169, 2020, 11, 3005]  // el trato de Elevate
+  [{ alum_100: 1 }, 29, 120, 1, 5],
+  [{ alum_300: 1 }, 59, 320, 1, 5],
+  [{ alum_1000: 1 }, 129, 1020, 1, 5],
+  [{ profes_5: 1 }, 49, 20, 6, 5],
+  [{ profes_20: 1 }, 99, 20, 21, 5],
+  [{ ia_500: 1 }, 29, 20, 1, 505],
+  [{ ia_5000: 1 }, 229, 20, 1, 5005],
+  [{ alum_500: 4, profes_5: 2, ia_3000: 1 }, 199 * 4 + 49 * 2 + 169, 2020, 11, 3005]  // el trato de Elevate, con claves legado
 ];
 for (const [p, m, a, pr, i] of casos){
   const l = M.limitesDePacks(p, null);
@@ -38,13 +38,13 @@ const cort = M.limitesDePacks({}, { alum_500: 4, profes_5: 2, ia_3000: 1 });
 eq("solo cortesía (el caso Elevate)", { a: cort.alumnos, p: cort.profes, i: cort.ia, m: cort.monto },
    { a: 2020, p: 11, i: 3005, m: 0 });
 eq("y no aparece en la factura", cort.items.length, 0);
-const mix = M.limitesDePacks({ alum_50: 1 }, { alum_500: 1 });
+const mix = M.limitesDePacks({ alum_100: 1 }, { alum_500: 1 });
 eq("comprado + cortesía: capacidad suma, cobro solo lo comprado",
-   { a: mix.alumnos, m: mix.monto, items: mix.items.length }, { a: 570, m: 39, items: 1 });
+   { a: mix.alumnos, m: mix.monto, items: mix.items.length }, { a: 620, m: 29, items: 1 });
 
 console.log("\n── 4. Basura en la bolsa no cobra de más ──");
-for (const [b, m] of [[{ no_existe: 3 }, 0], [{ alum_50: "abc" }, 0], [{ alum_50: -5 }, 0],
-                      [{ alum_50: 2.9 }, 78], [{ alum_50: 999 }, 39 * 50]]){
+for (const [b, m] of [[{ no_existe: 3 }, 0], [{ alum_100: "abc" }, 0], [{ alum_100: -5 }, 0],
+                      [{ alum_100: 2.9 }, 58], [{ alum_100: 999 }, 29 * 50]]){
   const l = M.limitesDePacks(b, null);
   eq("packs=" + JSON.stringify(b), l.monto, m);
 }

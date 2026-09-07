@@ -22,8 +22,19 @@ console.log("── 1. El servidor manda la marca de vencido por pase ──");
 comprobar("computeMulti la incluye en cada pase", /vencido:\s*e\.vencido/.test(WORKER));
 
 console.log("\n── 2. El panel la recibe y la usa ──");
+/* 🔴 4-set-2026 · esto cortaba 1800 CARACTERES FIJOS desde el nombre de la funcion.
+   Un comentario nuevo empujo `vencido: muerto` fuera de la ventana y la prueba denuncio un
+   candado que si estaba puesto. Misma trampa que en pruebas-reprogramar-cuenta el 3-set:
+   se corta la funcion de verdad, contando llaves. */
 const i = PANEL.indexOf("function pasesResumen(");
-const resumen = PANEL.slice(i, i + 1800);
+const resumen = (function(){
+  let n = 0, k = PANEL.indexOf("{", PANEL.indexOf(")", i));
+  for (let j = k; j < PANEL.length; j++){
+    if (PANEL[j] === "{") n++;
+    else if (PANEL[j] === "}" && --n === 0) return PANEL.slice(i, j + 1);
+  }
+  return PANEL.slice(i);
+})();
 comprobar("`pasesResumen` no tira `vencido`", /vencido:\s*!!p\.vencido/.test(resumen));
 comprobar("el respaldo local (sin saldo del server) también vence", /vencido:\s*muerto/.test(resumen));
 const j = PANEL.indexOf("var prC=pasesResumen(a);");
