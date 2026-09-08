@@ -13046,7 +13046,7 @@ export default {
           const tam = Number(cab.size) || 0;
           const rg = rangoPedido(cabRango, tam);
           if (rg && rg.malo){
-            return new Response(null, { status: 416, headers: { "content-range": "bytes */" + tam, "accept-ranges": "bytes" } });
+            return new Response(null, { status: 416, headers: { "content-range": "bytes */" + tam, "accept-ranges": "bytes", "cache-control": "private, no-store", "vary": "range" } });
           }
           if (rg){
             largo = rg.fin - rg.ini + 1;
@@ -13063,12 +13063,24 @@ export default {
         }
 
         const ct = (obj.httpMetadata && obj.httpMetadata.contentType) || MIME_ARCHIVO[m[1]] || "application/octet-stream";
+        /* ═══ UN PEDAZO NO SE GUARDA EN UN CACHE COMPARTIDO (7-set-2026) ═════════════
+           Medido en produccion sobre el logo de Elevate: pedir `Range: bytes=0-1` una
+           sola vez dejaba el 206 de 2 bytes guardado en el borde de Vercel, y la
+           siguiente peticion SIN Range —la que hace cualquier navegador— recibia esos
+           mismos 2 bytes con `x-vercel-cache: HIT`. Una hora de logo roto en la web
+           publica de la academia, y basta un bot con Range para dispararlo.
+           La causa era esta cabecera: el 206 salia con `public, max-age=3600`, igual
+           que el archivo entero. Una respuesta parcial NUNCA se guarda en cache
+           compartido, y ademas se anuncia `vary: range` para que la peticion entera y
+           la parcial no compartan llave. */
+        const esParcial = !!contentRange;
         const cabeceras = {
           "content-type": ct,
           "content-disposition": (obj.httpMetadata && obj.httpMetadata.contentDisposition) || "inline",
           /* "private": con URL firmada, un cache compartido no debe guardar una copia
-             que luego sirva a otro. El logo publico si puede cachearse. */
-          "cache-control": clase === "publico" ? "public, max-age=3600" : "private, max-age=300",
+             que luego sirva a otro. El logo publico si puede cachearse, entero. */
+          "cache-control": esParcial ? "private, no-store" : (clase === "publico" ? "public, max-age=3600" : "private, max-age=300"),
+          "vary": "range",
           "x-content-type-options": "nosniff",
           /* se anuncia SIEMPRE: es como el reproductor sabe que puede pedir pedazos */
           "accept-ranges": "bytes"
