@@ -37,7 +37,7 @@ t("el JOIN de cuentas y alumnos cruza el tenant", () => {
 
 console.log("\n=== El marcado (una vez por academia) ===");
 t("existe el endpoint para marcarlo", () => has(SRC, 'path === "/app/api/t/celebrado" && request.method === "POST"'));
-t("pide sesión", () => has(CEL, "Sesion expirada"));
+t("pide sesión", () => has(CEL, "Sesión expirada"));
 t("solo el dueño puede marcarlo", () => has(CEL, "esDueno") && has(CEL, "403"));
 t("es idempotente (dos clics no rompen)", () => has(CEL, "ON CONFLICT(tenant_id, clave) DO UPDATE"));
 t("se guarda en config, NO en el navegador", () => {

@@ -110,7 +110,7 @@ console.log("\n=== El link del alumno ===");
 t("el token se crea la PRIMERA vez que lo pide, no para todos", () => has(LINK, "if (!tokCal)"));
 t("si ya existe se reusa (no invalida el calendario que ya agregó)", () => has(LINK, 'COALESCE(cal_token,\'\') AS t'));
 t("pide sesión de alumno", () => has(LINK, "cuentaDeSesion"));
-t("exige tener ficha de alumno", () => has(LINK, "Todavia no tienes una ficha de alumno"));
+t("exige tener ficha de alumno", () => has(LINK, "Todavía no tienes una ficha de alumno"));
 t("la escritura filtra por alumno Y tenant", () => has(LINK, "WHERE id = ?2 AND tenant_id = ?3"));
 t("devuelve webcal:// para que el celular SUSCRIBA en vez de copiar", () => has(LINK, 'webcal: "webcal://"'));
 t("y también https por si lo quiere pegar a mano", () => has(LINK, "https: MARCA.dominio"));

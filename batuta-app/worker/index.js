@@ -202,6 +202,11 @@ function resolverPk(map, nombre){
 /* Contexto para "Mi web": junta los datos duros de la academia (config, precios,
    paquetes, si cobra online) que el motor de render necesita. Lo usan el GET de
    la web pública y la vista previa del editor, así ambos muestran lo mismo. */
+// Public-only override approved by Andrés 2026-09-08; never mutate internal sedes.
+function ubicacionPublicaMvt(tenant){
+  return tenant && (tenant.id === "MVT-PROFESORMVT" || tenant.slug === "profesormvt")
+    ? "Miraflores, Lima" : null;
+}
 async function armarWebCtx(env, tenant){
   const cfg = await loadConfig(env, tenant.id);
   const precios = await loadPrecios(env, tenant.id);
@@ -219,7 +224,9 @@ async function armarWebCtx(env, tenant){
      interruptor vive junto a las sedes en Ajustes, donde se escribe el dato. */
   const sedesWeb = String(cfg.web_direccion_off || "") === "1"
     ? []
-    : await sedesDeTenant(env, tenant.id).catch(() => []);
+    : ubicacionPublicaMvt(tenant)
+      ? [{ nombre: "", direccion: ubicacionPublicaMvt(tenant) }]
+      : await sedesDeTenant(env, tenant.id).catch(() => []);
   const ctx = webContexto(tenant, cfg, precios, paqPub, { cobroOn: cobroOn, sedes: sedesWeb, paqInfo: function (pk){ return resolverPk(paq.map, pk); } });
   return { ctx: ctx, cfg: cfg };
 }
@@ -4670,7 +4677,7 @@ async function metaConexion(env, tenantId){
 /* Canjea el `code` de Facebook Login for Business por un token de larga duracion / System User,
    lista las cuentas publicitarias y paginas del usuario, y guarda la conexion del tenant. */
 async function metaConectarTenant(env, tenantId, code, redirectUri){
-  if (!metaConfigurado(env)) return { ok: false, error: "Meta Ads no esta configurado todavia." };
+  if (!metaConfigurado(env)) return { ok: false, error: "Meta Ads no está configurado todavía." };
   const tokRes = await fetch(META_GRAPH + "/oauth/access_token?" + new URLSearchParams({
     client_id: env.META_APP_ID, client_secret: env.META_APP_SECRET,
     redirect_uri: redirectUri || (MARCA.dominio + "/app/meta/callback"), code: code
@@ -6213,22 +6220,22 @@ function paginaRegistro(googleOn){
       "<label>Tu nombre</label><input id=\"nombre\" required>" +
       "<label>Email</label><input id=\"email\" type=\"email\" required>" +
       "<label>WhatsApp</label><input id=\"whatsapp\" placeholder=\"51987654321\" required>" +
-      "<label>Que ensenas?</label>" +
+      "<label>¿Qué enseñas?</label>" +
       "<select id=\"rubro\" required style=\"width:100%;background:var(--campo);border:1px solid var(--linea-campo);border-radius:8px;padding:11px 12px;color:var(--texto);font-family:inherit;font-size:15px\">" +
         "<option value=\"\" disabled selected>Elige tu rubro</option>" +
-        "<option>Musica</option><option>Idiomas</option><option>Danza</option><option>Refuerzo escolar</option><option>Ajedrez</option><option>Arte</option><option>Deporte</option><option>Otro</option>" +
+        "<option>Música</option><option>Idiomas</option><option>Danza</option><option>Refuerzo escolar</option><option>Ajedrez</option><option>Arte</option><option>Deporte</option><option>Otro</option>" +
       "</select>" +
-      "<label>Cuantos alumnos tienes hoy?</label>" +
+      "<label>¿Cuántos alumnos tienes hoy?</label>" +
       "<select id=\"tam\" required style=\"width:100%;background:var(--campo);border:1px solid var(--linea-campo);border-radius:8px;padding:11px 12px;color:var(--texto);font-family:inherit;font-size:15px\">" +
         "<option value=\"\" disabled selected>Elige un rango</option>" +
-        "<option>Recien empiezo</option><option>1-10</option><option>11-30</option><option>31-80</option><option>Mas de 80</option>" +
+        "<option>Recién empiezo</option><option>1-10</option><option>11-30</option><option>31-80</option><option>Más de 80</option>" +
       "</select>" +
-      "<label>Contrasena</label><input id=\"pass\" type=\"password\" required>" +
-      "<label>Repite tu contrasena</label><input id=\"pass2\" type=\"password\" required>" +
+      "<label>Contraseña</label><input id=\"pass\" type=\"password\" required>" +
+      "<label>Repite tu contraseña</label><input id=\"pass2\" type=\"password\" required>" +
       "<button type=\"submit\">Empezar gratis</button>" +
       "<div class=\"err\" id=\"err\"></div>" +
     "</form>" +
-    "<div class=\"foot\">Ya tienes cuenta? <a href=\"/app/login\">Ingresa aqui</a></div>";
+    "<div class=\"foot\">¿Ya tienes cuenta? <a href=\"/app/login\">Ingresa aquí</a></div>";
   const script =
     // Atribución: ?f= del CTA que lo trajo, o el referrer como fallback; sobrevive recargas en sessionStorage.
     "var fuente='';try{var q=new URLSearchParams(location.search).get('f');if(q){fuente=q;}else if(document.referrer){var u=new URL(document.referrer);fuente=(u.host===location.host?'':u.host)+u.pathname;}}catch(e){}" +
@@ -6265,7 +6272,7 @@ function paginaRegistro(googleOn){
     "var tam=document.getElementById('tam').value;" +
     "var pass=document.getElementById('pass').value;" +
     "var pass2=document.getElementById('pass2').value;" +
-    "if(pass!==pass2){err.textContent='Las contrasenas no coinciden.'; btn.disabled=false; regEnviado=false; return;}" +
+    "if(pass!==pass2){err.textContent='Las contraseñas no coinciden.'; btn.disabled=false; regEnviado=false; return;}" +
     "try{" +
     "var r=await fetch('/app/api/t/registro',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({academia:academia,nombre:nombre,email:email,whatsapp:whatsapp,pass:pass,rubro:rubro,tam:tam,fuente:fuente,ref:refc,plan:planReg})});" +
     "var d=await r.json();" +
@@ -6278,7 +6285,7 @@ function paginaRegistro(googleOn){
        al panel (irCon(token,"/app/panel")): las dos puertas tienen que llevar al mismo sitio.
        Ya no hay checkout en el alta: siempre al panel. */
     "location.href='/app/panel';" +
-    "}catch(ex){err.textContent='Error de conexion. Intenta de nuevo.'; btn.disabled=false; regEnviado=false;}" +
+    "}catch(ex){err.textContent='Error de conexión. Intenta de nuevo.'; btn.disabled=false; regEnviado=false;}" +
     "});";
   return paginaBase("Crea tu academia — Batuta", cuerpo, script);
 }
@@ -6296,15 +6303,15 @@ function botonGoogle(intent, slug, texto, conSep) {
 function paginaLogin(googleOn){
   const cuerpo =
     "<h1>Ingresa a Batuta</h1>" +
-    "<p class=\"sub\">El panel del profesor o dueno de academia. Eres alumno? Entra por el link de tu academia (batuta.lat/app/a/tu-academia): pideselo a tu profesor.</p>" +
+    "<p class=\"sub\">El panel del profesor o dueño de academia. ¿Eres alumno? Entra por el link de tu academia (batuta.lat/app/a/tu-academia): pídeselo a tu profesor.</p>" +
     "<form id=\"f\">" +
       "<label>Email</label><input id=\"email\" type=\"email\" required>" +
-      "<label>Contrasena</label><input id=\"pass\" type=\"password\" required>" +
+      "<label>Contraseña</label><input id=\"pass\" type=\"password\" required>" +
       "<button type=\"submit\">Ingresar</button>" +
       "<div class=\"err\" id=\"err\"></div>" +
     "</form>" +
     (googleOn ? botonGoogle("profesor", "", "Continuar con Google") : "") +
-    "<div class=\"foot\">No tienes cuenta? <a href=\"/app/registro\">Crea tu academia</a> · <a href=\"/demo\">Mira la demo</a></div>";
+    "<div class=\"foot\">¿No tienes cuenta? <a href=\"/app/registro\">Crea tu academia</a> · <a href=\"/demo\">Mira la demo</a></div>";
   const script =
     "document.getElementById('f').addEventListener('submit', async function(e){" +
     "e.preventDefault();" +
@@ -6315,10 +6322,10 @@ function paginaLogin(googleOn){
     "try{" +
     "var r=await fetch('/app/api/t/login',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({email:email,pass:pass})});" +
     "var d=await r.json();" +
-    "if(!r.ok){err.textContent=d.error||'Correo o contrasena incorrectos.'; btn.disabled=false; return;}" +
+    "if(!r.ok){err.textContent=d.error||'Correo o contraseña incorrectos.'; btn.disabled=false; return;}" +
     "localStorage.setItem('batuta_t', d.token);" +
     "location.href='/app/panel';" +
-    "}catch(ex){err.textContent='Error de conexion. Intenta de nuevo.'; btn.disabled=false;}" +
+    "}catch(ex){err.textContent='Error de conexión. Intenta de nuevo.'; btn.disabled=false;}" +
     "});";
   return paginaBase("Ingresa — Batuta", cuerpo, script);
 }
@@ -6331,8 +6338,8 @@ function paginaSuscribir(){
     "<h1>Batuta es gratis</h1>" +
     "<p class=\"sub\">Ya no hay planes que activar. Tu Batuta incluye el producto completo con <b>20 alumnos</b>, <b>1 profesor</b> y <b>5 conversaciones</b> del asistente al mes, sin tarjeta y sin vencimiento.</p>" +
     "<div id=\"packs\">" +
-      "<div class=\"planopt\"><div class=\"planopt-t\">Mas alumnos</div><div class=\"planopt-p\">desde S/" + packChico("alumnos").precio + "<span>/mes · " + packChico("alumnos").nombre + "</span></div></div>" +
-      "<div class=\"planopt\"><div class=\"planopt-t\">Mas profesores</div><div class=\"planopt-p\">desde S/" + packChico("profes").precio + "<span>/mes · " + packChico("profes").nombre + "</span></div></div>" +
+      "<div class=\"planopt\"><div class=\"planopt-t\">Más alumnos</div><div class=\"planopt-p\">desde S/" + packChico("alumnos").precio + "<span>/mes · " + packChico("alumnos").nombre + "</span></div></div>" +
+      "<div class=\"planopt\"><div class=\"planopt-t\">Más profesores</div><div class=\"planopt-p\">desde S/" + packChico("profes").precio + "<span>/mes · " + packChico("profes").nombre + "</span></div></div>" +
       "<div class=\"planopt\"><div class=\"planopt-t\">Asistente de WhatsApp con IA</div><div class=\"planopt-p\">desde S/" + packChico("ia").precio + "<span>/mes · " + numPack(packChico("ia").suma) + " conversaciones</span></div></div>" +
     "</div>" +
     "<p class=\"sub\" style=\"margin:14px 0 0;font-size:13px\">Los packs se agregan y se sueltan solos desde tu panel, en <b>Mi cuenta y mi plan</b>. Se suman a un solo cobro mensual por Mercado Pago y no tienen permanencia.</p>" +
@@ -6354,7 +6361,7 @@ function paginaLanding(){
     "<h1>Batuta</h1>" +
     "<p class=\"sub\">El panel para gestionar tu academia.</p>" +
     "<a href=\"/app/registro\"><button type=\"button\">Empezar gratis</button></a>" +
-    "<div class=\"foot\">Ya tienes cuenta? <a href=\"/app/login\">Ingresa aqui</a> · <a href=\"/demo\">Mira la demo</a></div>";
+    "<div class=\"foot\">¿Ya tienes cuenta? <a href=\"/app/login\">Ingresa aquí</a> · <a href=\"/demo\">Mira la demo</a></div>";
   // Si ya tiene sesion de profesor, directo a su panel.
   const script = "try{ if(localStorage.getItem('batuta_t')){ location.replace('/app/panel'); } }catch(e){}";
   return paginaBase("Batuta", cuerpo, script);
@@ -9407,7 +9414,7 @@ export default {
       const auth = request.headers.get("authorization") || "";
       const tk = auth.toLowerCase().startsWith("bearer ") ? auth.slice(7).trim() : "";
       const tApi = await tenantPorApiToken(env, tk);
-      if (!tApi) return json({ error: "Token invalido. Genera el tuyo en Ajustes > Conecta tu Claude." }, 401);
+      if (!tApi) return json({ error: "Token inválido. Genera el tuyo en Ajustes > Conecta tu Claude." }, 401);
       if (request.method !== "GET") return json({ error: "La API v1 es de solo lectura." }, 405);
       const ipApi = clientIp(request);
       if (ipApi && await chatbotPasoTope(env, "apiv1:" + tApi.id, 300)){
@@ -9436,7 +9443,7 @@ export default {
        pelear. Mismo alcance que la API: su academia y solo lectura. */
     if (path.startsWith("/app/mcp/")){
       const tMcp = await tenantPorApiToken(env, path.slice("/app/mcp/".length));
-      if (!tMcp) return json({ error: "Token invalido" }, 401);
+      if (!tMcp) return json({ error: "Token inválido" }, 401);
       if (request.method === "GET"){
         /* El cliente MCP abre un GET con Accept: text/event-stream para escuchar al servidor.
            Batuta no habla SSE, y el protocolo manda responder 405: eso significa "no insistas".
@@ -9454,7 +9461,7 @@ export default {
                       herramientas: API_TOOLS.map(x => x.name),
                       como_usar: "Pega esta misma URL como servidor MCP en tu Claude." });
       }
-      if (request.method !== "POST") return json({ error: "Metodo no permitido" }, 405);
+      if (request.method !== "POST") return json({ error: "Método no permitido" }, 405);
       if (await chatbotPasoTope(env, "mcp:" + tMcp.id, 300)) return json({ error: "Demasiadas consultas esta hora." }, 429);
 
       const rpc = await request.json().catch(() => null);
@@ -9611,17 +9618,17 @@ export default {
     if (path === "/app/api/aprende/certificado" && request.method === "POST"){
       const ipCert = clientIp(request);
       if (ipCert && await chatbotPasoTope(env, "cert:" + ipCert, 5)){
-        return json({ error: "Demasiados intentos desde tu conexion. Intenta en una hora." }, 429);
+        return json({ error: "Demasiados intentos desde tu conexión. Intenta en una hora." }, 429);
       }
       const bC = await request.json().catch(() => ({}));
       const nomC = String(bC.nombre || "").trim().replace(/\s+/g, " ").slice(0, 60);
       const emC = String(bC.email || "").trim().toLowerCase().slice(0, 120);
       if (nomC.length < 3) return json({ error: "Escribe tu nombre completo (como quieres que salga en el certificado)." }, 400);
-      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emC)) return json({ error: "Escribe un correo valido." }, 400);
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emC)) return json({ error: "Escribe un correo válido." }, 400);
       const pts = (bC.puntajes && typeof bC.puntajes === "object") ? bC.puntajes : {};
       const mods = ["m1", "m2", "m3", "m4"];
       const aprobado = mods.every(m => Number(pts[m]) >= 4);
-      if (!aprobado) return json({ error: "Te falta aprobar los 4 modulos (minimo 4 de 5 en cada quiz)." }, 400);
+      if (!aprobado) return json({ error: "Te falta aprobar los 4 módulos (mínimo 4 de 5 en cada quiz)." }, 400);
       await ensureCertSchema(env);
       /* dedup por email Y tipo: el cert del curso gratis no bloquea el de la capacitacion pagada */
       const previo = await env.DB.prepare("SELECT id FROM certificados_101 WHERE email = ?1 AND tipo = 'curso'").bind(emC).first().catch(() => null);
@@ -9637,28 +9644,28 @@ export default {
 
     /* Capacitacion con IA: iniciar la sesion de voz de UNA seccion (codigo comprado, S/49.50/persona). */
     if (path === "/app/api/examen-oral/iniciar" && request.method === "POST"){
-      if (!env.ELEVENLABS_API_KEY) return json({ error: "La capacitacion no esta disponible ahora." }, 503);
+      if (!env.ELEVENLABS_API_KEY) return json({ error: "La capacitación no está disponible ahora." }, 503);
       const ipEx = clientIp(request);
       if (ipEx && await chatbotPasoTope(env, "exoral:" + ipEx, 15)){
-        return json({ error: "Demasiados intentos desde tu conexion. Espera una hora." }, 429);
+        return json({ error: "Demasiados intentos desde tu conexión. Espera una hora." }, 429);
       }
       const bE = await request.json().catch(() => ({}));
       const codE = String(bE.codigo || "").trim().toUpperCase();
       const secE = parseInt(bE.seccion, 10);
-      if (!/^BAT-[A-Z2-9]{6}$/.test(codE)) return json({ error: "Ese codigo no tiene el formato correcto (es tipo BAT-XXXXXX)." }, 400);
-      if (!AGENTES_CAPACITACION[secE]) return json({ error: "Seccion invalida." }, 400);
+      if (!/^BAT-[A-Z2-9]{6}$/.test(codE)) return json({ error: "Ese código no tiene el formato correcto (es tipo BAT-XXXXXX)." }, 400);
+      if (!AGENTES_CAPACITACION[secE]) return json({ error: "Sección inválida." }, 400);
       await ensureExamenSchema(env);
       const ex = await env.DB.prepare("SELECT * FROM examenes_orales WHERE codigo = ?1").bind(codE).first();
-      if (!ex) return json({ error: "Codigo no encontrado. Revisa que este bien escrito o escribenos por WhatsApp." }, 404);
+      if (!ex) return json({ error: "Código no encontrado. Revisa que esté bien escrito o escríbenos por WhatsApp." }, 404);
       const filaS = await env.DB.prepare("SELECT * FROM examen_secciones WHERE codigo = ?1 AND seccion = ?2").bind(codE, secE).first();
-      if (filaS && filaS.estado === "aprobado") return json({ error: "Esta seccion ya esta aprobada. Sigue con la que te falta." }, 409);
-      if (filaS && Number(filaS.intentos) >= EXAMEN_MAX_INTENTOS) return json({ error: "Esta seccion ya uso sus " + EXAMEN_MAX_INTENTOS + " intentos. Escribenos por WhatsApp." }, 409);
+      if (filaS && filaS.estado === "aprobado") return json({ error: "Esta sección ya está aprobada. Sigue con la que te falta." }, 409);
+      if (filaS && Number(filaS.intentos) >= EXAMEN_MAX_INTENTOS) return json({ error: "Esta sección ya usó sus " + EXAMEN_MAX_INTENTOS + " intentos. Escríbenos por WhatsApp." }, 409);
       /* tope de EMISIONES de signed URL por seccion (review 14-jul): sin esto, pedir /iniciar
          sin conectar nunca gastaba minutos de ElevenLabs sin limite. Holgura = 3x intentos
          (URLs que expiran o llamadas que caen antes de conectar). */
       const EMISIONES_MAX = EXAMEN_MAX_INTENTOS * 3;
       const emisionesPrev = filaS ? Number(filaS.emisiones || 0) : 0;
-      if (emisionesPrev >= EMISIONES_MAX) return json({ error: "Esta seccion agoto sus reintentos de conexion. Escribenos por WhatsApp." }, 409);
+      if (emisionesPrev >= EMISIONES_MAX) return json({ error: "Esta sección agotó sus reintentos de conexión. Escríbenos por WhatsApp." }, 409);
       /* signed URL fresca (expira en ~15 min): se pide recien cuando la persona da clic */
       let signed = null;
       try {
@@ -9680,7 +9687,7 @@ export default {
     if (path === "/app/api/examen-oral/vincular" && request.method === "POST"){
       const ipVc = clientIp(request);
       if (ipVc && await chatbotPasoTope(env, "exvinc:" + ipVc, 20)){
-        return json({ error: "Demasiados intentos desde tu conexion. Espera un rato." }, 429);
+        return json({ error: "Demasiados intentos desde tu conexión. Espera un rato." }, 429);
       }
       const bV = await request.json().catch(() => ({}));
       const codV = String(bV.codigo || "").trim().toUpperCase();
@@ -9689,14 +9696,14 @@ export default {
       if (!/^BAT-[A-Z2-9]{6}$/.test(codV) || !AGENTES_CAPACITACION[secV] || !convV) return json({ error: "Faltan datos." }, 400);
       await ensureExamenSchema(env);
       const exV = await env.DB.prepare("SELECT codigo, nombre FROM examenes_orales WHERE codigo = ?1").bind(codV).first();
-      if (!exV) return json({ error: "Codigo invalido." }, 404);
+      if (!exV) return json({ error: "Código inválido." }, 404);
       const filaV = await env.DB.prepare("SELECT estado, intentos FROM examen_secciones WHERE codigo = ?1 AND seccion = ?2").bind(codV, secV).first();
-      if (filaV && filaV.estado === "aprobado") return json({ error: "Seccion ya aprobada." }, 409);
+      if (filaV && filaV.estado === "aprobado") return json({ error: "Sección ya aprobada." }, 409);
       if (filaV && Number(filaV.intentos) >= EXAMEN_MAX_INTENTOS) return json({ error: "Sin intentos." }, 409);
       /* la conversation_id no puede estar ya usada en OTRA (codigo,seccion): frena el replay
          de pegar una misma conversacion aprobada a varias secciones/codigos (review 14-jul) */
       const dup = await env.DB.prepare("SELECT 1 FROM examen_secciones WHERE conversation_id = ?1 AND NOT (codigo = ?2 AND seccion = ?3)").bind(convV, codV, secV).first().catch(() => null);
-      if (dup) return json({ error: "Esa sesion no corresponde a esta seccion." }, 409);
+      if (dup) return json({ error: "Esa sesión no corresponde a esta sección." }, 409);
       await env.DB.prepare(
         "INSERT INTO examen_secciones (codigo, seccion, conversation_id, intentos, estado, actualizado) VALUES (?1, ?2, ?3, 1, 'iniciado', ?4) " +
         "ON CONFLICT(codigo, seccion) DO UPDATE SET conversation_id = ?3, intentos = intentos + 1, estado = 'iniciado', actualizado = ?4"
@@ -9711,7 +9718,7 @@ export default {
     if (path === "/app/api/examen-oral/progreso" && request.method === "POST"){
       const bP = await request.json().catch(() => ({}));
       const codP = String(bP.codigo || "").trim().toUpperCase();
-      if (!/^BAT-[A-Z2-9]{6}$/.test(codP)) return json({ error: "Codigo invalido." }, 400);
+      if (!/^BAT-[A-Z2-9]{6}$/.test(codP)) return json({ error: "Código inválido." }, 400);
       /* rate limit POR CODIGO (no por IP): un equipo con la misma IP publica no se pisa
          entre si, y cada codigo queda acotado por su cuenta (review 14-jul). Backstop por
          IP mas holgado contra spray de codigos invalidos. */
@@ -9724,7 +9731,7 @@ export default {
       }
       await ensureExamenSchema(env);
       const exP = await env.DB.prepare("SELECT * FROM examenes_orales WHERE codigo = ?1").bind(codP).first();
-      if (!exP) return json({ error: "Codigo no encontrado." }, 404);
+      if (!exP) return json({ error: "Código no encontrado." }, 404);
       const prog = await refrescarCapacitacion(env, exP);
       return json({ ok: true, nombre: exP.nombre, secciones: prog.secciones, cert_url: prog.cert_url });
     }
@@ -9767,21 +9774,21 @@ export default {
         } catch (e) {}
       }
       if (!invit || invit.estado !== "invitado"){
-        return htmlResponse(paginaBase("Invitacion — Batuta",
-          "<h1>Invitacion no valida</h1><p class=\"sub\">Este link ya se uso o vencio. Pidele al dueno de la academia que te reenvie la invitacion desde su panel.</p>", ""));
+        return htmlResponse(paginaBase("Invitación — Batuta",
+          "<h1>Invitación no válida</h1><p class=\"sub\">Este link ya se usó o venció. Pídele al dueño de la academia que te reenvíe la invitación desde su panel.</p>", ""));
       }
       const cuerpoInv =
         "<span class=\"pill\">" + esc(invit.academia || "Tu academia") + "</span>" +
         "<h1>Hola, " + esc((invit.nombre || "profe").split(" ")[0]) + "</h1>" +
-        "<p class=\"sub\">Crea tu contrasena para entrar a tu panel de profesor.</p>" +
-        "<label>Contrasena nueva (minimo 8)</label><input id=\"p1\" type=\"password\" autocomplete=\"new-password\" />" +
-        "<label>Repitela</label><input id=\"p2\" type=\"password\" autocomplete=\"new-password\" />" +
+        "<p class=\"sub\">Crea tu contraseña para entrar a tu panel de profesor.</p>" +
+        "<label>Contraseña nueva (mínimo 8)</label><input id=\"p1\" type=\"password\" autocomplete=\"new-password\" />" +
+        "<label>Repítela</label><input id=\"p2\" type=\"password\" autocomplete=\"new-password\" />" +
         "<button id=\"go\">Activar mi cuenta</button><div class=\"err\" id=\"err\"></div>";
       const scriptInv =
         "document.getElementById('go').addEventListener('click',function(){" +
         "var p1=document.getElementById('p1').value,p2=document.getElementById('p2').value,err=document.getElementById('err');err.textContent='';" +
-        "if(p1.length<8){err.textContent='La contrasena necesita minimo 8 caracteres.';return;}" +
-        "if(p1!==p2){err.textContent='Las contrasenas no coinciden.';return;}" +
+        "if(p1.length<8){err.textContent='La contraseña necesita mínimo 8 caracteres.';return;}" +
+        "if(p1!==p2){err.textContent='Las contraseñas no coinciden.';return;}" +
         "var btn=document.getElementById('go');btn.disabled=true;" +
         "fetch('/app/api/p/activar',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({token:'" + tk + "',pass:p1})})" +
         ".then(function(r){return r.json();}).then(function(d){" +
@@ -9889,6 +9896,7 @@ export default {
         return x.toLowerCase().replace(/(^|[\s(\-·])([a-záéíóúñ])/g, (m, a, b) => a + b.toUpperCase());
       };
       const tarjetas = lista.map(f => {
+        const sedePublica = ubicacionPublicaMvt(f) || f.sede;
         const cursos = String(f.cursos || "").split(",").map(x => x.trim()).filter(Boolean).slice(0, 4);
         const color = /^#[0-9a-fA-F]{6}$/.test(String(f.color || "")) ? String(f.color) : "#E8A13D";
         const inicial = String(nombreBonito(f.academia) || "?").trim().charAt(0).toUpperCase();
@@ -9907,9 +9915,9 @@ export default {
             (rubroUtil ? '<span class="ac-rubro">' + esc2(rubroUtil) + '</span>' : '') + '</div>' +
           '</div>' +
           (cursos.length ? '<div class="ac-cursos">' + cursos.map(c => '<span>' + esc2(c) + '</span>').join("") + '</div>' : '') +
-          ((f.sede && String(f.dir_off || "") !== "1")
-            ? '<p class="ac-sede">' + esc2(String(f.sede).slice(0, 60)) +
-              ((Number(f.n_sedes) || 0) > 1 ? esc2(" · y " + ((Number(f.n_sedes) || 0) - 1) + " local" + ((Number(f.n_sedes) || 0) > 2 ? "es" : "") + " más") : "") +
+          ((sedePublica && String(f.dir_off || "") !== "1")
+            ? '<p class="ac-sede">' + esc2(String(sedePublica).slice(0, 60)) +
+              (!ubicacionPublicaMvt(f) && (Number(f.n_sedes) || 0) > 1 ? esc2(" · y " + ((Number(f.n_sedes) || 0) - 1) + " local" + ((Number(f.n_sedes) || 0) > 2 ? "es" : "") + " más") : "") +
               '</p>' : '') +
           '<span class="ac-cta">Ver la academia &rarr;</span></a>';
       }).join("");
@@ -10075,9 +10083,9 @@ export default {
           "Tus datos los recibe <b>" + esc(tP.academia) + "</b> para registrarte como alumno, cobrarte y avisarte de tus clases. " +
           "Batuta los guarda por encargo de la academia y no los usa para otra cosa ni los vende. " +
           "Puedes pedir verlos, corregirlos o borrarlos escribiendo a la academia. " +
-          "<a href=\"https://batuta.lat/privacidad\" target=\"_blank\" rel=\"noopener\">Politica de privacidad</a>." +
+          "<a href=\"https://batuta.lat/privacidad\" target=\"_blank\" rel=\"noopener\">Política de privacidad</a>." +
         "</p>" +
-        "<div class=\"foot\">Ya tienes cuenta? <a href=\"/app/a/" + esc(tP.slug) + "\">Entra a tu portal</a></div>";
+        "<div class=\"foot\">¿Ya tienes cuenta? <a href=\"/app/a/" + esc(tP.slug) + "\">Entra a tu portal</a></div>";
       const scriptP =
         "var INFO=" + JSON.stringify(infoPago) + ";var SLUGP=" + JSON.stringify(tP.slug) + ";" +
         /* menos de 14 -> aparece la declaracion del apoderado y sin ella no se envia.
@@ -10450,9 +10458,9 @@ export default {
       /* ---------- Lead magnet del blog (público): captura + entrega por correo ---------- */
       if (path === "/app/api/lead-magnet" && request.method === "POST"){
         let body = {};
-        try { body = await request.json(); } catch (e) { return json({ error: "JSON invalido" }, 400); }
+        try { body = await request.json(); } catch (e) { return json({ error: "JSON inválido" }, 400); }
         const email = String(body.email || "").trim().toLowerCase().slice(0, 200);
-        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return json({ error: "Email invalido" }, 400);
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return json({ error: "Email inválido" }, 400);
         // Rate-limit: este endpoint dispara un correo Resend real → sin tope es un vector de spam
         // que quema la cuota. 10/hora por IP; degrada abierto solo si no hay IP (no rompe la captura).
         const ipLm = clientIp(request);
@@ -10510,7 +10518,7 @@ export default {
           const ipDl = clientIp(request);
           if (ipDl && await chatbotPasoTope(env, "dlead:" + ipDl, 8)) return json({ ok: true });
           let bDl = {};
-          try { bDl = await request.json(); } catch (e) { return json({ error: "JSON invalido" }, 400); }
+          try { bDl = await request.json(); } catch (e) { return json({ error: "JSON inválido" }, 400); }
           const emailDl = String(bDl.email || "").trim().toLowerCase().slice(0, 200);
           if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailDl)) return json({ error: "Escribe un correo válido" }, 400);
           if (correoNoEntregable(emailDl)) return json({ error: "Ese correo no existe. Escribe uno al que llegues." }, 400);
@@ -10562,9 +10570,9 @@ export default {
           const ipRa = clientIp(request);
           if (ipRa && await chatbotPasoTope(env, "rab:" + ipRa, 8)) return json({ ok: true });
           let body = {};
-          try { body = await request.json(); } catch (e) { return json({ error: "JSON invalido" }, 400); }
+          try { body = await request.json(); } catch (e) { return json({ error: "JSON inválido" }, 400); }
           const email = String(body.email || "").trim().toLowerCase().slice(0, 200);
-          if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return json({ error: "Email invalido" }, 400);
+          if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return json({ error: "Email inválido" }, 400);
           const whatsapp = String(body.whatsapp || "").replace(/[^\d+]/g, "").slice(0, 20);
           const rubro = String(body.rubro || "").slice(0, 40);
           const fuente = String(body.fuente || "").slice(0, 80);
@@ -10642,7 +10650,7 @@ export default {
       if (path === "/app/api/afiliados/aplicar" && request.method === "POST"){
         const ipAp = clientIp(request);
         if (ipAp && await chatbotPasoTope(env, "afapl:" + ipAp, 3)){
-          return json({ error: "Demasiados intentos. Escribenos por WhatsApp." }, 429);
+          return json({ error: "Demasiados intentos. Escríbenos por WhatsApp." }, 429);
         }
         const b = await request.json().catch(() => ({}));
         const nombreAp = String(b.nombre || "").trim().slice(0, 80);
@@ -10650,7 +10658,7 @@ export default {
         const waAp = String(b.whatsapp || "").trim().slice(0, 30);
         const ppAp = String(b.paypal || "").trim().slice(0, 120);
         const canalAp = String(b.canal || "").trim().slice(0, 400);
-        if (nombreAp.length < 2 || !emailOk(emailAp)) return json({ error: "Manda tu nombre y un correo valido." }, 400);
+        if (nombreAp.length < 2 || !emailOk(emailAp)) return json({ error: "Manda tu nombre y un correo válido." }, 400);
         await ensureAfiliadosSchema(env);
         await env.DB.prepare(
           "INSERT INTO afiliado_solicitudes (id, nombre, email, whatsapp, paypal, canal, fecha) VALUES (?1,?2,?3,?4,?5,?6,?7)"
@@ -10672,7 +10680,7 @@ export default {
       if (path === "/app/api/libro-reclamo" && request.method === "POST"){
         const ipLr = clientIp(request);
         if (ipLr && await chatbotPasoTope(env, "librorec:" + ipLr, 3)){
-          return json({ error: "Demasiados intentos. Escribenos por WhatsApp o al correo de contacto." }, 429);
+          return json({ error: "Demasiados intentos. Escríbenos por WhatsApp o al correo de contacto." }, 429);
         }
         const b = await request.json().catch(() => ({}));
         if (String(b.web || "").trim()) return json({ ok: true, codigo: "" }); // honeypot: bot fuera, sin pista
@@ -10689,7 +10697,7 @@ export default {
         const detLr = String(b.detalle || "").trim().slice(0, 3000);
         const pedLr = String(b.pedido || "").trim().slice(0, 1500);
         if (nomLr.length < 2 || !emailOk(emaLr) || docLr.length < 6 || detLr.length < 20 || pedLr.length < 5){
-          return json({ error: "Completa nombre, documento de identidad, un correo valido, el detalle (minimo 20 caracteres) y tu pedido." }, 400);
+          return json({ error: "Completa nombre, documento de identidad, un correo válido, el detalle (mínimo 20 caracteres) y tu pedido." }, 400);
         }
         if (menLr && apoLr.length < 2){
           return json({ error: "Si el consumidor es menor de edad, indica el nombre de su padre, madre o apoderado." }, 400);
@@ -10885,7 +10893,7 @@ export default {
         if (path === "/app/api/su/wa-pagado" && request.method === "GET"){
           const telQ = String(url.searchParams.get("tel") || "").replace(/\D/g, "");
           const tenantQ = String(url.searchParams.get("tenant") || "MVT-PROFESORMVT").slice(0, 64);
-          if (telQ.length < 9) return json({ error: "tel: van al menos los ultimos 9 digitos del numero" }, 400);
+          if (telQ.length < 9) return json({ error: "tel: van al menos los últimos 9 dígitos del número" }, 400);
           return json(await waLeadPago(env, tenantQ, telQ));
         }
         if (path === "/app/api/su/wa-status" && request.method === "GET"){
@@ -10948,7 +10956,7 @@ export default {
           let accion = "", cuerpo = {};
           if (path.endsWith("wa-request-code")){ accion = "request_code"; cuerpo = { code_method: String(b.method || "SMS"), language: String(b.lang || "es") }; }
           else if (path.endsWith("wa-verify-code")){ accion = "verify_code"; cuerpo = { code: String(b.code || "").replace(/\D/g, "") }; if (!cuerpo.code) return json({ error: "manda code" }, 400); }
-          else { accion = "register"; cuerpo = { messaging_product: "whatsapp", pin: String(b.pin || "").replace(/\D/g, "") }; if (cuerpo.pin.length !== 6) return json({ error: "pin de 6 digitos" }, 400); }
+          else { accion = "register"; cuerpo = { messaging_product: "whatsapp", pin: String(b.pin || "").replace(/\D/g, "") }; if (cuerpo.pin.length !== 6) return json({ error: "pin de 6 dígitos" }, 400); }
           try {
             const r = await fetch("https://graph.facebook.com/v21.0/" + phoneId + "/" + accion, {
               method: "POST", headers: { "Authorization": "Bearer " + env.WHATSAPP_TOKEN, "Content-Type": "application/json" },
@@ -11004,7 +11012,7 @@ export default {
           const b = await request.json().catch(() => ({}));
           const phoneIdS = String(b.phone_id || "").replace(/\D/g, "");
           const telS = String(b.telefono || "").replace(/\D/g, "");
-          if (!phoneIdS || !telS || !b.texto) return json({ error: "manda phone_id, telefono y texto" }, 400);
+          if (!phoneIdS || !telS || !b.texto) return json({ error: "manda phone_id, teléfono y texto" }, 400);
           const enviados = [];
           const res = await waAtenderTenant(env, { phoneId: phoneIdS, from: telS, texto: String(b.texto).slice(0, 500), nombre: String(b.nombre || "").slice(0, 80), simulado: true,
             enviar: async (to, t) => { enviados.push({ to, texto: t }); return { ok: true, wamid: "simulado", simulado: true }; } });
@@ -11050,7 +11058,7 @@ export default {
           const phoneId = String(b.phone_id || "").replace(/\D/g, "");
           const to = String(b.to || "").replace(/\D/g, "");
           const texto = String(b.texto || "Prueba de Batuta: el envio de WhatsApp funciona ✅").slice(0, 1000);
-          if (!phoneId || !to) return json({ error: "Manda phone_id y to (solo digitos, con codigo de pais)" }, 400);
+          if (!phoneId || !to) return json({ error: "Manda phone_id y to (solo dígitos, con código de país)" }, 400);
           /* 2-set-2026: fuera de la ventana de 24 h Meta ACEPTA un texto libre (200 + wamid) y despues
              lo marca failed por webhook (131047). Para abrir conversacion hay que mandar PLANTILLA:
              {"template":"hello_world","lang":"en_US"}. */
@@ -11077,14 +11085,14 @@ export default {
           const b = await request.json().catch(() => ({}));
           const nombre = String(b.nombre || "").trim().slice(0, 80);
           const phoneId = String(b.phone_id || "").replace(/\D/g, "");
-          if (!nombre || !phoneId) return json({ error: "manda nombre y phone_id (phone_number_id de la WABA, solo digitos)" }, 400);
+          if (!nombre || !phoneId) return json({ error: "manda nombre y phone_id (phone_number_id de la WABA, solo dígitos)" }, 400);
           /* Campo OMITIDO = se PRESERVA lo que ya tiene el negocio (10-ago-2026): antes un upsert
              sin kb la borraba y sin enabled lo apagaba. Clave para el dia del corte 3402: basta
              {id, nombre, phone_id} para escribir el phone_number_id real sin tocar el resto. */
           const existe = await env.DB.prepare("SELECT id, kb, enabled, cap_mes FROM wa_negocio WHERE phone_id = ?1 OR id = ?2").bind(phoneId, String(b.id || "")).first().catch(() => null);
           let kbStr = (existe && existe.kb) || "";
           if (b.kb != null){
-            if (typeof b.kb === "string"){ try { JSON.parse(b.kb); kbStr = b.kb; } catch (e) { return json({ error: "kb debe ser JSON valido" }, 400); } }
+            if (typeof b.kb === "string"){ try { JSON.parse(b.kb); kbStr = b.kb; } catch (e) { return json({ error: "kb debe ser JSON válido" }, 400); } }
             else kbStr = JSON.stringify(b.kb);
           }
           const cap = (Number.isFinite(Number(b.cap_mes)) && Number(b.cap_mes) > 0) ? Math.floor(Number(b.cap_mes)) : ((existe && Number(existe.cap_mes) > 0) ? Number(existe.cap_mes) : 1000);
@@ -11157,7 +11165,7 @@ export default {
           await ensureNegocioSchema(env);
           const negId = String(url.searchParams.get("negocio") || "").trim();
           const telH = String(url.searchParams.get("telefono") || "").replace(/\D/g, "");
-          if (!negId || !telH) return json({ error: "manda negocio y telefono" }, 400);
+          if (!negId || !telH) return json({ error: "manda negocio y teléfono" }, 400);
           const historial = await waHistorialCargar(env, "neg:" + negId, telH);
           const leadH = await env.DB.prepare("SELECT nombre, ultimo, actualizado, COALESCE(pausa,'') AS pausa FROM wa_negocio_lead WHERE negocio_id = ?1 AND telefono = ?2").bind(negId, telH).first().catch(() => null);
           return json({ ok: true, historial, lead: leadH || null });
@@ -11170,7 +11178,7 @@ export default {
           const negIdR = String(bR.negocio || "").trim();
           const telR = String(bR.telefono || "").replace(/\D/g, "");
           const textoR = String(bR.texto || "").trim().slice(0, 1000);
-          if (!negIdR || !telR || !textoR) return json({ error: "manda negocio, telefono y texto" }, 400);
+          if (!negIdR || !telR || !textoR) return json({ error: "manda negocio, teléfono y texto" }, 400);
           const negR = await env.DB.prepare("SELECT id, nombre, phone_id FROM wa_negocio WHERE id = ?1").bind(negIdR).first().catch(() => null);
           if (!negR) return json({ error: "negocio no encontrado" }, 404);
           const enviadoR = await enviarWhatsApp(env, negR.phone_id, telR, textoR);
@@ -11188,7 +11196,7 @@ export default {
           const negIdP = String(bP.negocio || "").trim();
           const telP = String(bP.telefono || "").replace(/\D/g, "");
           const pausaP = String(bP.pausa || "") === "on" ? "on" : "off";
-          if (!negIdP || !telP) return json({ error: "manda negocio y telefono" }, 400);
+          if (!negIdP || !telP) return json({ error: "manda negocio y teléfono" }, 400);
           const ahoraP = new Date().toISOString();
           await env.DB.prepare(
             "INSERT INTO wa_negocio_lead (negocio_id, telefono, nombre, ultimo, actualizado, pausa) VALUES (?1,?2,'','',?3,?4) " +
@@ -11202,7 +11210,7 @@ export default {
           const bB = await request.json().catch(() => ({}));
           const negIdB = String(bB.negocio || "").trim();
           const telB = String(bB.telefono || "").replace(/\D/g, "");
-          if (!negIdB || !telB) return json({ error: "manda negocio y telefono" }, 400);
+          if (!negIdB || !telB) return json({ error: "manda negocio y teléfono" }, 400);
           await env.DB.prepare("DELETE FROM wa_negocio_lead WHERE negocio_id = ?1 AND telefono = ?2").bind(negIdB, telB).run().catch(() => {});
           await env.DB.prepare("DELETE FROM wa_conv WHERE tenant_id = ?1 AND telefono = ?2").bind("neg:" + negIdB, telB).run().catch(() => {});
           return json({ ok: true });
@@ -11233,7 +11241,7 @@ export default {
           const bMP = await request.json().catch(() => ({}));
           const packKey = String(bMP.pack || "").trim();
           const cant = PACKS_MENSAJES[packKey];
-          if (!cant) return json({ error: "pack invalido: usa 5, 10 o 15" }, 400);
+          if (!cant) return json({ error: "pack inválido: usa 5, 10 o 15" }, 400);
           const ref = String(bMP.tenant || "").trim();
           if (!ref) return json({ error: "manda tenant (slug o id)" }, 400);
           const tMP = await env.DB.prepare("SELECT id, academia FROM tenants WHERE id = ?1 OR slug = ?1").bind(ref).first();
@@ -11249,7 +11257,7 @@ export default {
         if (path === "/app/api/su/plan-anual" && request.method === "POST"){
           const bSA = await request.json().catch(() => ({}));
           const planSA = String(bSA.plan || "").trim();
-          if (!PLANES_ANUAL[planSA]) return json({ error: "plan invalido: usa profe, profe_duo, profe_trio, academia o xl" }, 400);
+          if (!PLANES_ANUAL[planSA]) return json({ error: "plan inválido: usa profe, profe_duo, profe_trio, academia o xl" }, 400);
           const refSA = String(bSA.tenant || "").trim();
           const tSA = refSA ? await env.DB.prepare("SELECT id, academia FROM tenants WHERE id = ?1 OR slug = ?1").bind(refSA).first() : null;
           if (!tSA) return json({ error: "tenant no encontrado" }, 404);
@@ -11295,9 +11303,9 @@ export default {
             if (!tenantAf) return json({ error: "tenant no encontrado: " + refT }, 404);
           }
           const codigoAf = normRefCode(bAf.codigo) || (tenantAf ? tenantAf.slug : normRefCode(slugify(nombreAf)));
-          if (!codigoAf) return json({ error: "no pude generar codigo; manda uno" }, 400);
+          if (!codigoAf) return json({ error: "no pude generar código; manda uno" }, 400);
           const chocaT = await env.DB.prepare("SELECT id FROM tenants WHERE slug = ?1").bind(codigoAf).first();
-          if (chocaT && (!tenantAf || chocaT.id !== tenantAf.id)) return json({ error: "ese codigo choca con el slug de otro tenant; usa otro" }, 409);
+          if (chocaT && (!tenantAf || chocaT.id !== tenantAf.id)) return json({ error: "ese código choca con el slug de otro tenant; usa otro" }, 409);
           const yaAf = await env.DB.prepare("SELECT codigo, token_panel FROM afiliados WHERE codigo = ?1").bind(codigoAf).first();
           const tokenAf = (yaAf && yaAf.token_panel) || randHex(16);
           await env.DB.prepare(
@@ -11562,7 +11570,7 @@ export default {
             try { await env.DB.prepare("INSERT INTO config (tenant_id, clave, valor) VALUES (?1,'fundador','on') ON CONFLICT(tenant_id, clave) DO UPDATE SET valor='on'").bind(id).run(); } catch (e) {}
             return json({ ok: true, estado: "trial", meses, gratis_hasta: hasta.slice(0, 10) });
           }
-          return json({ error: "Accion no valida" }, 400);
+          return json({ error: "Acción no válida" }, 400);
         }
         /* Crea un preapproval_plan en MP desde el worker (el token vive como secreto; asi no
            hace falta sacarlo para operar planes). Body: { reason, transaction_amount, currency_id? }. */
@@ -11862,8 +11870,8 @@ export default {
 
         if (academia.length < 2) return json({ error: "Escribe el nombre de tu academia." }, 400);
         if (nombre.length < 2) return json({ error: "Escribe tu nombre." }, 400);
-        if (!emailOk(email)) return json({ error: "Ese correo no parece valido." }, 400);
-        if (pass.length < 8) return json({ error: "La contrasena necesita minimo 8 caracteres." }, 400);
+        if (!emailOk(email)) return json({ error: "Ese correo no parece válido." }, 400);
+        if (pass.length < 8) return json({ error: "La contraseña necesita mínimo 8 caracteres." }, 400);
 
         const existe = await env.DB.prepare("SELECT id FROM tenants WHERE email = ?1").bind(email).first();
         if (existe) return json({ error: "Ya existe una cuenta con ese correo. Intenta ingresar." }, 409);
@@ -11943,7 +11951,7 @@ export default {
           const hash = await hashPass(pass, t.pass_salt);
           if (!safeEq(hash, t.pass_hash)){
             await new Promise(r => setTimeout(r, 350));
-            return json({ error: "Correo o contrasena incorrectos." }, 401);
+            return json({ error: "Correo o contraseña incorrectos." }, 401);
           }
           const dueno = await asegurarDueno(env, t);
           const token = await crearSesion(env, dueno ? "P:" + dueno.id : "T:" + t.id);
@@ -11972,7 +11980,7 @@ export default {
           }
         }
         await new Promise(r => setTimeout(r, 350));
-        return json({ error: "Correo o contrasena incorrectos." }, 401);
+        return json({ error: "Correo o contraseña incorrectos." }, 401);
       }
 
       /* Activacion de profesor invitado: canjea el invite_token por contrasena + sesion P:. */
@@ -11984,11 +11992,11 @@ export default {
         const b = await request.json().catch(() => ({}));
         const tk = String(b.token || "").trim();
         const pass = String(b.pass || "");
-        if (!/^[0-9a-f]{16,64}$/.test(tk)) return json({ error: "Invitacion no valida." }, 400);
-        if (pass.length < 8) return json({ error: "La contrasena necesita minimo 8 caracteres." }, 400);
+        if (!/^[0-9a-f]{16,64}$/.test(tk)) return json({ error: "Invitación no válida." }, 400);
+        if (pass.length < 8) return json({ error: "La contraseña necesita mínimo 8 caracteres." }, 400);
         await ensureMultiprofesorSchema(env);
         const p = await env.DB.prepare("SELECT * FROM profesores WHERE invite_token = ?1").bind(tk).first();
-        if (!p || p.estado !== "invitado") return json({ error: "Este link ya se uso o vencio. Pide que te reenvien la invitacion." }, 400);
+        if (!p || p.estado !== "invitado") return json({ error: "Este link ya se usó o venció. Pide que te reenvíen la invitación." }, 400);
         const salt = randHex(16);
         const hash = await hashPass(pass, salt);
         await env.DB.prepare(
@@ -12014,7 +12022,7 @@ export default {
       if (path === "/app/api/t/activacion" && request.method === "GET"){
         // Checklist de activación: estado derivado de los datos reales, sin migración.
         const t = await tenantDeSesion(env, request);
-        if (!t) return json({ error: "Sesion expirada" }, 401);
+        if (!t) return json({ error: "Sesión expirada" }, 401);
         /* "Puse mis precios" = tener GUARDADO al menos un paquete con precio > 0.
            27-jul-2026: antes se comparaba contra PRECIOS_DEFAULT y bastaba con que UNO fuera
            distinto, así que una academia con todo en S/0 veía el paso tachado como hecho.
@@ -12085,7 +12093,7 @@ export default {
          no vuelva a salir cada vez que la dueña entra desde el celular. Idempotente. */
       if (path === "/app/api/t/celebrado" && request.method === "POST"){
         const actorC = await actorDeSesion(env, request);
-        if (!actorC) return json({ error: "Sesion expirada" }, 401);
+        if (!actorC) return json({ error: "Sesión expirada" }, 401);
         if (!actorC.esDueno) return json({ error: "Solo el dueño" }, 403);
         await env.DB.prepare(
           "INSERT INTO config (tenant_id, clave, valor) VALUES (?1,'primer_cobro_celebrado','1') " +
@@ -12104,7 +12112,7 @@ export default {
 
       if (path === "/app/api/t/me" && request.method === "GET"){
         const actorMe = await actorDeSesion(env, request);
-        if (!actorMe) return json({ error: "Sesion expirada" }, 401);
+        if (!actorMe) return json({ error: "Sesión expirada" }, 401);
         const t = actorMe.tenant;
         const diasRestantes = Math.max(0, Math.ceil((Date.parse(t.trial_hasta) - Date.now()) / 86400000));
         // Asientos de profesor del plan (suspendidos no ocupan asiento).
@@ -12189,13 +12197,13 @@ export default {
       /* Confirmacion al VOLVER del checkout anual (?payment_id=). Idempotente; el webhook es respaldo. */
       if (path === "/app/api/t/plan-anual/confirmar" && request.method === "POST"){
         const actorAc = await actorDeSesion(env, request);
-        if (!actorAc) return json({ error: "Sesion expirada" }, 401);
+        if (!actorAc) return json({ error: "Sesión expirada" }, 401);
         if (!env.MP_ACCESS_TOKEN) return json({ error: "No disponible." }, 501);
         const bAc = await request.json().catch(() => ({}));
         const payAc = String(bAc.payment_id || "").trim().slice(0, 40);
-        if (!/^\d+$/.test(payAc)) return json({ error: "payment_id invalido" }, 400);
+        if (!/^\d+$/.test(payAc)) return json({ error: "payment_id inválido" }, 400);
         const mpAc = await mpFetch(env, "/v1/payments/" + payAc, { method: "GET" });
-        if (!mpAc.ok || !mpAc.data) return json({ error: "No se pudo consultar el pago. El sistema lo acreditara solo en unos minutos." }, 502);
+        if (!mpAc.ok || !mpAc.data) return json({ error: "No se pudo consultar el pago. El sistema lo acreditará solo en unos minutos." }, 502);
         const refAc = String(mpAc.data.external_reference || "");
         if (!refAc.startsWith("btan:")) return json({ error: "Ese pago no corresponde a un plan anual." }, 400);
         const compraIdAc = refAc.slice(5);
@@ -12215,8 +12223,8 @@ export default {
          (estado 'activo'): no borra data sobre el tope, solo bloquea agregar mas. */
       if (path === "/app/api/t/plan-gratis" && request.method === "POST"){
         const actorGr = await actorDeSesion(env, request);
-        if (!actorGr) return json({ error: "Sesion expirada" }, 401);
-        if (!actorGr.esDueno) return json({ error: "El plan lo maneja el dueno de la academia." }, 403);
+        if (!actorGr) return json({ error: "Sesión expirada" }, 401);
+        if (!actorGr.esDueno) return json({ error: "El plan lo maneja el dueño de la academia." }, 403);
         const tGr = actorGr.tenant;
         if (esTenantDemo(tGr)) return json({ error: "En la demo no se cambia de plan." }, 400);
         /* Packs: "bajarse a gratis" es soltar los packs y quedarse en la Batuta base. */
@@ -12247,15 +12255,15 @@ export default {
          re-consulta el status y, si no quedó authorized, se avisa para que re-autorice. */
       if (path === "/app/api/t/packs" && request.method === "POST"){
         const actorPk = await actorDeSesion(env, request);
-        if (!actorPk) return json({ error: "Sesion expirada" }, 401);
-        if (!actorPk.esDueno) return json({ error: "Los packs los maneja el dueno de la academia." }, 403);
+        if (!actorPk) return json({ error: "Sesión expirada" }, 401);
+        if (!actorPk.esDueno) return json({ error: "Los packs los maneja el dueño de la academia." }, 403);
         const tPk = actorPk.tenant;
         if (esTenantDemo(tPk)) return json({ error: "En la demo no se compran packs." }, 400);
 
         const bPk = await request.json().catch(() => ({}));
         const pedidos = {};
         for (const k of Object.keys((bPk && bPk.packs) || {})){
-          if (!PACKS[k] || PACKS[k].legado) return json({ error: "Pack no valido: " + k }, 400);
+          if (!PACKS[k] || PACKS[k].legado) return json({ error: "Pack no válido: " + k }, 400);
           const n = Math.max(0, Math.min(20, parseInt(bPk.packs[k], 10) || 0));
           if (n) pedidos[k] = n;
         }
@@ -12277,7 +12285,7 @@ export default {
           return json({ ok: true, modo: "base", monto: 0, limites: { alumnos: finPk.alumnos, profes: finPk.profes, ia: finPk.ia } });
         }
 
-        if (!env.MP_ACCESS_TOKEN) return json({ error: "El cobro automatico no esta disponible ahora. Escribenos por WhatsApp y lo activamos hoy." }, 501);
+        if (!env.MP_ACCESS_TOKEN) return json({ error: "El cobro automático no está disponible ahora. Escríbenos por WhatsApp y lo activamos hoy." }, 501);
 
         // B) ya paga: se ajusta el monto de su suscripción
         if (vivosPk){
@@ -12285,7 +12293,7 @@ export default {
             method: "PUT",
             body: { auto_recurring: { transaction_amount: montoPk, currency_id: "PEN" }, reason: "Batuta · packs (S/" + montoPk + "/mes)" }
           });
-          if (!upPk.ok) return json({ error: "Mercado Pago no acepto el cambio. Escribenos por WhatsApp y lo hacemos hoy mismo." }, 502);
+          if (!upPk.ok) return json({ error: "Mercado Pago no aceptó el cambio. Escríbenos por WhatsApp y lo hacemos hoy mismo." }, 502);
           await setConfigValor(env, tPk.id, "packs", JSON.stringify(pedidos));
           let statusPk = "authorized";
           try {
@@ -12315,7 +12323,7 @@ export default {
           status: "pending"
         }});
         if (!mpPk.ok || !mpPk.data || !mpPk.data.init_point){
-          return json({ error: "Mercado Pago no acepto la suscripcion. Escribenos por WhatsApp y lo activamos a mano." }, 502);
+          return json({ error: "Mercado Pago no aceptó la suscripción. Escríbenos por WhatsApp y lo activamos a mano." }, 502);
         }
         await setConfigValor(env, tPk.id, "packs_pendientes", JSON.stringify(pedidos));
         await env.DB.prepare("UPDATE tenants SET mp_preapproval_id = ?1, mp_sub_status = 'checkout_pendiente' WHERE id = ?2")
@@ -12325,8 +12333,8 @@ export default {
 
       if (path === "/app/api/t/vincular-sub" && request.method === "POST"){
         const actorVs = await actorDeSesion(env, request);
-        if (!actorVs) return json({ error: "Sesion expirada" }, 401);
-        if (!actorVs.esDueno) return json({ error: "La suscripcion la maneja el dueno de la academia." }, 403);
+        if (!actorVs) return json({ error: "Sesión expirada" }, 401);
+        if (!actorVs.esDueno) return json({ error: "La suscripción la maneja el dueño de la academia." }, 403);
         const t = actorVs.tenant;
         if (!env.MP_ACCESS_TOKEN) return json({ error: "No disponible" }, 501);
         const b = await request.json().catch(() => ({}));
@@ -12334,17 +12342,17 @@ export default {
         if (!pid || pid.length > 64) return json({ error: "Falta preapproval_id" }, 400);
 
         const mp = await consultarPreapprovalMP(env, pid);
-        if (!mp.ok || !mp.data) return json({ error: "No se pudo verificar la suscripcion" }, 502);
+        if (!mp.ok || !mp.data) return json({ error: "No se pudo verificar la suscripción" }, 502);
         // Es nuestra si es uno de los planes fijos pre-creados, O si es el preapproval directo
         // (plan por alumno) cuyo external_reference apunta a ESTE tenant.
         const esNuestro = esPlanNuestroMP(mp.data.preapproval_plan_id)
           || String(mp.data.external_reference || "") === t.id;
-        if (!esNuestro) return json({ error: "Suscripcion no reconocida" }, 400);
+        if (!esNuestro) return json({ error: "Suscripción no reconocida" }, 400);
 
         const yaDeOtro = await env.DB.prepare(
           "SELECT id FROM tenants WHERE mp_preapproval_id = ?1 AND id != ?2"
         ).bind(pid, t.id).first();
-        if (yaDeOtro) return json({ error: "Esa suscripcion ya esta vinculada a otra cuenta" }, 409);
+        if (yaDeOtro) return json({ error: "Esa suscripción ya está vinculada a otra cuenta" }, 409);
 
         const st = String(mp.data.status || "");
         const pidVigenteVs = String(t.mp_preapproval_id || "");
@@ -12456,7 +12464,7 @@ export default {
         try {
           if (!(await validarFirmaMP(env, request, url))){
             console.error("MP webhook: firma x-signature invalida o ausente");
-            return json({ error: "Firma invalida" }, 401);
+            return json({ error: "Firma inválida" }, 401);
           }
           const bodyJson = await request.json().catch(() => ({}));
           const topic = String(url.searchParams.get("topic") || url.searchParams.get("type") || bodyJson.type || bodyJson.topic || "").trim();
@@ -12742,7 +12750,7 @@ export default {
           subPD = "Envía el equivalente del total en " + (cPD.crypto_moneda || "USDT") + " por esa red.";
           textoPD = (cPD.crypto_moneda || "USDT") + " por " + (cPD.crypto_red || "Tron (TRC20)") + ":\n" + cPD.crypto_wallet;
         } else {
-          return json({ error: "Ese metodo no esta disponible en esta academia." }, 404);
+          return json({ error: "Ese método no está disponible en esta academia." }, 404);
         }
         return json({ texto: textoPD, lab: labPD, num: numPD, sub: subPD, titular: titPD });
       }
@@ -12802,12 +12810,12 @@ export default {
         const b = await request.json().catch(() => ({}));
         const token = String(b.token || "").trim();
         const nueva = String(b.nueva || "");
-        if (!/^[a-f0-9]{64}$/.test(token)) return json({ error: "El enlace ya no es valido. Pide uno nuevo." }, 400);
-        if (nueva.length < 8) return json({ error: "La contrasena necesita minimo 8 caracteres." }, 400);
+        if (!/^[a-f0-9]{64}$/.test(token)) return json({ error: "El enlace ya no es válido. Pide uno nuevo." }, 400);
+        if (nueva.length < 8) return json({ error: "La contraseña necesita mínimo 8 caracteres." }, 400);
         const tokenHash = await sha256Hex(token);
         const rt = await env.DB.prepare("SELECT * FROM reset_tokens WHERE token_hash = ?1").bind(tokenHash).first();
         if (!rt || rt.usado || new Date(rt.expira).getTime() < Date.now()){
-          return json({ error: "El enlace ya no es valido. Pide uno nuevo." }, 400);
+          return json({ error: "El enlace ya no es válido. Pide uno nuevo." }, 400);
         }
         const salt = randHex(16);
         const hash = await hashPass(nueva, salt);
@@ -13156,8 +13164,8 @@ export default {
         const marketing = b.marketing ? 1 : 0;
 
         if (nombre.length < 2) return json({ error: "Escribe tu nombre." }, 400);
-        if (!emailOk(email)) return json({ error: "Ese correo no parece valido." }, 400);
-        if (password.length < 8) return json({ error: "La contrasena necesita minimo 8 caracteres." }, 400);
+        if (!emailOk(email)) return json({ error: "Ese correo no parece válido." }, 400);
+        if (password.length < 8) return json({ error: "La contraseña necesita mínimo 8 caracteres." }, 400);
 
         /* 🔒 12-ago-2026: el 409 "ya existe una cuenta con ese correo" confirmaba que ese correo
            es alumno de esta academia. Cerrarlo del todo (responder siempre ok y avisar por
@@ -13233,7 +13241,7 @@ export default {
           : null;
         if (!c){
           await new Promise(r => setTimeout(r, 350));
-          return json({ error: "Correo o contrasena incorrectos. Si entraste por un link de invitacion y nunca creaste una contrasena, usa \"Olvide mi contrasena\" para ponerte una." }, 401);
+          return json({ error: "Correo o contraseña incorrectos. Si entraste por un link de invitación y nunca creaste una contraseña, usa \"Olvidé mi contraseña\" para ponerte una." }, 401);
         }
         /* 🔒 12-ago-2026: este 401 decía "esta cuenta no tiene contrasena configurada" y con eso
            cualquiera averiguaba si un correo es alumno de esta academia — probando correos uno
@@ -13241,7 +13249,7 @@ export default {
            credenciales malas (mismo texto, mismo status, mismo delay), y la pista de qué hacer
            va en el texto genérico: se le muestra a TODOS, así que no delata a nadie y el alumno
            que entró por invitación igual sabe que su camino es "¿Olvidaste tu contraseña?". */
-        const ERR_LOGIN = "Correo o contrasena incorrectos. Si entraste por un link de invitacion y nunca creaste una contrasena, usa \"Olvide mi contrasena\" para ponerte una.";
+        const ERR_LOGIN = "Correo o contraseña incorrectos. Si entraste por un link de invitación y nunca creaste una contraseña, usa \"Olvidé mi contraseña\" para ponerte una.";
         if (!c.pass_hash){
           await new Promise(r => setTimeout(r, 350));
           return json({ error: ERR_LOGIN }, 401);
@@ -13268,7 +13276,7 @@ export default {
          ============================================================ */
       if (path === "/app/api/chat" && request.method === "GET"){
         const who = await authChat(env, request);
-        if (!who) return json({ error: "Sesion expirada" }, 401);
+        if (!who) return json({ error: "Sesión expirada" }, 401);
         /* FUGA CERRADA (11-ago-2026): el registro por slug es abierto A PROPOSITO (asi se da de
            alta el alumno nuevo sin que el dueno lo cargue), pero el slug es PUBLICO: esta en la
            URL del portal. Sin este candado, cualquier desconocido se registraba en la academia
@@ -13307,12 +13315,12 @@ export default {
 
       if (path === "/app/api/chat" && request.method === "POST"){
         const who = await authChat(env, request);
-        if (!who) return json({ error: "Sesion expirada" }, 401);
+        if (!who) return json({ error: "Sesión expirada" }, 401);
         const tid = who.admin ? who.tenant.id : who.cu.tenant_id;
         const b = await request.json().catch(() => ({}));
         const texto = limpiarTextoChat(b.texto);
         if (!texto) return json({ error: "Escribe un mensaje." }, 400);
-        if (texto.length > 500) return json({ error: "Maximo 500 caracteres." }, 400);
+        if (texto.length > 500) return json({ error: "Máximo 500 caracteres." }, 400);
 
         let nombre, esAdmin, cuentaId;
         if (who.admin){
@@ -13335,12 +13343,12 @@ export default {
 
       if (path === "/app/api/chat/privado" && request.method === "GET"){
         const who = await authChat(env, request);
-        if (!who) return json({ error: "Sesion expirada" }, 401);
+        if (!who) return json({ error: "Sesión expirada" }, 401);
         const tid = who.admin ? who.tenant.id : who.cu.tenant_id;
         let hilo;
         if (who.admin){
           hilo = String(url.searchParams.get("cuenta") || "").trim();
-          if (!/^[0-9a-fA-F-]{8,64}$/.test(hilo)) return json({ error: "Conversacion no valida" }, 400);
+          if (!/^[0-9a-fA-F-]{8,64}$/.test(hilo)) return json({ error: "Conversación no válida" }, 400);
           if (hilo === "grupal") return json({ error: "Usa /app/api/chat para el grupal" }, 400);
           const dest = await env.DB.prepare("SELECT id, alumno_id FROM cuentas WHERE id = ?1 AND tenant_id = ?2").bind(hilo, tid).first();
           if (!dest) return json({ error: "Esa cuenta no existe" }, 404);
@@ -13348,7 +13356,7 @@ export default {
           if (!who.esDueno){
             const pidChat = who.profesor ? who.profesor.id : "";
             const alChat = dest.alumno_id ? await env.DB.prepare("SELECT profesor_id FROM alumnos WHERE id = ?1 AND tenant_id = ?2").bind(dest.alumno_id, tid).first() : null;
-            if (!alChat || alChat.profesor_id !== pidChat) return json({ error: "Ese alumno no esta asignado a ti." }, 403);
+            if (!alChat || alChat.profesor_id !== pidChat) return json({ error: "Ese alumno no está asignado a ti." }, 403);
           }
         } else {
           if (!who.cu.alumno_id) return json({ mensajes: [], max: 0 });
@@ -13378,23 +13386,23 @@ export default {
 
       if (path === "/app/api/chat/privado" && request.method === "POST"){
         const who = await authChat(env, request);
-        if (!who) return json({ error: "Sesion expirada" }, 401);
+        if (!who) return json({ error: "Sesión expirada" }, 401);
         const tid = who.admin ? who.tenant.id : who.cu.tenant_id;
         const b = await request.json().catch(() => ({}));
         const texto = limpiarTextoChat(b.texto);
         if (!texto) return json({ error: "Escribe un mensaje." }, 400);
-        if (texto.length > 500) return json({ error: "Maximo 500 caracteres." }, 400);
+        if (texto.length > 500) return json({ error: "Máximo 500 caracteres." }, 400);
         let hilo, nombre, esAdmin, cuentaId;
         if (who.admin){
           hilo = String(b.cuenta || "").trim();
-          if (!/^[0-9a-fA-F-]{8,64}$/.test(hilo)) return json({ error: "Conversacion no valida" }, 400);
+          if (!/^[0-9a-fA-F-]{8,64}$/.test(hilo)) return json({ error: "Conversación no válida" }, 400);
           const dest = await env.DB.prepare("SELECT id, alumno_id FROM cuentas WHERE id = ?1 AND tenant_id = ?2").bind(hilo, tid).first();
           if (!dest) return json({ error: "Esa cuenta no existe" }, 404);
           /* multi-profesor: el hilo privado es alumno <-> SU profesor; un profesor no lee hilos ajenos */
           if (!who.esDueno){
             const pidChat = who.profesor ? who.profesor.id : "";
             const alChat = dest.alumno_id ? await env.DB.prepare("SELECT profesor_id FROM alumnos WHERE id = ?1 AND tenant_id = ?2").bind(dest.alumno_id, tid).first() : null;
-            if (!alChat || alChat.profesor_id !== pidChat) return json({ error: "Ese alumno no esta asignado a ti." }, 403);
+            if (!alChat || alChat.profesor_id !== pidChat) return json({ error: "Ese alumno no está asignado a ti." }, 403);
           }
           nombre = who.tenant.profe_nombre || "Profesor"; esAdmin = 1; cuentaId = null;
         } else {
@@ -13431,8 +13439,8 @@ export default {
          devuelve el mismo, para no invalidar el calendario que ya agregó a su celular. */
       if (path === "/app/api/cuenta/calendario" && request.method === "POST"){
         const cuCal = await cuentaDeSesion(env, request);
-        if (!cuCal) return json({ error: "Sesion expirada" }, 401);
-        if (!cuCal.alumno_id) return json({ error: "Todavia no tienes una ficha de alumno." }, 400);
+        if (!cuCal) return json({ error: "Sesión expirada" }, 401);
+        if (!cuCal.alumno_id) return json({ error: "Todavía no tienes una ficha de alumno." }, 400);
         await ensureAlumnoExtraSchema(env);
         let tokCal = "";
         try {
@@ -13469,7 +13477,7 @@ export default {
          hacer algo, no descontarle S/0 y que se entere yapeando de más. */
       if (path === "/app/api/cuenta/referido" && request.method === "POST"){
         const cuRef = await cuentaDeSesion(env, request);
-        if (!cuRef) return json({ error: "Sesion expirada" }, 401);
+        if (!cuRef) return json({ error: "Sesión expirada" }, 401);
         const bRef = await request.json().catch(() => ({}));
         const codigoRef = String(bRef.codigo || "").trim().toUpperCase();
         if (!codigoRef) return json({ error: "Escribe el código de tu amigo." }, 400);
@@ -13511,8 +13519,8 @@ export default {
 
       if (path === "/app/api/cuenta/marketing" && request.method === "POST"){
         const cu = await cuentaDeSesion(env, request);
-        if (!cu) return json({ error: "Sesion expirada" }, 401);
-        if (!cu.alumno_id) return json({ error: "Todavia no tienes una ficha de alumno." }, 400);
+        if (!cu) return json({ error: "Sesión expirada" }, 401);
+        if (!cu.alumno_id) return json({ error: "Todavía no tienes una ficha de alumno." }, 400);
         const b = await request.json().catch(() => ({}));
         const quiere = !!b.acepto;
         await ensureAlumnoExtraSchema(env);
@@ -13539,14 +13547,14 @@ export default {
       }
       if (path === "/app/api/cuenta/password" && request.method === "POST"){
         const cu = await cuentaDeSesion(env, request);
-        if (!cu) return json({ error: "Sesion expirada" }, 401);
-        if (!cu.pass_hash) return json({ error: "Tu cuenta no tiene contrasena configurada." }, 400);
+        if (!cu) return json({ error: "Sesión expirada" }, 401);
+        if (!cu.pass_hash) return json({ error: "Tu cuenta no tiene contraseña configurada." }, 400);
         const b = await request.json().catch(() => ({}));
         const actual = String(b.actual || "");
         const nueva = String(b.nueva || "");
         const hash = await hashPass(actual, cu.pass_salt);
-        if (!safeEq(hash, cu.pass_hash)) return json({ error: "Tu contrasena actual no coincide." }, 401);
-        if (nueva.length < 8) return json({ error: "La nueva contrasena necesita minimo 8 caracteres." }, 400);
+        if (!safeEq(hash, cu.pass_hash)) return json({ error: "Tu contraseña actual no coincide." }, 401);
+        if (nueva.length < 8) return json({ error: "La nueva contraseña necesita mínimo 8 caracteres." }, 400);
         const salt = randHex(16);
         const nuevoHash = await hashPass(nueva, salt);
         await env.DB.batch([
@@ -13567,15 +13575,15 @@ export default {
          prueba de identidad con la que ya esta viendo sus clases y su saldo. */
       if (path === "/app/api/cuenta/password-inicial" && request.method === "POST"){
         const cu = await cuentaDeSesion(env, request);
-        if (!cu) return json({ error: "Sesion expirada" }, 401);
+        if (!cu) return json({ error: "Sesión expirada" }, 401);
         await ensurePassPuestaSchema(env);
         const yaTiene = await env.DB.prepare("SELECT COALESCE(pass_puesta,0) AS p FROM cuentas WHERE id = ?1").bind(cu.id).first().catch(() => null);
         if (yaTiene && Number(yaTiene.p) === 1){
-          return json({ error: "Ya tienes una contrasena. Para cambiarla necesitamos la actual." }, 409);
+          return json({ error: "Ya tienes una contraseña. Para cambiarla necesitamos la actual." }, 409);
         }
         const b = await request.json().catch(() => ({}));
         const nueva = String(b.nueva || "");
-        if (nueva.length < 8) return json({ error: "La contrasena necesita minimo 8 caracteres." }, 400);
+        if (nueva.length < 8) return json({ error: "La contraseña necesita mínimo 8 caracteres." }, 400);
         const saltN = randHex(16);
         const hashN = await hashPass(nueva, saltN);
         await env.DB.batch([
@@ -13589,12 +13597,12 @@ export default {
 
       if (path === "/app/api/push/suscribir" && request.method === "POST"){
         const cu = await cuentaDeSesion(env, request);
-        if (!cu) return json({ error: "Sesion expirada" }, 401);
+        if (!cu) return json({ error: "Sesión expirada" }, 401);
         if (!env.VAPID_PUBLIC_KEY) return json({ error: "No disponible en el trial." }, 501);
         const b = await request.json().catch(() => ({}));
         const s = b.subscription || {};
         const keys = s.keys || {};
-        if (!s.endpoint || !keys.p256dh || !keys.auth) return json({ error: "Suscripcion invalida" }, 400);
+        if (!s.endpoint || !keys.p256dh || !keys.auth) return json({ error: "Suscripción inválida" }, 400);
         await env.DB.prepare(
           "INSERT OR REPLACE INTO push_subs (endpoint,tenant_id,p256dh,auth,dispositivo,creada,cuenta_id) VALUES (?1,?2,?3,?4,?5,?6,?7)"
         ).bind(s.endpoint, cu.tenant_id, keys.p256dh, keys.auth, String(b.dispositivo || "").slice(0, 120), hoyLima(), cu.id).run();
@@ -13602,7 +13610,7 @@ export default {
       }
       if (path === "/app/api/push/quitar" && request.method === "POST"){
         const cu = await cuentaDeSesion(env, request);
-        if (!cu) return json({ error: "Sesion expirada" }, 401);
+        if (!cu) return json({ error: "Sesión expirada" }, 401);
         const b = await request.json().catch(() => ({}));
         const endpoint = String((b.subscription && b.subscription.endpoint) || b.endpoint || "");
         if (!endpoint) return json({ error: "Falta el endpoint" }, 400);
@@ -13612,7 +13620,7 @@ export default {
 
       if (path === "/app/api/me" && request.method === "GET"){
         const cu = await cuentaDeSesion(env, request);
-        if (!cu) return json({ error: "Sesion expirada" }, 401);
+        if (!cu) return json({ error: "Sesión expirada" }, 401);
         const tid = cu.tenant_id;
         /* Se pregunta DESPUES del ensure y no se lee de `cu`: la primera vez que corre, la
            columna se crea recien aca, o sea despues de que `cu` ya se leyo. */
@@ -13968,13 +13976,13 @@ export default {
 
         const paquete = String(b.paquete || "");
         const paqMapPd = (await loadPaquetes(env, t.id)).map;
-        if (!paqMapPd[paquete]) return json({ error: "Paquete no valido." }, 400);
+        if (!paqMapPd[paquete]) return json({ error: "Paquete no válido." }, 400);
         const nombre = String(b.nombre || "").trim();
         const email = String(b.email || "").trim().toLowerCase();
         const whatsapp = String(b.whatsapp || "").trim().slice(0, 20);
         const metodo = String(b.metodo || "").trim().slice(0, 40);
         if (nombre.length < 2) return json({ error: "Escribe tu nombre." }, 400);
-        if (!emailOk(email)) return json({ error: "Ese correo no parece valido." }, 400);
+        if (!emailOk(email)) return json({ error: "Ese correo no parece válido." }, 400);
         /* Apellido y fecha de nacimiento (Ley 29733). La fecha SOLO se acepta si la academia
            la pidio: si no, se descarta aunque venga en el POST, para no guardar un dato que
            nadie declaro necesitar. Y con menos de 14 anios exige la declaracion del apoderado,
@@ -13986,7 +13994,7 @@ export default {
           const raw = String(b.nacimiento || "").trim().slice(0, 10);
           if (raw){
             const edad = edadDesde(raw);
-            if (edad === null) return json({ error: "Esa fecha de nacimiento no parece valida." }, 400);
+            if (edad === null) return json({ error: "Esa fecha de nacimiento no parece válida." }, 400);
             if (edad < 14 && !b.tutor){
               return json({ error: "Para inscribir a un menor de 14 anios necesitamos la autorizacion de su apoderado." }, 400);
             }
@@ -14190,7 +14198,7 @@ export default {
          ============================================================ */
       if (path === "/app/api/comprar" && request.method === "POST"){
         const cu = await cuentaDeSesion(env, request);
-        if (!cu) return json({ error: "Sesion expirada" }, 401);
+        if (!cu) return json({ error: "Sesión expirada" }, 401);
         const tid = cu.tenant_id;
         const b = await request.json().catch(() => ({}));
         const paquete = String(b.paquete || "");
@@ -14201,7 +14209,7 @@ export default {
 
         const precios = await loadPrecios(env, tid);
         const paqMapC = (await loadPaquetes(env, tid)).map;
-        if (!paqMapC[paquete]) return json({ error: "Paquete no valido." }, 400);
+        if (!paqMapC[paquete]) return json({ error: "Paquete no válido." }, 400);
         if (paquete === "Clase de prueba" && cu.alumno_id) return json({ error: "La clase de prueba es solo para tu primera clase. Elige un paquete para seguir." }, 400);
         // acepta combinaciones ("Canto, Piano"): cada parte debe ser un curso del tenant
         const curso = cursoDeCompra(cursosT, b.curso, paqMapC[paquete]);
@@ -14209,7 +14217,7 @@ export default {
         let slotDeseado = "";
         if (paquete === "Clase de prueba" && b.slot_deseado) {
           const iso = String(b.slot_deseado);
-          if (!(await slotValido(env, tid, iso))) return json({ error: "Ese horario ya no esta disponible. Elige otro." }, 400);
+          if (!(await slotValido(env, tid, iso))) return json({ error: "Ese horario ya no está disponible. Elige otro." }, 400);
           slotDeseado = iso;
         }
 
@@ -14223,7 +14231,7 @@ export default {
            de referidos dejen el monto en 0 es legítimo; que el plan no tenga precio, no: ahí la
            academia se lo estaría regalando sin saberlo. Las de prueba valen 0 a propósito. */
         if (!(precio > 0) && !/prueba/i.test(paquete)){
-          return json({ error: "Ese plan todavia no tiene precio. Escribele a tu profe y lo activa hoy mismo." }, 400);
+          return json({ error: "Ese plan todavía no tiene precio. Escríbele a tu profe y lo activa hoy mismo." }, 400);
         }
         const cob = await calcularCobro(env, tid, cu, paquete, precio, null, paqMapC);
         const descuento = cob.descCredito, descRef = cob.descRef, monto = cob.monto;
@@ -14271,7 +14279,7 @@ export default {
       // El profe consulta su estado de conexion MP (panel > Ajustes)
       if (path === "/app/api/admin/mp/estado" && request.method === "GET"){
         const t = await tenantDeSesion(env, request);
-        if (!t) return json({ error: "Sesion expirada" }, 401);
+        if (!t) return json({ error: "Sesión expirada" }, 401);
         await ensureMpProfeSchema(env);
         const row = await env.DB.prepare("SELECT mp_access_token, mp_user_id FROM tenants WHERE id = ?1").bind(t.id).first();
         return json({
@@ -14283,10 +14291,10 @@ export default {
 
       // El profe inicia la conexion de SU cuenta MP (OAuth)
       if (path === "/app/api/admin/mp/conectar" && request.method === "POST"){
-        if (!mpMarketplaceOn(env)) return json({ error: "El pago con tarjeta aun no esta configurado en Batuta. Pronto." }, 501);
+        if (!mpMarketplaceOn(env)) return json({ error: "El pago con tarjeta aún no está configurado en Batuta. Pronto." }, 501);
         const actorMpC = await actorDeSesion(env, request);
-        if (!actorMpC) return json({ error: "Sesion expirada" }, 401);
-        if (!actorMpC.esDueno) return json({ error: "Los cobros los configura el dueno de la academia." }, 403);
+        if (!actorMpC) return json({ error: "Sesión expirada" }, 401);
+        if (!actorMpC.esDueno) return json({ error: "Los cobros los configura el dueño de la academia." }, 403);
         const t = actorMpC.tenant;
         await ensureMpProfeSchema(env);
         const state = await firmarState(env, { k: "mpoauth", t: t.id, exp: Date.now() + 30 * 60000 });
@@ -14300,8 +14308,8 @@ export default {
       // El profe desconecta su cuenta MP
       if (path === "/app/api/admin/mp/desconectar" && request.method === "POST"){
         const actorMpD = await actorDeSesion(env, request);
-        if (!actorMpD) return json({ error: "Sesion expirada" }, 401);
-        if (!actorMpD.esDueno) return json({ error: "Los cobros los configura el dueno de la academia." }, 403);
+        if (!actorMpD) return json({ error: "Sesión expirada" }, 401);
+        if (!actorMpD.esDueno) return json({ error: "Los cobros los configura el dueño de la academia." }, 403);
         const t = actorMpD.tenant;
         await ensureMpProfeSchema(env);
         await env.DB.prepare(
@@ -14331,16 +14339,16 @@ export default {
       // basta con que el profe tenga su token conectado.
       if (path === "/app/api/mp/crear-alumno" && request.method === "POST"){
         const cu = await cuentaDeSesion(env, request);
-        if (!cu) return json({ error: "Sesion expirada" }, 401);
+        if (!cu) return json({ error: "Sesión expirada" }, 401);
         const tid = cu.tenant_id;
         const t = await env.DB.prepare("SELECT * FROM tenants WHERE id = ?1").bind(tid).first();
         const tk = t ? await mpTokenProfe(env, t) : null;
-        if (!tk) return json({ error: "Tu profesor aun no activo el pago con tarjeta. Paga por Yape/Plin o escribele." }, 400);
+        if (!tk) return json({ error: "Tu profesor aún no activó el pago con tarjeta. Paga por Yape/Plin o escríbele." }, 400);
 
         const b = await request.json().catch(() => ({}));
         const paquete = String(b.paquete || "");
         const paqMapMp = (await loadPaquetes(env, tid)).map;
-        if (!paqMapMp[paquete]) return json({ error: "Paquete no valido." }, 400);
+        if (!paqMapMp[paquete]) return json({ error: "Paquete no válido." }, 400);
         if (paquete === "Clase de prueba" && cu.alumno_id) return json({ error: "La clase de prueba es solo para tu primera clase." }, 400);
         const cursosT = cursosDeCfg(await loadConfig(env, tid));
         const curso = cursoDeCompra(cursosT, b.curso, paqMapMp[paquete]);
@@ -14354,7 +14362,7 @@ export default {
         let slotDeseado = "";
         if (paquete === "Clase de prueba" && b.slot_deseado){
           const iso = String(b.slot_deseado);
-          if (!(await slotValido(env, tid, iso))) return json({ error: "Ese horario ya no esta disponible. Elige otro." }, 400);
+          if (!(await slotValido(env, tid, iso))) return json({ error: "Ese horario ya no está disponible. Elige otro." }, 400);
           slotDeseado = iso;
         }
 
@@ -14363,7 +14371,7 @@ export default {
         const precio = precios[paquete] || 0;
         const cob = await calcularCobro(env, tid, cu, paquete, precio);
         const descuento = cob.descCredito, descRef = cob.descRef, monto = cob.monto;
-        if (!(monto > 0)) return json({ error: "Ese paquete no esta disponible para tarjeta. Escribele a tu profesor." }, 400);
+        if (!(monto > 0)) return json({ error: "Ese paquete no está disponible para tarjeta. Escríbele a tu profesor." }, 400);
 
         /* Intentos de tarjeta abandonados: se marcan 'cancelada', NUNCA DELETE. La preference
            vieja sigue pagable en MP y confirmarCompra debe poder acreditarla (patron packs). */
@@ -14474,7 +14482,7 @@ export default {
       // El profe consulta su estado de conexion Stripe (panel > Ajustes)
       if (path === "/app/api/admin/stripe/estado" && request.method === "GET"){
         const t = await tenantDeSesion(env, request);
-        if (!t) return json({ error: "Sesion expirada" }, 401);
+        if (!t) return json({ error: "Sesión expirada" }, 401);
         await ensureStripeProfeSchema(env);
         const row = await env.DB.prepare("SELECT stripe_account_id, stripe_charges_enabled, stripe_details_submitted FROM tenants WHERE id = ?1").bind(t.id).first();
         let listo = !!(row && Number(row.stripe_charges_enabled));
@@ -14494,10 +14502,10 @@ export default {
 
       // El profe inicia/continua el onboarding de Stripe (dueno)
       if (path === "/app/api/admin/stripe/conectar" && request.method === "POST"){
-        if (!stripeConnectOn(env)) return json({ error: "El pago internacional (Stripe) aun no esta configurado en Batuta." }, 501);
+        if (!stripeConnectOn(env)) return json({ error: "El pago internacional (Stripe) aún no está configurado en Batuta." }, 501);
         const actorS = await actorDeSesion(env, request);
-        if (!actorS) return json({ error: "Sesion expirada" }, 401);
-        if (!actorS.esDueno) return json({ error: "Los cobros los configura el dueno de la academia." }, 403);
+        if (!actorS) return json({ error: "Sesión expirada" }, 401);
+        if (!actorS.esDueno) return json({ error: "Los cobros los configura el dueño de la academia." }, 403);
         const t = actorS.tenant;
         await ensureStripeProfeSchema(env);
         const row = await env.DB.prepare("SELECT stripe_account_id FROM tenants WHERE id = ?1").bind(t.id).first();
@@ -14520,8 +14528,8 @@ export default {
       // El profe desvincula Stripe (dueno). Solo lo desvincula en Batuta; su cuenta Stripe sigue existiendo.
       if (path === "/app/api/admin/stripe/desconectar" && request.method === "POST"){
         const actorSD = await actorDeSesion(env, request);
-        if (!actorSD) return json({ error: "Sesion expirada" }, 401);
-        if (!actorSD.esDueno) return json({ error: "Los cobros los configura el dueno de la academia." }, 403);
+        if (!actorSD) return json({ error: "Sesión expirada" }, 401);
+        if (!actorSD.esDueno) return json({ error: "Los cobros los configura el dueño de la academia." }, 403);
         await ensureStripeProfeSchema(env);
         await env.DB.prepare("UPDATE tenants SET stripe_account_id = '', stripe_charges_enabled = 0, stripe_details_submitted = 0 WHERE id = ?1").bind(actorSD.tenant.id).run();
         return json({ ok: true });
@@ -14530,16 +14538,16 @@ export default {
       // El ALUMNO (logueado) inicia el pago con Stripe: compra 'iniciada' + Checkout Session en la cuenta del profe
       if (path === "/app/api/stripe/crear-alumno" && request.method === "POST"){
         const cu = await cuentaDeSesion(env, request);
-        if (!cu) return json({ error: "Sesion expirada" }, 401);
+        if (!cu) return json({ error: "Sesión expirada" }, 401);
         const tid = cu.tenant_id;
         const t = await env.DB.prepare("SELECT * FROM tenants WHERE id = ?1").bind(tid).first();
         if (!t || !t.stripe_account_id || !Number(t.stripe_charges_enabled)){
-          return json({ error: "Tu profesor aun no activo el pago internacional. Elige otro metodo." }, 400);
+          return json({ error: "Tu profesor aún no activó el pago internacional. Elige otro método." }, 400);
         }
         const b = await request.json().catch(() => ({}));
         const paquete = String(b.paquete || "");
         const paqMapS = (await loadPaquetes(env, tid)).map;
-        if (!paqMapS[paquete]) return json({ error: "Paquete no valido." }, 400);
+        if (!paqMapS[paquete]) return json({ error: "Paquete no válido." }, 400);
         if (paquete === "Clase de prueba" && cu.alumno_id) return json({ error: "La clase de prueba es solo para tu primera clase." }, 400);
         const cursosT = cursosDeCfg(await loadConfig(env, tid));
         const curso = cursoDeCompra(cursosT, b.curso, paqMapS[paquete]);
@@ -14548,7 +14556,7 @@ export default {
         let slotDeseado = "";
         if (paquete === "Clase de prueba" && b.slot_deseado){
           const iso = String(b.slot_deseado);
-          if (!(await slotValido(env, tid, iso))) return json({ error: "Ese horario ya no esta disponible. Elige otro." }, 400);
+          if (!(await slotValido(env, tid, iso))) return json({ error: "Ese horario ya no está disponible. Elige otro." }, 400);
           slotDeseado = iso;
         }
         const cfgS = await loadConfig(env, tid);
@@ -14561,7 +14569,7 @@ export default {
           ? await calcularCobro(env, tid, cu, paquete, precio)
           : { descCredito: 0, descRef: 0, monto: Math.max(0, Number(precio) || 0) };
         const descuento = cobS.descCredito, descRef = cobS.descRef, monto = cobS.monto;
-        if (!(monto > 0)) return json({ error: "Ese paquete no esta disponible para tarjeta." }, 400);
+        if (!(monto > 0)) return json({ error: "Ese paquete no está disponible para tarjeta." }, 400);
         /* Igual que en MP: la session vieja vive 1h y sigue pagable; 'cancelada', no DELETE. */
         await env.DB.prepare("UPDATE compras SET estado = 'cancelada' WHERE tenant_id = ?1 AND cuenta_id = ?2 AND estado = 'iniciada' AND metodo = 'Tarjeta (Stripe)'").bind(tid, cu.id).run();
         const compraId = crypto.randomUUID();
@@ -14579,7 +14587,7 @@ export default {
         }, { account: t.stripe_account_id, idempotencyKey: "sess-" + compraId });
         if (!sess.ok || !sess.data || !sess.data.url){
           await env.DB.prepare("DELETE FROM compras WHERE id = ?1 AND tenant_id = ?2 AND estado = 'iniciada'").bind(compraId, tid).run();
-          return json({ error: "No se pudo iniciar el pago con Stripe. Intenta de nuevo o elige otro metodo." }, 502);
+          return json({ error: "No se pudo iniciar el pago con Stripe. Intenta de nuevo o elige otro método." }, 502);
         }
         return json({ init_point: sess.data.url, monto, descuento });
       }
@@ -14592,7 +14600,7 @@ export default {
           const raw = await request.text();
           evt = await stripeVerifWebhook(env, raw, request.headers.get("Stripe-Signature"));
         } catch (e) { evt = null; }
-        if (!evt) return json({ error: "firma invalida" }, 400);
+        if (!evt) return json({ error: "firma inválida" }, 400);
         try {
           if (evt.type === "checkout.session.completed"){
             const sess = evt.data && evt.data.object;
@@ -14621,7 +14629,7 @@ export default {
 
       /* ----- Otras rutas /app/api/stripe/* apagadas ----- */
       if (path.startsWith("/app/api/stripe/") || path.startsWith("/app/api/admin/stripe/")){
-        return json({ error: "El pago con Stripe no esta disponible." }, 501);
+        return json({ error: "El pago con Stripe no está disponible." }, 501);
       }
 
       /* ============================================================
@@ -14634,7 +14642,7 @@ export default {
       // Estado de conexion Culqi (panel > Ajustes)
       if (path === "/app/api/admin/culqi/estado" && request.method === "GET"){
         const t = await tenantDeSesion(env, request);
-        if (!t) return json({ error: "Sesion expirada" }, 401);
+        if (!t) return json({ error: "Sesión expirada" }, 401);
         await ensureCulqiProfeSchema(env);
         const row = await env.DB.prepare("SELECT culqi_pk, culqi_sk_enc, culqi_on, culqi_titular FROM tenants WHERE id = ?1").bind(t.id).first();
         return json({
@@ -14647,17 +14655,17 @@ export default {
 
       // El profe conecta Culqi pegando sus llaves (dueno). Valida formato + ping autenticado, cifra la sk_.
       if (path === "/app/api/admin/culqi/conectar" && request.method === "POST"){
-        if (!culqiConnectOn(env)) return json({ error: "El pago con Culqi aun no esta configurado en Batuta." }, 501);
+        if (!culqiConnectOn(env)) return json({ error: "El pago con Culqi aún no está configurado en Batuta." }, 501);
         const actorC = await actorDeSesion(env, request);
-        if (!actorC) return json({ error: "Sesion expirada" }, 401);
-        if (!actorC.esDueno) return json({ error: "Los cobros los configura el dueno de la academia." }, 403);
+        if (!actorC) return json({ error: "Sesión expirada" }, 401);
+        if (!actorC.esDueno) return json({ error: "Los cobros los configura el dueño de la academia." }, 403);
         const t = actorC.tenant;
         await ensureCulqiProfeSchema(env);
         const b = await request.json().catch(() => ({}));
         const pk = String(b.pk || "").trim();
         const sk = String(b.sk || "").trim();
         const titular = String(b.titular || "").trim().slice(0, 120);
-        if (!/^pk_(live|test)_[A-Za-z0-9]+$/.test(pk)) return json({ error: "La llave publica (pk_) no tiene el formato correcto." }, 400);
+        if (!/^pk_(live|test)_[A-Za-z0-9]+$/.test(pk)) return json({ error: "La llave pública (pk_) no tiene el formato correcto." }, 400);
         if (!/^sk_(live|test)_[A-Za-z0-9]+$/.test(sk)) return json({ error: "La llave secreta (sk_) no tiene el formato correcto." }, 400);
         // Ping autenticado: un GET a /charges con la sk_ debe responder 2xx. Cualquier otra cosa
         // (401/403 llave mala, o 429/5xx/timeout: no pude validar) => no guardamos, pide reintentar.
@@ -14680,8 +14688,8 @@ export default {
       // El profe desconecta Culqi (dueno). Le recordamos rotar la sk_ en su panel Culqi.
       if (path === "/app/api/admin/culqi/desconectar" && request.method === "POST"){
         const actorCD = await actorDeSesion(env, request);
-        if (!actorCD) return json({ error: "Sesion expirada" }, 401);
-        if (!actorCD.esDueno) return json({ error: "Los cobros los configura el dueno de la academia." }, 403);
+        if (!actorCD) return json({ error: "Sesión expirada" }, 401);
+        if (!actorCD.esDueno) return json({ error: "Los cobros los configura el dueño de la academia." }, 403);
         await ensureCulqiProfeSchema(env);
         await env.DB.prepare("UPDATE tenants SET culqi_pk = '', culqi_sk_enc = '', culqi_titular = '', culqi_on = 0 WHERE id = ?1").bind(actorCD.tenant.id).run();
         return json({ ok: true });
@@ -14691,16 +14699,16 @@ export default {
       if (path === "/app/api/culqi/crear-cargo" && request.method === "POST"){
         if (!culqiConnectOn(env)) return json({ error: "Pago no disponible." }, 501);
         const cu = await cuentaDeSesion(env, request);
-        if (!cu) return json({ error: "Sesion expirada" }, 401);
+        if (!cu) return json({ error: "Sesión expirada" }, 401);
         const tid = cu.tenant_id;
         const t = await env.DB.prepare("SELECT * FROM tenants WHERE id = ?1").bind(tid).first();
-        if (!t || !Number(t.culqi_on) || !t.culqi_sk_enc) return json({ error: "Tu profesor aun no activo Culqi. Elige otro metodo." }, 400);
+        if (!t || !Number(t.culqi_on) || !t.culqi_sk_enc) return json({ error: "Tu profesor aún no activó Culqi. Elige otro método." }, 400);
         const b = await request.json().catch(() => ({}));
         const token = String(b.token || "").trim();
-        if (!/^tkn_(live|test)_[A-Za-z0-9]+$/.test(token)) return json({ error: "Token de pago invalido. Reintenta." }, 400);
+        if (!/^tkn_(live|test)_[A-Za-z0-9]+$/.test(token)) return json({ error: "Token de pago inválido. Reintenta." }, 400);
         const paquete = String(b.paquete || "");
         const paqMapC = (await loadPaquetes(env, tid)).map;
-        if (!paqMapC[paquete]) return json({ error: "Paquete no valido." }, 400);
+        if (!paqMapC[paquete]) return json({ error: "Paquete no válido." }, 400);
         if (paquete === "Clase de prueba" && cu.alumno_id) return json({ error: "La clase de prueba es solo para tu primera clase." }, 400);
         const cursosT = cursosDeCfg(await loadConfig(env, tid));
         const curso = cursoDeCompra(cursosT, b.curso, paqMapC[paquete]);
@@ -14709,18 +14717,18 @@ export default {
         let slotDeseado = "";
         if (paquete === "Clase de prueba" && b.slot_deseado){
           const iso = String(b.slot_deseado);
-          if (!(await slotValido(env, tid, iso))) return json({ error: "Ese horario ya no esta disponible. Elige otro." }, 400);
+          if (!(await slotValido(env, tid, iso))) return json({ error: "Ese horario ya no está disponible. Elige otro." }, 400);
           slotDeseado = iso;
         }
         const precios = await loadPrecios(env, tid);
         const precio = precios[paquete] || 0;
         const cobC = await calcularCobro(env, tid, cu, paquete, precio);
         const descuento = cobC.descCredito, descRef = cobC.descRef, monto = cobC.monto;
-        if (!(monto > 0)) return json({ error: "Ese paquete no esta disponible por Culqi." }, 400);
+        if (!(monto > 0)) return json({ error: "Ese paquete no está disponible por Culqi." }, 400);
         const email = String(cu.email || "").trim();
-        if (!emailOk(email)) return json({ error: "Tu cuenta no tiene un correo valido para el cargo." }, 400);
+        if (!emailOk(email)) return json({ error: "Tu cuenta no tiene un correo válido para el cargo." }, 400);
         const sk = await culqiDecrypt(env, t.culqi_sk_enc);
-        if (!sk) return json({ error: "No se pudo procesar el pago. Escribele a tu profesor." }, 500);
+        if (!sk) return json({ error: "No se pudo procesar el pago. Escríbele a tu profesor." }, 500);
         await env.DB.prepare("DELETE FROM compras WHERE tenant_id = ?1 AND cuenta_id = ?2 AND estado = 'iniciada' AND metodo = 'Tarjeta/Yape (Culqi)'").bind(tid, cu.id).run();
         const compraId = crypto.randomUUID();
         await env.DB.prepare(
@@ -14809,12 +14817,12 @@ export default {
 
       /* ----- Otras rutas /app/api/culqi/* apagadas ----- */
       if (path.startsWith("/app/api/culqi/") || path.startsWith("/app/api/admin/culqi/")){
-        return json({ error: "El pago con Culqi no esta disponible." }, 501);
+        return json({ error: "El pago con Culqi no está disponible." }, 501);
       }
 
       /* ----- Otras rutas /app/api/mp/* siguen apagadas ----- */
       if (path.startsWith("/app/api/mp/")){
-        return json({ error: "El pago con tarjeta no esta disponible en el trial." }, 501);
+        return json({ error: "El pago con tarjeta no está disponible en el trial." }, 501);
       }
 
       /* ----- Lead magnet (captura de correo) ----- */
@@ -14825,7 +14833,7 @@ export default {
         const t = await env.DB.prepare("SELECT id FROM tenants WHERE slug = ?1").bind(slug).first();
         if (!t) return json({ error: "Academia no encontrada" }, 404);
         const email = String(b.email || "").trim().toLowerCase().slice(0, 120);
-        if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return json({ error: "Correo no valido." }, 400);
+        if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return json({ error: "Correo no válido." }, 400);
         const marca = String(b.marca || "Batuta").trim().slice(0, 20);
         const fuente = String(b.fuente || "").trim().slice(0, 60);
         const interes = String(b.interes || "").trim().slice(0, 60);
@@ -14846,13 +14854,13 @@ export default {
          ============================================================ */
       if (path === "/app/api/admin/mensajes-pack/checkout" && request.method === "POST"){
         const actorPk = await actorDeSesion(env, request);
-        if (!actorPk) return json({ error: "Sesion expirada" }, 401);
-        if (!actorPk.esDueno) return json({ error: "Solo el dueno de la academia puede comprar packs. Pideselo por el chat interno." }, 403);
-        if (!env.MP_ACCESS_TOKEN) return json({ error: "El pago en linea no esta disponible ahora. Escribenos por WhatsApp." }, 501);
+        if (!actorPk) return json({ error: "Sesión expirada" }, 401);
+        if (!actorPk.esDueno) return json({ error: "Solo el dueño de la academia puede comprar packs. Pídeselo por el chat interno." }, 403);
+        if (!env.MP_ACCESS_TOKEN) return json({ error: "El pago en línea no está disponible ahora. Escríbenos por WhatsApp." }, 501);
         const bPk = await request.json().catch(() => ({}));
         const packKey = String(bPk.pack || "").trim();
         const cantPk = PACKS_MENSAJES[packKey];
-        if (!cantPk) return json({ error: "pack invalido: usa 5, 10 o 15" }, 400);
+        if (!cantPk) return json({ error: "pack inválido: usa 5, 10 o 15" }, 400);
         await ensureMensajesExtraSchema(env);
         /* OJO: NO se borran intentos 'iniciada' previos: una preference vieja sigue siendo
            pagable en MP y su compra debe poder acreditarse (borrarla = plata sin credito). */
@@ -14888,7 +14896,7 @@ export default {
         if (!prefPk.ok || !prefPk.data || !prefPk.data.init_point){
           await env.DB.prepare("DELETE FROM packs_compras WHERE id = ?1 AND estado = 'iniciada'").bind(compraIdPk).run();
           console.error("pack checkout: MP no devolvio init_point", prefPk.status);
-          return json({ error: "No se pudo iniciar el pago. Intenta de nuevo o escribenos por WhatsApp." }, 502);
+          return json({ error: "No se pudo iniciar el pago. Intenta de nuevo o escríbenos por WhatsApp." }, 502);
         }
         return json({ init_point: prefPk.data.init_point, pack: packKey, mensajes: cantPk });
       }
@@ -14898,13 +14906,13 @@ export default {
          el webhook (topic payment) es el respaldo. Idempotente via confirmarPackCompra. */
       if (path === "/app/api/admin/mensajes-pack/confirmar" && request.method === "POST"){
         const actorPc = await actorDeSesion(env, request);
-        if (!actorPc) return json({ error: "Sesion expirada" }, 401);
+        if (!actorPc) return json({ error: "Sesión expirada" }, 401);
         if (!env.MP_ACCESS_TOKEN) return json({ error: "No disponible." }, 501);
         const bPc = await request.json().catch(() => ({}));
         const payIdPc = String(bPc.payment_id || "").trim().slice(0, 40);
-        if (!/^\d+$/.test(payIdPc)) return json({ error: "payment_id invalido" }, 400);
+        if (!/^\d+$/.test(payIdPc)) return json({ error: "payment_id inválido" }, 400);
         const mpPc = await mpFetch(env, "/v1/payments/" + payIdPc, { method: "GET" });
-        if (!mpPc.ok || !mpPc.data) return json({ error: "No se pudo consultar el pago. El sistema lo acreditara solo en unos minutos." }, 502);
+        if (!mpPc.ok || !mpPc.data) return json({ error: "No se pudo consultar el pago. El sistema lo acreditará solo en unos minutos." }, 502);
         const pagoPc = mpPc.data;
         const refPc = String(pagoPc.external_reference || "");
         if (!refPc.startsWith("btpk:")) return json({ error: "Ese pago no corresponde a un pack." }, 400);
@@ -14928,7 +14936,7 @@ export default {
          ============================================================ */
       if (path === "/app/api/onboarding-ia" && request.method === "GET"){
         const who = await authChat(env, request);
-        if (!who) return json({ error: "Sesion expirada" }, 401);
+        if (!who) return json({ error: "Sesión expirada" }, 401);
         const clave = claveSoporteIA(who);
         const limite = who.admin ? limiteSoporteAdmin(who.tenant) : ONBOARDING_LIMITE_ALUMNO;
         const row = await env.DB.prepare("SELECT mensajes FROM onboarding_ia_uso WHERE clave = ?1").bind(clave).first();
@@ -14942,13 +14950,13 @@ export default {
       if (path === "/app/api/onboarding-ia" && request.method === "POST"){
         // Antes exigía ANTHROPIC_API_KEY (501). Ahora el asistente vive con Workers AI (Llama)
         // como fallback gratis; solo 503 si ninguna vía de IA está disponible.
-        if (!env.ANTHROPIC_API_KEY && !env.AI) return json({ error: "El asistente no esta disponible ahora." }, 503);
+        if (!env.ANTHROPIC_API_KEY && !env.AI) return json({ error: "El asistente no está disponible ahora." }, 503);
         const who = await authChat(env, request);
-        if (!who) return json({ error: "Sesion expirada" }, 401);
+        if (!who) return json({ error: "Sesión expirada" }, 401);
 
         const ipOia = clientIp(request);
         if (ipOia && await chatbotPasoTope(env, "oia:" + ipOia, 30)){
-          return json({ error: "Demasiados mensajes desde tu conexion. Intenta en un rato." }, 429);
+          return json({ error: "Demasiados mensajes desde tu conexión. Intenta en un rato." }, 429);
         }
 
         const b = await request.json().catch(() => ({}));
@@ -14960,7 +14968,7 @@ export default {
         if (!who.admin){
           const techoT = await onboardingContar(env, "alumnos:" + who.cu.tenant_id + ":" + mesLima(), ONBOARDING_LIMITE_ALUMNOS_TENANT);
           if (techoT.tope){
-            return json({ error: "El asistente de tu academia llego a su tope del mes. Escribele a tu profe por el chat del portal." }, 429);
+            return json({ error: "El asistente de tu academia llegó a su tope del mes. Escríbele a tu profe por el chat del portal." }, 429);
           }
         }
         const clave = claveSoporteIA(who);
@@ -15103,7 +15111,7 @@ export default {
           }
         }
         const reply = await llamarClaudeOnboarding(env, system, mensajes, extraSys);
-        if (!reply) return json({ error: "El asistente no esta disponible ahora mismo." }, 502);
+        if (!reply) return json({ error: "El asistente no está disponible ahora mismo." }, 502);
         ctx.waitUntil(logSoporteIA(env, who.admin ? who.tenant.id : who.cu.tenant_id, who.admin ? (who.esDueno ? "dueno" : "profesor") : "alumno", texto, reply, historial));
         const extrasPost = who.admin ? await saldoMensajesExtra(env, who.tenant.id) : 0;
         return json({ reply: reply, restantes: cont.restantes, extras: extrasPost });
@@ -15134,7 +15142,7 @@ export default {
          ============================================================ */
       if (path === "/app/api/agenda/slots" && request.method === "GET"){
         const cu = await cuentaDeSesion(env, request);
-        if (!cu) return json({ error: "Sesion expirada" }, 401);
+        if (!cu) return json({ error: "Sesión expirada" }, 401);
         // El alumno ve la agenda de SU profesor (multi-profesor); sin ficha aun -> la del dueno.
         const alS = cu.alumno_id ? await env.DB.prepare("SELECT profesor_id, paquete, ciclo, COALESCE(pases,'') AS pases FROM alumnos WHERE id = ?1 AND tenant_id = ?2").bind(cu.alumno_id, cu.tenant_id).first() : null;
         const profS = await profeDeAlumno(env, cu.tenant_id, alS);
@@ -15161,7 +15169,7 @@ export default {
 
       if (path === "/app/api/agenda/reservar" && request.method === "POST"){
         const cu = await cuentaDeSesion(env, request);
-        if (!cu) return json({ error: "Sesion expirada" }, 401);
+        if (!cu) return json({ error: "Sesión expirada" }, 401);
         /* Mensaje claro (7-ago-2026, reunión Elevate: "parecía que no tenía créditos"): la cuenta
            existe pero no está enlazada a una ficha de alumno — no es un tema de saldo. */
         if (!cu.alumno_id) return json({ error: "Tu cuenta aún no está conectada a una ficha de alumno. Pídele a tu academia que registre tu paquete con este mismo correo y listo." }, 403);
@@ -15181,12 +15189,12 @@ export default {
         if (!alumno) return json({ error: "No encuentro tu ficha de alumno." }, 400);
         // La reserva vive en la agenda del profesor del alumno (multi-profesor).
         const profR = await profeDeAlumno(env, tid, alumno);
-        if (!(await slotValido(env, tid, iso, null, profR))) return json({ error: "Ese horario ya no esta disponible. Elige otro." }, 400);
+        if (!(await slotValido(env, tid, iso, null, profR))) return json({ error: "Ese horario ya no está disponible. Elige otro." }, 400);
         /* Con salas hay N clases a la misma hora: primero se resuelve CUAL es (03-ago-2026).
            El portal nuevo siempre manda la sala; si no llega y la hora es ambigua, error claro. */
         const { franja: frR, ambigua: ambR } = await resolverFranja(env, tid, iso, profR, salaPedida);
         if (ambR) return json({ error: "A esa hora hay más de una clase. Actualiza la página y elige la clase que quieres." }, 400);
-        if (!frR) return json({ error: "Ese horario ya no esta disponible. Elige otro." }, 400);
+        if (!frR) return json({ error: "Ese horario ya no está disponible. Elige otro." }, 400);
         const salaR = frR.sala || "";
         const precios = await loadPrecios(env, tid);
         const ciclo = Number(alumno.ciclo) || 1;
@@ -15267,7 +15275,7 @@ export default {
                lee como un error del sistema. El saldo real no cambia: solo el mensaje. */
             const apart = (String((await loadConfig(env, tid)).saldo_modo || "") === "asistencia") ? (Number(cR.reservadas) || 0) : 0;
             if (apart > 0) return json({ error: "Ya tienes " + apart + " clase" + (apart === 1 ? "" : "s") + " reservada" + (apart === 1 ? "" : "s") + " y con eso usas todo tu paquete. Toma una o cancélala para poder reservar otra." }, 409);
-            return json({ error: "No te quedan clases en tu paquete. Renueva para reservar mas." }, 409);
+            return json({ error: "No te quedan clases en tu paquete. Renueva para reservar más." }, 409);
           }
           restantesFija = cR.ilim ? SERIE_SEMANAS : Math.max(0, Number(cR.restantes) || 0);
         }
@@ -15305,7 +15313,7 @@ export default {
              simultáneas del MISMO alumno con una sola clase disponible pasaban las dos. */
           if (await sobregiroTrasReservar(env, tid, alumno.id)){
             await env.DB.prepare("DELETE FROM reservas WHERE id = ?1 AND tenant_id = ?2").bind(rid, tid).run();
-            return json({ error: "Se te acabaron las clases justo ahora. Renueva para reservar mas." }, 409);
+            return json({ error: "Se te acabaron las clases justo ahora. Renueva para reservar más." }, 409);
           }
           try { await env.DB.prepare("UPDATE espera SET estado = 'convertida' WHERE tenant_id = ?1 AND inicio_utc = ?2 AND alumno_id = ?3 AND estado IN ('esperando','avisado')").bind(tid, iso, alumno.id).run(); } catch (e) {}
           gcalAvisar(env, ctx, tid);
@@ -15352,7 +15360,7 @@ export default {
 
       if (path === "/app/api/agenda/cancelar" && request.method === "POST"){
         const cu = await cuentaDeSesion(env, request);
-        if (!cu || !cu.alumno_id) return json({ error: "Sesion expirada" }, 401);
+        if (!cu || !cu.alumno_id) return json({ error: "Sesión expirada" }, 401);
         const tid = cu.tenant_id;
         const b = await request.json().catch(() => ({}));
         const r = await env.DB.prepare("SELECT * FROM reservas WHERE id = ?1 AND tenant_id = ?2").bind(String(b.id || ""), tid).first();
@@ -15362,7 +15370,7 @@ export default {
         const cfgCancel = await loadConfig(env, tid).catch(() => ({}));
         const rcfgB = reprogCfg(cfgCancel);
         if (!rcfgB.activo){
-          return json({ error: "Tu profesor gestiona los cambios de horario directamente. Escribele para reprogramar esta clase." }, 403);
+          return json({ error: "Tu profesor gestiona los cambios de horario directamente. Escríbele para reprogramar esta clase." }, 403);
         }
         /* La anticipacion para cancelar puede ser PROPIA de ese curso (28-jul, Elevate):
            reformer con 12h y mat con 2h conviven sin pelearse. Sin regla propia, la general. */
@@ -15411,7 +15419,7 @@ export default {
          WHERE en las DOS consultas, que antes estaba escrito dos veces. */
       if (path === "/app/api/agenda/espera" && request.method === "GET"){
         const cu = await cuentaDeSesion(env, request);
-        if (!cu || !cu.alumno_id) return json({ error: "Sesion expirada" }, 401);
+        if (!cu || !cu.alumno_id) return json({ error: "Sesión expirada" }, 401);
         let rows = [];
         try {
           rows = (await env.DB.prepare(
@@ -15429,7 +15437,7 @@ export default {
 
       if (path === "/app/api/agenda/espera" && request.method === "POST"){
         const cu = await cuentaDeSesion(env, request);
-        if (!cu || !cu.alumno_id) return json({ error: "Sesion expirada" }, 401);
+        if (!cu || !cu.alumno_id) return json({ error: "Sesión expirada" }, 401);
         const tid = cu.tenant_id;
         const b = await request.json().catch(() => ({}));
         const iso = String(b.inicio_utc || "");
@@ -15437,11 +15445,11 @@ export default {
         const alumno = await env.DB.prepare("SELECT * FROM alumnos WHERE id = ?1 AND tenant_id = ?2").bind(cu.alumno_id, tid).first();
         if (!alumno) return json({ error: "No encuentro tu ficha de alumno." }, 400);
         const profR = await profeDeAlumno(env, tid, alumno);
-        if (!(await slotValido(env, tid, iso, null, profR))) return json({ error: "Ese horario ya no esta disponible." }, 400);
+        if (!(await slotValido(env, tid, iso, null, profR))) return json({ error: "Ese horario ya no está disponible." }, 400);
         /* que franja de esa hora (multi-sala, 03-ago-2026) */
         const { franja: frE, ambigua: ambE } = await resolverFranja(env, tid, iso, profR, salaE);
         if (ambE) return json({ error: "A esa hora hay más de una clase. Actualiza la página y elige la clase que quieres." }, 400);
-        if (!frE) return json({ error: "Ese horario ya no esta disponible." }, 400);
+        if (!frE) return json({ error: "Ese horario ya no está disponible." }, 400);
         const salaFE = frE.sala || "";
         /* no tiene sentido hacer cola por una clase que su plan no cubre */
         const pasesEG = pasesDe(alumno);
@@ -15476,7 +15484,7 @@ export default {
 
       if (path === "/app/api/agenda/espera/cancelar" && request.method === "POST"){
         const cu = await cuentaDeSesion(env, request);
-        if (!cu || !cu.alumno_id) return json({ error: "Sesion expirada" }, 401);
+        if (!cu || !cu.alumno_id) return json({ error: "Sesión expirada" }, 401);
         const tid = cu.tenant_id;
         const b = await request.json().catch(() => ({}));
         const id = String(b.id || ""); const iso = String(b.inicio_utc || "");
@@ -15490,7 +15498,7 @@ export default {
 
       if (path === "/app/api/agenda/pausar" && request.method === "POST"){
         const cu = await cuentaDeSesion(env, request);
-        if (!cu || !cu.alumno_id) return json({ error: "Sesion expirada" }, 401);
+        if (!cu || !cu.alumno_id) return json({ error: "Sesión expirada" }, 401);
         const tid = cu.tenant_id;
         const b = await request.json().catch(() => ({}));
         const motivo = (b.motivo === "salud") ? "salud" : "viaje";
@@ -15507,7 +15515,7 @@ export default {
         const maxBloques = porPlan ? (pkP.congelaBloques || 2) : 0;
 
         const dias = Math.max(1, Math.min(maxDias, Number(b.dias) || 0));
-        if (!dias) return json({ error: "Indica cuantos dias necesitas." }, 400);
+        if (!dias) return json({ error: "Indica cuántos días necesitas." }, 400);
         const ciclo = Number(al.ciclo) || 1;
         const usados = await env.DB.prepare(
           "SELECT COALESCE(SUM(dias),0) AS n, COUNT(*) AS bloques FROM pausas WHERE tenant_id = ?1 AND alumno_id = ?2 AND ciclo = ?3"
@@ -15633,7 +15641,7 @@ export default {
            al migrar. Crea reservas sueltas validando que la franja exista y tenga cupo; NO
            valida saldo (la migración es del dueño: su palabra manda sobre lo ya pactado). */
         if (path === "/app/api/admin/importar-reservas" && request.method === "POST"){
-          if (!esDueno) return json({ error: "Las migraciones las maneja el dueno." }, 403);
+          if (!esDueno) return json({ error: "Las migraciones las maneja el dueño." }, 403);
           const bIR = await request.json().catch(() => ({}));
           /* 🔴 22-ago-2026: los dos recortes de abajo eran MUDOS. Quien mandaba 700 filas
              recibía "ok" y 200 no se miraban nunca; un alumno con 80 clases que migrar perdía
@@ -15712,7 +15720,7 @@ export default {
            que solo tienen WhatsApp. Los dos caminos usan el MISMO token.
            ============================================================ */
         if (path === "/app/api/admin/invitaciones" && request.method === "GET"){
-          if (!esDueno) return json({ error: "Las invitaciones las manda el dueno de la academia." }, 403);
+          if (!esDueno) return json({ error: "Las invitaciones las manda el dueño de la academia." }, 403);
           await ensureAlumnoExtraSchema(env);
           await ensureInvitacionesSchema(env);
           const { results: filas } = await env.DB.prepare(
@@ -15765,7 +15773,7 @@ export default {
         /* Link personal de UN alumno (el camino WhatsApp: el dueno aprieta y se abre el chat
            con el mensaje ya escrito). Devolver el token al dueno es correcto: es SU alumno. */
         if (path === "/app/api/admin/invitaciones/link" && request.method === "POST"){
-          if (!esDueno) return json({ error: "Las invitaciones las manda el dueno de la academia." }, 403);
+          if (!esDueno) return json({ error: "Las invitaciones las manda el dueño de la academia." }, 403);
           const bL = await request.json().catch(() => ({}));
           const alL = await env.DB.prepare("SELECT id, nombre, whatsapp FROM alumnos WHERE id = ?1 AND tenant_id = ?2").bind(String(bL.alumno_id || ""), tid).first();
           if (!alL) return json({ error: "Alumno no encontrado" }, 404);
@@ -15784,7 +15792,7 @@ export default {
            mitad, dejando media lista con enlace y media sin). Un barrido de vencidos + INSERTs
            en lotes + el marcado en lotes. */
         if (path === "/app/api/admin/invitaciones/csv" && request.method === "POST"){
-          if (!esDueno) return json({ error: "Las invitaciones las manda el dueno de la academia." }, 403);
+          if (!esDueno) return json({ error: "Las invitaciones las manda el dueño de la academia." }, 403);
           await ensureAlumnoExtraSchema(env);
           await ensureInvitacionesSchema(env);
           /* no_email = 0: el que pidio no recibir correos NO entra en un envio masivo (Ley 29733).
@@ -15844,7 +15852,7 @@ export default {
         /* Tanda de correos. Tope por tanda + tope por dia + apagado por defecto.
            Devuelve SIEMPRE a quien le toco, simulado o no, para que el dueno lo vea. */
         if (path === "/app/api/admin/invitaciones/enviar" && request.method === "POST"){
-          if (!esDueno) return json({ error: "Las invitaciones las manda el dueno de la academia." }, 403);
+          if (!esDueno) return json({ error: "Las invitaciones las manda el dueño de la academia." }, 403);
           await ensureAlumnoExtraSchema(env);
           await ensureInvitacionesSchema(env);
           const bE = await request.json().catch(() => ({}));
@@ -15946,12 +15954,12 @@ export default {
           if (!esDueno) return json({ error: "No autorizado" }, 403);
           if (!env.RECURSOS_R2) return json({ error: "No disponible en el trial." }, 501);
           const form = await request.formData().catch(() => null);
-          if (!form) return json({ error: "Formulario invalido" }, 400);
+          if (!form) return json({ error: "Formulario inválido" }, 400);
           const archivo = form.get("archivo");
           const esArchivo = archivo && typeof archivo !== "string" && typeof archivo.arrayBuffer === "function";
           const ext = esArchivo ? extArchivo(archivo.name) : null;
           if (!ext || !/^(png|jpg|jpeg)$/.test(ext) || archivo.size > 8 * 1024 * 1024){
-            return json({ error: "Solo imagenes (png/jpg) de hasta 8 MB." }, 400);
+            return json({ error: "Solo imágenes (png/jpg) de hasta 8 MB." }, 400);
           }
           const key = crypto.randomUUID() + "." + ext;
           await env.RECURSOS_R2.put(key, archivo, { httpMetadata: { contentType: MIME_ARCHIVO[ext], contentDisposition: "inline" } });
@@ -15980,15 +15988,15 @@ export default {
           const b = await request.json().catch(() => ({}));
           const tipoFb = b.tipo === "error" ? "error" : "idea";
           const textoFb = String(b.texto || "").trim();
-          if (textoFb.length < 20) return json({ error: "Cuentanos un poco mas (minimo 20 caracteres) para poder trabajarlo." }, 400);
-          if (textoFb.length > 1500) return json({ error: "Maximo 1500 caracteres. Si necesitas mas espacio, mandalo en dos aportes." }, 400);
+          if (textoFb.length < 20) return json({ error: "Cuéntanos un poco más (mínimo 20 caracteres) para poder trabajarlo." }, 400);
+          if (textoFb.length > 1500) return json({ error: "Máximo 1500 caracteres. Si necesitas más espacio, mándalo en dos aportes." }, 400);
           await ensureFeedbackSchema(env);
           const mesFb = hoyLima().slice(0, 7);
           const nMes = await env.DB.prepare(
             "SELECT COUNT(*) AS n FROM feedback WHERE tenant_id = ?1 AND mes = ?2"
           ).bind(tid, mesFb).first();
           if (nMes && Number(nMes.n) >= 10){
-            return json({ error: "Ya recibimos varios aportes tuyos este mes, gracias! El proximo mes puedes mandar mas." }, 429);
+            return json({ error: "Ya recibimos varios aportes tuyos este mes, ¡gracias! El próximo mes puedes mandar más." }, 429);
           }
           const yaPremiado = await env.DB.prepare(
             "SELECT COUNT(*) AS n FROM feedback WHERE tenant_id = ?1 AND premiado = 1"
@@ -16019,7 +16027,7 @@ export default {
 
         /* -------- Profesores del equipo (multi-profesor, SOLO dueno) -------- */
         if (path === "/app/api/admin/profesores" && request.method === "GET"){
-          if (!esDueno) return json({ error: "Solo el dueno gestiona profesores." }, 403);
+          if (!esDueno) return json({ error: "Solo el dueño gestiona profesores." }, 403);
           await ensureMultiprofesorSchema(env);
           await ensureErpSchema(env);
           await ensureAlumnoExtraSchema(env);   // trae la columna permisos
@@ -16042,7 +16050,7 @@ export default {
           return json({ profesores: lista, asientos: { usados, max: maxA }, plan: t.plan || "profe" });
         }
         if (path === "/app/api/admin/profesores" && request.method === "POST"){
-          if (!esDueno) return json({ error: "Solo el dueno gestiona profesores." }, 403);
+          if (!esDueno) return json({ error: "Solo el dueño gestiona profesores." }, 403);
           await ensureMultiprofesorSchema(env);
           const b = await request.json().catch(() => ({}));
           const accion = String(b.accion || "");
@@ -16051,7 +16059,7 @@ export default {
             const nombreP = String(b.nombre || "").trim().slice(0, 60);
             const emailP = String(b.email || "").trim().toLowerCase();
             if (nombreP.length < 2) return json({ error: "Escribe el nombre del profesor." }, 400);
-            if (!emailOk(emailP)) return json({ error: "Ese correo no parece valido." }, 400);
+            if (!emailOk(emailP)) return json({ error: "Ese correo no parece válido." }, 400);
             /* candado de asientos: lo que de verdad vende Academia/XL */
             const maxA = await maxProfesDe(env, tid, t.plan);
             const nAct = await env.DB.prepare("SELECT COUNT(*) AS n FROM profesores WHERE tenant_id = ?1 AND estado != 'suspendido'").bind(tid).first();
@@ -16107,7 +16115,7 @@ export default {
             const pidP = String(b.id || "");
             const pRowP = await env.DB.prepare("SELECT id, rol FROM profesores WHERE id = ?1 AND tenant_id = ?2").bind(pidP, tid).first();
             if (!pRowP) return json({ error: "Profesor no encontrado" }, 404);
-            if (pRowP.rol === "dueno") return json({ error: "El dueno tiene todos los permisos siempre." }, 400);
+            if (pRowP.rol === "dueno") return json({ error: "El dueño tiene todos los permisos siempre." }, 400);
             const limpio = sanearPermisos(b.permisos);
             await env.DB.prepare("UPDATE profesores SET permisos = ?1 WHERE id = ?2 AND tenant_id = ?3").bind(limpio, pidP, tid).run();
             return json({ ok: true, permisos: limpio });
@@ -16124,7 +16132,7 @@ export default {
           const pid = String(b.id || "");
           const pRow = await env.DB.prepare("SELECT * FROM profesores WHERE id = ?1 AND tenant_id = ?2").bind(pid, tid).first();
           if (!pRow) return json({ error: "Profesor no encontrado" }, 404);
-          if (pRow.rol === "dueno") return json({ error: "El dueno no se toca desde aqui." }, 400);
+          if (pRow.rol === "dueno") return json({ error: "El dueño no se toca desde aquí." }, 400);
 
           if (accion === "suspender" || accion === "reactivar"){
             if (accion === "reactivar"){
@@ -16140,7 +16148,7 @@ export default {
             return json({ ok: true, estado: nuevoEst });
           }
           if (accion === "reenviar"){
-            if (pRow.estado !== "invitado" || !pRow.invite_token) return json({ error: "Ese profesor ya activo su cuenta." }, 400);
+            if (pRow.estado !== "invitado" || !pRow.invite_token) return json({ error: "Ese profesor ya activó su cuenta." }, 400);
             const link = MARCA.dominio + "/app/p/activar?token=" + pRow.invite_token;
             let correoEnviado = false;
             try {
@@ -16170,11 +16178,11 @@ export default {
               .bind(nombreE, String(b.whatsapp || pRow.whatsapp || "").trim().slice(0, 20), pid, tid).run();
             return json({ ok: true });
           }
-          return json({ error: "Accion no valida" }, 400);
+          return json({ error: "Acción no válida" }, 400);
         }
         /* -------- CRM de interesados: pipeline con etapas (SOLO dueno) -------- */
         if (path === "/app/api/admin/lead" && request.method === "POST"){
-          if (!esDueno) return json({ error: "Los interesados los maneja el dueno." }, 403);
+          if (!esDueno) return json({ error: "Los interesados los maneja el dueño." }, 403);
           await ensureErpSchema(env);
           const b = await request.json().catch(() => ({}));
           const accion = String(b.accion || "");
@@ -16184,7 +16192,7 @@ export default {
           }
           if (accion === "etapa"){
             const etapa = ETAPAS_LEAD.indexOf(String(b.etapa || "")) !== -1 ? String(b.etapa) : "";
-            if (!etapa) return json({ error: "Etapa no valida" }, 400);
+            if (!etapa) return json({ error: "Etapa no válida" }, 400);
             const r = await env.DB.prepare("UPDATE leads SET etapa = ?1, actualizado = ?2 WHERE id = ?3 AND tenant_id = ?4")
               .bind(etapa, hoyLima(), String(b.id || ""), tid).run();
             if (!((r && r.meta && (r.meta.changes ?? r.meta.rows_written)) || 0)) return json({ error: "Interesado no encontrado" }, 404);
@@ -16207,7 +16215,7 @@ export default {
             const seguirL = /^\d{4}-\d{2}-\d{2}$/.test(String(b.seguir_el || "")) ? String(b.seguir_el) : "";
             const etapaL = ETAPAS_LEAD.indexOf(String(b.etapa || "")) !== -1 ? String(b.etapa) : "nuevo";
             if (!nombreL && !emailL && !waL) return json({ error: "Pon al menos un nombre, correo o WhatsApp." }, 400);
-            if (emailL && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(emailL)) return json({ error: "Ese correo no parece valido." }, 400);
+            if (emailL && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(emailL)) return json({ error: "Ese correo no parece válido." }, 400);
             if (accion === "crear"){
               await env.DB.prepare(
                 "INSERT INTO leads (id,tenant_id,email,marca,fuente,interes,fecha,nombre,whatsapp,etapa,nota,seguir_el,software_actual,actualizado) VALUES (?1,?2,?3,'Batuta','manual',?4,?5,?6,?7,?8,?9,?10,?11,?5)"
@@ -16220,12 +16228,12 @@ export default {
             }
             return json({ ok: true });
           }
-          return json({ error: "Accion no valida" }, 400);
+          return json({ error: "Acción no válida" }, 400);
         }
 
         /* -------- Caja: gastos de la academia (SOLO dueno) -------- */
         if (path === "/app/api/admin/gasto" && request.method === "POST"){
-          if (!esDueno) return json({ error: "La caja la maneja el dueno." }, 403);
+          if (!esDueno) return json({ error: "La caja la maneja el dueño." }, 403);
           await ensureErpSchema(env);
           const b = await request.json().catch(() => ({}));
           if (b.accion === "borrar"){
@@ -16246,7 +16254,7 @@ export default {
 
         /* -------- Facturacion electronica: emitir BOLETA de un pago confirmado (SOLO dueno) -------- */
         if (path === "/app/api/admin/comprobante" && request.method === "POST"){
-          if (!esDueno) return json({ error: "La facturacion la maneja el dueno." }, 403);
+          if (!esDueno) return json({ error: "La facturación la maneja el dueño." }, 403);
           await ensureErpSchema(env);
           /* 22-ago-2026: aqui habia un candado que exigia el "plan Profe (S/49/mes)" para emitir
              boletas. Ese plan murio el 20-ago y con el modelo de packs SUNAT viene en la base
@@ -16258,7 +16266,7 @@ export default {
           /* solo hablamos con Nubefact (el token viaja en el header: nada de rutas arbitrarias) */
           let hostOk = false;
           try { const uF = new URL(String(cfgF.nubefact_ruta)); hostOk = uF.protocol === "https:" && (uF.hostname === "nubefact.com" || uF.hostname.endsWith(".nubefact.com")); } catch (e) {}
-          if (!hostOk) return json({ error: "La ruta de Nubefact no parece valida: debe ser la URL que te da nubefact.com (api.nubefact.com/...)." }, 400);
+          if (!hostOk) return json({ error: "La ruta de Nubefact no parece válida: debe ser la URL que te da nubefact.com (api.nubefact.com/...)." }, 400);
 
           const b = await request.json().catch(() => ({}));
           const compra = await env.DB.prepare("SELECT * FROM compras WHERE id = ?1 AND tenant_id = ?2").bind(String(b.compra_id || ""), tid).first();
@@ -16275,7 +16283,7 @@ export default {
           const clienteDni = String(b.cliente_dni || "").replace(/\D/g, "").slice(0, 8);
           /* regla SUNAT: boletas de S/700 o mas requieren identificar al comprador */
           if (monto >= 700 && !/^\d{8}$/.test(clienteDni)){
-            return json({ error: "SUNAT exige DNI del cliente para boletas de S/ 700 o mas. Ponlo y vuelve a emitir." }, 400);
+            return json({ error: "SUNAT exige DNI del cliente para boletas de S/ 700 o más. Ponlo y vuelve a emitir." }, 400);
           }
           const descF = (compra.paquete || "Servicio educativo") + (compra.curso ? " de " + compra.curso : "") + " - clases";
 
@@ -16307,7 +16315,7 @@ export default {
                 reservado = true;
               } catch (e) { /* UNIQUE: otro request tomo ese numero, probar el siguiente */ }
             }
-            if (!reservado) return json({ error: "No pude reservar un numero de boleta. Intenta de nuevo." }, 409);
+            if (!reservado) return json({ error: "No pude reservar un número de boleta. Intenta de nuevo." }, 409);
           }
 
           const r = await emitirBoletaNubefact(env, cfgF, {
@@ -16342,7 +16350,7 @@ export default {
            clases = registros 'Asistió' del mes de SUS alumnos (asignacion actual);
            a pagar = pct% de ingresos + tarifa por clase. */
         if (path === "/app/api/admin/liquidacion" && request.method === "GET"){
-          if (!esDueno) return json({ error: "La liquidacion la ve el dueno." }, 403);
+          if (!esDueno) return json({ error: "La liquidación la ve el dueño." }, 403);
           await ensureErpSchema(env);
           const mesL = /^\d{4}-\d{2}$/.test(String(url.searchParams.get("mes") || "")) ? String(url.searchParams.get("mes")) : hoyLima().slice(0, 7);
           const { results: profs } = await env.DB.prepare(
@@ -16406,7 +16414,7 @@ export default {
 
         /* Reasignar un alumno a otro profesor (SOLO dueno) */
         if (path === "/app/api/admin/alumno/asignar" && request.method === "POST"){
-          if (!esDueno) return json({ error: "Solo el dueno reasigna alumnos." }, 403);
+          if (!esDueno) return json({ error: "Solo el dueño reasigna alumnos." }, 403);
           const b = await request.json().catch(() => ({}));
           const alumnoId = String(b.alumno_id || "");
           const profeId = String(b.profe || "");
@@ -16578,7 +16586,7 @@ export default {
         if (path === "/app/api/admin/agenda/bloquear" && request.method === "POST"){
           const b = await request.json().catch(() => ({}));
           const t0 = Date.parse(String(b.inicio_utc || ""));
-          if (!Number.isFinite(t0)) return json({ error: "Fecha invalida" }, 400);
+          if (!Number.isFinite(t0)) return json({ error: "Fecha inválida" }, 400);
           const alumnoId = b.alumno_id ? String(b.alumno_id) : null;
           /* "Reserva sin nombre" (18-ago-2026, pedido de Andrés tras el lío de José).
              Antes solo había dos extremos: con alumno, o SIN alumno = cerrar la hora entera.
@@ -16599,7 +16607,7 @@ export default {
             const al = await env.DB.prepare("SELECT curso, ciclo, profesor_id FROM alumnos WHERE id = ?1 AND tenant_id = ?2").bind(alumnoId, tid).first();
             if (!al) return json({ error: "Alumno no encontrado" }, 404);
             /* un profesor solo agenda a SUS alumnos; la reserva cae en la agenda del profe del alumno */
-            if (!esDueno && al.profesor_id !== profeActorId) return json({ error: "Ese alumno no esta asignado a ti." }, 403);
+            if (!esDueno && al.profesor_id !== profeActorId) return json({ error: "Ese alumno no está asignado a ti." }, 403);
             const profAl = await profeDeAlumno(env, tid, al);
             targetB = { id: profAl.id, esDueno: profAl.esDueno };
             curso = al.curso || ""; ciclo = Number(al.ciclo) || 1;
@@ -16680,7 +16688,7 @@ export default {
            Solo el dueño: es SU banco de datos y es él quien responde ante Indecopi por lo que
            se envíe. Un profesor invitado no puede escribirle a la base de la academia. */
         if (path === "/app/api/admin/campanas" && request.method === "GET"){
-          if (!esDueno) return json({ error: "Las campañas las maneja el dueno de la academia." }, 403);
+          if (!esDueno) return json({ error: "Las campañas las maneja el dueño de la academia." }, 403);
           await ensureAlumnoExtraSchema(env);
           const conteos = {};
           for (const s of CAMPANA_SEGMENTOS) conteos[s] = await contarSegmento(env, tid, s);
@@ -16705,22 +16713,22 @@ export default {
           });
         }
         if (path === "/app/api/admin/campanas" && request.method === "POST"){
-          if (!esDueno) return json({ error: "Las campañas las maneja el dueno de la academia." }, 403);
-          if (!env.RESEND_API_KEY) return json({ error: "El envio de correos no esta configurado. Escribenos." }, 501);
+          if (!esDueno) return json({ error: "Las campañas las maneja el dueño de la academia." }, 403);
+          if (!env.RESEND_API_KEY) return json({ error: "El envío de correos no está configurado. Escríbenos." }, 501);
           await ensureAlumnoExtraSchema(env);
           const b = await request.json().catch(() => ({}));
           const seg = CAMPANA_SEGMENTOS.indexOf(String(b.segmento || "")) !== -1 ? String(b.segmento) : "todos";
           const asunto = String(b.asunto || "").trim().slice(0, 120);
           const cuerpo = String(b.cuerpo || "").trim().slice(0, 5000);
-          if (!asunto || !cuerpo) return json({ error: "Ponle un asunto y un mensaje a tu campana." }, 400);
+          if (!asunto || !cuerpo) return json({ error: "Ponle un asunto y un mensaje a tu campaña." }, 400);
           const cfgC = await loadConfig(env, tid).catch(() => ({}));
           if (!String(cfgC.direccion_fiscal || cfgC.direccion || "").trim()){
-            return json({ error: "Antes de tu primera campana carga la direccion de tu academia en Ajustes > Academia: la ley exige que cada correo publicitario lleve el domicilio de quien lo envia." }, 400);
+            return json({ error: "Antes de tu primera campaña carga la dirección de tu academia en Ajustes > Academia: la ley exige que cada correo publicitario lleve el domicilio de quien lo envía." }, 400);
           }
           /* una campaña a la vez por academia: dos corriendo en paralelo se comen el tope diario
              entre ellas y el dueño no entiende por qué ninguna avanza */
           const enCurso = await env.DB.prepare("SELECT id FROM campanas WHERE tenant_id = ?1 AND estado = 'enviando' LIMIT 1").bind(tid).first().catch(() => null);
-          if (enCurso) return json({ error: "Ya tienes una campana enviandose. Espera a que termine o cancelala." }, 409);
+          if (enCurso) return json({ error: "Ya tienes una campaña enviándose. Espera a que termine o cancélala." }, 409);
 
           const idC = crypto.randomUUID();
           const { results: dest } = await env.DB.prepare(
@@ -16728,7 +16736,7 @@ export default {
           ).bind(tid).all().catch(() => ({ results: [] }));
           const lista = (dest || []).map(r => r.id);
           if (!lista.length){
-            return json({ error: "Todavia no tienes a nadie a quien escribirle en ese grupo. Tus alumnos tienen que aceptar recibir promociones desde su portal (Mi cuenta) antes de que puedas escribirles: la ley pide su permiso previo." }, 400);
+            return json({ error: "Todavía no tienes a nadie a quien escribirle en ese grupo. Tus alumnos tienen que aceptar recibir promociones desde su portal (Mi cuenta) antes de que puedas escribirles: la ley pide su permiso previo." }, 400);
           }
           await env.DB.prepare(
             "INSERT INTO campanas (id,tenant_id,segmento,asunto,cuerpo,estado,total,enviados,fallidos,creada,ultima) VALUES (?1,?2,?3,?4,?5,'enviando',?6,0,0,?7,'')"
@@ -16750,12 +16758,12 @@ export default {
           });
         }
         if (path === "/app/api/admin/campanas/cancelar" && request.method === "POST"){
-          if (!esDueno) return json({ error: "Las campañas las maneja el dueno de la academia." }, 403);
+          if (!esDueno) return json({ error: "Las campañas las maneja el dueño de la academia." }, 403);
           const b = await request.json().catch(() => ({}));
           const r = await env.DB.prepare("UPDATE campanas SET estado = 'cancelada' WHERE id = ?1 AND tenant_id = ?2 AND estado = 'enviando'")
             .bind(String(b.id || ""), tid).run().catch(() => null);
           const n = (r && r.meta && (r.meta.changes ?? 0)) || 0;
-          if (!n) return json({ error: "Esa campana ya no se esta enviando." }, 404);
+          if (!n) return json({ error: "Esa campaña ya no se está enviando." }, 404);
           return json({ ok: true });
         }
 
@@ -16763,12 +16771,12 @@ export default {
           const b = await request.json().catch(() => ({}));
           const id = String(b.id || "");
           const nuevo = String(b.estado || "");
-          if (!["completada", "falta", "cancelada"].includes(nuevo)) return json({ error: "Estado invalido" }, 400);
+          if (!["completada", "falta", "cancelada"].includes(nuevo)) return json({ error: "Estado inválido" }, 400);
           /* un profesor solo marca clases de SU agenda */
           const rv = await env.DB.prepare(
             "SELECT * FROM reservas WHERE id = ?1 AND tenant_id = ?2 AND (?3 = 1 OR profesor_id = ?4)"
           ).bind(id, tid, esDueno ? 1 : 0, profeActorId || "").first();
-          if (!rv) return json({ error: "Esa clase no esta en tu agenda." }, 404);
+          if (!rv) return json({ error: "Esa clase no está en tu agenda." }, 404);
           const stmts = [];
           if (nuevo === "cancelada"){
             stmts.push(env.DB.prepare("UPDATE reservas SET estado = 'cancelada', cancelada_utc = ?1, cancelada_por = ?2 WHERE id = ?3 AND tenant_id = ?4")
@@ -16811,7 +16819,7 @@ export default {
           const alA = await env.DB.prepare(
             "SELECT * FROM alumnos WHERE id = ?1 AND tenant_id = ?2 AND (?3 = 1 OR profesor_id = ?4)"
           ).bind(alumnoId, tid, esDueno ? 1 : 0, profeActorId || "").first();
-          if (!alA) return json({ error: "Ese alumno no esta en tu lista." }, 404);
+          if (!alA) return json({ error: "Ese alumno no está en tu lista." }, 404);
           const cicloA = Number(b.ciclo) || Number(alA.ciclo) || 1;
           /* 🔴 22-ago-2026 · esto borraba y cancelaba el DÍA ENTERO, sin mirar de qué clase.
              La bitácora se escribe por día Y CURSO (ver `anotarClaseDictada`) y el panel pinta
@@ -16881,7 +16889,7 @@ export default {
         if (path === "/app/api/admin/agenda/cancelar-clase" && request.method === "POST"){
           const b = await request.json().catch(() => ({}));
           const t0 = Date.parse(String(b.inicio_utc || ""));
-          if (!Number.isFinite(t0)) return json({ error: "Fecha invalida" }, 400);
+          if (!Number.isFinite(t0)) return json({ error: "Fecha inválida" }, 400);
           const isoC = new Date(t0).toISOString();
           const salaC = String(b.sala || "").trim().slice(0, 40);
           const motivo = String(b.nota || "").slice(0, 200);
@@ -17022,7 +17030,7 @@ export default {
           const b = await request.json().catch(() => ({}));
           const s = b.subscription || {};
           const keys = s.keys || {};
-          if (!s.endpoint || !keys.p256dh || !keys.auth) return json({ error: "Suscripcion invalida" }, 400);
+          if (!s.endpoint || !keys.p256dh || !keys.auth) return json({ error: "Suscripción inválida" }, 400);
           await env.DB.prepare(
             "INSERT OR REPLACE INTO push_subs (endpoint,tenant_id,p256dh,auth,dispositivo,creada) VALUES (?1,?2,?3,?4,?5,?6)"
           ).bind(s.endpoint, tid, keys.p256dh, keys.auth, String(b.dispositivo || "").slice(0, 120), hoyLima()).run();
@@ -17303,7 +17311,7 @@ export default {
 
         /* -------- Sedes (multisede: locales fisicos de la academia) -------- */
         if (path === "/app/api/admin/sede" && request.method === "POST"){
-          if (!esDueno) return json({ error: "Las sedes las maneja el dueno." }, 403);
+          if (!esDueno) return json({ error: "Las sedes las maneja el dueño." }, 403);
           await ensureSedesSchema(env);
           const b = await request.json().catch(() => ({}));
           const accion = String(b.accion || "");
@@ -17318,13 +17326,13 @@ export default {
             ]);
             return json({ ok: true });
           }
-          if (accion !== "crear" && accion !== "editar") return json({ error: "Accion no valida" }, 400);
+          if (accion !== "crear" && accion !== "editar") return json({ error: "Acción no válida" }, 400);
           const nombreS = String(b.nombre || "").trim().slice(0, 60);
           if (nombreS.length < 2) return json({ error: "Ponle un nombre a la sede (ej: Sede Miraflores)." }, 400);
           const direccionS = String(b.direccion || "").trim().slice(0, 120);
           if (accion === "crear"){
             const nS = await env.DB.prepare("SELECT COUNT(*) AS n FROM sedes WHERE tenant_id = ?1").bind(tid).first();
-            if ((Number(nS && nS.n) || 0) >= 20) return json({ error: "Maximo 20 sedes por academia." }, 400);
+            if ((Number(nS && nS.n) || 0) >= 20) return json({ error: "Máximo 20 sedes por academia." }, 400);
             await env.DB.prepare("INSERT INTO sedes (id, tenant_id, nombre, direccion, creado) VALUES (?1,?2,?3,?4,?5)")
               .bind(crypto.randomUUID(), tid, nombreS, direccionS, hoyLima()).run();
           } else {
@@ -17345,7 +17353,7 @@ export default {
             ).bind(String(b.id || ""), tid, esDueno ? 1 : 0, profeActorId || "").run();
             return json({ ok: true });
           }
-          if (accion !== "crear" && accion !== "editar") return json({ error: "Accion no valida" }, 400);
+          if (accion !== "crear" && accion !== "editar") return json({ error: "Acción no válida" }, 400);
           const nombre = String(b.nombre || "").trim().slice(0, 60);
           if (nombre.length < 2) return json({ error: "Ponle un nombre al grupo." }, 400);
           const curso = String(b.curso || "").trim().slice(0, 40);
@@ -17825,7 +17833,7 @@ export default {
 
         /* ===== Meta Ads (campanas) — SOLO el dueno. Aislado, gated por secrets. ===== */
         if (path === "/app/api/admin/meta/estado" && request.method === "GET"){
-          if (!esDueno) return json({ error: "Solo el dueno gestiona las campanas." }, 403);
+          if (!esDueno) return json({ error: "Solo el dueño gestiona las campañas." }, 403);
           const configurado = metaConfigurado(env);
           const cx = await metaConexion(env, tid);
           return json({
@@ -17839,15 +17847,15 @@ export default {
           });
         }
         if (path === "/app/api/admin/meta/conectar" && request.method === "POST"){
-          if (!esDueno) return json({ error: "Solo el dueno gestiona las campanas." }, 403);
-          if (!metaConfigurado(env)) return json({ error: "Meta Ads todavia no esta habilitado. Escribenos y lo activamos." }, 501);
+          if (!esDueno) return json({ error: "Solo el dueño gestiona las campañas." }, 403);
+          if (!metaConfigurado(env)) return json({ error: "Meta Ads todavía no está habilitado. Escríbenos y lo activamos." }, 501);
           const b = await request.json().catch(() => ({}));
           const res = await metaConectarTenant(env, tid, String(b.code || ""), b.redirect_uri ? String(b.redirect_uri) : null);
           if (!res.ok) return json({ error: res.error }, 502);
           return json({ ok: true, cuentas: res.cuentas, paginas: res.paginas });
         }
         if (path === "/app/api/admin/meta/seleccionar" && request.method === "POST"){
-          if (!esDueno) return json({ error: "Solo el dueno gestiona las campanas." }, 403);
+          if (!esDueno) return json({ error: "Solo el dueño gestiona las campañas." }, 403);
           const cx = await metaConexion(env, tid);
           if (!cx || !cx.token) return json({ error: "Primero conecta tu cuenta de Meta." }, 400);
           const b = await request.json().catch(() => ({}));
@@ -17855,7 +17863,7 @@ export default {
           const paginas = JSON.parse(cx.paginas_json || "[]");
           const actSel = cuentas.find(c => String(c.account_id) === String(b.act_id) || String(c.id) === String(b.act_id));
           const pageSel = paginas.find(p => String(p.id) === String(b.page_id));
-          if (!actSel) return json({ error: "Esa cuenta publicitaria no esta en tu lista." }, 400);
+          if (!actSel) return json({ error: "Esa cuenta publicitaria no está en tu lista." }, 400);
           // pixel: si el dueno no lo manda, tomamos el primero de la cuenta
           let pixelId = String(b.pixel_id || "");
           if (!pixelId){
@@ -17870,10 +17878,10 @@ export default {
           return json({ ok: true, pixel_id: pixelId });
         }
         if (path === "/app/api/admin/meta/campana" && request.method === "POST"){
-          if (!esDueno) return json({ error: "Solo el dueno gestiona las campanas." }, 403);
+          if (!esDueno) return json({ error: "Solo el dueño gestiona las campañas." }, 403);
           const cx = await metaConexion(env, tid);
           if (!cx || !cx.token || !cx.act_id) return json({ error: "Conecta tu cuenta y elige una cuenta publicitaria primero." }, 400);
-          if (!cx.page_id) return json({ error: "Elige la pagina de Facebook de tu academia para el anuncio." }, 400);
+          if (!cx.page_id) return json({ error: "Elige la página de Facebook de tu academia para el anuncio." }, 400);
           const b = await request.json().catch(() => ({}));
           const res = await metaCrearCampana(env, cx, {
             nombre: b.nombre, presupuesto_dia: b.presupuesto_dia, landing: b.landing || (MARCA.dominio + "/app/a/" + (t.slug || "")),
@@ -17883,7 +17891,7 @@ export default {
           return json(res);
         }
         if (path === "/app/api/admin/meta/desconectar" && request.method === "POST"){
-          if (!esDueno) return json({ error: "Solo el dueno gestiona las campanas." }, 403);
+          if (!esDueno) return json({ error: "Solo el dueño gestiona las campañas." }, 403);
           try { await env.DB.prepare("DELETE FROM meta_ads_conexion WHERE tenant_id = ?1").bind(tid).run(); } catch (e) {}
           return json({ ok: true });
         }
@@ -17891,7 +17899,7 @@ export default {
         /* Token de la API / MCP: lo ve y lo rota SOLO el dueño. Se muestra en claro a
            propósito (es lo que tiene que pegar en su Claude); rotarlo invalida el anterior. */
         if (path === "/app/api/admin/api-token" && request.method === "POST"){
-          if (!esDueno) return json({ error: "La conexion con tu Claude la maneja el dueno." }, 403);
+          if (!esDueno) return json({ error: "La conexión con tu Claude la maneja el dueño." }, 403);
           if (esTenantDemo(t)) return json({ error: "En la demo no se generan tokens." }, 400);
           const bTk = await request.json().catch(() => ({}));
           const token = await apiTokenDe(env, tid, bTk && bTk.accion === "rotar");
@@ -17974,7 +17982,7 @@ export default {
 
         if (path === "/app/api/admin/config" && request.method === "POST"){
           /* config del tenant (cobros, marca, cupo, cursos): SOLO el dueno */
-          if (!esDueno) return json({ error: "Los ajustes de la academia los maneja el dueno." }, 403);
+          if (!esDueno) return json({ error: "Los ajustes de la academia los maneja el dueño." }, 403);
           const b = await request.json().catch(() => ({}));
           const claves = ["pago_numero", "pago_titular", "bcp_cuenta", "bcp_cci", "scotia_cuenta", "scotia_cci", "crypto_moneda", "crypto_red", "crypto_wallet", "stripe_moneda", "profe_nombre", "profe_marca", "profe_foto", "whatsapp_profe", "cursos", "brand_color", "brand_font", "agenda_cupo", "recordatorios_clase", "recordatorio_renovacion", "nubefact_ruta", "nubefact_token", "fact_serie_boleta", "fact_igv", "fact_proximo_numero", "wa_phone_id", "wa_enabled", "wa_modo", "wa_tono", "wa_instrucciones", "wa_kb", "wa_seguimiento", "wa_no_tocar", "wa_url_horarios", "wa_url_portal", "reprog_activo", "reprog_min_h", "paquetes", "modulos_off", "clases", "anticipacion_h", "web_direccion_off",
                           /* Elevate (28-jul-2026) */
@@ -18321,7 +18329,7 @@ export default {
            Deja al dueno verificar como responde su IA con el tono e instrucciones actuales, aun sin
            tener el numero conectado (Meta en revision). Usa la MISMA IA del webhook. Solo el dueno. */
         if (path === "/app/api/admin/wa/probar" && request.method === "POST"){
-          if (!esDueno) return json({ error: "El asistente lo configura el dueno." }, 403);
+          if (!esDueno) return json({ error: "El asistente lo configura el dueño." }, 403);
           const b = await request.json().catch(() => ({}));
           const texto = String(b.texto || "").trim().slice(0, 500);
           const nombre = String(b.nombre || "").trim().slice(0, 60);
@@ -18344,7 +18352,7 @@ export default {
            pausar la IA. Solo el dueno. Responder a mano PAUSA la IA en ese chat (regla de oro del
            bot viejo de MVT: si el humano habla, el bot se calla). ===== */
         if (path === "/app/api/admin/wa/chats" && request.method === "GET"){
-          if (!esDueno) return json({ error: "Solo el dueno" }, 403);
+          if (!esDueno) return json({ error: "Solo el dueño" }, 403);
           await ensureWaHiloSchema(env);
           const { results } = await env.DB.prepare(
             "SELECT c.telefono, COALESCE(c.nombre,'') AS nombre, COALESCE(c.pausa,'') AS pausa, c.actualizado, COALESCE(c.ultimo_in,'') AS ultimo_in, COALESCE(c.ultimo_out,'') AS ultimo_out, " +
@@ -18355,22 +18363,22 @@ export default {
           return json({ ok: true, chats: results || [] });
         }
         if (path === "/app/api/admin/wa/chat" && request.method === "GET"){
-          if (!esDueno) return json({ error: "Solo el dueno" }, 403);
+          if (!esDueno) return json({ error: "Solo el dueño" }, 403);
           const telC = String(url.searchParams.get("telefono") || "").replace(/\D/g, "");
-          if (!telC) return json({ error: "manda telefono" }, 400);
+          if (!telC) return json({ error: "manda teléfono" }, 400);
           const hilo = await waHiloCargar(env, tid, telC, 80);
           const conv = await waConvDe(env, tid, telC);
           const leadC = await env.DB.prepare("SELECT id, nombre, etapa, nota FROM leads WHERE tenant_id = ?1 AND whatsapp = ?2").bind(tid, telC).first().catch(() => null);
           return json({ ok: true, hilo, conv: conv || null, lead: leadC || null, ventana_abierta: waVentanaServicioAbierta(conv && conv.ultimo_in), ultimo_in: (conv && conv.ultimo_in) || "" });
         }
         if (path === "/app/api/admin/wa/responder" && request.method === "POST"){
-          if (!esDueno) return json({ error: "Solo el dueno" }, 403);
+          if (!esDueno) return json({ error: "Solo el dueño" }, 403);
           const bR = await request.json().catch(() => ({}));
           const telR = String(bR.telefono || "").replace(/\D/g, "");
           const textoR = String(bR.texto || "").trim().slice(0, 1000);
-          if (!telR || !textoR) return json({ error: "manda telefono y texto" }, 400);
+          if (!telR || !textoR) return json({ error: "manda teléfono y texto" }, 400);
           const cfgR = await loadConfig(env, tid);
-          if (!cfgR.wa_phone_id) return json({ error: "Esta academia no tiene su numero conectado a la API de WhatsApp." }, 400);
+          if (!cfgR.wa_phone_id) return json({ error: "Esta academia no tiene su número conectado a la API de WhatsApp." }, 400);
           const convR = await waConvDe(env, tid, telR);
           const abiertaR = waVentanaServicioAbierta(convR && convR.ultimo_in);
           let envioR, modoR = "texto", textoHiloR = textoR, notaR = "";
@@ -18399,26 +18407,26 @@ export default {
           return json({ ok: envioR.ok, modo: modoR, wamid: envioR.wamid || "", error: envioR.error || "", nota: notaR }, envioR.ok ? 200 : 502);
         }
         if (path === "/app/api/admin/wa/pausa" && request.method === "POST"){
-          if (!esDueno) return json({ error: "Solo el dueno" }, 403);
+          if (!esDueno) return json({ error: "Solo el dueño" }, 403);
           const bP = await request.json().catch(() => ({}));
           const telP = String(bP.telefono || "").replace(/\D/g, "");
-          if (!telP) return json({ error: "manda telefono" }, 400);
+          if (!telP) return json({ error: "manda teléfono" }, 400);
           const on = String(bP.pausa || "") === "on";
           await waPausaSet(env, tid, telP, on);
           return json({ ok: true, telefono: telP, pausa: on ? "on" : "" });
         }
         if (path === "/app/api/admin/wa/borrar-chat" && request.method === "POST"){
-          if (!esDueno) return json({ error: "Solo el dueno" }, 403);
+          if (!esDueno) return json({ error: "Solo el dueño" }, 403);
           const bB = await request.json().catch(() => ({}));
           const telB = String(bB.telefono || "").replace(/\D/g, "");
-          if (!telB) return json({ error: "manda telefono" }, 400);
+          if (!telB) return json({ error: "manda teléfono" }, 400);
           for (const q of ["DELETE FROM wa_hilo WHERE tenant_id = ?1 AND telefono = ?2", "DELETE FROM wa_conv WHERE tenant_id = ?1 AND telefono = ?2", "DELETE FROM wa_aviso WHERE tenant_id = ?1 AND telefono = ?2", "DELETE FROM wa_seguimiento WHERE tenant_id = ?1 AND telefono = ?2"]){
             await env.DB.prepare(q).bind(tid, telB).run().catch(() => {});
           }
           return json({ ok: true });
         }
         if (path === "/app/api/admin/wa/sugerencias" && request.method === "GET"){
-          if (!esDueno) return json({ error: "Solo el dueno." }, 403);
+          if (!esDueno) return json({ error: "Solo el dueño." }, 403);
           await ensureWaSugSchema(env);
           const { results } = await env.DB.prepare(
             "SELECT id, telefono, nombre, mensaje, borrador, creado FROM wa_sugerencia WHERE tenant_id = ?1 AND estado = 'pendiente' ORDER BY creado DESC LIMIT 50"
@@ -18426,7 +18434,7 @@ export default {
           return json({ ok: true, sugerencias: results || [] });
         }
         if (path === "/app/api/admin/wa/sugerencias" && request.method === "POST"){
-          if (!esDueno) return json({ error: "Solo el dueno." }, 403);
+          if (!esDueno) return json({ error: "Solo el dueño." }, 403);
           await ensureWaSugSchema(env);
           const b = await request.json().catch(() => ({}));
           const id = String(b.id || "").trim();
@@ -18461,14 +18469,14 @@ export default {
             await env.DB.prepare("DELETE FROM recursos WHERE id = ?1 AND tenant_id = ?2").bind(idRec, tid).run();
             return json({ ok: true });
           }
-          return json({ error: "Accion no valida" }, 400);
+          return json({ error: "Acción no válida" }, 400);
         }
 
         /* -------- Subida de archivos: sin R2 -> "no disponible en el trial" -------- */
         if (path === "/app/api/admin/recurso/archivo" && request.method === "POST"){
           if (!env.RECURSOS_R2) return json({ error: "No disponible en el trial." }, 501);
           const form = await request.formData().catch(() => null);
-          if (!form) return json({ error: "Formulario invalido" }, 400);
+          if (!form) return json({ error: "Formulario inválido" }, 400);
           const archivo = form.get("archivo");
           const titulo = String(form.get("titulo") || "").trim();
           const descripcion = String(form.get("descripcion") || "").trim().slice(0, 300);
@@ -18479,7 +18487,7 @@ export default {
           const esArchivo = archivo && typeof archivo !== "string" && typeof archivo.arrayBuffer === "function";
           const ext = esArchivo ? extArchivo(archivo.name) : null;
           if (!ext || archivo.size > 25 * 1024 * 1024){
-            return json({ error: "Solo PDFs, audios (mp3/m4a/ogg/wav) o imagenes (png/jpg) de hasta 25 MB." }, 400);
+            return json({ error: "Solo PDFs, audios (mp3/m4a/ogg/wav) o imágenes (png/jpg) de hasta 25 MB." }, 400);
           }
 
           const key = crypto.randomUUID() + "." + ext;
@@ -18496,12 +18504,12 @@ export default {
         if (path === "/app/api/admin/perfil/foto" && request.method === "POST"){
           if (!env.RECURSOS_R2) return json({ error: "No disponible en el trial." }, 501);
           const form = await request.formData().catch(() => null);
-          if (!form) return json({ error: "Formulario invalido" }, 400);
+          if (!form) return json({ error: "Formulario inválido" }, 400);
           const archivo = form.get("archivo");
           const esArchivo = archivo && typeof archivo !== "string" && typeof archivo.arrayBuffer === "function";
           const ext = esArchivo ? extArchivo(archivo.name) : null;
           if (!ext || !/^(png|jpg|jpeg)$/.test(ext) || archivo.size > 8 * 1024 * 1024){
-            return json({ error: "Solo imagenes (png/jpg) de hasta 8 MB." }, 400);
+            return json({ error: "Solo imágenes (png/jpg) de hasta 8 MB." }, 400);
           }
           const key = crypto.randomUUID() + "." + ext;
           await env.RECURSOS_R2.put(key, archivo, {
@@ -18523,10 +18531,10 @@ export default {
            podía auto-subirse la suya, pero José quiere ponerlas él desde su cuenta. Mismo patrón
            R2 que perfil/foto; escribe profesores.foto (lo que pintan portal y web pública). */
         if (path === "/app/api/admin/profesores/foto" && request.method === "POST"){
-          if (!esDueno) return json({ error: "Las fotos del equipo las maneja el dueno." }, 403);
+          if (!esDueno) return json({ error: "Las fotos del equipo las maneja el dueño." }, 403);
           if (!env.RECURSOS_R2) return json({ error: "No disponible en el trial." }, 501);
           const form = await request.formData().catch(() => null);
-          if (!form) return json({ error: "Formulario invalido" }, 400);
+          if (!form) return json({ error: "Formulario inválido" }, 400);
           const pidFoto = String(form.get("profesor_id") || "").trim();
           const profFila = pidFoto ? await env.DB.prepare(
             "SELECT id, foto FROM profesores WHERE id = ?1 AND tenant_id = ?2"
@@ -18536,7 +18544,7 @@ export default {
           const esArchivo = archivo && typeof archivo !== "string" && typeof archivo.arrayBuffer === "function";
           const ext = esArchivo ? extArchivo(archivo.name) : null;
           if (!ext || !/^(png|jpg|jpeg)$/.test(ext) || archivo.size > 8 * 1024 * 1024){
-            return json({ error: "Solo imagenes (png/jpg) de hasta 8 MB." }, 400);
+            return json({ error: "Solo imágenes (png/jpg) de hasta 8 MB." }, 400);
           }
           const key = crypto.randomUUID() + "." + ext;
           await env.RECURSOS_R2.put(key, archivo, {
@@ -18554,7 +18562,7 @@ export default {
 
         /* Logo de la academia (branding del portal): mismo patron que la foto de perfil. Con valor vacio, lo quita. */
         if (path === "/app/api/admin/marca/logo" && request.method === "POST"){
-          if (!esDueno) return json({ error: "La marca de la academia la maneja el dueno." }, 403);
+          if (!esDueno) return json({ error: "La marca de la academia la maneja el dueño." }, 403);
           if (!env.RECURSOS_R2) return json({ error: "No disponible en el trial." }, 501);
           const cfgPrev = await loadConfig(env, tid);
           const borrarPrevio = async () => {
@@ -18572,12 +18580,12 @@ export default {
             return json({ ok: true, url: "" });
           }
           const form = await request.formData().catch(() => null);
-          if (!form) return json({ error: "Formulario invalido" }, 400);
+          if (!form) return json({ error: "Formulario inválido" }, 400);
           const archivo = form.get("archivo");
           const esArchivo = archivo && typeof archivo !== "string" && typeof archivo.arrayBuffer === "function";
           const ext = esArchivo ? extArchivo(archivo.name) : null;
           if (!ext || !/^(png|jpg|jpeg)$/.test(ext) || archivo.size > 8 * 1024 * 1024){
-            return json({ error: "Solo imagenes (png/jpg) de hasta 8 MB." }, 400);
+            return json({ error: "Solo imágenes (png/jpg) de hasta 8 MB." }, 400);
           }
           const key = crypto.randomUUID() + "." + ext;
           await env.RECURSOS_R2.put(key, archivo, {
@@ -18594,7 +18602,7 @@ export default {
         if (path === "/app/api/admin/ejercicio/archivo" && request.method === "POST"){
           if (!env.RECURSOS_R2) return json({ error: "No disponible en el trial." }, 501);
           const form = await request.formData().catch(() => null);
-          if (!form) return json({ error: "Formulario invalido" }, 400);
+          if (!form) return json({ error: "Formulario inválido" }, 400);
           const archivo = form.get("archivo");
           const titulo = String(form.get("titulo") || "").trim();
           const cursos = ["Todos"].concat(cursosDeCfg(await loadConfig(env, tid)));
@@ -18604,7 +18612,7 @@ export default {
           const esArchivo = archivo && typeof archivo !== "string" && typeof archivo.arrayBuffer === "function";
           const ext = esArchivo ? extArchivo(archivo.name) : null;
           if (!ext || archivo.size > 25 * 1024 * 1024){
-            return json({ error: "Solo audios (mp3/m4a/ogg/wav), PDF o imagenes (png/jpg) de hasta 25 MB." }, 400);
+            return json({ error: "Solo audios (mp3/m4a/ogg/wav), PDF o imágenes (png/jpg) de hasta 25 MB." }, 400);
           }
           const key = crypto.randomUUID() + "." + ext;
           const nombreLimpio = nombreArchivoLimpio(archivo.name);
@@ -18620,11 +18628,11 @@ export default {
         if (path === "/app/api/admin/ejercicio/carpeta" && request.method === "POST"){
           if (!env.RECURSOS_R2) return json({ error: "No disponible en el trial." }, 501);
           const form = await request.formData().catch(() => null);
-          if (!form) return json({ error: "Formulario invalido" }, 400);
+          if (!form) return json({ error: "Formulario inválido" }, 400);
           const archivos = form.getAll("archivos").filter(a => a && typeof a !== "string" && typeof a.arrayBuffer === "function");
           const rutas = form.getAll("rutas").map(r => String(r || ""));
-          if (!archivos.length) return json({ error: "No llego ningun archivo" }, 400);
-          if (archivos.length > 200) return json({ error: "Maximo 200 archivos por carpeta" }, 400);
+          if (!archivos.length) return json({ error: "No llegó ningún archivo" }, 400);
+          if (archivos.length > 200) return json({ error: "Máximo 200 archivos por carpeta" }, 400);
           const cursos = ["Todos"].concat(cursosDeCfg(await loadConfig(env, tid)));
           const curso = cursos.includes(form.get("curso")) ? form.get("curso") : "Todos";
           let subidos = 0, saltados = 0;
@@ -18664,14 +18672,14 @@ export default {
             }
             return json({ ok: true });
           }
-          return json({ error: "Accion invalida" }, 400);
+          return json({ error: "Acción inválida" }, 400);
         }
 
         /* -------- Adjuntos de tarea por clase -------- */
         if (path === "/app/api/admin/registro/audio" && request.method === "POST"){
           if (!env.RECURSOS_R2) return json({ error: "No disponible en el trial." }, 501);
           const form = await request.formData().catch(() => null);
-          if (!form) return json({ error: "Formulario invalido" }, 400);
+          if (!form) return json({ error: "Formulario inválido" }, 400);
           const registroId = String(form.get("registro_id") || "");
           const reg = await env.DB.prepare("SELECT id, alumno_id, COALESCE(tarea_audio,'') AS tarea_audio FROM registro WHERE id = ?1 AND tenant_id = ?2").bind(registroId, tid).first();
           if (!reg) return json({ error: "Registro no encontrado" }, 404);
@@ -18701,13 +18709,13 @@ export default {
           }
 
           if (lista.length >= 8){
-            return json({ error: "Maximo 8 adjuntos por clase. Quita uno primero." }, 400);
+            return json({ error: "Máximo 8 adjuntos por clase. Quita uno primero." }, 400);
           }
           const archivo = form.get("archivo");
           const esArchivo = archivo && typeof archivo !== "string" && typeof archivo.arrayBuffer === "function";
           const ext = esArchivo ? extArchivo(archivo.name) : null;
           if (!ext || archivo.size > 25 * 1024 * 1024){
-            return json({ error: "Solo audios (mp3/m4a/ogg/wav), PDF o imagenes (png/jpg) de hasta 25 MB." }, 400);
+            return json({ error: "Solo audios (mp3/m4a/ogg/wav), PDF o imágenes (png/jpg) de hasta 25 MB." }, 400);
           }
 
           const key = crypto.randomUUID() + "." + ext;
@@ -18722,7 +18730,7 @@ export default {
 
         /* -------- Chat: borrar mensaje / listar hilos -------- */
         if (path === "/app/api/admin/chat/borrar" && request.method === "POST"){
-          if (!esDueno) return json({ error: "Solo el dueno modera el chat." }, 403);
+          if (!esDueno) return json({ error: "Solo el dueño modera el chat." }, 403);
           const b = await request.json().catch(() => ({}));
           await env.DB.prepare("DELETE FROM chat_mensajes WHERE id = ?1 AND tenant_id = ?2").bind(String(b.id || ""), tid).run();
           return json({ ok: true });
@@ -18750,7 +18758,7 @@ export default {
           if (!alumnoId) return json({ error: "Falta alumno_id" }, 400);
           if (!esDueno){
             const alT = await env.DB.prepare("SELECT profesor_id FROM alumnos WHERE id = ?1 AND tenant_id = ?2").bind(alumnoId, tid).first();
-            if (!alT || alT.profesor_id !== profeActorId) return json({ error: "Ese alumno no esta asignado a ti." }, 403);
+            if (!alT || alT.profesor_id !== profeActorId) return json({ error: "Ese alumno no está asignado a ti." }, 403);
           }
           const cuenta = await env.DB.prepare("SELECT id FROM cuentas WHERE alumno_id = ?1 AND tenant_id = ?2").bind(alumnoId, tid).first();
           if (!cuenta) return json({ ok: true, enviados: 0 });
@@ -18799,7 +18807,7 @@ export default {
             const r = await confirmarCompra(env, tid, t, compra);
             return r.ok ? json({ ok: true }) : json({ error: r.error }, r.status || 400);
           }
-          return json({ error: "Accion no valida" }, 400);
+          return json({ error: "Acción no válida" }, 400);
         }
 
         if (path === "/app/api/admin/cuenta" && request.method === "POST"){
@@ -18817,14 +18825,14 @@ export default {
             if (alumnoId){
               const al = await env.DB.prepare("SELECT id, profesor_id FROM alumnos WHERE id = ?1 AND tenant_id = ?2").bind(alumnoId, tid).first();
               if (!al) return json({ error: "Alumno no encontrado" }, 404);
-              if (!esDueno && al.profesor_id !== profeActorId) return json({ error: "Ese alumno no esta asignado a ti." }, 403);
+              if (!esDueno && al.profesor_id !== profeActorId) return json({ error: "Ese alumno no está asignado a ti." }, 403);
             }
             await env.DB.prepare("UPDATE cuentas SET alumno_id = ?1 WHERE id = ?2 AND tenant_id = ?3").bind(alumnoId, cu.id, tid).run();
             return json({ ok: true });
           }
           if (b.accion === "reset"){
             const nueva = String(b.password || "");
-            if (nueva.length < 8) return json({ error: "La contrasena necesita minimo 8 caracteres." }, 400);
+            if (nueva.length < 8) return json({ error: "La contraseña necesita mínimo 8 caracteres." }, 400);
             const salt = randHex(16);
             const hash = await hashPass(nueva, salt);
             await env.DB.batch([
@@ -18841,7 +18849,7 @@ export default {
             ]);
             return json({ ok: true });
           }
-          return json({ error: "Accion no valida" }, 400);
+          return json({ error: "Acción no válida" }, 400);
         }
 
         return json({ error: "No encontrado" }, 404);
