@@ -42,6 +42,16 @@ const MARCA = {
   leadMagnetPdf: "/recursos/composicion-primera-cancion.pdf",
 };
 
+/* Las reuniones comerciales viven en la misma agenda para no duplicar calendarios,
+   pero no pertenecen al tenant ProfesorMVT. Su identidad y su destinatario salen de
+   esta marca explícita; nunca se infieren de una cuenta/alumno. */
+const WEBEXPRESS_REUNION = {
+  nombre: "Web Express",
+  dominio: "https://webexpress.pe",
+  correo: "hola@webexpress.pe",
+  responderA: "andres@webexpress.pe",
+};
+
 const PAQUETES = {
   "Paquete 4":    { clases: 4,  reprog: 2 },
   "Paquete 8":    { clases: 8,  reprog: 3 },
@@ -617,7 +627,7 @@ async function correosDeAlumnos(env){
   return set;
 }
 
-async function enviarCorreo(env, { to, subject, html, text, from }){
+async function enviarCorreo(env, { to, subject, html, text, from, replyTo, ignorarCorteAlumnos }){
   if (!env.RESEND_API_KEY || !to || !subject) return false;
   /* 🔒 23-ago-2026 · EL CORTE DEL CAMBIO DE GUARDIA. Con el portal ya en Batuta, los
      alumnos reciben sus recordatorios, renovaciones y avisos DESDE ALLÁ. Si los motores
@@ -626,7 +636,7 @@ async function enviarCorreo(env, { to, subject, html, text, from }){
      esa lista envejece, y el motor que alguien agregue mañana nacería encendido.
      Solo se callan los correos A LOS ALUMNOS: los avisos a Andrés y los correos a
      interesados (que no están en Batuta) siguen saliendo igual. */
-  if (await portalMigrado(env)){
+  if (!ignorarCorteAlumnos && await portalMigrado(env)){
     const dests = (Array.isArray(to) ? to : [to]).map(x => String(x || "").toLowerCase().trim());
     const migrados = await correosDeAlumnos(env);
     const quedan = dests.filter(d => !migrados.has(d));
@@ -645,7 +655,8 @@ async function enviarCorreo(env, { to, subject, html, text, from }){
         to: Array.isArray(to) ? to : [to],
         subject: subject,
         html: html || undefined,
-        text: text || (html ? html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim() : undefined)
+        text: text || (html ? html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim() : undefined),
+        reply_to: replyTo || undefined
       })
     });
     return r.ok;
@@ -3198,6 +3209,74 @@ async function correoRecordatorioClase(env, cuenta, reserva, cuando){
   return enviarCorreo(env, { to: cuenta.email, subject: titulo + " — " + MARCA.nombre, html: html });
 }
 
+/* Recordatorio transaccional de una reunión comercial de Web Express. Estas reservas
+   tienen alumno_id NULL por diseño; `contacto` es el correo validado al agendar. */
+async function correoRecordatorioReunion(env, reserva, cuando){
+  const correo = String((reserva && reserva.contacto) || "").trim().toLowerCase();
+  if (!correo) return false;
+  const p = limaParts(new Date(Date.parse(reserva.inicio_utc)));
+  const dias = ["domingo","lunes","martes","miércoles","jueves","viernes","sábado"];
+  const horaLima = dias[p.dow] + " " + hhmm(p) + " (hora Lima)";
+  const titulo = cuando === "24h" ? "Tu reunión con Web Express es mañana" : "Tu reunión con Web Express es en un par de horas";
+  const intro = cuando === "24h"
+    ? "Te recuerdo que mañana tenemos nuestra reunión de 20 minutos."
+    : "Te recuerdo que nuestra reunión de 20 minutos empieza pronto.";
+  const html =
+    '<div style="font-family:Arial,Helvetica,sans-serif;max-width:480px;margin:0 auto;color:#16171a;font-size:15px;line-height:1.6">' +
+      '<p>Hola,</p>' +
+      '<p>' + intro + '</p>' +
+      '<p style="font-size:18px;font-weight:bold;color:#16171a;margin:14px 0">' + horaLima + '</p>' +
+      '<p>El enlace para entrar está en la invitación de Google Calendar. Si necesitas moverla, responde a este correo.</p>' +
+      '<p>Nos vemos,<br><b>Andrés Salamé</b><br>Web Express</p>' +
+      '<p style="font-size:12px;color:#777;margin-top:24px"><a href="' + WEBEXPRESS_REUNION.dominio + '" style="color:#16171a">webexpress.pe</a></p>' +
+    '</div>';
+  return enviarCorreo(env, {
+    to: correo,
+    subject: titulo,
+    html: html,
+    from: { name: "Andrés de Web Express", email: WEBEXPRESS_REUNION.correo },
+    replyTo: WEBEXPRESS_REUNION.responderA,
+    /* El corte de alumnos pertenece a MVT/Batuta. Una persona que además agenda con
+       Web Express sigue necesitando el recordatorio transaccional de esta reunión. */
+    ignorarCorteAlumnos: true
+  });
+}
+
+/* Riel separado: no hace JOIN con cuentas ni alumnos y exige la marca de origen que
+   escribe /api/agenda/reunion. Así una reserva de otro producto no recibe copy Web Express. */
+async function procesarRecordatoriosReunion(env){
+  const now = Date.now();
+  const ventana24 = new Date(now + 24 * 3600000).toISOString();
+  const ventana2  = new Date(now + 2 * 3600000).toISOString();
+  const ahoraIso  = new Date(now).toISOString();
+  let enviados = 0;
+
+  const r24 = (await env.DB.prepare(
+    "SELECT r.* FROM reservas r WHERE r.tipo = 'reunion' AND r.nota LIKE 'Web Express · %' AND r.estado = 'reservada' AND r.aviso_24 = 0 AND r.inicio_utc > ?1 AND r.inicio_utc <= ?2 AND r.contacto IS NOT NULL AND r.contacto != ''"
+  ).bind(ventana2, ventana24).all()).results || [];
+  for (const r of r24){
+    const salio = await correoRecordatorioReunion(env, r, "24h");
+    if (salio){
+      await env.DB.prepare("UPDATE reservas SET aviso_24 = 1 WHERE id = ?1").bind(r.id).run();
+      enviados++;
+    }
+  }
+
+  const r2 = (await env.DB.prepare(
+    "SELECT r.* FROM reservas r WHERE r.tipo = 'reunion' AND r.nota LIKE 'Web Express · %' AND r.estado = 'reservada' AND r.aviso_2 = 0 AND r.inicio_utc > ?1 AND r.inicio_utc <= ?2 AND r.contacto IS NOT NULL AND r.contacto != ''"
+  ).bind(ahoraIso, ventana2).all()).results || [];
+  for (const r of r2){
+    const salio = await correoRecordatorioReunion(env, r, "2h");
+    if (salio){
+      await env.DB.prepare("UPDATE reservas SET aviso_2 = 1 WHERE id = ?1").bind(r.id).run();
+      enviados++;
+    }
+  }
+  /* Si Resend falla, el flag queda en cero y la siguiente corrida reintenta. No se usa el
+     estado de salud global de MVT: dos waitUntil paralelos podrían pisarse entre marcas. */
+  return enviados;
+}
+
 /* Cron: manda el recordatorio T-24h y T-2h a las clases reservadas, una sola vez
    cada uno (flags aviso_24 / aviso_2). Pensado para correr cada hora. */
 async function procesarRecordatoriosClase(env){
@@ -3211,7 +3290,7 @@ async function procesarRecordatoriosClase(env){
   // T-24h: clases que caen dentro de las próximas 24h (y a más de 2h) sin aviso de 24h.
   const r24 = (await env.DB.prepare(
     "SELECT r.*, c.id AS _cuenta_id, c.email AS _email, c.nombre AS _nombre FROM reservas r JOIN cuentas c ON c.alumno_id = r.alumno_id " +
-    "WHERE r.estado = 'reservada' AND r.aviso_24 = 0 AND r.inicio_utc > ?1 AND r.inicio_utc <= ?2 AND c.email IS NOT NULL AND c.email != ''"
+    "WHERE r.tipo != 'reunion' AND r.estado = 'reservada' AND r.aviso_24 = 0 AND r.inicio_utc > ?1 AND r.inicio_utc <= ?2 AND c.email IS NOT NULL AND c.email != ''"
   ).bind(ventana2, ventana24).all()).results || [];
   for (const r of r24){
     const ok = await correoRecordatorioClase(env, { email: r._email, nombre: r._nombre }, r, "24h");
@@ -3221,7 +3300,7 @@ async function procesarRecordatoriosClase(env){
   // T-2h: clases que caen dentro de las próximas 2h sin aviso de 2h.
   const r2 = (await env.DB.prepare(
     "SELECT r.*, c.id AS _cuenta_id, c.email AS _email, c.nombre AS _nombre FROM reservas r JOIN cuentas c ON c.alumno_id = r.alumno_id " +
-    "WHERE r.estado = 'reservada' AND r.aviso_2 = 0 AND r.inicio_utc > ?1 AND r.inicio_utc <= ?2 AND c.email IS NOT NULL AND c.email != ''"
+    "WHERE r.tipo != 'reunion' AND r.estado = 'reservada' AND r.aviso_2 = 0 AND r.inicio_utc > ?1 AND r.inicio_utc <= ?2 AND c.email IS NOT NULL AND c.email != ''"
   ).bind(ahoraIso, ventana2).all()).results || [];
   for (const r of r2){
     const ok = await correoRecordatorioClase(env, { email: r._email, nombre: r._nombre }, r, "2h");
@@ -3230,7 +3309,7 @@ async function procesarRecordatoriosClase(env){
   // T-1h: push (solo) "tu clase es en 1 hora". El correo imminente sigue siendo el de 2h.
   const r1 = (await env.DB.prepare(
     "SELECT r.*, c.id AS _cuenta_id FROM reservas r JOIN cuentas c ON c.alumno_id = r.alumno_id " +
-    "WHERE r.estado = 'reservada' AND r.aviso_1h = 0 AND r.inicio_utc > ?1 AND r.inicio_utc <= ?2"
+    "WHERE r.tipo != 'reunion' AND r.estado = 'reservada' AND r.aviso_1h = 0 AND r.inicio_utc > ?1 AND r.inicio_utc <= ?2"
   ).bind(ahoraIso, ventana1).all()).results || [];
   for (const r of r1){
     try { await avisarPushAlumno(env, r._cuenta_id, { title: "Tu clase es en 1 hora ⏰", body: "Arrancamos a las " + hhmm(limaParts(new Date(Date.parse(r.inicio_utc)))) + " (hora Lima). Toca para ver tu agenda.", url: MARCA.dominio + "/alumnos/#agenda" }); } catch (e) {}
@@ -6551,6 +6630,8 @@ export default {
     try { await ensureSchema(env); } catch (e) {}
     // Recordatorios de clase: cada hora (necesario para el T-2h).
     ctx.waitUntil(procesarRecordatoriosClase(env).catch(function(){}));
+    // Reuniones Web Express: riel propio porque no tienen alumno ni cuenta de MVT.
+    ctx.waitUntil(procesarRecordatoriosReunion(env).catch(function(){}));
     /* Asistencia automática: en CADA corrida (cada hora). Si esperara al cron diario, la clase
        de las 7pm quedaría "reservada" toda la noche y el saldo del alumno mentiría hasta el día
        siguiente. La función no hace nada si el ajuste está apagado. */
