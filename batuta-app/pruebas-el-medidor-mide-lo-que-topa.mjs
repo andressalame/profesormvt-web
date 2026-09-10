@@ -120,8 +120,14 @@ comprobar("existe `capAlumnosDe` (packs + cortesía + alum_extra)", !!cortarFn(S
 comprobar("el candado del alta lo usa", /const capAl = await capAlumnosDe\(env, tid, t\.plan\);/.test(SRC));
 comprobar("el candado cuenta el total con `totalAlumnosDe`", /const totActual = await totalAlumnosDe\(env, tid\);/.test(SRC));
 comprobar("nadie volvió a sumar `alum_extra` a mano", !/parseInt\(cfgAl\.alum_extra/.test(SRC));
-const usosMe = (SRC.match(/limites: \{ alumnos: await ([a-zA-Z]+)\(/) || [])[1];
-comprobar("`/t/me` publica el tope con `capAlumnosDe`", usosMe === "capAlumnosDe", "usa " + usosMe);
+/* El cobrador del 10-set comparte el mismo objeto de límites con el medidor y sus
+   alertas. Aceptamos la forma inline histórica o la variable común, pero en ambos
+   casos exigimos que alumnos venga de capAlumnosDe y que ESA variable se publique. */
+const inlineMe = /limites: \{ alumnos: await capAlumnosDe\(env, t\.id, t\.plan\)/.test(SRC);
+const comunMe = /const limitesPacksMe = \{[\s\S]{0,260}alumnos: await capAlumnosDe\(env, t\.id, t\.plan\)/.test(SRC) &&
+  /limites: limitesPacksMe/.test(SRC);
+comprobar("`/t/me` publica el tope con `capAlumnosDe`", inlineMe || comunMe,
+  inlineMe ? "inline" : (comunMe ? "objeto común" : "no se encontró el origen"));
 const usosApi = /alumnos: \{ activos, total: totAl, tope: await capAlumnosDe/.test(SRC);
 comprobar("la API v1 / MCP publica el mismo tope", usosApi);
 

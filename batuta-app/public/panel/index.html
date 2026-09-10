@@ -1607,11 +1607,13 @@ button[data-ayuda],a[data-ayuda],select[data-ayuda],input[data-ayuda],label[data
       <h2>Tu Batuta</h2>
       <p class="hint">Batuta es <b>gratis para siempre</b>: 20 alumnos, 1 profesor y 5 conversaciones del asistente al mes. Cuando necesites más, agregas un pack y pagas solo eso. Puedes soltarlo cuando quieras: no se borra nada, solo dejas de dar de alta nuevos hasta que bajes o vuelvas a comprar. El tope cuenta solo a tus <b>alumnos activos</b> (con plan vigente o con clase en los últimos 60 días): las fichas dormidas no cuentan y tampoco se borran.</p>
       <div id="packsUso" class="packs-uso"></div>
+      <div id="packsAlertas"></div>
       <div id="packsCat"></div>
       <div class="packs-pie">
         <div>Tu cobro mensual: <b id="packsTotal">S/0</b> <span class="hint" id="packsNota" style="margin:0;"></span></div>
         <button class="btn" id="btnPacksAplicar" type="button" disabled>Aplicar cambios</button>
       </div>
+      <label class="packs-email-opt"><input id="packsEmailOpt" type="checkbox" /> Avísame por correo cuando mi academia llegue al 80% de un límite.</label>
     </div>
     <div class="group">
       <h2>Recomienda Batuta</h2>
@@ -11545,6 +11547,22 @@ function packsPintarUso(){
     return '<div class="pu'+(f.usa>=f.max?' lleno':'')+'"><b>'+f.usa+' de '+f.max+'</b><span>'+f.t+(f.mes?' este mes':'')+'</span><i><em style="width:'+pct+'%"></em></i></div>';
   }).join("");
 }
+function packsPintarAlertas(alertas){
+  var cont=el("packsAlertas"); if(!cont) return;
+  cont.innerHTML=(alertas||[]).map(function(a){
+    return '<div class="pack-alerta"><div><b>Ya usas '+a.uso+' de '+a.tope+'.</b> Para seguir sumando alumnos o profesores, el pack que mejor calza es <b>'+esc(a.pack)+' por S/'+a.precio+'</b>.</div>'+
+      '<button class="btn ghost sm" type="button" data-pack-recomendado="'+esc(a.pack_id)+'">Ver packs</button></div>';
+  }).join("");
+  Array.prototype.forEach.call(cont.querySelectorAll("[data-pack-recomendado]"),function(b){
+    b.addEventListener("click",function(){
+      var k=b.getAttribute("data-pack-recomendado");
+      if(!PACKS_CAT[k]) return;
+      PACKS_EDIT[k]=(PACKS_EDIT[k]||0)+1;
+      packsPintarCat(); packsPintarUso(); packsPintarPie();
+      try{ el("packsCat").scrollIntoView({behavior:"smooth",block:"center"}); }catch(e){}
+    });
+  });
+}
 function packsPintarCat(){
   var cont=el("packsCat"); if(!cont) return;
   var fams=[
@@ -11589,10 +11607,21 @@ function refrescarPlan(){
        (los que estan al dia) el medidor decia "61 de 2020" con 1445 alumnas dentro. */
     PACKS_USO={alumnos:(d.alumnos_total!==undefined&&d.alumnos_total!==null)?d.alumnos_total:(d.alumnos_activos||0),
                profes:(d.asientos&&d.asientos.usados)||1, ia:(d.wa_cupo&&d.wa_cupo.usados)||0};
+    var opt=el("packsEmailOpt"); if(opt) opt.checked=!!d.packs.aviso_packs_email;
     try{ var af=el("afLink"); if(af && d.slug){ af.value=location.origin+"/app/registro?ref="+d.slug; } }catch(e){}
-    packsPintarCat(); packsPintarUso(); packsPintarPie();
+    packsPintarCat(); packsPintarUso(); packsPintarAlertas(d.packs.alertas||[]); packsPintarPie();
   }).catch(function(){});
 }
+(function(){
+  var opt=el("packsEmailOpt"); if(!opt) return;
+  opt.addEventListener("change",function(){
+    opt.disabled=true;
+    apiPost("/app/api/admin/config",{aviso_packs_email:opt.checked?"on":""})
+      .then(function(){ toast(opt.checked?"Te avisaremos al llegar al 80%":"Avisos de packs por correo apagados"); })
+      .catch(function(e){ opt.checked=!opt.checked; toast((e&&e.message)||"No se pudo guardar"); })
+      .then(function(){ opt.disabled=false; });
+  });
+})();
 (function(){
   var b=el("btnPacksAplicar"); if(!b) return;
   b.addEventListener("click",function(){
@@ -12701,6 +12730,10 @@ window.batutaInit = batutaInit;
 .packs-uso .pu i{display:block;height:5px;border-radius:99px;background:var(--line);margin-top:7px;overflow:hidden}
 .packs-uso .pu i em{display:block;height:100%;border-radius:99px;background:var(--acento)}
 .packs-uso .pu.lleno i em{background:#e8604f}
+.pack-alerta{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin:0 0 10px;padding:12px 14px;border:1px solid var(--accent);border-radius:12px;background:rgba(232,161,61,.09);font-size:.88rem;line-height:1.45}
+.pack-alerta>div{flex:1 1 260px}
+.packs-email-opt{display:flex;align-items:flex-start;gap:8px;margin-top:14px;color:var(--muted);font-size:.82rem;line-height:1.4;cursor:pointer}
+.packs-email-opt input{margin-top:2px;accent-color:var(--accent)}
 .packfam{border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:10px}
 .packfam h3{font-size:.92rem;margin:0 0 8px}
 .packrow{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:6px 0}

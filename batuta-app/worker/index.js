@@ -298,6 +298,28 @@ function textoPacks(fam, sep){
 /* El pack más barato de una familia: el que se nombra cuando alguien topa. */
 function packChico(fam){ return packsEnVenta(fam)[0]; }
 
+/* Cobrador de packs (10-set-2026). La alerta aparece al cruzar el 80% del
+   límite REAL de cada familia. Recomienda el pack vigente más chico que alcanza
+   para superar el tope actual; así nunca ofrece alumnos cuando falta IA ni cita
+   un precio escrito a mano. Función pura para compartirla con panel, cron y pruebas. */
+function alertasPacksDe(uso, limites){
+  const orden = ["alumnos", "profes", "ia"];
+  const out = [];
+  for (const fam of orden){
+    const usados = Math.max(0, Number((uso || {})[fam]) || 0);
+    const tope = Math.max(0, Number((limites || {})[fam]) || 0);
+    if (!tope || usados < Math.ceil(tope * 0.8)) continue;
+    const faltan = Math.max(1, tope - usados + 1);
+    const disponibles = packsEnVenta(fam);
+    const pack = disponibles.find(p => p.suma >= faltan) || disponibles[disponibles.length - 1];
+    if (!pack) continue;
+    const packId = Object.keys(PACKS).find(k => PACKS[k] === pack);
+    out.push({ fam, uso: usados, tope, pct: Math.round(usados * 100 / tope),
+               pack_id: packId, pack: pack.nombre, precio: pack.precio });
+  }
+  return out;
+}
+
 /* Suma packs comprados + de cortesía y devuelve los límites vivos del tenant.
    El monto mensual sale SOLO de los comprados: la cortesía no se cobra. */
 function limitesDePacks(comprados, cortesia){
@@ -2665,6 +2687,67 @@ async function enviarCorreo(env, { to, subject, html, text, from, replyTo, tenan
     // Devuelve el id de Resend (su acuse propio) cuando existe; los callers solo lo usan como truthy.
     try { const d = await r.json(); return (d && d.id) ? d.id : true; } catch (e) { return true; }
   } catch (e) { return false; }
+}
+
+/* Cobrador de packs por correo. Es marketing del propio SaaS, así que nace
+   APAGADO: solo entra quien activó `aviso_packs_email=on` dentro de Tu Batuta.
+   Se manda como máximo una familia por academia y corrida, y cada combinación
+   familia+tope+pack se sella únicamente DESPUÉS del acuse de Resend. Si el uso
+   baja del 80%, se limpia ese sello para poder avisar ante un cruce futuro real. */
+async function avisarPacksCercaDelTope(env){
+  let tenants = [];
+  try {
+    const r = await env.DB.prepare(
+      "SELECT t.* FROM tenants t JOIN config c ON c.tenant_id = t.id " +
+      "WHERE c.clave = 'aviso_packs_email' AND c.valor = 'on' AND t.estado IN ('trial','activo')"
+    ).all();
+    tenants = r.results || [];
+  } catch (e) { return 0; }
+  let enviadosN = 0;
+  for (const t of tenants){
+    if (tenantExcluidoNurture(t)) continue;
+    const [alumnos, profes, wa] = await Promise.all([
+      totalAlumnosDe(env, t.id),
+      env.DB.prepare("SELECT COUNT(*) AS n FROM profesores WHERE tenant_id = ?1 AND estado != 'suspendido'").bind(t.id).first().catch(() => null),
+      waUsoActual(env, t.id, waPlanEfectivo(t)).catch(() => ({ usados: 0, cap: BASE_LIMITES.ia }))
+    ]);
+    const limites = {
+      alumnos: await capAlumnosDe(env, t.id, t.plan),
+      profes: await maxProfesDe(env, t.id, t.plan),
+      ia: await convCapDe(env, t.id, false, t.plan)
+    };
+    const alertas = alertasPacksDe({ alumnos, profes: Number(profes && profes.n) || 1, ia: Number(wa.usados) || 0 }, limites);
+    let sellos = {};
+    try {
+      const f = await env.DB.prepare("SELECT valor FROM config WHERE tenant_id = ?1 AND clave = 'packs_alertas_enviadas'").bind(t.id).first();
+      sellos = JSON.parse((f && f.valor) || "{}") || {};
+    } catch (e) { sellos = {}; }
+    const activas = new Set(alertas.map(a => a.fam));
+    for (const fam of ["alumnos", "profes", "ia"]) if (!activas.has(fam)) delete sellos[fam];
+    const alerta = alertas.sort((a, b) => b.pct - a.pct).find(a => sellos[a.fam] !== (a.tope + ":" + a.pack_id));
+    if (!alerta){
+      await setConfigValor(env, t.id, "packs_alertas_enviadas", JSON.stringify(sellos));
+      continue;
+    }
+    const nombre = ((t.profe_nombre || "").trim().split(/\s+/)[0]) || "";
+    const hola = "Hola" + (nombre ? " " + nombre : "") + "!";
+    const cuerpo = hola + " Tu academia ya usa " + alerta.uso + " de " + alerta.tope +
+      ". Para seguir sumando alumnos o profesores, el pack que mejor calza es " + alerta.pack +
+      " por S/" + alerta.precio + " al mes. Puedes activarlo desde Batuta. Si quieres, te ayudo a elegir :)\n\n" +
+      MARCA.dominio + "/app/panel\n\nPuedes apagar estos avisos en Perfil > Tu Batuta.";
+    const ok = await enviarCorreo(env, {
+      to: t.email,
+      subject: "Tu academia está cerca del límite en Batuta",
+      text: cuerpo,
+      from: { name: "Batuta", email: "hola@batuta.lat" }
+    });
+    if (ok){
+      sellos[alerta.fam] = alerta.tope + ":" + alerta.pack_id;
+      await setConfigValor(env, t.id, "packs_alertas_enviadas", JSON.stringify(sellos));
+      enviadosN++;
+    }
+  }
+  return enviadosN;
 }
 
 /* ---------- Mercado Pago: suscripciones (preapproval). Sin MP_ACCESS_TOKEN -> degrada con gracia. ----------
@@ -12149,6 +12232,21 @@ export default {
           // Se muestra siempre (aunque la IA este apagada) para que el dueno vea su cupo del plan.
           wa_cupo = await waUsoActual(env, t.id, waPlanEfectivo(t));
         } catch (e) {}
+        const limitesPacksMe = {
+          alumnos: await capAlumnosDe(env, t.id, t.plan),
+          profes: asientos ? asientos.max : packsMe.profes,
+          ia: await convCapDe(env, t.id, false, t.plan)
+        };
+        let avisoPacksEmail = false;
+        try {
+          const f = await env.DB.prepare("SELECT valor FROM config WHERE tenant_id = ?1 AND clave = 'aviso_packs_email'").bind(t.id).first();
+          avisoPacksEmail = !!(f && f.valor === "on");
+        } catch (e) {}
+        const alertasPacksMe = actorMe.esDueno ? alertasPacksDe({
+          alumnos: totalMe,
+          profes: (asientos && asientos.usados) || 1,
+          ia: (wa_cupo && wa_cupo.usados) || 0
+        }, limitesPacksMe) : [];
         return json({
           academia: t.academia, profe_nombre: t.profe_nombre, slug: t.slug,
           demo: esTenantDemo(t),
@@ -12174,7 +12272,9 @@ export default {
             base: BASE_LIMITES,
             comprados: packsMe.comprados,
             cortesia: packsMe.cortesia,
-            limites: { alumnos: await capAlumnosDe(env, t.id, t.plan), profes: asientos ? asientos.max : packsMe.profes, ia: await convCapDe(env, t.id, false, t.plan) },
+            limites: limitesPacksMe,
+            alertas: alertasPacksMe,
+            aviso_packs_email: avisoPacksEmail,
             items: packsMe.items,
             monto_mensual: packsMe.monto,
             catalogo: PACKS   /* incluye los legado (la cortesía los nombra); el panel no los vende */
@@ -18050,6 +18150,8 @@ export default {
                           "aviso_plan_activo",
                           /* "off" apaga el rescate de compras abandonadas (15-ago-2026) */
                           "rescate_activo", "review_link", "resena_activa", "resena_min_clases",
+                          /* opt-in explícito del dueño para avisos comerciales de packs */
+                          "aviso_packs_email",
                           /* domicilio de la academia: obligatorio en los correos de campaña */
                           "direccion_fiscal",
                           /* 🔴 27-ago-2026 · Google Calendar. Estas cuatro claves NUNCA estuvieron
@@ -18943,6 +19045,7 @@ export default {
        el correo automático, después la foto de telemetría del día. */
     try { await nurtureDuenoTrabado(env); } catch (e) { console.error("nurture dueno trabado", e); }
     try { await telemetriaActivacion(env); } catch (e) { console.error("telemetria activacion", e); }
+    try { await avisarPacksCercaDelTope(env); } catch (e) { console.error("cobrador packs", e); }
     try { await recalcularPorAlumno(env); } catch (e) { console.error("recalcular por alumno", e); }
     /* Afiliados: credito automatico (diario) + riel PayPal (mes vencido, dia 1; con flag OFF solo avisa). */
     try { await aplicarCreditosAfiliados(env); } catch (e) { console.error("creditos afiliados", e); }
