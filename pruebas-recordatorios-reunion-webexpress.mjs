@@ -68,7 +68,7 @@ comprobar("los tres rieles de clase excluyen tipo reunion explícitamente",
 console.log("\n── 4. El remitente y la respuesta son de Web Express ──");
 let capturado = null;
 const fuenteCorreo =
-  "const WEBEXPRESS_REUNION = { nombre: 'Web Express', dominio: 'https://webexpress.pe', correo: 'hola@webexpress.pe', responderA: 'andres@webexpress.pe' };\n" +
+  "const WEBEXPRESS_REUNION = { nombre: 'Web Express', dominio: 'https://webexpress.pe', correo: 'andres@webexpress.pe', responderA: 'andres@webexpress.pe' };\n" +
   "function limaParts(d){ return { dow: 4, h: 10, min: 0 }; }\n" +
   "function hhmm(){ return '10:00'; }\n" +
   "async function enviarCorreo(env, datos){ globalThis.__correo = datos; return true; }\n" +
@@ -82,7 +82,7 @@ try {
   capturado = globalThis.__correo;
 } catch (e) { capturado = { error: e.message }; }
 comprobar("se manda al contacto reservado", capturado && capturado.to, "ana@negocio.pe");
-comprobar("sale como Web Express", capturado && capturado.from, { name: "Andrés de Web Express", email: "hola@webexpress.pe" });
+comprobar("sale como Web Express", capturado && capturado.from, { name: "Andrés de Web Express", email: "andres@webexpress.pe" });
 comprobar("las respuestas vuelven a Web Express", capturado && capturado.replyTo, "andres@webexpress.pe");
 comprobar("el corte de alumnos MVT no silencia una reunión de otro tenant", capturado && capturado.ignorarCorteAlumnos, true);
 comprobar("no menciona ProfesorMVT", /ProfesorMVT/.test(JSON.stringify(capturado || {})), false);

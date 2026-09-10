@@ -48,7 +48,7 @@ const MARCA = {
 const WEBEXPRESS_REUNION = {
   nombre: "Web Express",
   dominio: "https://webexpress.pe",
-  correo: "hola@webexpress.pe",
+  correo: "andres@webexpress.pe",
   responderA: "andres@webexpress.pe",
 };
 
