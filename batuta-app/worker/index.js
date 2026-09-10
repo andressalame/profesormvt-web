@@ -215,7 +215,7 @@ async function armarWebCtx(env, tenant){
      por su link directo de compra o asignados desde el panel. */
   const paqPub = { map: {}, list: paq.list.filter(n => !paq.map[n].oculto) };
   for (const nPub of paqPub.list) paqPub.map[nPub] = paq.map[nPub];
-  const mpOn = !!(tenant.mp_access_token) && (!(Number(tenant.mp_expires_at) || 0) || Number(tenant.mp_expires_at) > Date.now());
+  const mpOn = mpCobraConTarjeta(tenant);
   const cobroOn = !!(mpOn || cfg.pago_numero || cfg.bcp_cuenta || cfg.interbank_cuenta || cfg.scotia_cuenta || cfg.crypto_wallet);
   /* ¿Dónde queda? (23-ago-2026, pedido de Andrés). La página de una academia vendía clases
      con un botón de "Comprar" y no decía en ninguna parte a qué distrito ir.
@@ -1018,6 +1018,23 @@ async function mpGuardarTokens(env, tenantId, data){
   ).bind(data.access_token, data.refresh_token || "", String(data.user_id || ""), data.public_key || "", exp, tenantId).run();
 }
 /* Access token vigente del profe; refresca solo si vence en <15 dias. */
+/* 9-set-2026 · UN SOLO RIEL para «¿esta academia puede cobrar con tarjeta hoy?».
+   Vivía copiada en CINCO sitios y ninguno decía lo mismo que el cobro real: la
+   página pública de pago, la web de la academia, el checklist de arranque, el
+   editor de «Mi web» y el panel miraban `mp_expires_at` a pelo, y el portal del
+   alumno (/app/api/me) solo miraba que hubiera token. Las cinco copias además
+   daban por muerto un token vencido que `mpTokenProfe` SÍ renueva y cobra.
+   Con el token vencido el link público escondía la opción y el portal la seguía
+   ofreciendo — el alumno logueado elegía «Tarjeta o Yape (se confirma solo)» y se
+   comía un 400. Las dos puertas preguntan ahora lo mismo.
+   Ojo: acepta refresh vivo, igual que mpTokenProfe, que es quien de verdad cobra. */
+function mpCobraConTarjeta(tenant){
+  if (!tenant || !tenant.mp_access_token) return false;
+  const exp = Number(tenant.mp_expires_at) || 0;
+  if (!exp) return true;                    // sin fecha = token sin vencimiento conocido
+  if (exp > Date.now()) return true;
+  return !!tenant.mp_refresh_token;         // vencido pero renovable en el próximo cobro
+}
 async function mpTokenProfe(env, tenant){
   if (!tenant || !tenant.mp_access_token) return null;
   const exp = Number(tenant.mp_expires_at) || 0;
@@ -2932,7 +2949,7 @@ async function pasoActivacionExacto(env, t){
       env.DB.prepare("SELECT COUNT(*) AS n FROM compras WHERE tenant_id = ?1 AND estado != 'iniciada'").bind(t.id).first(),
     ]);
     const cfg = await loadConfig(env, t.id);
-    const mpOn = !!(t.mp_access_token) && (!(Number(t.mp_expires_at) || 0) || Number(t.mp_expires_at) > Date.now());
+    const mpOn = mpCobraConTarjeta(t);
     const cobroOn = !!(mpOn || cfg.pago_numero || cfg.bcp_cuenta || cfg.interbank_cuenta || cfg.scotia_cuenta || cfg.crypto_wallet);
     if (!(Number(nAl && nAl.n) > 0)) return "alumno";
     if (!(Number(nPre && nPre.n) > 0)) return "precio";
@@ -10019,7 +10036,7 @@ export default {
          justo ese plan (?p=...): ese es el "link especial" para clientes puntuales. */
       const paqP = await loadPaquetes(env, tP.id);
       const paquetesOk = paqP.list.filter(pk => (preciosP[pk] || 0) > 0 && (!paqP.map[pk].oculto || pk === preSel));
-      const mpOnP = !!(tP.mp_access_token) && (!(Number(tP.mp_expires_at) || 0) || Number(tP.mp_expires_at) > Date.now());
+      const mpOnP = mpCobraConTarjeta(tP);
       const stripeOnP = stripeConnectOn(env) && !!(tP.stripe_account_id) && !!Number(tP.stripe_charges_enabled);
       const mpSoloTarjetaP = String(cfgP.mp_solo_tarjeta || "") === "1";
       const metodos = [];
@@ -12056,7 +12073,7 @@ export default {
            Sin esto el checklist llegaba a 4/4 anotando un cobro en efectivo sin haber
            conectado nunca Yape/MP, y la web publica seguia sin poder vender (03-ago-2026). */
         const cfgAct = await loadConfig(env, t.id);
-        const mpOnAct = !!(t.mp_access_token) && (!(Number(t.mp_expires_at) || 0) || Number(t.mp_expires_at) > Date.now());
+        const mpOnAct = mpCobraConTarjeta(t);
         /* 10-ago-2026: se suma interbank_cuenta — la web pública ya lo contaba (armarWebCtx)
            pero este checklist no: un tenant solo-Interbank vendía y aquí se le decía que no. */
         const cobroConectado = !!(mpOnAct || cfgAct.pago_numero || cfgAct.bcp_cuenta || cfgAct.interbank_cuenta || cfgAct.scotia_cuenta || cfgAct.crypto_wallet);
@@ -13941,7 +13958,7 @@ export default {
             mp_solo_tarjeta: String(config.mp_solo_tarjeta || "") === "1",
             vapid_public: env.VAPID_PUBLIC_KEY || "",
             // Tarjeta del alumno: si el profe conecto su cuenta de MP (el APP_SECRET solo hace falta para el OAuth)
-            mp_tarjeta: !!(await env.DB.prepare("SELECT mp_access_token FROM tenants WHERE id = ?1").bind(tid).first().then(r => r && r.mp_access_token).catch(() => false)),
+            mp_tarjeta: await env.DB.prepare("SELECT mp_access_token, mp_expires_at, mp_refresh_token FROM tenants WHERE id = ?1").bind(tid).first().then(mpCobraConTarjeta).catch(() => false),
             // Rieles opcionales: Stripe (internacional) y Culqi (Yape/tarjeta por API). culqi_pk es publica (para el widget).
             ...(await (async () => {
               try {
@@ -14462,8 +14479,28 @@ export default {
             } catch (e) { /* la alerta jamas rompe el 200 hacia MP */ }
             return json({ ok: true });
           }
-          // El monto aprobado debe cubrir el de la compra
-          if ((Number(pago.transaction_amount) || 0) + 0.01 < (Number(compra.monto) || 0)) return json({ ok: true });
+          /* El monto aprobado debe cubrir el de la compra.
+             🔴 9-set-2026: acá se devolvía 200 MUDO. La plata YA entró a la cuenta de MP
+             del profesor, el alumno se queda sin su paquete y nadie se entera nunca —
+             exactamente el caso que el pago huérfano de arriba sí avisa por correo. Un
+             pago corto puede ser real (promoción o cupón del medio de pago), así que no
+             se acredita solo: se avisa para que el dueño decida. */
+          const pagado = Number(pago.transaction_amount) || 0;
+          if (pagado + 0.01 < (Number(compra.monto) || 0)){
+            try {
+              const detalleCorto =
+                "Llegó un pago APROBADO de Mercado Pago por MENOS de lo que costaba el paquete, así que Batuta no lo acreditó solo.\n" +
+                "Academia: " + (t.academia || tid) + "\n" +
+                "Pago MP: " + paymentId + "\n" +
+                "Paquete: " + (compra.paquete || "?") + "\n" +
+                "Se cobró: S/" + pagado + "  ·  Costaba: S/" + (Number(compra.monto) || 0) + "\n" +
+                "Pagador: " + ((pago.payer && pago.payer.email) || "?") + "\n" +
+                "El dinero SÍ entró a tu cuenta de Mercado Pago. Revísalo y, si está bien, confirma la compra a mano desde el panel.";
+              if (t.email) await enviarCorreo(env, { to: t.email, subject: "Batuta: un pago con tarjeta llegó por menos de lo que costaba", text: detalleCorto });
+              await alertaCorreoAndres(env, "Batuta: pago MP aprobado por MENOS que la compra (" + (t.academia || tid) + ")", detalleCorto);
+            } catch (e) { /* la alerta jamás rompe el 200 hacia MP */ }
+            return json({ ok: true });
+          }
 
           const r = await confirmarCompra(env, tid, t, compra); // idempotente (claim con UPDATE)
           if (r && r.ok){
@@ -17236,7 +17273,7 @@ export default {
              borrarle los datos bancarios al rol profesor, si no el flag saldria falso para el
              profe aunque la academia si cobre. Lo consume el editor de "Mi web" para avisar
              que la seccion de Precios no sale sin un medio de cobro conectado. */
-          const mpVivo = !!(t && t.mp_access_token) && (!(Number(t && t.mp_expires_at) || 0) || Number(t.mp_expires_at) > Date.now());
+          const mpVivo = mpCobraConTarjeta(t);
           const cobroOnPanel = !!(mpVivo || config.pago_numero || config.bcp_cuenta || config.interbank_cuenta || config.scotia_cuenta || config.crypto_wallet);
           /* HALLAZGO del review: el rol profesor NO recibe secretos del tenant (con el token
              de Nubefact podria emitir comprobantes por fuera saltandose el guard del dueno). */

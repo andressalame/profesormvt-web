@@ -159,6 +159,7 @@
   .pill.green{background:rgba(95,138,82,.16);color:var(--green);border:1px solid var(--green);}
   .pill.amber{background:rgba(217,154,60,.16);color:var(--amber);border:1px solid var(--amber);}
   .pill.gray{background:transparent;color:var(--muted);border:1px solid var(--line);}
+  .pill.red{background:rgba(179,50,26,.14);color:var(--red);border:1px solid var(--red);}
 
   .card{background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:20px 22px;margin-bottom:14px;}
   .card.nudge{border-color:var(--accent-ink);box-shadow:0 0 0 1px var(--accent) inset;}
@@ -2326,14 +2327,31 @@ function renderCuenta(){
   $("btnPass").textContent = sinClaveC ? "Guardar mi contraseña" : "Actualizar contraseña";
   show("ctaPassCard");
 
+  /* El estado que guarda la base es vocabulario del sistema ('iniciada', 'cancelada'),
+     no castellano. Acá viajaba crudo a la pantalla: 13 cuentas reales veían una de esas
+     palabras en su historial, y un rechazo se pintaba igual que un checkout abandonado.
+     Cada estado dice ahora qué le pasó a SU plata, con el color que le toca. */
+  var PAGO_ESTADO = {
+    confirmada: { t:"Pagado",         c:"green" },
+    pendiente:  { t:"Por confirmar",  c:"amber" },
+    iniciada:   { t:"Sin terminar",   c:"gray"  },
+    cancelada:  { t:"Sin terminar",   c:"gray"  },
+    rechazada:  { t:"No aprobado",    c:"red"   }
+  };
+  /* S/629.1 se lee como un error de tipeo: el dinero siempre con sus dos decimales. */
+  function solesPago(x){ return "S/ " + (Math.round((Number(x)||0)*100)/100).toFixed(2); }
   var pagos = ME.pagos || [];
   if(pagos.length){
     show("ctaPagos");
     $("pTabla").querySelector("tbody").innerHTML = pagos.map(function(p){
-      var pc = p.estado==="confirmada"?"green":(p.estado==="pendiente"?"amber":"gray");
-      var monto = "S/ "+(p.monto||0) + (Number(p.descuento)>0?' <span class="mut">(-S/'+p.descuento+' crédito)</span>':'');
+      var e = PAGO_ESTADO[p.estado] || { t:(p.estado||""), c:"gray" };
+      /* el desglose viaja desde el servidor y antes se tiraba a la basura: la alumna de
+         Elevate con S/69.90 de descuento por referir veía S/629.10 sin explicación. */
+      var det = "";
+      if(Number(p.desc_ref)>0) det += ' <span class="mut">(-'+solesPago(p.desc_ref)+' por tu código de amigo)</span>';
+      if(Number(p.descuento)>0) det += ' <span class="mut">(-'+solesPago(p.descuento)+' de tu crédito)</span>';
       return '<tr><td class="mono">'+esc(p.fecha||"")+'</td><td>'+esc(p.paquete||"")+'</td>'+
-        '<td>'+monto+'</td><td><span class="pill '+pc+'">'+esc(p.estado||"")+'</span></td></tr>';
+        '<td>'+solesPago(p.monto)+det+'</td><td><span class="pill '+e.c+'">'+esc(e.t)+'</span></td></tr>';
     }).join("");
   } else hide("ctaPagos");
 
