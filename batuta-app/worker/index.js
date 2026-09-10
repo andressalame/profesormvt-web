@@ -3053,12 +3053,23 @@ function tenantExcluidoNurture(t){
   return false;
 }
 
-/* ---------- Nurture del DUEÑO TRABADO (día 2 y día 7, según lo que FALTA en D1) ----------
+/* ---------- Nurture del DUEÑO TRABADO (día 2, 7 y rescate final 21) ----------
    Fase 3 del plan "para dummies": el producto persigue al dueño, no al revés. La única
    fundadora que se destrabó (José) fue la que tuvo intervención humana; esto empaqueta esa
    intervención. Distinto del nurture de trial (día 1/3/6, genérico): este es CAUSAL — dice
    exactamente qué falta y qué consecuencia tiene. El paso vive en tenants.nurture_trabado:
-   0 = nada · 1 = salió el de día 2 · 2 = salió el de día 7 (o el track se cerró). */
+   0 = nada · 1 = salió el de día 2 · 2 = salió el de día 7. El día 21 lleva
+   sello independiente en config para no reinterpretar las filas históricas. */
+function etapaNurtureTrabado(paso, dias, dia21Enviado){
+  paso = paso | 0;
+  dias = Math.max(0, Number(dias) || 0);
+  if (paso === 0 && dias >= 2 && dias < 7) return { etapa: "dia2", pasoNuevo: 1 };
+  if (paso < 2 && dias >= 7 && dias < 14) return { etapa: "dia7", pasoNuevo: 2 };
+  /* Ventana acotada: el deploy no puede revivir de golpe toda la historia vieja. */
+  if (!dia21Enviado && dias >= 21 && dias < 28) return { etapa: "dia21", pasoNuevo: paso };
+  return null;
+}
+
 function correoNurtureTrabado(tenant, etapa, paso){
   const nombre = ((tenant.profe_nombre || "").trim().split(/\s+/)[0]) || "";
   const hola = "Hola" + (nombre ? " " + nombre : "") + ".";
@@ -3091,6 +3102,18 @@ function correoNurtureTrabado(tenant, etapa, paso){
     }
   };
   const c = CAUSA[paso] || CAUSA.alumno;
+  if (etapa === "dia21"){
+    const academia = esc(tenant.academia || "tu academia");
+    const academiaAsunto = String(tenant.academia || "tu academia").replace(/[\r\n]+/g, " ").trim().slice(0, 90);
+    const retomar = "https://batuta.lat/app";
+    return {
+      subject: "¿Te ayudo a terminar de configurar " + academiaAsunto + "?",
+      html: '<div style="font-family:Arial,Helvetica,sans-serif;max-width:480px;margin:0 auto;color:#1a1a1a;font-size:15px;line-height:1.6">' +
+        '<p>Hola! Vi que en Batuta todavía falta <b>' + c.falta + '</b> para que <b>' + academia + '</b> quede lista. Si quieres, responde a este correo y te ayudo a terminarlo.</p>' +
+        '<p>También puedes retomarlo aquí: <a href="' + retomar + '">' + retomar + '</a> :)</p>' +
+        '<p><a href="' + retomar + '"><b>Retomar mi academia</b></a></p></div>'
+    };
+  }
   if (etapa === "dia2") return {
     subject: "Te falta una sola cosa: " + c.falta,
     html: wrap(
@@ -3116,28 +3139,25 @@ async function nurtureDuenoTrabado(env){
   let filas = [];
   try {
     const r = await env.DB.prepare(
-      "SELECT id, academia, profe_nombre, email, creado, estado, mp_access_token, mp_expires_at, COALESCE(nurture_trabado, 0) AS paso_n FROM tenants WHERE estado IN ('trial', 'activo')"
+      "SELECT t.id, t.academia, t.profe_nombre, t.email, t.creado, t.estado, t.mp_access_token, t.mp_expires_at, " +
+      "COALESCE(t.nurture_trabado, 0) AS paso_n, COALESCE((SELECT c.valor FROM config c WHERE c.tenant_id=t.id AND c.clave='nurture_dia21'),'') AS dia21 " +
+      "FROM tenants t WHERE t.estado IN ('trial', 'activo')"
     ).all();
     filas = r.results || [];
   } catch (e) { return; }
   for (const t of filas){
     if (tenantExcluidoNurture(t)) continue;
     const dias = Math.floor((ahora - (Date.parse(t.creado) || ahora)) / 86400000);
-    /* Ventanas duras: día 2 solo entre el día 2 y el 6; día 7 solo entre el 7 y el 13.
-       Un tenant viejo (Lisi, Kelly, Elevate) NUNCA recibe esto retroactivamente. */
-    let etapa = null, pasoNuevo = t.paso_n | 0;
-    if ((t.paso_n | 0) === 0 && dias >= 2 && dias < 7){ etapa = "dia2"; pasoNuevo = 1; }
-    else if ((t.paso_n | 0) < 2 && dias >= 7 && dias < 14){ etapa = "dia7"; pasoNuevo = 2; }
-    else if (dias >= 14 && (t.paso_n | 0) < 2){
-      // Fuera de ventana para siempre: se cierra el track sin enviar nada.
-      try { await env.DB.prepare("UPDATE tenants SET nurture_trabado = 2 WHERE id = ?1").bind(t.id).run(); } catch (e) {}
-      continue;
-    }
-    if (!etapa) continue;
+    const turno = etapaNurtureTrabado(t.paso_n, dias, t.dia21 === "1");
+    if (!turno) continue;
+    const etapa = turno.etapa, pasoNuevo = turno.pasoNuevo;
     const paso = await pasoActivacionExacto(env, t);
     if (paso === "completo"){
       // Nada que perseguir: el track avanza mudo para no re-evaluar cada mañana.
-      try { await env.DB.prepare("UPDATE tenants SET nurture_trabado = ?1 WHERE id = ?2").bind(pasoNuevo, t.id).run(); } catch (e) {}
+      try {
+        if (etapa === "dia21") await setConfigValor(env, t.id, "nurture_dia21", "1");
+        else await env.DB.prepare("UPDATE tenants SET nurture_trabado = ?1 WHERE id = ?2").bind(pasoNuevo, t.id).run();
+      } catch (e) {}
       continue;
     }
     if (paso === "primer_cobro" && etapa === "dia2"){
@@ -3149,7 +3169,11 @@ async function nurtureDuenoTrabado(env){
     const mail = correoNurtureTrabado(t, etapa, paso);
     const ok = await enviarCorreo(env, { to: t.email, subject: mail.subject, html: mail.html });
     if (ok){
-      try { await env.DB.prepare("UPDATE tenants SET nurture_trabado = ?1 WHERE id = ?2").bind(pasoNuevo, t.id).run(); } catch (e) {}
+      if (etapa === "dia21"){
+        try { await setConfigValor(env, t.id, "nurture_dia21", "1"); } catch (e) {}
+      } else {
+        try { await env.DB.prepare("UPDATE tenants SET nurture_trabado = ?1 WHERE id = ?2").bind(pasoNuevo, t.id).run(); } catch (e) {}
+      }
     }
   }
 }
@@ -19052,18 +19076,24 @@ export default {
     if (dSched.getUTCDate() === 1){
       try { await payoutsPayPalAfiliados(env); } catch (e) { console.error("payouts paypal afiliados", e); }
     }
-    /* ---- Digest de ACTIVACION para Andres (15-jul-2026): la metrica #1. Tenants de los
-       ultimos 7 dias que aun no cargan 5 alumnos + 1 cobro, con wa.me listo para el toque
-       humano (sales-assist manual mientras haya <20 trials/mes). + dunning pendiente. ---- */
+    /* ---- Digest de ACTIVACION para Andres (15-jul-2026): la metrica #1. Tenants que aun
+       no cargan 5 alumnos + 1 cobro, con los nuevos y los trabados >7d separados para que
+       nadie desaparezca del radar. + dunning pendiente. ---- */
     try {
-      const desde7 = new Date(Date.now() - 7 * 86400000).toISOString();
       const { results: nuevos } = await env.DB.prepare(
-        "SELECT id, academia, email, whatsapp, creado, plan, estado FROM tenants WHERE creado >= ?1 AND email NOT LIKE ?2"
-      ).bind(desde7, SQL_DEMO_LIKE).all();
+        "SELECT id, academia, email, whatsapp, creado, plan, estado FROM tenants WHERE estado IN ('trial','activo') AND email NOT LIKE ?1"
+      ).bind(SQL_DEMO_LIKE).all();
       const sinActivar = [];
+      const trabadosMayores = [];
       for (const tN of (nuevos || [])){
+        if (tenantExcluidoNurture(tN)) continue;
         const aN = await tenantActivado(env, tN.id);
-        if (!aN.activado) sinActivar.push({ t: tN, a: aN });
+        if (!aN.activado){
+          const diasN = Math.max(0, Math.floor((Date.now() - (Date.parse(tN.creado) || Date.now())) / 86400000));
+          const itemN = { t: tN, a: aN, dias: diasN };
+          if (diasN > 7) trabadosMayores.push(itemN);
+          else sinActivar.push(itemN);
+        }
       }
       let dunningPend = [];
       try {
@@ -19072,16 +19102,21 @@ export default {
         ).bind(SQL_DEMO_LIKE).all();
         dunningPend = dp.results || [];
       } catch (e) {}
-      if (sinActivar.length || dunningPend.length){
+      if (sinActivar.length || trabadosMayores.length || dunningPend.length){
         const lineas = sinActivar.map(x =>
           "· " + (x.t.academia || "?") + " (" + (x.t.plan || "profe") + ", creado " + String(x.t.creado).slice(0, 10) + "): " +
+          x.a.alumnos + " alumnos, " + x.a.cobros + " cobros" +
+          (x.t.whatsapp ? " -> https://wa.me/" + String(x.t.whatsapp).replace(/\D/g, "") : " (sin WhatsApp, correo: " + x.t.email + ")"));
+        const lineasTrabados = trabadosMayores.map(x =>
+          "· " + (x.t.academia || "?") + " (" + x.dias + " días, " + (x.t.plan || "profe") + "): " +
           x.a.alumnos + " alumnos, " + x.a.cobros + " cobros" +
           (x.t.whatsapp ? " -> https://wa.me/" + String(x.t.whatsapp).replace(/\D/g, "") : " (sin WhatsApp, correo: " + x.t.email + ")"));
         const lineasDun = dunningPend.map(d =>
           "· " + (d.academia || "?") + " (" + d.mp_sub_status + ")" + (d.whatsapp ? " -> https://wa.me/" + String(d.whatsapp).replace(/\D/g, "") : " " + d.email));
         await alertaCorreoAndres(env,
-          "Batuta hoy: " + sinActivar.length + " sin activar" + (dunningPend.length ? " · " + dunningPend.length + " en dunning" : ""),
+          "Batuta hoy: " + sinActivar.length + " sin activar nuevos · " + trabadosMayores.length + " trabados >7d" + (dunningPend.length ? " · " + dunningPend.length + " en dunning" : ""),
           (sinActivar.length ? "SIN ACTIVAR (objetivo: que carguen 5 alumnos + 1 cobro en su semana 1; ofrece cargarlo juntos por chat):\n" + lineas.join("\n") : "") +
+          (trabadosMayores.length ? "\n\nTRABADOS HACE MÁS DE 7 DÍAS (siguen vivos; prioriza el atasco más cercano a ingreso):\n" + lineasTrabados.join("\n") : "") +
           (dunningPend.length ? "\n\nDUNNING (suscripcion pausada/cancelada, rescatar por WhatsApp):\n" + lineasDun.join("\n") : "") +
           "\n\nDetalle vivo: su/funnel (activacion_45d) y su/cohortes.");
       }
