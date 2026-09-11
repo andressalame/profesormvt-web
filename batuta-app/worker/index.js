@@ -3696,6 +3696,7 @@ function sanearRespuestaIA(t){
     .replace(/¿\s*\?/g, "")        // "¿?" espurio -> nada
     .replace(/¡\s*!/g, "")          // "¡!" espurio -> nada
     .replace(/[¿¡]/g, "")           // sin signos de apertura (estilo de marca)
+    .replace(/([!?])(:\)|;\))/g, "$2$1") // la carita cierra antes del signo: ":)!", nunca "!:)"
     .replace(/\s+([?!.,;:])/g, "$1") // espacio antes de puntuacion -> pegado
     .replace(/\s{2,}/g, " ")
     .trim();
