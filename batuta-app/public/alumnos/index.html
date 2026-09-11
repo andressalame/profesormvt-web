@@ -720,6 +720,7 @@
             <button class="btn ghost sm" data-tipo="suelta">Clase suelta</button>
           </div>
           <p class="note" id="agTipoNota" style="margin:0 0 16px;"></p>
+          <p class="note" id="agZona" style="margin:-6px 0 16px;color:var(--ink-soft,#7b7469);"></p>
           <div id="agSlots"><p class="note" style="margin:0">Cargando horarios…</p></div>
         </div>
       </div>
@@ -1574,7 +1575,7 @@ function renderInicio(){
            ? esc(pasesVivos.map(function(p){ return p.n; }).join(" + "))
            : (esc(a.paquete||"—")+(a.monto?' <small>· S/ '+a.monto+'</small>':'')))+
       kv("Pago", esc(a.pago||"—"))+
-      (a.vence ? kv("Tu paquete vence", esc(fmtFechaLocal(a.vence+"T23:59:59Z"))+' <small>('+diasHasta(a.vence)+')</small>') : "");
+      (a.vence ? kv("Tu paquete vence", esc(fmtFechaLima(a.vence+"T23:59:59Z"))+' <small>('+diasHasta(a.vence)+')</small>') : "");
     renderVencePausa(a);
   } else {
     hide("iPkg"); show("iVacio");
@@ -2581,13 +2582,35 @@ var AG_DIA = "";
 var AG_MESES = ["enero","febrero","marzo","abril","mayo","junio","julio","agosto","setiembre","octubre","noviembre","diciembre"];
 var DIAS_LARGO = ["domingo","lunes","martes","miércoles","jueves","viernes","sábado"];
 
-/* 🔴 22-ago-2026 · estas dos pintaban la fecha y la hora en la zona del NAVEGADOR. La clase
-   ocurre en Lima: con el celular en otra zona, una clase del lunes 20:00 se leía "martes 25,
-   01:00 a.m." en UTC y "03:00 a.m." en Madrid — otro día y otra hora, y la alumna la pierde.
-   El panel del dueño SÍ fija `America/Lima` en sus seis formatos; el portal no lo hacía en
-   ninguno de los dos. El respaldo también: `getHours()` es del navegador igual. */
+/* 10-set-2026 · La agenda se pinta en la zona del dispositivo del alumno. El instante que
+   llega del servidor sigue siendo UTC y la disponibilidad sigue definida en Lima; solo cambia
+   la traducción visual. Así alguien en Sídney ve SU martes 11:00 para la misma clase que el
+   profesor ve el lunes 20:00. Las fechas administrativas (vencimiento/pausa) siguen usando
+   fmtFechaLima porque son fechas civiles de la academia, no instantes de una clase. */
 var TZ_LIMA = { timeZone: "America/Lima" };
 function partesLima(iso){ return new Date(Date.parse(iso) - 5*3600000); }   // en UTC = hora de Lima
+var AG_TZ_LOCAL = (function(){
+  try { return Intl.DateTimeFormat().resolvedOptions().timeZone || "America/Lima"; }
+  catch(e){ return "America/Lima"; }
+})();
+function opcionesZona(base){
+  var o={}; Object.keys(base||{}).forEach(function(k){o[k]=base[k];});
+  o.timeZone=AG_TZ_LOCAL; return o;
+}
+function etiquetaZonaAgenda(){
+  var ciudad=String(AG_TZ_LOCAL||"America/Lima").split("/").pop().replace(/_/g," ");
+  var zona="";
+  try {
+    zona=(new Intl.DateTimeFormat("es-PE",{timeZone:AG_TZ_LOCAL,timeZoneName:"short"})
+      .formatToParts(new Date()).filter(function(p){return p.type==="timeZoneName";})[0]||{}).value||"";
+  } catch(e){}
+  return ciudad+(zona?" ("+zona+")":"");
+}
+function fmtFechaLima(iso){
+  var d=new Date(iso);
+  try{ return d.toLocaleDateString("es-PE",{weekday:"long",day:"numeric",month:"long",timeZone:"America/Lima"}); }
+  catch(e){ var l=partesLima(iso); return DIAS_LARGO[l.getUTCDay()]+" "+l.getUTCDate(); }
+}
 function pintarAgendadas(){
   var box = $("cAgendadas"), lista = $("cAgendadasLista");
   if(!box || !lista) return;
@@ -2606,12 +2629,12 @@ function pintarAgendadas(){
 }
 function fmtFechaLocal(iso){
   var d = new Date(iso);
-  try{ return d.toLocaleDateString("es-PE",{weekday:"long",day:"numeric",month:"long",timeZone:"America/Lima"}); }
+  try{ return d.toLocaleDateString("es-PE",opcionesZona({weekday:"long",day:"numeric",month:"long"})); }
   catch(e){ var l=partesLima(iso); return DIAS_LARGO[l.getUTCDay()]+" "+l.getUTCDate(); }
 }
 function fmtHoraLocal(iso){
   var d = new Date(iso);
-  try{ return d.toLocaleTimeString("es-PE",{hour:"2-digit",minute:"2-digit",timeZone:"America/Lima"}); }
+  try{ return d.toLocaleTimeString("es-PE",opcionesZona({hour:"2-digit",minute:"2-digit"})); }
   catch(e){ var l=partesLima(iso); return ("0"+l.getUTCHours()).slice(-2)+":"+("0"+l.getUTCMinutes()).slice(-2); }
 }
 function diasHasta(fechaYmd){
@@ -2665,7 +2688,7 @@ $("btnConfirmarPausa").addEventListener("click",function(){
   $("btnConfirmarPausa").disabled=true;
   api("/app/api/agenda/pausar",{method:"POST",body:JSON.stringify({motivo:motivo,dias:dias})})
     .then(function(r){
-      toast("Listo, tu paquete ahora vence "+fmtFechaLocal(r.vence+"T23:59:59Z"));
+      toast("Listo, tu paquete ahora vence "+fmtFechaLima(r.vence+"T23:59:59Z"));
       hide("iPausaForm");
       return api("/app/api/me");
     })
@@ -2679,6 +2702,8 @@ function renderAgenda(){
   var a = ME.alumno;
   if(!a){ $("agSinPaquete").style.display=""; $("agConPaquete").style.display="none"; return; }
   $("agSinPaquete").style.display="none"; $("agConPaquete").style.display="";
+  if($("agZona") && typeof etiquetaZonaAgenda==="function")
+    $("agZona").textContent="Horarios en tu zona: "+etiquetaZonaAgenda()+". Si viajas, se ajustan solos en este dispositivo.";
 
   var rest = Number(a.restantes)||0;
   /* 🔴 22-ago-2026 · acá se sumaban TODOS los pases y se le pegaba el nombre de UNO solo

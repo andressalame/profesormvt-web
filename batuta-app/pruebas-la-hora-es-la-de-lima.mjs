@@ -9,10 +9,10 @@
       era el único que no. Va en los recordatorios de 24h y 1h: **307 correos ya
       salieron así** a alumnas de Elevate.
 
-   2) 🔴 EL PORTAL PINTABA LA HORA DEL NAVEGADOR. La clase ocurre en Lima; con el
-      celular en otra zona, una del lunes 20:00 se leía "martes 01:00 a.m." en UTC
-      y "03:00 a.m." en Madrid. El panel del dueño fija `America/Lima` en sus seis
-      formatos; el portal no lo hacía en ninguno.
+   2) Desde el 10-set, EL PORTAL DEBE PINTAR LA HORA DEL ALUMNO. La clase sigue
+      guardada como un instante UTC y la agenda del profesor sigue definida en Lima,
+      pero alguien en Australia tiene que ver el martes 11:00 que realmente vivirá.
+      Las fechas civiles del plan (vencimiento/pausa) sí se mantienen en Lima.
 
    Corre las dos implementaciones y, para el portal, la MISMA fecha bajo varias
    zonas horarias del dispositivo.
@@ -47,7 +47,7 @@ console.log("── 1. La fecha que va en los correos ──");
 }
 
 /* ── 2 · la hora que ve el alumno, desde cualquier zona ─────────────────────── */
-console.log("\n── 2. El portal, con el dispositivo en distintas zonas ──");
+console.log("\n── 2. El portal traduce la misma clase a la zona del alumno ──");
 {
   const iso = "2026-08-25T01:00:00.000Z";   // lunes 24, 20:00 de Lima
   const leer = tz => {
@@ -57,21 +57,32 @@ console.log("\n── 2. El portal, con el dispositivo en distintas zonas ──
       /* si la función no existe devuelve "", no el archivo entero desde el byte 0 */
       const cortar=n=>{const i=H.indexOf('\\nfunction '+n+'(');if(i<0) return '';let k=H.indexOf('{',i+1),d=0;
         for(;k<H.length;k++){ if(H[k]==='{')d++; else if(H[k]==='}'&&--d===0) return H.slice(i+1,k+1);} return '';};
-      const f=new Function('DIAS_LARGO', cortar('partesLima')+cortar('fmtFechaLocal')+cortar('fmtHoraLocal')+
-        '\\nreturn {fmtFechaLocal,fmtHoraLocal};')(["domingo","lunes","martes","miércoles","jueves","viernes","sábado"]);
-      console.log(f.fmtFechaLocal(${JSON.stringify(iso)})+" | "+f.fmtHoraLocal(${JSON.stringify(iso)}));`;
+      const ini=H.indexOf('var AG_TZ_LOCAL =');
+      const fin=H.indexOf('function pintarAgendadas',ini);
+      const zona=H.slice(ini,fin);
+      const f=new Function('DIAS_LARGO', cortar('partesLima')+zona+cortar('fmtFechaLocal')+cortar('fmtHoraLocal')+
+        '\\nreturn {fmtFechaLocal,fmtHoraLocal,fmtFechaLima,etiquetaZonaAgenda};')(["domingo","lunes","martes","miércoles","jueves","viernes","sábado"]);
+      console.log(f.fmtFechaLocal(${JSON.stringify(iso)})+" | "+f.fmtHoraLocal(${JSON.stringify(iso)})+" | "+f.etiquetaZonaAgenda()+" | "+f.fmtFechaLima(${JSON.stringify(iso)}));`;
     return execFileSync(process.execPath, ["-e", codigo], { env: { ...process.env, TZ: tz } }).toString().trim();
   };
-  const enLima = leer("America/Lima");
-  comprobar("en Lima dice el lunes a las 8 de la noche", /lunes/.test(enLima) && /24/.test(enLima) && /08:00/.test(enLima), enLima);
-  for (const tz of ["UTC", "Europe/Madrid", "America/New_York", "Asia/Tokyo"]){
-    const otra = leer(tz);
-    comprobar("con el reloj en " + tz + " dice lo mismo", otra === enLima, otra);
+  const casos = [
+    ["America/Lima",      /lunes,? 24 de agosto \| 08:00 p\. m\./, "Lima"],
+    ["UTC",               /martes,? 25 de agosto \| 01:00 a\. m\./, "UTC"],
+    ["Europe/Madrid",     /martes,? 25 de agosto \| 03:00 a\. m\./, "Madrid"],
+    ["America/New_York",  /lunes,? 24 de agosto \| 09:00 p\. m\./, "New York"],
+    ["Asia/Tokyo",        /martes,? 25 de agosto \| 10:00 a\. m\./, "Tokyo"],
+    ["Australia/Sydney",  /martes,? 25 de agosto \| 11:00 a\. m\./, "Sydney"],
+  ];
+  for (const [tz, esperado, ciudad] of casos){
+    const dicho = leer(tz);
+    comprobar(tz + " ve su día y su hora reales", esperado.test(dicho), dicho);
+    comprobar("   y la pantalla nombra " + ciudad, dicho.includes(ciudad), dicho);
+    comprobar("   pero el vencimiento civil no cambia de fecha", /\| lunes,? 24 de agosto$/.test(dicho), dicho);
   }
 }
 
 /* ── 3 · y coincide con lo que dice el correo ───────────────────────────────── */
-console.log("\n── 3. El correo y el portal cuentan la misma clase ──");
+console.log("\n── 3. En Lima, el correo y el portal cuentan la misma clase ──");
 {
   const iso = "2026-08-25T01:00:00.000Z";
   const delCorreo = W.fmtLima(iso);                       // "Lunes 24/08 a las 20:00 (hora de Lima)"
@@ -82,13 +93,14 @@ console.log("\n── 3. El correo y el portal cuentan la misma clase ──");
 }
 
 /* ── 4 · ninguna fecha del portal se pinta sin zona ─────────────────────────── */
-console.log("\n── 4. Barrido: nada de fechas sin zona en el portal ──");
+console.log("\n── 4. Barrido: cada formato declara qué zona usa ──");
 {
-  const sinZona = [];
-  for (const m of H.matchAll(/toLocale(?:Date|Time)String\s*\([^)]*\)/g))
-    if (!/timeZone/.test(m[0])) sinZona.push(m[0].replace(/\s+/g, " ").slice(0, 80));
-  comprobar("todas las fechas del portal fijan America/Lima", sinZona.length === 0, sinZona.join(" · ") || "ninguna suelta");
+  const cuerpoOpciones = H.slice(H.indexOf("function opcionesZona"), H.indexOf("function etiquetaZonaAgenda"));
+  comprobar("el formateador de la agenda fuerza la zona detectada",
+    /o\.timeZone=AG_TZ_LOCAL/.test(cuerpoOpciones), cuerpoOpciones.replace(/\s+/g," ").slice(0,120));
+  comprobar("la fecha civil conserva explícitamente America/Lima",
+    /function fmtFechaLima[\s\S]*?timeZone:"America\/Lima"/.test(H), "vencimientos y pausas no se desplazan");
 }
 
-console.log(fallos ? `\n🔴 ${fallos} fallo(s)` : "\n✅ la misma clase, la misma hora, en el correo y en el portal");
+console.log(fallos ? `\n🔴 ${fallos} fallo(s)` : "\n✅ una clase, el mismo instante y la hora correcta para cada país");
 process.exit(fallos ? 1 : 0);

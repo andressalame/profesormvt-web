@@ -30,10 +30,14 @@ limpiar
 
 mal=0; ok(){ echo "  ✅ $1"; }; no(){ echo "  🔴 $1"; mal=$((mal+1)); }
 
-# la clase, dentro de 3 días a una hora fija de Lima (pasa minH y no llega a maxDias)
+# La clase: el siguiente día que realmente existe en la disponibilidad sembrada (lunes a
+# sábado), con más de 12h de anticipación. Antes era "+3 días" fijo: si la auditoría corría
+# un jueves elegía domingo, el arnés daba rojo y acusaba al producto de un horario inexistente.
 read ISO DOW HORA <<<"$(python3 -c "
 import datetime
-lima = datetime.datetime.utcnow() - datetime.timedelta(hours=5) + datetime.timedelta(days=3)
+lima = datetime.datetime.utcnow() - datetime.timedelta(hours=5) + datetime.timedelta(days=2)
+while int(lima.strftime('%w')) == 0:
+    lima += datetime.timedelta(days=1)
 lima = lima.replace(hour=15, minute=0, second=0, microsecond=0)
 utc  = lima + datetime.timedelta(hours=5)
 print(utc.strftime('%Y-%m-%dT%H:00:00.000Z'), int(lima.strftime('%w')), lima.strftime('%H:00'))")"
