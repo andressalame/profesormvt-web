@@ -4,7 +4,7 @@
    red, sin wrangler, sin D1). Cubre exactamente los 5 filos que pide la tarjeta
    del tablero: inclusión, clase futura, reserva reciente, plan y último pago.
    ───────────────────────────────────────────────────────────────────────────── */
-import { calcularVigia } from "./vigia-retencion-mvt.mjs";
+import { calcularVigia, EXCLUIDOS_RESCATE } from "./vigia-retencion-mvt.mjs";
 
 let fallas = 0;
 const ver = (ok, bien, mal) => {
@@ -158,6 +158,36 @@ function alumno(id, extra) {
 }
 
 /* ── 5 · ÚLTIMO PAGO: compra confirmada más reciente, con fallback a alumnos.fecha ── */
+
+/* ── SALDO Y EXCEPCIONES: no perseguir bajas ni a Sebastián ───────────────── */
+{
+  const agotado = alumno("agotado", { migrado_usadas: 2, migrado_ciclo: 1, ciclo: 1 });
+  const r = calcularVigia({
+    hoy: HOY, alumnos: [agotado], cuentas: [], compras: [], reservas: [],
+    registros: [
+      { alumno_id: "agotado", ciclo: 1, estado: "Asistió", fecha: "2026-06-01" },
+      { alumno_id: "agotado", ciclo: 1, estado: "Asistió", fecha: "2026-06-08" }
+    ]
+  });
+  ver(r.length === 0, "un paquete con saldo real 0 queda fuera aunque conserve el nombre del plan", "entró un alumno sin saldo: " + JSON.stringify(r));
+}
+
+{
+  const r = calcularVigia({
+    hoy: HOY,
+    alumnos: [alumno(EXCLUIDOS_RESCATE[0], { nombre: "Sebastian", apellido: "Cardenas" })],
+    cuentas: [], compras: [], reservas: [], registros: []
+  });
+  ver(r.length === 0, "Sebastián queda fuera de rescates por su ID estable", "Sebastián entró al rescate: " + JSON.stringify(r));
+}
+
+{
+  const r = calcularVigia({
+    hoy: HOY, alumnos: [alumno("con-saldo", { migrado_usadas: 2, migrado_ciclo: 1, ciclo: 1 })],
+    cuentas: [], compras: [], reservas: [], registros: []
+  });
+  ver(r.length === 1, "un alumno con saldo real positivo sigue entrando al vigía", "se excluyó un alumno con saldo: " + JSON.stringify(r));
+}
 
 /* 5a. Con cuenta y una sola compra confirmada: usa esa fecha/monto, no alumnos.fecha. */
 {

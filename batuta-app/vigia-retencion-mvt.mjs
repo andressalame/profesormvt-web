@@ -47,6 +47,12 @@ export const PLANES_RECURRENTES = ["Paquete 4", "Paquete 8", "Paquete 12"];
    partirlo en dos checks — ya se intentó pensar así y termina en el mismo SQL. */
 export const VENTANA_DIAS = 14;
 
+/* Excepciones comerciales permanentes: alumnos con los que no corresponde hacer
+   rescate aunque tengan saldo y no reserven. Se configura por ID (estable) y no
+   por nombre. MVT: Sebastián Cárdenas usa sus clases muy esporádicamente y Andrés
+   pidió explícitamente conservarle el saldo sin presionarlo. */
+export const EXCLUIDOS_RESCATE = ["mq8ykj6xz5jdx"];
+
 function restarDias(isoOFecha, dias) {
   const ms = Date.parse(String(isoOFecha));
   if (!Number.isFinite(ms)) throw new Error("fecha inválida: " + isoOFecha);
@@ -101,11 +107,41 @@ export function calcularVigia({
   cuentas,
   compras,
   reservas,
+  registros = [],
   hoy = new Date().toISOString(),
   ventanaDias = VENTANA_DIAS,
-  planes = PLANES_RECURRENTES
+  planes = PLANES_RECURRENTES,
+  excluidos = EXCLUIDOS_RESCATE
 }) {
   const corte = restarDias(hoy, ventanaDias);
+
+  const regsPorAlumnoCiclo = new Map();
+  for (const r of registros || []) {
+    const k = `${r.alumno_id}:${Number(r.ciclo) || 1}`;
+    const lista = regsPorAlumnoCiclo.get(k) || [];
+    lista.push(r);
+    regsPorAlumnoCiclo.set(k, lista);
+  }
+
+  /* Saldo conservador para este reporte: en los candidatos no hay reservas
+     recientes ni futuras, así que las fuentes determinantes son bitácora + saldo
+     migrado. Replica las reglas de compute() para los planes clásicos de MVT. */
+  function tieneSaldo(alumno) {
+    if (Number(alumno.caducado)) return false;
+    const vence = String(alumno.vence || "").trim();
+    if (vence && vence < String(hoy).slice(0, 10)) return false;
+    const clases = Number(String(alumno.paquete || "").match(/\d+/)?.[0]) || 0;
+    const ciclo = Number(alumno.ciclo) || 1;
+    const regs = regsPorAlumnoCiclo.get(`${alumno.id}:${ciclo}`) || [];
+    const asistio = regs.filter(r => r.estado === "Asistió").length;
+    const falta = regs.filter(r => r.estado === "Falta").length;
+    const reprogramo = regs.filter(r => r.estado === "Reprogramó").length;
+    const reprogIncluidas = ({ 4: 2, 8: 3, 12: 4 })[clases] || 0;
+    const exceso = Math.max(0, reprogramo - reprogIncluidas);
+    const migradas = Number(alumno.migrado_ciclo) === ciclo ? Math.max(0, Number(alumno.migrado_usadas) || 0) : 0;
+    const bonus = Number(alumno.bonus_ciclo) === ciclo ? Math.max(0, Number(alumno.bonus_clases) || 0) : 0;
+    return clases + bonus - asistio - falta - exceso - migradas > 0;
+  }
 
   const reservasVigentesPorAlumno = new Map();
   for (const r of reservas || []) {
@@ -138,7 +174,9 @@ export function calcularVigia({
 
   const enRiesgo = (alumnos || [])
     .filter(a => planes.includes(a.paquete))
+    .filter(a => !(excluidos || []).includes(a.id))
     .filter(a => !tuvoActividadDesde(a, corte))
+    .filter(tieneSaldo)
     .map(a => ({
       id: a.id,
       nombre: [a.nombre, a.apellido].filter(Boolean).join(" ").trim(),
@@ -175,15 +213,22 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   const cuentas = filas(consultar(`SELECT * FROM cuentas WHERE tenant_id = '${t}'`));
   const compras = filas(consultar(`SELECT * FROM compras WHERE tenant_id = '${t}' AND estado = 'confirmada'`));
   const reservas = filas(consultar(`SELECT * FROM reservas WHERE tenant_id = '${t}' AND estado != 'cancelada'`));
+  const registros = filas(consultar(`SELECT alumno_id, ciclo, estado, fecha FROM registro WHERE tenant_id = '${t}'`));
 
-  const enRiesgo = calcularVigia({ alumnos, cuentas, compras, reservas });
+  const enRiesgo = calcularVigia({ alumnos, cuentas, compras, reservas, registros });
   const totalRecurrentes = alumnos.filter(a => PLANES_RECURRENTES.includes(a.paquete)).length;
+  /* Con reservas vacías, calcularVigia aplica solo plan + saldo; así distinguimos
+     el padrón histórico por nombre de plan de quienes hoy sí pueden reservar. */
+  const recurrentesConSaldo = calcularVigia({
+    alumnos, cuentas: [], compras: [], reservas: [], registros, excluidos: [], hoy: new Date().toISOString()
+  }).length;
 
   if (process.argv.includes("--json")) {
-    console.log(JSON.stringify({ totalRecurrentes, enRiesgo }, null, 2));
+    console.log(JSON.stringify({ totalRecurrentes, recurrentesConSaldo, enRiesgo }, null, 2));
   } else {
     console.log(`VIGÍA DE RETENCIÓN — MVT (tenant ${t})`);
-    console.log(`Recurrentes (Paquete 4/8/12): ${totalRecurrentes}`);
+    console.log(`Fichas con plan Paquete 4/8/12: ${totalRecurrentes}`);
+    console.log(`Con saldo real hoy: ${recurrentesConSaldo} (Sebastián excluido solo del rescate)`);
     console.log(`Sin clase futura ni reserva en ${VENTANA_DIAS} días: ${enRiesgo.length}\n`);
     enRiesgo.forEach((a, i) => {
       const p = a.ultimoPago;

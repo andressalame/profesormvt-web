@@ -8513,13 +8513,23 @@ async function winbackAlumnos(env){
       "AND (a.vence IS NULL OR a.vence = '' OR date(a.vence) >= date('now')) LIMIT 200"
     ).bind(SQL_DEMO_LIKE).all()).results) || [];
   } catch (e) { return 0; }
-  const cache = new Map(), cacheMsg = new Map();
+  const cache = new Map(), cacheMsg = new Map(), cacheExcluidos = new Map();
   const now = Date.now();
   let enviados = 0;
   for (const a of cand){
     if (enviados >= 40) break;
     if (!a.alumno_email) continue;
     if (!(await toggleTenantOn(env, cache, a.tenant_id, "winback"))) continue;
+    /* Excepciones comerciales por academia (IDs separados por coma). Sirve para
+       conservar el saldo de alguien que usa sus clases esporádicamente sin que la
+       automatización lo presione. No se usa el nombre: puede cambiar o repetirse. */
+    if (!cacheExcluidos.has(a.tenant_id)) {
+      const row = await env.DB.prepare(
+        "SELECT valor FROM config WHERE tenant_id = ?1 AND clave = 'winback_excluir_alumnos'"
+      ).bind(a.tenant_id).first().catch(() => null);
+      cacheExcluidos.set(a.tenant_id, new Set(String((row && row.valor) || "").split(",").map(x => x.trim()).filter(Boolean)));
+    }
+    if (cacheExcluidos.get(a.tenant_id).has(a.id)) continue;
     /* si tiene una clase futura agendada, no esta "enfriado": no molestar */
     const prox = await env.DB.prepare(
       "SELECT 1 AS ok FROM reservas WHERE tenant_id = ?1 AND alumno_id = ?2 AND estado = 'reservada' AND inicio_utc > ?3 LIMIT 1"
