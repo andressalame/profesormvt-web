@@ -398,6 +398,14 @@ async function promoverPacksPendientes(env, tenantId){
   } catch (e) { return false; }
 }
 
+/* Un aumento de cobro solo entrega capacidad cuando MP confirma que el nuevo monto sigue
+   autorizado. Una baja (o cambio de composición por el mismo monto) se aplica al instante:
+   no puede regalar capacidad por encima de lo que ya se paga. */
+function decisionCambioPacks(montoActual, montoNuevo, mpStatus){
+  const aumenta = (Number(montoNuevo) || 0) > (Number(montoActual) || 0);
+  return { aumenta, aplicar: !aumenta || String(mpStatus || "") === "authorized" };
+}
+
 /* ⚠️ alumCapDe y convCapDe toman el MÁXIMO contra el plan viejo: mientras quede un tenant sin
    migrar (o si la migración falla a medias), nadie puede perder capacidad que ya estaba usando.
    Elevate tiene 1,447 alumnos en un plan viejo; sin esta red, el tope le bajaría a 20 de golpe. */
@@ -12399,8 +12407,8 @@ export default {
       /* ---------- PACKS (20-ago-2026): comprar, ampliar o soltar capacidad ----------
          Un solo cobro mensual = la suma de los packs. Tres caminos:
            A) monto 0  -> vuelve a la base gratis y se cancela la suscripción.
-           B) suscripción viva -> PUT del monto (el dueño NO vuelve a meter tarjeta) y la
-              capacidad se le da al instante; el cobro nuevo rige desde el próximo ciclo.
+           B) suscripción viva -> PUT del monto (el dueño NO vuelve a meter tarjeta). Una baja
+              se aplica al instante; un aumento solo da capacidad cuando MP lo deja authorized.
            C) sin suscripción -> checkout de MP; los packs quedan PENDIENTES hasta que MP
               confirme, así abandonar el checkout no regala capacidad.
          ⚠️ MP puede pausar la suscripción si el monto sube mucho de golpe: tras el PUT se
@@ -12441,24 +12449,41 @@ export default {
 
         // B) ya paga: se ajusta el monto de su suscripción
         if (vivosPk){
+          const antesPk = await packsDe(env, tPk.id);
+          const aumentaPk = montoPk > antesPk.monto;
+          /* Se escribe antes del PUT para que un webhook authorized que se adelante a la
+             reconsulta ya tenga qué promover. Un pedido nuevo siempre reemplaza al anterior. */
+          if (aumentaPk) await setConfigValor(env, tPk.id, "packs_pendientes", JSON.stringify(pedidos));
+          else await env.DB.prepare("DELETE FROM config WHERE tenant_id = ?1 AND clave = 'packs_pendientes'").bind(tPk.id).run();
           const upPk = await mpFetch(env, "/preapproval/" + encodeURIComponent(tPk.mp_preapproval_id), {
             method: "PUT",
             body: { auto_recurring: { transaction_amount: montoPk, currency_id: "PEN" }, reason: "Batuta · packs (S/" + montoPk + "/mes)" }
           });
-          if (!upPk.ok) return json({ error: "Mercado Pago no aceptó el cambio. Escríbenos por WhatsApp y lo hacemos hoy mismo." }, 502);
-          await setConfigValor(env, tPk.id, "packs", JSON.stringify(pedidos));
-          let statusPk = "authorized";
+          if (!upPk.ok){
+            if (aumentaPk) await env.DB.prepare("DELETE FROM config WHERE tenant_id = ?1 AND clave = 'packs_pendientes'").bind(tPk.id).run();
+            return json({ error: "Mercado Pago no aceptó el cambio. Escríbenos por WhatsApp y lo hacemos hoy mismo." }, 502);
+          }
+          /* Si la reconsulta falla, un aumento queda pendiente (fail closed). Una baja puede
+             aplicarse igual: reduce capacidad y nunca regala más de lo ya pagado. */
+          let statusPk = aumentaPk ? "" : "authorized";
           try {
             const cPk = await consultarPreapprovalMP(env, tPk.mp_preapproval_id);
             statusPk = (cPk && cPk.data && String(cPk.data.status || "")) || statusPk;
           } catch (e) {}
-          if (statusPk !== "authorized"){
+          const decisionPk = decisionCambioPacks(antesPk.monto, montoPk, statusPk);
+          if (decisionPk.aplicar){
+            await setConfigValor(env, tPk.id, "packs", JSON.stringify(pedidos));
+            await env.DB.prepare("DELETE FROM config WHERE tenant_id = ?1 AND clave = 'packs_pendientes'").bind(tPk.id).run();
+          }
+          if (statusPk && statusPk !== "authorized"){
             await env.DB.prepare("UPDATE tenants SET mp_sub_status = ?1 WHERE id = ?2").bind(statusPk, tPk.id).run();
+          }
+          if (statusPk !== "authorized"){
             try { await alertaCorreoAndres(env, "Batuta packs: MP pidio re-autorizacion",
-              "Academia: " + (tPk.academia || tPk.id) + "\nMonto nuevo: S/" + montoPk + "\nStatus del preapproval: " + statusPk + "\nEl dueno tiene que re-autorizar el monto en Mercado Pago."); } catch (e) {}
+              "Academia: " + (tPk.academia || tPk.id) + "\nMonto nuevo: S/" + montoPk + "\nStatus del preapproval: " + (statusPk || "sin confirmar") + "\nLa capacidad nueva NO se aplico: queda pendiente hasta que el dueno re-autorice el monto en Mercado Pago."); } catch (e) {}
           }
           const finB = await packsDe(env, tPk.id);
-          return json({ ok: true, modo: "actualizado", monto: montoPk, mp_status: statusPk,
+          return json({ ok: true, modo: decisionPk.aplicar ? "actualizado" : "pendiente_reautorizacion", monto: montoPk, mp_status: statusPk || "sin_confirmar",
                         limites: { alumnos: finB.alumnos, profes: finB.profes, ia: finB.ia } });
         }
 
@@ -12674,6 +12699,9 @@ export default {
               if (pidVigente && pidVigente !== resId){
                 try { await mpFetch(env, "/preapproval/" + encodeURIComponent(pidVigente), { method: "PUT", body: { status: "cancelled" } }); } catch (e) {}
               }
+              /* También cubre un aumento sobre el MISMO preapproval: la capacidad quedó
+                 pendiente hasta que MP confirmó la re-autorización del monto. */
+              await promoverPacksPendientes(env, t.id);
               ctx.waitUntil(alertaCorreoAndres(env,
                 "SUSCRIPCIÓN MP AUTORIZADA: " + t.academia,
                 "El tenant " + t.academia + " (" + t.email + ") autorizó su suscripción.\nPlan: " + (planPagado || t.plan || "?") + "\nPreapproval: " + resId));
