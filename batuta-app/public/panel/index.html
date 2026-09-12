@@ -9393,7 +9393,16 @@ el("btnCsv").addEventListener("click",function(){
     /* 🔴 23-ago-2026 · el CSV exportaba `a.nombre` a secas mientras la tabla, la API y el
        buscador usan nombre + apellido. Con 1.441 de 1.447 alumnas con apellido cargado, el
        archivo salía con 27 filas que decían solo «Andrea», 20 «Claudia», 17 «Fiorella»… */
-    return [alumnoEtiqueta(a),a.whatsapp,a.curso,a.paquete,(a.ciclo||1),a.fecha,c.monto,a.pago,a.horario,(c.ilim?"Ilimitado (mensual)":c.compradas),c.usadas,(c.ilim?("vence "+(a.vence||"")):c.restantes),(c.ilim?"":c.reprogRest),c.estado,a.notas]; });
+    /* 🔴 11-set-2026 · EL ARREGLO DEL 4-SET LLEGÓ A LA CELDA Y NO A ESTE ARCHIVO.
+       La tabla cuenta el saldo sobre los pases VIGENTES (igual que el portal del alumno) y
+       el CSV seguía sumando también los vencidos: Andrea Trujillo (Elevate) leía «6 / 20»
+       en pantalla y «compradas 68» en el archivo de esa misma tabla. 5 alumnas reales.
+       El archivo usa los MISMOS números que la pantalla: `pasesResumen` es la única fuente.
+       El caso "mensualidad + pases" (pr.ilim) se deja como estaba: hoy no lo tiene nadie y
+       la celda tampoco muestra números ahí. */
+    var pr=pasesResumen(a), comp=c.compradas, usa=c.usadas, rest=c.restantes;
+    if(pr && !pr.ilim){ comp=pr.comp; rest=pr.rest; usa=Math.max(0,pr.comp-pr.rest); }
+    return [alumnoEtiqueta(a),a.whatsapp,a.curso,a.paquete,(a.ciclo||1),a.fecha,c.monto,a.pago,a.horario,(c.ilim?"Ilimitado (mensual)":comp),usa,(c.ilim?("vence "+(a.vence||"")):rest),(c.ilim?"":c.reprogRest),c.estado,a.notas]; });
   descargaCsv(head,rows,"alumnos-"+MARCA.archivoExport+".csv");
 });
 el("btnCsvEmails").addEventListener("click",function(){
