@@ -11559,7 +11559,7 @@ function packsPintarUso(){
 function packsPintarAlertas(alertas){
   var cont=el("packsAlertas"); if(!cont) return;
   cont.innerHTML=(alertas||[]).map(function(a){
-    return '<div class="pack-alerta"><div><b>Ya usas '+a.uso+' de '+a.tope+'.</b> Para seguir sumando alumnos o profesores, el pack que mejor calza es <b>'+esc(a.pack)+' por S/'+a.precio+'</b>.</div>'+
+    return '<div class="pack-alerta"><div><b>Ya usas '+a.uso+' de '+a.tope+'.</b> Para seguir sumando '+({alumnos:'alumnos',profes:'profesores',ia:'conversaciones del asistente'}[a.fam]||'capacidad')+', el pack que mejor calza es <b>'+esc(a.pack)+' por S/'+a.precio+'</b>.</div>'+
       '<button class="btn ghost sm" type="button" data-pack-recomendado="'+esc(a.pack_id)+'">Ver packs</button></div>';
   }).join("");
   Array.prototype.forEach.call(cont.querySelectorAll("[data-pack-recomendado]"),function(b){

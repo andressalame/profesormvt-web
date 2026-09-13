@@ -120,6 +120,51 @@ for (const [nombre, aguja] of NUEVAS){
   DUENO_P.includes(aguja) ? ok("conoce " + nombre) : no("NO conoce " + nombre);
 }
 
+console.log("\n── 7. Ni una cantidad de pack muerta escrita a mano (12-set-2026) ──");
+/* El 7-set los packs de IA pasaron a 500/2,000/5,000 y el bloque de precios se ató a
+   textoPacks(), pero la línea del asistente de WhatsApp seguía diciendo a mano «con un
+   pack subes a 300, 1,000, 3,000 o 10,000». La sección 5 solo miraba lo que recita la
+   función, no lo que el manual escribe por su cuenta. Los muertos salen de `legado:true`. */
+const vivas = new Set(), muertas = new Set();
+for (const m of WORKER.matchAll(/\{ fam: "[a-z]+",\s*suma: (\d+),[^}]*\}/g)){
+  (/legado: true/.test(m[0]) ? muertas : vivas).add(Number(m[1]));
+}
+const soloMuertas = [...muertas].filter(n => !vivas.has(n)).map(n => n.toLocaleString("en-US"));
+if (soloMuertas.length < 3) no("no pude leer los packs legado de PACKS (leí " + soloMuertas.length + ")");
+for (const n of soloMuertas){
+  /* «50» o «300» sueltos son falsos positivos (S/50 de afiliados): una cantidad chica solo
+     cuenta si va pegada a «conversaciones»/«alumnos» o dentro de una lista «300, 1,000 o …». */
+  const esc = n.replace(/[,.]/g, "\\$&");
+  const re = n.includes(",")
+    ? new RegExp("(^|[^0-9,.])" + esc + "([^0-9,]|$)")
+    : new RegExp("(^|[^0-9,.$/])" + esc + "(\\s*(conversaciones|alumnos)|, [0-9]|\\s+o\\s+[0-9])");
+  re.test(DUENO) ? no("el manual escribe a mano la cantidad muerta «" + n + "»") : ok("sin la cantidad muerta «" + n + "»");
+}
+
+console.log("\n── 8. Cuándo llega la capacidad de un pack, y el aviso del 80% (11-set-2026) ──");
+/* Desde 04320c6 un AUMENTO solo da capacidad cuando MP autoriza el monto nuevo y una BAJA
+   se aplica al instante. El manual decía «el cambio rige desde el siguiente cobro». */
+DUENO_P.includes("rige desde el siguiente cobro") ? no("sigue diciendo «el cambio rige desde el siguiente cobro»") : ok("ya no dice que el cambio rige desde el siguiente cobro");
+DUENO_P.includes("autoriza el monto nuevo") ? ok("explica que un aumento espera a que Mercado Pago autorice") : no("no explica que un aumento espera a Mercado Pago");
+DUENO_P.includes("el limite baja en ese mismo momento") ? ok("explica que una baja se aplica al instante") : no("no explica que una baja se aplica al instante");
+const casilla = /id="packsEmailOpt" type="checkbox" \/>\s*([^<]+?)\.?<\/label>/.exec(PANEL);
+if (!casilla) no("no encontré la casilla del aviso del 80% en el panel");
+else DUENO_P.includes(pelar(casilla[1].trim())) ? ok("nombra la casilla real «" + casilla[1].trim() + "»") : no("NO nombra la casilla «" + casilla[1].trim() + "»");
+
+console.log("\n── 9. Las rutas que ya no existen no se recitan ──");
+for (const muerta of ["registro de clases", "traer mi lista de excel", "pago con tarjeta (mercado pago)", "pestana 'mi web'", "en inicio"]){
+  DUENO_P.includes(muerta) ? no("el manual del dueño manda a «" + muerta + "», que no existe en el panel") : ok("sin «" + muerta + "»");
+}
+const grupoClases = /clases:\[(\[[^\]]*\](?:,\[[^\]]*\])*)\]/.exec(PANEL);
+if (grupoClases){
+  for (const m of grupoClases[1].matchAll(/\["[a-z]+","([^"]+)"\]/g)){
+    DUENO_P.includes("mis clases > " + pelar(m[1])) || DUENO_P.includes(pelar(m[1])) ? ok("Mis clases > " + m[1] + " está nombrada") : no("no nombra Mis clases > " + m[1]);
+  }
+} else no("no pude leer las sub-pestañas de Mis clases");
+if (PORTAL.includes("Horarios en tu zona")){
+  pelar(ALUMNO).includes("horarios en tu zona") ? ok("el manual del alumno sabe que la agenda sale en su zona") : no("el portal muestra la agenda en la zona del alumno y el bot no lo sabe");
+}
+
 console.log();
 if (mal){ console.log("🔴 " + mal + " fallo(s)"); process.exit(1); }
 console.log("✅ el bot sabe lo que hay");
