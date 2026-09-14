@@ -6444,7 +6444,7 @@ function paginaLogin(googleOn, slug){
       "<div class=\"err\" id=\"err\"></div>" +
     "</form>" +
     (googleOn ? botonGoogle("profesor", slug, "Continuar con Google") : "") +
-    "<div class=\"foot\">¿No tienes cuenta? <a href=\"/app/registro\">Crea tu academia</a> · <a href=\"/demo\">Mira la demo</a></div>";
+    "<div class=\"foot\"><a href=\"/app/recuperar" + (slug ? "?slug=" + encodeURIComponent(slug) : "") + "\">¿Olvidaste tu contraseña?</a><br><br>¿No tienes cuenta? <a href=\"/app/registro\">Crea tu academia</a> · <a href=\"/demo\">Mira la demo</a></div>";
   const script =
     "document.getElementById('f').addEventListener('submit', async function(e){" +
     "e.preventDefault();" +
@@ -6461,6 +6461,46 @@ function paginaLogin(googleOn, slug){
     "}catch(ex){err.textContent='Error de conexión. Intenta de nuevo.'; btn.disabled=false;}" +
     "});";
   return paginaBase("Ingresa — Batuta", cuerpo, script);
+}
+
+function paginaRecuperarProfesor(slug){
+  const cuerpo =
+    "<h1>Recupera tu acceso</h1>" +
+    "<p class=\"sub\">Escribe el correo que usas en Batuta. Te enviaremos un enlace para crear una contraseña nueva.</p>" +
+    "<form id=\"f\">" +
+      "<label>Email</label><input id=\"email\" type=\"email\" autocomplete=\"email\" required>" +
+      "<button type=\"submit\">Enviar enlace</button>" +
+      "<div class=\"err\" id=\"err\"></div>" +
+    "</form>" +
+    "<div class=\"foot\"><a href=\"/app/login" + (slug ? "?slug=" + encodeURIComponent(slug) : "") + "\">Volver a ingresar</a></div>";
+  const script =
+    "document.getElementById('f').addEventListener('submit',async function(e){" +
+    "e.preventDefault();var err=document.getElementById('err'),btn=e.target.querySelector('button');err.textContent='';btn.disabled=true;" +
+    "try{var r=await fetch('/app/api/t/password/olvide',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({email:document.getElementById('email').value.trim(),slug:" + JSON.stringify(slug || "") + "})});" +
+    "if(!r.ok)throw new Error();err.style.color='var(--verde)';err.textContent='Si encontramos esa cuenta, el enlace llegará a su correo en unos minutos.';" +
+    "}catch(ex){err.textContent='No se pudo enviar. Intenta de nuevo.';btn.disabled=false;}" +
+    "});";
+  return paginaBase("Recupera tu acceso — Batuta", cuerpo, script);
+}
+
+function paginaRestablecerProfesor(token){
+  const cuerpo =
+    "<h1>Crea una contraseña nueva</h1>" +
+    "<form id=\"f\">" +
+      "<label>Contraseña nueva (mínimo 8 caracteres)</label><input id=\"p1\" type=\"password\" autocomplete=\"new-password\" required>" +
+      "<label>Repítela</label><input id=\"p2\" type=\"password\" autocomplete=\"new-password\" required>" +
+      "<button type=\"submit\">Guardar y entrar</button>" +
+      "<div class=\"err\" id=\"err\"></div>" +
+    "</form>";
+  const script =
+    "document.getElementById('f').addEventListener('submit',async function(e){" +
+    "e.preventDefault();var p1=document.getElementById('p1').value,p2=document.getElementById('p2').value,err=document.getElementById('err'),btn=e.target.querySelector('button');err.textContent='';" +
+    "if(p1.length<8){err.textContent='La contraseña necesita mínimo 8 caracteres.';return;}if(p1!==p2){err.textContent='Las contraseñas no coinciden.';return;}btn.disabled=true;" +
+    "try{var r=await fetch('/app/api/t/password/reset',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({token:" + JSON.stringify(token || "") + ",nueva:p1})}),d=await r.json();" +
+    "if(!r.ok){err.textContent=d.error||'El enlace ya no es válido.';btn.disabled=false;return;}localStorage.setItem('batuta_t',d.token);location.replace('/app/panel');" +
+    "}catch(ex){err.textContent='No se pudo guardar. Intenta de nuevo.';btn.disabled=false;}" +
+    "});";
+  return paginaBase("Nueva contraseña — Batuta", cuerpo, script);
 }
 
 /* Packs (20-ago-2026): ya no hay planes que activar. Esta página sobrevive porque hay links
@@ -9691,6 +9731,13 @@ export default {
     if (path === "/app/login" && request.method === "GET"){
       return htmlResponse(paginaLogin(googleConfigurado(env), String(url.searchParams.get("slug") || "").trim().slice(0, 60)));
     }
+    if (path === "/app/recuperar" && request.method === "GET"){
+      return htmlResponse(paginaRecuperarProfesor(String(url.searchParams.get("slug") || "").trim().slice(0, 60)));
+    }
+    if (path === "/app/restablecer" && request.method === "GET"){
+      const tokenReset = String(url.searchParams.get("token") || "").trim();
+      return htmlResponse(paginaRestablecerProfesor(/^[a-f0-9]{64}$/.test(tokenReset) ? tokenReset : ""));
+    }
     if (path === "/app/suscribir" && request.method === "GET"){
       return htmlResponse(paginaSuscribir());
     }
@@ -12128,6 +12175,108 @@ export default {
           "\nSlug: " + slug +
           "\n\nACTIVACION (la metrica #1): el objetivo del primer toque es que cargue 5 alumnos y registre 1 cobro en 7 dias. Ofrecele cargar su Excel juntos por chat."));
         return json({ ok: true, token, slug, plan: "base" }); // freemium: todo registro nuevo es gratis
+      }
+
+      /* Recuperación para dueños y profesores. El correo siempre recibe la misma respuesta:
+         no revela si existe una cuenta. El token guarda un actor T:/P: dentro de reset_tokens,
+         tabla ya usada por alumnos, pero esta ruta nunca toca cuentas de alumnos. */
+      if (path === "/app/api/t/password/olvide" && request.method === "POST"){
+        const ipReset = clientIp(request);
+        if (ipReset && await chatbotPasoTope(env, "tpwr:" + ipReset, 5)){
+          return json({ ok: true });
+        }
+        const bReset = await request.json().catch(() => ({}));
+        const emailReset = String(bReset.email || "").trim().toLowerCase();
+        const slugReset = String(bReset.slug || "").trim().slice(0, 60);
+        if (emailOk(emailReset)){
+          let tenantReset = slugReset
+            ? await env.DB.prepare("SELECT * FROM tenants WHERE slug = ?1").bind(slugReset).first()
+            : await env.DB.prepare("SELECT * FROM tenants WHERE email = ?1").bind(emailReset).first();
+          let actorReset = tenantReset && tenantReset.email === emailReset ? "T:" + tenantReset.id : "";
+          if (!actorReset){
+            await ensureMultiprofesorSchema(env);
+            const queryReset = slugReset
+              ? "SELECT p.*, t.slug, t.academia FROM profesores p JOIN tenants t ON t.id = p.tenant_id WHERE p.email = ?1 AND p.tenant_id = ?2 AND p.rol != 'dueno' AND p.estado = 'activo' AND t.estado != 'vencido' LIMIT 2"
+              : "SELECT p.*, t.slug, t.academia FROM profesores p JOIN tenants t ON t.id = p.tenant_id WHERE p.email = ?1 AND p.rol != 'dueno' AND p.estado = 'activo' AND t.estado != 'vencido' LIMIT 2";
+            const stmtReset = env.DB.prepare(queryReset);
+            const profsReset = slugReset && tenantReset
+              ? await stmtReset.bind(emailReset, tenantReset.id).all()
+              : (!slugReset ? await stmtReset.bind(emailReset).all() : { results: [] });
+            const candidatosReset = (profsReset && profsReset.results) || [];
+            if (candidatosReset.length === 1){
+              const profReset = candidatosReset[0];
+              tenantReset = tenantReset || await env.DB.prepare("SELECT * FROM tenants WHERE id = ?1").bind(profReset.tenant_id).first();
+              actorReset = "P:" + profReset.id;
+            }
+          }
+          if (tenantReset && actorReset){
+            const tokenReset = randHex(32);
+            const hashReset = await sha256Hex(tokenReset);
+            const expiraReset = new Date(Date.now() + 30 * 60000).toISOString();
+            await env.DB.batch([
+              env.DB.prepare("DELETE FROM reset_tokens WHERE tenant_id = ?1 AND cuenta_id = ?2").bind(tenantReset.id, actorReset),
+              env.DB.prepare("INSERT INTO reset_tokens (token_hash, tenant_id, cuenta_id, expira, usado) VALUES (?1,?2,?3,?4,0)").bind(hashReset, tenantReset.id, actorReset, expiraReset)
+            ]);
+            const linkReset = MARCA.dominio + "/app/restablecer?token=" + tokenReset;
+            try {
+              await enviarCorreo(env, {
+                tenantId: tenantReset.id,
+                to: emailReset,
+                subject: "Restablece tu contraseña de Batuta",
+                text: "Abre este enlace para crear una contraseña nueva: " + linkReset + "\n\nEl enlace vence en 30 minutos. Si no pediste el cambio, ignora este correo."
+              });
+            } catch (e) {}
+          }
+        }
+        return json({ ok: true });
+      }
+
+      if (path === "/app/api/t/password/reset" && request.method === "POST"){
+        const bReset = await request.json().catch(() => ({}));
+        const tokenReset = String(bReset.token || "").trim();
+        const nuevaReset = String(bReset.nueva || "");
+        if (!/^[a-f0-9]{64}$/.test(tokenReset)) return json({ error: "El enlace ya no es válido. Pide uno nuevo." }, 400);
+        if (nuevaReset.length < 8) return json({ error: "La contraseña necesita mínimo 8 caracteres." }, 400);
+        const hashTokenReset = await sha256Hex(tokenReset);
+        const filaReset = await env.DB.prepare("SELECT * FROM reset_tokens WHERE token_hash = ?1").bind(hashTokenReset).first();
+        if (!filaReset || filaReset.usado || new Date(filaReset.expira).getTime() < Date.now()){
+          return json({ error: "El enlace ya no es válido. Pide uno nuevo." }, 400);
+        }
+        const actorReset = String(filaReset.cuenta_id || "");
+        if (!/^[TP]:/.test(actorReset)) return json({ error: "El enlace ya no es válido. Pide uno nuevo." }, 400);
+        const saltReset = randHex(16);
+        const passReset = await hashPass(nuevaReset, saltReset);
+        let slugReset = "";
+        if (actorReset.startsWith("P:")){
+          const profReset = await env.DB.prepare("SELECT id, tenant_id, estado FROM profesores WHERE id = ?1 AND tenant_id = ?2").bind(actorReset.slice(2), filaReset.tenant_id).first();
+          if (!profReset || profReset.estado !== "activo") return json({ error: "El enlace ya no es válido. Pide uno nuevo." }, 400);
+          const tenantReset = await env.DB.prepare("SELECT slug, estado FROM tenants WHERE id = ?1").bind(filaReset.tenant_id).first();
+          if (!tenantReset || tenantReset.estado === "vencido") return json({ error: "El enlace ya no es válido. Pide uno nuevo." }, 400);
+          slugReset = tenantReset.slug;
+          const claimReset = await env.DB.prepare("UPDATE reset_tokens SET usado = 1 WHERE token_hash = ?1 AND usado = 0").bind(hashTokenReset).run();
+          if (!((claimReset && claimReset.meta && claimReset.meta.changes) || 0)){
+            return json({ error: "El enlace ya no es válido. Pide uno nuevo." }, 400);
+          }
+          await env.DB.batch([
+            env.DB.prepare("UPDATE profesores SET pass_hash = ?1, pass_salt = ?2 WHERE id = ?3 AND tenant_id = ?4").bind(passReset, saltReset, profReset.id, filaReset.tenant_id),
+            env.DB.prepare("DELETE FROM sesiones WHERE cuenta_id = ?1").bind(actorReset)
+          ]);
+        } else {
+          const tenantReset = await env.DB.prepare("SELECT * FROM tenants WHERE id = ?1").bind(filaReset.tenant_id).first();
+          if (!tenantReset || actorReset !== "T:" + tenantReset.id) return json({ error: "El enlace ya no es válido. Pide uno nuevo." }, 400);
+          slugReset = tenantReset.slug;
+          const duenoReset = await asegurarDueno(env, tenantReset);
+          const claimReset = await env.DB.prepare("UPDATE reset_tokens SET usado = 1 WHERE token_hash = ?1 AND usado = 0").bind(hashTokenReset).run();
+          if (!((claimReset && claimReset.meta && claimReset.meta.changes) || 0)){
+            return json({ error: "El enlace ya no es válido. Pide uno nuevo." }, 400);
+          }
+          await env.DB.batch([
+            env.DB.prepare("UPDATE tenants SET pass_hash = ?1, pass_salt = ?2 WHERE id = ?3").bind(passReset, saltReset, tenantReset.id),
+            env.DB.prepare("UPDATE profesores SET pass_hash = ?1, pass_salt = ?2 WHERE tenant_id = ?3 AND rol = 'dueno'").bind(passReset, saltReset, tenantReset.id),
+            env.DB.prepare("DELETE FROM sesiones WHERE cuenta_id = ?1 OR cuenta_id = ?2").bind(actorReset, duenoReset ? "P:" + duenoReset.id : "")
+          ]);
+        }
+        return json({ ok: true, token: await crearSesion(env, actorReset), slug: slugReset });
       }
 
       if (path === "/app/api/t/login" && request.method === "POST"){
