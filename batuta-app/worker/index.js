@@ -8715,6 +8715,31 @@ async function cerrarAsistenciasAuto(env){
   }
   return cerradas;
 }
+/* ---------- La BITÁCORA cierra la RESERVA (14-sep-2026) ----------
+   Dos puertas al mismo hecho. Marcar la clase en la AGENDA cierra la reserva y escribe la
+   bitácora; anotarla en la BITÁCORA del panel (el guardado grande) solo escribía la bitácora.
+   MVT anota así y el 14-set juntaba 46 reservas ya pasadas en 'reservada', 37 con su clase
+   anotada ese mismo día: la ficha se las enseñaba a Andrés como «Ya pasaron y están sin marcar».
+   El saldo NO cambia (el motor empareja reserva con bitácora por día sin mirar el estado de la
+   reserva); cambia lo que se ve y la fecha de «última clase».
+   Solo se cierra cuando la bitácora de ese día alcanza para TODAS las reservas abiertas del
+   alumno ese día y dice una sola cosa. Dos clases y una anotada, o «Asistió» y «Falta» el
+   mismo día: no se adivina cuál fue, se deja a mano (la liquidación pagaría una clase de más).
+   ?1 = tenant · ?2 = ahora en ISO. Prueba: pruebas-la-bitacora-cierra-la-reserva.mjs */
+function sqlCerrarReservasAnotadas(){
+  const abiertasDia =
+    "(SELECT COUNT(*) FROM reservas r2 WHERE r2.tenant_id = reservas.tenant_id AND r2.alumno_id = reservas.alumno_id " +
+    "AND r2.estado = 'reservada' AND r2.tipo NOT IN ('bloqueo','aparta') AND r2.fin_utc <= ?2 " +
+    "AND date(r2.inicio_utc, '-5 hours') = date(reservas.inicio_utc, '-5 hours'))";
+  const anotadas = (est) =>
+    "(SELECT COUNT(*) FROM registro g WHERE g.tenant_id = reservas.tenant_id AND g.alumno_id = reservas.alumno_id " +
+    "AND g.fecha = date(reservas.inicio_utc, '-5 hours') AND g.estado = '" + est + "')";
+  return "UPDATE reservas SET estado = CASE WHEN " + anotadas("Asistió") + " > 0 THEN 'completada' ELSE 'falta' END " +
+    "WHERE tenant_id = ?1 AND estado = 'reservada' AND tipo NOT IN ('bloqueo','aparta') " +
+    "AND COALESCE(alumno_id,'') != '' AND fin_utc <= ?2 AND (" +
+    "(" + anotadas("Asistió") + " >= " + abiertasDia + " AND " + anotadas("Falta") + " = 0) OR " +
+    "(" + anotadas("Falta") + " >= " + abiertasDia + " AND " + anotadas("Asistió") + " = 0))";
+}
 /* La bitácora de una clase dictada, en UN solo sitio (15-ago-2026). La escribían el marcado
    manual y "vino sin reservar" con su propia copia de la guarda; el cierre automático no la
    escribía y ahí nació el bug de las clases invisibles de Elevate. Devuelve true si anotó.
@@ -9247,7 +9272,10 @@ async function apiResumen(env, t){
   const hoyIni = new Date(Date.parse(hoyL + "T00:00:00Z") + 5 * 3600000).toISOString();
   const hoyFin = new Date(Date.parse(hoyL + "T23:59:59Z") + 5 * 3600000).toISOString();
   const clasesHoy = await env.DB.prepare(
-    "SELECT COUNT(*) AS n FROM reservas WHERE tenant_id = ?1 AND estado = 'reservada' AND inicio_utc BETWEEN ?2 AND ?3"
+    /* 14-sep-2026 · contaba solo 'reservada': cada clase que se cerraba (a mano, sola o
+       desde la bitácora) desaparecía de «clases de hoy» a media tarde. */
+    "SELECT COUNT(*) AS n FROM reservas WHERE tenant_id = ?1 AND estado IN ('reservada','completada','falta') " +
+    "AND COALESCE(alumno_id,'') != '' AND tipo NOT IN ('bloqueo','aparta') AND inicio_utc BETWEEN ?2 AND ?3"
   ).bind(tid, hoyIni, hoyFin).first();
   const profes = await env.DB.prepare("SELECT COUNT(*) AS n FROM profesores WHERE tenant_id = ?1 AND estado != 'suspendido'").bind(tid).first();
   const lim = await packsDe(env, tid);
@@ -18023,6 +18051,10 @@ export default {
             "AND alumno_id NOT IN (SELECT id FROM alumnos WHERE tenant_id = ?1)"
           ).bind(tid));
           await env.DB.batch(stmts);
+          /* 14-sep-2026 · la bitácora recién guardada cierra las reservas que ya anotó. Va
+             DESPUÉS del batch: si el guardado falla, no se cierra nada. */
+          try { await env.DB.prepare(sqlCerrarReservasAnotadas()).bind(tid, new Date().toISOString()).run(); }
+          catch (e) { console.error("cerrar reservas anotadas", e); }
           /* Los avisos van DESPUÉS del batch a propósito: si el guardado falla, el alumno no
              puede haber recibido "tu plan ya está activo" por un plan que no se guardó. */
           if (avisarPlan.length){
