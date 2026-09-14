@@ -6430,10 +6430,10 @@ const GOOGLE_BTN_CSS =
   ".gsep::before,.gsep::after{content:'';flex:1;height:1px;background:var(--linea-campo)}";
 const GOOGLE_SVG = "<svg width=\"18\" height=\"18\" viewBox=\"0 0 48 48\"><path fill=\"#EA4335\" d=\"M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z\"/><path fill=\"#4285F4\" d=\"M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z\"/><path fill=\"#FBBC05\" d=\"M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z\"/><path fill=\"#34A853\" d=\"M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z\"/></svg>";
 function botonGoogle(intent, slug, texto, conSep) {
-  const q = intent === "alumno" ? "?intent=alumno&slug=" + encodeURIComponent(slug || "") : "?intent=profesor";
+  const q = intent === "alumno" ? "?intent=alumno&slug=" + encodeURIComponent(slug || "") : "?intent=profesor" + (slug ? "&slug=" + encodeURIComponent(slug) : "");
   return (conSep === false ? "" : "<div class=\"gsep\">o</div>") + "<a class=\"gbtn\" href=\"/app/api/auth/google/start" + q + "\">" + GOOGLE_SVG + esc(texto) + "</a>";
 }
-function paginaLogin(googleOn){
+function paginaLogin(googleOn, slug){
   const cuerpo =
     "<h1>Ingresa a Batuta</h1>" +
     "<p class=\"sub\">El panel del profesor o dueño de academia. ¿Eres alumno? Entra por el link de tu academia (batuta.lat/app/a/tu-academia): pídeselo a tu profesor.</p>" +
@@ -6443,7 +6443,7 @@ function paginaLogin(googleOn){
       "<button type=\"submit\">Ingresar</button>" +
       "<div class=\"err\" id=\"err\"></div>" +
     "</form>" +
-    (googleOn ? botonGoogle("profesor", "", "Continuar con Google") : "") +
+    (googleOn ? botonGoogle("profesor", slug, "Continuar con Google") : "") +
     "<div class=\"foot\">¿No tienes cuenta? <a href=\"/app/registro\">Crea tu academia</a> · <a href=\"/demo\">Mira la demo</a></div>";
   const script =
     "document.getElementById('f').addEventListener('submit', async function(e){" +
@@ -6453,7 +6453,7 @@ function paginaLogin(googleOn){
     "var email=document.getElementById('email').value.trim();" +
     "var pass=document.getElementById('pass').value;" +
     "try{" +
-    "var r=await fetch('/app/api/t/login',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({email:email,pass:pass})});" +
+    "var r=await fetch('/app/api/t/login',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({email:email,pass:pass,slug:new URLSearchParams(location.search).get('slug')||''})});" +
     "var d=await r.json();" +
     "if(!r.ok){err.textContent=d.error||'Correo o contraseña incorrectos.'; btn.disabled=false; return;}" +
     "localStorage.setItem('batuta_t', d.token);" +
@@ -9689,7 +9689,7 @@ export default {
       return htmlResponse(paginaRegistro(googleConfigurado(env)));
     }
     if (path === "/app/login" && request.method === "GET"){
-      return htmlResponse(paginaLogin(googleConfigurado(env)));
+      return htmlResponse(paginaLogin(googleConfigurado(env), String(url.searchParams.get("slug") || "").trim().slice(0, 60)));
     }
     if (path === "/app/suscribir" && request.method === "GET"){
       return htmlResponse(paginaSuscribir());
@@ -11956,8 +11956,31 @@ export default {
         };
         await ensureGoogleSchema(env);
         if (st.intent === "profesor"){
-          // ¿Ya existe un tenant con ese email? -> login. Si no -> registro con Google.
+          // La identidad viene de Google verificado; el slug solo elige entre sus accesos.
+          // Nunca convertir a un profesor invitado en dueño de una academia nueva.
+          perfil.email = String(perfil.email).trim().toLowerCase();
           let t = await env.DB.prepare("SELECT * FROM tenants WHERE email = ?1").bind(perfil.email).first();
+          await ensureMultiprofesorSchema(env);
+          const { results: membresias } = await env.DB.prepare(
+            "SELECT p.id, p.tenant_id, p.estado, t.slug, t.academia, t.estado AS academia_estado FROM profesores p JOIN tenants t ON t.id = p.tenant_id WHERE lower(p.email) = ?1 AND p.rol != 'dueno'"
+          ).bind(perfil.email).all();
+          const destinos = (membresias || []).filter(p => p.estado === "activo" && p.academia_estado !== "vencido")
+            .map(p => ({ slug: p.slug, academia: p.academia, cuenta: "P:" + p.id, rol: "Profesor" }));
+          if (t) destinos.push({ slug: t.slug, academia: t.academia, cuenta: "T:" + t.id, rol: "Dueño" });
+          const elegido = st.slug ? destinos.find(d => d.slug === st.slug) : (destinos.length === 1 ? destinos[0] : null);
+          if ((st.slug && !elegido) || (!destinos.length && (membresias || []).length)){
+            return paginaError("Tu cuenta no tiene un acceso activo a esta academia. Consulta con su administrador.", "/app/login");
+          }
+          if (elegido){
+            const token = await crearSesion(env, elegido.cuenta);
+            return irCon(token, "/app/panel", "batuta_t");
+          }
+          if (destinos.length > 1){
+            // Sin sesión provisional ni credenciales en enlaces. Cada elección vuelve a
+            // OAuth y revalida identidad y membresía; un cambio de cuenta no hereda acceso.
+            const opciones = destinos.map(d => "<a class=\"gbtn\" href=\"/app/api/auth/google/start?intent=profesor&amp;slug=" + encodeURIComponent(d.slug) + "\">" + esc(d.academia) + " · " + esc(d.rol) + "</a>").join("");
+            return htmlResponse(paginaBase("Elige tu academia — Batuta", "<style>" + GOOGLE_BTN_CSS + "</style><h1>¿A qué academia quieres entrar?</h1><p class=\"sub\">Tu correo tiene acceso a estas academias. Elige una para continuar con Google.</p>" + opciones, ""));
+          }
           if (!t){
             const id = crypto.randomUUID();
             const nombre = (perfil.name || perfil.email.split("@")[0]).slice(0, 60);
@@ -12116,17 +12139,17 @@ export default {
         const email = String(b.email || "").trim().toLowerCase();
         const pass = String(b.pass || "");
         const t = emailOk(email) ? await env.DB.prepare("SELECT * FROM tenants WHERE email = ?1").bind(email).first() : null;
-        if (t){
+        const slugLogin = String(b.slug || "").trim().slice(0, 60);
+        if (t && (!slugLogin || t.slug === slugLogin)){
           // Dueno de academia: valida contra tenants (fuente de verdad de SU contrasena)
           // y emite sesion P: del dueno (T: legacy sigue aceptado en actorDeSesion).
           const hash = await hashPass(pass, t.pass_salt);
-          if (!safeEq(hash, t.pass_hash)){
-            await new Promise(r => setTimeout(r, 350));
-            return json({ error: "Correo o contraseña incorrectos." }, 401);
+          if (safeEq(hash, t.pass_hash)){
+            const dueno = await asegurarDueno(env, t);
+            const token = await crearSesion(env, dueno ? "P:" + dueno.id : "T:" + t.id);
+            return json({ ok: true, token, slug: t.slug });
           }
-          const dueno = await asegurarDueno(env, t);
-          const token = await crearSesion(env, dueno ? "P:" + dueno.id : "T:" + t.id);
-          return json({ ok: true, token, slug: t.slug });
+          // Puede tener otra contraseña como profesor de una academia distinta.
         }
         // Profesor invitado (multi-profesor): valida contra `profesores`.
         if (emailOk(email)){
@@ -12135,16 +12158,16 @@ export default {
             "SELECT * FROM profesores WHERE email = ?1 AND rol != 'dueno' AND estado = 'activo'"
           ).bind(email).all();
           let candidatos = (matches || []);
-          if (candidatos.length > 1 && b.slug){
-            const tSlug = await env.DB.prepare("SELECT id FROM tenants WHERE slug = ?1").bind(String(b.slug).trim()).first();
-            if (tSlug) candidatos = candidatos.filter(p => p.tenant_id === tSlug.id);
+          if (slugLogin){
+            const tSlug = await env.DB.prepare("SELECT id FROM tenants WHERE slug = ?1").bind(slugLogin).first();
+            candidatos = tSlug ? candidatos.filter(p => p.tenant_id === tSlug.id) : [];
           }
           for (const p of candidatos){
             if (!p.pass_hash) continue;
             const hp = await hashPass(pass, p.pass_salt);
             if (safeEq(hp, p.pass_hash)){
               const tp = await env.DB.prepare("SELECT slug, estado FROM tenants WHERE id = ?1").bind(p.tenant_id).first();
-              if (!tp) continue;
+              if (!tp || tp.estado === "vencido") continue;
               const token = await crearSesion(env, "P:" + p.id);
               return json({ ok: true, token, slug: tp.slug });
             }
