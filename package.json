@@ -14,5 +14,11 @@
     "@block65/webcrypto-web-push": "^1.0.2",
     "astro": "^4.16.0",
     "mimetext": "^3.0.28"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "devDependencies": {
+    "wrangler": "4.131.1"
   }
 }
