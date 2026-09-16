@@ -28,3 +28,10 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: d6762650e83c09d554b1e3413c03b43d
+      - name: smoke post-deploy (la web responde y sirve la marca)
+        run: |
+          set -e
+          for i in 1 2 3; do code=$(curl -s -o /tmp/home.html -w '%{http_code}' https://profesormvt.com/) && [ "$code" = "200" ] && break; sleep 10; done
+          [ "$code" = "200" ] || { echo "home devolvió $code"; exit 1; }
+          grep -qi 'ProfesorMVT' /tmp/home.html || { echo "la home no contiene la marca"; exit 1; }
+          echo "smoke OK: 200 y marca presente"

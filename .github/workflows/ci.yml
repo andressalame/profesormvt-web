@@ -15,3 +15,8 @@ jobs:
       - run: npm ci
       - run: npm run build --if-present
       - run: npx wrangler --version
+      - name: npm audit (producción, alto o crítico)
+        run: npm audit --omit=dev --audit-level=high || echo "::warning::audit con hallazgos (cadena Astro 4, Fase 2 pendiente)"
+      - name: gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env: { GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} }
