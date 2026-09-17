@@ -3709,11 +3709,39 @@ function sanearRespuestaIA(t){
     .replace(/\s{2,}/g, " ")
     .trim();
 }
+
+/* ============ Langfuse (Andres AI OS, capa E) ============
+   Traza cada llamada a Claude como una "generation" via OTLP/JSON al endpoint OTel de Langfuse.
+   Sin LANGFUSE_PUBLIC_KEY / LANGFUSE_SECRET_KEY / LANGFUSE_HOST (secrets) no hace nada.
+   Privacidad (clase P2): telefonos y correos enmascarados, texto recortado; nunca se envian secretos. */
+function lfEnmascarar(s){ return String(s || "").replace(/\+?\d[\d\s().-]{7,}\d/g, "[tel]").replace(/[\w.+-]+@[\w-]+\.[\w.-]+/g, "[email]").slice(0, 600); }
+function lfHex(n){ const b = new Uint8Array(n); crypto.getRandomValues(b); return Array.from(b, x => x.toString(16).padStart(2, "0")).join(""); }
+function lfGeneracion(env, { nombre, input, output, modelo, usage, inicioMs, finMs, meta }){
+  if (!env.LANGFUSE_PUBLIC_KEY || !env.LANGFUSE_SECRET_KEY) return Promise.resolve();
+  const host = String(env.LANGFUSE_HOST || "https://cloud.langfuse.com").replace(/\/$/, "");
+  const str = v => ({ stringValue: String(v) });
+  const attrs = [
+    ["langfuse.observation.type", str("generation")],
+    ["langfuse.trace.name", str(nombre || "wa-asistente")],
+    ["langfuse.trace.tags", { arrayValue: { values: [str("batuta-app")] } }],
+    ["langfuse.trace.input", str(lfEnmascarar(input))],
+    ["langfuse.trace.output", str(lfEnmascarar(output))],
+    ["langfuse.observation.input", str(lfEnmascarar(input))],
+    ["langfuse.observation.output", str(lfEnmascarar(output))],
+    ["langfuse.observation.model.name", str(modelo || "")],
+    ["langfuse.observation.usage_details", str(JSON.stringify({ input: usage?.input_tokens || 0, output: usage?.output_tokens || 0, input_cached: usage?.cache_read_input_tokens || 0 }))],
+    ["langfuse.trace.metadata", str(JSON.stringify(Object.assign({ worker: "batuta-app" }, meta || {})))]
+  ].map(([key, value]) => ({ key, value }));
+  const ns = ms => String(Math.round(ms * 1e6));
+  const body = { resourceSpans: [{ resource: { attributes: [{ key: "service.name", value: str("batuta-app") }] }, scopeSpans: [{ scope: { name: "batuta-app" }, spans: [{ traceId: lfHex(16), spanId: lfHex(8), name: nombre || "wa-asistente", kind: 1, startTimeUnixNano: ns(inicioMs), endTimeUnixNano: ns(finMs || Date.now()), attributes: attrs, status: { code: 1 } }] }] }] };
+  return fetch(host + "/api/public/otel/v1/traces", { method: "POST", headers: { "content-type": "application/json", authorization: "Basic " + btoa(env.LANGFUSE_PUBLIC_KEY + ":" + env.LANGFUSE_SECRET_KEY) }, body: JSON.stringify(body), signal: AbortSignal.timeout(4000) }).catch(() => {});
+}
 async function llamarClaudeOnboarding(env, system, mensajes, extraSystem, modelo){
   const extra = String(extraSystem || "").trim();
   /* modelo opcional (10-ago-2026): la rama negocio puede pedir Sonnet para la linea PROPIA de
      venta de Batuta (kb.modelo = "sonnet"); todo lo demas sigue en Haiku (el modelo de clientes). */
   const modeloId = modelo === "sonnet" ? "claude-sonnet-4-5-20250929" : "claude-haiku-4-5-20251001";
+  const lfInicio = Date.now();
   if (env.ANTHROPIC_API_KEY){
     try {
       /* system en 2 bloques: el manual largo y FIJO lleva cache_control (en conversaciones
@@ -3735,6 +3763,12 @@ async function llamarClaudeOnboarding(env, system, mensajes, extraSystem, modelo
         const data = await resp.json().catch(() => null);
         const bloque = data && Array.isArray(data.content) ? data.content.find(c => c.type === "text") : null;
         const t = bloque ? String(bloque.text || "").trim() : "";
+        try {
+          const ultimo = Array.isArray(mensajes) && mensajes.length ? mensajes[mensajes.length - 1] : null;
+          const entrada = ultimo && typeof ultimo.content === "string" ? ultimo.content : JSON.stringify(ultimo && ultimo.content || "");
+          const p = lfGeneracion(env, { nombre: "wa-asistente", input: entrada, output: t, modelo: modeloId, usage: data && data.usage, inicioMs: lfInicio, finMs: Date.now(), meta: { extra: !!extra, stop_reason: data && data.stop_reason } });
+          if (env.__ctx && env.__ctx.waitUntil) env.__ctx.waitUntil(p); else await p;
+        } catch (e) { /* la traza nunca tumba la respuesta */ }
         if (t) return sanearRespuestaIA(t);
       }
     } catch (e) { /* cae al binding AI */ }
@@ -9604,6 +9638,7 @@ async function ejecutarHerramientaApi(env, t, nombre, args){
    ═══════════════════════════════════════════════════════════════════════════ */
 export default {
   async fetch(request, env, ctx){
+    try { env.__ctx = ctx; } catch (e) {}
     const url = new URL(request.url);
     /* Una barra de mas no puede botar a nadie: hasta el 11-ago-2026 "/app/panel/" daba 404
        porque TODAS las rutas de abajo comparan con === contra el pathname pelado. El que
@@ -19270,6 +19305,7 @@ export default {
   },
 
   async scheduled(event, env, ctx){
+    try { env.__ctx = ctx; } catch (e) {}
     // UN solo cron (cada 15 min): recordatorios de clase SIEMPRE; el trabajo diario
     // (nurture, renovaciones, demo) solo en la corrida de las 14:00 UTC (9am Lima).
     // Asi Batuta usa 1 cron y no pisa el limite de 5 por cuenta del plan free.
