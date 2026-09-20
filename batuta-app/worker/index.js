@@ -8026,6 +8026,17 @@ async function seguimientoLeadsDueno(env){
   return enviados;
 }
 
+/* La promesa es "3 días o menos", medida por días de calendario de Lima. El cálculo
+   anterior comparaba milisegundos contra las 23:59 UTC y podía retrasar un aviso un día.
+   También sirve como fallback cuando hay `pases`, pero ninguno tiene fecha propia: en ese
+   caso la fecha válida sigue siendo `alumnos.vence` y no se puede silenciar al alumno. */
+function venceEnVentanaRenovacion(vence, hoy = hoyLima()){
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(vence || ""))) return false;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(hoy || ""))) return false;
+  const dias = Math.round((Date.parse(vence + "T00:00:00Z") - Date.parse(hoy + "T00:00:00Z")) / 86400000);
+  return dias >= -3 && dias <= 3;
+}
+
 async function recordatorioRenovacion(env){
   if (!env.RESEND_API_KEY) return 0;
   /* V2 multi-pase (11-ago-2026): el alumno con varios pases entra también si es CUALQUIERA
@@ -8051,18 +8062,20 @@ async function recordatorioRenovacion(env){
     if (!(await toggleTenantOn(env, cache, a.tenant_id, "recordatorio_renovacion"))) continue;
     /* multi-pase: se avisa por el pase que vence ANTES dentro de la ventana; si ninguno de
        sus pases cae en la ventana, esta fila no toca avisarla todavía. */
-    let venceAviso = a.vence, paqAviso = a.paquete;
+    let venceAviso = a.vence, paqAviso = a.paquete, paseAvisado = null;
     const listaAv = pasesDe(a);
     if (listaAv){
-      const hoyMs = Date.now(), ventana = 3 * 86400000;
       const cand = listaAv
-        .filter(p => !p.av && p.vence && Math.abs(Date.parse(p.vence + "T23:59:59Z") - hoyMs) <= ventana)
+        .filter(p => !p.av && venceEnVentanaRenovacion(p.vence))
         .sort((x, y) => x.vence < y.vence ? -1 : 1)[0];
-      if (!cand) continue;
-      venceAviso = cand.vence; paqAviso = cand.n;
+      if (cand){
+        venceAviso = cand.vence; paqAviso = cand.n; paseAvisado = cand;
+      } else if (!venceEnVentanaRenovacion(a.vence)) {
+        continue;
+      }
     }
     const linkPortal = MARCA.dominio + "/app/a/" + (a.slug || "");
-    const yaVencio = Date.parse(venceAviso) < Date.now();
+    const yaVencio = venceVencido(venceAviso);
     const nombreCorto = (a.nombre || "").split(" ")[0] || "Hola";
     /* Texto editable por la academia (Ajustes > Mensajes); si no lo toco, el default. */
     const msgs = await mensajesTenant(env, cacheMsg, a.tenant_id);
@@ -8078,7 +8091,7 @@ async function recordatorioRenovacion(env){
     try { ok = await enviarCorreo(env, { tenantId: a.tenant_id, to: a.alumno_email, subject: mail.subject, html: mail.html }); } catch (e) {}
     if (ok){
       enviados++;
-      if (listaAv){
+      if (paseAvisado){
         /* multi-pase: se marca EL PASE avisado, no el ciclo entero — si no, el aviso del
            segundo pase no saldría nunca. El ciclo se marca solo cuando ya no queda ningún
            pase por avisar, para que la fila deje de mirarse todos los días. */

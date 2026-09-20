@@ -82,7 +82,9 @@ console.log("\n── 7. la agenda: «Tu plan X no incluye Y» no puede contrade
 /* La frase la arma el portal con `plan.nombre` que manda /agenda/slots, y el "no incluye"
    se calcula con la UNIÓN de los pases VIVOS. Si el nombre sale de la ficha, Andrea lee
    «Tu plan 48 clases de Pilates no incluye Pilates Máquinas». */
-const andreaCruda = { pases: [{ n: "48 clases de Pilates", vence: "2026-08-16" }, { n: "20 clases de Mat", vence: "2026-09-15" }] };
+/* Fechas deliberadamente estables: la prueba debe seguir separando un pase muerto de uno
+   vivo aunque se ejecute meses después de haber escrito este caso. */
+const andreaCruda = { pases: [{ n: "48 clases de Pilates", vence: "2000-08-16" }, { n: "20 clases de Mat", vence: "2099-09-15" }] };
 const rAg = planVigenteDe(andreaCruda, { paquete: "48 clases de Pilates", vence: "2026-11-12" });
 comprobar("con la lista CRUDA (sin campo `vencido`) también sabe cuál murió", rAg.nombre === "20 clases de Mat",
   "da «" + rAg.nombre + "»");
