@@ -4745,10 +4745,7 @@ async function manejarNegocioWA(env, { phoneId, from, texto, nombre }){
   let neg;
   try { neg = await negocioPorPhone(env, phoneId); } catch (e) { return false; }
   if (!neg) return false;                                   // no es negocio: sigue el flujo academia
-  if (String(neg.enabled || "") !== "on") return true;      // dado de alta pero apagado: no responde
-  // freno de abuso: max ~12 respuestas por cliente por hora (misma ventana horaria)
-  if (await chatbotPasoTope(env, "neg:" + neg.id + ":" + from, 12)) return true;
-  const kb = negocioKbParse(neg.kb);
+  if (String(neg.enabled || "") !== "on" && neg.id !== "webexpress") return true;
   const synthTenant = "neg:" + neg.id;
   /* Chat NUEVO (primera vez que este telefono escribe a este negocio) -> UN aviso a Andres por
      correo, disparado por CODIGO (leccion 19-jul: nunca a criterio del modelo). No se repite
@@ -4766,6 +4763,16 @@ async function manejarNegocioWA(env, { phoneId, from, texto, nombre }){
         "\n\nBandeja (ver chat, responder a mano o pausar la IA):\nhttps://batuta.lat/app/su/bandeja");
     } catch (e) {}
   }
+  /* Modo bandeja manual: conserva el mensaje y avisa del lead, pero nunca contesta.
+     Permite reasignar una linea sin perder consultas mientras Meta revisa el nombre. */
+  if (String(neg.enabled || "") !== "on"){
+    const previo = await waHistorialCargar(env, synthTenant, from);
+    await waHistorialGuardar(env, synthTenant, from, previo.concat([{ role: "user", content: texto }]));
+    return true;
+  }
+  // freno de abuso: max ~12 respuestas por cliente por hora (misma ventana horaria)
+  if (await chatbotPasoTope(env, "neg:" + neg.id + ":" + from, 12)) return true;
+  const kb = negocioKbParse(neg.kb);
   /* Pausa por chat (bandeja): si Andres pauso este chat, la IA se calla. El mensaje igual
      queda en el historial para que la bandeja lo muestre. */
   if (leadPrev && String(leadPrev.pausa || "") === "on"){
