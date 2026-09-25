@@ -6407,6 +6407,7 @@ function paginaRegistro(googleOn){
     // Atribución: ?f= del CTA que lo trajo, o el referrer como fallback; sobrevive recargas en sessionStorage.
     "var fuente='';try{var q=new URLSearchParams(location.search).get('f');if(q){fuente=q;}else if(document.referrer){var u=new URL(document.referrer);fuente=(u.host===location.host?'':u.host)+u.pathname;}}catch(e){}" +
     "try{if(fuente){sessionStorage.setItem('batuta_f',fuente);}else{fuente=sessionStorage.getItem('batuta_f')||'';}}catch(e){}" +
+    "try{var gl=document.querySelector('a.gbtn');if(gl&&fuente){var gu=new URL(gl.href);gu.searchParams.set('f',fuente);gl.href=gu.pathname+gu.search;}}catch(e){}" +
     // Afiliados (?ref=): cookie 60 dias (la siembra cualquier pagina de batuta.lat) + sessionStorage.
     "var refc='';try{var qr=new URLSearchParams(location.search).get('ref');if(qr){refc=qr;}}catch(e){}" +
     "try{if(!refc){var mck=/(?:^|;\\s*)batuta_ref=([^;]+)/.exec(document.cookie);if(mck){refc=decodeURIComponent(mck[1]);}}}catch(e){}" +
@@ -12018,8 +12019,9 @@ export default {
         if (!googleConfigurado(env)) return json({ error: "Login con Google no configurado." }, 501);
         const intent = url.searchParams.get("intent") === "alumno" ? "alumno" : "profesor";
         const slug = String(url.searchParams.get("slug") || "").trim().slice(0, 60);
+        const fuente = String(url.searchParams.get("f") || "").trim().slice(0, 80);
         if (intent === "alumno" && !slug) return json({ error: "Falta la academia." }, 400);
-        const state = await firmarState(env, { intent, slug, exp: Date.now() + 10 * 60 * 1000, n: randHex(8) });
+        const state = await firmarState(env, { intent, slug, fuente, exp: Date.now() + 10 * 60 * 1000, n: randHex(8) });
         return new Response(null, { status: 302, headers: { location: googleAuthUrl(env, state), "cache-control": "no-store" } });
       }
       /* ---------- Login con Google: callback ---------- */
@@ -12090,11 +12092,12 @@ export default {
                conversaciones del asistente al mes en vez de las 5 de la Batuta gratis. */
             const trialHasta = new Date(Date.now() + TRIAL_DIAS * 86400000).toISOString();
             const refCode = refDePeticion(request, "");
+            const fuenteAlta = String(st.fuente || "google").slice(0, 80);
             await ensureAfiliadosSchema(env); // la columna ref_code nace aca; sin esto un deploy limpio tira 500
             await env.DB.prepare(
               "INSERT INTO tenants (id,slug,academia,profe_nombre,email,whatsapp,pass_hash,pass_salt,plan,estado,trial_hasta,creado,fuente,google_id,ref_code) " +
-              "VALUES (?1,?2,?3,?4,?5,'',?6,?7,'base','activo',?8,?9,'google','g',?10)"
-            ).bind(id, slug, nombre, nombre, perfil.email, hash, salt, trialHasta, new Date().toISOString(), refCode).run();
+              "VALUES (?1,?2,?3,?4,?5,'',?6,?7,'base','activo',?8,?9,?10,'g',?11)"
+            ).bind(id, slug, nombre, nombre, perfil.email, hash, salt, trialHasta, new Date().toISOString(), fuenteAlta, refCode).run();
             const stmts = [];
             /* sin siembra de precios de musica (03-ago-2026): paquetes vacios de verdad,
                igual que el registro por email — el panel guia a crear el primero */
