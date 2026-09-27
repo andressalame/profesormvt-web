@@ -1662,7 +1662,9 @@ function atribuirPases(lista, paqMap, eventos, reprogTotal){
   const cobrar = (tipo, futuro, cuando, esClase) => {
     const marcar = (e, via) => {
       e.usadas++; if (futuro) e.futuras = (e.futuras || 0) + 1;
-      if (esClase) cargos.push({ cuando: cuando || "", tipo: tipo || "", idx: e.idx, n: e.n, via: via });
+      /* 🐛 26-set-2026: `idx` es la posición en `est` (= `pases` que se devuelve, en orden de
+         consumo), NO `e.idx` (orden original): la ficha hace pases[c.idx] y nombraba otro pase. */
+      if (esClase) cargos.push({ cuando: cuando || "", tipo: tipo || "", idx: est.indexOf(e), n: e.n, via: via });
     };
     /* 22-ago-2026: vencido AL MOMENTO DE LA CLASE, no vencido hoy. Ver `vencidoAl`. */
     const muerto = (e) => vencidoAl(e.vence, cuando);
@@ -1858,7 +1860,8 @@ async function sobregiroTrasReservar(env, tenantId, alumnoId){
 function eventosConsumo(resv, regs, excluirReservaId){
   const eventos = [];
   let reprogTotal = 0;
-  const porFecha = new Map();   // registros que consumen, para emparejar reservas pasadas
+  const porFecha = new Map();   // fecha → cursos de las filas libres, para emparejar reservas pasadas
+  const anotar = (f, c) => { if (f) (porFecha.get(f) || porFecha.set(f, []).get(f)).push(String(c || "")); };
   for (const g of (regs || [])){
     const f = String(g.fecha || "").slice(0, 10);
     if (g.estado === "Reprogramó"){
@@ -1868,12 +1871,12 @@ function eventosConsumo(resv, regs, excluirReservaId){
          de ese día. Si no, esa reserva se queda sin par y cuenta como clase dictada, así que
          reprogramar terminaba costando una clase igual. Mismo arreglo que en
          reservasUsadasCount; los dos caminos tienen que contar idéntico. */
-      if (f) porFecha.set(f, (porFecha.get(f) || 0) + 1);
+      anotar(f, g.curso);
       continue;
     }
     if (g.estado === "Asistió" || g.estado === "Falta"){
       eventos.push({ tipo: g.curso || "", cuando: String(g.fecha || "") });
-      if (f) porFecha.set(f, (porFecha.get(f) || 0) + 1);
+      anotar(f, g.curso);
     }
   }
   const excl = String(excluirReservaId || "");
@@ -1885,15 +1888,26 @@ function eventosConsumo(resv, regs, excluirReservaId){
     /* el tipo de CLASE manda; `tipo` (suelta/fija) queda de respaldo para reservas viejas */
     const etiqueta = r.curso || r.tipo || "";
     if (Date.parse(r.inicio_utc) >= ahora){ eventos.push({ tipo: etiqueta, cuando: r.inicio_utc, futuro: true }); reservadas++; continue; }
-    pasadas.push({ f: fechaLimaDe(r.inicio_utc), tipo: etiqueta, cuando: r.inicio_utc });
+    pasadas.push({ f: fechaLimaDe(r.inicio_utc), tipo: etiqueta, curso: String(r.curso || ""), cuando: r.inicio_utc });
   }
+  /* 🐛 26-set-2026: esto emparejaba reserva por reserva, en orden, saltando al día vecino sin
+     mirar el curso. Una reserva de Mat del 9-set sin fila se quedaba con la fila de Máquinas del
+     10-set, la del 10-set con la de Mat del 11-set, y el cargo huérfano caía el 11-set: ese día
+     salía cobrado dos veces y el 9-set desaparecía. Ahora primero TODAS las reservas toman su
+     fila del mismo día, y solo las que quedan sin par buscan en el vecino, y solo una fila de
+     la misma clase (o sin curso, lo histórico). */
+  const sinPar = [];
   for (const r of pasadas){
-    let libre = porFecha.get(r.f) || 0;
-    if (libre > 0){ porFecha.set(r.f, libre - 1); continue; }
+    const l = porFecha.get(r.f);
+    if (l && l.length){ const k = l.indexOf(r.curso); l.splice(k >= 0 ? k : 0, 1); }
+    else sinPar.push(r);
+  }
+  for (const r of sinPar){
     let emparejada = false;
     for (const vf of [diaVecino(r.f, 1), diaVecino(r.f, -1)]){
-      const lv = porFecha.get(vf) || 0;
-      if (lv > 0){ porFecha.set(vf, lv - 1); emparejada = true; break; }
+      const l = porFecha.get(vf) || [];
+      const k = l.findIndex(c => !c || !r.curso || c === r.curso);
+      if (k >= 0){ l.splice(k, 1); emparejada = true; break; }
     }
     if (!emparejada) eventos.push({ tipo: r.tipo, cuando: r.cuando });
   }

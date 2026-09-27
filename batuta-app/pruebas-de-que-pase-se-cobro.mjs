@@ -94,6 +94,37 @@ console.log("\n── 5. el exceso de reprogramaciones no es una clase ──");
   comprobar("consume saldo pero no aparece como clase", (r.cargos || []).length === 0, (r.cargos || []).length + " cargos");
 }
 
+console.log("\n── 5b. el índice del cargo apunta a la lista que devuelve el saldo ──");
+{
+  /* 🐛 26-set-2026: `cargos.idx` era la posición ORIGINAL en alumnos.pases, pero `pases`
+     sale en ORDEN DE CONSUMO y la ficha hace pases[c.idx]. Con [Pilates, Mat, Mat] y el
+     segundo Mat empezado, el orden se invierte y la ficha nombraba otro pase. */
+  const PL = M.parsePaquetes(JSON.stringify([
+    { n: "12 Pilates", c: 12, r: 0, u: false, t: ["Pilates"], d: 0, i: "compra" },
+    { n: "12 Mat", c: 12, r: 0, u: false, t: ["Mat"], d: 0, i: "compra" },
+  ])).map;
+  const a = { id: "a1", tenant_id: TID, nombre: "Prueba", ciclo: 1, paquete: "12 Pilates",
+              pases: JSON.stringify({ c: 1, p: [
+                { n: "12 Pilates", usadas: 0, vence: "2099-03-01" },
+                { n: "12 Mat", usadas: 0, vence: "2099-02-01" },
+                { n: "12 Mat", usadas: 1, vence: "2099-01-01" } ] }) };
+  const regs = [["2026-08-10", "Pilates"], ["2026-08-11", "Mat"]]
+    .map(r => ({ alumno_id: "a1", estado: "Asistió", ciclo: 1, fecha: r[0], curso: r[1] }));
+  const r = await M.computeMulti(envConDatos({ reservas: [], registro: regs, alumnos: [a] }), TID, a, PL, {});
+  const cP = (r.cargos || []).find(c => c.cuando === "2026-08-10");
+  const cM = (r.cargos || []).find(c => c.cuando === "2026-08-11");
+  comprobar("el orden de consumo sí difiere del original (el caso es real)",
+    r.pases.map(p => p.n + "/" + p.vence).join(",") !== "12 Pilates/2099-03-01,12 Mat/2099-02-01,12 Mat/2099-01-01",
+    r.pases.map(p => p.n).join(","));
+  comprobar("pases[idx] de la de Pilates es el de Pilates", !!cP && r.pases[cP.idx] && r.pases[cP.idx].n === "12 Pilates",
+    cP && r.pases[cP.idx] && r.pases[cP.idx].n);
+  comprobar("pases[idx] de la de Mat es un Mat", !!cM && r.pases[cM.idx] && r.pases[cM.idx].n === "12 Mat",
+    cM && r.pases[cM.idx] && r.pases[cM.idx].n);
+  comprobar("y es EL Mat que se cobró (el empezado: 1 → 2 usadas)", !!cM && r.pases[cM.idx] && r.pases[cM.idx].usadas === 2
+    && r.pases[cM.idx].vence === "2099-01-01", cM && r.pases[cM.idx] && (r.pases[cM.idx].usadas + " usadas, vence " + r.pases[cM.idx].vence));
+  comprobar("el nombre del cargo coincide con pases[idx]", (r.cargos || []).every(c => r.pases[c.idx] && r.pases[c.idx].n === c.n));
+}
+
 console.log("\n── 6. solo se le enseña a quien tiene VARIOS pases ──");
 {
   comprobar("la ficha lo condiciona a 2+ pases", /pases\.length>1\) \? sv\.pases : null/.test(PANEL.replace(/\s+/g, "")) ||
