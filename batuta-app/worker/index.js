@@ -1758,17 +1758,30 @@ function pkUnionPases(lista, paqMap){
 function saldoMostrado(c, modo){
   if (!c || c.ilim || String(modo || "") !== "asistencia") return c;
   const res = Math.max(0, Number(c.reservadas) || 0);
+  /* 🐛 28-set-2026 (caso Camila Ruiz, Elevate): `restantes` viene recortado a 0, y acá se le
+     sumaba lo apartado ENCIMA. Un pase con 13 cobradas de 12 (12 dictadas + 1 reservada que ya
+     no cabía) salía «1 restante»: José preguntó por qué le quedaba 1 de Mat si justo se le había
+     cobrado del otro porque ese se acabó. Lo cobrado por encima de lo comprado se descuenta de
+     lo que se devuelve: esa reserva no es saldo, es sobregiro. */
+  const sobre = (x) => x.ilim ? 0 : (x.sobreconsumo != null ? Math.max(0, Number(x.sobreconsumo) || 0)
+    : (Number.isFinite(x.compradas) ? Math.max(0, (Number(x.usadas) || 0) - (Number(x.compradas) || 0)) : 0));
   /* el modo se marca SIEMPRE, aunque no tenga nada apartado: si no, el alumno sin reservas
      viajaría con modo "reserva" y la próxima persona que lea este campo se confundiría */
-  const out = Object.assign({}, c, { restantes: (Number(c.restantes) || 0) + res, modo_saldo: "asistencia" });
+  const out = Object.assign({}, c, { restantes: Math.max(0, (Number(c.restantes) || 0) + res - sobre(c)), modo_saldo: "asistencia" });
   /* 21-ago-2026 (caso Abigayl, Elevate): el desglose por pase se dejaba SIN ajustar mientras el
      total sí sumaba lo apartado. Resultado: el total decía 21 y el pase decía 9, y el dueño
      creyó que el sistema le había borrado clases. Ahora cada pase recupera SUS apartadas, así
      que el desglose y el total cuentan lo mismo. El saldo REAL (el que deja o no reservar) no
      se toca: el candado usa computeMulti directo, sin pasar por acá. */
-  if (Array.isArray(c.pases)) out.pases = c.pases.map(p => Object.assign({}, p, {
-    restantes: p.ilim ? p.restantes : (Number(p.restantes) || 0) + (Number(p.futuras) || 0)
-  }));
+  if (Array.isArray(c.pases)){
+    out.pases = c.pases.map(p => Object.assign({}, p, {
+      restantes: p.ilim ? p.restantes : Math.max(0, (Number(p.restantes) || 0) + (Number(p.futuras) || 0) - sobre(p))
+    }));
+    /* el total es la suma de los pases VIVOS tal como se ven (misma regla que computeMulti):
+       así el sobregiro de un pase no se come el saldo del vecino ni al revés */
+    const vivos = out.pases.filter(p => !p.vencido);
+    out.restantes = vivos.filter(p => !p.ilim).reduce((s, p) => s + (Number(p.restantes) || 0), 0) + (vivos.some(p => p.ilim) ? 9999 : 0);
+  }
   return out;
 }
 /* PURO (12-ago-2026): arma los consumos del ciclo en orden cronológico, sin tocar la DB.
@@ -2255,6 +2268,15 @@ function calcularVence(pk, alumno, venceActual){
   }
   const base = String((alumno && alumno.fecha) || "").trim();
   return /^\d{4}-\d{2}-\d{2}$/.test(base) ? sumarDias(base, dias) : (venceActual || "");
+}
+/* Vence de lo que se COMPRA por la web (28-set-2026, MVT: «la vigencia dura el doble»).
+   La compra web ponía SIEMPRE hoy+30, sin mirar los días del plan: si la academia le daba
+   60 días a su Paquete 8, el alumno que pagaba quedaba con 30 hasta que alguien guardara su
+   ficha en el panel. Ahora el plan con días manda, igual que en el guardado del panel y en
+   el pase que se suma. Sin días configurados, el +30 de siempre (`porDefecto`). */
+function venceDeCompra(pk, hoy, porDefecto){
+  if (pk && Number(pk.dias)) return calcularVence(pk, { fecha: hoy, activado: "" }, "");
+  return porDefecto;
 }
 /* Meses que la academia le da a un plan comprado para ARRANCAR antes de caducar.
    Elevate: 6. 0 = nunca caduca. Solo aplica a paquetes que cuentan desde la primera clase:
@@ -3436,13 +3458,14 @@ async function confirmarCompra(env, tenantId, tenant, compra){
     }
     if (al && !sumado){
       const cicloNuevo = (Number(al.ciclo) || 1) + 1;
+      const venceRenov = venceDeCompra(resolverPk(paqMapConfirm, compra.paquete), hoyLima(), vence);
       /* caducado = 0 + activado = '': renovar REVIVE al alumno caducado (promesa del cron
          caducarPlanesSinArrancar) y el ciclo nuevo arranca su vigencia de cero — el mismo
          reset que hace el guardado manual de la ficha. Sin esto, el alumno pagaba su
          renovacion y reservar lo seguia rebotando con 'Tu plan caduco'. */
       stmts.push(env.DB.prepare(
         "UPDATE alumnos SET paquete = ?1, curso = ?2, pago = 'Pagado', fecha = ?3, ciclo = ?4, vence = ?5, aviso_vence_ciclo = 0, caducado = 0, activado = '' WHERE id = ?6 AND tenant_id = ?7"
-      ).bind(compra.paquete, compra.curso || al.curso, hoyLima(), cicloNuevo, vence, al.id, tenantId));
+      ).bind(compra.paquete, compra.curso || al.curso, hoyLima(), cicloNuevo, venceRenov, al.id, tenantId));
       /* Migrar las reservas FUTURAS al ciclo nuevo: si no, el credito de esas clases queda
          huerfano en el ciclo viejo y la clase se carga mal al paquete nuevo (bug MVT 21-jul).
 
@@ -3542,7 +3565,8 @@ async function confirmarCompra(env, tenantId, tenant, compra){
        vacios y la ficha queda igual que siempre. */
     stmts.push(env.DB.prepare(
       "INSERT INTO alumnos (id,tenant_id,codigo,nombre,whatsapp,curso,paquete,fecha,pago,horario,notas,ciclo,vence,profesor_id,apellido,email,nacimiento) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,'Pagado','','Creado por compra web',1,?9,?10,?11,?12,?13)"
-    ).bind(nuevoId, tenantId, randHex(3).toUpperCase(), cu.nombre, cu.whatsapp || "", cursoNuevo, compra.paquete, hoyLima(), vence, profeNuevo,
+    ).bind(nuevoId, tenantId, randHex(3).toUpperCase(), cu.nombre, cu.whatsapp || "", cursoNuevo, compra.paquete, hoyLima(),
+           venceDeCompra(resolverPk(paqMapConfirm, compra.paquete), hoyLima(), vence), profeNuevo,
            cu.apellido || "", cu.email || "", cu.nacimiento || ""));
     stmts.push(env.DB.prepare("UPDATE cuentas SET alumno_id = ?1 WHERE id = ?2 AND tenant_id = ?3").bind(nuevoId, cu.id, tenantId));
   }
