@@ -1500,13 +1500,15 @@ function renderInicio(){
       $("iRest").style.fontSize = "";
       $("iRest").textContent = (Number(a.restantes)>=9999) ? "∞" : a.restantes;
       /* Se cuentan los pases VIGENTES: decir "6 clases en 2 pases" cuando uno está muerto
-         infla lo que la alumna cree tener. Los vencidos siguen listándose abajo, en gris. */
+         infla lo que la alumna cree tener. Desde el 28-set los vencidos tampoco se listan abajo. */
       $("iDe").textContent = pasesVivos.length
         ? ("clases en " + pasesVivos.length + (pasesVivos.length===1 ? " pase" : " pases"))
         : "sin pases vigentes";
-      var sp="";
-      for(var pi=0; pi<a.pases.length; pi++){
-        var pp=a.pases[pi];
+      /* 28-set-2026 (José, Elevate): los vencidos ya no se listan, ni en gris. Si todos
+         vencieron, se muestran para que la alumna sepa qué renovar. */
+      var sp="", verP=pasesParaMostrar(a.pases);
+      for(var pi=0; pi<verP.length; pi++){
+        var pp=verP[pi];
         sp += '<div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px;margin:5px 0;">'+
               '<span style="font-size:13px;'+(pp.vencido?'opacity:.55;':'')+'">'+esc(pp.n)+(pp.vencido?' (vencido)':'')+'</span>'+
               '<b style="white-space:nowrap;">'+(pp.ilim?'sin límite':(pp.restantes+' de '+pp.compradas))+
@@ -1688,6 +1690,14 @@ function calc(pk){
   return { precio:precio, descRef:dRef, desc:desc, final:Math.max(0, precio-dRef-desc) };
 }
 /* "2026-08-20" -> "20 ago" (para mostrar el vencimiento de la mensualidad) */
+/* Los pases que se listan en "Tus pases" (28-set-2026): solo los vigentes. El vencido sigue
+   en los datos (sostiene las clases que se le cobraron), pero no se enseña. Si no queda
+   ninguno vigente, se enseñan todos: una lista vacía no le dice qué renovar. */
+function pasesParaMostrar(lista){
+  var l=lista||[];
+  var vivos=l.filter(function(p){ return p && !p.vencido; });
+  return vivos.length ? vivos : l;
+}
 function fechaBonita(iso){
   if(!iso) return "—";
   var p=String(iso).split("-"); if(p.length<3) return iso;

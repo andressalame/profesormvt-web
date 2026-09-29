@@ -3230,6 +3230,17 @@ function pasesVivosN(pr){
   if(pr.vivos!=null) return pr.vivos;
   return (pr.lista||[]).filter(function(x){ return !x.vencido; }).length;
 }
+/* 🐛 28-set-2026 (José, Elevate, caso Camila Ruiz): «quiero que desaparezcan los ya vencidos.
+   Les cambié la fecha de vencimiento pero no se van». Ponerles fecha pasada es justo lo que le
+   recomendamos para retirar un pase sin mover el saldo (Quitar sí lo mueve), y la celda los
+   seguía pintando en rojo. El pase vencido NO se borra de los datos: sigue sosteniendo las
+   clases que se le cobraron, y la ficha (Editar) lo lista con su fecha para poder revivirlo.
+   Solo deja de verse aquí. Si TODOS vencieron, se muestran: una celda vacía se lee como roto. */
+function pasesParaVer(lista){
+  var l=lista||[];
+  var vivos=l.filter(function(x){ return x && !x.vencido; });
+  return vivos.length ? vivos : l;
+}
 function pasesResumen(a){
   /* 12-ago-2026: si el servidor mandó el desglose ya repartido, ese manda. El de abajo leía
      `usadas` GUARDADO en cada pase, que no incluye ni las clases dictadas del ciclo ni las
@@ -3250,8 +3261,9 @@ function pasesResumen(a){
        Trujillo salia "6 / 68 sumando sus 2 pases" con la celda de al lado diciendo que uno de
        esos dos vencio el 16 de agosto. Y su portal, que desde el 11-ago solo cuenta los
        vigentes, le decia "6 clases en 1 pase". 4 alumnas de Elevate. El denominador y el
-       conteo van SOLO sobre lo vigente, igual que el portal; la lista completa (con los
-       vencidos en gris) sigue saliendo en la columna del plan. */
+       conteo van SOLO sobre lo vigente, igual que el portal. `lista` sigue trayendo los
+       vencidos (los necesita quien cuente), pero la columna del plan ya no los pinta:
+       ver `pasesParaVer`, 28-set-2026. */
     var vivosL=lst.filter(function(x){return !x.vencido;});
     return { lista:lst, vivos:vivosL.length, ilim:lst.some(function(x){return x.ilim;}),
       comp:vivosL.reduce(function(s,x){return s+(x.ilim?0:x.comp);},0),
@@ -3619,7 +3631,7 @@ function renderAlumnos(){
            la verdad fina la calcula el server (reserva y portal) — en una academia recién
            migrada son exactamente lo mismo. */
         var prC=pasesResumen(a);
-        if(prC) return prC.lista.map(function(px){
+        if(prC) return pasesParaVer(prC.lista).map(function(px){
           /* 21-ago-2026: un pase cuyo plan ya no está en tu lista (lo renombraste o lo borraste)
              mostraba "0 de 0" sin explicación, y así fue como 9 alumnas de Elevate parecieron
              sin saldo habiendo pagado. Ahora la celda lo dice con todas sus letras. */

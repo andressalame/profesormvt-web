@@ -52,6 +52,8 @@ function mundo(ME){
     diasHasta: () => "en 5 días",
     renderAvisoClave(){}, renderBeneficios(){}, renderVencePausa(){},
     alumnoActivoSinReservar: () => false,
+    /* 28-set-2026: la lista de «Tus pases» pasa por esta función real del portal */
+    pasesParaMostrar: new Function(cortar("pasesParaMostrar") + "\nreturn pasesParaMostrar;")(),
     document: { createElement: () => nodo("_nuevo") },
   };
   const nombres = Object.keys(g);
@@ -75,7 +77,10 @@ comprobar("el título nombra lo que puede usar", andrea.iPlanLine.textContent.in
 comprobar("cuenta los pases VIGENTES, no los muertos", andrea.iDe.textContent === "clases en 1 pase",
   '"' + andrea.iDe.textContent + '"');
 comprobar("la fila «Paquete» tampoco nombra el muerto", andrea.iPlan.innerHTML.indexOf("48 clases de Pilates") === -1);
-comprobar("el pase vencido SIGUE listado abajo (no se esconde)", andrea.iStubs.innerHTML.indexOf("48 clases de Pilates") >= 0);
+/* 🔄 28-set-2026 · esta línea pedía lo contrario («el vencido SIGUE listado abajo»). José
+   (Elevate) pidió que los vencidos desaparezcan sin tocar el saldo: ahora se esconden. */
+comprobar("el pase vencido ya NO se lista abajo", andrea.iStubs.innerHTML.indexOf("48 clases de Pilates") === -1);
+comprobar("y el vigente sí", andrea.iStubs.innerHTML.indexOf("20 clases de Mat") >= 0);
 
 console.log("\n── 2. dos pases vivos: se nombran los dos ──");
 const dos = mundo(base({ curso: "", paquete: "12 clases de Mat", restantes: 16, compradas: 24,
@@ -89,6 +94,8 @@ const mj = mundo(base({ curso: "", paquete: "48 clases de Pilates", restantes: 0
   reprogRestantes: 0, reprogPermitidas: 4, horario: "", pago: "", vence: "",
   pases: [pase("48 clases de Pilates", 0, 48, true), pase("12 clases de Mat", 0, 12, true)] }));
 comprobar("no se inventa pases vigentes", mj.iDe.textContent === "sin pases vigentes", '"' + mj.iDe.textContent + '"');
+comprobar("con todos vencidos, la lista sí los muestra (vacía no dice qué renovar)",
+  mj.iStubs.innerHTML.indexOf("48 clases de Pilates") >= 0 && mj.iStubs.innerHTML.indexOf("12 clases de Mat") >= 0);
 
 console.log("\n── 4. control: la alumna de UN solo plan no cambia ──");
 const simple = mundo(base({ curso: "Canto", paquete: "8 clases de Mat", restantes: 5, compradas: 8,
