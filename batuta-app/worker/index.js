@@ -199,6 +199,54 @@ function resolverPk(map, nombre){
   return { clases: 0, reprog: 0, ilim: false, tipos: [], dias: 0, inicio: "compra", oculto: false, congela: null, congelaBloques: 2, sinRef: false, noExiste: true };
 }
 
+/* ───────── Renombrar un plan arrastra a quien lo tiene (29-sep-2026, José/Elevate) ─────────
+   José cambió «48 clases de Pilates» a «48 clases All Access» y sus 4 alumnas quedaron en 0
+   con "el plan ya no existe": el alumno guarda el NOMBRE del plan (`alumnos.paquete` y
+   `alumnos.pases.p[].n`), no un id, y `resolverPk` solo perdona tildes y prefijos.
+   Esto es PURO (sin DB) para poder probarlo:
+     sanearRenombresPlan · de lo que manda el panel deja solo pares viejo→nuevo creíbles:
+       el viejo estaba en el catálogo de ANTES y ya no está en el de AHORA, y el nuevo sí está.
+       Nada de reescribir nombres arbitrarios.
+     migrarPlanEnAlumnos · para cada alumno devuelve su cambio SOLO si algo cambia. Toca
+       únicamente el nombre: usadas, vence, ciclo, av y todo lo demás quedan como estaban
+       (saldo y fechas no se mueven). Cada nombre se traduce UNA vez, así A→B y B→A a la
+       vez no se pisan. */
+function sanearRenombresPlan(raw, listaAntes, mapAhora){
+  let obj; try { obj = (typeof raw === "string") ? JSON.parse(raw) : raw; } catch (e) { return {}; }
+  if (!obj || typeof obj !== "object" || Array.isArray(obj)) return {};
+  const antes = new Set(listaAntes || []);
+  const out = {};
+  for (const viejo of Object.keys(obj)){
+    const nuevo = String(obj[viejo] || "").trim();
+    if (!viejo || !nuevo || viejo === nuevo) continue;
+    if (!antes.has(viejo)) continue;
+    if (mapAhora && mapAhora[viejo]) continue;
+    if (!mapAhora || !mapAhora[nuevo]) continue;
+    out[viejo] = nuevo;
+  }
+  return out;
+}
+function migrarPlanEnAlumnos(alumnos, pares){
+  const cambios = [];
+  const tiene = (k) => Object.prototype.hasOwnProperty.call(pares, k);
+  for (const a of (alumnos || [])){
+    let paquete = a.paquete, pases = a.pases, cambio = false;
+    if (typeof a.paquete === "string" && tiene(a.paquete)){ paquete = pares[a.paquete]; cambio = true; }
+    if (a.pases){
+      let obj = null;
+      try { obj = (typeof a.pases === "string") ? JSON.parse(a.pases) : a.pases; } catch (e) { obj = null; }
+      const lista = obj && (Array.isArray(obj.p) ? obj.p : (Array.isArray(obj) ? obj : null));
+      if (lista && lista.some(x => x && typeof x.n === "string" && tiene(x.n))){
+        for (const x of lista) if (x && typeof x.n === "string" && tiene(x.n)) x.n = pares[x.n];
+        pases = (typeof a.pases === "string") ? JSON.stringify(obj) : obj;
+        cambio = true;
+      }
+    }
+    if (cambio) cambios.push({ id: a.id, paquete, pases });
+  }
+  return cambios;
+}
+
 /* Contexto para "Mi web": junta los datos duros de la academia (config, precios,
    paquetes, si cobra online) que el motor de render necesita. Lo usan el GET de
    la web pública y la vista previa del editor, así ambos muestran lo mismo. */
@@ -1491,8 +1539,9 @@ function compute(alumno, regs, precios, reservasUsadas, pk){
      Se sigue aceptando un número suelto por compatibilidad, y ahí n = futuras (lo que hacía
      antes): así ningún llamador viejo cambia de comportamiento sin que alguien lo decida. */
   const ru = (reservasUsadas && typeof reservasUsadas === "object")
-    ? { n: Math.max(0, Number(reservasUsadas.n) || 0), futuras: Math.max(0, Number(reservasUsadas.futuras) || 0) }
-    : { n: Math.max(0, Number(reservasUsadas) || 0), futuras: Math.max(0, Number(reservasUsadas) || 0) };
+    ? { n: Math.max(0, Number(reservasUsadas.n) || 0), futuras: Math.max(0, Number(reservasUsadas.futuras) || 0),
+        pendientes: Math.max(0, Number(reservasUsadas.pendientes) || 0) }
+    : { n: Math.max(0, Number(reservasUsadas) || 0), futuras: Math.max(0, Number(reservasUsadas) || 0), pendientes: 0 };
   let asistio = 0, reprogramo = 0, falta = 0;
   for (const r of regs){
     if (r.estado === "Asistió") asistio++;
@@ -1518,7 +1567,7 @@ function compute(alumno, regs, precios, reservasUsadas, pk){
   /* Mensualidad ilimitada: no descuenta clases; vence solo por fecha (a.vence, que
      ya maneja el motor de recordatorios). Saldo alto = siempre "Activo" por saldo. */
   if (pk.ilim){
-    return { compradas: null, ilim: true, usadas, restantes: 9999, bonus,
+    return { compradas: null, ilim: true, usadas, restantes: 9999, bonus, pendientesCerrar: ru.pendientes,
       reprogPermitidas: pk.reprog, reprogUsadas: reprogramo,
       reprogRestantes: pk.reprog ? Math.max(0, pk.reprog - reprogramo) : 9999,
       saldo: 9999, monto };
@@ -1542,6 +1591,11 @@ function compute(alumno, regs, precios, reservasUsadas, pk){
     /* apartadas y aun SIN DICTAR. Antes acá entraba todo lo que consumía, incluidas las clases
        ya tomadas, y saldoMostrado se las devolvía al saldo: por eso no bajaba nunca. */
     reservadas: ru.futuras,
+    /* 29-set-2026 · reservas de días anteriores que nadie cerró (siguen 'reservada' y sin fila en
+       la bitácora). Ya están DENTRO de `usadas` —no se sobrevende—; este número solo dice cuántas
+       de esas «usadas» son un cierre pendiente y no una clase confirmada. Una sola fuente: sale
+       del mismo emparejamiento que `usadas`. */
+    pendientesCerrar: ru.pendientes,
     vencido, caducado: caduco,
     vence: (alumno && alumno.vence) || "",
     reprogPermitidas: pk.reprog,
@@ -1894,14 +1948,15 @@ function eventosConsumo(resv, regs, excluirReservaId){
   }
   const excl = String(excluirReservaId || "");
   const ahora = Date.now();
+  const hoyL = fechaLimaDe(new Date(ahora).toISOString());
   const pasadas = [];
-  let reservadas = 0;
+  let reservadas = 0, pendientes = 0;
   for (const r of (resv || [])){
     if (r.id === excl) continue;
     /* el tipo de CLASE manda; `tipo` (suelta/fija) queda de respaldo para reservas viejas */
     const etiqueta = r.curso || r.tipo || "";
     if (Date.parse(r.inicio_utc) >= ahora){ eventos.push({ tipo: etiqueta, cuando: r.inicio_utc, futuro: true }); reservadas++; continue; }
-    pasadas.push({ f: fechaLimaDe(r.inicio_utc), tipo: etiqueta, curso: String(r.curso || ""), cuando: r.inicio_utc });
+    pasadas.push({ f: fechaLimaDe(r.inicio_utc), tipo: etiqueta, curso: String(r.curso || ""), cuando: r.inicio_utc, estado: r.estado });
   }
   /* 🐛 26-set-2026: esto emparejaba reserva por reserva, en orden, saltando al día vecino sin
      mirar el curso. Una reserva de Mat del 9-set sin fila se quedaba con la fila de Máquinas del
@@ -1922,13 +1977,16 @@ function eventosConsumo(resv, regs, excluirReservaId){
       const k = l.findIndex(c => !c || !r.curso || c === r.curso);
       if (k >= 0){ l.splice(k, 1); emparejada = true; break; }
     }
-    if (!emparejada) eventos.push({ tipo: r.tipo, cuando: r.cuando });
+    if (!emparejada){
+      eventos.push({ tipo: r.tipo, cuando: r.cuando });
+      if (r.estado === "reservada" && r.f && r.f < hoyL) pendientes++;   // ver reservasUsadasPuro
+    }
   }
   eventos.sort((a, b) => String(a.cuando) < String(b.cuando) ? -1 : 1);
   /* `reservadas` = clases apartadas que TODAVIA no se dictaron. La contabilidad no cambia
      (siguen consumiendo, y por eso nadie puede sobrevender), pero la academia que descuenta
      "al asistir" las suma de vuelta SOLO para mostrar el saldo. Ver saldoMostrado(). */
-  return { eventos, reprogTotal, reservadas };
+  return { eventos, reprogTotal, reservadas, pendientes };
 }
 /* computeMulti: la versión de compute() para el alumno con varios pases. Junta los consumos
    REALES del ciclo (misma semántica que reservasUsadasCount + compute: reservas vivas con su
@@ -1952,14 +2010,14 @@ async function computeMulti(env, tid, alumno, paqMap, precios, excluirReservaId,
     resv = filas.resv || []; regs = filas.regs || [];
   } else {
     resv = (await env.DB.prepare(
-      "SELECT id, inicio_utc, COALESCE(curso,'') AS curso, COALESCE(tipo,'') AS tipo FROM reservas WHERE tenant_id = ?1 AND alumno_id = ?2 AND COALESCE(ciclo,1) = ?3 " +
+      "SELECT id, inicio_utc, estado, COALESCE(curso,'') AS curso, COALESCE(tipo,'') AS tipo FROM reservas WHERE tenant_id = ?1 AND alumno_id = ?2 AND COALESCE(ciclo,1) = ?3 " +
       "AND estado IN ('reservada','completada','falta') ORDER BY inicio_utc ASC"
     ).bind(tid, alumno.id, ciclo).all()).results || [];
     regs = (await env.DB.prepare(
       "SELECT fecha, COALESCE(curso,'') AS curso, estado FROM registro WHERE tenant_id = ?1 AND alumno_id = ?2 AND COALESCE(ciclo,1) = ?3 ORDER BY fecha ASC, id ASC"
     ).bind(tid, alumno.id, ciclo).all()).results || [];
   }
-  const { eventos, reprogTotal, reservadas } = eventosConsumo(resv || [], regs || [], excluirReservaId);
+  const { eventos, reprogTotal, reservadas, pendientes } = eventosConsumo(resv || [], regs || [], excluirReservaId);
   const at = atribuirPases(lista, paqMap, eventos, reprogTotal);
   /* Clases de regalo por referir (15-ago-2026) en un alumno con VARIOS pases: el regalo es
      del alumno, no de un pase, asi que hay que ponerlo en alguno. Va al primer pase VIVO
@@ -2001,6 +2059,7 @@ async function computeMulti(env, tid, alumno, paqMap, precios, excluirReservaId,
     bonus: bonusM,
     restantes,
     reservadas,                                             // apartadas y aun sin dictar
+    pendientesCerrar: pendientes,                           // pasadas sin cerrar (ver compute)
     vencido: vivos.length === 0, caducado: false,
     vence: (alumno && alumno.vence) || "",
     reprogPermitidas: at.reprogPermitidas,
@@ -5710,7 +5769,7 @@ function diaVecino(f, delta){
      futuras = SOLO lo apartado que todavía no se dictó. Es lo único que se suma de vuelta.
    `computeMulti` ya lo hacía bien por su lado (eventosConsumo), y por eso los 12 alumnos con
    varios pases nunca dieron el síntoma: el bug solo se veía en los de un pase, que son 1,435. */
-function reservasUsadasPuro(resv, regs, excluirId){
+function reservasUsadasPuro(resv, regs, excluirId, detalle){
   const excl = String(excluirId || "");
   const ahora = Date.now();
   if (!resv || !resv.length) return { n: 0, futuras: 0 };
@@ -5720,32 +5779,49 @@ function reservasUsadasPuro(resv, regs, excluirId){
     if (f) porFecha.set(f, (porFecha.get(f) || 0) + 1);
   }
   let n = 0, futuras = 0;
+  const hoyL = fechaLimaDe(new Date(ahora).toISOString());
   const pasadas = [];
   for (const r of resv){
     if (r.id === excl) continue;
     if (Date.parse(r.inicio_utc) >= ahora){ n++; futuras++; continue; }   // futura: aparta credito
-    pasadas.push(fechaLimaDe(r.inicio_utc));
+    pasadas.push({ f: fechaLimaDe(r.inicio_utc), r });
   }
   const sinPar = [];
-  for (const f of pasadas){
-    const libres = porFecha.get(f) || 0;
-    if (libres > 0) porFecha.set(f, libres - 1);
-    else sinPar.push(f);
+  for (const p of pasadas){
+    const libres = porFecha.get(p.f) || 0;
+    if (libres > 0) porFecha.set(p.f, libres - 1);
+    else sinPar.push(p);
   }
-  for (const f of sinPar){
+  const sinCerrar = [];
+  for (const p of sinPar){
     let emparejada = false;
-    for (const vf of [diaVecino(f, 1), diaVecino(f, -1)]){
+    for (const vf of [diaVecino(p.f, 1), diaVecino(p.f, -1)]){
       const libres = porFecha.get(vf) || 0;
       if (libres > 0){ porFecha.set(vf, libres - 1); emparejada = true; break; }
     }
-    if (!emparejada) n++;                                       // dictada y sin anotar: igual consume
+    if (!emparejada){
+      n++;                                                      // dictada y sin anotar: igual consume
+      /* 29-set-2026 · si además sigue 'reservada' de un día de Lima ANTERIOR a hoy, nadie la cerró: ni
+         «se dictó», ni «falta», ni «reprogramada», ni «cancelada». Consume igual (no se sobrevende),
+         pero se cuenta aparte para decirlo en voz alta: «X pendientes de cerrar». La de hoy todavía
+         tiene el día para cerrarse: no es un pendiente. */
+      if (p.r.estado === "reservada" && p.r.tipo !== "bloqueo" && p.r.tipo !== "aparta" && p.f && p.f < hoyL) sinCerrar.push(p.r);
+    }
   }
-  return { n, futuras };
+  /* `detalle` devuelve además las filas: la lista del aviso sale de ESTE mismo emparejamiento, así el
+     saldo («X pendientes») y la campanita («estas X clases») no pueden contradecirse. */
+  return detalle ? { n, futuras, pendientes: sinCerrar.length, sinCerrar } : { n, futuras, pendientes: sinCerrar.length };
+}
+/* PURO: la lista de reservas pasadas sin cerrar de UN alumno (ver reservasUsadasPuro). Alimenta el aviso
+   diario, la ficha y la consulta de solo lectura. Devuelve las filas tal como llegaron + `dia` (Lima). */
+function reservasSinCerrarPuro(resv, regs){
+  return (reservasUsadasPuro(resv, regs, "", true).sinCerrar || [])
+    .map(r => Object.assign({}, r, { dia: fechaLimaDe(r.inicio_utc) }));
 }
 /* El de siempre, ahora solo trae las filas y delega la cuenta en la version pura. */
 async function reservasUsadasCount(env, tenantId, alumnoId, ciclo, excluirId){
   const { results: resv } = await env.DB.prepare(
-    "SELECT id, inicio_utc FROM reservas WHERE tenant_id = ?1 AND alumno_id = ?2 AND COALESCE(ciclo,1) = ?3 " +
+    "SELECT id, inicio_utc, estado FROM reservas WHERE tenant_id = ?1 AND alumno_id = ?2 AND COALESCE(ciclo,1) = ?3 " +
     "AND estado IN ('reservada','completada','falta') ORDER BY inicio_utc ASC"
   ).bind(tenantId, alumnoId, ciclo).all();
   if (!resv || !resv.length) return 0;
@@ -7579,6 +7655,20 @@ const NOVEDADES = [
     titulo: "Batuta es gratis, con el producto completo",
     texto: "Se acabaron los planes. Tienes todo Batuta con 20 alumnos, 1 profesor y 5 conversaciones del asistente al mes. Si necesitas más, compras packs y se suman a un solo cobro." }
 ];
+/* Libro de regalos/bonos (29-set-2026): de dónde salió cada clase extra y, si la regaló otro alumno,
+   quién. `bonus_clases` solo guarda un total; este libro guarda el porqué. Tabla nueva = nace sola. */
+let BONOS_OK = false;
+async function ensureBonosSchema(env){
+  if (BONOS_OK) return;
+  try {
+    await env.DB.prepare(
+      "CREATE TABLE IF NOT EXISTS bonos_log (id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, fecha_utc TEXT NOT NULL, " +
+      "alumno_id TEXT NOT NULL, de_alumno_id TEXT DEFAULT '', clases INTEGER NOT NULL, origen TEXT NOT NULL, " +
+      "ciclo INTEGER, ciclo_de INTEGER, por TEXT DEFAULT '')"
+    ).run();
+  } catch (e) { /* ya existe */ }
+  BONOS_OK = true;
+}
 let AVISOS_OK = false;
 async function ensureAvisosSchema(env){
   if (AVISOS_OK) return;
@@ -7589,8 +7679,85 @@ async function ensureAvisosSchema(env){
    `c` va por rowid y no por fecha porque `compras.fecha` es un DÍA de Lima: con fechas, un
    pago de hoy quedaría "nuevo" o "viejo" según la hora, y el contador mentiría medio día. */
 function avisosVistoDe(profesor){
-  try { const j = JSON.parse((profesor && profesor.avisos_visto) || "{}") || {}; return { n: String(j.n || ""), c: Number(j.c) || 0 }; }
-  catch (e) { return { n: "", c: 0 }; }
+  /* `d` (29-set-2026) = el último DÍA de Lima en que se vio el aviso de clases sin cerrar: ese aviso
+     se enciende una vez al día mientras haya algo pendiente, y no se queda prendido para siempre. */
+  try { const j = JSON.parse((profesor && profesor.avisos_visto) || "{}") || {}; return { n: String(j.n || ""), c: Number(j.c) || 0, d: String(j.d || "") }; }
+  catch (e) { return { n: "", c: 0, d: "" }; }
+}
+/* ═══ CIERRE DIARIO DE RESERVAS PASADAS (29-set-2026, pedido de Andrés) ═══════════════════════
+   Caso real: un alumno pide reprogramar, se acepta, y nadie lo marca en el portal. La reserva pasada
+   queda 'reservada', cuenta como clase usada y el saldo se descuadra (Álvaro Guillén 21-set, Danielle
+   3 reservas, Yaritza 19-set, Hellen 2 reservas). Esta consulta es de SOLO LECTURA: lista, por alumno,
+   las reservas de días anteriores que siguen 'reservada' y sin fila de bitácora, con el mismo
+   emparejamiento que usa el saldo (`reservasHuerfanasPuro`). El cierre lo hace /reserva/cerrar.
+   `alcance` = { esDueno, profeId }: un profesor solo ve las reservas de SU agenda. */
+async function listarSinCerrar(env, tid, alcance){
+  const al = alcance || {};
+  const hoyL = hoyLima();
+  const corteIso = new Date(Date.parse(hoyL + "T00:00:00Z") + LIMA_OFFSET_MS).toISOString();   // 00:00 de hoy en Lima
+  const cand = ((await env.DB.prepare(
+    "SELECT r.id, r.alumno_id, r.inicio_utc, COALESCE(r.curso,'') AS curso, COALESCE(r.tipo,'') AS tipo, " +
+    "COALESCE(r.ciclo,1) AS ciclo, r.estado, TRIM(COALESCE(a.nombre,'') || ' ' || COALESCE(a.apellido,'')) AS alumno, " +
+    "COALESCE(a.codigo,'') AS codigo FROM reservas r JOIN alumnos a ON a.id = r.alumno_id AND a.tenant_id = r.tenant_id " +
+    "WHERE r.tenant_id = ?1 AND r.estado = 'reservada' AND r.inicio_utc < ?2 AND COALESCE(r.alumno_id,'') != '' " +
+    "AND r.tipo NOT IN ('bloqueo','aparta') AND (?3 = 1 OR r.profesor_id = ?4) ORDER BY r.inicio_utc ASC LIMIT 300"
+  ).bind(tid, corteIso, al.esDueno ? 1 : 0, al.profeId || "").all()).results) || [];
+  if (!cand.length) return { total: 0, items: [], alumnos: 0 };
+  /* para emparejar bien hacen falta TODAS las reservas y la bitácora de esos alumnos (no solo las
+     abiertas): una reserva ya completada también ocupa su fila de registro */
+  const ids = [...new Set(cand.map(r => r.alumno_id))];
+  const resv = [], regs = [];
+  for (let i = 0; i < ids.length; i += 40){
+    const lote = ids.slice(i, i + 40);
+    const ph = lote.map((_, k) => "?" + (k + 2)).join(",");
+    resv.push(...(((await env.DB.prepare(
+      "SELECT r.id, r.alumno_id, r.inicio_utc, COALESCE(r.curso,'') AS curso, COALESCE(r.tipo,'') AS tipo, COALESCE(r.ciclo,1) AS ciclo, r.estado " +
+      "FROM reservas r WHERE r.tenant_id = ?1 AND r.estado IN ('reservada','completada','falta') AND r.alumno_id IN (" + ph + ")"
+    ).bind(tid, ...lote).all()).results) || []));
+    regs.push(...(((await env.DB.prepare(
+      "SELECT alumno_id, fecha, COALESCE(curso,'') AS curso, estado, COALESCE(ciclo,1) AS ciclo " +
+      "FROM registro WHERE tenant_id = ?1 AND alumno_id IN (" + ph + ") ORDER BY fecha ASC, id ASC"
+    ).bind(tid, ...lote).all()).results) || []));
+  }
+  const info = new Map(cand.map(r => [r.id, r]));
+  const grupos = new Map();
+  for (const r of resv){ const k = r.alumno_id + "|" + r.ciclo; if (!grupos.has(k)) grupos.set(k, { resv: [], regs: [] }); grupos.get(k).resv.push(r); }
+  for (const g of regs){ const k = g.alumno_id + "|" + g.ciclo; if (!grupos.has(k)) grupos.set(k, { resv: [], regs: [] }); grupos.get(k).regs.push(g); }
+  const items = [];
+  for (const g of grupos.values()){
+    for (const r of reservasSinCerrarPuro(g.resv, g.regs)){
+      const c = info.get(r.id);
+      if (!c) continue;   // pendiente que no cae en el alcance de este profesor
+      items.push({ id: r.id, alumno_id: c.alumno_id, alumno: c.alumno, codigo: c.codigo, inicio_utc: c.inicio_utc,
+                   dia: r.dia, curso: c.curso, ciclo: c.ciclo });
+    }
+  }
+  items.sort((a, b) => String(a.inicio_utc).localeCompare(String(b.inicio_utc)));
+  return { total: items.length, items, alumnos: new Set(items.map(x => x.alumno_id)).size };
+}
+/* Las cuatro salidas de una reserva pasada sin cerrar. Cada una deja la reserva y la bitácora en un
+   estado que el saldo ya sabe leer (ver eventosConsumo), sin inventar reglas nuevas:
+     dicto        → completada + fila «Asistió»          (consume, como siempre)
+     falta        → falta      + fila «Falta»            (consume, como siempre)
+     reprogramada → completada + fila «Reprogramó»       (la fila empareja la reserva: NO consume;
+                                                          cuenta en la cuota de reprogramaciones)
+     cancelada    → cancelada                            (devuelve la clase)                      */
+const CIERRES_RESERVA = ["dicto", "falta", "reprogramada", "cancelada"];
+/* PURO: qué columnas cambian al dar `clases` de regalo a `alR`, y (si las regala otro alumno, `alD`) al
+   descontárselas a él. Recibir = `bonus_clases` del ciclo de quien recibe; descontar = `migrado_usadas`
+   del ciclo de quien regala (las «ya consumidas» que compute() resta del saldo). Si el bono o el
+   migrado estaban atados a OTRO ciclo, ya eran inertes: se reemplazan, no se suman. */
+function bonoAplicar(alR, alD, clases){
+  const n = Math.max(0, Math.floor(Number(clases) || 0));
+  const cR = Number(alR && alR.ciclo) || 1;
+  const yaBonus = (Number(alR && alR.bonus_ciclo) || 0) === cR ? Math.max(0, Number(alR && alR.bonus_clases) || 0) : 0;
+  const out = { recibe: { bonus_clases: yaBonus + n, bonus_ciclo: cR }, regala: null };
+  if (alD){
+    const cD = Number(alD.ciclo) || 1;
+    const yaMig = (Number(alD.migrado_ciclo) || 0) === cD ? Math.max(0, Number(alD.migrado_usadas) || 0) : 0;
+    out.regala = { migrado_usadas: yaMig + n, migrado_ciclo: cD };
+  }
+  return out;
 }
 async function avisosDe(env, actor){
   await ensureAvisosSchema(env);
@@ -7624,10 +7791,27 @@ async function avisosDe(env, actor){
       });
     }
   }
+  /* Clases de días anteriores sin cerrar (29-set-2026). Un solo aviso con la lista; el dueño ve todas y
+     un profesor las de su agenda. Se enciende una vez por día (`d`) mientras siga habiendo pendientes. */
+  let topeD = visto.d;
+  try {
+    const hoyC = hoyLima();
+    const sc = await listarSinCerrar(env, actor.tenant.id, { esDueno: !!actor.esDueno, profeId: (actor.profesor && actor.profesor.id) || "" });
+    if (sc.total > 0){
+      topeD = hoyC;
+      lista.push({
+        tipo: "cierre", id: "cierre-" + hoyC, fecha: hoyC,
+        titulo: sc.total === 1 ? "1 clase pasada sin cerrar" : sc.total + " clases pasadas sin cerrar",
+        texto: "Mientras sigan «reservadas» cuentan como usadas en el saldo. Marca cada una: se dictó, faltó, se reprogramó o se canceló.",
+        pendiente: true, total: sc.total, alumnos: sc.alumnos, items: sc.items.slice(0, 30),
+        nuevo: visto.d < hoyC
+      });
+    }
+  } catch (e) { console.error("avisos: clases sin cerrar", e && e.message); }   // la campanita nunca se cae por esto
   /* por fecha, y a igualdad de fecha primero lo que hay que hacer algo */
   lista.sort((a, b) => (b.fecha || "").localeCompare(a.fecha || "") || (b.pendiente ? 1 : 0) - (a.pendiente ? 1 : 0));
   const topeN = NOVEDADES.length ? NOVEDADES.map(x => x.fecha).sort().slice(-1)[0] : visto.n;
-  return { avisos: lista.slice(0, 25), nuevos: lista.filter(x => x.nuevo).length, tope: { n: topeN, c: topeC } };
+  return { avisos: lista.slice(0, 25), nuevos: lista.filter(x => x.nuevo).length, tope: { n: topeN, c: topeC, d: topeD } };
 }
 
 /* ── ¿A QUÉ LOCAL TIENE QUE IR? Una sola regla para TODAS las superficies ──────
@@ -8894,7 +9078,11 @@ async function profeQueDicta(env, tenantId, inicioUtc, quien){
   return String((quien && quien.fallback) || "");
 }
 /* `quien` = {sala, grilla, fallback}: de ahí sale QUIÉN DICTÓ. Se pasa un objeto y no un
-   parámetro suelto a propósito: los positionales de este archivo ya me costaron un bug. */
+   parámetro suelto a propósito: los positionales de este archivo ya me costaron un bug.
+   29-set-2026 · «Reprogramó» también pasa por esta función (cierre diario de reservas pasadas): es la
+   fila que EMPAREJA la reserva de ese día para que deje de consumir. Su guarda mira lo suyo: una fila
+   «Reprogramó» ya escrita no se duplica, y una «Reprogramó» no cuenta como clase dictada (ni al revés).
+   `quien.nota` = texto libre para el historial («Reprogramada a 2026-10-03»). */
 async function anotarClaseDictada(env, tenantId, alumnoId, inicioUtc, curso, ciclo, estado, quien){
   if (!alumnoId) return false;
   const fechaL = fechaLimaDe(inicioUtc);
@@ -8908,15 +9096,16 @@ async function anotarClaseDictada(env, tenantId, alumnoId, inicioUtc, curso, cic
      Ahora la guarda es por día Y CURSO: dos clases distintas del mismo día se anotan las dos,
      y repetir el cierre de la misma sigue sin duplicar. El saldo no cambia: una reserva sin
      su fila de bitácora ya contaba igual, por el emparejamiento de `eventosConsumo`. */
+  const esRepro = estado === "Reprogramó";   // ver la nota de arriba de la función
   const ya = await env.DB.prepare(
     "SELECT 1 FROM registro WHERE tenant_id = ?1 AND alumno_id = ?2 AND COALESCE(ciclo,1) = ?3 " +
-    "AND fecha = ?4 AND COALESCE(curso,'') = ?5 AND estado != 'Reprogramó' LIMIT 1"
+    "AND fecha = ?4 AND COALESCE(curso,'') = ?5 AND " + (esRepro ? "estado = 'Reprogramó'" : "estado != 'Reprogramó'") + " LIMIT 1"
   ).bind(tenantId, alumnoId, cicloR, fechaL, String(curso || "")).first();
   if (ya) return false;
   await env.DB.prepare(
-    "INSERT INTO registro (id,tenant_id,fecha,alumno_id,curso,estado,trabajo,tarea,ciclo,tarea_audio,plan,profesor_id) VALUES (?1,?2,?3,?4,?5,?6,'','',?7,'','',?8)"
-  ).bind(crypto.randomUUID(), tenantId, fechaL, alumnoId, curso || "", (estado === "Falta" ? "Falta" : "Asistió"), cicloR,
-         await profeQueDicta(env, tenantId, inicioUtc, quien)).run();
+    "INSERT INTO registro (id,tenant_id,fecha,alumno_id,curso,estado,trabajo,tarea,ciclo,tarea_audio,plan,profesor_id) VALUES (?1,?2,?3,?4,?5,?6,?9,'',?7,'','',?8)"
+  ).bind(crypto.randomUUID(), tenantId, fechaL, alumnoId, curso || "", (esRepro ? "Reprogramó" : (estado === "Falta" ? "Falta" : "Asistió")), cicloR,
+         await profeQueDicta(env, tenantId, inicioUtc, quien), String((quien && quien.nota) || "").slice(0, 200)).run();
   return true;
 }
 
@@ -8925,7 +9114,7 @@ async function anotarClaseDictada(env, tenantId, alumnoId, inicioUtc, curso, cic
    entera una demo privada al vencer. ⚠️ Tabla nueva con `tenant_id` = agregarla ACÁ,
    o la demo acumula basura de cada visitante para siempre (`campanas` se sumó el
    15-ago-2026 tras verlo pasar). */
-const TABLAS_TENANT = ["alumnos", "registro", "pausas", "precios", "config", "disponibilidad", "reservas", "grupos", "sedes", "cuentas", "compras", "recursos", "ejercicios", "chat_mensajes", "push_subs", "leads", "feedback", "gastos", "comprobantes", "campanas", "espera", "reset_tokens", "mensajes_extra", "soporte_ia_log", "referidos"];
+const TABLAS_TENANT = ["alumnos", "registro", "pausas", "precios", "config", "disponibilidad", "reservas", "grupos", "sedes", "cuentas", "compras", "recursos", "ejercicios", "chat_mensajes", "push_subs", "leads", "feedback", "gastos", "comprobantes", "campanas", "espera", "reset_tokens", "mensajes_extra", "soporte_ia_log", "referidos", "bonos_log"];
 /* Fuera de la lista a propósito: `afiliados` y `comisiones` tienen tenant_id pero la fila es
    de OTRA persona (el afiliado que trajo al tenant, y su ledger de pagos). Borrar por
    tenant_id ahí sería borrarle su registro y su historial de comisiones a un tercero.
@@ -8957,6 +9146,7 @@ async function resetDemo(env, opts){
   await ensureErpSchema(env);      // idem: gastos
   await ensureMultiprofesorSchema(env); // idem: profesores + la columna profesor_id que usa el equipo
   await ensureSedesSchema(env);         // idem: sedes + la columna sede_id (multisede)
+  await ensureBonosSchema(env);         // idem: bonos_log (libro de regalos)
   let t = null;
   if (O.tenantId){
     /* Demo privada: el tenant lo acaba de crear crearDemoPrivada() y nace vacío. No hay nada
@@ -17264,6 +17454,102 @@ export default {
           return json({ ok: true });
         }
 
+        /* ---- Cierre diario de reservas pasadas (29-set-2026) ----
+           GET  /reservas/sin-cerrar  → solo lectura: la lista que alimenta la campanita y la ficha.
+           POST /reserva/cerrar       → una de CIERRES_RESERVA sobre UNA reserva pasada. Solo cierra lo
+                                        que sigue 'reservada' (nunca pisa una clase ya cerrada) y un
+                                        profesor solo cierra las de SU agenda, igual que /agenda/marcar. */
+        if (path === "/app/api/admin/reservas/sin-cerrar" && request.method === "GET"){
+          return json(await listarSinCerrar(env, tid, { esDueno, profeId: profeActorId || "" }));
+        }
+        if (path === "/app/api/admin/reserva/cerrar" && request.method === "POST"){
+          const b = await request.json().catch(() => ({}));
+          const id = String(b.id || "");
+          const accion = String(b.accion || "");
+          if (!CIERRES_RESERVA.includes(accion)) return json({ error: "Acción inválida" }, 400);
+          const rv = await env.DB.prepare(
+            "SELECT * FROM reservas WHERE id = ?1 AND tenant_id = ?2 AND (?3 = 1 OR profesor_id = ?4)"
+          ).bind(id, tid, esDueno ? 1 : 0, profeActorId || "").first();
+          if (!rv) return json({ error: "Esa clase no está en tu agenda." }, 404);
+          if (rv.tipo === "bloqueo" || !rv.alumno_id) return json({ error: "Eso no es la clase de un alumno." }, 400);
+          if (rv.estado !== "reservada") return json({ error: "Esa clase ya está cerrada." }, 409);
+          if (!(Date.parse(rv.inicio_utc) < Date.now())) return json({ error: "Esa clase todavía no pasa." }, 400);
+          const quien = (esDueno ? "dueno" : "profesor") + ":" + (profeActorId || "");
+          if (accion === "cancelada"){
+            await env.DB.prepare("UPDATE reservas SET estado = 'cancelada', cancelada_utc = ?1, cancelada_por = ?2 WHERE id = ?3 AND tenant_id = ?4 AND estado = 'reservada'")
+              .bind(new Date().toISOString(), quien + ":cierre", id, tid).run();
+          } else if (accion === "reprogramada"){
+            /* la fila 'Reprogramó' EMPAREJA esta reserva (ver eventosConsumo): sin fila, la reserva
+               seguiría contando como clase dictada. Idempotente por día + curso. La fecha nueva, si se
+               da, queda escrita en la fila para que el historial diga adónde se movió. */
+            const nueva = /^\d{4}-\d{2}-\d{2}$/.test(String(b.nueva_fecha || "")) ? String(b.nueva_fecha) : "";
+            /* primero la fila, después la reserva: si la fila falla NO se cierra nada (una reserva
+               'completada' sin su fila volvería a consumir en silencio y ya no saldría en la lista) */
+            try { await anotarClaseDictada(env, tid, rv.alumno_id, rv.inicio_utc, rv.curso, rv.ciclo, "Reprogramó",
+                                           { sala: rv.sala, grilla: rv.profesor_id, fallback: rv.profesor_id,
+                                             nota: nueva ? ("Reprogramada a " + nueva) : "Reprogramada" }); }
+            catch (e) { console.error("cerrar: no se pudo anotar la reprogramación", id, e); return json({ error: "No se pudo anotar la reprogramación. Intenta de nuevo." }, 500); }
+            await env.DB.prepare("UPDATE reservas SET estado = 'completada' WHERE id = ?1 AND tenant_id = ?2 AND estado = 'reservada'").bind(id, tid).run();
+          } else {
+            const est = accion === "dicto" ? "completada" : "falta";
+            await env.DB.prepare("UPDATE reservas SET estado = ?1 WHERE id = ?2 AND tenant_id = ?3 AND estado = 'reservada'").bind(est, id, tid).run();
+            try { await anotarClaseDictada(env, tid, rv.alumno_id, rv.inicio_utc, rv.curso, rv.ciclo,
+                                           accion === "dicto" ? "Asistió" : "Falta",
+                                           { sala: rv.sala, grilla: rv.profesor_id, fallback: rv.profesor_id }); }
+            catch (e) { console.error("cerrar: no se pudo anotar la clase", id, e); }
+          }
+          const resto = await listarSinCerrar(env, tid, { esDueno, profeId: profeActorId || "" }).catch(() => null);
+          return json({ ok: true, accion, pendientes: resto ? resto.total : null });
+        }
+
+        /* ---- Regalo / bono CON ORIGEN, y transferencia entre alumnos (29-set-2026) ----
+           Hellen le regaló sus clases a Gabriel y Batuta no se enteró: Gabriel nació con un paquete de
+           cortesía y a Hellen nadie le descontó nada; los bonos de Yaritza (6 en vez de 4) y Molly
+           subieron el total sin dejar de dónde salieron. Regla: NINGÚN bono entra sin una nota de origen,
+           y si lo regala otro alumno se le DESCUENTA a ese en el mismo paso (todo o nada).
+           Solo el dueño. Descontar = subir `migrado_usadas` del ciclo (el mismo mecanismo de «ya
+           consumidas» que usa compute); recibir = `bonus_clases` del ciclo. */
+        if (path === "/app/api/admin/alumno/bono" && request.method === "POST"){
+          if (!esDueno) return json({ error: "Los regalos de clases los da el dueño." }, 403);
+          const b = await request.json().catch(() => ({}));
+          const clases = Math.floor(Number(b.clases));
+          const origen = String(b.origen || "").trim().slice(0, 200);
+          if (!(clases >= 1 && clases <= 50)) return json({ error: "Pon cuántas clases (de 1 a 50)." }, 400);
+          if (origen.length < 5) return json({ error: "Escribe de dónde sale el regalo (ej: «Hellen se las regaló», «premio por referir»)." }, 400);
+          const alR = await env.DB.prepare("SELECT * FROM alumnos WHERE id = ?1 AND tenant_id = ?2").bind(String(b.alumno_id || ""), tid).first();
+          if (!alR) return json({ error: "Ese alumno no existe." }, 404);
+          const cicloR = Number(alR.ciclo) || 1;
+          const deId = String(b.de_alumno_id || "");
+          const stB = [];
+          let alD = null, cicloD = null;
+          if (deId){
+            if (deId === alR.id) return json({ error: "No se puede regalar a sí mismo." }, 400);
+            alD = await env.DB.prepare("SELECT * FROM alumnos WHERE id = ?1 AND tenant_id = ?2").bind(deId, tid).first();
+            if (!alD) return json({ error: "El alumno que regala no existe." }, 404);
+            cicloD = Number(alD.ciclo) || 1;
+            if (pasesDe(alD)) return json({ error: "Quien regala tiene varios pases: descuéntaselo a mano desde su ficha." }, 400);
+            const paqMapB = (await loadPaquetes(env, tid)).map;
+            const pkD = resolverPk(paqMapB, alD.paquete);
+            if (pkD && pkD.ilim) return json({ error: "Quien regala tiene plan ilimitado: no hay clases que descontar." }, 400);
+            /* el saldo REAL (el que deja reservar), no el «mostrado»: no se regala lo que ya está apartado */
+            const { results: regsD } = await env.DB.prepare(SQL_REGS_CICLO).bind(tid, alD.id, cicloD).all();
+            const cD = compute(alD, regsD || [], {}, await reservasUsadasCount(env, tid, alD.id, cicloD), pkD);
+            if ((Number(cD.restantes) || 0) < clases)
+              return json({ error: (alD.nombre || "Ese alumno") + " solo tiene " + (Number(cD.restantes) || 0) + " clase(s) libres: no puede regalar " + clases + "." }, 400);
+          }
+          const plan = bonoAplicar(alR, alD, clases);
+          if (plan.regala) stB.push(env.DB.prepare("UPDATE alumnos SET migrado_usadas = ?1, migrado_ciclo = ?2 WHERE id = ?3 AND tenant_id = ?4")
+            .bind(plan.regala.migrado_usadas, plan.regala.migrado_ciclo, alD.id, tid));
+          stB.push(env.DB.prepare("UPDATE alumnos SET bonus_clases = ?1, bonus_ciclo = ?2 WHERE id = ?3 AND tenant_id = ?4")
+            .bind(plan.recibe.bonus_clases, plan.recibe.bonus_ciclo, alR.id, tid));
+          await ensureBonosSchema(env);
+          stB.push(env.DB.prepare(
+            "INSERT INTO bonos_log (id, tenant_id, fecha_utc, alumno_id, de_alumno_id, clases, origen, ciclo, ciclo_de, por) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10)"
+          ).bind(crypto.randomUUID(), tid, new Date().toISOString(), alR.id, alD ? alD.id : "", clases, origen, cicloR, cicloD, profeActorId || "dueno"));
+          await env.DB.batch(stB);   // todo o nada: nunca queda uno recibido sin el otro descontado
+          return json({ ok: true, clases, recibe: alR.nombre || "", regala: alD ? (alD.nombre || "") : "" });
+        }
+
         if (path === "/app/api/admin/agenda/marcar" && request.method === "POST"){
           const b = await request.json().catch(() => ({}));
           const id = String(b.id || "");
@@ -17796,8 +18082,9 @@ export default {
           const nAv = /^\d{4}-\d{2}-\d{2}$/.test(String((bAv && bAv.n) || "")) ? String(bAv.n) : "";
           const cAv = Math.max(0, Math.min(1e12, parseInt((bAv && bAv.c), 10) || 0));
           const prev = avisosVistoDe(profeActor);
+          const dAv = /^\d{4}-\d{2}-\d{2}$/.test(String((bAv && bAv.d) || "")) ? String(bAv.d) : "";
           /* nunca hacia atrás: dos pestañas abiertas no pueden "des-leer" lo ya leído */
-          const guardar = { n: nAv > prev.n ? nAv : prev.n, c: Math.max(cAv, prev.c) };
+          const guardar = { n: nAv > prev.n ? nAv : prev.n, c: Math.max(cAv, prev.c), d: dAv > prev.d ? dAv : prev.d };
           try {
             await env.DB.prepare("UPDATE profesores SET avisos_visto = ?1 WHERE id = ?2 AND tenant_id = ?3")
               .bind(JSON.stringify(guardar), profeActorId, tid).run();
@@ -18542,6 +18829,12 @@ export default {
              reservas quedaron apuntando a salas que ya no existian: el horario se ve VACIO y
              nadie puede reservar. Hay que leer la lista de ANTES para poder arrastrar el cambio. */
           let salasCanon = null, salasAntes = null;
+          /* Renombrar un plan arrastra a los alumnos que lo tienen (29-sep-2026, José/Elevate):
+             se lee el catálogo de ANTES y se guarda el de AHORA para validar el renombrado. */
+          let paqListaAntes = null, paqParsedAhora = null;
+          if ("paquetes" in b && b.paquetes_renombrados){
+            paqListaAntes = (await loadPaquetes(env, tid).catch(() => ({ list: [] }))).list;
+          }
           if ("salas" in b){
             const filaS = await env.DB.prepare("SELECT valor FROM config WHERE tenant_id = ?1 AND clave = 'salas'")
               .bind(tid).first().catch(() => null);
@@ -18575,6 +18868,7 @@ export default {
                   return out;
                 })) : "";
                 if (parsed && parsed.sobran > 0) avisoPaquetes = parsed.sobran;
+                paqParsedAhora = parsed;
                 /* 🐛 20-ago-2026 (Elevate): renombrar un paquete deja huérfanos los pases que
                    guardaban el nombre viejo, y esos alumnos ven 0/0 aunque hayan pagado.
                    `resolverPk` ya lo resuelve con tolerancia, pero lo que NI ASÍ se puede
@@ -18740,6 +19034,27 @@ export default {
             }
           }
           if (stmts.length) await env.DB.batch(stmts);
+          /* ---- El arrastre del renombrado de planes (29-sep-2026) ----
+             Va DESPUÉS de guardar el catálogo nuevo. Solo se cambia el nombre del plan en
+             `alumnos.paquete` y `alumnos.pases`; `compras` y el registro son historia y no se tocan. */
+          let planesArrastrados = 0;
+          if (paqListaAntes && paqParsedAhora){
+            const pares = sanearRenombresPlan(b.paquetes_renombrados, paqListaAntes, paqParsedAhora.map);
+            if (Object.keys(pares).length){
+              try {
+                const { results: conPlan } = await env.DB.prepare(
+                  "SELECT id, paquete, pases FROM alumnos WHERE tenant_id = ?1 AND (COALESCE(paquete,'') != '' OR COALESCE(pases,'') != '')"
+                ).bind(tid).all();
+                const cambios = migrarPlanEnAlumnos(conPlan || [], pares);
+                for (let i = 0; i < cambios.length; i += 50){
+                  await env.DB.batch(cambios.slice(i, i + 50).map(c =>
+                    env.DB.prepare("UPDATE alumnos SET paquete = ?1, pases = ?2 WHERE id = ?3 AND tenant_id = ?4")
+                      .bind(c.paquete || "", c.pases || "", c.id, tid)));
+                }
+                planesArrastrados = cambios.length;
+              } catch (e) { console.error("arrastre de plan renombrado", tid, e); }
+            }
+          }
           /* ---- El arrastre del renombrado de salas (12-ago-2026) ----
              Solo cuando la CANTIDAD de salas no cambió: ahí el mapeo por posición es seguro.
              Si agregó o quitó salas no se adivina nada — se cuenta lo que quedó suelto y se
@@ -18809,7 +19124,7 @@ export default {
              sin guardar. Se devuelve `ignoradas` para que eso sea VISIBLE al depurar.
              A propósito NO lleva `aviso`: no le cambia nada a la academia (no vería ningún cartel
              nuevo) y el panel actual simplemente no lee este campo. Es diagnóstico, no interfaz. */
-          const ignoradas = Object.keys(b || {}).filter(k => claves.indexOf(k) === -1);
+          const ignoradas = Object.keys(b || {}).filter(k => claves.indexOf(k) === -1 && k !== "paquetes_renombrados");
           const conRastro = (obj) => (ignoradas.length ? Object.assign({}, obj, { ignoradas }) : obj);
           /* Si el tope de planes dejo alguno afuera, se DICE. Guardar 20 de 25 y no avisar es
              la forma mas facil de que una academia crea que tiene todo cargado y no lo tenga. */
@@ -18824,6 +19139,9 @@ export default {
           }
           if (salasRenombradas > 0){
             return json(conRastro({ ok: true, aviso: "Listo: cambie el nombre en tus salas y en las " + salasRenombradas + " horas y reservas que colgaban de ellas. Tu horario queda igual." }));
+          }
+          if (planesArrastrados > 0){
+            return json(conRastro({ ok: true, aviso: "Listo: actualice el plan en " + planesArrastrados + " alumno" + (planesArrastrados === 1 ? "" : "s") + " que lo tenian. Sus clases usadas y fechas quedan igual." }));
           }
           return json(conRastro({ ok: true }));
         }

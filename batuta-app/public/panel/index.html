@@ -6308,6 +6308,22 @@ function campPintar(){
     return;
   }
   L.innerHTML=CAMP.avisos.map(function(a){
+    /* Clases pasadas sin cerrar (29-set-2026): un aviso con la lista y los cuatro botones de un clic.
+       Cerrar = que deje de contar como usada sin decidir: se dictó, faltó, se reprogramó o se canceló. */
+    if(a.tipo==="cierre"){
+      var mas=(a.total||0)>(a.items||[]).length?('<span class="camp-d">Y '+((a.total||0)-(a.items||[]).length)+' más: cierra estas y aparecen.</span>'):'';
+      return '<div class="camp-it'+(a.nuevo?" nuevo":"")+'">'+
+        '<span class="camp-t"><i class="camp-dot pend" title="Falta cerrarlas"></i>'+esc(a.titulo)+'</span>'+
+        (a.texto?'<span class="camp-d">'+esc(a.texto)+'</span>':'')+
+        (a.items||[]).map(function(x){
+          return '<span class="camp-d" style="display:block;margin-top:6px;"><b>'+esc(x.alumno||"Alumno")+'</b> · '+esc(campFecha(x.dia))+(x.curso?(' · '+esc(x.curso)):'')+'<br>'+
+            '<button type="button" class="btn ghost sm" data-cierre="dicto" data-id="'+esc(x.id)+'">Se dictó</button> '+
+            '<button type="button" class="btn ghost sm" data-cierre="falta" data-id="'+esc(x.id)+'">Falta</button> '+
+            '<button type="button" class="btn ghost sm" data-cierre="reprogramada" data-id="'+esc(x.id)+'">Reprogramada a…</button> '+
+            '<button type="button" class="btn ghost sm" data-cierre="cancelada" data-id="'+esc(x.id)+'" title="Se cancela y la clase vuelve al saldo del alumno">Cancelada (devolver clase)</button></span>';
+        }).join("")+mas+
+        '<span class="camp-f">'+esc(campFecha(a.fecha))+'</span></div>';
+    }
     var esPago=a.tipo==="pago";
     /* los pagos llevan a Cobros; una novedad no lleva a ningún lado */
     return '<'+(esPago?'button type="button" class="camp-it click'+(a.nuevo?" nuevo":"")+'" data-ira="pagos"':
@@ -6348,8 +6364,31 @@ function campMarcarLeido(){
      abierto, no queda enterrado como leído sin que nadie lo haya visto. */
   var t=CAMP.tope;
   CAMP.nuevos=0; CAMP.avisos.forEach(function(a){ a.nuevo=false; }); campPintar();
-  apiPost("/app/api/admin/avisos/visto",{n:t.n,c:t.c}).catch(function(){});
+  apiPost("/app/api/admin/avisos/visto",{n:t.n,c:t.c,d:t.d}).catch(function(){});
 }
+/* Cerrar una clase pasada desde la campanita o desde la ficha. `cerrarReserva` es lo único que habla
+   con el servidor: la campanita y la ficha comparten el mismo camino y el mismo mensaje. */
+function cerrarReserva(id,accion){
+  var cuerpo={id:id,accion:accion};
+  if(accion==="reprogramada"){
+    var f=prompt("¿A qué fecha la reprogramaron? (AAAA-MM-DD; déjalo vacío si aún no hay fecha)","");
+    if(f===null) return Promise.resolve(false);
+    f=String(f||"").trim();
+    if(f && !/^\d{4}-\d{2}-\d{2}$/.test(f)){ toast("Escribe la fecha así: 2026-10-03"); return Promise.resolve(false); }
+    if(f) cuerpo.nueva_fecha=f;
+  }
+  if(accion==="cancelada" && !confirm("¿Cancelar esta clase? La clase vuelve al saldo del alumno.")) return Promise.resolve(false);
+  return apiPost("/app/api/admin/reserva/cerrar",cuerpo).then(function(){ toast("Listo"); return true; })
+    .catch(function(err){ toast((err&&err.message)||"No se pudo cerrar"); return false; });
+}
+if(el("campLista")) el("campLista").addEventListener("click",function(e){
+  var b=e.target.closest("[data-cierre]"); if(!b) return;
+  e.preventDefault(); b.disabled=true;
+  cerrarReserva(b.dataset.id,b.dataset.cierre).then(function(ok){
+    b.disabled=false;
+    if(ok){ campCargar(); try{ recargar(); }catch(e2){} }
+  });
+});
 function campAbrir(abrir){
   var b=el("btnCampana"), pn=el("campPanel"); if(!b||!pn) return;
   var quedaAbierto=(abrir===undefined)?pn.hidden:abrir;
@@ -8023,9 +8062,12 @@ function pintarClasesDeAlumno(a){
       lista(sinMarcar.map(function(r){
         return fila(esc(fmtLima(r.inicio_utc))+(r.curso?(' · '+esc(r.curso)):''),
           '<button type="button" class="btn ghost sm" data-ficha-marcar="completada" data-id="'+esc(r.id)+'">Vino</button> '+
-          '<button type="button" class="btn ghost sm" data-ficha-marcar="falta" data-id="'+esc(r.id)+'">Faltó</button>');
+          '<button type="button" class="btn ghost sm" data-ficha-marcar="falta" data-id="'+esc(r.id)+'">Faltó</button> '+
+          '<button type="button" class="btn ghost sm" data-ficha-cerrar="reprogramada" data-id="'+esc(r.id)+'">Reprogramada a…</button> '+
+          '<button type="button" class="btn ghost sm" data-ficha-cerrar="cancelada" data-id="'+esc(r.id)+'" title="Se cancela y la clase vuelve a su saldo">Cancelada</button>');
       }).join(""))+
-      '<p class="hint" style="margin:4px 0 0;">Hasta que las marques, su saldo no termina de cuadrar.</p></div>';
+      '<p class="hint" style="margin:4px 0 0;">'+sinMarcar.length+(sinMarcar.length===1?' pendiente de cerrar':' pendientes de cerrar')+
+      ': mientras sigan «reservadas» cuentan como usadas en su saldo. Ciérralas y el saldo cuadra.</p></div>';
   }
 
   h+='<div style="margin-top:'+(sinMarcar.length?'12px':'2px')+';">'+titulo("Próximas", futuras.length);
@@ -8064,6 +8106,14 @@ function pintarClasesDeAlumno(a){
   }).join(""));
   h+='</div>';
 
+  /* Regalo de clases CON ORIGEN (29-set-2026): nada entra al saldo sin decir de dónde sale, y si lo
+     regala otro alumno se le descuenta a él en el mismo paso. Solo el dueño. */
+  if(typeof esDuenoPanel==="function" && esDuenoPanel()){
+    h+='<div style="margin-top:12px;">'+titulo("Regalo de clases")+
+      '<p class="hint" style="margin:3px 0 4px;">Siempre con nota de origen. Si las regala otro alumno, se le descuentan a él.</p>'+
+      '<button type="button" class="btn ghost sm" data-bono="nuevo" data-al="'+esc(a.id)+'">Dar clases de regalo</button> '+
+      '<button type="button" class="btn ghost sm" data-bono="pasar" data-al="'+esc(a.id)+'">Pasar sus clases a otro alumno</button></div>';
+  }
   box.innerHTML=h;
   wrap.style.display="";
 }
@@ -8094,7 +8144,54 @@ function repintarFicha(){
    reserva cambió de estado) y los datos (marcar Vino/Faltó ESCRIBE una fila de registro, que es
    la que de verdad descuenta). Si solo se recargara la agenda, la clase desaparecería de
    "sin marcar" y no aparecería en "ya tomadas": se vería como que se perdió. */
+/* Refresca lo que cambia al cerrar una clase o regalar clases, sin pisar la fila abierta (ver abajo). */
+function fichaRefrescar(){
+  AG_RESERVAS_LISTAS=false;
+  return Promise.all([
+    asegurarReservas(),
+    apiGet().then(function(d){
+      db.registro=d.registro||db.registro;
+      if(d.alumnos){
+        var abierto=db.alumnos.find(function(x){ return x.id===FICHA_AL; });
+        db.alumnos=d.alumnos.map(function(x){ return (abierto && x.id===FICHA_AL) ? abierto : x; });
+      }
+    })
+  ]).then(function(){ repintarFicha(); try{ renderAlumnos(); }catch(e2){} });
+}
 if(el("ovAlumno")) el("ovAlumno").addEventListener("click",function(e){
+  var bc=e.target.closest("[data-ficha-cerrar]");
+  if(bc){
+    e.preventDefault(); bc.disabled=true;
+    cerrarReserva(bc.dataset.id,bc.dataset.fichaCerrar).then(function(ok){
+      bc.disabled=false; if(ok) fichaRefrescar();
+    });
+    return;
+  }
+  var bb=e.target.closest("[data-bono]");
+  if(bb){
+    e.preventDefault();
+    var cuerpo={alumno_id:bb.dataset.al}, quien;
+    if(bb.dataset.bono==="pasar"){
+      /* «pasar» = ESTE alumno regala; el que recibe se busca por su código de alumno (el de 6 letras) */
+      var cod=prompt("Código del alumno que RECIBE las clases (el de 6 letras/números):","");
+      if(!cod) return;
+      cod=String(cod).trim().toUpperCase();
+      quien=db.alumnos.find(function(x){ return String(x.codigo||"").toUpperCase()===cod; });
+      if(!quien){ toast("No encuentro a nadie con el código "+cod); return; }
+      cuerpo.alumno_id=quien.id; cuerpo.de_alumno_id=bb.dataset.al;
+    }
+    var n=prompt(bb.dataset.bono==="pasar"?"¿Cuántas clases pasa?":"¿Cuántas clases de regalo?","1");
+    if(n===null) return;
+    var o=prompt("¿De dónde sale? (obligatorio, ej: «Hellen se las regaló», «premio por referir»)","");
+    if(o===null) return;
+    cuerpo.clases=parseInt(n,10); cuerpo.origen=String(o||"").trim();
+    bb.disabled=true;
+    apiPost("/app/api/admin/alumno/bono",cuerpo)
+      .then(function(){ toast("Listo: clases registradas con su origen"); return fichaRefrescar(); })
+      .catch(function(err){ toast((err&&err.message)||"No se pudo registrar"); })
+      .finally(function(){ bb.disabled=false; });
+    return;
+  }
   var b=e.target.closest("[data-ficha-marcar]");
   if(!b) return;
   e.preventDefault();
@@ -8377,7 +8474,20 @@ el("btnGuardarAjustes").addEventListener("click",function(){
   var clasesRows=leerClasesEditor();
   /* si renombró paquetes, migra a los alumnos que estaban en el nombre viejo (no los huérfana) */
   if(Object.keys(rename).length && db.alumnos){
-    db.alumnos=db.alumnos.map(function(a){ return rename[a.paquete] ? Object.assign({},a,{paquete:rename[a.paquete]}) : a; });
+    db.alumnos=db.alumnos.map(function(a){
+      var b=rename[a.paquete] ? Object.assign({},a,{paquete:rename[a.paquete]}) : a;
+      /* 29-sep-2026: el nombre también vive DENTRO de los pases (`pases.p[].n`). Solo se
+         migraba `paquete`, y quien tenía el plan como pase quedaba huérfano en 0. */
+      try{
+        var ps=b.pases?(typeof b.pases==="string"?JSON.parse(b.pases):b.pases):null;
+        var lp=ps&&(Array.isArray(ps.p)?ps.p:(Array.isArray(ps)?ps:null));
+        if(lp&&lp.some(function(x){return x&&rename[x.n];})){
+          lp.forEach(function(x){ if(x&&rename[x.n]) x.n=rename[x.n]; });
+          b=Object.assign({},b,{pases:(typeof b.pases==="string"?JSON.stringify(ps):ps)});
+        }
+      }catch(e){}
+      return b;
+    });
   }
   /* preserva precios de claves que el editor NO muestra (ej. "Clase de prueba" en un tenant
      con paquetes custom), y encima aplica los precios de las filas visibles. */
@@ -8477,7 +8587,11 @@ el("btnGuardarAjustes").addEventListener("click",function(){
      worker no pise (ni espeje en blanco) un número que la cuenta ya tenía cargado desde
      el alta. Vaciarlo a propósito no es un caso real; perderlo en silencio, sí lo era. */
   if(!cfg.whatsapp_profe) delete cfg.whatsapp_profe;
-  Promise.all([ apiPut(), apiPost("/app/api/admin/config",cfg) ])
+  /* 29-sep-2026: el SERVIDOR es quien arrastra a los alumnos al renombrar un plan (así
+     no depende de qué alumnos tenga cargados este navegador). Se le dice qué se renombró;
+     no se guarda como ajuste, por eso va aparte de `cfg`. */
+  var cfgPost=Object.keys(rename).length?Object.assign({},cfg,{paquetes_renombrados:JSON.stringify(rename)}):cfg;
+  Promise.all([ apiPut(), apiPost("/app/api/admin/config",cfgPost) ])
     .then(function(res){
       /* 🐛 12-ago-2026: el server manda avisos que el dueño NECESITA leer (planes que no
          entraron por el tope, salas renombradas que arrastraron su horario, franjas que
