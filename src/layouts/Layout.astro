@@ -9,6 +9,7 @@ export interface Props {
   title: string;
   description: string;
   activeNav?: string;
+  calendarOnly?: boolean;
   /** Tipo de Open Graph: 'website' (default) o 'article' para posts del blog */
   type?: string;
   /** Imagen para previews al compartir. Ruta relativa (ej: '/og-image.jpg') o absoluta */
@@ -23,6 +24,7 @@ const {
   title,
   description,
   activeNav,
+  calendarOnly = false,
   type = 'website',
   image = '/og-image.jpg',
   publishedTime,
@@ -169,9 +171,9 @@ const baseSchema = { "@context":"https://schema.org", "@graph":[localBusinessSch
   {extraSchema && <script type="application/ld+json" set:html={JSON.stringify(extraSchema)} is:inline></script>}
 </head>
 <body>
-  <Nav activeNav={activeNav} />
+  {!calendarOnly && <Nav activeNav={activeNav} />}
   <slot />
-  <Footer />
-  <ChatbotFloat />
+  {!calendarOnly && <Footer />}
+  {!calendarOnly && <ChatbotFloat />}
 </body>
 </html>
