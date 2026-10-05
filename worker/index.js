@@ -2941,7 +2941,8 @@ const LIMA_OFFSET_MS = 5 * 3600 * 1000;
 const CLASE_MIN = 60;             // duración de la clase
 const HORIZONTE_SEMANAS = 4;      // hasta cuándo se puede reservar adelante
 const SERIE_SEMANAS = 4;          // una reserva fija aparta las próximas 4 semanas ("de 4 en 4")
-const ANTICIPACION_MIN_H = 12;    // no se puede reservar con menos de 12h de anticipación
+const ANTICIPACION_MIN_H = 12;    // clases: no se puede reservar con menos de 12h de anticipación
+const REUNION_ANTICIPACION_MIN_H = 1; // Web Express: reserva desde exactamente 60 minutos antes
 
 /* ═══════ REUNIÓN DE VENTA DE WEB EXPRESS, SIN CUENTA (31-ago-2026) ═══════
    webexpress.pe/horarios-disponibles necesitaba agenda y el motor ya estaba escrito acá:
@@ -3133,7 +3134,7 @@ async function slotValido(env, iso, opts){
   const t = Date.parse(iso);
   if (!Number.isFinite(t)) return false;
   const now = Date.now();
-  if (t <= now + ANTICIPACION_MIN_H * 3600000) return false;
+  if ((opts && opts.reunion) ? t < now + REUNION_ANTICIPACION_MIN_H * 3600000 : t <= now + ANTICIPACION_MIN_H * 3600000) return false;
   // Las semanas 2-4 de una serie fija caen más allá del horizonte de oferta; para
   // ellas saltamos el techo (igual se validan disponibilidad + freebusy + anticipación).
   if (!(opts && opts.ignorarHorizonte) && t > now + HORIZONTE_SEMANAS * 7 * 86400000) return false;
@@ -3150,7 +3151,7 @@ async function slotValido(env, iso, opts){
 }
 
 // Lista de slots libres en las próximas HORIZONTE_SEMANAS semanas (ISO UTC, ordenados).
-async function generarSlots(env){
+async function generarSlots(env, opts){
   const { results: disp } = await env.DB.prepare(
     "SELECT dia_semana, hora FROM disponibilidad WHERE activo = 1"
   ).all();
@@ -3176,7 +3177,7 @@ async function generarSlots(env){
     const horas = porDia[p.dow] || [];
     for (const h of horas){
       const ms = limaToUtc(p.y, p.m, p.d, h).getTime();
-      if (ms <= now + ANTICIPACION_MIN_H * 3600000 || ms > hastaMs) continue;
+      if (((opts && opts.reunion) ? ms < now + REUNION_ANTICIPACION_MIN_H * 3600000 : ms <= now + ANTICIPACION_MIN_H * 3600000) || ms > hastaMs) continue;
       const iso = new Date(ms).toISOString();
       if (!ocupados.has(iso) && !chocaConBusy(busy, ms)) slots.push(iso);
     }
@@ -5327,6 +5328,13 @@ export default {
       /* ===== AGENDA: vitrina PÚBLICA de horarios libres (sin sesión) =====
          Para que un interesado vea qué horarios hay ANTES de crear cuenta y pagar.
          Solo lectura: los mismos slots libres del portal, sin datos de nadie. */
+      if (url.pathname === "/api/agenda/slots-reunion" && request.method === "GET"){
+        const slots = await generarSlots(env, { reunion: true });
+        const r = json({ slots });
+        r.headers.set("Access-Control-Allow-Origin", "https://webexpress.pe");
+        return r;
+      }
+
       if (url.pathname === "/api/agenda/slots-publicos" && request.method === "GET"){
         const slots = await generarSlots(env);
         const r = json({ slots });
@@ -5365,9 +5373,9 @@ export default {
         if (!/^https?:\/\//i.test(web) && /^[a-z0-9.-]+\.[a-z]{2,}(\/.*)?$/i.test(web)) web = "https://" + web;
 
         const iso = String(b.inicio_utc || "");
-        /* El mismo portero de las clases: día y hora habilitados, 12h de anticipación, dentro
+        /* El mismo portero de las clases: día y hora habilitados, 60 min de anticipación, dentro
            del horizonte, y que el Google Calendar de Andrés no lo tenga ocupado. */
-        if (!(await slotValido(env, iso))) return jr({ error: "Ese horario ya no está libre. Elige otro." }, 409);
+        if (!(await slotValido(env, iso, { reunion: true }))) return jr({ error: "Ese horario ya no está libre. Elige otro." }, 409);
 
         const ahora = Date.now();
         const nowIso = new Date(ahora).toISOString();
