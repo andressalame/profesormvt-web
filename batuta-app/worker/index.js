@@ -1464,16 +1464,16 @@ function precioPorClase(precio, pk){
 /* ¿Esta persona YA era de la casa antes de llegar con el código? Vive aparte porque la
    preguntan DOS: `refElegible` al cobrar y el portal al prometer. Estaba escrita solo en la
    primera, así que el portal tachaba el precio y el server cobraba entero. */
-async function yaEraAlumnoDe(env, tenantId, alumnoId){
+async function yaEraAlumnoDe(env, tenantId, alumnoId, estricto = false){
   if (!alumnoId) return false;
   const al = await env.DB.prepare(
     "SELECT COALESCE(migrado_usadas,0) AS mu, COALESCE(pases,'') AS pases FROM alumnos WHERE id = ?1 AND tenant_id = ?2"
-  ).bind(alumnoId, tenantId).first().catch(() => null);
+  ).bind(alumnoId, tenantId).first().catch(e => { if (estricto) throw e; return null; });
   if (al && (Number(al.mu) > 0 || String(al.pases || ""))) return true;
   const hist = await env.DB.prepare(
     "SELECT (SELECT COUNT(*) FROM registro WHERE tenant_id = ?1 AND alumno_id = ?2) + " +
     "(SELECT COUNT(*) FROM reservas WHERE tenant_id = ?1 AND alumno_id = ?2) AS n"
-  ).bind(tenantId, alumnoId).first().catch(() => null);
+  ).bind(tenantId, alumnoId).first().catch(e => { if (estricto) throw e; return null; });
   return !!(hist && Number(hist.n));
 }
 /* ¿Esta compra activa el beneficio de referidos? Una sola funcion para los DOS lados (el
@@ -1530,6 +1530,55 @@ async function calcularCobro(env, tenantId, cu, paquete, precio, cfg, paqMap){
   salida.descCredito = Math.min(credito, Math.max(0, base - descRef));
   salida.monto = Math.max(0, Math.round((base - descRef - salida.descCredito) * 100) / 100);
   return salida;
+}
+
+/* Pago público: solo anunciar programas configurados por la academia. El default
+   histórico de refCfg (S/50) sigue intacto en el portal; no lo activamos en su web
+   por inferencia cuando nunca configuró Referidos. No existe un interruptor global. */
+function referidoPagoConfigurado(cfg){
+  return !!String(cfg.ref_premio_modo || cfg.ref_desc_modo || "").trim();
+}
+function errorReferidoPago(motivo){
+  if (motivo === "plan en promocion") return "Este paquete en promoción no acepta códigos de referido.";
+  if (motivo === "clase de prueba") return "El código de referido no se aplica a la clase de prueba.";
+  if (motivo.startsWith("no llega al minimo de ")) return "El código requiere un paquete de al menos " + motivo.slice(22) + " clases.";
+  if (motivo === "no es su primera compra") return "El código de referido solo vale para tu primera compra.";
+  if (motivo === "ya era alumno") return "Esta promoción es para alumnos que recién empiezan en la academia.";
+  return "No se puede aplicar el código a esta compra.";
+}
+async function validarReferidoPago(env, tenantId, datos, cu, paquete, cfg, paqMap){
+  const codigo = String(datos.codigo_referido || "").trim().toUpperCase();
+  if (!codigo) return { codigo: "" };
+  if (!referidoPagoConfigurado(cfg)) return { error: "Esta academia no ofrece códigos de referido en esta página." };
+  if (datos.metodo === "Tarjeta (Stripe)") return { error: "El código de referido no se aplica al pago internacional. Elige otro método." };
+  const valido = await buscarRefCode(env, tenantId, codigo);
+  if (!valido) return { error: "Ese código no existe en esta academia. Revísalo con tu amigo." };
+  const dueno = await env.DB.prepare("SELECT id, email, alumno_id FROM cuentas WHERE tenant_id = ?1 AND ref_code = ?2")
+    .bind(tenantId, valido).first();
+  if (!dueno) return { error: "Ese código no existe en esta academia. Revísalo con tu amigo." };
+  if (String(dueno.email || "").trim().toLowerCase() === datos.email ||
+      (cu && (dueno.id === cu.id || (dueno.alumno_id && dueno.alumno_id === cu.alumno_id)))){
+    return { error: "No puedes usar tu propio código de referido." };
+  }
+  /* Sin sesión no se cambia el referido de una cuenta existente: el portal permite
+     aplicarlo autenticado. Así un correo ajeno no permite gastar su único código. */
+  if (cu) return { error: "Para usar el código con este correo, entra a tu portal y aplícalo antes de comprar." };
+  /* Mirar TODAS las fichas por correo, incluso las ya vinculadas o ambiguas que
+     fichaLibrePorCorreo no puede enlazar. Ante error de lectura no se acepta el código. */
+  const { results: fichas } = await env.DB.prepare(
+    "SELECT id FROM alumnos WHERE tenant_id = ?1 AND LOWER(TRIM(COALESCE(email,''))) = ?2"
+  ).bind(tenantId, datos.email).all();
+  const candidato = { id: "", ref_por: valido, alumno_id: null, credito: 0 };
+  const rc = refCfg(cfg);
+  for (const ficha of fichas || []){
+    if (ficha.id === dueno.alumno_id) return { error: "No puedes usar tu propio código de referido." };
+    if (rc.soloNuevos && await yaEraAlumnoDe(env, tenantId, ficha.id, true)){
+      return { error: errorReferidoPago("ya era alumno") };
+    }
+  }
+  const el = await refElegible(env, tenantId, candidato, paquete, paqMap[paquete], rc, null);
+  if (!el.ok) return { error: errorReferidoPago(el.motivo) };
+  return { codigo: valido, candidato };
 }
 
 /* ---------- reglas (compute / estado) ---------- */
@@ -10546,7 +10595,18 @@ export default {
          Ahora la pagina nace SIN un solo digito y los pide a /app/api/pago-datos cuando el alumno
          elige su metodo: viaja UN riel, el que va a usar, y con tope por IP. La experiencia del
          alumno es identica (un fetch al cambiar el select). */
-      const infoPago = { mpSoloTarjeta: mpSoloTarjetaP };
+      const refPlanesP = {};
+      const refActivoP = referidoPagoConfigurado(cfgP);
+      if (refActivoP){
+        for (const pk of paquetesOk){
+          const el = await refElegible(env, tP.id, { id: "", ref_por: "vista-previa" }, pk, paqP.map[pk], refCfg(cfgP), null);
+          refPlanesP[pk] = el.ok ? "" : errorReferidoPago(el.motivo);
+        }
+      }
+      const seleccionadoP = paquetesOk.includes(preSel) ? preSel : paquetesOk[0];
+      const refVisibleP = refActivoP && !refPlanesP[seleccionadoP] && metodos[0].v !== "Tarjeta (Stripe)";
+      const infoPago = { mpSoloTarjeta: mpSoloTarjetaP, referido: refActivoP, refPlanes: refPlanesP,
+        precios: Object.fromEntries(paquetesOk.map(pk => [pk, preciosP[pk]])) };
       const cuerpoP =
         "<h1>" + esc(tP.academia) + "</h1>" +
         "<p class=\"sub\">Elige tu paquete, paga y listo: tu cuenta se crea sola y te llega un correo para entrar a tu portal.</p>" +
@@ -10566,6 +10626,8 @@ export default {
                   "<span>Soy el padre, la madre o el apoderado del alumno y autorizo que " + esc(tP.academia) + " trate sus datos.</span>" +
                 "</label></div>"
             : "") +
+          (refActivoP ? '<div id="refbox"' + (refVisibleP ? '' : ' hidden') + '><label for="refp">Código de referido (opcional)</label><input id="refp" type="text" maxlength="12" autocomplete="off" autocapitalize="characters"><button type="button" id="aplicarref">Aplicar código</button><p class="sub" id="refmsg" role="status" aria-live="polite"></p></div><p class="sub" id="refmotivo">' + esc(refVisibleP ? '' : (refPlanesP[seleccionadoP] || 'El código no se aplica al pago internacional.')) + '</p>' : '') +
+          '<p id="totalp" aria-live="polite">Total: S/ ' + Number(preciosP[seleccionadoP]).toFixed(2) + '</p>' +
           "<label>Método de pago</label><select id=\"mt\">" +
             metodos.map(m => "<option value=\"" + esc(m.v) + "\">" + esc(m.t) + "</option>").join("") +
           "</select>" +
@@ -10589,7 +10651,7 @@ export default {
         "</p>" +
         "<div class=\"foot\">¿Ya tienes cuenta? <a href=\"/app/a/" + esc(tP.slug) + "\">Entra a tu portal</a></div>";
       const scriptP =
-        "var INFO=" + JSON.stringify(infoPago) + ";var SLUGP=" + JSON.stringify(tP.slug) + ";" +
+        "var INFO=" + JSON.stringify(infoPago).replace(/</g, "\\u003c") + ";var SLUGP=" + JSON.stringify(tP.slug) + ";" +
         /* menos de 14 -> aparece la declaracion del apoderado y sin ella no se envia.
            Es la "verificacion razonable" que pide el reglamento; el servidor la reexige. */
         "var fnEl=document.getElementById('fn');" +
@@ -10611,12 +10673,19 @@ export default {
         "manual.style.display='';btn.textContent='Registrar mi pago';pinfo.textContent='Cargando los datos para pagar\\u2026';" +
         "var pedido=v;var txt=await traeInfo(v);if(mt.value!==pedido)return;" +
         "pinfo.textContent=txt||'No pudimos cargar los datos. Recarga la pagina o escribele a tu profesor.';}" +
+        "var refEl=document.getElementById('refp'),refBox=document.getElementById('refbox'),refMsg=document.getElementById('refmsg'),totalEl=document.getElementById('totalp'),pqEl=document.getElementById('pq'),refFirma='',refRevision=0,refMonto=null;" +
+        "function datosRef(){return {slug:SLUGP,paquete:pqEl.value,nombre:document.getElementById('nm').value.trim(),email:document.getElementById('em').value.trim(),whatsapp:document.getElementById('wa').value.trim(),metodo:mt.value,codigo_referido:refEl&&!refBox.hidden?refEl.value.trim():''};}" +
+        "function firmaRef(){return JSON.stringify(datosRef());}" +
+        "function cambiaRef(){refRevision++;refFirma='';refMonto=null;if(refMsg)refMsg.textContent='';if(refBox){var motivo=INFO.refPlanes[pqEl.value]||'';if(mt.value==='Tarjeta (Stripe)')motivo='El código no se aplica al pago internacional.';refBox.hidden=!!motivo;document.getElementById('refmotivo').textContent=motivo;}totalEl.textContent='Total: '+(mt.value==='Tarjeta (Stripe)'?'':'S/ ')+Number(INFO.precios[pqEl.value]||0).toFixed(2);}" +
+        "async function aplicaRef(){var firma=firmaRef(),rev=refRevision,d=datosRef();if(!d.codigo_referido){cambiaRef();return false;}refMsg.textContent='Comprobando código…';try{d.cotizar=true;var r=await fetch('/app/api/pagar-directo',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(d)});var v=await r.json();if(firma!==firmaRef()||rev!==refRevision)return false;if(!r.ok){refMsg.textContent=v.error||'No pudimos comprobar el código.';return false;}refFirma=firma;refMonto=Number(v.monto);totalEl.textContent='Total: S/ '+Number(v.monto).toFixed(2);refMsg.textContent=v.descRef>0?'Código aplicado. Descuento: S/ '+Number(v.descRef).toFixed(2):'Código aplicado para el beneficio de tu amigo.';return true;}catch(e){if(rev===refRevision)refMsg.textContent='No pudimos comprobar el código. Intenta de nuevo.';return false;}}" +
+        "if(refEl){refEl.addEventListener('input',cambiaRef);document.getElementById('aplicarref').addEventListener('click',aplicaRef);}['nm','em','wa'].forEach(function(id){document.getElementById(id).addEventListener('input',cambiaRef);});pqEl.addEventListener('change',cambiaRef);mt.addEventListener('change',cambiaRef);" +
         "mt.addEventListener('change',pintaInfo);pintaInfo();" +
         "function leerCap(){return new Promise(function(res){var f=document.getElementById('cap').files[0];if(!f)return res('');var r=new FileReader();r.onload=function(){res(String(r.result||''));};r.onerror=function(){res('');};r.readAsDataURL(f);});}" +
         "document.getElementById('fp').addEventListener('submit',async function(e){" +
         "e.preventDefault();var err=document.getElementById('errp');err.textContent='';" +
         "var tb=document.getElementById('tutorbox'),tc=document.getElementById('tutor');" +
         "if(tb&&tb.style.display!=='none'&&tc&&!tc.checked){err.textContent='Marca la autorizacion del apoderado para continuar.';return;}" +
+        "if(datosRef().codigo_referido&&refFirma!==firmaRef()){await aplicaRef();err.textContent='Revisa el código y el total antes de continuar con el pago.';return;}" +
         "btn.disabled=true;" +
         "try{var cap=await leerCap();" +
         "var r=await fetch('/app/api/pagar-directo',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({" +
@@ -10624,7 +10693,7 @@ export default {
         "apellido:(document.getElementById('ap')?document.getElementById('ap').value.trim():'')," +
         "nacimiento:(fnEl?fnEl.value:''),tutor:(document.getElementById('tutor')?document.getElementById('tutor').checked:false)," +
         "email:document.getElementById('em').value.trim(),whatsapp:document.getElementById('wa').value.trim()," +
-        "metodo:mt.value,op_numero:document.getElementById('op')?document.getElementById('op').value.trim():'',comprobante:cap})});" +
+        "codigo_referido:datosRef().codigo_referido,total_cotizado:refMonto,metodo:mt.value,op_numero:document.getElementById('op')?document.getElementById('op').value.trim():'',comprobante:cap})});" +
         "var d=await r.json();" +
         "if(!r.ok){err.textContent=d.error||'No se pudo registrar. Intenta de nuevo.';btn.disabled=false;return;}" +
         "if(d.init_point){location.href=d.init_point;return;}" +
@@ -14671,6 +14740,32 @@ export default {
         // Cuenta: reusa por correo o crea una nueva con contraseña aleatoria
         // (el alumno la define después con el link del correo).
         let cu = await env.DB.prepare("SELECT * FROM cuentas WHERE tenant_id = ?1 AND email = ?2").bind(t.id, email).first();
+        let refPago;
+        try {
+          refPago = await validarReferidoPago(env, t.id, { ...b, email, whatsapp, metodo }, cu, paquete, cfgPd, paqMapPd);
+        } catch (e) {
+          return json({ error: "No pudimos comprobar el código. Intenta de nuevo antes de pagar." }, 503);
+        }
+        if (refPago.error) return json({ error: refPago.error }, 400);
+        const precios = await loadPrecios(env, t.id);
+        const precio = precios[paquete] || 0;
+        if (!(precio > 0)) return json({ error: "Ese paquete no está disponible. Escríbele a tu profesor." }, 400);
+        /* Cotizar no crea cuentas, compras, correos ni llamadas a la pasarela. Nunca
+           revela crédito/datos de una cuenta existente a quien solo sabe su correo. */
+        if (b.cotizar === true){
+          const vista = await calcularCobro(env, t.id, refPago.candidato || { id: "", credito: 0 }, paquete, precio, cfgPd, paqMapPd);
+          if (refPago.codigo && refCfg(cfgPd).hayDescuento && !(vista.descRef > 0)){
+            return json({ error: "No pudimos aplicar el descuento. Intenta de nuevo antes de pagar." }, 503);
+          }
+          return json({ precio: vista.precio, descRef: vista.descRef, monto: vista.monto });
+        }
+        if (refPago.codigo){
+          const previsto = await calcularCobro(env, t.id, refPago.candidato, paquete, precio, cfgPd, paqMapPd);
+          if ((refCfg(cfgPd).hayDescuento && !(previsto.descRef > 0)) ||
+              typeof b.total_cotizado !== "number" || Math.round(b.total_cotizado * 100) !== Math.round(previsto.monto * 100)){
+            return json({ error: "El total cambió. Vuelve a aplicar el código y revisa el total antes de pagar." }, 409);
+          }
+        }
         let esNueva = false;
         if (!cu){
           esNueva = true;
@@ -14687,8 +14782,8 @@ export default {
           const alumnoVincPd = await fichaLibrePorCorreo(env, t.id, email);
           await ensurePassPuestaSchema(env);   /* clave aleatoria: ver comentario en canjear */
           await env.DB.prepare(
-            "INSERT INTO cuentas (id,tenant_id,email,nombre,whatsapp,pass_hash,pass_salt,marketing,alumno_id,creada,ref_code,ref_por,credito,apellido,nacimiento) VALUES (?1,?2,?3,?4,?5,?6,?7,0,?8,?9,?10,'',0,?11,?12)"
-          ).bind(idCu, t.id, email, nombre, whatsapp, hash, salt, alumnoVincPd, hoyLima(), refCode, apellidoPd, nacimientoPd).run();
+            "INSERT INTO cuentas (id,tenant_id,email,nombre,whatsapp,pass_hash,pass_salt,marketing,alumno_id,creada,ref_code,ref_por,credito,apellido,nacimiento) VALUES (?1,?2,?3,?4,?5,?6,?7,0,?8,?9,?10,?13,0,?11,?12)"
+          ).bind(idCu, t.id, email, nombre, whatsapp, hash, salt, alumnoVincPd, hoyLima(), refCode, apellidoPd, nacimientoPd, refPago.codigo).run();
           cu = await env.DB.prepare("SELECT * FROM cuentas WHERE id = ?1").bind(idCu).first();
         }
 
@@ -14697,9 +14792,10 @@ export default {
         ).bind(t.id, cu.id).first();
         if (yaPend) return json({ error: "Ya tienes un pago en verificación con este correo. Entra a tu portal para verlo." }, 409);
 
-        const precios = await loadPrecios(env, t.id);
-        const precio = precios[paquete] || 0;
-        const cob = await calcularCobro(env, t.id, cu, paquete, precio);
+        const cob = await calcularCobro(env, t.id, cu, paquete, precio, cfgPd, paqMapPd);
+        if (refPago.codigo && refCfg(cfgPd).hayDescuento && !(cob.descRef > 0)){
+          return json({ error: "No pudimos aplicar el descuento. Entra a tu portal antes de pagar." }, 409);
+        }
         const descuento = cob.descCredito, descRef = cob.descRef, monto = cob.monto;
         if (!(monto > 0)) return json({ error: "Ese paquete no está disponible. Escríbele a tu profesor." }, 400);
 

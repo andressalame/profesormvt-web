@@ -13,7 +13,7 @@
      node pruebas-referidos.mjs
 */
 import { readFileSync } from "node:fs";
-const SRC = readFileSync(process.env.HOME + "/Code/mvt/web/batuta-app/worker/index.js", "utf8");
+const SRC = readFileSync(process.env.BATUTA_WORKER || new URL("./worker/index.js", import.meta.url), "utf8");
 function cortar(nombre, tipo){
   const re = tipo === "const" ? new RegExp("^const " + nombre + "\\s*=", "m")
                               : new RegExp("(?:^|\\n)(?:async )?function " + nombre + "\\s*\\(", "m");
@@ -32,7 +32,7 @@ function cortar(nombre, tipo){
 }
 const CONSTS = ["PAQUETES", "CLASES_MAX", "PAQUETES_MAX", "CREDITO_REFERIDO", "REF_PREMIO_MODOS", "LIMA_OFFSET_MS"];
 const FUNCS = ["parsePaquetes", "normPaqNombre", "resolverPk", "refCfg", "precioPorClase", "yaEraAlumnoDe", "refElegible",
-               "calcularCobro", "compute", "venceVencido"];
+               "calcularCobro", "compute", "venceVencido", "referidoPagoConfigurado", "errorReferidoPago"];
 const fuente =
   CONSTS.map(n => cortar(n, "const")).join("\n") + "\n" +
   FUNCS.map(n => cortar(n)).join("\n\n") + "\n" +
@@ -201,6 +201,17 @@ console.log("\n── 7. Cuánto vale 'una clase' cuando el premio se paga como 
   comprobar("mensualidad ilimitada: no tiene precio por clase (0, y el worker lo registra)",
     W.precioPorClase(300, W.resolverPk(PAQ, "Mensualidad libre")), 0);
 }
+
+console.log("\n── 8. Pago público: visibilidad y errores sin cambiar las reglas ──");
+comprobar("sin programa configurado no se anuncia en la web", W.referidoPagoConfigurado({}), false);
+comprobar("programa de Elevate visible", W.referidoPagoConfigurado(CFG_ELEVATE), true);
+comprobar("premio sin descuento también es un programa", W.referidoPagoConfigurado({ref_premio_modo:"soles"}), true);
+comprobar("mínimo explicado en lenguaje claro", W.errorReferidoPago("no llega al minimo de 4"), "El código requiere un paquete de al menos 4 clases.");
+comprobar("los valores históricos siguen intactos", [W.refCfg({}).premioValor, W.refCfg({}).hayDescuento], [50, false]);
+const envRoto = {DB:{prepare(){return {bind(){return {async first(){throw Error("lectura fallida");}};}};}}};
+let rechazoLectura = false;
+try { await W.yaEraAlumnoDe(envRoto, "t1", "al1", true); } catch { rechazoLectura = true; }
+comprobar("pago público no acepta nuevo por una lectura fallida", rechazoLectura, true);
 
 console.log("\n" + (fail ? "❌ " + fail + " fallaron" : "✅ TODO EN VERDE") + " · " + ok + "/" + (ok + fail) + "\n");
 process.exit(fail ? 1 : 0);
