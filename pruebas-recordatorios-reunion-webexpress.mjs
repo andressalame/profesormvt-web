@@ -8,7 +8,7 @@
 import { readFileSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 
-const ROOT = process.env.HOME + "/Code/mvt/web";
+const ROOT = new URL(".", import.meta.url).pathname;
 const SRC = readFileSync(ROOT + "/worker/index.js", "utf8");
 const LIMPIO = SRC.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[^\n]/g, " ")).replace(/^\s*\/\/.*$/gm, "");
 
