@@ -181,6 +181,12 @@
   .field input,.field select{width:100%;background:var(--panel);border:1px solid var(--line-campo);color:var(--cream);
     font-family:var(--body);font-size:15px;padding:11px 12px;border-radius:3px;}
   .check{display:flex;gap:10px;align-items:flex-start;font-size:13px;color:var(--muted);margin:14px 0 4px;line-height:1.5;}
+  /* Acceso: texto legible y controles cómodos, sin escalar el resto del portal. */
+  .auth-card .sub{font-family:var(--body);font-size:18px;line-height:1.5;text-transform:none;letter-spacing:normal;}
+  .auth-card .atab,.auth-card .btn,.auth-card .field label{font-family:var(--body);font-size:18px;letter-spacing:normal;text-transform:none;}
+  .auth-card .atab,.auth-card .btn,.auth-card .field input{min-height:48px;}
+  .auth-card .field input{font-size:18px;}
+  .auth-card #linkOlvide{display:inline-flex;align-items:center;min-height:48px;font-size:18px;}
   /* Entrar con Google (24-ago-2026). Los alumnos que venian de ProfesorMVT entraban con
      este boton y al migrar a Batuta se quedaron sin el: el flujo del worker
      (/app/api/auth/google/start?intent=alumno) ya existia, faltaba la puerta.
@@ -466,18 +472,18 @@
   <!-- Logo de la academia (si subio uno en Ajustes); vacio = solo el eyebrow de siempre. -->
   <div id="authLogo"></div>
   <div class="eyebrow" id="eyebrowAuth">// BATUTA</div>
-  <h1>Portal de <em>alumno</em></h1>
-  <div class="sub">Tus clases · Tu avance · Tu comunidad</div>
+  <h1>Entra a <em>tus clases</em></h1>
+  <div class="sub">Usa el correo con el que te inscribiste.</div>
   <hr class="rule" />
   <div class="authtabs">
-    <button class="atab active" id="tabLogin">Ingresar</button>
+    <button class="atab active" id="tabLogin">Entrar</button>
     <button class="atab" id="tabReg">Crear cuenta</button>
   </div>
 
   <div id="formLogin">
     <div class="field"><label for="l_email">Correo</label><input id="l_email" type="email" autocomplete="email" /></div>
     <div class="field"><label for="l_pass">Contraseña</label><input id="l_pass" type="password" autocomplete="current-password" /></div>
-    <button class="btn full" id="btnLogin">Ingresar</button>
+    <button class="btn full" id="btnLogin">Entrar</button>
     <div class="err" id="loginErr"></div>
     <!-- Antes esto era un texto muerto ("escríbele a tu profesor"): con una academia de
          cientos de alumnos, eso convierte al dueño en la mesa de ayuda de contraseñas.
@@ -986,6 +992,7 @@ var REF_URL = "";
 try{ REF_URL = (new URLSearchParams(location.search).get("ref") || "").trim().toUpperCase(); }catch(e){}
 
 function $(id){ return document.getElementById(id); }
+function linkear(s){ return esc(s).replace(/(https?:\/\/[^\s<]*[^\s<.,;:!?)\]])/g,function(u){ return '<a href="'+u+'" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()" style="color:inherit;text-decoration:underline;overflow-wrap:anywhere;word-break:break-all;-webkit-user-select:text;user-select:text;">'+u+'</a>'; }); }
 function esc(s){ return String(s==null?"":s).replace(/[&<>"']/g,function(m){return {"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[m];}); }
 function show(id){ $(id).classList.remove("hidden"); }
 function hide(id){ $(id).classList.add("hidden"); }
@@ -1125,8 +1132,11 @@ function api(path, opts){
     return res.json().catch(function(){ return {}; }).then(function(data){
       if(!res.ok){
         // Traduce códigos crudos a mensaje humano (el alumno nunca debe leer "trial_vencido").
+        // Un 402 SIN texto = academia en pausa. Un 402 CON texto (p. ej. "tu tarjeta fue rechazada"
+        // de Culqi) se muestra tal cual: antes se pisaba con "academia inactiva" y el alumno creía
+        // que su profe lo había dado de baja.
         var msg = data.error || "Error";
-        if(msg === "trial_vencido" || res.status === 402){ msg = "Esta academia está inactiva por ahora. Escríbele a "+quienResponde()+" para que la reactive."; }
+        if(msg === "trial_vencido" || (res.status === 402 && !data.error)){ msg = "Esta academia está inactiva por ahora. Escríbele a "+quienResponde()+" para que la reactive."; }
         var e = new Error(msg); e.status = res.status; e.data = data; e.code = data.error; throw e;
       }
       return data;
@@ -1614,12 +1624,12 @@ function renderClases(){
     if(h[i].plan && String(h[i].plan).trim()) prox = h[i];
   }
   if(prox){
-    $("cProxTxt").textContent = prox.plan || "";
+    $("cProxTxt").innerHTML = linkear(prox.plan || "");
     $("cProxMeta").textContent = "El plan para tu próxima clase";
     show("cProx");
   } else hide("cProx");
   if(con){
-    $("cTareaTxt").textContent = con.tarea || "";
+    $("cTareaTxt").innerHTML = linkear(con.tarea || "");
     $("cTareaAudio").innerHTML = adjuntosHtml(audiosDe(con), true);
     $("cTareaMeta").textContent = "De tu clase del " + (con.fecha||"—");
     show("cTarea");
@@ -1631,8 +1641,8 @@ function renderClases(){
     var audioCell = adjuntosHtml(audiosDe(r), false);
     return '<tr><td class="mono">'+esc(r.fecha||"")+'</td>'+
       '<td><span class="pill '+pc+'">'+esc(r.estado||"")+'</span></td>'+
-      '<td>'+esc(r.trabajo||"")+'</td><td class="mut">'+esc(r.tarea||"")+audioCell+'</td>'+
-      '<td class="mut">'+esc(r.plan||"")+'</td></tr>';
+      '<td>'+linkear(r.trabajo||"")+'</td><td class="mut">'+linkear(r.tarea||"")+audioCell+'</td>'+
+      '<td class="mut">'+linkear(r.plan||"")+'</td></tr>';
   }).join("");
 }
 
@@ -3084,7 +3094,7 @@ function manejarRetornoPago(){
   if(!pago) return;
   try { history.replaceState({}, "", location.pathname + location.hash); } catch(e){}
   if(pago === "ok"){
-    toast("Pago aprobado. Activando tu paquete…");
+    toast("Estamos verificando tu pago. Tu paquete se activará cuando se confirme.");
     var n = 0, t = setInterval(function(){
       n++;
       api("/app/api/me").then(function(d){

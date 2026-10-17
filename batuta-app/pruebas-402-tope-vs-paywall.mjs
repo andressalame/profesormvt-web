@@ -17,6 +17,8 @@ globalThis.confirm = m => { pantalla.push("CONFIRM: "+m); return false; };
 globalThis.document = { querySelector: ()=>null };
 globalThis.mostrarPaywall = () => pantalla.push("PAYWALL (Tu cuenta esta en pausa)");
 globalThis.setSync = ()=>{};
+// apiPut requiere datos frescos antes de evaluar el 402 del servidor.
+globalThis.DATOS_FRESCOS = true;
 globalThis.hdr = ()=>({});
 globalThis.db = {alumnos:[],registro:[],precios:{}};
 let respuesta;

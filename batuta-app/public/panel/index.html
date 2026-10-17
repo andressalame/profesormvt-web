@@ -235,7 +235,8 @@
   .hoycard.urge{border-color:var(--accent);}
   .hoycard .hc-n{font-family:var(--display,var(--mono));font-size:30px;line-height:1;color:var(--cream);}
   .hoycard.urge .hc-n{color:var(--accent);}
-  .hoycard .hc-l{font-size:13px;color:var(--muted);flex:1;}
+  .hoycard .hc-l{font-size:18px;line-height:1.5;color:var(--muted);flex:1;}
+  .hoycard .btn.hc-b,.accrap .btn.sm{min-height:48px;font-size:18px;line-height:1.4;padding:12px 14px;white-space:normal;text-align:left;}
   .hoycard .hc-b{align-self:flex-start;}
   .accrap{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 14px;}
   /* "qué es esta pantalla": la línea que corta la duda Agenda (futuro) vs Registro (pasado) */
@@ -746,6 +747,8 @@
     border:1px solid var(--line);border-radius:var(--r);background:var(--panel2);color:var(--cream);
     font-family:var(--body);font-size:17px;font-weight:600;cursor:pointer;transition:border-color .12s,background .12s;}
   .plat-b:hover,.plat-b:focus-visible{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 9%,var(--panel2));outline:none;}
+  .btn.aviso-x{flex:none;min-width:44px;min-height:44px;padding:0 10px;font-size:22px;line-height:1;}
+  .btn.aviso-x:focus-visible,.aviso-vacio:focus-visible{outline:3px solid var(--accent);outline-offset:2px;}
   .plat-b svg{width:26px;height:26px;flex:0 0 26px;fill:none;stroke:var(--accent);stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;}
   .plat-b .plat-sub{display:block;font-size:12.5px;font-weight:400;color:var(--muted);margin-top:2px;line-height:1.3;}
   /* Guía de export: los pasos exactos del menú del sistema anterior. Se lee como receta. */
@@ -863,6 +866,17 @@ button[data-ayuda],a[data-ayuda],select[data-ayuda],input[data-ayuda],label[data
         <div class="brand-sub">Tu academia</div>
       </div>
     </div>
+    <script>
+    /* Pintado inmediato de la marca (nombre, logo/foto y color) desde la última visita, para que el
+       panel no se vea con el nombre genérico "Batuta" mientras llegan los datos. Se corrige solo
+       cuando carga la academia real. Se borra al cerrar sesión. */
+    (function(){try{var b=JSON.parse(localStorage.getItem("bt_brand_v1")||"null");if(!b||!b.n)return;
+      var nm=document.getElementById("navNombre");if(nm)nm.textContent=b.n;
+      var nf=document.getElementById("navFoto");
+      if(nf){var u=b.l||b.f;if(u&&/^(https?:|\/|data:image\/)/.test(u)){var im=document.createElement("img");im.className="brand-foto"+(b.l?" logo":"");im.id="navFoto";im.alt="";im.src=u;nf.parentNode.replaceChild(im,nf);}else{nf.textContent=b.i||"M";}}
+      if(b.c&&/^#[0-9a-fA-F]{6}$/.test(b.c))document.documentElement.style.setProperty("--accent",b.c);
+    }catch(e){}})();
+    </script>
     <nav class="nav">
       <!-- ====== MENÚ PLANO DE 5 (fase 3 "para dummies", 10-ago-2026) ======
            5 botones siempre visibles, cero acordeones, palabras de señora de 50.
@@ -2547,7 +2561,7 @@ button[data-ayuda],a[data-ayuda],select[data-ayuda],input[data-ayuda],label[data
   </div>
 </div>
 
-<div class="toast" id="toast"></div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
 
 <script>
 "use strict";
@@ -2788,6 +2802,7 @@ var refreshInterval = null;
 var prevPendientes = 0;
 
 function el(id){ return document.getElementById(id); }
+function linkear(s){ return esc(s).replace(/(https?:\/\/[^\s<]*[^\s<.,;:!?)\]])/g,function(u){ return '<a href="'+u+'" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()" style="color:inherit;text-decoration:underline;overflow-wrap:anywhere;word-break:break-all;-webkit-user-select:text;user-select:text;">'+u+'</a>'; }); }
 function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,function(m){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m];}); }
 function uid(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,7); }
 /* tarea_audio: JSON array [{u,n}] (nuevo) o string con un solo url (formato viejo) */
@@ -2835,6 +2850,7 @@ function apiGet(){
   });
 }
 function apiPut(){
+  if(!DATOS_FRESCOS){ return Promise.reject(new Error("Todavía estoy trayendo tus datos más recientes. Intenta de nuevo en un segundo.")); }
   setSync("Guardando…","");
   return fetch("/app/api/admin/data",{method:"PUT",headers:hdr(),
     body:JSON.stringify({alumnos:db.alumnos,registro:db.registro,precios:db.precios})})
@@ -2871,8 +2887,33 @@ function apiPost(path, body){
     });
   });
 }
+/* ---------- Arranque rápido: pinta con los datos de la última visita mientras llegan los nuevos ----------
+   Se guarda la última respuesta de /admin/data en este navegador (solo si es de la misma sesión) y se
+   pinta al instante; en cuanto llegan los datos reales se vuelve a pintar. Mientras no lleguen los datos
+   reales NO se permite guardar (apiPut), para no pisar el servidor con datos viejos. Se borra al cerrar sesión. */
+var DATOS_FRESCOS = true;
+function cacheClave(){ try{ return "bt_data_v1_"+String(token||"").slice(-14); }catch(e){ return "bt_data_v1_x"; } }
+function guardarCacheDatos(d){
+  try{ var txt=JSON.stringify(d); if(txt.length<3500000){ localStorage.setItem(cacheClave(),txt); } else { localStorage.removeItem(cacheClave()); } }catch(e){}
+}
+function hidratarDesdeCache(){
+  try{
+    var txt=localStorage.getItem(cacheClave()); if(!txt) return false;
+    var d=JSON.parse(txt); if(!d || typeof d!=="object") return false;
+    db=d; if(!db.precios) db.precios=Object.assign({},PRECIOS_DEFAULT);
+    db.cuentas=db.cuentas||[]; db.compras=db.compras||[]; db.recursos=db.recursos||[]; db.ejercicios=db.ejercicios||[]; db.leads=db.leads||[]; db.grupos=db.grupos||[]; db.config=db.config||{};
+    if(d.slug){ TENANT_SLUG=d.slug; }
+    DATOS_LISTOS=true; ROL=d.rol||"dueno"; PROFE_ID=d.profe_id||""; EQUIPO=d.equipo||[];
+    DATOS_FRESCOS=false;
+    aplicarRol();
+    try{ aplicarPermisosPropios(); }catch(e){}
+    renderAll(); pintarLinkAlumnos(); setSync("Actualizando…","");
+    return true;
+  }catch(e){ return false; }
+}
 function recargar(){
   return apiGet().then(function(d){
+    DATOS_FRESCOS=true; guardarCacheDatos(d);
     db=d; if(!db.precios) db.precios=Object.assign({},PRECIOS_DEFAULT);
     db.cuentas=db.cuentas||[]; db.compras=db.compras||[]; db.recursos=db.recursos||[]; db.ejercicios=db.ejercicios||[]; db.leads=db.leads||[]; db.grupos=db.grupos||[]; db.config=db.config||{};
     // El slug también llega por admin/data (path que SIEMPRE corre): así el link de alumnos no
@@ -3111,7 +3152,8 @@ function pintarLinkAlumnos(){
     // nada hasta que lleguen los datos reales; recargar() vuelve a llamar a esta funcion al terminar.
     if(cont && !DATOS_LISTOS){ cont.innerHTML='<span class="hint">Cargando tus links…</span>'; return; }
     if(cont && db && db.precios){
-      var pks=pkNombres().filter(function(pk){ return (db.precios[pk]||0)>0; });
+      // El servidor separa nueva venta de planes históricos; no borrar paquetes de Ajustes.
+      var pks=(Array.isArray(db.paquetes_venta)?db.paquetes_venta:pkNombres()).filter(function(pk){ return (db.precios[pk]||0)>0; });
       cont.innerHTML = pks.length ? "" : '<span class="hint">Pon tus precios en Ajustes y aquí salen los links.</span>';
       pks.forEach(function(pk){
         var b=document.createElement("button");
@@ -3194,6 +3236,8 @@ function detenerRefresco(){
 
 /* ---------- Sesión ---------- */
 el("btnLogoutAdmin").addEventListener("click",function(){
+  try{ localStorage.removeItem("bt_brand_v1"); }catch(e){}
+  try{ localStorage.removeItem(cacheClave()); }catch(e){}
   detenerRefresco();
   if(token){ fetch("/app/api/admin/logout",{method:"POST",headers:hdr()}).catch(function(){}); }
   try{ localStorage.removeItem(TOKEN_KEY); }catch(e){}
@@ -3777,8 +3821,8 @@ function renderRegistro(){
          y con "(por defecto)", que es exactamente lo que hace la liquidación. */
       '<td class="mini">'+quienDictoTxt(r)+'</td>'+
       '<td><span class="pill '+pc+'">'+esc(r.estado)+'</span></td>'+
-      '<td class="notes">'+esc(r.trabajo||'')+'</td>'+
-      '<td class="notes">'+esc(r.tarea||'')+'</td>'+
+      '<td class="notes">'+linkear(r.trabajo||'')+'</td>'+
+      '<td class="notes">'+linkear(r.tarea||'')+'</td>'+
       planTd+
       '<td><div class="rowact"><button class="btn ghost sm" data-editreg="'+r.id+'" title="Editar esta clase"><svg viewBox="0 0 24 24" aria-hidden="true" class="ico-mini"><path d="M16.8 3.1a2.83 2.83 0 1 1 4 4L7.4 20.6 2 22l1.4-5.4z"/></svg></button>'+adjHtml+(r.tarea?'<button class="btn ghost sm" data-avisartarea="'+esc(r.alumnoId||r.alumno_id)+'" data-tareatxt="'+esc(r.tarea)+'" title="Avisar al alumno por push"><svg viewBox=\"0 0 24 24\" style=\"width:12px;height:12px;stroke:currentColor;stroke-width:1.8;fill:none;stroke-linecap:round;stroke-linejoin:round;vertical-align:-1px;margin-right:3px\"><path d=\"M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9\"/><path d=\"M13.7 21a2 2 0 0 1-3.4 0\"/></svg>Avisar</button>':'')+'<button class="btn ghost sm" data-delreg="'+r.id+'">×</button></div></td>'+
     '</tr>';
@@ -4263,6 +4307,7 @@ function inicialPerfil(){
 function aplicarPerfilSidebar(){
   var c=db.config||{};
   var nombre=c.profe_marca||c.profe_nombre||MARCA.nombre;
+  try{ localStorage.setItem("bt_brand_v1",JSON.stringify({n:nombre,l:c.brand_logo||"",f:c.profe_foto||"",i:inicialPerfil(),c:c.brand_color||""})); }catch(e){}
   var nm=el("navNombre"); if(nm) nm.textContent=nombre;
   var nf=el("navFoto"); if(!nf) return;
   /* Academia con logo propio -> manda el logo (sin recortar); profesor particular sin
@@ -5035,7 +5080,7 @@ function claveClase(fkey,hora,sala){ return fkey+"|"+hora+"|"+(sala||""); }
 function filaClaseDia(fkey,hora,titulo,rs,pasado,sala,cupo,curso){
   var ck=claveClase(fkey,hora,sala);
   var gente=rs.filter(function(r){ return r.tipo!=="bloqueo" && r.estado!=="cancelada"; });
-  var bloqs=rs.filter(function(r){ return r.tipo==="bloqueo"; });
+  var bloqs=rs.filter(function(r){ return r.tipo==="bloqueo" && r.estado!=="cancelada"; });
   var cancelada=bloqs.some(function(r){ return /cancelada/i.test(String(r.nota||"")); });
   var vivas=gente.filter(function(r){ return r.estado==="reservada"; }).length;
   /* el resumen del <summary> es lo que se lee de un vistazo sin desplegar nada */
@@ -5101,12 +5146,21 @@ function filaClaseDia(fkey,hora,titulo,rs,pasado,sala,cupo,curso){
   lista+=bloqs.filter(function(r){ return r.estado==="reservada"; }).map(function(r){
     return '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:5px 0;">'+
       '<span style="flex:1 1 auto;font-size:13px;" class="hint">Hora apartada'+(r.nota?(' · '+esc(r.nota)):'')+'</span>'+
-      (pasado?'':'<span style="flex:0 0 auto;"><button class="btn ghost sm" data-ag-marcar="cancelada" data-id="'+esc(r.id)+'">Liberar</button></span>')+
+      ((pasado||/cancelada/i.test(String(r.nota||"")))?'':'<span style="flex:0 0 auto;"><button class="btn ghost sm" data-ag-marcar="cancelada" data-id="'+esc(r.id)+'">Liberar</button></span>')+
     '</div>';
   }).join("");
 
   /* Cancelar la clase entera: solo hacia adelante y solo si de verdad hay algo que cancelar. */
   var pieCancel="";
+  /* Reabrir (8-oct-2026, José/Elevate): una clase cancelada cierra la hora entera y el único
+     rastro era un "Liberar" suelto en una "hora apartada"; José pensó que la hora quedaba
+     "bloqueada sola" y no sabía cómo deshacerlo. Botón claro que quita ese cierre. */
+  if(!pasado && cancelada){
+    var idsCierre=bloqs.filter(function(r){ return r.estado==="reservada" && /cancelada/i.test(String(r.nota||"")); }).map(function(r){ return r.id; });
+    if(idsCierre.length) pieCancel='<div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--line,rgba(255,255,255,.1));">'+
+      '<button class="btn sm" data-reabrirclase="'+esc(idsCierre.join(","))+'">Reabrir esta clase</button>'+
+      '<p class="hint" style="margin:6px 0 0;">Esta clase está cancelada y la hora está cerrada. Al reabrirla se puede volver a reservar. Las personas que tenían reserva y se cancelaron no vuelven solas: agrégalas de nuevo.</p></div>';
+  }
   if(!pasado && !cancelada){
     pieCancel='<div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--line,rgba(255,255,255,.1));">'+
       '<button class="btn ghost sm" data-cancelclase="'+esc(hora)+'" data-fecha="'+esc(fkey)+'" data-sala="'+esc(sala||"")+'" data-vivas="'+vivas+'">Cancelar esta clase</button>'+
@@ -5240,6 +5294,17 @@ if(el("calDia")) el("calDia").addEventListener("click",function(e){
       cargarAgenda();
     }).catch(function(err){ toast(err.message||"No se pudo cancelar"); })
       .finally(function(){ cc.disabled=false; });
+    return;
+  }
+  var ro=e.target.closest("[data-reabrirclase]");
+  if(ro){
+    if(!confirm("¿Reabrir esta clase?\n\nSe quita el cierre de la hora y se puede volver a reservar.")) return;
+    ro.disabled=true;
+    var ids=String(ro.dataset.reabrirclase||"").split(",").filter(Boolean);
+    Promise.all(ids.map(function(id){ return apiPost("/app/api/admin/agenda/marcar",{id:id, estado:"cancelada"}); }))
+      .then(function(){ toast("Clase reabierta"); cargarAgenda(); })
+      .catch(function(err){ toast(err.message||"No se pudo reabrir"); })
+      .finally(function(){ ro.disabled=false; });
     return;
   }
   var sem=e.target.closest("#btnCalSemana");
@@ -9924,7 +9989,7 @@ function pasesEnRiesgo(a){
       var d=diasHastaFecha(p.vence);
       if(d===null || d>7 || d<-14) return;
       var n=cuantas(p.compradas,0,p.usadas,p.restantes,!!p.vencido || d<0);
-      if(n>0) out.push({n:p.n||"",rest:n,dias:d,perdidas:d<0});
+      if(n>0) out.push({id:(p.id!=null?p.id:(p.pase_id!=null?p.pase_id:null)),n:p.n||"",vence:p.vence,rest:n,dias:d,perdidas:d<0});
     });
     return out;
   }
@@ -9932,8 +9997,80 @@ function pasesEnRiesgo(a){
   var d1=diasHastaFecha(c.vence);
   if(d1===null || d1>7 || d1<-14) return [];
   var n1=cuantas(sv.compradas,sv.bonus,sv.usadas,c.restantes,!!sv.vencido || d1<0);
-  if(n1>0) out.push({n:a.paquete||"su plan",rest:n1,dias:d1,perdidas:d1<0});
+  if(n1>0) out.push({n:a.paquete||"su plan",vence:c.vence,rest:n1,dias:d1,perdidas:d1<0});
   return out;
+}
+/* Descartes por aviso y academia. Todo vive en UNA clave por academia (un objeto JSON
+   {clave:1}) y se guarda con UN solo setItem: o queda todo o no queda nada, nunca a medias.
+   La clave de cada aviso es [tipo, alumno, detalle]; para vencimientos el detalle lleva el id
+   del pase (si el servidor lo manda) + nombre + fecha, así dos pases iguales no se pisan.
+   Leer NUNCA escribe: la limpieza de descartes resueltos es avisosLimpiarResueltos(). */
+function avisosStoreKey(){ return "bt_avisos_descartados_v2_"+(TENANT_SLUG||"x"); }
+function avisoDescartadoKey(tipo,a,detalle){
+  return JSON.stringify([tipo,String(a.id),detalle]);
+}
+function avisosLeer(){
+  try{
+    var o=JSON.parse(localStorage.getItem(avisosStoreKey())||"{}");
+    return (o && typeof o==="object" && !Array.isArray(o)) ? o : {};
+  }catch(e){ return {}; }
+}
+function avisosGuardar(o){
+  try{ localStorage.setItem(avisosStoreKey(),JSON.stringify(o)); return true; }catch(e){ return false; }
+}
+function avisoDescartado(key){ return avisosLeer()[key]===1; }
+function avisosDescartar(keys){
+  var o=avisosLeer();
+  keys.forEach(function(k){ o[k]=1; });
+  return avisosGuardar(o);
+}
+/* Si un plan roto se arregla y después se rompe otra vez, es un problema nuevo: se borra el
+   descarte viejo. Solo se decide con el saldo YA cargado (a.saldo); mientras no llegue, no se
+   toca nada. Escribe únicamente si algo cambió. */
+function avisosLimpiarResueltos(){
+  var o=avisosLeer(), ids={}, cambio=false;
+  Object.keys(o).forEach(function(k){
+    try{ var q=JSON.parse(k); if(q[0]==="plan-roto") ids[q[1]]=1; }catch(e){}
+  });
+  if(!Object.keys(ids).length) return;
+  var rotos={};
+  alumnosConPlanRoto().forEach(function(f){ rotos[String(f.a.id)]=1; });
+  (db.alumnos||[]).forEach(function(a){
+    if(!a || !ids[String(a.id)] || rotos[String(a.id)]) return;
+    var resuelto = !(a.paquete||"") || !!Number(a.caducado) || (a.saldo && typeof a.saldo==="object");
+    if(!resuelto) return;
+    Object.keys(o).forEach(function(k){
+      try{ var q=JSON.parse(k); if(q[0]==="plan-roto" && q[1]===String(a.id)){ delete o[k]; cambio=true; } }catch(e){}
+    });
+  });
+  if(cambio) avisosGuardar(o);
+}
+function botonDescartarAviso(key,nombre){
+  return '<button type="button" class="btn ghost sm aviso-x" data-descartar-aviso="'+esc(JSON.stringify(Array.isArray(key)?key:[key]))+'" aria-label="Descartar aviso de '+esc(nombre||"este alumno")+'" title="Descartar este aviso">×</button>';
+}
+function activarDescartesAvisos(box){
+  box.querySelectorAll("[data-descartar-aviso]").forEach(function(b){
+    b.addEventListener("click",function(){
+      var botones=[].slice.call(box.querySelectorAll("[data-descartar-aviso]"));
+      var pos=botones.indexOf(b), claves;
+      try{ claves=JSON.parse(b.getAttribute("data-descartar-aviso")); }catch(e){ claves=null; }
+      if(!claves || !avisosDescartar(claves)){
+        toast("No se pudo guardar el descarte. Permite el almacenamiento del navegador y vuelve a intentar.");
+        return;
+      }
+      renderPlanRotoBanner(); renderVenceBanner();
+      /* el render rehace el HTML y el foco se perdería: va al X del siguiente aviso, o al
+         bloque si no quedan */
+      var nb=box.querySelectorAll("[data-descartar-aviso]");
+      if(nb.length){ nb[Math.min(pos,nb.length-1)].focus(); }
+      else {
+        box.style.display="";
+        box.innerHTML='<div class="aviso-vacio mini" tabindex="-1" style="padding:10px 0;">No quedan avisos de este tipo.</div>';
+        box.firstChild.focus();
+      }
+      toast("Aviso descartado en este navegador.");
+    });
+  });
 }
 function venceOcultoHoy(){
   try{ return localStorage.getItem("bt_vence_ok_"+(TENANT_SLUG||"x"))===hoyLima(); }catch(e){ return false; }
@@ -9958,11 +10095,20 @@ function alumnosConPlanRoto(){
   });
   return out;
 }
+/* Los que siguen sin descartar (con su clave puesta en f.avisoKey). Sin efectos secundarios. */
+function alumnosConPlanRotoVisibles(){
+  var o=avisosLeer();
+  return alumnosConPlanRoto().filter(function(f){
+    f.avisoKey=avisoDescartadoKey("plan-roto",f.a,f.planes.slice().sort());
+    return o[f.avisoKey]!==1;
+  });
+}
 function renderPlanRotoBanner(){
   var box=el("planRotoBanner"); if(!box) return;
   box.style.display="none"; box.innerHTML="";
   if(ROL!=="dueno" && ROL!=="profe") return;
-  var filas=alumnosConPlanRoto();
+  try{ avisosLimpiarResueltos(); }catch(e){}
+  var filas=alumnosConPlanRotoVisibles();
   if(!filas.length) return;
   var tit = filas.length===1
     ? ("A "+esc(String(filas[0].a.nombre||"un alumno").split(" ")[0])+" le figura un plan que ya no está en tu lista")
@@ -9971,7 +10117,7 @@ function renderPlanRotoBanner(){
     return '<div style="display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap;padding:7px 0;border-top:1px solid var(--line);">'+
       '<div style="flex:1;min-width:200px;"><b>'+esc(f.a.nombre||"")+'</b>'+
         '<div class="mini" style="margin-top:2px;">tenía «'+esc(f.planes.join("», «"))+'»</div></div>'+
-      '<button type="button" class="btn sm" data-edit="'+esc(f.a.id)+'" style="white-space:nowrap;">Abrir su ficha</button></div>';
+      '<button type="button" class="btn sm" data-edit="'+esc(f.a.id)+'" style="white-space:nowrap;">Abrir su ficha</button>'+botonDescartarAviso(f.avisoKey,f.a.nombre)+'</div>';
   }).join("");
   var mas=filas.length>10?('<div class="mini" style="padding-top:8px;">y '+(filas.length-10)+' más</div>'):"";
   box.style.display="";
@@ -9980,6 +10126,7 @@ function renderPlanRotoBanner(){
       '<div class="hint" style="margin:4px 0 0;">Mientras tanto le sale <b>0 clases</b> aunque haya pagado, y no puede reservar. Pasa al renombrar o borrar un plan: ábrele la ficha y elígele el plan que le corresponde hoy.</div></div>'+
     '<div style="margin-top:8px;">'+lineas+mas+'</div>'+
   '</div>';
+  activarDescartesAvisos(box);
 }
 function renderVenceBanner(){
   var box=el("venceBanner"); if(!box) return;
@@ -9988,8 +10135,12 @@ function renderVenceBanner(){
   if(venceOcultoHoy()) return;
   var filas=[];
   (db.alumnos||[]).forEach(function(a){
-    var ps=pasesEnRiesgo(a);
-    if(ps.length) filas.push({a:a,ps:ps});
+    var of=avisosLeer();
+    var ps=pasesEnRiesgo(a).filter(function(p){
+      p.avisoKey=avisoDescartadoKey("vence",a,[p.id==null?"":String(p.id),p.n,p.vence]);
+      return of[p.avisoKey]!==1;
+    });
+    if(ps.length) filas.push({a:a,ps:ps,avisoKey:ps.map(function(p){return p.avisoKey;})});
   });
   if(!filas.length) return;
   /* lo más urgente arriba: primero lo que vence antes */
@@ -10026,7 +10177,7 @@ function renderVenceBanner(){
       ? '<a class="btn sm" href="https://wa.me/'+tel+'?text='+msg+'" target="_blank" rel="noopener" style="white-space:nowrap;">Escribirle</a>'
       : '<span class="mini" style="opacity:.7;white-space:nowrap;">sin WhatsApp</span>';
     return '<div style="display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap;padding:7px 0;border-top:1px solid var(--line);">'+
-      '<div style="flex:1;min-width:220px;"><b>'+esc(f.a.nombre||"")+'</b><div class="mini" style="margin-top:2px;">'+det+'</div></div>'+btn+'</div>';
+      '<div style="flex:1;min-width:220px;"><b>'+esc(f.a.nombre||"")+'</b><div class="mini" style="margin-top:2px;">'+det+'</div></div>'+btn+botonDescartarAviso(f.avisoKey,f.a.nombre)+'</div>';
   }).join("");
   var mas=filas.length>8?('<div class="mini" style="padding-top:8px;">y '+(filas.length-8)+' más en tu lista de alumnos</div>'):"";
   box.style.display="";
@@ -10040,6 +10191,7 @@ function renderVenceBanner(){
     '</div>'+
     '<div style="margin-top:8px;">'+lineas+mas+'</div>'+
   '</div>';
+  activarDescartesAvisos(box);
   var b=el("btnVenceOk");
   if(b) b.addEventListener("click",function(){
     try{ localStorage.setItem("bt_vence_ok_"+(TENANT_SLUG||"x"),hoyLima()); }catch(e){}
@@ -11977,7 +12129,7 @@ function celebrarPrimerCobro(pc){
   if(!pc || el("celebraCobro")) return;
   /* 21-ago-2026: el confeti se comía la alerta roja. Si hay alumnos con un plan roto (pagaron
      y les sale 0), eso manda: la celebración espera al siguiente ingreso al panel. */
-  try{ if(alumnosConPlanRoto().length) return; }catch(e){}
+  try{ if(alumnosConPlanRotoVisibles().length) return; }catch(e){}
   var monto="S/ "+(Number(pc.monto)||0);
   var quien=(pc.quien||"").trim();
   var titular=quien ? ("Tu academia acaba de cobrar solita: "+monto+" de "+quien)
@@ -12091,6 +12243,7 @@ function batutaInit(){
   // La marca es cosmetica: si lanza, jamas debe tumbar el arranque del panel.
   try{ aplicarMarca(); }catch(e){ try{ window.__marcaErr=(e&&e.message)||String(e); }catch(_){} }
   setSync("Conectando…","");
+  try{ hidratarDesdeCache(); }catch(e){}
   try{ vincularSubSiVuelveDeMP().then(cargarTrialInfo); }catch(e){}
   try{ cargarActivacion(); }catch(e){}
   // PWA: registra el service worker al arranque (habilita instalar como app + recibir push)

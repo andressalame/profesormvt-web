@@ -1,5 +1,15 @@
 # RUNBOOK — construir Batuta App v0 (corrida nocturna autónoma)
 
+## Vigencias: decisión operativa de Andrés, 17-oct-2026
+
+ProfesorMVT/Batuta conserva ambos modos: planes con vencimiento y planes sin vencimiento.
+Andrés decide a quién corresponde cada modo y comunica las excepciones. Un ejemplo,
+una fecha vacía o un aviso no autoriza a inferir un cambio de plan, inventar una fecha,
+normalizar fichas ni sobreescribir una decisión manual. Cambiar esa regla para una persona
+requiere su instrucción concreta; esta documentación no ejecuta cambios de datos.
+Las correcciones de interfaz y mensajes deben preservar ambos modos y los valores existentes.
+
+
 > Para la sesión programada de las 3:10am del 04-jul-2026 (tras el reset del límite de sesión).
 > Contexto completo del producto en SPEC.md (mismo directorio). Este runbook es el plan de ejecución.
 

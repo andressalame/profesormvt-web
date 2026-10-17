@@ -164,6 +164,50 @@ function normPaqNombre(s){
     .replace(/[^a-z0-9]+/g, " ").trim();
 }
 
+/* 01-oct-2026, Andrés: ProfesorMVT vende clase suelta S/90 y paquetes, sin prueba.
+   Esta es una regla de NUEVA VENTA, no de resolución del plan: no tocar config,
+   precios, alumnos, reservas ni compras ya iniciadas. Oculto no sirve para retirarlo:
+   un plan oculto sigue siendo comprable por link y renovable en otras academias. */
+function errorVentaPaquete(tenant, nombre){
+  const id = typeof tenant === "string" ? tenant : tenant && tenant.id;
+  const slug = tenant && typeof tenant === "object" ? tenant.slug : "";
+  if ((id === "MVT-PROFESORMVT" || slug === "profesormvt") && normPaqNombre(nombre) === "clase de prueba"){
+    return "ProfesorMVT ya no ofrece clases de prueba. Elige Clase suelta (S/90) o uno de los paquetes.";
+  }
+  return "";
+}
+function paquetesEnVenta(tenant, lista){
+  return (lista || []).filter(n => !errorVentaPaquete(tenant, n));
+}
+function preciosEnVenta(tenant, precios){
+  const out = {};
+  for (const n of paquetesEnVenta(tenant, Object.keys(precios || {}))) out[n] = precios[n];
+  return out;
+}
+
+/* Empareja el ?p= de un link de cobro con un plan de la lista. Misma tolerancia que resolverPk
+   (exacto · sin tildes/mayúsculas · prefijo con el mismo número de clases y UN solo candidato) y
+   sin adivinar nunca: si nada encaja devuelve "". Antes el portal caía en el primer plan de la
+   lista: un link de Máquinas viejo cobraba Mat por S/239 (Elevate). */
+function pkDeEnlace(lista, pedido){
+  const p = String(pedido || "").trim();
+  const nombres = Array.isArray(lista) ? lista : [];
+  if (!p) return "";
+  if (nombres.includes(p)) return p;
+  const objetivo = normPaqNombre(p);
+  if (!objetivo) return "";
+  const iguales = nombres.filter(k => normPaqNombre(k) === objetivo);
+  if (iguales.length === 1) return iguales[0];
+  const numObj = (objetivo.match(/^\d+/) || [""])[0];
+  if (!numObj) return "";
+  const cand = nombres.filter(k => {
+    const nk = normPaqNombre(k);
+    if (((nk.match(/^\d+/) || [""])[0]) !== numObj) return false;
+    return objetivo.startsWith(nk + " ") || nk.startsWith(objetivo + " ");
+  });
+  return cand.length === 1 ? cand[0] : "";
+}
+
 /* Resuelve el paquete de un alumno por nombre: primero el set del tenant, luego los
    nombres legacy por defecto, y si no existe, 0 clases.
    🐛 20-ago-2026 (Elevate): el pase guarda el NOMBRE del paquete, así que renombrar
@@ -261,7 +305,7 @@ async function armarWebCtx(env, tenant){
   const paq = await loadPaquetes(env, tenant.id);
   /* Los planes ocultos (o=1, 7-ago-2026) NO existen para la web pública: se venden solo
      por su link directo de compra o asignados desde el panel. */
-  const paqPub = { map: {}, list: paq.list.filter(n => !paq.map[n].oculto) };
+  const paqPub = { map: {}, list: paquetesEnVenta(tenant, paq.list).filter(n => !paq.map[n].oculto) };
   for (const nPub of paqPub.list) paqPub.map[nPub] = paq.map[nPub];
   const mpOn = mpCobraConTarjeta(tenant);
   const cobroOn = !!(mpOn || cfg.pago_numero || cfg.bcp_cuenta || cfg.interbank_cuenta || cfg.scotia_cuenta || cfg.crypto_wallet);
@@ -2098,6 +2142,8 @@ async function computeMulti(env, tid, alumno, paqMap, precios, excluirReservaId,
     multi: true,
     pases: at.pases.map(e => ({ n: e.n, compradas: e.compradas, ilim: e.ilim, usadas: e.usadas,
       restantes: e.restantes, futuras: Number(e.futuras) || 0, vence: e.vence, vencido: e.vencido, tipos: e.tipos, pk: e.pk,
+      /* Identidad dentro de la lista guardada: el orden de consumo no la cambia. */
+      id: typeof e.idx === "number" ? "p" + e.idx : null,
       noExiste: !!e.noExiste,
       /* clases cobradas a este pase por encima de su capacidad: sin esto se perdían */
       sobreconsumo: e.ilim ? 0 : Math.max(0, (e.usadas || 0) - (e.compradas || 0)) })),
@@ -3955,7 +4001,7 @@ async function contextoVentaWA(env, tenant, cfg){
   try {
     const paq = await loadPaquetes(env, tenant.id);
     const precios = await loadPrecios(env, tenant.id);
-    const items = (paq.list || []).map(nombre => {
+    const items = paquetesEnVenta(tenant, paq.list).map(nombre => {
       const pk = paq.map[nombre] || {};
       const monto = precios[nombre] != null ? precios[nombre] : null;
       const detalle = pk.ilim ? "mensualidad" : (pk.clases + " clases");
@@ -6019,7 +6065,14 @@ async function ocupacionSlot(env, tenantId, iso, prof, sala){
   }
   let n = 0, bloqueado = false;
   for (const r of results){
-    if (r.tipo === "bloqueo"){ bloqueado = true; continue; }
+    if (r.tipo === "bloqueo"){
+      /* 9-oct-2026 (José/Elevate): cancelar la clase de UNA sala cerraba la hora en TODAS las
+         salas y no le dejaba agendar en la otra. Un cierre con sala solo cierra esa sala; un
+         cierre sin sala ('') sigue cerrando la hora entera. Sin sala pedida, cualquier cierre cierra. */
+      const salaBloq = String(r.sala || "");
+      if (salaBloq === "" || salaBloq === salaK || salaK === "") bloqueado = true;
+      continue;
+    }
     /* Comodin de transicion: una reserva sin sala ('') cuenta en TODAS las salas de esa
        hora (mismo criterio que resolverFranja y la lista de espera). Sobre-conservador a
        proposito: sin esto, tras migrar a salas las reservas viejas dejan de contar en la
@@ -6145,7 +6198,7 @@ async function generarSlotsDetalle(env, tenantId, prof, opts){
   /* Ocupacion POR SALA (iso|sala); un bloqueo cierra la hora entera, todas las salas. */
   const conteo = new Map(); const bloqueados = new Set();
   for (const r of (tomadas || [])){
-    if (r.tipo === "bloqueo"){ bloqueados.add(r.inicio_utc); continue; }
+    if (r.tipo === "bloqueo"){ bloqueados.add(r.inicio_utc + "|" + (r.sala || "")); continue; }   // 9-oct-2026: el cierre es por sala; sala '' = todas
     const k = r.inicio_utc + "|" + (r.sala || "");
     conteo.set(k, (conteo.get(k) || 0) + 1);
   }
@@ -6186,7 +6239,7 @@ async function generarSlotsDetalle(env, tenantId, prof, opts){
       if (ms <= now + reg.minH * 3600000 || ms > hastaMs) continue;
       if (reg.maxDias > 0 && ms > now + reg.maxDias * 86400000) continue;
       const iso = new Date(ms).toISOString();
-      if (bloqueados.has(iso)) continue;   // hora cerrada por el profe: ni libre ni espera
+      if (bloqueados.has(iso + "|") || bloqueados.has(iso + "|" + (h.sala || ""))) continue;   // hora (o sala) cerrada por el profe: ni libre ni espera
       const cupo = cupoEff(h.cupo, h.curso);
       /* Comodin de transicion (igual que ocupacionSlot): las reservas sin sala ('')
          ocupan TODAS las salas de esa hora, para no sobrevender mientras haya
@@ -6755,8 +6808,8 @@ const SEC_HEADERS = {
   "strict-transport-security": "max-age=31536000; includeSubDomains",
   "content-security-policy": "frame-ancestors 'self'",
 };
-function htmlResponse(html){
-  return new Response(html, { headers: Object.assign({ "content-type": "text/html; charset=utf-8", "cache-control": "no-store" }, SEC_HEADERS) });
+function htmlResponse(html, status = 200){
+  return new Response(html, { status, headers: Object.assign({ "content-type": "text/html; charset=utf-8", "cache-control": "no-store" }, SEC_HEADERS) });
 }
 /* ---------- Examen oral con IA (Fase B, 14-jul-2026): capacitacion S/49.50 por persona.
    Agente ElevenLabs privado (enable_auth), SOLO VOZ (decision permanente de Andres).
@@ -10565,11 +10618,18 @@ export default {
       if (tP.estado === "vencido") return htmlResponse(paginaBase("No disponible — Batuta", "<h1>Pagos en pausa</h1><p class=\"sub\">Esta academia está inactiva por ahora. Escríbele a tu profesor.</p>", ""));
       const cfgP = await loadConfig(env, tP.id);
       const preciosP = await loadPrecios(env, tP.id);
-      const preSel = String(url.searchParams.get("p") || "");
+      const preSelRaw = String(url.searchParams.get("p") || "").trim();
+      const errorOfertaP = errorVentaPaquete(tP, preSelRaw);
+      if (errorOfertaP){
+        return htmlResponse(paginaBase("Plan no disponible — " + esc(tP.academia),
+          "<h1>Este plan ya no está disponible</h1><p class=\"sub\">" + esc(errorOfertaP) +
+          "</p><p><a href=\"/app/a/" + encodeURIComponent(tP.slug) + "/pagar\">Ver clase suelta y paquetes</a></p>", ""), 410);
+      }
       /* Planes ocultos (7-ago-2026, Elevate): no se listan — SALVO que el link traiga
          justo ese plan (?p=...): ese es el "link especial" para clientes puntuales. */
       const paqP = await loadPaquetes(env, tP.id);
-      const paquetesOk = paqP.list.filter(pk => (preciosP[pk] || 0) > 0 && (!paqP.map[pk].oculto || pk === preSel));
+      const preSel = pkDeEnlace(paquetesEnVenta(tP, paqP.list), preSelRaw);
+      const paquetesOk = paquetesEnVenta(tP, paqP.list).filter(pk => (preciosP[pk] || 0) > 0 && (!paqP.map[pk].oculto || pk === preSel));
       const mpOnP = mpCobraConTarjeta(tP);
       const stripeOnP = stripeConnectOn(env) && !!(tP.stripe_account_id) && !!Number(tP.stripe_charges_enabled);
       const mpSoloTarjetaP = String(cfgP.mp_solo_tarjeta || "") === "1";
@@ -10603,16 +10663,23 @@ export default {
           refPlanesP[pk] = el.ok ? "" : errorReferidoPago(el.motivo);
         }
       }
-      const seleccionadoP = paquetesOk.includes(preSel) ? preSel : paquetesOk[0];
+      /* Con ?p= que no encaja NO se elige el primero de la lista (así se cobró Mat por S/239 en lugar
+         de Máquinas): el alumno elige. Sin ?p= se mantiene el primero, como siempre. */
+      const seleccionadoP = paquetesOk.includes(preSel) ? preSel : (preSelRaw ? "" : paquetesOk[0]);
+      const avisoLinkP = (preSelRaw && !seleccionadoP)
+        ? "<p class=\"err\" role=\"status\" style=\"margin:0 0 14px\">Ese link ya no corresponde a un plan que esté a la venta. Elige tu paquete abajo.</p>"
+        : "";
       const refVisibleP = refActivoP && !refPlanesP[seleccionadoP] && metodos[0].v !== "Tarjeta (Stripe)";
       const infoPago = { mpSoloTarjeta: mpSoloTarjetaP, referido: refActivoP, refPlanes: refPlanesP,
         precios: Object.fromEntries(paquetesOk.map(pk => [pk, preciosP[pk]])) };
       const cuerpoP =
         "<h1>" + esc(tP.academia) + "</h1>" +
         "<p class=\"sub\">Elige tu paquete, paga y listo: tu cuenta se crea sola y te llega un correo para entrar a tu portal.</p>" +
+        avisoLinkP +
         "<form id=\"fp\">" +
           "<label>Paquete</label><select id=\"pq\">" +
-            paquetesOk.map(pk => "<option value=\"" + esc(pk) + "\"" + (pk === preSel ? " selected" : "") + ">" + esc(pk) + " — S/ " + (preciosP[pk] || 0) + "</option>").join("") +
+            (seleccionadoP ? "" : "<option value=\"\" selected disabled>Elige tu paquete</option>") +
+            paquetesOk.map(pk => "<option value=\"" + esc(pk) + "\"" + (pk === seleccionadoP ? " selected" : "") + ">" + esc(pk) + " — S/ " + (preciosP[pk] || 0) + "</option>").join("") +
           "</select>" +
           "<label>Tu nombre</label><input id=\"nm\" type=\"text\" required maxlength=\"80\">" +
           "<label>Tus apellidos</label><input id=\"ap\" type=\"text\" maxlength=\"80\" placeholder=\"Opcional\">" +
@@ -10627,7 +10694,7 @@ export default {
                 "</label></div>"
             : "") +
           (refActivoP ? '<div id="refbox"' + (refVisibleP ? '' : ' hidden') + '><label for="refp">Código de referido (opcional)</label><input id="refp" type="text" maxlength="12" autocomplete="off" autocapitalize="characters"><button type="button" id="aplicarref">Aplicar código</button><p class="sub" id="refmsg" role="status" aria-live="polite"></p></div><p class="sub" id="refmotivo">' + esc(refVisibleP ? '' : (refPlanesP[seleccionadoP] || 'El código no se aplica al pago internacional.')) + '</p>' : '') +
-          '<p id="totalp" aria-live="polite">Total: S/ ' + Number(preciosP[seleccionadoP]).toFixed(2) + '</p>' +
+          '<p id="totalp" aria-live="polite">' + (seleccionadoP ? 'Total: S/ ' + Number(preciosP[seleccionadoP]).toFixed(2) : 'Elige tu paquete para ver el total') + '</p>' +
           "<label>Método de pago</label><select id=\"mt\">" +
             metodos.map(m => "<option value=\"" + esc(m.v) + "\">" + esc(m.t) + "</option>").join("") +
           "</select>" +
@@ -10676,13 +10743,14 @@ export default {
         "var refEl=document.getElementById('refp'),refBox=document.getElementById('refbox'),refMsg=document.getElementById('refmsg'),totalEl=document.getElementById('totalp'),pqEl=document.getElementById('pq'),refFirma='',refRevision=0,refMonto=null;" +
         "function datosRef(){return {slug:SLUGP,paquete:pqEl.value,nombre:document.getElementById('nm').value.trim(),email:document.getElementById('em').value.trim(),whatsapp:document.getElementById('wa').value.trim(),metodo:mt.value,codigo_referido:refEl&&!refBox.hidden?refEl.value.trim():''};}" +
         "function firmaRef(){return JSON.stringify(datosRef());}" +
-        "function cambiaRef(){refRevision++;refFirma='';refMonto=null;if(refMsg)refMsg.textContent='';if(refBox){var motivo=INFO.refPlanes[pqEl.value]||'';if(mt.value==='Tarjeta (Stripe)')motivo='El código no se aplica al pago internacional.';refBox.hidden=!!motivo;document.getElementById('refmotivo').textContent=motivo;}totalEl.textContent='Total: '+(mt.value==='Tarjeta (Stripe)'?'':'S/ ')+Number(INFO.precios[pqEl.value]||0).toFixed(2);}" +
+        "function cambiaRef(){refRevision++;refFirma='';refMonto=null;if(refMsg)refMsg.textContent='';if(refBox){var motivo=INFO.refPlanes[pqEl.value]||'';if(mt.value==='Tarjeta (Stripe)')motivo='El código no se aplica al pago internacional.';refBox.hidden=!!motivo;document.getElementById('refmotivo').textContent=motivo;}totalEl.textContent=pqEl.value?('Total: '+(mt.value==='Tarjeta (Stripe)'?'':'S/ ')+Number(INFO.precios[pqEl.value]||0).toFixed(2)):'Elige tu paquete para ver el total';}" +
         "async function aplicaRef(){var firma=firmaRef(),rev=refRevision,d=datosRef();if(!d.codigo_referido){cambiaRef();return false;}refMsg.textContent='Comprobando código…';try{d.cotizar=true;var r=await fetch('/app/api/pagar-directo',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(d)});var v=await r.json();if(firma!==firmaRef()||rev!==refRevision)return false;if(!r.ok){refMsg.textContent=v.error||'No pudimos comprobar el código.';return false;}refFirma=firma;refMonto=Number(v.monto);totalEl.textContent='Total: S/ '+Number(v.monto).toFixed(2);refMsg.textContent=v.descRef>0?'Código aplicado. Descuento: S/ '+Number(v.descRef).toFixed(2):'Código aplicado para el beneficio de tu amigo.';return true;}catch(e){if(rev===refRevision)refMsg.textContent='No pudimos comprobar el código. Intenta de nuevo.';return false;}}" +
         "if(refEl){refEl.addEventListener('input',cambiaRef);document.getElementById('aplicarref').addEventListener('click',aplicaRef);}['nm','em','wa'].forEach(function(id){document.getElementById(id).addEventListener('input',cambiaRef);});pqEl.addEventListener('change',cambiaRef);mt.addEventListener('change',cambiaRef);" +
         "mt.addEventListener('change',pintaInfo);pintaInfo();" +
         "function leerCap(){return new Promise(function(res){var f=document.getElementById('cap').files[0];if(!f)return res('');var r=new FileReader();r.onload=function(){res(String(r.result||''));};r.onerror=function(){res('');};r.readAsDataURL(f);});}" +
         "document.getElementById('fp').addEventListener('submit',async function(e){" +
         "e.preventDefault();var err=document.getElementById('errp');err.textContent='';" +
+        "if(!document.getElementById('pq').value){err.textContent='Elige tu paquete antes de pagar.';return;}" +
         "var tb=document.getElementById('tutorbox'),tc=document.getElementById('tutor');" +
         "if(tb&&tb.style.display!=='none'&&tc&&!tc.checked){err.textContent='Marca la autorizacion del apoderado para continuar.';return;}" +
         "if(datosRef().codigo_referido&&refFirma!==firmaRef()){await aplicaRef();err.textContent='Revisa el código y el total antes de continuar con el pago.';return;}" +
@@ -13416,7 +13484,7 @@ export default {
           profesoresPub = (profs || []).map(p => ({ id: p.id, nombre: p.nombre || "", foto: p.foto || "" }));
         } catch (e) {}
         return json({
-          academia: t.academia, whatsapp: t.whatsapp || "", precios,
+          academia: t.academia, whatsapp: t.whatsapp || "", precios: preciosEnVenta({ id: t.id, slug }, precios),
           profesores: profesoresPub,
           cursos: cursosDeCfg(cfg),
           /* Voz del portal ANTES de entrar (11-ago-2026): la pantalla de login tambien dice
@@ -14615,7 +14683,9 @@ export default {
              de mat" (14 de sus 15 planes SÍ tienen precio, por eso el paso "Puse mis precios"
              estaba en verde y nadie le avisó). Las clases de PRUEBA sí valen 0 a propósito, y
              el plan que el alumno ya tiene se queda visible para que pueda renovarlo. */
-          paquetes: paqMe.list.filter(function(n){ return !paqMe.map[n].oculto || (alumno && alumno.paquete === n); })
+          /* La prueba retirada de MVT conserva su saldo e historia arriba, pero ya no
+             es una opción de compra o renovación, aunque el alumno aún tenga ese plan. */
+          paquetes: paquetesEnVenta(tenantActor || tid, paqMe.list).filter(function(n){ return !paqMe.map[n].oculto || (alumno && alumno.paquete === n); })
             .filter(function(n){
               if (alumno && alumno.paquete === n) return true;
               if (/prueba/i.test(n)) return true;
@@ -14710,6 +14780,8 @@ export default {
         if (t.estado === "vencido") return json({ error: "Esta academia está inactiva por ahora. Escríbele a tu profesor." }, 402);
 
         const paquete = String(b.paquete || "");
+        const errorOferta = errorVentaPaquete(t, paquete);
+        if (errorOferta) return json({ error: errorOferta }, 410);
         const paqMapPd = (await loadPaquetes(env, t.id)).map;
         if (!paqMapPd[paquete]) return json({ error: "Paquete no válido." }, 400);
         const nombre = String(b.nombre || "").trim();
@@ -14970,6 +15042,8 @@ export default {
         const comprobante = typeof b.comprobante === "string" ? b.comprobante : "";
 
         const precios = await loadPrecios(env, tid);
+        const errorOferta = errorVentaPaquete(tenantActor || tid, paquete);
+        if (errorOferta) return json({ error: errorOferta }, 410);
         const paqMapC = (await loadPaquetes(env, tid)).map;
         if (!paqMapC[paquete]) return json({ error: "Paquete no válido." }, 400);
         if (paquete === "Clase de prueba" && cu.alumno_id) return json({ error: "La clase de prueba es solo para tu primera clase. Elige un paquete para seguir." }, 400);
@@ -15104,11 +15178,12 @@ export default {
         if (!cu) return json({ error: "Sesión expirada" }, 401);
         const tid = cu.tenant_id;
         const t = await env.DB.prepare("SELECT * FROM tenants WHERE id = ?1").bind(tid).first();
-        const tk = t ? await mpTokenProfe(env, t) : null;
-        if (!tk) return json({ error: "Tu profesor aún no activó el pago con tarjeta. Paga por Yape/Plin o escríbele." }, 400);
-
         const b = await request.json().catch(() => ({}));
         const paquete = String(b.paquete || "");
+        const errorOferta = errorVentaPaquete(t || tid, paquete);
+        if (errorOferta) return json({ error: errorOferta }, 410);
+        const tk = t ? await mpTokenProfe(env, t) : null;
+        if (!tk) return json({ error: "Tu profesor aún no activó el pago con tarjeta. Paga por Yape/Plin o escríbele." }, 400);
         const paqMapMp = (await loadPaquetes(env, tid)).map;
         if (!paqMapMp[paquete]) return json({ error: "Paquete no válido." }, 400);
         if (paquete === "Clase de prueba" && cu.alumno_id) return json({ error: "La clase de prueba es solo para tu primera clase." }, 400);
@@ -15328,6 +15403,8 @@ export default {
         }
         const b = await request.json().catch(() => ({}));
         const paquete = String(b.paquete || "");
+        const errorOferta = errorVentaPaquete(t, paquete);
+        if (errorOferta) return json({ error: errorOferta }, 410);
         const paqMapS = (await loadPaquetes(env, tid)).map;
         if (!paqMapS[paquete]) return json({ error: "Paquete no válido." }, 400);
         if (paquete === "Clase de prueba" && cu.alumno_id) return json({ error: "La clase de prueba es solo para tu primera clase." }, 400);
@@ -15489,6 +15566,8 @@ export default {
         const token = String(b.token || "").trim();
         if (!/^tkn_(live|test)_[A-Za-z0-9]+$/.test(token)) return json({ error: "Token de pago inválido. Reintenta." }, 400);
         const paquete = String(b.paquete || "");
+        const errorOferta = errorVentaPaquete(t, paquete);
+        if (errorOferta) return json({ error: errorOferta }, 410);
         const paqMapC = (await loadPaquetes(env, tid)).map;
         if (!paqMapC[paquete]) return json({ error: "Paquete no válido." }, 400);
         if (paquete === "Clase de prueba" && cu.alumno_id) return json({ error: "La clase de prueba es solo para tu primera clase." }, 400);
@@ -15543,10 +15622,16 @@ export default {
         const rechazoExplicito = !exito && !ambiguo && chStatus >= 400 && chStatus < 500;
         if (!exito){
           if (rechazoExplicito){
-            // Rechazo real (tarjeta declinada, datos malos): no hubo cobro. Limpiamos y avisamos.
+            // Rechazo explícito de Culqi: no hubo cobro. Limpiamos la compra y le decimos al alumno qué pasó.
             await env.DB.prepare("DELETE FROM compras WHERE id = ?1 AND tenant_id = ?2 AND estado = 'iniciada'").bind(compraId, tid).run();
-            const msg = (charge && charge.user_message) || (charge && charge.merchant_message) || "El pago fue rechazado. Revisa tus datos o intenta con otra tarjeta.";
-            return json({ error: msg }, 402);
+            // 401/403 = la llave secreta de la academia no sirve (la rotó o la revocó). NO es la tarjeta:
+            // antes salía como "el pago fue rechazado" y el alumno reintentaba con otra tarjeta sin salida.
+            if (chStatus === 401 || chStatus === 403){
+              return json({ error: "Tu academia no puede cobrar con Culqi en este momento. No se te cobró nada: elige otro método o avísale a tu profesor.", codigo: "culqi_sin_conexion" }, 503);
+            }
+            // Solo el user_message llega al alumno: el merchant_message es técnico y es para la academia.
+            const msg = (charge && typeof charge.user_message === "string" && charge.user_message.trim()) || "El pago fue rechazado. Revisa tus datos o intenta con otra tarjeta.";
+            return json({ error: msg, codigo: "pago_rechazado" }, 402);
           }
           // AMBIGUO: dejar la compra como 'pendiente' (no borrar) para no perder un cobro real.
           await env.DB.prepare("UPDATE compras SET estado = 'pendiente' WHERE id = ?1 AND tenant_id = ?2 AND estado = 'iniciada'").bind(compraId, tid).run();
@@ -15668,10 +15753,9 @@ export default {
              arriba apuntaba al vacio. Estaba escrito DOS VECES en este mismo objeto (mismo
              valor, asi que no cambiaba nada, pero wrangler lo avisaba en cada deploy): queda
              una sola y la razon aca. (24-ago-2026)
-             ⚠️ PENDIENTE, no es de este cobro: los dos de arriba recortan a 22, pero la nota
-             del tablero (12-ago, con link a la doc de MP) dice que en preferencias el tope es
-             de 13. Si es 13, un nombre de academia largo se manda pasado. Verificar y corregir
-             ALLA; aca no aplica porque "BATUTA" son 6. */
+             Los dos cobros al alumno recortan a 13 desde el 2-set-2026, el máximo de
+             Checkout Pro. BA07 verificado el 1-oct con pruebas del payload de ambas rutas;
+             la nota anterior que decía "pendiente" y 22 era histórica. Aquí "BATUTA" son 6. */
           statement_descriptor: "BATUTA",
           metadata: { batuta_tenant: actorPk.tenant.id, batuta_pack_compra: compraIdPk }
         }});
@@ -18144,6 +18228,7 @@ export default {
           } catch (e) {}
           const sedes = await sedesDeTenant(env, tid);
           return json({ alumnos, registro, precios, cuentas, compras, recursos, ejercicios, leads, gastos, comprobantes, config, grupos, sedes,
+                        paquetes_venta: paquetesEnVenta(t, (await loadPaquetes(env, tid)).list),
                         slug: t.slug, academia: t.academia, estado: t.estado, demo: esTenantDemo(t),
                         rol: esDueno ? "dueno" : "profesor", profe_id: profeActorId || "", equipo,
                         cobro_on: cobroOnPanel,

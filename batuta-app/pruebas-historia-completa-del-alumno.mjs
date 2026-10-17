@@ -90,7 +90,7 @@ console.log("\n── 3. La pantalla de «Mis clases» pinta lo que le llega ─
   const ME = { alumno: { historial: filas.map(([id, f, e, c]) => ({ fecha: f, estado: e, trabajo: "", tarea: "", plan: "", ciclo: c })) },
     proximasClases: [{ inicio_utc: "2026-09-05T15:00:00Z", curso: "Canto", tipo: "suelta" }] };
   const f = new Function("$", "ME", "esc", "show", "hide", "audiosDe", "adjuntosHtml", "window", "fmtFechaLocal", "fmtHoraLocal",
-    cortar("pintarAgendadas") + cortar("renderClases") + "\nreturn renderClases;")(
+    cortar("linkear") + cortar("pintarAgendadas") + cortar("renderClases") + "\nreturn renderClases;")(
     caja, ME, x => String(x == null ? "" : x), () => {}, () => {}, () => [], () => "",
     { ME }, () => "sábado 5 de septiembre", () => "10:00 a.m.");
   try { f(); } catch (e) { comprobar("la pantalla no revienta", false, e.message); }

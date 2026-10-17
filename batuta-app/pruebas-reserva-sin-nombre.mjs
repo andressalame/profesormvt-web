@@ -6,6 +6,7 @@
      node pruebas-reserva-sin-nombre.mjs
 */
 import { readFileSync } from "node:fs";
+import { cargarMotor } from "./motor-real.mjs";
 const S = readFileSync(process.env.HOME + "/Code/mvt/web/batuta-app/worker/index.js", "utf8");
 const P = readFileSync(process.env.HOME + "/Code/mvt/web/batuta-app/public/panel/index.html", "utf8");
 let ok = 0, mal = 0;
@@ -32,7 +33,7 @@ t("al liberarla se avisa a la lista de espera", () => {
   has(S, 'if (nuevo === "cancelada" && rv.tipo !== "bloqueo") await promoverEspera');
 });
 t("no cuenta como hora cerrada", () => {
-  has(S, 'if (r.tipo === "bloqueo"){ bloqueados.add(r.inicio_utc); continue; }');
+  has(S, 'if (r.tipo === "bloqueo"){ bloqueados.add(r.inicio_utc + "|" + (r.sala || "")); continue; }');
 });
 t("el calendario del alumno no la muestra (filtra por su alumno_id)", () => {
   has(S, "WHERE tenant_id = ?1 AND alumno_id = ?2 AND inicio_utc >= ?3");
@@ -103,9 +104,23 @@ t("el filtro por sala deja pasar los bloqueos sin sala", () => {
 t("sigue filtrando por sala todo lo demás", () => has(P, 'return rsala===String(f.sala||"");'));
 t("sin salas configuradas, no filtra nada", () => has(P, "if(!conSalas) return true;"));
 t("el backend efectivamente cierra TODAS las salas con un bloqueo sin sala", () => {
-  has(S, 'if (r.tipo === "bloqueo"){ bloqueados.add(r.inicio_utc); continue; }',
+  has(S, 'if (r.tipo === "bloqueo"){ bloqueados.add(r.inicio_utc + "|" + (r.sala || "")); continue; }',
       "el bloqueo se guarda por hora, sin sala: por eso tiene que verse en todas");
 });
+
+// Ejecución real: desde el arreglo publicado del 9-oct, un cierre con sala es local.
+const M = await cargarMotor(["ocupacionSlot"]);
+const ocupacion = (filas,sala) => M.ocupacionSlot({DB:{prepare(){return {bind(){return this;},async all(){return {results:filas};}};}}},"DEMO","2099-01-01T15:00:00Z",{id:"profe-demo",esDueno:true},sala);
+const apartada = await ocupacion([{tipo:"aparta",sala:"A",n:1}],"A");
+t("ejecución: apartar sin nombre ocupa un cupo sin cerrar",()=>{if(apartada.n!==1||apartada.bloqueado)throw Error(JSON.stringify(apartada));});
+for (const sala of ["A","B"]){
+ const cierre = await ocupacion([{tipo:"bloqueo",sala:"",n:1}],sala);
+ t("ejecución: cierre sin sala cierra "+sala,()=>{if(!cierre.bloqueado)throw Error("El cierre global se perdió");});
+}
+const otra = await ocupacion([{tipo:"bloqueo",sala:"A",n:1}],"B");
+t("ejecución: cerrar A deja B disponible",()=>{if(otra.bloqueado)throw Error("Se cerró una sala ajena");});
+const propia = await ocupacion([{tipo:"bloqueo",sala:"A",n:1}],"A");
+t("ejecución: cerrar A sí cierra A",()=>{if(!propia.bloqueado)throw Error("No se cerró la sala indicada");});
 
 console.log("\n" + (mal ? "✗ " + mal + " fallando · " : "✓ ") + ok + " pruebas OK\n");
 process.exit(mal ? 1 : 0);
