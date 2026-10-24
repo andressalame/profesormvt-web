@@ -832,7 +832,7 @@
         <h3>// HISTORIAL DE PAGOS</h3>
         <div class="tablewrap">
           <table id="pTabla">
-            <thead><tr><th>Fecha</th><th>Paquete</th><th>Monto</th><th>Estado</th></tr></thead>
+            <thead><tr><th>Fecha</th><th>Paquete</th><th>Monto</th><th>Estado</th><th>Recibo</th></tr></thead>
             <tbody></tbody>
           </table>
         </div>
@@ -2372,7 +2372,8 @@ function renderCuenta(){
       if(Number(p.desc_ref)>0) det += ' <span class="mut">(-'+solesPago(p.desc_ref)+' por tu código de amigo)</span>';
       if(Number(p.descuento)>0) det += ' <span class="mut">(-'+solesPago(p.descuento)+' de tu crédito)</span>';
       return '<tr><td class="mono">'+esc(p.fecha||"")+'</td><td>'+esc(p.paquete||"")+'</td>'+
-        '<td>'+solesPago(p.monto)+det+'</td><td><span class="pill '+e.c+'">'+esc(e.t)+'</span></td></tr>';
+        '<td>'+solesPago(p.monto)+det+'</td><td><span class="pill '+e.c+'">'+esc(e.t)+'</span></td>'+
+        '<td>'+(p.recibo_url?'<a href="'+esc(p.recibo_url)+'" target="_blank" rel="noopener">Nro '+esc(p.recibo_numero||"")+' ↗</a>':'<span class="mut">—</span>')+'</td></tr>';
     }).join("");
   } else hide("ctaPagos");
 

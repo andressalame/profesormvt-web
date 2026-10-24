@@ -46,3 +46,28 @@
   diseñado en el vault (proyectos/Batuta - producto por nicho (plan 2026-07-14).md). Falta que Andrés apruebe
   los términos por rubro; luego son ~2-3 sesiones (diccionario T() + data-t + copy del worker + prompt del bot).
 - **Demo por vertical:** Estudio Sonata es de música; un prospecto de fútbol ve demo de música.
+
+## Auditoría de promesas (24-oct-2026): lo que se cerró y lo que sigue pendiente
+Rama `cumplir-promesas-24oct`. Cerrado en código: respaldo del servidor + chat en el export, avisos al profe
+(chat, reserva, cancelación) con contador de no leídos, embudo que avanza solo + conversión, liquidación
+cerrada/pagada/Caja, recordatorios para plan gratis + segundo aviso al vencer + aviso de correo apagado,
+recibo correlativo + envío automático + visible en el portal.
+
+### Pendiente (no se hizo a propósito)
+- **«Borrar mi cuenta y mis datos»:** NO existe. Borrar una academia toca ~25 tablas más archivos en R2 y
+  sesiones, y un error ahí es irreversible con academias reales (Elevate, MVT). Requiere diseño aparte:
+  doble confirmación, descarga previa del respaldo (`/app/api/admin/backup/ahora`), borrado por `tenant_id`
+  en transacción, purga de R2 por prefijo y de `push_subs`/`sesiones`. Hoy se hace a mano con el superadmin.
+- **Boleta SUNAT (Nubefact):** no se tocó. Falta: (1) que cada academia cree SU cuenta Nubefact y pegue ruta +
+  token + RUC en Ajustes (hoy ninguna lo hizo y nunca se recorrió con un documento real); (2) FACTURAS (solo hay
+  boletas); (3) NOTAS DE CRÉDITO y anulaciones; (4) emisión automática al confirmar el pago (hoy es a mano,
+  pago por pago). El «recibo» es un comprobante NO tributario y así lo dice.
+- **Backup automático diario:** el cron no respalda. `backup/ahora` ya guarda en R2 (`backups/<tenant>/<fecha>.json`)
+  si hay binding; falta llamarlo desde `scheduled()` (decisión de Andrés: costo de R2 y retención).
+- **Cobro recurrente automático al alumno, recordatorios por WhatsApp, dominio propio por academia, app en
+  tiendas, editor de landing separado PC/celular, audios del bot:** no se hacen por código ahora (ver
+  `batuta-textos-honestos.md` en el Second Brain para cómo se describen mientras tanto).
+- Pruebas que ya fallaban ANTES de estos cambios (13): aforo-se-ve, api-mismo-numero, carrera-reserva,
+  dos-clases-el-mismo-dia, estados-raros, historia-no-se-mueve, importador-no-adivina, pase-vencido-se-nota,
+  pausa-no-inventa-vencimiento, portal-agenda-multipase, renovacion-columnas, reprogramar-cuenta, tres-superficies.
+  `./correr-pruebas-mjs.sh` corre todas y lista las que fallan.

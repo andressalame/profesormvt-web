@@ -264,8 +264,12 @@ CREATE TABLE IF NOT EXISTS compras (
   -- desc_ref = descuento de bienvenida por venir referido (15-ago-2026). Va aparte porque NO
   -- sale del credito del alumno: es una rebaja de la academia. En prod va por ALTER.
   desc_ref     REAL DEFAULT 0,
-  slot_deseado TEXT DEFAULT ''
+  slot_deseado TEXT DEFAULT '',
+  -- Número correlativo del recibo, por academia (24-oct-2026). En prod va por ensureReciboSchema.
+  recibo_num   INTEGER,
+  recibo_enviado INTEGER DEFAULT 0
 );
+CREATE UNIQUE INDEX IF NOT EXISTS idx_compras_recibo ON compras (tenant_id, recibo_num) WHERE recibo_num IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_compras_estado ON compras (tenant_id, estado);
 CREATE INDEX IF NOT EXISTS idx_compras_cuenta ON compras (tenant_id, cuenta_id);
 

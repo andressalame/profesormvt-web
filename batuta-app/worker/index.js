@@ -3528,6 +3528,53 @@ function correoLeadMagnet(paso, origen){
 }
 
 /* ---------- Confirmar una compra (reutilizado por el panel y por el webhook de MP) ---------- */
+/* ---------- Recibos: número correlativo por academia y envío automático (24-oct-2026) ----------
+   Antes el «número» del recibo era un trozo del id del pago (A1B2C3D4): no es correlativo, dos
+   academias podían repetirlo y el alumno no podía ordenar sus recibos. Ahora cada pago confirmado
+   recibe el siguiente número de SU academia (1, 2, 3…). Los pagos confirmados antes de esto se
+   numeran de una vez, en orden de fecha, la primera vez que hace falta. Un índice único por
+   (academia, número) hace imposible repetir uno aunque dos cobros se confirmen a la vez. */
+async function ensureReciboSchema(env){
+  try { await env.DB.prepare("ALTER TABLE compras ADD COLUMN recibo_num INTEGER").run(); } catch (e) { /* ya existe */ }
+  try { await env.DB.prepare("ALTER TABLE compras ADD COLUMN recibo_enviado INTEGER DEFAULT 0").run(); } catch (e) { /* ya existe */ }
+  try { await env.DB.prepare("CREATE UNIQUE INDEX IF NOT EXISTS idx_compras_recibo ON compras (tenant_id, recibo_num) WHERE recibo_num IS NOT NULL").run(); } catch (e) {}
+}
+function reciboNumeroTexto(n){ return String(Math.max(0, Math.floor(Number(n) || 0))).padStart(6, "0"); }
+async function numerarRecibos(env, tid){
+  await ensureReciboSchema(env);
+  for (let intento = 0; intento < 4; intento++){
+    try {
+      const pend = await env.DB.prepare("SELECT COUNT(*) AS n FROM compras WHERE tenant_id = ?1 AND estado = 'confirmada' AND recibo_num IS NULL").bind(tid).first();
+      if (!(Number(pend && pend.n) > 0)) return 0;
+      const mx = await env.DB.prepare("SELECT COALESCE(MAX(recibo_num),0) AS m FROM compras WHERE tenant_id = ?1").bind(tid).first();
+      const r = await env.DB.prepare(
+        "WITH nuevos AS MATERIALIZED (SELECT rowid AS rid, ROW_NUMBER() OVER (ORDER BY COALESCE(fecha,''), rowid) AS n FROM compras " +
+        "  WHERE tenant_id = ?1 AND estado = 'confirmada' AND recibo_num IS NULL) " +
+        "UPDATE compras SET recibo_num = ?2 + (SELECT n FROM nuevos WHERE nuevos.rid = compras.rowid) " +
+        "WHERE tenant_id = ?1 AND estado = 'confirmada' AND recibo_num IS NULL"
+      ).bind(tid, Number(mx && mx.m) || 0).run();
+      return Number(r && r.meta && r.meta.changes) || 0;
+    } catch (e) { /* otra confirmación se llevó el número: se reintenta con el máximo nuevo */ }
+  }
+  return 0;
+}
+/* Correo con el recibo, una sola vez por pago. Se apaga con la clave `recibo_email = off`. */
+async function enviarReciboAlumno(env, tenant, cu, compra){
+  if (!cu || !cu.email || !tenant) return false;
+  if (!(await toggleTenantOn(env, new Map(), tenant.id, "recibo_email"))) return false;
+  const fila = await env.DB.prepare("SELECT recibo_num, COALESCE(recibo_enviado,0) AS env FROM compras WHERE id = ?1 AND tenant_id = ?2").bind(compra.id, tenant.id).first();
+  if (!fila || fila.env) return false;
+  const link = MARCA.dominio + "/app/r/" + encodeURIComponent(compra.id);
+  const academia = tenant.academia || "tu academia";
+  const html = "<p>Hola " + esc((cu.nombre || "").split(" ")[0] || "") + ", recibimos tu pago en " + esc(academia) + ".</p>" +
+    "<p><b>Recibo Nro " + reciboNumeroTexto(fila.recibo_num) + "</b> · " + esc(compra.paquete || "tu paquete") + " · S/ " + (Number(compra.monto) || 0).toFixed(2) + "</p>" +
+    "<p><a href=\"" + link + "\">Ver o descargar mi recibo</a></p>" +
+    "<p style=\"color:#8a8172;font-size:12px\">Comprobante de pago de la academia. No es un documento tributario oficial.</p>";
+  const ok = await enviarCorreo(env, { tenantId: tenant.id, to: cu.email, subject: "Tu recibo Nro " + reciboNumeroTexto(fila.recibo_num) + " · " + academia, html });
+  if (ok) await env.DB.prepare("UPDATE compras SET recibo_enviado = 1 WHERE id = ?1 AND tenant_id = ?2").bind(compra.id, tenant.id).run();
+  return !!ok;
+}
+
 async function confirmarCompra(env, tenantId, tenant, compra){
   /* La ficha nueva se crea con apellido/email/nacimiento, que son columnas agregadas por
      migracion: hay que garantizarlas antes del INSERT o el pago confirmado se cae. */
@@ -3848,6 +3895,8 @@ async function confirmarCompra(env, tenantId, tenant, compra){
       url: MARCA.dominio + "/app/a/" + (tenant ? tenant.slug : "")
     });
   } catch (e) {}
+  /* recibo: numerarlo y mandárselo al alumno. Nunca tumba el cobro ya confirmado. */
+  try { await numerarRecibos(env, tenantId); await enviarReciboAlumno(env, tenant, cu, compra); } catch (e) {}
   return { ok: true, cu, compra };
 }
 
@@ -10650,13 +10699,20 @@ export default {
       }
       const tR = await env.DB.prepare("SELECT academia, slug FROM tenants WHERE id = ?1").bind(compraR.tenant_id).first();
       const cfgR = await loadConfig(env, compraR.tenant_id);
+      /* número correlativo de la academia; los pagos viejos se numeran la primera vez que se piden */
+      let numeroCorr = 0;
+      try {
+        await numerarRecibos(env, compraR.tenant_id);
+        const nr = await env.DB.prepare("SELECT recibo_num FROM compras WHERE id = ?1 AND tenant_id = ?2").bind(compraR.id, compraR.tenant_id).first();
+        numeroCorr = Number(nr && nr.recibo_num) || 0;
+      } catch (e) {}
       let clienteR = "";
       if (compraR.cuenta_id){
         const cuR = await env.DB.prepare("SELECT nombre FROM cuentas WHERE id = ?1 AND tenant_id = ?2").bind(compraR.cuenta_id, compraR.tenant_id).first();
         clienteR = (cuR && cuR.nombre) || "";
       }
       const brutoR = Math.round((Number(compraR.monto) || 0) * 100) / 100;
-      const numR = String(compraR.id).replace(/-/g, "").slice(0, 8).toUpperCase();
+      const numR = numeroCorr ? reciboNumeroTexto(numeroCorr) : String(compraR.id).replace(/-/g, "").slice(0, 8).toUpperCase();
       return htmlResponse(reciboHTML({
         academia: (tR && tR.academia) || cfgR.profe_nombre || "Academia",
         logo: (cfgR.brand_logo && String(cfgR.brand_logo).indexOf("/app/api/recurso/archivo/") === 0) ? cfgR.brand_logo : "",
@@ -14903,9 +14959,16 @@ export default {
           for (const r of filasRec) recursos.push(Object.assign({}, r, { url: await firmarRuta(env, r.url, "m") }));
         }
 
-        const pagos = (await env.DB.prepare(
-          "SELECT fecha, curso, paquete, monto, COALESCE(descuento,0) AS descuento, COALESCE(desc_ref,0) AS desc_ref, estado FROM compras WHERE tenant_id = ?1 AND cuenta_id = ?2 ORDER BY fecha DESC, rowid DESC LIMIT 20"
-        ).bind(tid, cu.id).all()).results || [];
+        await numerarRecibos(env, tid).catch(() => {});   /* los pagos viejos reciben su número (y el alumno su recibo) */
+        const pagos = ((await env.DB.prepare(
+          "SELECT id, fecha, curso, paquete, monto, COALESCE(descuento,0) AS descuento, COALESCE(desc_ref,0) AS desc_ref, estado, recibo_num FROM compras WHERE tenant_id = ?1 AND cuenta_id = ?2 ORDER BY fecha DESC, rowid DESC LIMIT 20"
+        ).bind(tid, cu.id).all()).results || []).map(x => {
+          /* el recibo existe solo para pagos confirmados; el link es el mismo que usa el dueño */
+          const conRecibo = x.estado === "confirmada";
+          return { fecha: x.fecha, curso: x.curso, paquete: x.paquete, monto: x.monto, descuento: x.descuento, desc_ref: x.desc_ref, estado: x.estado,
+                   recibo_url: conRecibo ? MARCA.dominio + "/app/r/" + encodeURIComponent(x.id) : "",
+                   recibo_numero: conRecibo && x.recibo_num ? reciboNumeroTexto(x.recibo_num) : "" };
+        });
 
         // Multi-profesor: el alumno ve con que profesor va ("Tu profesor: Ana").
         let miProfe = null, miSede = null;
@@ -16256,7 +16319,7 @@ export default {
             "- Comprar o renovar: Comprar > eliges paquete > pagas por Yape/Plin/transferencia y subes tu captura (tu profe confirma el mismo dia), o con tarjeta si tu profe la activo (se confirma sola al instante).\n" +
             "- Pagar con tarjeta NO te cuesta nada extra: pagas exactamente el precio del paquete, sin recargos ni comisiones para ti.\n" +
             "- Tu material y tareas: Recursos (si hay audio de tarea, lo escuchas ahi). Tu saldo de clases y tu historial: Mis clases; arriba del todo, en 'Tus proximas clases', salen tambien las que ya reservaste, con su fecha y hora y un link para reprogramar.\n" +
-            "- Tus pagos: en Mi cuenta ves tu historial (fecha, paquete, monto y estado). Si necesitas el recibo de un pago, pideselo a tu profe por el chat del portal y el te manda el link.\n" +
+            "- Tus pagos: en Mi cuenta ves tu historial (fecha, paquete, monto y estado). Cada pago confirmado trae su recibo con numero (boton Recibo en esa misma lista) y ademas te llega por correo.\n" +
             "- Hablar con tu profe: el chat del portal. Si el chat sale bloqueado, casi siempre es porque no tienes paquete activo: compra o renueva y se desbloquea.\n" +
             "- Olvidaste tu contrasena: escribele a tu profe, el te la restablece. Te cambiaste de celular: entra de nuevo al link de tu academia con tu correo y contrasena, todo sigue ahi.\n" +
             "- App + avisos: el portal se instala como app (iPhone: Compartir > 'Agregar a inicio'; Android: menu > 'Instalar aplicacion') y en Mi cuenta activas los avisos de tus clases.\n" +
