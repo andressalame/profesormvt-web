@@ -7,6 +7,19 @@ const RAIZ = new URL(".", import.meta.url).pathname;
 export async function envLocal(extra){
   const raw = new DatabaseSync(":memory:");
   raw.exec(readFileSync(RAIZ + "db/schema.sql", "utf8"));
+  /* Producción agrega columnas con ALTER perezosos (ensure*Schema). Para que las pruebas que cargan el worker
+     entero vean la misma base, se aplican los ALTER que están escritos literalmente en el worker. */
+  if (extra && extra.migrar){
+    const src = readFileSync(RAIZ + "worker/index.js", "utf8");
+    for (const m of src.matchAll(/ALTER TABLE (\w+) ADD COLUMN (\w+) ([A-Z]+(?: DEFAULT (?:'[^']*'|\d+(?:\.\d+)?))?)/g)){
+      try { raw.exec(`ALTER TABLE ${m[1]} ADD COLUMN ${m[2]} ${m[3]}`); } catch (e) { /* ya existe o tabla aún no creada */ }
+    }
+    /* y los que se arman en un bucle: for (const col of ["a","b"]) ... "ALTER TABLE t ADD COLUMN " + col + " TEXT DEFAULT ''" */
+    for (const m of src.matchAll(/for \(const col of \[([^\]]*)\]\)\{\s*try \{ await env\.DB\.prepare\("ALTER TABLE (\w+) ADD COLUMN " \+ col \+ " ([A-Z]+(?: DEFAULT (?:''|\d+))?)"/g)){
+      for (const c of m[1].matchAll(/"(\w+)"/g)) { try { raw.exec(`ALTER TABLE ${m[2]} ADD COLUMN ${c[1]} ${m[3]}`); } catch (e) {} }
+    }
+    delete extra.migrar;
+  }
   const prep = (sql) => {
     let args = [];
     const st = {

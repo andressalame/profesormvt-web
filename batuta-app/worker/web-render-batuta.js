@@ -70,6 +70,7 @@ export const WEB_DEFAULTS = {
     mostrar_logo: true,
     foto: { url: "", pos: "50% 50%" },
     cta_texto: "",         // "" = "Reserva tu clase de prueba" o "Escríbeme"
+    ver_planes: true,      // botón «Ver planes y comprar» en la portada (solo si hay planes con cobro)
     layout: "centrado"     // centrado | foto-derecha
   },
   sobre: {
@@ -204,6 +205,19 @@ function anuncioHtml(data){
   return '<div class="bt-anuncio" data-ed="marca.anuncio">' + esc(a) + "</div>";
 }
 
+/* Botones de la portada: lo que ya había (WhatsApp) y, nuevo, «Ver planes y comprar», que baja a los
+   planes de la misma página (los botones «Comprar» de cada plan llevan a la pantalla de pago de ESE
+   plan). Solo sale si de verdad hay planes a la venta: un botón que baja a nada es peor que ninguno. */
+function hayPlanesVisibles(d, ctx){ return !!(d.precios.on && d.precios.mostrar && ctx.paquetes.length && ctx.cobroOn); }
+function heroBotones(h, d, ctx){
+  var wa = ctx.wa ? '<a class="bt-cta" href="https://wa.me/' + esc(ctx.wa) + "?text=" + ctx.waMsg + '" data-ed="hero.cta">' + SVG_WA + esc(h.cta_texto || "Escríbenos por WhatsApp") + "</a>" : "";
+  var planes = (h.ver_planes !== false && hayPlanesVisibles(d, ctx)) ? '<a class="bt-cta bt-cta-sec" href="#planes">Ver planes y comprar</a>' : "";
+  if (!wa && !planes) return "";
+  if (!planes) return wa;
+  /* con los dos botones van juntos y el que más vende (planes) primero */
+  return '<div class="bt-hero-btns">' + planes + wa + "</div>";
+}
+
 /* ---------- bloques arrastrables (24-oct-2026) ----------
    Un BLOQUE es una pieza de texto/botón que la dueña puede mover y estirar: títulos, párrafos y el
    botón de la portada. Cada sección arma su HTML a partir de una lista de bloques (en su orden
@@ -302,7 +316,7 @@ function bloqueInterno(id, d, ctx){
       /* La "clase de prueba" esta MUERTA (decision 25-jul-2026): el hero ya no anuncia ese
          producto fantasma que la academia nunca definio ni puede apagar desde su panel
          (la fila 'Clase de prueba' de precios existe por default en todo tenant). */
-      return ctx.wa ? '<a class="bt-cta" href="https://wa.me/' + esc(ctx.wa) + "?text=" + ctx.waMsg + '" data-ed="hero.cta">' + SVG_WA + esc(h.cta_texto || "Escríbenos por WhatsApp") + "</a>" : "";
+      return heroBotones(h, d, ctx);
     case "sobre.titulo": return '<h2 data-ed="sobre.titulo">' + esc(s.titulo || "Sobre nosotros") + "</h2>";
     case "sobre.texto": return s.texto ? '<div data-ed="sobre.texto">' + texto(s.texto) + "</div>" : "";
     case "cursos.titulo": return '<h2 data-ed="cursos.titulo">' + esc(c.titulo || "Lo que enseñamos") + "</h2>";
@@ -405,7 +419,7 @@ function secPrecios(d, ctx, ids, st){
     ? '<p class="bt-paq-extra"><a href="' + esc(ctx.extra.url) + '" target="_blank" rel="noopener">' +
       esc(ctx.extra.txt) + " →</a></p>"   /* la flecha literal, no una entidad escrita a mano */
     : "";
-  return '<section class="bt-sec"' + (st.editable ? ' data-s="precios"' : "") + ">" +
+  return '<section class="bt-sec" id="planes"' + (st.editable ? ' data-s="precios"' : "") + ">" +
     lista(ids, d, ctx, st, '<div class="bt-paqs">' + cards + "</div>" + extra) + "</section>";
 }
 
@@ -494,6 +508,9 @@ function css(){
     ".bt-card b{display:block;font-size:17px;margin-bottom:6px}",
     ".bt-card span{color:var(--muted);font-size:14px}",
     ".bt-paqs{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px}",
+    ".bt-hero-btns{display:flex;gap:12px;justify-content:center;flex-wrap:wrap}",
+    ".bt-hero-split .bt-hero-btns{justify-content:flex-start}",
+    "html{scroll-behavior:smooth}.bt-sec{scroll-margin-top:12px}",
     ".bt-paq{background:var(--panel);border:1px solid var(--linea);border-radius:var(--radio);padding:22px}",
     ".bt-paq b{display:block;font-size:17px}",
     ".bt-pr{display:block;font-family:var(--ft),sans-serif;font-size:30px;color:var(--acento);margin:10px 0 2px}",
@@ -504,7 +521,7 @@ function css(){
     ".bt-contacto .bt-cta-row{margin-top:4px}",
     ".bt-foot{max-width:1040px;margin:0 auto;padding:26px 22px;border-top:1px solid var(--linea);color:var(--muted);font-size:13px;display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}",
     ".bt-foot a{color:var(--acento);text-decoration:none}",
-    "@media(max-width:760px){.bt-hero-split,.bt-sobre-grid{grid-template-columns:1fr;gap:26px}.bt-hero-split{text-align:center}.bt-hero-split .bt-hero-sub,.bt-hero-split .bt-logo{margin-left:auto;margin-right:auto}}"
+    "@media(max-width:760px){.bt-paqs{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.bt-paq{padding:16px}.bt-paq b{font-size:15px}.bt-pr{font-size:24px}.bt-hero-split .bt-hero-btns{justify-content:center}.bt-hero-split,.bt-sobre-grid{grid-template-columns:1fr;gap:26px}.bt-hero-split{text-align:center}.bt-hero-split .bt-hero-sub,.bt-hero-split .bt-logo{margin-left:auto;margin-right:auto}}"
   ].join("");
 }
 
@@ -899,6 +916,7 @@ export function sanearWeb(raw){
     mostrar_logo: sBool,
     foto: sFoto,
     cta_texto: function (v){ return sTxt(v, 60); },
+    ver_planes: sBool,
     layout: function (v){ return v === "foto-derecha" ? "foto-derecha" : "centrado"; }
   });
   out.sobre = sSeccion(d.sobre, {

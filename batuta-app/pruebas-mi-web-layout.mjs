@@ -65,7 +65,7 @@ comprobar("el bloque sale envuelto con sus medidas", /class="bt-blq bt-blq-w" st
 comprobar("el CSS de celular usa SUS medidas (no las de PC)", /@media\(max-width:760px\)\{\.bt-blq\{width:var\(--wm,auto\);min-height:var\(--hm,0\)\}/.test(h));
 comprobar("el texto se acomoda: sin desborde (overflow-wrap) y el tope es 100% del contenedor", /\.bt-blq\{[^}]*max-width:100%;overflow-wrap:anywhere/.test(h));
 comprobar("solo alto de celular: no inventa un ancho", /style="--hm:90px"/.test(htmlDocumento(con({ bloques: { "sobre.texto": { hm: 90 } } }), ctx())));
-comprobar("la web sigue siendo responsive (viewport y media query de siempre)", /name="viewport"/.test(h) && /@media\(max-width:760px\)\{\.bt-hero-split,\.bt-sobre-grid\{grid-template-columns:1fr/.test(h));
+comprobar("la web sigue siendo responsive (viewport y media query de siempre)", /name="viewport"/.test(h) && /@media\(max-width:760px\)\{[^"]*\.bt-hero-split,\.bt-sobre-grid\{grid-template-columns:1fr/.test(h));
 comprobar("un bloque sin tamaño no se envuelve (HTML de siempre)", !/class="bt-blq[^"]*"[^>]*><h1/.test(h));
 
 console.log("\n── 7. Seguridad ──");
