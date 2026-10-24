@@ -978,6 +978,7 @@ button[data-ayuda],a[data-ayuda],select[data-ayuda],input[data-ayuda],label[data
          0/0 aunque haya pagado. Pasó el 20-ago con 9 alumnas de Elevate al renombrar un
          paquete, y nadie se enteró hasta que el cliente reclamó por WhatsApp. Lo pinta
          renderPlanRotoBanner(). -->
+    <div id="correoOffBanner" style="display:none;"></div>
     <div id="planRotoBanner" style="display:none;"></div>
     <div id="venceBanner" style="display:none;"></div>
     <div class="group" id="grpActivacion" style="display:none;">
@@ -4734,7 +4735,7 @@ function renderReportes(){
   }
 }
 
-function renderAll(){ aplicarBrandTenant(); aplicarModulos(); aplicarMarcaCursos(); renderResumen(); renderAlumnos(); try{ renderPlanRotoBanner(); }catch(e){} try{ renderVenceBanner(); }catch(e){} try{ renderSinPlanBanner(); }catch(e){} try{ renderInvBanner(); }catch(e){} renderGrupos(); renderRegistro(); renderPagos(); renderReportes(); renderCuentas(); renderLeads(); renderCaja(); renderRecursos(); renderEjercicios(); renderAjustes(); renderSedes(); renderPerfil(); fillSelects(); try{ arreglarTablas(); }catch(e){} }
+function renderAll(){ aplicarBrandTenant(); aplicarModulos(); aplicarMarcaCursos(); renderResumen(); renderAlumnos(); try{ renderPlanRotoBanner(); }catch(e){} try{ renderVenceBanner(); }catch(e){} try{ renderSinPlanBanner(); }catch(e){} try{ renderCorreoOffBanner(); }catch(e){} try{ renderInvBanner(); }catch(e){} renderGrupos(); renderRegistro(); renderPagos(); renderReportes(); renderCuentas(); renderLeads(); renderCaja(); renderRecursos(); renderEjercicios(); renderAjustes(); renderSedes(); renderPerfil(); fillSelects(); try{ arreglarTablas(); }catch(e){} }
 
 /* ---------- AGENDA (admin) ---------- */
 var AG_DISP = [], AG_RESERVAS = [];
@@ -10283,6 +10284,16 @@ function renderVenceBanner(){
     renderVenceBanner();
     toast("Listo. Te lo vuelvo a mostrar mañana.");
   });
+}
+/* 24-oct-2026 · si el servidor no tiene llave de correo, los recordatorios no salen: se avisa, no se calla */
+function renderCorreoOffBanner(){
+  var box=el("correoOffBanner"); if(!box) return;
+  box.style.display="none"; box.innerHTML="";
+  if(ROL!=="dueno" || db.correo_ok!==false) return;
+  box.style.display="";
+  box.innerHTML='<div style="border:1px solid var(--line);border-left:4px solid var(--red);border-radius:8px;padding:12px 16px;margin:10px 0 14px;">'+
+    '<b>Los correos automáticos están apagados en este momento.</b>'+
+    '<div class="hint" style="margin:4px 0 0;">Mientras sigan así, tus alumnos no reciben recordatorios de clase ni avisos de renovación. Escríbele a Batuta por WhatsApp para activarlos.</div></div>';
 }
 function renderSinPlanBanner(){
   var box=el("sinPlanBanner"); if(!box) return;

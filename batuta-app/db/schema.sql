@@ -84,6 +84,7 @@ CREATE TABLE IF NOT EXISTS alumnos (
   winback_ciclo       INTEGER DEFAULT 0,
   vence               TEXT DEFAULT '',
   aviso_vence_ciclo   INTEGER DEFAULT 0,
+  aviso_vence2_ciclo  INTEGER DEFAULT 0,   -- segundo recordatorio de renovación, al vencer (24-oct-2026)
   -- saldo migrado desde otro sistema (28-jul-2026): clases ya consumidas al importar y el
   -- ciclo en el que aplican (al renovar sube el ciclo y el arrastre deja de contar solo).
   -- En D1 de prod se agregaron por ALTER; ensureSaldoMigradoSchema las asegura igual.

@@ -1733,7 +1733,8 @@ function pasesDe(alumno){
       n,
       usadas: Math.max(0, Math.floor(Number(x && x.usadas) || 0)),
       vence: /^\d{4}-\d{2}-\d{2}$/.test(String((x && x.vence) || "")) ? String(x.vence) : "",
-      av: (x && x.av) ? 1 : 0   // ya se avisó el vencimiento DE ESTE pase
+      av: (x && x.av) ? 1 : 0,   // ya se avisó el vencimiento DE ESTE pase
+      av2: (x && x.av2) ? 1 : 0  // y ya se mandó el segundo aviso, el de «venció»
     });
     if (out.length >= 12) break;
   }
@@ -1755,6 +1756,7 @@ function sanearPasesJson(valor, ciclo){
       vence: /^\d{4}-\d{2}-\d{2}$/.test(String((x && x.vence) || "")) ? String(x.vence) : ""
     };
     if (x && x.av) it.av = 1;   // marca de "ya avisado", se preserva entre guardados
+    if (x && x.av2) it.av2 = 1; // idem para el segundo aviso (al vencer)
     p.push(it);
     if (p.length >= 12) break;
   }
@@ -7714,7 +7716,9 @@ async function ensureAlumnoExtraSchema(env){
                    marcó él mismo; la fecha y el origen son la prueba de descargo ante Indecopi,
                    que es lo que a ESAN no le alcanzó. mkt_token = su link de baja permanente. */
                 ["mkt_ok", "INTEGER DEFAULT 0"], ["mkt_fecha", "TEXT DEFAULT ''"],
-                ["mkt_origen", "TEXT DEFAULT ''"], ["mkt_token", "TEXT DEFAULT ''"]];
+                ["mkt_origen", "TEXT DEFAULT ''"], ["mkt_token", "TEXT DEFAULT ''"],
+                /* segundo recordatorio de renovación, al vencer (24-oct-2026) */
+                ["aviso_vence2_ciclo", "INTEGER DEFAULT 0"]];
   for (const [c, tipo] of cols){
     try { await env.DB.prepare("ALTER TABLE alumnos ADD COLUMN " + c + " " + tipo).run(); } catch (e) { /* ya existe */ }
   }
@@ -8462,8 +8466,16 @@ async function toggleTenantOn(env, cache, tenantId, clave){
   cache.set(k, on);
   return on;
 }
+/* Sin la llave de correo NADA de lo automático sale (recordatorios de clase, renovaciones, rescates).
+   Antes era un `return 0` mudo. Ahora queda en el log en cada corrida y el panel del dueño lo dice
+   (`correo_ok` en /admin/data); así deja de ser un silencio que nadie ve. */
+function correoActivo(env, quien){
+  if (env.RESEND_API_KEY) return true;
+  console.error("[correo apagado] falta RESEND_API_KEY: no sale " + quien + " (ver RUNBOOK, 'Correos automáticos').");
+  return false;
+}
 async function recordatoriosDeClase(env){
-  if (!env.RESEND_API_KEY) return 0;
+  if (!correoActivo(env, "ningún recordatorio de clase")) return 0;
   const now = Date.now();
   const hasta = new Date(now + 25 * 3600000).toISOString();
   const desde = new Date(now).toISOString();
@@ -8475,7 +8487,7 @@ async function recordatoriosDeClase(env){
     "COALESCE(r.sala,'') AS sala, COALESCE(r.profesor_id,'') AS grilla, " +
     "t.academia, t.slug, c.email AS alumno_email, c.nombre AS alumno_nombre, p.nombre AS profe_nombre" + cols + " " +
     "FROM reservas r " +
-    "JOIN tenants t ON t.id = r.tenant_id AND t.estado != 'vencido' AND COALESCE(t.plan,'profe') != 'gratis' AND t.email NOT LIKE ?3 " +
+    "JOIN tenants t ON t.id = r.tenant_id AND t.estado != 'vencido' AND t.email NOT LIKE ?3 " +
     "JOIN cuentas c ON c.alumno_id = r.alumno_id AND c.tenant_id = r.tenant_id " +
     "LEFT JOIN profesores p ON p.id = r.profesor_id" + joins + " " +
     "WHERE r.estado = 'reservada' AND r.alumno_id IS NOT NULL AND r.inicio_utc > ?1 AND r.inicio_utc <= ?2 " +
@@ -8606,7 +8618,8 @@ function venceEnVentanaRenovacion(vence, hoy = hoyLima()){
 }
 
 async function recordatorioRenovacion(env){
-  if (!env.RESEND_API_KEY) return 0;
+  if (!correoActivo(env, "ningún recordatorio de renovación")) return 0;
+  await ensureAlumnoExtraSchema(env).catch(() => {});
   /* V2 multi-pase (11-ago-2026): el alumno con varios pases entra también si es CUALQUIERA
      de sus pases el que está por vencer, no solo el espejo de la ficha. Sin esto, al que
      tiene 3 pases se le vencía uno en silencio. El texto del correo nombra el pase exacto. */
@@ -8615,7 +8628,7 @@ async function recordatorioRenovacion(env){
     "COALESCE(a.pases,'') AS pases, COALESCE(a.migrado_usadas,0) AS migrado_usadas, COALESCE(a.migrado_ciclo,0) AS migrado_ciclo, " +
     "t.academia, t.slug, c.email AS alumno_email " +
     "FROM alumnos a " +
-    "JOIN tenants t ON t.id = a.tenant_id AND t.estado != 'vencido' AND COALESCE(t.plan,'profe') != 'gratis' AND t.email NOT LIKE ?1 " +
+    "JOIN tenants t ON t.id = a.tenant_id AND t.estado != 'vencido' AND t.email NOT LIKE ?1 " +
     "JOIN cuentas c ON c.alumno_id = a.id AND c.tenant_id = a.tenant_id " +
     "WHERE ((a.vence IS NOT NULL AND a.vence != '' " +
     "        AND date(a.vence) <= date('now', '+3 days') AND date(a.vence) >= date('now', '-3 days')) " +
@@ -8670,9 +8683,61 @@ async function recordatorioRenovacion(env){
           try { await env.DB.prepare("UPDATE alumnos SET aviso_vence_ciclo = ?1 WHERE id = ?2 AND tenant_id = ?3").bind(a.ciclo, a.id, a.tenant_id).run(); } catch (e) {}
         }
       } else {
-        try { await env.DB.prepare("UPDATE alumnos SET aviso_vence_ciclo = ?1 WHERE id = ?2 AND tenant_id = ?3").bind(a.ciclo, a.id, a.tenant_id).run(); } catch (e) {}
+        /* si el primer aviso ya salió vencido, es la plantilla «venció»: no hace falta un segundo */
+        try { await env.DB.prepare("UPDATE alumnos SET aviso_vence_ciclo = ?1" + (yaVencio ? ", aviso_vence2_ciclo = ?1" : "") + " WHERE id = ?2 AND tenant_id = ?3").bind(a.ciclo, a.id, a.tenant_id).run(); } catch (e) {}
       }
     }
+  }
+  return enviados;
+}
+
+/* Segundo recordatorio de renovación, AL VENCER (24-oct-2026). El primero sale hasta 3 días antes;
+   si el alumno no lo abrió, el pase vence igual. Este sale una sola vez cuando ya venció (hasta 3
+   días después) y solo si el primero ya había salido ANTES del vencimiento: el que recibe su primer
+   aviso ya vencido ya leyó la plantilla «venció» y no se le repite. Mismo candado por ciclo. */
+async function recordatorioRenovacion2(env){
+  if (!correoActivo(env, "ningún segundo recordatorio de renovación")) return 0;
+  await ensureAlumnoExtraSchema(env).catch(() => {});
+  const { results } = await env.DB.prepare(
+    "SELECT a.id, a.tenant_id, a.nombre, a.vence, COALESCE(a.ciclo,1) AS ciclo, a.paquete, a.curso, COALESCE(a.aviso_vence_ciclo,0) AS avisado, " +
+    "COALESCE(a.aviso_vence2_ciclo,0) AS avisado2, COALESCE(a.pases,'') AS pases, " +
+    "t.academia, t.slug, c.email AS alumno_email " +
+    "FROM alumnos a " +
+    "JOIN tenants t ON t.id = a.tenant_id AND t.estado != 'vencido' AND t.email NOT LIKE ?1 " +
+    "JOIN cuentas c ON c.alumno_id = a.id AND c.tenant_id = a.tenant_id " +
+    "WHERE (COALESCE(a.vence,'') != '' OR COALESCE(a.pases,'') != '') " +
+    "AND COALESCE(a.aviso_vence_ciclo,0) >= COALESCE(a.ciclo,1) AND COALESCE(a.aviso_vence2_ciclo,0) < COALESCE(a.ciclo,1) LIMIT 100"
+  ).bind(SQL_DEMO_LIKE).all();
+  const cache = new Map(), cacheMsg = new Map();
+  let enviados = 0;
+  for (const a of (results || [])){
+    if (enviados >= 40) break;
+    if (!a.alumno_email) continue;
+    if (!(await toggleTenantOn(env, cache, a.tenant_id, "recordatorio_renovacion"))) continue;
+    const lista = pasesDe(a);
+    let vence = a.vence, paq = a.paquete, pase = null;
+    if (lista){
+      pase = lista.filter(p => p.av && !p.av2 && venceVencido(p.vence) && venceEnVentanaRenovacion(p.vence))
+                  .sort((x, y) => x.vence < y.vence ? -1 : 1)[0] || null;
+      if (pase){ vence = pase.vence; paq = pase.n; }
+      else if (!(venceVencido(a.vence) && venceEnVentanaRenovacion(a.vence))) continue;
+    } else if (!(venceVencido(a.vence) && venceEnVentanaRenovacion(a.vence))) continue;
+    const msgs = await mensajesTenant(env, cacheMsg, a.tenant_id);
+    const datos = { alumno: (a.nombre || "").split(" ")[0] || "Hola", academia: a.academia || "", curso: a.curso || "",
+                    paquete: paq || "paquete", vence, curso_de: a.curso ? " de " + a.curso : "", con_profe: "" };
+    const plant = msgs.vencido;
+    let ok = false;
+    try { ok = await enviarCorreo(env, { tenantId: a.tenant_id, to: a.alumno_email, subject: msgAsunto(plant.asunto, datos),
+      html: msgHtml(plant.cuerpo, datos, { url: MARCA.dominio + "/app/a/" + (a.slug || ""), texto: "Renovar ahora" }) }); } catch (e) {}
+    if (!ok) continue;
+    enviados++;
+    if (pase){
+      const marcada = lista.map(p => (p.n === pase.n && p.vence === pase.vence) ? Object.assign({}, p, { av2: 1 }) : p);
+      const pj = sanearPasesJson({ c: Number(a.ciclo) || 1, p: marcada }, Number(a.ciclo) || 1);
+      try { await env.DB.prepare("UPDATE alumnos SET pases = ?1 WHERE id = ?2 AND tenant_id = ?3").bind(pj, a.id, a.tenant_id).run(); } catch (e) {}
+      if (!marcada.every(p => p.av2 || !p.vence || !p.av)) continue;
+    }
+    try { await env.DB.prepare("UPDATE alumnos SET aviso_vence2_ciclo = ?1 WHERE id = ?2 AND tenant_id = ?3").bind(a.ciclo, a.id, a.tenant_id).run(); } catch (e) {}
   }
   return enviados;
 }
@@ -9171,7 +9236,7 @@ async function winbackAlumnos(env){
       "SELECT a.id, a.tenant_id, a.nombre, a.curso, a.paquete, COALESCE(a.ciclo,1) AS ciclo, a.vence, " +
       "t.academia, t.slug, c.email AS alumno_email " +
       "FROM alumnos a " +
-      "JOIN tenants t ON t.id = a.tenant_id AND t.estado != 'vencido' AND COALESCE(t.plan,'profe') != 'gratis' AND t.email NOT LIKE ?1 " +
+      "JOIN tenants t ON t.id = a.tenant_id AND t.estado != 'vencido' AND t.email NOT LIKE ?1 " +
       "JOIN cuentas c ON c.alumno_id = a.id AND c.tenant_id = a.tenant_id " +
       "WHERE COALESCE(a.winback_ciclo,0) < COALESCE(a.ciclo,1) " +
       "AND (a.vence IS NULL OR a.vence = '' OR date(a.vence) >= date('now')) LIMIT 200"
@@ -18474,6 +18539,8 @@ export default {
                         slug: t.slug, academia: t.academia, estado: t.estado, demo: esTenantDemo(t),
                         rol: esDueno ? "dueno" : "profesor", profe_id: profeActorId || "", equipo,
                         cobro_on: cobroOnPanel,
+                        /* false = el worker no tiene llave de correo: los avisos automáticos NO salen. El panel se lo dice al dueño. */
+                        correo_ok: !!env.RESEND_API_KEY,
                         /* lo que este profe NO puede hacer, para que el panel esconda esos
                            botones. El freno de verdad esta en el servidor; esto es cortesia. */
                         permisos_negados: esDueno ? [] : [...permisosDe(profeActor).negados],
@@ -20183,6 +20250,7 @@ export default {
     if (!(dSched.getUTCHours() === 14 && dSched.getUTCMinutes() === 0)) return;
     /* ---- desde aqui: SOLO la corrida diaria de las 9am Lima ---- */
     try { await recordatorioRenovacion(env); } catch (e) { console.error("recordatorio renovacion", e); }
+    try { await recordatorioRenovacion2(env); } catch (e) { console.error("recordatorio renovacion 2", e); }
     try { await winbackAlumnos(env); } catch (e) { console.error("winback alumnos", e); }
     /* Rescate de compras abandonadas: diario, no cada 15 min. Una compra que quedó a medias no
        se recupera por escribirle más rápido, y a esa hora el pago de anoche ya se resolvió. */
