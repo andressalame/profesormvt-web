@@ -5721,7 +5721,7 @@ const RESPALDO_TABLAS = [
   ["alumnos", 20000], ["registro", 100000], ["cuentas", 20000], ["compras", 50000], ["reservas", 100000],
   ["disponibilidad", 5000], ["pausas", 20000], ["espera", 20000], ["precios", 2000], ["recursos", 20000],
   ["ejercicios", 20000], ["chat_mensajes", 200000], ["leads", 50000], ["gastos", 50000],
-  ["comprobantes", 50000], ["grupos", 5000], ["sedes", 500], ["profesores", 500], ["feedback", 20000]
+  ["comprobantes", 50000], ["liquidaciones", 5000], ["grupos", 5000], ["sedes", 500], ["profesores", 500], ["feedback", 20000]
 ];
 const RESPALDO_SECRETOS_COL = /^(pass_hash|pass_salt|invite_token|token|token_hash)$/;
 const RESPALDO_SECRETOS_CONFIG = /(token|secret|api_key|clave_api|password)/i;
@@ -5749,6 +5749,114 @@ async function avisarPush(env, tenantId, info){
   const { results } = await env.DB.prepare("SELECT * FROM push_subs WHERE tenant_id = ?1 AND cuenta_id IS NULL").bind(tenantId).all();
   return enviarPushA(env, results || [], info);
 }
+/* ---------- Liquidación de comisiones (24-oct-2026) ----------
+   `calcularLiquidacion` es el cálculo EN VIVO de siempre (% de lo cobrado + tarifa por clase).
+   Cerrar un mes lo CONGELA en `liquidaciones`: cambiar después el porcentaje o la tarifa ya no
+   mueve lo que se debía ese mes. Pagarlo lo marca pagado y, si el dueño quiere, baja a la Caja
+   como gasto (una sola vez: el pago se reclama con un UPDATE condicionado). */
+async function ensureLiquidacionesSchema(env){
+  await env.DB.prepare(
+    "CREATE TABLE IF NOT EXISTS liquidaciones (id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, mes TEXT NOT NULL, profesor_id TEXT NOT NULL, " +
+    "profesor_nombre TEXT DEFAULT '', ingresos REAL DEFAULT 0, compras INTEGER DEFAULT 0, clases INTEGER DEFAULT 0, comision_pct REAL DEFAULT 0, " +
+    "tarifa_clase REAL DEFAULT 0, a_pagar REAL DEFAULT 0, estado TEXT DEFAULT 'cerrada', cerrada_utc TEXT DEFAULT '', pagada_fecha TEXT DEFAULT '', " +
+    "gasto_id TEXT DEFAULT '', nota TEXT DEFAULT '')"
+  ).run();
+  await env.DB.prepare("CREATE UNIQUE INDEX IF NOT EXISTS idx_liq_unica ON liquidaciones (tenant_id, mes, profesor_id)").run();
+}
+async function calcularLiquidacion(env, tid, mesL){
+    const { results: profs } = await env.DB.prepare(
+      "SELECT id, nombre, rol, estado, COALESCE(comision_pct,0) AS pct, COALESCE(tarifa_clase,0) AS tarifa FROM profesores WHERE tenant_id = ?1"
+    ).bind(tid).all();
+    const duenoRow = (profs || []).find(p => p.rol === "dueno");
+    const { results: ingRows } = await env.DB.prepare(
+      "SELECT COALESCE(profesor_id, ?3) AS pid, COUNT(*) AS n, COALESCE(SUM(monto),0) AS total FROM compras " +
+      "WHERE tenant_id = ?1 AND estado = 'confirmada' AND fecha LIKE ?2 GROUP BY COALESCE(profesor_id, ?3)"
+    ).bind(tid, mesL + "%", (duenoRow && duenoRow.id) || "").all();
+    const { results: clsRows } = await env.DB.prepare(
+      /* 🐛 23-ago-2026 · esto atribuía la clase al profesor ASIGNADO AL ALUMNO, no al que
+         la dictó: con David dando la clase de una alumna de Fiorella, cobraba Fiorella.
+         Ahora manda `registro.profesor_id`. Las filas viejas (sin ese dato) caen al
+         asignado, exactamente como antes: la historia no se mueve. */
+      "SELECT COALESCE(NULLIF(r.profesor_id,''), a.profesor_id, ?3) AS pid, COUNT(*) AS n FROM registro r " +
+      "JOIN alumnos a ON a.id = r.alumno_id AND a.tenant_id = r.tenant_id " +
+      /* el GROUP BY tiene que agrupar por LO MISMO que selecciona: con la expresión vieja
+         acá, SQLite juntaba en un solo grupo clases de dos profesores distintos y devolvía
+         el pid de una fila cualquiera. Lo cazó la prueba antes de desplegar. */
+      "WHERE r.tenant_id = ?1 AND r.estado = 'Asistió' AND r.fecha LIKE ?2 " +
+      "GROUP BY COALESCE(NULLIF(r.profesor_id,''), a.profesor_id, ?3)"
+    ).bind(tid, mesL + "%", (duenoRow && duenoRow.id) || "").all();
+    /* + clases cerradas desde la AGENDA (reservas 'completada') que no tienen fila en registro:
+       sin esto, marcar "Asistió" en la agenda no contaba para la tarifa por clase (hallazgo del review).
+       La fecha de la reserva se lleva a dia-Lima (-5h) para casar con registro.fecha. */
+    /* 🐛 21-ago-2026: este NOT EXISTS excluía TODAS las reservas del día en cuanto hubiera
+       UNA fila en registro de ese alumno. En un estudio donde alguien toma Mat en la mañana
+       y Máquinas en la tarde, la segunda clase desaparecía de la liquidación: en Elevate,
+       **15 clases dictadas en agosto que el profesor no cobraba**. `registro` no guarda
+       hora, así que no se pueden casar una a una; lo correcto con el dato que hay es
+       descontar TANTAS reservas como registros haya ese día, no todas. */
+    const { results: clsAgRows } = await env.DB.prepare(
+      "SELECT pid, SUM(extra) AS n FROM (" +
+      "  SELECT COALESCE(rv.profesor_id, ?3) AS pid, rv.alumno_id AS al, date(rv.inicio_utc, '-5 hours') AS dia, " +
+      "         COUNT(*) - COALESCE((SELECT COUNT(*) FROM registro rg WHERE rg.tenant_id = rv.tenant_id " +
+      "           AND rg.alumno_id = rv.alumno_id AND rg.fecha = date(rv.inicio_utc, '-5 hours') " +
+      "           AND rg.estado = 'Asistió'), 0) AS extra " +
+      "  FROM reservas rv " +
+      "  WHERE rv.tenant_id = ?1 AND rv.estado = 'completada' AND rv.tipo != 'bloqueo' AND rv.alumno_id IS NOT NULL " +
+      "    AND substr(date(rv.inicio_utc, '-5 hours'), 1, 7) = ?2 " +
+      "  GROUP BY 1, 2, 3" +
+      ") WHERE extra > 0 GROUP BY pid"
+    ).bind(tid, mesL, (duenoRow && duenoRow.id) || "").all();
+    const ingM = new Map((ingRows || []).map(r => [r.pid, r]));
+    const clsM = new Map((clsRows || []).map(r => [r.pid, Number(r.n) || 0]));
+    for (const r of (clsAgRows || [])){ clsM.set(r.pid, (clsM.get(r.pid) || 0) + (Number(r.n) || 0)); }
+    const filas = (profs || []).map(p => {
+      const ing = ingM.get(p.id);
+      const ingresos = Math.round(((ing && Number(ing.total)) || 0) * 100) / 100;
+      const compras = (ing && Number(ing.n)) || 0;
+      const clases = clsM.get(p.id) || 0;
+      const pct = Number(p.pct) || 0, tarifa = Number(p.tarifa) || 0;
+      const aPagar = Math.round((ingresos * pct / 100 + clases * tarifa) * 100) / 100;
+      return { id: p.id, nombre: p.nombre, rol: p.rol, estado: p.estado, ingresos, compras, clases, comision_pct: pct, tarifa_clase: tarifa, a_pagar: aPagar };
+    });
+  return filas;
+}
+/* Cierra (congela) la liquidación de UN profesor para un mes. Devuelve la fila guardada. */
+async function cerrarLiquidacion(env, tid, mes, profesorId){
+  await ensureLiquidacionesSchema(env);
+  const ya = await env.DB.prepare("SELECT * FROM liquidaciones WHERE tenant_id = ?1 AND mes = ?2 AND profesor_id = ?3").bind(tid, mes, profesorId).first();
+  if (ya) return { fila: ya, nueva: false };
+  const f = (await calcularLiquidacion(env, tid, mes)).find(x => x.id === profesorId);
+  if (!f) return { error: "Profesor no encontrado", status: 404 };
+  if (f.rol === "dueno") return { error: "El dueño no se liquida a sí mismo.", status: 400 };
+  if (!(f.a_pagar > 0)) return { error: "No hay nada que pagar a este profesor este mes.", status: 400 };
+  const id = crypto.randomUUID();
+  await env.DB.prepare(
+    "INSERT OR IGNORE INTO liquidaciones (id,tenant_id,mes,profesor_id,profesor_nombre,ingresos,compras,clases,comision_pct,tarifa_clase,a_pagar,estado,cerrada_utc) " +
+    "VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,'cerrada',?12)"
+  ).bind(id, tid, mes, profesorId, f.nombre, f.ingresos, f.compras, f.clases, f.comision_pct, f.tarifa_clase, f.a_pagar, new Date().toISOString()).run();
+  const fila = await env.DB.prepare("SELECT * FROM liquidaciones WHERE tenant_id = ?1 AND mes = ?2 AND profesor_id = ?3").bind(tid, mes, profesorId).first();
+  return { fila, nueva: true };
+}
+/* Marca pagada una liquidación (la cierra antes si hace falta). `aCaja`: registra el gasto. */
+async function pagarLiquidacion(env, tid, mes, profesorId, aCaja){
+  const c = await cerrarLiquidacion(env, tid, mes, profesorId);
+  if (c.error) return c;
+  const hoy = hoyLima();
+  const rec = await env.DB.prepare(
+    "UPDATE liquidaciones SET estado = 'pagada', pagada_fecha = ?1 WHERE tenant_id = ?2 AND mes = ?3 AND profesor_id = ?4 AND estado = 'cerrada'"
+  ).bind(hoy, tid, mes, profesorId).run();
+  if (!(Number(rec && rec.meta && rec.meta.changes) > 0)) return { error: "Esa liquidación ya estaba pagada.", status: 409 };
+  let gastoId = "";
+  if (aCaja){
+    gastoId = crypto.randomUUID();
+    await env.DB.prepare(
+      "INSERT INTO gastos (id,tenant_id,fecha,concepto,categoria,monto,creado) VALUES (?1,?2,?3,?4,'Profesores',?5,?6)"
+    ).bind(gastoId, tid, hoy, ("Liquidación " + mes + " · " + (c.fila.profesor_nombre || "profesor")).slice(0, 120), c.fila.a_pagar, new Date().toISOString()).run();
+    await env.DB.prepare("UPDATE liquidaciones SET gasto_id = ?1 WHERE tenant_id = ?2 AND mes = ?3 AND profesor_id = ?4").bind(gastoId, tid, mes, profesorId).run();
+  }
+  return { ok: true, a_pagar: c.fila.a_pagar, gasto_id: gastoId, pagada_fecha: hoy };
+}
+
 /* ---------- Embudo que se mueve solo (24-oct-2026) ----------
    La promesa: «embudo de ventas». Las etapas solo cambiaban a mano. Ahora el interesado AVANZA
    cuando hace algo medible: reserva (→ prueba) o paga (→ alumno). Se le reconoce por correo o por
@@ -17362,64 +17470,55 @@ export default {
         if (path === "/app/api/admin/liquidacion" && request.method === "GET"){
           if (!esDueno) return json({ error: "La liquidación la ve el dueño." }, 403);
           await ensureErpSchema(env);
+          await ensureLiquidacionesSchema(env);
           const mesL = /^\d{4}-\d{2}$/.test(String(url.searchParams.get("mes") || "")) ? String(url.searchParams.get("mes")) : hoyLima().slice(0, 7);
-          const { results: profs } = await env.DB.prepare(
-            "SELECT id, nombre, rol, estado, COALESCE(comision_pct,0) AS pct, COALESCE(tarifa_clase,0) AS tarifa FROM profesores WHERE tenant_id = ?1"
-          ).bind(tid).all();
-          const duenoRow = (profs || []).find(p => p.rol === "dueno");
-          const { results: ingRows } = await env.DB.prepare(
-            "SELECT COALESCE(profesor_id, ?3) AS pid, COUNT(*) AS n, COALESCE(SUM(monto),0) AS total FROM compras " +
-            "WHERE tenant_id = ?1 AND estado = 'confirmada' AND fecha LIKE ?2 GROUP BY COALESCE(profesor_id, ?3)"
-          ).bind(tid, mesL + "%", (duenoRow && duenoRow.id) || "").all();
-          const { results: clsRows } = await env.DB.prepare(
-            /* 🐛 23-ago-2026 · esto atribuía la clase al profesor ASIGNADO AL ALUMNO, no al que
-               la dictó: con David dando la clase de una alumna de Fiorella, cobraba Fiorella.
-               Ahora manda `registro.profesor_id`. Las filas viejas (sin ese dato) caen al
-               asignado, exactamente como antes: la historia no se mueve. */
-            "SELECT COALESCE(NULLIF(r.profesor_id,''), a.profesor_id, ?3) AS pid, COUNT(*) AS n FROM registro r " +
-            "JOIN alumnos a ON a.id = r.alumno_id AND a.tenant_id = r.tenant_id " +
-            /* el GROUP BY tiene que agrupar por LO MISMO que selecciona: con la expresión vieja
-               acá, SQLite juntaba en un solo grupo clases de dos profesores distintos y devolvía
-               el pid de una fila cualquiera. Lo cazó la prueba antes de desplegar. */
-            "WHERE r.tenant_id = ?1 AND r.estado = 'Asistió' AND r.fecha LIKE ?2 " +
-            "GROUP BY COALESCE(NULLIF(r.profesor_id,''), a.profesor_id, ?3)"
-          ).bind(tid, mesL + "%", (duenoRow && duenoRow.id) || "").all();
-          /* + clases cerradas desde la AGENDA (reservas 'completada') que no tienen fila en registro:
-             sin esto, marcar "Asistió" en la agenda no contaba para la tarifa por clase (hallazgo del review).
-             La fecha de la reserva se lleva a dia-Lima (-5h) para casar con registro.fecha. */
-          /* 🐛 21-ago-2026: este NOT EXISTS excluía TODAS las reservas del día en cuanto hubiera
-             UNA fila en registro de ese alumno. En un estudio donde alguien toma Mat en la mañana
-             y Máquinas en la tarde, la segunda clase desaparecía de la liquidación: en Elevate,
-             **15 clases dictadas en agosto que el profesor no cobraba**. `registro` no guarda
-             hora, así que no se pueden casar una a una; lo correcto con el dato que hay es
-             descontar TANTAS reservas como registros haya ese día, no todas. */
-          const { results: clsAgRows } = await env.DB.prepare(
-            "SELECT pid, SUM(extra) AS n FROM (" +
-            "  SELECT COALESCE(rv.profesor_id, ?3) AS pid, rv.alumno_id AS al, date(rv.inicio_utc, '-5 hours') AS dia, " +
-            "         COUNT(*) - COALESCE((SELECT COUNT(*) FROM registro rg WHERE rg.tenant_id = rv.tenant_id " +
-            "           AND rg.alumno_id = rv.alumno_id AND rg.fecha = date(rv.inicio_utc, '-5 hours') " +
-            "           AND rg.estado = 'Asistió'), 0) AS extra " +
-            "  FROM reservas rv " +
-            "  WHERE rv.tenant_id = ?1 AND rv.estado = 'completada' AND rv.tipo != 'bloqueo' AND rv.alumno_id IS NOT NULL " +
-            "    AND substr(date(rv.inicio_utc, '-5 hours'), 1, 7) = ?2 " +
-            "  GROUP BY 1, 2, 3" +
-            ") WHERE extra > 0 GROUP BY pid"
-          ).bind(tid, mesL, (duenoRow && duenoRow.id) || "").all();
-          const ingM = new Map((ingRows || []).map(r => [r.pid, r]));
-          const clsM = new Map((clsRows || []).map(r => [r.pid, Number(r.n) || 0]));
-          for (const r of (clsAgRows || [])){ clsM.set(r.pid, (clsM.get(r.pid) || 0) + (Number(r.n) || 0)); }
-          const filas = (profs || []).map(p => {
-            const ing = ingM.get(p.id);
-            const ingresos = Math.round(((ing && Number(ing.total)) || 0) * 100) / 100;
-            const compras = (ing && Number(ing.n)) || 0;
-            const clases = clsM.get(p.id) || 0;
-            const pct = Number(p.pct) || 0, tarifa = Number(p.tarifa) || 0;
-            const aPagar = Math.round((ingresos * pct / 100 + clases * tarifa) * 100) / 100;
-            return { id: p.id, nombre: p.nombre, rol: p.rol, estado: p.estado, ingresos, compras, clases, comision_pct: pct, tarifa_clase: tarifa, a_pagar: aPagar };
+          const vivas = await calcularLiquidacion(env, tid, mesL);
+          const cerradas = new Map(((await env.DB.prepare("SELECT * FROM liquidaciones WHERE tenant_id = ?1 AND mes = ?2").bind(tid, mesL).all()).results || []).map(r => [r.profesor_id, r]));
+          /* lo cerrado manda sobre el cálculo en vivo: no se recalcula al cambiar el porcentaje */
+          const filas = vivas.map(f => {
+            const c = cerradas.get(f.id);
+            if (!c) return Object.assign({}, f, { estado_liq: "abierta" });
+            return Object.assign({}, f, { ingresos: c.ingresos, compras: c.compras, clases: c.clases, comision_pct: c.comision_pct,
+              tarifa_clase: c.tarifa_clase, a_pagar: c.a_pagar, estado_liq: c.estado, pagada_fecha: c.pagada_fecha || "", gasto_id: c.gasto_id || "",
+              recalculo_actual: Math.round(((Number(f.a_pagar) || 0)) * 100) / 100 });
           });
           return json({ mes: mesL, filas,
             total_ingresos: Math.round(filas.reduce((s, f) => s + f.ingresos, 0) * 100) / 100,
             total_a_pagar: Math.round(filas.reduce((s, f) => s + (f.rol === "dueno" ? 0 : f.a_pagar), 0) * 100) / 100 });
+        }
+        if (path === "/app/api/admin/liquidacion/cerrar" && request.method === "POST"){
+          if (!esDueno) return json({ error: "La liquidación la maneja el dueño." }, 403);
+          await ensureErpSchema(env);
+          const bL = await request.json().catch(() => ({}));
+          if (!/^\d{4}-\d{2}$/.test(String(bL.mes || ""))) return json({ error: "Mes no válido" }, 400);
+          const r = await cerrarLiquidacion(env, tid, String(bL.mes), String(bL.profesor_id || ""));
+          if (r.error) return json({ error: r.error }, r.status || 400);
+          return json({ ok: true, liquidacion: r.fila });
+        }
+        if (path === "/app/api/admin/liquidacion/pagar" && request.method === "POST"){
+          if (!esDueno) return json({ error: "La liquidación la maneja el dueño." }, 403);
+          await ensureErpSchema(env);
+          const bL = await request.json().catch(() => ({}));
+          if (!/^\d{4}-\d{2}$/.test(String(bL.mes || ""))) return json({ error: "Mes no válido" }, 400);
+          const r = await pagarLiquidacion(env, tid, String(bL.mes), String(bL.profesor_id || ""), !!bL.a_caja);
+          if (r.error) return json({ error: r.error }, r.status || 400);
+          return json(r);
+        }
+        /* Reabrir sirve solo para corregir un cierre que aún no se pagó. */
+        if (path === "/app/api/admin/liquidacion/reabrir" && request.method === "POST"){
+          if (!esDueno) return json({ error: "La liquidación la maneja el dueño." }, 403);
+          await ensureLiquidacionesSchema(env);
+          const bL = await request.json().catch(() => ({}));
+          const r = await env.DB.prepare("DELETE FROM liquidaciones WHERE tenant_id = ?1 AND mes = ?2 AND profesor_id = ?3 AND estado = 'cerrada'")
+            .bind(tid, String(bL.mes || ""), String(bL.profesor_id || "")).run();
+          if (!(Number(r && r.meta && r.meta.changes) > 0)) return json({ error: "Solo se reabre una liquidación cerrada que aún no se pagó." }, 409);
+          return json({ ok: true });
+        }
+        if (path === "/app/api/admin/liquidaciones" && request.method === "GET"){
+          if (!esDueno) return json({ error: "La liquidación la ve el dueño." }, 403);
+          await ensureLiquidacionesSchema(env);
+          const rows = (await env.DB.prepare("SELECT * FROM liquidaciones WHERE tenant_id = ?1 ORDER BY mes DESC, profesor_nombre LIMIT 500").bind(tid).all()).results || [];
+          return json({ liquidaciones: rows });
         }
 
         /* Reasignar un alumno a otro profesor (SOLO dueno) */

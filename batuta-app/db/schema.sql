@@ -513,3 +513,25 @@ CREATE TABLE IF NOT EXISTS reclamos (   -- Libro de Reclamaciones virtual (tambi
   estado     TEXT DEFAULT 'pendiente',  -- pendiente | respondido
   creado     TEXT DEFAULT ''
 );
+
+-- ============ LIQUIDACIONES CERRADAS (24-oct-2026) ============
+-- Cerrar un mes congela lo que se le debe a cada profesor: cambiar el % o la tarifa después no lo mueve.
+CREATE TABLE IF NOT EXISTS liquidaciones (
+  id             TEXT PRIMARY KEY,
+  tenant_id      TEXT NOT NULL,
+  mes            TEXT NOT NULL,            -- YYYY-MM
+  profesor_id    TEXT NOT NULL,
+  profesor_nombre TEXT DEFAULT '',
+  ingresos       REAL DEFAULT 0,
+  compras        INTEGER DEFAULT 0,
+  clases         INTEGER DEFAULT 0,
+  comision_pct   REAL DEFAULT 0,
+  tarifa_clase   REAL DEFAULT 0,
+  a_pagar        REAL DEFAULT 0,
+  estado         TEXT DEFAULT 'cerrada',   -- cerrada | pagada
+  cerrada_utc    TEXT DEFAULT '',
+  pagada_fecha   TEXT DEFAULT '',
+  gasto_id       TEXT DEFAULT '',          -- si el pago bajó a la Caja
+  nota           TEXT DEFAULT ''
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_liq_unica ON liquidaciones (tenant_id, mes, profesor_id);

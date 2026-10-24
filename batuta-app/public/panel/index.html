@@ -1118,8 +1118,14 @@ button[data-ayuda],a[data-ayuda],select[data-ayuda],input[data-ayuda],label[data
       </div>
       <p class="hint">Ingresos = pagos confirmados del mes atribuidos a cada profe. Clases = las registradas como dictadas. A pagar = su % + su tarifa por clase.</p>
       <div class="tablewrap">
-        <table id="tablaLiq"><thead><tr><th>Profesor</th><th>Ingresos que trajo</th><th>Clases dictadas</th><th>Comisión</th><th>A pagar</th></tr></thead>
+        <table id="tablaLiq"><thead><tr><th>Profesor</th><th>Ingresos que trajo</th><th>Clases dictadas</th><th>Comisión</th><th>A pagar</th><th>Estado</th></tr></thead>
         <tbody id="tbLiq"></tbody></table>
+      </div>
+      <p class="hint" style="margin-top:8px;">«Cerrar mes» congela lo que le debes: si luego cambias el porcentaje o la tarifa, ese mes no se mueve. «Marcar pagada» lo registra como pagado y puede bajarlo a tu Caja como gasto.</p>
+      <h3 style="margin-top:16px;">Liquidaciones cerradas</h3>
+      <div class="tablewrap">
+        <table id="tablaLiqHist"><thead><tr><th>Mes</th><th>Profesor</th><th>Monto</th><th>Estado</th></tr></thead>
+        <tbody id="tbLiqHist"></tbody></table>
       </div>
     </div>
   </section>
@@ -6680,10 +6686,51 @@ function cargarLiquidacion(){
           '<td>'+fmt(f.ingresos)+' <span class="mini">('+f.compras+(f.compras===1?' pago':' pagos')+')</span></td>'+
           '<td>'+f.clases+'</td>'+
           '<td>'+(com.length?esc(com.join(" + ")):'—')+'</td>'+
-          '<td class="big">'+(f.rol==="dueno"?'<span class="mini">(tuyo)</span> ':'')+fmt(f.a_pagar)+'</td></tr>';
-      }).join(""):'<tr><td colspan="5" class="empty">Sin datos este mes</td></tr>';
+          '<td class="big">'+(f.rol==="dueno"?'<span class="mini">(tuyo)</span> ':'')+fmt(f.a_pagar)+'</td>'+
+          '<td>'+liqEstadoCelda(f,d.mes)+'</td></tr>';
+      }).join(""):'<tr><td colspan="6" class="empty">Sin datos este mes</td></tr>';
     }).catch(function(){ toast("No pude cargar la liquidación."); });
+  cargarLiquidacionesCerradas();
 }
+/* 24-oct-2026 · cerrar / pagar / reabrir una liquidación */
+function liqEstadoCelda(f,mes){
+  if(f.rol==="dueno") return '<span class="mini">—</span>';
+  var b='data-liqmes="'+esc(mes)+'" data-liqprofe="'+esc(f.id)+'" data-liqnombre="'+esc(f.nombre)+'"';
+  if(f.estado_liq==="pagada") return '<span class="pill green">Pagada '+esc(f.pagada_fecha||"")+'</span>'+(f.gasto_id?' <span class="mini">en Caja</span>':'');
+  if(f.estado_liq==="cerrada")
+    return '<span class="pill amber">Cerrada</span> <button class="btn ghost sm" data-liqpagar '+b+'>Marcar pagada</button> <button class="btn ghost sm" data-liqreabrir '+b+'>Reabrir</button>'+
+      (Math.abs((f.recalculo_actual||0)-(f.a_pagar||0))>0.004?'<div class="mini">Hoy daría S/ '+f.recalculo_actual+' (no cambia lo cerrado)</div>':'');
+  if(!(f.a_pagar>0)) return '<span class="mini">Nada que pagar</span>';
+  return '<button class="btn ghost sm" data-liqcerrar '+b+'>Cerrar mes</button> <button class="btn ghost sm" data-liqpagar '+b+'>Marcar pagada</button>';
+}
+function cargarLiquidacionesCerradas(){
+  var tb=el("tbLiqHist"); if(!tb) return;
+  fetch("/app/api/admin/liquidaciones",{headers:hdr()}).then(function(r){return r.json();}).then(function(d){
+    var fmt=function(n){ return "S/ "+(Math.round((Number(n)||0)*100)/100).toLocaleString("es-PE"); };
+    var rows=d.liquidaciones||[];
+    tb.innerHTML=rows.length?rows.map(function(r){
+      return '<tr><td>'+esc(r.mes)+'</td><td class="name">'+esc(r.profesor_nombre)+'</td><td>'+fmt(r.a_pagar)+
+        ' <span class="mini">('+r.comision_pct+'% + S/ '+r.tarifa_clase+'/clase · '+r.clases+' clases)</span></td>'+
+        '<td>'+(r.estado==="pagada"?'<span class="pill green">Pagada '+esc(r.pagada_fecha||"")+'</span>':'<span class="pill amber">Cerrada, por pagar</span>')+'</td></tr>';
+    }).join(""):'<tr><td colspan="4" class="empty">Aún no cierras ningún mes</td></tr>';
+  }).catch(function(){});
+}
+document.body.addEventListener("click",function(e){
+  var c=e.target.closest&&e.target.closest("[data-liqcerrar],[data-liqpagar],[data-liqreabrir]"); if(!c) return;
+  var body={mes:c.dataset.liqmes,profesor_id:c.dataset.liqprofe}, nom=c.dataset.liqnombre||"el profesor";
+  if(c.hasAttribute("data-liqcerrar")){
+    if(!confirm("¿Cerrar "+body.mes+" para "+nom+"? Lo que le debes queda fijo aunque cambies su porcentaje.")) return;
+    apiPost("/app/api/admin/liquidacion/cerrar",body).then(function(){ toast("Mes cerrado ✓"); cargarLiquidacion(); }).catch(function(er){ toast((er&&er.message)||"No se pudo cerrar"); });
+  } else if(c.hasAttribute("data-liqreabrir")){
+    if(!confirm("¿Reabrir? Volverá a calcularse con el porcentaje actual.")) return;
+    apiPost("/app/api/admin/liquidacion/reabrir",body).then(function(){ toast("Reabierta"); cargarLiquidacion(); }).catch(function(er){ toast((er&&er.message)||"No se pudo reabrir"); });
+  } else {
+    if(!confirm("¿Marcar como pagada la liquidación de "+nom+" ("+body.mes+")?")) return;
+    body.a_caja=confirm("¿Registrar también este pago como gasto en tu Caja?\n\nAceptar = sí, bajarlo a la Caja. Cancelar = solo marcarlo pagado.");
+    apiPost("/app/api/admin/liquidacion/pagar",body).then(function(r){ toast(r.gasto_id?"Pagada y registrada en la Caja ✓":"Pagada ✓"); cargarLiquidacion(); try{ recargar(); }catch(x){} })
+      .catch(function(er){ toast((er&&er.message)||"No se pudo marcar"); });
+  }
+});
 if(el("liqMes")) el("liqMes").addEventListener("change",cargarLiquidacion);
 if(el("btnGuardarComision")) el("btnGuardarComision").addEventListener("click",function(){
   var err=el("cmErr"); err.textContent="";
