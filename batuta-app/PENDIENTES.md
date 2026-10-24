@@ -71,3 +71,12 @@ recibo correlativo + envío automático + visible en el portal.
   dos-clases-el-mismo-dia, estados-raros, historia-no-se-mueve, importador-no-adivina, pase-vencido-se-nota,
   pausa-no-inventa-vencimiento, portal-agenda-multipase, renovacion-columnas, reprogramar-cuenta, tres-superficies.
   `./correr-pruebas-mjs.sh` corre todas y lista las que fallan.
+
+## «Mi web»: arrastrar y estirar textos (24-oct-2026)
+Hecho: títulos, párrafos y el botón de la portada se mueven (mouse y dedo) dentro de su sección o a otra, se estiran en ancho/alto
+(medidas de PC y de celular por separado), con «Paso atrás» y «Volver a como estaba». Se guarda en `web.layout` (dentro de `config.web_json`,
+SIN tablas ni columnas nuevas). Sin `layout`, la web pública sale idéntica byte por byte (`pruebas-mi-web-compatible.mjs`).
+Pruebas: `pruebas-mi-web-layout.mjs` (datos y render), `pruebas-mi-web-compatible.mjs`, `pruebas-mi-web-arrastrar.e2e.mjs` (Playwright contra
+`wrangler dev --local`; mouse y touch). Límites: no se mueven fotos ni tarjetas de cursos/precios (son un módulo fijo dentro de su sección);
+las medidas de alto son «alto mínimo»; sin editor separado de PC y celular (el orden es el mismo, el tamaño no).
+Ojo al desplegar: el bundler agrega `__name`; el script del editor ya lo define (si se vuelve a mover ese script, conservar esa línea).
