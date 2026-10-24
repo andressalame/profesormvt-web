@@ -6838,7 +6838,225 @@ async function promoverEspera(env, tenantId, iso, sala, opciones){
 /* ═══════════════════════════════════════════════════════════════════════════
    PAGINAS INLINE: /app/registro y /app/login
    ═══════════════════════════════════════════════════════════════════════════ */
-function paginaBase(titulo, cuerpo, script){
+
+/* ---------- Pantalla de pago de la tienda: estilos (25-oct-2026) ---------- */
+const PAGO_CSS =
+  "body{display:block;padding:0;align-items:initial}" +
+  ".pgw{max-width:1000px;margin:0 auto;padding:18px 16px 140px}" +
+  ".sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}" +
+  ".sel-nativo{position:absolute;opacity:0;pointer-events:none;width:1px;height:1px}" +
+  ".js-ok .sel-nativo{display:none}" +
+  ".pg-h{display:flex;align-items:center;gap:12px;padding:4px 0 14px}" +
+  ".pg-logo{flex:0 0 auto;width:48px;height:48px;border-radius:12px;object-fit:cover;background:var(--card);border:1px solid var(--linea);display:grid;place-items:center;font-weight:700;font-size:20px;color:var(--acc)}" +
+  ".pg-h h1{font-size:20px;margin:0}.pg-h .sub{margin:2px 0 0;font-size:13px;line-height:1.4}" +
+  ".pg-tema{margin:0 0 0 auto;width:42px;height:42px;padding:0;flex:0 0 auto;background:transparent;color:var(--texto);border:1px solid var(--linea-campo);border-radius:50%;font-size:18px}" +
+  ".pasos{display:flex;gap:8px;list-style:none;padding:0;margin:0 0 16px}" +
+  ".pasos li{flex:1;font-size:12px;color:var(--muted);border-top:3px solid var(--linea);padding-top:6px}" +
+  ".pasos li.on,.pasos li.ok{border-color:var(--acc)}.pasos li.on{color:var(--texto);font-weight:600}" +
+  ".pg-grid{display:grid;gap:16px}" +
+  ".paso{background:var(--card);border:1px solid var(--linea);border-radius:16px;padding:18px;margin:0 0 14px}" +
+  ".paso h2{font-family:'Cabinet Grotesk',system-ui,sans-serif;font-size:17px;margin:0 0 12px;display:flex;gap:10px;align-items:center}" +
+  ".paso h2 b{flex:0 0 auto;width:26px;height:26px;border-radius:50%;background:var(--acc);color:var(--acc-ink);display:grid;place-items:center;font-size:13px}" +
+  ".pk-cards{display:grid;gap:10px;grid-template-columns:repeat(auto-fill,minmax(200px,1fr))}" +
+  ".pk,.mt-b{position:relative;display:block;margin:0;cursor:pointer;color:var(--texto);background:var(--campo);border:1.5px solid var(--linea-campo);border-radius:14px;padding:14px;font-size:14px}" +
+  ".pk input,.mt-b input{position:absolute;opacity:0;width:1px;height:1px}" +
+  ".pk.sel,.mt-b.sel{border-color:var(--acc);background:color-mix(in srgb,var(--acc) 10%,var(--campo));box-shadow:0 0 0 3px color-mix(in srgb,var(--acc) 22%,transparent)}" +
+  ".pk:focus-within,.mt-b:focus-within{outline:3px solid var(--acc);outline-offset:2px}" +
+  ".pk .n{font-weight:600;color:var(--texto)}.pk .p{font-size:24px;font-weight:700;margin-top:4px;color:var(--texto)}.pk .d{font-size:12px;color:var(--muted);margin-top:2px}" +
+  ".pk .ck{position:absolute;top:10px;right:10px;width:20px;height:20px;border-radius:50%;border:1.5px solid var(--linea-campo);display:grid;place-items:center;font-size:12px;color:transparent}" +
+  ".pk.sel .ck{background:var(--acc);border-color:var(--acc);color:var(--acc-ink)}" +
+  ".fila{display:grid;gap:12px}@media(min-width:560px){.fila{grid-template-columns:1fr 1fr}}" +
+  ".paso label{margin:12px 0 6px;color:var(--muted)}.fila .cp label{margin-top:0}" +
+  ".paso .pk,.paso .mt-b,.paso .drop{margin:0;color:var(--texto)}.paso .drop{color:var(--muted)}" +
+  ".paso input[type=text],.paso input[type=email],.paso input[type=tel],.paso input[type=date]{font-size:16px;padding:12px}" +
+  ".paso input.bad{border-color:var(--red)}.fe{color:var(--red);font-size:12px;margin-top:4px;min-height:0}" +
+  "#refbox{margin-top:14px}#refbox input{margin-bottom:8px}#refbox button{margin-top:6px;background:transparent;color:var(--acc);border:1.5px solid var(--acc);padding:10px}" +
+  "#totalp{font-size:13px;color:var(--muted);margin:0 0 12px}" +
+  ".metodos{display:flex;flex-wrap:wrap;gap:8px}.mt-b{flex:1 1 150px;padding:12px;font-weight:600;display:flex;gap:8px;align-items:center;justify-content:center;text-align:center}" +
+  ".mt-b i{font-style:normal;font-size:18px}" +
+  "#pinfo.oculto{position:absolute;left:-9999px}" +
+  ".pago-card{margin-top:12px;border:1px dashed var(--linea-campo);border-radius:14px;padding:6px 14px;background:var(--campo)}" +
+  ".pago-monto{padding:10px 0;font-size:13px;color:var(--muted)}.pago-monto b{display:block;font-size:24px;color:var(--texto)}" +
+  ".pago-fila{display:flex;align-items:center;gap:10px;justify-content:space-between;padding:10px 0;border-top:1px solid var(--linea)}" +
+  ".pago-fila .k{display:block;font-size:12px;color:var(--muted)}.pago-fila .v{font-weight:600;word-break:break-all;font-variant-numeric:tabular-nums;font-size:16px}" +
+  ".copiar{width:auto;flex:0 0 auto;margin:0;padding:9px 14px;font-size:13px;background:transparent;color:var(--texto);border:1.5px solid var(--acc);border-radius:10px;font-weight:600}" +
+  ".pago-nota{font-size:13px;color:var(--muted);padding:10px 0;border-top:1px solid var(--linea)}" +
+  ".drop{display:block;border:2px dashed var(--linea-campo);border-radius:14px;padding:18px;text-align:center;cursor:pointer;color:var(--muted);margin:0}" +
+  ".drop.on,.drop:focus-within{border-color:var(--acc)}.drop strong{color:var(--texto)}.drop img{display:block;max-height:170px;max-width:100%;border-radius:10px;margin:10px auto 0}" +
+  ".drop input{position:absolute;opacity:0;width:1px;height:1px}" +
+  ".resumen{background:var(--card);border:1px solid var(--linea);border-radius:16px;padding:18px}" +
+  ".res-t{font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}.res-pq{font-weight:600;font-size:17px;margin-top:6px}.res-d{font-size:13px;color:var(--muted);margin:2px 0 14px}" +
+  ".res-tot{display:flex;justify-content:space-between;align-items:baseline;border-top:1px solid var(--linea);padding-top:12px}.res-l{color:var(--muted)}.res-total{font-size:30px;font-weight:700}" +
+  ".resumen button{background:var(--acc);color:var(--acc-ink);border-radius:12px;padding:15px;margin-top:14px;font-size:16px}" +
+  ".resumen button:focus-visible,.copiar:focus-visible,.pg-tema:focus-visible{outline:3px solid var(--acc);outline-offset:2px}" +
+  ".seguro{font-size:12px;color:var(--muted);margin:12px 0 0;line-height:1.5}" +
+  ".legal{margin:6px 0 0;font-size:12px;color:var(--muted)}.legal summary{cursor:pointer;padding:6px 0}" +
+  "#okp{background:var(--card);border:1px solid var(--linea);border-radius:16px;padding:22px;margin-top:14px}" +
+  ".ok-pasos{list-style:none;padding:0;margin:14px 0 0;display:grid;gap:12px}.ok-pasos li{display:flex;gap:12px;align-items:flex-start}" +
+  ".ok-pasos b{flex:0 0 auto;width:26px;height:26px;border-radius:50%;background:var(--acc);color:var(--acc-ink);display:grid;place-items:center;font-size:13px}" +
+  ".ok-btn{display:block;text-align:center;margin-top:18px;background:var(--acc);color:var(--acc-ink);border-radius:12px;padding:14px;text-decoration:none;font-weight:600}" +
+  "body.listo .pasos,body.listo .pg-grid,body.listo .legal,body.listo .pg-h .sub{display:none}" +
+  ".err{font-size:14px;margin:0 0 14px}" +
+  "@media(min-width:900px){.pg-grid{grid-template-columns:minmax(0,1fr) 330px;align-items:start}.resumen{position:sticky;top:18px}.pgw{padding-bottom:40px}}" +
+  "@media(max-width:899px){.resumen{position:fixed;left:0;right:0;bottom:0;z-index:20;border-radius:18px 18px 0 0;padding:12px 16px calc(12px + env(safe-area-inset-bottom));display:flex;align-items:center;gap:14px;box-shadow:0 -8px 28px rgba(0,0,0,.2)}" +
+    ".resumen .res-det{display:none}.resumen .res-tot{border:0;padding:0;display:block}.resumen .res-total{font-size:22px;display:block}.resumen button{margin:0;flex:1}}" +
+  "@media(prefers-reduced-motion:no-preference){.pk,.mt-b{transition:border-color .12s,box-shadow .12s}}";
+
+/* ---------- Pantalla de pago: capa visual (25-oct-2026). ES5 puro, todo dentro de try: si algo falla, la
+   página queda como el formulario de siempre. NO toca la lógica de cobro: solo lee/escribe los mismos
+   campos (#pq, #mt, #totalp, #pinfo, #cap, #okp…) y despacha sus eventos 'change'. ---------- */
+const PAGO_UI_JS = String.raw`(function(){try{
+if(typeof document==='undefined'||!document.querySelectorAll||!window.MutationObserver)return;
+var $=function(i){return document.getElementById(i)};
+var pq=$('pq'),mt=$('mt'),totalp=$('totalp'),pinfo=$('pinfo'),btn=$('btnp'),form=$('fp'),nm=$('nm'),em=$('em');
+if(!pq||!mt||!form)return;
+document.documentElement.className+=' js-ok';
+function fire(el){var e=document.createEvent('Event');e.initEvent('change',true,true);el.dispatchEvent(e);}
+function el(t,c,h){var n=document.createElement(t);if(c)n.className=c;if(h!==undefined)n.innerHTML=h;return n;}
+function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]});}
+function soles(n){return 'S/ '+Number(n||0).toFixed(2);}
+
+/* tarjetas de paquete (el <select> sigue mandando: es el que lee la lógica de cobro) */
+var cont=$('pkcards');
+function pintaPaquetes(){
+  if(!cont)return;cont.innerHTML='';
+  [].forEach.call(pq.options,function(o){
+    if(!o.value)return;
+    var l=el('label','pk'+(o.value===pq.value?' sel':''));
+    l.innerHTML='<input type="radio" name="pkr" value="'+esc(o.value)+'"'+(o.value===pq.value?' checked':'')+'><span class="ck">✓</span><div class="n">'+esc(o.value)+'</div><div class="p">'+soles(o.getAttribute('data-precio'))+'</div><div class="d">'+esc(o.getAttribute('data-det')||'')+'</div>';
+    l.querySelector('input').addEventListener('change',function(){pq.value=o.value;fire(pq);});
+    cont.appendChild(l);
+  });
+}
+function selPaquete(){
+  [].forEach.call(cont.querySelectorAll('.pk'),function(l){var i=l.querySelector('input');var on=i.value===pq.value;l.classList.toggle('sel',on);i.checked=on;});
+  var o=pq.options[pq.selectedIndex];
+  $('res-pq').textContent=(o&&o.value)?o.value:'Elige tu paquete';
+  $('res-det').textContent=(o&&o.getAttribute('data-det'))||'';
+  pasos();
+}
+pintaPaquetes();pq.addEventListener('change',selPaquete);selPaquete();
+
+/* métodos de pago como botones */
+var ICONOS={'Tarjeta (Mercado Pago)':'💳','Tarjeta (Stripe)':'💳','Yape/Plin/Sip':'📱','Transferencia BCP':'🏦','Transferencia Interbank':'🏦','Transferencia Scotiabank':'🏦','Crypto USDT':'₮'};
+var mb=$('mtbtns');
+function pintaMetodos(){
+  mb.innerHTML='';
+  [].forEach.call(mt.options,function(o){
+    var l=el('label','mt-b'+(o.value===mt.value?' sel':''));
+    l.innerHTML='<input type="radio" name="mtr" value="'+esc(o.value)+'"'+(o.value===mt.value?' checked':'')+'><i aria-hidden="true">'+(ICONOS[o.value]||'💳')+'</i><span>'+esc(o.text)+'</span>';
+    l.querySelector('input').addEventListener('change',function(){mt.value=o.value;fire(mt);});
+    mb.appendChild(l);
+  });
+}
+function selMetodo(){[].forEach.call(mb.querySelectorAll('.mt-b'),function(l){var i=l.querySelector('input');var on=i.value===mt.value;l.classList.toggle('sel',on);i.checked=on;});pasos();}
+pintaMetodos();mt.addEventListener('change',selMetodo);
+
+/* resumen: el total sale del mismo #totalp que arma la lógica (con descuento de referido incluido) */
+function total(){var m=/S\/\s*([\d.,]+)/.exec(totalp.textContent||'');return m?m[1].replace(/,/g,''):'';}
+function pintaTotal(){var t=total();$('res-total').textContent=t?('S/ '+Number(t).toFixed(2)):'—';pagoCard();}
+new MutationObserver(pintaTotal).observe(totalp,{childList:true,characterData:true,subtree:true});pintaTotal();
+
+/* datos para pagar: se arman del texto que ya entrega /pago-datos ("Etiqueta: valor" por línea) */
+var copiadoT=0;
+function copiar(txt,b){
+  function listo(){b.textContent='¡Copiado!';clearTimeout(copiadoT);copiadoT=setTimeout(function(){b.textContent='Copiar';},1600);}
+  if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(txt).then(listo,function(){});}
+  else{var t=document.createElement('textarea');t.value=txt;document.body.appendChild(t);t.select();try{document.execCommand('copy');listo();}catch(e){}document.body.removeChild(t);}
+}
+var pc=$('pagocard'),pintando=false;
+function pagoCard(){
+  if(!pc||pintando)return;pintando=true;
+  try{
+    var v=mt.value,txt=(pinfo.textContent||'').trim();
+    pinfo.className='sub oculto';pc.innerHTML='';
+    if(!txt){pintando=false;return;}
+    var card=el('div','pago-card');
+    var esTarjeta=/^Tarjeta/.test(v);
+    var t=total();
+    if(t&&!esTarjeta)card.appendChild(el('div','pago-monto','Monto exacto a pagar<b>S/ '+Number(t).toFixed(2)+'</b>'));
+    if(esTarjeta||/^Cargando/.test(txt)||/^No pudimos/.test(txt)){card.appendChild(el('div','pago-nota',esc(txt)));}
+    else{
+      txt.split('\n').forEach(function(linea){
+        var m=/^([^:]{1,40}):\s*(.+)$/.exec(linea);
+        if(!m){card.appendChild(el('div','pago-nota',esc(linea)));return;}
+        var fila=el('div','pago-fila');
+        fila.appendChild(el('div','', '<span class="k">'+esc(m[1])+'</span><span class="v">'+esc(m[2])+'</span>'));
+        if(/\d{6,}|^[A-Za-z0-9]{20,}$/.test(m[2].replace(/[\s-]/g,''))){
+          var b=el('button','copiar','Copiar');b.type='button';b.setAttribute('aria-label','Copiar '+m[1]);
+          b.addEventListener('click',function(){copiar(m[2].replace(/\s+/g,'').replace(/-/g,''),b);});fila.appendChild(b);
+        }
+        card.appendChild(fila);
+      });
+      card.appendChild(el('div','pago-nota','Haz el pago por el monto exacto y luego sube tu captura aquí abajo. '+esc('Así se confirma más rápido.')));
+    }
+    pc.appendChild(card);
+  }finally{pintando=false;}
+}
+new MutationObserver(function(){if(!pintando)pagoCard();}).observe(pinfo,{childList:true,characterData:true,subtree:true});pagoCard();
+
+/* captura: zona para soltar y vista previa */
+var cap=$('cap');
+if(cap){
+  var dz=el('label','drop');dz.setAttribute('for','cap');
+  cap.parentNode.insertBefore(dz,cap);dz.appendChild(cap);
+  var msg=el('div','','<strong>Toca para subir tu captura</strong><br>o arrástrala aquí (imagen)');dz.appendChild(msg);
+  var pv=el('div');dz.appendChild(pv);
+  function muestra(){
+    var f=cap.files&&cap.files[0];pv.innerHTML='';
+    if(!f){msg.innerHTML='<strong>Toca para subir tu captura</strong><br>o arrástrala aquí (imagen)';return;}
+    msg.innerHTML='<strong>'+esc(f.name)+'</strong><br><span style="font-size:12px">Toca para cambiarla</span>';
+    if(window.URL&&URL.createObjectURL){var im=document.createElement('img');im.alt='Vista previa de tu captura';im.src=URL.createObjectURL(f);pv.appendChild(im);}
+  }
+  cap.addEventListener('change',muestra);
+  ['dragenter','dragover'].forEach(function(n){dz.addEventListener(n,function(e){e.preventDefault();dz.classList.add('on');});});
+  ['dragleave','drop'].forEach(function(n){dz.addEventListener(n,function(e){e.preventDefault();dz.classList.remove('on');});});
+  dz.addEventListener('drop',function(e){var f=e.dataTransfer&&e.dataTransfer.files;if(f&&f.length&&/^image\//.test(f[0].type)){try{cap.files=f;muestra();}catch(x){}}});
+}
+
+/* validación en línea, en castellano (el servidor vuelve a validar todo) */
+function error(inp,id,m){var f=$(id);if(f)f.textContent=m||'';inp.classList.toggle('bad',!!m);inp.setAttribute('aria-invalid',m?'true':'false');if(f)inp.setAttribute('aria-describedby',id);return !m;}
+function vNombre(){return error(nm,'fe-nm',nm.value.trim().length<2?'Escribe tu nombre.':'');}
+function vCorreo(){var v=em.value.trim();return error(em,'fe-em',!v?'Escribe tu correo para enviarte el acceso.':(/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(v)?'':'Revisa tu correo: parece que le falta algo (por ejemplo, nombre@gmail.com).'));}
+nm.addEventListener('blur',vNombre);em.addEventListener('blur',vCorreo);
+nm.addEventListener('input',function(){if(nm.classList.contains('bad'))vNombre();pasos();});em.addEventListener('input',function(){if(em.classList.contains('bad'))vCorreo();pasos();});
+form.addEventListener('submit',function(e){
+  var errp=$('errp');
+  var a=vNombre(),b=vCorreo();
+  if(!pq.value){errp.textContent='Elige tu paquete antes de pagar.';(cont.querySelector('input')||pq).focus();e.preventDefault();e.stopImmediatePropagation();return;}
+  if(!(a&&b)){errp.textContent='Revisa los campos marcados.';(a?em:nm).focus();e.preventDefault();e.stopImmediatePropagation();}
+},true);
+
+/* al corregir, el aviso rojo de abajo se va */
+form.addEventListener('input',function(){var x=$('errp');if(x&&/^Revisa los campos|^Elige tu paquete antes/.test(x.textContent))x.textContent='';});
+/* pasos arriba */
+function pasos(){
+  var ok1=!!pq.value,ok2=nm.value.trim().length>=2&&/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(em.value.trim());
+  var li=document.querySelectorAll('#pasos li');
+  li[0].className=ok1?'ok':'on';li[1].className=ok1?(ok2?'ok':'on'):'';li[2].className=ok1&&ok2?'on':'';
+}
+pasos();
+
+/* tema claro / oscuro (misma llave que el resto de Batuta) */
+var tb=$('tema');
+if(tb)tb.addEventListener('click',function(){var d=document.documentElement,n=d.getAttribute('data-theme')==='dark'?'light':'dark';d.setAttribute('data-theme',n);try{localStorage.setItem('batuta-theme',n);}catch(e){}});
+
+/* éxito: qué pasa ahora */
+var okp=$('okp');
+new MutationObserver(function(){
+  if(okp.style.display==='none'||document.body.className.indexOf('listo')>=0)return;
+  document.body.className+=' listo';
+  var slug=(location.pathname.split('/')[3]||'');
+  var m=!(/^Tarjeta/.test(mt.value));
+  $('oksig').innerHTML='<ol class="ok-pasos"><li><b>1</b><div><strong>Recibimos tu pedido</strong><br><span class="sub" style="margin:0">'+(m?'Guardamos tu pedido y tus datos.':'Estamos preparando tu pago.')+'</span></div></li>'
+    +'<li><b>2</b><div><strong>Se confirma tu pago</strong><br><span class="sub" style="margin:0">'+(m?'La academia revisa tu captura y lo confirma; normalmente ese mismo día.':'Con tarjeta se confirma sola en cuanto se aprueba.')+'</span></div></li>'
+    +'<li><b>3</b><div><strong>Entras a tu portal</strong><br><span class="sub" style="margin:0">Te llega un correo con el acceso. Revisa también la carpeta de spam.</span></div></li></ol>'
+    +'<a class="ok-btn" href="/app/a/'+encodeURIComponent(slug)+'">Ir a mi portal</a>';
+  window.scrollTo(0,0);
+}).observe(okp,{attributes:true,attributeFilter:['style']});
+}catch(e){}})();`;
+
+function paginaBase(titulo, cuerpo, script, op){
   // Beacon del embudo TOP: 1 hit por pageview de cada pagina inline (registro/login/landing/suscribir/demo).
   // Denominador del gate de 90 dias. try/catch total: jamas rompe la pagina.
   const beaconEmbudo =
@@ -6882,8 +7100,9 @@ function paginaBase(titulo, cuerpo, script){
     ".err{color:var(--red);font-size:13px;margin-top:12px;min-height:16px}" +
     ".foot{text-align:center;margin-top:18px;font-size:13px;color:var(--muted)}" +
     ".foot a{color:var(--acento-ink);text-decoration:none}" +
-    GOOGLE_BTN_CSS +
-    "</style></head><body><div class=\"card\">" + cuerpo + "</div><script>" + script + "</script></body></html>";
+    GOOGLE_BTN_CSS + ((op && op.css) || "") +
+    "</style></head><body>" + (op && op.sinCard ? cuerpo : "<div class=\"card\">" + cuerpo + "</div>") +
+    "<script>" + script + "</script>" + ((op && op.scriptExtra) ? "<script>" + op.scriptExtra + "</script>" : "") + "</body></html>";
 }
 
 function paginaRegistro(googleOn){
@@ -11144,21 +11363,47 @@ export default {
       const refVisibleP = refActivoP && !refPlanesP[seleccionadoP] && metodos[0].v !== "Tarjeta (Stripe)";
       const infoPago = { mpSoloTarjeta: mpSoloTarjetaP, referido: refActivoP, refPlanes: refPlanesP,
         precios: Object.fromEntries(paquetesOk.map(pk => [pk, preciosP[pk]])) };
+      /* ---------- Rediseño de la pantalla de pago (25-oct-2026) ----------
+         Misma lógica, mismos ids y mismos endpoints: solo cambia lo que se VE. El markup sigue trayendo
+         el <select id="pq">, el <select id="mt">, el total en #totalp y los campos con sus ids; el script de
+         abajo (scriptP) no se tocó. Un segundo script (scriptUI) los viste: tarjetas de paquete, botones de
+         método, datos de pago con «Copiar», zona para soltar la captura, resumen fijo y validación en línea.
+         Sin JavaScript la página sigue funcionando como el formulario de siempre. */
+      const colorP = /^#[0-9a-fA-F]{6}$/.test(String(cfgP.brand_color || "")) ? String(cfgP.brand_color) : "#E8A13D";
+      const luzP = (() => { const n = parseInt(colorP.slice(1), 16); return (0.2126 * ((n >> 16) & 255) + 0.7152 * ((n >> 8) & 255) + 0.0722 * (n & 255)) / 255; })();
+      const logoP = (cfgP.brand_logo && String(cfgP.brand_logo).indexOf("/app/api/recurso/archivo/") === 0) ? String(cfgP.brand_logo) : "";
+      const detallePaq = (pk) => {
+        const m = paqP.map[pk] || {};
+        const partes = [m.ilim ? "Clases ilimitadas" : (m.clases + (m.clases === 1 ? " clase" : " clases"))];
+        if (m.dias) partes.push("vale " + m.dias + " días");
+        if (m.reprog) partes.push(m.reprog + (m.reprog === 1 ? " cambio de horario" : " cambios de horario"));
+        return partes.join(" · ");
+      };
       const cuerpoP =
-        "<h1>" + esc(tP.academia) + "</h1>" +
-        "<p class=\"sub\">Elige tu paquete, paga y listo: tu cuenta se crea sola y te llega un correo para entrar a tu portal.</p>" +
+        '<div class="pgw">' +
+        '<header class="pg-h">' +
+          (logoP ? '<img class="pg-logo" src="' + esc(logoP) + '" alt="">' : '<span class="pg-logo">' + esc(String(tP.academia || "?").trim().charAt(0).toUpperCase()) + '</span>') +
+          '<div><h1>' + esc(tP.academia) + '</h1>' +
+          '<p class="sub">Elige tu paquete, paga y listo: tu cuenta se crea sola y te llega un correo para entrar a tu portal.</p></div>' +
+          '<button type="button" id="tema" class="pg-tema" aria-label="Cambiar entre tema claro y oscuro">◐</button>' +
+        '</header>' +
+        '<ol class="pasos" id="pasos" aria-label="Pasos para pagar"><li class="on" data-p="1">1 · Paquete</li><li data-p="2">2 · Tus datos</li><li data-p="3">3 · Pago</li></ol>' +
         avisoLinkP +
-        "<form id=\"fp\">" +
-          "<label>Paquete</label><select id=\"pq\">" +
+        '<div class="pg-grid"><div>' +
+        "<form id=\"fp\" novalidate>" +
+          '<section class="paso" id="s1" aria-labelledby="h1p"><h2 id="h1p"><b>1</b> Elige tu paquete</h2>' +
+          '<div id="pkcards" class="pk-cards" role="radiogroup" aria-label="Paquete"></div>' +
+          "<label class=\"sr\" for=\"pq\">Paquete</label><select id=\"pq\" class=\"sel-nativo\">" +
             (seleccionadoP ? "" : "<option value=\"\" selected disabled>Elige tu paquete</option>") +
-            paquetesOk.map(pk => "<option value=\"" + esc(pk) + "\"" + (pk === seleccionadoP ? " selected" : "") + ">" + esc(pk) + " — S/ " + (preciosP[pk] || 0) + "</option>").join("") +
-          "</select>" +
-          "<label>Tu nombre</label><input id=\"nm\" type=\"text\" required maxlength=\"80\">" +
-          "<label>Tus apellidos</label><input id=\"ap\" type=\"text\" maxlength=\"80\" placeholder=\"Opcional\">" +
-          "<label>Tu correo</label><input id=\"em\" type=\"email\" required maxlength=\"120\">" +
-          "<label>Tu WhatsApp (opcional)</label><input id=\"wa\" type=\"tel\" maxlength=\"20\">" +
+            paquetesOk.map(pk => "<option value=\"" + esc(pk) + "\"" + (pk === seleccionadoP ? " selected" : "") + " data-det=\"" + esc(detallePaq(pk)) + "\" data-precio=\"" + (Number(preciosP[pk]) || 0) + "\">" + esc(pk) + " — S/ " + (preciosP[pk] || 0) + "</option>").join("") +
+          "</select></section>" +
+          '<section class="paso" id="s2" aria-labelledby="h2p"><h2 id="h2p"><b>2</b> Tus datos</h2><div class="fila">' +
+          '<div class="cp"><label for="nm">Tu nombre</label><input id="nm" type="text" required maxlength="80" autocomplete="given-name"><div class="fe" id="fe-nm" role="alert"></div></div>' +
+          '<div class="cp"><label for="ap">Tus apellidos</label><input id="ap" type="text" maxlength="80" placeholder="Opcional" autocomplete="family-name"></div>' +
+          '<div class="cp"><label for="em">Tu correo</label><input id="em" type="email" required maxlength="120" autocomplete="email" inputmode="email"><div class="fe" id="fe-em" role="alert"></div></div>' +
+          '<div class="cp"><label for="wa">Tu WhatsApp (opcional)</label><input id="wa" type="tel" maxlength="20" autocomplete="tel" inputmode="tel"></div></div>' +
           (camposP.nacimiento
-            ? "<label>Fecha de nacimiento</label><input id=\"fn\" type=\"date\" max=\"" + hoyLima() + "\">" +
+            ? "<label for=\"fn\">Fecha de nacimiento</label><input id=\"fn\" type=\"date\" max=\"" + hoyLima() + "\">" +
               "<div id=\"tutorbox\" style=\"display:none;margin:10px 0 0\">" +
                 "<label style=\"display:flex;gap:9px;align-items:flex-start;font-size:13px;line-height:1.45\">" +
                   "<input id=\"tutor\" type=\"checkbox\" style=\"width:auto;margin-top:3px;flex:0 0 auto\">" +
@@ -11166,29 +11411,38 @@ export default {
                 "</label></div>"
             : "") +
           (refActivoP ? '<div id="refbox"' + (refVisibleP ? '' : ' hidden') + '><label for="refp">Código de referido (opcional)</label><input id="refp" type="text" maxlength="12" autocomplete="off" autocapitalize="characters"><button type="button" id="aplicarref">Aplicar código</button><p class="sub" id="refmsg" role="status" aria-live="polite"></p></div><p class="sub" id="refmotivo">' + esc(refVisibleP ? '' : (refPlanesP[seleccionadoP] || 'El código no se aplica al pago internacional.')) + '</p>' : '') +
+          '</section>' +
+          '<section class="paso" id="s3" aria-labelledby="h3p"><h2 id="h3p"><b>3</b> Paga</h2>' +
           '<p id="totalp" aria-live="polite">' + (seleccionadoP ? 'Total: S/ ' + Number(preciosP[seleccionadoP]).toFixed(2) : 'Elige tu paquete para ver el total') + '</p>' +
-          "<label>Método de pago</label><select id=\"mt\">" +
+          '<div id="mtbtns" class="metodos" role="radiogroup" aria-label="Método de pago"></div>' +
+          "<label class=\"sr\" for=\"mt\">Método de pago</label><select id=\"mt\" class=\"sel-nativo\">" +
             metodos.map(m => "<option value=\"" + esc(m.v) + "\">" + esc(m.t) + "</option>").join("") +
           "</select>" +
-          "<div id=\"pinfo\" class=\"sub\" style=\"margin:10px 0;white-space:pre-line\"></div>" +
+          "<div id=\"pinfo\" class=\"sub\" style=\"margin:10px 0;white-space:pre-line\"></div><div id=\"pagocard\"></div>" +
           "<div id=\"manualbox\">" +
-            "<label>N° de operación (opcional, confirma más rápido)</label><input id=\"op\" type=\"text\" maxlength=\"40\">" +
-            "<label>Captura del pago (recomendado)</label><input id=\"cap\" type=\"file\" accept=\"image/*\">" +
-          "</div>" +
-          "<button type=\"submit\" id=\"btnp\">Registrar mi pago</button>" +
-          "<div class=\"err\" id=\"errp\"></div>" +
+            "<label for=\"op\">N° de operación (opcional, confirma más rápido)</label><input id=\"op\" type=\"text\" maxlength=\"40\" inputmode=\"numeric\">" +
+            "<label for=\"cap\">Captura del pago (recomendado)</label><input id=\"cap\" type=\"file\" accept=\"image/*\">" +
+          "</div></section>" +
+          '<div class="err" id="errp" role="alert"></div>' +
         "</form>" +
-        "<div id=\"okp\" style=\"display:none\"><h1>Listo 🎉</h1><p class=\"sub\" id=\"okmsg\"></p></div>" +
+        '</div><aside class="resumen" id="resumen" aria-label="Resumen de tu pedido"><div class="res-det"><div class="res-t">Tu pedido</div><div id="res-pq" class="res-pq">—</div><div id="res-det" class="res-d"></div></div>' +
+          '<div class="res-tot"><span class="res-l">Total</span><span class="res-total" id="res-total">—</span></div>' +
+          "<button type=\"submit\" id=\"btnp\" form=\"fp\">Registrar mi pago</button>" +
+          '<p class="seguro res-det">🔒 Tus datos viajan cifrados. Si pagas con tarjeta, lo haces en el checkout seguro de Mercado Pago o Stripe: Batuta no ve ni guarda tu tarjeta.</p></aside></div>' +
+        "<div id=\"okp\" style=\"display:none\"><h1>Listo 🎉</h1><p class=\"sub\" id=\"okmsg\"></p><div id=\"oksig\"></div></div>" +
         /* Aviso de privacidad (Ley 29733): quien es el responsable, para que, y como ejercer
            derechos. La academia es la titular del banco de datos; Batuta solo lo trata por
-           encargo suyo. Antes este formulario no decia NADA. */
-        "<p class=\"sub\" style=\"font-size:12px;line-height:1.5;margin:16px 0 0\">" +
+           encargo suyo. Antes este formulario no decia NADA. Rediseño: una línea visible y el texto
+           COMPLETO (sin cambiar una palabra) desplegable. */
+        "<details class=\"legal\"><summary>Tus datos los recibe <b>" + esc(tP.academia) + "</b> para registrarte y cobrarte. Ver detalle de privacidad</summary>" +
+        "<p class=\"sub\" style=\"font-size:12px;line-height:1.5;margin:10px 0 0\">" +
           "Tus datos los recibe <b>" + esc(tP.academia) + "</b> para registrarte como alumno, cobrarte y avisarte de tus clases. " +
           "Batuta los guarda por encargo de la academia y no los usa para otra cosa ni los vende. " +
           "Puedes pedir verlos, corregirlos o borrarlos escribiendo a la academia. " +
           "<a href=\"https://batuta.lat/privacidad\" target=\"_blank\" rel=\"noopener\">Política de privacidad</a>." +
-        "</p>" +
-        "<div class=\"foot\">¿Ya tienes cuenta? <a href=\"/app/a/" + esc(tP.slug) + "\">Entra a tu portal</a></div>";
+        "</p></details>" +
+        "<div class=\"foot\">¿Ya tienes cuenta? <a href=\"/app/a/" + esc(tP.slug) + "\">Entra a tu portal</a></div></div>";
+      const cssP = PAGO_CSS + ":root{--acc:" + colorP + ";--acc-ink:" + (luzP > 0.55 ? "#17130C" : "#FFFFFF") + "}";
       const scriptP =
         "var INFO=" + JSON.stringify(infoPago).replace(/</g, "\\u003c") + ";var SLUGP=" + JSON.stringify(tP.slug) + ";" +
         /* menos de 14 -> aparece la declaracion del apoderado y sin ella no se envia.
@@ -11242,7 +11496,7 @@ export default {
         "document.getElementById('okp').style.display='block';" +
         "document.getElementById('okmsg').textContent=d.mensaje||'Tu pago quedó registrado. Revisa tu correo para entrar a tu portal.';" +
         "}catch(ex){err.textContent='Error de conexión. Intenta de nuevo.';btn.disabled=false;}});";
-      return htmlResponse(paginaBase("Paga tus clases — " + esc(tP.academia), cuerpoP, scriptP));
+      return htmlResponse(paginaBase("Paga tus clases — " + esc(tP.academia), cuerpoP, scriptP, { sinCard: true, css: cssP, scriptExtra: PAGO_UI_JS }));
     }
     if (path.startsWith("/app/a/") && request.method === "GET"){
       return env.ASSETS ? assetConSeguridad(await env.ASSETS.fetch(new Request(new URL("/alumnos/index.html", url), request))) : json({ error: "No encontrado" }, 404);
