@@ -204,43 +204,169 @@ function anuncioHtml(data){
   return '<div class="bt-anuncio" data-ed="marca.anuncio">' + esc(a) + "</div>";
 }
 
+/* ---------- bloques arrastrables (24-oct-2026) ----------
+   Un BLOQUE es una pieza de texto/botón que la dueña puede mover y estirar: títulos, párrafos y el
+   botón de la portada. Cada sección arma su HTML a partir de una lista de bloques (en su orden
+   por defecto = el de siempre). `web.layout` puede reordenar esas listas, mover un bloque a otra
+   sección y darle ancho/alto. SIN `layout` el HTML es idéntico, byte por byte, al de antes
+   (lo vigila pruebas-mi-web-compatible.mjs contra una foto del render anterior).
+   "@mod" es el resto fijo de la sección (tarjetas, precios, sedes, botones): se mueve de lugar
+   dentro de su sección pero no sale de ella. */
+export const WEB_BLOQUES = {
+  "hero.titulo": "hero", "hero.sub": "hero", "hero.cta": "hero",
+  "sobre.titulo": "sobre", "sobre.texto": "sobre",
+  "cursos.titulo": "cursos", "cursos.intro": "cursos",
+  "precios.titulo": "precios", "precios.intro": "precios",
+  "galeria.titulo": "galeria",
+  "contacto.titulo": "contacto", "contacto.texto": "contacto"
+};
+var BLOQUES_DEFECTO = {
+  hero: ["hero.titulo", "hero.sub", "hero.cta"],
+  sobre: ["sobre.titulo", "sobre.texto"],
+  cursos: ["cursos.titulo", "cursos.intro", "@mod"],
+  precios: ["precios.titulo", "precios.intro", "@mod"],
+  galeria: ["galeria.titulo", "@mod"],
+  contacto: ["contacto.titulo", "contacto.texto", "@mod"]
+};
+export var WEB_LAYOUT_MAX_W = 100, WEB_LAYOUT_MIN_W = 15, WEB_LAYOUT_MAX_H = 800;
+
+/* Layout validado. Se llama también al RENDERIZAR: el JSON guardado nunca se da por bueno. */
+export function layoutLimpio(raw){
+  var l = raw && typeof raw === "object" ? raw : {};
+  var out = {};
+  if (l.secs && typeof l.secs === "object"){
+    var vistos = {}, secs = {};
+    WEB_SECCIONES.forEach(function (sec){
+      var arr = l.secs[sec];
+      if (!Array.isArray(arr)) return;
+      var lista = [];
+      arr.slice(0, 40).forEach(function (id){
+        if (id === "@mod"){ if (BLOQUES_DEFECTO[sec].indexOf("@mod") >= 0 && lista.indexOf("@mod") < 0) lista.push("@mod"); return; }
+        if (!Object.prototype.hasOwnProperty.call(WEB_BLOQUES, id) || vistos[id]) return;
+        vistos[id] = 1; lista.push(id);
+      });
+      secs[sec] = lista;
+    });
+    if (Object.keys(secs).length) out.secs = secs;
+  }
+  if (l.bloques && typeof l.bloques === "object"){
+    var bl = {};
+    Object.keys(WEB_BLOQUES).forEach(function (id){
+      var b = l.bloques[id];
+      if (!b || typeof b !== "object") return;
+      var r = {};
+      [["w", WEB_LAYOUT_MIN_W, WEB_LAYOUT_MAX_W], ["wm", WEB_LAYOUT_MIN_W, WEB_LAYOUT_MAX_W],
+       ["h", 0, WEB_LAYOUT_MAX_H], ["hm", 0, WEB_LAYOUT_MAX_H]].forEach(function (c){
+        var n = Math.round(Number(b[c[0]]));
+        if (isFinite(n) && n > 0) r[c[0]] = Math.min(c[2], Math.max(c[1], n));
+      });
+      if (Object.keys(r).length) bl[id] = r;
+    });
+    if (Object.keys(bl).length) out.bloques = bl;
+  }
+  return out;
+}
+
+/* En qué sección cae cada bloque y en qué orden. Sin layout = las listas de siempre. */
+function planSecciones(lay){
+  var plan = {};
+  WEB_SECCIONES.forEach(function (sec){ plan[sec] = BLOQUES_DEFECTO[sec].slice(); });
+  if (!lay || !lay.secs) return plan;
+  var colocados = {};
+  Object.keys(lay.secs).forEach(function (sec){ lay.secs[sec].forEach(function (id){ if (id !== "@mod") colocados[id] = sec; }); });
+  WEB_SECCIONES.forEach(function (sec){
+    var propia = lay.secs[sec];
+    if (propia){
+      var lista = propia.slice();
+      BLOQUES_DEFECTO[sec].forEach(function (id){
+        if (id === "@mod" ? lista.indexOf("@mod") < 0 : (!colocados[id] && lista.indexOf(id) < 0)) lista.push(id);
+      });
+      plan[sec] = lista;
+    } else {
+      plan[sec] = BLOQUES_DEFECTO[sec].filter(function (id){ return id === "@mod" || !colocados[id]; });
+    }
+  });
+  return plan;
+}
+
+/* HTML interno de un bloque ("" si no tiene contenido). La dueña edita estos textos con data-ed. */
+function bloqueInterno(id, d, ctx){
+  var h = d.hero, s = d.sobre, c = d.cursos, p = d.precios, g = d.galeria, k = d.contacto;
+  switch (id){
+    case "hero.titulo": return '<h1 data-ed="hero.titulo">' + esc(h.titulo || ctx.tenant.academia) + "</h1>";
+    case "hero.sub": {
+      var sub = h.sub || (ctx.cursos.length ? "Clases de " + ctx.cursos.join(", ") + ". Reserva y paga online." : "Reserva y paga tus clases online.");
+      return '<p class="bt-hero-sub" data-ed="hero.sub">' + esc(sub) + "</p>";
+    }
+    case "hero.cta":
+      /* La "clase de prueba" esta MUERTA (decision 25-jul-2026): el hero ya no anuncia ese
+         producto fantasma que la academia nunca definio ni puede apagar desde su panel
+         (la fila 'Clase de prueba' de precios existe por default en todo tenant). */
+      return ctx.wa ? '<a class="bt-cta" href="https://wa.me/' + esc(ctx.wa) + "?text=" + ctx.waMsg + '" data-ed="hero.cta">' + SVG_WA + esc(h.cta_texto || "Escríbenos por WhatsApp") + "</a>" : "";
+    case "sobre.titulo": return '<h2 data-ed="sobre.titulo">' + esc(s.titulo || "Sobre nosotros") + "</h2>";
+    case "sobre.texto": return s.texto ? '<div data-ed="sobre.texto">' + texto(s.texto) + "</div>" : "";
+    case "cursos.titulo": return '<h2 data-ed="cursos.titulo">' + esc(c.titulo || "Lo que enseñamos") + "</h2>";
+    case "cursos.intro": return c.intro ? '<p class="bt-sec-intro" data-ed="cursos.intro">' + esc(c.intro) + "</p>" : "";
+    case "precios.titulo": return '<h2 data-ed="precios.titulo">' + esc(p.titulo || "Planes y precios") + "</h2>";
+    case "precios.intro": return p.intro ? '<p class="bt-sec-intro" data-ed="precios.intro">' + esc(p.intro) + "</p>" : "";
+    case "galeria.titulo": return '<h2 data-ed="galeria.titulo">' + esc(g.titulo || "Galería") + "</h2>";
+    case "contacto.titulo": return '<h2 data-ed="contacto.titulo">' + esc(k.titulo || "Contáctanos") + "</h2>";
+    case "contacto.texto": return k.texto ? '<p class="bt-sec-intro" data-ed="contacto.texto">' + texto(k.texto) + "</p>" : "";
+  }
+  return "";
+}
+/* Un bloque listo para ir en la página: con su envoltorio si tiene tamaño, y con las marcas del
+   editor (data-b) solo en la vista previa. */
+function bloque(id, d, ctx, st){
+  var inner = bloqueInterno(id, d, ctx);
+  if (!inner) return "";
+  var t = st.lay && st.lay.bloques && st.lay.bloques[id];
+  var ed = st.editable ? ' data-b="' + id + '"' : "";
+  if (t){
+    var vars = [];
+    if (t.w) vars.push("--w:" + t.w + "%");
+    if (t.h) vars.push("--h:" + t.h + "px");
+    if (t.wm) vars.push("--wm:" + t.wm + "%");
+    if (t.hm) vars.push("--hm:" + t.hm + "px");
+    st.conTam = true;
+    return '<div class="bt-blq' + (t.w || t.wm ? " bt-blq-w" : "") + '"' + ed + ' style="' + vars.join(";") + '">' + inner + "</div>";
+  }
+  return ed ? inner.replace(/^<([a-z0-9]+)/, "<$1" + ed) : inner;
+}
+/* El resto fijo de la sección, con marca para el editor. */
+function modulo(html, st){
+  if (!html) return "";
+  return st.editable ? '<div data-m="1" class="bt-mod">' + html + "</div>" : html;
+}
+function lista(ids, d, ctx, st, mod){
+  return ids.map(function (id){ return id === "@mod" ? modulo(mod, st) : bloque(id, d, ctx, st); }).join("");
+}
+
 /* ---------- secciones ---------- */
-function secHero(d, ctx){
+/* Cada una recibe la lista de bloques que le toca (`ids`) y el estado del render (`st`). */
+function secHero(d, ctx, ids, st){
   var h = d.hero;
-  var titulo = h.titulo || ctx.tenant.academia;
-  var sub = h.sub || (ctx.cursos.length ? "Clases de " + ctx.cursos.join(", ") + ". Reserva y paga online." : "Reserva y paga tus clases online.");
   var logo = (h.mostrar_logo && ctx.cfg.brand_logo)
     ? '<img class="bt-logo" src="' + urlSegura(ctx.cfg.brand_logo) + '" alt="" data-ed="hero.logo" />' : "";
-  var cta = "";
-  /* La "clase de prueba" esta MUERTA (decision 25-jul-2026): el hero ya no anuncia ese
-     producto fantasma que la academia nunca definio ni puede apagar desde su panel
-     (la fila 'Clase de prueba' de precios existe por default en todo tenant). */
-  if (ctx.wa){
-    cta = '<a class="bt-cta" href="https://wa.me/' + esc(ctx.wa) + "?text=" + ctx.waMsg + '" data-ed="hero.cta">' + SVG_WA + esc(h.cta_texto || "Escríbenos por WhatsApp") + "</a>";
-  }
   var foto = fotoTag(h.foto, "bt-hero-foto", "", "hero.foto");
-  var cuerpo =
-    logo +
-    '<h1 data-ed="hero.titulo">' + esc(titulo) + "</h1>" +
-    '<p class="bt-hero-sub" data-ed="hero.sub">' + esc(sub) + "</p>" +
-    cta;
+  var cuerpo = logo + lista(ids, d, ctx, st, "");
+  var sd = st.editable ? ' data-s="hero"' : "";
   if (h.layout === "foto-derecha" && foto){
-    return '<section class="bt-hero bt-hero-split"><div class="bt-hero-tx">' + cuerpo + "</div><div>" + foto + "</div></section>";
+    return '<section class="bt-hero bt-hero-split"' + sd + '><div class="bt-hero-tx">' + cuerpo + "</div><div>" + foto + "</div></section>";
   }
-  return '<section class="bt-hero"' + (foto ? ' style="--tiene-foto:1"' : "") + ">" +
+  return '<section class="bt-hero"' + sd + (foto ? ' style="--tiene-foto:1"' : "") + ">" +
     (foto ? '<div class="bt-hero-media">' + foto + "</div>" : "") + '<div class="bt-hero-tx">' + cuerpo + "</div></section>";
 }
 
-function secSobre(d){
+function secSobre(d, ctx, ids, st){
   var s = d.sobre;
   if (!s.on || (!s.texto && !s.foto.url)) return "";
   var foto = fotoTag(s.foto, "bt-sobre-foto", "", "sobre.foto");
-  var tx = '<div class="bt-sobre-tx"><h2 data-ed="sobre.titulo">' + esc(s.titulo || "Sobre nosotros") + "</h2>" +
-    (s.texto ? '<div data-ed="sobre.texto">' + texto(s.texto) + "</div>" : "") + "</div>";
-  return '<section class="bt-sec bt-sobre">' + (foto ? '<div class="bt-sobre-grid">' + tx + "<div>" + foto + "</div></div>" : tx) + "</section>";
+  var tx = '<div class="bt-sobre-tx">' + lista(ids, d, ctx, st, "") + "</div>";
+  return '<section class="bt-sec bt-sobre"' + (st.editable ? ' data-s="sobre"' : "") + ">" + (foto ? '<div class="bt-sobre-grid">' + tx + "<div>" + foto + "</div></div>" : tx) + "</section>";
 }
 
-function secCursos(d, ctx){
+function secCursos(d, ctx, ids, st){
   var c = d.cursos;
   if (!c.on) return "";
   var cards = "";
@@ -261,12 +387,11 @@ function secCursos(d, ctx){
     esChips = true;
   }
   if (!cards) return "";
-  return '<section class="bt-sec"><h2 data-ed="cursos.titulo">' + esc(c.titulo || "Lo que enseñamos") + "</h2>" +
-    (c.intro ? '<p class="bt-sec-intro" data-ed="cursos.intro">' + esc(c.intro) + "</p>" : "") +
-    '<div class="' + (esChips ? "bt-chips" : "bt-cards") + '">' + cards + "</div></section>";
+  return '<section class="bt-sec"' + (st.editable ? ' data-s="cursos"' : "") + ">" +
+    lista(ids, d, ctx, st, '<div class="' + (esChips ? "bt-chips" : "bt-cards") + '">' + cards + "</div>") + "</section>";
 }
 
-function secPrecios(d, ctx){
+function secPrecios(d, ctx, ids, st){
   var p = d.precios;
   if (!p.on || !p.mostrar || !ctx.paquetes.length || !ctx.cobroOn) return "";
   var cards = ctx.paquetes.map(function (pk){
@@ -278,19 +403,18 @@ function secPrecios(d, ctx){
   }).join("");
   var extra = ctx.extra
     ? '<p class="bt-paq-extra"><a href="' + esc(ctx.extra.url) + '" target="_blank" rel="noopener">' +
-      esc(ctx.extra.txt) + " \u2192</a></p>"   /* la flecha literal, no una entidad escrita a mano */
+      esc(ctx.extra.txt) + " →</a></p>"   /* la flecha literal, no una entidad escrita a mano */
     : "";
-  return '<section class="bt-sec"><h2 data-ed="precios.titulo">' + esc(p.titulo || "Planes y precios") + "</h2>" +
-    (p.intro ? '<p class="bt-sec-intro" data-ed="precios.intro">' + esc(p.intro) + "</p>" : "") +
-    '<div class="bt-paqs">' + cards + "</div>" + extra + "</section>";
+  return '<section class="bt-sec"' + (st.editable ? ' data-s="precios"' : "") + ">" +
+    lista(ids, d, ctx, st, '<div class="bt-paqs">' + cards + "</div>" + extra) + "</section>";
 }
 
-function secGaleria(d){
+function secGaleria(d, ctx, ids, st){
   var g = d.galeria;
   if (!g.on || !Array.isArray(g.fotos) || !g.fotos.length) return "";
   var fotos = g.fotos.map(function (f, i){ return fotoTag(f, "bt-gal-foto", "", "galeria.fotos." + i); }).filter(Boolean).join("");
   if (!fotos) return "";
-  return '<section class="bt-sec"><h2 data-ed="galeria.titulo">' + esc(g.titulo || "Galería") + '</h2><div class="bt-galeria">' + fotos + "</div></section>";
+  return '<section class="bt-sec"' + (st.editable ? ' data-s="galeria"' : "") + ">" + lista(ids, d, ctx, st, '<div class="bt-galeria">' + fotos + "</div>") + "</section>";
 }
 
 /* Dónde queda la academia. Va en Contacto porque es la pregunta que se hace justo
@@ -308,7 +432,7 @@ function bloqueSedes(ctx){
       '" target="_blank" rel="noopener">' + esc(s.direccion) + "</a></div>";
   }).join("") + "</div>";
 }
-function secContacto(d, ctx){
+function secContacto(d, ctx, ids, st){
   var c = d.contacto;
   if (!c.on) return "";
   var botones = "";
@@ -320,10 +444,8 @@ function secContacto(d, ctx){
   }
   var sedes = bloqueSedes(ctx);
   if (!c.texto && !botones && !sedes) return "";
-  return '<section class="bt-sec bt-contacto"><h2 data-ed="contacto.titulo">' + esc(c.titulo || "Contáctanos") + "</h2>" +
-    (c.texto ? '<p class="bt-sec-intro" data-ed="contacto.texto">' + texto(c.texto) + "</p>" : "") +
-    sedes +
-    (botones ? '<div class="bt-cta-row">' + botones + "</div>" : "") + "</section>";
+  return '<section class="bt-sec bt-contacto"' + (st.editable ? ' data-s="contacto"' : "") + ">" +
+    lista(ids, d, ctx, st, sedes + (botones ? '<div class="bt-cta-row">' + botones + "</div>" : "")) + "</section>";
 }
 
 const RENDERERS = { hero: secHero, sobre: secSobre, cursos: secCursos, precios: secPrecios, galeria: secGaleria, contacto: secContacto };
@@ -384,6 +506,163 @@ function css(){
     ".bt-foot a{color:var(--acento);text-decoration:none}",
     "@media(max-width:760px){.bt-hero-split,.bt-sobre-grid{grid-template-columns:1fr;gap:26px}.bt-hero-split{text-align:center}.bt-hero-split .bt-hero-sub,.bt-hero-split .bt-logo{margin-left:auto;margin-right:auto}}"
   ].join("");
+}
+
+
+
+/* Envoltorios con tamaño y marcas del editor. Se agregan SOLO si hay algún bloque con tamaño
+   (o en la vista previa): una web sin tamaños sale con el mismo CSS de siempre. */
+const BLQ_CSS =
+  ".bt-blq{width:var(--w,auto);min-height:var(--h,0);max-width:100%;overflow-wrap:anywhere}" +
+  ".bt-blq-w>*{max-width:none!important}" +
+  ".bt-hero .bt-blq{margin-left:auto;margin-right:auto}.bt-hero-split .bt-blq{margin-left:0}" +
+  "@media(max-width:760px){.bt-blq{width:var(--wm,auto);min-height:var(--hm,0)}.bt-hero-split .bt-blq{margin-left:auto}}" +
+  ".bt-sel{outline:2px solid var(--acento);outline-offset:3px}";
+
+/* ---------- editor: mover y estirar bloques dentro de la vista previa (24-oct-2026) ----------
+   Este código corre DENTRO del iframe de "Mi web" (solo en la vista previa, nunca en la web
+   pública). Al tocar un bloque aparecen una agarradera (mover) y una manija de esquina (estirar).
+   Todo con pointer events: sirve igual con mouse que con el dedo. No toca el HTML a mano: calcula
+   el orden nuevo, se lo manda al panel (parent.btWebLayout) y el panel vuelve a pedir la vista
+   previa al servidor, que es el único que dibuja. Así lo que ves es lo que se publica. */
+function btEditorMain(){
+  var sel = null, grip = null, hdl = null, linea = null, accion = null;
+  function dev(){ return window.matchMedia("(max-width:760px)").matches ? "movil" : "desktop"; }
+  function ui(css, txt, tit){
+    var n = document.createElement("div");
+    n.className = "bt-ui"; n.style.cssText = "position:absolute;z-index:99999;touch-action:none;user-select:none;-webkit-user-select:none;" + css;
+    if (txt) n.textContent = txt; if (tit) n.title = tit;
+    document.body.appendChild(n); return n;
+  }
+  function rectDoc(el){ var r = el.getBoundingClientRect(); return { x: r.left + scrollX, y: r.top + scrollY, w: r.width, h: r.height }; }
+  function limpiarUi(){ [grip, hdl].forEach(function (n){ if (n && n.parentNode) n.parentNode.removeChild(n); }); grip = hdl = null; }
+  function colocar(){
+    if (!sel || !grip) return;
+    var r = rectDoc(sel);
+    grip.style.left = Math.max(2, r.x - 4) + "px"; grip.style.top = Math.max(2, r.y - 30) + "px";
+    if (hdl){ hdl.style.left = (r.x + r.w - 10) + "px"; hdl.style.top = (r.y + r.h - 10) + "px"; }
+  }
+  function seleccionar(b){
+    if (sel) sel.classList.remove("bt-sel");
+    limpiarUi(); sel = b;
+    try { parent.btWebSelId = b ? b.getAttribute("data-b") : ""; } catch (_) {}
+    if (!b) return;
+    b.classList.add("bt-sel");
+    grip = ui("background:#E8A13D;color:#0F1115;font:700 13px/1 system-ui;padding:8px 12px;border-radius:8px;cursor:grab;box-shadow:0 2px 8px rgba(0,0,0,.35);", "⠿ Mover", "Arrastra para mover este bloque");
+    grip.setAttribute("data-bt", "grip");
+    if (b.tagName !== "A" && !b.querySelector(":scope > a.bt-cta:only-child")){
+      hdl = ui("width:22px;height:22px;background:#E8A13D;border:2px solid #0F1115;border-radius:6px;cursor:nwse-resize;box-shadow:0 2px 8px rgba(0,0,0,.35);", "", "Arrastra para cambiar el ancho y el alto");
+      hdl.setAttribute("data-bt", "handle");
+      hdl.addEventListener("pointerdown", empezarTam);
+    }
+    grip.addEventListener("pointerdown", empezarMover);
+    colocar();
+  }
+  function enviar(m){ try { if (parent && parent.btWebLayout) parent.btWebLayout(m); } catch (_) {} }
+
+  /* ---- listas actuales (lo que hay en pantalla, sección por sección) ---- */
+  function items(sec){
+    return [].slice.call(sec.querySelectorAll("[data-b],[data-m]")).map(function (n){ return n.hasAttribute("data-m") ? "@mod" : n.getAttribute("data-b"); });
+  }
+  function listas(){ var o = {}; [].forEach.call(document.querySelectorAll("[data-s]"), function (s){ o[s.getAttribute("data-s")] = items(s); }); return o; }
+  function flujo(sec){ return sec.querySelector(".bt-hero-tx,.bt-sobre-tx") || sec; }
+
+  /* ---- mover ---- */
+  function destino(x, y, id){
+    var cand = [].slice.call(document.querySelectorAll("[data-b],[data-m]")).filter(function (n){ return n.getAttribute("data-b") !== id; });
+    var mejor = null, dmin = 1e9;
+    cand.forEach(function (n){
+      var r = n.getBoundingClientRect();
+      var dx = x < r.left ? r.left - x : (x > r.right ? x - r.right : 0);
+      var dy = y < r.top ? r.top - y : (y > r.bottom ? y - r.bottom : 0);
+      var d = dy * 3 + dx;
+      if (d < dmin){ dmin = d; mejor = { n: n, r: r }; }
+    });
+    var secs = [].slice.call(document.querySelectorAll("[data-s]")).filter(function (s){ var r = s.getBoundingClientRect(); return y >= r.top && y <= r.bottom; });
+    var sec = secs.length ? secs[secs.length - 1] : null;
+    if (mejor && (dmin < 140 || !sec)){
+      var ref = mejor.n.hasAttribute("data-m") ? "@mod" : mejor.n.getAttribute("data-b");
+      var despues = y > mejor.r.top + mejor.r.height / 2;
+      return { sec: mejor.n.closest("[data-s]").getAttribute("data-s"), ref: ref, despues: despues, y: despues ? mejor.r.bottom : mejor.r.top, x: mejor.r.left, w: mejor.r.width };
+    }
+    if (sec){
+      var f = flujo(sec).getBoundingClientRect();
+      return { sec: sec.getAttribute("data-s"), ref: null, despues: true, y: f.bottom, x: f.left, w: f.width };
+    }
+    return null;
+  }
+  function empezarMover(e){
+    if (!sel) return; e.preventDefault(); e.stopPropagation();
+    accion = { tipo: "mover", id: sel.getAttribute("data-b"), dest: null, antes: listas() };
+    grip.setPointerCapture(e.pointerId); grip.style.cursor = "grabbing";
+    linea = ui("height:4px;background:#E8A13D;border-radius:2px;pointer-events:none;display:none;");
+    sel.style.opacity = ".45";
+    grip.addEventListener("pointermove", moverPuntero); grip.addEventListener("pointerup", soltarMover); grip.addEventListener("pointercancel", soltarMover);
+  }
+  function moverPuntero(e){
+    if (!accion || accion.tipo !== "mover") return;
+    var d = destino(e.clientX, e.clientY, accion.id); accion.dest = d;
+    if (!d){ linea.style.display = "none"; return; }
+    linea.style.display = "block"; linea.style.left = (d.x + scrollX) + "px"; linea.style.top = (d.y + scrollY - 2) + "px"; linea.style.width = d.w + "px";
+    /* cerca del borde de la ventana: la página sigue la mano */
+    if (e.clientY < 50) scrollBy(0, -14); else if (e.clientY > innerHeight - 50) scrollBy(0, 14);
+  }
+  function soltarMover(e){
+    var a = accion; accion = null;
+    if (grip){ grip.removeEventListener("pointermove", moverPuntero); grip.removeEventListener("pointerup", soltarMover); grip.removeEventListener("pointercancel", soltarMover); grip.style.cursor = "grab"; }
+    if (linea && linea.parentNode) linea.parentNode.removeChild(linea); linea = null;
+    if (sel) sel.style.opacity = "";
+    if (!a || !a.dest || e.type === "pointercancel") return;
+    var nuevo = {}; Object.keys(a.antes).forEach(function (k){ nuevo[k] = a.antes[k].filter(function (x){ return x !== a.id; }); });
+    var l = nuevo[a.dest.sec]; if (!l) return;
+    var i = a.dest.ref ? l.indexOf(a.dest.ref) : -1;
+    if (i < 0) l.push(a.id); else l.splice(a.dest.despues ? i + 1 : i, 0, a.id);
+    var cambios = {};
+    Object.keys(nuevo).forEach(function (k){ if (nuevo[k].join("|") !== a.antes[k].join("|")) cambios[k] = nuevo[k]; });
+    if (Object.keys(cambios).length) enviar({ op: "orden", secs: cambios, id: a.id });
+  }
+
+  /* ---- estirar: ancho en % del contenedor, alto mínimo en px ---- */
+  function empezarTam(e){
+    if (!sel) return; e.preventDefault(); e.stopPropagation();
+    var r = sel.getBoundingClientRect(), pr = sel.parentElement.getBoundingClientRect();
+    var cs = getComputedStyle(sel.parentElement);
+    var ancho = pr.width - parseFloat(cs.paddingLeft || 0) - parseFloat(cs.paddingRight || 0);
+    accion = { tipo: "tam", id: sel.getAttribute("data-b"), x0: e.clientX, y0: e.clientY, w0: r.width, h0: r.height, ancho: Math.max(60, ancho), w: null, h: null, dev: dev() };
+    hdl.setPointerCapture(e.pointerId);
+    hdl.addEventListener("pointermove", moverTam); hdl.addEventListener("pointerup", soltarTam); hdl.addEventListener("pointercancel", soltarTam);
+  }
+  function moverTam(e){
+    var a = accion; if (!a || a.tipo !== "tam") return;
+    var w = Math.round((a.w0 + e.clientX - a.x0) / a.ancho * 100); w = Math.max(15, Math.min(100, w));
+    var h = Math.max(0, Math.round(a.h0 + e.clientY - a.y0));
+    a.w = w; a.h = h;
+    sel.style.width = w + "%"; sel.style.maxWidth = "none"; sel.style.minHeight = h + "px"; sel.style.overflowWrap = "anywhere";
+    colocar();
+  }
+  function soltarTam(e){
+    var a = accion; accion = null;
+    if (hdl){ hdl.removeEventListener("pointermove", moverTam); hdl.removeEventListener("pointerup", soltarTam); hdl.removeEventListener("pointercancel", soltarTam); }
+    if (!a || a.w === null || e.type === "pointercancel") return;
+    /* el alto solo se guarda si de verdad lo estiró hacia abajo: si no, se queda en automático */
+    var natural = a.h0;
+    enviar({ op: "tam", id: a.id, dev: a.dev, w: a.w, h: (a.h > natural + 6 ? a.h : 0) });
+  }
+
+  /* ---- clic: selecciona el bloque Y conserva lo de siempre (abrir su control en el panel) ---- */
+  document.addEventListener("click", function (e){
+    if (e.target.closest && e.target.closest(".bt-ui")) return;
+    e.preventDefault(); e.stopPropagation();
+    var b = e.target.closest("[data-b]");
+    seleccionar(b);
+    var n = e.target.closest("[data-ed]");
+    try { if (parent && parent.btWebClick) parent.btWebClick(n ? n.getAttribute("data-ed") : ""); } catch (_) {}
+  }, true);
+  addEventListener("resize", colocar); addEventListener("load", function (){
+    try { var id = parent.btWebSelId; if (id){ var b = document.querySelector('[data-b="' + id + '"]'); if (b) seleccionar(b); } } catch (_) {}
+  });
+  /* las imágenes cargan después y mueven todo: se recoloca la manija */
+  setInterval(colocar, 600);
 }
 
 /* ---------- contexto de la academia (datos duros) ---------- */
@@ -451,14 +730,33 @@ export function contexto(tenant, cfg, precios, paq, opciones){
   };
 }
 
-/* HTML del <body> (sin <head>) — se usa para la vista previa del editor. */
-export function htmlCuerpo(data, ctx){
+/* HTML del <body> (sin <head>) — se usa para la vista previa del editor.
+   `st` lleva el estado del render: layout validado, si es la vista del editor y si algún bloque
+   salió con tamaño (para saber si hace falta el CSS de los envoltorios). */
+export function htmlCuerpo(data, ctx, opciones){
   var d = mezclar(data);
+  var st = { lay: layoutLimpio(d.layout), editable: !!(opciones && opciones.editable), conTam: false };
   var orden = (Array.isArray(d.orden) && d.orden.length ? d.orden : WEB_DEFAULTS.orden)
     .filter(function (k){ return WEB_SECCIONES.indexOf(k) >= 0; });
-  var secs = orden.map(function (k){ return RENDERERS[k] ? RENDERERS[k](d, ctx) : ""; }).join("");
+  var plan = planSecciones(st.lay);
+  var html = {};
+  orden.forEach(function (k){ html[k] = RENDERERS[k] ? RENDERERS[k](d, ctx, plan[k], st) : ""; });
+  /* Un bloque movido a una sección que no se dibuja (apagada o sin contenido) no desaparece:
+     vuelve a su sección de origen. */
+  var movidos = false;
+  orden.forEach(function (k){
+    if (html[k]) return;
+    plan[k].forEach(function (id){
+      if (id === "@mod") return;
+      var casa = WEB_BLOQUES[id];
+      if (casa !== k){ plan[k] = plan[k].filter(function (x){ return x !== id; }); plan[casa].push(id); movidos = true; }
+    });
+  });
+  if (movidos) orden.forEach(function (k){ html[k] = RENDERERS[k] ? RENDERERS[k](d, ctx, plan[k], st) : ""; });
+  var secs = orden.map(function (k){ return html[k]; }).join("");
   var foot = '<footer class="bt-foot"><span>' + esc(ctx.tenant.academia) + "</span>" +
     '<span>Hecho con <a href="https://batuta.lat/?f=pagina-academia" target="_blank" rel="noopener">Batuta</a></span></footer>';
+  if (opciones && opciones.estado) opciones.estado.conTam = st.conTam;
   return anuncioHtml(d) + secs + foot;
 }
 
@@ -524,8 +822,13 @@ export function htmlDocumento(data, ctx, opciones){
   var editorCss = o.editable
     ? "[data-ed]{transition:outline .1s}[data-ed]:hover{outline:2px dashed var(--acento);outline-offset:3px;cursor:pointer}"
     : "";
+  var estadoR = {};
+  var cuerpoHtml = htmlCuerpo(d, ctx, { editable: !!o.editable, estado: estadoR });
+  /* CSS de los envoltorios y del editor: solo cuando hacen falta, para que una web sin
+     tamaños salga idéntica a la de antes. */
+  var blqCss = (estadoR.conTam || o.editable) ? BLQ_CSS : "";
   var editorJs = o.editable
-    ? "document.addEventListener('click',function(e){e.preventDefault();e.stopPropagation();var n=e.target.closest('[data-ed]');try{if(parent&&parent.btWebClick)parent.btWebClick(n?n.getAttribute('data-ed'):'');}catch(_){}}, true);"
+    ? "(" + btEditorMain.toString() + ")();"
     : (o.beacon || "");
   return "<!doctype html><html lang=\"es\"><head><meta charset=\"utf-8\">" +
     "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">" +
@@ -539,8 +842,8 @@ export function htmlDocumento(data, ctx, opciones){
     "<link rel=\"preconnect\" href=\"https://fonts.googleapis.com\">" +
     "<link rel=\"preconnect\" href=\"https://fonts.gstatic.com\" crossorigin>" +
     (href ? "<link href=\"" + esc(href) + "\" rel=\"stylesheet\">" : "") +
-    "<style>" + fuentesSelfCss(d, ctx.cfg) + ":root{" + estiloVars(d, ctx.cfg) + "}" + css() + editorCss + "</style></head><body>" +
-    htmlCuerpo(d, ctx) +
+    "<style>" + fuentesSelfCss(d, ctx.cfg) + ":root{" + estiloVars(d, ctx.cfg) + "}" + css() + blqCss + editorCss + "</style></head><body>" +
+    cuerpoHtml +
     (editorJs ? "<script>" + editorJs + "</script>" : "") +
     "</body></html>";
 }
@@ -612,6 +915,8 @@ export function sanearWeb(raw){
     on: sBool, titulo: function (v){ return sTxt(v, 80); }, texto: function (v){ return sTxt(v, 600); },
     mostrar_whatsapp: sBool, mostrar_portal: sBool
   });
+  var lay = layoutLimpio(d.layout);
+  if (Object.keys(lay).length) out.layout = lay;
   if (Array.isArray(d.orden)){
     out.orden = d.orden.filter(function (k){ return WEB_SECCIONES.indexOf(k) >= 0; });
     // completa las secciones faltantes al final, sin duplicar

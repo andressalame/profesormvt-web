@@ -1576,15 +1576,17 @@ button[data-ayuda],a[data-ayuda],select[data-ayuda],input[data-ayuda],label[data
       <div class="web-acts">
         <span class="web-estado" id="webEstado">&nbsp;</span>
         <button class="btn ghost sm" type="button" onclick="lanzarTourModulo('web')">? Cómo funciona</button>
+        <button class="btn ghost sm" id="btnWebPaso" type="button" title="Deshace tu último movimiento o cambio de tamaño de un bloque" disabled>↶ Paso atrás</button>
         <button class="btn ghost sm" id="btnWebDeshacer" type="button" title="Descarta los cambios sin publicar">Deshacer</button>
         <button class="btn" id="btnWebPublicar" type="button">Publicar</button>
       </div>
     </div>
     <div class="web-editor">
       <div class="web-side">
-        <p class="hint" id="webAyuda">Haz clic en cualquier parte de la vista previa para editar esa parte. Los cambios se ven al instante aquí; tu web pública recién cambia cuando le das <b>Publicar</b>. Tu página vive en <b id="webLink">tuacademia.batuta.lat</b>.</p>
+        <p class="hint" id="webAyuda">Haz clic en cualquier parte de la vista previa para editar esa parte. <b>Toca un título, párrafo o botón y arrástralo con «⠿ Mover»</b> a otro lugar (también a otra sección); estira la esquina para cambiar su ancho y alto. En la vista «Celular» el tamaño que le des vale solo para el celular. Los cambios se ven al instante aquí; tu web pública recién cambia cuando le das <b>Publicar</b>. Tu página vive en <b id="webLink">tuacademia.batuta.lat</b>.</p>
         <div id="webControles"></div>
         <div class="web-danger">
+          <button class="btn ghost sm" id="btnWebDisp" type="button" title="Quita todos los movimientos y tamaños; los textos se quedan">Volver a como estaba (posiciones y tamaños)</button>
           <button class="btn ghost sm" id="btnWebOriginal" type="button">Volver al diseño automático</button>
         </div>
       </div>
@@ -12655,6 +12657,41 @@ window.batutaInit = batutaInit;
     el("webPrevWrap").classList.toggle("movil",b.dataset.dev==="movil");
   }); });
 
+
+  /* ---- mover y estirar bloques (24-oct-2026) ----
+     La vista previa (iframe) calcula el movimiento y llama a btWebLayout; acá se guarda en
+     WEB.layout, se apunta en el historial para poder volver atrás y se redibuja. */
+  var HIST=[];
+  function copiaLay(){ return WEB&&WEB.layout?JSON.parse(JSON.stringify(WEB.layout)):null; }
+  function pasoBtn(){ var b=el("btnWebPaso"); if(b) b.disabled=!HIST.length; }
+  function apuntar(){ HIST.push(copiaLay()); if(HIST.length>60) HIST.shift(); pasoBtn(); }
+  window.btWebLayout=function(m){
+    if(!m||!WEB) return;
+    if(m.op==="orden"&&m.secs){
+      apuntar();
+      WEB.layout=WEB.layout||{}; WEB.layout.secs=Object.assign(WEB.layout.secs||{},m.secs);
+    } else if(m.op==="tam"&&m.id){
+      apuntar();
+      WEB.layout=WEB.layout||{}; var bl=WEB.layout.bloques=WEB.layout.bloques||{}, b=bl[m.id]=bl[m.id]||{};
+      var mv=m.dev==="movil", kw=mv?"wm":"w", kh=mv?"hm":"h";
+      b[kw]=Math.max(15,Math.min(100,Math.round(Number(m.w)||100)));
+      if(m.h>0) b[kh]=Math.min(800,Math.round(m.h)); else delete b[kh];
+    } else return;
+    pintar();
+  };
+  function deshacerPaso(){
+    if(!HIST.length||!WEB) return;
+    var prev=HIST.pop();
+    if(prev&&Object.keys(prev).length) WEB.layout=prev; else delete WEB.layout;
+    pasoBtn(); pintar();
+  }
+  el("btnWebPaso").addEventListener("click",deshacerPaso);
+  el("btnWebDisp").addEventListener("click",function(){
+    if(!WEB||!WEB.layout){ toast("No has movido ni estirado nada"); return; }
+    if(!confirm("Esto devuelve cada título, párrafo y botón a su lugar y tamaño original. Tus textos no cambian. ¿Seguir?")) return;
+    apuntar(); delete WEB.layout; pintar(); toast("Listo. Con «Paso atrás» puedes arrepentirte; se aplica al publicar.");
+  });
+
   /* ---- publicar / deshacer / original ---- */
   el("btnWebPublicar").addEventListener("click",function(){
     var btn=this; btn.disabled=true; btn.textContent="Publicando…";
@@ -12681,7 +12718,7 @@ window.batutaInit = batutaInit;
     var raw={};
     try{ raw = (db.config&&db.config.web_json)?JSON.parse(db.config.web_json):{}; }catch(e){ raw={}; }
     WEB=raw&&typeof raw==="object"?raw:{};
-    GUARDADO=firma(WEB);
+    GUARDADO=firma(WEB); HIST=[]; pasoBtn();
     render(); pintar();
   }
   window.abrirEditorWeb=function(){
