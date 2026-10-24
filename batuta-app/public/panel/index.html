@@ -294,6 +294,10 @@
   .web-prevwrap{border:1px solid var(--line);border-radius:4px;background:#0F1115;overflow:hidden;}
   .web-prevwrap.movil{max-width:390px;margin:0 auto;}
   #webPrev{width:100%;height:calc(100vh - 240px);min-height:460px;border:0;display:block;background:#0F1115;}
+  /* 24-oct-2026 · la vista «Computadora» se dibuja a 1100px de ancho y se reduce para caber: antes el
+     iframe medía lo que dejaba la columna (unos 650px) y la web se veía con el diseño de CELULAR. */
+  .web-prevwrap.esc{position:relative;}
+  .web-prevwrap.esc #webPrev{position:absolute;left:0;top:0;width:1100px;max-width:none;transform-origin:0 0;}
   .wgrp{border:1px solid var(--line);border-radius:4px;background:var(--panel);margin-bottom:10px;overflow:hidden;}
   .wgrp>summary{list-style:none;cursor:pointer;padding:11px 13px;font-family:var(--mono);font-size:11.5px;text-transform:uppercase;letter-spacing:.08em;font-weight:700;color:var(--accent);display:flex;justify-content:space-between;align-items:center;gap:8px;}
   .wgrp>summary::-webkit-details-marker{display:none;}
@@ -12655,8 +12659,23 @@ window.batutaInit = batutaInit;
   document.querySelectorAll(".webdev").forEach(function(b){ b.addEventListener("click",function(){
     document.querySelectorAll(".webdev").forEach(function(x){ x.classList.remove("active"); }); b.classList.add("active");
     el("webPrevWrap").classList.toggle("movil",b.dataset.dev==="movil");
+    ajustarPrev();
   }); });
 
+
+
+  /* ---- vista «Computadora» a su ancho real, reducida para caber (24-oct-2026) ---- */
+  function esMovil(){ return el("webPrevWrap").classList.contains("movil"); }
+  function ajustarPrev(){
+    var w=el("webPrevWrap"), fr=frame(); if(!w||!fr) return;
+    if(esMovil()){ w.classList.remove("esc"); w.style.height=""; fr.style.transform=""; fr.style.height=""; return; }
+    var disp=w.parentElement.clientWidth; if(!disp) return;
+    var k=Math.min(1,disp/1100), alto=Math.max(460,Math.round(window.innerHeight-240));
+    w.classList.add("esc"); w.style.height=alto+"px";
+    fr.style.transform="scale("+k+")"; fr.style.height=Math.round(alto/k)+"px";
+  }
+  window.addEventListener("resize",ajustarPrev);
+  window.btWebDev=function(){ return esMovil()?"movil":"desktop"; };
 
   /* ---- mover y estirar bloques (24-oct-2026) ----
      La vista previa (iframe) calcula el movimiento y llama a btWebLayout; acá se guarda en
@@ -12728,8 +12747,10 @@ window.batutaInit = batutaInit;
       var a=el("webAbrir"); if(a) a.href="/app/a/"+encodeURIComponent(slug)+"/web";
       var l=el("webLink"); if(l) l.textContent=slug+".batuta.lat";
     }
+    ajustarPrev();
     if(!cargado){ cargado=true; cargar(); }
     else { render(); pintar(); }
+    setTimeout(ajustarPrev,300);
   };
 })();
 </script>

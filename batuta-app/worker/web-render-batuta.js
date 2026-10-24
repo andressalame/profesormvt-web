@@ -527,11 +527,14 @@ const BLQ_CSS =
    previa al servidor, que es el único que dibuja. Así lo que ves es lo que se publica. */
 function btEditorMain(){
   var sel = null, grip = null, hdl = null, linea = null, accion = null;
-  function dev(){ return window.matchMedia("(max-width:760px)").matches ? "movil" : "desktop"; }
+  function dev(){ try { if (parent && parent.btWebDev) return parent.btWebDev(); } catch (_) {} return window.matchMedia("(max-width:760px)").matches ? "movil" : "desktop"; }
   function ui(css, txt, tit){
     var n = document.createElement("div");
     n.className = "bt-ui"; n.style.cssText = "position:absolute;z-index:99999;touch-action:none;user-select:none;-webkit-user-select:none;" + css;
     if (txt) n.textContent = txt; if (tit) n.title = tit;
+    /* la vista «Computadora» se reduce para caber: se agranda lo que se toca para que siga cómodo */
+    var inv = 1; try { inv = Math.min(2, Math.max(1, innerWidth / window.frameElement.getBoundingClientRect().width)); } catch (_) {}
+    if (inv > 1.05){ n.style.transform = "scale(" + inv + ")"; n.style.transformOrigin = txt ? "0 100%" : "50% 50%"; }
     document.body.appendChild(n); return n;
   }
   function rectDoc(el){ var r = el.getBoundingClientRect(); return { x: r.left + scrollX, y: r.top + scrollY, w: r.width, h: r.height }; }
@@ -540,7 +543,7 @@ function btEditorMain(){
     if (!sel || !grip) return;
     var r = rectDoc(sel);
     grip.style.left = Math.max(2, r.x - 4) + "px"; grip.style.top = Math.max(2, r.y - 30) + "px";
-    if (hdl){ hdl.style.left = (r.x + r.w - 10) + "px"; hdl.style.top = (r.y + r.h - 10) + "px"; }
+    if (hdl){ hdl.style.left = (r.x + r.w - 12) + "px"; hdl.style.top = (r.y + r.h - 12) + "px"; }
   }
   function seleccionar(b){
     if (sel) sel.classList.remove("bt-sel");
@@ -551,7 +554,7 @@ function btEditorMain(){
     grip = ui("background:#E8A13D;color:#0F1115;font:700 13px/1 system-ui;padding:8px 12px;border-radius:8px;cursor:grab;box-shadow:0 2px 8px rgba(0,0,0,.35);", "⠿ Mover", "Arrastra para mover este bloque");
     grip.setAttribute("data-bt", "grip");
     if (b.tagName !== "A" && !b.querySelector(":scope > a.bt-cta:only-child")){
-      hdl = ui("width:22px;height:22px;background:#E8A13D;border:2px solid #0F1115;border-radius:6px;cursor:nwse-resize;box-shadow:0 2px 8px rgba(0,0,0,.35);", "", "Arrastra para cambiar el ancho y el alto");
+      hdl = ui("width:26px;height:26px;background:#E8A13D;border:2px solid #0F1115;border-radius:6px;cursor:nwse-resize;box-shadow:0 2px 8px rgba(0,0,0,.35);", "", "Arrastra para cambiar el ancho y el alto");
       hdl.setAttribute("data-bt", "handle");
       hdl.addEventListener("pointerdown", empezarTam);
     }
@@ -828,7 +831,9 @@ export function htmlDocumento(data, ctx, opciones){
      tamaños salga idéntica a la de antes. */
   var blqCss = (estadoR.conTam || o.editable) ? BLQ_CSS : "";
   var editorJs = o.editable
-    ? "(" + btEditorMain.toString() + ")();"
+    /* Wrangler/esbuild envuelve las funciones con un ayudante `__name` (keepNames) que NO existe dentro
+       del iframe: sin esta línea el editor moría con «__name is not defined». */
+    ? "var __name=function(f){return f};(" + btEditorMain.toString() + ")();"
     : (o.beacon || "");
   return "<!doctype html><html lang=\"es\"><head><meta charset=\"utf-8\">" +
     "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">" +
