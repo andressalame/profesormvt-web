@@ -540,3 +540,17 @@ CREATE TABLE IF NOT EXISTS liquidaciones (
   nota           TEXT DEFAULT ''
 );
 CREATE UNIQUE INDEX IF NOT EXISTS idx_liq_unica ON liquidaciones (tenant_id, mes, profesor_id);
+
+-- ============ BITÁCORA DE CAMBIOS HECHOS POR EL ASISTENTE (MCP/API, 25-oct-2026) ============
+-- Cada precio que el asistente cambia deja acá cuándo, el valor anterior y el nuevo.
+CREATE TABLE IF NOT EXISTS api_cambios (
+  id        TEXT PRIMARY KEY,
+  tenant_id TEXT NOT NULL,
+  fecha     TEXT NOT NULL,
+  accion    TEXT NOT NULL,        -- 'precio'
+  objeto    TEXT DEFAULT '',      -- nombre del paquete
+  anterior  TEXT DEFAULT '',
+  nuevo     TEXT DEFAULT '',
+  origen    TEXT DEFAULT ''       -- mcp | api
+);
+CREATE INDEX IF NOT EXISTS idx_api_cambios ON api_cambios (tenant_id, fecha);

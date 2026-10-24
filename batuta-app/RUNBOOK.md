@@ -516,3 +516,25 @@ Preparacion del corte del +51 904 079 121 (linea Baileys 3402) a la Cloud API of
 - **Endpoints su/ nuevos**: negocio-chats (lista) · negocio-chat?negocio=&telefono= (historial) · negocio-responder {negocio,telefono,texto} · negocio-pausa {negocio,telefono,pausa:on|off} · negocio-chat-borrar {negocio,telefono}.
 - **E2E REAL corrido el 10-ago** con el numero de prueba de la WABA (phone_id 1149379364933769) apuntado temporalmente al negocio: webhook entrante simulado -> lead + correo de chat nuevo -> Sonnet respondio -> WhatsApp REAL entregado a 51989077928 -> pausa silencio la IA -> respuesta manual salio -> chat de prueba borrado y phone_id devuelto al placeholder. Token WHATSAPP_TOKEN del 22-jul: VIVO (su/wa-status ok).
 - Historial de la rama negocio ahora guarda el turno del cliente SIEMPRE (aunque el envio falle o este en pausa): la bandeja nunca queda ciega.
+
+## Hablar con tu academia desde Claude o ChatGPT (MCP) — 25-oct-2026
+**Qué es:** el dueño pega una URL en su Claude/ChatGPT y le habla a su academia («¿a quién se le acaban las clases?», «ya no quiero cobrar S/240 por 4 clases de canto, sino S/280»). Código: `API_TOOLS`, `ejecutarHerramientaApi`, ruta `/app/mcp/<llave>` y `/app/api/v1/*` en `worker/index.js`.
+
+**Dos llaves, a propósito**
+| Llave | Forma | Qué puede | Cómo se obtiene |
+|---|---|---|---|
+| Lectura | `bt_…` | resumen, alumnos, agenda, pagos, por renovar, **listar_precios** | Ajustes > «Conecta tu Claude» > Ver mi llave (siempre existió) |
+| Escritura | `bw_…` | todo lo anterior + **actualizar_precio** | Ajustes > «Permitir que mi asistente cambie precios» (casilla **apagada por defecto**) |
+Activar la casilla crea la llave `bw_`; desactivarla la **borra** (la URL deja de servir al instante); «Generar otra» la rota. La llave de lectura nunca escribe, ni por MCP ni por REST (`POST /app/api/v1/precios` responde 403).
+
+**Qué cambia `actualizar_precio`:** el precio de UN paquete que ya existe (por nombre exacto o igual sin tildes/mayúsculas; si hay duda devuelve la lista, no adivina). No crea ni borra paquetes. Guarda con `stmtGuardarPrecio`, el mismo constructor que usa el guardado del panel (`PUT /admin/data`), así que lo ven al toque el panel, el portal, la landing y el cobro (`loadPrecios`). Devuelve precio anterior, nuevo y enlaces: panel (`/app/panel#academia`, «Mi academia > Planes y precios») y página pública (`/app/a/<slug>/web`).
+**Candados:** monto con hasta 2 decimales entre S/1 y S/20,000 (rechaza texto, negativos, notación científica); un salto de más de 3 veces o menos de un tercio pide `confirmar = "si"`; máximo 20 cambios por hora y academia; no en demos ni en cuentas vencidas; cada cambio queda en la tabla `api_cambios` (fecha, anterior, nuevo, origen) y el dueño lo ve en Ajustes. Un profesor del equipo no ve las llaves en su panel.
+**Para revertir un cambio:** pedirle al asistente el precio anterior (queda anotado) o editarlo en el panel. Para cortar todo: apagar la casilla.
+
+**Conectar Claude** (probado SOLO a nivel de protocolo contra el worker, no con el cliente real):
+- claude.ai o Claude Desktop: Personalizar > Conectores > «+» > **Añadir conector personalizado**, pegar la URL `https://batuta.lat/app/mcp/<llave>` (sin OAuth: dejar vacíos Client ID/Secret). Según la ayuda actual de Anthropic, los conectores personalizados de MCP remoto están en todos los planes (el gratis, con 1 conector); una versión anterior del artículo decía solo planes de pago.
+- Claude Code: `claude mcp add --transport http batuta https://batuta.lat/app/mcp/<llave>`.
+**Conectar ChatGPT** (NO comprobado con una cuenta real):
+- Hay conectores MCP remotos en el **modo desarrollador**: Ajustes > Conectores > Avanzado > Modo desarrollador, luego Crear, pegar la URL, autenticación **«Sin autenticación»** (la llave va dentro de la URL). Las fuentes que consulté NO coinciden en qué planes lo tienen (unas dicen Plus/Pro, otras Business/Enterprise/Edu, y en algunas la escritura solo en planes de empresa). **Verificar en la cuenta de ChatGPT del cliente antes de prometérselo.** La ChatGPT gratis probablemente no lo tiene; tampoco comprobado.
+**Lo que NO se probó:** ningún cliente real (ni Claude ni ChatGPT) contra producción. El servidor habla JSON por POST sin streaming (responde 405 al stream SSE a propósito, ver comentario en el código) y devuelve `annotations` (solo lectura / escribe) en `tools/list`. Primera prueba real = conectar la cuenta de Andrés y pedir «lista mis precios».
+**Aviso al vender:** la llave va en la URL: quien la tenga puede usar el permiso que tenga esa llave. Decir «tu asistente puede cambiar precios si TÚ lo activas», no «tu asistente administra tu academia» (no borra, no cobra, no toca alumnos).

@@ -10003,7 +10003,8 @@ async function limpiarDemosPrivadas(env){
    Las dos leen las MISMAS funciones de abajo, así nunca dicen cosas distintas.
 
    🔒 v1 es de SOLO LECTURA a propósito. Un token que puede borrar alumnos es un
-   token que un día borra alumnos. Escribir se evalúa cuando esto tenga uso real.
+   token que un día borra alumnos. Desde el 25-oct-2026 hay UNA escritura, apagada por defecto y
+   con llave aparte (`bw_`): cambiar el precio de un paquete que ya existe (ver `apiActualizarPrecio`).
    El token vive en config.api_token, lo genera el dueño desde Ajustes y puede
    rotarlo; identifica a UNA academia y todo queda scoped a su tenant_id.
    ═══════════════════════════════════════════════════════════════════════════ */
@@ -10020,15 +10021,113 @@ async function apiTokenDe(env, tenantId, rotar){
 }
 
 /* Resuelve el tenant de un token. config es chica (unas pocas filas por academia),
-   así que el scan por valor es barato; si algún día pesa, va un índice por valor. */
+   así que el scan por valor es barato; si algún día pesa, va un índice por valor.
+   Hay DOS clases de llave (25-oct-2026): `bt_…` solo LEE (la de siempre) y `bw_…` además puede
+   cambiar precios. La de escribir NO existe hasta que el dueño la activa en Ajustes; apagarla la
+   borra. El tenant que vuelve trae `__escritura` = true solo con la llave `bw_`. */
 async function tenantPorApiToken(env, token){
   const tk = String(token || "").trim();
-  if (!/^bt_[a-f0-9]{40}$/.test(tk)) return null;
+  const esEscritura = /^bw_[a-f0-9]{40}$/.test(tk);
+  if (!esEscritura && !/^bt_[a-f0-9]{40}$/.test(tk)) return null;
   const row = await env.DB.prepare(
-    "SELECT tenant_id FROM config WHERE clave = 'api_token' AND valor = ?1"
-  ).bind(tk).first().catch(() => null);
+    "SELECT tenant_id FROM config WHERE clave = ?2 AND valor = ?1"
+  ).bind(tk, esEscritura ? "api_token_w" : "api_token").first().catch(() => null);
   if (!row) return null;
-  return env.DB.prepare("SELECT * FROM tenants WHERE id = ?1").bind(row.tenant_id).first().catch(() => null);
+  const t = await env.DB.prepare("SELECT * FROM tenants WHERE id = ?1").bind(row.tenant_id).first().catch(() => null);
+  if (!t) return null;
+  if (esEscritura){
+    /* la casilla manda: si el dueño la apagó, la llave no escribe aunque siga guardada */
+    const on = await env.DB.prepare("SELECT valor FROM config WHERE tenant_id = ?1 AND clave = 'api_escritura'").bind(t.id).first().catch(() => null);
+    t.__escritura = !!(on && String(on.valor) === "1");
+  }
+  return t;
+}
+async function apiWriteTokenDe(env, tenantId, rotar){
+  if (!rotar){
+    const row = await env.DB.prepare("SELECT valor FROM config WHERE tenant_id = ?1 AND clave = 'api_token_w'").bind(tenantId).first().catch(() => null);
+    if (row && row.valor) return String(row.valor);
+  }
+  const nuevo = "bw_" + randHex(20);
+  await setConfigValor(env, tenantId, "api_token_w", nuevo);
+  return nuevo;
+}
+
+/* ---------- escribir precios desde el asistente (25-oct-2026) ----------
+   Hasta hoy la API era solo de lectura. Esto abre UNA escritura, la mínima que sirve: cambiar el
+   precio de un paquete que YA existe. No crea ni borra paquetes. Tiene cuatro candados:
+     1. llave aparte (`bw_`) que solo existe si el dueño activó «permitir que mi asistente cambie precios»;
+     2. el monto se valida (número con hasta 2 decimales, entre S/1 y S/20,000; un salto de más de 3 veces
+        o de menos de un tercio exige confirmar);
+     3. tope de cambios por hora y por academia;
+     4. cada cambio queda en `api_cambios` (cuándo, valor anterior, valor nuevo, desde dónde).
+   Guardar usa `stmtGuardarPrecio`, el MISMO constructor que usa el guardado del panel: una sola forma de
+   escribir un precio. */
+const API_PRECIO_MIN = 1, API_PRECIO_MAX = 20000, API_ESCRITURAS_HORA = 20;
+function stmtGuardarPrecio(env, tenantId, paquete, precio){
+  return env.DB.prepare("INSERT OR REPLACE INTO precios (tenant_id, paquete, precio) VALUES (?1, ?2, ?3)").bind(tenantId, paquete, precio);
+}
+async function ensureApiCambiosSchema(env){
+  await env.DB.prepare(
+    "CREATE TABLE IF NOT EXISTS api_cambios (id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, fecha TEXT NOT NULL, accion TEXT NOT NULL, " +
+    "objeto TEXT DEFAULT '', anterior TEXT DEFAULT '', nuevo TEXT DEFAULT '', origen TEXT DEFAULT '')"
+  ).run();
+  await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_api_cambios ON api_cambios (tenant_id, fecha)").run();
+}
+/* "280", 280, "S/ 280", "280.50", "280,50" -> número; todo lo demás se rechaza (nada de "doscientos", "1e3", "-5"). */
+function apiParsePrecio(v){
+  if (typeof v === "number"){ if (!isFinite(v)) return { error: "El monto no es un número." }; v = String(v); }
+  let t = String(v == null ? "" : v).trim().replace(/^s\/\.?\s*/i, "").replace(/\s/g, "");
+  if (/^\d+,\d{1,2}$/.test(t)) t = t.replace(",", ".");
+  if (!/^\d+(\.\d{1,2})?$/.test(t)) return { error: "El monto tiene que ser un número como 280 o 280.50 (sin letras ni signos)." };
+  const n = Number(t);
+  if (!(n >= API_PRECIO_MIN) || n > API_PRECIO_MAX) return { error: "El monto tiene que estar entre S/" + API_PRECIO_MIN + " y S/" + API_PRECIO_MAX + "." };
+  return { valor: Math.round(n * 100) / 100 };
+}
+/* Nombre exacto, o igual sin tildes/mayúsculas/puntuación. Nunca adivina: si hay duda devuelve las opciones. */
+function apiBuscarPaquete(pedido, nombres){
+  const p = String(pedido == null ? "" : pedido).trim();
+  if (!p) return { error: "Falta el nombre del paquete.", opciones: nombres };
+  if (nombres.includes(p)) return { nombre: p };
+  const n = normPaqNombre(p);
+  const iguales = n ? nombres.filter(x => normPaqNombre(x) === n) : [];
+  if (iguales.length === 1) return { nombre: iguales[0] };
+  return { error: iguales.length > 1 ? "Ese nombre coincide con más de un paquete." : "No encuentro un paquete con ese nombre. Esta herramienta solo cambia el precio de paquetes que ya existen.", opciones: nombres };
+}
+async function apiPreciosDe(env, t){
+  const precios = preciosEnVenta(t, await loadPrecios(env, t.id));
+  return Object.keys(precios).filter(n => n !== "Clase de prueba").map(n => ({ paquete: n, precio: Number(precios[n]) || 0 }));
+}
+function apiEnlacesPrecios(t){
+  return { panel: MARCA.dominio + "/app/panel#academia", donde_en_el_panel: "Mi academia > Planes y precios",
+           pagina_publica: MARCA.dominio + "/app/a/" + (t.slug || "") + "/web", pagar: MARCA.dominio + "/app/a/" + (t.slug || "") + "/pagar" };
+}
+async function apiListarPrecios(env, t){
+  return { moneda: "PEN", precios: await apiPreciosDe(env, t), puede_cambiar_precios: !!t.__escritura, enlaces: apiEnlacesPrecios(t) };
+}
+async function apiActualizarPrecio(env, t, a, origen){
+  if (!t.__escritura) return { error: "Este conector solo puede leer. El dueño tiene que activar «permitir que mi asistente cambie precios» en Ajustes y usar la llave de escritura." };
+  if (esTenantDemo(t)) return { error: "En la demo no se cambian precios." };
+  if (t.estado === "vencido") return { error: "La cuenta está vencida: renueva Batuta para poder cambiar precios." };
+  const lista = await apiPreciosDe(env, t);
+  const nombres = lista.map(x => x.paquete);
+  const buscado = apiBuscarPaquete(a.paquete, nombres);
+  if (buscado.error) return { error: buscado.error, paquetes_disponibles: buscado.opciones };
+  const monto = apiParsePrecio(a.precio);
+  if (monto.error) return { error: monto.error };
+  const anterior = (lista.find(x => x.paquete === buscado.nombre) || {}).precio || 0;
+  if (monto.valor === anterior) return { ok: true, sin_cambios: true, paquete: buscado.nombre, precio: anterior, mensaje: "Ya cobraba S/" + anterior + ". No cambié nada.", enlaces: apiEnlacesPrecios(t) };
+  if (anterior > 0 && (monto.valor > anterior * 3 || monto.valor < anterior / 3) && String(a.confirmar || "").toLowerCase() !== "si"){
+    return { error: "Es un cambio muy grande (de S/" + anterior + " a S/" + monto.valor + "). Si es correcto, vuelve a pedirlo con confirmar = \"si\".", requiere_confirmacion: true };
+  }
+  if (await chatbotPasoTope(env, "apiw:" + t.id, API_ESCRITURAS_HORA)) return { error: "Demasiados cambios esta hora (máximo " + API_ESCRITURAS_HORA + "). Intenta más tarde." };
+  await ensureApiCambiosSchema(env);
+  await env.DB.batch([
+    stmtGuardarPrecio(env, t.id, buscado.nombre, monto.valor),
+    env.DB.prepare("INSERT INTO api_cambios (id, tenant_id, fecha, accion, objeto, anterior, nuevo, origen) VALUES (?1,?2,?3,'precio',?4,?5,?6,?7)")
+      .bind(crypto.randomUUID(), t.id, new Date().toISOString(), buscado.nombre, String(anterior), String(monto.valor), String(origen || "api"))
+  ]);
+  return { ok: true, paquete: buscado.nombre, precio_anterior: anterior, precio_nuevo: monto.valor,
+           mensaje: "Listo: «" + buscado.nombre + "» pasó de S/" + anterior + " a S/" + monto.valor + ".", enlaces: apiEnlacesPrecios(t) };
 }
 
 /* ---------- las consultas (las comparten REST y MCP) ---------- */
@@ -10318,6 +10417,8 @@ const API_TOOLS = [
   { name: "ficha_alumno", desc: "Ficha completa de un alumno: saldo por pase, proximas clases y ultimas clases dictadas.", args: { alumno: "id, codigo o nombre del alumno" } },
   { name: "agenda", desc: "Clases reservadas de los proximos dias, con alumno y profesor.", args: { dias: "cuantos dias hacia adelante (max 30, por defecto 7)" } },
   { name: "pagos_recientes", desc: "Pagos de los ultimos dias con su estado y metodo, y el total confirmado.", args: { dias: "cuantos dias hacia atras (max 120, por defecto 30)" } },
+  { name: "listar_precios", desc: "Los precios de los paquetes de la academia (en soles) y los enlaces para verlos. Úsala antes de cambiar un precio para tomar el nombre exacto del paquete.", args: {} },
+  { name: "actualizar_precio", escribe: true, desc: "Cambia el precio de UN paquete que ya existe (no crea ni borra paquetes). Devuelve el precio anterior, el nuevo y los enlaces para chequearlo. Solo funciona si el dueño activó el permiso de escritura.", args: { paquete: "nombre exacto del paquete, tal como sale en listar_precios", precio: "precio nuevo en soles, por ejemplo 280", confirmar: "escribe si solo cuando el cambio sea de más de 3 veces o menos de un tercio del precio actual" } },
   { name: "alumnos_por_renovar", desc: "Alumnos a los que se les acaban las clases (2 o menos), se les vence el plan en los proximos 10 dias o ya se les vencio. Ordenados del que esta peor al que menos. No entra quien todavia no tiene un plan puesto en su ficha: a ese no le toca renovar, le falta que la academia se lo asigne. Devuelve como maximo 50; `total` dice cuantos hay de verdad.", args: {} }
 ];
 
@@ -10330,6 +10431,8 @@ async function ejecutarHerramientaApi(env, t, nombre, args){
     case "agenda":              return apiAgenda(env, t, a.dias);
     case "pagos_recientes":     return apiPagos(env, t, a.dias);
     case "alumnos_por_renovar": return apiPorRenovar(env, t);
+    case "listar_precios":      return apiListarPrecios(env, t);
+    case "actualizar_precio":   return apiActualizarPrecio(env, t, a, "mcp");
     default: return { error: "No existe la herramienta '" + nombre + "'." };
   }
 }
@@ -10362,7 +10465,15 @@ export default {
       const tk = auth.toLowerCase().startsWith("bearer ") ? auth.slice(7).trim() : "";
       const tApi = await tenantPorApiToken(env, tk);
       if (!tApi) return json({ error: "Token inválido. Genera el tuyo en Ajustes > Conecta tu Claude." }, 401);
-      if (request.method !== "GET") return json({ error: "La API v1 es de solo lectura." }, 405);
+      const subPre = path.slice("/app/api/v1/".length);
+      if (request.method === "POST" && subPre === "precios"){
+        /* única escritura de la v1: cambiar el precio de un paquete, y solo con la llave de escritura */
+        if (!tApi.__escritura) return json({ error: "Esta llave solo lee. Activa el permiso de escritura en Ajustes y usa la llave de escritura." }, 403);
+        const bPre = await request.json().catch(() => ({}));
+        const rPre = await apiActualizarPrecio(env, tApi, bPre || {}, "api");
+        return json(rPre, rPre.error ? 400 : 200);
+      }
+      if (request.method !== "GET") return json({ error: "La API v1 es de solo lectura (salvo POST /precios con la llave de escritura)." }, 405);
       const ipApi = clientIp(request);
       if (ipApi && await chatbotPasoTope(env, "apiv1:" + tApi.id, 300)){
         return json({ error: "Demasiadas consultas esta hora. Intenta en un rato." }, 429);
@@ -10376,9 +10487,10 @@ export default {
         if (sub === "agenda")      return json(await apiAgenda(env, tApi, q.get("dias")));
         if (sub === "pagos")       return json(await apiPagos(env, tApi, q.get("dias")));
         if (sub === "por-renovar") return json(await apiPorRenovar(env, tApi));
+        if (sub === "precios")     return json(await apiListarPrecios(env, tApi));
         if (sub === "" || sub === "ayuda"){
           return json({ version: API_V1, academia: tApi.academia, solo_lectura: true,
-            rutas: ["/app/api/v1/resumen", "/app/api/v1/alumnos?q=&limite=", "/app/api/v1/alumno/{id|nombre}", "/app/api/v1/agenda?dias=7", "/app/api/v1/pagos?dias=30", "/app/api/v1/por-renovar"],
+            rutas: ["/app/api/v1/resumen", "/app/api/v1/alumnos?q=&limite=", "/app/api/v1/alumno/{id|nombre}", "/app/api/v1/agenda?dias=7", "/app/api/v1/pagos?dias=30", "/app/api/v1/por-renovar", "/app/api/v1/precios (GET lee; POST {paquete, precio} cambia, solo con la llave de escritura)"],
             mcp: MARCA.dominio + "/app/mcp/<tu-token>" });
         }
       } catch (e){ console.error("api v1", e); return json({ error: "Error del servidor" }, 500); }
@@ -10405,7 +10517,7 @@ export default {
           });
         }
         return json({ servidor: "batuta", version: API_V1, academia: tMcp.academia,
-                      herramientas: API_TOOLS.map(x => x.name),
+                      herramientas: API_TOOLS.filter(x => !x.escribe || tMcp.__escritura).map(x => x.name),
                       como_usar: "Pega esta misma URL como servidor MCP en tu Claude." });
       }
       if (request.method !== "POST") return json({ error: "Método no permitido" }, 405);
@@ -10431,9 +10543,12 @@ export default {
         if (metodo.startsWith("notifications/")) return responder(undefined);
         if (metodo === "tools/list"){
           return responder(id, {
-            tools: API_TOOLS.map(h => ({
+            tools: API_TOOLS.filter(h => !h.escribe || tMcp.__escritura).map(h => ({
               name: h.name,
               description: h.desc,
+              /* pistas para el cliente (ChatGPT/Claude): lo que solo lee se marca así; lo que cambia un precio avisa que escribe pero no borra */
+              annotations: h.escribe ? { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false }
+                                     : { readOnlyHint: true, openWorldHint: false },
               inputSchema: {
                 type: "object",
                 properties: Object.keys(h.args).reduce((acc, k) => { acc[k] = { type: "string", description: h.args[k] }; return acc; }, {}),
@@ -10444,7 +10559,7 @@ export default {
         }
         if (metodo === "tools/call"){
           const nombre = String((rpc.params && rpc.params.name) || "");
-          if (!API_TOOLS.some(h => h.name === nombre)){
+          if (!API_TOOLS.some(h => h.name === nombre && (!h.escribe || tMcp.__escritura))){
             return responder(id, { content: [{ type: "text", text: "No existe la herramienta '" + nombre + "'." }], isError: true });
           }
           const datos = await ejecutarHerramientaApi(env, tMcp, nombre, (rpc.params && rpc.params.arguments) || {});
@@ -18578,7 +18693,7 @@ export default {
              el 10-ago y nadie lo sumo aqui). Un profesor contratado leia los datos de cobro
              personales del dueno de la academia. Van los rieles COMPLETOS. */
           if (!esDueno){
-            for (const kSec of ["nubefact_token", "nubefact_ruta", "fact_proximo_numero", "gcal_client_secret", "gcal_client_id",
+            for (const kSec of ["api_token", "api_token_w", "nubefact_token", "nubefact_ruta", "fact_proximo_numero", "gcal_client_secret", "gcal_client_id",
                                 "pago_numero", "pago_titular", "bcp_cuenta", "bcp_cci", "interbank_cuenta", "interbank_cci",
                                 "scotia_cuenta", "scotia_cci", "crypto_moneda", "crypto_red", "crypto_wallet"]){
               if (kSec in config) delete config[kSec];
@@ -19157,7 +19272,7 @@ export default {
           if (esDueno){
             const preciosPut = body.precios || {};
             for (const k of Object.keys(preciosPut)){
-              stmts.push(env.DB.prepare("INSERT INTO precios (tenant_id, paquete, precio) VALUES (?1, ?2, ?3)").bind(tid, k, Number(preciosPut[k]) || 0));
+              stmts.push(stmtGuardarPrecio(env, tid, k, Number(preciosPut[k]) || 0));
             }
           }
           /* Reservas que quedaron sin dueño (21-ago-2026). Este guardado borra y reinserta
@@ -19287,6 +19402,35 @@ export default {
           const bTk = await request.json().catch(() => ({}));
           const token = await apiTokenDe(env, tid, bTk && bTk.accion === "rotar");
           return json({ ok: true, token, mcp_url: MARCA.dominio + "/app/mcp/" + token, api_url: MARCA.dominio + "/app/api/v1" });
+        }
+
+        /* Permiso de escritura del asistente (25-oct-2026): APAGADO por defecto. Activar crea una llave
+           aparte (`bw_…`); desactivar la borra, así la URL que ya se pegó deja de poder escribir al instante.
+           La llave de lectura de siempre no cambia. Solo el dueño. */
+        if (path === "/app/api/admin/api-escritura" && request.method === "POST"){
+          if (!esDueno) return json({ error: "Esto lo maneja el dueño." }, 403);
+          if (esTenantDemo(t)) return json({ error: "En la demo no se activa." }, 400);
+          const bEs = await request.json().catch(() => ({}));
+          const accion = String((bEs && bEs.accion) || "estado");
+          if (accion === "activar" || accion === "rotar"){
+            await setConfigValor(env, tid, "api_escritura", "1");
+            const tw = await apiWriteTokenDe(env, tid, accion === "rotar");
+            return json({ ok: true, activo: true, token: tw, mcp_url: MARCA.dominio + "/app/mcp/" + tw });
+          }
+          if (accion === "desactivar"){
+            await setConfigValor(env, tid, "api_escritura", "0");
+            await env.DB.prepare("DELETE FROM config WHERE tenant_id = ?1 AND clave = 'api_token_w'").bind(tid).run();
+            return json({ ok: true, activo: false });
+          }
+          const cfgEs = await loadConfig(env, tid);
+          const act = String(cfgEs.api_escritura || "") === "1" && !!cfgEs.api_token_w;
+          return json({ ok: true, activo: act, token: act ? cfgEs.api_token_w : "", mcp_url: act ? MARCA.dominio + "/app/mcp/" + cfgEs.api_token_w : "" });
+        }
+        if (path === "/app/api/admin/api-cambios" && request.method === "GET"){
+          if (!esDueno) return json({ error: "Esto lo ve el dueño." }, 403);
+          await ensureApiCambiosSchema(env);
+          const rows = (await env.DB.prepare("SELECT fecha, accion, objeto, anterior, nuevo, origen FROM api_cambios WHERE tenant_id = ?1 ORDER BY fecha DESC LIMIT 30").bind(tid).all()).results || [];
+          return json({ cambios: rows });
         }
 
         /* ---------- Google Calendar: estado / conectar / desconectar ----------

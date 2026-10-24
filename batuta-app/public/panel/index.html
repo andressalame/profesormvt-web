@@ -1983,6 +1983,15 @@ button[data-ayuda],a[data-ayuda],select[data-ayuda],input[data-ayuda],label[data
         <div class="cfgrow"><span class="pk">Tu llave</span><input id="apiToken" type="text" readonly /></div>
         <p class="hint">Guárdala como una contraseña: quien la tenga puede leer los datos de tu academia. Si se te escapa, genera una nueva y la anterior deja de servir al instante.</p>
       </div>
+      <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--line);">
+        <label class="wtoggle" style="display:flex;gap:8px;align-items:center;"><input type="checkbox" id="apiEscChk" /> <b>Permitir que mi asistente cambie precios</b></label>
+        <p class="hint">Apagado por defecto. Con tu llave de siempre tu asistente <b>solo lee</b>. Al activar esto se crea una <b>segunda llave (de escritura)</b>: con ella puedes decirle «ahora cobra S/280 por el paquete de 4 clases» y lo cambia en Batuta. Solo cambia el precio de paquetes que ya existen, no crea ni borra nada, y cada cambio queda anotado abajo. Si la desactivas, esa llave deja de servir al instante.</p>
+        <div id="apiEscBox" style="display:none;">
+          <div class="cfgrow"><span class="pk">Para pegar en tu Claude o ChatGPT (con permiso de cambiar precios)</span><input id="apiEscUrl" type="text" readonly /></div>
+          <div class="rowact" style="margin-top:6px;"><button class="btn ghost sm" id="btnApiEscRotar" type="button">Generar otra llave de escritura</button></div>
+        </div>
+        <div id="apiCambiosBox" style="display:none;margin-top:10px;"><div class="mini" style="margin-bottom:4px;">Últimos cambios hechos por tu asistente</div><div id="apiCambios" class="hint"></div></div>
+      </div>
     </div>
     <div class="group" data-aj="avanzado">
       <h2>Avisos en tu teléfono (app + push)</h2>
@@ -11886,6 +11895,45 @@ var _bCuD=el("btnCulqiDesconectar"); if(_bCuD) _bCuD.addEventListener("click",fu
     bR.disabled = true;
     apiPost('/app/api/admin/api-token', {accion:"rotar"}).then(function(d){ pintarToken(d); toast("Listo: llave nueva"); bR.disabled=false; })
       .catch(function(e){ toast((e&&e.message)||"No se pudo generar"); bR.disabled=false; });
+  });
+})();
+
+
+/* ---------- Permiso de escritura del asistente (25-oct-2026) ---------- */
+(function(){
+  var chk=el("apiEscChk"); if(!chk) return;
+  function pintar(d){
+    var on=!!(d&&d.activo);
+    chk.checked=on;
+    el("apiEscBox").style.display=on?"":"none";
+    el("apiEscUrl").value=on?(d.mcp_url||""):"";
+    cargarCambios();
+  }
+  function cargarCambios(){
+    fetch("/app/api/admin/api-cambios",{headers:hdr()}).then(function(r){return r.json();}).then(function(d){
+      var rows=(d&&d.cambios)||[];
+      el("apiCambiosBox").style.display=(rows.length||chk.checked)?"":"none";
+      el("apiCambios").innerHTML=rows.length?rows.map(function(c){
+        return esc((c.fecha||"").slice(0,16).replace("T"," "))+" · "+esc(c.objeto)+": S/ "+esc(c.anterior)+" → S/ "+esc(c.nuevo);
+      }).join("<br>"):"Todavía no ha cambiado nada.";
+    }).catch(function(){});
+  }
+  function estado(){ apiPost("/app/api/admin/api-escritura",{accion:"estado"}).then(pintar).catch(function(){}); }
+  chk.addEventListener("change",function(){
+    var quiere=chk.checked;
+    if(quiere && !confirm("Vas a permitir que un asistente (Claude, ChatGPT…) con la llave de escritura cambie los precios de tus paquetes. ¿Activar?")){ chk.checked=false; return; }
+    apiPost("/app/api/admin/api-escritura",{accion:quiere?"activar":"desactivar"}).then(function(d){ pintar(d); toast(quiere?"Permiso activado":"Permiso apagado: esa llave ya no sirve"); })
+      .catch(function(e){ chk.checked=!quiere; toast((e&&e.message)||"No se pudo cambiar"); });
+  });
+  el("btnApiEscRotar").addEventListener("click",function(){
+    if(!confirm("La llave de escritura anterior deja de funcionar al instante. ¿Generar otra?")) return;
+    apiPost("/app/api/admin/api-escritura",{accion:"rotar"}).then(function(d){ pintar(d); toast("Llave de escritura nueva"); }).catch(function(e){ toast((e&&e.message)||"No se pudo"); });
+  });
+  var ver=el("btnApiToken"); if(ver) ver.addEventListener("click",estado);
+  /* los links que manda el asistente (…/app/panel#academia) abren esa pestaña */
+  window.addEventListener("load",function(){
+    var h=(location.hash||"").slice(1);
+    if(/^(academia|ajustes|pagos|alumnos|agenda|web)$/.test(h)) setTimeout(function(){ var t=document.querySelector('.tab[data-tab="'+h+'"]'); if(t) t.click(); },1500);
   });
 })();
 

@@ -80,3 +80,7 @@ Pruebas: `pruebas-mi-web-layout.mjs` (datos y render), `pruebas-mi-web-compatibl
 `wrangler dev --local`; mouse y touch). Límites: no se mueven fotos ni tarjetas de cursos/precios (son un módulo fijo dentro de su sección);
 las medidas de alto son «alto mínimo»; sin editor separado de PC y celular (el orden es el mismo, el tamaño no).
 Ojo al desplegar: el bundler agrega `__name`; el script del editor ya lo define (si se vuelve a mover ese script, conservar esa línea).
+
+## Asistente (MCP/API) que cambia precios (25-oct-2026)
+Hecho: `listar_precios` y `actualizar_precio` (ver RUNBOOK, «Hablar con tu academia desde Claude o ChatGPT»). Llave de escritura aparte, apagada por defecto, bitácora `api_cambios`, tope y validaciones.
+Pendiente / límites: (1) no crea ni borra paquetes ni cambia otros datos (alumnos, pagos, planes) por diseño; (2) falta probar con un cliente real de Claude y de ChatGPT, y confirmar qué planes de ChatGPT permiten conectores MCP con escritura; (3) la llave va en la URL: si se quiere más seguridad, pasar a OAuth por academia; (4) el tope de 20 cambios/hora y el límite de 3x son valores a ajustar con uso real; (5) «deshacer» el último cambio desde el panel no existe: se revierte pidiendo el precio anterior.
