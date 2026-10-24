@@ -5710,6 +5710,39 @@ async function enviarPushA(env, subs, payload){
   }
   return ok;
 }
+/* ---------- Respaldo completo de UNA academia (24-oct-2026) ----------
+   La promesa es «tus datos son tuyos». El botón «Backup servidor» llamaba a rutas que no existían y
+   el JSON de exportación no traía el chat. Esto arma TODO lo de la academia (solo filas con su
+   tenant_id) y lo entrega: nunca contraseñas, sesiones ni tokens/llaves secretas. Si una tabla
+   se corta por el tope, se DICE en `truncadas` (nada se pierde en silencio). */
+const RESPALDO_TABLAS = [
+  ["alumnos", 20000], ["registro", 100000], ["cuentas", 20000], ["compras", 50000], ["reservas", 100000],
+  ["disponibilidad", 5000], ["pausas", 20000], ["espera", 20000], ["precios", 2000], ["recursos", 20000],
+  ["ejercicios", 20000], ["chat_mensajes", 200000], ["leads", 50000], ["gastos", 50000],
+  ["comprobantes", 50000], ["grupos", 5000], ["sedes", 500], ["profesores", 500], ["feedback", 20000]
+];
+const RESPALDO_SECRETOS_COL = /^(pass_hash|pass_salt|invite_token|token|token_hash)$/;
+const RESPALDO_SECRETOS_CONFIG = /(token|secret|api_key|clave_api|password)/i;
+async function armarRespaldo(env, tid){
+  const datos = {}, truncadas = [], ausentes = [];
+  let filas = 0;
+  for (const [tabla, tope] of RESPALDO_TABLAS){
+    try {
+      const r = (await env.DB.prepare("SELECT * FROM " + tabla + " WHERE tenant_id = ?1 LIMIT ?2").bind(tid, tope + 1).all()).results || [];
+      if (r.length > tope){ r.length = tope; truncadas.push(tabla); }
+      for (const f of r) for (const k of Object.keys(f)) if (RESPALDO_SECRETOS_COL.test(k)) delete f[k];
+      datos[tabla] = r; filas += r.length;
+    } catch (e) { ausentes.push(tabla); }
+  }
+  try {
+    const cfg = (await env.DB.prepare("SELECT clave, valor FROM config WHERE tenant_id = ?1").bind(tid).all()).results || [];
+    datos.config = cfg.filter(c => !RESPALDO_SECRETOS_CONFIG.test(String(c.clave)));
+    filas += datos.config.length;
+  } catch (e) { ausentes.push("config"); }
+  return { formato: "batuta-respaldo-v1", generado: new Date().toISOString(), tenant_id: tid, filas, truncadas, ausentes, datos };
+}
+const respaldoLlave = (tid, fecha) => "backups/" + tid + "/" + fecha + ".json";
+
 async function avisarPush(env, tenantId, info){
   const { results } = await env.DB.prepare("SELECT * FROM push_subs WHERE tenant_id = ?1 AND cuenta_id IS NULL").bind(tenantId).all();
   return enviarPushA(env, results || [], info);
@@ -18245,6 +18278,48 @@ export default {
                         })),
                         msg_campos: CAMPOS_MSG,
                         vapid_public: env.VAPID_PUBLIC_KEY || "" });
+        }
+
+        /* -------- Respaldo del servidor (24-oct-2026) --------
+           Solo el dueño. `ahora` arma el respaldo y, si hay R2, lo guarda; `descargar` lo entrega
+           (el guardado de esa fecha, o uno recién armado). `respaldo?solo=chat` es lo que suma
+           «Exportar JSON». Siempre de ESTA academia: el tenant sale de la sesión, nunca del cliente. */
+        if (path === "/app/api/admin/backup/ahora" && request.method === "POST"){
+          if (!esDueno) return json({ error: "Solo el dueño" }, 403);
+          const rsp = await armarRespaldo(env, tid);
+          const texto = JSON.stringify(rsp);
+          const fecha = hoyLima();
+          let key = "";
+          if (env.RECURSOS_R2){
+            key = respaldoLlave(tid, fecha);
+            try { await env.RECURSOS_R2.put(key, texto, { httpMetadata: { contentType: "application/json" } }); }
+            catch (e) { key = ""; }
+          }
+          return json({ ok: true, key: key || ("backups/" + fecha + ".json"), guardado: !!key, fecha,
+                        bytes: texto.length, filas: rsp.filas, truncadas: rsp.truncadas });
+        }
+        if (path === "/app/api/admin/backup/descargar" && request.method === "GET"){
+          if (!esDueno) return json({ error: "Solo el dueño" }, 403);
+          const f = String(url.searchParams.get("fecha") || "");
+          let texto = null;
+          if (/^\d{4}-\d{2}-\d{2}$/.test(f) && env.RECURSOS_R2){
+            const o = await env.RECURSOS_R2.get(respaldoLlave(tid, f)).catch(() => null);
+            if (o) texto = await o.text();
+          }
+          if (texto === null) texto = JSON.stringify(await armarRespaldo(env, tid));
+          return new Response(texto, { status: 200, headers: {
+            "content-type": "application/json; charset=utf-8",
+            "content-disposition": 'attachment; filename="batuta-respaldo-' + hoyLima() + '.json"',
+            "cache-control": "no-store" } });
+        }
+        if (path === "/app/api/admin/respaldo" && request.method === "GET"){
+          if (!esDueno) return json({ error: "Solo el dueño" }, 403);
+          if (url.searchParams.get("solo") === "chat"){
+            const ch = (await env.DB.prepare("SELECT * FROM chat_mensajes WHERE tenant_id = ?1 ORDER BY fecha LIMIT 200001").bind(tid).all()).results || [];
+            const corto = ch.length > 200000; if (corto) ch.length = 200000;
+            return json({ chat_mensajes: ch, truncado: corto });
+          }
+          return json(await armarRespaldo(env, tid));
         }
 
         /* -------- La campanita (23-ago-2026) --------

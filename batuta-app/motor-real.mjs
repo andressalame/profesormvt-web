@@ -14,7 +14,7 @@ import { join } from "node:path";
 /* 🔴 22-ago-2026 · esto estaba hardcodeado, así que ninguna prueba que use `cargarMotor`
    podía correrse contra una versión RECONSTRUIDA del worker para comprobar el rojo-antes:
    siempre leía el archivo real, ya arreglado, y el rojo salía verde sin avisar. */
-const RUTA = process.env.BATUTA_WORKER || (process.env.HOME + "/Code/mvt/web/batuta-app/worker/index.js");
+const RUTA = process.env.BATUTA_WORKER || new URL("worker/index.js", import.meta.url).pathname;
 
 export async function cargarMotor(nombres, opciones){
   const SRC = readFileSync((opciones && opciones.ruta) || RUTA, "utf8");

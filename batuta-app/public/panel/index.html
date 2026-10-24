@@ -9563,15 +9563,26 @@ el("fileAudio").addEventListener("change",function(e){
 
 /* ---------- Export ---------- */
 el("btnExport").addEventListener("click",function(){
-  var blob=new Blob([JSON.stringify(db,null,2)],{type:"application/json"});
-  downloadBlob(blob,"crm-"+MARCA.archivoExport+"-"+new Date().toISOString().slice(0,10)+".json");
-  toast("Respaldo exportado");
+  /* 24-oct-2026: el JSON ahora trae tambien los mensajes del chat (solo el dueno puede pedirlos;
+     si falla se exporta lo demas y se avisa, no se calla). */
+  function bajar(chat,aviso){
+    var out=Object.assign({},db); if(chat) out.chat_mensajes=chat;
+    var blob=new Blob([JSON.stringify(out,null,2)],{type:"application/json"});
+    downloadBlob(blob,"crm-"+MARCA.archivoExport+"-"+new Date().toISOString().slice(0,10)+".json");
+    toast(aviso||"Respaldo exportado");
+  }
+  fetch("/app/api/admin/respaldo?solo=chat",{headers:hdr()}).then(function(r){ return r.ok?r.json():null; })
+    .then(function(r){
+      if(!r) return bajar(null,"Exportado sin los mensajes del chat (solo el dueño los descarga)");
+      bajar(r.chat_mensajes||[], r.truncado?"Exportado, pero el chat es muy largo y quedó cortado":"");
+    })
+    .catch(function(){ bajar(null,"Exportado sin los mensajes del chat (no se pudieron leer)"); });
 });
 el("btnBackupSrv").addEventListener("click",function(){
   var b=el("btnBackupSrv"); b.disabled=true; toast("Corriendo backup del servidor…");
   apiPost("/app/api/admin/backup/ahora",{}).then(function(r){
-    toast("Backup OK ("+Math.round((r.bytes||0)/1024)+" KB · "+r.filas+" filas)");
-    var f=(String(r.key||"").match(/(\d{4}-\d{2}-\d{2})/)||[])[1];
+    toast("Backup OK ("+Math.round((r.bytes||0)/1024)+" KB · "+r.filas+" filas)"+((r.truncadas&&r.truncadas.length)?" · cortado en: "+r.truncadas.join(", "):""));
+    var f=r.fecha||(String(r.key||"").match(/(\d{4}-\d{2}-\d{2})/)||[])[1];
     return f ? fetch("/app/api/admin/backup/descargar?fecha="+f,{headers:hdr()}) : null;
   }).then(function(res){ return (res&&res.ok)?res.blob():null; })
     .then(function(blob){ if(blob) downloadBlob(blob,"backup-servidor.json"); })
