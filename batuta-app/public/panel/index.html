@@ -4503,6 +4503,16 @@ function renderLeads(){
         return '<button class="btn ghost sm'+(LEAD_FILTRO===e.k?" sel":"")+'" data-letapa="'+e.k+'">'+e.n+' ('+(conteos[e.k]||0)+')</button>';
       }).join("");
   }
+  /* 24-oct-2026 · conversión por etapa. Se calcula con la etapa ACTUAL de cada interesado (no hay
+     historial): «llegaron a prueba» incluye a los que ya son alumnos. Los perdidos cuentan en el total. */
+  var cv=el("leadConv");
+  if(!cv && fe){ cv=document.createElement("div"); cv.id="leadConv"; cv.className="mini"; cv.style.margin="8px 0"; fe.insertAdjacentElement("afterend",cv); }
+  if(cv){
+    var tot=leads.length, nP=0, nA=0, nC=0;
+    leads.forEach(function(l){ var k=l.etapa||"nuevo"; if(k==="alumno"){nA++;nP++;nC++;} else if(k==="prueba"){nP++;nC++;} else if(k==="contactado"){nC++;} });
+    var pc=function(n,d){ return d?Math.round(n*100/d)+"%":"–"; };
+    cv.innerHTML = tot ? ('Conversión de tus '+tot+' interesados: <strong>'+pc(nC,tot)+'</strong> contactados · <strong>'+pc(nP,tot)+'</strong> llegaron a prueba · <strong>'+pc(nA,tot)+'</strong> son alumnos'+(nP?(' · de cada 100 que probaron, '+Math.round(nA*100/nP)+' se quedaron'):'')) : '';
+  }
   var vista=LEAD_FILTRO?leads.filter(function(l){return (l.etapa||"nuevo")===LEAD_FILTRO;}):leads;
   /* los que tocan seguimiento hoy, arriba */
   var hoyS=hoyLima();

@@ -3550,6 +3550,8 @@ async function confirmarCompra(env, tenantId, tenant, compra){
   if (!filasReclamo){
     return { ok: false, error: "Esa compra ya fue procesada", status: 409, yaProcesada: true };
   }
+  /* embudo: quien paga pasa a «alumno» (la clase de prueba paga solo cuenta como «prueba») */
+  await leadAvanzar(env, tenantId, { email: cu.email, whatsapp: cu.whatsapp }, compra.paquete === "Clase de prueba" ? "prueba" : "alumno");
 
   const stmts = [];
   let renovado = false;
@@ -5747,6 +5749,31 @@ async function avisarPush(env, tenantId, info){
   const { results } = await env.DB.prepare("SELECT * FROM push_subs WHERE tenant_id = ?1 AND cuenta_id IS NULL").bind(tenantId).all();
   return enviarPushA(env, results || [], info);
 }
+/* ---------- Embudo que se mueve solo (24-oct-2026) ----------
+   La promesa: «embudo de ventas». Las etapas solo cambiaban a mano. Ahora el interesado AVANZA
+   cuando hace algo medible: reserva (→ prueba) o paga (→ alumno). Se le reconoce por correo o por
+   teléfono (últimos 9 dígitos, así «+51 989 077 928» y «989077928» son la misma persona).
+   Solo avanza: nunca retrocede a nadie ni toca a un «perdido» que apenas reservó (eso lo decide el
+   dueño); un «perdido» que PAGÓ sí pasa a alumno, porque ya lo es. Solo toca la fila del lead. */
+const LEAD_DESDE = { prueba: ["nuevo", "contactado"], alumno: ["nuevo", "contactado", "prueba", "perdido"] };
+async function leadAvanzar(env, tenantId, { email, whatsapp }, etapa){
+  const desde = LEAD_DESDE[etapa];
+  if (!desde) return 0;
+  const mail = String(email || "").trim().toLowerCase();
+  const tel9 = String(whatsapp || "").replace(/\D/g, "").slice(-9);
+  const quien = [], args = [tenantId, new Date(Date.now() - 5 * 3600000).toISOString().slice(0, 10), etapa];
+  if (mail){ args.push(mail); quien.push("LOWER(TRIM(email)) = ?" + args.length); }
+  if (tel9.length >= 8){ args.push("%" + tel9); quien.push("REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(COALESCE(whatsapp,''),' ',''),'+',''),'-',''),'(',''),')','') LIKE ?" + args.length); }
+  if (!quien.length) return 0;
+  const lista = desde.map(x => "'" + x + "'").join(",");
+  try {
+    const r = await env.DB.prepare(
+      "UPDATE leads SET etapa = ?3, actualizado = ?2 WHERE tenant_id = ?1 AND COALESCE(etapa,'nuevo') IN (" + lista + ") AND (" + quien.join(" OR ") + ")"
+    ).bind(...args).run();
+    return Number(r && r.meta && r.meta.changes) || 0;
+  } catch (e) { return 0; }   /* el embudo nunca tumba una reserva ni un cobro */
+}
+
 /* ---------- Avisos al PROFESOR cuando el alumno actúa (24-oct-2026) ----------
    La promesa: «avisos en tu celular» y «chat con tus alumnos». Hasta hoy solo se avisaba al alumno;
    el profe se enteraba si tenía el panel abierto. Push web (la infraestructura de siempre) a los
@@ -16295,6 +16322,7 @@ export default {
           }
           try { await env.DB.prepare("UPDATE espera SET estado = 'convertida' WHERE tenant_id = ?1 AND inicio_utc = ?2 AND alumno_id = ?3 AND estado IN ('esperando','avisado')").bind(tid, iso, alumno.id).run(); } catch (e) {}
           gcalAvisar(env, ctx, tid);
+          await leadAvanzar(env, tid, { email: cu.email || alumno.email, whatsapp: cu.whatsapp || alumno.whatsapp }, "prueba");
           try { const tR = await env.DB.prepare("SELECT * FROM tenants WHERE id = ?1").bind(tid).first(); if (tR) await avisarProfeDeAlumno(env, tR, { tipo: "reserva", alumnoId: alumno.id, nombre: cu.nombre || alumno.nombre, extra: fmtLima(iso) + (cursoR ? " · " + cursoR : "") }); } catch (e) {}
           return json({ ok: true, reservadas: 1, tipo: "suelta" });
         }
@@ -16334,6 +16362,7 @@ export default {
         }
         if (creadas === 0) return json({ error: "No pude apartar el horario fijo (sin cupos esas semanas o sin clases en tu paquete)." }, 409);
         gcalAvisar(env, ctx, tid);
+        await leadAvanzar(env, tid, { email: cu.email || alumno.email, whatsapp: cu.whatsapp || alumno.whatsapp }, "prueba");
         try { const tR = await env.DB.prepare("SELECT * FROM tenants WHERE id = ?1").bind(tid).first(); if (tR) await avisarProfeDeAlumno(env, tR, { tipo: "reservas_fijas", alumnoId: alumno.id, nombre: cu.nombre || alumno.nombre, extra: creadas + " clases desde " + fmtLima(iso) }); } catch (e) {}
         return json({ ok: true, reservadas: creadas, tipo: "fija", saltadas });
       }
