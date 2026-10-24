@@ -56,6 +56,9 @@ export async function cargarMotor(nombres, opciones){
   let cuerpo = "";
   const faltan = [];
   const yaCortadas = new Set();
+  /* `opciones.omitir`: nombres que NO se arrastran (se leen de globalThis). Sirve para poner un
+     espía en la salida (push, correo) sin que la prueba llame al servicio real. */
+  const omitir = new Set((opciones && opciones.omitir) || []);
   for (const n of nombres){
     const f = cortarFn(n);
     if (f){ cuerpo += f + "\n"; yaCortadas.add(n); } else faltan.push(n);
@@ -128,7 +131,7 @@ export async function cargarMotor(nombres, opciones){
       .map(x => x.replace(/\s*\($/, "")));
     let nuevas = 0;
     for (const c of llamadas){
-      if (yaCortadas.has(c)) continue;
+      if (yaCortadas.has(c) || omitir.has(c)) continue;
       const f = cortarFn(c);
       if (f){ cuerpo += f + "\n"; yaCortadas.add(c); nuevas++; }
     }

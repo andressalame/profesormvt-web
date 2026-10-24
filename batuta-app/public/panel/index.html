@@ -7640,12 +7640,29 @@ function chatAdmCargarHilos(){
       b.dataset.conv=h.cuenta_id;
       b.dataset.label=h.nombre||h.email||"Alumno";
       b.title=(h.ultimo_admin? "Tú: ":"")+(h.ultimo_texto||"");
-      b.textContent=(h.nombre||h.email||"Alumno");
+      b.textContent=(h.nombre||h.email||"Alumno")+(h.sin_leer>0 && h.cuenta_id!==chatAdmConv ? " ("+h.sin_leer+")" : "");
+      if(h.sin_leer>0 && h.cuenta_id!==chatAdmConv) b.style.fontWeight="700";
       if(h.cuenta_id===chatAdmConv) b.classList.add("active");
       cont.appendChild(b);
     });
+    chatAdmPintarSinLeer(d.hilos||[]);
   }).catch(function(){});
 }
+/* 24-oct-2026: contador de no leídos en la pestaña Chat. La conversación abierta cuenta como leída
+   (el servidor la marca al abrirla), así que no se cuenta aquí para que no parpadee. */
+function chatAdmPintarSinLeer(hilos){
+  var tab=document.querySelector('.tab[data-tab="chat"]'); if(!tab) return;
+  var abierta=tab.classList.contains("active"), n=0;
+  hilos.forEach(function(h){ if(!(abierta && h.cuenta_id===chatAdmConv)) n+=(h.sin_leer||0); });
+  tab.textContent = n>0 ? "Chat ("+n+")" : "Chat";
+}
+/* con otra pestaña abierta también se revisa, cada minuto */
+setInterval(function(){
+  if(!token || document.hidden) return;
+  var tab=document.querySelector('.tab[data-tab="chat"]');
+  if(!tab || tab.classList.contains("active")) return;
+  chatAdmCargarHilos();
+}, 60000);
 function chatAdmLlenarAlumnos(){
   var sel=el("chatNuevoAlumno"); if(!sel) return;
   var actual=sel.value;

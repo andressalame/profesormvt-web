@@ -312,6 +312,13 @@ CREATE TABLE IF NOT EXISTS chat_mensajes (
 );
 CREATE INDEX IF NOT EXISTS idx_chat_fecha ON chat_mensajes (tenant_id, fecha);
 CREATE INDEX IF NOT EXISTS idx_chat_hilo ON chat_mensajes (tenant_id, hilo);
+-- Marca de lectura del profe por hilo privado (24-oct-2026): sin leer = mensajes del alumno con rowid > rid.
+CREATE TABLE IF NOT EXISTS chat_leido (
+  tenant_id TEXT NOT NULL,
+  hilo      TEXT NOT NULL,
+  rid       INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (tenant_id, hilo)
+);
 
 CREATE TABLE IF NOT EXISTS push_subs (
   endpoint    TEXT PRIMARY KEY,

@@ -5747,6 +5747,74 @@ async function avisarPush(env, tenantId, info){
   const { results } = await env.DB.prepare("SELECT * FROM push_subs WHERE tenant_id = ?1 AND cuenta_id IS NULL").bind(tenantId).all();
   return enviarPushA(env, results || [], info);
 }
+/* ---------- Avisos al PROFESOR cuando el alumno actúa (24-oct-2026) ----------
+   La promesa: «avisos en tu celular» y «chat con tus alumnos». Hasta hoy solo se avisaba al alumno;
+   el profe se enteraba si tenía el panel abierto. Push web (la infraestructura de siempre) a los
+   dispositivos del panel y, para el chat, correo de respaldo (por si no activó el push).
+   Nunca rompe la acción del alumno: todo va envuelto y devuelve qué salió. */
+function textoAvisoProfe(tipo, nombre, extra){
+  const n = String(nombre || "Un alumno").slice(0, 60);
+  if (tipo === "chat") return { title: "Mensaje de " + n, body: String(extra || "").slice(0, 90) };
+  if (tipo === "reserva") return { title: n + " reservó una clase", body: String(extra || "") };
+  if (tipo === "reservas_fijas") return { title: n + " reservó su horario fijo", body: String(extra || "") };
+  if (tipo === "cancelo") return { title: n + " canceló una clase", body: String(extra || "") };
+  return { title: "Novedad de " + n, body: String(extra || "") };
+}
+/* A quién le toca el correo: el profesor asignado al alumno si tiene correo, si no el dueño. */
+async function correoDelProfeDeAlumno(env, tenant, alumnoId){
+  try {
+    const al = alumnoId ? await env.DB.prepare("SELECT profesor_id FROM alumnos WHERE id = ?1 AND tenant_id = ?2").bind(alumnoId, tenant.id).first() : null;
+    if (al && al.profesor_id){
+      const p = await env.DB.prepare("SELECT email FROM profesores WHERE id = ?1 AND tenant_id = ?2 AND estado <> 'suspendido'").bind(al.profesor_id, tenant.id).first();
+      if (p && p.email) return p.email;
+    }
+  } catch (e) {}
+  return tenant.email || "";
+}
+async function avisarProfeDeAlumno(env, tenant, { tipo, alumnoId, nombre, extra, correo }){
+  const out = { push: 0, correo: false };
+  try {
+    const tx = textoAvisoProfe(tipo, nombre, extra);
+    const panel = MARCA.dominio + "/app/panel";
+    out.push = await avisarPush(env, tenant.id, { title: tx.title, body: tx.body, url: panel });
+    if (correo){
+      const to = await correoDelProfeDeAlumno(env, tenant, alumnoId);
+      if (to){
+        const esc1 = (x) => String(x || "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+        out.correo = !!(await enviarCorreo(env, {
+          to, subject: tx.title, tenantId: tenant.id,
+          html: "<p>" + esc1(tx.title) + "</p>" + (tx.body ? "<p style=\"padding:10px;background:#f4f4f4;border-radius:6px\">" + esc1(tx.body) + "</p>" : "") +
+                "<p><a href=\"" + panel + "\">Responder desde tu panel</a></p>"
+        }));
+      }
+    }
+  } catch (e) { /* un aviso fallido nunca tumba la acción del alumno */ }
+  return out;
+}
+/* Mensajes sin leer del chat privado: lo del alumno que está después de la marca de lectura de ese hilo. */
+async function ensureChatLeidoSchema(env){
+  await env.DB.prepare("CREATE TABLE IF NOT EXISTS chat_leido (tenant_id TEXT NOT NULL, hilo TEXT NOT NULL, rid INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (tenant_id, hilo))").run();
+}
+async function marcarChatLeido(env, tid, hilo, rid){
+  if (!(rid > 0)) return;
+  await ensureChatLeidoSchema(env);
+  await env.DB.prepare(
+    "INSERT INTO chat_leido (tenant_id, hilo, rid) VALUES (?1,?2,?3) ON CONFLICT(tenant_id, hilo) DO UPDATE SET rid = MAX(rid, excluded.rid)"
+  ).bind(tid, hilo, rid).run();
+}
+const SQL_CHAT_SIN_LEER =
+  "SELECT m.hilo AS hilo, COUNT(*) AS n FROM chat_mensajes m " +
+  "LEFT JOIN chat_leido l ON l.tenant_id = m.tenant_id AND l.hilo = m.hilo " +
+  "WHERE m.tenant_id = ?1 AND m.hilo <> 'grupal' AND m.es_admin = 0 AND m.rowid > COALESCE(l.rid, 0) GROUP BY m.hilo";
+async function chatSinLeer(env, tid){
+  try {
+    await ensureChatLeidoSchema(env);
+    const rows = (await env.DB.prepare(SQL_CHAT_SIN_LEER).bind(tid).all()).results || [];
+    const porHilo = {}; for (const r of rows) porHilo[r.hilo] = Number(r.n) || 0;
+    return porHilo;
+  } catch (e) { return {}; }
+}
+
 async function avisarPushAlumno(env, tenantId, cuentaId, payload){
   if (!cuentaId) return 0;
   const { results } = await env.DB.prepare("SELECT * FROM push_subs WHERE tenant_id = ?1 AND cuenta_id = ?2").bind(tenantId, cuentaId).all();
@@ -14217,6 +14285,8 @@ export default {
                    texto: m.texto, fecha: m.fecha,
                    mio: who.admin ? (m.es_admin === 1) : (m.cuenta_id === who.cu.id) };
         });
+        /* el profe abrió el hilo: lo que hay hasta aquí ya está leído */
+        if (who.admin && max > 0){ try { await marcarChatLeido(env, tid, hilo, max); } catch (e) {} }
         return json({ mensajes, max });
       }
 
@@ -14228,7 +14298,7 @@ export default {
         const texto = limpiarTextoChat(b.texto);
         if (!texto) return json({ error: "Escribe un mensaje." }, 400);
         if (texto.length > 500) return json({ error: "Máximo 500 caracteres." }, 400);
-        let hilo, nombre, esAdmin, cuentaId;
+        let hilo, nombre, esAdmin, cuentaId, ultPrivAlumno = null;
         if (who.admin){
           hilo = String(b.cuenta || "").trim();
           if (!/^[0-9a-fA-F-]{8,64}$/.test(hilo)) return json({ error: "Conversación no válida" }, 400);
@@ -14248,6 +14318,7 @@ export default {
           const ult = await env.DB.prepare(
             "SELECT MAX(fecha) AS f FROM chat_mensajes WHERE tenant_id = ?1 AND hilo = ?2 AND es_admin = 0"
           ).bind(tid, hilo).first();
+          ultPrivAlumno = ult;
           if (ult && ult.f && (Date.now() - new Date(ult.f).getTime()) < 3000){
             return json({ error: "Despacio, un mensaje cada 3 segundos." }, 429);
           }
@@ -14256,6 +14327,13 @@ export default {
           "INSERT INTO chat_mensajes (id,tenant_id,cuenta_id,nombre,es_admin,texto,fecha,hilo) VALUES (?1,?2,?3,?4,?5,?6,?7,?8)"
         ).bind(crypto.randomUUID(), tid, cuentaId, nombre, esAdmin, texto, new Date().toISOString(), hilo).run();
         if (who.admin){ try { await avisarPushAlumno(env, tid, hilo, { title: "Mensaje del profesor", body: texto.slice(0, 90), url: MARCA.dominio + "/app/a/" + who.tenant.slug }); } catch (e) {} }
+        else {
+          /* El alumno le escribe al profe: push siempre; correo de respaldo solo si su mensaje
+             anterior fue hace más de 30 min (una charla seguida no llena el correo del profe). */
+          const prev = ultPrivAlumno && ultPrivAlumno.f ? Date.parse(ultPrivAlumno.f) : 0;
+          const tTen = await env.DB.prepare("SELECT * FROM tenants WHERE id = ?1").bind(tid).first();
+          if (tTen) await avisarProfeDeAlumno(env, tTen, { tipo: "chat", alumnoId: who.cu.alumno_id, nombre: nombre, extra: texto, correo: !(prev && (Date.now() - prev) < 30 * 60000) });
+        }
         return json({ ok: true });
       }
 
@@ -16217,6 +16295,7 @@ export default {
           }
           try { await env.DB.prepare("UPDATE espera SET estado = 'convertida' WHERE tenant_id = ?1 AND inicio_utc = ?2 AND alumno_id = ?3 AND estado IN ('esperando','avisado')").bind(tid, iso, alumno.id).run(); } catch (e) {}
           gcalAvisar(env, ctx, tid);
+          try { const tR = await env.DB.prepare("SELECT * FROM tenants WHERE id = ?1").bind(tid).first(); if (tR) await avisarProfeDeAlumno(env, tR, { tipo: "reserva", alumnoId: alumno.id, nombre: cu.nombre || alumno.nombre, extra: fmtLima(iso) + (cursoR ? " · " + cursoR : "") }); } catch (e) {}
           return json({ ok: true, reservadas: 1, tipo: "suelta" });
         }
 
@@ -16255,6 +16334,7 @@ export default {
         }
         if (creadas === 0) return json({ error: "No pude apartar el horario fijo (sin cupos esas semanas o sin clases en tu paquete)." }, 409);
         gcalAvisar(env, ctx, tid);
+        try { const tR = await env.DB.prepare("SELECT * FROM tenants WHERE id = ?1").bind(tid).first(); if (tR) await avisarProfeDeAlumno(env, tR, { tipo: "reservas_fijas", alumnoId: alumno.id, nombre: cu.nombre || alumno.nombre, extra: creadas + " clases desde " + fmtLima(iso) }); } catch (e) {}
         return json({ ok: true, reservadas: creadas, tipo: "fija", saltadas });
       }
 
@@ -16308,6 +16388,7 @@ export default {
         }
         await promoverEspera(env, tid, r.inicio_utc, r.sala || "");   // se libero un cupo EN ESA SALA: avisar a su lista de espera
         gcalAvisar(env, ctx, tid);
+        try { const tC = await env.DB.prepare("SELECT * FROM tenants WHERE id = ?1").bind(tid).first(); if (tC) await avisarProfeDeAlumno(env, tC, { tipo: "cancelo", alumnoId: cu.alumno_id, nombre: cu.nombre, extra: fmtLima(r.inicio_utc) + (r.curso ? " · " + r.curso : "") }); } catch (e) {}
         return json({ ok: true, mensaje: "Listo, libere tu horario. Elige tu nuevo horario abajo." });
       }
 
@@ -19826,7 +19907,9 @@ export default {
             "AND (?2 = 1 OR c.alumno_id IN (SELECT id FROM alumnos WHERE tenant_id = ?1 AND profesor_id = ?3)) " +
             "ORDER BY m.rowid DESC"
           ).bind(tid, esDueno ? 1 : 0, profeActorId || "").all();
-          return json({ hilos: results || [] });
+          const sinLeer = await chatSinLeer(env, tid);
+          const hilosL = (results || []).map(h => Object.assign({}, h, { sin_leer: sinLeer[h.cuenta_id] || 0 }));
+          return json({ hilos: hilosL, sin_leer_total: hilosL.reduce((a, h) => a + h.sin_leer, 0) });
         }
 
         if (path === "/app/api/admin/push/tarea" && request.method === "POST"){
