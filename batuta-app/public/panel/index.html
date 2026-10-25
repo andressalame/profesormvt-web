@@ -7407,6 +7407,72 @@ document.addEventListener("keydown",function(e){
   }
 });
 
+/* ═══ TABLAS: ACCIONES Y TARJETAS EN CELULAR (rediseño 24-oct-2026) ════════════════
+   1) Cada celda de acciones con más de 2 botones deja UNO a la vista (el principal) y el resto
+      en un menú "⋯". Se MUEVEN los botones de siempre (no se clonan): conservan sus data-*,
+      sus listeners y siguen dentro de su <tbody>, así que todo handler delegado sigue igual.
+   2) Cada <td> recibe data-label con el texto de su cabecera: la capa CSS lo usa en celular
+      para pintar la fila como tarjeta (Alumnos, Interesados, Asistencia, Pagos y Caja). */
+var TB_PANELES=["panel-alumnos","panel-leads","panel-registro","panel-pagos","panel-caja"];
+function tbPreparar(){
+  TB_PANELES.forEach(function(pid){
+    var p=el(pid); if(!p) return;
+    p.querySelectorAll(".tablewrap table").forEach(function(t){
+      t.classList.add("tcards");
+      var heads=[].slice.call(t.querySelectorAll("thead th")).map(function(th){ return th.textContent.trim(); });
+      t.querySelectorAll("tbody tr").forEach(function(tr){
+        var tds=tr.children;
+        for(var i=0;i<tds.length;i++){ if(!tds[i].hasAttribute("data-label")) tds[i].setAttribute("data-label",heads[i]||""); }
+        if(tds.length===1) tr.classList.add("tc-sola");
+      });
+      if(!t.classList.contains("acc-fija")) return;
+      t.querySelectorAll("tbody tr > td:last-child > .rowact:not([data-accmas])").forEach(function(ra){
+        ra.setAttribute("data-accmas","1");
+        var its=[].slice.call(ra.children).filter(function(n){ return n.matches("button,a"); });
+        if(its.length<=2) return;
+        var prim=its.filter(function(n){ return n.classList.contains("btn")&&!n.classList.contains("ghost"); })[0]||its[0];
+        var wrap=document.createElement("div"); wrap.className="acc-mas";
+        wrap.innerHTML='<button type="button" class="btn ghost sm acc-mas-b" aria-haspopup="menu" aria-expanded="false" aria-label="Más acciones" title="Más acciones">⋯</button><div class="acc-mas-m" role="menu" hidden></div>';
+        var menu=wrap.lastChild;
+        its.forEach(function(n){
+          if(n===prim) return;
+          var tx=n.textContent.trim();
+          if(tx==="×"||tx==="✕"){ n.textContent="Borrar"; n.classList.add("acc-borrar"); }
+          else if(!tx){ var lb=n.getAttribute("title")||n.getAttribute("aria-label")||""; if(lb) n.insertAdjacentText("beforeend"," "+lb.split(/[.(]/)[0].trim()); }
+          n.setAttribute("role","menuitem"); menu.appendChild(n);
+        });
+        ra.appendChild(wrap);
+      });
+    });
+  });
+}
+function accCerrar(){ document.querySelectorAll(".acc-mas-m:not([hidden])").forEach(function(m){ m.hidden=true; var b=m.previousSibling; if(b) b.setAttribute("aria-expanded","false"); }); }
+document.addEventListener("click",function(e){
+  var b=e.target.closest?e.target.closest(".acc-mas-b"):null;
+  if(b){
+    e.preventDefault(); e.stopPropagation();
+    var m=b.nextSibling, abrir=m.hidden; accCerrar();
+    if(abrir){
+      m.hidden=false; b.setAttribute("aria-expanded","true");
+      var r=b.getBoundingClientRect(), mw=m.offsetWidth, mh=m.offsetHeight;
+      var top=(r.bottom+6+mh>window.innerHeight)?Math.max(8,r.top-6-mh):r.bottom+6;
+      m.style.top=top+"px"; m.style.left=Math.max(8,Math.min(window.innerWidth-mw-8,r.right-mw))+"px";
+    }
+    return;
+  }
+  if(e.target.closest&&e.target.closest(".acc-mas-m")){ setTimeout(accCerrar,0); return; }
+  accCerrar();
+},true);
+window.addEventListener("scroll",accCerrar,true);
+window.addEventListener("resize",accCerrar);
+/* Las tablas se repintan solas (filtros, buscador, guardados): se preparan cada vez que cambia un <tbody>. */
+(function(){
+  var cola=null;
+  try{
+    new MutationObserver(function(){ if(cola) return; cola=setTimeout(function(){ cola=null; try{ tbPreparar(); }catch(e){} },30); })
+      .observe(document.querySelector(".content")||document.body,{childList:true,subtree:true});
+  }catch(e){}
+})();
 /* Índice "Mi academia": tarjetas en lenguaje de resultado, filtradas por rol y módulos. */
 function renderAcademia(){
   var g=el("acadGrid"); if(!g) return;
