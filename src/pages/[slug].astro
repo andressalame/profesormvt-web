@@ -107,6 +107,16 @@ const FAQ = [
   },
 ];
 
+// Enlaces internos: los mismos cursos en los otros distritos, y el otro curso en este distrito.
+const TODOS = [
+  { slug: 'miraflores', nombre: 'Miraflores' }, { slug: 'surco', nombre: 'Surco' },
+  { slug: 'san-borja', nombre: 'San Borja' }, { slug: 'la-molina', nombre: 'La Molina' },
+  { slug: 'barranco', nombre: 'Barranco' }, { slug: 'jesus-maria', nombre: 'Jesús María' },
+];
+const otrosDistritos = TODOS.filter((d) => d.slug !== distrito.slug);
+const otroKey = cursoKey === 'canto' ? 'composicion' : 'canto';
+const otroNombre = cursoKey === 'canto' ? 'composición' : 'canto';
+
 const schema = grafo(cursoSchema(cursoKey === 'canto' ? 'canto' : 'composicion'), faqSchema(FAQ));
 ---
 
@@ -167,6 +177,11 @@ const schema = grafo(cursoSchema(cursoKey === 'canto' ? 'canto' : 'composicion')
         <p class="note" style="margin-top:18px;">
           ¿Quieres el detalle completo del curso? Mira <a href={curso.pagLima}>{curso.pagLimaLabel}</a>,
           o los <a href="/prueba/">tres cursos y sus precios</a>.
+        </p>
+        <p class="note">
+          ¿Vives en otra zona? Clases de {curso.nombre} en
+          {otrosDistritos.map((d, i) => (<><a href={`/clases-de-${cursoKey}-en-${d.slug}/`}>{d.nombre}</a>{i < otrosDistritos.length - 1 ? ' · ' : '.'}</>))}
+          ¿Te interesa también {otroNombre}? Mira las <a href={`/clases-de-${otroKey}-en-${distrito.slug}/`}>clases de {otroNombre} en {distrito.nombre}</a>.
         </p>
       </div>
     </section>

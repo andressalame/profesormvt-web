@@ -18,6 +18,10 @@ export interface Props {
   publishedTime?: string;
   /** JSON-LD adicional de la página (ej. FAQPage del home). Se inyecta tal cual. */
   extraSchema?: unknown;
+  /** true = la página no debe aparecer en Google (ej. /pagar). */
+  noindex?: boolean;
+  /** Texto alternativo de la imagen que se ve al compartir el enlace. */
+  imageAlt?: string;
 }
 
 const {
@@ -29,6 +33,8 @@ const {
   image = '/og-image.jpg',
   publishedTime,
   extraSchema,
+  noindex = false,
+  imageAlt = 'ProfesorMVT: clases de canto y composición para adultos en Lima',
 } = Astro.props;
 
 // URL canónica: debe coincidir EXACTO con la URL servida y la del sitemap (con
@@ -58,9 +64,10 @@ const localBusinessSchema = {
   // equivocada en el schema rompe la coherencia NAP con Google Business y penaliza;
   // la avenida + el distrito es lo que de verdad da SEO local.
   "address":{"@type":"PostalAddress","streetAddress":"Av. El Ejército","addressLocality":"Miraflores","addressRegion":"Lima","addressCountry":"PE"},
-  // ⚠️ Coordenada APROXIMADA del centro de Miraflores, NO de la puerta. Poner el pin
-  // exacto del perfil de Google Business solo cuando la mudanza esté cerrada.
-  "geo":{"@type":"GeoCoordinates","latitude":-12.1200,"longitude":-77.0300},
+  // "geo" fuera a propósito (24-oct-2026): la coordenada que había era el centro aproximado
+  // de Miraflores, no la puerta, y un dato de ubicación que no se puede verificar no debe ir
+  // en el schema. PENDIENTE Andrés: pasar el pin exacto del perfil de Google Business y
+  // volver a poner `"geo":{"@type":"GeoCoordinates","latitude":..,"longitude":..}`.
   // Horario REAL, sacado de la disponibilidad publicada del portal (no inventado):
   // lunes a viernes 9-12 y 14-21, sábados 9-12 y 14-16 (hora de Lima).
   "openingHoursSpecification": openingHours(),
@@ -122,7 +129,7 @@ const baseSchema = { "@context":"https://schema.org", "@graph":[localBusinessSch
   <title>{title}</title>
   <meta name="description" content={description} />
   <link rel="canonical" href={canonicalURL} />
-  <meta name="robots" content="index, follow" />
+  <meta name="robots" content={noindex ? 'noindex, follow' : 'index, follow'} />
 
   <!-- Meta Pixel Code (is:inline: Astro NO debe empaquetar/diferir el pixel, o no
        trackea confiable; debe ir inline en el head como en la home standalone) -->
@@ -148,6 +155,7 @@ const baseSchema = { "@context":"https://schema.org", "@graph":[localBusinessSch
   <meta property="og:type" content={type} />
   <meta property="og:url" content={canonicalURL} />
   <meta property="og:image" content={socialImage} />
+  <meta property="og:image:alt" content={imageAlt} />
   <meta property="og:locale" content="es_PE" />
   <meta property="og:site_name" content="Profesor MVT" />
   {publishedTime && <meta property="article:published_time" content={publishedTime} />}
@@ -157,6 +165,7 @@ const baseSchema = { "@context":"https://schema.org", "@graph":[localBusinessSch
   <meta name="twitter:title" content={title} />
   <meta name="twitter:description" content={description} />
   <meta name="twitter:image" content={socialImage} />
+  <meta name="twitter:image:alt" content={imageAlt} />
 
   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
   <!-- Fuentes de marca AUTO-ALOJADAS (Cabinet Grotesk + Switzer). Nada de Google Fonts:

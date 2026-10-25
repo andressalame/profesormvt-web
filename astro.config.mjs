@@ -10,5 +10,8 @@ export default defineConfig({
     '/clases-piano-lima': '/prueba',
     '/clases-piano-online': '/prueba',
   },
-  integrations: [sitemap()],
+  integrations: [
+    // /pagar es una pantalla de pago (noindex): no va en el sitemap.
+    sitemap({ filter: (page) => !page.includes('/pagar') }),
+  ],
 });
