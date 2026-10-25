@@ -1,5 +1,6 @@
 ---
 import Layout from '../../layouts/Layout.astro';
+import { PERSONA_ID } from '../../lib/seo';
 import { getCollection } from 'astro:content';
 import '../../styles/blog-post.css';
 
@@ -33,6 +34,15 @@ const related = allPosts
   .filter(p => p.slug !== post.slug && p.data.category === post.data.category)
   .sort((a, b) => b.data.date.valueOf() - a.data.date.valueOf())
   .slice(0, 3);
+
+// Enlace interno hacia la página del curso que corresponde al tema del artículo
+// (piano no se promociona, así que esos posts no llevan enlace de curso).
+const cursoRelacionado = ({
+  voz: { href: '/clases-canto-lima/', txt: 'las clases de canto en Lima' },
+  metodo: { href: '/clases-canto-lima/', txt: 'las clases de canto en Lima' },
+  composicion: { href: '/clases-composicion-lima/', txt: 'las clases de composición en Lima' },
+  teoria: { href: '/clases-composicion-lima/', txt: 'las clases de composición en Lima' },
+} as Record<string, { href: string; txt: string }>)[post.data.category];
 
 const postImageURL = new URL(post.data.image || '/og-image.jpg', Astro.site).href;
 const postURL = new URL(`/blog/${post.slug}/`, Astro.site).href;
@@ -103,15 +113,15 @@ const descSEO = recortar((post.data as any).metaDescription || post.data.excerpt
 
     <aside style="max-width:640px;margin:36px auto;padding:26px 24px;background:var(--fondo-2);border:1px solid var(--linea);border-left:3px solid var(--acento);border-radius: 0;">
       <h3 style="font-family:var(--display);font-weight:600;text-transform:uppercase;font-size:24px;letter-spacing:.01em;color:var(--texto);margin:0 0 8px;">¿Listo para dar el paso?</h3>
-      <p style="font-family:var(--lectura);font-size: 18px;line-height:1.55;color:var(--texto-2);margin:0 0 18px;">Clases 1 a 1, con un plan armado a tu medida desde la primera sesión. Planes mensuales desde S/320.</p>
+      <p style="font-family:var(--lectura);font-size: 18px;line-height:1.55;color:var(--texto-2);margin:0 0 18px;">Clases 1 a 1, con un plan armado a tu medida desde la primera sesión. Planes mensuales desde S/320.{cursoRelacionado && <> Mira <a href={cursoRelacionado.href} style="color:var(--acento);text-decoration:underline;">{cursoRelacionado.txt}</a>.</>}</p>
       <a href="/prueba/?f=blog" style="display:inline-block;font-family:var(--lectura);text-transform:uppercase;letter-spacing:.06em;font-size: 18px;font-weight:700;padding:13px 22px;border-radius: 0;background:var(--acento);color:var(--sobre-acento);text-decoration:none;">Quiero empezar →</a>
     </aside>
 
     <footer class="post-footer">
       <div class="post-author">
-        <img class="author-avatar" src="/andres-avatar.jpg" alt="Andrés Salame" width="48" height="48" loading="lazy" />
+        <img class="author-avatar" src="/andres-avatar.jpg" alt="Andrés Salamé-Córdova, profesor de canto y composición" width="48" height="48" loading="lazy" />
         <div class="author-info">
-          <div class="author-name">Andrés Salame</div>
+          <div class="author-name">Andrés Salamé-Córdova</div>
           <div class="author-role">Profesor de canto y composición</div>
         </div>
       </div>
@@ -151,7 +161,7 @@ const descSEO = recortar((post.data as any).metaDescription || post.data.excerpt
   "datePublished": post.data.date.toISOString(),
   "dateModified": post.data.date.toISOString(),
   "inLanguage": "es",
-  "author": { "@type": "Person", "name": "Andrés Salame", "url": "https://profesormvt.com" },
+  "author": { "@type": "Person", "@id": PERSONA_ID, "name": "Andrés Salamé-Córdova", "url": "https://profesormvt.com" },
   "publisher": {
     "@type": "Organization",
     "name": "Profesor MVT",
