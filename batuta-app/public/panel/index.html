@@ -851,6 +851,7 @@
 [data-ayuda]{cursor:help;}
 /* los controles no cambian de cursor: ahí manda su propia función, no la ayuda */
 button[data-ayuda],a[data-ayuda],select[data-ayuda],input[data-ayuda],label[data-ayuda]{cursor:inherit;}
+
 /* ═══════════════════════════════════════════════════════════════════════════════
    CAPA "REDISEÑO 24-oct" (2026)
    El look que aprobó Andrés: barra lateral con píldora naranja sólida, métricas con cifra
@@ -1126,7 +1127,6 @@ table.acc-fija tbody tr:hover td:last-child{background:var(--panel2);}
   table.tcards td.plan{border-left:0;}
   .tablewrap:has(table.tcards)+.tabmas{display:none;}
 }
-
 </style>
 </head>
 <body>
@@ -1247,6 +1247,10 @@ table.acc-fija tbody tr:hover td:last-child{background:var(--panel2);}
     </div>
 
   <section class="panel active" id="panel-resumen">
+   <!-- Rediseño 24-oct-2026: dos columnas. A la izquierda métricas + lo que necesita atención;
+        a la derecha el mes y las próximas clases. En celular la columna derecha baja al final. -->
+   <div class="hoy-layout">
+   <div class="hoy-main">
     <!-- Clases pagadas por vencerse (21-ago-2026): a Elevate se le perdieron 22 clases ya
          pagadas de 3 alumnas y nadie se enteró, porque el único aviso que existía era el correo
          al ALUMNO (y ese llega a pocos). El dueño no tenía dónde verlo. Lo pinta renderVenceBanner(). -->
@@ -1276,8 +1280,12 @@ table.acc-fija tbody tr:hover td:last-child{background:var(--panel2);}
         <button class="btn ghost" data-ira="pagos">Cobros</button>
         <button class="btn ghost" data-ira="agenda">Mis clases</button>
       </div>
+      <div class="hoy-kpis" id="hoyKpis" aria-label="Métricas clave"></div>
+      <h3 class="hoy-h3">Lo que necesita atención hoy</h3>
       <div class="hoygrid" id="tuDia"></div>
+      <div id="hoyRenovar"></div>
     </div>
+    <div class="group" id="grpHoyAct"><h2>Actividad reciente</h2><div id="hoyActividad"></div></div>
 
     <div class="group" data-tour="link-alumnos">
       <h2>Comparte con tus alumnos</h2>
@@ -1311,10 +1319,18 @@ table.acc-fija tbody tr:hover td:last-child{background:var(--panel2);}
     <!-- Fase 3 (17-ago-2026): arriba SOLO lo que pide acción hoy; los números que no piden
          nada bajan al segundo bloque. "Este mes" e "Histórico" se fueron a Reportes, donde
          ya estaban mejor contados (series por mes con gráfico, no un número suelto). -->
-    <div class="group"><h2>Lo que toca hoy</h2><div class="grid cards" id="resHoy"></div></div>
+    <!-- 24-oct-2026: "Lo que toca hoy" repetía "Tu día" con otra forma. Sigue pintándose (lo usan
+         pruebas y JS) pero se oculta en la capa REDISEÑO; sus nombres viven ahora en #hoyRenovar. -->
+    <div class="group" id="grpResHoy"><h2>Lo que toca hoy</h2><div class="grid cards" id="resHoy"></div></div>
     <div class="group"><h2>Tu academia en números</h2>
       <p class="hint">Cómo va tu academia. Nada de esto pide que hagas algo ahora. ¿Quieres el detalle mes a mes, con gráficos? Está en <a href="#" data-ira="reportes">Reportes</a>.</p>
       <div class="grid cards" id="resAlumnos"></div></div>
+   </div>
+   <aside class="hoy-side" aria-label="Tu mes">
+     <div class="hoy-box" id="hoyCal"></div>
+     <div class="hoy-box" id="hoyProx"></div>
+   </aside>
+   </div>
   </section>
 
   <!-- ====== MI ACADEMIA (fase 3, 10-ago-2026): pantalla-índice de tarjetas ======
@@ -3811,7 +3827,8 @@ function renderResumen(){
   }
   try{ espejarDotsNav(); }catch(e){}
 
-  renderTuDia({pend:pend, ultima:ultima, compl:compl});
+  renderTuDia({pend:pend, ultima:ultima, compl:compl, activos:activos, gUltima:gUltima, gCompl:gCompl,
+               vigentes:cs.filter(function(c){ return c.estado==="Activo"||c.estado==="⚠ Última clase"||c.estado==="Renovar mensualidad"; }).length});
 }
 
 /* ---------- "Tu día": los pendientes de HOY, cada uno con su botón (27-jul-2026) ---------- */
@@ -3831,7 +3848,10 @@ function renderTuDia(x){
   var sinAcceso=(db.alumnos||[]).filter(function(a){ return !conCuenta[a.id]; }).length;
   var porRenovar=(x.ultima||0)+(x.compl||0);
   var h="";
-  h += TD_RESERVAS_HOY===null
+  /* Rediseño 24-oct-2026: "clases de hoy" ya sale grande en la fila de métricas (#hoyKpis);
+     esta tarjeta queda solo en el HTML de respaldo por si las métricas no se pintan. */
+  var hayKpis=!!el("hoyKpis");
+  if(!hayKpis) h += TD_RESERVAS_HOY===null
     ? tarjetaDia("—","Clases reservadas para hoy","Ver la agenda","agenda",false)
     : tarjetaDia(TD_RESERVAS_HOY, TD_RESERVAS_HOY===1?"clase reservada para hoy":"clases reservadas para hoy",
                  TD_RESERVAS_HOY>0?"Ver la agenda":"Abrir horarios","agenda",false);
@@ -3854,12 +3874,26 @@ function renderTuDia(x){
       ? tarjetaDia(nLeadsHoy,"interesados esperando tu respuesta hoy","Responderles","leads",true)
       : tarjetaDia(0,"interesados por responder hoy ✓","","leads",false);
   }
-  box.innerHTML=h;
+  /* Patrón "lo que necesita atención" (24-oct-2026): lo urgente primero, lo que ya está al día
+     después. Mismo contenido, otro orden: la dueña lee de arriba abajo y para en lo primero. */
+  if(hayKpis){
+    var tmp=document.createElement("div"); tmp.innerHTML=h;
+    var urg=[].slice.call(tmp.children).filter(function(n){ return n.classList.contains("urge"); });
+    var ok=[].slice.call(tmp.children).filter(function(n){ return !n.classList.contains("urge"); });
+    box.innerHTML="";
+    urg.concat(ok).forEach(function(n){ box.appendChild(n); });
+    box.classList.toggle("todo-ok", !urg.length);
+  } else box.innerHTML=h;
+  try{ hoyPintarKpis(x, porRenovar, sinAcceso); }catch(e){}
+  try{ hoyPintarRenovar(x); }catch(e){}
+  try{ hoyPintarActividad(); }catch(e){}
+  try{ hoyPintarMes(); }catch(e){}
 
   /* cuántas clases hay hoy: una sola consulta por sesión, y jamás rompe el Inicio */
   if(TD_RESERVAS_HOY===null && !TD_PIDIENDO){
     TD_PIDIENDO=true;
     fetch("/app/api/admin/agenda",{headers:hdr()}).then(function(r){return r.json();}).then(function(d){
+      TD_AGENDA=((d&&d.reservas)||[]).filter(function(r){ return r.estado==="reservada"; });
       var hoy=new Date(); var y=hoy.getFullYear(), m=hoy.getMonth(), dd=hoy.getDate();
       TD_RESERVAS_HOY=((d&&d.reservas)||[]).filter(function(r){
         if(r.estado!=="reservada") return false;
@@ -3868,9 +3902,169 @@ function renderTuDia(x){
       }).length;
       TD_PIDIENDO=false;
       renderTuDia(x);
-    }).catch(function(){ TD_RESERVAS_HOY=0; TD_PIDIENDO=false; });
+    }).catch(function(){ TD_RESERVAS_HOY=0; TD_PIDIENDO=false; if(TD_AGENDA===null){ TD_AGENDA=[]; try{ renderTuDia(x); }catch(e){} } });
   }
 }
+
+/* ═══ HOY · REDISEÑO 24-oct-2026 ══════════════════════════════════════════════════
+   Métricas con cifra grande, chip de variación y mini-gráfico; "paquetes por terminar" con
+   nombre y WhatsApp; actividad reciente; y a la derecha el mes con las próximas clases.
+   Todo sale de datos que el panel YA tiene (db.* y la misma consulta de agenda de "Tu día"):
+   no hay consultas nuevas ni números inventados. Si una serie no existe, no se dibuja. */
+var TD_AGENDA=null;   // reservas "reservada" de /app/api/admin/agenda (la misma consulta de arriba)
+var HOY_MES_OFF=0;    // mes que muestra el calendario de Hoy, relativo al actual
+function hoyMeses(n){
+  var h=hoyLima(), y=+h.slice(0,4), m=+h.slice(5,7)-1, out=[];
+  for(var i=n-1;i>=0;i--) out.push(new Date(Date.UTC(y,m-i,1)).toISOString().slice(0,7));
+  return out;
+}
+function hoyLimaDe(iso){ var t=Date.parse(iso); return isNaN(t)?null:new Date(t-5*3600000).toISOString(); }
+function hoySpark(vals){
+  if(!vals||vals.length<2) return "";
+  var w=120,h=34,max=Math.max.apply(null,vals),min=Math.min.apply(null,vals),rng=(max-min)||1;
+  var line=vals.map(function(v,i){
+    var x=(i/(vals.length-1))*w, y=h-3-((v-min)/rng)*(h-9);
+    return (i?"L":"M")+x.toFixed(1)+" "+y.toFixed(1);
+  }).join(" ");
+  var id="hsg"+Math.random().toString(36).slice(2,8);
+  return '<svg class="kpi-spark" viewBox="0 0 '+w+' '+h+'" preserveAspectRatio="none" aria-hidden="true">'+
+    '<defs><linearGradient id="'+id+'" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="currentColor" stop-opacity=".32"/><stop offset="1" stop-color="currentColor" stop-opacity="0"/></linearGradient></defs>'+
+    '<path d="'+line+' L'+w+' '+h+' L0 '+h+' Z" fill="url(#'+id+')"/>'+
+    '<path d="'+line+'" fill="none" stroke="currentColor" stroke-width="1.8" vector-effect="non-scaling-stroke" stroke-linejoin="round" stroke-linecap="round"/></svg>';
+}
+function hoyChip(txt,cls,ayuda){
+  return txt?'<span class="kpi-chip '+(cls||"flat")+'"'+(ayuda?' title="'+esc(ayuda)+'"':'')+'>'+esc(txt)+'</span>':"";
+}
+function hoyKpi(o){
+  return '<button type="button" class="kpi" data-ira="'+esc(o.ira)+'">'+
+    '<span class="kpi-top"><span class="kpi-l">'+esc(o.l)+'</span>'+(o.chip||"")+'</span>'+
+    '<span class="kpi-n">'+esc(String(o.n))+'</span>'+
+    '<span class="kpi-s">'+esc(o.s||"")+'</span>'+(o.viz||'<span class="kpi-spark kpi-vacio"></span>')+'</button>';
+}
+function hoyPintarKpis(x, porRenovar, sinAcceso){
+  var box=el("hoyKpis"); if(!box) return;
+  var meses=hoyMeses(6), ymHoy=meses[meses.length-1];
+  var al=db.alumnos||[], N=al.length;
+  /* Alumnos: la MISMA lista que "Mis alumnos" (db.alumnos), acumulada por mes de inscripción */
+  var serieAl=meses.map(function(ym){ return al.filter(function(a){ var f=(a.fecha||"").slice(0,7); return !f||f<=ym; }).length; });
+  var nuevos=al.filter(function(a){ return (a.fecha||"").slice(0,7)===ymHoy; }).length;
+  var h=hoyKpi({ira:"alumnos", l:"Alumnos", n:N,
+    chip:nuevos>0?hoyChip("+"+nuevos+" este mes","up","Alumnos inscritos este mes"):"",
+    s:(x.vigentes||0)+" con clases vigentes", viz:hoySpark(serieAl)});
+  /* Ingresos: cobros confirmados por mes (misma cuenta que Caja y Reportes) */
+  if(tabVisiblePorReglas("pagos")){
+    var ing={}; (db.compras||[]).forEach(function(c){
+      if(c.estado!=="confirmada") return; var ym=(c.fecha||"").slice(0,7); ing[ym]=(ing[ym]||0)+(Number(c.monto)||0); });
+    var serieIng=meses.map(function(ym){ return ing[ym]||0; });
+    var cur=serieIng[5], prev=serieIng[4], chipI="";
+    if(prev>0){ var pct=Math.round((cur-prev)/prev*100); chipI=hoyChip((pct>0?"+":"")+pct+"%",pct>0?"up":(pct<0?"down":"flat"),"Contra todo el mes pasado (el mes en curso todavía no termina)"); }
+    var nomMes=new Date(ymHoy+"-15T12:00:00Z").toLocaleDateString("es-PE",{month:"long"});
+    h+=hoyKpi({ira:"pagos", l:"Ingresos del mes", n:"S/ "+Math.round(cur).toLocaleString("es-PE"), chip:chipI,
+      s:"cobrado en "+nomMes, viz:hoySpark(serieIng)});
+  }
+  /* Clases hoy: la consulta de agenda de "Tu día". Serie = reservas por día, una semana atrás y una adelante. */
+  var sCl="", vizCl="";
+  if(TD_AGENDA){
+    var hoyK=hoyLima(), ahora=new Date(Date.now()-5*3600000).toISOString();
+    var prox=TD_AGENDA.map(function(r){ return hoyLimaDe(r.inicio_utc); }).filter(function(l){ return l && l.slice(0,10)===hoyK && l>=ahora; }).sort();
+    sCl=prox.length?("próxima a las "+prox[0].slice(11,16)):"ninguna más por hoy";
+    var dias=[]; for(var k=-6;k<=7;k++){ dias.push(new Date(Date.parse(hoyK+"T12:00:00Z")+k*86400000).toISOString().slice(0,10)); }
+    var cnt={}; TD_AGENDA.forEach(function(r){ var l=hoyLimaDe(r.inicio_utc); if(l){ cnt[l.slice(0,10)]=(cnt[l.slice(0,10)]||0)+1; } });
+    vizCl=hoySpark(dias.map(function(d){ return cnt[d]||0; }));
+  } else sCl="cargando tu agenda…";
+  h+=hoyKpi({ira:"agenda", l:"Clases hoy", n:(TD_RESERVAS_HOY===null?"—":TD_RESERVAS_HOY), s:sCl, viz:vizCl});
+  /* Por renovar: sin historia guardada, así que en vez de inventar una curva va la proporción real */
+  var pctR=N?Math.round(porRenovar/N*100):0;
+  h+=hoyKpi({ira:"alumnos", l:"Por renovar", n:porRenovar,
+    chip:porRenovar>0?hoyChip("toca hoy","warn"):hoyChip("al día","up"),
+    s:sinAcceso+" sin acceso al portal",
+    viz:'<span class="kpi-meter" title="'+pctR+'% de tus alumnos"><i style="width:'+Math.min(100,pctR)+'%"></i></span><span class="kpi-mt">'+pctR+'% de tus alumnos</span>'});
+  box.innerHTML=h;
+}
+function hoyPintarRenovar(x){
+  var box=el("hoyRenovar"); if(!box) return;
+  var gente=(x.gCompl||[]).map(function(g){ return {g:g,t:"terminó su paquete"}; })
+    .concat((x.gUltima||[]).map(function(g){ return {g:g,t:"le queda su última clase"}; }));
+  if(!gente.length){ box.innerHTML=""; return; }
+  var MAX=6;
+  var filas=gente.slice(0,MAX).map(function(o){
+    var wa=(o.g.whatsapp||"").replace(/\D/g,"");
+    return '<div class="hl-row"><b class="hl-nom">'+esc(o.g.nombre||"(sin nombre)")+'</b>'+
+      '<span class="hl-det">'+esc(o.t)+(o.g.detalle?(' · '+esc(String(o.g.detalle).replace(/^\s*·\s*/,""))):'')+'</span>'+
+      (wa?'<a class="btn sm" target="_blank" rel="noopener" href="https://wa.me/'+(wa.length<=9?"51":"")+wa+'">Escribirle</a>'
+         :'<button type="button" class="btn ghost sm" data-ira="alumnos">Ver ficha</button>')+'</div>';
+  }).join("");
+  box.innerHTML='<div class="hoy-list"><div class="hl-cab"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 8a6 6 0 1 0-12 0c0 6-2 7-2 7h16s-2-1-2-7"/><path d="M13.7 20a2 2 0 0 1-3.4 0"/></svg>'+
+    '<b>Paquetes por terminar</b><span class="hl-n">'+gente.length+'</span></div>'+filas+
+    (gente.length>MAX?'<button type="button" class="hl-mas" data-ira="alumnos">Ver los '+gente.length+' en Mis alumnos</button>':'')+'</div>';
+}
+function hoyCuando(f){
+  var hoyK=hoyLima(); if(!f) return "";
+  var d=Math.round((Date.parse(hoyK+"T12:00:00Z")-Date.parse(f.slice(0,10)+"T12:00:00Z"))/86400000);
+  if(isNaN(d)) return f; if(d<=0) return d<0?"Programado":"Hoy"; if(d===1) return "Ayer"; if(d<7) return "Hace "+d+" días";
+  return new Date(f.slice(0,10)+"T12:00:00Z").toLocaleDateString("es-PE",{day:"numeric",month:"short"});
+}
+function hoyPintarActividad(){
+  var box=el("hoyActividad"); if(!box) return;
+  var ev=[], verPlata=tabVisiblePorReglas("pagos");
+  var alPorId={}; (db.alumnos||[]).forEach(function(a){ alPorId[a.id]=a; });
+  var cuPorId={}; (db.cuentas||[]).forEach(function(c){ cuPorId[c.id]=c; });
+  if(verPlata) (db.compras||[]).forEach(function(c){
+    if(c.estado!=="confirmada"&&c.estado!=="pendiente") return;
+    var cu=cuPorId[c.cuenta_id], a=cu&&cu.alumno_id?alPorId[cu.alumno_id]:null;
+    ev.push({f:c.fecha||"", q:a?alumnoEtiqueta(a):(cu?cu.nombre:"Alumno"),
+      t:(c.estado==="pendiente"?"Mandó un pago por confirmar: ":"Pagó ")+(c.paquete||""), m:Number(c.monto)||0, p:c.estado==="pendiente"});
+  });
+  (db.registro||[]).forEach(function(r){
+    var a=alPorId[r.alumnoId||r.alumno_id]; if(!a) return;
+    var t=r.estado==="Asistió"?"Vino a su clase":(r.estado==="Falta"?"Faltó a su clase":(r.estado==="Reprogramó"?"Cambió su clase de horario":"")); if(!t) return;
+    ev.push({f:r.fecha||"", q:alumnoEtiqueta(a), t:t+(r.curso?(" de "+r.curso):""), m:null});
+  });
+  var hoyK=hoyLima();
+  ev=ev.filter(function(e){ return e.f && e.f.slice(0,10)<=hoyK; }).sort(function(a,b){ return a.f<b.f?1:(a.f>b.f?-1:0); }).slice(0,6);
+  if(!ev.length){ box.innerHTML='<p class="hint">Todavía no hay movimiento. Aquí vas a ver los pagos y las clases a medida que pasen.</p>'; return; }
+  box.innerHTML='<div class="hoy-act"><table><thead><tr><th>Alumno</th><th>Qué pasó</th><th>Cuándo</th>'+(verPlata?'<th class="num">Monto</th>':'')+'</tr></thead><tbody>'+
+    ev.map(function(e){
+      return '<tr><td data-label="Alumno">'+esc(e.q)+'</td><td data-label="Qué pasó">'+esc(e.t)+'</td><td data-label="Cuándo">'+esc(hoyCuando(e.f))+'</td>'+
+        (verPlata?'<td data-label="Monto" class="num'+(e.m?(e.p?" pend":" plata"):"")+'">'+(e.m?("S/ "+Math.round(e.m).toLocaleString("es-PE")):"—")+'</td>':'')+'</tr>';
+    }).join("")+'</tbody></table></div>';
+}
+function hoyPintarMes(){
+  var cal=el("hoyCal"), px=el("hoyProx"); if(!cal) return;
+  var hoyK=hoyLima(), y=+hoyK.slice(0,4), m=+hoyK.slice(5,7)-1+HOY_MES_OFF;
+  var ini=new Date(Date.UTC(y,m,1)), Y=ini.getUTCFullYear(), M=ini.getUTCMonth();
+  var nDias=new Date(Date.UTC(Y,M+1,0)).getUTCDate(), lunes0=(ini.getUTCDay()+6)%7;
+  var cnt={}; (TD_AGENDA||[]).forEach(function(r){ var l=hoyLimaDe(r.inicio_utc); if(l) cnt[l.slice(0,10)]=(cnt[l.slice(0,10)]||0)+1; });
+  var tit=ini.toLocaleDateString("es-PE",{month:"long",year:"numeric",timeZone:"UTC"}).replace(" de "," ");
+  var h='<div class="hc-cab"><b>'+esc(tit.charAt(0).toUpperCase()+tit.slice(1))+'</b><span class="hc-nav">'+
+    '<button type="button" data-hoymes="-1" aria-label="Mes anterior"><svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg></button>'+
+    '<button type="button" data-hoymes="1" aria-label="Mes siguiente"><svg viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg></button></span></div>'+
+    '<div class="hc-grid">'+["L","M","M","J","V","S","D"].map(function(d){ return '<span class="hc-dow">'+d+'</span>'; }).join("");
+  for(var i=0;i<lunes0;i++) h+='<span class="hc-d fuera"></span>';
+  for(var d=1;d<=nDias;d++){
+    var k=Y+"-"+String(M+1).padStart(2,"0")+"-"+String(d).padStart(2,"0"), n=cnt[k]||0;
+    h+='<button type="button" class="hc-d'+(k===hoyK?" hoy":"")+(n?" con":"")+'" data-ira="agenda"'+
+       ' aria-label="'+d+(n?(": "+n+(n===1?" clase reservada":" clases reservadas")):"")+'">'+d+'</button>';
+  }
+  h+='</div>';
+  cal.innerHTML=h;
+  if(!px) return;
+  var ahora=new Date(Date.now()-5*3600000).toISOString();
+  var prox=(TD_AGENDA||[]).map(function(r){ return {r:r,l:hoyLimaDe(r.inicio_utc)}; })
+    .filter(function(o){ return o.l && o.l>=ahora; }).sort(function(a,b){ return a.l<b.l?-1:1; }).slice(0,4);
+  var manK=new Date(Date.parse(hoyK+"T12:00:00Z")+86400000).toISOString().slice(0,10);
+  px.innerHTML='<div class="hp-cab"><b>Próximas clases</b></div>'+(TD_AGENDA===null?'<p class="hint">Cargando tu agenda…</p>':
+    (prox.length?prox.map(function(o){
+      var dk=o.l.slice(0,10), dia=dk===hoyK?"Hoy":(dk===manK?"Mañana":new Date(dk+"T12:00:00Z").toLocaleDateString("es-PE",{weekday:"long",day:"numeric",timeZone:"UTC"}));
+      return '<button type="button" class="hp-row" data-ira="agenda"><span class="hp-t"><b>'+esc((o.r.curso||"Clase")+" · "+(o.r.alumno_nombre||"Sin nombre"))+'</b>'+
+        '<span>'+esc(dia.charAt(0).toUpperCase()+dia.slice(1))+'</span></span><span class="hp-h">'+o.l.slice(11,16)+'</span></button>';
+    }).join(""):'<p class="hint">No hay clases reservadas por delante.</p>'))+
+    '<button type="button" class="hl-mas" data-ira="agenda">Ver mi agenda</button>';
+}
+document.addEventListener("click",function(e){
+  var b=e.target.closest?e.target.closest("[data-hoymes]"):null; if(!b) return;
+  e.preventDefault(); HOY_MES_OFF+=Number(b.dataset.hoymes)||0; try{ hoyPintarMes(); }catch(err){}
+});
 /* data-ira="<tab>" [data-iract="<idBoton>"] = salta a esa sección (y dispara su acción).
    A nivel documento: lo usan "Tu día", las acciones rápidas y los enlaces cruzados
    entre Agenda y Registro de clases. */
@@ -7150,6 +7344,7 @@ function espejarDotsNav(){
     dst.classList.toggle("hidden",src.classList.contains("hidden"));
   });
 }
+
 /* Índice "Mi academia": tarjetas en lenguaje de resultado, filtradas por rol y módulos. */
 function renderAcademia(){
   var g=el("acadGrid"); if(!g) return;
