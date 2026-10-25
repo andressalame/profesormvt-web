@@ -8,7 +8,9 @@
    Prefijo de rutas: TODO bajo /app y /app/api. Paginas registro/login servidas inline.
 */
 "use strict";
-import { captureWebExpressInbox, webExpressQueueRoute } from "./webexpress-crm-inbox.mjs";
+/* Recepcion Web Express: import dinamico (no `import` arriba) para que las pruebas que cargan este
+   archivo con vm.Script sigan funcionando; esbuild lo empaqueta igual al deployar. */
+const weInbox = () => import("./webexpress-crm-inbox.mjs");
 
 /* Motor de "Mi web": la web pública editable de cada academia (tab Mi web del panel).
    Una sola fuente para servir la web y para la vista previa del editor. */
@@ -9786,7 +9788,7 @@ async function anotarClaseDictada(env, tenantId, alumnoId, inicioUtc, curso, cic
    entera una demo privada al vencer. ⚠️ Tabla nueva con `tenant_id` = agregarla ACÁ,
    o la demo acumula basura de cada visitante para siempre (`campanas` se sumó el
    15-ago-2026 tras verlo pasar). */
-const TABLAS_TENANT = ["alumnos", "registro", "pausas", "precios", "config", "disponibilidad", "reservas", "grupos", "sedes", "cuentas", "compras", "recursos", "ejercicios", "chat_mensajes", "push_subs", "leads", "feedback", "gastos", "comprobantes", "campanas", "espera", "reset_tokens", "mensajes_extra", "soporte_ia_log", "referidos", "bonos_log"];
+const TABLAS_TENANT = ["alumnos", "registro", "pausas", "precios", "config", "disponibilidad", "reservas", "grupos", "sedes", "cuentas", "compras", "recursos", "ejercicios", "chat_mensajes", "push_subs", "leads", "feedback", "gastos", "comprobantes", "campanas", "espera", "reset_tokens", "mensajes_extra", "soporte_ia_log", "referidos", "chat_leido", "liquidaciones", "api_cambios", "bonos_log"];
 /* Fuera de la lista a propósito: `afiliados` y `comisiones` tienen tenant_id pero la fila es
    de OTRA persona (el afiliado que trajo al tenant, y su ledger de pagos). Borrar por
    tenant_id ahí sería borrarle su registro y su historial de comisiones a un tercero.
@@ -12115,7 +12117,7 @@ export default {
           return json({ error: "No autorizado" }, 401);
         }
         if (path === "/app/api/su/webexpress-crm-issues" || path === "/app/api/su/webexpress-crm-events" || path === "/app/api/su/webexpress-crm-ack") {
-          return await webExpressQueueRoute(request, env);
+          return await (await weInbox()).webExpressQueueRoute(request, env);
         }
         /* Prende (o apaga) el envio REAL de invitaciones por correo de UNA academia.
            Nace apagado en todas: mandar cientos de correos a nombre de un tercero se
@@ -13944,7 +13946,7 @@ export default {
           try {
             let signedPayload = null;
             try { signedPayload = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(rawBuf)); } catch {} // Legacy handles malformed bodies unchanged.
-            const captured = await captureWebExpressInbox(signedPayload, env);
+            const captured = await (await weInbox()).captureWebExpressInbox(signedPayload, env);
             if (captured.matched) {
               if (!captured.remaining.entry.length) return new Response("EVENT_RECEIVED", { status: 200 });
               weCrmRemaining = captured.remaining;
