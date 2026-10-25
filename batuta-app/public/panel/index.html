@@ -7357,6 +7357,17 @@ function espejarDotsNav(){
     dst.textContent=src.textContent;
     dst.classList.toggle("hidden",src.classList.contains("hidden"));
   });
+  /* 🐛 24-oct-2026 · El globo de "Mis alumnos" decía 22 con 32 alumnos en la lista: arriba se
+     espejaban DOS contadores al mismo destino (interesados y cuentas sin vincular) y ganaba el
+     último, o sea "cuentas del portal sin enlazar", que nadie leía así. Ahora el menú cuenta lo
+     que dice: los alumnos de la lista (db.alumnos, la misma fuente que "Mis alumnos").
+     Los pendientes de interesados y de portal siguen en "Tu día", con su botón. */
+  var dA=el("dotNavAlumnos");
+  if(dA){
+    var nA=(db.alumnos||[]).length;
+    dA.textContent=nA; dA.classList.toggle("hidden",!nA); dA.classList.add("cuenta");
+    dA.title=nA+(nA===1?" alumno en tu lista":" alumnos en tu lista");
+  }
   try{ avPintar(); }catch(e){}
 }
 
