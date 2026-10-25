@@ -1227,6 +1227,20 @@ table.acc-fija tbody tr:hover td:last-child{background:var(--panel2);}
           <div class="camp-lista" id="campLista"></div>
         </div>
       </div>
+      <!-- Avatar con menú (rediseño 24-oct-2026): atajos a lo que ya existía (Perfil, Mi academia,
+           Cerrar sesión). No trae lógica propia: cada opción hace clic en el botón de siempre. -->
+      <div class="av-wrap">
+        <button class="av-btn" id="btnAvatar" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="avMenu" aria-label="Tu cuenta">
+          <span class="av-ini" id="avIni">P</span>
+          <svg class="av-chev" viewBox="0 0 24 24" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
+        </button>
+        <div class="av-menu" id="avMenu" role="menu" hidden>
+          <div class="av-cab"><b id="avNom"></b><span id="avSub">Tu academia</span></div>
+          <button type="button" role="menuitem" class="av-it" id="avCuenta" data-ira="perfil"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>Mi cuenta</button>
+          <button type="button" role="menuitem" class="av-it" data-ira="academia"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 21h18"/><path d="M5 21V7l7-4 7 4v14"/><path d="M9 21v-6h6v6"/></svg>Mi academia</button>
+          <button type="button" role="menuitem" class="av-it av-salir" id="avSalir"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>Cerrar sesión</button>
+        </div>
+      </div>
     </header>
     <div class="content">
       <div class="pagehead">
@@ -7343,7 +7357,44 @@ function espejarDotsNav(){
     dst.textContent=src.textContent;
     dst.classList.toggle("hidden",src.classList.contains("hidden"));
   });
+  try{ avPintar(); }catch(e){}
 }
+
+/* ═══ AVATAR CON MENÚ (rediseño 24-oct-2026) ═══════════════════════════════════════
+   Atajos, no lógica nueva: "Mi cuenta" = pestaña Perfil, "Mi academia" = su índice,
+   "Cerrar sesión" = clic al botón de siempre (#btnLogoutAdmin, que sigue en la barra lateral). */
+function avPintar(){
+  var c=(db&&db.config)||{};
+  var nom=(c.profe_nombre||c.profe_marca||"").trim(), aca=(el("navNombre")&&el("navNombre").textContent||"").trim();
+  var ini=(nom||aca||"B").split(/\s+/).slice(0,2).map(function(p){ return p.charAt(0); }).join("").toUpperCase();
+  var b=el("avIni"); if(!b) return;
+  if(c.profe_foto && /^(https?:|\/|data:image\/)/.test(c.profe_foto)){
+    b.innerHTML='<img alt="" src="'+esc(c.profe_foto)+'">';
+  } else b.textContent=ini||"B";
+  if(el("avNom")) el("avNom").textContent=nom||aca||"Tu cuenta";
+  if(el("avSub")) el("avSub").textContent=aca&&aca!==nom?aca:"Tu academia";
+  if(el("avCuenta")) el("avCuenta").hidden=!tabVisiblePorReglas("perfil");
+}
+function avAbrir(on){
+  var m=el("avMenu"), b=el("btnAvatar"); if(!m||!b) return;
+  m.hidden=!on; b.setAttribute("aria-expanded",on?"true":"false");
+  if(on){ try{ avPintar(); }catch(e){} var p=m.querySelector(".av-it:not([hidden])"); if(p) p.focus(); }
+}
+if(el("btnAvatar")) el("btnAvatar").addEventListener("click",function(e){ e.stopPropagation(); avAbrir(el("avMenu").hidden); });
+if(el("avSalir")) el("avSalir").addEventListener("click",function(){ avAbrir(false); el("btnLogoutAdmin").click(); });
+document.addEventListener("click",function(e){
+  var m=el("avMenu"); if(!m||m.hidden) return;
+  if(e.target.closest&&e.target.closest(".av-it")){ setTimeout(function(){ avAbrir(false); },0); return; }
+  if(!(e.target.closest&&e.target.closest(".av-wrap"))) avAbrir(false);
+});
+document.addEventListener("keydown",function(e){
+  var m=el("avMenu"); if(!m||m.hidden) return;
+  if(e.key==="Escape"){ avAbrir(false); el("btnAvatar").focus(); return; }
+  if(e.key==="ArrowDown"||e.key==="ArrowUp"){
+    var its=[].slice.call(m.querySelectorAll(".av-it:not([hidden])")), i=its.indexOf(document.activeElement);
+    i=(i+(e.key==="ArrowDown"?1:-1)+its.length)%its.length; its[i].focus(); e.preventDefault();
+  }
+});
 
 /* Índice "Mi academia": tarjetas en lenguaje de resultado, filtradas por rol y módulos. */
 function renderAcademia(){
