@@ -851,6 +851,282 @@
 [data-ayuda]{cursor:help;}
 /* los controles no cambian de cursor: ahí manda su propia función, no la ayuda */
 button[data-ayuda],a[data-ayuda],select[data-ayuda],input[data-ayuda],label[data-ayuda]{cursor:inherit;}
+/* ═══════════════════════════════════════════════════════════════════════════════
+   CAPA "REDISEÑO 24-oct" (2026)
+   El look que aprobó Andrés: barra lateral con píldora naranja sólida, métricas con cifra
+   grande + chip + mini-gráfico, el mes a la derecha, tablas limpias, campana con punto y
+   avatar con menú. Bordes finos de 1px (estilo Linear) en vez de sombras.
+   Como la capa "APP DE MAC": va al final, gana por cascada, no cambia ids ni clases que use
+   el JS, y SE PUEDE BORRAR ENTERA para volver al look anterior (el HTML/JS nuevo de Hoy y
+   del avatar sigue funcionando sin ella, solo que sin estilo fino).
+   Ojo: el color de marca de cada academia sigue mandando (se pone en línea sobre <html>);
+   el naranja de aquí es solo el valor por defecto.
+   ═══════════════════════════════════════════════════════════════════════════════ */
+:root{
+  --bg:#111010; --panel:#1a1817; --panel2:#232120; --line:#332f2c; --line2:#3d3834;
+  --accent:#ff4d1c; --cream:#f1ede4;
+  --on-accent:#160d09;   /* texto sobre naranja: 5.8:1 (el blanco daba 3.3:1) */
+  /* contraste ≥5.7:1 incluso sobre el fondo de una fila con hover (#2c2927) */
+  --muted:#aaa298;
+  --ok:#3fb97a; --warn:#e8a13d; --bad:#ff6b57;
+  /* escala única de controles: sm para tablas y chips, md para acciones de pantalla */
+  --ctl-sm:32px; --ctl-md:40px; --fs-sm:13px; --fs-md:14px;
+  --sh-1:none; --sh-2:none;
+}
+body{background:var(--bg);color:var(--cream);}
+/* Las entradas de pantalla solo funden (sin transform): un transform que se queda puesto
+   convertía al panel en el contenedor de los position:fixed (menús ⋯) y los descolocaba. */
+@keyframes rd-fade{from{opacity:0}to{opacity:1}}
+.panel.active,.cards .card{animation:rd-fade .22s var(--ease) both;}
+
+/* ---------- Botones: dos tamaños, misma altura en toda la app ---------- */
+.btn{min-height:var(--ctl-md);font-size:var(--fs-md);padding:0 16px;display:inline-flex;align-items:center;justify-content:center;gap:6px;
+     border-radius:10px;box-shadow:none;line-height:1.2;}
+.btn.sm{min-height:var(--ctl-sm);font-size:var(--fs-sm);padding:0 12px;border-radius:8px;}
+.btn:not(.ghost):not(.ok):not(.no){background:var(--accent);border-color:var(--accent);color:var(--on-accent);}
+.btn:not(.ghost):not(.ok):not(.no):hover{background:color-mix(in srgb,var(--accent) 86%,#fff);border-color:color-mix(in srgb,var(--accent) 86%,#fff);box-shadow:none;}
+.btn.ghost{background:transparent;border:1px solid var(--line);color:var(--cream);}
+.btn.ghost:hover{background:var(--panel2);border-color:var(--line2);box-shadow:none;}
+.btn:hover{box-shadow:none;}
+.btn:disabled,.btn:disabled:hover{background:var(--accent);border-color:var(--accent);}
+.btn.ghost:disabled,.btn.ghost:disabled:hover{background:transparent;border-color:var(--line);}
+
+/* ---------- Campos: base por ELEMENTO (sin huérfanos) ---------- */
+.panel input,.panel select,.panel textarea,.modal input,.modal select,.modal textarea{
+  border-radius:10px;border-color:var(--line);background:var(--panel);font-size:var(--fs-md);}
+.panel input:not([type=checkbox]):not([type=radio]):not([type=color]):not([type=file]),.panel select,
+.modal input:not([type=checkbox]):not([type=radio]):not([type=color]):not([type=file]),.modal select{min-height:var(--ctl-md);}
+
+/* ---------- Superficies: 1px, sin sombras ---------- */
+.card,.tablewrap,.hoycard,.modal,.acadcard,.bsbox,.camp-panel{box-shadow:none;}
+.card{border:1px solid var(--line);background:var(--panel);border-radius:14px;}
+.card:hover{box-shadow:none;}
+.group h2{font-size:17px;font-weight:700;letter-spacing:-.01em;}
+.content{max-width:1360px;padding-bottom:140px;}   /* 140px: los botones flotantes ya no tapan lo último */
+.pagehead .rule{display:none;}
+.pagehead .eyebrow{display:none;}
+.pagehead h1{font-size:30px;margin:0;}
+.pagehead{margin-bottom:20px;}
+
+/* ---------- Barra lateral: píldora naranja sólida ---------- */
+.sidebar{background:var(--bg);border-right:1px solid var(--line);}
+.brand{border-bottom:0;}
+.navbig{min-height:44px;border-radius:12px;font-size:15px;font-weight:600;color:var(--muted);padding:0 14px;gap:12px;margin:2px 0;}
+.navbig:hover{background:var(--panel);color:var(--cream);}
+.navbig.active,.navbig.active:hover{background:var(--accent);color:var(--on-accent);border-color:var(--accent);}
+.navbig .dot{position:static;margin-left:auto;background:var(--accent);color:var(--on-accent);min-width:22px;height:20px;border-radius:999px;font-size:11.5px;font-weight:700;padding:0 6px;}
+.navbig .dot.cuenta{background:var(--panel2);color:var(--cream);border:1px solid var(--line);}
+.navbig.active .dot,.navbig.active .dot.cuenta{background:rgba(0,0,0,.16);color:var(--on-accent);border-color:transparent;}
+.navsep{background:var(--line);}
+.sb-tools{border-top:1px solid var(--line);}
+
+/* ---------- Barra superior: buscador, campana con punto y avatar ---------- */
+.topbar{background:color-mix(in srgb,var(--bg) 88%,transparent);border-bottom:1px solid var(--line);gap:10px;min-height:60px;}
+.buscador{margin-left:auto;border:1px solid var(--line);background:var(--panel);border-radius:10px;height:var(--ctl-md);}
+.camp{width:var(--ctl-md);height:var(--ctl-md);border:0;border-radius:10px;color:var(--cream);}
+.camp:hover,.camp[aria-expanded="true"]{background:var(--panel2);color:var(--cream);}
+.camp svg{width:19px;height:19px;}
+/* El globo con número se vuelve un punto naranja: avisa que hay algo, sin gritar una cifra. */
+.camp-pt:not([hidden]){top:8px;right:9px;min-width:0;width:9px;height:9px;padding:0;border-radius:50%;
+  font-size:0;color:transparent;background:var(--accent);box-shadow:0 0 0 2px var(--bg);}
+.camp-panel{border-radius:14px;}
+.av-wrap{position:relative;flex:0 0 auto;}
+.av-btn{display:flex;align-items:center;gap:6px;height:var(--ctl-md);padding:0 6px 0 3px;border:0;border-radius:999px;background:transparent;color:var(--muted);cursor:pointer;}
+.av-btn:hover,.av-btn[aria-expanded="true"]{background:var(--panel2);color:var(--cream);}
+.av-btn:focus-visible,.av-it:focus-visible,.camp:focus-visible{outline:2px solid var(--accent);outline-offset:2px;}
+.av-ini{width:34px;height:34px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;overflow:hidden;
+  background:var(--panel2);border:1px solid var(--line2);color:var(--cream);font-size:13px;font-weight:700;letter-spacing:.02em;}
+.av-ini img{width:100%;height:100%;object-fit:cover;}
+.av-chev{width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;}
+.av-menu{position:absolute;top:calc(100% + 8px);right:0;min-width:230px;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:6px;z-index:70;}
+.av-menu[hidden]{display:none;}
+.av-cab{display:flex;flex-direction:column;padding:10px 12px 10px;border-bottom:1px solid var(--line);margin-bottom:4px;}
+.av-cab b{font-size:14px;color:var(--cream);}
+.av-cab span{font-size:12.5px;color:var(--muted);}
+.av-it{display:flex;align-items:center;gap:10px;width:100%;min-height:var(--ctl-md);padding:0 12px;border:0;border-radius:9px;background:transparent;
+  color:var(--cream);font:500 14px var(--body);text-align:left;cursor:pointer;}
+.av-it[hidden]{display:none;}
+.av-it:hover,.av-it:focus-visible{background:var(--panel2);}
+.av-it svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;color:var(--muted);}
+.av-salir{border-top:1px solid var(--line);border-radius:0 0 9px 9px;margin-top:4px;}
+
+/* ---------- Ayudas: informativas y neutras, ya no alarmas rojizas ---------- */
+.quees{border:1px solid var(--line);border-left:1px solid var(--line);border-radius:12px;background:var(--panel);
+  padding:12px 14px;color:var(--muted);max-width:820px;}
+.quees b{color:var(--cream);}
+.quees>svg{color:var(--muted);}
+.quees a{color:var(--cream);text-decoration:underline;text-underline-offset:2px;}
+#avisoWebCard{border:1px solid var(--line)!important;background:var(--panel);}
+#venceBanner>div,#planRotoBanner>div{border:1px solid var(--line)!important;border-radius:12px!important;background:var(--panel);}
+.plat-guia{border:1px solid var(--line);background:var(--panel);}
+
+/* ---------- Tablas limpias ---------- */
+.tablewrap{border:1px solid var(--line);border-radius:14px;background:var(--panel);}
+th{background:transparent;color:var(--muted);font-size:12.5px;font-weight:600;border-bottom:1px solid var(--line);padding:11px 14px;}
+td{padding:12px 14px;border-bottom:1px solid var(--line);}
+tbody tr{background:transparent;}
+tbody tr:hover{background:color-mix(in srgb,var(--panel2) 70%,transparent);}
+table.acc-fija th:last-child,table.acc-fija td:last-child{background:var(--panel);box-shadow:-1px 0 0 var(--line);}
+table.acc-fija th:last-child{background:var(--panel);}
+table.acc-fija tbody tr:hover td:last-child{background:var(--panel2);}
+.rowact{flex-wrap:nowrap;align-items:center;gap:6px;}
+.rowact .btn{min-height:var(--ctl-sm);height:var(--ctl-sm);white-space:nowrap;}
+.acc-mas{position:relative;display:inline-flex;}
+.acc-mas-b{width:var(--ctl-sm);padding:0!important;font-size:17px;letter-spacing:.05em;}
+.acc-mas-m{position:fixed;z-index:400;min-width:190px;display:flex;flex-direction:column;gap:2px;padding:6px;
+  background:var(--panel);border:1px solid var(--line);border-radius:12px;}
+.acc-mas-m[hidden]{display:none;}
+.acc-mas-m>.btn,.acc-mas-m>a{justify-content:flex-start;width:100%;border:0;background:transparent;color:var(--cream);text-align:left;min-height:var(--ctl-sm);}
+.acc-mas-m>.btn:hover,.acc-mas-m>a:hover{background:var(--panel2);}
+.acc-mas-m>.acc-borrar{color:var(--bad);}
+.pill{border-radius:999px;font-size:12px;font-weight:600;padding:3px 10px;}
+.pestanas button{min-height:var(--ctl-sm);border-radius:999px;font-size:var(--fs-sm);}
+.pestanas button.on{color:var(--on-accent);background:var(--accent);border-color:var(--accent);}
+.acadcard{background:var(--panel);border:1px solid var(--line);border-radius:14px;}
+.acadcard:hover{border-color:var(--line2);background:var(--panel2);transform:none;}
+.acadcard .ac-ico svg{stroke:var(--accent);}
+
+/* ---------- Botones flotantes: más chicos y sin tapar contenido ---------- */
+.oia-fab,.mas-fab{width:44px;height:44px;box-shadow:none;}
+.oia-fab{bottom:20px;right:20px;font-size:16px;color:var(--on-accent);background:var(--accent);border-color:var(--accent);}
+.mas-fab{bottom:72px;right:20px;font-size:22px;background:var(--panel2);border:1px solid var(--line);}
+.mas-menu{bottom:124px;right:20px;box-shadow:none;}
+
+/* ═══ HOY ═══ */
+.hoy-layout{display:grid;grid-template-columns:minmax(0,1fr) 330px;gap:24px;align-items:start;}
+.hoy-main{min-width:0;}
+.hoy-side{display:flex;flex-direction:column;gap:16px;position:sticky;top:84px;}
+#grpResHoy{display:none;}           /* duplicaba "Tu día": sus nombres viven en #hoyRenovar */
+.accrap{gap:8px;margin:0 0 16px;}
+.accrap .btn{min-height:var(--ctl-md);font-size:var(--fs-md);}
+.hoy-h3{font-size:15px;font-weight:700;margin:22px 0 10px;color:var(--cream);letter-spacing:-.005em;}
+/* fila de métricas: una sola caja con divisiones de 1px (patrón Tremor/shadcn) */
+.hoy-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));border:1px solid var(--line);border-radius:16px;background:var(--panel);overflow:hidden;}
+.kpi{display:flex;flex-direction:column;align-items:stretch;gap:4px;padding:18px 20px 14px;text-align:left;background:transparent;border:0;
+  border-right:1px solid var(--line);color:var(--cream);font-family:var(--body);cursor:pointer;min-width:0;transition:background .14s;}
+.kpi:last-child{border-right:0;}
+.kpi:hover{background:var(--panel2);}
+.kpi:focus-visible{outline:2px solid var(--accent);outline-offset:-2px;}
+.kpi-top{display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:22px;}
+.kpi-l{font-size:13.5px;color:var(--muted);font-weight:500;}
+.kpi-n{font-family:var(--body);font-size:34px;font-weight:700;line-height:1.1;letter-spacing:-.02em;font-variant-numeric:tabular-nums;white-space:nowrap;}
+.kpi-s{font-size:12.5px;color:var(--muted);min-height:18px;}
+.kpi-chip{font-size:11.5px;font-weight:600;padding:2px 8px;border-radius:999px;border:1px solid var(--line);white-space:nowrap;color:var(--muted);}
+.kpi-chip.up{color:var(--ok);border-color:color-mix(in srgb,var(--ok) 40%,transparent);background:color-mix(in srgb,var(--ok) 10%,transparent);}
+.kpi-chip.down{color:var(--bad);border-color:color-mix(in srgb,var(--bad) 40%,transparent);background:color-mix(in srgb,var(--bad) 10%,transparent);}
+.kpi-chip.warn{color:var(--accent);border-color:color-mix(in srgb,var(--accent) 40%,transparent);background:color-mix(in srgb,var(--accent) 10%,transparent);}
+.kpi-spark{display:block;width:100%;height:34px;margin-top:8px;color:var(--accent);}
+.kpi-vacio{height:34px;}
+.kpi-meter{display:block;height:6px;border-radius:999px;background:var(--panel2);margin-top:22px;overflow:hidden;}
+.kpi-meter i{display:block;height:100%;background:var(--accent);border-radius:999px;}
+.kpi-mt{font-size:11.5px;color:var(--muted);margin-top:4px;}
+/* tarjetas de "lo que necesita atención": proporciones corregidas (eran 18px/48px) */
+.hoygrid{grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:10px;}
+.hoycard{border:1px solid var(--line);border-radius:14px;background:var(--panel);padding:16px;gap:6px;}
+.hoycard.urge{border-color:color-mix(in srgb,var(--accent) 45%,var(--line));background:var(--panel);}
+.hoycard .hc-n{font-family:var(--body);font-size:34px;font-weight:700;line-height:1.05;letter-spacing:-.02em;color:var(--cream);}
+.hoycard.urge .hc-n{color:var(--accent);}
+.hoycard:not(.urge) .hc-n{font-size:22px;color:var(--muted);}
+.hoycard .hc-l{font-size:14px;line-height:1.45;color:var(--muted);}
+.hoycard.urge .hc-l{color:var(--cream);}
+.hoycard .btn.hc-b{min-height:var(--ctl-md);font-size:var(--fs-md);line-height:1.2;padding:0 14px;margin-top:6px;white-space:nowrap;}
+.hoycard.urge .btn.hc-b{background:var(--accent);border-color:var(--accent);color:var(--on-accent);}
+/* paquetes por terminar */
+.hoy-list{margin-top:14px;border:1px solid var(--line);border-radius:16px;background:var(--panel);padding:6px 18px 8px;}
+.hl-cab{display:flex;align-items:center;gap:10px;padding:12px 0 10px;}
+.hl-cab svg{width:18px;height:18px;fill:none;stroke:var(--accent);stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;}
+.hl-cab b{font-size:15px;}
+.hl-n{font-size:12px;font-weight:700;color:var(--cream);background:var(--panel2);border:1px solid var(--line);border-radius:999px;padding:1px 8px;}
+.hl-row{display:grid;grid-template-columns:minmax(120px,200px) 1fr auto;align-items:center;gap:14px;padding:10px 0;border-top:1px solid var(--line);}
+.hl-nom{font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.hl-det{font-size:13.5px;color:var(--muted);}
+.hl-mas{display:block;width:100%;margin-top:6px;padding:10px 0 4px;border:0;border-top:1px solid var(--line);background:transparent;color:var(--muted);
+  font:500 13.5px var(--body);text-align:left;cursor:pointer;}
+.hl-mas:hover{color:var(--cream);}
+/* actividad reciente */
+.hoy-act{border:1px solid var(--line);border-radius:16px;background:var(--panel);overflow:hidden;}
+.hoy-act table{width:100%;border-collapse:collapse;}
+.hoy-act th,.hoy-act td{padding:11px 18px;text-align:left;}
+.hoy-act tbody tr:last-child td{border-bottom:0;}
+.hoy-act .num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap;}
+.hoy-act td.plata{color:var(--accent);font-weight:600;}
+.hoy-act td.pend{color:var(--muted);}
+/* columna derecha: el mes y las próximas clases */
+.hoy-box{border:1px solid var(--line);border-radius:16px;background:var(--panel);padding:16px 18px;}
+.hc-cab,.hp-cab{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;}
+.hc-cab b,.hp-cab b{font-size:16px;font-weight:700;}
+.hc-nav{display:flex;gap:2px;}
+.hc-nav button{width:30px;height:30px;border:0;border-radius:8px;background:transparent;color:var(--muted);cursor:pointer;display:inline-flex;align-items:center;justify-content:center;}
+.hc-nav button:hover{background:var(--panel2);color:var(--cream);}
+.hc-nav svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;}
+.hc-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:2px;text-align:center;}
+.hc-dow{font-size:11.5px;color:var(--muted);padding:4px 0 6px;}
+.hc-d{position:relative;height:36px;border:0;border-radius:999px;background:transparent;color:var(--cream);font:500 13.5px var(--body);cursor:pointer;font-variant-numeric:tabular-nums;}
+.hc-d.fuera{cursor:default;}
+.hc-d:hover:not(.fuera){background:var(--panel2);}
+.hc-d.con::after{content:"";position:absolute;left:50%;bottom:3px;width:4px;height:4px;margin-left:-2px;border-radius:50%;background:var(--accent);}
+.hc-d.hoy{background:var(--accent);color:var(--on-accent);font-weight:700;}
+.hc-d.hoy::after{background:var(--on-accent);}
+.hp-row{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;width:100%;padding:11px 0;border:0;border-top:1px solid var(--line);
+  background:transparent;color:var(--cream);text-align:left;cursor:pointer;font-family:var(--body);}
+.hp-row:first-of-type{border-top:0;}
+.hp-t{display:flex;flex-direction:column;min-width:0;}
+.hp-t b{font-size:14px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.hp-t span{font-size:12.5px;color:var(--muted);}
+.hp-h{font-size:14px;font-weight:700;color:var(--accent);font-variant-numeric:tabular-nums;}
+@media (max-width:1180px){
+  .hoy-layout{grid-template-columns:minmax(0,1fr);}
+  .hoy-side{position:static;display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));}
+}
+
+/* ═══ CELULAR ═══ */
+@media (max-width:600px){
+  .content{padding:16px 16px 140px;}
+  .topbar{min-height:56px;padding:8px 12px;}
+  .av-chev{display:none;}
+  .av-ini{width:32px;height:32px;}
+  .hoy-kpis{grid-template-columns:1fr 1fr;}
+  .kpi{padding:14px 14px 12px;border-bottom:1px solid var(--line);}
+  .kpi:nth-child(2n){border-right:0;}
+  .kpi-n{font-size:28px;}
+  .kpi-top{flex-wrap:wrap;}
+  .hl-row{grid-template-columns:1fr auto;gap:4px 10px;}
+  .hl-det{grid-column:1;grid-row:2;font-size:13px;}
+  .hl-row .btn{grid-row:1 / span 2;grid-column:2;}
+  .hoy-act th,.hoy-act td{padding:10px 12px;font-size:13.5px;}
+  .hoy-act th:nth-child(3),.hoy-act td:nth-child(3){display:none;}
+  /* botones flotantes en esquina compacta: el contenido lleva 140px de aire abajo */
+  .oia-fab{right:12px;bottom:14px;}
+  .mas-fab{right:12px;bottom:66px;}
+  .mas-menu{right:12px;bottom:118px;}
+  .accrap{display:grid;grid-template-columns:1fr 1fr;}
+  /* tablas → tarjetas (Alumnos, Interesados, Asistencia, Pagos y Caja) */
+  .tablewrap:has(table.tcards){border:0;background:transparent;overflow:visible;}
+  table.tcards{display:block;width:100%;min-width:0!important;}
+  table.tcards thead{display:none;}
+  table.tcards tbody{display:flex;flex-direction:column;gap:10px;}
+  table.tcards tr{display:block;border:1px solid var(--line);border-radius:14px;background:var(--panel);padding:6px 14px;}
+  table.tcards tbody tr:hover{background:var(--panel);}
+  /* bloque con la etiqueta flotando a la izquierda: el contenido de la celda (nombre, teléfono,
+     chips, <br>) sigue fluyendo como en la tabla, solo que alineado a la derecha */
+  table.tcards td{display:block;padding:9px 0;border-bottom:1px solid var(--line);overflow:hidden;
+    text-align:right;white-space:normal;min-width:0!important;max-width:none!important;overflow-wrap:anywhere;}
+  table.tcards td::before{content:attr(data-label);float:left;max-width:42%;margin-right:12px;color:var(--muted);font-size:12.5px;font-weight:500;text-align:left;}
+  table.tcards td[data-label=""]::before{content:none;}
+  table.tcards td:first-child{text-align:left;font-size:15px;}
+  table.tcards td:first-child::before{float:none;display:block;max-width:none;margin:0 0 2px;}
+  table.tcards td:last-child{border-bottom:0;}
+  table.tcards tr.tc-sola td{display:block;text-align:center;}
+  table.tcards tr.tc-sola td::before{content:none;}
+  table.tcards.acc-fija td:last-child{position:static;background:transparent;box-shadow:none;}
+  table.tcards.acc-fija tbody tr:hover td:last-child{background:transparent;}
+  table.tcards .rowact{display:flex;flex-wrap:wrap;justify-content:flex-end;}
+  table.tcards td:last-child::before{content:none;}
+  table.tcards td.notes span,table.tcards td.plan{white-space:normal;}
+  table.tcards td.plan{border-left:0;}
+  .tablewrap:has(table.tcards)+.tabmas{display:none;}
+}
+
 </style>
 </head>
 <body>
