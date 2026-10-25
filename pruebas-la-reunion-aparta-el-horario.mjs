@@ -16,7 +16,7 @@
 import { readFileSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 
-const HOME = process.env.HOME + "/Code/mvt/web";
+const HOME = new URL(".", import.meta.url).pathname;
 const SRC = readFileSync(HOME + "/worker/index.js", "utf8");
 
 let ok = 0, mal = 0;
@@ -89,7 +89,7 @@ comprobar("🔴 el INSERT corre contra el esquema real sin reventar", exploto, n
 const fila = db.prepare("SELECT alumno_id, tipo, estado, fin_utc, contacto FROM reservas WHERE id='r1'").get();
 comprobar("queda SIN alumno_id (como el 'bloqueo' que ya existía)", fila.alumno_id, null);
 comprobar("queda con tipo 'reunion' y estado 'reservada'", [fila.tipo, fila.estado], ["reunion", "reservada"]);
-comprobar("dura " + W.REUNION_MIN + " minutos, no una hora", fila.fin_utc, "2026-09-10T15:20:00.000Z");
+comprobar("dura " + W.REUNION_MIN + " minutos, no una hora", fila.fin_utc, "2026-09-10T15:10:00.000Z");
 
 /* ───────────────────────── 2. Nadie se queda con el horario de otro ───────────────────── */
 console.log("\n── 2. Dos personas no pueden tomar el mismo horario ──");
@@ -106,10 +106,10 @@ try {
 comprobar("🔴 y una CLASE tampoco entra encima de la reunión", chocoClase, true);
 
 /* ───────────────────────── 3. La reunión tapa el slot de la clase ─────────────────────── */
-console.log("\n── 3. 20 minutos tapan la hora entera ──");
+console.log("\n── 3. 10 minutos tapan la hora entera ──");
 const ini = Date.parse(SLOT);
-const busy20 = [[ini, ini + 20 * 60000]];
-comprobar("🔴 una reunión de 20 min bloquea el slot de 60 min de la clase", W.chocaConBusy(busy20, ini), true);
+const busy20 = [[ini, ini + 10 * 60000]];
+comprobar("🔴 una reunión de 10 min bloquea el slot de 60 min de la clase", W.chocaConBusy(busy20, ini), true);
 comprobar("una reunión que arranca a los 40 min también lo bloquea",
   W.chocaConBusy([[ini + 40 * 60000, ini + 60 * 60000]], ini), true);
 comprobar("pero NO bloquea la hora siguiente", W.chocaConBusy(busy20, ini + 3600000), false);
@@ -141,7 +141,7 @@ let capt = null;
 globalThis.fetch = async (u, opt) => { capt = { url: String(u), body: JSON.parse(opt.body) }; return { ok: true, json: async () => ({ id: "evt_1" }) }; };
 
 const idR = await W.gcalCrearEvento({}, {
-  inicio_utc: SLOT, fin_utc: "2026-09-10T15:20:00.000Z", email: "ana@negocio.pe",
+  inicio_utc: SLOT, fin_utc: "2026-09-10T15:10:00.000Z", email: "ana@negocio.pe",
   titulo: "Reunión Web Express · Ana", descripcion: "Negocio: https://ana.pe"
 });
 comprobar("devuelve el id del evento", idR, "evt_1");
@@ -186,7 +186,7 @@ comprobar("y NO pide sesión (ese es el punto)", (() => {
 })(), false);
 comprobar("pero SÍ pasa por el mismo portero de horarios que las clases", (() => {
   const i = LIMPIO.indexOf('url.pathname === "/api/agenda/reunion" && request.method === "POST"');
-  return /await slotValido\(env, iso\)/.test(LIMPIO.slice(i, i + 4000));
+  return /await slotValido\(env, iso, \{ reunion: true \}\)/.test(LIMPIO.slice(i, i + 4000));
 })(), true);
 comprobar("la trampa de bots responde 200 y no aparta nada", (() => {
   const i = LIMPIO.indexOf('url.pathname === "/api/agenda/reunion" && request.method === "POST"');
@@ -194,6 +194,32 @@ comprobar("la trampa de bots responde 200 y no aparta nada", (() => {
 })(), true);
 comprobar("🔴 el IP nunca se guarda en claro, solo hasheado",
   /sha256Hex\("reunion\|" \+ \(request\.headers\.get\("CF-Connecting-IP"\)/.test(LIMPIO), true);
+
+/* Ejecutar el portero real con reloj fijo; el slot es 12:00 America/Lima. */
+console.log("\n── 7. Anticipación de reuniones y clases ──");
+const validar = new Function("ANTICIPACION_MIN_H", "REUNION_ANTICIPACION_MIN_H", "HORIZONTE_SEMANAS", "CLASE_MIN", "limaParts", "hhmm", "gcalBusy", "chocaConBusy", "reunionDentroDeFranja", "REUNION_MIN", "gcalBusyReunion", "reservasOcupadasReunion", "reunionChoca",
+  "return (" + cortar("slotValido") + ")")(12, 1, 4, 60,
+  d => ({ dow: d.getUTCDay(), min: d.getUTCMinutes() }), () => "12:00",
+  async () => ocupacion, (busy, ms) => busy.includes(ms), () => true, 10, async () => ocupacion, async () => [], (busy, ms) => busy.includes(ms));
+const slotPrueba = "2026-10-05T17:00:00.000Z";
+const slotMs = Date.parse(slotPrueba);
+const relojReal = Date.now;
+let ocupacion = [];
+const dbPrueba = { DB: { prepare: () => ({ bind: () => ({ first: async () => ({ ok: 1 }) }) }) } };
+try {
+  for (const [minutos, esperado] of [[59,false],[60,true],[61,true]]){
+    Date.now = () => slotMs - minutos * 60000;
+    comprobar("reunión a " + minutos + " min", await validar(dbPrueba, slotPrueba, { reunion: true }), esperado);
+  }
+  Date.now = () => slotMs - 12 * 3600000;
+  comprobar("clase exactamente a 12 h mantiene regla previa", await validar(dbPrueba, slotPrueba), false);
+  Date.now = () => slotMs - 12 * 3600000 - 1;
+  comprobar("clase con más de 12 h", await validar(dbPrueba, slotPrueba), true);
+  Date.now = () => slotMs - 60 * 60000;
+  ocupacion = [slotMs];
+  comprobar("reunión a 60 min con horario ocupado", await validar(dbPrueba, slotPrueba, { reunion: true }), false);
+} finally { Date.now = relojReal; }
+comprobar("disponibilidad de reuniones usa su ruta y regla", /url.pathname === "\/api\/agenda\/slots-reunion"[\s\S]*?generarSlots\(env, \{ reunion: true \}\)/.test(LIMPIO), true);
 
 console.log("\n" + (mal ? "🔴 " + mal + " en rojo, " : "✅ ") + ok + " verdes\n");
 process.exit(mal ? 1 : 0);

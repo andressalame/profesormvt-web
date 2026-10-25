@@ -2941,7 +2941,8 @@ const LIMA_OFFSET_MS = 5 * 3600 * 1000;
 const CLASE_MIN = 60;             // duración de la clase
 const HORIZONTE_SEMANAS = 4;      // hasta cuándo se puede reservar adelante
 const SERIE_SEMANAS = 4;          // una reserva fija aparta las próximas 4 semanas ("de 4 en 4")
-const ANTICIPACION_MIN_H = 12;    // no se puede reservar con menos de 12h de anticipación
+const ANTICIPACION_MIN_H = 12;    // clases: no se puede reservar con menos de 12h de anticipación
+const REUNION_ANTICIPACION_MIN_H = 1; // Web Express: reserva desde exactamente 60 minutos antes
 
 /* ═══════ REUNIÓN DE VENTA DE WEB EXPRESS, SIN CUENTA (31-ago-2026) ═══════
    webexpress.pe/horarios-disponibles necesitaba agenda y el motor ya estaba escrito acá:
@@ -2962,7 +2963,10 @@ const ANTICIPACION_MIN_H = 12;    // no se puede reservar con menos de 12h de an
    Batuta sí tapan estos horarios (Batuta las publica en el mismo calendario y acá las lee
    gcalBusy, verificado el 31-ago), pero Batuta NO lee freebusy, así que una reunión
    agendada acá no le desaparece un slot al portal del alumno. Ver la nota al pie. */
-const REUNION_MIN = 20;                 // los 20 minutos que promete la página
+const REUNION_MIN = 10;                 // los 10 minutos que promete la página (29-sep-2026: antes 20; llamada corta de cierre)
+const REUNION_ZONA = "America/Lima";
+const REUNION_DESDE_MIN = 8 * 60;
+const REUNION_HASTA_MIN = 21 * 60;
 const REUNION_MAX_IP_24H = 3;           // freno por visitante
 const REUNION_MAX_DIA = 6;              // techo global: que nadie le llene la agenda en una noche
 const REUNION_MAX_EMAIL_ABIERTAS = 1;   // una reunión futura por correo, no se acaparan horarios
@@ -3128,29 +3132,55 @@ async function horarioFijoDerivado(env, alumnoId){
     .map(e => e[0]);
 }
 
+/* Política exclusiva de Web Express. Conserva días/horas habilitados y slots en punto.
+   La reunión completa debe caber entre 08:00 y 21:00 Lima. No acepta segundos ocultos. */
+function reunionDentroDeFranja(ms){
+  if (!Number.isFinite(ms)) return false;
+  const p = limaParts(new Date(ms));
+  const minuto = p.h * 60 + p.min;
+  return ms % 60000 === 0 && minuto >= REUNION_DESDE_MIN && minuto + REUNION_MIN <= REUNION_HASTA_MIN;
+}
+function reunionChoca(busy, ms){
+  return busy.some(b => ms < b[1] && ms + REUNION_MIN * 60000 > b[0]);
+}
+async function reservasOcupadasReunion(env, desde, hasta){
+  const { results } = await env.DB.prepare(
+    "SELECT inicio_utc, fin_utc FROM reservas WHERE estado IN ('reservada','completada') AND inicio_utc < ?2 AND fin_utc > ?1"
+  ).bind(desde, hasta).all();
+  return (results || []).map(r => [Date.parse(r.inicio_utc), Date.parse(r.fin_utc)]);
+}
+
 // ¿Ese instante ISO es un slot real y reservable? (existe en disponibilidad, dentro del horizonte y con anticipación).
 async function slotValido(env, iso, opts){
   const t = Date.parse(iso);
   if (!Number.isFinite(t)) return false;
   const now = Date.now();
-  if (t <= now + ANTICIPACION_MIN_H * 3600000) return false;
+  if ((opts && opts.reunion) ? t < now + REUNION_ANTICIPACION_MIN_H * 3600000 : t <= now + ANTICIPACION_MIN_H * 3600000) return false;
   // Las semanas 2-4 de una serie fija caen más allá del horizonte de oferta; para
   // ellas saltamos el techo (igual se validan disponibilidad + freebusy + anticipación).
   if (!(opts && opts.ignorarHorizonte) && t > now + HORIZONTE_SEMANAS * 7 * 86400000) return false;
   const p = limaParts(new Date(t));
   if (p.min !== 0) return false;                       // los slots arrancan en punto
+  if (opts && opts.reunion && !reunionDentroDeFranja(t)) return false;
   const row = await env.DB.prepare(
     "SELECT 1 AS ok FROM disponibilidad WHERE dia_semana = ?1 AND hora = ?2 AND activo = 1"
   ).bind(p.dow, hhmm(p)).first();
   if (!row) return false;
   // no dejar reservar encima de algo que Andrés tiene ocupado en su Google Calendar
-  const busy = await gcalBusy(env, new Date(t).toISOString(), new Date(t + CLASE_MIN * 60000).toISOString());
+  const desde = new Date(t).toISOString();
+  if (opts && opts.reunion){
+    const hasta = new Date(t + REUNION_MIN * 60000).toISOString();
+    const busy = await gcalBusyReunion(env, desde, hasta);
+    const reservas = await reservasOcupadasReunion(env, desde, hasta);
+    return !reunionChoca(busy.concat(reservas), t);
+  }
+  const busy = await gcalBusy(env, desde, new Date(t + CLASE_MIN * 60000).toISOString());
   if (chocaConBusy(busy, t)) return false;
   return true;
 }
 
 // Lista de slots libres en las próximas HORIZONTE_SEMANAS semanas (ISO UTC, ordenados).
-async function generarSlots(env){
+async function generarSlots(env, opts){
   const { results: disp } = await env.DB.prepare(
     "SELECT dia_semana, hora FROM disponibilidad WHERE activo = 1"
   ).all();
@@ -3165,7 +3195,12 @@ async function generarSlots(env){
   const ocupados = new Set((tomadas || []).map(r => r.inicio_utc));
 
   // Bloques ocupados en el Google Calendar de Andrés (si está conectado): esos slots no se ofrecen.
-  const busy = await gcalBusy(env, new Date(now).toISOString(), new Date(hastaMs).toISOString());
+  const esReunion = !!(opts && opts.reunion);
+  const desde = new Date(now).toISOString();
+  const hasta = new Date(hastaMs + (esReunion ? REUNION_MIN * 60000 : 0)).toISOString();
+  const busy = esReunion
+    ? (await gcalBusyReunion(env, desde, hasta)).concat(await reservasOcupadasReunion(env, desde, hasta))
+    : await gcalBusy(env, desde, hasta);
 
   // Arrancamos en la medianoche-Lima de hoy y avanzamos día por día (no hay DST, +86.4M es exacto).
   const p0 = limaParts(new Date(now));
@@ -3176,9 +3211,10 @@ async function generarSlots(env){
     const horas = porDia[p.dow] || [];
     for (const h of horas){
       const ms = limaToUtc(p.y, p.m, p.d, h).getTime();
-      if (ms <= now + ANTICIPACION_MIN_H * 3600000 || ms > hastaMs) continue;
+      if (((opts && opts.reunion) ? ms < now + REUNION_ANTICIPACION_MIN_H * 3600000 : ms <= now + ANTICIPACION_MIN_H * 3600000) || ms > hastaMs) continue;
       const iso = new Date(ms).toISOString();
-      if (!ocupados.has(iso) && !chocaConBusy(busy, ms)) slots.push(iso);
+      if (esReunion && (!reunionDentroDeFranja(ms) || limaParts(new Date(ms)).min !== 0)) continue;
+      if (!ocupados.has(iso) && !(esReunion ? reunionChoca(busy, ms) : chocaConBusy(busy, ms))) slots.push(iso);
     }
   }
   slots.sort();
@@ -3436,6 +3472,31 @@ async function gcalBusy(env, timeMinIso, timeMaxIso){
       .map(b => [Date.parse(b.start), Date.parse(b.end)])
       .filter(x => Number.isFinite(x[0]) && Number.isFinite(x[1]));
   } catch (e) { return []; }
+}
+
+/* Web Express exige una respuesta válida de Google. Un error nunca equivale a libre.
+   Usa la conexión y el calendario existentes; solo lee intervalos, sin títulos ni asistentes. */
+async function gcalBusyReunion(env, timeMinIso, timeMaxIso){
+  const unavailable = () => new Error("No se pudo comprobar Google Calendar.");
+  const tok = await gcalAccessToken(env);
+  if (!tok) throw unavailable();
+  const cfg = await loadConfig(env);
+  const calId = cfg.gcal_calendar_id || "primary";
+  const r = await fetch("https://www.googleapis.com/calendar/v3/freeBusy", {
+    method: "POST",
+    headers: { "authorization": "Bearer " + tok, "content-type": "application/json" },
+    body: JSON.stringify({ timeMin: timeMinIso, timeMax: timeMaxIso, timeZone: REUNION_ZONA, items: [{ id: calId }] }),
+    signal: AbortSignal.timeout(10000)
+  });
+  if (!r.ok) throw unavailable();
+  const d = await r.json();
+  const cal = d && d.calendars && d.calendars[calId];
+  if (!cal || (cal.errors && cal.errors.length) || (d.errors && d.errors.length) || !Array.isArray(cal.busy)) throw unavailable();
+  return cal.busy.map(b => {
+    const ini = Date.parse(b.start), fin = Date.parse(b.end);
+    if (!Number.isFinite(ini) || !Number.isFinite(fin) || fin <= ini) throw unavailable();
+    return [ini, fin];
+  });
 }
 
 /* ¿El slot [ms, ms+CLASE_MIN) choca con algún bloque ocupado? */
@@ -5327,6 +5388,21 @@ export default {
       /* ===== AGENDA: vitrina PÚBLICA de horarios libres (sin sesión) =====
          Para que un interesado vea qué horarios hay ANTES de crear cuenta y pagar.
          Solo lectura: los mismos slots libres del portal, sin datos de nadie. */
+      if (url.pathname === "/api/agenda/slots-reunion" && request.method === "GET"){
+        let r;
+        try {
+          const slots = await generarSlots(env, { reunion: true });
+          r = json({ slots, minutos: REUNION_MIN, zona_horaria: REUNION_ZONA,
+            franja: { desde: "08:00", hasta: "21:00" }, verificado_en: new Date().toISOString() });
+        } catch (e){
+          r = json({ error: "No pudimos comprobar la agenda. Intenta de nuevo en un momento." }, 503);
+        }
+        r.headers.set("Access-Control-Allow-Origin", "https://webexpress.pe");
+        r.headers.set("Vary", "Origin");
+        r.headers.set("Cache-Control", "no-store");
+        return r;
+      }
+
       if (url.pathname === "/api/agenda/slots-publicos" && request.method === "GET"){
         const slots = await generarSlots(env);
         const r = json({ slots });
@@ -5344,6 +5420,7 @@ export default {
         const jr = (data, status) => {
           const r = json(data, status);
           for (const k in ch) r.headers.set(k, ch[k]);
+          r.headers.set("Cache-Control", "no-store");
           return r;
         };
         const b = await request.json().catch(() => ({}));
@@ -5364,10 +5441,15 @@ export default {
            es el peor final posible para esta página. */
         if (!/^https?:\/\//i.test(web) && /^[a-z0-9.-]+\.[a-z]{2,}(\/.*)?$/i.test(web)) web = "https://" + web;
 
-        const iso = String(b.inicio_utc || "");
-        /* El mismo portero de las clases: día y hora habilitados, 12h de anticipación, dentro
-           del horizonte, y que el Google Calendar de Andrés no lo tenga ocupado. */
-        if (!(await slotValido(env, iso))) return jr({ error: "Ese horario ya no está libre. Elige otro." }, 409);
+        const ms = Date.parse(String(b.inicio_utc || ""));
+        if (!Number.isFinite(ms)) return jr({ error: "Elige un horario válido." }, 400);
+        // Normalizar antes del índice UNIQUE: offsets equivalentes no crean reservas duplicadas.
+        const iso = new Date(ms).toISOString();
+        try {
+          if (!(await slotValido(env, iso, { reunion: true }))) return jr({ error: "Ese horario ya no está libre. Elige otro.", codigo: "horario_ocupado" }, 409);
+        } catch (e){
+          return jr({ error: "No pudimos comprobar la agenda. No se ha reservado ningún horario. Intenta de nuevo.", codigo: "agenda_no_verificada" }, 503);
+        }
 
         const ahora = Date.now();
         const nowIso = new Date(ahora).toISOString();
@@ -5400,7 +5482,7 @@ export default {
           ).bind(rid, iso, fin, nota, nowIso, email, ipHash).run();
         } catch (e){
           /* el UNIQUE INDEX del slot: alguien lo tomó entre la validación y el INSERT */
-          return jr({ error: "Justo tomaron ese horario. Elige otro." }, 409);
+          return jr({ error: "Justo tomaron ese horario. Elige otro.", codigo: "horario_ocupado" }, 409);
         }
 
         const eid = await gcalCrearEvento(env, {
