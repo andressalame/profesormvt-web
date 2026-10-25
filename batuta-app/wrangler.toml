@@ -3,6 +3,10 @@ main = "worker/index.js"
 compatibility_date = "2026-05-06"
 compatibility_flags = ["nodejs_compat"]
 
+[vars]
+# Recepción Web Express aprobada 18-oct: solo borradores; sin autorespuesta ni CRM automático.
+WE_CRM_INBOX_ENABLED = "true"
+
 [assets]
 directory = "./public"
 binding = "ASSETS"

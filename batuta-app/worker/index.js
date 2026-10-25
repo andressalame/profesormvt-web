@@ -8,6 +8,7 @@
    Prefijo de rutas: TODO bajo /app y /app/api. Paginas registro/login servidas inline.
 */
 "use strict";
+import { captureWebExpressInbox, webExpressQueueRoute } from "./webexpress-crm-inbox.mjs";
 
 /* Motor de "Mi web": la web pública editable de cada academia (tab Mi web del panel).
    Una sola fuente para servir la web y para la vista previa del editor. */
@@ -12113,6 +12114,9 @@ export default {
         if (!env.ADMIN_TOKEN || !safeEq(auth, "Bearer " + env.ADMIN_TOKEN)){
           return json({ error: "No autorizado" }, 401);
         }
+        if (path === "/app/api/su/webexpress-crm-issues" || path === "/app/api/su/webexpress-crm-events" || path === "/app/api/su/webexpress-crm-ack") {
+          return await webExpressQueueRoute(request, env);
+        }
         /* Prende (o apaga) el envio REAL de invitaciones por correo de UNA academia.
            Nace apagado en todas: mandar cientos de correos a nombre de un tercero se
            autoriza a mano, no se hereda. Apagado, el panel simula la tanda.
@@ -13931,8 +13935,24 @@ export default {
            cualquiera que descubriera esta URL podia inyectar mensajes falsos, quemar el cupo
            de IA (que es plata) y ensuciar el pipeline con conversaciones que nunca existieron.
            Se valida ANTES de tocar la IA, la DB o mandar un WhatsApp de salida. */
-        const rawBuf = await request.arrayBuffer();
+        const rawBuf = await request.arrayBuffer(); // Exact legacy read for every phone and flag state.
         const firma = await validarFirmaMeta(env, rawBuf, request.headers.get("x-hub-signature-256"));
+        let weCrmRemaining = null;
+        // Only this exact official Web Express line enters the durable review queue.
+        // Signature is checked before JSON; durable commit finishes before any success ACK.
+        if (firma.ok && env.WE_CRM_INBOX_ENABLED === "true") {
+          try {
+            let signedPayload = null;
+            try { signedPayload = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(rawBuf)); } catch {} // Legacy handles malformed bodies unchanged.
+            const captured = await captureWebExpressInbox(signedPayload, env);
+            if (captured.matched) {
+              if (!captured.remaining.entry.length) return new Response("EVENT_RECEIVED", { status: 200 });
+              weCrmRemaining = captured.remaining;
+            }
+          } catch (e) {
+            return json({ error: e.code || "webexpress_inbox_unavailable" }, e.status || 503);
+          }
+        }
         /* Bitacora persistente de lo que llega (2-set-2026): wrangler tail no es fiable para esto
            y sin registro no se puede saber si Meta esta posteando o no. Guarda tipo y resumen, nunca el texto. */
         ctx.waitUntil((async () => {
@@ -13959,8 +13979,8 @@ export default {
         }
         // Siempre 200 rapido (Meta reintenta si no); el trabajo va en waitUntil.
         if (!env.WHATSAPP_TOKEN) return new Response("ok", { status: 200 });
-        let body = null;
-        try { body = JSON.parse(new TextDecoder().decode(rawBuf)); } catch (e) { body = null; }
+        let body = weCrmRemaining;
+        if (!body) try { body = JSON.parse(new TextDecoder().decode(rawBuf)); } catch (e) { body = null; }
         ctx.waitUntil((async () => {
           try {
             const val = body && body.entry && body.entry[0] && body.entry[0].changes && body.entry[0].changes[0] && body.entry[0].changes[0].value;
