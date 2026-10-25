@@ -4122,7 +4122,7 @@ export default {
             "content-disposition": (obj.httpMetadata && obj.httpMetadata.contentDisposition) || "inline",
             /* "private" a propósito: con URL firmada, un caché compartido no debe guardar
                una copia que luego sirva a otro. La foto pública sí puede cachearse. */
-            "cache-control": clase === "publico" ? "public, max-age=3600" : "private, max-age=300",
+            "cache-control": clase === "publico" ? "public, max-age=60" : "private, max-age=300",
             "x-content-type-options": "nosniff"
           }
         });
