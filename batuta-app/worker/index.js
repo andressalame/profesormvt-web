@@ -13,6 +13,8 @@
 const weInbox = () => import("./webexpress-crm-inbox.mjs");
 /* Asistente de la linea de anuncios de Web Express (29-oct-2026). Apagado salvo WE_ASSISTANT_ENABLED="true" Y wa_negocio.enabled='on'. */
 const weAsistente = () => import("./webexpress-asistente.mjs");
+/* Enrutamiento de la linea compartida con Batuta: ante la duda gana Batuta (ver webexpress-ruta.mjs). */
+const weRuta = () => import("./webexpress-ruta.mjs");
 
 /* Motor de "Mi web": la web pública editable de cada academia (tab Mi web del panel).
    Una sola fuente para servir la web y para la vista previa del editor. */
@@ -14076,11 +14078,16 @@ export default {
           try {
             let signedPayload = null;
             try { signedPayload = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(rawBuf)); } catch {} // Legacy handles malformed bodies unchanged.
-            const captured = await (await weInbox()).captureWebExpressInbox(signedPayload, env);
-            if (captured.matched) {
-              if (!captured.remaining.entry.length) return new Response("EVENT_RECEIVED", { status: 200 });
-              weCrmRemaining = captured.remaining;
+            /* Linea COMPARTIDA con Batuta: a la bandeja solo entran los mensajes que el enrutador marca como de Web Express.
+               Con WE_ASSISTANT_ENABLED distinto de "true" el conjunto esta vacio: no se captura nada y Batuta queda intacta. */
+            let permitidos = new Set();
+            if (env.WE_ASSISTANT_ENABLED === "true" && signedPayload) {
+              const I = await weInbox();
+              permitidos = await (await weRuta()).mensajesParaWE(env, signedPayload, I.WE_WABA, I.WE_PHONE);
             }
+            const captured = await (await weInbox()).captureWebExpressInbox(signedPayload, env, permitidos);
+            /* Los mensajes de Web Express ya quedaron guardados; siguen su camino hacia el asistente (no se corta aqui)
+               porque ya no hay una linea exclusiva: lo que no es de Web Express es de Batuta y tambien debe seguir. */
           } catch (e) {
             return json({ error: e.code || "webexpress_inbox_unavailable" }, e.status || 503);
           }
@@ -14123,6 +14130,8 @@ export default {
               if (env.WE_ASSISTANT_ENABLED === "true"){
                 const phoneIdNT = (val.metadata && val.metadata.phone_number_id) || "";
                 const fromNT = String(msg.from || "").replace(/[^\d]/g, "");
+                /* Linea compartida: un adjunto solo va a Web Express si el remitente ya es lead de Web Express; si no, sigue como antes (Batuta lo ignora). */
+                if ((await (await weRuta()).decidirRuta(env, { phoneId: phoneIdNT, from: fromNT, texto: "", referral: msg.referral })).ruta !== "we") return;
                 const wamidNT = String(msg.id || "");
                 if (phoneIdNT && fromNT && !(wamidNT && await chatbotPasoTope(env, "wamid:" + wamidNT, 1))){
                   const nombreNT = (val.contacts && val.contacts[0] && val.contacts[0].profile && val.contacts[0].profile.name) || "";
@@ -14142,7 +14151,11 @@ export default {
             // RAMA NEGOCIO (asistente-cliente para negocio suelto, no-academia). AISLADA y default
             // vacia: si el numero no esta dado de alta en wa_negocio, devuelve false y el flujo de
             // academia de abajo queda intacto. Si lo maneja (respondio, apagado o sin cupo), corta aca.
-            if (await manejarNegocioWA(env, { phoneId, from, texto, nombre, tipo: "text", referral: msg.referral })) return;
+            /* Linea compartida (29-oct-2026): si el numero es la linea de Batuta, solo un prospecto de Web Express entra a la rama negocio.
+               Todo lo demas sigue al flujo de academia exactamente como antes. */
+            const rutaWE = await (await weRuta()).decidirRuta(env, { phoneId, from, texto, referral: msg.referral });
+            const lineaCompartida = phoneId === (await weRuta()).LINEA_COMPARTIDA;
+            if ((!lineaCompartida || rutaWE.ruta === "we") && await manejarNegocioWA(env, { phoneId, from, texto, nombre, tipo: "text", referral: msg.referral })) return;
             // resolver el tenant dueno de ese numero (config wa_phone_id)
             await waAtenderTenant(env, { phoneId, from, texto, nombre });
           } catch (e) { console.error("wa webhook", e); }

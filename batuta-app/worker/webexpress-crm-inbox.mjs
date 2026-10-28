@@ -1,9 +1,12 @@
 /** Durable Web Express-only inbox (guarda el mensaje entrante; la respuesta, si la hay, la decide webexpress-asistente.mjs). */
-/* 29-oct-2026: la linea de anuncios es +51 904 056 197. El ID viejo (1224297864110431) fue retirado. */
-export const WE_PHONE='1434449576409643';
+/* 29-oct-2026 (decision de Andres): Web Express usa la linea COMPARTIDA de Batuta (+51 904 079 121, phone_number_id 1353785221144478).
+   Los IDs 1224297864110431 (retirado) y 1434449576409643 (linea +51 904 056 197, trabada en Pendiente) ya no se usan.
+   Como la linea es compartida, SOLO se captura lo que worker/webexpress-ruta.mjs clasifica como de Web Express. */
+export const WE_PHONE='1353785221144478';
 export const WE_PHONE_RETIRADO='1224297864110431';
-/* Tabla v2: la v1 tenia CHECK(phone_id=<ID viejo>) y SQLite no permite cambiarlo; ver migrations/002. */
-export const WE_INBOX_TABLE='webexpress_crm_inbox_v2';
+export const WE_PHONE_PENDIENTE='1434449576409643';
+/* Tabla v3: la v1 tenia CHECK(phone_id=<ID viejo>) y SQLite no permite cambiarlo; ver migrations/002. */
+export const WE_INBOX_TABLE='webexpress_crm_inbox_v3';
 export const WE_WABA='2090741322318574';
 export const WE_MAX_RAW=1048576;
 const enc=new TextEncoder();
@@ -18,16 +21,24 @@ export async function boundedWebhookBody(request){
  try{for(;;){const p=await reader.read();if(p.done)break;n+=p.value.byteLength;if(n>WE_MAX_RAW){await reader.cancel();throw problem(413,'body_limit');}parts.push(p.value);}}finally{reader.releaseLock();}
  const out=new Uint8Array(n);let offset=0;for(const p of parts){out.set(p,offset);offset+=p.byteLength;}return out.buffer;
 }
-export function partitionWebExpress(payload){
+export function partitionWebExpress(payload,allow){
  if(!obj(payload)||payload.object!=='whatsapp_business_account'||!Array.isArray(payload.entry))return {events:[],matched:false,remaining:payload};
  const events=[],entries=[],issues=[];let matched=false;
  for(const entry of payload.entry){
   if(!obj(entry)||!Array.isArray(entry.changes)){entries.push(entry);continue;}
   const changes=[];
   for(const change of entry.changes){
-   const v=change?.value;
+   let v=change?.value;
    if(entry.id!==WE_WABA||change?.field!=='messages'||v?.metadata?.phone_number_id!==WE_PHONE){changes.push(change);continue;}
    if(v.messages===undefined || (Array.isArray(v.messages)&&v.messages.length===0)){changes.push(change);continue;}
+   /* Linea compartida: con `allow` (Set de ids), solo los mensajes de Web Express entran; el resto sigue su camino hacia Batuta. */
+   let rest=[];
+   if(allow instanceof Set&&Array.isArray(v.messages)){
+    const mine=v.messages.filter(m=>obj(m)&&allow.has(m.id));
+    if(!mine.length){changes.push(change);continue;}
+    rest=v.messages.filter(m=>!(obj(m)&&allow.has(m.id)));
+    v={...v,messages:mine};
+   }
    matched=true;
    const start=events.length;
    try {
@@ -55,7 +66,10 @@ export function partitionWebExpress(payload){
     events.splice(start);issues.push({change,reason:e.code});changes.push(change);continue;
    }
    // Preserve delivery/read statuses through the legacy path, without captured messages/contacts.
-   if(Array.isArray(v.statuses)&&v.statuses.length){
+   if(rest.length){
+    const {messages,...restValue}=v; // los mensajes que no son de Web Express siguen intactos (con sus contactos y statuses)
+    changes.push({...change,value:{...restValue,messages:rest}});
+   }else if(Array.isArray(v.statuses)&&v.statuses.length){
     const {messages,contacts,...statusValue}=v;
     changes.push({...change,value:statusValue});
    }
@@ -64,8 +78,8 @@ export function partitionWebExpress(payload){
  }
  return {events,issues,matched,remaining:{...payload,entry:entries}};
 }
-export async function captureWebExpressInbox(payload,env){
- const part=partitionWebExpress(payload);if(!part.matched)return part;
+export async function captureWebExpressInbox(payload,env,allow){
+ const part=partitionWebExpress(payload,allow);if(!part.matched)return part;
  const owner=await env.DB.prepare("SELECT id,phone_id,enabled FROM wa_negocio WHERE id='webexpress' AND phone_id=?").bind(WE_PHONE).first();
  if(!owner||owner.id!=='webexpress'||owner.phone_id!==WE_PHONE||(owner.enabled!=='off'&&owner.enabled!=='on'))throw problem(503,'manual_scope_not_ready');
  const now=Date.now();

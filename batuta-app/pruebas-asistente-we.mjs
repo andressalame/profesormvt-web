@@ -1,5 +1,5 @@
 /* ─────────────────────────────────────────────────────────────────────────────
-   ASISTENTE DE WEB EXPRESS (línea de anuncios +51 904 056 197)            (29-oct-2026)
+   ASISTENTE DE WEB EXPRESS (línea compartida de Batuta +51 904 079 121)            (29-oct-2026)
 
    Todo sintético: NO hay red, NO hay WhatsApp, NO hay D1 remota, NO hay modelo.
    Los envíos son funciones falsas que apuntan a un arreglo. Cubre:
@@ -266,7 +266,7 @@ sec("3. Migración de D1 (en una base SQLite local, nunca en la remota)");
 
   db.exec(m002);
   let e = estado();
-  comprobar("el ID del negocio pasa al nuevo 1434449576409643", e.phone_id === I.WE_PHONE && I.WE_PHONE === "1434449576409643");
+  comprobar("el ID del negocio pasa a la línea compartida de Batuta 1353785221144478", e.phone_id === I.WE_PHONE && I.WE_PHONE === "1353785221144478");
   comprobar("la base de conocimiento queda cargada (JSON válido y con el estrella)", e.n > 1000 && /SEO \+ AEO avanzados mensuales/.test(JSON.parse(db.prepare("SELECT kb FROM wa_negocio WHERE id='webexpress'").get().kb).servicios[0].nombre));
   comprobar("NO enciende la IA: enabled sigue off y cap_mes se conserva", e.enabled === "off" && e.cap_mes === 777);
   comprobar("no toca a otros negocios", db.prepare("SELECT phone_id, enabled FROM wa_negocio WHERE id='batuta-3402'").get().phone_id === "555000111");
@@ -277,7 +277,7 @@ sec("3. Migración de D1 (en una base SQLite local, nunca en la remota)");
   let rechazo = false;
   try { db.exec("INSERT INTO " + I.WE_INBOX_TABLE + " VALUES ('x','999','2090741322318574','5','', 1,'text','a','','p','none',1,NULL)"); } catch (er) { rechazo = true; }
     let nuevoOk = true;
-  try { db.exec("INSERT INTO " + I.WE_INBOX_TABLE + " VALUES ('y','1434449576409643','2090741322318574','5','', 1,'text','a','','p','none',1,NULL)"); } catch (er) { nuevoOk = false; }
+  try { db.exec("INSERT INTO " + I.WE_INBOX_TABLE + " VALUES ('y','1353785221144478','2090741322318574','5','', 1,'text','a','','p','none',1,NULL)"); } catch (er) { nuevoOk = false; }
   comprobar("la bandeja v2 acepta el ID nuevo y rechaza cualquier otro", nuevoOk && rechazo);
 
   db.exec(on); comprobar("003 activar: enabled pasa a on", estado().enabled === "on");

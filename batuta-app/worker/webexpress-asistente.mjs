@@ -1,4 +1,4 @@
-/* Asistente de Web Express para la linea de anuncios «Click to WhatsApp» (+51 904 056 197).
+/* Asistente de Web Express para la linea de anuncios «Click to WhatsApp» (linea compartida de Batuta, +51 904 079 121).
    Preparado el 29-oct-2026. NADA de esto corre en produccion hasta que Andres:
    (1) despliegue, (2) ejecute la migracion de D1, (3) ponga WE_ASSISTANT_ENABLED="true" y
    (4) ejecute la migracion de activar. Con cualquiera de las cuatro pendientes, la linea sigue
@@ -328,7 +328,7 @@ export function armarAviso({ motivo, intent, telefono, nombre, ultimo, referral,
     : "";
   const asunto = "Web Express WhatsApp: " + quien + " " + etiqueta;
   const cuerpo =
-    "Lead de la línea de anuncios (+51 904 056 197), origen: " + (origen || "anuncio") + ".\n" +
+    "Lead de la línea de anuncios (linea compartida de Batuta, +51 904 079 121), origen: " + (origen || "anuncio") + ".\n" +
     "Cliente: " + quien + "\nMotivo del pase: " + etiqueta + (intent && intent !== motivo ? " (" + intent + ")" : "") +
     "\nÚltimo mensaje: " + String(ultimo || "").slice(0, 400) + ad +
     "\n\nEl asistente quedó en pausa en este chat; el siguiente mensaje lo respondes tú.\n" +

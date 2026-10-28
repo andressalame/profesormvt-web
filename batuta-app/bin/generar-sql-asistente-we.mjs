@@ -8,12 +8,15 @@ import { WE_PHONE, WE_PHONE_RETIRADO, WE_INBOX_TABLE } from "../worker/webexpres
 
 export function sqlPreparar() {
   const kb = JSON.stringify(WE_KB).replace(/'/g, "''");
-  return `-- 002: PREPARAR la linea de anuncios de Web Express (+51 904 056 197). Generado por bin/generar-sql-asistente-we.mjs.
+  return `-- 002: PREPARAR Web Express en la linea COMPARTIDA de Batuta (+51 904 079 121, phone_number_id ${WE_PHONE}). Generado por bin/generar-sql-asistente-we.mjs.
 -- Idempotente: se puede ejecutar varias veces. NO enciende el asistente (no toca wa_negocio.enabled en una fila que ya existe).
 -- Ejecutar: CLOUDFLARE_ACCOUNT_ID=d6762650e83c09d554b1e3413c03b43d npx wrangler d1 execute batuta-app --remote --file=migrations/002-webexpress-asistente-preparar.sql
 -- Es seguro con el worker ACTUAL: solo crea una tabla nueva, copia lo que hay y reapunta el ID.
+-- OJO linea compartida: wa_negocio guarda el phone_id de Batuta. El worker NUNCA manda a alumnos o academias a la rama de Web Express
+-- (decide webexpress-ruta.mjs por remitente). Aun asi, el interruptor de Web Express es WE_ASSISTANT_ENABLED en wrangler.toml.
+-- REVERSION (volver a dejar la linea solo para Batuta): ver migrations/004-webexpress-quitar-linea-compartida.sql.
 
--- 1) Bandeja v2: la v1 tenia CHECK(phone_id=${WE_PHONE_RETIRADO}) y SQLite no deja cambiarlo. La v1 queda intacta (reversion).
+-- 1) Bandeja v3 (la v2 de la version anterior nunca se aplico en produccion: no se usa): la v1 tenia CHECK(phone_id=${WE_PHONE_RETIRADO}) y SQLite no deja cambiarlo. La v1 queda intacta (reversion).
 CREATE TABLE IF NOT EXISTS ${WE_INBOX_TABLE} (
  event_id TEXT NOT NULL CHECK(length(event_id) BETWEEN 1 AND 250),
  phone_id TEXT NOT NULL CHECK(phone_id IN ('${WE_PHONE}','${WE_PHONE_RETIRADO}')),
@@ -24,7 +27,7 @@ CREATE TABLE IF NOT EXISTS ${WE_INBOX_TABLE} (
  created_at INTEGER NOT NULL,acked_at INTEGER,
  PRIMARY KEY(phone_id,event_id)
 );
-CREATE INDEX IF NOT EXISTS webexpress_crm_pending_v2 ON ${WE_INBOX_TABLE}(phone_id,waba_id,acked_at,created_at,event_id);
+CREATE INDEX IF NOT EXISTS webexpress_crm_pending_v3 ON ${WE_INBOX_TABLE}(phone_id,waba_id,acked_at,created_at,event_id);
 INSERT OR IGNORE INTO ${WE_INBOX_TABLE}(event_id,phone_id,waba_id,from_phone,contact_name,timestamp_ms,message_type,body,media_id,review_state,reply_state,created_at,acked_at)
  SELECT event_id,phone_id,waba_id,from_phone,contact_name,timestamp_ms,message_type,body,media_id,review_state,reply_state,created_at,acked_at FROM webexpress_crm_inbox;
 
