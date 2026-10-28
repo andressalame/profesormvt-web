@@ -6,6 +6,9 @@ compatibility_flags = ["nodejs_compat"]
 [vars]
 # Recepción Web Express aprobada 18-oct: solo borradores; sin autorespuesta ni CRM automático.
 WE_CRM_INBOX_ENABLED = "true"
+# Asistente de IA de la linea de anuncios (+51 904 056 197). SEGUNDA llave: ademas hace falta
+# wa_negocio.enabled='on' (migrations/003). Con "false" la linea solo guarda y avisa, nunca contesta.
+WE_ASSISTANT_ENABLED = "false"
 
 [assets]
 directory = "./public"

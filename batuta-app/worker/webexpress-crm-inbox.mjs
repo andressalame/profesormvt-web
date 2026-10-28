@@ -1,5 +1,9 @@
-/** Durable Web Express-only inbox. No AI, Graph send, email or CRM mutation. */
-export const WE_PHONE='1224297864110431';
+/** Durable Web Express-only inbox (guarda el mensaje entrante; la respuesta, si la hay, la decide webexpress-asistente.mjs). */
+/* 29-oct-2026: la linea de anuncios es +51 904 056 197. El ID viejo (1224297864110431) fue retirado. */
+export const WE_PHONE='1434449576409643';
+export const WE_PHONE_RETIRADO='1224297864110431';
+/* Tabla v2: la v1 tenia CHECK(phone_id=<ID viejo>) y SQLite no permite cambiarlo; ver migrations/002. */
+export const WE_INBOX_TABLE='webexpress_crm_inbox_v2';
 export const WE_WABA='2090741322318574';
 export const WE_MAX_RAW=1048576;
 const enc=new TextEncoder();
@@ -63,9 +67,9 @@ export function partitionWebExpress(payload){
 export async function captureWebExpressInbox(payload,env){
  const part=partitionWebExpress(payload);if(!part.matched)return part;
  const owner=await env.DB.prepare("SELECT id,phone_id,enabled FROM wa_negocio WHERE id='webexpress' AND phone_id=?").bind(WE_PHONE).first();
- if(!owner||owner.id!=='webexpress'||owner.phone_id!==WE_PHONE||owner.enabled!=='off')throw problem(503,'manual_scope_not_ready');
+ if(!owner||owner.id!=='webexpress'||owner.phone_id!==WE_PHONE||(owner.enabled!=='off'&&owner.enabled!=='on'))throw problem(503,'manual_scope_not_ready');
  const now=Date.now();
- const statements=part.events.map(e=>env.DB.prepare('INSERT INTO webexpress_crm_inbox(event_id,phone_id,waba_id,from_phone,contact_name,timestamp_ms,message_type,body,media_id,review_state,reply_state,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(phone_id,event_id) DO NOTHING').bind(e.event_id,e.phone_id,e.waba_id,e.from,e.name,e.timestamp_ms,e.type,e.body,e.media_id,e.review_state,'none',now));
+ const statements=part.events.map(e=>env.DB.prepare('INSERT INTO '+WE_INBOX_TABLE+'(event_id,phone_id,waba_id,from_phone,contact_name,timestamp_ms,message_type,body,media_id,review_state,reply_state,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(phone_id,event_id) DO NOTHING').bind(e.event_id,e.phone_id,e.waba_id,e.from,e.name,e.timestamp_ms,e.type,e.body,e.media_id,e.review_state,'none',now));
  for(const issue of part.issues||[]){
   const bytes=enc.encode(JSON.stringify(issue.change));
   const digest=new Uint8Array(await crypto.subtle.digest('SHA-256',bytes));
@@ -91,7 +95,7 @@ export async function webExpressQueueRoute(request,env){
   if(url.pathname==='/app/api/su/webexpress-crm-issues'&&request.method==='GET'){const r=await env.DB.prepare('SELECT reason,COUNT(*) AS count,MAX(created_at) AS last_at FROM webexpress_crm_issues GROUP BY reason').all();if(!r.success)throw problem(503,'issues_unavailable');return reply({issues:r.results});}
   if(url.pathname==='/app/api/su/webexpress-crm-events'&&request.method==='GET'){
    const limit=url.searchParams.get('limit')||'25';if(!/^\d+$/.test(limit)||Number(limit)<1||Number(limit)>50)return reply({error:'invalid_limit'},400);
-   const r=await env.DB.prepare('SELECT event_id,phone_id,waba_id,from_phone,contact_name,timestamp_ms,message_type,body,media_id,review_state,reply_state FROM webexpress_crm_inbox WHERE phone_id=? AND waba_id=? AND acked_at IS NULL ORDER BY created_at,event_id LIMIT ?').bind(WE_PHONE,WE_WABA,Number(limit)).all();
+   const r=await env.DB.prepare('SELECT event_id,phone_id,waba_id,from_phone,contact_name,timestamp_ms,message_type,body,media_id,review_state,reply_state FROM '+WE_INBOX_TABLE+' WHERE phone_id=? AND waba_id=? AND acked_at IS NULL ORDER BY created_at,event_id LIMIT ?').bind(WE_PHONE,WE_WABA,Number(limit)).all();
    if(!r.success)throw problem(503,'queue_unavailable');
    const events=[];for(const e of r.results){if(enc.encode(JSON.stringify({events:[...events,e]})).byteLength>262144)break;events.push(e);}return reply({events});
   }
@@ -99,7 +103,7 @@ export async function webExpressQueueRoute(request,env){
    const bytes=await boundedWebhookBody(request);if(bytes.byteLength>16384)return reply({error:'ack_limit'},413);
    const b=JSON.parse(new TextDecoder('utf8',{fatal:true}).decode(bytes));
    if(!obj(b)||!Array.isArray(b.event_ids)||!b.event_ids.length||b.event_ids.length>50||!b.event_ids.every(x=>text(x,250)&&!!x))return reply({error:'invalid_event_ids'},400);
-   const ids=[...new Set(b.event_ids)];const r=await env.DB.batch(ids.map(id=>env.DB.prepare('UPDATE webexpress_crm_inbox SET acked_at=COALESCE(acked_at,?) WHERE event_id=? AND phone_id=? AND waba_id=?').bind(Date.now(),id,WE_PHONE,WE_WABA)));
+   const ids=[...new Set(b.event_ids)];const r=await env.DB.batch(ids.map(id=>env.DB.prepare('UPDATE '+WE_INBOX_TABLE+' SET acked_at=COALESCE(acked_at,?) WHERE event_id=? AND phone_id=? AND waba_id=?').bind(Date.now(),id,WE_PHONE,WE_WABA)));
    if(r.some(x=>!x.success))throw problem(503,'ack_unavailable');return reply({acknowledged:r.reduce((n,x)=>n+x.meta.changes,0)});
   }
   return reply({error:'method_not_allowed'},405);

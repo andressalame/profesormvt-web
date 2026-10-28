@@ -11,6 +11,8 @@
 /* Recepcion Web Express: import dinamico (no `import` arriba) para que las pruebas que cargan este
    archivo con vm.Script sigan funcionando; esbuild lo empaqueta igual al deployar. */
 const weInbox = () => import("./webexpress-crm-inbox.mjs");
+/* Asistente de la linea de anuncios de Web Express (29-oct-2026). Apagado salvo WE_ASSISTANT_ENABLED="true" Y wa_negocio.enabled='on'. */
+const weAsistente = () => import("./webexpress-asistente.mjs");
 
 /* Motor de "Mi web": la web pública editable de cada academia (tab Mi web del panel).
    Una sola fuente para servir la web y para la vista previa del editor. */
@@ -2833,7 +2835,14 @@ async function validarFirmaMeta(env, rawBuf, sigHeader){
   if (!recibida.startsWith("sha256=")) return { ok: false, motivo: "sin header X-Hub-Signature-256" };
   const key = await crypto.subtle.importKey("raw", enc.encode(env.WHATSAPP_APP_SECRET), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
   const esperado = hex(await crypto.subtle.sign("HMAC", key, rawBuf));
-  if (!safeEq(recibida.slice(7), esperado)) return { ok: false, motivo: "firma no coincide" };
+  if (!safeEq(recibida.slice(7), esperado)){
+    /* Opcional (29-oct-2026): si la linea de Web Express cuelga de OTRA app de Meta, su firma usa otro secreto. */
+    if (env.WE_WHATSAPP_APP_SECRET){
+      const key2 = await crypto.subtle.importKey("raw", enc.encode(env.WE_WHATSAPP_APP_SECRET), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+      if (safeEq(recibida.slice(7), hex(await crypto.subtle.sign("HMAC", key2, rawBuf)))) return { ok: true };
+    }
+    return { ok: false, motivo: "firma no coincide" };
+  }
   return { ok: true };
 }
 
@@ -4886,6 +4895,10 @@ async function ensureNegocioSchema(env){
     /* pausa por chat (bandeja 10-ago-2026): 'on' = la IA se calla en ese chat y responde Andres
        a mano desde la bandeja. ALTER idempotente: falla en silencio si la columna ya existe. */
     try { await env.DB.prepare("ALTER TABLE wa_negocio_lead ADD COLUMN pausa TEXT DEFAULT ''").run(); } catch (e) {}
+    /* Origen del lead (29-oct-2026): 'anuncio' + el objeto referral de Meta (Click to WhatsApp) + estado y motivo del pase a Andres. */
+    for (const col of ["origen TEXT DEFAULT ''", "referral TEXT DEFAULT ''", "estado TEXT DEFAULT ''", "motivo_pase TEXT DEFAULT ''"]) {
+      try { await env.DB.prepare("ALTER TABLE wa_negocio_lead ADD COLUMN " + col).run(); } catch (e) {}
+    }
     NEG_SCHEMA_OK = true;
   } catch (e) {}
 }
@@ -4995,15 +5008,58 @@ async function negocioConsumirConv(env, negId, cap){
   } catch (e) { return { ok: true, usados: 0, cap: tope }; }
 }
 
+/* Web Express: registra el origen del lead (anuncio) y, si viene, el referral de Click to WhatsApp.
+   Campos en null se conservan. Nunca tumba el turno. */
+async function weLeadActualizar(env, tel, d){
+  try {
+    await ensureNegocioSchema(env);
+    const ref = d && d.referral ? JSON.stringify(d.referral) : "";
+    await env.DB.prepare(
+      "UPDATE wa_negocio_lead SET " +
+      "origen = CASE WHEN COALESCE(origen,'') = '' THEN ?2 ELSE origen END, " +
+      "referral = CASE WHEN ?3 != '' AND COALESCE(referral,'') = '' THEN ?3 ELSE referral END, " +
+      "estado = COALESCE(?4, estado), " +
+      "motivo_pase = CASE WHEN COALESCE(?5,'') != '' THEN ?5 ELSE motivo_pase END, " +
+      "pausa = CASE WHEN ?6 = 1 THEN 'on' ELSE pausa END " +
+      "WHERE negocio_id = 'webexpress' AND telefono = ?1"
+    ).bind(String(tel), String((d && d.origen) || "anuncio"), ref, (d && d.estado) || null, (d && d.motivo) || "", d && d.pausa ? 1 : 0).run();
+  } catch (e) {}
+}
+
+/* Turno del asistente de Web Express: las decisiones viven en webexpress-asistente.mjs (probado sin red);
+   aqui solo se conectan el envio, el aviso a Andres, el modelo y D1. */
+async function weTurnoWA(env, neg, p){
+  const W = await weAsistente();
+  const envEnvio = env.WE_WHATSAPP_TOKEN ? Object.assign({}, env, { WHATSAPP_TOKEN: env.WE_WHATSAPP_TOKEN }) : env;
+  const conversacion = p.previo.concat([{ role: "user", content: p.texto || ("[" + (p.tipo || "adjunto") + "]") }]);
+  await waHistorialGuardar(env, p.synthTenant, p.from, conversacion);
+  const deps = {
+    historial: p.previo,
+    primero: p.previo.length === 0 || !!p.esConvNuevaNeg,
+    enviar: (t) => enviarWhatsApp(envEnvio, p.phoneId, p.from, t),
+    avisar: (info) => W.avisarAndres(env, info, {
+      correo: (asunto, cuerpo) => enviarCorreo(env, { to: "andressalame@gmail.com", subject: asunto, text: cuerpo }),
+      wa: (to, t) => enviarWhatsApp(envEnvio, p.phoneId, to, t),
+      plantilla: async (to, nombre, params) => { const r = await enviarPlantillaWA(envEnvio, p.phoneId, to, nombre, "es", params); return !!(r && r.ok); }
+    }),
+    llm: (conv) => llamarClaudeOnboarding(env, WA_NEGOCIO_SYS, conv, contextoNegocioWA(neg, p.kb, p.nombre), p.kb.modelo === "sonnet" ? "sonnet" : ""),
+    guardarLead: (d) => weLeadActualizar(env, p.from, d)
+  };
+  const r = await W.turno(deps, { texto: p.texto, tipo: p.tipo, telefono: p.from, nombre: p.nombre, referral: W.limpiarReferral(p.referral) });
+  if (r.enviado) await waHistorialGuardar(env, p.synthTenant, p.from, conversacion.concat([{ role: "assistant", content: r.texto }]));
+  return true;
+}
+
 /* Maneja un mensaje entrante SI el numero es un negocio dado de alta. Devuelve:
    - false: el numero NO es un negocio -> el webhook sigue con el flujo de academia (sin cambios).
    - true : era un negocio (respondido, apagado, o sin cupo) -> el webhook NO sigue con academia.
    Es la UNICA integracion con el webhook existente y es un no-op mientras wa_negocio este vacia. */
-async function manejarNegocioWA(env, { phoneId, from, texto, nombre }){
+async function manejarNegocioWA(env, { phoneId, from, texto, nombre, tipo, referral }){
   let neg;
   try { neg = await negocioPorPhone(env, phoneId); } catch (e) { return false; }
   if (!neg) return false;                                   // no es negocio: sigue el flujo academia
   if (String(neg.enabled || "") !== "on" && neg.id !== "webexpress") return true;
+  if (tipo && tipo !== "text" && neg.id !== "webexpress") return true; // audios/imagenes: solo los atiende la rama de Web Express
   const synthTenant = "neg:" + neg.id;
   /* Chat NUEVO (primera vez que este telefono escribe a este negocio) -> UN aviso a Andres por
      correo, disparado por CODIGO (leccion 19-jul: nunca a criterio del modelo). No se repite
@@ -5011,6 +5067,9 @@ async function manejarNegocioWA(env, { phoneId, from, texto, nombre }){
   let leadPrev = null;
   try { leadPrev = await env.DB.prepare("SELECT telefono, pausa FROM wa_negocio_lead WHERE negocio_id = ?1 AND telefono = ?2").bind(neg.id, from).first(); } catch (e) {}
   await negocioLeadUpsert(env, neg.id, from, nombre, texto);
+  if (neg.id === "webexpress"){
+    try { const W0 = await weAsistente(); await weLeadActualizar(env, from, { origen: "anuncio", referral: W0.limpiarReferral(referral) }); } catch (e) {}
+  }
   if (!leadPrev){
     try {
       await alertaCorreoAndres(env,
@@ -5023,7 +5082,8 @@ async function manejarNegocioWA(env, { phoneId, from, texto, nombre }){
   }
   /* Modo bandeja manual: conserva el mensaje y avisa del lead, pero nunca contesta.
      Permite reasignar una linea sin perder consultas mientras Meta revisa el nombre. */
-  if (String(neg.enabled || "") !== "on"){
+  /* Web Express exige DOS llaves para contestar: enabled='on' en D1 Y WE_ASSISTANT_ENABLED="true" en el worker. */
+  if (String(neg.enabled || "") !== "on" || (neg.id === "webexpress" && env.WE_ASSISTANT_ENABLED !== "true")){
     const previo = await waHistorialCargar(env, synthTenant, from);
     await waHistorialGuardar(env, synthTenant, from, previo.concat([{ role: "user", content: texto }]));
     return true;
@@ -5047,6 +5107,9 @@ async function manejarNegocioWA(env, { phoneId, from, texto, nombre }){
   }
   const datos = contextoNegocioWA(neg, kb, nombre);
   const previo = await waHistorialCargar(env, synthTenant, from);
+  if (neg.id === "webexpress"){
+    return await weTurnoWA(env, neg, { phoneId, from, texto, nombre, tipo, referral, kb, previo, esConvNuevaNeg, synthTenant });
+  }
   const conversacion = previo.concat([{ role: "user", content: texto }]);
   // guarda el turno del cliente YA (aunque el envio falle, la bandeja lo muestra)
   await waHistorialGuardar(env, synthTenant, from, conversacion);
@@ -14055,7 +14118,19 @@ export default {
             const val = body && body.entry && body.entry[0] && body.entry[0].changes && body.entry[0].changes[0] && body.entry[0].changes[0].value;
             if (!val || !val.messages || !val.messages[0]) return;
             const msg = val.messages[0];
-            if (msg.type !== "text") return;
+            if (msg.type !== "text"){
+              /* Audios, imagenes y archivos: solo la linea de Web Express, y solo con el asistente encendido, los pasa a Andres. */
+              if (env.WE_ASSISTANT_ENABLED === "true"){
+                const phoneIdNT = (val.metadata && val.metadata.phone_number_id) || "";
+                const fromNT = String(msg.from || "").replace(/[^\d]/g, "");
+                const wamidNT = String(msg.id || "");
+                if (phoneIdNT && fromNT && !(wamidNT && await chatbotPasoTope(env, "wamid:" + wamidNT, 1))){
+                  const nombreNT = (val.contacts && val.contacts[0] && val.contacts[0].profile && val.contacts[0].profile.name) || "";
+                  await manejarNegocioWA(env, { phoneId: phoneIdNT, from: fromNT, texto: "[" + String(msg.type || "adjunto").slice(0, 20) + "]", nombre: nombreNT, tipo: String(msg.type || "adjunto"), referral: msg.referral });
+                }
+              }
+              return;
+            }
             const wamid = String(msg.id || "");
             // dedup: Meta reintenta el mismo mensaje; procesarlo una sola vez
             if (wamid && await chatbotPasoTope(env, "wamid:" + wamid, 1)) return;
@@ -14067,7 +14142,7 @@ export default {
             // RAMA NEGOCIO (asistente-cliente para negocio suelto, no-academia). AISLADA y default
             // vacia: si el numero no esta dado de alta en wa_negocio, devuelve false y el flujo de
             // academia de abajo queda intacto. Si lo maneja (respondio, apagado o sin cupo), corta aca.
-            if (await manejarNegocioWA(env, { phoneId, from, texto, nombre })) return;
+            if (await manejarNegocioWA(env, { phoneId, from, texto, nombre, tipo: "text", referral: msg.referral })) return;
             // resolver el tenant dueno de ese numero (config wa_phone_id)
             await waAtenderTenant(env, { phoneId, from, texto, nombre });
           } catch (e) { console.error("wa webhook", e); }
