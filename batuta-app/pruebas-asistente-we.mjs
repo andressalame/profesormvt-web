@@ -195,6 +195,10 @@ sec("1. Mensaje libre: modelo con base de conocimiento y guardia de salida");
   comprobar("sin modelo disponible: respaldo cálido, nunca silencio", sinIA.accion === "respondio_respaldo" && sinIA.enviado === true && /cuéntame a qué se dedica/.test(sinIA.texto));
   const g = A.revisarSalida("Son S/ 1.497 por 3 meses y 15 % menos por 6 meses.");
   comprobar("guardia: S/ 1.497 y 15 % permitidos", g.ok);
+  comprobar("lista corrida se ordena: el 1) baja un renglón, una opción por línea y la pregunta aparte", A.limpiarEstiloWE("Genial. Te recomiendo: 1) Anuncios (S/ 690 al mes) 2) Web (S/ 690) Cual te interesa?") === "Genial. Te recomiendo:\n\n1) Anuncios (S/ 690 al mes)\n2) Web (S/ 690)\n\nCual te interesa?");
+  comprobar("viñetas con guion pasan a lista numerada", A.limpiarEstiloWE("Mira:\n- Uno\n- Dos\nCual?") === "Mira:\n\n1) Uno\n2) Dos\n\nCual?");
+  comprobar("«te late» (mexicanismo) no sale nunca", !/te late/i.test(A.limpiarEstiloWE("Cual te late más?")));
+  comprobar("la voz de Andrés: tuteo, preguntitas, sin mexicanismos ni vos", /preguntitas/.test(A.WE_KB.voz) && /nunca «te late»/.test(A.WE_KB.voz) && /Desearías que te cuente/.test(A.WE_KB.voz));
   comprobar("guardia: 25 %, un monto inventado y una suma bloqueados; los de la lista pasan", !A.revisarSalida("Te doy 25 % menos").ok && !A.revisarSalida("Son S/ 777 al mes").ok && !A.revisarSalida("Son S/ 540 en total").ok && A.revisarSalida("El asistente cuesta S/ 490 y luego S/ 150 al mes").ok);
 }
 

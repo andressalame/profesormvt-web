@@ -139,7 +139,10 @@ export const WE_KB = {
   negocio: "Web Express",
   rubro: "Agencia digital en Perú que le hace la vida más fácil al emprendedor y automatiza sus procesos (web, WhatsApp con IA, CRM, anuncios, marca, software a la medida). El servicio que se anuncia ahora es SEO + AEO avanzados mensuales («Que te encuentren en Google y en ChatGPT»); SEO y AEO son una parte de lo que hacemos, no lo principal.",
   voz:
-    "Español peruano, de tú, cercano y cálido, frases cortas, una pregunta útil a la vez. Nunca uses vos (nada de tenés, podés, querés). " +
+    "Habla como Andrés: español peruano limpio, de tú, cercano, cálido y con calma. Primero reacciona a lo que la persona acaba de decir (por ejemplo «genial» o «excelente», sin abusar) y recién propone. " +
+    "Si vas a hacer varias preguntas, avisa antes («tengo un par de preguntitas para orientarte mejor») y pon cada pregunta en su propio renglón. Los diminutivos suaves están bien («preguntita»). " +
+    "Las preguntas son amables y concretas, por ejemplo «Desearías que te cuente con más detalle cómo funciona para que lo revises con calma?». Como mucho un «:)!» por mensaje, y no siempre. " +
+    "Nada de mexicanismos ni argentinismos (nunca «te late», «órale», «vos», «tenés»), nada de «pe» ni «causa», y nada de jerga de informe como «solución integral», «alcance» u «optimizar». No inventes apodos ni acortes nombres. " +
     "Preséntate como el asistente virtual de Web Express, nunca como Andrés ni como una persona. Sin signos de apertura de pregunta o exclamación y sin rayas largas.",
   servicios: [
     {
@@ -192,6 +195,7 @@ export const WE_SYS =
   "4) Una línea en blanco.\n" +
   "5) UNA sola pregunta para seguir guiando.\n" +
   "Máximo unas 90 palabras. Párrafos de una o dos frases separados por una línea en blanco; nunca un bloque largo de texto. Nunca dos preguntas.\n" +
+  "VOZ (la de Andrés): español peruano limpio, de tú, cálido y con calma. Reacciona primero a lo que dijo la persona y luego propone. Preguntas amables y concretas, por ejemplo «Cuál de estas te interesa más?» o «Desearías que te cuente con más detalle la que más te convenga?». Nunca uses mexicanismos ni argentinismos: jamás «te late», «órale», «vos». Nada de «pe» ni «causa». Como mucho un «:)!» por mensaje.\n" +
   "ESTILO: español peruano claro y cálido, de tú. Sin em dash. Sin signos de apertura invertidos (nada de ¿ ni ¡ al inicio, solo los de cierre). Sin markdown, sin asteriscos ni viñetas con guion; para listar usa 1) 2) 3). Un emoji ocasional como máximo.\n" +
   "REGLAS DURAS: NUNCA prometes resultados, plazos garantizados ni ingresos. NUNCA inventas precios, datos ni servicios que no estén en los DATOS: si no lo sabes, dilo con honestidad y ofrece que Andrés lo confirme. NUNCA cierras un pago ni pides datos de tarjeta, cuentas ni claves por aquí. Sigue las REGLAS del negocio para pasar a Andrés.\n" +
   "CIERRE: nunca cierres en seco; deja siempre la pregunta que sigue guiando.";
@@ -209,13 +213,44 @@ const hoyLima = (ahora) => new Date((ahora ? ahora.getTime() : Date.now()) - 5 *
 export const prepagoVigente = (ahora) => hoyLima(ahora) <= WE_VIGENCIA_PREPAGO_HASTA;
 
 /* Estilo de la casa para WhatsApp: sin ¿ ¡ al inicio, sin rayas largas, sin markdown. */
+/* Lista SIEMPRE numerada y en renglones propios (29-oct-2026, pedido de Andrés): el modelo a veces la escribe corrida
+   («1) A 2) B») o con guiones. Se ordena por código: cada opción en su línea, numerada 1) 2) 3), con una línea en blanco
+   antes y después del bloque. */
+export function ordenarListaWE(t) {
+  let s = String(t || "").replace(/\r/g, "");
+  s = s.replace(/[ \t]+(?=[1-9]\)\s)/g, "\n");                       // «… 1) A 2) B» -> un renglón por opción
+  const lineas = s.split("\n");
+  const out = [];
+  let n = 0, enLista = false;
+  const esItem = (l) => /^\s*(?:[1-9]\)|[-•*])\s+\S/.test(l);
+  for (const l of lineas) {
+    if (esItem(l)) {
+      if (!enLista) { enLista = true; n = 0; if (out.length && out[out.length - 1].trim() !== "") out.push(""); }
+      n++;
+      let cuerpo = l.replace(/^\s*(?:[1-9]\)|[-•*])\s+/, "").trim();
+      /* la pregunta final pegada a la última opción («… (S/ 390) Cual te interesa?») pasa a su propio renglón */
+      let pregunta = "";
+      if (/\?\s*$/.test(cuerpo)) {
+        const cortes = [...cuerpo.matchAll(/[\)\.]\s+(?=[A-ZÁÉÍÓÚÑ])/g)];
+        if (cortes.length) { const c = cortes[cortes.length - 1]; pregunta = cuerpo.slice(c.index + c[0].length).trim(); cuerpo = cuerpo.slice(0, c.index + 1).trim(); }
+      }
+      out.push(n + ") " + cuerpo);
+      if (pregunta) { out.push(""); out.push(pregunta); enLista = false; }
+    } else {
+      if (enLista && l.trim() !== "") out.push("");
+      enLista = false;
+      out.push(l);
+    }
+  }
+  return out.join("\n").replace(/\n{3,}/g, "\n\n");
+}
 export function limpiarEstiloWE(t) {
-  return String(t || "")
+  return ordenarListaWE(String(t || ""))
     .replace(/[¿¡]/g, "")
     .replace(/\s*[—–]\s*/g, ", ")
     .replace(/\*\*(.*?)\*\*/g, "$1")
     .replace(/[*_`>#~]/g, "")
-    .replace(/^\s*[-•]\s+/gm, "")
+    .replace(/\bte late\b/gi, "te interesa")                         // mexicanismo: Andrés es peruano
     .replace(/[ \t]{2,}/g, " ")
     .trim();
 }
