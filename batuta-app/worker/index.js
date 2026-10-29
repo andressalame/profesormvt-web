@@ -2154,7 +2154,12 @@ async function computeMulti(env, tid, alumno, paqMap, precios, excluirReservaId,
      de más DESAPARECE de la cuenta: el alumno queda con más saldo del que le toca.
      Hoy no le pasa a nadie (0 pases sobrecargados en producción), pero se alcanza con una
      edición normal del catálogo. Ahora se cuenta y viaja, para que no se pierda en silencio. */
-  const sobreconsumo = at.pases.filter(e => !e.ilim)
+  /* 29-oct-2026 (Elevate, Abigayl Falla): un pase YA VENCIDO que quedó 1 clase pasado (una
+     clase que ningún pase cubría se le cobró como "vivoNoCubre") dejaba `sobreconsumo` en 1 para
+     siempre, y sobregiroTrasReservar deshacía TODA reserva nueva con "se te acabaron las clases"
+     aunque tuviera 55 clases vivas en sus otros pases. Lo que un pase muerto consumió de más ya
+     no se le puede quitar a nadie: solo cuenta el sobreconsumo de pases que siguen vivos. */
+  const sobreconsumo = at.pases.filter(e => !e.ilim && !e.vencido)
     .reduce((s, e) => s + Math.max(0, (e.usadas || 0) - (e.compradas || 0)), 0);
   return {
     multi: true,
