@@ -88,7 +88,7 @@ console.log("\n── 2. Rechazo en el formulario: el flujo sigue vivo ──");
 console.log("\n── 3. Worker (código real) · crear-cargo ──");
 const K = await cargarMotor(["culqiEncrypt", "culqiEncKey"]);
 globalThis.enc = new TextEncoder();   /* la misma constante de nivel superior que el worker (línea «const enc = new TextEncoder()») */
-const ENV_CULQI = { CULQI_ENC_KEY: "clave-de-prueba-14oct", ADMIN_TOKEN: "admin-prueba" };
+const ENV_CULQI = { CULQI_ENC_KEY: "clave-de-prueba-14oct", ADMIN_TOKEN: "admin-prueba" }; // gitleaks:allow (valor inventado de prueba)
 const skEnc = await K.culqiEncrypt(ENV_CULQI, "sk_test_prueba_no_real");
 const SESION = "a".repeat(64);
 const expira = new Date(Date.now() + 86400000).toISOString();
