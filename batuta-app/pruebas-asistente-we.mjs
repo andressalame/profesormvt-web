@@ -199,6 +199,11 @@ sec("1. Mensaje libre: modelo con base de conocimiento y guardia de salida");
   comprobar("viñetas con guion pasan a lista numerada", A.limpiarEstiloWE("Mira:\n- Uno\n- Dos\nCual?") === "Mira:\n\n1) Uno\n2) Dos\n\nCual?");
   comprobar("«te late» (mexicanismo) no sale nunca", !/te late/i.test(A.limpiarEstiloWE("Cual te late más?")));
   comprobar("la voz de Andrés: tuteo, preguntitas, sin mexicanismos ni vos", /preguntitas/.test(A.WE_KB.voz) && /nunca «te late»/.test(A.WE_KB.voz) && /Desearías que te cuente/.test(A.WE_KB.voz));
+  const largo = "Claro, entonces te veo el camino claro. Como no tienes web aún, la mejor opción es que contrates SEO + AEO avanzados mensuales pagando 3 meses por adelantado (S/ 1.497, IGV incluido). Trabajamos tu web para que Google y ChatGPT te encuentren y te regalamos una página web completa de hasta 8 páginas con dominio y hosting por 1 año. Eso te abre una puerta: mientras traes clientes por Google, tienes dónde mandarlos. Cuál te llama más la atención ahora: empezar con la web y el SEO o primero activar anuncios en Meta?";
+  const partido = A.limpiarEstiloWE(largo);
+  comprobar("un parrafazo se parte en párrafos cortos y la pregunta queda sola", partido.split("\n\n").length >= 4 && partido.split("\n\n").every(x => x.length <= 260) && /\?$/.test(partido.split("\n\n").pop()) && !partido.split("\n\n").slice(0, -1).some(x => /\?$/.test(x)));
+  comprobar("partir párrafos no toca listas ni textos cortos", A.limpiarEstiloWE("Hola.\n\n1) Uno\n2) Dos\n\nCual?") === "Hola.\n\n1) Uno\n2) Dos\n\nCual?");
+  comprobar("el prompt propio pide el gancho de la web de regalo ANTES de explicar", /GANCHO PRIMERO/.test(A.WE_SYS) && /Nunca expliques antes de dar el gancho/.test(A.WE_SYS) && /primer párrafo, de una sola frase/.test(A.WE_KB.reglas.join(" ")));
   comprobar("guardia: 25 %, un monto inventado y una suma bloqueados; los de la lista pasan", !A.revisarSalida("Te doy 25 % menos").ok && !A.revisarSalida("Son S/ 777 al mes").ok && !A.revisarSalida("Son S/ 540 en total").ok && A.revisarSalida("El asistente cuesta S/ 490 y luego S/ 150 al mes").ok);
 }
 
