@@ -58,7 +58,7 @@ sec("2. Decisión de ruta por remitente");
   const { raw, DB } = crearBase();
   raw.exec(`INSERT INTO alumnos VALUES ('a1','t1','+51 987 654 321')`);
   raw.exec(`INSERT INTO wa_negocio_lead VALUES ('webexpress','${PROSPECTO}','Pro','hola','x')`);
-  const env = { DB, WE_ASSISTANT_ENABLED: "true" };
+  const env = { DB, WE_ASSISTANT_ENABLED: "true", WE_LINEA_EXCLUSIVA: "false" };
   const d = (from, texto, extra = {}, e = env) => R.decidirRuta(e, { phoneId: L, from, texto, ...extra });
 
   let r = await d(ALUMNA, "hola, a qué hora es mi clase");
@@ -91,13 +91,13 @@ sec("2. Decisión de ruta por remitente");
   comprobar("cualquier otra línea nunca la decide Web Express", r.ruta === "batuta" && r.motivo === "otra_linea");
 
   /* si la base falla, gana Batuta */
-  const rota = { DB: { prepare() { throw new Error("D1 caída"); } }, WE_ASSISTANT_ENABLED: "true" };
+  const rota = { DB: { prepare() { throw new Error("D1 caída"); } }, WE_ASSISTANT_ENABLED: "true", WE_LINEA_EXCLUSIVA: "false" };
   r = await R.decidirRuta(rota, { phoneId: L, from: PROSPECTO, texto: "seo" });
   comprobar("si la base falla, la decisión es batuta (falla seguro)", r.ruta === "batuta" && r.motivo === "error");
   /* tablas ausentes (base nueva) no rompen */
   const vacia = new DatabaseSync(":memory:");
   const D2 = { prepare(sql) { const s = vacia.prepare(sql); return { _a: [], bind(...a) { this._a = a; return this; }, async first() { return s.get(...this._a) || null; } }; } };
-  r = await R.decidirRuta({ DB: D2, WE_ASSISTANT_ENABLED: "true" }, { phoneId: L, from: DESCONOCIDO, texto: "web express" });
+  r = await R.decidirRuta({ DB: D2, WE_ASSISTANT_ENABLED: "true", WE_LINEA_EXCLUSIVA: "false" }, { phoneId: L, from: DESCONOCIDO, texto: "web express" });
   comprobar("base sin tablas de Batuta: no se rompe y el disparador explícito manda a we", r.ruta === "we");
 }
 
@@ -122,7 +122,7 @@ sec("3. Interruptor WE_ASSISTANT_ENABLED apagado: Batuta intacta");
   comprobar("apagado: la bandeja no captura nada y el payload queda idéntico para el flujo de Batuta", ids.size === 0 && !part.matched && raw.prepare("SELECT COUNT(*) n FROM " + I.WE_INBOX_TABLE).get().n === 0 && JSON.stringify(part.remaining ?? payload) === JSON.stringify(payload));
   const idx = readFileSync(join(AQUI, "worker/index.js"), "utf8");
   const wr = readFileSync(join(AQUI, "wrangler.toml"), "utf8");
-  comprobar("wrangler.toml deja WE_ASSISTANT_ENABLED en false", /WE_ASSISTANT_ENABLED = "false"/.test(wr));
+  comprobar("wrangler.toml tiene WE_ASSISTANT_ENABLED definido (encendido el 29-oct por decision de Andres)", /WE_ASSISTANT_ENABLED = "true"/.test(wr));
   comprobar("el webhook solo manda a la rama negocio, en la línea compartida, si el enrutador dice we", /\(!lineaCompartida \|\| rutaWE\.ruta === "we"\) && await manejarNegocioWA/.test(idx));
   comprobar("los adjuntos de la línea compartida solo pasan si el enrutador dice we", /decidirRuta\(env, \{ phoneId: phoneIdNT[^}]*\}\)\)\.ruta !== "we"\) return;/.test(idx));
   comprobar("el webhook ya no corta el flujo cuando captura (Batuta y el asistente siguen)", !/captured\.remaining\.entry\.length\) return new Response/.test(idx));
@@ -133,7 +133,7 @@ sec("4. Bandeja durable con mensajes mezclados y reintentos de Meta");
 {
   const { raw, DB } = crearBase();
   raw.exec(`INSERT INTO alumnos VALUES ('a1','t1','${ALUMNA}')`);
-  const env = { DB, WE_ASSISTANT_ENABLED: "true" };
+  const env = { DB, WE_ASSISTANT_ENABLED: "true", WE_LINEA_EXCLUSIVA: "false" };
   const msg = (id, from, body) => ({ id, from, timestamp: "1760834760", type: "text", text: { body } });
   const payload = (msgs) => ({ object: "whatsapp_business_account", entry: [{ id: I.WE_WABA, changes: [{ field: "messages", value: { messaging_product: "whatsapp", metadata: { phone_number_id: L }, contacts: msgs.map((m) => ({ wa_id: m.from, profile: { name: "N" + m.from.slice(-3) } })), messages: msgs, statuses: [{ id: "s1", status: "read" }] } }] }] });
   const n = () => raw.prepare("SELECT COUNT(*) n FROM " + I.WE_INBOX_TABLE).get().n;
@@ -189,6 +189,28 @@ sec("5. Reversión por SQL");
   let sintaxis = true;
   try { (await import("node:child_process")).execSync("node --check worker/index.js", { cwd: AQUI, stdio: "ignore" }); } catch (x) { sintaxis = false; }
   comprobar("worker/index.js sigue siendo JavaScript válido", sintaxis);
+}
+
+sec("6. Linea EXCLUSIVA de Web Express (decision 29-oct)");
+{
+  const { DB } = crearBase();
+  const env = { DB, WE_ASSISTANT_ENABLED: "true" };
+  for (const [txt, quien] of [["hola", "desconocido"], ["quiero info de la academia", "otro rubro"], ["", "sin texto"]]) {
+    const r = await R.decidirRuta(env, { phoneId: L, from: "51999111222", texto: txt });
+    comprobar("encendido, " + quien + " -> we (linea_exclusiva_we)", r.ruta === "we" && r.motivo === "linea_exclusiva_we");
+  }
+  comprobar("apagado -> batuta", (await R.decidirRuta({ DB, WE_ASSISTANT_ENABLED: "false" }, { phoneId: L, from: "51999111222", texto: "hola" })).ruta === "batuta");
+  comprobar("otra linea -> batuta", (await R.decidirRuta(env, { phoneId: "999", from: "51999111222", texto: "hola" })).ruta === "batuta");
+  comprobar("WE_LINEA_EXCLUSIVA=false recupera el reparto por remitente", (await R.decidirRuta({ ...env, WE_LINEA_EXCLUSIVA: "false" }, { phoneId: L, from: "51999111222", texto: "hola" })).ruta === "batuta");
+  const m5 = readFileSync(join(AQUI, "migrations/005-batuta-libera-linea.sql"), "utf8");
+  const { raw } = crearBase();
+  raw.exec("INSERT OR REPLACE INTO wa_negocio (id,nombre,phone_id,enabled,kb) VALUES ('batuta-3402','Batuta','" + L + "','on','x')");
+  let ok = true; try { raw.exec(m5); } catch (x) { ok = false; }
+  const b = raw.prepare("SELECT enabled,phone_id,kb FROM wa_negocio WHERE id='batuta-3402'").get();
+  comprobar("005 apaga Batuta, libera el phone_id y conserva sus datos", ok && b.enabled === "off" && b.phone_id === "batuta-sin-linea" && b.kb === "x");
+  raw.exec(readFileSync(join(AQUI, "migrations/005-batuta-restaurar-linea.sql"), "utf8"));
+  const c = raw.prepare("SELECT enabled,phone_id FROM wa_negocio WHERE id='batuta-3402'").get();
+  comprobar("005 restaurar devuelve Batuta a su estado original", c.enabled === "on" && c.phone_id === L);
 }
 
 console.log(`\n${total - fallos}/${total} pruebas pasan`);

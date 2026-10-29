@@ -337,7 +337,7 @@ sec("5. El worker exige dos llaves y no deja rastros del ID viejo");
   const wr = readFileSync(join(AQUI, "wrangler.toml"), "utf8");
   const baseEnv = { WE_ASSISTANT_ENABLED: "true" };
   const neg = (extra) => Object.assign({ id: "webexpress", enabled: "on" }, extra);
-  comprobar("apagado por defecto en wrangler.toml", /WE_ASSISTANT_ENABLED = "false"/.test(wr));
+  comprobar("bandera definida en wrangler.toml (encendida 29-oct)", /WE_ASSISTANT_ENABLED = "true"/.test(wr));
   comprobar("bandera sola no basta (enabled off)", A.asistenteActivo(baseEnv, neg({ enabled: "off" })) === false);
   comprobar("enabled solo no basta (bandera ausente o en false)", A.asistenteActivo({}, neg()) === false && A.asistenteActivo({ WE_ASSISTANT_ENABLED: "false" }, neg()) === false);
   comprobar("con las dos llaves sí está activo", A.asistenteActivo(baseEnv, neg()) === true);

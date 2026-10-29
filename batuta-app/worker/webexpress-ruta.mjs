@@ -73,6 +73,10 @@ export async function decidirRuta(env, { phoneId, from, texto, referral } = {}) 
     if (String(phoneId || "") !== LINEA_COMPARTIDA) return { ruta: "batuta", motivo: "otra_linea" };
     if (!env || env.WE_ASSISTANT_ENABLED !== "true") return { ruta: "batuta", motivo: "apagado" };
     if (!env.DB || !digitos(from)) return { ruta: "batuta", motivo: "sin_datos" };
+    /* DECISION 29-oct (Andres): la linea 1353785221144478 pasa a ser SOLO de Web Express (Batuta queda sin numero por ahora).
+       Con el asistente encendido, todo mensaje a esta linea lo atiende Web Express. Reversion: WE_ASSISTANT_ENABLED="false"
+       (vuelve a "batuta") o poner WE_LINEA_EXCLUSIVA="false" para recuperar el reparto por remitente de abajo. */
+    if (env.WE_LINEA_EXCLUSIVA !== "false") return { ruta: "we", motivo: "linea_exclusiva_we" };
     if (await conocidoPorBatuta(env.DB, from)) return { ruta: "batuta", motivo: "conocido_batuta" };
     if (await esLeadWE(env.DB, from)) return { ruta: "we", motivo: "lead_we" };
     const d = disparaWE(texto, referral, env);

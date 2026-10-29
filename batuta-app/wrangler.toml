@@ -6,10 +6,9 @@ compatibility_flags = ["nodejs_compat"]
 [vars]
 # Recepción Web Express aprobada 18-oct: solo borradores; sin autorespuesta ni CRM automático.
 WE_CRM_INBOX_ENABLED = "true"
-# Asistente de IA de la linea de anuncios (linea compartida de Batuta, +51 904 079 121). SEGUNDA llave: ademas hace falta
-# wa_negocio.enabled='on' (migrations/003). Con "false" Web Express NO recibe ni contesta nada en la linea compartida
-# y Batuta queda exactamente igual. Con "true", el enrutador (worker/webexpress-ruta.mjs) separa por remitente: ante la duda, Batuta.
-WE_ASSISTANT_ENABLED = "false"
+# Asistente de IA de Web Express en la linea +51 904 079 121 (phone id 1353785221144478). Desde el 29-oct es linea EXCLUSIVA de Web Express
+# (Batuta sin numero por ahora). SEGUNDA llave: wa_negocio.enabled='on' (migrations/003). APAGAR: poner "false" y `npx wrangler deploy`.
+WE_ASSISTANT_ENABLED = "true"
 
 [assets]
 directory = "./public"
