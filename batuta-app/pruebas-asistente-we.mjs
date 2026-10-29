@@ -195,7 +195,7 @@ sec("1. Mensaje libre: modelo con base de conocimiento y guardia de salida");
   comprobar("sin modelo disponible: respaldo cálido, nunca silencio", sinIA.accion === "respondio_respaldo" && sinIA.enviado === true && /cuéntame a qué se dedica/.test(sinIA.texto));
   const g = A.revisarSalida("Son S/ 1.497 por 3 meses y 15 % menos por 6 meses.");
   comprobar("guardia: S/ 1.497 y 15 % permitidos", g.ok);
-  comprobar("guardia: 25 % y S/ 790 bloqueados", !A.revisarSalida("Te doy 25 % menos").ok && !A.revisarSalida("Son S/ 790 al mes").ok);
+  comprobar("guardia: 25 %, un monto inventado y una suma bloqueados; los de la lista pasan", !A.revisarSalida("Te doy 25 % menos").ok && !A.revisarSalida("Son S/ 777 al mes").ok && !A.revisarSalida("Son S/ 540 en total").ok && A.revisarSalida("El asistente cuesta S/ 490 y luego S/ 150 al mes").ok);
 }
 
 sec("1. Textos fijos: estilo y cifras");
