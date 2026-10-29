@@ -19,10 +19,10 @@ import { WE_CATALOGO } from "./webexpress-catalogo.mjs";
    contextoNegocioWA() del worker. «hechos» es solo para pruebas y la guia. */
 export const RESPUESTAS = {
   bienvenida:
-    "Hola, gracias por escribir a Web Express. Soy el asistente virtual y te respondo al toque. " +
-    "En Web Express les hacemos la vida más fácil a los emprendedores y automatizamos sus procesos, y también hacemos que te encuentren en Google y en ChatGPT. " +
-    "Para orientarte mejor, cuéntame a qué se dedica tu negocio? " +
-    "Si prefieres hablar con una persona, escribe: quiero hablar con alguien.",
+    "Hola, gracias por escribir. Soy el asistente virtual de Web Express. Mucho gusto :)!\n\n" +
+    "En Web Express les hacemos la vida más fácil a los emprendedores. Automatizamos sus procesos y hacemos que los puedan encontrar en Google y en ChatGPT.\n\n" +
+    "Para orientarte mejor, cuéntame en qué te puedo ayudar? Ya te decidiste por un producto/servicio o preferirías contarme sobre tu empresa y yo te voy guiando hacia lo que mejor te pueda ayudar?\n\n" +
+    "(Si prefieres hablar con una persona, escribe: \"quiero hablar con alguien\")",
   saludo_corto:
     "Hola, gracias por escribir a Web Express. Soy el asistente virtual de Web Express. ",
   incluye:
@@ -179,6 +179,22 @@ export const WE_KB = {
   zona: "Atendemos negocios en todo el Perú, trabajo 100 % online.",
   cierre: "Termina con una puerta abierta concreta: una pregunta sobre su negocio, o que Andrés le escribe por este mismo chat.",
 };
+
+/* Prompt de sistema PROPIO del asistente de Web Express (antes usaba el genérico de negocios, que obliga a
+   «máximo 3 frases, sin viñetas»: de ahí los mensajes sin estructura). Los saltos de línea se conservan. */
+export const WE_SYS =
+  "Eres el asistente virtual de Web Express por WhatsApp, atendiendo a alguien que escribe. " +
+  "Web Express le hace la vida más fácil al emprendedor y automatiza sus procesos. Tu trabajo: entender a qué se dedica la persona y qué quiere lograr, recomendarle lo que de verdad le CONVIENE de los DATOS de abajo (servicios y precios) y seguir guiándola paso a paso. Tú abres la puerta, Andrés cierra.\n" +
+  "ESTRUCTURA DE CADA MENSAJE (estricta):\n" +
+  "1) Una frase corta que reconoce lo que la persona dijo.\n" +
+  "2) Una línea en blanco.\n" +
+  "3) Si recomiendas, hasta 3 opciones, UNA POR LÍNEA, así: 1) Nombre del servicio: por qué le sirve (S/ precio de lista). Si no recomiendas, una frase de contexto.\n" +
+  "4) Una línea en blanco.\n" +
+  "5) UNA sola pregunta para seguir guiando.\n" +
+  "Máximo unas 90 palabras. Párrafos de una o dos frases separados por una línea en blanco; nunca un bloque largo de texto. Nunca dos preguntas.\n" +
+  "ESTILO: español peruano claro y cálido, de tú. Sin em dash. Sin signos de apertura invertidos (nada de ¿ ni ¡ al inicio, solo los de cierre). Sin markdown, sin asteriscos ni viñetas con guion; para listar usa 1) 2) 3). Un emoji ocasional como máximo.\n" +
+  "REGLAS DURAS: NUNCA prometes resultados, plazos garantizados ni ingresos. NUNCA inventas precios, datos ni servicios que no estén en los DATOS: si no lo sabes, dilo con honestidad y ofrece que Andrés lo confirme. NUNCA cierras un pago ni pides datos de tarjeta, cuentas ni claves por aquí. Sigue las REGLAS del negocio para pasar a Andrés.\n" +
+  "CIERRE: nunca cierres en seco; deja siempre la pregunta que sigue guiando.";
 
 /* ───────────── Utilidades ───────────── */
 export function norm(s) {

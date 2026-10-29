@@ -5049,7 +5049,7 @@ async function weTurnoWA(env, neg, p){
       wa: (to, t) => enviarWhatsApp(envEnvio, p.phoneId, to, t),
       plantilla: async (to, nombre, params) => { const r = await enviarPlantillaWA(envEnvio, p.phoneId, to, nombre, "es", params); return !!(r && r.ok); }
     }),
-    llm: (conv) => llamarClaudeOnboarding(env, WA_NEGOCIO_SYS, conv, contextoNegocioWA(neg, p.kb, p.nombre), p.kb.modelo === "sonnet" ? "sonnet" : ""),
+    llm: (conv) => llamarClaudeOnboarding(env, W.WE_SYS, conv, contextoNegocioWA(neg, p.kb, p.nombre), p.kb.modelo === "sonnet" ? "sonnet" : ""),
     guardarLead: (d) => weLeadActualizar(env, p.from, d)
   };
   const r = await W.turno(deps, { texto: p.texto, tipo: p.tipo, telefono: p.from, nombre: p.nombre, referral: W.limpiarReferral(p.referral) });

@@ -64,7 +64,7 @@ sec("1. Conversación: bienvenida");
   const r = await c.decir("Hola", { referral: { source_type: "ad", source_id: "120000001", headline: "Que te encuentren en Google y en ChatGPT", source_url: "https://fb.me/x", ctwa_clid: "abc" } });
   comprobar("responde la bienvenida fija", r.accion === "respondio" && r.intent === "bienvenida");
   comprobar("se presenta como asistente virtual de Web Express", /asistente virtual/.test(r.texto) && /Web Express/.test(r.texto));
-  comprobar("corta y cálida: máx. 380 caracteres y una sola pregunta de rubro", r.texto.length <= 380 && /a qué se dedica tu negocio/.test(r.texto));
+  comprobar("bienvenida aprobada por Andrés (29-oct): párrafos separados, se presenta, pregunta cómo ayudar y ofrece hablar con una persona", r.texto.split("\n\n").length === 4 && /Mucho gusto/.test(r.texto) && /en qué te puedo ayudar/.test(r.texto) && /quiero hablar con alguien/.test(r.texto) && !/[¿¡]/.test(r.texto));
   comprobar("ofrece persona desde el primer mensaje", /quiero hablar con alguien/.test(r.texto));
   comprobar("no promete nada ni cita precios", !/S\//.test(r.texto) && !/garantiz/.test(r.texto));
   comprobar("registra el lead con origen «anuncio» y el referral limpio", c.leads[0].origen === "anuncio" && c.leads[0].referral && c.leads[0].referral.source_id === "120000001" && c.leads[0].estado === "conversando");
@@ -241,7 +241,7 @@ sec("2. Cada cifra de la base coincide con el catálogo (rama checkout-mp-28oct)
     const r = cat.PRODUCTS.find((x) => x.id === "resenas-google");
     comprobar("reseñas: 3 días hábiles", /3 días hábiles/.test(r.name) && /3 días hábiles/.test(A.RESPUESTAS.resenas));
     comprobar("el estrella NO entra en packs ni en el descuento de temporada (por eso el prepago no se le aplica)", !cat.PRODUCTS.some((x) => x.id === "seo-aeo-estrella") && /No es suscripción|estrella/.test(A.RESPUESTAS.prepago_vigente));
-    comprobar("lema del catálogo en la bienvenida", e.lema === "Que te encuentren en Google y en ChatGPT" && /encuentren en Google y en ChatGPT/.test(A.RESPUESTAS.bienvenida));
+    comprobar("lema del catálogo en la bienvenida", e.lema === "Que te encuentren en Google y en ChatGPT" && /encontrar en Google y en ChatGPT/.test(A.RESPUESTAS.bienvenida));
   }
 }
 
