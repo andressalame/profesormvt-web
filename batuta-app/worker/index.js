@@ -1550,6 +1550,15 @@ async function refElegible(env, tenantId, cu, paquete, pk, rc, excluirCompraId){
   if (rc.soloNuevos && await yaEraAlumnoDe(env, tenantId, cu.alumno_id)) return { ok: false, motivo: "ya era alumno" };
   return { ok: true };
 }
+/* Precio de lista de una compra = lo que pagó + el crédito que usó + el descuento de bienvenida
+   (los tres quedan guardados en la fila, sin migración). Premio "X %" = X % de ESO, en soles
+   con 2 decimales exactos (se redondea en centavos enteros: nada de 7.199999). */
+function premioPctDeLista(compra, pct){
+  const c = n => Math.round((Number(n) || 0) * 100);
+  const listaCent = Math.max(0, c(compra && compra.monto) + c(compra && compra.descuento) + c(compra && compra.desc_ref));
+  const p = Math.max(0, Number(pct) || 0);
+  return Math.round(listaCent * p / 100) / 100;
+}
 /* Lo que paga el alumno por un paquete, con sus dos descuentos posibles. Vive en una sola
    funcion porque hay SEIS rutas de compra (Yape, transferencia, MP, MP marketplace, Stripe,
    Culqi) y cada una calculaba su total a mano: la septima que se agregue sin esto se olvida
@@ -3818,9 +3827,10 @@ async function confirmarCompra(env, tenantId, tenant, compra){
       if (rcC.premioModo === "soles"){
         creditoPremio = rcC.premioValor;
       } else if (rcC.premioModo === "pct_compra"){
-        /* sobre lo que el amigo PAGO de verdad, no sobre el precio de lista: si uso su credito
-           o su descuento de bienvenida, la academia no vio esa plata y no puede repartirla */
-        creditoPremio = Math.round(Math.max(0, Number(compra.monto) || 0) * rcC.premioValor) / 100;
+        /* 29-oct-2026 (José/Elevate): el % es del PRECIO DE LISTA del paquete, no de lo que
+           quedó tras el descuento de bienvenida o el crédito del amigo. Antes salía de
+           `compra.monto` (ya neto): con 10% de bienvenida el premio "10%" valía 9% del paquete. */
+        creditoPremio = premioPctDeLista(compra, rcC.premioValor);
       } else {
         /* "N clases gratis". En modo `clases_saldo` van al saldo del que refirio y las puede
            reservar sin comprar nada; en `clases_credito` se pagan como credito, al precio de
@@ -3838,7 +3848,7 @@ async function confirmarCompra(env, tenantId, tenant, compra){
         }
       }
       if (creditoPremio > 0){
-        stmts.push(env.DB.prepare("UPDATE cuentas SET credito = COALESCE(credito,0) + ?1 WHERE id = ?2 AND tenant_id = ?3")
+        stmts.push(env.DB.prepare("UPDATE cuentas SET credito = ROUND(COALESCE(credito,0) + ?1, 2) WHERE id = ?2 AND tenant_id = ?3")
           .bind(creditoPremio, refidor.id, tenantId));
       }
       if (clasesPremio > 0){
@@ -6422,6 +6432,63 @@ function vigenciaCubre(vdesde, vhasta, fechaLima){
   if (d && fechaLima < d) return false;
   if (h && fechaLima > h) return false;
   return true;
+}
+/* ═══ HORARIO POR FECHAS: varias filas por franja (29-oct-2026, José/Elevate) ═══
+   Pedido: cambiar el horario de la PRÓXIMA semana sin tocar la actual (donde ya hay gente
+   agendada). Antes cada franja (dia+hora+sala) tenía UNA fila, así que ponerle fechas a una
+   franja que corría siempre la convertía en "solo esa semana" y el resto de semanas se
+   quedaba sin clase. Ahora una franja puede tener varias filas con rangos que NO se pisan:
+   `recortarVigencia` le quita a cada fila el pedazo [d,h] y deja lo que sobra a los lados.
+   Fechas "YYYY-MM-DD" en hora de Lima; "" = sin límite. Las RESERVAS no se tocan nunca:
+   viven en su tabla y guardan su fecha; este recorte solo cambia qué horas se ofrecen. */
+function vigDiaMas(f, n){
+  const p = String(f).split("-").map(Number);
+  const d = new Date(Date.UTC(p[0], p[1] - 1, p[2] + n));
+  return d.getUTCFullYear() + "-" + String(d.getUTCMonth() + 1).padStart(2, "0") + "-" + String(d.getUTCDate()).padStart(2, "0");
+}
+/* Quita el rango [d,h] de cada fila. Devuelve filas nuevas (copias); las que quedan
+   enteras dentro de [d,h] desaparecen; las que lo cruzan se parten en dos. */
+function recortarVigencia(filas, d, h){
+  d = String(d || ""); h = String(h || "");
+  const out = [];
+  for (const r of (filas || [])){
+    const rd = String(r.vdesde || ""), rh = String(r.vhasta || "");
+    const finAntes = !d ? false : (!rd || rd < d);          // sobra un pedazo a la izquierda
+    const finDespues = !h ? false : (!rh || rh > h);        // sobra un pedazo a la derecha
+    const separados = (h && rd && rd > h) || (d && rh && rh < d);   // ni se tocan
+    if (separados){ out.push({ ...r }); continue; }
+    if (finAntes) out.push({ ...r, vdesde: rd, vhasta: vigDiaMas(d, -1) });
+    if (finDespues) out.push({ ...r, vdesde: vigDiaMas(h, 1), vhasta: rh });
+  }
+  return out;
+}
+/* ¿Dos rangos comparten algún día? ("" = sin límite) */
+function vigenciasSePisan(d1, h1, d2, h2){
+  d1 = String(d1 || ""); h1 = String(h1 || ""); d2 = String(d2 || ""); h2 = String(h2 || "");
+  if (h1 && d2 && h1 < d2) return false;
+  if (h2 && d1 && h2 < d1) return false;
+  return true;
+}
+/* Mismo dia+hora+sala con rangos que se pisan = la franja existiría DOS veces el mismo día.
+   Devuelve la primera pareja que choca ("" si todo bien). */
+function franjaQueSePisa(filas){
+  const porClave = new Map();
+  for (const r of (filas || [])){
+    const k = Number(r.dia_semana) + "|" + r.hora + "|" + String(r.sala || "");
+    const l = porClave.get(k) || [];
+    for (const o of l){
+      if (vigenciasSePisan(o.vdesde, o.vhasta, r.vdesde, r.vhasta)) return k;
+    }
+    l.push(r); porClave.set(k, l);
+  }
+  return "";
+}
+/* ¿La PK de `disponibilidad` ya incluye vigente_desde? (migracion db/2026-10-29-horario-por-fechas.sql) */
+async function disponibilidadPkConFechas(env){
+  try {
+    const { results } = await env.DB.prepare("PRAGMA table_info(disponibilidad)").all();
+    return (results || []).some(c => c.name === "vigente_desde" && Number(c.pk) > 0);
+  } catch (e) { return false; }
 }
 function fechaLimaDeParts(p){
   /* limaParts trae m 0-based (convencion Date): aqui se vuelve calendario humano */
@@ -18121,11 +18188,25 @@ export default {
               const { results: prevC } = await env.DB.prepare(
                 "SELECT dia_semana, hora, COALESCE(cupo,0) AS cupo, COALESCE(curso,'') AS curso, COALESCE(sala,'') AS sala, COALESCE(profe,'') AS profe, COALESCE(vigente_desde,'') AS vdesde, COALESCE(vigente_hasta,'') AS vhasta FROM disponibilidad WHERE tenant_id = ?1 AND profesor_id = ?2"
               ).bind(tid, target.id).all();
-              cuposPrevios = new Map((prevC || []).map(r => [r.dia_semana + "|" + r.hora + "|" + (r.sala || ""), parseInt(r.cupo, 10) || 0]));
-              cursosPrevios = new Map((prevC || []).map(r => [r.dia_semana + "|" + r.hora + "|" + (r.sala || ""), r.curso || ""]));
-              profesPrevios = new Map((prevC || []).map(r => [r.dia_semana + "|" + r.hora + "|" + (r.sala || ""), r.profe || ""]));
-              vigPrevios = new Map((prevC || []).map(r => [r.dia_semana + "|" + r.hora + "|" + (r.sala || ""), [r.vdesde || "", r.vhasta || ""]]));
+              cuposPrevios = new Map((prevC || []).flatMap(r => { const kk = r.dia_semana + "|" + r.hora + "|" + (r.sala || ""); const v = parseInt(r.cupo, 10) || 0; return [[kk, v], [kk + "|" + (r.vdesde || "") + "|" + (r.vhasta || ""), v]]; }));
+              cursosPrevios = new Map((prevC || []).flatMap(r => { const kk = r.dia_semana + "|" + r.hora + "|" + (r.sala || ""); const v = r.curso || ""; return [[kk, v], [kk + "|" + (r.vdesde || "") + "|" + (r.vhasta || ""), v]]; }));
+              profesPrevios = new Map((prevC || []).flatMap(r => { const kk = r.dia_semana + "|" + r.hora + "|" + (r.sala || ""); const v = r.profe || ""; return [[kk, v], [kk + "|" + (r.vdesde || "") + "|" + (r.vhasta || ""), v]]; }));
+              vigPrevios = new Map((prevC || []).flatMap(r => { const kk = r.dia_semana + "|" + r.hora + "|" + (r.sala || ""); const v = [r.vdesde || "", r.vhasta || ""]; return [[kk, v], [kk + "|" + (r.vdesde || "") + "|" + (r.vhasta || ""), v]]; }));
             } catch (e) {}
+          }
+          /* Horario por fechas (29-oct-2026): varias filas por franja solo si no se pisan y
+             solo si la PK de la tabla ya incluye vigente_desde (db/2026-10-29-...sql). Se
+             revisa ANTES del DELETE: si la tabla es la vieja, una segunda fila de la misma
+             franja se perderia en silencio por el INSERT OR IGNORE. */
+          {
+            const norm = activos.map(s => ({ dia_semana: Number(s.dia_semana), hora: String(s.hora || ""), sala: String(s.sala || "").trim().slice(0, 40),
+              vdesde: /^\d{4}-\d{2}-\d{2}$/.test(String(s.vdesde || "")) ? String(s.vdesde) : "", vhasta: /^\d{4}-\d{2}-\d{2}$/.test(String(s.vhasta || "")) ? String(s.vhasta) : "" }));
+            const choca = franjaQueSePisa(norm);
+            if (choca) return json({ error: "Hay dos horarios que se pisan en las mismas fechas (" + choca.split("|").slice(1).join(" · ") + "). Revisa las fechas." }, 400);
+            const claves = new Set(norm.map(r => r.dia_semana + "|" + r.hora + "|" + r.sala));
+            if (claves.size < norm.length && !(await disponibilidadPkConFechas(env))){
+              return json({ error: "Falta activar los horarios por fechas en la base de datos. No se guardó nada; tu horario sigue igual." }, 409);
+            }
           }
           /* BLINDADO multi-profesor: el DELETE va scoped al profesor objetivo, nunca
              al tenant entero (antes un profesor podia borrar los horarios de todos). */
@@ -18148,11 +18229,14 @@ export default {
             let vdF = fOk(s.vdesde), vhF = fOk(s.vhasta);
             if (vdF && vhF && vdF > vhF){ vdF = ""; vhF = ""; }
             if (!esDueno){
-              const kPrev = dia + "|" + h + "|" + salaF;
+              /* con varias filas por franja, la fila previa se busca por clave+fechas; si esa
+                 combinacion no existia, se cae a la clave sola y la fila nace "sin fechas" */
+              const kVig = dia + "|" + h + "|" + salaF + "|" + vdF + "|" + vhF;
+              const kPrev = vigPrevios.has(kVig) ? kVig : (dia + "|" + h + "|" + salaF);
               cupoF = cuposPrevios.get(kPrev) || 0;
               cursoF = cursosPrevios.get(kPrev) || "";
               profeF = profesPrevios.get(kPrev) || "";
-              const vPrev = vigPrevios.get(kPrev) || ["", ""];
+              const vPrev = vigPrevios.get(kPrev) || ["", ""];   // (con fechas exactas: las mismas)
               vdF = vPrev[0]; vhF = vPrev[1];
             }
             if (dia >= 0 && dia <= 6 && /^\d{2}:\d{2}$/.test(h)){

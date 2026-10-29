@@ -1687,7 +1687,9 @@ function descRefDe(pk){
   if(info && info.sinRef) return 0;
   var min = Number(r.minClases)||0;
   if(min>0 && info && !info.ilim && (Number(info.clases)||0) < min) return 0;
-  var d = r.descModo==="pct" ? (precio*(Number(r.descValor)||0)/100) : (Number(r.descValor)||0);
+  /* misma cuenta que el worker (calcularCobro): Math.round(precio*%)/100. Antes aquí era
+     precio*%/100 y luego *100: en ~286 precios (S/1.45, 10.05...) prometía 1 centavo menos */
+  var d = r.descModo==="pct" ? (Math.round(precio*(Number(r.descValor)||0))/100) : (Number(r.descValor)||0);
   return Math.min(precio, Math.round(d*100)/100);
 }
 function calc(pk){
@@ -1697,7 +1699,8 @@ function calc(pk){
   /* el crédito se aplica sobre lo que QUEDA tras el descuento de bienvenida, igual que en el
      worker: al revés, el alumno gastaría crédito de más para nada */
   var desc = Math.min(cred, Math.max(0, precio - dRef));
-  return { precio:precio, descRef:dRef, desc:desc, final:Math.max(0, precio-dRef-desc) };
+  var r2 = function(n){ return Math.round(n*100)/100; };
+  return { precio:precio, descRef:dRef, desc:r2(desc), final:Math.max(0, r2(precio-dRef-desc)) };
 }
 /* "2026-08-20" -> "20 ago" (para mostrar el vencimiento de la mensualidad) */
 /* Los pases que se listan en "Tus pases" (28-set-2026): solo los vigentes. El vencido sigue
@@ -2194,7 +2197,7 @@ $("ovCompra").addEventListener("click",function(e){ if(e.target===$("ovCompra"))
 function textoPremioRef(){
   var r = (ME && ME.referidos) || {};
   var v = Number(r.premioValor) || 0;
-  if(r.premioModo === "pct_compra") return "<strong style=\"color:var(--cream)\">"+v+"% de lo que pague</strong>, como descuento para tu próxima compra";
+  if(r.premioModo === "pct_compra") return "<strong style=\"color:var(--cream)\">"+v+"% del precio del paquete que compre</strong>, como descuento para tu próxima compra";
   /* al alumno se le dice qué recibe y CUÁNDO lo puede usar, que es lo único que le importa */
   if(r.premioModo === "clases_saldo") return "<strong style=\"color:var(--cream)\">"+v+" clase"+(v===1?"":"s")+" gratis</strong>, que puedes reservar cuando quieras sin pagar nada";
   if(r.premioModo === "clases_credito") return "<strong style=\"color:var(--cream)\">lo que cuesta"+(v===1?"":"n")+" "+v+" clase"+(v===1?"":"s")+"</strong> a favor, para descontar de tu próxima compra";

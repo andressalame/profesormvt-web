@@ -1857,6 +1857,15 @@ table.acc-fija tbody tr:hover td:last-child{background:var(--panel2);}
         <button class="btn ghost sm" id="btnDispFila" type="button" title="Agrega una hora suelta que no cae en la grilla (ej. 7:45)">+ Hora suelta</button>
         <button class="btn ghost sm" id="btnDispCopiar" type="button">Copiar un día a otro</button>
       </div>
+      <!-- Horario por fechas (29-oct-2026): ver el horario de otra fecha y copiarlo a otras fechas -->
+      <div class="dispcfg" id="dispVistaBar">
+        <span class="pk" style="flex:0 0 auto;">Ver el horario del día</span>
+        <input id="disp_vista" type="date" />
+        <button class="btn ghost sm" id="btnVistaHoy" type="button">Hoy</button>
+        <button class="btn sm" id="btnDispDuplicar" type="button">Copiar este horario a otras fechas</button>
+      </div>
+      <p class="hint" id="vistaTx" style="margin-top:-2px;"></p>
+      <div id="vistaChips" style="display:flex;flex-wrap:wrap;gap:8px;margin:0 0 10px;"></div>
       <p class="hint" style="margin-top:-2px;">La grilla es solo tu vista: cambia el rango o el paso para poner clases a las 7:15 o cada media hora. Nunca borra franjas que ya guardaste fuera de este rango.</p>
       <div class="tablewrap" id="dispGrid"></div>
       <button class="btn" id="btnGuardarDisp" style="margin-top:12px;">Guardar horario</button>
@@ -2752,6 +2761,21 @@ table.acc-fija tbody tr:hover td:last-child{background:var(--panel2);}
 </div>
 
 <!-- Modal copiar día -->
+<div class="overlay" id="ovDuplicar">
+  <div class="modal">
+    <h3>Copiar este horario a <em>otras fechas</em></h3>
+    <div class="mlab" id="dup_origen">Se copia el horario que estás viendo</div>
+    <div class="frow">
+      <div class="field"><label>Desde el día</label><input id="dup_desde" type="date" /></div>
+      <div class="field"><label>Hasta el día (opcional)</label><input id="dup_hasta" type="date" /></div>
+    </div>
+    <p class="hint">En esas fechas se usará el horario copiado. Fuera de ellas tu horario queda como está, y <b>las reservas ya hechas no se tocan</b>. Si dejas "hasta" vacío, vale para siempre.</p>
+    <div class="modal-actions">
+      <button class="btn ghost" data-close>Cancelar</button>
+      <button class="btn" id="btnDuplicarOk">Copiar horario</button>
+    </div>
+  </div>
+</div>
 <div class="overlay" id="ovCopiarDia">
   <div class="modal">
     <h3>Copiar un <em>día</em></h3>
@@ -5287,8 +5311,46 @@ function normalizarSalasDisp(){
   (AG_DISP||[]).forEach(function(r){ if(r && !String(r.sala||"").trim()) r.sala=salas[0]; });
   if(salasGrilla().indexOf(AG_SALA)===-1) AG_SALA=salas[0];
 }
+/* ═══ HORARIO POR FECHAS: varias filas por franja (29-oct-2026, José/Elevate) ═══
+   Pedido: cambiar el horario de la PRÓXIMA semana sin tocar la actual (donde ya hay gente
+   agendada). Antes cada franja (dia+hora+sala) tenía UNA fila, así que ponerle fechas a una
+   franja que corría siempre la convertía en "solo esa semana" y el resto de semanas se
+   quedaba sin clase. Ahora una franja puede tener varias filas con rangos que NO se pisan:
+   `recortarVigencia` le quita a cada fila el pedazo [d,h] y deja lo que sobra a los lados.
+   Fechas "YYYY-MM-DD" en hora de Lima; "" = sin límite. Las RESERVAS no se tocan nunca:
+   viven en su tabla y guardan su fecha; este recorte solo cambia qué horas se ofrecen. */
+function vigDiaMas(f, n){
+  const p = String(f).split("-").map(Number);
+  const d = new Date(Date.UTC(p[0], p[1] - 1, p[2] + n));
+  return d.getUTCFullYear() + "-" + String(d.getUTCMonth() + 1).padStart(2, "0") + "-" + String(d.getUTCDate()).padStart(2, "0");
+}
+/* Quita el rango [d,h] de cada fila. Devuelve filas nuevas (copias); las que quedan
+   enteras dentro de [d,h] desaparecen; las que lo cruzan se parten en dos. */
+function recortarVigencia(filas, d, h){
+  d = String(d || ""); h = String(h || "");
+  const out = [];
+  for (const r of (filas || [])){
+    const rd = String(r.vdesde || ""), rh = String(r.vhasta || "");
+    const finAntes = !d ? false : (!rd || rd < d);          // sobra un pedazo a la izquierda
+    const finDespues = !h ? false : (!rh || rh > h);        // sobra un pedazo a la derecha
+    const separados = (h && rd && rd > h) || (d && rh && rh < d);   // ni se tocan
+    if (separados){ out.push({ ...r }); continue; }
+    if (finAntes) out.push({ ...r, vdesde: rd, vhasta: vigDiaMas(d, -1) });
+    if (finDespues) out.push({ ...r, vdesde: vigDiaMas(h, 1), vhasta: rh });
+  }
+  return out;
+}
+
+/* ---- Qué horario estoy mirando (29-oct-2026) ----
+   Una franja puede tener varias filas con fechas distintas. La grilla enseña UNA por celda: la
+   que vale en la fecha que miras (por defecto hoy; en "una sola semana", el lunes de esa semana). */
+var VISTA_FECHA="";
+function hoyLimaKey(){ var d=new Date(Date.now()-5*3600000); return d.getUTCFullYear()+"-"+String(d.getUTCMonth()+1).padStart(2,"0")+"-"+String(d.getUTCDate()).padStart(2,"0"); }
+function fechaVista(){ return (typeof SEMANA_EDIT!=="undefined"&&SEMANA_EDIT) ? SEMANA_EDIT.desde : (VISTA_FECHA||hoyLimaKey()); }
+function filaCubre(r,fk){ var d=String(r.vdesde||""), h=String(r.vhasta||""); return !((d&&fk<d)||(h&&fk>h)); }
 function dispActiva(dow,hora){
-  for(var i=0;i<AG_DISP.length;i++){ if(AG_DISP[i].dia_semana===dow && AG_DISP[i].hora===hora && String(AG_DISP[i].sala||"")===AG_SALA) return AG_DISP[i].activo!==0; }
+  var fv=fechaVista();
+  for(var i=0;i<AG_DISP.length;i++){ if(AG_DISP[i].dia_semana===dow && AG_DISP[i].hora===hora && String(AG_DISP[i].sala||"")===AG_SALA && filaCubre(AG_DISP[i],fv)) return AG_DISP[i].activo!==0; }
   return false;
 }
 /* Horario por profesor: AG_PROFE = de quién estoy editando el horario ("" = el mío).
@@ -5478,7 +5540,8 @@ function renderAgendaAdmin(){
     '<p class="hint" style="margin:0 0 10px;">Estás editando <b>'+esc(AG_SALA)+'</b>. Cada sala tiene su propia grilla: dos salas pueden dictar clases distintas a la misma hora. Al guardar se guardan todas las salas juntas.</p>';
   }
   html += '<table class="dispt"><thead><tr><th></th>'+AG_DOW.map(function(d){return '<th>'+d.n+'</th>';}).join("")+'</tr></thead><tbody>';
-  var filaDe=function(dow,hora){ return (AG_DISP||[]).find(function(x){return x.dia_semana===dow&&x.hora===hora&&String(x.sala||"")===AG_SALA;}); };
+  var fv=fechaVista();
+  var filaDe=function(dow,hora){ return (AG_DISP||[]).find(function(x){return x.dia_semana===dow&&x.hora===hora&&String(x.sala||"")===AG_SALA&&filaCubre(x,fv);}); };
   var cupoDeCelda=function(dow,hora){
     var r=filaDe(dow,hora); var c=r?parseInt(r.cupo,10):0;
     return (c>=1&&c<=60)?c:0;
@@ -5500,7 +5563,7 @@ function renderAgendaAdmin(){
   });
   el("dispGrid").innerHTML = html + '</tbody></table>'+
     '<p class="hint" style="margin-top:8px;">Clic en una hora apagada la <b>prende</b>. Clic en una prendida abre su <b>tipo de clase, aforo y profesor</b> (Máquinas 3, Mat 8…), y puedes aplicarlo a todo el día o a toda la semana de un golpe. Los tipos de clase se crean en <b>Ajustes → Clases y planes</b>'+(salasTabs.length?'; las salas también.':'. ¿Dictas dos clases a la misma hora en espacios distintos? Crea tus salas en <b>Ajustes → Clases y planes</b>.')+'</p>';
-  try{ pintarSemanaBanner(); pintarBarraSinGuardar(); }catch(e){}
+  try{ pintarSemanaBanner(); pintarBarraSinGuardar(); pintarVista(); }catch(e){}
 
   /* Los dos selectores de alumno (12-ago-2026, pedido de José con 1,447 alumnos en la lista:
      «no me aparecen los apellidos jeje tambien seria bueno que en vez de una lista sea un
@@ -6122,25 +6185,44 @@ if(el("btnFranjaOk")) el("btnFranjaOk").addEventListener("click",function(){
   /* vigencia por fechas (10-ago-2026): rango invertido se avisa y NO se aplica */
   var vd=(el("fr_vdesde")&&el("fr_vdesde").value)||"", vh=(el("fr_vhasta")&&el("fr_vhasta").value)||"";
   if(vd&&vh&&vd>vh){ toast("Las fechas están al revés: la de inicio es posterior a la de fin. Corrígelas y vuelve a guardar."); return; }
-  /* 🔒 CANDADO (10-ago-2026). El modal PRECARGA la vigencia de la celda que abriste, así que
-     con "Aplicar también a…" se podía estampar un rango de fechas sobre TODO el horario sin
-     haberlo escrito — y esas clases desaparecen del portal fuera del rango. Se confirma antes
-     de restringir horarios que hoy corren siempre. */
-  var corrianSiempre=objetivo.filter(function(c){ return !(c.dataset.vdesde||c.dataset.vhasta); });
-  if((vd||vh) && corrianSiempre.length && (modo!=="una" || !!SEMANA_EDIT)){
-    var n=corrianSiempre.length;
-    var aviso="Vas a hacer que "+(n===1?"ese horario exista":("esos "+n+" horarios existan"))+" SOLO "+textoRangoVig(vd,vh)+".\n\n"+
-      "Fuera de esas fechas tus alumnos no verán nada ahí"+(n>1?(" — le pasa a "+n+" horarios de tu semana"):"")+".\n\n¿Seguro?";
-    if(!confirm(aviso)) return;
-  }
-  objetivo.forEach(function(c){ c.classList.add("on"); c.dataset.curso=tipo; c.dataset.cupo=cupo; c.dataset.profe=profeFr; c.dataset.vdesde=vd; c.dataset.vhasta=vh; pintarDcell(c); });
+  /* 29-oct-2026: ya no hay candado. Un cambio con fechas RECORTA solo el pedazo [desde,hasta]
+     de la franja y deja el resto como estaba (antes la franja entera pasaba a "solo esas
+     fechas" y el resto de semanas se quedaba sin clase). Las reservas ya hechas no se tocan. */
+  sincronizarGrillaEnMemoria();
+  objetivo.forEach(function(c){
+    var dw=Number(c.dataset.dow), hr=c.dataset.hora, sala=String(c.dataset.sala||AG_SALA||"");
+    var enOn=c.classList.contains("on");
+    var propio={vdesde:c.dataset.vdesde||"", vhasta:c.dataset.vhasta||""};
+    var claveIgual=function(r){ return Number(r.dia_semana)===Number(dw)&&r.hora===hr&&String(r.sala||"")===sala; };
+    var misma=AG_DISP.filter(claveIgual), resto=AG_DISP.filter(function(r){ return !claveIgual(r); });
+    var fila={dia_semana:Number(dw),hora:hr,activo:1,cupo:cupo,curso:tipo,sala:sala,profe:profeFr,vdesde:vd,vhasta:vh};
+    if(enOn && propio.vdesde===vd && propio.vhasta===vh){
+      /* mismo rango que ya tenía: se cambia SOLO esa fila (tipo, aforo, profe) */
+      misma=misma.filter(function(r){ return !((r.vdesde||"")===vd&&(r.vhasta||"")===vh); });
+      AG_DISP=resto.concat(misma,[fila]);
+    } else {
+      AG_DISP=resto.concat(recortarVigencia(misma,vd,vh),[fila]);
+    }
+  });
+  renderAgendaAdmin();
+  if(vd||vh) toast("Este cambio vale "+textoRangoVig(vd,vh)+". Lo demás y las reservas ya hechas no cambian.",4200);
   closeOv("ovFranja");
   /* GUARDA DE VERDAD (10-ago-2026): antes "Aplicar" solo pintaba el HTML, parecía guardado y
      al cambiar de pestaña o de profesor cargarAgenda() lo borraba sin preguntar. */
   guardarHorario(objetivo.length>1?("Guardado en "+objetivo.length+" horarios ✓"):"Guardado ✓");
 });
 if(el("btnFranjaApagar")) el("btnFranjaApagar").addEventListener("click",function(){
-  if(FRANJA_CELDA){ FRANJA_CELDA.classList.remove("on"); FRANJA_CELDA.dataset.curso=""; FRANJA_CELDA.dataset.cupo=0; FRANJA_CELDA.dataset.profe=""; FRANJA_CELDA.dataset.vdesde=""; FRANJA_CELDA.dataset.vhasta=""; pintarDcell(FRANJA_CELDA); }
+  if(FRANJA_CELDA){
+    /* quita SOLO la fila que ves; en "una sola semana", solo esa semana (parte la fila en dos) */
+    var cA=FRANJA_CELDA; sincronizarGrillaEnMemoria();
+    var dwA=Number(cA.dataset.dow), hrA=cA.dataset.hora, salaA=String(cA.dataset.sala||AG_SALA||"");
+    var igualA=function(r){ return Number(r.dia_semana)===dwA&&r.hora===hrA&&String(r.sala||"")===salaA; };
+    var mismaA=AG_DISP.filter(igualA), restoA=AG_DISP.filter(function(r){ return !igualA(r); });
+    if(SEMANA_EDIT) mismaA=recortarVigencia(mismaA,SEMANA_EDIT.desde,SEMANA_EDIT.hasta);
+    else mismaA=mismaA.filter(function(r){ return !((r.vdesde||"")===(cA.dataset.vdesde||"")&&(r.vhasta||"")===(cA.dataset.vhasta||"")); });
+    AG_DISP=restoA.concat(mismaA);
+    renderAgendaAdmin();
+  }
   closeOv("ovFranja");
   guardarHorario("Horario quitado ✓");
 });
@@ -6234,7 +6316,8 @@ function guardarPrefDisp(){
 function sincronizarGrillaEnMemoria(){
   var celdas=el("dispGrid").querySelectorAll(".dcell");
   if(!celdas.length) return;   // grilla no pintada: no hay nada que volcar
-  var otras=(AG_DISP||[]).filter(function(r){ return String(r.sala||"")!==AG_SALA; });
+  var fvS=fechaVista();
+  var otras=(AG_DISP||[]).filter(function(r){ return String(r.sala||"")!==AG_SALA || !filaCubre(r,fvS); });
   var vivos=[];
   Array.prototype.forEach.call(el("dispGrid").querySelectorAll(".dcell.on"),function(c){
     vivos.push({dia_semana:Number(c.dataset.dow), hora:c.dataset.hora, activo:1, cupo:parseInt(c.dataset.cupo,10)||0, curso:c.dataset.curso||"", sala:AG_SALA, profe:c.dataset.profe||"", vdesde:c.dataset.vdesde||"", vhasta:c.dataset.vhasta||""});
@@ -6284,6 +6367,53 @@ if(el("btnCopiarDiaOk")) el("btnCopiarDiaOk").addEventListener("click",function(
   pintarBarraSinGuardar();
   toast(n+" horarios copiados — dale \"Guardar horario\"");
 });
+/* ============ HORARIO POR FECHAS: ver otra fecha y copiar (29-oct-2026) ============ */
+function pintarVista(){
+  var inp=el("disp_vista"); if(!inp) return;
+  var fv=fechaVista(); inp.value=fv;
+  var tx=el("vistaTx"); if(tx) tx.innerHTML="Estás viendo el horario que vale el <b>"+esc(fechaBonita(fv))+"</b>.";
+  var rangos={}, orden=[];
+  (AG_DISP||[]).forEach(function(r){
+    if(!r||r.activo===0) return;
+    var k=(r.vdesde||"")+"|"+(r.vhasta||""); if(!k||k==="|") return;
+    if(!rangos[k]){ rangos[k]={vd:r.vdesde||"",vh:r.vhasta||"",n:0}; orden.push(k); }
+    rangos[k].n++;
+  });
+  orden.sort();
+  var box=el("vistaChips"); if(!box) return;
+  box.innerHTML=orden.map(function(k){ var g=rangos[k];
+    return '<button type="button" class="btn ghost sm" data-vistaini="'+esc(g.vd||hoyLimaKey())+'">Horario '+esc(textoRangoVig(g.vd,g.vh))+' · '+g.n+(g.n===1?' hora':' horas')+'</button>';
+  }).join("");
+}
+function cambiarVista(f){
+  sincronizarGrillaEnMemoria();   /* lo que tocaste sin guardar no se pierde al cambiar de fecha */
+  VISTA_FECHA=f||""; renderAgendaAdmin();
+}
+if(el("disp_vista")) el("disp_vista").addEventListener("change",function(){ cambiarVista(this.value); });
+if(el("btnVistaHoy")) el("btnVistaHoy").addEventListener("click",function(){ cambiarVista(""); });
+if(el("vistaChips")) el("vistaChips").addEventListener("click",function(e){ var b=e.target.closest("[data-vistaini]"); if(b) cambiarVista(b.dataset.vistaini); });
+if(el("btnDispDuplicar")) el("btnDispDuplicar").addEventListener("click",function(){
+  sincronizarGrillaEnMemoria();
+  var fv=fechaVista();
+  if(el("dup_origen")) el("dup_origen").textContent="Se copia el horario que vale el "+fechaBonita(fv);
+  el("dup_desde").value=""; el("dup_hasta").value="";
+  openOv("ovDuplicar");
+});
+if(el("btnDuplicarOk")) el("btnDuplicarOk").addEventListener("click",function(){
+  var nd=el("dup_desde").value||"", nh=el("dup_hasta").value||"";
+  if(!nd){ toast("Pon desde qué día vale el horario copiado"); return; }
+  if(nh&&nh<nd){ toast("Las fechas están al revés: corrígelas"); return; }
+  var fv=fechaVista();
+  var copias=(AG_DISP||[]).filter(function(r){ return r&&r.activo!==0&&filaCubre(r,fv); }).map(function(r){
+    return {dia_semana:Number(r.dia_semana),hora:r.hora,activo:1,cupo:parseInt(r.cupo,10)||0,curso:r.curso||"",sala:String(r.sala||""),profe:r.profe||"",vdesde:nd,vhasta:nh};
+  });
+  if(!copias.length){ toast("No hay horario para copiar en esa fecha"); return; }
+  AG_DISP=recortarVigencia(AG_DISP,nd,nh).concat(copias);
+  closeOv("ovDuplicar");
+  VISTA_FECHA=nd; renderAgendaAdmin();
+  guardarHorario("Listo: copiado "+textoRangoVig(nd,nh)+". Las reservas ya hechas siguen igual ✓");
+});
+
 /* ============ GUARDADO REAL + CAMBIOS SIN GUARDAR (10-ago-2026) ============
    Bug de fondo que rompía el modelo mental de la pantalla: el botón del modal decía
    "Aplicar", cerraba el modal y NO guardaba nada — solo pintaba el HTML. El guardado real
@@ -6311,7 +6441,7 @@ function firmaDisp(){
   if(!celdas.length) return null;              // grilla no pintada: no se puede opinar
   var arr=[];
   (AG_DISP||[]).forEach(function(r){
-    if(!r || r.activo===0 || String(r.sala||"")===AG_SALA) return;
+    if(!r || r.activo===0 || (String(r.sala||"")===AG_SALA && filaCubre(r,fechaVista()))) return;
     arr.push([Number(r.dia_semana),r.hora,parseInt(r.cupo,10)||0,r.curso||"",String(r.sala||""),r.profe||"",r.vdesde||"",r.vhasta||""].join("|"));
   });
   Array.prototype.forEach.call(g.querySelectorAll(".dcell.on"),function(c){
