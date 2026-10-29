@@ -11794,7 +11794,7 @@ export default {
        Shell publico SIN datos: todo sale de /app/api/su/negocio-* con el ADMIN_TOKEN que Andres
        pega una vez (queda en localStorage). Responder a mano via Graph API + pausar la IA por chat. */
     if (path === "/app/su/bandeja" && request.method === "GET"){
-      const html = "<!doctype html><html lang='es'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'><meta name='robots' content='noindex'><title>Bandeja WhatsApp · Batuta</title><style>" +
+      const html = "<!doctype html><html lang='es'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'><meta name='robots' content='noindex'><title>Bandeja WhatsApp · Web Express</title><style>" +
         "*{box-sizing:border-box}body{font-family:system-ui,sans-serif;background:#0d1117;color:#e6edf3;margin:0;height:100vh;display:flex;flex-direction:column}" +
         "header{padding:10px 16px;border-bottom:1px solid #30363d;display:flex;align-items:center;gap:10px}header b span{color:#e8a33d}" +
         "#estado{font-size:12px;color:#8b949e;margin-left:auto}" +
@@ -11815,7 +11815,7 @@ export default {
         "#login{padding:40px;max-width:420px;margin:0 auto}input{width:100%;background:#161b22;color:#e6edf3;border:1px solid #30363d;border-radius:10px;padding:10px;font:inherit;margin:10px 0}" +
         ".vacio{color:#8b949e;padding:20px;font-size:14px}" +
         "</style></head><body>" +
-        "<header><b><span>BATUTA</span> · Bandeja WhatsApp</b><span id='hchat'></span><span id='estado'></span><button class='sec' id='salir' style='display:none'>Salir</button></header>" +
+        "<header><b><span>WEB EXPRESS</span> · Bandeja WhatsApp</b><span id='hchat'></span><span id='ia'></span><button class='sec' id='iabtn' style='display:none'></button><span id='estado'></span><button class='sec' id='salir' style='display:none'>Salir</button></header>" +
         "<div id='login'><p>Pega el token de administrador para entrar. Se guarda solo en este navegador.</p><input id='tok' type='password' placeholder='ADMIN_TOKEN'><button id='entrar'>Entrar</button><p id='loginerr' style='color:#f85149'></p></div>" +
         "<main id='app' style='display:none'><div id='lista'></div><div id='conv'><div id='msgs'><div class='vacio'>Elige un chat de la izquierda.</div></div>" +
         "<div id='barra' style='display:none'><textarea id='txt' placeholder='Escribe tu respuesta (sale por WhatsApp al instante)'></textarea><button id='enviar'>Enviar</button><button class='sec' id='pausa'></button></div></div></main>" +
@@ -11824,7 +11824,7 @@ export default {
         "function api(p,opt){opt=opt||{};opt.headers=Object.assign({'Authorization':'Bearer '+T,'content-type':'application/json'},opt.headers||{});return fetch('/app/api/su/'+p,opt).then(function(r){if(r.status===401){throw new Error('token')}return r.json()});}" +
         "function esc(s){var d=document.createElement('div');d.textContent=s==null?'':String(s);return d.innerHTML;}" +
         "function pintaLista(){var L=document.getElementById('lista');if(!CHATS.length){L.innerHTML=\"<div class='vacio'>Sin chats todavia. Cuando alguien escriba a la linea Cloud API, aparece aqui.</div>\";return;}" +
-        "L.innerHTML=CHATS.map(function(c){var k=c.negocio_id+'|'+c.telefono;return \"<div class='chat\"+(SEL===k?' sel':'')+\"' data-k='\"+esc(k)+\"'><div class='q'>\"+esc(c.nombre||c.telefono)+(c.pausa==='on'?\" <span class='pausado'>IA EN PAUSA</span>\":'')+\"</div><div class='u'>\"+esc((c.negocio_nombre||c.negocio_id)+' · '+(c.ultimo||''))+\"</div></div>\";}).join('');" +
+        "L.innerHTML=CHATS.map(function(c){var k=c.negocio_id+'|'+c.telefono;return \"<div class='chat\"+(SEL===k?' sel':'')+\"' data-k='\"+esc(k)+\"'><div class='q'>\"+esc(c.nombre||c.telefono)+(c.pausa==='on'?\" <span class='pausado'>IA EN PAUSA</span>\":'')+(c.estado==='pasado_a_andres'?\" <span class='pausado'>PASO A TI</span>\":'')+\"</div><div class='u'>\"+esc((c.negocio_nombre||c.negocio_id)+' · '+(c.ultimo||''))+\"</div></div>\";}).join('');" +
         "Array.prototype.forEach.call(L.querySelectorAll('.chat'),function(el){el.onclick=function(){abrir(el.getAttribute('data-k'));};});}" +
         "function pintaConv(hist,lead){var M=document.getElementById('msgs');if(!hist||!hist.length){M.innerHTML=\"<div class='vacio'>Sin historial en este chat.</div>\";}else{M.innerHTML=hist.map(function(m){return \"<div class='m \"+(m.role==='assistant'?'assistant':'user')+\"'>\"+esc(m.content)+\"</div>\";}).join('');}M.scrollTop=M.scrollHeight;" +
         "var p=document.getElementById('pausa');var on=lead&&lead.pausa==='on';p.textContent=on?'Reanudar IA':'Pausar IA';p.dataset.on=on?'1':'';}" +
@@ -11838,9 +11838,11 @@ export default {
         "api('negocio-pausa',{method:'POST',body:JSON.stringify({negocio:pp[0],telefono:pp[1],pausa:on?'off':'on'})}).then(function(){refresca();});};" +
         "document.getElementById('txt').addEventListener('keydown',function(e){if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();document.getElementById('enviar').click();}});" +
         "function logout(msg){T=null;try{localStorage.removeItem('batuta_su_token');}catch(e){}clearInterval(TIMER);document.getElementById('app').style.display='none';document.getElementById('salir').style.display='none';document.getElementById('login').style.display='block';if(msg)document.getElementById('loginerr').textContent=msg;}" +
+        "var NEGWE=null;function iaEstado(){api('negocio-list').then(function(d){var n=(d.negocios||[]).filter(function(x){return x.id==='webexpress';})[0];NEGWE=n||null;var e=document.getElementById('ia'),b=document.getElementById('iabtn');if(!n){e.textContent='Asistente Web Express: sin dar de alta';b.style.display='none';return;}var on=n.enabled==='on';var vivo=on&&d.we_env;e.innerHTML='Asistente: <b style=\"color:'+(vivo?'#3fb950':'#f85149')+'\">'+(vivo?'ENCENDIDO':'APAGADO')+'</b>'+(on&&!d.we_env?' (falta el interruptor del worker)':'')+' · '+n.usados_mes+' resp. este mes';b.style.display='inline-block';b.textContent=on?'Apagar asistente':'Encender asistente';b.dataset.on=on?'1':'';}).catch(function(){});}" +
+        "document.getElementById('iabtn').onclick=function(){if(!NEGWE)return;var on=this.dataset.on==='1';if(!confirm(on?'Apagar el asistente de Web Express? Dejara de contestar en todos los chats.':'Encender el asistente de Web Express?'))return;api('negocio-upsert',{method:'POST',body:JSON.stringify({id:NEGWE.id,nombre:NEGWE.nombre,phone_id:NEGWE.phone_id,enabled:on?'off':'on'})}).then(iaEstado);};" +
         "document.getElementById('salir').onclick=function(){logout('');};" +
         "function entra(tok){T=tok;api('negocio-chats').then(function(d){try{localStorage.setItem('batuta_su_token',tok);}catch(e){}" +
-        "document.getElementById('login').style.display='none';document.getElementById('app').style.display='flex';document.getElementById('salir').style.display='inline-block';CHATS=d.chats||[];pintaLista();TIMER=setInterval(refresca,8000);}).catch(function(){document.getElementById('loginerr').textContent='Token rechazado.';});}" +
+        "document.getElementById('login').style.display='none';document.getElementById('app').style.display='flex';document.getElementById('salir').style.display='inline-block';CHATS=d.chats||[];pintaLista();TIMER=setInterval(refresca,8000);iaEstado();}).catch(function(){document.getElementById('loginerr').textContent='Token rechazado.';});}" +
         "document.getElementById('entrar').onclick=function(){var v=document.getElementById('tok').value.trim();if(v)entra(v);};" +
         "try{var g=localStorage.getItem('batuta_su_token');if(g)entra(g);}catch(e){}" +
         "</script></body></html>";
@@ -12553,7 +12555,7 @@ export default {
             const nl = await env.DB.prepare("SELECT COUNT(*) AS n FROM wa_negocio_lead WHERE negocio_id = ?1").bind(n.id).first().catch(() => null);
             out.push(Object.assign({}, n, { usados_mes: uso ? Number(uso.usados) : 0, leads: nl ? Number(nl.n) : 0 }));
           }
-          return json({ ok: true, negocios: out });
+          return json({ ok: true, negocios: out, we_env: env.WE_ASSISTANT_ENABLED === "true" });
         }
         /* Prueba EN SECO la respuesta del asistente de un negocio SIN enviar WhatsApp (usa la MISMA
            IA del webhook: Claude Haiku si hay key/creditos, si no el fallback Workers AI). Sirve para
@@ -12583,7 +12585,7 @@ export default {
         if (path === "/app/api/su/negocio-chats" && request.method === "GET"){
           await ensureNegocioSchema(env);
           const refC = String(url.searchParams.get("negocio") || "").trim();
-          let sql = "SELECT l.negocio_id, l.telefono, l.nombre, l.ultimo, l.actualizado, COALESCE(l.pausa,'') AS pausa, n.nombre AS negocio_nombre, n.phone_id " +
+          let sql = "SELECT l.negocio_id, l.telefono, l.nombre, l.ultimo, l.actualizado, COALESCE(l.pausa,'') AS pausa, COALESCE(l.estado,'') AS estado, COALESCE(l.motivo_pase,'') AS motivo_pase, n.nombre AS negocio_nombre, n.phone_id " +
             "FROM wa_negocio_lead l LEFT JOIN wa_negocio n ON n.id = l.negocio_id ";
           let stmt;
           if (refC){
