@@ -4,13 +4,15 @@ import Layout from '../layouts/Layout.astro';
 
 <Layout
   title="Horarios disponibles | ProfesorMVT"
-  description="Consulta los horarios disponibles de ProfesorMVT, actualizados en vivo y mostrados en hora de Lima."
+  description="Elige tu horario de clase con ProfesorMVT. Horarios en vivo, en hora de Lima."
   activeNav="horarios"
-  calendarOnly
 >
   <main class="hor">
-    <h1>Horarios disponibles</h1>
-    <p class="note">Hora de Lima · América/Lima. Los horarios se actualizan en vivo.</p>
+    <header class="hor-cab">
+      <p class="antetitulo">Clases 1 a 1 · hora de Lima</p>
+      <h1>Elige tu horario</h1>
+      <p class="note">Los horarios se actualizan en vivo. Elige un día, una hora, y sigue con tu paquete.</p>
+    </header>
     <fieldset class="duracion">
       <legend>Duración</legend>
       <label><input type="radio" name="duracion" value="1" checked /> 1 hora</label>
@@ -19,33 +21,49 @@ import Layout from '../layouts/Layout.astro';
     <div id="calBox" class="cal-box" aria-live="polite">
       <p>Cargando horarios…</p>
     </div>
-    <p id="seleccion" class="seleccion" aria-live="polite">Elige un día y una hora de preferencia. La selección no aparta el horario.</p>
+    <div class="hor-pie">
+      <p id="seleccion" class="seleccion" aria-live="polite">Elige un día y una hora de preferencia.</p>
+      <a id="continuar" class="btn-hero" href="/prueba/" hidden><span>Continuar con mi paquete</span><span aria-hidden="true">→</span></a>
+    </div>
   </main>
 </Layout>
 
 <style>
-  .hor { max-width: 720px; margin: 0 auto; padding: clamp(28px, 6vw, 72px) 16px 64px; }
-  h1 { font-size: clamp(30px, 5vw, 48px); line-height: 1.12; text-align: center; }
-  .note, .seleccion { color: var(--color-text-mute); text-align: center; line-height: 1.5; }
-  .note { margin: 12px 0 28px; }
-  .seleccion { margin: 20px auto 0; }
-  .duracion { display: flex; justify-content: center; flex-wrap: wrap; gap: 12px 24px; border: 0; padding: 0; margin: 0 0 22px; }
-  .duracion legend { margin: 0 auto 12px; text-align: center; font-weight: 600; }
-  .duracion label { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; }
-  .duracion input { accent-color: var(--color-ember); width: 18px; height: 18px; }
-  .cal-box { background: var(--color-ink-soft); border: 1px solid var(--color-line); padding: clamp(12px, 4vw, 26px); }
-  .cal-box :global(.calmes) { font-weight: 700; margin: 0 0 16px; text-align: center; }
-  .cal-box :global(.cal) { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }
-  .cal-box :global(.cdow) { color: var(--color-text-mute); text-align: center; font-size: 14px; }
-  .cal-box :global(.calc) { min-height: 40px; border: 1px solid transparent; background: none; color: var(--color-text-mute); font: inherit; }
-  .cal-box :global(button.calc) { border-color: var(--color-line); color: var(--color-bone); cursor: pointer; }
-  .cal-box :global(button.calc:hover), .cal-box :global(button.calc:focus-visible) { border-color: var(--color-ember); }
-  .cal-box :global(button.calc.sel) { background: var(--color-ember); color: var(--color-ink); }
-  .cal-box :global(.cal-dia-titulo) { margin: 22px 0 12px; font-weight: 700; }
-  .cal-box :global(.cal-horas) { display: flex; flex-wrap: wrap; gap: 8px; }
-  .cal-box :global(.cal-hora) { min-height: 44px; padding: 8px 14px; border: 1px solid var(--color-line); background: var(--color-ink); color: var(--color-bone); font: inherit; cursor: pointer; }
-  .cal-box :global(.cal-hora:hover), .cal-box :global(.cal-hora:focus-visible), .cal-box :global(.cal-hora.sel) { border-color: var(--color-ember); color: var(--color-ember); }
-  @media (max-width: 420px) { .cal-box :global(.calc) { min-height: 36px; } .hor { padding-left: 10px; padding-right: 10px; } }
+  .hor { max-width: 1100px; margin: 0 auto; padding: clamp(28px, 4vw, 56px) var(--margen) 72px; }
+  .hor-cab { margin-bottom: 26px; }
+  .antetitulo { font-size: 14px; letter-spacing: .18em; text-transform: uppercase; color: var(--acento); font-weight: 500; }
+  h1 { font-size: clamp(38px, 5vw, 64px); line-height: 1; margin: 10px 0 12px; font-weight: 800; }
+  .note { color: var(--texto-2); font-size: 20px; max-width: 46ch; }
+  .duracion { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 26px; border: 0; padding: 0; margin: 0 0 22px; }
+  .duracion legend { float: left; margin: 0 26px 0 0; font-weight: 700; padding: 0; }
+  .duracion label { display: inline-flex; align-items: center; gap: 10px; cursor: pointer; font-size: 19px; min-height: 44px; }
+  .duracion input { accent-color: var(--acento); width: 20px; height: 20px; }
+  .cal-box { background: var(--lamina); border: 1px solid var(--linea-fuerte); padding: clamp(18px, 3vw, 40px); display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); column-gap: clamp(24px, 4vw, 56px); align-items: start; }
+  .cal-box > p { grid-column: 1 / -1; }
+  .cal-box :global(.calmes) { grid-column: 1 / -1; font-weight: 800; font-size: 26px; margin: 0 0 18px; }
+  .cal-box :global(.calmes)::first-letter, .cal-box :global(.cal-dia-titulo)::first-letter { text-transform: uppercase; }
+  .cal-box :global(.cal) { grid-column: 1; grid-row: 2 / span 2; display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 8px; }
+  .cal-box :global(.cdow) { color: var(--texto-2); text-align: center; font-size: 15px; font-weight: 700; padding-bottom: 4px; }
+  .cal-box :global(.calc) { min-height: clamp(48px, 6vw, 68px); border: 1px solid transparent; background: none; color: var(--texto-2); font: inherit; font-size: 20px; display: flex; align-items: center; justify-content: center; }
+  .cal-box :global(button.calc) { border-color: var(--linea-fuerte); color: var(--texto); cursor: pointer; font-weight: 700; background: var(--fondo); }
+  .cal-box :global(button.calc:hover), .cal-box :global(button.calc:focus-visible) { border-color: var(--acento); outline: 2px solid var(--acento); outline-offset: -2px; }
+  .cal-box :global(button.calc.sel) { background: var(--acento); border-color: var(--acento); color: var(--sobre-acento); }
+  .cal-box :global(.cal-dia-titulo) { grid-column: 2; grid-row: 2; margin: 0 0 14px; font-weight: 800; font-size: 22px; }
+  .cal-box :global(.cal-horas) { grid-column: 2; grid-row: 3; display: grid; grid-template-columns: repeat(auto-fill, minmax(112px, 1fr)); gap: 10px; align-content: start; }
+  .cal-box :global(.cal-hora) { min-height: 56px; padding: 8px 14px; border: 1px solid var(--linea-fuerte); background: var(--fondo); color: var(--texto); font: inherit; font-size: 20px; font-weight: 700; cursor: pointer; }
+  .cal-box :global(.cal-hora:hover), .cal-box :global(.cal-hora:focus-visible) { border-color: var(--acento); outline: 2px solid var(--acento); outline-offset: -2px; }
+  .cal-box :global(.cal-hora.sel) { background: var(--acento); border-color: var(--acento); color: var(--sobre-acento); }
+  .hor-pie { margin-top: 22px; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 18px 32px; }
+  .seleccion { color: var(--texto); font-size: 19px; line-height: 1.5; max-width: 62ch; margin: 0; }
+  .btn-hero { display: flex; justify-content: space-between; align-items: center; gap: 28px; background: var(--acento); color: var(--sobre-acento); min-height: 60px; padding: 0 26px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; font-size: 15px; text-decoration: none; }
+  .btn-hero[hidden] { display: none; }
+  .btn-hero:hover { background: var(--texto); color: var(--fondo); }
+  @media (max-width: 860px) {
+    .cal-box { grid-template-columns: 1fr; }
+    .cal-box :global(.cal), .cal-box :global(.cal-dia-titulo), .cal-box :global(.cal-horas) { grid-column: 1; grid-row: auto; }
+    .cal-box :global(.cal-dia-titulo) { margin-top: 24px; }
+    .btn-hero { width: 100%; }
+  }
 </style>
 
 <script is:inline>
@@ -82,6 +100,7 @@ import Layout from '../layouts/Layout.astro';
       if (!slots.length) {
         box.innerHTML = "<p>No hay horarios libres" + (DURACION === 2 ? " de 2 horas seguidas" : "") + " en las próximas semanas.</p>";
         seleccion.textContent = "";
+        var c0 = document.getElementById("continuar"); if (c0) c0.hidden = true;
         return;
       }
       var mapa = {};
@@ -113,8 +132,13 @@ import Layout from '../layouts/Layout.astro';
         '</div><div class="cal-dia-titulo">' + escapeHtml(fechaFmt.format(fechaUtc(DIA))) +
         '</div><div class="cal-horas">' + horas + '</div>';
       seleccion.textContent = ELEGIDO
-        ? "Preferencia: " + fechaFmt.format(new Date(ELEGIDO)) + ", " + horaFmt.format(new Date(ELEGIDO)) + " (" + DURACION + (DURACION === 1 ? " hora" : " horas seguidas") + ", hora de Lima). Aún no está reservada."
-        : "Elige un día y una hora de preferencia. La selección no aparta el horario.";
+        ? "Tu preferencia: " + fechaFmt.format(new Date(ELEGIDO)) + ", " + horaFmt.format(new Date(ELEGIDO)) + " (" + DURACION + (DURACION === 1 ? " hora" : " horas seguidas") + ", hora de Lima). Para apartarlo: compra tu paquete, crea tu cuenta y reserva este horario."
+        : "Elige un día y una hora de preferencia.";
+      var cta = document.getElementById("continuar");
+      if (cta) {
+        if (ELEGIDO) { cta.hidden = false; cta.href = "/prueba/?slot=" + encodeURIComponent(ELEGIDO) + "&dur=" + DURACION; }
+        else { cta.hidden = true; }
+      }
     }
     box.addEventListener("click", function (e) {
       var dia = e.target.closest("[data-day]");

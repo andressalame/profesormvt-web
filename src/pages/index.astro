@@ -31,6 +31,28 @@ const FAQ = [
   { q: '¿Necesito saber música?', a: 'No. El punto de partida se diseña según tu nivel real, desde cero o desde donde lo dejaste.' },
   { q: '¿Puedo llevar canto y composición juntos?', a: 'Sí, y es el formato que más recomiendo: sesiones de 2 horas seguidas. Va desde 8 horas al mes (S/580) y sale mejor por hora que llevarlos por separado.' },
   { q: '¿Cómo pago?', a: 'Desde Perú, con Yape, Plin, tarjeta o transferencia. Desde el extranjero, tarjeta o cripto.' },
+
+  {
+    q: '¿Cuánto cuestan las clases de canto en Lima?',
+    a: 'Los planes mensuales de ProfesorMVT son S/320 por 4 clases, S/580 por 8 clases y S/780 por 12 clases, todas de 1 hora y uno a uno. La clase suelta cuesta S/90. Mientras más clases al mes, menos cuesta la hora: de S/80 en el plan de 4 a S/65 en el de 12.',
+  },
+  {
+    q: '¿Se puede tomar las clases online?',
+    a: 'Sí. Todas las clases se dan presenciales en Miraflores (Lima) o en vivo por videollamada, con el mismo método y el mismo precio. Eliges la modalidad al reservar cada clase, así que puedes alternar.',
+  },
+  {
+    q: '¿Dónde quedan las clases presenciales?',
+    a: 'En Miraflores, Lima, en la Av. El Ejército. La dirección exacta se coordina al reservar. Hay alumnos que vienen de Surco, San Borja, Barranco, Jesús María y La Molina, y también quien lleva todo online.',
+  },
+  {
+    q: '¿Cómo reservo mi primera clase?',
+    a: 'Desde el botón "Reservar una clase", que lleva al portal de alumno: creas tu cuenta, eliges tu plan, pagas con Yape, Plin, transferencia o tarjeta y reservas tú mismo tus horarios en el calendario. No hace falta llamar ni esperar respuesta.',
+    html: 'Desde el botón «Reservar una clase», que lleva al <a href="/alumnos/#comprar">portal de alumno</a>: creas tu cuenta, eliges tu plan, pagas con Yape, Plin, transferencia o tarjeta y reservas tú mismo tus horarios en el <a href="/horarios/">calendario de horarios libres</a>. No hace falta llamar ni esperar respuesta.',
+  },
+  {
+    q: '¿Qué pasa en la primera clase?',
+    a: 'Es una clase completa, no una muestra. Andrés escucha tu voz o revisa tus ideas, identifica qué te está frenando y arma tu plan desde ahí. El diagnóstico va incluido en la primera clase de tu plan, no se cobra aparte.',
+  },
 ];
 
 // La home lleva los 3 cursos con sus precios en PEN además del FAQPage: es la página que
@@ -52,7 +74,6 @@ const homeSchema = grafo(
 <header class="portada">
   <div class="p-texto">
     <p class="antetitulo">Andrés Salamé · Profesor de música</p>
-    <p class="vertical" aria-hidden="true">Tu voz se entrena</p>
     <div class="p-centro">
       <h1><span class="marca">Profesor<br>MVT</span><span class="vh"> · Clases de canto y composición en Lima</span></h1>
       <p class="lema">Canto y composición,<br />de uno en uno.</p>
@@ -60,266 +81,20 @@ const homeSchema = grafo(
     </div>
     <div class="acciones">
       <a href="/prueba/?f=home" class="btn-hero"><span>Reservar una clase</span><span aria-hidden="true">→</span></a>
-      <p class="pie-accion">Se coordina por WhatsApp, sin llamadas.</p>
+      <p class="pie-accion">Se coordina por WhatsApp.</p>
     </div>
   </div>
   <figure class="p-foto">
     <img src="/andres-hero-cobalto.jpg" width="1200" height="1600" alt="Andrés Salamé tocando la guitarra y cantando en vivo" fetchpriority="high" />
     <span class="sol" aria-hidden="true"></span>
+    <p class="etiqueta" aria-hidden="true">Tu voz se entrena</p>
   </figure>
 </header>
 
 <div class="hoja-w">
 
-  <!-- ══ PORTADA ══
-       El dibujo va ARRIBA, no en una sección de más abajo: lo que Andrés quería
-       de esta dirección es abrir la página y ver una imagen de frente, no texto.
-       La ficha (5.0 · precio · dónde) baja a una tira compacta bajo la portada,
-       así el precio sigue quedando en la primera pantalla. -->
-
-
-  <!-- Tira de evidencia: responde precio, nota y lugar sin ocupar media pantalla. -->
-  <div class="tira">
-    <div class="tira-item">
-      <span class="tira-et">Opiniones</span>
-      <span class="tira-vl"><b>5.0</b>
-        <span class="estrellas" role="img" aria-label="5 de 5 estrellas">
-          <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2.6l2.9 6 6.6.9-4.8 4.6 1.2 6.5-5.9-3.1-5.9 3.1 1.2-6.5L2.5 9.5l6.6-.9z"/></svg>
-          <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2.6l2.9 6 6.6.9-4.8 4.6 1.2 6.5-5.9-3.1-5.9 3.1 1.2-6.5L2.5 9.5l6.6-.9z"/></svg>
-          <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2.6l2.9 6 6.6.9-4.8 4.6 1.2 6.5-5.9-3.1-5.9 3.1 1.2-6.5L2.5 9.5l6.6-.9z"/></svg>
-          <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2.6l2.9 6 6.6.9-4.8 4.6 1.2 6.5-5.9-3.1-5.9 3.1 1.2-6.5L2.5 9.5l6.6-.9z"/></svg>
-          <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2.6l2.9 6 6.6.9-4.8 4.6 1.2 6.5-5.9-3.1-5.9 3.1 1.2-6.5L2.5 9.5l6.6-.9z"/></svg>
-        </span></span>
-      <a class="tira-nt lnk-sobrio" href="https://g.page/r/CevbO7ON9f4CEAE/review" target="_blank" rel="noopener noreferrer">11 opiniones en Google</a>
-    </div>
-    <div class="tira-item">
-      <span class="tira-et">Desde</span>
-      <span class="tira-vl"><b>S/320</b> al mes</span>
-      <span class="tira-nt">4 clases de 1 hora</span>
-    </div>
-    <div class="tira-item">
-      <span class="tira-et">Dónde</span>
-      <span class="tira-vl"><b>Miraflores</b> u online</span>
-      <span class="tira-nt">Lima, Perú</span>
-    </div>
-  </div>
-
-  <!-- ══ 01 · FORZAR VS COORDINAR ══ -->
-  <section class="bloque">
-    <div class="folio">01<span>El punto de partida</span></div>
-    <div>
-      <h2>Casi nadie canta mal. La mayoría empuja.</h2>
-      <div class="dos-figs">
-        <figure class="lamina">
-          <figcaption class="lam-tit">Fig. 2a · Forzar</figcaption>
-          <div class="lam-dibujo" set:html={`<svg viewBox="0 0 300 168" role="img" aria-label="Un tubo apretado en el medio: el aire entra y se corta antes de salir" style="width:100%;height:auto"><g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 52c70 0 84 22 128 22s58-22 128-22"/><path d="M22 116c70 0 84-22 128-22s58 22 128 22"/><g stroke-width="1.6"><path d="M150 20v20M144 34l6 8 6-8M150 148v-20M144 134l6-8 6 8"/></g><g stroke="var(--acento)" stroke-width="2.4"><path d="M34 84h26l16-8 16 14 12-6"/><path d="M174 86h12M198 88h10M220 86h7" stroke-opacity=".5"/></g></g></svg>`} />
-          <p class="lam-pie">Más presión, menos sonido. El cuello aprieta y el aire se corta.</p>
-        </figure>
-        <figure class="lamina">
-          <figcaption class="lam-tit">Fig. 2b · Coordinar</figcaption>
-          <div class="lam-dibujo" set:html={`<svg viewBox="0 0 300 168" role="img" aria-label="Un tubo abierto y parejo: el mismo aire pasa entero y sale sonando" style="width:100%;height:auto"><g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 54c78-3 152-3 216 1"/><path d="M22 114c78 3 152 3 216-1"/><g stroke="var(--acento)" stroke-width="2.4"><path d="M34 84c66-5 140 5 194 0"/><path d="M226 78l14 6-14 6"/></g><g stroke="var(--acento)" stroke-width="1.8" stroke-opacity=".45"><path d="M256 68c7 10 7 22 0 32M272 60c9 14 9 34 0 48"/></g></g></svg>`} />
-          <p class="lam-pie">El mismo aire, el tubo abierto. Menos esfuerzo, más sonido.</p>
-        </figure>
-      </div>
-    </div>
-  </section>
-
-  <!-- ══ 02 · DE QUÉ DEPENDE TU PLAN ══
-       Reemplaza a "los tres ejes" (esos nombres los inventé yo) y ABSORBE la vieja
-       sección "La ruta". Corrección de Andrés (25-ago): la ruta de cada alumno
-       depende de sus desbalances + oído y afinación + confianza o ansiedad + sus
-       objetivos. La línea de tiempo fija de 12 semanas se eliminó: era inventada y
-       encima se contradecía con la Fig. 4 de al lado, que dice que el plan se arma
-       DESPUÉS de escuchar. -->
-  <section class="bloque oscuro" id="ejes">
-    <div class="folio">02<span>Cómo trabajamos</span></div>
-    <div>
-      <h2>Tu plan sale de cuatro cosas, no de un temario.</h2>
-      <figure class="lamina">
-        <figcaption class="lam-tit">Fig. 3 · Lo que define tu ruta</figcaption>
-        <div class="ejes ejes-4">
-          <div class="eje">
-            <svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 30c6-4 10-4 14 0s10 6 16 0"/><path d="M6 18c6-4 10-4 14 0s10 6 16 0" stroke-opacity=".45"/><path d="M42 12v24"/></svg>
-            <h3>Tus desbalances</h3>
-            <p>Aire, cierre, resonancia. Qué sobra y qué falta en tu voz hoy.</p>
-          </div>
-          <div class="eje">
-            <svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 8v32"/><path d="M14 16v16M30 14v20M6 22v8M38 20v12"/></svg>
-            <h3>Oído y afinación</h3>
-            <p>Si reconoces la nota, si la reproduces, y qué tan fino está el oído.</p>
-          </div>
-          <div class="eje">
-            <svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M31 40v-5a8 8 0 0 1 3-6 12 12 0 1 0-19-9.5"/><path d="M15 21a12 12 0 0 0 4 9 8 8 0 0 1 3 6v4"/><path d="M19 44h13"/></svg>
-            <h3>Confianza o ansiedad</h3>
-            <p>Cuánto te aprieta el juicio ajeno. Eso también se entrena.</p>
-          </div>
-          <div class="eje">
-            <svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="24" cy="24" r="16"/><circle cx="24" cy="24" r="8"/><circle cx="24" cy="24" r="1.6" fill="currentColor"/></svg>
-            <h3>Tus objetivos</h3>
-            <p>No es lo mismo cantar en una boda que grabar tu disco.</p>
-          </div>
-        </div>
-        <p class="lam-pie">
-          <b>Por eso no hay temario ni cronograma.</b> Dos personas con la misma edad
-          y las mismas ganas pueden necesitar lo contrario, y el orden lo decide lo
-          que escucho en la primera clase.
-        </p>
-      </figure>
-    </div>
-  </section>
-
-  <!-- ══ 04 · POR QUÉ 1 A 1 ══ -->
-  <section class="bloque">
-    <div class="folio">03<span>Por qué uno a uno</span></div>
-    <div>
-      <h2>Cada voz llega desbalanceada distinto.</h2>
-      <figure class="lamina">
-        <figcaption class="lam-tit">Fig. 4 · Dos puntos de partida <span class="sello-ej">Ejemplo</span></figcaption>
-        <div class="perfiles">
-          <div class="perfil-col">
-            <p class="perfil-nom">Llega afinando bien, se queda sin aire</p>
-            <ul class="barras">
-              <li><span class="bl">Aire</span><span class="bar"><i style="width:30%"></i></span><span class="bv">bajo</span></li>
-              <li><span class="bl">Cierre</span><span class="bar"><i style="width:55%"></i></span><span class="bv">medio</span></li>
-              <li><span class="bl">Resonancia</span><span class="bar"><i style="width:45%"></i></span><span class="bv">medio</span></li>
-              <li><span class="bl">Oído</span><span class="bar"><i style="width:85%"></i></span><span class="bv">alto</span></li>
-              <li><span class="bl">Confianza</span><span class="bar"><i style="width:70%"></i></span><span class="bv">alto</span></li>
-            </ul>
-            <p class="perfil-plan"><b>Su plan empieza por</b> respiración y apoyo.</p>
-          </div>
-          <div class="perfil-col">
-            <p class="perfil-nom">Tiene aire de sobra, se traba al subir</p>
-            <ul class="barras">
-              <li><span class="bl">Aire</span><span class="bar"><i style="width:80%"></i></span><span class="bv">alto</span></li>
-              <li><span class="bl">Cierre</span><span class="bar"><i style="width:25%"></i></span><span class="bv">bajo</span></li>
-              <li><span class="bl">Resonancia</span><span class="bar"><i style="width:35%"></i></span><span class="bv">bajo</span></li>
-              <li><span class="bl">Oído</span><span class="bar"><i style="width:50%"></i></span><span class="bv">medio</span></li>
-              <li><span class="bl">Confianza</span><span class="bar"><i style="width:30%"></i></span><span class="bv">bajo</span></li>
-            </ul>
-            <p class="perfil-plan"><b>Su plan empieza por</b> cierre y miedo al agudo.</p>
-          </div>
-        </div>
-        <p class="lam-pie">
-          Los dos quieren «cantar mejor» y necesitan lo contrario. Por eso el plan se arma
-          <b>después</b> de escucharte, y por eso no hay clases grupales.
-        </p>
-      </figure>
-    </div>
-  </section>
-
-  <!-- ══ 05 · LA EDAD ══ -->
-  <section class="bloque" id="edad">
-    <div class="folio">04<span>La edad</span></div>
-    <div>
-      <h2>No empezaste tarde.</h2>
-      <figure class="lamina">
-        <figcaption class="lam-tit">Fig. 5 · Empezar de adulto contra empezar de niño</figcaption>
-        <div class="tabla-edad">
-          <div class="col-edad">
-            <p class="col-tit col-no">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
-              El mito
-            </p>
-            <ul>
-              <li>«Si no empezaste de niño, ya fue.»</li>
-              <li>«O naces con oído o no.»</li>
-              <li>«A esta edad la voz ya está hecha.»</li>
-            </ul>
-          </div>
-          <div class="col-edad">
-            <p class="col-tit col-si">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 13l4 4L19 7"/></svg>
-              Lo que pasa de verdad
-            </p>
-            <ul>
-              <li>La coordinación se entrena a cualquier edad.</li>
-              <li>El oído se educa; no es un don que te tocó o no.</li>
-              <li>Llegas sabiendo qué quieres cantar, y eso acelera todo.</li>
-            </ul>
-          </div>
-        </div>
-        <p class="lam-pie">El que empezó de niño lleva ventaja en horas, no en capacidad. Las horas se hacen.</p>
-      </figure>
-    </div>
-  </section>
-
-  <!-- ══ 06 · CURSOS ══ -->
-  <section class="bloque" id="cursos">
-    <div class="folio">05<span>Los cursos</span></div>
-    <div>
-      <h2>Canto, composición, o los dos juntos.</h2>
-
-      <div class="cursos-2">
-        <article class="curso-min">
-          <span class="rom">I</span>
-          <h3>Vocal coaching</h3>
-          <p>Técnica con el método Modern Vocal Training.</p>
-          <p class="curso-meta">Clases de 1 hora · desde <b>S/320</b> al mes</p>
-        </article>
-        <article class="curso-min">
-          <span class="rom">II</span>
-          <h3>Composición y teoría</h3>
-          <p>Terminar las canciones que tienes a medias.</p>
-          <p class="curso-meta">Clases de 1 hora · desde <b>S/320</b> al mes</p>
-        </article>
-      </div>
-
-      <article class="combo" id="combo">
-        <div class="combo-cab">
-          <span class="marcaje">El que recomiendo</span>
-          <h3><span class="rom">III</span> Canto + Composición</h3>
-          <p class="combo-sub">Dos horas seguidas: la voz y tus canciones en la misma cita.</p>
-        </div>
-
-        <figure class="lamina lamina-oscura">
-          <figcaption class="lam-tit">Fig. 6 · Mismo tiempo pagado, más trabajo real</figcaption>
-          <div class="comp-fila">
-            <p class="comp-et">Dos clases de 1 hora, en días distintos</p>
-            <div class="comp-barra" role="img" aria-label="Dos clases de una hora: quince minutos de calentamiento y cuarenta y cinco de trabajo, dos veces. Noventa minutos de trabajo real.">
-              <span class="seg seg-cal" style="flex:15"></span>
-              <span class="seg seg-tra" style="flex:45"></span>
-              <span class="seg seg-gap" style="flex:4"></span>
-              <span class="seg seg-cal" style="flex:15"></span>
-              <span class="seg seg-tra" style="flex:45"></span>
-            </div>
-            <p class="comp-pie">Calientas dos veces · <b>90 minutos de trabajo</b></p>
-          </div>
-          <div class="comp-fila">
-            <p class="comp-et">Una sesión de 2 horas seguidas</p>
-            <div class="comp-barra" role="img" aria-label="Una sesión de dos horas: quince minutos de calentamiento, cincuenta de técnica vocal y cincuenta y cinco de composición. Ciento cinco minutos de trabajo real.">
-              <span class="seg seg-cal" style="flex:15"></span>
-              <span class="seg seg-voz" style="flex:50"></span>
-              <span class="seg seg-com" style="flex:55"></span>
-            </div>
-            <p class="comp-pie">Calientas una vez · <b>105 minutos de trabajo</b></p>
-          </div>
-          <p class="lam-pie"><b>15 minutos más de trabajo real</b> por el mismo tiempo pagado.</p>
-        </figure>
-
-        <p class="combo-precio">Desde <b>S/580</b> al mes (8 h) · <b>S/780</b> (12 h)</p>
-      </article>
-    </div>
-  </section>
-
-  <!-- ══ 08 · QUIÉN ENSEÑA ══ -->
-  <section class="bloque" id="quien">
-    <div class="folio">06<span>Quién enseña</span></div>
-    <div>
-      <h2>Andrés Salamé-Córdova</h2>
-      <p class="lead lead-corto">Aquí nadie se ríe de nadie. Todo lo que suena mal hoy es simplemente lo siguiente que vamos a entrenar.</p>
-      <dl class="credenciales">
-        <div class="cred"><dt>Método</dt><dd>Modern Vocal Training</dd></div>
-        <div class="cred"><dt>Música</dt><dd>Estudios en la UPC</dd></div>
-        <div class="cred"><dt>Psicología</dt><dd>Estudios en la Universidad de Lima</dd></div>
-        <div class="cred"><dt>Escenario</dt><dd>Ex vocalista de Tramboyos, banda peruana</dd></div>
-        <div class="cred"><dt>Formato</dt><dd>Uno a uno, a puerta cerrada. Nunca en grupo.</dd></div>
-      </dl>
-    </div>
-  </section>
-
-  <!-- ══ 09 · OPINIONES ══ -->
-  <section class="bloque" id="opiniones">
-    <div class="folio">07<span>Opiniones</span></div>
+<section class="bloque" id="opiniones">
+    <div class="folio">01<span>Opiniones</span></div>
     <div class="opinion">
       <div>
         <p class="nota-grande">5.0</p>
@@ -339,57 +114,28 @@ const homeSchema = grafo(
     </div>
   </section>
 
-  <!-- ══ 10 · PLANES ══ -->
-  <span id="precios" class="ancla-alias" aria-hidden="true"></span>
-  <section class="bloque" id="planes">
-    <div class="folio">08<span>Planes</span></div>
+<section class="bloque" id="quien">
+    <div class="folio">02<span>Quién enseña</span></div>
     <div>
-      <h2>Mientras más horas, menos cuesta la hora.</h2>
-      <table class="tabla-planes">
-        <thead>
-          <tr><th scope="col">Al mes</th><th scope="col">Horas</th><th scope="col">Precio</th><th scope="col">Sale a</th></tr>
-        </thead>
-        <tbody>
-          {PLANES.map((p) => (
-            <tr class={p.elegido ? 'elegido' : ''}>
-              <th scope="row">{p.nom}<span class="tp-nota">{p.nota}</span></th>
-              <td data-l="Horas">{p.clases} · {p.horas}</td>
-              <td data-l="Precio"><b>S/{p.precio}</b></td>
-              <td data-l="Sale a"><span class="tp-hora">S/{p.hora} la hora</span></td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      <p class="tp-elegido"><b>El más elegido:</b> Constante, 8 horas al mes.</p>
-
-      <div class="notas">
-        <p><b>Canto + Composición</b> va en sesiones de 2 horas, mínimo 8 horas al mes.</p>
-        <p><b>Incluido:</b> la primera clase de tu plan trae el diagnóstico vocal en PDF.</p>
-        <p><b>Pagos:</b> Yape, Plin, tarjeta o transferencia. Del extranjero, tarjeta o cripto.</p>
-        <p class="note"><b>Clase suelta S/90.</b> Existe, pero no es la oferta.</p>
-      </div>
-
-      <div class="cierre-planes">
-        <a href="/prueba/?f=home-planes" class="btn">Reservar una clase</a>
-        <p class="pie-accion">Me escribes, vemos horario y curso, y quedas agendado.</p>
-      </div>
+      <h2>Andrés Salamé-Córdova</h2>
+      <p class="lead lead-corto">Aquí nadie se ríe de nadie. Todo lo que suena mal hoy es simplemente lo siguiente que vamos a entrenar.</p>
+      <dl class="credenciales">
+        <div class="cred"><dt>Método</dt><dd>Modern Vocal Training</dd></div>
+        <div class="cred"><dt>Música</dt><dd>Estudios en la UPC</dd></div>
+        <div class="cred"><dt>Psicología</dt><dd>Estudios en la Universidad de Lima</dd></div>
+        <div class="cred"><dt>Escenario</dt><dd>Ex vocalista de Tramboyos, banda peruana</dd></div>
+        <div class="cred"><dt>Formato</dt><dd>Uno a uno, a puerta cerrada. Nunca en grupo.</dd></div>
+      </dl>
     </div>
   </section>
 
-  <!-- ══ 11 · DUDAS ══ -->
-  <section class="bloque" id="faq">
-    <div class="folio">09<span>Dudas</span></div>
+<section class="bloque" id="faq">
+    <div class="folio">03<span>Dudas</span></div>
     <div class="faq">
       {FAQ.map((f) => (<details><summary>{f.q}</summary><p>{f.a}</p></details>))}
     </div>
   </section>
 
-  <!-- ══ CIERRE ══ -->
-  <section class="cierre">
-    <h2>Te escucho una vez y sabemos por dónde empezar.</h2>
-    <p class="sub">Sin audición ni examen de entrada.</p>
-    <p><a class="tel" href="https://wa.me/51989077928" target="_blank" rel="noopener noreferrer">+51 989 077 928</a></p>
-  </section>
 
 </div>
 
@@ -417,15 +163,15 @@ const homeSchema = grafo(
 /* ══ PORTADA ══ */
 .portada {
   display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
-  min-height: min(88vh, 780px); background: var(--fondo);
+  height: calc(100svh - 47px); min-height: 520px; max-height: 820px; background: var(--fondo);
 }
-.p-texto { position: relative; padding: clamp(36px, 5vw, 70px) clamp(24px, 4.5vw, 64px) clamp(32px, 4vw, 56px); display: flex; flex-direction: column; justify-content: space-between; gap: 40px; }
+.p-texto { position: relative; padding: clamp(24px, 4vh, 56px) clamp(24px, 4.5vw, 64px) clamp(24px, 4vh, 48px); display: flex; flex-direction: column; justify-content: space-between; gap: 24px; min-height: 0; }
 .antetitulo { font-size: 14px; letter-spacing: .18em; text-transform: uppercase; color: var(--acento); font-weight: 500; }
-.portada h1 { font-weight: 800; line-height: .95; letter-spacing: -.01em; color: var(--texto); font-size: clamp(46px, 5.6vw, 82px); text-transform: uppercase; margin: 0; }
+.portada h1 { font-weight: 800; line-height: .95; letter-spacing: -.01em; color: var(--texto); font-size: clamp(40px, min(5.6vw, 10.5vh), 82px); text-transform: uppercase; margin: 0; }
 .portada h1 .marca { display: block; }
 .portada h1 .vh { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
-.lema { font-family: var(--display); font-weight: 500; font-size: clamp(24px, 2.3vw, 30px); line-height: 1.35; margin-top: 26px; color: var(--texto); }
-.donde { margin-top: 18px; font-size: 14px; letter-spacing: .2em; text-transform: uppercase; font-weight: 500; color: var(--texto); }
+.lema { font-family: var(--display); font-weight: 500; font-size: clamp(20px, min(2.3vw, 3.6vh), 30px); line-height: 1.3; margin-top: clamp(12px, 2.4vh, 26px); color: var(--texto); }
+.donde { margin-top: clamp(10px, 2vh, 18px); font-size: 14px; letter-spacing: .2em; text-transform: uppercase; font-weight: 500; color: var(--texto); }
 .acciones { display: flex; flex-direction: column; gap: 14px; }
 .btn-hero { display: flex; justify-content: space-between; align-items: center; background: var(--acento); color: var(--sobre-acento); min-height: 60px; padding: 0 26px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; font-size: 15px; text-decoration: none; max-width: 440px; }
 .btn-hero:hover { background: var(--texto); color: var(--fondo); }
@@ -433,7 +179,7 @@ const homeSchema = grafo(
 .p-foto { position: relative; margin: 0; overflow: hidden; background: var(--filete-2); }
 .p-foto img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: 50% 50%; }
 .p-foto .sol { position: absolute; right: -9%; bottom: -150px; width: min(30vw, 400px); aspect-ratio: 1; border-radius: 50%; background: var(--sol); opacity: .93; }
-.vertical { position: absolute; right: clamp(12px, 1.6vw, 24px); top: clamp(36px, 5vw, 70px); writing-mode: vertical-rl; color: var(--acento); font-weight: 700; letter-spacing: .26em; text-transform: uppercase; font-size: 14px; margin: 0; }
+.etiqueta { position: absolute; left: clamp(14px, 2vw, 28px); top: clamp(14px, 2vw, 28px); margin: 0; background: var(--fondo); color: var(--acento); padding: 10px 16px; font-size: 13px; font-weight: 700; letter-spacing: .22em; text-transform: uppercase; }
 .entrada { font-size: 21px; line-height: 1.55; max-width: 34ch; color: var(--texto-2); margin-top: 22px; }
 
 /* Tira de evidencia bajo la portada */
@@ -635,13 +381,13 @@ a.tira-nt { min-height: 44px; align-items: center; }
   /* La barra fija de abajo come 60px, así que el pliegue útil son ~784px.
      Se aprieta el aire de la portada para que "Desde S/320" quede por ENCIMA
      de la barra y no detrás. Medido, no calculado a ojo. */
-  .portada { grid-template-columns: 1fr; min-height: 0; }
+  .portada { grid-template-columns: 1fr; height: auto; max-height: none; min-height: 0; }
   .p-texto { gap: 22px; padding: 26px var(--margen) 28px; }
   .portada h1 { font-size: clamp(44px, 12.5vw, 64px); }
   .lema { margin-top: 16px; font-size: 22px; }
   .p-foto { height: 108vw; max-height: 560px; min-height: 380px; }
   .p-foto .sol { width: 44vw; right: -8vw; bottom: -10vw; }
-  .vertical { position: absolute; right: clamp(12px, 1.6vw, 24px); top: clamp(36px, 5vw, 70px); writing-mode: vertical-rl; color: var(--acento); font-weight: 700; letter-spacing: .26em; text-transform: uppercase; font-size: 14px; margin: 0; }
+  .etiqueta { position: absolute; left: clamp(14px, 2vw, 28px); top: clamp(14px, 2vw, 28px); margin: 0; background: var(--fondo); color: var(--acento); padding: 10px 16px; font-size: 13px; font-weight: 700; letter-spacing: .22em; text-transform: uppercase; }
   .claves-mini { margin-top: 12px; padding-top: 12px; }
   .tira { grid-template-columns: 1fr; }
   .tira-item { border-left: 0; border-top: 1px solid var(--linea); padding: 12px 0 14px; }

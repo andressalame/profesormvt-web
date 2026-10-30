@@ -14,14 +14,11 @@ const { activeNav } = Astro.props;
     <svg class="snav-horns" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="5" y="2.5" width="3.2" height="12.5" rx="1.6"/><rect x="15.8" y="2.5" width="3.2" height="12.5" rx="1.6"/><rect x="8.7" y="9" width="3.1" height="6.5" rx="1.55"/><rect x="12.2" y="9" width="3.1" height="6.5" rx="1.55"/><rect x="4.6" y="12" width="14.8" height="9" rx="4"/><rect x="2.8" y="12.2" width="5.5" height="3.3" rx="1.65"/></svg>PROFESORMVT
   </a>
   <div class="snav-links">
-    <a class="snav-link" href="/#cursos">Cursos</a>
+    <a href="/clases/" class:list={["snav-link", { active: activeNav === 'clases' }]}>Cursos</a>
     <a href="/horarios/" class:list={["snav-link", { active: activeNav === 'horarios' }]}>Horarios</a>
-    <a class="snav-link" href="/#planes">Precios</a>
+    <a class="snav-link" href="/clases/#planes">Precios</a>
     <a class="snav-link" href="/#faq">FAQ</a>
-    <!-- 13-ago-2026: va en el header a pedido de Andrés, para que nadie pueda alegar que la
-         política de reprogramación "estaba escondida". Lleva `siempre` porque en móvil el
-         resto de los enlaces se ocultan y este es justo el que no puede desaparecer. -->
-    <a href="/politicas/" class:list={["snav-link", "siempre", { active: activeNav === 'politicas' }]}>Políticas</a>
+    <!-- 30-oct-2026: Políticas sale del header y vive en el pie (pedido de Andrés). -->
     <a class="snav-ghost" href="/alumnos/">Ingresar</a>
     <!-- dos etiquetas: en el celular no caben la marca, Políticas y "Quiero empezar" a la vez -->
     <a class="snav-cta" href="/prueba/">Reservar una clase</a>
@@ -36,11 +33,10 @@ const { activeNav } = Astro.props;
   </div>
 </nav>
 <div class="snav-panel" id="navMenu" hidden>
-  <a href="/#cursos">Cursos</a>
+  <a href="/clases/">Cursos</a>
   <a href="/horarios/">Horarios</a>
-  <a href="/#planes">Precios</a>
+  <a href="/clases/#planes">Precios</a>
   <a href="/#faq">FAQ</a>
-  <a href="/politicas/">Políticas</a>
   <a href="/sorteo/">Sorteo</a>
   <a class="destacado" href="/alumnos/">Ingresar a mi portal</a>
 </div>

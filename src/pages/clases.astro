@@ -1,0 +1,434 @@
+---
+// Home de ProfesorMVT · dirección "Ficha clínica" (elegida por Andrés el 24-ago-2026).
+//
+// Criterio de esta versión: MENOS TEXTO. Lo que se puede demostrar con un dibujo no
+// se explica con un párrafo. Cada lámina lleva una figura y dos frases, no cinco.
+// El argumento central: cantar es coordinación (cuerpo), cabeza y música a la vez,
+// y como cada persona llega desbalanceada distinto, el plan se arma DESPUÉS de
+// escucharla. Eso es lo que justifica el uno a uno y lo que hace que la edad no importe.
+//
+// Reglas que no se tocan:
+//  - Ningún gráfico puede cargar significado en una etiqueta que se pueda apagar.
+//    `font-size:0` está PROHIBIDO en media queries (bug real de la maqueta original).
+//  - Nada bajo 18px. Targets de 44px. Un solo botón relleno por vista.
+//  - Cero emojis: todos los íconos son SVG dibujados con stroke.
+import Layout from '../layouts/Layout.astro';
+import { cursoSchema, faqSchema, grafo } from '../lib/seo';
+
+const title = "Clases y precios | ProfesorMVT";
+const description = "Los tres cursos de ProfesorMVT (canto, composición y canto + composición), sus planes mensuales y precios. Clases 1 a 1 en Miraflores u online, desde S/320 al mes.";
+
+const PLANES = [
+  { nom: 'Esencial',  clases: '4 clases',  horas: '4 h',  precio: 320, hora: '80',    nota: 'Una por semana.' },
+  { nom: 'Constante', clases: '8 clases',  horas: '8 h',  precio: 580, hora: '72.50', nota: 'Dos por semana. Es donde la voz empieza a responder sola.', elegido: true },
+  { nom: 'Intensivo', clases: '12 clases', horas: '12 h', precio: 780, hora: '65',    nota: 'Tres por semana.' },
+];
+
+const FAQ = [
+  { q: '¿Y si de verdad canto mal?', a: 'Casi nadie canta mal: la mayoría empuja. Lo que suena forzado es tensión, no falta de talento, y la tensión se desarma con técnica.' },
+  { q: '¿No es muy tarde si no empecé de niño?', a: 'No. La coordinación se entrena a cualquier edad y el oído se educa. Quien empezó de chico lleva ventaja en horas acumuladas, no en capacidad, y las horas se hacen.' },
+  { q: '¿Me van a hacer cantar delante de gente?', a: 'Nunca. Todas las clases son uno a uno, a puerta cerrada. No hay clases grupales ni las hubo.' },
+  { q: '¿Necesito saber música?', a: 'No. El punto de partida se diseña según tu nivel real, desde cero o desde donde lo dejaste.' },
+  { q: '¿Puedo llevar canto y composición juntos?', a: 'Sí, y es el formato que más recomiendo: sesiones de 2 horas seguidas. Va desde 8 horas al mes (S/580) y sale mejor por hora que llevarlos por separado.' },
+  { q: '¿Cómo pago?', a: 'Desde Perú, con Yape, Plin, tarjeta o transferencia. Desde el extranjero, tarjeta o cripto.' },
+];
+
+// La home lleva los 3 cursos con sus precios en PEN además del FAQPage: es la página que
+// más citan las IAs y la que Google usa como entrada de la marca, así que tiene que poder
+// contestar "qué enseña y cuánto cuesta" sin que nadie navegue a otra.
+const homeSchema = grafo(
+  cursoSchema('canto'),
+  cursoSchema('composicion'),
+  cursoSchema('combo'),
+  faqSchema(FAQ),
+);
+---
+
+<Layout title={title} description={description} activeNav="clases" extraSchema={homeSchema}>
+
+<header class="encab-pag"><div class="hoja-w"><p class="antetitulo">Clases 1 a 1 · Miraflores y online</p><h1>Clases y precios</h1><p class="lema-pag">Tres cursos y tres planes mensuales. Elige el que te calce y reserva tu horario.</p></div></header>
+
+<div class="hoja-w">
+
+<section class="bloque" id="cursos">
+    <div class="folio">01<span>Los cursos</span></div>
+    <div>
+      <h2>Canto, composición, o los dos juntos.</h2>
+
+      <div class="cursos-2">
+        <article class="curso-min">
+          <span class="rom">I</span>
+          <h3>Vocal coaching</h3>
+          <p>Técnica con el método Modern Vocal Training.</p>
+          <p class="curso-meta">Clases de 1 hora · desde <b>S/320</b> al mes</p>
+        </article>
+        <article class="curso-min">
+          <span class="rom">II</span>
+          <h3>Composición y teoría</h3>
+          <p>Terminar las canciones que tienes a medias.</p>
+          <p class="curso-meta">Clases de 1 hora · desde <b>S/320</b> al mes</p>
+        </article>
+      </div>
+
+      <article class="combo" id="combo">
+        <div class="combo-cab">
+          <span class="marcaje">El que recomiendo</span>
+          <h3><span class="rom">III</span> Canto + Composición</h3>
+          <p class="combo-sub">Dos horas seguidas: la voz y tus canciones en la misma cita.</p>
+        </div>
+
+        <figure class="lamina lamina-oscura">
+          <figcaption class="lam-tit">Fig. 6 · Mismo tiempo pagado, más trabajo real</figcaption>
+          <div class="comp-fila">
+            <p class="comp-et">Dos clases de 1 hora, en días distintos</p>
+            <div class="comp-barra" role="img" aria-label="Dos clases de una hora: quince minutos de calentamiento y cuarenta y cinco de trabajo, dos veces. Noventa minutos de trabajo real.">
+              <span class="seg seg-cal" style="flex:15"></span>
+              <span class="seg seg-tra" style="flex:45"></span>
+              <span class="seg seg-gap" style="flex:4"></span>
+              <span class="seg seg-cal" style="flex:15"></span>
+              <span class="seg seg-tra" style="flex:45"></span>
+            </div>
+            <p class="comp-pie">Calientas dos veces · <b>90 minutos de trabajo</b></p>
+          </div>
+          <div class="comp-fila">
+            <p class="comp-et">Una sesión de 2 horas seguidas</p>
+            <div class="comp-barra" role="img" aria-label="Una sesión de dos horas: quince minutos de calentamiento, cincuenta de técnica vocal y cincuenta y cinco de composición. Ciento cinco minutos de trabajo real.">
+              <span class="seg seg-cal" style="flex:15"></span>
+              <span class="seg seg-voz" style="flex:50"></span>
+              <span class="seg seg-com" style="flex:55"></span>
+            </div>
+            <p class="comp-pie">Calientas una vez · <b>105 minutos de trabajo</b></p>
+          </div>
+          <p class="lam-pie"><b>15 minutos más de trabajo real</b> por el mismo tiempo pagado.</p>
+        </figure>
+
+        <p class="combo-precio">Desde <b>S/580</b> al mes (8 h) · <b>S/780</b> (12 h)</p>
+      </article>
+    </div>
+  </section>
+
+<section class="bloque" id="planes">
+    <div class="folio">02<span>Planes</span></div>
+    <div>
+      <h2>Mientras más horas, menos cuesta la hora.</h2>
+      <table class="tabla-planes">
+        <thead>
+          <tr><th scope="col">Al mes</th><th scope="col">Horas</th><th scope="col">Precio</th><th scope="col">Sale a</th></tr>
+        </thead>
+        <tbody>
+          {PLANES.map((p) => (
+            <tr class={p.elegido ? 'elegido' : ''}>
+              <th scope="row">{p.nom}<span class="tp-nota">{p.nota}</span></th>
+              <td data-l="Horas">{p.clases} · {p.horas}</td>
+              <td data-l="Precio"><b>S/{p.precio}</b></td>
+              <td data-l="Sale a"><span class="tp-hora">S/{p.hora} la hora</span></td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <p class="tp-elegido"><b>El más elegido:</b> Constante, 8 horas al mes.</p>
+
+      <div class="notas">
+        <p><b>Canto + Composición</b> va en sesiones de 2 horas, mínimo 8 horas al mes.</p>
+        <p><b>Incluido:</b> la primera clase de tu plan trae el diagnóstico vocal en PDF.</p>
+        <p><b>Pagos:</b> Yape, Plin, tarjeta o transferencia. Del extranjero, tarjeta o cripto.</p>
+        <p class="note"><b>Clase suelta S/90.</b> Existe, pero no es la oferta.</p>
+      </div>
+
+      <div class="cierre-planes">
+        <a href="/prueba/?f=home-planes" class="btn">Reservar una clase</a>
+        <p class="pie-accion">Me escribes, vemos horario y curso, y quedas agendado.</p>
+      </div>
+    </div>
+  </section>
+</div>
+
+</Layout>
+
+<style>
+/* ───────────────────────────────────────────────────────────────
+   Home · "Ficha clínica". Los tokens, botones, planes, faq y
+   credenciales viven en global.css; acá solo lo propio de la página.
+   Regla dura: ningún rótulo de figura puede apagarse en móvil.
+   ─────────────────────────────────────────────────────────────── */
+
+/* 1180px, no 1400: con el ancho anterior el contenido se desparramaba y
+   la página se leía descentrada. */
+.hoja-w { max-width: 1180px; margin: 0 auto; padding: 0 var(--margen); }
+.ancla-alias { display: block; height: 0; scroll-margin-top: 80px; }
+
+/* ══ PORTADA ══ */
+.portada {
+  display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+  min-height: min(88vh, 780px); background: var(--fondo);
+}
+.p-texto { position: relative; padding: clamp(36px, 5vw, 70px) clamp(24px, 4.5vw, 64px) clamp(32px, 4vw, 56px); display: flex; flex-direction: column; justify-content: space-between; gap: 40px; }
+.antetitulo { font-size: 14px; letter-spacing: .18em; text-transform: uppercase; color: var(--acento); font-weight: 500; }
+.portada h1 { font-weight: 800; line-height: .95; letter-spacing: -.01em; color: var(--texto); font-size: clamp(46px, 5.6vw, 82px); text-transform: uppercase; margin: 0; }
+.portada h1 .marca { display: block; }
+.portada h1 .vh { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.lema { font-family: var(--display); font-weight: 500; font-size: clamp(24px, 2.3vw, 30px); line-height: 1.35; margin-top: 26px; color: var(--texto); }
+.donde { margin-top: 18px; font-size: 14px; letter-spacing: .2em; text-transform: uppercase; font-weight: 500; color: var(--texto); }
+.acciones { display: flex; flex-direction: column; gap: 14px; }
+.btn-hero { display: flex; justify-content: space-between; align-items: center; background: var(--acento); color: var(--sobre-acento); min-height: 60px; padding: 0 26px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; font-size: 15px; text-decoration: none; max-width: 440px; }
+.btn-hero:hover { background: var(--texto); color: var(--fondo); }
+.pie-accion { font-size: 18px; color: var(--texto-2); }
+.p-foto { position: relative; margin: 0; overflow: hidden; background: var(--filete-2); }
+.p-foto img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: 50% 50%; }
+.p-foto .sol { position: absolute; right: -9%; bottom: -150px; width: min(30vw, 400px); aspect-ratio: 1; border-radius: 50%; background: var(--sol); opacity: .93; }
+.vertical { position: absolute; right: clamp(12px, 1.6vw, 24px); top: clamp(36px, 5vw, 70px); writing-mode: vertical-rl; color: var(--acento); font-weight: 700; letter-spacing: .26em; text-transform: uppercase; font-size: 14px; margin: 0; }
+.entrada { font-size: 21px; line-height: 1.55; max-width: 34ch; color: var(--texto-2); margin-top: 22px; }
+
+/* Tira de evidencia bajo la portada */
+.tira {
+  display: grid; grid-template-columns: repeat(3, 1fr);
+  border-top: 2px solid var(--linea-fuerte); border-bottom: 1px solid var(--linea);
+}
+.tira-item { padding: 16px clamp(14px, 2vw, 28px) 18px; border-left: 1px solid var(--linea); }
+.tira-item:first-child { border-left: 0; padding-left: 0; }
+.tira-et { display: block; font-size: 18px; color: var(--texto-2); }
+.tira-vl { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; font-size: 19px; margin-top: 2px; }
+.tira-vl b { font-family: var(--display); font-weight: 800; font-size: clamp(24px, 2.2vw, 29px); line-height: 1.1; }
+.tira-nt { display: block; font-size: 18px; color: var(--texto-2); margin-top: 2px; }
+a.tira-nt { min-height: 44px; align-items: center; }
+
+.ficha { border-top: 2px solid var(--linea-fuerte); padding-top: 20px; margin-top: 12px; }
+.ficha-tit { font-size: 18px; font-weight: 600; text-transform: uppercase; letter-spacing: .14em; color: var(--texto-2); }
+.ficha-datos { margin-top: 10px; }
+.ficha-datos > div { padding: 16px 0; border-bottom: 1px solid var(--linea); }
+.ficha-datos > div:first-child { border-top: 1px solid var(--linea); }
+.ficha-datos dt { font-size: 18px; color: var(--texto-2); font-weight: 500; }
+.ficha-datos dd { font-size: 20px; margin-top: 4px; display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.ficha-datos dd b { font-family: var(--display); font-weight: 800; font-size: clamp(25px, 2.4vw, 31px); line-height: 1.1; }
+.ficha-datos dd.nt { font-size: 18px; color: var(--texto-2); margin-top: 2px; }
+.lnk-sobrio { display: inline-flex; align-items: center; min-height: 44px; color: var(--acento); border-bottom: 1px solid var(--acento); font-weight: 500; }
+
+/* ══ LÁMINAS ══ (hoja blanca sobre el papel cálido, con marcas de registro) */
+.lamina {
+  background: var(--lamina);
+  border: 1px solid var(--linea);
+  padding: clamp(20px, 2.6vw, 34px);
+  margin-top: clamp(22px, 2.6vw, 34px);
+  position: relative;
+}
+.lamina::before, .lamina::after {
+  content: ''; position: absolute; width: 9px; height: 9px;
+  border: 1px solid var(--filete); pointer-events: none;
+}
+.lamina::before { top: 9px; left: 9px; border-right: 0; border-bottom: 0; }
+.lamina::after  { bottom: 9px; right: 9px; border-left: 0; border-top: 0; }
+.lam-tit {
+  font-size: 18px; font-weight: 600; text-transform: uppercase; letter-spacing: .13em;
+  color: var(--acento); margin-bottom: 18px;
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  border-left: 4px solid var(--acento); padding-left: 12px;
+}
+.sello-ej {
+  border: 1px solid var(--filete-fuerte); color: var(--texto-2);
+  padding: 2px 9px; letter-spacing: .1em; font-size: 18px;
+}
+.lam-pie { font-size: 19px; color: var(--texto-2); line-height: 1.5; margin-top: 20px; border-top: 1px solid var(--linea); padding-top: 16px; }
+.lam-pie b { color: var(--texto); font-weight: 600; }
+.lam-dibujo { color: var(--texto); }
+.lam-dibujo :global(svg) { display: block; width: 100%; height: auto; }
+
+/* Fig. 1 · aparato de la voz */
+.lam-cuerpo { display: grid; grid-template-columns: minmax(0, 300px) minmax(0, 1fr); gap: clamp(20px, 3vw, 48px); align-items: center; }
+.lam-claves { list-style: none; display: grid; gap: 18px; }
+.lam-claves li { display: grid; grid-template-columns: 38px minmax(0, 1fr); gap: 14px; align-items: start; font-size: 19px; color: var(--texto-2); line-height: 1.45; }
+.lam-claves .tx { display: block; }
+.lam-claves b { color: var(--texto); font-weight: 600; }
+.lam-claves .n {
+  width: 34px; height: 34px; border: 2px solid var(--acento); color: var(--acento);
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--display); font-weight: 700; font-size: 19px; border-radius: 50%;
+}
+
+/* Fig. 2 · dos tubos */
+.dos-figs { display: grid; grid-template-columns: 1fr 1fr; gap: clamp(16px, 2vw, 28px); }
+.dos-figs .lamina { margin-top: clamp(22px, 2.6vw, 34px); }
+
+/* Fig. 3 · los tres ejes */
+.ejes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0; }
+.ejes-4 { grid-template-columns: repeat(4, 1fr); }
+/* Los párrafos de los ejes traen su propio color y le ganan a la regla genérica
+   del bloque oscuro: sin esto quedan en 2.32 sobre tinta. */
+.bloque.oscuro .ejes p { color: var(--invertido-texto-2); }
+.bloque.oscuro .lamina { background: transparent; border-color: var(--invertido-linea); }
+.bloque.oscuro .lamina::before, .bloque.oscuro .lamina::after { border-color: var(--invertido-linea); }
+.bloque.oscuro .lam-pie { color: var(--invertido-texto-2); border-top-color: var(--invertido-linea); }
+.bloque.oscuro .lam-pie b { color: var(--invertido-texto); }
+.ejes .eje { padding: 4px clamp(14px, 1.8vw, 26px); border-left: 1px solid var(--linea); }
+.bloque.oscuro .ejes .eje { border-left-color: var(--invertido-linea); }
+/* Estos dos traen su propio color y le ganan en especificidad a la regla
+   genérica del bloque oscuro: quedaban en 2.32 sobre tinta. */
+.ejes .eje:first-child { border-left: 0; padding-left: 0; }
+.ejes svg { width: 52px; height: 52px; color: var(--acento); margin-bottom: 16px; }
+.ejes h3 { font-size: clamp(22px, 2.1vw, 27px); }
+.ejes p { font-size: 19px; color: var(--texto-2); margin-top: 8px; line-height: 1.45; }
+
+/* Fig. 4 · dos perfiles */
+.perfiles { display: grid; grid-template-columns: 1fr 1fr; gap: clamp(20px, 3vw, 44px); }
+.perfil-nom { font-family: var(--display); font-weight: 700; font-size: 21px; line-height: 1.25; margin-bottom: 16px; }
+.barras { list-style: none; display: grid; gap: 10px; }
+.barras li { display: grid; grid-template-columns: 96px 1fr 62px; gap: 12px; align-items: center; font-size: 18px; }
+.bl { color: var(--texto-2); }
+.bar { display: block; height: 14px; background: var(--papel-2); }
+.bar i { display: block; height: 100%; background: var(--acento); }
+.bv { color: var(--texto-2); text-align: right; }
+.perfil-plan { font-size: 19px; color: var(--texto-2); margin-top: 16px; }
+.perfil-plan b { color: var(--texto); font-weight: 600; }
+
+/* Fig. 5 · la edad */
+.tabla-edad { display: grid; grid-template-columns: 1fr 1fr; gap: clamp(20px, 3vw, 44px); }
+.col-tit { display: flex; align-items: center; gap: 10px; font-family: var(--display); font-weight: 700; font-size: 21px; margin-bottom: 14px; }
+.col-tit svg { width: 24px; height: 24px; flex: none; }
+.col-no svg { color: var(--texto-2); }
+.col-si svg { color: var(--acento); }
+.col-edad ul { list-style: none; display: grid; gap: 10px; }
+.col-edad li { font-size: 19px; color: var(--texto-2); line-height: 1.45; padding-left: 16px; position: relative; }
+.col-edad li::before { content: ''; position: absolute; left: 0; top: 12px; width: 7px; height: 1px; background: var(--texto-2); }
+
+/* ══ CURSOS ══ */
+.cursos-2 { display: grid; grid-template-columns: 1fr 1fr; gap: clamp(16px, 2vw, 28px); margin-top: clamp(20px, 2.4vw, 30px); }
+.curso-min { border-top: 2px solid var(--linea-fuerte); padding-top: 18px; }
+.curso-min .rom { font-family: var(--display); font-weight: 800; font-size: 21px; color: var(--acento); }
+.curso-min h3 { font-size: clamp(23px, 2.2vw, 29px); margin-top: 6px; }
+.curso-min p { font-size: 19px; color: var(--texto-2); margin-top: 10px; line-height: 1.45; }
+.curso-meta { font-size: 18px; }
+.curso-meta b { color: var(--texto); font-weight: 600; }
+
+.combo {
+  margin-top: clamp(24px, 3vw, 40px);
+  background: var(--invertido-fondo); color: var(--invertido-texto);
+  padding: clamp(22px, 3vw, 40px);
+  /* El bermellón de marca (#B23A22) sobre tinta da 2.77 y no llega a AA. Dentro del
+     bloque oscuro se redefine el token: al ser el MISMO color aclarado con papel,
+     sigue siendo la misma tinta de marca y todo lo que usa var(--acento) hereda
+     el arreglo solo. Medido, no supuesto. */
+  --acento: #8DB0EE;
+}
+.combo .marcaje { background: var(--invertido-texto); color: var(--invertido-fondo); }
+.combo h3 { color: var(--invertido-texto); font-size: clamp(26px, 2.8vw, 36px); margin-top: 12px; display: flex; align-items: baseline; gap: 14px; }
+.combo h3 .rom { color: var(--acento); font-size: 24px; }
+.combo-sub { font-size: 20px; color: var(--invertido-texto); margin-top: 12px; }
+.combo-precio { font-size: 21px; color: var(--invertido-texto); margin-top: 22px; }
+.combo-precio b { font-family: var(--display); font-weight: 800; font-size: 27px; }
+.lamina-oscura { background: transparent; border-color: var(--invertido-linea); }
+.lamina-oscura .lam-tit { color: var(--acento); }
+.lamina-oscura .lam-pie { color: var(--invertido-texto); border-top-color: var(--invertido-linea); }
+.lamina-oscura .lam-pie b { color: var(--invertido-texto); }
+.lamina-oscura::before, .lamina-oscura::after { border-color: var(--invertido-linea); }
+
+.comp-fila { margin-bottom: 20px; }
+.comp-et { font-size: 19px; font-weight: 600; color: var(--invertido-texto); margin-bottom: 8px; }
+.comp-barra { display: flex; height: 24px; width: 100%; }
+.seg { display: block; height: 100%; }
+.seg-cal { background: var(--invertido-linea); }
+.seg-tra, .seg-voz { background: var(--invertido-texto); }
+.seg-com { background: var(--acento); }
+.seg-gap { background: transparent; }
+.comp-pie { font-size: 18px; color: var(--invertido-texto-2); margin-top: 8px; }
+.comp-pie b { color: var(--invertido-texto); font-weight: 600; }
+
+
+/* ══ QUIÉN ENSEÑA · OPINIONES ══ */
+.lead-corto { max-width: 46ch; margin-top: 16px; font-style: italic; }
+.credenciales { border-top: 1px solid var(--linea); margin-top: clamp(22px, 2.6vw, 32px); }
+.credenciales .cred:last-child { border-bottom: 0; }
+.opinion { display: grid; grid-template-columns: minmax(0, auto) minmax(0, 1fr); gap: clamp(22px, 4vw, 64px); align-items: center; }
+.nota-grande { font-family: var(--display); font-weight: 800; font-size: clamp(70px, 9vw, 124px); line-height: .84; letter-spacing: -.045em; }
+.op-tit { font-size: clamp(23px, 2.4vw, 32px); max-width: 20ch; }
+.opinion p { margin-top: 16px; }
+
+/* ══ TABLA DE PLANES ══ */
+.tabla-planes { width: 100%; border-collapse: collapse; margin-top: clamp(20px, 2.4vw, 30px); }
+.tabla-planes th, .tabla-planes td { text-align: left; padding: 18px 14px; border-bottom: 1px solid var(--linea); font-size: 19px; }
+.tabla-planes thead th {
+  font-family: var(--lectura); font-weight: 600; font-size: 18px; text-transform: uppercase;
+  letter-spacing: .12em; color: var(--texto-2); border-bottom: 2px solid var(--linea-fuerte); padding-bottom: 12px;
+}
+.tabla-planes tbody th { font-family: var(--display); font-weight: 700; font-size: 23px; padding-left: 0; }
+.tp-nota { display: block; font-family: var(--lectura); font-weight: 400; font-size: 18px; color: var(--texto-2); margin-top: 4px; }
+.tabla-planes td b { font-family: var(--display); font-weight: 800; font-size: 27px; }
+.tp-hora { color: var(--acento); font-weight: 600; }
+/* La fila elegida se marca con FILETE, no con relleno. Con un tinte de fondo el
+   acento de "sale a S/x la hora" caía a 4.02 (no pasa AA), y `color-mix` además
+   no existe en el Chrome de esta Mac: resolvía a casi negro. Filete y ya. */
+.tabla-planes tr.elegido { background: transparent; box-shadow: inset 3px 0 0 var(--acento); }
+.tabla-planes tr.elegido th { padding-left: 16px; }
+.tabla-planes tr.elegido th, .tabla-planes tr.elegido td { border-bottom-color: var(--acento); }
+.tp-elegido { font-size: 19px; color: var(--texto-2); margin-top: 14px; }
+.tp-elegido b { color: var(--acento); }
+.notas { margin-top: clamp(24px, 3vw, 36px); display: grid; gap: 10px; border-top: 1px solid var(--linea); padding-top: 20px; }
+.notas p { font-size: 19px; color: var(--texto-2); line-height: 1.5; }
+.notas b { color: var(--texto); font-weight: 600; }
+.cierre-planes { margin-top: clamp(26px, 3vw, 40px); display: flex; align-items: center; gap: 24px; flex-wrap: wrap; }
+
+/* ══ CIERRE ══ */
+.cierre { border-top: 2px solid var(--linea-fuerte); padding: clamp(48px, 6vw, 96px) 0 clamp(44px, 5vw, 72px); }
+.cierre h2 { font-size: clamp(29px, 4vw, 52px); max-width: 20ch; }
+.cierre .sub { font-size: 21px; color: var(--texto-2); margin-top: 20px; }
+.cierre .tel { margin-top: clamp(24px, 3vw, 36px); font-family: var(--display); font-weight: 700; font-size: clamp(25px, 3vw, 36px); display: inline-flex; align-items: center; min-height: 56px; border-bottom: 2px solid var(--acento); }
+
+.barra-movil { display: none; }
+
+/* ══ MÓVIL ══ */
+@media (max-width: 900px) {
+  /* La barra fija de abajo come 60px, así que el pliegue útil son ~784px.
+     Se aprieta el aire de la portada para que "Desde S/320" quede por ENCIMA
+     de la barra y no detrás. Medido, no calculado a ojo. */
+  .portada { grid-template-columns: 1fr; min-height: 0; }
+  .p-texto { gap: 22px; padding: 26px var(--margen) 28px; }
+  .portada h1 { font-size: clamp(44px, 12.5vw, 64px); }
+  .lema { margin-top: 16px; font-size: 22px; }
+  .p-foto { height: 108vw; max-height: 560px; min-height: 380px; }
+  .p-foto .sol { width: 44vw; right: -8vw; bottom: -10vw; }
+  .vertical { position: absolute; right: clamp(12px, 1.6vw, 24px); top: clamp(36px, 5vw, 70px); writing-mode: vertical-rl; color: var(--acento); font-weight: 700; letter-spacing: .26em; text-transform: uppercase; font-size: 14px; margin: 0; }
+  .claves-mini { margin-top: 12px; padding-top: 12px; }
+  .tira { grid-template-columns: 1fr; }
+  .tira-item { border-left: 0; border-top: 1px solid var(--linea); padding: 12px 0 14px; }
+  .tira-item:first-child { border-top: 0; padding-left: 0; }
+  .ficha { margin-top: 0; padding-top: 16px; }
+  .entrada { max-width: none; margin-top: 14px; font-size: 20px; }
+  .acciones { margin-top: 2px; gap: 10px; }
+  .ficha-datos { margin-top: 6px; }
+  .ficha-datos > div { padding: 12px 0; }
+
+  .lam-cuerpo { grid-template-columns: 1fr; gap: 22px; }
+  .lam-cuerpo .lam-dibujo { max-width: 260px; margin: 0 auto; }
+  .dos-figs { grid-template-columns: 1fr; }
+  .ejes { grid-template-columns: 1fr; }
+  .ejes .eje { border-left: 0; border-top: 1px solid var(--linea); padding: 20px 0 4px; }
+  .ejes .eje:first-child { border-top: 0; padding-top: 0; }
+  .perfiles { grid-template-columns: 1fr; gap: 28px; }
+  .tabla-edad { grid-template-columns: 1fr; gap: 26px; }
+  .cursos-2 { grid-template-columns: 1fr; }
+  .opinion { grid-template-columns: 1fr; gap: 14px; }
+
+  /* La tabla de planes se convierte en fichas apiladas CON su rótulo de columna
+     (data-l). Prohibido dejar "4 clases / S/320" sin etiqueta. */
+  .tabla-planes thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .tabla-planes, .tabla-planes tbody, .tabla-planes tr, .tabla-planes th, .tabla-planes td { display: block; width: 100%; }
+  .tabla-planes tr { border-top: 2px solid var(--linea-fuerte); padding: 16px 0 14px; }
+  .tabla-planes tr.elegido { border-top-color: var(--acento); box-shadow: none; border-left: 3px solid var(--acento); padding-left: 14px; }
+  .tabla-planes tbody th { padding: 0 0 10px; border-bottom: 0; }
+  .tabla-planes td { padding: 4px 0; border-bottom: 0; display: flex; justify-content: space-between; gap: 16px; align-items: baseline; }
+  .tabla-planes td::before { content: attr(data-l); color: var(--texto-2); font-size: 18px; }
+
+  .barra-movil {
+    display: flex; position: fixed; left: 0; right: 0; bottom: 0; z-index: 40;
+    background: var(--invertido-fondo); border-top: 2px solid var(--acento);
+  }
+  .barra-cta { flex: 1; display: inline-flex; align-items: center; justify-content: center; min-height: 60px; color: var(--invertido-texto); font-family: var(--display); font-weight: 700; font-size: 20px; }
+  .barra-tel { flex: none; width: 68px; display: inline-flex; align-items: center; justify-content: center; min-height: 60px; color: var(--invertido-texto); border-left: 1px solid var(--invertido-linea); }
+  .barra-tel svg { width: 24px; height: 24px; }
+  body { padding-bottom: 60px; }
+}
+@media (max-width: 520px) {
+  .barras li { grid-template-columns: 84px 1fr 54px; gap: 8px; font-size: 18px; }
+}
+.encab-pag { padding: clamp(36px,5vw,72px) 0 8px; }
+.encab-pag h1 { font-size: clamp(40px,5.5vw,72px); line-height: 1; margin: 10px 0 14px; }
+.lema-pag { font-size: 22px; color: var(--texto-2); max-width: 40ch; }
+</style>
