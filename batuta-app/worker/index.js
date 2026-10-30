@@ -4815,12 +4815,20 @@ async function waHistorialCargar(env, tenantId, telefono){
     const row = await env.DB.prepare("SELECT historial FROM wa_conv WHERE tenant_id = ?1 AND telefono = ?2").bind(tenantId, telefono).first();
     if (!row || !row.historial) return [];
     const arr = JSON.parse(row.historial);
-    return Array.isArray(arr) ? arr.slice(-8) : [];
+    if (!Array.isArray(arr)) return [];
+    return arr.slice(-8).map(m => {
+      if (m && m.ts){ const t = m.ts; delete m.ts; Object.defineProperty(m, "ts", { value: t, enumerable: false }); }
+      return m;
+    });
   } catch (e) { return []; }
 }
 async function waHistorialGuardar(env, tenantId, telefono, mensajes){
   try {
-    const recorte = JSON.stringify((mensajes || []).slice(-8));
+    const ahoraTs = new Date().toISOString();
+    const recorte = JSON.stringify((mensajes || []).slice(-8).map((m, i, a) => {
+      const ts = m && (m.ts || (i === a.length - 1 ? ahoraTs : ""));
+      return ts ? Object.assign({}, m, { ts }) : m;
+    }));
     await env.DB.prepare(
       "INSERT INTO wa_conv (tenant_id, telefono, historial, actualizado) VALUES (?1,?2,?3,?4) " +
       "ON CONFLICT(tenant_id, telefono) DO UPDATE SET historial = ?3, actualizado = ?4"
@@ -5098,6 +5106,19 @@ async function manejarNegocioWA(env, { phoneId, from, texto, nombre, tipo, refer
   // freno de abuso: max ~12 respuestas por cliente por hora (misma ventana horaria)
   if (await chatbotPasoTope(env, "neg:" + neg.id + ":" + from, 12)) return true;
   const kb = negocioKbParse(neg.kb);
+  /* Pide hablar con una persona (negocios que no son Web Express): aviso a Andres por CODIGO,
+     marca el chat y pausa la IA para que no prometa nada mas. Web Express ya lo hace en su rama. */
+  if (neg.id !== "webexpress" && /(hablar|comunicar|contactar|escribir)\w*\s+con\s+(alguien|una\s+persona|un\s+humano|andr[eé]s|el\s+due[ñn]o|un\s+asesor)|persona\s+real/i.test(String(texto || ""))){
+    try { await env.DB.prepare("UPDATE wa_negocio_lead SET estado = 'pasado_a_andres', pausa = 'on' WHERE negocio_id = ?1 AND telefono = ?2").bind(neg.id, from).run(); } catch (e) {}
+    try {
+      await alertaCorreoAndres(env,
+        "WhatsApp " + (neg.nombre || "negocio") + ": " + (nombre || from) + " pide hablar contigo",
+        "Pidio hablar con una persona.\n\nNegocio: " + (neg.nombre || neg.id) +
+        "\nDe: " + (nombre ? nombre + " (" + from + ")" : from) +
+        "\nMensaje: " + String(texto || "").slice(0, 700) +
+        "\n\nLa IA quedo en pausa en ese chat. Responde desde la bandeja:\nhttps://batuta.lat/app/su/bandeja");
+    } catch (e) {}
+  }
   /* Pausa por chat (bandeja): si Andres pauso este chat, la IA se calla. El mensaje igual
      queda en el historial para que la bandeja lo muestre. */
   if (leadPrev && String(leadPrev.pausa || "") === "on"){
@@ -11878,7 +11899,7 @@ export default {
         "#conv{flex:1;display:flex;flex-direction:column;min-width:0}" +
         "#msgs{flex:1;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:8px}" +
         ".m{max-width:78%;padding:8px 12px;border-radius:12px;font-size:14px;line-height:1.45;white-space:pre-wrap;word-break:break-word}" +
-        ".m.user{background:#161b22;border:1px solid #30363d;align-self:flex-start}" +
+        ".m .h{display:block;margin-top:4px;font-size:11px;color:#8b949e}.m.user{background:#161b22;border:1px solid #30363d;align-self:flex-start}" +
         ".m.assistant{background:#1a2f23;border:1px solid #2ea04326;align-self:flex-end}" +
         "#barra{display:flex;gap:8px;padding:10px;border-top:1px solid #30363d}" +
         "textarea{flex:1;background:#161b22;color:#e6edf3;border:1px solid #30363d;border-radius:10px;padding:10px;font:inherit;resize:none;height:64px}" +
@@ -11896,9 +11917,10 @@ export default {
         "function api(p,opt){opt=opt||{};opt.headers=Object.assign({'Authorization':'Bearer '+T,'content-type':'application/json'},opt.headers||{});return fetch('/app/api/su/'+p,opt).then(function(r){if(r.status===401){throw new Error('token')}return r.json()});}" +
         "function esc(s){var d=document.createElement('div');d.textContent=s==null?'':String(s);return d.innerHTML;}" +
         "function pintaLista(){var L=document.getElementById('lista');if(!CHATS.length){L.innerHTML=\"<div class='vacio'>Sin chats todavia. Cuando alguien escriba a la linea Cloud API, aparece aqui.</div>\";return;}" +
-        "L.innerHTML=CHATS.map(function(c){var k=c.negocio_id+'|'+c.telefono;return \"<div class='chat\"+(SEL===k?' sel':'')+\"' data-k='\"+esc(k)+\"'><div class='q'>\"+esc(c.nombre||c.telefono)+(c.pausa==='on'?\" <span class='pausado'>IA EN PAUSA</span>\":'')+(c.estado==='pasado_a_andres'?\" <span class='pausado'>PASO A TI</span>\":'')+\"</div><div class='u'>\"+esc((c.negocio_nombre||c.negocio_id)+' · '+(c.ultimo||''))+\"</div></div>\";}).join('');" +
+        "L.innerHTML=CHATS.map(function(c){var k=c.negocio_id+'|'+c.telefono;return \"<div class='chat\"+(SEL===k?' sel':'')+\"' data-k='\"+esc(k)+\"'><div class='q'>\"+esc(c.nombre||c.telefono)+(c.pausa==='on'?\" <span class='pausado'>IA EN PAUSA</span>\":'')+(c.estado==='pasado_a_andres'?\" <span class='pausado'>PASO A TI</span>\":'')+\"</div><div class='u'>\"+esc((c.actualizado?fh(c.actualizado)+' · ':'')+(c.negocio_nombre||c.negocio_id)+' · '+(c.ultimo||''))+\"</div></div>\";}).join('');" +
         "Array.prototype.forEach.call(L.querySelectorAll('.chat'),function(el){el.onclick=function(){abrir(el.getAttribute('data-k'));};});}" +
-        "function pintaConv(hist,lead){var M=document.getElementById('msgs');if(!hist||!hist.length){M.innerHTML=\"<div class='vacio'>Sin historial en este chat.</div>\";}else{M.innerHTML=hist.map(function(m){return \"<div class='m \"+(m.role==='assistant'?'assistant':'user')+\"'>\"+esc(m.content)+\"</div>\";}).join('');}M.scrollTop=M.scrollHeight;" +
+        "function fh(t){try{return new Date(t).toLocaleString('es-PE',{timeZone:'America/Lima',day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit',hour12:false});}catch(e){return '';}}" +
+        "function pintaConv(hist,lead){var M=document.getElementById('msgs');if(!hist||!hist.length){M.innerHTML=\"<div class='vacio'>Sin historial en este chat.</div>\";}else{M.innerHTML=hist.map(function(m){return \"<div class='m \"+(m.role==='assistant'?'assistant':'user')+\"'>\"+esc(m.content)+(m.ts?\"<span class='h'>\"+fh(m.ts)+\"</span>\":'')+\"</div>\";}).join('');}M.scrollTop=M.scrollHeight;" +
         "var p=document.getElementById('pausa');var on=lead&&lead.pausa==='on';p.textContent=on?'Reanudar IA':'Pausar IA';p.dataset.on=on?'1':'';}" +
         "function refresca(){api('negocio-chats').then(function(d){CHATS=d.chats||[];pintaLista();document.getElementById('estado').textContent='al dia '+new Date().toLocaleTimeString();if(SEL){cargaConv();}}).catch(function(e){if(String(e.message)==='token'){logout('Token rechazado.');}else{document.getElementById('estado').textContent='sin conexion';}});}" +
         "function cargaConv(){var pp=SEL.split('|');api('negocio-chat?negocio='+encodeURIComponent(pp[0])+'&telefono='+encodeURIComponent(pp[1])).then(function(d){pintaConv(d.historial,d.lead);}).catch(function(){});}" +
@@ -12676,7 +12698,7 @@ export default {
           const negId = String(url.searchParams.get("negocio") || "").trim();
           const telH = String(url.searchParams.get("telefono") || "").replace(/\D/g, "");
           if (!negId || !telH) return json({ error: "manda negocio y teléfono" }, 400);
-          const historial = await waHistorialCargar(env, "neg:" + negId, telH);
+          const historial = (await waHistorialCargar(env, "neg:" + negId, telH)).map(m => ({ role: m.role, content: m.content, ts: m.ts || null }));
           const leadH = await env.DB.prepare("SELECT nombre, ultimo, actualizado, COALESCE(pausa,'') AS pausa FROM wa_negocio_lead WHERE negocio_id = ?1 AND telefono = ?2").bind(negId, telH).first().catch(() => null);
           return json({ ok: true, historial, lead: leadH || null });
         }
