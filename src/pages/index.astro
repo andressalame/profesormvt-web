@@ -46,6 +46,29 @@ const homeSchema = grafo(
 
 <Layout title={title} description={description} activeNav="home" extraSchema={homeSchema}>
 
+<!-- ══ PORTADA · rebranding 30-oct-2026 ══
+     Afiche retro: panel hueso con el nombre y el botón, foto en dúo tono cobalto a la derecha,
+     un sol rojo y una línea vertical. Sin animaciones. Pensado primero para móvil (foto abajo). -->
+<header class="portada">
+  <div class="p-texto">
+    <p class="antetitulo">Andrés Salamé · Profesor de música</p>
+    <p class="vertical" aria-hidden="true">Tu voz se entrena</p>
+    <div class="p-centro">
+      <h1><span class="marca">Profesor<br>MVT</span><span class="vh"> · Clases de canto y composición en Lima</span></h1>
+      <p class="lema">Canto y composición,<br />de uno en uno.</p>
+      <p class="donde">Miraflores y online</p>
+    </div>
+    <div class="acciones">
+      <a href="/prueba/?f=home" class="btn-hero"><span>Reservar una clase</span><span aria-hidden="true">→</span></a>
+      <p class="pie-accion">Se coordina por WhatsApp, sin llamadas.</p>
+    </div>
+  </div>
+  <figure class="p-foto">
+    <img src="/andres-hero-cobalto.jpg" width="1200" height="1600" alt="Andrés Salamé tocando la guitarra y cantando en vivo" fetchpriority="high" />
+    <span class="sol" aria-hidden="true"></span>
+  </figure>
+</header>
+
 <div class="hoja-w">
 
   <!-- ══ PORTADA ══
@@ -53,27 +76,7 @@ const homeSchema = grafo(
        de esta dirección es abrir la página y ver una imagen de frente, no texto.
        La ficha (5.0 · precio · dónde) baja a una tira compacta bajo la portada,
        así el precio sigue quedando en la primera pantalla. -->
-  <header class="portada">
-    <div class="p-texto">
-      <p class="antetitulo"><i></i>Clases 1 a 1 para adultos · Miraflores y online</p>
-      <h1>Cantar no es un don.<span class="segunda">Es coordinación, y se entrena.</span></h1>
-      <p class="entrada">A cualquier edad. Primero te escucho, después armamos el plan.</p>
-      <div class="acciones">
-        <a href="/prueba/?f=home" class="btn">Reservar una clase</a>
-        <p class="pie-accion">Se coordina por WhatsApp, sin llamadas.</p>
-      </div>
-    </div>
 
-    <figure class="portada-fig">
-      <figcaption class="lam-tit">Fig. 1 · El aparato de la voz</figcaption>
-      <div class="lam-dibujo" set:html={`<svg viewBox="0 0 470 520" role="img" aria-label="Corte del aparato de la voz: los pulmones y el diafragma empujan el aire, los pliegues o cuerdas vocales lo hacen vibrar en la laringe, y el espacio de la faringe y la boca le da el color" style="width:100%;height:auto"> <g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"> <g stroke-opacity=".26" stroke-width="1.2"> <path d="M16 20h12M22 14v12M442 20h12M448 14v12M16 500h12M22 494v12M442 500h12M448 494v12"/> </g> <!-- ═══ 3 · EL ESPACIO (tracto vocal) pintado como espacio ═══ Va de los pliegues hacia arriba y sale por la boca. No toca la nariz. --> <path d="M232 250 C230 232 232 214 240 202 C248 190 256 180 256 166 C256 154 248 148 234 146 C214 143 190 146 172 154 C162 158 158 164 160 170 C163 178 174 182 188 186 C204 190 214 196 214 208 L214 232 C214 242 220 250 232 250 Z" fill="var(--acento)" fill-opacity=".14" stroke="none"/> <!-- ═══ CABEZA + CUELLO, un solo contorno cerrado ═══ --> <path d="M268 44 C214 44 178 82 177 128 C176 139 171 146 163 153 C155 160 150 165 150 171 C150 177 156 180 162 181 C158 187 160 192 166 194 C163 200 166 205 173 206 C172 214 178 220 187 221 C196 222 205 220 212 218 C212 228 210 238 204 246 C198 254 196 262 196 274 L196 300"/> <path d="M268 44 C314 44 340 78 340 124 C340 154 331 174 320 187 C311 197 307 208 307 222 L307 300"/> <!-- oreja --> <path d="M296 128 C308 124 314 136 309 149 C306 157 300 160 295 158" stroke-opacity=".45"/> <!-- paladar / velo --> <path d="M166 168 C188 160 216 162 234 168 C246 172 254 180 256 192" stroke-opacity=".55"/> <!-- lengua --> <path d="M172 198 C192 184 218 184 234 194 C242 199 244 206 240 212 C230 222 202 224 184 216 C175 212 170 205 172 198" stroke-opacity=".55"/> <!-- pared faríngea --> <path d="M258 152 C262 176 262 208 256 234" stroke-opacity=".55"/> <!-- epiglotis --> <path d="M236 246 C242 240 250 240 254 246" stroke-opacity=".55"/> <!-- ═══ 2 · LARINGE, encajada en el cuello ═══ --> <path d="M214 252 h42 c7 0 12 5 12 13 v24 c0 8-5 13-12 13 h-42 c-7 0-12-5-12-13 v-24 c0-8 5-13 12-13 z"/> <!-- pliegues vocales: dos cuñas que se juntan al centro --> <g stroke-width="2.6" stroke="var(--acento)"> <path d="M206 268 L233 278"/> <path d="M264 268 L237 278"/> </g> <path d="M206 290 C220 284 250 284 264 290" stroke-opacity=".35"/> <!-- ═══ TRÁQUEA ═══ --> <path d="M218 302 v34M252 302 v34"/> <g stroke-opacity=".4"><path d="M218 311h34M218 320h34M218 329h34"/></g> <!-- ═══ BRONQUIOS -> entran a cada pulmón ═══ --> <path d="M228 336 C220 350 206 358 190 364"/> <path d="M242 336 C250 350 264 358 280 364"/> <!-- ═══ PULMONES, colgando de los bronquios ═══ --> <path d="M196 360 C170 366 150 388 143 416 C136 444 140 462 150 466 C166 471 190 462 202 446 C211 434 214 416 214 396 C214 372 208 358 196 360 Z"/> <path d="M274 360 C300 366 320 388 327 416 C334 444 330 462 320 466 C304 471 280 462 268 446 C259 434 256 416 256 396 C256 372 262 358 274 360 Z"/> <g stroke-opacity=".2"> <path d="M162 398 C176 394 192 396 202 404M156 420 C172 414 190 416 204 424 M308 398 C294 394 278 396 268 404M314 420 C298 414 280 416 266 424"/> </g> <!-- ═══ 1 · DIAFRAGMA ═══ --> <path d="M132 468 C182 434 288 434 338 468" stroke-width="3.4"/> <g stroke-opacity=".28" stroke-dasharray="4 7"> <path d="M132 492 C182 460 288 460 338 492"/> </g> <g stroke="var(--acento)" stroke-width="2.2" stroke-opacity=".8"> <path d="M180 490 v-16M174 480l6-8 6 8"/> <path d="M235 496 v-16M229 486l6-8 6 8"/> <path d="M290 490 v-16M284 480l6-8 6 8"/> </g> <!-- caja torácica --> <g stroke-opacity=".26"> <path d="M138 380 C186 366 284 366 332 380M132 404 C182 388 288 388 338 404 M130 428 C180 412 290 412 340 428"/> </g> <!-- ═══ RECORRIDO DEL AIRE ═══ --> <g stroke="var(--acento)" stroke-width="2.8"> <path d="M235 452 C235 420 235 380 235 350 L235 306"/> <path d="M235 300 L235 262"/> <path d="M235 256 C235 236 240 216 236 202 C231 188 212 182 190 180 C176 179 166 180 158 182"/> <path d="M164 172 L150 182 L164 192"/> </g> <!-- ═══ GUÍAS Y MARCADORES ═══ --> <g stroke-opacity=".45" stroke-width="1.2"> <path d="M392 440 h-66"/> <path d="M392 278 h-121"/> <path d="M80 214 h108"/> </g> <g fill="currentColor" stroke="none"> <circle cx="326" cy="440" r="3"/><circle cx="271" cy="278" r="3"/><circle cx="188" cy="214" r="3"/> </g> <g stroke="var(--acento)" fill="var(--lamina, #FFFFFF)" stroke-width="1.8"> <circle cx="410" cy="440" r="17"/><circle cx="410" cy="278" r="17"/><circle cx="62" cy="214" r="17"/> </g> <g fill="var(--acento)" stroke="none" font-family="'Cabinet Grotesk', sans-serif" font-size="19" font-weight="700" text-anchor="middle"> <text x="410" y="447">1</text><text x="410" y="285">2</text><text x="62" y="221">3</text> </g> </g> </svg>`} />
-      <ol class="claves-mini">
-        <li><span class="n">1</span><span class="tx"><b>Aire.</b> Lo empujan los pulmones y el diafragma.</span></li>
-        <li><span class="n">2</span><span class="tx"><b>Pliegues / cuerdas vocales.</b> Vibran y cierran.</span></li>
-        <li><span class="n">3</span><span class="tx"><b>Espacio.</b> Da el color.</span></li>
-      </ol>
-    </figure>
-  </header>
 
   <!-- Tira de evidencia: responde precio, nota y lugar sin ocupar media pantalla. -->
   <div class="tira">
@@ -413,32 +416,25 @@ const homeSchema = grafo(
 
 /* ══ PORTADA ══ */
 .portada {
-  display: grid;
-  grid-template-columns: minmax(0, 6fr) minmax(280px, 5fr);
-  column-gap: clamp(28px, 4.5vw, 70px);
-  align-items: center;
-  padding: clamp(28px, 4vw, 62px) 0 clamp(26px, 3.4vw, 46px);
+  display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+  min-height: min(88vh, 780px); background: var(--fondo);
 }
+.p-texto { position: relative; padding: clamp(36px, 5vw, 70px) clamp(24px, 4.5vw, 64px) clamp(32px, 4vw, 56px); display: flex; flex-direction: column; justify-content: space-between; gap: 40px; }
+.antetitulo { font-size: 14px; letter-spacing: .18em; text-transform: uppercase; color: var(--acento); font-weight: 500; }
+.portada h1 { font-weight: 800; line-height: .95; letter-spacing: -.01em; color: var(--texto); font-size: clamp(46px, 5.6vw, 82px); text-transform: uppercase; margin: 0; }
+.portada h1 .marca { display: block; }
+.portada h1 .vh { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.lema { font-family: var(--display); font-weight: 500; font-size: clamp(24px, 2.3vw, 30px); line-height: 1.35; margin-top: 26px; color: var(--texto); }
+.donde { margin-top: 18px; font-size: 14px; letter-spacing: .2em; text-transform: uppercase; font-weight: 500; color: var(--texto); }
+.acciones { display: flex; flex-direction: column; gap: 14px; }
+.btn-hero { display: flex; justify-content: space-between; align-items: center; background: var(--acento); color: var(--sobre-acento); min-height: 60px; padding: 0 26px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; font-size: 15px; text-decoration: none; max-width: 440px; }
+.btn-hero:hover { background: var(--texto); color: var(--fondo); }
+.pie-accion { font-size: 18px; color: var(--texto-2); }
+.p-foto { position: relative; margin: 0; overflow: hidden; background: var(--filete-2); }
+.p-foto img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: 50% 50%; }
+.p-foto .sol { position: absolute; right: -9%; bottom: -150px; width: min(30vw, 400px); aspect-ratio: 1; border-radius: 50%; background: var(--sol); opacity: .93; }
+.vertical { position: absolute; right: clamp(12px, 1.6vw, 24px); top: clamp(36px, 5vw, 70px); writing-mode: vertical-rl; color: var(--acento); font-weight: 700; letter-spacing: .26em; text-transform: uppercase; font-size: 14px; margin: 0; }
 .entrada { font-size: 21px; line-height: 1.55; max-width: 34ch; color: var(--texto-2); margin-top: 22px; }
-.acciones { margin-top: clamp(26px, 3vw, 38px); display: flex; align-items: center; gap: 24px; flex-wrap: wrap; }
-
-/* Figura de portada: es lo primero que se ve, antes que cualquier párrafo. */
-.portada-fig { background: var(--lamina); border: 1px solid var(--linea); padding: 0; overflow: hidden; }
-.portada-fig .lam-tit {
-  background: var(--acento); color: var(--sobre-acento);
-  margin: 0; padding: 12px clamp(16px, 2vw, 24px);
-}
-.portada-fig .lam-dibujo { padding: clamp(18px, 2.4vw, 30px) clamp(16px, 2vw, 26px) 0; }
-.portada-fig .claves-mini { margin: 16px clamp(16px, 2vw, 26px) clamp(18px, 2vw, 24px); }
-.portada-fig .lam-dibujo { max-width: 300px; margin: 0 auto; }
-.claves-mini { list-style: none; display: grid; gap: 10px; margin-top: 16px; border-top: 1px solid var(--linea); padding-top: 16px; }
-.claves-mini li { display: grid; grid-template-columns: 30px minmax(0, 1fr); gap: 12px; align-items: center; font-size: 18px; color: var(--texto-2); }
-.claves-mini b { color: var(--texto); font-weight: 600; }
-.claves-mini .n {
-  width: 30px; height: 30px; background: var(--acento); color: var(--sobre-acento);
-  display: flex; align-items: center; justify-content: center; border-radius: 50%;
-  font-family: var(--display); font-weight: 700; font-size: 18px; flex: none;
-}
 
 /* Tira de evidencia bajo la portada */
 .tira {
@@ -567,7 +563,7 @@ a.tira-nt { min-height: 44px; align-items: center; }
      bloque oscuro se redefine el token: al ser el MISMO color aclarado con papel,
      sigue siendo la misma tinta de marca y todo lo que usa var(--acento) hereda
      el arreglo solo. Medido, no supuesto. */
-  --acento: #FF7A4D;
+  --acento: #8DB0EE;
 }
 .combo .marcaje { background: var(--invertido-texto); color: var(--invertido-fondo); }
 .combo h3 { color: var(--invertido-texto); font-size: clamp(26px, 2.8vw, 36px); margin-top: 12px; display: flex; align-items: baseline; gap: 14px; }
@@ -639,10 +635,13 @@ a.tira-nt { min-height: 44px; align-items: center; }
   /* La barra fija de abajo come 60px, así que el pliegue útil son ~784px.
      Se aprieta el aire de la portada para que "Desde S/320" quede por ENCIMA
      de la barra y no detrás. Medido, no calculado a ojo. */
-  /* En móvil el dibujo va PRIMERO: la idea es abrir y ver una imagen. */
-  .portada { grid-template-columns: 1fr; row-gap: 18px; padding: 14px 0 18px; }
-  .portada-fig { order: -1; padding: 14px; }
-  .portada-fig .lam-dibujo { max-width: 210px; }
+  .portada { grid-template-columns: 1fr; min-height: 0; }
+  .p-texto { gap: 22px; padding: 26px var(--margen) 28px; }
+  .portada h1 { font-size: clamp(44px, 12.5vw, 64px); }
+  .lema { margin-top: 16px; font-size: 22px; }
+  .p-foto { height: 108vw; max-height: 560px; min-height: 380px; }
+  .p-foto .sol { width: 44vw; right: -8vw; bottom: -10vw; }
+  .vertical { position: absolute; right: clamp(12px, 1.6vw, 24px); top: clamp(36px, 5vw, 70px); writing-mode: vertical-rl; color: var(--acento); font-weight: 700; letter-spacing: .26em; text-transform: uppercase; font-size: 14px; margin: 0; }
   .claves-mini { margin-top: 12px; padding-top: 12px; }
   .tira { grid-template-columns: 1fr; }
   .tira-item { border-left: 0; border-top: 1px solid var(--linea); padding: 12px 0 14px; }

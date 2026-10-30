@@ -1,44 +1,6 @@
-/* Fuentes de marca AUTO-ALOJADAS. Regla permanente de la casa:
-   Cabinet Grotesk (display) + Switzer (texto). Nada de Google Fonts.
-   PROHIBIDAS: Space Grotesk, Inter, Oswald, JetBrains Mono, Fraunces, Newsreader. */
-
-@font-face {
-  font-family: 'Cabinet Grotesk';
-  src: url('/fonts/CabinetGrotesk-500.woff2') format('woff2');
-  font-weight: 500; font-style: normal; font-display: swap;
-}
-@font-face {
-  font-family: 'Cabinet Grotesk';
-  src: url('/fonts/CabinetGrotesk-700.woff2') format('woff2');
-  font-weight: 700; font-style: normal; font-display: swap;
-}
-@font-face {
-  font-family: 'Cabinet Grotesk';
-  src: url('/fonts/CabinetGrotesk-800.woff2') format('woff2');
-  font-weight: 800; font-style: normal; font-display: swap;
-}
-@font-face {
-  font-family: 'Switzer';
-  src: url('/fonts/Switzer-400.woff2') format('woff2');
-  font-weight: 400; font-style: normal; font-display: swap;
-}
-@font-face {
-  font-family: 'Switzer';
-  src: url('/fonts/Switzer-400i.woff2') format('woff2');
-  font-weight: 400; font-style: italic; font-display: swap;
-}
-@font-face {
-  font-family: 'Switzer';
-  src: url('/fonts/Switzer-500.woff2') format('woff2');
-  font-weight: 500; font-style: normal; font-display: swap;
-}
-@font-face {
-  font-family: 'Switzer';
-  src: url('/fonts/Switzer-600.woff2') format('woff2');
-  font-weight: 600; font-style: normal; font-display: swap;
-}
-@font-face {
-  font-family: 'Switzer';
-  src: url('/fonts/Switzer-700.woff2') format('woff2');
-  font-weight: 700; font-style: normal; font-display: swap;
-}
+/* Fuente de marca AUTO-ALOJADA (rebranding 30-oct-2026, elegida por Andrés): Shippori Mincho.
+   Licencia OFL. Solo subconjunto latino: cubre tildes, ñ, ¿ y ¡. Sin cursivas (la marca no usa). */
+@font-face { font-family: 'Shippori Mincho'; src: url('/fonts/ShipporiMincho-400.woff2') format('woff2'); font-weight: 400; font-style: normal; font-display: swap; }
+@font-face { font-family: 'Shippori Mincho'; src: url('/fonts/ShipporiMincho-500.woff2') format('woff2'); font-weight: 500; font-style: normal; font-display: swap; }
+@font-face { font-family: 'Shippori Mincho'; src: url('/fonts/ShipporiMincho-700.woff2') format('woff2'); font-weight: 600 700; font-style: normal; font-display: swap; }
+@font-face { font-family: 'Shippori Mincho'; src: url('/fonts/ShipporiMincho-800.woff2') format('woff2'); font-weight: 800; font-style: normal; font-display: swap; }

@@ -13,28 +13,30 @@
    ========================================================================== */
 
 @import './fonts.css';
+html { font-synthesis: none; }
 
 :root {
+  --sol: #E4472B;
   /* ── LOS 3 COLORES DE MARCA (dirección "Ficha clínica", elegida el 24-ago-2026) ── */
-  --papel:  #F8F2E8;   /* 1 · papel. Subido de #F1EBE0 el 25-ago: estaba turbio
+  --papel:  #E9E8DD;   /* 1 · papel. Subido de #F1EBE0 el 25-ago: estaba turbio
                           y apagaba todo. Más limpio = el acento rebota más y el
                           rango tinta/papel sube de 13.91 a 14.82. */
-  --tinta:  #17211E;   /* 2 · la tinta (verde muy oscuro, no negro) */
-  --sello:  #CE300D;   /* 3 · bermellón vivo. De #C42D12 (91% de saturación) a
+  --tinta:  #101A2E;   /* 2 · la tinta (verde muy oscuro, no negro) */
+  --sello:  #2F5AA0;   /* 3 · bermellón vivo. De #C42D12 (91% de saturación) a
                           #CE300D (94%). Da 4.65 sobre el papel nuevo: pasa AA
                           como texto Y como relleno. Es el tope: un paso más
                           (#D43308) cae a 4.41 y ya no pasa. Medido. */
 
   /* ── Derivados: SOLO mezclas de los tres de arriba ── */
-  --papel-2:      #F5EFE5;   /* tinte del panel. Con el bermellón nuevo, cualquier
+  --papel-2:      #E0DFD3;   /* tinte del panel. Con el bermellón nuevo, cualquier
                                 tono más oscuro que este lo tira bajo 4.5. */
-  --filete-2:     #DCD3C3;   /* ese tono se queda, pero como línea */
-  --hoja:         #FFFFFF;   /* la lámina blanca sobre el papel cálido */
-  --tinta-media:  #4E5B55;
-  --filete:       rgba(23, 33, 30, .16);
-  --filete-fuerte:rgba(23, 33, 30, .38);
-  --papel-media:  rgba(248, 242, 232, .72);
-  --filete-papel: rgba(248, 242, 232, .28);
+  --filete-2:     #CDCCBE;   /* ese tono se queda, pero como línea */
+  --hoja:         #F3F2EA;   /* la lámina blanca sobre el papel cálido */
+  --tinta-media:  #46526A;
+  --filete:       rgba(16, 26, 46, .16);
+  --filete-fuerte:rgba(16, 26, 46, .38);
+  --papel-media:  rgba(233, 232, 221, .72);
+  --filete-papel: rgba(233, 232, 221, .28);
 
   /* Roles semánticos (lo que usan los componentes) */
   --fondo:        var(--papel);
@@ -52,8 +54,8 @@
   --invertido-linea: var(--filete-papel);
 
   /* Tipografía */
-  --display: 'Cabinet Grotesk', ui-sans-serif, system-ui, sans-serif;
-  --lectura: 'Switzer', ui-sans-serif, system-ui, sans-serif;
+  --display: 'Shippori Mincho', 'Hiragino Mincho ProN', Georgia, serif;
+  --lectura: 'Shippori Mincho', 'Hiragino Mincho ProN', Georgia, serif;
 
   /* Medidas */
   --ancho:  1400px;
@@ -64,32 +66,16 @@
 /* ── MODO OSCURO ──
    Mismos 3 colores, roles invertidos. El sello se aclara mezclándolo con papel
    (sigue siendo el mismo color de marca) para mantener contraste AA sobre tinta. */
-:root:not([data-theme="light"]) {
-  @media (prefers-color-scheme: dark) {
-    --fondo:        var(--tinta);
-    --fondo-2:      #1F2B27;
-    --lamina:       #1F2B27;
-    --texto:        var(--papel);
-    --texto-2:      #AEB8B3;
-    --linea:        var(--filete-papel);
-    --linea-fuerte: var(--papel);
-    --acento:       #FF7A4D;
-    --sobre-acento: var(--tinta);
-    --invertido-fondo: var(--papel);
-    --invertido-texto: var(--tinta);
-    --invertido-texto-2: var(--tinta-media);
-    --invertido-linea: var(--filete);
-  }
-}
+/* Modo oscuro automático desactivado (rebranding 30-oct-2026): la marca es hueso y cobalto. */
 :root[data-theme="dark"] {
   --fondo:        var(--tinta);
-  --fondo-2:      #1F2B27;
-  --lamina:       #1F2B27;
+  --fondo-2:      #18233B;
+  --lamina:       #18233B;
   --texto:        var(--papel);
-  --texto-2:      #AEB8B3;
+  --texto-2:      #AEB7C9;
   --linea:        var(--filete-papel);
   --linea-fuerte: var(--papel);
-  --acento:       #FF7A4D;
+  --acento:       #8DB0EE;
   --sobre-acento: var(--tinta);
   --invertido-fondo: var(--papel);
   --invertido-texto: var(--tinta);
@@ -186,7 +172,7 @@ h2 { font-size: clamp(29px, 3.5vw, 46px); }
 h3 { font-size: clamp(24px, 2.5vw, 33px); }
 h4 { font-size: clamp(21px, 2vw, 25px); }
 p  { font-size: inherit; }
-em { font-style: italic; }
+em { font-style: normal; }
 strong, b { font-weight: 600; }
 a { color: inherit; text-decoration: none; }
 a:focus-visible, button:focus-visible, input:focus-visible,
@@ -285,7 +271,7 @@ select:focus-visible, textarea:focus-visible, summary:focus-visible {
   padding-inline: calc(50vw - 50%);
   /* Dentro del bloque oscuro el bermellón no llega a AA: se aclara mezclándolo
      con papel. Sigue siendo la misma tinta de marca. */
-  --acento: #FF7A4D;
+  --acento: #8DB0EE;
 }
 .bloque.oscuro h2, .bloque.oscuro h3 { color: var(--invertido-texto); }
 .bloque.oscuro .folio { color: var(--acento); }

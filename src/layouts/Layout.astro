@@ -171,10 +171,10 @@ const baseSchema = { "@context":"https://schema.org", "@graph":[localBusinessSch
   <!-- Fuentes de marca AUTO-ALOJADAS (Cabinet Grotesk + Switzer). Nada de Google Fonts:
        Oswald/Space Grotesk/JetBrains Mono/Fraunces quedaron prohibidas en el rediseño
        del 24-ago-2026. Se precargan las dos que pintan el primer texto visible. -->
-  <link rel="preload" href="/fonts/CabinetGrotesk-800.woff2" as="font" type="font/woff2" crossorigin />
-  <link rel="preload" href="/fonts/Switzer-400.woff2" as="font" type="font/woff2" crossorigin />
-  <meta name="theme-color" content="#F8F2E8" media="(prefers-color-scheme: light)" />
-  <meta name="theme-color" content="#17211E" media="(prefers-color-scheme: dark)" />
+  <link rel="preload" href="/fonts/ShipporiMincho-800.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="preload" href="/fonts/ShipporiMincho-400.woff2" as="font" type="font/woff2" crossorigin />
+  <meta name="theme-color" content="#E9E8DD" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#101A2E" media="(prefers-color-scheme: dark)" />
   <link rel="alternate" type="text/plain" href="https://profesormvt.com/llms.txt" title="llms.txt" />
   <script type="application/ld+json" set:html={JSON.stringify(baseSchema)} is:inline></script>
   {extraSchema && <script type="application/ld+json" set:html={JSON.stringify(extraSchema)} is:inline></script>}
