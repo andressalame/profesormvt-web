@@ -120,8 +120,9 @@ export const PASES = {
     ["Excelente. Ya le avisé a Andrés para que coordine contigo los pasos y el pago. Si quieres, déjame aquí tu nombre y el de tu negocio para que lo tenga a la mano.",
      "Excelente. Dejé tu pedido anotado para Andrés, que coordina contigo los pasos y el pago. Si quieres, déjame aquí tu nombre y el de tu negocio."],
   pago:
-    ["Gracias, ya le avisé a Andrés para que confirme tu pago y coordine contigo cómo arrancamos. Si necesitas factura o boleta, déjame aquí tus datos.",
-     "Gracias, dejé anotado tu pago para Andrés, que lo confirma y coordina contigo cómo arrancamos. Si necesitas factura o boleta, déjame aquí tus datos."],  reclamo:
+    ["Gracias, ya le avisé a Andrés para que confirme tu pago y empiece a chambear contigo. Para mandarte el contrato y que puedas hacer seguimiento a tu compra, déjame aquí tu correo, tu número de WhatsApp y el nombre de tu negocio. Si necesitas factura o boleta, avísame.",
+     "Gracias, dejé anotado tu pago para Andrés, que lo confirma y empieza a chambear contigo. Para mandarte el contrato y que puedas hacer seguimiento a tu compra, déjame aquí tu correo, tu número de WhatsApp y el nombre de tu negocio. Si necesitas factura o boleta, avísame."],
+  reclamo:
     ["Lamento lo que cuentas. Ya le avisé a Andrés para que lo revise contigo directamente.",
      "Lamento lo que cuentas. Dejé tu mensaje anotado para que Andrés lo revise contigo directamente."],
   condicion_especial:
@@ -442,7 +443,7 @@ export function armarAviso({ motivo, intent, telefono, nombre, ultimo, referral,
     persona: "pidió hablar con una persona",
     contratar: "quiere contratar",
     cierre: "quiere contratar o pagar (el asistente le dio las formas de pago)",
-    pago: "pregunta por el pago o mandó un comprobante",
+    pago: "YA PAGÓ (mandó su comprobante): confirma el pago y hay que chambear",
     reclamo: "tiene un reclamo",
     condicion_especial: "pide una condición especial o descuento",
     objecion_repetida: "repitió la objeción de precio",
@@ -454,7 +455,7 @@ export function armarAviso({ motivo, intent, telefono, nombre, ultimo, referral,
   const ad = referral && (referral.headline || referral.source_url || referral.source_id)
     ? "\nAnuncio: " + [referral.headline, referral.source_url, referral.source_id ? "id " + referral.source_id : ""].filter(Boolean).join(" | ")
     : "";
-  const asunto = "Web Express WhatsApp: " + quien + " " + etiqueta;
+  const asunto = (motivo === "pago" ? "VENTA PAGADA · hay que chambear · " : "Web Express WhatsApp: ") + quien + (motivo === "pago" ? "" : " " + etiqueta);
   const cuerpo =
     "Lead de la línea de anuncios (linea compartida de Batuta, +51 904 079 121), origen: " + (origen || "anuncio") + ".\n" +
     "Cliente: " + quien + "\nMotivo del pase: " + etiqueta + (intent && intent !== motivo ? " (" + intent + ")" : "") +
