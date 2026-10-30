@@ -8,11 +8,6 @@ import Layout from '../layouts/Layout.astro';
   activeNav="horarios"
 >
   <main class="hor">
-    <header class="hor-cab">
-      <p class="antetitulo">Clases 1 a 1 · hora de Lima</p>
-      <h1>Elige tu horario</h1>
-      <p class="note">Los horarios se actualizan en vivo. Elige un día, una hora, y sigue con tu paquete.</p>
-    </header>
     <fieldset class="duracion">
       <legend>Duración</legend>
       <label><input type="radio" name="duracion" value="1" checked /> 1 hora</label>
@@ -22,7 +17,7 @@ import Layout from '../layouts/Layout.astro';
       <p>Cargando horarios…</p>
     </div>
     <div class="hor-pie">
-      <p id="seleccion" class="seleccion" aria-live="polite">Elige un día y una hora de preferencia.</p>
+      <p id="seleccion" class="seleccion" aria-live="polite"></p>
       <a id="continuar" class="btn-hero" href="/prueba/" hidden><span>Continuar con mi paquete</span><span aria-hidden="true">→</span></a>
     </div>
   </main>
@@ -131,9 +126,7 @@ import Layout from '../layouts/Layout.astro';
       box.innerHTML = '<div class="calmes">' + escapeHtml(label) + '</div><div class="cal">' + celdas +
         '</div><div class="cal-dia-titulo">' + escapeHtml(fechaFmt.format(fechaUtc(DIA))) +
         '</div><div class="cal-horas">' + horas + '</div>';
-      seleccion.textContent = ELEGIDO
-        ? "Tu preferencia: " + fechaFmt.format(new Date(ELEGIDO)) + ", " + horaFmt.format(new Date(ELEGIDO)) + " (" + DURACION + (DURACION === 1 ? " hora" : " horas seguidas") + ", hora de Lima). Para apartarlo: compra tu paquete, crea tu cuenta y reserva este horario."
-        : "Elige un día y una hora de preferencia.";
+      seleccion.textContent = "";
       var cta = document.getElementById("continuar");
       if (cta) {
         if (ELEGIDO) { cta.hidden = false; cta.href = "/prueba/?slot=" + encodeURIComponent(ELEGIDO) + "&dur=" + DURACION; }

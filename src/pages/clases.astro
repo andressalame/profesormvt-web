@@ -23,6 +23,12 @@ const PLANES = [
   { nom: 'Constante', clases: '8 clases',  horas: '8 h',  precio: 580, hora: '72.50', nota: 'Dos por semana. Es donde la voz empieza a responder sola.', elegido: true },
   { nom: 'Intensivo', clases: '12 clases', horas: '12 h', precio: 780, hora: '65',    nota: 'Tres por semana.' },
 ];
+const CURSOS = [
+  { n: 'Vocal coaching', foto: '/clase-canto.jpg', alt: 'Andrés cantando en vivo frente al micrófono', d: 'Técnica con el método Modern Vocal Training: dejas de forzar y la voz empieza a responder sola.', precio: 'Clases de 1 hora · desde S/ 320 al mes' },
+  { n: 'Composición y teoría', foto: '/clase-composicion.jpg', alt: 'Manos de Andrés sobre el mástil de la guitarra', d: 'Armonía, estructura y letra aplicadas a tus ideas, hasta terminar las canciones que tienes a medias.', precio: 'Clases de 1 hora · desde S/ 320 al mes' },
+  { n: 'Canto + Composición', foto: '/clase-combo.jpg', alt: 'Andrés tocando guitarra y cantando en un escenario', destacado: true, d: 'Dos horas seguidas: entrenas la voz y escribes tus canciones en la misma cita.', precio: 'Sesiones de 2 horas · desde S/ 580 al mes' },
+];
+
 
 const FAQ = [
   { q: '¿Y si de verdad canto mal?', a: 'Casi nadie canta mal: la mayoría empuja. Lo que suena forzado es tensión, no falta de talento, y la tensión se desarma con técnica.' },
@@ -51,94 +57,49 @@ const homeSchema = grafo(
 <div class="hoja-w">
 
 <section class="bloque" id="cursos">
-    <div class="folio">01<span>Los cursos</span></div>
-    <div>
-      <h2>Canto, composición, o los dos juntos.</h2>
-
-      <div class="cursos-2">
-        <article class="curso-min">
-          <span class="rom">I</span>
-          <h3>Vocal coaching</h3>
-          <p>Técnica con el método Modern Vocal Training.</p>
-          <p class="curso-meta">Clases de 1 hora · desde <b>S/320</b> al mes</p>
-        </article>
-        <article class="curso-min">
-          <span class="rom">II</span>
-          <h3>Composición y teoría</h3>
-          <p>Terminar las canciones que tienes a medias.</p>
-          <p class="curso-meta">Clases de 1 hora · desde <b>S/320</b> al mes</p>
-        </article>
-      </div>
-
-      <article class="combo" id="combo">
-        <div class="combo-cab">
-          <span class="marcaje">El que recomiendo</span>
-          <h3><span class="rom">III</span> Canto + Composición</h3>
-          <p class="combo-sub">Dos horas seguidas: la voz y tus canciones en la misma cita.</p>
-        </div>
-
-        <figure class="lamina lamina-oscura">
-          <figcaption class="lam-tit">Fig. 6 · Mismo tiempo pagado, más trabajo real</figcaption>
-          <div class="comp-fila">
-            <p class="comp-et">Dos clases de 1 hora, en días distintos</p>
-            <div class="comp-barra" role="img" aria-label="Dos clases de una hora: quince minutos de calentamiento y cuarenta y cinco de trabajo, dos veces. Noventa minutos de trabajo real.">
-              <span class="seg seg-cal" style="flex:15"></span>
-              <span class="seg seg-tra" style="flex:45"></span>
-              <span class="seg seg-gap" style="flex:4"></span>
-              <span class="seg seg-cal" style="flex:15"></span>
-              <span class="seg seg-tra" style="flex:45"></span>
-            </div>
-            <p class="comp-pie">Calientas dos veces · <b>90 minutos de trabajo</b></p>
-          </div>
-          <div class="comp-fila">
-            <p class="comp-et">Una sesión de 2 horas seguidas</p>
-            <div class="comp-barra" role="img" aria-label="Una sesión de dos horas: quince minutos de calentamiento, cincuenta de técnica vocal y cincuenta y cinco de composición. Ciento cinco minutos de trabajo real.">
-              <span class="seg seg-cal" style="flex:15"></span>
-              <span class="seg seg-voz" style="flex:50"></span>
-              <span class="seg seg-com" style="flex:55"></span>
-            </div>
-            <p class="comp-pie">Calientas una vez · <b>105 minutos de trabajo</b></p>
-          </div>
-          <p class="lam-pie"><b>15 minutos más de trabajo real</b> por el mismo tiempo pagado.</p>
-        </figure>
-
-        <p class="combo-precio">Desde <b>S/580</b> al mes (8 h) · <b>S/780</b> (12 h)</p>
-      </article>
-    </div>
+    <h2 class="sec-tit">Nuestras clases</h2>
+    <ul class="cur-grid">
+      {CURSOS.map((c) => (
+        <li>
+          <a class="cur-card" href="/prueba/?f=clases">
+            <img src={c.foto} alt={c.alt} width="900" height="1100" loading="lazy" />
+            {c.destacado && <span class="cur-chip">El que recomiendo</span>}
+            <span class="cur-cuerpo">
+              <span class="cur-nombre">{c.n}</span>
+              <span class="cur-desc">{c.d}</span>
+              <span class="cur-precio">{c.precio}</span>
+            </span>
+          </a>
+        </li>
+      ))}
+    </ul>
   </section>
 
-<section class="bloque" id="planes">
-    <div class="folio">02<span>Planes</span></div>
-    <div>
-      <h2>Mientras más horas, menos cuesta la hora.</h2>
-      <table class="tabla-planes">
-        <thead>
-          <tr><th scope="col">Al mes</th><th scope="col">Horas</th><th scope="col">Precio</th><th scope="col">Sale a</th></tr>
-        </thead>
-        <tbody>
-          {PLANES.map((p) => (
-            <tr class={p.elegido ? 'elegido' : ''}>
-              <th scope="row">{p.nom}<span class="tp-nota">{p.nota}</span></th>
-              <td data-l="Horas">{p.clases} · {p.horas}</td>
-              <td data-l="Precio"><b>S/{p.precio}</b></td>
-              <td data-l="Sale a"><span class="tp-hora">S/{p.hora} la hora</span></td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      <p class="tp-elegido"><b>El más elegido:</b> Constante, 8 horas al mes.</p>
-
-      <div class="notas">
-        <p><b>Canto + Composición</b> va en sesiones de 2 horas, mínimo 8 horas al mes.</p>
-        <p><b>Incluido:</b> la primera clase de tu plan trae el diagnóstico vocal en PDF.</p>
-        <p><b>Pagos:</b> Yape, Plin, tarjeta o transferencia. Del extranjero, tarjeta o cripto.</p>
-        <p class="note"><b>Clase suelta S/90.</b> Existe, pero no es la oferta.</p>
-      </div>
-
-      <div class="cierre-planes">
-        <a href="/prueba/?f=home-planes" class="btn">Reservar una clase</a>
-        <p class="pie-accion">Me escribes, vemos horario y curso, y quedas agendado.</p>
-      </div>
+  <section class="bloque" id="planes">
+    <h2 class="sec-tit">Planes mensuales</h2>
+    <div class="pl-grid">
+      {PLANES.map((p) => (
+        <article class={`pl-card${p.elegido ? ' pl-top' : ''}`}>
+          <p class="pl-banda">{p.elegido ? 'El más elegido' : 'Plan mensual'}</p>
+          <div class="pl-cuerpo">
+            <h3>{p.nom}</h3>
+            <p class="pl-precio">S/ {p.precio}<span>/mes</span></p>
+            <p class="pl-sub">{p.clases} de 1 hora · sale a S/ {p.hora} la hora</p>
+            <p class="pl-nota">{p.nota}</p>
+            <ul class="pl-lista">
+              <li>Clases 1 a 1</li>
+              <li>Diagnóstico vocal en tu primera clase</li>
+              <li>Miraflores u online</li>
+            </ul>
+            <a class="pl-btn" href="/prueba/?f=planes"><span>Elegir plan</span><span aria-hidden="true">→</span></a>
+          </div>
+        </article>
+      ))}
+    </div>
+    <div class="pl-notas">
+      <p><b>Canto + Composición</b> va en sesiones de 2 horas, mínimo 8 horas al mes.</p>
+      <p><b>Pagos:</b> Yape, Plin, tarjeta o transferencia. Del extranjero, tarjeta o cripto.</p>
+      <p><b>Clase suelta S/ 90.</b> Existe, pero no es la oferta.</p>
     </div>
   </section>
 </div>
@@ -431,4 +392,40 @@ a.tira-nt { min-height: 44px; align-items: center; }
 .encab-pag { padding: clamp(36px,5vw,72px) 0 8px; }
 .encab-pag h1 { font-size: clamp(40px,5.5vw,72px); line-height: 1; margin: 10px 0 14px; }
 .lema-pag { font-size: 22px; color: var(--texto-2); max-width: 40ch; }
+
+.sec-tit { font-size: clamp(26px, 3vw, 38px); text-transform: uppercase; letter-spacing: .06em; text-align: center; margin: 0 0 28px; }
+.cur-grid { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+.cur-card { position: relative; display: block; aspect-ratio: 3 / 4; overflow: hidden; color: #E9E8DD; text-decoration: none; background: var(--tinta); }
+.cur-card img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; transition: transform .4s ease; }
+.cur-card::after { content: ""; position: absolute; inset: 0; background: linear-gradient(180deg, rgba(16,26,46,.35) 0, rgba(16,26,46,.55) 45%, rgba(16,26,46,.9) 100%); }
+.cur-card:hover img, .cur-card:focus-visible img { transform: scale(1.04); }
+.cur-card:focus-visible { outline: 3px solid var(--acento); outline-offset: 3px; }
+.cur-cuerpo { position: absolute; inset: 0; z-index: 2; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; text-align: center; gap: 10px; padding: 24px 22px 26px; }
+.cur-nombre { font-family: var(--display); font-weight: 800; font-size: clamp(24px, 2.4vw, 32px); text-transform: uppercase; letter-spacing: .08em; line-height: 1.1; margin-bottom: auto; margin-top: 38%; }
+.cur-desc { font-size: 18px; line-height: 1.4; }
+.cur-precio { font-size: 14px; letter-spacing: .14em; text-transform: uppercase; font-weight: 700; color: #C9D8F2; }
+.cur-chip { position: absolute; top: 14px; left: 14px; z-index: 3; background: #E9E8DD; color: var(--sello); padding: 6px 12px; font-size: 12px; font-weight: 700; letter-spacing: .16em; text-transform: uppercase; }
+.pl-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 28px; align-items: start; padding-right: 8px; }
+.pl-card { background: var(--hoja); border: 2px solid var(--tinta); box-shadow: 8px 8px 0 var(--tinta); }
+.pl-top { border-color: var(--sello); box-shadow: 8px 8px 0 var(--sello); }
+.pl-banda { margin: 0; padding: 12px 20px; background: var(--fondo-2); border-bottom: 2px solid var(--tinta); font-size: 13px; font-weight: 700; letter-spacing: .18em; text-transform: uppercase; }
+.pl-top .pl-banda { background: var(--sello); color: #E9E8DD; border-bottom-color: var(--sello); }
+.pl-cuerpo { padding: 22px 22px 24px; }
+.pl-cuerpo h3 { font-size: 30px; line-height: 1.05; margin: 0 0 14px; }
+.pl-precio { font-family: var(--display); font-weight: 800; font-size: 44px; line-height: 1; margin: 0; }
+.pl-precio span { font-size: 20px; font-weight: 500; }
+.pl-sub { margin: 8px 0 0; color: var(--texto-2); font-size: 17px; }
+.pl-nota { margin: 14px 0 0; font-size: 18px; line-height: 1.4; min-height: 3.6em; }
+.pl-lista { list-style: none; margin: 14px 0 20px; padding: 14px 0 0; border-top: 1px solid var(--linea); display: grid; gap: 6px; font-size: 17px; }
+.pl-lista li::before { content: "·  "; font-weight: 800; color: var(--sello); }
+.pl-btn { display: flex; justify-content: space-between; align-items: center; min-height: 54px; padding: 0 20px; background: var(--tinta); color: #E9E8DD; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; font-size: 14px; text-decoration: none; box-shadow: 4px 4px 0 var(--sello); }
+.pl-btn:hover { background: var(--sello); box-shadow: 4px 4px 0 var(--tinta); }
+.pl-notas { margin-top: 34px; display: grid; gap: 6px; font-size: 18px; color: var(--texto-2); text-align: center; }
+@media (max-width: 900px) {
+  .cur-grid { grid-template-columns: 1fr; }
+  .cur-card { aspect-ratio: 16 / 11; }
+  .cur-nombre { margin-top: 0; font-size: 26px; }
+  .pl-grid { grid-template-columns: 1fr; gap: 24px; padding-right: 6px; }
+  .pl-nota { min-height: 0; }
+}
 </style>
