@@ -146,9 +146,19 @@ sec("1. Conversación: pide hablar con una persona");
 sec("1. Conversación: contratar, pago, reclamo, adjuntos, reglas");
 {
   const c1 = await simular().decir("ya quiero contratarlo");
-  comprobar("«quiero contratar» pasa a Andrés y no pide datos de pago", c1.accion === "paso_a_andres" && c1.motivo === "contratar" && !/yape|plin|cuenta/i.test(c1.texto));
+  comprobar("«quiero contratar»: el asistente CIERRA y da las formas de pago reales (Yape, BCP, Scotiabank, tienda)", c1.accion === "respondio_respaldo" && c1.intent === "cierre" && /989 077 928/.test(c1.texto) && /19300343797068/.test(c1.texto) && /5621567824/.test(c1.texto) && /webexpress\.pe\/tienda/.test(c1.texto) && /captura/.test(c1.texto));
   const c2 = await simular().decir("dónde te pago? yape?");
-  comprobar("pregunta de pago: no da cuenta ni Yape, pasa a Andrés", c2.accion === "paso_a_andres" && c2.motivo === "pago" && !/\d{6,}/.test(c2.texto));
+  comprobar("pregunta de pago: da las formas de pago y NO pausa el chat", c2.intent === "cierre" && /Yape o Plin/.test(c2.texto));
+  const c2s = simular(); await c2s.decir("dónde te pago? yape?");
+  comprobar("al cerrar avisa a Andrés pero sin pausar el chat", c2s.avisos.length === 1 && c2s.avisos[0].motivo === "cierre" && c2s.leads.every(l => l.pausa === false));
+  const c2m = simular({ llm: async () => "Perfecto, eliges SEO + AEO (S/ 1.497).\n\n1) Yape o Plin: 989 077 928\n2) BCP Soles: cuenta 19300343797068\n\nMándame la captura por aquí." });
+  const r2m = await c2m.decir("quiero contratar el SEO + AEO");
+  comprobar("si el modelo da los datos reales, pasan la guardia", r2m.accion === "respondio_ia" && /19300343797068/.test(r2m.texto));
+  const c2x = simular({ llm: async () => "Paga a la cuenta 12345678901234 por favor." });
+  const r2x = await c2x.decir("quiero contratar el SEO + AEO");
+  comprobar("si el modelo inventa una cuenta, se rechaza y sale la lista fija real (no pasa a Andrés)", r2x.accion === "respondio" && r2x.intent === "datos_de_pago" && !/12345678901234/.test(r2x.texto) && /19300343797068/.test(r2x.texto));
+  const c2c = await simular().decir("quiero que me hagan el contrato para firmar");
+  comprobar("contrato o firma siguen pasando a Andrés", c2c.accion === "paso_a_andres" && c2c.motivo === "contratar");
   const c3 = await simular().decir("ya pagué, te mando el voucher");
   comprobar("comprobante: pasa a Andrés, no confirma el dinero", c3.accion === "paso_a_andres" && !/recibimos tu pago|pago confirmado/i.test(c3.texto));
   const c4 = await simular().decir("esto es una estafa, quiero mi plata");
@@ -216,10 +226,10 @@ sec("1. Textos fijos: estilo y cifras");
   const pct = todos.flatMap((t) => [...t.matchAll(/(\d+) ?%/g)].map((m) => m[1]));
   comprobar("todo porcentaje citado es 15 o 20", pct.every((m) => ["15", "20"].includes(m)));
   comprobar("ningún texto fijo promete posiciones ni recomendación de IA", !todos.some((t) => /\b(garantizamos|te aseguro|vas a salir)\b/.test(t.replace(/no garantizamos/gi, ""))));
-  comprobar("ningún texto fijo da números de cuenta, Yape ni enlaces de pago", !todos.some((t) => /\b(yape|plin|cci)\b|https?:\/\/(?!webexpress\.pe)/i.test(t)));
+  comprobar("solo el texto de las formas de pago da cuentas y Yape; ningún otro texto fijo ni enlaces ajenos", !todos.filter((t) => t !== A.RESPUESTAS.datos_de_pago).some((t) => /\b(yape|plin|cci)\b|\d{9,}|https?:\/\/(?!webexpress\.pe)/i.test(t)));
   comprobar("ningún texto fijo pasa de 700 caracteres (cabe en un mensaje de WhatsApp de 1.000)", todos.every((t) => t.length <= 700), "máx " + Math.max(...todos.map((t) => t.length)));
   comprobar("la KB para el modelo trae reglas de pase, de no prometer y de no cobrar", WE_KB_OK());
-  function WE_KB_OK() { const r = A.WE_KB.reglas.join(" "); return /Pasa a Andrés/.test(r) && /Nunca prometas posiciones/.test(r) && /nunca pidas ni des cuentas/.test(r) && A.WE_KB.faq.length >= 8; }
+  function WE_KB_OK() { const r = A.WE_KB.reglas.join(" "); return /Pasa a Andrés/.test(r) && /Nunca prometas posiciones/.test(r) && /CIERRE/.test(r) && /Formas de pago/.test(JSON.stringify(A.WE_KB.servicios)) && A.WE_KB.faq.length >= 8; }
 }
 
 /* ═════════════ 2. KB vs catálogo ═════════════ */

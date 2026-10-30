@@ -15,7 +15,7 @@ const C = [
   ["dan factura?", "paso_a_andres", "pago", /Andrés/],
   ["quiero hablar con una persona", "paso_a_andres", "persona", /Andrés/],
   ["eres un bot?", "respondio", "bot", /asistente virtual/],
-  ["quiero contratar", "paso_a_andres", "contratar", /Andrés/],
+  ["quiero contratar", "respondio_respaldo", "cierre", /Yape/],
 ];
 let n = 0, fallos = 0;
 for (const [q, accion, intent, rx] of C) {
