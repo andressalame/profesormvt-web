@@ -107,6 +107,16 @@ export const RESPUESTAS = {
   prepago_vigente:
     "Para los planes mensuales de mantenimiento hay 15 % de descuento pagando 6 meses juntos y 20 % pagando 12 meses juntos, hasta el 31 de diciembre de 2026. " +
     "El servicio estrella ya tiene su propio precio: S/ 499 al mes, o S/ 1.497 por 3 meses con la web de regalo.",
+  /* 31-oct-2026: la landing /seo-aeo/ ofrece «Te digo gratis si apareces». El asistente junta los datos y le avisa a Andrés, que hace la revisión. */
+  revision_pide:
+    "Genial, con gusto te lo revisamos gratis :)!\n\n" +
+    "Tengo un par de preguntitas para que la revisión salga bien:\n" +
+    "Cómo se llama tu negocio?\n" +
+    "En qué distrito o ciudad estás?\n" +
+    "Tienes web o Instagram? Si tienes, pásame el enlace.",
+  revision_recibida:
+    "Excelente, gracias. Ya le pasé tus datos a Andrés: él revisa cómo te ven hoy Google y ChatGPT y te escribe por aquí con lo que encontró.\n\n" +
+    "Mientras tanto, si quieres te cuento cómo es el servicio para que aparezcas más. Desearías que te cuente?",
   prepago_vencido:
     "El servicio estrella tiene precio fijo: S/ 499 al mes, o S/ 1.497 por 3 meses con la web de regalo.",
 };
@@ -342,6 +352,7 @@ const RX = {
   reporte: /reporte|informe|metricas|como (mido|veo|miden|medimos)|analytics|search console/,
   portafolio: /portafolio|ejemplos?|trabajos (hechos|anteriores|realizados)|casos de exito|clientes (tuyos|suyos|que tienen)|referencias|han hecho|muestras?/,
   resenas: /rese[nñ]as?|opiniones de google|calificaciones/,
+  revision: /\b(revision|revisar|revisen|revises|diagnostico|auditoria|chequeo) gratis|\b(saber|sepa|ver|revis\w*)\b.{0,30}\bsi (mi negocio|mi empresa|me|nos) (aparece|aparezco|aparecemos|encuentran)|como me (ven|encuentran) (en )?(google|chatgpt)|aparezco en (google|chatgpt)|te digo gratis/,
   saludo: /^(hola|holi|holis|buenas|buen dia|buenos dias|buenas tardes|buenas noches|hello|hi|que tal|ola)( .{0,25})?$/,
   graciasOk: /^(ok|okay|oki|listo|vale|dale|gracias|muchas gracias|ya|entiendo|entendido|perfecto|genial|bien|buenisimo)( .{0,20})?$/,
   fuera: /clima|receta|chiste|futbol|partido|politic|horoscopo|signo zodiacal|tarea|matematica|traduce|traduc|poema|cancion|letra de|presidente|bitcoin|criptomoneda|pelicula|serie de|videojuego|quien (gano|es el presidente)|cuanto es \d|capital de|recomiendame (un|una) (libro|pelicula|restaurante)|\bdime (un|una)\b/,
@@ -378,6 +389,15 @@ export function decidir({ texto, tipo = "text", historial = [], primero = false,
   if (RX.descuento.test(t)) {
     return { tipo: "pase", motivo: "condicion_especial", intent: "descuento", textos: PASES.condicion_especial, pausar: true,
       textoPrevio: /prepag|adelantad|6 meses|12 meses|seis meses|doce meses|un ano/.test(t) ? (prepagoVigente(ahora) ? RESPUESTAS.prepago_vigente : RESPUESTAS.prepago_vencido) : null };
+  }
+  /* Revisión gratis (31-oct-2026): con datos del negocio avisa a Andrés sin pausar; sin datos, los pide. */
+  if (RX.revision.test(t)) {
+    const detalle = (t.split(/mi negocio es:?/)[1] || "").replace(/[^a-z0-9]/g, "");
+    return detalle.length >= 3 ? { tipo: "revision", intent: "revision" } : { tipo: "respuesta", intent: "revision_pide", texto: RESPUESTAS.revision_pide };
+  }
+  const ultimoAsistente = [...(historial || [])].reverse().find((m) => m && m.role === "assistant");
+  if (ultimoAsistente && /te lo revisamos gratis/.test(ultimoAsistente.content || "") && t.length >= 3 && !RX.precio.test(t) && !RX.incluye.test(t)) {
+    return { tipo: "revision", intent: "revision" };
   }
   if (RX.caro.test(t)) {
     if (contarUsuario(historial, RX.caro) >= 1) return pase("objecion_repetida", "caro");
@@ -450,6 +470,7 @@ export function armarAviso({ motivo, intent, telefono, nombre, ultimo, referral,
     adjunto: "mandó un audio, imagen o archivo",
     instruccion_sospechosa: "intentó cambiar las reglas del asistente",
     dato_no_verificado: "pregunta algo que el asistente no puede confirmar",
+    revision: "pidió la REVISIÓN GRATIS (cómo lo ven Google y ChatGPT): hazla y respóndele por este chat",
   }[motivo] || motivo;
   const quien = nombre ? nombre + " (" + telefono + ")" : telefono;
   const ad = referral && (referral.headline || referral.source_url || referral.source_id)
@@ -460,7 +481,7 @@ export function armarAviso({ motivo, intent, telefono, nombre, ultimo, referral,
     "Lead de la línea de anuncios (linea compartida de Batuta, +51 904 079 121), origen: " + (origen || "anuncio") + ".\n" +
     "Cliente: " + quien + "\nMotivo del pase: " + etiqueta + (intent && intent !== motivo ? " (" + intent + ")" : "") +
     "\nÚltimo mensaje: " + String(ultimo || "").slice(0, 400) + ad +
-    (motivo === "cierre" ? "\n\nEl asistente SIGUE atendiendo este chat y ya le dio las formas de pago; cuando la persona mande su comprobante te avisará de nuevo.\n" : "\n\nEl asistente quedó en pausa en este chat; el siguiente mensaje lo respondes tú.\n") +
+    (motivo === "revision" ? "\n\nEl asistente SIGUE atendiendo este chat. Haz la revisión (cómo aparece en Google, Maps y ChatGPT) y respóndele tú por la bandeja.\n" : motivo === "cierre" ? "\n\nEl asistente SIGUE atendiendo este chat y ya le dio las formas de pago; cuando la persona mande su comprobante te avisará de nuevo.\n" : "\n\nEl asistente quedó en pausa en este chat; el siguiente mensaje lo respondes tú.\n") +
     "Bandeja: https://batuta.lat/app/su/bandeja";
   const textoWA = ("Web Express: " + quien + " " + etiqueta + ". Último mensaje: " + String(ultimo || "").slice(0, 160)).slice(0, 350);
   return { asunto, cuerpo, textoWA };
@@ -503,6 +524,13 @@ export async function turno(deps, p) {
     const ok = await deps.enviar(texto);
     await deps.guardarLead({ ...base, estado: "pasado_a_andres", motivo: d.motivo, pausa: true });
     return { accion: "paso_a_andres", texto, motivo: d.motivo, intent: d.intent, enviado: ok, avisoConfirmado: aviso.confirmado };
+  }
+  if (d.tipo === "revision") {
+    try { await deps.avisar({ motivo: "revision", intent: "revision", telefono: p.telefono, nombre: p.nombre, ultimo: p.texto, referral: p.referral, origen: "anuncio" }); } catch (e) {}
+    const texto = limpiarEstiloWE(RESPUESTAS.revision_recibida);
+    const ok = await deps.enviar(texto);
+    await deps.guardarLead({ ...base, estado: "revision", motivo: "revision", pausa: false });
+    return { accion: "aviso_revision", texto, intent: "revision", enviado: ok };
   }
   const esCierre = d.tipo === "cierre";
   if (esCierre) {

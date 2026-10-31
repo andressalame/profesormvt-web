@@ -183,6 +183,23 @@ sec("1. Conversación: fuera de tema");
   comprobar("una frase con Google/web NO se trata como fuera de tema", dentro.intent !== "fuera_de_tema");
 }
 
+sec("1. Conversación: revisión gratis desde la landing (31-oct)");
+{
+  const c = simular();
+  const r = await c.decir("Hola, quiero saber gratis si mi negocio aparece en Google y en ChatGPT. Mi negocio es: ");
+  comprobar("sin datos del negocio, pide los datos sin avisar todavía", r.intent === "revision_pide" && c.avisos.length === 0 && /Cómo se llama tu negocio/.test(r.texto));
+  const r2 = await c.decir("Pastelería Dulce Ana, en Surco, instagram.com/dulceana");
+  comprobar("con los datos, avisa a Andrés con motivo «revision»", r2.accion === "aviso_revision" && c.avisos.length === 1 && c.avisos[0].motivo === "revision");
+  comprobar("no pausa el chat: el asistente sigue atendiendo", c.leads.at(-1).pausa === false && c.leads.at(-1).estado === "revision");
+  comprobar("no promete resultados ni cita precios", !/S\//.test(r2.texto) && !/garantiz/.test(r2.texto));
+  comprobar("estilo de la casa en los dos mensajes", sinFormaProhibida(r.texto) && sinFormaProhibida(r2.texto));
+  const c2 = simular();
+  const r3 = await c2.decir("Hola, quiero saber gratis si mi negocio aparece en Google y en ChatGPT. Mi negocio es: Ferretería El Clavo, Lima");
+  comprobar("si el primer mensaje ya trae el negocio, avisa de una", r3.accion === "aviso_revision" && c2.avisos.length === 1);
+  const a = A.armarAviso({ motivo: "revision", telefono: "51999", nombre: "X", ultimo: "y" });
+  comprobar("el correo a Andrés dice que haga la revisión y no habla de formas de pago", /REVISIÓN GRATIS/.test(a.asunto) && /Haz la revisión/.test(a.cuerpo) && !/formas de pago/.test(a.cuerpo));
+}
+
 sec("1. Mensaje libre: modelo con base de conocimiento y guardia de salida");
 {
   const conLlm = async (llm, msg) => { const c = simular({ llm }); await c.decir("Hola"); return c.decir(msg); };
