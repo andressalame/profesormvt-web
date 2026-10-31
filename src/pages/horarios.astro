@@ -18,7 +18,7 @@ import Layout from '../layouts/Layout.astro';
     </div>
     <div class="hor-pie">
       <p id="seleccion" class="seleccion" aria-live="polite"></p>
-      <a id="continuar" class="btn-hero" href="/prueba/" hidden><span>Continuar con mi paquete</span><span aria-hidden="true">→</span></a>
+      <a id="continuar" class="btn-hero" href="https://batuta.lat/app/a/profesormvt/pagar" hidden><span>Elegir paquete y pagar</span><span aria-hidden="true">→</span></a>
     </div>
   </main>
 </Layout>
@@ -129,7 +129,7 @@ import Layout from '../layouts/Layout.astro';
       seleccion.textContent = "";
       var cta = document.getElementById("continuar");
       if (cta) {
-        if (ELEGIDO) { cta.hidden = false; cta.href = "/prueba/?slot=" + encodeURIComponent(ELEGIDO) + "&dur=" + DURACION; }
+        if (ELEGIDO) { cta.hidden = false; cta.href = "https://batuta.lat/app/a/profesormvt/pagar?slot=" + encodeURIComponent(ELEGIDO) + "&dur=" + DURACION; }
         else { cta.hidden = true; }
       }
     }

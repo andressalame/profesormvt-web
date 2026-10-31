@@ -3904,14 +3904,19 @@ async function confirmarCompra(env, tenantId, tenant, compra){
     return { ok: false, error: "No se pudo aplicar la compra. Intenta de nuevo.", status: 500 };
   }
 
-  if (!renovado && alumnoIdNuevo && compra.paquete === "Clase de prueba" && compra.slot_deseado) {
+  /* Horario elegido ANTES de pagar (calendario publico de ProfesorMVT): "ISO" o "ISO;2" para
+     dos horas seguidas. Se reserva con cualquier paquete, no solo con la clase de prueba. */
+  if (!renovado && alumnoIdNuevo && compra.slot_deseado) {
     try {
-      if (await slotValido(env, tenantId, compra.slot_deseado)) {
-        const finIso = new Date(Date.parse(compra.slot_deseado) + CLASE_MIN * 60000).toISOString();
-        const rid = crypto.randomUUID();
+      const [slotIso, durTxt] = String(compra.slot_deseado).split(";");
+      const horas = durTxt === "2" ? 2 : 1;
+      for (let h = 0; h < horas; h++) {
+        const ini = new Date(Date.parse(slotIso) + h * CLASE_MIN * 60000).toISOString();
+        if (!(await slotValido(env, tenantId, ini))) break;
+        const finIso = new Date(Date.parse(ini) + CLASE_MIN * 60000).toISOString();
         await env.DB.prepare(
           "INSERT INTO reservas (id,tenant_id,alumno_id,inicio_utc,fin_utc,tipo,serie_id,estado,curso,ciclo,creada) VALUES (?1,?2,?3,?4,?5,'suelta','','reservada',?6,1,?7)"
-        ).bind(rid, tenantId, alumnoIdNuevo, compra.slot_deseado, finIso, compra.curso || "", new Date().toISOString()).run();
+        ).bind(crypto.randomUUID(), tenantId, alumnoIdNuevo, ini, finIso, compra.curso || "", new Date().toISOString()).run();
       }
     } catch (e) { /* alguien tomo ese horario mientras tanto; el alumno lo reserva desde el portal */ }
   }
@@ -11482,6 +11487,17 @@ export default {
       const paqP = await loadPaquetes(env, tP.id);
       const preSel = pkDeEnlace(paquetesEnVenta(tP, paqP.list), preSelRaw);
       const paquetesOk = paquetesEnVenta(tP, paqP.list).filter(pk => (preciosP[pk] || 0) > 0 && (!paqP.map[pk].oculto || pk === preSel));
+      /* Horario elegido en el calendario publico (?slot=ISO&dur=1|2): se confirma que siga libre. */
+      let slotP = "", slotTxtP = "";
+      {
+        const isoP = String(url.searchParams.get("slot") || "");
+        const durP = url.searchParams.get("dur") === "2" ? 2 : 1;
+        if (isoP && await slotValido(env, tP.id, isoP).catch(() => false)){
+          slotP = isoP + (durP === 2 ? ";2" : "");
+          slotTxtP = new Intl.DateTimeFormat("es-PE", { timeZone: "America/Lima", weekday: "long", day: "numeric", month: "long", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(new Date(isoP)) +
+            (durP === 2 ? " (2 horas seguidas)" : "");
+        }
+      }
       const mpOnP = mpCobraConTarjeta(tP);
       const stripeOnP = stripeConnectOn(env) && !!(tP.stripe_account_id) && !!Number(tP.stripe_charges_enabled);
       const mpSoloTarjetaP = String(cfgP.mp_solo_tarjeta || "") === "1";
@@ -11558,11 +11574,11 @@ export default {
             (seleccionadoP ? "" : "<option value=\"\" selected disabled>Elige tu paquete</option>") +
             paquetesOk.map(pk => "<option value=\"" + esc(pk) + "\"" + (pk === seleccionadoP ? " selected" : "") + " data-det=\"" + esc(detallePaq(pk)) + "\" data-precio=\"" + (Number(preciosP[pk]) || 0) + "\">" + esc(pk) + " — S/ " + (preciosP[pk] || 0) + "</option>").join("") +
           "</select></section>" +
-          '<section class="paso" id="s2" aria-labelledby="h2p"><h2 id="h2p"><b>2</b> Tus datos</h2><div class="fila">' +
+          '<section class="paso" id="s2" aria-labelledby="h2p"><h2 id="h2p"><b>2</b> Tus datos</h2>' + (slotP ? '<p class="sub" id="slotp" style="margin:0 0 12px"><b>Tu horario:</b> ' + esc(slotTxtP) + '. Se aparta apenas confirmemos tu pago.</p>' : '') + '<div class="fila">' +
           '<div class="cp"><label for="nm">Tu nombre</label><input id="nm" type="text" required maxlength="80" autocomplete="given-name"><div class="fe" id="fe-nm" role="alert"></div></div>' +
           '<div class="cp"><label for="ap">Tus apellidos</label><input id="ap" type="text" maxlength="80" placeholder="Opcional" autocomplete="family-name"></div>' +
-          '<div class="cp"><label for="em">Tu correo</label><input id="em" type="email" required maxlength="120" autocomplete="email" inputmode="email"><div class="fe" id="fe-em" role="alert"></div></div>' +
-          '<div class="cp"><label for="wa">Tu WhatsApp (opcional)</label><input id="wa" type="tel" maxlength="20" autocomplete="tel" inputmode="tel"></div></div>' +
+          '<div class="cp"><label for="em">' + (slotP ? 'Tu correo (o tu WhatsApp)' : 'Tu correo') + '</label><input id="em" type="email"' + (slotP ? '' : ' required') + ' maxlength="120" autocomplete="email" inputmode="email"><div class="fe" id="fe-em" role="alert"></div></div>' +
+          '<div class="cp"><label for="wa">' + (slotP ? 'Tu WhatsApp (o tu correo)' : 'Tu WhatsApp (opcional)') + '</label><input id="wa" type="tel" maxlength="20" autocomplete="tel" inputmode="tel"></div></div>' +
           (camposP.nacimiento
             ? "<label for=\"fn\">Fecha de nacimiento</label><input id=\"fn\" type=\"date\" max=\"" + hoyLima() + "\">" +
               "<div id=\"tutorbox\" style=\"display:none;margin:10px 0 0\">" +
@@ -11605,7 +11621,7 @@ export default {
         "<div class=\"foot\">¿Ya tienes cuenta? <a href=\"/app/a/" + esc(tP.slug) + "\">Entra a tu portal</a></div></div>";
       const cssP = PAGO_CSS + ":root{--acc:" + colorP + ";--acc-ink:" + (luzP > 0.55 ? "#17130C" : "#FFFFFF") + "}";
       const scriptP =
-        "var INFO=" + JSON.stringify(infoPago).replace(/</g, "\\u003c") + ";var SLUGP=" + JSON.stringify(tP.slug) + ";" +
+        "var INFO=" + JSON.stringify(infoPago).replace(/</g, "\\u003c") + ";var SLUGP=" + JSON.stringify(tP.slug) + ";var SLOTP=" + JSON.stringify(slotP) + ";" +
         /* menos de 14 -> aparece la declaracion del apoderado y sin ella no se envia.
            Es la "verificacion razonable" que pide el reglamento; el servidor la reexige. */
         "var fnEl=document.getElementById('fn');" +
@@ -11638,6 +11654,7 @@ export default {
         "document.getElementById('fp').addEventListener('submit',async function(e){" +
         "e.preventDefault();var err=document.getElementById('errp');err.textContent='';" +
         "if(!document.getElementById('pq').value){err.textContent='Elige tu paquete antes de pagar.';return;}" +
+        "if(SLOTP&&!document.getElementById('em').value.trim()&&document.getElementById('wa').value.replace(/\\D/g,'').length<8){err.textContent='Escribe tu correo o tu WhatsApp.';return;}" +
         "var tb=document.getElementById('tutorbox'),tc=document.getElementById('tutor');" +
         "if(tb&&tb.style.display!=='none'&&tc&&!tc.checked){err.textContent='Marca la autorizacion del apoderado para continuar.';return;}" +
         "if(datosRef().codigo_referido&&refFirma!==firmaRef()){await aplicaRef();err.textContent='Revisa el código y el total antes de continuar con el pago.';return;}" +
@@ -11647,7 +11664,7 @@ export default {
         "slug:SLUGP,paquete:document.getElementById('pq').value,nombre:document.getElementById('nm').value.trim()," +
         "apellido:(document.getElementById('ap')?document.getElementById('ap').value.trim():'')," +
         "nacimiento:(fnEl?fnEl.value:''),tutor:(document.getElementById('tutor')?document.getElementById('tutor').checked:false)," +
-        "email:document.getElementById('em').value.trim(),whatsapp:document.getElementById('wa').value.trim()," +
+        "email:document.getElementById('em').value.trim(),whatsapp:document.getElementById('wa').value.trim(),slot_deseado:SLOTP," +
         "codigo_referido:datosRef().codigo_referido,total_cotizado:refMonto,metodo:mt.value,op_numero:document.getElementById('op')?document.getElementById('op').value.trim():'',comprobante:cap})});" +
         "var d=await r.json();" +
         "if(!r.ok){err.textContent=d.error||'No se pudo registrar. Intenta de nuevo.';btn.disabled=false;return;}" +
@@ -15734,11 +15751,23 @@ export default {
         const paqMapPd = (await loadPaquetes(env, t.id)).map;
         if (!paqMapPd[paquete]) return json({ error: "Paquete no válido." }, 400);
         const nombre = String(b.nombre || "").trim();
-        const email = String(b.email || "").trim().toLowerCase();
+        let email = String(b.email || "").trim().toLowerCase();
         const whatsapp = String(b.whatsapp || "").trim().slice(0, 20);
         const metodo = String(b.metodo || "").trim().slice(0, 40);
         if (nombre.length < 2) return json({ error: "Escribe tu nombre." }, 400);
-        if (!emailOk(email)) return json({ error: "Ese correo no parece válido." }, 400);
+        /* Con horario elegido (calendario publico) basta el correo O el WhatsApp. Sin correo la
+           cuenta lleva uno interno (@invitados.batuta.lat): la fila lo exige (NOT NULL, unico)
+           y nunca se le escribe a esa direccion. */
+        let slotPd = "";
+        if (b.slot_deseado){
+          const [isoPd, durPd] = String(b.slot_deseado).split(";");
+          if (!(await slotValido(env, t.id, isoPd))) return json({ error: "Ese horario ya no está libre. Vuelve a los horarios y elige otro." }, 409);
+          slotPd = isoPd + (durPd === "2" ? ";2" : "");
+        }
+        const digitosPd = whatsapp.replace(/\D/g, "");
+        const emailInterno = !email && slotPd && digitosPd.length >= 8;
+        if (emailInterno) email = "wa" + digitosPd + "@invitados.batuta.lat";
+        if (!emailOk(email)) return json({ error: slotPd ? "Escribe tu correo o tu WhatsApp." : "Ese correo no parece válido." }, 400);
         /* Apellido y fecha de nacimiento (Ley 29733). La fecha SOLO se acepta si la academia
            la pidio: si no, se descarta aunque venga en el POST, para no guardar un dato que
            nadie declaro necesitar. Y con menos de 14 anios exige la declaracion del apoderado,
@@ -15826,6 +15855,7 @@ export default {
         // cuenta existente -> recordatorio de entrar al portal.
         async function correoAcceso(){
           try {
+            if (/@invitados\.batuta\.lat$/.test(email)) return;
             const portal = MARCA.dominio + "/app/a/" + t.slug;
             if (esNueva){
               const token = randHex(32);
@@ -15871,8 +15901,8 @@ export default {
           ).bind(t.id, cu.id).run();
           const compraId = crypto.randomUUID();
           await env.DB.prepare(
-            "INSERT INTO compras (id,tenant_id,cuenta_id,curso,paquete,monto,descuento,desc_ref,op_numero,estado,fecha,metodo,comprobante,slot_deseado) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,'','iniciada',?9,'Tarjeta (Mercado Pago)','','')"
-          ).bind(compraId, t.id, cu.id, cursoDef, paquete, monto, descuento, descRef, hoyLima()).run();
+            "INSERT INTO compras (id,tenant_id,cuenta_id,curso,paquete,monto,descuento,desc_ref,op_numero,estado,fecha,metodo,comprobante,slot_deseado) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,'','iniciada',?9,'Tarjeta (Mercado Pago)','',?10)"
+          ).bind(compraId, t.id, cu.id, cursoDef, paquete, monto, descuento, descRef, hoyLima(), slotPd).run();
           let pref = null;
           /* mp_solo_tarjeta (7-ago-2026, Elevate): MP queda SOLO para tarjeta — Yape dentro de MP
              le come comisión a la academia; el Yape directo (sin comisión) ya es otro método. */
@@ -15934,8 +15964,8 @@ export default {
           ).bind(t.id, cu.id).run();
           const compraIdSt = crypto.randomUUID();
           await env.DB.prepare(
-            "INSERT INTO compras (id,tenant_id,cuenta_id,curso,paquete,monto,descuento,op_numero,estado,fecha,metodo,comprobante,slot_deseado) VALUES (?1,?2,?3,?4,?5,?6,0,'','iniciada',?7,'Tarjeta (Stripe)','','')"
-          ).bind(compraIdSt, t.id, cu.id, cursoDef, paquete, montoSt, hoyLima()).run();
+            "INSERT INTO compras (id,tenant_id,cuenta_id,curso,paquete,monto,descuento,op_numero,estado,fecha,metodo,comprobante,slot_deseado) VALUES (?1,?2,?3,?4,?5,?6,0,'','iniciada',?7,'Tarjeta (Stripe)','',?8)"
+          ).bind(compraIdSt, t.id, cu.id, cursoDef, paquete, montoSt, hoyLima(), slotPd).run();
           const sessSt = await stripeApi(env, "POST", "/v1/checkout/sessions", {
             mode: "payment",
             expires_at: Math.floor(Date.now() / 1000) + 3600,
@@ -15967,11 +15997,13 @@ export default {
           } catch (e) { comprobanteKey = ""; }
         }
         await env.DB.prepare(
-          "INSERT INTO compras (id,tenant_id,cuenta_id,curso,paquete,monto,descuento,desc_ref,op_numero,estado,fecha,metodo,comprobante,slot_deseado) VALUES (?1,?2,?3,?4,?5,?6,?7,?12,?8,'pendiente',?9,?10,?11,'')"
-        ).bind(crypto.randomUUID(), t.id, cu.id, cursoDef, paquete, monto, descuento, String(b.op_numero || "").trim().slice(0, 40), hoyLima(), metodo, comprobanteKey, descRef).run();
+          "INSERT INTO compras (id,tenant_id,cuenta_id,curso,paquete,monto,descuento,desc_ref,op_numero,estado,fecha,metodo,comprobante,slot_deseado) VALUES (?1,?2,?3,?4,?5,?6,?7,?12,?8,'pendiente',?9,?10,?11,?13)"
+        ).bind(crypto.randomUUID(), t.id, cu.id, cursoDef, paquete, monto, descuento, String(b.op_numero || "").trim().slice(0, 40), hoyLima(), metodo, comprobanteKey, descRef, slotPd).run();
         try { await avisarPush(env, t.id, { title: "Pago por confirmar", paquete, monto }); } catch (e) {}
         await correoAcceso();
-        return json({ ok: true, mensaje: esNueva
+        return json({ ok: true, mensaje: emailInterno
+          ? "Tu pago quedó registrado" + (slotPd ? " y tu horario está apartado" : "") + ". Te escribimos por WhatsApp apenas lo confirmemos."
+          : esNueva
           ? "Tu pago quedó registrado. Revisa tu correo (" + email + "): te mandamos el link para crear tu contraseña y entrar a tu portal."
           : "Tu pago quedó registrado. Tu profesor lo confirma y lo verás en tu portal." });
       }
