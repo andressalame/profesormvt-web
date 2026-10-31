@@ -44,7 +44,7 @@ const cursoRelacionado = ({
   teoria: { href: '/clases-composicion-lima/', txt: 'las clases de composición en Lima' },
 } as Record<string, { href: string; txt: string }>)[post.data.category];
 
-const postImageURL = new URL(post.data.image || '/og-image.jpg', Astro.site).href;
+const postImageURL = new URL(post.data.image || '/og-mvt-2026.jpg', Astro.site).href;
 const postURL = new URL(`/blog/${post.slug}/`, Astro.site).href;
 
 // SEO de los 36 posts, 6-set-2026. Dos cosas estaban rotas de fábrica y en TODOS:
@@ -78,7 +78,7 @@ const descSEO = recortar((post.data as any).metaDescription || post.data.excerpt
   title={tituloSEO}
   description={descSEO}
   type="article"
-  image={post.data.image || '/og-image.jpg'}
+  image={post.data.image || '/og-mvt-2026.jpg'}
   publishedTime={post.data.date.toISOString()}
   activeNav="blog"
 >

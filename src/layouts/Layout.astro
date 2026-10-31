@@ -30,7 +30,7 @@ const {
   activeNav,
   calendarOnly = false,
   type = 'website',
-  image = '/og-image.jpg',
+  image = '/og-mvt-2026.jpg',
   publishedTime,
   extraSchema,
   noindex = false,
@@ -56,7 +56,7 @@ const localBusinessSchema = {
   "description":"Clases 1 a 1 de canto (método MVT) y composición para adultos en Lima (Miraflores) y online.",
   "url":"https://profesormvt.com/",
   "telephone":"+51989077928",
-  "image":"https://profesormvt.com/og-image.jpg",
+  "image":"https://profesormvt.com/og-mvt-2026.jpg",
   "priceRange":"S/90 - S/780",
   "areaServed":[{"@type":"City","name":"Lima"},{"@type":"AdministrativeArea","name":"Lima Metropolitana"}],
   // Sede presencial: MIRAFLORES, Av. El Ejército. Va la AVENIDA, nunca el número:
@@ -155,6 +155,8 @@ const baseSchema = { "@context":"https://schema.org", "@graph":[localBusinessSch
   <meta property="og:type" content={type} />
   <meta property="og:url" content={canonicalURL} />
   <meta property="og:image" content={socialImage} />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
   <meta property="og:image:alt" content={imageAlt} />
   <meta property="og:locale" content="es_PE" />
   <meta property="og:site_name" content="Profesor MVT" />
