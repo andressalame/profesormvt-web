@@ -2310,7 +2310,7 @@ async function loadConfig(env, tenantId){
    son las propias de Batuta (self-hosted); el resto se queda por las academias que
    ya eligieron una. Si se agrega un nombre aqui hay que sumarlo tambien a
    BRAND_FONT_LINKS del panel, o el panel no sabra cargarla. */
-const BRAND_FONTS = ["Cabinet Grotesk", "Switzer", "Anton", "Bebas Neue", "Bricolage Grotesque", "Playfair Display", "Space Grotesk", "Space Mono"];
+const BRAND_FONTS = ["Cabinet Grotesk", "Switzer", "Anton", "Bebas Neue", "Bricolage Grotesque", "Playfair Display", "Shippori Mincho", "Space Grotesk", "Space Mono"];
 
 /* Cursos del tenant: editables en Ajustes (config.cursos, separados por comas). Sin configurar → default. */
 const CURSOS_DEFAULT = ["Canto", "Piano", "Guitarra"];
