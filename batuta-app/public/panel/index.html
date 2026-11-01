@@ -1283,7 +1283,7 @@ table.acc-fija tbody tr:hover td:last-child{background:var(--panel2);}
     <div class="card ia-banner" id="iaBanner">
       <div class="ia-ico" aria-hidden="true">✨</div>
       <div class="ia-txt"><b>Configura tu academia fácilmente hablando con ChatGPT o Claude</b>
-        <span>Te hace unas preguntas y deja listos tus cursos, cupos, reglas de cancelación y precios. Sin formularios.</span></div>
+        <span>Te hace unas preguntas y deja listos tus cursos, paquetes, horarios, cupos, reglas de cancelación y precios. Sin formularios.</span></div>
       <button class="btn" id="btnIAGuia" type="button">Aquí está cómo hacerlo →</button>
     </div>
         <!-- Clases pagadas por vencerse (21-ago-2026): a Elevate se le perdieron 22 clases ya
@@ -2317,8 +2317,8 @@ table.acc-fija tbody tr:hover td:last-child{background:var(--panel2);}
         <p class="hint">Guárdala como una contraseña: quien la tenga puede leer los datos de tu academia. Si se te escapa, genera una nueva y la anterior deja de servir al instante.</p>
       </div>
       <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--line);">
-        <label class="wtoggle" style="display:flex;gap:8px;align-items:center;"><input type="checkbox" id="apiEscChk" /> <b>Permitir que mi asistente cambie ajustes y precios</b></label>
-        <p class="hint">Apagado por defecto. Con tu llave de siempre tu asistente <b>solo lee</b>. Al activar esto se crea una <b>segunda llave (de escritura)</b>: con ella puedes decirle «ahora cobra S/280 por el paquete de 4 clases» y lo cambia en Batuta. Solo cambia el precio de paquetes que ya existen, no crea ni borra nada, y cada cambio queda anotado abajo. Si la desactivas, esa llave deja de servir al instante.</p>
+        <label class="wtoggle" style="display:flex;gap:8px;align-items:center;"><input type="checkbox" id="apiEscChk" /> <b>Permitir que mi asistente configure mi academia (ajustes, paquetes, horarios y precios)</b></label>
+        <p class="hint">Apagado por defecto. Con tu llave de siempre tu asistente <b>solo lee</b>. Al activar esto se crea una <b>segunda llave (de escritura)</b>: con ella tu asistente puede cambiar cursos, cupos y reglas de cancelación, <b>crear paquetes nuevos</b>, <b>agregar horarios</b> y cambiar precios («ahora cobra S/280 por el paquete de 4 clases»). Solo <b>agrega o ajusta</b>: no borra paquetes, horarios, alumnos ni pagos, y cada cambio queda anotado abajo. Si la desactivas, esa llave deja de servir al instante.</p>
         <div id="apiEscBox" style="display:none;">
           <div class="cfgrow"><span class="pk">Para pegar en tu Claude o ChatGPT (con permiso de cambiar precios)</span><input id="apiEscUrl" type="text" readonly /></div>
           <div class="rowact" style="margin-top:6px;"><button class="btn ghost sm" id="btnApiEscRotar" type="button">Generar otra llave de escritura</button></div>
@@ -2457,7 +2457,7 @@ table.acc-fija tbody tr:hover td:last-child{background:var(--panel2);}
       </ol></div>
 
     <div class="ia-paso"><h4>2 · Saca tu enlace de conexión</h4>
-      <p class="hint" style="margin:0 0 6px;">Es una dirección privada que le da permiso a tu IA para ver y cambiar los ajustes de tu academia (cursos, cupos, cancelaciones y precios). No toca alumnos ni pagos. Cada cambio queda anotado en Ajustes → Avanzado.</p>
+      <p class="hint" style="margin:0 0 6px;">Es una dirección privada que le da permiso a tu IA para configurar tu academia: cursos, cupos, cancelaciones, paquetes nuevos, horarios y precios. Solo agrega o ajusta: no borra nada y no toca alumnos ni pagos. Cada cambio queda anotado en Ajustes → Avanzado.</p>
       <div class="ia-fila"><button class="btn" id="btnIAEnlace" type="button">Activar y mostrar mi enlace</button></div>
       <div id="iaEnlaceBox" style="display:none;"><div class="ia-fila"><input id="iaEnlace" type="text" readonly aria-label="Tu enlace de conexión" /><button class="btn ghost sm" id="btnIACopiarEnlace" type="button">Copiar</button></div>
         <p class="hint">Trátalo como una contraseña: quien lo tenga puede cambiar esos ajustes. Si se te escapa, en Ajustes → Avanzado genera otro y el anterior deja de servir.</p></div></div>
@@ -2475,7 +2475,7 @@ table.acc-fija tbody tr:hover td:last-child{background:var(--panel2);}
       <textarea id="iaPrompt" readonly aria-label="Mensaje para tu IA"></textarea>
       <div class="ia-fila"><button class="btn" id="btnIACopiarPrompt" type="button">Copiar mensaje</button><span class="hint" id="iaOk"></span></div></div>
 
-    <div class="card" style="padding:12px 14px;font-size:13.5px;"><b>Qué puede hacer hoy tu IA:</b> cursos, cupo por clase, reglas de cancelación, anticipación para reservar, vigencia de las clases y precios de tus paquetes. <b>Los horarios semanales y crear paquetes nuevos</b> se hacen desde este panel (Mi academia); si prefieres, escríbenos y los dejamos listos juntos.</div>
+    <div class="card" style="padding:12px 14px;font-size:13.5px;"><b>Qué puede hacer tu IA:</b> cursos, cupo por clase, reglas de cancelación, anticipación para reservar, vigencia de las clases, <b>crear paquetes</b>, <b>agregar horarios semanales</b> y cambiar precios. <b>Quitar</b> paquetes u horarios, o cambiar profesores, se hace desde este panel (Mi academia); si prefieres, escríbenos y lo dejamos listo juntos.</div>
 
     <div class="frow" style="grid-template-columns:1fr;margin-top:14px;"><button class="btn ghost" id="btnIACerrar" type="button">Cerrar</button></div>
   </div>
@@ -12697,11 +12697,12 @@ var _bCuD=el("btnCulqiDesconectar"); if(_bCuD) _bCuD.addEventListener("click",fu
 "   - Si las alumnas pueden cancelar o reprogramar solas y con cuántas horas de anticipación como mínimo.",
 "   - Con cuántas horas de anticipación como mínimo se puede reservar una clase.",
 "   - Cuántos meses dura un paquete de clases antes de vencer (0 si no vence).",
-"   - Los precios de mis paquetes (usa listar_precios para ver cuáles existen y no inventes nombres).",
+"   - Mis paquetes: cuáles ofrezco (nombre, cuántas clases incluye, precio y, si quiero, cuántos días dura). Usa listar_precios para ver los que ya existen y crea los que falten con crear_paquete.",
+"   - Mis horarios semanales: en qué días y a qué hora empiezan las clases, de qué curso es cada una y cuántas alumnas entran. Cárgalos con agregar_horario.",
 "3. Cuando tengas las respuestas, hazme un resumen con lo que vas a cambiar (antes → después) y espera mi «sí» antes de aplicar nada.",
-"4. Con mi «sí», aplica con configurar_academia y actualizar_precio. Un cambio de precio muy grande requiere que yo lo confirme de nuevo.",
+"4. Con mi «sí», aplica con configurar_academia, crear_paquete, agregar_horario y actualizar_precio. Un cambio de precio muy grande requiere que yo lo confirme de nuevo. Solo agregan o ajustan: nada de esto borra.",
 "5. Al terminar, llama otra vez a ver_configuracion y dime con claridad qué quedó guardado.",
-"6. Dime qué falta que no puedes hacer tú: los horarios semanales y crear paquetes nuevos se hacen en el panel de Batuta (Mi academia). Explícame cómo, en pasos cortos.",
+"6. Dime qué falta que no puedes hacer tú: quitar paquetes u horarios, o cambiar profesores, se hace en el panel de Batuta (Mi academia). Explícame cómo, en pasos cortos.",
 "",
 "Reglas: no inventes datos ni cambies nada que no te haya pedido; si no entiendes una respuesta, vuelve a preguntar; no pidas ni muestres contraseñas ni llaves."
   ].join("\n");
@@ -12748,6 +12749,7 @@ var _bCuD=el("btnCulqiDesconectar"); if(_bCuD) _bCuD.addEventListener("click",fu
       el("apiCambiosBox").style.display=(rows.length||chk.checked)?"":"none";
       el("apiCambios").innerHTML=rows.length?rows.map(function(c){
         var pre=(c.accion==="precio")?"S/ ":"";
+        if(c.accion==="paquete"||c.accion==="horario") return esc((c.fecha||"").slice(0,16).replace("T"," "))+" · "+(c.accion==="paquete"?"paquete nuevo":"horario agregado")+" · "+esc(c.objeto)+": "+esc(c.nuevo);
         return esc((c.fecha||"").slice(0,16).replace("T"," "))+" · "+esc(c.objeto)+": "+pre+esc(c.anterior)+" → "+pre+esc(c.nuevo);
       }).join("<br>"):"Todavía no ha cambiado nada.";
     }).catch(function(){});
@@ -12755,7 +12757,7 @@ var _bCuD=el("btnCulqiDesconectar"); if(_bCuD) _bCuD.addEventListener("click",fu
   function estado(){ apiPost("/app/api/admin/api-escritura",{accion:"estado"}).then(pintar).catch(function(){}); }
   chk.addEventListener("change",function(){
     var quiere=chk.checked;
-    if(quiere && !confirm("Vas a permitir que un asistente (Claude, ChatGPT…) con la llave de escritura cambie ajustes de tu academia (cursos, cupos, reglas de cancelación) y los precios de tus paquetes. ¿Activar?")){ chk.checked=false; return; }
+    if(quiere && !confirm("Vas a permitir que un asistente (Claude, ChatGPT…) con la llave de escritura configure tu academia: cursos, cupos, reglas de cancelación, paquetes nuevos, horarios y precios. No borra nada y cada cambio queda anotado. ¿Activar?")){ chk.checked=false; return; }
     apiPost("/app/api/admin/api-escritura",{accion:quiere?"activar":"desactivar"}).then(function(d){ pintar(d); toast(quiere?"Permiso activado":"Permiso apagado: esa llave ya no sirve"); })
       .catch(function(e){ chk.checked=!quiere; toast((e&&e.message)||"No se pudo cambiar"); });
   });
