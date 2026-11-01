@@ -587,6 +587,17 @@
   .trialbar .dl-btn[disabled]{opacity:.55;cursor:default;}
   .dl-msg{text-transform:none;letter-spacing:normal;}
   @media(max-width:700px){ .dl-solodesk{display:none;} .trialbar{gap:8px;padding:8px 12px;} .trialbar .dl-in{width:150px;} }
+  .ia-banner{display:flex;gap:14px;align-items:center;flex-wrap:wrap;padding:16px 18px;border:1px solid var(--accent);background:linear-gradient(135deg,rgba(232,161,61,.14),rgba(232,161,61,.04));margin-bottom:14px;}
+  .ia-banner .ia-ico{font-size:26px;line-height:1;}
+  .ia-banner .ia-txt{flex:1;min-width:220px;display:flex;flex-direction:column;gap:3px;}
+  .ia-banner .ia-txt span{font-size:13.5px;color:var(--muted);}
+  #ovIA .modal{max-width:720px;max-height:92vh;overflow-y:auto;}
+  #ovIA .ia-paso{border:1px solid var(--line);border-radius:6px;padding:14px;margin:12px 0;background:var(--panel2);}
+  #ovIA .ia-paso h4{margin:0 0 6px;font-size:15px;}
+  #ovIA .ia-paso ol{margin:6px 0 0;padding-left:20px;font-size:14px;line-height:1.6;}
+  #ovIA textarea{width:100%;min-height:210px;font-family:var(--mono,ui-monospace,monospace);font-size:12.5px;line-height:1.5;}
+  #ovIA .ia-fila{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:8px;}
+  #ovIA input[readonly]{flex:1;min-width:200px;}
   #ovPaywall{z-index:200;}
   #ovPaywall .modal{border-color:var(--accent);}
   /* multi-profesor: lo que solo ve el dueno se esconde para el rol profesor */
@@ -1269,7 +1280,13 @@ table.acc-fija tbody tr:hover td:last-child{background:var(--panel2);}
         a la derecha el mes y las próximas clases. En celular la columna derecha baja al final. -->
    <div class="hoy-layout">
    <div class="hoy-main">
-    <!-- Clases pagadas por vencerse (21-ago-2026): a Elevate se le perdieron 22 clases ya
+    <div class="card ia-banner" id="iaBanner">
+      <div class="ia-ico" aria-hidden="true">✨</div>
+      <div class="ia-txt"><b>Configura tu academia fácilmente hablando con ChatGPT o Claude</b>
+        <span>Te hace unas preguntas y deja listos tus cursos, cupos, reglas de cancelación y precios. Sin formularios.</span></div>
+      <button class="btn" id="btnIAGuia" type="button">Aquí está cómo hacerlo →</button>
+    </div>
+        <!-- Clases pagadas por vencerse (21-ago-2026): a Elevate se le perdieron 22 clases ya
          pagadas de 3 alumnas y nadie se enteró, porque el único aviso que existía era el correo
          al ALUMNO (y ese llega a pocos). El dueño no tenía dónde verlo. Lo pinta renderVenceBanner(). -->
     <!-- Planes rotos (21-ago-2026): un alumno cuyo plan ya no está en el catálogo queda en
@@ -2300,7 +2317,7 @@ table.acc-fija tbody tr:hover td:last-child{background:var(--panel2);}
         <p class="hint">Guárdala como una contraseña: quien la tenga puede leer los datos de tu academia. Si se te escapa, genera una nueva y la anterior deja de servir al instante.</p>
       </div>
       <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--line);">
-        <label class="wtoggle" style="display:flex;gap:8px;align-items:center;"><input type="checkbox" id="apiEscChk" /> <b>Permitir que mi asistente cambie precios</b></label>
+        <label class="wtoggle" style="display:flex;gap:8px;align-items:center;"><input type="checkbox" id="apiEscChk" /> <b>Permitir que mi asistente cambie ajustes y precios</b></label>
         <p class="hint">Apagado por defecto. Con tu llave de siempre tu asistente <b>solo lee</b>. Al activar esto se crea una <b>segunda llave (de escritura)</b>: con ella puedes decirle «ahora cobra S/280 por el paquete de 4 clases» y lo cambia en Batuta. Solo cambia el precio de paquetes que ya existen, no crea ni borra nada, y cada cambio queda anotado abajo. Si la desactivas, esa llave deja de servir al instante.</p>
         <div id="apiEscBox" style="display:none;">
           <div class="cfgrow"><span class="pk">Para pegar en tu Claude o ChatGPT (con permiso de cambiar precios)</span><input id="apiEscUrl" type="text" readonly /></div>
@@ -2427,6 +2444,42 @@ table.acc-fija tbody tr:hover td:last-child{background:var(--panel2);}
 </div><!-- /app -->
 
 <!-- Overlay de paywall (trial vencido) -->
+<div class="overlay" id="ovIA">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="iaTit">
+    <h3 id="iaTit">Configura tu academia <em>hablando con una IA</em></h3>
+    <div class="mlab">4 pasos, unos 10 minutos. Tú solo respondes preguntas; la IA hace los cambios en tu panel y tú los ves aquí.</div>
+
+    <div class="ia-paso"><h4>1 · Ten una cuenta en Claude o ChatGPT</h4>
+      <ol>
+        <li><b>Claude:</b> entra a <a href="https://claude.ai" target="_blank" rel="noopener">claude.ai</a> → «Sign up» y crea tu cuenta con tu correo o con Google.</li>
+        <li><b>ChatGPT:</b> entra a <a href="https://chatgpt.com" target="_blank" rel="noopener">chatgpt.com</a> → «Registrarse».</li>
+        <li>Conectar herramientas externas (como Batuta) suele pedir un plan de pago de ellos (Claude Pro o ChatGPT Plus). Revisa que tu plan lo permita.</li>
+      </ol></div>
+
+    <div class="ia-paso"><h4>2 · Saca tu enlace de conexión</h4>
+      <p class="hint" style="margin:0 0 6px;">Es una dirección privada que le da permiso a tu IA para ver y cambiar los ajustes de tu academia (cursos, cupos, cancelaciones y precios). No toca alumnos ni pagos. Cada cambio queda anotado en Ajustes → Avanzado.</p>
+      <div class="ia-fila"><button class="btn" id="btnIAEnlace" type="button">Activar y mostrar mi enlace</button></div>
+      <div id="iaEnlaceBox" style="display:none;"><div class="ia-fila"><input id="iaEnlace" type="text" readonly aria-label="Tu enlace de conexión" /><button class="btn ghost sm" id="btnIACopiarEnlace" type="button">Copiar</button></div>
+        <p class="hint">Trátalo como una contraseña: quien lo tenga puede cambiar esos ajustes. Si se te escapa, en Ajustes → Avanzado genera otro y el anterior deja de servir.</p></div></div>
+
+    <div class="ia-paso"><h4>3 · Conéctalo a tu IA</h4>
+      <ol>
+        <li><b>Claude:</b> Configuración (Settings) → <b>Conectores</b> (Connectors) → «Añadir conector personalizado» (Add custom connector) → nombre «Batuta» → pega tu enlace → Añadir.</li>
+        <li><b>ChatGPT:</b> Configuración → <b>Conectores</b> (Connectors) → Avanzado → activa el <b>modo desarrollador</b> → «Crear» → nombre «Batuta» → pega tu enlace → sin autenticación → Crear.</li>
+        <li>Los nombres de los menús pueden variar un poco según la versión. Si no encuentras «Conectores», busca «MCP» o «Herramientas» en la configuración.</li>
+        <li>En una conversación nueva, activa el conector Batuta (en ChatGPT, desde el «+» o el selector de herramientas).</li>
+      </ol></div>
+
+    <div class="ia-paso"><h4>4 · Copia y pega este mensaje</h4>
+      <p class="hint" style="margin:0 0 6px;">Pégalo en la conversación nueva y responde sus preguntas con calma. Antes de cambiar algo te pide confirmación.</p>
+      <textarea id="iaPrompt" readonly aria-label="Mensaje para tu IA"></textarea>
+      <div class="ia-fila"><button class="btn" id="btnIACopiarPrompt" type="button">Copiar mensaje</button><span class="hint" id="iaOk"></span></div></div>
+
+    <div class="card" style="padding:12px 14px;font-size:13.5px;"><b>Qué puede hacer hoy tu IA:</b> cursos, cupo por clase, reglas de cancelación, anticipación para reservar, vigencia de las clases y precios de tus paquetes. <b>Los horarios semanales y crear paquetes nuevos</b> se hacen desde este panel (Mi academia); si prefieres, escríbenos y los dejamos listos juntos.</div>
+
+    <div class="frow" style="grid-template-columns:1fr;margin-top:14px;"><button class="btn ghost" id="btnIACerrar" type="button">Cerrar</button></div>
+  </div>
+</div>
 <div class="overlay" id="ovPaywall">
   <div class="modal">
     <h3>Tu cuenta está <em>en pausa</em></h3>
@@ -12629,6 +12682,56 @@ var _bCuD=el("btnCulqiDesconectar"); if(_bCuD) _bCuD.addEventListener("click",fu
 })();
 
 
+
+/* ---------- Configura tu academia hablando con ChatGPT o Claude (1-nov-2026) ---------- */
+(function(){
+  var ban=el("btnIAGuia"); if(!ban) return;
+  var PROMPT=[
+"Eres mi asistente de configuración de Batuta, el software de mi academia. Tienes conectada la herramienta «Batuta». Habla en español sencillo, como a alguien que no sabe de tecnología, y haz UNA tanda de máximo 3 preguntas a la vez.",
+"",
+"Haz esto, en orden:",
+"1. Llama a ver_configuracion para saber cómo está mi academia hoy. Si dice que no puedo configurar, avísame que active el permiso en Batuta (Ajustes → Avanzado → «Permitir que mi asistente cambie ajustes y precios») y espera.",
+"2. Entrevístame para configurarla. Pregúntame, de a pocas:",
+"   - Qué tipo de academia es y qué cursos o disciplinas dicta (para el listado de cursos).",
+"   - Cuántas alumnas o alumnos entran como máximo en una clase (cupo por clase).",
+"   - Si las alumnas pueden cancelar o reprogramar solas y con cuántas horas de anticipación como mínimo.",
+"   - Con cuántas horas de anticipación como mínimo se puede reservar una clase.",
+"   - Cuántos meses dura un paquete de clases antes de vencer (0 si no vence).",
+"   - Los precios de mis paquetes (usa listar_precios para ver cuáles existen y no inventes nombres).",
+"3. Cuando tengas las respuestas, hazme un resumen con lo que vas a cambiar (antes → después) y espera mi «sí» antes de aplicar nada.",
+"4. Con mi «sí», aplica con configurar_academia y actualizar_precio. Un cambio de precio muy grande requiere que yo lo confirme de nuevo.",
+"5. Al terminar, llama otra vez a ver_configuracion y dime con claridad qué quedó guardado.",
+"6. Dime qué falta que no puedes hacer tú: los horarios semanales y crear paquetes nuevos se hacen en el panel de Batuta (Mi academia). Explícame cómo, en pasos cortos.",
+"",
+"Reglas: no inventes datos ni cambies nada que no te haya pedido; si no entiendes una respuesta, vuelve a preguntar; no pidas ni muestres contraseñas ni llaves."
+  ].join("\n");
+  el("iaPrompt").value=PROMPT;
+  function abrir(){ el("ovIA").classList.add("open"); estado(); }
+  function cerrar(){ el("ovIA").classList.remove("open"); }
+  function pintar(d){
+    var on=!!(d&&d.activo&&d.mcp_url);
+    el("iaEnlaceBox").style.display=on?"":"none";
+    el("iaEnlace").value=on?d.mcp_url:"";
+    el("btnIAEnlace").textContent=on?"Mi enlace está activo":"Activar y mostrar mi enlace";
+    el("btnIAEnlace").disabled=on;
+  }
+  function estado(){ apiPost("/app/api/admin/api-escritura",{accion:"estado"}).then(pintar).catch(function(){}); }
+  function copiar(texto,aviso){
+    function ok(){ toast(aviso); }
+    if(navigator.clipboard&&navigator.clipboard.writeText){ navigator.clipboard.writeText(texto).then(ok).catch(function(){ toast("Selecciona el texto y cópialo a mano"); }); }
+    else toast("Selecciona el texto y cópialo a mano");
+  }
+  ban.addEventListener("click",abrir);
+  el("btnIACerrar").addEventListener("click",cerrar);
+  el("ovIA").addEventListener("click",function(e){ if(e.target===el("ovIA")) cerrar(); });
+  el("btnIAEnlace").addEventListener("click",function(){
+    if(!confirm("Vas a permitir que una IA (Claude o ChatGPT) con tu enlace privado cambie cursos, cupos, reglas de cancelación y precios de tu academia. Cada cambio queda anotado y puedes apagarlo cuando quieras. ¿Activar?")) return;
+    apiPost("/app/api/admin/api-escritura",{accion:"activar"}).then(function(d){ pintar(d); toast("Enlace activado"); }).catch(function(e){ toast((e&&e.message)||"No se pudo activar"); });
+  });
+  el("btnIACopiarEnlace").addEventListener("click",function(){ copiar(el("iaEnlace").value,"Enlace copiado"); });
+  el("btnIACopiarPrompt").addEventListener("click",function(){ copiar(el("iaPrompt").value,"Mensaje copiado"); el("iaOk").textContent="Copiado. Pégalo en tu conversación con la IA."; });
+  el("iaPrompt").addEventListener("focus",function(){ this.select(); });
+})();
 /* ---------- Permiso de escritura del asistente (25-oct-2026) ---------- */
 (function(){
   var chk=el("apiEscChk"); if(!chk) return;
@@ -12644,14 +12747,15 @@ var _bCuD=el("btnCulqiDesconectar"); if(_bCuD) _bCuD.addEventListener("click",fu
       var rows=(d&&d.cambios)||[];
       el("apiCambiosBox").style.display=(rows.length||chk.checked)?"":"none";
       el("apiCambios").innerHTML=rows.length?rows.map(function(c){
-        return esc((c.fecha||"").slice(0,16).replace("T"," "))+" · "+esc(c.objeto)+": S/ "+esc(c.anterior)+" → S/ "+esc(c.nuevo);
+        var pre=(c.accion==="precio")?"S/ ":"";
+        return esc((c.fecha||"").slice(0,16).replace("T"," "))+" · "+esc(c.objeto)+": "+pre+esc(c.anterior)+" → "+pre+esc(c.nuevo);
       }).join("<br>"):"Todavía no ha cambiado nada.";
     }).catch(function(){});
   }
   function estado(){ apiPost("/app/api/admin/api-escritura",{accion:"estado"}).then(pintar).catch(function(){}); }
   chk.addEventListener("change",function(){
     var quiere=chk.checked;
-    if(quiere && !confirm("Vas a permitir que un asistente (Claude, ChatGPT…) con la llave de escritura cambie los precios de tus paquetes. ¿Activar?")){ chk.checked=false; return; }
+    if(quiere && !confirm("Vas a permitir que un asistente (Claude, ChatGPT…) con la llave de escritura cambie ajustes de tu academia (cursos, cupos, reglas de cancelación) y los precios de tus paquetes. ¿Activar?")){ chk.checked=false; return; }
     apiPost("/app/api/admin/api-escritura",{accion:quiere?"activar":"desactivar"}).then(function(d){ pintar(d); toast(quiere?"Permiso activado":"Permiso apagado: esa llave ya no sirve"); })
       .catch(function(e){ chk.checked=!quiere; toast((e&&e.message)||"No se pudo cambiar"); });
   });

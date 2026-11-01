@@ -10515,6 +10515,84 @@ async function apiActualizarPrecio(env, t, a, origen){
            mensaje: "Listo: «" + buscado.nombre + "» pasó de S/" + anterior + " a S/" + monto.valor + ".", enlaces: apiEnlacesPrecios(t) };
 }
 
+/* ---------- configurar la academia hablando con la IA (1-nov-2026) ----------
+   Mismas reglas y topes que el panel (`/app/api/admin/config`), con la llave de escritura
+   aparte, bitacora (`api_cambios`) y tope por hora. Solo lo que el panel ya deja cambiar. */
+async function apiVerConfiguracion(env, t){
+  const cfg = await loadConfig(env, t.id);
+  const cupo = parseInt(cfg.agenda_cupo, 10);
+  const plazo = parseInt(cfg.reprog_min_h, 10);
+  return {
+    academia: t.academia,
+    puede_configurar: !!t.__escritura,
+    cursos: cursosDeCfg(cfg),
+    clases_de_dos_niveles: clasesDeCfg(cfg).length > 0,
+    cupo_por_clase: (Number.isFinite(cupo) && cupo >= 1) ? cupo : 1,
+    cancelacion_activa: String(cfg.reprog_activo || "") !== "0",
+    plazo_cancelacion_horas: (Number.isFinite(plazo) && plazo >= 1) ? plazo : CANCELA_MIN_H,
+    anticipacion_reserva_horas: String(cfg.anticipacion_h || "") === "" ? "por defecto" : Number(cfg.anticipacion_h),
+    vigencia_clases_meses: String(cfg.caduca_meses || "") === "" ? "por defecto" : Number(cfg.caduca_meses),
+    paquetes: await apiPreciosDe(env, t),
+    enlaces: { panel: MARCA.dominio + "/app/panel#ajustes", horarios_y_paquetes: MARCA.dominio + "/app/panel#academia" }
+  };
+}
+async function apiConfigurarAcademia(env, t, a, origen){
+  if (!t.__escritura) return { error: "Este conector solo puede leer. El dueño tiene que activar «permitir que mi asistente cambie ajustes» en Ajustes y usar la llave de escritura." };
+  if (esTenantDemo(t)) return { error: "En la demo no se cambian ajustes." };
+  if (t.estado === "vencido") return { error: "La cuenta está vencida: renueva Batuta para poder cambiar ajustes." };
+  const cfg = await loadConfig(env, t.id);
+  const cambios = [], errores = [];
+  const poner = (clave, etiqueta, antes, valor) => { cambios.push({ clave, campo: etiqueta, anterior: String(antes), nuevo: String(valor), guardar: valor }); };
+  const entero = (v, min, max) => { const n = parseInt(String(v).replace(/[^\d-]/g, ""), 10); return (Number.isFinite(n) && n >= min && n <= max) ? n : null; };
+  if (a.cursos != null && a.cursos !== ""){
+    if (clasesDeCfg(cfg).length) errores.push("Esta academia usa clases de dos niveles (categoría · variante): los cursos se cambian desde el panel, no por aquí.");
+    else {
+      const lista = (Array.isArray(a.cursos) ? a.cursos : String(a.cursos).split(",")).map(x => String(x).trim().slice(0, 40)).filter(Boolean)
+        .filter((c, i, arr) => arr.indexOf(c) === i).slice(0, 15);
+      if (!lista.length) errores.push("cursos: escribe al menos un nombre.");
+      else poner("cursos", "cursos", cursosDeCfg(cfg).join(", "), lista.join(", "));
+    }
+  }
+  if (a.cupo_por_clase != null && a.cupo_por_clase !== ""){
+    const n = entero(a.cupo_por_clase, 1, CUPO_MAX);
+    if (n === null) errores.push("cupo_por_clase: un número entre 1 y " + CUPO_MAX + ".");
+    else poner("agenda_cupo", "cupo por clase", parseInt(cfg.agenda_cupo, 10) || 1, n);
+  }
+  if (a.cancelacion_activa != null && a.cancelacion_activa !== ""){
+    const v = String(a.cancelacion_activa).toLowerCase();
+    if (!["si", "sí", "no", "true", "false"].includes(v)) errores.push("cancelacion_activa: «si» o «no».");
+    else poner("reprog_activo", "las alumnas pueden cancelar/reprogramar", String(cfg.reprog_activo || "") !== "0" ? "si" : "no", ["no", "false"].includes(v) ? "0" : "");
+  }
+  if (a.plazo_cancelacion_horas != null && a.plazo_cancelacion_horas !== ""){
+    const n = entero(a.plazo_cancelacion_horas, 1, 72);
+    if (n === null) errores.push("plazo_cancelacion_horas: un número entre 1 y 72.");
+    else poner("reprog_min_h", "plazo mínimo para cancelar (horas)", parseInt(cfg.reprog_min_h, 10) || CANCELA_MIN_H, n);
+  }
+  if (a.anticipacion_reserva_horas != null && a.anticipacion_reserva_horas !== ""){
+    const n = entero(a.anticipacion_reserva_horas, 0, 168);
+    if (n === null) errores.push("anticipacion_reserva_horas: un número entre 0 y 168.");
+    else poner("anticipacion_h", "anticipación mínima para reservar (horas)", cfg.anticipacion_h || "por defecto", n);
+  }
+  if (a.vigencia_clases_meses != null && a.vigencia_clases_meses !== ""){
+    const n = entero(a.vigencia_clases_meses, 0, 60);
+    if (n === null) errores.push("vigencia_clases_meses: un número entre 0 y 60 (0 = sin vencimiento).");
+    else poner("caduca_meses", "vigencia de las clases (meses)", cfg.caduca_meses || "por defecto", n);
+  }
+  if (!cambios.length) return { error: errores.length ? errores.join(" ") : "No me pasaste ningún ajuste para cambiar.", ...(errores.length ? {} : { ajustes_posibles: ["cursos", "cupo_por_clase", "cancelacion_activa", "plazo_cancelacion_horas", "anticipacion_reserva_horas", "vigencia_clases_meses"] }) };
+  if (await chatbotPasoTope(env, "apiw:" + t.id, API_ESCRITURAS_HORA)) return { error: "Demasiados cambios esta hora (máximo " + API_ESCRITURAS_HORA + "). Intenta más tarde." };
+  await ensureApiCambiosSchema(env);
+  const ahora = new Date().toISOString();
+  const stmts = [];
+  for (const c of cambios){
+    stmts.push(env.DB.prepare("INSERT INTO config (tenant_id, clave, valor) VALUES (?1,?2,?3) ON CONFLICT(tenant_id, clave) DO UPDATE SET valor = ?3").bind(t.id, c.clave, String(c.guardar)));
+    stmts.push(env.DB.prepare("INSERT INTO api_cambios (id, tenant_id, fecha, accion, objeto, anterior, nuevo, origen) VALUES (?1,?2,?3,'config',?4,?5,?6,?7)")
+      .bind(crypto.randomUUID(), t.id, ahora, c.clave, c.anterior, c.nuevo, String(origen || "api")));
+  }
+  await env.DB.batch(stmts);
+  return { ok: true, cambios: cambios.map(c => ({ campo: c.campo, anterior: c.anterior, nuevo: c.nuevo })), ...(errores.length ? { no_se_pudo: errores } : {}),
+           mensaje: "Listo: cambié " + cambios.length + " ajuste" + (cambios.length === 1 ? "" : "s") + ".", enlaces: { panel: MARCA.dominio + "/app/panel#ajustes" } };
+}
+
 /* ---------- las consultas (las comparten REST y MCP) ---------- */
 async function apiResumen(env, t){
   const tid = t.id;
@@ -10803,6 +10881,8 @@ const API_TOOLS = [
   { name: "agenda", desc: "Clases reservadas de los proximos dias, con alumno y profesor.", args: { dias: "cuantos dias hacia adelante (max 30, por defecto 7)" } },
   { name: "pagos_recientes", desc: "Pagos de los ultimos dias con su estado y metodo, y el total confirmado.", args: { dias: "cuantos dias hacia atras (max 120, por defecto 30)" } },
   { name: "listar_precios", desc: "Los precios de los paquetes de la academia (en soles) y los enlaces para verlos. Úsala antes de cambiar un precio para tomar el nombre exacto del paquete.", args: {} },
+  { name: "ver_configuracion", desc: "Cómo está configurada la academia hoy: cursos, cupo por clase, reglas de cancelación, anticipación de reserva, vigencia de las clases y paquetes con precio. Úsala SIEMPRE antes de cambiar ajustes y al terminar para confirmar.", args: {} },
+  { name: "configurar_academia", escribe: true, desc: "Cambia ajustes de la academia (solo los que se pasan): cursos (nombres separados por coma), cupo_por_clase (1-60), cancelacion_activa (si/no), plazo_cancelacion_horas (1-72), anticipacion_reserva_horas (0-168), vigencia_clases_meses (0-60, 0 = no vencen). Devuelve lo anterior y lo nuevo de cada uno. No toca precios (usa actualizar_precio) ni horarios ni alumnos.", args: { cursos: "ej. Ballet, Jazz, Hip hop", cupo_por_clase: "alumnas máximo por clase", cancelacion_activa: "si o no", plazo_cancelacion_horas: "horas antes de la clase", anticipacion_reserva_horas: "horas mínimas antes para reservar", vigencia_clases_meses: "meses de vigencia de un paquete" } },
   { name: "actualizar_precio", escribe: true, desc: "Cambia el precio de UN paquete que ya existe (no crea ni borra paquetes). Devuelve el precio anterior, el nuevo y los enlaces para chequearlo. Solo funciona si el dueño activó el permiso de escritura.", args: { paquete: "nombre exacto del paquete, tal como sale en listar_precios", precio: "precio nuevo en soles, por ejemplo 280", confirmar: "escribe si solo cuando el cambio sea de más de 3 veces o menos de un tercio del precio actual" } },
   { name: "alumnos_por_renovar", desc: "Alumnos a los que se les acaban las clases (2 o menos), se les vence el plan en los proximos 10 dias o ya se les vencio. Ordenados del que esta peor al que menos. No entra quien todavia no tiene un plan puesto en su ficha: a ese no le toca renovar, le falta que la academia se lo asigne. Devuelve como maximo 50; `total` dice cuantos hay de verdad.", args: {} }
 ];
@@ -10818,6 +10898,8 @@ async function ejecutarHerramientaApi(env, t, nombre, args){
     case "alumnos_por_renovar": return apiPorRenovar(env, t);
     case "listar_precios":      return apiListarPrecios(env, t);
     case "actualizar_precio":   return apiActualizarPrecio(env, t, a, "mcp");
+    case "ver_configuracion":   return apiVerConfiguracion(env, t);
+    case "configurar_academia": return apiConfigurarAcademia(env, t, a, "mcp");
     default: return { error: "No existe la herramienta '" + nombre + "'." };
   }
 }
