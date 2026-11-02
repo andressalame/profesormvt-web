@@ -2109,6 +2109,7 @@ table.acc-fija tbody tr:hover td:last-child{background:var(--panel2);}
       <p class="hint" style="margin-top:-4px;">Apágalo si tus alumnos no tienen horario fijo (típico en estudios con clases grupales): el portal solo ofrecerá reservar clase por clase.</p>
       <div class="cfgrow"><span class="pk">Lista de espera al liberarse un cupo</span><select id="cfg_espera_auto" data-ayuda="Cuando alguien cancela y queda un cupo libre: o le avisas al primero de la cola, o se lo reservas automáticamente."><option value="">Avisar al primero para que reserve</option><option value="1">Reservarle la clase automáticamente al primero</option></select></div>
       <p class="hint" style="margin-top:-4px;">Con el modo automático, apenas alguien cancela, el primero de la cola queda <b>dentro</b> de la clase (si su plan tiene saldo) y le llega el aviso por correo y notificación. Si su plan no alcanza, se le avisa como siempre.</p>
+      <div class="cfgrow"><span class="pk">Plazas de prueba por clase</span><input id="cfg_prueba_plazas" data-ayuda="Lugares aparte, solo para alumnas de prueba, que no le quitan cupo a tus alumnas regulares. Vacío = no hay plazas de prueba." type="number" min="1" max="20" placeholder="0" /></div>
       <div class="cfgrow"><span class="pk">Créditos de recuperación</span><select id="cfg_cred_on" data-ayuda="Cuando una alumna inscrita falta a su clase, se le da un crédito para recuperarla en otra clase. Tú puedes anularlo o cambiarlo a mano desde su ficha."><option value="">Apagados</option><option value="1">Dar un crédito cuando falta</option></select></div>
       <div class="cfgrow"><span class="pk">Máximo de créditos por alumna al mes</span><input id="cfg_cred_max_mes" data-ayuda="Cuántos créditos puede ganar una misma alumna por las faltas de un mismo mes." type="number" min="1" max="10" placeholder="1" /></div>
       <div class="cfgrow"><span class="pk">Días que dura un crédito</span><input id="cfg_cred_vence_dias" data-ayuda="Se cuentan desde la clase que faltó. Pasa al mes siguiente si todavía no vence: una falta del 25 de enero con 30 días vale hasta el 24 de febrero." type="number" min="1" max="365" placeholder="30" /></div>
@@ -4732,7 +4733,7 @@ function renderAjustes(){
   if(el("cfg_interbank_cci")) el("cfg_interbank_cci").value=(db.config&&db.config.interbank_cci)||"";
   if(el("cfg_mp_solo_tarjeta")) el("cfg_mp_solo_tarjeta").value=(db.config&&db.config.mp_solo_tarjeta)||"";
   if(el("cfg_espera_auto")) el("cfg_espera_auto").value=(db.config&&db.config.espera_auto)||"";
-  ["cred_on","cred_max_mes","cred_vence_dias","cred_en_tardia"].forEach(function(k){ if(el("cfg_"+k)) el("cfg_"+k).value=(db.config&&db.config[k])||""; });
+  ["cred_on","cred_max_mes","cred_vence_dias","cred_en_tardia","prueba_plazas"].forEach(function(k){ if(el("cfg_"+k)) el("cfg_"+k).value=(db.config&&db.config[k])||""; });
   if(el("cfg_portal_fija_off")) el("cfg_portal_fija_off").value=(db.config&&db.config.portal_fija_off)||"";
   if(el("cfg_directorio")) el("cfg_directorio").value=(db.config&&db.config.directorio)||"";
   if(el("cfg_portal_chat_off")) el("cfg_portal_chat_off").value=(db.config&&db.config.portal_chat_off)||"";
@@ -9065,6 +9066,20 @@ function pintarClasesDeAlumno(a){
   box.innerHTML=h;
   wrap.style.display="";
   fichaCreditos(a,box);
+  fichaPrueba(a,box);
+}
+/* Alumna de prueba (2-nov-2026): marcarla, y pasarla a regular en la MISMA ficha (sin perfil nuevo). Solo el dueño. */
+function fichaPrueba(a,box){
+  if(typeof esDuenoPanel!=="function"||!esDuenoPanel()) return;
+  var pr=Number(a.es_prueba)===1;
+  var cfgOn=db.config&&Number(db.config.prueba_plazas)>0;
+  if(!pr&&!cfgOn) return;
+  var h='<div id="fichaPrueba" style="margin-top:12px;"><b style="font-size:12.5px;">Alumna de prueba</b>'+
+    (pr?'<p class="hint" style="margin:3px 0 4px;">Está en plazas de prueba. Cuando se quede, pásala a regular: conserva su ficha y su historial.</p>'+
+        '<button type="button" class="btn ghost sm" data-prueba="convertir" data-al="'+esc(a.id)+'">Pasar a alumna regular…</button> <button type="button" class="btn ghost sm" data-prueba="quitar" data-al="'+esc(a.id)+'">Ya no es de prueba</button>'
+       :'<p class="hint" style="margin:3px 0 4px;">Es alumna regular.</p><button type="button" class="btn ghost sm" data-prueba="marcar" data-al="'+esc(a.id)+'">Marcar como alumna de prueba</button>')+'</div>';
+  var viejo=box.querySelector("#fichaPrueba"); if(viejo) viejo.remove();
+  box.insertAdjacentHTML("beforeend",h);
 }
 /* Créditos de recuperación en la ficha (2-nov-2026): la lista de la alumna, con anular / editar a mano.
    Se pide aparte para no frenar la ficha; si la academia no los usa y no hay ninguno, no aparece nada. */
@@ -9136,6 +9151,24 @@ if(el("ovAlumno")) el("ovAlumno").addEventListener("click",function(e){
     cerrarReserva(bc.dataset.id,bc.dataset.fichaCerrar).then(function(ok){
       bc.disabled=false; if(ok) fichaRefrescar();
     });
+    return;
+  }
+  var bpr=e.target.closest("[data-prueba]");
+  if(bpr){
+    e.preventDefault();
+    var ap=bpr.dataset.prueba, idp=bpr.dataset.al;
+    var llamada;
+    if(ap==="convertir"){
+      var nombres=Object.keys(db.precios||{}).filter(function(n){ return n!=="Clase de prueba"; });
+      var elegido=prompt("¿A qué paquete la pasas?\n\n"+nombres.join("\n")+"\n\nEscribe el nombre tal cual:","");
+      if(elegido===null) return;
+      llamada=apiPost("/app/api/admin/alumno/convertir",{alumno_id:idp,paquete:String(elegido).trim()});
+    } else {
+      llamada=apiPost("/app/api/admin/alumno/prueba",{alumno_id:idp,es_prueba:ap==="marcar"});
+    }
+    bpr.disabled=true;
+    llamada.then(function(r){ toast((r&&r.aviso)||"Listo"); return apiGet().then(function(d){ if(d&&d.alumnos) db.alumnos=d.alumnos; return fichaRefrescar(); }); })
+      .catch(function(err){ toast((err&&err.message)||"No se pudo"); }).finally(function(){ bpr.disabled=false; });
     return;
   }
   var bcr=e.target.closest("[data-cred]");
@@ -9566,6 +9599,7 @@ el("btnGuardarAjustes").addEventListener("click",function(){
             /* interruptores de la reunión Elevate (7-ago-2026) */
             mp_solo_tarjeta:(el("cfg_mp_solo_tarjeta")?el("cfg_mp_solo_tarjeta").value:""),
             espera_auto:(el("cfg_espera_auto")?el("cfg_espera_auto").value:""),
+            prueba_plazas:(el("cfg_prueba_plazas")?el("cfg_prueba_plazas").value.trim():""),
             cred_on:(el("cfg_cred_on")?el("cfg_cred_on").value:""),
             cred_max_mes:(el("cfg_cred_max_mes")?el("cfg_cred_max_mes").value.trim():""),
             cred_vence_dias:(el("cfg_cred_vence_dias")?el("cfg_cred_vence_dias").value.trim():""),

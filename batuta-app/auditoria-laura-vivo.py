@@ -125,7 +125,42 @@ def etapa_asistencia():
     saldo = d1(f"SELECT estado, COALESCE(cancel_tipo,'') ct FROM reservas WHERE tenant_id='{T}' ORDER BY id")
     ver([x["ct"] for x in saldo] == ["", "tarde", "", "a_tiempo"] or sorted(x["ct"] for x in saldo) == ["", "", "a_tiempo", "tarde"], "las etiquetas quedaron guardadas", f"{saldo}")
 
-ETAPAS = {"creditos": etapa_creditos, "asistencia": etapa_asistencia}
+def etapa_prueba():
+    admin, portal = sembrar(nombres=("ANA", "BEA", "PRU", "CAL"))
+    http("POST", "/app/api/admin/config", admin, {"prueba_plazas": "1", "agenda_cupo": "1"})
+    http("GET", "/app/api/agenda/slots", portal["ANA"])     # esto crea las columnas nuevas en producción
+    for n in ("PRU", "CAL"):
+        st, r = http("POST", "/app/api/admin/alumno/prueba", admin, {"alumno_id": "LZ-" + n, "es_prueba": True})
+        ver(st == 200 and r.get("es_prueba") == 1, f"{n} queda marcada como alumna de prueba", f"marcar {n}: {st} {r}")
+    horario(slot(), cupo=1)
+    iso = slot()[0]
+    st, r = http("POST", "/app/api/agenda/reservar", portal["ANA"], {"inicio_utc": iso, "tipo": "suelta"})
+    ver(st == 200, "una alumna regular toma la única plaza regular", f"ANA: {st} {r}")
+    st, r = http("POST", "/app/api/agenda/reservar", portal["BEA"], {"inicio_utc": iso, "tipo": "suelta"})
+    ver(st == 409, "otra regular ya no entra: la clase está llena", f"BEA debió dar 409 y dio {st} {r}")
+    st, r = http("GET", "/app/api/agenda/slots", portal["PRU"])
+    fr = (r.get("franjas") or {}).get(iso, [{}])[0]
+    ver(st == 200 and fr.get("cupo") == 1 and fr.get("ocupados") == 0 and fr.get("estado") == "libre", "la alumna de prueba ve su plaza LIBRE aunque la regular esté llena", f"franja vista por PRU: {fr}")
+    st, r = http("POST", "/app/api/agenda/reservar", portal["PRU"], {"inicio_utc": iso, "tipo": "suelta"})
+    ver(st == 200, "la alumna de prueba entra en la plaza de prueba", f"PRU: {st} {r}")
+    st, r = http("POST", "/app/api/agenda/reservar", portal["CAL"], {"inicio_utc": iso, "tipo": "suelta"})
+    ver(st == 409 and "prueba" in json.dumps(r), "una segunda de prueba no entra: ya no quedan plazas de prueba", f"CAL: {st} {r}")
+    pl = {x["alumno_id"]: x["plaza"] for x in d1(f"SELECT alumno_id, COALESCE(plaza,'') plaza FROM reservas WHERE tenant_id='{T}' AND estado='reservada'")}
+    ver(pl.get("LZ-ANA") == "" and pl.get("LZ-PRU") == "prueba", "cada reserva guardó su tipo de plaza", f"{pl}")
+    # el guardado del panel no debe borrar la marca
+    st, datos = http("GET", "/app/api/admin/data", admin)
+    st2, r = http("PUT", "/app/api/admin/data", admin, {"alumnos": datos["alumnos"], "registro": datos.get("registro", []), "precios": datos.get("precios", {})})
+    marcas = {x["id"]: x["es_prueba"] for x in d1(f"SELECT id, COALESCE(es_prueba,0) es_prueba FROM alumnos WHERE tenant_id='{T}'")}
+    ver(st2 == 200 and marcas.get("LZ-PRU") == 1 and marcas.get("LZ-CAL") == 1 and marcas.get("LZ-ANA") == 0, "guardar desde el panel conserva quién es de prueba", f"PUT {st2}: {marcas}")
+    st, r = http("POST", "/app/api/admin/alumno/convertir", admin, {"alumno_id": "LZ-PRU", "paquete": "2 clases"})
+    ver(st == 200 and r.get("ciclo") == 2, "pasar a regular en la misma ficha (ciclo nuevo)", f"convertir: {st} {r}")
+    f = d1(f"SELECT id, paquete, ciclo, COALESCE(es_prueba,0) es_prueba FROM alumnos WHERE tenant_id='{T}' AND id='LZ-PRU'")
+    n = d1(f"SELECT COUNT(*) n FROM alumnos WHERE tenant_id='{T}'")[0]["n"]
+    ver(len(f) == 1 and f[0]["es_prueba"] == 0 and n == 4, "misma ficha, ya regular, y no apareció ningún perfil nuevo", f"{f} total {n}")
+    st, r = http("GET", "/app/api/me", portal["PRU"])
+    ver(st == 200, "su cuenta del portal sigue funcionando", f"/me {st}")
+
+ETAPAS = {"prueba": etapa_prueba, "creditos": etapa_creditos, "asistencia": etapa_asistencia}
 if __name__ == "__main__":
     if len(sys.argv) < 2 or sys.argv[1] == "limpiar":
         limpiar(); sys.exit(0)

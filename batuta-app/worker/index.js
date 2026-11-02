@@ -2273,7 +2273,7 @@ async function loadConfig(env, tenantId){
               interbank_cuenta: "", interbank_cci: "",
               mp_solo_tarjeta: "", espera_auto: "",
               /* créditos de recuperación (2-nov-2026): ver el bloque «CRÉDITOS DE RECUPERACIÓN» */
-              cred_on: "", cred_max_mes: "", cred_vence_dias: "", cred_en_tardia: "", cred_desde: "",
+              cred_on: "", cred_max_mes: "", cred_vence_dias: "", cred_en_tardia: "", cred_desde: "", prueba_plazas: "",
               portal_fija_off: "", portal_chat_off: "", portal_sin_profe: "",
               /* Beneficios / convenios (10-ago-2026, reunión Elevate): JSON [{t,d,l}] con los
                  convenios de la academia (ej. descuento en X). Los ven los alumnos con cuenta
@@ -3906,6 +3906,10 @@ async function confirmarCompra(env, tenantId, tenant, compra){
     return { ok: false, error: "No se pudo aplicar la compra. Intenta de nuevo.", status: 500 };
   }
 
+  if (!renovado && alumnoIdNuevo && compra.paquete === "Clase de prueba"){
+    try { await ensureCreditosSchema(env); await env.DB.prepare("UPDATE alumnos SET es_prueba = 1 WHERE id = ?1 AND tenant_id = ?2").bind(alumnoIdNuevo, tenantId).run(); }
+    catch (e) { console.error("marcar alumna de prueba", e); }
+  }
   /* Horario elegido ANTES de pagar (calendario publico de ProfesorMVT): "ISO" o "ISO;2" para
      dos horas seguidas. Se reserva con cualquier paquete, no solo con la clase de prueba. */
   if (!renovado && alumnoIdNuevo && compra.slot_deseado) {
@@ -6444,7 +6448,19 @@ function salasDeCfg(cfg){
    sala (03-ago-2026): con salas, la ocupacion se cuenta POR SALA (la clase de Mat llena
    no bloquea la de Maquinas de la misma hora). Un "bloqueo" cierra la hora ENTERA
    (todas las salas): es el profe cerrando su horario, no un ocupante mas. */
-async function ocupacionSlot(env, tenantId, iso, prof, sala){
+/* ═══ PLAZAS DE PRUEBA (2-nov-2026, etapa 3 del pedido de Laura) ═══════════════════════════════════
+   Cada clase tiene sus plazas REGULARES (el cupo de siempre) y, aparte, N plazas de prueba
+   (config `prueba_plazas`, 0 = no hay, y todo funciona como antes). Una alumna de prueba
+   (`alumnos.es_prueba = 1`) solo ocupa plazas de prueba; las regulares nunca se las quita una prueba.
+   La reserva guarda de cuál tomó (`reservas.plaza`). Pasar a regular conserva su ficha: ver /alumno/convertir. */
+function pruebaPlazasDe(cfg){
+  const n = parseInt(cfg && cfg.prueba_plazas, 10);
+  return (Number.isFinite(n) && n >= 1 && n <= 20) ? n : 0;
+}
+function condPlaza(plaza){
+  return plaza === "prueba" ? "(tipo = 'bloqueo' OR COALESCE(plaza,'') = 'prueba')" : "(tipo = 'bloqueo' OR COALESCE(plaza,'') != 'prueba')";
+}
+async function ocupacionSlot(env, tenantId, iso, prof, sala, plaza){
   const pid = prof && prof.id ? prof.id : "";
   const esD = !!(prof && prof.esDueno);
   const salaK = String(sala || "");
@@ -6452,7 +6468,7 @@ async function ocupacionSlot(env, tenantId, iso, prof, sala){
   try {
     results = ((await env.DB.prepare(
       "SELECT tipo, COALESCE(sala,'') AS sala, COUNT(*) AS n FROM reservas WHERE tenant_id = ?1 AND inicio_utc = ?2 AND estado IN ('reservada','completada') " +
-      "AND (profesor_id = ?3 OR (?4 = 1 AND profesor_id IS NULL)) GROUP BY tipo, sala"
+      "AND (profesor_id = ?3 OR (?4 = 1 AND profesor_id IS NULL)) AND " + condPlaza(plaza) + " GROUP BY tipo, sala"
     ).bind(tenantId, iso, pid, esD ? 1 : 0).all()).results) || [];
   } catch (e) {
     /* columna sala aun no existe en esta D1: conteo viejo, todo junto */
@@ -6641,7 +6657,7 @@ async function generarSlotsDetalle(env, tenantId, prof, opts){
   let tomadas = [];
   try {
     tomadas = ((await env.DB.prepare(
-      "SELECT inicio_utc, tipo, COALESCE(sala,'') AS sala FROM reservas WHERE tenant_id = ?1 AND estado IN ('reservada','completada') AND inicio_utc >= ?2 AND inicio_utc <= ?3 " +
+      "SELECT inicio_utc, tipo, COALESCE(sala,'') AS sala, COALESCE(plaza,'') AS plaza FROM reservas WHERE tenant_id = ?1 AND estado IN ('reservada','completada') AND inicio_utc >= ?2 AND inicio_utc <= ?3 " +
       "AND (profesor_id = ?4 OR (?5 = 1 AND profesor_id IS NULL))"
     ).bind(tenantId, new Date(now).toISOString(), new Date(hastaMs).toISOString(), pid, esD ? 1 : 0).all()).results) || [];
   } catch (e) {
@@ -6651,13 +6667,16 @@ async function generarSlotsDetalle(env, tenantId, prof, opts){
     ).bind(tenantId, new Date(now).toISOString(), new Date(hastaMs).toISOString(), pid, esD ? 1 : 0).all()).results) || [];
   }
   /* Ocupacion POR SALA (iso|sala); un bloqueo cierra la hora entera, todas las salas. */
-  const conteo = new Map(); const bloqueados = new Set();
+  const conteo = new Map(), conteoP = new Map(); const bloqueados = new Set();
   for (const r of (tomadas || [])){
     if (r.tipo === "bloqueo"){ bloqueados.add(r.inicio_utc + "|" + (r.sala || "")); continue; }   // 9-oct-2026: el cierre es por sala; sala '' = todas
     const k = r.inicio_utc + "|" + (r.sala || "");
-    conteo.set(k, (conteo.get(k) || 0) + 1);
+    const m = (r.plaza === "prueba") ? conteoP : conteo;   // las plazas de prueba se cuentan aparte de las regulares
+    m.set(k, (m.get(k) || 0) + 1);
   }
   const cfgT = await loadConfig(env, tenantId);
+  const plazasP = pruebaPlazasDe(cfgT);
+  const verComoPrueba = !!(opts && opts.prueba) && plazasP > 0;
   /* Aforo efectivo, en orden: el de la celda (1-60) > el AFORO DEL TIPO DE CLASE
      (Maquinas 3 / Mat 8, definido una sola vez en Ajustes) > el cupo general > 1 sin definir.
      Una sola fuente: aforoResuelto(). */
@@ -6695,11 +6714,12 @@ async function generarSlotsDetalle(env, tenantId, prof, opts){
       if (reg.maxDias > 0 && ms > now + reg.maxDias * 86400000) continue;
       const iso = new Date(ms).toISOString();
       if (bloqueados.has(iso + "|") || bloqueados.has(iso + "|" + (h.sala || ""))) continue;   // hora (o sala) cerrada por el profe: ni libre ni espera
-      const cupo = cupoEff(h.cupo, h.curso);
+      const cupo = verComoPrueba ? plazasP : cupoEff(h.cupo, h.curso);
       /* Comodin de transicion (igual que ocupacionSlot): las reservas sin sala ('')
          ocupan TODAS las salas de esa hora, para no sobrevender mientras haya
          reservas viejas sin backfillear. */
-      const ocupados = (conteo.get(iso + "|" + (h.sala || "")) || 0) + (h.sala ? (conteo.get(iso + "|") || 0) : 0);
+      const cm = verComoPrueba ? conteoP : conteo;
+      const ocupados = (cm.get(iso + "|" + (h.sala || "")) || 0) + (h.sala ? (cm.get(iso + "|") || 0) : 0);
       const enPlan = !(pk && !paqueteCubre(pk, h.curso));
       const estado = !enPlan ? "fuera" : (ocupados < cupo ? "libre" : "lleno");
       (franjas[iso] = franjas[iso] || []).push({
@@ -8564,9 +8584,11 @@ async function ensureCreditosSchema(env){
   } catch (e) { /* ya existe */ }
   try { await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_cred_alumno ON creditos_recup (tenant_id, alumno_id, estado)").run(); } catch (e) {}
   try { await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_cred_origen ON creditos_recup (tenant_id, origen_reserva_id)").run(); } catch (e) {}
-  for (const col of ["credito_id TEXT DEFAULT ''", "cancel_tipo TEXT DEFAULT ''"]){
+  for (const col of ["credito_id TEXT DEFAULT ''", "cancel_tipo TEXT DEFAULT ''", "plaza TEXT DEFAULT ''"]){
     try { await env.DB.prepare("ALTER TABLE reservas ADD COLUMN " + col).run(); } catch (e) { /* ya existe */ }
   }
+  /* plazas de prueba (etapa 3): la alumna de prueba lleva la marca en su ficha */
+  try { await env.DB.prepare("ALTER TABLE alumnos ADD COLUMN es_prueba INTEGER DEFAULT 0").run(); } catch (e) { /* ya existe */ }
   CRED_OK = true;
 }
 function limpiarEnteroCfg(v, min, max){
@@ -8727,6 +8749,15 @@ function resumenAsistencia(filas){
     por.get(rv.alumno_id)[e]++;
   }
   return [...por.values()];
+}
+/* PURO: lo que cambia en la ficha cuando una alumna de prueba pasa a regular. MISMA ficha (mismo id, historial,
+   cuenta del portal): no se crea ningún perfil nuevo. El ciclo sube como en una renovación, así la clase de
+   prueba que ya tomó no se descuenta del paquete que acaba de elegir. */
+function planConvertirPrueba(alumno, pk, hoyYMD){
+  const ciclo = (Number(alumno && alumno.ciclo) || 1) + 1;
+  const ficha = { es_prueba: 0, paquete: pk && pk.nombre ? pk.nombre : (alumno && alumno.paquete) || "", ciclo, fecha: hoyYMD, activado: "", caducado: 0, aviso_vence_ciclo: 0 };
+  ficha.vence = calcularVence(pk || {}, { fecha: hoyYMD, activado: "" }, "");
+  return ficha;
 }
 /* El cron barre las academias que prendieron los créditos: cubre la falta que se anotó por la bitácora
    o por cualquier otro camino que no llama a credGenerarDeFaltas. Sin academias prendidas = 1 consulta. */
@@ -10740,6 +10771,7 @@ async function apiVerConfiguracion(env, t){
     plazo_cancelacion_horas: (Number.isFinite(plazo) && plazo >= 1) ? plazo : CANCELA_MIN_H,
     anticipacion_reserva_horas: String(cfg.anticipacion_h || "") === "" ? "por defecto" : Number(cfg.anticipacion_h),
     vigencia_clases_meses: String(cfg.caduca_meses || "") === "" ? "por defecto" : Number(cfg.caduca_meses),
+    plazas_de_prueba_por_clase: pruebaPlazasDe(cfg),
     creditos_recuperacion: (function(){ const k = credCfg(cfg); return { activo: k.on, max_por_mes: k.maxMes, vigencia_dias: k.dias, tambien_por_cancelacion_tardia: k.enTardia }; })(),
     paquetes: await apiPreciosDe(env, t),
     horario_semanal: await apiResumenHorario(env, t),
@@ -10790,6 +10822,11 @@ async function apiConfigurarAcademia(env, t, a, origen){
   }
   /* Créditos de recuperación (2-nov-2026): mismas reglas que Ajustes > Reservas */
   const siNo = (v) => { const x = String(v).toLowerCase(); return ["si", "sí", "true"].includes(x) ? "1" : (["no", "false"].includes(x) ? "" : null); };
+  if (a.plazas_de_prueba != null && a.plazas_de_prueba !== ""){
+    const n = entero(a.plazas_de_prueba, 0, 20);
+    if (n === null) errores.push("plazas_de_prueba: un número entre 0 y 20 (0 = sin plazas de prueba).");
+    else poner("prueba_plazas", "plazas de prueba por clase", pruebaPlazasDe(cfg), n === 0 ? "" : n);
+  }
   if (a.creditos_recuperacion != null && a.creditos_recuperacion !== ""){
     const v = siNo(a.creditos_recuperacion);
     if (v === null) errores.push("creditos_recuperacion: «si» o «no».");
@@ -10813,7 +10850,7 @@ async function apiConfigurarAcademia(env, t, a, origen){
     if (v === null) errores.push("creditos_por_cancelacion_tardia: «si» o «no».");
     else poner("cred_en_tardia", "la cancelación tardía también da crédito", credCfg(cfg).enTardia ? "si" : "no", v);
   }
-  if (!cambios.length) return { error: errores.length ? errores.join(" ") : "No me pasaste ningún ajuste para cambiar.", ...(errores.length ? {} : { ajustes_posibles: ["cursos", "cupo_por_clase", "cancelacion_activa", "plazo_cancelacion_horas", "anticipacion_reserva_horas", "vigencia_clases_meses", "creditos_recuperacion", "creditos_max_por_mes", "creditos_vigencia_dias", "creditos_por_cancelacion_tardia"] }) };
+  if (!cambios.length) return { error: errores.length ? errores.join(" ") : "No me pasaste ningún ajuste para cambiar.", ...(errores.length ? {} : { ajustes_posibles: ["cursos", "cupo_por_clase", "cancelacion_activa", "plazo_cancelacion_horas", "anticipacion_reserva_horas", "vigencia_clases_meses", "plazas_de_prueba", "creditos_recuperacion", "creditos_max_por_mes", "creditos_vigencia_dias", "creditos_por_cancelacion_tardia"] }) };
   if (await chatbotPasoTope(env, "apiw:" + t.id, API_ESCRITURAS_HORA)) return { error: "Demasiados cambios esta hora (máximo " + API_ESCRITURAS_HORA + "). Intenta más tarde." };
   await ensureApiCambiosSchema(env);
   const ahora = new Date().toISOString();
@@ -11231,7 +11268,7 @@ const API_TOOLS = [
   { name: "pagos_recientes", desc: "Pagos de los ultimos dias con su estado y metodo, y el total confirmado.", args: { dias: "cuantos dias hacia atras (max 120, por defecto 30)" } },
   { name: "listar_precios", desc: "Los precios de los paquetes de la academia (en soles) y los enlaces para verlos. Úsala antes de cambiar un precio para tomar el nombre exacto del paquete.", args: {} },
   { name: "ver_configuracion", desc: "Cómo está configurada la academia hoy: cursos, cupo por clase, reglas de cancelación, anticipación de reserva, vigencia de las clases y paquetes con precio. Úsala SIEMPRE antes de cambiar ajustes y al terminar para confirmar.", args: {} },
-  { name: "configurar_academia", escribe: true, desc: "Cambia ajustes de la academia (solo los que se pasan): cursos (nombres separados por coma), cupo_por_clase (1-60), cancelacion_activa (si/no), plazo_cancelacion_horas (1-72), anticipacion_reserva_horas (0-168), vigencia_clases_meses (0-60, 0 = no vencen), creditos_recuperacion (si/no: la alumna que falta recibe un crédito para recuperar la clase), creditos_max_por_mes (1-10 por alumna), creditos_vigencia_dias (1-365, desde la clase faltada; pasa al mes siguiente), creditos_por_cancelacion_tardia (si/no). Devuelve lo anterior y lo nuevo de cada uno. No toca precios (usa actualizar_precio) ni horarios ni alumnos.", args: { cursos: "ej. Ballet, Jazz, Hip hop", cupo_por_clase: "alumnas máximo por clase", cancelacion_activa: "si o no", plazo_cancelacion_horas: "horas antes de la clase", anticipacion_reserva_horas: "horas mínimas antes para reservar", vigencia_clases_meses: "meses de vigencia de un paquete", creditos_recuperacion: "si o no", creditos_max_por_mes: "créditos máximos por alumna al mes", creditos_vigencia_dias: "días que dura un crédito", creditos_por_cancelacion_tardia: "si o no" } },
+  { name: "configurar_academia", escribe: true, desc: "Cambia ajustes de la academia (solo los que se pasan): cursos (nombres separados por coma), cupo_por_clase (1-60), cancelacion_activa (si/no), plazo_cancelacion_horas (1-72), anticipacion_reserva_horas (0-168), vigencia_clases_meses (0-60, 0 = no vencen), plazas_de_prueba (0-20 por clase: lugares aparte, solo para alumnas de prueba; 0 = ninguno), creditos_recuperacion (si/no: la alumna que falta recibe un crédito para recuperar la clase), creditos_max_por_mes (1-10 por alumna), creditos_vigencia_dias (1-365, desde la clase faltada; pasa al mes siguiente), creditos_por_cancelacion_tardia (si/no). Devuelve lo anterior y lo nuevo de cada uno. No toca precios (usa actualizar_precio) ni horarios ni alumnos.", args: { cursos: "ej. Ballet, Jazz, Hip hop", cupo_por_clase: "alumnas máximo por clase", cancelacion_activa: "si o no", plazo_cancelacion_horas: "horas antes de la clase", anticipacion_reserva_horas: "horas mínimas antes para reservar", vigencia_clases_meses: "meses de vigencia de un paquete", plazas_de_prueba: "plazas de prueba por clase, aparte de las regulares", creditos_recuperacion: "si o no", creditos_max_por_mes: "créditos máximos por alumna al mes", creditos_vigencia_dias: "días que dura un crédito", creditos_por_cancelacion_tardia: "si o no" } },
   { name: "crear_paquete", escribe: true, desc: "Crea un paquete NUEVO de clases con su precio (no borra ni cambia los que ya existen). Devuelve el paquete creado y los enlaces. Revisa antes con listar_precios para no repetir nombres.", args: { nombre: "ej. 8 clases de Ballet", clases: "cuántas clases incluye (1-500)", precio: "en soles, ej. 280", vigencia_dias: "opcional: días que dura (vacío = no vence)", cambios_incluidos: "opcional: cambios de horario por ciclo (por defecto 2)" } },
   { name: "agregar_horario", escribe: true, desc: "Agrega horarios semanales a la agenda de la academia (SOLO agrega: no borra ni reemplaza los que ya hay; quitar se hace en el panel). Crea una franja por cada combinación de día y hora. Si pasas curso, tiene que ser uno de los cursos de la academia (míralos con ver_configuracion).", args: { dias: "ej. lunes, miércoles o 1,3 (0=domingo ... 6=sábado)", horas: "hora de inicio en formato 24 h, ej. 18:00, 19:00", curso: "opcional: a qué curso corresponde", cupo: "opcional: alumnas máximo en esas clases (vacío = el cupo general)" } },
   { name: "actualizar_precio", escribe: true, desc: "Cambia el precio de UN paquete que ya existe (no crea ni borra paquetes). Devuelve el precio anterior, el nuevo y los enlaces para chequearlo. Solo funciona si el dueño activó el permiso de escritura.", args: { paquete: "nombre exacto del paquete, tal como sale en listar_precios", precio: "precio nuevo en soles, por ejemplo 280", confirmar: "escribe si solo cuando el cambio sea de más de 3 veces o menos de un tercio del precio actual" } },
@@ -17427,14 +17464,15 @@ export default {
         const cu = await cuentaDeSesion(env, request);
         if (!cu) return json({ error: "Sesión expirada" }, 401);
         // El alumno ve la agenda de SU profesor (multi-profesor); sin ficha aun -> la del dueno.
-        const alS = cu.alumno_id ? await env.DB.prepare("SELECT profesor_id, paquete, ciclo, COALESCE(pases,'') AS pases FROM alumnos WHERE id = ?1 AND tenant_id = ?2").bind(cu.alumno_id, cu.tenant_id).first() : null;
+        await ensureCreditosSchema(env);
+        const alS = cu.alumno_id ? await env.DB.prepare("SELECT profesor_id, paquete, ciclo, COALESCE(pases,'') AS pases, COALESCE(es_prueba,0) AS es_prueba FROM alumnos WHERE id = ?1 AND tenant_id = ?2").bind(cu.alumno_id, cu.tenant_id).first() : null;
         const profS = await profeDeAlumno(env, cu.tenant_id, alS);
         /* El alumno solo ve lo que SU plan cubre (27-jul-2026, Elevate): un plan de Mat no
            muestra Maquinas. Lo de fuera se devuelve aparte para poder explicarlo, no ocultarlo.
            Con VARIOS pases (11-ago-2026): ve la UNIÓN de lo que cubren sus pases vigentes. */
         const pasesS = alS ? pasesDe(alS) : null;
         const pkS = alS ? (pasesS ? pkUnionPases(pasesS, (await loadPaquetes(env, cu.tenant_id)).map) : resolverPk((await loadPaquetes(env, cu.tenant_id)).map, alS.paquete)) : null;
-        const det = await generarSlotsDetalle(env, cu.tenant_id, profS, { pk: pkS });
+        const det = await generarSlotsDetalle(env, cu.tenant_id, profS, { pk: pkS, prueba: !!(alS && Number(alS.es_prueba) === 1) });
         /* portal_sin_profe (7-ago-2026, Elevate): clases grupales sin profe fijo por alumno.
            No se nombra al profesor; el portal dice "Tu clase en {academia}". */
         const sinProfeS = String(((await loadConfig(env, cu.tenant_id).catch(() => ({}))).portal_sin_profe) || "") === "1";
@@ -17457,6 +17495,7 @@ export default {
            existe pero no está enlazada a una ficha de alumno — no es un tema de saldo. */
         if (!cu.alumno_id) return json({ error: "Tu cuenta aún no está conectada a una ficha de alumno. Pídele a tu academia que registre tu paquete con este mismo correo y listo." }, 403);
         const tid = cu.tenant_id;
+        await ensureCreditosSchema(env);   // columnas de plazas/créditos antes de leer la ficha
 
         const b = await request.json().catch(() => ({}));
         const tipo = b.tipo === "fija" ? "fija" : "suelta";
@@ -17473,6 +17512,11 @@ export default {
         /* Crédito de recuperación (2-nov-2026): reservar CON el crédito. Por ahora solo clase suelta y
            alumnos de un solo paquete. En memoria se le suma la clase al bono para que las validaciones de
            abajo la vean; el crédito se reclama de verdad (y el bono se escribe) después del INSERT. */
+        await ensureCreditosSchema(env);
+        const cfgPl = await loadConfig(env, tid).catch(() => ({}));
+        const plazasPr = pruebaPlazasDe(cfgPl);
+        const esPrueba = Number(alumno.es_prueba) === 1 && plazasPr > 0;   // sin plazas de prueba configuradas, todo sigue como antes
+        if (esPrueba && tipo === "fija") return json({ error: "Con una clase de prueba se reserva clase por clase, no horario fijo." }, 400);
         const usarCred = b.usar_credito === true || b.usar_credito === 1 || b.usar_credito === "1";
         let credito = null;
         const alumnoBD = Object.assign({}, alumno);
@@ -17581,7 +17625,8 @@ export default {
         const startMs = Date.parse(iso);
 
         /* cupo por franja: el de la celda de disponibilidad si es >0, si no el aforo del tipo, si no el global */
-        const cupoT = await cupoDeSlot(env, tid, iso, profR, await loadConfig(env, tid), salaR);
+        const cupoT = esPrueba ? plazasPr : await cupoDeSlot(env, tid, iso, profR, await loadConfig(env, tid), salaR);
+        const plazaR = esPrueba ? "prueba" : "";
         /* el mismo alumno no puede reservar dos veces la misma hora (en ninguna sala: nadie
            esta en dos salones a la vez; con cupo > 1 el conteo solo no lo impide) */
         const yaMia = await env.DB.prepare(
@@ -17593,15 +17638,15 @@ export default {
            por tipo de clase se aplican sobre lo que realmente reservo, no sobre su ficha. */
         const cursoR = frR.curso || alumno.curso || "";
         if (tipo === "suelta"){
-          const oc = await ocupacionSlot(env, tid, iso, profR, salaR);
-          if (oc.bloqueado || oc.n >= cupoT) return json({ error: "Ese horario ya se lleno. Elige otro." }, 409);
+          const oc = await ocupacionSlot(env, tid, iso, profR, salaR, plazaR);
+          if (oc.bloqueado || oc.n >= cupoT) return json({ error: esPrueba ? "Ya no quedan plazas de prueba en esa clase. Elige otra." : "Ese horario ya se lleno. Elige otro." }, 409);
           const fin = new Date(startMs + CLASE_MIN * 60000).toISOString();
           const rid = crypto.randomUUID();
           await env.DB.prepare(
-            "INSERT INTO reservas (id,tenant_id,alumno_id,inicio_utc,fin_utc,tipo,serie_id,estado,curso,ciclo,creada,profesor_id,sala) VALUES (?1,?2,?3,?4,?5,'suelta','','reservada',?6,?7,?8,?9,?10)"
-          ).bind(rid, tid, alumno.id, iso, fin, cursoR, ciclo, nowIso, profR.id || null, salaR).run();
+            "INSERT INTO reservas (id,tenant_id,alumno_id,inicio_utc,fin_utc,tipo,serie_id,estado,curso,ciclo,creada,profesor_id,sala,plaza) VALUES (?1,?2,?3,?4,?5,'suelta','','reservada',?6,?7,?8,?9,?10,?11)"
+          ).bind(rid, tid, alumno.id, iso, fin, cursoR, ciclo, nowIso, profR.id || null, salaR, plazaR).run();
           /* re-verificacion optimista: si una carrera paso el cupo, se deshace esta reserva */
-          const oc2 = await ocupacionSlot(env, tid, iso, profR, salaR);
+          const oc2 = await ocupacionSlot(env, tid, iso, profR, salaR, plazaR);
           if (oc2.bloqueado || oc2.n > cupoT){
             await env.DB.prepare("DELETE FROM reservas WHERE id = ?1 AND tenant_id = ?2").bind(rid, tid).run();
             return json({ error: "Justo se lleno ese horario. Elige otro." }, 409);
@@ -19125,6 +19170,48 @@ export default {
             resumen: resumenAsistencia(filas).map(x => Object.assign({ alumno: nombres.get(x.alumno_id) || "" }, x)),
             clases: aidA ? filas.map(f => ({ id: f.id, inicio_utc: f.inicio_utc, curso: f.curso, estado: estadoAsistencia(f), etiqueta: ASISTENCIA_ETIQUETA[estadoAsistencia(f)] })) : undefined });
         }
+        /* ---- Alumnas de prueba (2-nov-2026, etapa 3) ----
+           POST /alumno/prueba    {alumno_id, es_prueba}   → marca / desmarca a mano
+           POST /alumno/convertir {alumno_id, paquete}     → pasa a regular en la MISMA ficha */
+        if ((path === "/app/api/admin/alumno/prueba" || path === "/app/api/admin/alumno/convertir") && request.method === "POST"){
+          if (!esDueno) return json({ error: "Esto lo maneja el dueño." }, 403);
+          await ensureCreditosSchema(env);
+          const b = await request.json().catch(() => ({}));
+          const al = await env.DB.prepare("SELECT * FROM alumnos WHERE id = ?1 AND tenant_id = ?2").bind(String(b.alumno_id || ""), tid).first();
+          if (!al) return json({ error: "Ese alumno no existe." }, 404);
+          if (path.endsWith("/prueba")){
+            const v = (b.es_prueba === true || b.es_prueba === 1 || b.es_prueba === "1") ? 1 : 0;
+            await env.DB.prepare("UPDATE alumnos SET es_prueba = ?1 WHERE id = ?2 AND tenant_id = ?3").bind(v, al.id, tid).run();
+            return json({ ok: true, es_prueba: v });
+          }
+          if (Number(al.es_prueba) !== 1) return json({ error: "Esa alumna ya es regular." }, 409);
+          const paqMapC = (await loadPaquetes(env, tid)).map;
+          const pkC = resolverPk(paqMapC, String(b.paquete || ""));
+          if (!pkC || !b.paquete) return json({ error: "Elige uno de tus paquetes para pasarla a regular." }, 400);
+          const nombreC = (Object.keys(paqMapC).find(n => n === b.paquete) || String(b.paquete));
+          const ficha = planConvertirPrueba(al, Object.assign({}, pkC, { nombre: nombreC }), fechaLimaDe(new Date().toISOString()));
+          await env.DB.prepare("UPDATE alumnos SET es_prueba = 0, paquete = ?1, ciclo = ?2, fecha = ?3, activado = ?4, caducado = 0, vence = ?5, aviso_vence_ciclo = 0 WHERE id = ?6 AND tenant_id = ?7")
+            .bind(ficha.paquete, ficha.ciclo, ficha.fecha, ficha.activado, ficha.vence, al.id, tid).run();
+          /* sus clases ya reservadas pasan al ciclo nuevo y, si hay lugar regular, a plaza regular */
+          const cfgCv = await loadConfig(env, tid).catch(() => ({}));
+          const { results: fut } = await env.DB.prepare(
+            "SELECT id, inicio_utc, COALESCE(profesor_id,'') AS profesor_id, COALESCE(sala,'') AS sala FROM reservas WHERE tenant_id = ?1 AND alumno_id = ?2 AND estado = 'reservada' AND inicio_utc >= ?3 ORDER BY inicio_utc ASC"
+          ).bind(tid, al.id, new Date().toISOString()).all();
+          let aRegular = 0, enPrueba = 0;
+          for (const rv of (fut || [])){
+            const profCv = { id: rv.profesor_id, esDueno: !rv.profesor_id };
+            let plazaNueva = "";
+            try {
+              const cupoCv = await cupoDeSlot(env, tid, rv.inicio_utc, profCv, cfgCv, rv.sala);
+              const ocCv = await ocupacionSlot(env, tid, rv.inicio_utc, profCv, rv.sala, "");
+              if (ocCv.bloqueado || ocCv.n >= cupoCv) plazaNueva = "prueba";
+            } catch (e) { plazaNueva = "prueba"; }
+            await env.DB.prepare("UPDATE reservas SET ciclo = ?1, plaza = ?2 WHERE id = ?3 AND tenant_id = ?4").bind(ficha.ciclo, plazaNueva, rv.id, tid).run();
+            if (plazaNueva === "prueba") enPrueba++; else aRegular++;
+          }
+          return json({ ok: true, alumno_id: al.id, paquete: ficha.paquete, ciclo: ficha.ciclo, vence: ficha.vence, clases_pasadas_a_plaza_regular: aRegular, clases_que_siguen_en_plaza_de_prueba: enPrueba,
+            aviso: enPrueba ? enPrueba + " de sus clases ya reservadas no tienen lugar regular: siguen en plaza de prueba hasta que se libere cupo." : "" });
+        }
         if (path === "/app/api/admin/creditos" && request.method === "GET"){
           await ensureCreditosSchema(env);
           const aid = String(url.searchParams.get("alumno_id") || "");
@@ -20040,6 +20127,7 @@ export default {
              Con la lista enumerada, cada columna nueva nacía condenada — así se borraban en
              silencio las bajas de correo, el consentimiento de marketing y las clases de
              regalo. `memoria: leccion-columna-nueva-no-llega-por-select-enumerado` */
+          await ensureCreditosSchema(env);   // es_prueba tiene que existir ANTES de este guardado, o el INSERT de abajo revienta
           try {
             prevRows = (await env.DB.prepare(
               "SELECT * FROM alumnos WHERE tenant_id = ?1 AND (?2 = 1 OR profesor_id = ?3)"
@@ -20274,7 +20362,7 @@ export default {
               }
             }
             stmts.push(env.DB.prepare(
-              "INSERT INTO alumnos (id,tenant_id,codigo,nombre,whatsapp,curso,paquete,fecha,pago,horario,notas,ciclo,vence,aviso_vence_ciclo,recordatorio_fecha,recordatorio_ciclo,winback_ciclo,profesor_id,sede_id,migrado_usadas,migrado_ciclo,activado,caducado,apellido,email,nacimiento,pases,vence_manual,invitado_el,invitado_canal,no_email,bonus_clases,bonus_ciclo,mkt_ok,mkt_fecha,mkt_origen,mkt_token,resena_pedida,cal_token) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,?22,?23,?24,?25,?26,?27,?28,?29,?30,?31,?32,?33,?34,?35,?36,?37,?38,?39)"
+              "INSERT INTO alumnos (id,tenant_id,codigo,nombre,whatsapp,curso,paquete,fecha,pago,horario,notas,ciclo,vence,aviso_vence_ciclo,recordatorio_fecha,recordatorio_ciclo,winback_ciclo,profesor_id,sede_id,migrado_usadas,migrado_ciclo,activado,caducado,apellido,email,nacimiento,pases,vence_manual,invitado_el,invitado_canal,no_email,bonus_clases,bonus_ciclo,mkt_ok,mkt_fecha,mkt_origen,mkt_token,resena_pedida,cal_token,es_prueba) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,?22,?23,?24,?25,?26,?27,?28,?29,?30,?31,?32,?33,?34,?35,?36,?37,?38,?39,?40)"
             ).bind(
               a.id, tid, String(a.codigo || "").toUpperCase() || randHex(3).toUpperCase(), a.nombre,
               a.whatsapp || "", a.curso || "", a.paquete || "",
@@ -20296,7 +20384,8 @@ export default {
               (pr && Number(pr.bonus_clases)) || 0, (pr && Number(pr.bonus_ciclo)) || 0,
               (pr && Number(pr.mkt_ok)) || 0, (pr && pr.mkt_fecha) || "", (pr && pr.mkt_origen) || "",
               (pr && pr.mkt_token) || "", (pr && Number(pr.resena_pedida)) || 0,
-              (pr && pr.cal_token) || ""
+              (pr && pr.cal_token) || "",
+              (pr && Number(pr.es_prueba)) || 0     // la marca de alumna de prueba vive en el servidor: el panel no la manda
             ));
           }
           for (const r of body.registro){
@@ -20575,7 +20664,7 @@ export default {
           /* config del tenant (cobros, marca, cupo, cursos): SOLO el dueno */
           if (!esDueno) return json({ error: "Los ajustes de la academia los maneja el dueño." }, 403);
           const b = await request.json().catch(() => ({}));
-          const claves = ["pago_numero", "pago_titular", "bcp_cuenta", "bcp_cci", "scotia_cuenta", "scotia_cci", "crypto_moneda", "crypto_red", "crypto_wallet", "stripe_moneda", "profe_nombre", "profe_marca", "profe_foto", "whatsapp_profe", "cursos", "brand_color", "brand_font", "agenda_cupo", "recordatorios_clase", "recordatorio_renovacion", "nubefact_ruta", "nubefact_token", "fact_serie_boleta", "fact_igv", "fact_proximo_numero", "wa_phone_id", "wa_enabled", "wa_modo", "wa_tono", "wa_instrucciones", "wa_kb", "wa_seguimiento", "wa_no_tocar", "wa_url_horarios", "wa_url_portal", "reprog_activo", "reprog_min_h", "cred_on", "cred_max_mes", "cred_vence_dias", "cred_en_tardia", "paquetes", "modulos_off", "clases", "anticipacion_h", "web_direccion_off",
+          const claves = ["pago_numero", "pago_titular", "bcp_cuenta", "bcp_cci", "scotia_cuenta", "scotia_cci", "crypto_moneda", "crypto_red", "crypto_wallet", "stripe_moneda", "profe_nombre", "profe_marca", "profe_foto", "whatsapp_profe", "cursos", "brand_color", "brand_font", "agenda_cupo", "recordatorios_clase", "recordatorio_renovacion", "nubefact_ruta", "nubefact_token", "fact_serie_boleta", "fact_igv", "fact_proximo_numero", "wa_phone_id", "wa_enabled", "wa_modo", "wa_tono", "wa_instrucciones", "wa_kb", "wa_seguimiento", "wa_no_tocar", "wa_url_horarios", "wa_url_portal", "reprog_activo", "reprog_min_h", "cred_on", "cred_max_mes", "cred_vence_dias", "cred_en_tardia", "prueba_plazas", "paquetes", "modulos_off", "clases", "anticipacion_h", "web_direccion_off",
                           /* Elevate (28-jul-2026) */
                           "caduca_meses", "asistencia_auto", "asistencia_horas", "mensajes",
                           /* que datos extra pide el formulario publico de compra (02-ago-2026) */
@@ -20806,6 +20895,7 @@ export default {
               if (k === "reprog_activo" && valor && valor !== "0") valor = "";
               if (k === "cred_on" || k === "cred_en_tardia") valor = (valor === "1") ? "1" : "";
               if (k === "cred_max_mes") valor = limpiarEnteroCfg(valor, 1, 10);
+              if (k === "prueba_plazas") valor = limpiarEnteroCfg(valor, 1, 20);
               if (k === "cred_vence_dias") valor = limpiarEnteroCfg(valor, 1, 365);
               if (k === "reprog_min_h" && valor){
                 const nh = parseInt(valor, 10);
