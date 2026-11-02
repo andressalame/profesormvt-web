@@ -2060,7 +2060,7 @@ function renderPaybox(){
       var cc = calc(pk);
       var soloTarjMP = (m === "Tarjeta (Mercado Pago)") && !!cf.mp_solo_tarjeta;
       var lab = (m === "Tarjeta (Stripe)") ? "Tarjeta internacional" : (soloTarjMP ? "Tarjeta" : "Tarjeta o Yape");
-      var nota = (m === "Tarjeta (Stripe)") ? "Te llevamos al checkout seguro de Stripe. Al terminar, tu paquete se activa solo."
+      var nota = (m === "Tarjeta (Stripe)") ? "Te llevamos a la página de pago segura de Stripe. Al terminar, tu paquete se activa solo."
         : (m === "Tarjeta/Yape (Culqi)") ? "Paga con tarjeta o Yape sin salir de aquí. Se confirma solo."
         : (soloTarjMP ? "Te llevamos a Mercado Pago (solo tarjeta). Al terminar, tu paquete se activa solo."
         : "Te llevamos a Mercado Pago (tarjeta o Yape). Al terminar, tu paquete se activa solo.");
@@ -2094,7 +2094,7 @@ function pagarConAuto(){
   if(paquete==="Clase de prueba" && !COMPRA_SLOT){ irAWizPaso(2); $("wizErr2").textContent="Elige un horario para tu clase de prueba."; return; }
   if(metodo === "Tarjeta/Yape (Culqi)"){ pagarConCulqi(paquete, curso, btn, txtOrig); return; }
   var endpoint = (metodo === "Tarjeta (Stripe)") ? "/app/api/stripe/crear-alumno" : "/app/api/mp/crear-alumno";
-  if(btn){ btn.disabled=true; btn.textContent="Abriendo checkout…"; }
+  if(btn){ btn.disabled=true; btn.textContent="Abriendo la página de pago…"; }
   api(endpoint,{method:"POST",body:JSON.stringify({paquete:paquete,curso:curso,slot_deseado:(paquete==="Clase de prueba"?COMPRA_SLOT:"")})})
     .then(function(r){
       if(r && r.init_point){ window.location.href = r.init_point; }

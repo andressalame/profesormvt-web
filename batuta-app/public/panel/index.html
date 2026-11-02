@@ -1211,6 +1211,9 @@ p.hint[style*="font-size"]{font-size:13px!important;}
 .ajsec>.ajsec-d{margin:-4px 16px 12px;}
 .ajsec>.cfgrow,.ajsec>.hint:not(.ajsec-d){margin-left:16px;margin-right:16px;}
 .ajsec>.cfgrow:last-child,.ajsec>.hint:last-child{margin-bottom:14px;}
+
+/* secciones genéricas (Perfil): solo se ve el bloque elegido */
+.panel[data-subs]>.group[data-ssub]:not(.ssub-on){display:none;}
 </style>
 </head>
 <body>
@@ -1850,7 +1853,7 @@ p.hint[style*="font-size"]{font-size:13px!important;}
   </section>
 
   <section class="panel" id="panel-agenda">
-    <p class="hint quees"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg><b>Esto es el FUTURO: tu horario y lo que ya está reservado.</b> Aquí armas en qué días y horas dictas, con qué tipo de clase y cuánta gente entra. ¿Buscas anotar una clase que YA diste? Eso es <b><a href="#" data-ira="registro">Asistencia</a></b>.</p>
+    <p class="hint quees"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg><b>Aquí ves lo que viene: tu horario y lo que ya está reservado.</b> Aquí armas en qué días y horas dictas, con qué tipo de clase y cuánta gente entra. ¿Buscas anotar una clase que YA diste? Eso es <b><a href="#" data-ira="registro">Asistencia</a></b>.</p>
     <!-- Calendario del mes (10-ago-2026, reunión Elevate): la vista mensual que José extraña
          de Punchpass. Día a día: cuántas clases del horario + cuántas reservas. Clic en un
          día = detalle con la gente, y desde ahí se bloquea o siembra con la fecha puesta. -->
@@ -1964,7 +1967,7 @@ p.hint[style*="font-size"]{font-size:13px!important;}
       </div>
       <p class="hint" id="vistaTx" style="margin-top:-2px;"></p>
       <div id="vistaChips" style="display:flex;flex-wrap:wrap;gap:8px;margin:0 0 10px;"></div>
-      <p class="hint" style="margin-top:-2px;">La grilla es solo tu vista: cambia el rango o el paso para poner clases a las 7:15 o cada media hora. Nunca borra franjas que ya guardaste fuera de este rango.</p>
+      <p class="hint" style="margin-top:-2px;">La grilla es solo tu vista: cambia el rango o el paso para poner clases a las 7:15 o cada media hora. Nunca borra clases que ya guardaste fuera de este rango.</p>
       <div class="tablewrap" id="dispGrid"></div>
       <button class="btn" id="btnGuardarDisp" style="margin-top:12px;">Guardar horario</button>
       <div class="sinsave" id="dispSinGuardar" hidden>
@@ -2178,10 +2181,10 @@ p.hint[style*="font-size"]{font-size:13px!important;}
     </div>
     <div class="group" data-aj="reservas">
       <h2>Cómo reservan tus alumnos</h2>
-      <p class="hint">Las reglas del portal. Tus horarios y el aforo de cada franja se arman en <b>Clases → Agenda</b>.</p>
+      <p class="hint">Las reglas del portal. Tus horarios y cuántas alumnas entran a cada clase se arman en <b>Clases → Agenda</b>.</p>
       <details class="ajsec" open><summary>Reservar y cancelar</summary><p class="hint ajsec-d">Cuándo y cómo pueden reservar y cancelar tus alumnas.</p>
  <div class="cfgrow"><span class="pk">Cupo por horario (general)</span><input id="cfg_agenda_cupo" type="number" min="1" max="60" placeholder="1" /></div>
-      <p class="hint" style="margin-top:-4px;">Es el último recurso: manda el aforo que le pongas a la franja en la Agenda, luego el aforo del tipo de clase, y recién este. 1 = clases individuales.</p>
+      <p class="hint" style="margin-top:-4px;">Es el último recurso: manda lo que le pongas a cada horario en la Agenda, luego lo del tipo de clase, y recién este. 1 = clases individuales.</p>
 
       <div class="cfgrow"><span class="pk">Anticipación mínima para reservar</span><input id="cfg_anticipacion_h" data-ayuda="Con cuánta anticipación te tienen que reservar. 0 = pueden reservar la clase de dentro de un rato." type="number" min="0" max="168" placeholder="12" /></div>
       <p class="hint" style="margin-top:-4px;">Horas de aviso que exiges. <b>0</b> = pueden reservar la clase de dentro de un rato (lo normal en un estudio). Vacío = 12 horas.</p>
@@ -2247,7 +2250,7 @@ p.hint[style*="font-size"]{font-size:13px!important;}
 
       <div class="cfgrow"><span class="pk">Clases antes de pedirla</span><input id="cfg_resena_min_clases" type="number" min="1" placeholder="4" data-ayuda="Cuántas clases tiene que haber tomado el alumno antes de que le pidamos su opinión. Por defecto 4: pedírsela al que fue una vez es pedirle que opine de lo que todavía no conoce."></div>
 
-      <div class="cfgrow"><span class="pk">Rescatar compras a medias</span><select id="cfg_rescate_activo" data-ayuda="Si alguien abre el checkout y no llega a pagar, al día siguiente le llega un correo para retomarlo. Nunca se le escribe al que ya pagó por Yape y espera que confirmes."><option value="">Activado</option><option value="off">Apagado</option></select></div>
+      <div class="cfgrow"><span class="pk">Rescatar compras a medias</span><select id="cfg_rescate_activo" data-ayuda="Si alguien empieza a pagar y no termina, al día siguiente le llega un correo para retomarlo. Nunca se le escribe al que ya pagó por Yape y espera que confirmes."><option value="">Activado</option><option value="off">Apagado</option></select></div>
       <p class="hint" style="margin-top:-4px;">Cuando alguien empieza a comprar y no termina, esa venta hoy se pierde en silencio. Con esto le llega un correo al día siguiente para retomarla desde su portal. <b>Nunca</b> le escribe a quien ya te pagó por Yape y espera tu confirmación.</p>
       </details>
 
@@ -5666,6 +5669,25 @@ function agSub(n){
   bar.addEventListener("click",function(e){ var b=e.target.closest("button[data-s]"); if(b) agSub(b.getAttribute("data-s")); });
   var primero=p.querySelector(":scope > .group"); p.insertBefore(bar,primero);
   agSub("cal");
+})();
+
+/* Perfil en tres secciones (2-nov-2026): Mis datos, Mi plan de Batuta, Recomendar. Mismos bloques de siempre. */
+(function(){
+  var p=el("panel-perfil"); if(!p||p.querySelector(".agpills")) return;
+  var gs=[].slice.call(p.querySelectorAll(":scope > .group")); if(gs.length<2) return;
+  var defs=[["Mis datos","tu perfil"],["Mi plan de Batuta","tu batuta"],["Recomendar Batuta","recomienda batuta"]];
+  var usados=0;
+  gs.forEach(function(g){
+    var h=g.querySelector("h2"), t=(h?h.textContent:"").trim().toLowerCase(), k=-1;
+    defs.forEach(function(d,i){ if(t.indexOf(d[1])===0) k=i; });
+    if(k<0) k=0;
+    g.setAttribute("data-ssub",String(k)); usados++;
+  });
+  var bar=document.createElement("div"); bar.className="agpills"; bar.setAttribute("role","tablist");
+  bar.innerHTML=defs.map(function(d,i){ return '<button type="button" data-ss="'+i+'">'+d[0]+'</button>'; }).join("");
+  function ir(n){ p.setAttribute("data-subs",String(n)); gs.forEach(function(g){ g.classList.toggle("ssub-on",g.getAttribute("data-ssub")===String(n)); }); [].forEach.call(bar.querySelectorAll("button"),function(b){ b.classList.toggle("on",b.getAttribute("data-ss")===String(n)); }); }
+  bar.addEventListener("click",function(e){ var b=e.target.closest("button[data-ss]"); if(b) ir(b.getAttribute("data-ss")); });
+  p.insertBefore(bar,gs[0]); ir(0);
 })();
 function cargarAgenda(){
   el("dispGrid").innerHTML = '<p class="hint">Cargando…</p>';
@@ -13326,7 +13348,7 @@ try {
   if(_stQ){
     setTimeout(function(){
       if(_stQ==="ok") toast("Stripe: revisa tu estado de conexión en Configuración");
-      else toast("Retomaste el onboarding de Stripe. Complétalo para activar los cobros");
+      else toast("Retomaste la activación de Stripe. Complétala para activar los cobros");
       try{ MP_ESTADO_CARGADO=false; renderAjustes(); }catch(e){}
     }, 600);
     try { history.replaceState(null, "", location.pathname); } catch(e){}
