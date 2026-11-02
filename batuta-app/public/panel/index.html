@@ -1193,6 +1193,24 @@ p.hint[style*="font-size"]{font-size:13px!important;}
 .camp-borrar{margin-left:auto;margin-right:8px;background:transparent;border:1px solid var(--line);border-radius:8px;color:var(--cream);font:600 12.5px/1 var(--sans,inherit);padding:8px 10px;cursor:pointer;}
 .camp-borrar:hover{background:var(--panel2);}
 .camp-borrar[hidden]{display:none;}
+
+/* Mis clases > Agenda en secciones (2-nov-2026): antes eran 6 bloques apilados (~1.800 px). Una pregunta por pantalla. */
+.agpills{display:flex;gap:8px;flex-wrap:wrap;margin:4px 0 16px;}
+.agpills button{min-height:var(--ctl-md);padding:0 16px;border-radius:999px;border:1px solid var(--line);background:transparent;color:var(--cream);font:600 var(--fs-md)/1 var(--sans,inherit);cursor:pointer;}
+.agpills button.on{background:var(--accent);border-color:var(--accent);color:var(--on-accent,#111);}
+#panel-agenda[data-sub] .group:not([data-agsub]){display:none;}
+#panel-agenda[data-sub="cal"] .group:not([data-agsub="cal"]),#panel-agenda[data-sub="horario"] .group:not([data-agsub="horario"]),
+#panel-agenda[data-sub="ausencia"] .group:not([data-agsub="ausencia"]),#panel-agenda[data-sub="compartir"] .group:not([data-agsub="compartir"]){display:none;}
+
+/* Ajustes > Reservas en secciones que se abren y cierran (2-nov-2026) */
+.ajsec{border:1px solid var(--line);border-radius:12px;margin:0 0 12px;background:var(--panel);}
+.ajsec>summary{cursor:pointer;list-style:none;padding:14px 16px;font-weight:700;font-size:16px;min-height:48px;display:flex;align-items:center;gap:10px;}
+.ajsec>summary::-webkit-details-marker{display:none;}
+.ajsec>summary::after{content:"+";margin-left:auto;font-size:22px;color:var(--muted);}
+.ajsec[open]>summary::after{content:"\2212";}
+.ajsec>.ajsec-d{margin:-4px 16px 12px;}
+.ajsec>.cfgrow,.ajsec>.hint:not(.ajsec-d){margin-left:16px;margin-right:16px;}
+.ajsec>.cfgrow:last-child,.ajsec>.hint:last-child{margin-bottom:14px;}
 </style>
 </head>
 <body>
@@ -2161,43 +2179,77 @@ p.hint[style*="font-size"]{font-size:13px!important;}
     <div class="group" data-aj="reservas">
       <h2>Cómo reservan tus alumnos</h2>
       <p class="hint">Las reglas del portal. Tus horarios y el aforo de cada franja se arman en <b>Clases → Agenda</b>.</p>
-      <div class="cfgrow"><span class="pk">Cupo por horario (general)</span><input id="cfg_agenda_cupo" type="number" min="1" max="60" placeholder="1" /></div>
+      <details class="ajsec" open><summary>Reservar y cancelar</summary><p class="hint ajsec-d">Cuándo y cómo pueden reservar y cancelar tus alumnas.</p>
+ <div class="cfgrow"><span class="pk">Cupo por horario (general)</span><input id="cfg_agenda_cupo" type="number" min="1" max="60" placeholder="1" /></div>
       <p class="hint" style="margin-top:-4px;">Es el último recurso: manda el aforo que le pongas a la franja en la Agenda, luego el aforo del tipo de clase, y recién este. 1 = clases individuales.</p>
+
       <div class="cfgrow"><span class="pk">Anticipación mínima para reservar</span><input id="cfg_anticipacion_h" data-ayuda="Con cuánta anticipación te tienen que reservar. 0 = pueden reservar la clase de dentro de un rato." type="number" min="0" max="168" placeholder="12" /></div>
       <p class="hint" style="margin-top:-4px;">Horas de aviso que exiges. <b>0</b> = pueden reservar la clase de dentro de un rato (lo normal en un estudio). Vacío = 12 horas.</p>
+
       <div class="cfgrow"><span class="pk">¿El alumno reprograma solo?</span><select id="cfg_reprog_activo"><option value="">Sí, desde su portal</option><option value="0">No, solo a través del profesor</option></select></div>
+
       <div class="cfgrow"><span class="pk">Horas mínimas para reprogramar</span><input id="cfg_reprog_min_h" data-ayuda="Hasta cuántas horas antes puede mover su clase sin perderla. Con menos tiempo, ya no se puede." type="number" min="1" max="72" placeholder="4" /></div>
       <p class="hint" style="margin-top:-4px;">Con esa anticipación o más, reprogramar libera el horario sin consumir la clase; con menos ya no se puede. Vacío = 4 horas.</p>
+
+      <div class="cfgrow"><span class="pk">Cancelar fuera de plazo</span><select id="cfg_cancel_tarde" data-ayuda="Qué pasa si una alumna quiere cancelar cuando ya pasó el plazo de arriba. Bloquear: no puede. Permitir: puede, pero la clase se le cuenta como usada (y solo recibe crédito si lo activas abajo)."><option value="">No puede cancelar</option><option value="pierde">Puede, y la clase se cuenta como usada</option></select></div>
+
       <div class="cfgrow"><span class="pk">Horario fijo semanal en el portal</span><select id="cfg_portal_fija_off" data-ayuda="El &quot;horario fijo semanal&quot; es para el alumno que viene siempre el mismo día y hora. Apágalo si tus clases son grupales y nadie tiene horario fijo."><option value="">Encendido — pueden apartar el mismo horario cada semana</option><option value="1">Apagado — solo reservan clase por clase</option></select></div>
       <p class="hint" style="margin-top:-4px;">Apágalo si tus alumnos no tienen horario fijo (típico en estudios con clases grupales): el portal solo ofrecerá reservar clase por clase.</p>
+
       <div class="cfgrow"><span class="pk">Lista de espera al liberarse un cupo</span><select id="cfg_espera_auto" data-ayuda="Cuando alguien cancela y queda un cupo libre: o le avisas al primero de la cola, o se lo reservas automáticamente."><option value="">Avisar al primero para que reserve</option><option value="1">Reservarle la clase automáticamente al primero</option></select></div>
       <p class="hint" style="margin-top:-4px;">Con el modo automático, apenas alguien cancela, el primero de la cola queda <b>dentro</b> de la clase (si su plan tiene saldo) y le llega el aviso por correo y notificación. Si su plan no alcanza, se le avisa como siempre.</p>
-      <div class="cfgrow"><span class="pk">Cancelar fuera de plazo</span><select id="cfg_cancel_tarde" data-ayuda="Qué pasa si una alumna quiere cancelar cuando ya pasó el plazo de arriba. Bloquear: no puede. Permitir: puede, pero la clase se le cuenta como usada (y solo recibe crédito si lo activas abajo)."><option value="">No puede cancelar</option><option value="pierde">Puede, y la clase se cuenta como usada</option></select></div>
+      </details>
+
+            <details class="ajsec"><summary>Clases de prueba y créditos de recuperación</summary><p class="hint ajsec-d">Plazas aparte para alumnas de prueba y créditos cuando una alumna falta.</p>
+
       <div class="cfgrow"><span class="pk">Plazas de prueba por clase</span><input id="cfg_prueba_plazas" data-ayuda="Lugares aparte, solo para alumnas de prueba, que no le quitan cupo a tus alumnas regulares. Vacío = no hay plazas de prueba." type="number" min="1" max="20" placeholder="0" /></div>
+
       <div class="cfgrow"><span class="pk">Créditos de recuperación</span><select id="cfg_cred_on" data-ayuda="Cuando una alumna inscrita falta a su clase, se le da un crédito para recuperarla en otra clase. Tú puedes anularlo o cambiarlo a mano desde su ficha."><option value="">Apagados</option><option value="1">Dar un crédito cuando falta</option></select></div>
+
       <div class="cfgrow"><span class="pk">Máximo de créditos por alumna al mes</span><input id="cfg_cred_max_mes" data-ayuda="Cuántos créditos puede ganar una misma alumna por las faltas de un mismo mes." type="number" min="1" max="10" placeholder="1" /></div>
+
       <div class="cfgrow"><span class="pk">Días que dura un crédito</span><input id="cfg_cred_vence_dias" data-ayuda="Se cuentan desde la clase que faltó. Pasa al mes siguiente si todavía no vence: una falta del 25 de enero con 30 días vale hasta el 24 de febrero." type="number" min="1" max="365" placeholder="30" /></div>
+
       <div class="cfgrow"><span class="pk">¿La cancelación tardía también da crédito?</span><select id="cfg_cred_en_tardia" data-ayuda="Si una alumna cancela cuando ya pasó el plazo, la clase se le cuenta como usada. Aquí decides si igual recibe un crédito."><option value="">No, la pierde</option><option value="1">Sí, recibe crédito</option></select></div>
       <p class="hint" style="margin-top:-4px;">El crédito suma una clase a la alumna y queda anotado con qué clase se usó. Solo cuenta desde el día que lo prendes: no se regalan créditos por faltas antiguas.</p>
+      </details>
+
+            <details class="ajsec"><summary>Lo que ve el alumno en su portal</summary><p class="hint ajsec-d">Profesores visibles y chat.</p>
+
       <div class="cfgrow"><span class="pk">Nombres de profesores en el portal</span><select id="cfg_portal_sin_profe" data-ayuda="Si tus clases son grupales y nadie tiene profesor fijo, mejor que el portal no diga nombres de profesores."><option value="">Mostrarlos ("Tu clase con Ana")</option><option value="1">Ocultarlos ("Tu clase en tu academia")</option></select></div>
       <p class="hint" style="margin-top:-4px;">Ocúltalos si tus clases son grupales y ningún alumno tiene profesor fijo.</p>
+
       <div class="cfgrow"><span class="pk">Chat del portal</span><select id="cfg_portal_chat_off"><option value="">Encendido</option><option value="1">Apagado — botón directo a tu WhatsApp</option></select></div>
       <p class="hint" style="margin-top:-4px;">Apagado: en vez del chat, el alumno ve un botón que abre tu WhatsApp (el número de tu Perfil).</p>
+      </details>
+
+            <details class="ajsec"><summary>Avisos automáticos</summary><p class="hint ajsec-d">Correos que salen solos para que no tengas que escribir uno por uno.</p>
+
       <div class="cfgrow"><span class="pk">Recordatorio de clase (24h y 1h)</span><select id="cfg_recordatorios_clase"><option value="">Activado</option><option value="off">Apagado</option></select></div>
       <p class="hint" style="margin-top:-4px;">Correo automático al alumno 24 horas y 1 hora antes de su reserva. Menos faltas sin que muevas un dedo.</p>
+
       <div class="cfgrow"><span class="pk">Recordatorio de renovación</span><select id="cfg_recordatorio_renovacion"><option value="">Activado</option><option value="off">Apagado</option></select></div>
       <p class="hint" style="margin-top:-4px;">Correo automático cuando el paquete del alumno está por vencer (o venció), con link para renovar desde su portal.</p>
+
       <div class="cfgrow"><span class="pk">Aviso de plan activo</span><select id="cfg_aviso_plan_activo" data-ayuda="Cuando le cargas o le renuevas el plan a un alumno desde su ficha, le llega un correo avisándole. Útil si te pagó por Yape fuera de la app."><option value="">Activado</option><option value="off">Apagado</option></select></div>
+      <p class="hint" style="margin-top:-4px;">Cuando le cargas o le renuevas el plan a un alumno <b>desde su ficha</b> (típico si te pagó por Yape fuera de la app), le llega un correo con su plan y el link a su portal. El que paga por internet ya recibe el suyo al confirmarse el pago.</p>
+      </details>
+
+            <details class="ajsec"><summary>Reseñas y compras a medias</summary><p class="hint ajsec-d">Pedir reseñas de Google y rescatar a quien dejó una compra a medias.</p>
+
       <div class="cfgrow"><span class="pk">Pedir reseñas de Google</span><select id="cfg_resena_activa" data-ayuda="Al alumno que ya lleva varias clases le llega un correo: del 1 al 5, ¿cómo van tus clases? Si responde 4 o 5 lo mandamos a dejar tu reseña en Google. Si responde 3 o menos NO le pedimos nada público y te avisamos a ti al toque, para que lo llames antes de que se vaya."><option value="">Activado</option><option value="off">Apagado</option></select></div>
+
       <div class="cfgrow"><span class="pk">Tu link de reseñas de Google</span><input id="cfg_review_link" placeholder="https://g.page/r/..." data-ayuda="Pega acá el link donde tus alumnos dejan la reseña (Google Business → Pedir reseñas). Si lo dejas vacío no se manda ningún correo: nunca inventamos un link por ti."></div>
       <!-- 21-ago-2026: "Pedir reseñas" sale como Activado aunque falte el link, y sin link no
            se manda un solo correo. Resultado: cero reseñas pedidas en toda la historia de
            Batuta, con el dueño creyendo que estaba funcionando. -->
       <p class="hint" id="avisoResenaSinLink" style="display:none;margin:2px 0 0;color:var(--amber,#E8A13D);">Dice <b>Activado</b>, pero sin tu link no se manda ningún correo. Lo sacas de Google Business → Pedir reseñas y lo pegas acá.</p>
+
       <div class="cfgrow"><span class="pk">Clases antes de pedirla</span><input id="cfg_resena_min_clases" type="number" min="1" placeholder="4" data-ayuda="Cuántas clases tiene que haber tomado el alumno antes de que le pidamos su opinión. Por defecto 4: pedírsela al que fue una vez es pedirle que opine de lo que todavía no conoce."></div>
+
       <div class="cfgrow"><span class="pk">Rescatar compras a medias</span><select id="cfg_rescate_activo" data-ayuda="Si alguien abre el checkout y no llega a pagar, al día siguiente le llega un correo para retomarlo. Nunca se le escribe al que ya pagó por Yape y espera que confirmes."><option value="">Activado</option><option value="off">Apagado</option></select></div>
       <p class="hint" style="margin-top:-4px;">Cuando alguien empieza a comprar y no termina, esa venta hoy se pierde en silencio. Con esto le llega un correo al día siguiente para retomarla desde su portal. <b>Nunca</b> le escribe a quien ya te pagó por Yape y espera tu confirmación.</p>
-      <p class="hint" style="margin-top:-4px;">Cuando le cargas o le renuevas el plan a un alumno <b>desde su ficha</b> (típico si te pagó por Yape fuera de la app), le llega un correo con su plan y el link a su portal. El que paga por internet ya recibe el suyo al confirmarse el pago.</p>
+      </details>
 
       <h2 style="margin-top:22px;">Asistencia</h2>
       <div class="cfgrow"><span class="pk">Pedir fecha de nacimiento al comprar</span><select id="cfg_campos_alumno" data-ayuda="Solo si de verdad la usas. Es un dato personal, y si el alumno resulta menor de 14 años el formulario le exige al que compra declarar que es su apoderado.">
@@ -5589,6 +5641,32 @@ if(el("ausLista")) el("ausLista").addEventListener("click",function(e){
     cargarAusencias();
   }).catch(function(err){ toast((err&&err.message)||"No se pudo"); }).finally(function(){ b.disabled=false; });
 });
+
+/* Secciones de Mis clases > Agenda: se arman con los bloques que ya existen (no se mueve ni se borra ninguno). */
+var AG_SUB="cal";
+function agSub(n){
+  var p=el("panel-agenda"); if(!p) return;
+  AG_SUB=n; p.setAttribute("data-sub",n);
+  [].forEach.call(p.querySelectorAll(".agpills button"),function(b){ b.classList.toggle("on",b.getAttribute("data-s")===n); });
+  if(n==="horario"){ try{ renderAgendaAdmin(); arreglarTablas(); }catch(e){} }
+  if(n==="ausencia"){ try{ cargarAusencias(); }catch(e){} }
+}
+(function(){
+  var p=el("panel-agenda"); if(!p||p.querySelector(".agpills")) return;
+  var asig=function(g,s){ if(g) g.setAttribute("data-agsub",s); };
+  [].forEach.call(p.querySelectorAll(":scope > .group"),function(g){
+    var h=g.querySelector("h2"), t=(h?h.textContent:"").toLowerCase();
+    if(g.id==="grpAusencia") asig(g,"ausencia");
+    else if(g.querySelector("#dispGrid")) asig(g,"horario");
+    else if(t.indexOf("link de cupos")>=0) asig(g,"compartir");
+    else asig(g,"cal");   /* calendario del mes, apartar un horario, vino sin reservar */
+  });
+  var bar=document.createElement("div"); bar.className="agpills"; bar.setAttribute("role","tablist");
+  bar.innerHTML='<button type="button" data-s="cal">Calendario</button><button type="button" data-s="horario">Mi horario</button><button type="button" data-s="ausencia">Ausencias</button><button type="button" data-s="compartir">Compartir cupos</button>';
+  bar.addEventListener("click",function(e){ var b=e.target.closest("button[data-s]"); if(b) agSub(b.getAttribute("data-s")); });
+  var primero=p.querySelector(":scope > .group"); p.insertBefore(bar,primero);
+  agSub("cal");
+})();
 function cargarAgenda(){
   el("dispGrid").innerHTML = '<p class="hint">Cargando…</p>';
   /* La lista de profesores se pide UNA vez y se cachea: la agenda se recarga en cada guardado. */
@@ -6146,6 +6224,7 @@ function pintarSemanaBanner(){
   b.hidden=false;
 }
 function entrarModoSemana(fkey){
+  if(typeof agSub==="function") agSub("horario");
   SEMANA_EDIT=lunesYDomingoDe(fkey);
   pintarSemanaBanner();
   var grupo=el("dispGrid") && el("dispGrid").closest(".group");
@@ -10314,7 +10393,7 @@ function bsIr(it){
   closeOv("ovBuscar");
   var t=document.querySelector('.tab[data-tab="'+it.tab+'"]');
   if(t) t.click();
-  if(it.aj) setTimeout(function(){ try{ ajTab(it.aj); }catch(e){} },30);
+  if(it.aj) setTimeout(function(){ try{ ajTab(it.aj); [].forEach.call(document.querySelectorAll(".ajsec"),function(d){ d.open=true; }); }catch(e){} },30);   /* desde el buscador se abren todas las secciones: el ajuste buscado puede estar en una cerrada */
   /* 31-ago-2026: las 7 páginas de Mi web se navegan con `pg`. No hay función
      global que las abra (irA() vive dentro del módulo del editor), así que se le
      da click al botón real de #webPages, que es justo lo que el editor escucha.
