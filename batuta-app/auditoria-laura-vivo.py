@@ -27,7 +27,7 @@ def http(metodo, ruta, token=None, cuerpo=None):
         try: return e.code, json.loads(e.read() or b"{}")
         except Exception: return e.code, {}
 def limpiar():
-    tablas = ["creditos_recup","espera","reservas","disponibilidad","cuentas","alumnos","profesores","precios","config","registro","bonos_log","api_cambios"]
+    tablas = ["creditos_recup","espera","reservas","disponibilidad","cuentas","alumnos","profesores","precios","config","registro","bonos_log","api_cambios","ausencias_profe","sustituciones"]
     hay = {r["name"] for r in d1("SELECT name FROM sqlite_master WHERE type='table'")}
     d1("; ".join(f"DELETE FROM {t} WHERE tenant_id = '{T}'" for t in tablas if t in hay) + f"; DELETE FROM sesiones WHERE cuenta_id LIKE 'LZ-%' OR cuenta_id = 'P:LZ-P'; DELETE FROM tenants WHERE id = '{T}'")
     q = d1(f"SELECT (SELECT COUNT(*) FROM tenants WHERE id='{T}') t,(SELECT COUNT(*) FROM alumnos WHERE tenant_id='{T}') a,(SELECT COUNT(*) FROM reservas WHERE tenant_id='{T}') r")
