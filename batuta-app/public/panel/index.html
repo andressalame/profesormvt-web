@@ -1214,6 +1214,10 @@ p.hint[style*="font-size"]{font-size:13px!important;}
 
 /* secciones genéricas (Perfil): solo se ve el bloque elegido */
 .panel[data-subs]>.group[data-ssub]:not(.ssub-on){display:none;}
+
+.snack-undo{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(24px + env(safe-area-inset-bottom));z-index:700;display:flex;align-items:center;gap:14px;background:var(--cream);color:var(--bg);padding:10px 12px 10px 16px;border-radius:12px;font-size:15px;box-shadow:0 6px 24px rgba(0,0,0,.35);max-width:calc(100vw - 24px);}
+.snack-undo button{min-height:40px;padding:0 14px;border-radius:8px;border:0;background:var(--accent);color:var(--on-accent,#111);font-weight:700;font-size:15px;cursor:pointer;}
+@media (max-width:820px){ .snack-undo{bottom:calc(80px + env(safe-area-inset-bottom));} }
 </style>
 </head>
 <body>
@@ -7395,6 +7399,16 @@ function campPintar(){
   var bt=el("btnCampBorrarTodas"); if(bt) bt.hidden=!CAMP.avisos.some(function(a){ return a.tipo!=="cierre"; });
 }
 /* Borrar avisos (2-nov-2026): se quita al instante de la pantalla y se avisa al servidor; si falla, vuelve. */
+
+/* Deshacer en vez de «¿estás seguro?» (principio 13 de la casa): una barra de 8 segundos con el botón Deshacer. */
+function snackDeshacer(texto,alDeshacer){
+  var v=el("snackUndo"); if(v) v.remove();
+  v=document.createElement("div"); v.id="snackUndo"; v.className="snack-undo"; v.setAttribute("role","status");
+  v.innerHTML='<span></span><button type="button">Deshacer</button>'; v.firstChild.textContent=texto;
+  var t=setTimeout(function(){ v.remove(); },8000);
+  v.querySelector("button").addEventListener("click",function(){ clearTimeout(t); v.remove(); try{ Promise.resolve(alDeshacer()).catch(function(){}); }catch(e){} });
+  document.body.appendChild(v);
+}
 function campBorrar(ids,todos){
   var antes=CAMP.avisos.slice();
   CAMP.avisos=CAMP.avisos.filter(function(a){ return a.tipo==="cierre"||(todos?false:ids.indexOf(a.id)<0); });
@@ -7402,6 +7416,9 @@ function campBorrar(ids,todos){
   campPintar();
   return fetch("/app/api/admin/avisos/borrar",{method:"POST",headers:hdr(),body:JSON.stringify(todos?{todos:true}:{ids:ids})})
     .then(function(r){ if(!r.ok) throw new Error("x"); return r.json(); })
+    .then(function(d){ snackDeshacer(todos?"Borraste todos los avisos":"Aviso borrado",function(){
+      return fetch("/app/api/admin/avisos/restaurar",{method:"POST",headers:hdr(),body:JSON.stringify({ids:(d&&d.ids)||ids})}).then(function(){ return campCargar(); });
+    }); })
     .catch(function(){ CAMP.avisos=antes; CAMP.nuevos=antes.filter(function(a){ return a.nuevo; }).length; campPintar(); toast("No se pudo borrar. Intenta de nuevo."); });
 }
 if(el("campLista")) el("campLista").addEventListener("click",function(e){
@@ -7411,8 +7428,7 @@ if(el("campLista")) el("campLista").addEventListener("click",function(e){
 });
 if(el("btnCampBorrarTodas")) el("btnCampBorrarTodas").addEventListener("click",function(e){
   e.stopPropagation();
-  if(!confirm("¿Borrar todos los avisos? Tus pagos siguen en Cobros y las clases sin cerrar se quedan hasta que las cierres.")) return;
-  campBorrar([],true);
+  campBorrar([],true);   /* sin «¿estás seguro?»: se puede deshacer 8 segundos */
 });
 /* "hoy" / "ayer" / "hace 3 días" y, más allá, la fecha. Un ISO pelado no le dice
    nada a nadie de un vistazo. */

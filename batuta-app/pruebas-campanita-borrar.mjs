@@ -23,5 +23,8 @@ t(/slice\(-300\)/, "la lista de borrados tiene tope (no crece sin fin)", "borrad
 t(/data-avdel=/, "cada aviso tiene su X", "falta la X por aviso", PAN);
 t(/id="btnCampBorrarTodas"/, "hay un botón «Borrar todas»", "falta Borrar todas", PAN);
 t(/catch\(function\(\)\{ CAMP\.avisos=antes;/, "si el servidor falla, el aviso vuelve y se le dice a la persona", "borrar no deshace si falla", PAN);
+t(/path === "\/app\/api\/admin\/avisos\/restaurar"/, "el servidor deshace un borrado", "falta el endpoint restaurar");
+t(/function snackDeshacer\(/, "la pantalla ofrece Deshacer 8 segundos en vez de preguntar «¿estás seguro?»", "falta el Deshacer", PAN);
+ver(!/¿Borrar todos los avisos\?/.test(PAN), "«Borrar todas» ya no pregunta antes", "sigue el «¿estás seguro?»");
 console.log(fallas ? "\n🔴 " + fallas + " fallo(s)" : "\n🟢 campanita: todo en verde");
 process.exit(fallas ? 1 : 0);

@@ -266,6 +266,10 @@ def etapa_avisos():
     ver(st == 200, "borra todos", f"borrar todos: {st} {r}")
     st, r = http("GET", "/app/api/admin/avisos", admin)
     ver(len([a for a in r.get("avisos", []) if a["tipo"] != "cierre"]) == 0, "la campanita queda vacía", f"quedan {len(r.get('avisos', []))}")
+    st, r = http("POST", "/app/api/admin/avisos/borrar", admin, {"todos": True})
+    st2, r2 = http("POST", "/app/api/admin/avisos/restaurar", admin, {"ids": ["2026-11-02-creditos"]})
+    st3, r3 = http("GET", "/app/api/admin/avisos", admin)
+    ver(st2 == 200 and [a["id"] for a in r3.get("avisos", [])] == ["2026-11-02-creditos"], "deshacer devuelve el aviso borrado y solo ese", f"restaurar: {st2} {[a['id'] for a in r3.get('avisos', [])]}")
 
 ETAPAS = {"avisos": etapa_avisos, "semana": etapa_semana, "profe": etapa_profe, "tardia": etapa_tardia, "prueba": etapa_prueba, "creditos": etapa_creditos, "asistencia": etapa_asistencia}
 if __name__ == "__main__":

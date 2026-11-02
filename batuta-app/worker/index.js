@@ -8440,6 +8440,9 @@ async function sedesDeTenant(env, tid){
    cada una su marca. Y la marca que se guarda es la que el cliente VIO, no "ahora":
    si entra un pago entre que se pinta la lista y se marca leído, no se pierde. */
 const NOVEDADES = [
+  { id: "2026-11-02-deshacer", fecha: "2026-11-02",
+    titulo: "Deshacer en la campanita y portal más claro en el celular",
+    texto: "Si borras un aviso de la campanita tienes 8 segundos para deshacerlo. Perfil tiene tres secciones. En el portal de tus alumnos, las pestañas de abajo se leen mejor y el botón de tema ya no tapa nada." },
   { id: "2026-11-02-secciones", fecha: "2026-11-02",
     titulo: "Mis clases y Ajustes más ordenados",
     texto: "Mis clases ahora tiene cuatro secciones (Calendario, Mi horario, Ausencias y Compartir cupos). En Ajustes → Reservas las opciones están en secciones que se abren y se cierran." },
@@ -20241,7 +20244,22 @@ export default {
             await env.DB.prepare("UPDATE profesores SET avisos_visto = ?1 WHERE id = ?2 AND tenant_id = ?3").bind(JSON.stringify(guardar), profeActorId, tid).run();
             if (profeActor) profeActor.avisos_visto = JSON.stringify(guardar);
           } catch (e) { return json({ error: "No se pudo borrar" }, 500); }
-          return json({ ok: true, borrados: ids.length });
+          return json({ ok: true, borrados: ids.length, ids });
+        }
+        /* Deshacer el borrado (8 s en pantalla): saca esos ids de la lista de borrados de la persona */
+        if (path === "/app/api/admin/avisos/restaurar" && request.method === "POST"){
+          await ensureAvisosSchema(env);
+          if (!profeActorId) return json({ ok: true });
+          const bR = await request.json().catch(() => ({}));
+          const quitar = new Set((Array.isArray(bR.ids) ? bR.ids : []).map(x => String(x).slice(0, 80)).slice(0, 300));
+          const prev = avisosVistoDe(profeActor);
+          const base = (function(){ try { return JSON.parse((profeActor && profeActor.avisos_visto) || "{}") || {}; } catch (e) { return {}; } })();
+          const guardar = Object.assign({}, base, { x: prev.x.filter(id => !quitar.has(id)) });
+          try {
+            await env.DB.prepare("UPDATE profesores SET avisos_visto = ?1 WHERE id = ?2 AND tenant_id = ?3").bind(JSON.stringify(guardar), profeActorId, tid).run();
+            if (profeActor) profeActor.avisos_visto = JSON.stringify(guardar);
+          } catch (e) { return json({ error: "No se pudo deshacer" }, 500); }
+          return json({ ok: true });
         }
         if (path === "/app/api/admin/avisos/visto" && request.method === "POST"){
           await ensureAvisosSchema(env);
