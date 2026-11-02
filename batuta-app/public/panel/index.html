@@ -2109,6 +2109,11 @@ table.acc-fija tbody tr:hover td:last-child{background:var(--panel2);}
       <p class="hint" style="margin-top:-4px;">Apágalo si tus alumnos no tienen horario fijo (típico en estudios con clases grupales): el portal solo ofrecerá reservar clase por clase.</p>
       <div class="cfgrow"><span class="pk">Lista de espera al liberarse un cupo</span><select id="cfg_espera_auto" data-ayuda="Cuando alguien cancela y queda un cupo libre: o le avisas al primero de la cola, o se lo reservas automáticamente."><option value="">Avisar al primero para que reserve</option><option value="1">Reservarle la clase automáticamente al primero</option></select></div>
       <p class="hint" style="margin-top:-4px;">Con el modo automático, apenas alguien cancela, el primero de la cola queda <b>dentro</b> de la clase (si su plan tiene saldo) y le llega el aviso por correo y notificación. Si su plan no alcanza, se le avisa como siempre.</p>
+      <div class="cfgrow"><span class="pk">Créditos de recuperación</span><select id="cfg_cred_on" data-ayuda="Cuando una alumna inscrita falta a su clase, se le da un crédito para recuperarla en otra clase. Tú puedes anularlo o cambiarlo a mano desde su ficha."><option value="">Apagados</option><option value="1">Dar un crédito cuando falta</option></select></div>
+      <div class="cfgrow"><span class="pk">Máximo de créditos por alumna al mes</span><input id="cfg_cred_max_mes" data-ayuda="Cuántos créditos puede ganar una misma alumna por las faltas de un mismo mes." type="number" min="1" max="10" placeholder="1" /></div>
+      <div class="cfgrow"><span class="pk">Días que dura un crédito</span><input id="cfg_cred_vence_dias" data-ayuda="Se cuentan desde la clase que faltó. Pasa al mes siguiente si todavía no vence: una falta del 25 de enero con 30 días vale hasta el 24 de febrero." type="number" min="1" max="365" placeholder="30" /></div>
+      <div class="cfgrow"><span class="pk">¿La cancelación tardía también da crédito?</span><select id="cfg_cred_en_tardia" data-ayuda="Si una alumna cancela cuando ya pasó el plazo, la clase se le cuenta como usada. Aquí decides si igual recibe un crédito."><option value="">No, la pierde</option><option value="1">Sí, recibe crédito</option></select></div>
+      <p class="hint" style="margin-top:-4px;">El crédito suma una clase a la alumna y queda anotado con qué clase se usó. Solo cuenta desde el día que lo prendes: no se regalan créditos por faltas antiguas.</p>
       <div class="cfgrow"><span class="pk">Nombres de profesores en el portal</span><select id="cfg_portal_sin_profe" data-ayuda="Si tus clases son grupales y nadie tiene profesor fijo, mejor que el portal no diga nombres de profesores."><option value="">Mostrarlos ("Tu clase con Ana")</option><option value="1">Ocultarlos ("Tu clase en tu academia")</option></select></div>
       <p class="hint" style="margin-top:-4px;">Ocúltalos si tus clases son grupales y ningún alumno tiene profesor fijo.</p>
       <div class="cfgrow"><span class="pk">Chat del portal</span><select id="cfg_portal_chat_off"><option value="">Encendido</option><option value="1">Apagado — botón directo a tu WhatsApp</option></select></div>
@@ -4727,6 +4732,7 @@ function renderAjustes(){
   if(el("cfg_interbank_cci")) el("cfg_interbank_cci").value=(db.config&&db.config.interbank_cci)||"";
   if(el("cfg_mp_solo_tarjeta")) el("cfg_mp_solo_tarjeta").value=(db.config&&db.config.mp_solo_tarjeta)||"";
   if(el("cfg_espera_auto")) el("cfg_espera_auto").value=(db.config&&db.config.espera_auto)||"";
+  ["cred_on","cred_max_mes","cred_vence_dias","cred_en_tardia"].forEach(function(k){ if(el("cfg_"+k)) el("cfg_"+k).value=(db.config&&db.config[k])||""; });
   if(el("cfg_portal_fija_off")) el("cfg_portal_fija_off").value=(db.config&&db.config.portal_fija_off)||"";
   if(el("cfg_directorio")) el("cfg_directorio").value=(db.config&&db.config.directorio)||"";
   if(el("cfg_portal_chat_off")) el("cfg_portal_chat_off").value=(db.config&&db.config.portal_chat_off)||"";
@@ -9054,6 +9060,29 @@ function pintarClasesDeAlumno(a){
   }
   box.innerHTML=h;
   wrap.style.display="";
+  fichaCreditos(a,box);
+}
+/* Créditos de recuperación en la ficha (2-nov-2026): la lista de la alumna, con anular / editar a mano.
+   Se pide aparte para no frenar la ficha; si la academia no los usa y no hay ninguno, no aparece nada. */
+function fichaCreditos(a,box){
+  fetch("/app/api/admin/creditos?alumno_id="+encodeURIComponent(a.id),{headers:hdr()}).then(function(r){ return r.ok?r.json():null; }).then(function(d){
+    if(!d||FICHA_AL!==a.id) return;
+    var lista=d.creditos||[], on=d.config&&d.config.on, dueno=(typeof esDuenoPanel==="function"&&esDuenoPanel());
+    if(!on&&!lista.length&&!dueno) return;
+    if(!on&&!lista.length) return;
+    var nombres={activo:"Disponible",usado:"Usado",anulado:"Anulado",vencido:"Vencido"};
+    var h='<div id="fichaCred" style="margin-top:12px;"><b style="font-size:12.5px;">Créditos de recuperación</b> <span class="hint" style="margin:0;">('+lista.filter(function(c){return c.estado_efectivo==="activo";}).length+' disponibles)</span>';
+    if(!lista.length) h+='<p class="hint" style="margin:3px 0;">Todavía no tiene créditos.</p>';
+    h+=lista.map(function(c){
+      var det=(c.estado_efectivo==="usado"?'se usó en una clase':'vence el '+esc(c.vence))+(c.nota?' · '+esc(c.nota):'')+(c.motivo==="manual"?' · dado a mano':c.motivo==="cancelo_tarde"?' · cancelación tardía':c.motivo==="profe_ausente"?' · profesora ausente':' · por falta');
+      var bt=(dueno&&c.estado_efectivo!=="usado")?(' <button type="button" class="btn ghost sm" data-cred="editar" data-id="'+esc(c.id)+'" data-vence="'+esc(c.vence)+'">Cambiar fecha</button>'+(c.estado_efectivo==="activo"?' <button type="button" class="btn ghost sm" data-cred="anular" data-id="'+esc(c.id)+'">Anular</button>':'')):'';
+      return '<div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid var(--line);"><div style="flex:1;min-width:0;"><b>'+nombres[c.estado_efectivo]+'</b> <span class="hint" style="margin:0;">'+det+'</span></div>'+bt+'</div>';
+    }).join("");
+    if(dueno) h+='<div style="margin-top:6px;"><button type="button" class="btn ghost sm" data-cred="crear" data-al="'+esc(a.id)+'">Dar un crédito a mano</button></div>';
+    h+='</div>';
+    var viejo=box.querySelector("#fichaCred"); if(viejo) viejo.remove();
+    box.insertAdjacentHTML("beforeend",h);
+  }).catch(function(){});
 }
 /* qué alumno está abierto en la ficha, para repintar su lista sin cerrar la ventana */
 var FICHA_AL=null;
@@ -9103,6 +9132,32 @@ if(el("ovAlumno")) el("ovAlumno").addEventListener("click",function(e){
     cerrarReserva(bc.dataset.id,bc.dataset.fichaCerrar).then(function(ok){
       bc.disabled=false; if(ok) fichaRefrescar();
     });
+    return;
+  }
+  var bcr=e.target.closest("[data-cred]");
+  if(bcr){
+    e.preventDefault();
+    var acc=bcr.dataset.cred, cuerpoC={accion:acc};
+    if(acc==="crear"){
+      cuerpoC.alumno_id=bcr.dataset.al;
+      var nt=prompt("¿Por qué le das este crédito? (queda anotado)","");
+      if(nt===null) return;
+      cuerpoC.nota=String(nt||"").trim()||"Dado a mano";
+      var vv=prompt("¿Hasta cuándo vale? (año-mes-día, ej. 2026-12-15). Déjalo vacío para usar los días de tus ajustes.","");
+      if(vv===null) return;
+      if(String(vv).trim()) cuerpoC.vence=String(vv).trim();
+    } else if(acc==="editar"){
+      cuerpoC.id=bcr.dataset.id;
+      var nv=prompt("Nueva fecha de caducidad (año-mes-día):",bcr.dataset.vence||"");
+      if(nv===null) return;
+      cuerpoC.vence=String(nv).trim();
+    } else {
+      if(!confirm("¿Anular este crédito? La alumna ya no podrá usarlo.")) return;
+      cuerpoC.id=bcr.dataset.id;
+    }
+    bcr.disabled=true;
+    apiPost("/app/api/admin/credito",cuerpoC).then(function(){ toast("Listo"); return fichaRefrescar(); })
+      .catch(function(err){ toast((err&&err.message)||"No se pudo"); }).finally(function(){ bcr.disabled=false; });
     return;
   }
   var bb=e.target.closest("[data-bono]");
@@ -9507,6 +9562,10 @@ el("btnGuardarAjustes").addEventListener("click",function(){
             /* interruptores de la reunión Elevate (7-ago-2026) */
             mp_solo_tarjeta:(el("cfg_mp_solo_tarjeta")?el("cfg_mp_solo_tarjeta").value:""),
             espera_auto:(el("cfg_espera_auto")?el("cfg_espera_auto").value:""),
+            cred_on:(el("cfg_cred_on")?el("cfg_cred_on").value:""),
+            cred_max_mes:(el("cfg_cred_max_mes")?el("cfg_cred_max_mes").value.trim():""),
+            cred_vence_dias:(el("cfg_cred_vence_dias")?el("cfg_cred_vence_dias").value.trim():""),
+            cred_en_tardia:(el("cfg_cred_en_tardia")?el("cfg_cred_en_tardia").value:""),
             portal_fija_off:(el("cfg_portal_fija_off")?el("cfg_portal_fija_off").value:""),
             directorio:(el("cfg_directorio")?el("cfg_directorio").value:""),
             portal_chat_off:(el("cfg_portal_chat_off")?el("cfg_portal_chat_off").value:""),
@@ -12697,6 +12756,7 @@ var _bCuD=el("btnCulqiDesconectar"); if(_bCuD) _bCuD.addEventListener("click",fu
 "   - Si las alumnas pueden cancelar o reprogramar solas y con cuántas horas de anticipación como mínimo.",
 "   - Con cuántas horas de anticipación como mínimo se puede reservar una clase.",
 "   - Cuántos meses dura un paquete de clases antes de vencer (0 si no vence).",
+"   - Si la alumna que falta recibe un crédito para recuperar la clase, cuántos como máximo por alumna al mes y cuántos días le duran (creditos_recuperacion, creditos_max_por_mes, creditos_vigencia_dias, creditos_por_cancelacion_tardia).",
 "   - Mis paquetes: cuáles ofrezco (nombre, cuántas clases incluye, precio y, si quiero, cuántos días dura). Usa listar_precios para ver los que ya existen y crea los que falten con crear_paquete.",
 "   - Mis horarios semanales: en qué días y a qué hora empiezan las clases, de qué curso es cada una y cuántas alumnas entran. Cárgalos con agregar_horario.",
 "3. Cuando tengas las respuestas, hazme un resumen con lo que vas a cambiar (antes → después) y espera mi «sí» antes de aplicar nada.",

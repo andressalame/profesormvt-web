@@ -726,6 +726,11 @@
           </div>
         </div>
 
+        <div class="card" id="agCredCard" style="margin-bottom:16px;display:none;">
+          <h3>// TUS CRÉDITOS DE RECUPERACIÓN</h3>
+          <div id="agCred"></div>
+        </div>
+
         <div class="card" id="agEsperaCard" style="margin-bottom:16px;display:none;">
           <h3>// EN LISTA DE ESPERA</h3>
           <div id="agEspera"></div>
@@ -2825,7 +2830,7 @@ function cargarSlots(){
     AG_PROFE = (d && d.profe) || null;
     pintarProfe();
     pintarSlots();
-    cargarEspera();
+    cargarEspera(); cargarCreditos();
   }).catch(function(){
     $("agSlots").innerHTML = '<p class="note" style="margin:0 0 8px">No pude cargar los horarios.</p>'+
       '<button class="btn ghost" id="agReintentar" type="button">Reintentar</button>';
@@ -2974,6 +2979,21 @@ function pintarSlots(){
     '<div class="agslotsdia">'+slotsHtml+'</div>';
 }
 
+// ---- Créditos de recuperación (2-nov-2026) ----
+var AG_USAR_CRED=false;
+function cargarCreditos(){
+  api("/app/api/agenda/creditos").then(function(d){
+    var card=$("agCredCard"), box=$("agCred"); if(!card||!box) return;
+    var n=(d&&d.activos)||0;
+    if(!n){ card.style.display="none"; box.innerHTML=""; AG_USAR_CRED=false; return; }
+    card.style.display="";
+    box.innerHTML='<p style="margin:0 0 8px;">Tienes <b>'+n+' crédito'+(n===1?'':'s')+'</b> para recuperar una clase. '+(d.proximo_vence?'El primero vence el <b>'+esc(d.proximo_vence)+'</b>.':'')+'</p>'+
+      '<label style="display:flex;gap:8px;align-items:center;cursor:pointer;"><input type="checkbox" id="chkCred"'+(AG_USAR_CRED?' checked':'')+' /> Usar un crédito en la próxima clase que reserve</label>'+
+      '<p class="note" style="margin:6px 0 0;">Solo para clases sueltas. Si cancelas esa clase a tiempo, el crédito te vuelve.</p>';
+    var c=$("chkCred"); if(c) c.addEventListener("change",function(){ AG_USAR_CRED=c.checked; });
+  }).catch(function(){});
+}
+
 // ---- Lista de espera (clases llenas) ----
 function cargarEspera(){
   api("/app/api/agenda/espera").then(function(d){ renderEspera((d&&d.espera)||[]); }).catch(function(){ renderEspera([]); });
@@ -3015,7 +3035,7 @@ function reservarSlot(iso, sala){
     ? "Vas a reservar el horario fijo de "+label+" las próximas 4 semanas. ¿Confirmas?"
     : "Vas a reservar tu clase del "+label+". ¿Confirmas?";
   if(!confirm(msg)) return;
-  api("/app/api/agenda/reservar",{method:"POST",body:JSON.stringify({inicio_utc:iso, tipo:AG_TIPO, sala:sala||""})})
+  api("/app/api/agenda/reservar",{method:"POST",body:JSON.stringify({inicio_utc:iso, tipo:AG_TIPO, sala:sala||"", usar_credito:(AG_USAR_CRED&&AG_TIPO!=="fija")})})
     .then(function(r){
       if(r.tipo==="fija"){
         var m = vz("Listo, aparté ","Listo, apartamos ")+r.reservadas+" clase"+(r.reservadas===1?"":"s");
@@ -3025,8 +3045,10 @@ function reservarSlot(iso, sala){
         }
         toast(m);
       } else {
-        toast("Clase reservada");
+        toast(r.con_credito?"Clase reservada con tu crédito de recuperación":"Clase reservada");
+        if(r.con_credito) AG_USAR_CRED=false;
       }
+      cargarCreditos();
       return api("/app/api/me");
     })
     .then(function(d){ ME=d; renderAgenda(); })
@@ -3036,7 +3058,7 @@ function reservarSlot(iso, sala){
 function cancelarClase(id){
   if(!confirm("¿Reprogramar esta clase? Se libera tu horario actual y eliges uno nuevo. Solo se puede con al menos "+AG_CANCELA_MIN_H+"h de anticipación.")) return;
   api("/app/api/agenda/cancelar",{method:"POST",body:JSON.stringify({id:id})})
-    .then(function(r){ toast(r.mensaje || "Clase liberada."); return api("/app/api/me"); })
+    .then(function(r){ toast(r.mensaje || "Clase liberada."); cargarCreditos(); return api("/app/api/me"); })
     .then(function(d){
       ME=d; renderAgenda();
       var slots=$("agSlots"); if(slots) slots.scrollIntoView({behavior:"smooth",block:"start"});
