@@ -96,7 +96,7 @@ ver(lista.some(c => c.estado_efectivo === "vencido") && lista.some(c => c.estado
 /* ── 8 · cableado en el worker ── */
 const tiene = (re, b, m) => ver(re.test(SRC), b, m);
 tiene(/credGenerarDeFaltas\(env, tid, null, rv\.alumno_id\)[\s\S]{0,80}marcar falta/, "marcar falta en la agenda genera el crédito", "marcar falta no genera crédito");
-tiene(/accion === "falta"\) await credGenerarDeFaltas/, "cerrar una reserva pasada como falta genera el crédito", "cerrar como falta no genera crédito");
+tiene(/accion === "falta" \|\| accion === "cancelo_tarde"\) await credGenerarDeFaltas/, "cerrar una reserva pasada como falta genera el crédito", "cerrar como falta no genera crédito");
 tiene(/await credDevolverDeReserva\(env, tid, r\.id\);/, "el alumno que cancela su clase con crédito lo recupera", "la cancelación del alumno no devuelve el crédito");
 tiene(/credCronTodos\(env\)/, "el cron barre las academias con créditos", "el cron no genera créditos");
 tiene(/b\.usar_credito === true/, "reservar acepta usar_credito", "reservar no acepta usar_credito");
