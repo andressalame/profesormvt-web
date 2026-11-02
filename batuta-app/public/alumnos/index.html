@@ -474,6 +474,15 @@
   .oia-send{flex:0 0 auto;padding:0 13px;border:none;border-radius:6px;cursor:pointer;background:var(--accent);color:var(--sobre-acento);font-family:var(--mono);font-weight:700;font-size:12px;}
   .oia-send:disabled{opacity:.5;cursor:default;}
   #app.hidden ~ .oia-fab,#app.hidden ~ .oia-panel{display:none!important;}
+
+/* Celular (2-nov-2026, auditoría de diseño): el botón de tema tapaba la primera pestaña de la barra de abajo y las
+   etiquetas de las pestañas medían 8.5 px. El botón sube a la esquina y las etiquetas crecen. */
+@media (max-width:859px){
+  #temaBtn{position:fixed;top:10px;right:12px;z-index:60;width:40px;height:40px;}
+  .main{padding-top:56px;}
+  .side nav a span{font-size:10px;font-weight:600;}
+  .side nav a svg{width:21px;height:21px;}
+}
 </style>
 </head>
 <body>
