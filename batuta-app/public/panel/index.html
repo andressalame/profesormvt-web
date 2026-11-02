@@ -1154,6 +1154,9 @@ table.acc-fija tbody tr:hover td:last-child{background:var(--panel2);}
 th{font-size:13px;}
 .cfgrow input:not([type=checkbox]):not([type=radio]):not([type=color]):not([type=file]),.cfgrow select{min-height:var(--ctl-md);font-size:var(--fs-md);}
 #avisoWebCard{max-width:none!important;padding:0!important;border:0!important;background:transparent!important;}
+/* piso de letra para lo que trae el tamaño escrito a mano en la etiqueta (editor de paquetes, ayudas): nada por debajo de 13 px */
+:is(p,span,b,summary,small,label,div)[style*="font-size:10px"],:is(p,span,b,summary,small,label,div)[style*="font-size:10.5px"],:is(p,span,b,summary,small,label,div)[style*="font-size:11px"],:is(p,span,b,summary,small,label,div)[style*="font-size:11.5px"],:is(p,span,b,summary,small,label,div)[style*="font-size:12px"],:is(p,span,b,summary,small,label,div)[style*="font-size:12.5px"],summary{font-size:13px!important;}
+p.hint[style*="font-size"]{font-size:13px!important;}
 .aviso-franja{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:10px 14px;border:1px solid var(--line);border-left:3px solid var(--warn);border-radius:10px;background:var(--panel);}
 .aviso-franja .af-tx{flex:1;min-width:220px;font-size:14px;line-height:1.45;color:var(--muted);}
 .aviso-franja .af-tx b{color:var(--cream);}
