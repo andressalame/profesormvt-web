@@ -1846,6 +1846,17 @@ table.acc-fija tbody tr:hover td:last-child{background:var(--panel2);}
       <button class="btn" id="btnVinoSinReserva">Contarle la clase</button>
     </div>
 
+    <div class="group" id="grpAusencia">
+      <h2>Ausencia de profesora</h2>
+      <p class="hint">Si una profesora no puede dictar, avísalo aquí. La administración decide: <b>cancelar las clases</b> (las alumnas reciben un aviso y, si tienes créditos prendidos, un crédito de recuperación) o <b>asignar una sustituta</b> sin tocar ninguna reserva.</p>
+      <div class="cfgrow solo-dueno hidden" id="ausProfeWrap"><span class="pk">Profesora</span><select id="aus_profe"></select></div>
+      <div class="cfgrow"><span class="pk">Desde</span><input id="aus_desde" type="date" /></div>
+      <div class="cfgrow"><span class="pk">Hasta</span><input id="aus_hasta" type="date" data-ayuda="Déjalo igual que Desde si es un solo día. Una semana = 7 días." /></div>
+      <div class="cfgrow"><span class="pk">Motivo</span><input id="aus_motivo" type="text" maxlength="160" placeholder="Ej. enferma, viaje" /></div>
+      <button class="btn" id="btnAusAvisar" type="button">Avisar ausencia</button>
+      <div id="ausLista" style="margin-top:12px;"></div>
+    </div>
+
     <div class="group">
       <h2 id="dispTitulo">Tu horario de todas las semanas <button class="btn ghost sm" type="button" style="margin-left:8px;" onclick="lanzarTourModulo('agenda')">? Cómo funciona</button></h2>
       <p class="hint">Este es el horario que se repite <b>todas las semanas</b>. Prende las horas en las que dictas: un clic la prende o la apaga; clic en una hora prendida abre su <b>tipo de clase y aforo</b>. Los alumnos solo ven lo que esté prendido. Hora de Lima. ¿Quieres cambiar <b>una sola semana</b>? Hazlo desde el calendario de arriba.</p>
@@ -5439,6 +5450,59 @@ function pintarSelectProfeAgenda(){
     AG_PROFE=yo?yo.id:""; sel.value=AG_PROFE;
   }
 }
+/* Ausencia de profesora (2-nov-2026): avisar, y (solo el dueño) cancelar clases o asignar sustituta. */
+function cargarAusencias(){
+  var dueno=esDuenoPanel();
+  var wrap=el("ausProfeWrap"), sel=el("aus_profe");
+  var listo=(dueno&&AG_PROFES===null)?fetch("/app/api/admin/profesores",{headers:hdr()}).then(function(r){return r.json();}).then(function(d){ AG_PROFES=(d&&d.profesores)||[]; }).catch(function(){}):Promise.resolve();
+  listo.then(function(){
+    var lista=(AG_PROFES||[]).filter(function(p){ return p.estado!=="suspendido"; });
+    if(wrap&&sel){
+      if(dueno&&lista.length){ wrap.classList.remove("hidden"); var prev=sel.value; sel.innerHTML=lista.map(function(p){ return '<option value="'+esc(p.id)+'">'+esc(p.nombre)+(p.rol==="dueno"?" (tú)":"")+'</option>'; }).join(""); if(prev) sel.value=prev; }
+      else wrap.classList.add("hidden");
+    }
+    return fetch("/app/api/admin/ausencias",{headers:hdr()}).then(function(r){return r.json();});
+  }).then(function(d){
+    var box=el("ausLista"); if(!box) return;
+    var l=(d&&d.ausencias)||[];
+    if(!l.length){ box.innerHTML='<p class="hint">No hay avisos de ausencia.</p>'; return; }
+    box.innerHTML=l.map(function(x){
+      var cuando=x.desde===x.hasta?x.desde:(x.desde+" al "+x.hasta);
+      var pend=x.estado==="avisada";
+      var botones=(dueno&&pend)?(' <button type="button" class="btn ghost sm" data-aus="cancelar" data-id="'+esc(x.id)+'">Cancelar sus clases</button> <button type="button" class="btn ghost sm" data-aus="sustituir" data-id="'+esc(x.id)+'">Asignar sustituta…</button> <button type="button" class="btn ghost sm" data-aus="descartar" data-id="'+esc(x.id)+'">Descartar</button>'):'';
+      return '<div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--line);"><div style="flex:1;min-width:200px;"><b>'+esc(x.profesora)+'</b> · '+esc(cuando)+(x.motivo?' · '+esc(x.motivo):'')+
+        '<br><span class="hint" style="margin:0;">'+(pend?(x.clases_afectadas+' clase(s) con alumnas · pendiente'):(x.estado==="atendida"?'Atendida':'Descartada'))+'</span></div>'+botones+'</div>';
+    }).join("");
+  }).catch(function(){});
+}
+if(el("btnAusAvisar")) el("btnAusAvisar").addEventListener("click",function(){
+  var cuerpo={desde:el("aus_desde").value,hasta:el("aus_hasta").value||el("aus_desde").value,motivo:el("aus_motivo").value.trim()};
+  if(esDuenoPanel()&&el("aus_profe")&&el("aus_profe").value) cuerpo.profesor_id=el("aus_profe").value;
+  if(!cuerpo.desde){ toast("Elige desde qué día"); return; }
+  var b=this; b.disabled=true;
+  apiPost("/app/api/admin/ausencia/avisar",cuerpo).then(function(r){ toast("Aviso enviado · "+r.clases_afectadas+" clase(s) con alumnas"); el("aus_motivo").value=""; cargarAusencias(); })
+    .catch(function(err){ toast((err&&err.message)||"No se pudo avisar"); }).finally(function(){ b.disabled=false; });
+});
+if(el("ausLista")) el("ausLista").addEventListener("click",function(e){
+  var b=e.target.closest("[data-aus]"); if(!b) return;
+  e.preventDefault();
+  var acc=b.dataset.aus, cuerpo={accion:acc,ausencia_id:b.dataset.id};
+  if(acc==="cancelar"&&!confirm("¿Cancelar las clases de esa profesora en esas fechas? Se cierra el horario, se avisa por correo a cada alumna"+(db.config&&db.config.cred_on==="1"?" y cada una recibe un crédito de recuperación":" y la clase vuelve a su saldo")+".")) return;
+  if(acc==="sustituir"){
+    var otras=(AG_PROFES||[]).filter(function(p){ return p.estado!=="suspendido"; });
+    var nom=prompt("¿Qué profesora la reemplaza? Escribe su nombre:\n\n"+otras.map(function(p){return p.nombre;}).join("\n"),"");
+    if(nom===null) return;
+    var q=String(nom).trim().toLowerCase();
+    var hit=otras.filter(function(p){ return String(p.nombre||"").toLowerCase()===q; })[0]||otras.filter(function(p){ return String(p.nombre||"").toLowerCase().indexOf(q)>=0; })[0];
+    if(!q||!hit){ toast("No encuentro a esa profesora"); return; }
+    cuerpo.sustituta_id=hit.id;
+  }
+  b.disabled=true;
+  apiPost("/app/api/admin/ausencia/resolver",cuerpo).then(function(r){
+    toast(acc==="cancelar"?(r.clases_canceladas+" clase(s) canceladas · "+r.avisadas_por_correo+" alumnas avisadas"):(acc==="sustituir"?("Sustituta asignada · "+r.clases_con_sustituta+" clase(s)"):"Listo"));
+    cargarAusencias();
+  }).catch(function(err){ toast((err&&err.message)||"No se pudo"); }).finally(function(){ b.disabled=false; });
+});
 function cargarAgenda(){
   el("dispGrid").innerHTML = '<p class="hint">Cargando…</p>';
   /* La lista de profesores se pide UNA vez y se cachea: la agenda se recarga en cada guardado. */
@@ -7529,7 +7593,7 @@ document.querySelectorAll(".tab").forEach(function(t){
     var ti=TITULOS[t.dataset.tab]||"Panel";
     if(el("pageTitle")) el("pageTitle").textContent=ti;
     if(el("topTitle")) el("topTitle").textContent=ti;
-    if(t.dataset.tab==="agenda") cargarAgenda();
+    if(t.dataset.tab==="agenda"){ cargarAgenda(); cargarAusencias(); }
     if(t.dataset.tab==="perfil") renderPerfil();
     if(t.dataset.tab==="feedback") cargarFeedback();
     if(t.dataset.tab==="profesores"){ cargarProfesores(); cargarLiquidacion(); }

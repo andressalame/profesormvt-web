@@ -188,7 +188,46 @@ def etapa_tardia():
     ver(st == 200, "BEA cancela tarde con créditos por tardía activados", f"BEA: {st} {r}")
     ver(http("GET", "/app/api/agenda/creditos", portal["BEA"])[1].get("activos") == 1, "y ella SÍ recibe el crédito", "BEA sin crédito")
 
-ETAPAS = {"tardia": etapa_tardia, "prueba": etapa_prueba, "creditos": etapa_creditos, "asistencia": etapa_asistencia}
+def etapa_profe():
+    admin, portal = sembrar(nombres=("ANA", "BEA"))
+    exp = (datetime.datetime.utcnow() + datetime.timedelta(days=1)).isoformat() + "Z"
+    p2 = secrets.token_hex(32)
+    d1(f"UPDATE tenants SET email = '' WHERE id = '{T}'; "
+       f"INSERT INTO profesores (id,tenant_id,nombre,email,rol,estado,creado) VALUES ('LZ-P2','{T}','Profe Dos','p2@ejemplo.invalid','profesor','activo','2026-11-02'); "
+       f"INSERT INTO sesiones (token,cuenta_id,expira) VALUES ('{p2}','P:LZ-P2','{exp}')")
+    http("POST", "/app/api/admin/config", admin, {"cred_on": "1"})
+    d1(f"UPDATE config SET valor = '{(datetime.date.today() - datetime.timedelta(days=10)).isoformat()}' WHERE tenant_id = '{T}' AND clave = 'cred_desde'")
+    http("GET", "/app/api/agenda/slots", portal["ANA"])
+    iso_a, dow, hora = slot(3); iso_b = slot(10)[0]
+    d1(f"INSERT INTO disponibilidad (tenant_id,profesor_id,dia_semana,hora,activo,cupo,curso,sala,profe) VALUES ('{T}','{P}',{dow},'{hora}',1,5,'Ballet','','LZ-P2')")
+    for rid, n, iso in (("LZ-A1", "ANA", iso_a), ("LZ-A2", "BEA", iso_a), ("LZ-B1", "ANA", iso_b), ("LZ-B2", "BEA", iso_b)):
+        fin = (datetime.datetime.strptime(iso, "%Y-%m-%dT%H:%M:%S.000Z") + datetime.timedelta(hours=1)).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+        d1(f"INSERT INTO reservas (id,tenant_id,alumno_id,inicio_utc,fin_utc,tipo,estado,curso,ciclo,profesor_id,sala) VALUES ('{rid}','{T}','LZ-{n}','{iso}','{fin}','suelta','reservada','Ballet',1,'{P}','')")
+    dia = lambda iso: (datetime.datetime.strptime(iso, "%Y-%m-%dT%H:%M:%S.000Z") - datetime.timedelta(hours=5)).strftime("%Y-%m-%d")
+    st, r = http("POST", "/app/api/admin/ausencia/avisar", p2, {"desde": dia(iso_a), "hasta": dia(iso_a), "motivo": "enferma"})
+    ver(st == 200 and r.get("clases_afectadas") == 2, "la profesora avisa desde la plataforma y ve 2 clases afectadas", f"avisar: {st} {r}")
+    aus_a = r.get("id")
+    st, r = http("POST", "/app/api/admin/ausencia/resolver", p2, {"accion": "cancelar", "ausencia_id": aus_a})
+    ver(st == 403, "una profesora NO puede resolver su propio aviso", f"resolver como profesora dio {st}")
+    st, r = http("GET", "/app/api/admin/ausencias", admin)
+    ver(st == 200 and any(x["id"] == aus_a and x["estado"] == "avisada" for x in r.get("ausencias", [])), "el dueño ve el aviso pendiente", f"{st} {r}")
+    st, r = http("POST", "/app/api/admin/ausencia/resolver", admin, {"accion": "sustituir", "ausencia_id": aus_a, "sustituta_id": P, "avisar": False})
+    ver(st == 200 and r.get("clases_con_sustituta") == 2, "asigna sustituta: 2 clases pasan a la sustituta", f"sustituir: {st} {r}")
+    q = d1(f"SELECT COUNT(*) n FROM reservas WHERE tenant_id='{T}' AND estado='reservada' AND id IN ('LZ-A1','LZ-A2')")[0]["n"]
+    ver(q == 2, "las reservas no se tocaron ni se recrearon", f"reservadas: {q}")
+    st, r = http("POST", "/app/api/admin/ausencia/avisar", p2, {"desde": dia(iso_b), "hasta": dia(iso_b), "motivo": "viaje"})
+    aus_b = r.get("id")
+    st, r = http("POST", "/app/api/admin/ausencia/resolver", admin, {"accion": "cancelar", "ausencia_id": aus_b, "avisar": False})
+    ver(st == 200 and r.get("clases_canceladas") == 2 and r.get("creditos_dados") == 2 and r.get("horarios_cerrados") >= 1, "la administración cancela: 2 clases, 2 créditos, horario cerrado", f"cancelar: {st} {r}")
+    ver(http("GET", "/app/api/agenda/creditos", portal["ANA"])[1].get("activos") == 1 and http("GET", "/app/api/agenda/creditos", portal["BEA"])[1].get("activos") == 1, "cada alumna ve su crédito de recuperación", "créditos de las alumnas mal")
+    st, r = http("GET", "/app/api/agenda/slots", portal["ANA"])
+    ver(iso_b not in (r.get("slots") or []) and iso_b not in (r.get("llenos") or []), "esa clase ya no se ofrece para reservar (horario cerrado)", f"sigue ofrecida: {iso_b}")
+    est = {x["id"]: (x["estado"], x["ct"]) for x in d1(f"SELECT id, estado, COALESCE(cancel_tipo,'') ct FROM reservas WHERE tenant_id='{T}' AND tipo!='bloqueo'")}
+    ver(est.get("LZ-B1") == ("falta", "profe") and est.get("LZ-A1") == ("reservada", ""), "la cancelada queda etiquetada «profe»; la de la sustitución sigue reservada", f"{est}")
+    sus = d1(f"SELECT profe_original, profe_sustituta FROM sustituciones WHERE tenant_id='{T}'")
+    ver(len(sus) == 1 and sus[0]["profe_sustituta"] == P, "la sustitución quedó registrada", f"{sus}")
+
+ETAPAS = {"profe": etapa_profe, "tardia": etapa_tardia, "prueba": etapa_prueba, "creditos": etapa_creditos, "asistencia": etapa_asistencia}
 if __name__ == "__main__":
     if len(sys.argv) < 2 or sys.argv[1] == "limpiar":
         limpiar(); sys.exit(0)
