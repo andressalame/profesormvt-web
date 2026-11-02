@@ -994,6 +994,8 @@ table.acc-fija tbody tr:hover td:last-child{background:var(--panel2);}
 .acc-mas-m[hidden]{display:none;}
 .acc-mas-m>.btn,.acc-mas-m>a{justify-content:flex-start;width:100%;border:0;background:transparent;color:var(--cream);text-align:left;min-height:var(--ctl-sm);}
 .acc-mas-m>.btn:hover,.acc-mas-m>a:hover{background:var(--panel2);}
+.acc-mas-m>.adj{display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding:4px 6px;max-width:320px;}
+.acc-mas-m>.adj audio{max-width:100%;height:34px;}
 .acc-mas-m>.acc-borrar{color:var(--bad);}
 .pill{border-radius:999px;font-size:12px;font-weight:600;padding:3px 10px;}
 .pestanas button{min-height:var(--ctl-sm);border-radius:999px;font-size:var(--fs-sm);}
@@ -7824,7 +7826,8 @@ function tbPreparar(){
       if(!t.classList.contains("acc-fija")) return;
       t.querySelectorAll("tbody tr > td:last-child > .rowact:not([data-accmas])").forEach(function(ra){
         ra.setAttribute("data-accmas","1");
-        var its=[].slice.call(ra.children).filter(function(n){ return n.matches("button,a"); });
+        /* los adjuntos (.adj: chip con reproductor <audio>, ~300 px cada uno) también van al menú ⋯: dejados en la fila inflaban la columna sticky a ~990 px y tapaban toda la tabla de Asistencia */
+        var its=[].slice.call(ra.children).filter(function(n){ return n.matches("button,a,.adj"); });
         if(its.length<=2) return;
         var prim=its.filter(function(n){ return n.classList.contains("btn")&&!n.classList.contains("ghost"); })[0]||its[0];
         var wrap=document.createElement("div"); wrap.className="acc-mas";
