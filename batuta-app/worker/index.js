@@ -8440,6 +8440,27 @@ async function sedesDeTenant(env, tid){
    cada una su marca. Y la marca que se guarda es la que el cliente VIO, no "ahora":
    si entra un pago entre que se pinta la lista y se marca leído, no se pierde. */
 const NOVEDADES = [
+  { id: "2026-11-02-creditos", fecha: "2026-11-02",
+    titulo: "Créditos de recuperación",
+    texto: "Si una alumna falta, puede recibir un crédito para recuperar la clase. Tú eliges cuántos al mes y cuántos días duran, y puedes anular o cambiar cada uno desde su ficha. Se prende en Ajustes → Reservas." },
+  { id: "2026-11-02-asistencia", fecha: "2026-11-02",
+    titulo: "Asistencia con cuatro estados",
+    texto: "Ahora marcas si la alumna asistió, estuvo ausente, canceló a tiempo o canceló tarde, y cada uno aplica su regla (clase devuelta, usada o crédito)." },
+  { id: "2026-11-02-prueba", fecha: "2026-11-02",
+    titulo: "Plazas de prueba separadas",
+    texto: "Elige cuántas plazas de prueba tiene cada clase en Ajustes → Reservas. No le quitan lugar a tus alumnas regulares, y cuando una se queda la pasas a regular desde su ficha sin crear un perfil nuevo." },
+  { id: "2026-11-02-tardia", fecha: "2026-11-02",
+    titulo: "Cancelar fuera de plazo",
+    texto: "Decide si una alumna puede cancelar cuando ya pasó el plazo. Si puede, la clase se le cuenta como usada y ella confirma antes de cancelar. Está en Ajustes → Reservas." },
+  { id: "2026-11-02-ausencia", fecha: "2026-11-02",
+    titulo: "Ausencia de profesora",
+    texto: "La profesora avisa desde Mis clases. Tú cancelas sus clases (se cierra el horario, se avisa a las alumnas y reciben su crédito) o asignas una sustituta sin tocar ninguna reserva." },
+  { id: "2026-11-02-copiar-semana", fecha: "2026-11-02",
+    titulo: "Copiar una semana de horario a otra",
+    texto: "En Mis clases, «Copiar una semana a otra» repite todas las clases de una semana en otra, con sus cupos, profesoras y salas. Las reservas ya hechas no se tocan." },
+  { id: "2026-11-02-diseno", fecha: "2026-11-02",
+    titulo: "Botones y letra más grandes, y menú abajo en el celular",
+    texto: "Los botones y los textos ahora se leen y se tocan mejor. En el celular tienes una barra abajo con Hoy, Alumnos, Clases, Cobros y Más." },
   { id: "2026-08-23-direccion", fecha: "2026-08-23",
     titulo: "Tu página web ya dice dónde queda tu academia",
     texto: "Carga la dirección de tu local en Ajustes → Mi academia y sale en tu página, con enlace a Google Maps. Si prefieres no publicarla, ahí mismo la apagas: tus alumnos la siguen viendo en su portal." },
@@ -8479,8 +8500,10 @@ async function ensureAvisosSchema(env){
 function avisosVistoDe(profesor){
   /* `d` (29-set-2026) = el último DÍA de Lima en que se vio el aviso de clases sin cerrar: ese aviso
      se enciende una vez al día mientras haya algo pendiente, y no se queda prendido para siempre. */
-  try { const j = JSON.parse((profesor && profesor.avisos_visto) || "{}") || {}; return { n: String(j.n || ""), c: Number(j.c) || 0, d: String(j.d || "") }; }
-  catch (e) { return { n: "", c: 0, d: "" }; }
+  /* `x` (2-nov-2026) = ids de avisos que esta persona BORRÓ de su campanita (uno por uno o todos). Es por persona. */
+  try { const j = JSON.parse((profesor && profesor.avisos_visto) || "{}") || {};
+    return { n: String(j.n || ""), c: Number(j.c) || 0, d: String(j.d || ""), x: Array.isArray(j.x) ? j.x.map(String).slice(-300) : [] }; }
+  catch (e) { return { n: "", c: 0, d: "", x: [] }; }
 }
 /* ═══ CIERRE DIARIO DE RESERVAS PASADAS (29-set-2026, pedido de Andrés) ═══════════════════════
    Caso real: un alumno pide reprogramar, se acepta, y nadie lo marca en el portal. La reserva pasada
@@ -8911,7 +8934,8 @@ async function avisosDe(env, actor){
   await ensureAvisosSchema(env);
   const visto = avisosVistoDe(actor.profesor);
   const lista = [];
-  for (const nv of NOVEDADES.slice(0, 12)){
+  const borrados = new Set(visto.x);
+  for (const nv of NOVEDADES.slice(0, 25)){
     lista.push({ tipo: "novedad", id: nv.id, fecha: nv.fecha, titulo: nv.titulo, texto: nv.texto,
                  nuevo: nv.fecha > visto.n });
   }
@@ -8957,9 +8981,10 @@ async function avisosDe(env, actor){
     }
   } catch (e) { console.error("avisos: clases sin cerrar", e && e.message); }   // la campanita nunca se cae por esto
   /* por fecha, y a igualdad de fecha primero lo que hay que hacer algo */
+  for (let i = lista.length - 1; i >= 0; i--) if (lista[i].tipo !== "cierre" && borrados.has(lista[i].id)) lista.splice(i, 1);   // lo que la persona borró no vuelve
   lista.sort((a, b) => (b.fecha || "").localeCompare(a.fecha || "") || (b.pendiente ? 1 : 0) - (a.pendiente ? 1 : 0));
   const topeN = NOVEDADES.length ? NOVEDADES.map(x => x.fecha).sort().slice(-1)[0] : visto.n;
-  return { avisos: lista.slice(0, 25), nuevos: lista.filter(x => x.nuevo).length, tope: { n: topeN, c: topeC, d: topeD } };
+  return { avisos: lista.slice(0, 25), borrables: true, nuevos: lista.filter(x => x.nuevo).length, tope: { n: topeN, c: topeC, d: topeD } };
 }
 
 /* ── ¿A QUÉ LOCAL TIENE QUE IR? Una sola regla para TODAS las superficies ──────
@@ -20192,6 +20217,29 @@ export default {
         if (path === "/app/api/admin/avisos" && request.method === "GET"){
           return json(await avisosDe(env, actor));
         }
+        /* Borrar avisos de la campanita (2-nov-2026): uno por uno ({ids:[...]}) o todos ({todos:true}). Por persona:
+           lo que borra una profesora no desaparece de la campanita del dueño. Las clases sin cerrar no se borran
+           (se van solas al cerrarlas). Todo avisa lo que hizo para que la pantalla no mienta. */
+        if (path === "/app/api/admin/avisos/borrar" && request.method === "POST"){
+          await ensureAvisosSchema(env);
+          if (!profeActorId) return json({ ok: true, borrados: 0 });
+          const bB = await request.json().catch(() => ({}));
+          const prev = avisosVistoDe(profeActor);
+          let ids = [];
+          if (bB && bB.todos === true){
+            ids = (await avisosDe(env, actor)).avisos.filter(a => a.tipo !== "cierre").map(a => a.id).concat(NOVEDADES.map(n => n.id));
+          } else if (bB && Array.isArray(bB.ids)){
+            ids = bB.ids.map(x => String(x).slice(0, 80)).filter(Boolean).slice(0, 50);
+          }
+          const x = [...new Set(prev.x.concat(ids))].slice(-300);
+          const base = (function(){ try { return JSON.parse((profeActor && profeActor.avisos_visto) || "{}") || {}; } catch (e) { return {}; } })();
+          const guardar = Object.assign({}, base, { x });
+          try {
+            await env.DB.prepare("UPDATE profesores SET avisos_visto = ?1 WHERE id = ?2 AND tenant_id = ?3").bind(JSON.stringify(guardar), profeActorId, tid).run();
+            if (profeActor) profeActor.avisos_visto = JSON.stringify(guardar);
+          } catch (e) { return json({ error: "No se pudo borrar" }, 500); }
+          return json({ ok: true, borrados: ids.length });
+        }
         if (path === "/app/api/admin/avisos/visto" && request.method === "POST"){
           await ensureAvisosSchema(env);
           if (!profeActorId) return json({ ok: true });   /* sin ficha de profesor no hay dónde guardar */
@@ -20204,7 +20252,7 @@ export default {
           const prev = avisosVistoDe(profeActor);
           const dAv = /^\d{4}-\d{2}-\d{2}$/.test(String((bAv && bAv.d) || "")) ? String(bAv.d) : "";
           /* nunca hacia atrás: dos pestañas abiertas no pueden "des-leer" lo ya leído */
-          const guardar = { n: nAv > prev.n ? nAv : prev.n, c: Math.max(cAv, prev.c), d: dAv > prev.d ? dAv : prev.d };
+          const guardar = { n: nAv > prev.n ? nAv : prev.n, c: Math.max(cAv, prev.c), d: dAv > prev.d ? dAv : prev.d, x: prev.x };
           try {
             await env.DB.prepare("UPDATE profesores SET avisos_visto = ?1 WHERE id = ?2 AND tenant_id = ?3")
               .bind(JSON.stringify(guardar), profeActorId, tid).run();

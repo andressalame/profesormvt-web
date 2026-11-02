@@ -1183,6 +1183,16 @@ p.hint[style*="font-size"]{font-size:13px!important;}
   .mas-fab{bottom:calc(132px + env(safe-area-inset-bottom));}
   .toast{bottom:calc(84px + env(safe-area-inset-bottom));}
 }
+
+/* campanita: borrar avisos (2-nov-2026) */
+.camp-row{position:relative;}
+.camp-row .camp-it{padding-right:46px;}
+.camp-del{position:absolute;top:6px;right:6px;width:36px;height:36px;display:inline-flex;align-items:center;justify-content:center;background:transparent;border:0;border-radius:8px;color:var(--muted);cursor:pointer;}
+.camp-del:hover{background:var(--panel2);color:var(--cream);}
+.camp-del svg{width:16px;height:16px;stroke:currentColor;stroke-width:2;fill:none;stroke-linecap:round;}
+.camp-borrar{margin-left:auto;margin-right:8px;background:transparent;border:1px solid var(--line);border-radius:8px;color:var(--cream);font:600 12.5px/1 var(--sans,inherit);padding:8px 10px;cursor:pointer;}
+.camp-borrar:hover{background:var(--panel2);}
+.camp-borrar[hidden]{display:none;}
 </style>
 </head>
 <body>
@@ -1279,7 +1289,7 @@ p.hint[style*="font-size"]{font-size:13px!important;}
           <span class="camp-pt" id="campPunto" hidden></span>
         </button>
         <div class="camp-panel" id="campPanel" hidden>
-          <div class="camp-cab"><span>Novedades</span><button class="camp-x" id="btnCampCerrar" type="button" aria-label="Cerrar">&times;</button></div>
+          <div class="camp-cab"><span>Novedades</span><button class="camp-borrar" id="btnCampBorrarTodas" type="button" title="Borra todos los avisos de esta lista" hidden>Borrar todas</button><button class="camp-x" id="btnCampCerrar" type="button" aria-label="Cerrar">&times;</button></div>
           <div class="camp-lista" id="campLista"></div>
         </div>
       </div>
@@ -7270,17 +7280,39 @@ function campPintar(){
         '<span class="camp-f">'+esc(campFecha(a.fecha))+'</span></div>';
     }
     var esPago=a.tipo==="pago";
-    /* los pagos llevan a Cobros; una novedad no lleva a ningún lado */
-    return '<'+(esPago?'button type="button" class="camp-it click'+(a.nuevo?" nuevo":"")+'" data-ira="pagos"':
+    /* los pagos llevan a Cobros; una novedad no lleva a ningún lado. Cada aviso se puede borrar con su X. */
+    return '<div class="camp-row">'+'<'+(esPago?'button type="button" class="camp-it click'+(a.nuevo?" nuevo":"")+'" data-ira="pagos"':
                        'div class="camp-it'+(a.nuevo?" nuevo":"")+'"')+'>'+
       /* 🔴 nada de emojis (regla de la casa): un punto dibujado, ámbar si falta confirmarlo
          y verde si ya entró. Con `title` para quien no distingue los colores. */
       '<span class="camp-t">'+(esPago?'<i class="camp-dot'+(a.pendiente?' pend':' ok')+'" title="'+(a.pendiente?'Falta confirmarlo':'Confirmado')+'"></i>':'')+esc(a.titulo)+'</span>'+
       (a.texto?'<span class="camp-d">'+esc(a.texto)+'</span>':'')+
       '<span class="camp-f">'+esc(campFecha(a.fecha))+'</span>'+
-      '</'+(esPago?'button':'div')+'>';
+      '</'+(esPago?'button':'div')+'>'+
+      '<button type="button" class="camp-del" data-avdel="'+esc(a.id)+'" aria-label="Borrar este aviso" title="Borrar este aviso"><svg viewBox="0 0 24 24" aria-hidden="true"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg></button></div>';
   }).join("");
+  var bt=el("btnCampBorrarTodas"); if(bt) bt.hidden=!CAMP.avisos.some(function(a){ return a.tipo!=="cierre"; });
 }
+/* Borrar avisos (2-nov-2026): se quita al instante de la pantalla y se avisa al servidor; si falla, vuelve. */
+function campBorrar(ids,todos){
+  var antes=CAMP.avisos.slice();
+  CAMP.avisos=CAMP.avisos.filter(function(a){ return a.tipo==="cierre"||(todos?false:ids.indexOf(a.id)<0); });
+  CAMP.nuevos=CAMP.avisos.filter(function(a){ return a.nuevo; }).length;
+  campPintar();
+  return fetch("/app/api/admin/avisos/borrar",{method:"POST",headers:hdr(),body:JSON.stringify(todos?{todos:true}:{ids:ids})})
+    .then(function(r){ if(!r.ok) throw new Error("x"); return r.json(); })
+    .catch(function(){ CAMP.avisos=antes; CAMP.nuevos=antes.filter(function(a){ return a.nuevo; }).length; campPintar(); toast("No se pudo borrar. Intenta de nuevo."); });
+}
+if(el("campLista")) el("campLista").addEventListener("click",function(e){
+  var d=e.target.closest("[data-avdel]"); if(!d) return;
+  e.preventDefault(); e.stopPropagation();
+  campBorrar([d.getAttribute("data-avdel")],false);
+});
+if(el("btnCampBorrarTodas")) el("btnCampBorrarTodas").addEventListener("click",function(e){
+  e.stopPropagation();
+  if(!confirm("¿Borrar todos los avisos? Tus pagos siguen en Cobros y las clases sin cerrar se quedan hasta que las cierres.")) return;
+  campBorrar([],true);
+});
 /* "hoy" / "ayer" / "hace 3 días" y, más allá, la fecha. Un ISO pelado no le dice
    nada a nadie de un vistazo. */
 function campFecha(f){

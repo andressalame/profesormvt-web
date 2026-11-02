@@ -249,7 +249,25 @@ def etapa_semana():
     except Exception as e: html = str(e)
     ver("btnDispCopiarSemana" in html, "el panel publicado trae el botón «Copiar una semana a otra»", "el panel en vivo no trae el botón")
 
-ETAPAS = {"semana": etapa_semana, "profe": etapa_profe, "tardia": etapa_tardia, "prueba": etapa_prueba, "creditos": etapa_creditos, "asistencia": etapa_asistencia}
+def etapa_avisos():
+    admin, portal = sembrar(nombres=("ANA",))
+    st, r = http("GET", "/app/api/admin/avisos", admin)
+    ids = [a["id"] for a in r.get("avisos", [])]
+    ver(st == 200 and "2026-11-02-creditos" in ids and "2026-11-02-diseno" in ids, f"la campanita trae las novedades de hoy ({len(ids)} avisos)", f"avisos: {st} {ids}")
+    st, r = http("POST", "/app/api/admin/avisos/borrar", admin, {"ids": ["2026-11-02-creditos"]})
+    ver(st == 200 and r.get("borrados") == 1, "borra un aviso", f"borrar: {st} {r}")
+    st, r = http("GET", "/app/api/admin/avisos", admin)
+    ids2 = [a["id"] for a in r.get("avisos", [])]
+    ver("2026-11-02-creditos" not in ids2 and len(ids2) == len(ids) - 1, "ese aviso ya no está y los demás sí", f"{len(ids2)} vs {len(ids)}")
+    http("POST", "/app/api/admin/avisos/visto", admin, {"n": "2026-11-02", "c": 0, "d": ""})
+    st, r = http("GET", "/app/api/admin/avisos", admin)
+    ver("2026-11-02-creditos" not in [a["id"] for a in r.get("avisos", [])], "marcar como leído no lo trae de vuelta", "reapareció tras marcar leído")
+    st, r = http("POST", "/app/api/admin/avisos/borrar", admin, {"todos": True})
+    ver(st == 200, "borra todos", f"borrar todos: {st} {r}")
+    st, r = http("GET", "/app/api/admin/avisos", admin)
+    ver(len([a for a in r.get("avisos", []) if a["tipo"] != "cierre"]) == 0, "la campanita queda vacía", f"quedan {len(r.get('avisos', []))}")
+
+ETAPAS = {"avisos": etapa_avisos, "semana": etapa_semana, "profe": etapa_profe, "tardia": etapa_tardia, "prueba": etapa_prueba, "creditos": etapa_creditos, "asistencia": etapa_asistencia}
 if __name__ == "__main__":
     if len(sys.argv) < 2 or sys.argv[1] == "limpiar":
         limpiar(); sys.exit(0)
