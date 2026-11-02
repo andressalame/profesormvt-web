@@ -8440,6 +8440,9 @@ async function sedesDeTenant(env, tid){
    cada una su marca. Y la marca que se guarda es la que el cliente VIO, no "ahora":
    si entra un pago entre que se pinta la lista y se marca leído, no se pierde. */
 const NOVEDADES = [
+  { id: "2026-11-02-secciones", fecha: "2026-11-02",
+    titulo: "Mis clases y Ajustes más ordenados",
+    texto: "Mis clases ahora tiene cuatro secciones (Calendario, Mi horario, Ausencias y Compartir cupos). En Ajustes → Reservas las opciones están en secciones que se abren y se cierran." },
   { id: "2026-11-02-creditos", fecha: "2026-11-02",
     titulo: "Créditos de recuperación",
     texto: "Si una alumna falta, puede recibir un crédito para recuperar la clase. Tú eliges cuántos al mes y cuántos días duran, y puedes anular o cambiar cada uno desde su ficha. Se prende en Ajustes → Reservas." },
