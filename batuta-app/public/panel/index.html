@@ -1167,6 +1167,22 @@ p.hint[style*="font-size"]{font-size:13px!important;}
   .oia-fab,.mas-fab{width:48px;height:48px;right:14px;}
   .mas-fab{bottom:80px;}
 }
+
+/* ═══ Barra inferior en celular (2-nov-2026, auditoría de diseño) ═══
+   Lo que espera quien usa una app: los 5 lugares de siempre al alcance del pulgar. Cada botón le hace clic al
+   botón del menú lateral correspondiente, así que no hay una segunda lógica de navegación que mantener. */
+.bnav{display:none;}
+@media (max-width:820px){
+  .bnav{display:flex;position:fixed;left:0;right:0;bottom:0;z-index:260;background:var(--panel);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom);}
+  .bnav button{flex:1;min-width:0;min-height:60px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;background:transparent;border:0;color:var(--muted);font:600 12px/1.1 var(--sans,inherit);cursor:pointer;padding:6px 2px;}
+  .bnav button svg{width:24px;height:24px;stroke:currentColor;stroke-width:1.8;fill:none;stroke-linecap:round;stroke-linejoin:round;}
+  .bnav button.on{color:var(--accent);}
+  .bnav button.on span{font-weight:700;}
+  .content{padding-bottom:230px;}
+  .oia-fab{bottom:calc(76px + env(safe-area-inset-bottom));}
+  .mas-fab{bottom:calc(132px + env(safe-area-inset-bottom));}
+  .toast{bottom:calc(84px + env(safe-area-inset-bottom));}
+}
 </style>
 </head>
 <body>
@@ -14600,6 +14616,31 @@ el("wzSalir").onclick=function(){
   el("wzVeil").hidden=true;
   toast("Tranquila, lo retomamos la próxima vez que entres.");
 };
+})();
+</script>
+<nav class="bnav" id="bottomNav" aria-label="Menú principal"></nav>
+<script>
+/* Barra inferior (celular): se arma con los mismos íconos del menú lateral y le hace clic al botón de allá. */
+(function(){
+  var NOM={hoy:"Hoy",alumnos:"Alumnos",clases:"Clases",cobros:"Cobros",academia:"Más"};
+  function armar(){
+    var nav=document.getElementById("bottomNav"); if(!nav||nav.children.length) return;
+    var bigs=[].slice.call(document.querySelectorAll(".navbig[data-nav]"));
+    if(!bigs.length) return;
+    bigs.forEach(function(b){
+      var k=b.getAttribute("data-nav"), svg=b.querySelector(".nb-ico svg");
+      var x=document.createElement("button"); x.type="button"; x.setAttribute("data-bn",k);
+      x.setAttribute("aria-label",NOM[k]||k);
+      x.innerHTML=(svg?svg.outerHTML:"")+"<span>"+(NOM[k]||k)+"</span>";
+      x.addEventListener("click",function(){ b.click(); window.scrollTo(0,0); var c=document.querySelector(".content"); if(c&&c.scrollTo) c.scrollTo(0,0); });
+      nav.appendChild(x);
+    });
+    function sync(){ [].forEach.call(nav.children,function(x){ var b=document.querySelector('.navbig[data-nav="'+x.getAttribute("data-bn")+'"]'); x.classList.toggle("on",!!(b&&b.classList.contains("active"))); }); }
+    try{ new MutationObserver(sync).observe(document.querySelector(".nav")||document.body,{attributes:true,subtree:true,attributeFilter:["class"]}); }catch(e){}
+    sync();
+  }
+  if(document.readyState==="loading") document.addEventListener("DOMContentLoaded",armar); else armar();
+  window.addEventListener("load",armar);
 })();
 </script>
 </body>
