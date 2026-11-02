@@ -5770,9 +5770,10 @@ function filaClaseDia(fkey,hora,titulo,rs,pasado,sala,cupo,curso){
     if(r.estado==="reservada" && anon){
       btns=(pasado?'':'<button class="btn ghost sm" data-ag-marcar="cancelada" data-id="'+esc(r.id)+'">Liberar</button>');
     } else if(r.estado==="reservada"){
-      btns='<button class="btn ghost sm" data-ag-marcar="completada" data-id="'+esc(r.id)+'">Vino</button> '+
-           '<button class="btn ghost sm" data-ag-marcar="falta" data-id="'+esc(r.id)+'">Faltó</button>'+
-           (pasado?'':' <button class="btn ghost sm" data-ag-marcar="cancelada" data-id="'+esc(r.id)+'">Quitar</button>');
+      btns='<button class="btn ghost sm" data-ag-marcar="completada" data-id="'+esc(r.id)+'">Asistió</button> '+
+           '<button class="btn ghost sm" data-ag-marcar="falta" data-id="'+esc(r.id)+'" title="No vino y no avisó">Ausente</button> '+
+           '<button class="btn ghost sm" data-ag-marcar="cancelo_tarde" data-id="'+esc(r.id)+'" title="Avisó fuera de plazo: la clase se le cuenta como usada">Canceló tarde</button>'+
+           (pasado?'':' <button class="btn ghost sm" data-ag-marcar="cancelada" data-id="'+esc(r.id)+'" title="Avisó a tiempo: la clase vuelve a su saldo">Canceló a tiempo</button>');
     }
     return '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:5px 0;">'+
            '<span style="flex:1 1 auto;font-size:13px;">'+nom+estado+'</span>'+
@@ -7089,9 +7090,10 @@ function campPintar(){
         (a.items||[]).map(function(x){
           return '<span class="camp-d" style="display:block;margin-top:6px;"><b>'+esc(x.alumno||"Alumno")+'</b> · '+esc(campFecha(x.dia))+(x.curso?(' · '+esc(x.curso)):'')+'<br>'+
             '<button type="button" class="btn ghost sm" data-cierre="dicto" data-id="'+esc(x.id)+'">Se dictó</button> '+
-            '<button type="button" class="btn ghost sm" data-cierre="falta" data-id="'+esc(x.id)+'">Falta</button> '+
+            '<button type="button" class="btn ghost sm" data-cierre="falta" data-id="'+esc(x.id)+'" title="No vino y no avisó">Ausente</button> '+
+            '<button type="button" class="btn ghost sm" data-cierre="cancelo_tarde" data-id="'+esc(x.id)+'" title="Avisó fuera de plazo: se le cuenta como usada">Canceló tarde</button> '+
             '<button type="button" class="btn ghost sm" data-cierre="reprogramada" data-id="'+esc(x.id)+'">Reprogramada a…</button> '+
-            '<button type="button" class="btn ghost sm" data-cierre="cancelada" data-id="'+esc(x.id)+'" title="Se cancela y la clase vuelve al saldo del alumno">Cancelada (devolver clase)</button></span>';
+            '<button type="button" class="btn ghost sm" data-cierre="cancelada" data-id="'+esc(x.id)+'" title="Se cancela y la clase vuelve al saldo del alumno">Canceló a tiempo</button></span>';
         }).join("")+mas+
         '<span class="camp-f">'+esc(campFecha(a.fecha))+'</span></div>';
     }
@@ -9005,10 +9007,11 @@ function pintarClasesDeAlumno(a){
     h+='<div style="margin-top:2px;">'+titulo("Ya pasaron y están sin marcar", sinMarcar.length, "var(--accent)")+
       lista(sinMarcar.map(function(r){
         return fila(esc(fmtLima(r.inicio_utc))+(r.curso?(' · '+esc(r.curso)):''),
-          '<button type="button" class="btn ghost sm" data-ficha-marcar="completada" data-id="'+esc(r.id)+'">Vino</button> '+
-          '<button type="button" class="btn ghost sm" data-ficha-marcar="falta" data-id="'+esc(r.id)+'">Faltó</button> '+
-          '<button type="button" class="btn ghost sm" data-ficha-cerrar="reprogramada" data-id="'+esc(r.id)+'">Reprogramada a…</button> '+
-          '<button type="button" class="btn ghost sm" data-ficha-cerrar="cancelada" data-id="'+esc(r.id)+'" title="Se cancela y la clase vuelve a su saldo">Cancelada</button>');
+          '<button type="button" class="btn ghost sm" data-ficha-marcar="completada" data-id="'+esc(r.id)+'">Asistió</button> '+
+          '<button type="button" class="btn ghost sm" data-ficha-marcar="falta" data-id="'+esc(r.id)+'" title="No vino y no avisó">Ausente</button> '+
+          '<button type="button" class="btn ghost sm" data-ficha-cerrar="cancelo_tarde" data-id="'+esc(r.id)+'" title="Avisó fuera de plazo: la clase se le cuenta como usada">Canceló tarde</button> '+
+          '<button type="button" class="btn ghost sm" data-ficha-cerrar="cancelada" data-id="'+esc(r.id)+'" title="Avisó a tiempo: la clase vuelve a su saldo">Canceló a tiempo</button> '+
+          '<button type="button" class="btn ghost sm" data-ficha-cerrar="reprogramada" data-id="'+esc(r.id)+'">Reprogramada a…</button>');
       }).join(""))+
       '<p class="hint" style="margin:4px 0 0;">'+sinMarcar.length+(sinMarcar.length===1?' pendiente de cerrar':' pendientes de cerrar')+
       ': mientras sigan «reservadas» cuentan como usadas en su saldo. Ciérralas y el saldo cuadra.</p></div>';
@@ -9018,9 +9021,10 @@ function pintarClasesDeAlumno(a){
   if(!futuras.length) h+='<p class="hint" style="margin:3px 0 0;">No tiene ninguna clase reservada.</p>';
   else h+=lista(futuras.map(function(r){
     return fila(esc(fmtLima(r.inicio_utc))+(r.curso?(' · '+esc(r.curso)):''),
-      '<button type="button" class="btn ghost sm" data-ficha-marcar="completada" data-id="'+esc(r.id)+'">Vino</button> '+
-      '<button type="button" class="btn ghost sm" data-ficha-marcar="falta" data-id="'+esc(r.id)+'">Faltó</button> '+
-      '<button type="button" class="btn ghost sm" data-ficha-marcar="cancelada" data-id="'+esc(r.id)+'">Quitar</button>');
+      '<button type="button" class="btn ghost sm" data-ficha-marcar="completada" data-id="'+esc(r.id)+'">Asistió</button> '+
+      '<button type="button" class="btn ghost sm" data-ficha-marcar="falta" data-id="'+esc(r.id)+'" title="No vino y no avisó">Ausente</button> '+
+      '<button type="button" class="btn ghost sm" data-ficha-marcar="cancelo_tarde" data-id="'+esc(r.id)+'" title="Avisó fuera de plazo: la clase se le cuenta como usada">Canceló tarde</button> '+
+      '<button type="button" class="btn ghost sm" data-ficha-marcar="cancelada" data-id="'+esc(r.id)+'" title="Avisó a tiempo: la clase vuelve a su saldo">Canceló a tiempo</button>');
   }).join(""));
   h+='</div>';
 

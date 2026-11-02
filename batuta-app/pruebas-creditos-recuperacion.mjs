@@ -50,6 +50,9 @@ const cfg2 = Object.assign({}, cfg, { cred_max_mes: "2" });
 await M.credGenerarDeFaltas(env, T, cfg2);
 ver((await cuenta("ana")) === 3, "con tope 2 al mes, la segunda de enero también entra (3 en total)", "el tope configurable no funciona: " + await cuenta("ana"));
 
+ver(M.credDecidir({ cred_on: "1", cred_desde: "2026-01-01" }, [{ mes: "2026-01", estado: "anulado", origen_reserva_id: "z" }], "2026-01-20", "nuevo").motivo === "tope_mes",
+  "un crédito anulado a mano sigue contando para el tope del mes", "anular abrió cupo para otro crédito");
+
 /* ── 3 · caducidad configurable que cruza el mes ── */
 ver(M.credDecidir({ cred_on: "1", cred_desde: "2026-01-01" }, [], "2026-01-25").vence === "2026-02-24", "30 días por defecto: falta el 25-ene, vale hasta el 24-feb (pasa al mes siguiente)", "caducidad por defecto mal");
 ver(M.credDecidir({ cred_on: "1", cred_vence_dias: "60", cred_desde: "2026-01-01" }, [], "2026-01-25").vence === "2026-03-26", "caducidad de 60 días configurable", "cred_vence_dias no se respeta");
