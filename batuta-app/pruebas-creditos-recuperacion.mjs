@@ -103,7 +103,7 @@ tiene(/b\.usar_credito === true/, "reservar acepta usar_credito", "reservar no a
 tiene(/path === "\/app\/api\/admin\/credito" && request\.method === "POST"[\s\S]{0,200}if \(!esDueno\)/, "anular / editar / crear a mano es solo del dueño", "el endpoint de créditos no exige dueño");
 tiene(/accion === "anular"[\s\S]{0,400}ya se usó/, "no se anula un crédito ya usado", "se podría anular un crédito usado");
 tiene(/"cred_on", "cred_max_mes", "cred_vence_dias", "cred_en_tardia"/, "los ajustes se guardan desde el panel", "los ajustes cred_* no están en la lista del panel");
-tiene(/"creditos_recup"\];/, "el reinicio de la demo también limpia los créditos", "creditos_recup falta en TABLAS_TENANT");
+tiene(/"creditos_recup"/, "el reinicio de la demo también limpia los créditos", "creditos_recup falta en TABLAS_TENANT");
 
 console.log(fallas ? "\n🔴 " + fallas + " fallo(s)" : "\n🟢 créditos de recuperación: todo en verde");
 process.exit(fallas ? 1 : 0);

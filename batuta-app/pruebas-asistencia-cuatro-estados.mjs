@@ -59,7 +59,7 @@ ver(await nCred("tar") === 1, "canceló tarde → crédito cuando la academia lo
 const t = (re, b, m) => ver(re.test(SRC), b, m);
 t(/\["completada", "falta", "cancelada", "cancelo_tarde"\]\.includes\(pedido\)/, "marcar acepta «canceló tarde»", "marcar no acepta cancelo_tarde");
 t(/CIERRES_RESERVA = \["dicto", "falta", "reprogramada", "cancelada", "cancelo_tarde"\]/, "cerrar una clase pasada acepta «canceló tarde»", "cerrar no acepta cancelo_tarde");
-t(/estado = 'cancelada', cancel_tipo = 'a_tiempo', cancelada_utc = \?1, cancelada_por = \?2 " \+\s*\n?\s*"WHERE id = \?3 AND tenant_id = \?4 AND estado = 'reservada'"/, "la alumna que cancela a tiempo queda como «canceló a tiempo»", "la cancelación del portal no se etiqueta");
+t(/tardio \? "falta" : "cancelada", tardio \? "tarde" : "a_tiempo"/, "la alumna que cancela a tiempo queda como «canceló a tiempo» (y tarde, como «canceló tarde»)", "la cancelación del portal no se etiqueta");
 t(/path === "\/app\/api\/admin\/asistencia"/, "existe el resumen de asistencia para la administración", "falta el endpoint de asistencia");
 console.log(fallas ? "\n🔴 " + fallas + " fallo(s)" : "\n🟢 asistencia con cuatro estados: todo en verde");
 process.exit(fallas ? 1 : 0);
