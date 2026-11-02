@@ -2273,7 +2273,7 @@ async function loadConfig(env, tenantId){
               interbank_cuenta: "", interbank_cci: "",
               mp_solo_tarjeta: "", espera_auto: "",
               /* créditos de recuperación (2-nov-2026): ver el bloque «CRÉDITOS DE RECUPERACIÓN» */
-              cred_on: "", cred_max_mes: "", cred_vence_dias: "", cred_en_tardia: "", cred_desde: "", prueba_plazas: "",
+              cred_on: "", cred_max_mes: "", cred_vence_dias: "", cred_en_tardia: "", cred_desde: "", prueba_plazas: "", cancel_tarde: "",
               portal_fija_off: "", portal_chat_off: "", portal_sin_profe: "",
               /* Beneficios / convenios (10-ago-2026, reunión Elevate): JSON [{t,d,l}] con los
                  convenios de la academia (ej. descuento en X). Los ven los alumnos con cuenta
@@ -8591,6 +8591,8 @@ async function ensureCreditosSchema(env){
   try { await env.DB.prepare("ALTER TABLE alumnos ADD COLUMN es_prueba INTEGER DEFAULT 0").run(); } catch (e) { /* ya existe */ }
   CRED_OK = true;
 }
+/* ¿la academia deja cancelar fuera de plazo (y cobra la clase)? Por defecto NO: se bloquea, como siempre. */
+function cancelTardePermitida(cfg){ return String((cfg && cfg.cancel_tarde) || "") === "pierde"; }
 function limpiarEnteroCfg(v, min, max){
   const n = parseInt(String(v == null ? "" : v).trim(), 10);
   return (Number.isFinite(n) && n >= min && n <= max) ? String(n) : "";
@@ -10771,6 +10773,7 @@ async function apiVerConfiguracion(env, t){
     plazo_cancelacion_horas: (Number.isFinite(plazo) && plazo >= 1) ? plazo : CANCELA_MIN_H,
     anticipacion_reserva_horas: String(cfg.anticipacion_h || "") === "" ? "por defecto" : Number(cfg.anticipacion_h),
     vigencia_clases_meses: String(cfg.caduca_meses || "") === "" ? "por defecto" : Number(cfg.caduca_meses),
+    cancelacion_fuera_de_plazo: cancelTardePermitida(cfg) ? "permitida (la clase se cuenta como usada)" : "bloqueada",
     plazas_de_prueba_por_clase: pruebaPlazasDe(cfg),
     creditos_recuperacion: (function(){ const k = credCfg(cfg); return { activo: k.on, max_por_mes: k.maxMes, vigencia_dias: k.dias, tambien_por_cancelacion_tardia: k.enTardia }; })(),
     paquetes: await apiPreciosDe(env, t),
@@ -10822,6 +10825,11 @@ async function apiConfigurarAcademia(env, t, a, origen){
   }
   /* Créditos de recuperación (2-nov-2026): mismas reglas que Ajustes > Reservas */
   const siNo = (v) => { const x = String(v).toLowerCase(); return ["si", "sí", "true"].includes(x) ? "1" : (["no", "false"].includes(x) ? "" : null); };
+  if (a.cancelacion_tardia != null && a.cancelacion_tardia !== ""){
+    const v = String(a.cancelacion_tardia).toLowerCase();
+    if (!["bloquear", "permitir"].includes(v)) errores.push("cancelacion_tardia: «bloquear» (no se puede cancelar fuera de plazo) o «permitir» (se puede, pero la clase se cuenta como usada).");
+    else poner("cancel_tarde", "cancelación fuera de plazo", cancelTardePermitida(cfg) ? "permitir" : "bloquear", v === "permitir" ? "pierde" : "");
+  }
   if (a.plazas_de_prueba != null && a.plazas_de_prueba !== ""){
     const n = entero(a.plazas_de_prueba, 0, 20);
     if (n === null) errores.push("plazas_de_prueba: un número entre 0 y 20 (0 = sin plazas de prueba).");
@@ -10850,7 +10858,7 @@ async function apiConfigurarAcademia(env, t, a, origen){
     if (v === null) errores.push("creditos_por_cancelacion_tardia: «si» o «no».");
     else poner("cred_en_tardia", "la cancelación tardía también da crédito", credCfg(cfg).enTardia ? "si" : "no", v);
   }
-  if (!cambios.length) return { error: errores.length ? errores.join(" ") : "No me pasaste ningún ajuste para cambiar.", ...(errores.length ? {} : { ajustes_posibles: ["cursos", "cupo_por_clase", "cancelacion_activa", "plazo_cancelacion_horas", "anticipacion_reserva_horas", "vigencia_clases_meses", "plazas_de_prueba", "creditos_recuperacion", "creditos_max_por_mes", "creditos_vigencia_dias", "creditos_por_cancelacion_tardia"] }) };
+  if (!cambios.length) return { error: errores.length ? errores.join(" ") : "No me pasaste ningún ajuste para cambiar.", ...(errores.length ? {} : { ajustes_posibles: ["cursos", "cupo_por_clase", "cancelacion_activa", "plazo_cancelacion_horas", "anticipacion_reserva_horas", "vigencia_clases_meses", "cancelacion_tardia", "plazas_de_prueba", "creditos_recuperacion", "creditos_max_por_mes", "creditos_vigencia_dias", "creditos_por_cancelacion_tardia"] }) };
   if (await chatbotPasoTope(env, "apiw:" + t.id, API_ESCRITURAS_HORA)) return { error: "Demasiados cambios esta hora (máximo " + API_ESCRITURAS_HORA + "). Intenta más tarde." };
   await ensureApiCambiosSchema(env);
   const ahora = new Date().toISOString();
@@ -11268,7 +11276,7 @@ const API_TOOLS = [
   { name: "pagos_recientes", desc: "Pagos de los ultimos dias con su estado y metodo, y el total confirmado.", args: { dias: "cuantos dias hacia atras (max 120, por defecto 30)" } },
   { name: "listar_precios", desc: "Los precios de los paquetes de la academia (en soles) y los enlaces para verlos. Úsala antes de cambiar un precio para tomar el nombre exacto del paquete.", args: {} },
   { name: "ver_configuracion", desc: "Cómo está configurada la academia hoy: cursos, cupo por clase, reglas de cancelación, anticipación de reserva, vigencia de las clases y paquetes con precio. Úsala SIEMPRE antes de cambiar ajustes y al terminar para confirmar.", args: {} },
-  { name: "configurar_academia", escribe: true, desc: "Cambia ajustes de la academia (solo los que se pasan): cursos (nombres separados por coma), cupo_por_clase (1-60), cancelacion_activa (si/no), plazo_cancelacion_horas (1-72), anticipacion_reserva_horas (0-168), vigencia_clases_meses (0-60, 0 = no vencen), plazas_de_prueba (0-20 por clase: lugares aparte, solo para alumnas de prueba; 0 = ninguno), creditos_recuperacion (si/no: la alumna que falta recibe un crédito para recuperar la clase), creditos_max_por_mes (1-10 por alumna), creditos_vigencia_dias (1-365, desde la clase faltada; pasa al mes siguiente), creditos_por_cancelacion_tardia (si/no). Devuelve lo anterior y lo nuevo de cada uno. No toca precios (usa actualizar_precio) ni horarios ni alumnos.", args: { cursos: "ej. Ballet, Jazz, Hip hop", cupo_por_clase: "alumnas máximo por clase", cancelacion_activa: "si o no", plazo_cancelacion_horas: "horas antes de la clase", anticipacion_reserva_horas: "horas mínimas antes para reservar", vigencia_clases_meses: "meses de vigencia de un paquete", plazas_de_prueba: "plazas de prueba por clase, aparte de las regulares", creditos_recuperacion: "si o no", creditos_max_por_mes: "créditos máximos por alumna al mes", creditos_vigencia_dias: "días que dura un crédito", creditos_por_cancelacion_tardia: "si o no" } },
+  { name: "configurar_academia", escribe: true, desc: "Cambia ajustes de la academia (solo los que se pasan): cursos (nombres separados por coma), cupo_por_clase (1-60), cancelacion_activa (si/no), plazo_cancelacion_horas (1-72), anticipacion_reserva_horas (0-168), vigencia_clases_meses (0-60, 0 = no vencen), cancelacion_tardia (bloquear | permitir: permitir deja cancelar fuera de plazo pero la clase se cuenta como usada), plazas_de_prueba (0-20 por clase: lugares aparte, solo para alumnas de prueba; 0 = ninguno), creditos_recuperacion (si/no: la alumna que falta recibe un crédito para recuperar la clase), creditos_max_por_mes (1-10 por alumna), creditos_vigencia_dias (1-365, desde la clase faltada; pasa al mes siguiente), creditos_por_cancelacion_tardia (si/no). Devuelve lo anterior y lo nuevo de cada uno. No toca precios (usa actualizar_precio) ni horarios ni alumnos.", args: { cursos: "ej. Ballet, Jazz, Hip hop", cupo_por_clase: "alumnas máximo por clase", cancelacion_activa: "si o no", plazo_cancelacion_horas: "horas antes de la clase", anticipacion_reserva_horas: "horas mínimas antes para reservar", vigencia_clases_meses: "meses de vigencia de un paquete", cancelacion_tardia: "bloquear o permitir", plazas_de_prueba: "plazas de prueba por clase, aparte de las regulares", creditos_recuperacion: "si o no", creditos_max_por_mes: "créditos máximos por alumna al mes", creditos_vigencia_dias: "días que dura un crédito", creditos_por_cancelacion_tardia: "si o no" } },
   { name: "crear_paquete", escribe: true, desc: "Crea un paquete NUEVO de clases con su precio (no borra ni cambia los que ya existen). Devuelve el paquete creado y los enlaces. Revisa antes con listar_precios para no repetir nombres.", args: { nombre: "ej. 8 clases de Ballet", clases: "cuántas clases incluye (1-500)", precio: "en soles, ej. 280", vigencia_dias: "opcional: días que dura (vacío = no vence)", cambios_incluidos: "opcional: cambios de horario por ciclo (por defecto 2)" } },
   { name: "agregar_horario", escribe: true, desc: "Agrega horarios semanales a la agenda de la academia (SOLO agrega: no borra ni reemplaza los que ya hay; quitar se hace en el panel). Crea una franja por cada combinación de día y hora. Si pasas curso, tiene que ser uno de los cursos de la academia (míralos con ver_configuracion).", args: { dias: "ej. lunes, miércoles o 1,3 (0=domingo ... 6=sábado)", horas: "hora de inicio en formato 24 h, ej. 18:00, 19:00", curso: "opcional: a qué curso corresponde", cupo: "opcional: alumnas máximo en esas clases (vacío = el cupo general)" } },
   { name: "actualizar_precio", escribe: true, desc: "Cambia el precio de UN paquete que ya existe (no crea ni borra paquetes). Devuelve el precio anterior, el nuevo y los enlaces para chequearlo. Solo funciona si el dueño activó el permiso de escritura.", args: { paquete: "nombre exacto del paquete, tal como sale en listar_precios", precio: "precio nuevo en soles, por ejemplo 280", confirmar: "escribe si solo cuando el cambio sea de más de 3 veces o menos de un tercio del precio actual" } },
@@ -17727,8 +17735,19 @@ export default {
            reformer con 12h y mat con 2h conviven sin pelearse. Sin regla propia, la general. */
         const regCancel = reglasDeClase(cfgCancel, r.curso || "");
         const horas = (Date.parse(r.inicio_utc) - Date.now()) / 3600000;
-        if (horas < regCancel.cancelH){
-          return json({ error: "Ya no se puede reprogramar: falta menos de " + regCancel.cancelH + " horas para tu clase." }, 400);
+        /* Cancelación TARDÍA (2-nov-2026, etapa 4): fuera del plazo, o se bloquea (como siempre) o la academia
+           permite cancelar igual y la clase se cuenta como usada (cancel_tarde = "pierde"). A tiempo la clase
+           vuelve al saldo; tarde NO vuelve, y solo da crédito si la academia lo decidió (cred_en_tardia). */
+        const tardio = horas < regCancel.cancelH;
+        if (tardio){
+          if (!cancelTardePermitida(cfgCancel) || horas <= 0){
+            return json({ error: "Ya no se puede reprogramar: falta menos de " + regCancel.cancelH + " horas para tu clase." }, 400);
+          }
+          if (!(b.confirmar_tarde === true || b.confirmar_tarde === 1)){
+            const kT = credCfg(cfgCancel);
+            return json({ requiere_confirmar_tarde: true,
+              error: "Faltan menos de " + regCancel.cancelH + " horas para tu clase: si cancelas ahora la clase se te cuenta como usada" + (kT.on && kT.enTardia ? ", pero recibes un crédito de recuperación." : ".") + " ¿Cancelar igual?" }, 409);
+          }
         }
         /* 🔴 22-ago-2026 · el candado que faltaba. El portal le promete al alumno "X de Y
            reprogramaciones" y hasta hoy ese número no bajaba nunca: podía cambiar de horario
@@ -17737,7 +17756,7 @@ export default {
         const cicloCancel = Number(alCancel && alCancel.ciclo) || 1;
         const pkCancel = resolverPk((await loadPaquetes(env, tid)).map, (alCancel && alCancel.paquete) || "");
         const cuotaCancel = Number(pkCancel && pkCancel.reprog) || 0;
-        if (cuotaCancel > 0){
+        if (cuotaCancel > 0 && !tardio){
           const yaPortal = await reprogPortalDe(env, tid, cu.alumno_id, cicloCancel);
           const { results: regsCancel } = await env.DB.prepare(SQL_REGS_CICLO).bind(tid, cu.alumno_id, cicloCancel).all();
           const yaDueno = (regsCancel || []).filter(g => g.estado === "Reprogramó").length;
@@ -17751,17 +17770,18 @@ export default {
            pero el cierre automático corre cada 15 minutos: si le cae justo encima, el alumno
            cancelaba una clase que el cron acababa de marcar como dictada. Se reclama la fila. */
         const canc = await env.DB.prepare(
-          "UPDATE reservas SET estado = 'cancelada', cancel_tipo = 'a_tiempo', cancelada_utc = ?1, cancelada_por = ?2 " +
+          "UPDATE reservas SET estado = ?5, cancel_tipo = ?6, cancelada_utc = ?1, cancelada_por = ?2 " +
           "WHERE id = ?3 AND tenant_id = ?4 AND estado = 'reservada'"
-        ).bind(new Date().toISOString(), "alumno:" + cu.alumno_id, r.id, tid).run();
+        ).bind(new Date().toISOString(), "alumno:" + cu.alumno_id, r.id, tid, tardio ? "falta" : "cancelada", tardio ? "tarde" : "a_tiempo").run();
         if (!((canc && canc.meta && (canc.meta.changes ?? 0)) || 0)){
           return json({ error: "Esa clase ya se dio por dictada. Escríbele a tu profesor si hubo un error." }, 409);
         }
         await promoverEspera(env, tid, r.inicio_utc, r.sala || "");   // se libero un cupo EN ESA SALA: avisar a su lista de espera
-        await credDevolverDeReserva(env, tid, r.id);   // si se pagó con un crédito de recuperación, el crédito vuelve
+        if (!tardio) await credDevolverDeReserva(env, tid, r.id);   // si se pagó con un crédito de recuperación, el crédito vuelve (tarde no: la perdió)
+        else await credGenerarDeFaltas(env, tid, cfgCancel, cu.alumno_id).catch(e => console.error("creditos: cancelación tardía", e));
         gcalAvisar(env, ctx, tid);
         try { const tC = await env.DB.prepare("SELECT * FROM tenants WHERE id = ?1").bind(tid).first(); if (tC) await avisarProfeDeAlumno(env, tC, { tipo: "cancelo", alumnoId: cu.alumno_id, nombre: cu.nombre, extra: fmtLima(r.inicio_utc) + (r.curso ? " · " + r.curso : "") }); } catch (e) {}
-        return json({ ok: true, mensaje: "Listo, libere tu horario. Elige tu nuevo horario abajo." });
+        return json({ ok: true, tarde: tardio, mensaje: tardio ? "Cancelada fuera de plazo: la clase se te cuenta como usada." : "Listo, libere tu horario. Elige tu nuevo horario abajo." });
       }
 
       /* ---- Lista de espera (clases llenas): entrar / salir / ver la mia ---- */
@@ -20664,7 +20684,7 @@ export default {
           /* config del tenant (cobros, marca, cupo, cursos): SOLO el dueno */
           if (!esDueno) return json({ error: "Los ajustes de la academia los maneja el dueño." }, 403);
           const b = await request.json().catch(() => ({}));
-          const claves = ["pago_numero", "pago_titular", "bcp_cuenta", "bcp_cci", "scotia_cuenta", "scotia_cci", "crypto_moneda", "crypto_red", "crypto_wallet", "stripe_moneda", "profe_nombre", "profe_marca", "profe_foto", "whatsapp_profe", "cursos", "brand_color", "brand_font", "agenda_cupo", "recordatorios_clase", "recordatorio_renovacion", "nubefact_ruta", "nubefact_token", "fact_serie_boleta", "fact_igv", "fact_proximo_numero", "wa_phone_id", "wa_enabled", "wa_modo", "wa_tono", "wa_instrucciones", "wa_kb", "wa_seguimiento", "wa_no_tocar", "wa_url_horarios", "wa_url_portal", "reprog_activo", "reprog_min_h", "cred_on", "cred_max_mes", "cred_vence_dias", "cred_en_tardia", "prueba_plazas", "paquetes", "modulos_off", "clases", "anticipacion_h", "web_direccion_off",
+          const claves = ["pago_numero", "pago_titular", "bcp_cuenta", "bcp_cci", "scotia_cuenta", "scotia_cci", "crypto_moneda", "crypto_red", "crypto_wallet", "stripe_moneda", "profe_nombre", "profe_marca", "profe_foto", "whatsapp_profe", "cursos", "brand_color", "brand_font", "agenda_cupo", "recordatorios_clase", "recordatorio_renovacion", "nubefact_ruta", "nubefact_token", "fact_serie_boleta", "fact_igv", "fact_proximo_numero", "wa_phone_id", "wa_enabled", "wa_modo", "wa_tono", "wa_instrucciones", "wa_kb", "wa_seguimiento", "wa_no_tocar", "wa_url_horarios", "wa_url_portal", "reprog_activo", "reprog_min_h", "cred_on", "cred_max_mes", "cred_vence_dias", "cred_en_tardia", "prueba_plazas", "cancel_tarde", "paquetes", "modulos_off", "clases", "anticipacion_h", "web_direccion_off",
                           /* Elevate (28-jul-2026) */
                           "caduca_meses", "asistencia_auto", "asistencia_horas", "mensajes",
                           /* que datos extra pide el formulario publico de compra (02-ago-2026) */
@@ -20896,6 +20916,7 @@ export default {
               if (k === "cred_on" || k === "cred_en_tardia") valor = (valor === "1") ? "1" : "";
               if (k === "cred_max_mes") valor = limpiarEnteroCfg(valor, 1, 10);
               if (k === "prueba_plazas") valor = limpiarEnteroCfg(valor, 1, 20);
+              if (k === "cancel_tarde") valor = (valor === "pierde") ? "pierde" : "";
               if (k === "cred_vence_dias") valor = limpiarEnteroCfg(valor, 1, 365);
               if (k === "reprog_min_h" && valor){
                 const nh = parseInt(valor, 10);

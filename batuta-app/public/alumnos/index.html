@@ -3055,15 +3055,18 @@ function reservarSlot(iso, sala){
     .catch(function(e){ toast(e.message || "No se pudo reservar."); cargarSlots(); });
 }
 
-function cancelarClase(id){
-  if(!confirm("¿Reprogramar esta clase? Se libera tu horario actual y eliges uno nuevo. Solo se puede con al menos "+AG_CANCELA_MIN_H+"h de anticipación.")) return;
-  api("/app/api/agenda/cancelar",{method:"POST",body:JSON.stringify({id:id})})
+function cancelarClase(id, confirmarTarde){
+  if(!confirmarTarde && !confirm("¿Reprogramar esta clase? Se libera tu horario actual y eliges uno nuevo. Solo se puede con al menos "+AG_CANCELA_MIN_H+"h de anticipación.")) return;
+  api("/app/api/agenda/cancelar",{method:"POST",body:JSON.stringify({id:id, confirmar_tarde:!!confirmarTarde})})
     .then(function(r){ toast(r.mensaje || "Clase liberada."); cargarCreditos(); return api("/app/api/me"); })
     .then(function(d){
       ME=d; renderAgenda();
       var slots=$("agSlots"); if(slots) slots.scrollIntoView({behavior:"smooth",block:"start"});
     })
-    .catch(function(e){ toast(e.message || "No se pudo reprogramar."); });
+    .catch(function(e){
+      if(e && e.data && e.data.requiere_confirmar_tarde){ if(confirm(e.message)) cancelarClase(id, true); return; }
+      toast(e.message || "No se pudo reprogramar.");
+    });
 }
 
 /* Suscripción al calendario (17-ago-2026). El token se pide al servidor la primera vez y

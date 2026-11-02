@@ -2109,6 +2109,7 @@ table.acc-fija tbody tr:hover td:last-child{background:var(--panel2);}
       <p class="hint" style="margin-top:-4px;">Apágalo si tus alumnos no tienen horario fijo (típico en estudios con clases grupales): el portal solo ofrecerá reservar clase por clase.</p>
       <div class="cfgrow"><span class="pk">Lista de espera al liberarse un cupo</span><select id="cfg_espera_auto" data-ayuda="Cuando alguien cancela y queda un cupo libre: o le avisas al primero de la cola, o se lo reservas automáticamente."><option value="">Avisar al primero para que reserve</option><option value="1">Reservarle la clase automáticamente al primero</option></select></div>
       <p class="hint" style="margin-top:-4px;">Con el modo automático, apenas alguien cancela, el primero de la cola queda <b>dentro</b> de la clase (si su plan tiene saldo) y le llega el aviso por correo y notificación. Si su plan no alcanza, se le avisa como siempre.</p>
+      <div class="cfgrow"><span class="pk">Cancelar fuera de plazo</span><select id="cfg_cancel_tarde" data-ayuda="Qué pasa si una alumna quiere cancelar cuando ya pasó el plazo de arriba. Bloquear: no puede. Permitir: puede, pero la clase se le cuenta como usada (y solo recibe crédito si lo activas abajo)."><option value="">No puede cancelar</option><option value="pierde">Puede, y la clase se cuenta como usada</option></select></div>
       <div class="cfgrow"><span class="pk">Plazas de prueba por clase</span><input id="cfg_prueba_plazas" data-ayuda="Lugares aparte, solo para alumnas de prueba, que no le quitan cupo a tus alumnas regulares. Vacío = no hay plazas de prueba." type="number" min="1" max="20" placeholder="0" /></div>
       <div class="cfgrow"><span class="pk">Créditos de recuperación</span><select id="cfg_cred_on" data-ayuda="Cuando una alumna inscrita falta a su clase, se le da un crédito para recuperarla en otra clase. Tú puedes anularlo o cambiarlo a mano desde su ficha."><option value="">Apagados</option><option value="1">Dar un crédito cuando falta</option></select></div>
       <div class="cfgrow"><span class="pk">Máximo de créditos por alumna al mes</span><input id="cfg_cred_max_mes" data-ayuda="Cuántos créditos puede ganar una misma alumna por las faltas de un mismo mes." type="number" min="1" max="10" placeholder="1" /></div>
@@ -4733,7 +4734,7 @@ function renderAjustes(){
   if(el("cfg_interbank_cci")) el("cfg_interbank_cci").value=(db.config&&db.config.interbank_cci)||"";
   if(el("cfg_mp_solo_tarjeta")) el("cfg_mp_solo_tarjeta").value=(db.config&&db.config.mp_solo_tarjeta)||"";
   if(el("cfg_espera_auto")) el("cfg_espera_auto").value=(db.config&&db.config.espera_auto)||"";
-  ["cred_on","cred_max_mes","cred_vence_dias","cred_en_tardia","prueba_plazas"].forEach(function(k){ if(el("cfg_"+k)) el("cfg_"+k).value=(db.config&&db.config[k])||""; });
+  ["cred_on","cred_max_mes","cred_vence_dias","cred_en_tardia","prueba_plazas","cancel_tarde"].forEach(function(k){ if(el("cfg_"+k)) el("cfg_"+k).value=(db.config&&db.config[k])||""; });
   if(el("cfg_portal_fija_off")) el("cfg_portal_fija_off").value=(db.config&&db.config.portal_fija_off)||"";
   if(el("cfg_directorio")) el("cfg_directorio").value=(db.config&&db.config.directorio)||"";
   if(el("cfg_portal_chat_off")) el("cfg_portal_chat_off").value=(db.config&&db.config.portal_chat_off)||"";
@@ -9600,6 +9601,7 @@ el("btnGuardarAjustes").addEventListener("click",function(){
             mp_solo_tarjeta:(el("cfg_mp_solo_tarjeta")?el("cfg_mp_solo_tarjeta").value:""),
             espera_auto:(el("cfg_espera_auto")?el("cfg_espera_auto").value:""),
             prueba_plazas:(el("cfg_prueba_plazas")?el("cfg_prueba_plazas").value.trim():""),
+            cancel_tarde:(el("cfg_cancel_tarde")?el("cfg_cancel_tarde").value:""),
             cred_on:(el("cfg_cred_on")?el("cfg_cred_on").value:""),
             cred_max_mes:(el("cfg_cred_max_mes")?el("cfg_cred_max_mes").value.trim():""),
             cred_vence_dias:(el("cfg_cred_vence_dias")?el("cfg_cred_vence_dias").value.trim():""),

@@ -160,7 +160,35 @@ def etapa_prueba():
     st, r = http("GET", "/app/api/me", portal["PRU"])
     ver(st == 200, "su cuenta del portal sigue funcionando", f"/me {st}")
 
-ETAPAS = {"prueba": etapa_prueba, "creditos": etapa_creditos, "asistencia": etapa_asistencia}
+def etapa_tardia():
+    admin, portal = sembrar(nombres=("ANA", "BEA"))
+    http("POST", "/app/api/admin/config", admin, {"reprog_min_h": "24", "cred_on": "1"})
+    d1(f"UPDATE config SET valor = '{(datetime.date.today() - datetime.timedelta(days=10)).isoformat()}' WHERE tenant_id = '{T}' AND clave = 'cred_desde'")
+    http("GET", "/app/api/agenda/slots", portal["ANA"])
+    def clase(rid, n, horas):   # una clase dentro de `horas` horas
+        ini = (datetime.datetime.utcnow() + datetime.timedelta(hours=horas)).replace(minute=0, second=0, microsecond=0)
+        d1(f"INSERT INTO reservas (id,tenant_id,alumno_id,inicio_utc,fin_utc,tipo,estado,curso,ciclo,profesor_id,sala) VALUES ('{rid}','{T}','LZ-{n}','{ini.strftime('%Y-%m-%dT%H:00:00.000Z')}','{(ini+datetime.timedelta(hours=1)).strftime('%Y-%m-%dT%H:00:00.000Z')}','suelta','reservada','Ballet',1,'{P}','')")
+    clase("LZ-T1", "ANA", 72); clase("LZ-T2", "ANA", 6); clase("LZ-T3", "BEA", 6)
+    st, r = http("POST", "/app/api/agenda/cancelar", portal["ANA"], {"id": "LZ-T1"})
+    ver(st == 200 and not r.get("tarde"), "cancelar con 72 h de anticipación: a tiempo", f"a tiempo: {st} {r}")
+    st, r = http("POST", "/app/api/agenda/cancelar", portal["ANA"], {"id": "LZ-T2"})
+    ver(st == 400, "fuera de plazo y con la academia en «bloquear»: se rechaza como siempre", f"debió 400 y dio {st} {r}")
+    http("POST", "/app/api/admin/config", admin, {"reprog_min_h": "24", "cred_on": "1", "cancel_tarde": "pierde"})
+    st, r = http("POST", "/app/api/agenda/cancelar", portal["ANA"], {"id": "LZ-T2"})
+    ver(st == 409 and r.get("requiere_confirmar_tarde"), "con «permitir», primero pide confirmación", f"confirmación: {st} {r}")
+    st, r = http("POST", "/app/api/agenda/cancelar", portal["ANA"], {"id": "LZ-T2", "confirmar_tarde": True})
+    ver(st == 200 and r.get("tarde"), "confirma y cancela tarde", f"tarde: {st} {r}")
+    f = d1(f"SELECT id, estado, COALESCE(cancel_tipo,'') ct FROM reservas WHERE tenant_id='{T}' ORDER BY id")
+    ver({x["id"]: (x["estado"], x["ct"]) for x in f}.get("LZ-T1") == ("cancelada", "a_tiempo") and {x["id"]: (x["estado"], x["ct"]) for x in f}.get("LZ-T2") == ("falta", "tarde"),
+        "a tiempo = cancelada (vuelve al saldo); tarde = falta etiquetada (se cuenta usada)", f"{f}")
+    st, r = http("GET", "/app/api/agenda/creditos", portal["ANA"])
+    ver(r.get("activos") == 0, "la tardía NO da crédito (la academia no lo activó)", f"{r}")
+    http("POST", "/app/api/admin/config", admin, {"reprog_min_h": "24", "cred_on": "1", "cancel_tarde": "pierde", "cred_en_tardia": "1"})
+    st, r = http("POST", "/app/api/agenda/cancelar", portal["BEA"], {"id": "LZ-T3", "confirmar_tarde": True})
+    ver(st == 200, "BEA cancela tarde con créditos por tardía activados", f"BEA: {st} {r}")
+    ver(http("GET", "/app/api/agenda/creditos", portal["BEA"])[1].get("activos") == 1, "y ella SÍ recibe el crédito", "BEA sin crédito")
+
+ETAPAS = {"tardia": etapa_tardia, "prueba": etapa_prueba, "creditos": etapa_creditos, "asistencia": etapa_asistencia}
 if __name__ == "__main__":
     if len(sys.argv) < 2 or sys.argv[1] == "limpiar":
         limpiar(); sys.exit(0)
