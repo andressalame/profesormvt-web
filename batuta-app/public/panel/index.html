@@ -1891,6 +1891,7 @@ table.acc-fija tbody tr:hover td:last-child{background:var(--panel2);}
         <input id="disp_vista" type="date" />
         <button class="btn ghost sm" id="btnVistaHoy" type="button">Hoy</button>
         <button class="btn sm" id="btnDispDuplicar" type="button">Copiar este horario a otras fechas</button>
+        <button class="btn sm" id="btnDispCopiarSemana" type="button" title="Copia todas las clases de una semana a otra, con sus aforos, profesoras y salas">Copiar una semana a otra</button>
       </div>
       <p class="hint" id="vistaTx" style="margin-top:-2px;"></p>
       <div id="vistaChips" style="display:flex;flex-wrap:wrap;gap:8px;margin:0 0 10px;"></div>
@@ -2845,6 +2846,23 @@ table.acc-fija tbody tr:hover td:last-child{background:var(--panel2);}
     <div class="modal-actions">
       <button class="btn ghost" data-close>Cancelar</button>
       <button class="btn" id="btnDuplicarOk">Copiar horario</button>
+    </div>
+  </div>
+</div>
+<!-- Modal copiar semana (2-nov-2026, pedido de Laura) -->
+<div class="overlay" id="ovCopiarSemana">
+  <div class="modal">
+    <h3>Copiar una semana a <em>otra semana</em></h3>
+    <div class="frow">
+      <div class="field"><label>Semana que copias (cualquier día de esa semana)</label><input id="cs_origen" type="date" /></div>
+      <div class="field"><label>Semana a la que la copias (cualquier día)</label><input id="cs_destino" type="date" /></div>
+    </div>
+    <p class="hint" id="cs_txt"></p>
+    <p class="hint">Se copian todas las clases de esa semana (hora, tipo de clase, aforo, profesora y sala). La semana de destino queda igual que la de origen; <b>las reservas ya hechas no se tocan</b> y el resto de tus semanas queda como está.</p>
+    <div class="modal-actions">
+      <button class="btn ghost" data-close>Cancelar</button>
+      <button class="btn ghost" id="btnCopiarSemanaSig" type="button">La semana que viene</button>
+      <button class="btn" id="btnCopiarSemanaOk">Copiar semana</button>
     </div>
   </div>
 </div>
@@ -5414,6 +5432,23 @@ function recortarVigencia(filas, d, h){
   return out;
 }
 
+/* Copiar UNA SEMANA a otra (2-nov-2026): de cada franja que existía en la semana de origen se saca una copia
+   con la vigencia de la semana de destino (lunes a domingo). La franja ya trae su día de la semana, así que
+   la copia solo vale ese día. Quien llama recorta antes el destino con recortarVigencia() para no pisar a ciegas. */
+function copiarSemanaFranjas(filas, origenLunes, destinoLunes){
+  const destinoDomingo = vigDiaMas(destinoLunes, 6);
+  const out = [];
+  for (const r of (filas || [])){
+    if (!r || r.activo === 0) continue;
+    const dow = Number(r.dia_semana);
+    const fecha = vigDiaMas(origenLunes, (dow + 6) % 7);   /* el día de la semana de origen en que cae esta franja */
+    const d = String(r.vdesde || ""), h = String(r.vhasta || "");
+    if ((d && fecha < d) || (h && fecha > h)) continue;    /* esa semana no la tenía */
+    out.push({ ...r, vdesde: destinoLunes, vhasta: destinoDomingo });
+  }
+  return out;
+}
+
 /* ---- Qué horario estoy mirando (29-oct-2026) ----
    Una franja puede tener varias filas con fechas distintas. La grilla enseña UNA por celda: la
    que vale en la fecha que miras (por defecto hoy; en "una sola semana", el lunes de esa semana). */
@@ -6526,6 +6561,36 @@ if(el("btnDispDuplicar")) el("btnDispDuplicar").addEventListener("click",functio
   el("dup_desde").value=""; el("dup_hasta").value="";
   openOv("ovDuplicar");
 });
+if(el("btnDispCopiarSemana")) el("btnDispCopiarSemana").addEventListener("click",function(){
+  sincronizarGrillaEnMemoria();
+  var fv=fechaVista();
+  el("cs_origen").value=fv; el("cs_destino").value=vigDiaMas(lunesYDomingoDe(fv).desde,7);
+  actualizarTxtCopiarSemana();
+  openOv("ovCopiarSemana");
+});
+function actualizarTxtCopiarSemana(){
+  var o=el("cs_origen").value, d=el("cs_destino").value, t=el("cs_txt");
+  if(!o||!d){ t.textContent=""; return; }
+  var a=lunesYDomingoDe(o), b=lunesYDomingoDe(d);
+  t.innerHTML="Copias la semana del <b>"+esc(fechaBonita(a.desde))+" al "+esc(fechaBonita(a.hasta))+"</b> a la del <b>"+esc(fechaBonita(b.desde))+" al "+esc(fechaBonita(b.hasta))+"</b>.";
+}
+if(el("cs_origen")) el("cs_origen").addEventListener("change",actualizarTxtCopiarSemana);
+if(el("cs_destino")) el("cs_destino").addEventListener("change",actualizarTxtCopiarSemana);
+if(el("btnCopiarSemanaSig")) el("btnCopiarSemanaSig").addEventListener("click",function(){
+  el("cs_destino").value=vigDiaMas(lunesYDomingoDe(el("cs_origen").value||fechaVista()).desde,7); actualizarTxtCopiarSemana();
+});
+if(el("btnCopiarSemanaOk")) el("btnCopiarSemanaOk").addEventListener("click",function(){
+  var o=el("cs_origen").value, d=el("cs_destino").value;
+  if(!o||!d){ toast("Elige las dos semanas"); return; }
+  var a=lunesYDomingoDe(o), b=lunesYDomingoDe(d);
+  if(a.desde===b.desde){ toast("Elige una semana distinta a la de origen"); return; }
+  var copias=copiarSemanaFranjas(AG_DISP||[],a.desde,b.desde);
+  if(!copias.length){ toast("Esa semana no tiene clases para copiar"); return; }
+  AG_DISP=recortarVigencia(AG_DISP,b.desde,b.hasta).concat(copias);
+  closeOv("ovCopiarSemana");
+  VISTA_FECHA=b.desde; renderAgendaAdmin();
+  guardarHorario("Listo: copiaste la semana del "+fechaBonita(a.desde)+" a la del "+fechaBonita(b.desde)+". Las reservas ya hechas siguen igual ✓");
+});
 if(el("btnDuplicarOk")) el("btnDuplicarOk").addEventListener("click",function(){
   var nd=el("dup_desde").value||"", nh=el("dup_hasta").value||"";
   if(!nd){ toast("Pon desde qué día vale el horario copiado"); return; }
@@ -7416,7 +7481,7 @@ function aplicarPermisosPropios(){
      El permiso se marcaba y no escondia nada. Los reales son los cuatro de la caja
      "Datos y respaldo". Y estos dos de abajo no tenian regla ninguna. */
   if(negados.indexOf("pagos_ver")>=0) css.push('.tab[data-tab="pagos"]');
-  if(negados.indexOf("agenda_editar")>=0) css.push("#btnGuardarDisp,#btnDispFila,#btnDispCopiar");
+  if(negados.indexOf("agenda_editar")>=0) css.push("#btnGuardarDisp,#btnDispFila,#btnDispCopiar,#btnDispCopiarSemana,#btnDispDuplicar");
   if(css.length){
     var st=document.getElementById("permCss")||document.createElement("style");
     st.id="permCss"; st.textContent=css.join(",")+"{display:none !important;}";

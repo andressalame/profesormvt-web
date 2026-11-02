@@ -227,7 +227,29 @@ def etapa_profe():
     sus = d1(f"SELECT profe_original, profe_sustituta FROM sustituciones WHERE tenant_id='{T}'")
     ver(len(sus) == 1 and sus[0]["profe_sustituta"] == P, "la sustitución quedó registrada", f"{sus}")
 
-ETAPAS = {"profe": etapa_profe, "tardia": etapa_tardia, "prueba": etapa_prueba, "creditos": etapa_creditos, "asistencia": etapa_asistencia}
+def etapa_semana():
+    admin, portal = sembrar(nombres=("ANA",))
+    http("GET", "/app/api/agenda/slots", portal["ANA"])
+    # lunes de la semana que viene (W1), +7 (W2) y +14 (W3)
+    hoy = datetime.date.today()
+    w1 = hoy + datetime.timedelta(days=(7 - hoy.weekday()))
+    w2, w3 = w1 + datetime.timedelta(days=7), w1 + datetime.timedelta(days=14)
+    dom = lambda l: (l + datetime.timedelta(days=6)).isoformat()
+    # lo que el panel arma al «copiar la semana W1 a W3»: la franja de W1 + su copia con la vigencia de W3
+    activos = [{"dia_semana": 1, "hora": "10:00", "cupo": 4, "curso": "Ballet", "sala": "", "profe": "", "vdesde": w1.isoformat(), "vhasta": dom(w1)},
+               {"dia_semana": 1, "hora": "10:00", "cupo": 4, "curso": "Ballet", "sala": "", "profe": "", "vdesde": w3.isoformat(), "vhasta": dom(w3)}]
+    st, r = http("POST", "/app/api/admin/disponibilidad", admin, {"activos": activos})
+    ver(st == 200, "el servidor guarda la semana original y su copia", f"guardar horario: {st} {r}")
+    st, r = http("GET", "/app/api/agenda/slots", portal["ANA"])
+    dias = sorted({(datetime.datetime.strptime(i, "%Y-%m-%dT%H:%M:%S.000Z") - datetime.timedelta(hours=5)).date() for i in (r.get("slots") or []) + (r.get("llenos") or [])})
+    ver(w1 in dias and w3 in dias and w2 not in dias, f"la alumna ve el lunes de la semana original y el de la copia, no el de en medio ({[d.isoformat() for d in dias]})", f"slots: {dias}")
+    st, html = 0, ""
+    try:
+        with urllib.request.urlopen(urllib.request.Request(BASE + "/panel/index.html", headers={"user-agent": "auditoria-laura"})) as x: html = x.read().decode()
+    except Exception as e: html = str(e)
+    ver("btnDispCopiarSemana" in html, "el panel publicado trae el botón «Copiar una semana a otra»", "el panel en vivo no trae el botón")
+
+ETAPAS = {"semana": etapa_semana, "profe": etapa_profe, "tardia": etapa_tardia, "prueba": etapa_prueba, "creditos": etapa_creditos, "asistencia": etapa_asistencia}
 if __name__ == "__main__":
     if len(sys.argv) < 2 or sys.argv[1] == "limpiar":
         limpiar(); sys.exit(0)
