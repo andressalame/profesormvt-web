@@ -11490,9 +11490,55 @@ async function ejecutarHerramientaApi(env, t, nombre, args){
 /* ═══════════════════════════════════════════════════════════════════════════
    FETCH principal
    ═══════════════════════════════════════════════════════════════════════════ */
-export default {
+/* Velocidad de las consultas PÚBLICAS (2-nov-2026): /app/api/publico y /app/api/agenda/slots-publicos
+   tardaban de 1 a 4 s (varias consultas a D1 y, en los horarios, Google Calendar) y las usan la web de
+   Elevate, la de ProfesorMVT y el portal del alumno. No dependen de quién pregunta: solo de los
+   parámetros. Se guarda la respuesta en la caché del borde y se sirve al instante; pasado 1 minuto se
+   renueva por detrás (la visita que la encuentra vieja igual la recibe rápido). Nada de esto toca una
+   reserva: reservar y pagar vuelven a comprobar el horario en el servidor, así que lo peor que pasa
+   es ver libre un horario recién tomado hasta 1 minuto. Solo se guardan respuestas 200. */
+const RUTAS_PUBLICAS_CACHEADAS = new Set(["/app/api/publico", "/app/api/agenda/slots-publicos"]);
+async function respuestaPublicaCacheada(request, ctx, url, correr){
+  const params = [...url.searchParams.entries()].filter(([k]) => k !== "_").sort((x, y) => x[0].localeCompare(y[0]) || x[1].localeCompare(y[1]));
+  const qs = new URLSearchParams(params).toString();
+  const llave = new Request(url.origin + url.pathname.replace(/\/+$/, "") + "?" + qs + "&cache=pub1");
+  const cache = caches.default;
+  const refrescar = async () => {
+    const r = await correr();
+    if (r.status === 200){
+      const copia = new Response(r.clone().body, r);
+      copia.headers.set("X-Pub-Gen", String(Date.now()));
+      copia.headers.set("Cache-Control", "public, s-maxage=600");
+      await cache.put(llave, copia).catch(() => {});
+    }
+    return r;
+  };
+  const guardado = await cache.match(llave).catch(() => null);
+  if (guardado){
+    const edad = Date.now() - Number(guardado.headers.get("X-Pub-Gen") || 0);
+    if (edad > 60000 && ctx && ctx.waitUntil) ctx.waitUntil(refrescar().catch(() => {}));
+    const rc = new Response(guardado.body, guardado);
+    rc.headers.set("Cache-Control", "no-cache");
+    rc.headers.delete("Expires");
+    rc.headers.set("X-Pub-Cache", edad > 60000 ? "STALE" : "HIT");
+    return rc;
+  }
+  const r = await refrescar();
+  r.headers.set("Cache-Control", "no-cache");
+  r.headers.set("X-Pub-Cache", "MISS");
+  return r;
+}
+
+const WORKER_BATUTA = {
   async fetch(request, env, ctx){
     try { env.__ctx = ctx; } catch (e) {}
+    if (request.method === "GET" && !request.headers.has("x-sin-cache-publica")){
+      const u0 = new URL(request.url);
+      if (RUTAS_PUBLICAS_CACHEADAS.has(u0.pathname.replace(/\/+$/, ""))){
+        const h2 = new Headers(request.headers); h2.set("x-sin-cache-publica", "1");
+        return respuestaPublicaCacheada(request, ctx, u0, () => WORKER_BATUTA.fetch(new Request(request, { headers: h2 }), env, ctx));
+      }
+    }
     const url = new URL(request.url);
     /* Una barra de mas no puede botar a nadie: hasta el 11-ago-2026 "/app/panel/" daba 404
        porque TODAS las rutas de abajo comparan con === contra el pathname pelado. El que
@@ -22126,3 +22172,5 @@ export default {
     } catch (e) { /* el lead magnet jamas tumba el nurture de tenants */ }
   }
 };
+
+export default WORKER_BATUTA;
