@@ -5404,10 +5404,44 @@ export default {
       }
 
       if (url.pathname === "/api/agenda/slots-publicos" && request.method === "GET"){
-        const slots = await generarSlots(env);
-        const r = json({ slots });
-        // Vitrina también embebida en academiakanta.com (segunda marca): solo lectura, sin datos personales
-        r.headers.set("Access-Control-Allow-Origin", "*");
+        /* Velocidad (2-nov-2026): armar los horarios cuesta 2 consultas a D1, un token nuevo de
+           Google y un freeBusy, o sea de 1 a 4 s por visita. El resultado cambia poco, así que se
+           guarda en la caché del borde y se sirve al instante. Pasados 60 s la copia se renueva
+           POR DETRÁS (la visita que la encuentra vieja igual la recibe rápido). No hay riesgo de
+           doble reserva: slotValido() vuelve a comprobar el horario al reservar o pagar. Lo peor
+           que pasa es que un horario recién tomado se vea libre un minuto y luego se rechace con
+           el aviso de siempre. */
+        const llaveCache = new Request(url.origin + "/api/agenda/slots-publicos?cache=v2");
+        const cache = caches.default;
+        const construir = async () => {
+          const slots = await generarSlots(env);
+          const r = json({ slots });
+          // Vitrina también embebida en academiakanta.com (segunda marca): solo lectura, sin datos personales
+          r.headers.set("Access-Control-Allow-Origin", "*");
+          r.headers.set("X-Slots-Gen", String(Date.now()));
+          return r;
+        };
+        const guardar = async () => {
+          const r = await construir();
+          const copia = r.clone();
+          copia.headers.set("Cache-Control", "public, s-maxage=600");
+          await cache.put(llaveCache, copia).catch(() => {});
+          return r;
+        };
+        const guardado = await cache.match(llaveCache).catch(() => null);
+        if (guardado){
+          const edad = Date.now() - Number(guardado.headers.get("X-Slots-Gen") || 0);
+          if (edad > 60000 && ctx && ctx.waitUntil) ctx.waitUntil(guardar().catch(() => {}));
+          const rc = new Response(guardado.body, guardado);
+          rc.headers.set("X-Slots-Cache", edad > 60000 ? "STALE" : "HIT");
+          // Cloudflare reescribe el max-age de lo guardado (4 h). Al navegador siempre se le dice que revalide.
+          rc.headers.set("Cache-Control", "no-cache");
+          rc.headers.delete("Expires");
+          return rc;
+        }
+        const r = await guardar();
+        r.headers.set("Cache-Control", "no-cache");
+        r.headers.set("X-Slots-Cache", "MISS");
         return r;
       }
 

@@ -8,6 +8,7 @@ import Layout from '../layouts/Layout.astro';
   activeNav="horarios"
 >
   <main class="hor">
+    <script is:inline>window.__slotsP = fetch("/api/agenda/slots-publicos").catch(function () { return null; });</script>
     <fieldset class="duracion">
       <legend>Duración</legend>
       <label><input type="radio" name="duracion" value="1" checked /> 1 hora</label>
@@ -142,7 +143,7 @@ import Layout from '../layouts/Layout.astro';
     document.querySelectorAll('input[name="duracion"]').forEach(function (radio) {
       radio.addEventListener("change", function () { DURACION = Number(radio.value); DIA = ""; ELEGIDO = ""; pintar(); });
     });
-    fetch("/api/agenda/slots-publicos")
+    (window.__slotsP ? window.__slotsP.then(function (r) { return r || fetch("/api/agenda/slots-publicos"); }) : fetch("/api/agenda/slots-publicos"))
       .then(function (r) { if (!r.ok) throw Error("No se pudieron cargar los horarios"); return r.json(); })
       .then(function (d) {
         SLOTS = Array.isArray(d.slots) ? d.slots.filter(function (s) { return typeof s === "string" && !isNaN(Date.parse(s)); }).sort() : [];
