@@ -272,7 +272,7 @@
   tr:last-child td{border-bottom:0;}
   td.mono{font-family:var(--mono);font-size:12px;color:var(--muted);white-space:nowrap;}
   td.mut,span.mut{color:var(--muted);font-size:13.5px;}
-  .empty{color:var(--muted);font-family:var(--mono);font-size:12px;text-transform:uppercase;letter-spacing:.08em;padding:10px 0;}
+  .empty{color:var(--muted);font-size:16px;line-height:1.5;text-transform:none;letter-spacing:0;padding:10px 0;}
   .tarea{border-left:5px solid var(--accent);}
   .tarea .t{font-family:var(--display);font-size:20px;line-height:1.35;}
   .tarea .meta{font-family:var(--mono);font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;margin-top:8px;}
@@ -1808,7 +1808,8 @@ function renderComprar(){
   // Estado vacío: si el profe aún no publicó precios, el alumno vería una caja en blanco.
   // Le explicamos qué pasa y a quién escribir, en vez de dejarlo perdido.
   $("tiers").innerHTML = tiersHtml || '<div class="empty" style="grid-column:1/-1;text-align:center;padding:32px 16px;opacity:.85">'+
-    'Tu profesor todavía no publicó los paquetes de clases aquí.<br>Escríbele y los coordinan directo.</div>';
+    'Tu profesor todavía no publicó los paquetes de clases aquí.<br>Escríbele y los coordinan directo.'+
+    ((ME && ME.portal && ME.portal.whatsapp) ? '<br><a class="btn" style="margin-top:16px" target="_blank" rel="noopener" href="https://wa.me/'+String(ME.portal.whatsapp).replace(/\D/g,"")+'">Escribirle por WhatsApp</a>' : '')+'</div>';
 }
 $("tiers").addEventListener("click",function(e){
   var b=e.target.closest("[data-comprar]");
@@ -1848,7 +1849,7 @@ try {
   if(_pagoQ){
     setTimeout(function(){
       try {
-        if(_pagoQ==="ok") toast("Pago recibido: tu paquete se activa en unos segundos 🎉");
+        if(_pagoQ==="ok") toast("Pago recibido: tu paquete se activa en unos segundos.");
         else if(_pagoQ==="pendiente") toast("Tu pago quedó en proceso; se confirma solo apenas apruebe.");
         else toast("El pago no se completó. Puedes intentar de nuevo o pagar por Yape.");
       } catch(e){}
@@ -2798,7 +2799,7 @@ function renderAgenda(){
 
   var prox = ME.proximasClases || [];
   if(prox.length===0){
-    $("agProx").innerHTML = '<p class="note" style="margin:0">Todavía no tienes clases agendadas. Reserva abajo 👇</p>';
+    $("agProx").innerHTML = '<p class="note" style="margin:0">Todavía no tienes clases agendadas. Reserva abajo.</p>';
   } else {
     $("agProx").innerHTML = prox.map(function(r){
       var badge = '<span class="rtag">'+(r.tipo==="fija"?"FIJA":"SUELTA")+'</span>';
@@ -3039,7 +3040,7 @@ function renderEspera(list){
     return '<div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--line);">'+
       '<div style="flex:1;min-width:0;">'+
         '<div style="font-weight:600;text-transform:capitalize;">'+esc(fmtFechaLocal(e.inicio_utc))+' · '+esc(fmtHoraLocal(e.inicio_utc))+(e.curso?' · '+esc(e.curso):'')+(e.sala?' · '+esc(e.sala):'')+'</div>'+
-        '<div class="note" style="margin:0;">'+(av?'<span style="color:var(--accent-ink,#905A14);font-weight:700;">¡Se liberó un cupo! Resérvalo abajo 👇</span>':'En lista de espera · te aviso si se libera un cupo')+'</div>'+
+        '<div class="note" style="margin:0;">'+(av?'<span style="color:var(--accent-ink,#905A14);font-weight:700;">¡Se liberó un cupo! Resérvalo abajo.</span>':'En lista de espera · te aviso si se libera un cupo')+'</div>'+
       '</div>'+
       '<button class="btn ghost sm" data-salir-espera="'+esc(e.id)+'">Salir</button>'+
     '</div>';
