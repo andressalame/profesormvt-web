@@ -498,6 +498,14 @@
   .mas-menu a:hover,.mas-menu a.active{background:var(--panel-2,rgba(0,0,0,.06));}
   .mas-menu svg{width:22px;height:22px;stroke:currentColor;stroke-width:1.8;fill:none;stroke-linecap:round;stroke-linejoin:round;}
 }
+
+/* Letra y botones del portal (2-nov-2026, auditoría de diseño): había etiquetas de 10 a 11.5 px y botones de 11.5 px.
+   Piso de 13 px para todo lo que se lee, y botones de 44 px (48 en celular) para que se toquen sin errar. */
+.eyebrow,.lab,.sub,.stubcap,.pill,.ministat,.note,label,.main h3{font-size:13px;}
+.btn,.main .btn{font-size:13px;}
+.btn{min-height:44px;}
+.main .btn.sm{min-height:44px;}
+@media (max-width:859px){ .btn,.main .btn.sm{min-height:48px;} }
 </style>
 </head>
 <body>
