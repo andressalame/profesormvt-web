@@ -11529,14 +11529,14 @@ async function respuestaPublicaCacheada(request, ctx, url, correr){
   return r;
 }
 
-const WORKER_BATUTA = {
+export default {
   async fetch(request, env, ctx){
     try { env.__ctx = ctx; } catch (e) {}
-    if (request.method === "GET" && !request.headers.has("x-sin-cache-publica")){
+    if (request.method === "GET" && !request.headers.has("x-sin-cache-publica") && typeof caches !== "undefined" && caches.default){
       const u0 = new URL(request.url);
       if (RUTAS_PUBLICAS_CACHEADAS.has(u0.pathname.replace(/\/+$/, ""))){
         const h2 = new Headers(request.headers); h2.set("x-sin-cache-publica", "1");
-        return respuestaPublicaCacheada(request, ctx, u0, () => WORKER_BATUTA.fetch(new Request(request, { headers: h2 }), env, ctx));
+        return respuestaPublicaCacheada(request, ctx, u0, () => this.fetch(new Request(request, { headers: h2 }), env, ctx));
       }
     }
     const url = new URL(request.url);
@@ -19997,9 +19997,50 @@ const WORKER_BATUTA = {
              pantallas no se contradigan.
              El 1 a 1 (MVT) no se toca: ahí `disponibilidad.profe` está vacío, `mias` queda en
              cero y el resultado es idéntico al de siempre. */
-          const todosAl = (await env.DB.prepare(
+          /* Velocidad (3-nov-2026): las ~20 consultas de abajo eran independientes pero corrían una tras otra
+             (3 s o más). Se lanzan TODAS juntas aquí y cada lugar de abajo solo espera su resultado. Mismo
+             contenido: los try/catch de cada bloque siguen atrapando los fallos porque el await sigue donde estaba. */
+          const P = {};
+          P.alumnos = env.DB.prepare(
             "SELECT * FROM alumnos WHERE tenant_id = ?1" + ORDEN_NOMBRE
-          ).bind(tid).all()).results || [];
+          ).bind(tid).all();
+          P.registro = env.DB.prepare("SELECT * FROM registro WHERE tenant_id = ?1 ORDER BY fecha DESC, id DESC").bind(tid).all();
+          P.resv = env.DB.prepare(
+            "SELECT id, alumno_id, inicio_utc, COALESCE(curso,'') AS curso, COALESCE(tipo,'') AS tipo, COALESCE(ciclo,1) AS ciclo, estado " +
+            "FROM reservas WHERE tenant_id = ?1 AND estado IN ('reservada','completada','falta') ORDER BY inicio_utc ASC"
+          ).bind(tid).all();
+          P.canc = env.DB.prepare(
+              "SELECT alumno_id, COALESCE(ciclo,1) AS ciclo, COUNT(*) AS n FROM reservas " +
+              "WHERE tenant_id = ?1 AND estado = 'cancelada' AND COALESCE(cancelada_por,'') LIKE 'alumno:%' " +
+              "GROUP BY alumno_id, COALESCE(ciclo,1)"
+            ).bind(tid).all();
+          P.cuentas = env.DB.prepare(
+            "SELECT id,email,nombre,whatsapp,marketing,alumno_id,creada,ref_code,ref_por,credito FROM cuentas WHERE tenant_id = ?1 ORDER BY creada DESC"
+          ).bind(tid).all();
+          P.compras = env.DB.prepare("SELECT * FROM compras WHERE tenant_id = ?1 AND estado != 'iniciada' ORDER BY CASE estado WHEN 'pendiente' THEN 0 ELSE 1 END, fecha DESC").bind(tid).all();
+          P.recursos = env.DB.prepare("SELECT * FROM recursos WHERE tenant_id = ?1 ORDER BY fecha DESC, rowid DESC").bind(tid).all();
+          P.ejercicios = env.DB.prepare("SELECT * FROM ejercicios WHERE tenant_id = ?1 ORDER BY fecha DESC, rowid DESC").bind(tid).all();
+          P.fijas = env.DB.prepare(
+            "SELECT alumno_id, serie_id, id, inicio_utc FROM reservas " +
+            "WHERE tenant_id = ?1 AND tipo='fija' AND estado='reservada' AND inicio_utc >= ?2 ORDER BY inicio_utc ASC"
+          ).bind(tid, new Date().toISOString()).all();
+          P.grupos = env.DB.prepare(
+            "SELECT * FROM grupos WHERE tenant_id = ?1 AND (?2 = 1 OR profesor_id = ?3) ORDER BY creado DESC, rowid DESC"
+          ).bind(tid, esDueno ? 1 : 0, profeActorId || "").all();
+          P.equipo = env.DB.prepare(
+              "SELECT id, nombre, email, rol, estado, foto, COALESCE(sede_id,'') AS sede_id FROM profesores WHERE tenant_id = ?1 ORDER BY CASE rol WHEN 'dueno' THEN 0 ELSE 1 END, " + sinTildesSQL("COALESCE(nombre,'')") + ", nombre"
+            ).bind(tid).all();
+          P.gastos = esDueno ? env.DB.prepare("SELECT id,fecha,concepto,categoria,monto FROM gastos WHERE tenant_id = ?1 ORDER BY fecha DESC, rowid DESC LIMIT 2000").bind(tid).all() : Promise.resolve({ results: [] });
+          P.comprobantes = esDueno ? env.DB.prepare("SELECT compra_id, serie, numero, enlace_pdf, aceptada, COALESCE(estado,'emitida') AS estado FROM comprobantes WHERE tenant_id = ?1 ORDER BY rowid DESC LIMIT 2000").bind(tid).all() : Promise.resolve({ results: [] });
+          P.precios1 = loadPrecios(env, tid);
+          P.precios2 = loadPrecios(env, tid);
+          P.config1 = loadConfig(env, tid);
+          P.config2 = loadConfig(env, tid);
+          P.paquetes1 = loadPaquetes(env, tid);
+          P.paquetes2 = loadPaquetes(env, tid);
+          P.sedes1 = sedesDeTenant(env, tid);
+          for (const k in P){ if (P[k] && P[k].catch) P[k].catch(() => {}); }  // sin "unhandled rejection" si un bloque aborta antes de esperarla
+          const todosAl = (await P.alumnos).results || [];
           let alumnos = todosAl;
           if (!esDueno){
             const miasAl = new Set();
@@ -20027,10 +20068,7 @@ const WORKER_BATUTA = {
             alumnos = todosAl.filter(a => a.profesor_id === profeActorId || deSusFranjas.has(a.id));
           }
           const idsScope = new Set(alumnos.map(a => a.id));
-          const { results: fijasRows } = await env.DB.prepare(
-            "SELECT alumno_id, serie_id, id, inicio_utc FROM reservas " +
-            "WHERE tenant_id = ?1 AND tipo='fija' AND estado='reservada' AND inicio_utc >= ?2 ORDER BY inicio_utc ASC"
-          ).bind(tid, new Date().toISOString()).all();
+          const { results: fijasRows } = await P.fijas;
           const fijasPorAlumno = {}, seriesVistas = {};
           for (const r of (fijasRows || [])){
             const aid = r.alumno_id; if (!aid) continue;
@@ -20044,7 +20082,7 @@ const WORKER_BATUTA = {
             if (fijasPorAlumno[aid].indexOf(label) === -1) fijasPorAlumno[aid].push(label);
           }
           for (const a of alumnos){ a.horarioFijo = fijasPorAlumno[a.id] || []; }
-          const registroAll = (await env.DB.prepare("SELECT * FROM registro WHERE tenant_id = ?1 ORDER BY fecha DESC, id DESC").bind(tid).all()).results || [];
+          const registroAll = (await P.registro).results || [];
           const registro = esDueno ? registroAll : registroAll.filter(r => idsScope.has(r.alumno_id));
 
           /* SALDO CALCULADO EN EL SERVIDOR (12-ago-2026) — el arreglo de fondo del desajuste
@@ -20054,19 +20092,12 @@ const WORKER_BATUTA = {
              Ahora sale del MISMO computeMulti/compute que usa el portal. Barato: una consulta
              más para TODAS las reservas del tenant (Elevate: 80 filas para 1,447 alumnos) y el
              resto en memoria — cero consultas por alumno. */
-          const resvAll = (await env.DB.prepare(
-            "SELECT id, alumno_id, inicio_utc, COALESCE(curso,'') AS curso, COALESCE(tipo,'') AS tipo, COALESCE(ciclo,1) AS ciclo, estado " +
-            "FROM reservas WHERE tenant_id = ?1 AND estado IN ('reservada','completada','falta') ORDER BY inicio_utc ASC"
-          ).bind(tid).all()).results || [];
+          const resvAll = (await P.resv).results || [];
           /* cancelaciones que hizo el ALUMNO desde su portal, en lote: sin esto el panel
              mostraría "3 de 3 cambios" y el portal "0 de 3" para la misma persona. */
           const reprogPortalPor = new Map();
           try {
-            const { results: cancAll } = await env.DB.prepare(
-              "SELECT alumno_id, COALESCE(ciclo,1) AS ciclo, COUNT(*) AS n FROM reservas " +
-              "WHERE tenant_id = ?1 AND estado = 'cancelada' AND COALESCE(cancelada_por,'') LIKE 'alumno:%' " +
-              "GROUP BY alumno_id, COALESCE(ciclo,1)"
-            ).bind(tid).all();
+            const { results: cancAll } = await P.canc;
             for (const c of (cancAll || [])) reprogPortalPor.set(c.alumno_id + "|" + c.ciclo, Number(c.n) || 0);
           } catch (e) { /* si falla, el panel muestra lo de siempre */ }
           const resvPorAlumno = new Map(), regsPorAlumno = new Map();
@@ -20082,9 +20113,9 @@ const WORKER_BATUTA = {
             /* OJO: loadPaquetes devuelve {map, list} — va el `.map`, como en los otros 10 sitios.
                Sin él, resolverPk no encuentra NINGÚN paquete propio de la academia y devuelve
                0 clases: los 1,447 de Elevate saldrían "Completado — renovar" en rojo. */
-            const paqMapP = (await loadPaquetes(env, tid)).map;
-            const preciosP = await loadPrecios(env, tid);
-            const modoSaldo = (await loadConfig(env, tid)).saldo_modo || "";
+            const paqMapP = (await P.paquetes1).map;
+            const preciosP = await P.precios1;
+            const modoSaldo = (await P.config1).saldo_modo || "";
             for (const a of alumnos){
               const ciA = Number(a.ciclo) || 1;
               const rv = (resvPorAlumno.get(a.id) || []).filter(r => (Number(r.ciclo) || 1) === ciA);
@@ -20115,12 +20146,10 @@ const WORKER_BATUTA = {
                 .map(r => ({ id: r.id, inicio_utc: r.inicio_utc, curso: r.curso || "", estado: r.estado, ciclo: r.ciclo }));
             }
           } catch (e) { console.error("saldo panel", e && e.message); }   // el panel cae a su cálculo viejo
-          const cuentasAll = (await env.DB.prepare(
-            "SELECT id,email,nombre,whatsapp,marketing,alumno_id,creada,ref_code,ref_por,credito FROM cuentas WHERE tenant_id = ?1 ORDER BY creada DESC"
-          ).bind(tid).all()).results || [];
+          const cuentasAll = (await P.cuentas).results || [];
           const cuentas = esDueno ? cuentasAll : cuentasAll.filter(c => c.alumno_id && idsScope.has(c.alumno_id));
           const idsCuentasScope = new Set(cuentas.map(c => c.id));
-          const comprasAll = (await env.DB.prepare("SELECT * FROM compras WHERE tenant_id = ?1 AND estado != 'iniciada' ORDER BY CASE estado WHEN 'pendiente' THEN 0 ELSE 1 END, fecha DESC").bind(tid).all()).results || [];
+          const comprasAll = (await P.compras).results || [];
           /* pagos_ver (1-set-2026): el permiso vivia en el catalogo desde el 28-jul y no lo
              miraba NADIE — ni el worker ni el panel. El dueno lo marcaba y no pasaba nada.
              Un profe sin el permiso ya no recibe las compras: se le mandan vacias, que es
@@ -20129,8 +20158,8 @@ const WORKER_BATUTA = {
           const compras = esDueno
             ? comprasAll
             : (permisosDe(profeActor).puede("pagos_ver") ? comprasAll.filter(c => c.profesor_id === profeActorId || idsCuentasScope.has(c.cuenta_id)) : []);
-          const recursos = (await env.DB.prepare("SELECT * FROM recursos WHERE tenant_id = ?1 ORDER BY fecha DESC, rowid DESC").bind(tid).all()).results || [];
-          const ejercicios = (await env.DB.prepare("SELECT * FROM ejercicios WHERE tenant_id = ?1 ORDER BY fecha DESC, rowid DESC").bind(tid).all()).results || [];
+          const recursos = (await P.recursos).results || [];
+          const ejercicios = (await P.ejercicios).results || [];
           /* URLs firmadas para el panel (11-ago-2026): tambien pinta <audio src> y <a href>,
              que van sin header Authorization. Aqui ya se comprobo quien pregunta. */
           for (const r of recursos) r.url = await firmarRuta(env, r.url, "m");
@@ -20158,18 +20187,18 @@ const WORKER_BATUTA = {
           let gastos = [];
           if (esDueno){
             try {
-              gastos = (await env.DB.prepare("SELECT id,fecha,concepto,categoria,monto FROM gastos WHERE tenant_id = ?1 ORDER BY fecha DESC, rowid DESC LIMIT 2000").bind(tid).all()).results || [];
+              gastos = (await P.gastos).results || [];
             } catch (e) { gastos = []; }
           }
           /* comprobantes SUNAT emitidos (para pintar el link de la boleta en Pagos): solo el dueno */
           let comprobantes = [];
           if (esDueno){
             try {
-              comprobantes = (await env.DB.prepare("SELECT compra_id, serie, numero, enlace_pdf, aceptada, COALESCE(estado,'emitida') AS estado FROM comprobantes WHERE tenant_id = ?1 ORDER BY rowid DESC LIMIT 2000").bind(tid).all()).results || [];
+              comprobantes = (await P.comprobantes).results || [];
             } catch (e) { comprobantes = []; }
           }
-          const precios  = await loadPrecios(env, tid);
-          const config   = await loadConfig(env, tid);
+          const precios  = await P.precios2;
+          const config   = await P.config2;
           /* cobro_on (28-jul-2026): misma formula que armarWebCtx. Se calcula ACA, ANTES de
              borrarle los datos bancarios al rol profesor, si no el flag saldria falso para el
              profe aunque la academia si cobre. Lo consume el editor de "Mi web" para avisar
@@ -20189,21 +20218,17 @@ const WORKER_BATUTA = {
               if (kSec in config) delete config[kSec];
             }
           }
-          const grupos   = ((await env.DB.prepare(
-            "SELECT * FROM grupos WHERE tenant_id = ?1 AND (?2 = 1 OR profesor_id = ?3) ORDER BY creado DESC, rowid DESC"
-          ).bind(tid, esDueno ? 1 : 0, profeActorId || "").all()).results || [])
+          const grupos   = ((await P.grupos).results || [])
             .map(g => { let m = []; try { m = JSON.parse(g.miembros || "[]"); } catch (e) {} return Object.assign({}, g, { miembros: Array.isArray(m) ? m : [] }); });
           /* equipo: al dueno le sirve para asignar; al profesor, para pintar nombres */
           let equipo = [];
           try {
-            const { results: eqRows } = await env.DB.prepare(
-              "SELECT id, nombre, email, rol, estado, foto, COALESCE(sede_id,'') AS sede_id FROM profesores WHERE tenant_id = ?1 ORDER BY CASE rol WHEN 'dueno' THEN 0 ELSE 1 END, " + sinTildesSQL("COALESCE(nombre,'')") + ", nombre"
-            ).bind(tid).all();
+            const { results: eqRows } = await P.equipo;
             equipo = eqRows || [];
           } catch (e) {}
-          const sedes = await sedesDeTenant(env, tid);
+          const sedes = await P.sedes1;
           return json({ alumnos, registro, precios, cuentas, compras, recursos, ejercicios, leads, gastos, comprobantes, config, grupos, sedes,
-                        paquetes_venta: paquetesEnVenta(t, (await loadPaquetes(env, tid)).list),
+                        paquetes_venta: paquetesEnVenta(t, (await P.paquetes2).list),
                         slug: t.slug, academia: t.academia, estado: t.estado, demo: esTenantDemo(t),
                         rol: esDueno ? "dueno" : "profesor", profe_id: profeActorId || "", equipo,
                         cobro_on: cobroOnPanel,
@@ -22172,5 +22197,3 @@ const WORKER_BATUTA = {
     } catch (e) { /* el lead magnet jamas tumba el nurture de tenants */ }
   }
 };
-
-export default WORKER_BATUTA;
