@@ -8440,6 +8440,9 @@ async function sedesDeTenant(env, tid){
    cada una su marca. Y la marca que se guarda es la que el cliente VIO, no "ahora":
    si entra un pago entre que se pinta la lista y se marca leído, no se pierde. */
 const NOVEDADES = [
+  { id: "2026-11-02-deshacer-todo", fecha: "2026-11-02",
+    titulo: "Deshacer al borrar",
+    texto: "Al borrar un interesado, un gasto, un grupo, un recurso, un ejercicio, un registro de clase, un adjunto, un mensaje, la foto de perfil, algo de tu web o anular un crédito, ya no te preguntan «¿estás seguro?»: tienes 8 segundos para tocar Deshacer. En el portal de tus alumnos, en el celular, la barra de abajo ahora tiene 5 pestañas y «Más»." },
   { id: "2026-11-02-deshacer", fecha: "2026-11-02",
     titulo: "Deshacer en la campanita y portal más claro en el celular",
     texto: "Si borras un aviso de la campanita tienes 8 segundos para deshacerlo. Perfil tiene tres secciones. En el portal de tus alumnos, las pestañas de abajo se leen mejor y el botón de tema ya no tapa nada." },

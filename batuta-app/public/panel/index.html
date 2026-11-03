@@ -5084,9 +5084,9 @@ el("perfilFotoInput").addEventListener("change",function(e){
 });
 el("btnPerfilFotoQuitar").addEventListener("click",function(){
   if(!(db.config&&db.config.profe_foto)){ toast("No hay foto"); return; }
-  if(!confirm("¿Quitar la foto de perfil?")) return;
-  apiPost("/app/api/admin/config",{profe_foto:""}).then(function(){ db.config.profe_foto=""; renderPerfil(); toast("Foto quitada"); })
-    .catch(function(){ toast("No se pudo quitar"); });
+  var fotoAntes=db.config.profe_foto;
+  esconderConDeshacer("Foto quitada",function(){ db.config.profe_foto=""; renderPerfil(); },function(){ db.config.profe_foto=fotoAntes; renderPerfil(); },
+    function(){ return apiPost("/app/api/admin/config",{profe_foto:""}); });
 });
 
 function renderRecursos(){
@@ -5303,10 +5303,9 @@ if(el("panel-leads")) el("panel-leads").addEventListener("click",function(e){
   var ed=e.target.closest("[data-leadedit]");
   if(ed){ var l=(db.leads||[]).find(function(x){return x.id===ed.dataset.leadedit;}); if(l) abrirLead(l); return; }
   var dl=e.target.closest("[data-leaddel]");
-  if(dl && confirm("¿Borrar a este interesado?")){
-    apiPost("/app/api/admin/lead",{accion:"borrar",id:dl.dataset.leaddel})
-      .then(function(){ toast("Borrado"); return recargar(); })
-      .catch(function(err){ toast((err&&err.message)||"No se pudo"); });
+  if(dl){
+    var idL=dl.dataset.leaddel;
+    borrarConDeshacer("Interesado borrado","leads",idL,function(){ return apiPost("/app/api/admin/lead",{accion:"borrar",id:idL}).then(function(){ return recargar(); }); });
   }
 });
 if(el("panel-leads")) el("panel-leads").addEventListener("change",function(e){
@@ -5380,10 +5379,9 @@ if(el("btnGuardarGasto")) el("btnGuardarGasto").addEventListener("click",functio
 });
 if(el("panel-caja")) el("panel-caja").addEventListener("click",function(e){
   var d=e.target.closest("[data-gastodel]");
-  if(d && confirm("¿Borrar este gasto?")){
-    apiPost("/app/api/admin/gasto",{accion:"borrar",id:d.dataset.gastodel})
-      .then(function(){ toast("Gasto borrado"); return recargar(); })
-      .catch(function(err){ toast((err&&err.message)||"No se pudo"); });
+  if(d){
+    var idG=d.dataset.gastodel;
+    borrarConDeshacer("Gasto borrado","gastos",idG,function(){ return apiPost("/app/api/admin/gasto",{accion:"borrar",id:idG}).then(function(){ return recargar(); }); });
   }
 });
 /* ---------- Reportes por mes (ingresos + asistencia), calculados del histórico ya cargado ---------- */
@@ -7409,6 +7407,23 @@ function snackDeshacer(texto,alDeshacer){
   v.querySelector("button").addEventListener("click",function(){ clearTimeout(t); v.remove(); try{ Promise.resolve(alDeshacer()).catch(function(){}); }catch(e){} });
   document.body.appendChild(v);
 }
+
+/* Borrar con DESHACER (principio 13): el elemento desaparece de la pantalla al instante y el borrado de verdad se
+   manda a los 8 segundos, salvo que la persona toque «Deshacer». Si cierra la página antes, no se borra nada. */
+function borrarConDeshacer(texto,clave,id,enviar){
+  var arr=db[clave]||[]; var i=-1; arr.forEach(function(x,k){ if(i<0&&x.id===id) i=k; });
+  if(i<0) return;
+  var item=arr[i]; arr.splice(i,1); try{ renderAll(); }catch(e){}
+  function restaurar(){ var a=db[clave]||(db[clave]=[]); if(!a.some(function(x){ return x.id===id; })) a.splice(Math.min(i,a.length),0,item); try{ renderAll(); }catch(e){} }
+  var timer=setTimeout(function(){ Promise.resolve().then(enviar).catch(function(){ restaurar(); toast("No se pudo borrar. Intenta de nuevo."); }); },8000);
+  snackDeshacer(texto,function(){ clearTimeout(timer); restaurar(); });
+}
+/* lo mismo para algo que solo se esconde en pantalla (adjunto, foto, mensaje): se esconde, se manda a los 8 s, o vuelve */
+function esconderConDeshacer(texto,esconder,mostrar,enviar){
+  esconder();
+  var timer=setTimeout(function(){ Promise.resolve().then(enviar).catch(function(){ mostrar(); toast("No se pudo borrar. Intenta de nuevo."); }); },8000);
+  snackDeshacer(texto,function(){ clearTimeout(timer); mostrar(); });
+}
 function campBorrar(ids,todos){
   var antes=CAMP.avisos.slice();
   CAMP.avisos=CAMP.avisos.filter(function(a){ return a.tipo==="cierre"||(todos?false:ids.indexOf(a.id)<0); });
@@ -8300,12 +8315,9 @@ document.body.addEventListener("click",function(e){
         .catch(function(){ toast("No se pudo borrar. Revisa tu conexión e intenta de nuevo."); dl.disabled=false; });
     }
   }
-  if(dr){ if(confirm("¿Borrar este registro de clase?")){
-      dr.disabled=true;
-      db.registro=db.registro.filter(function(x){return x.id!==dr.dataset.delreg;});
-      apiPut().then(function(){ renderAll(); toast("Registro borrado"); })
-        .catch(function(){ toast("No se pudo borrar. Revisa tu conexión e intenta de nuevo."); dr.disabled=false; });
-    }
+  if(dr){
+    /* el registro viaja dentro del guardado general: a los 8 s se guarda sin esa fila */
+    borrarConDeshacer("Registro de clase borrado","registro",dr.dataset.delreg,function(){ return apiPut().then(function(){ renderAll(); }); });
   }
   if(er){ var rg=db.registro.find(function(x){return x.id===er.dataset.editreg;}); if(!rg)return;
     /* 14-ago-2026: este botón ahora también vive DENTRO de la ficha del alumno ("Ya tomadas").
@@ -8568,10 +8580,8 @@ if(el("tablaGrupos")) el("tablaGrupos").addEventListener("click",function(e){
   var b=e.target.closest("button"); if(!b) return;
   if(b.dataset.geditar){ var g=(db.grupos||[]).find(function(x){return x.id===b.dataset.geditar;}); if(g) abrirGrupo(g); }
   if(b.dataset.gborrar){ var g2=(db.grupos||[]).find(function(x){return x.id===b.dataset.gborrar;});
-    if(g2 && confirm('¿Borrar el grupo "'+g2.nombre+'"? (Los alumnos y sus clases no se tocan.)')){
-      apiPost("/app/api/admin/grupo",{accion:"borrar",id:g2.id})
-        .then(function(){ toast("Grupo borrado"); return recargar(); })
-        .catch(function(err){ toast(err.message||"No se pudo borrar"); });
+    if(g2){
+      borrarConDeshacer('Grupo "'+g2.nombre+'" borrado',"grupos",g2.id,function(){ return apiPost("/app/api/admin/grupo",{accion:"borrar",id:g2.id}).then(function(){ return recargar(); }); });
     }
   }
   if(b.dataset.gclase){ var g3=(db.grupos||[]).find(function(x){return x.id===b.dataset.gclase;}); if(g3) registrarClaseGrupo(g3); }
@@ -8875,11 +8885,9 @@ document.querySelectorAll(".tab").forEach(function(t){
 el("chatAdmMsgs").addEventListener("click",function(e){
   var b=e.target.closest("[data-chatdel]");
   if(!b) return;
-  if(confirm("¿Borrar este mensaje?")){
-    apiPost("/app/api/admin/chat/borrar",{id:b.dataset.chatdel})
-      .then(function(){ chatAdmIniciar(); toast("Mensaje borrado"); })
-      .catch(function(err){ toast((err&&err.message)||"No se pudo borrar"); });
-  }
+  var filaM=b.parentElement, idM=b.dataset.chatdel;
+  esconderConDeshacer("Mensaje borrado",function(){ filaM.style.display="none"; },function(){ filaM.style.display=""; },
+    function(){ return apiPost("/app/api/admin/chat/borrar",{id:idM}).then(function(){ chatAdmIniciar(); }); });
 });
 function chatAdmEnviarMsg(){
   var t=el("chatAdmTexto").value.trim();
@@ -9415,7 +9423,7 @@ function fichaCreditos(a,box){
     if(!lista.length) h+='<p class="hint" style="margin:3px 0;">Todavía no tiene créditos.</p>';
     h+=lista.map(function(c){
       var det=(c.estado_efectivo==="usado"?'se usó en una clase':'vence el '+esc(c.vence))+(c.nota?' · '+esc(c.nota):'')+(c.motivo==="manual"?' · dado a mano':c.motivo==="cancelo_tarde"?' · cancelación tardía':c.motivo==="profe_ausente"?' · profesora ausente':' · por falta');
-      var bt=(dueno&&c.estado_efectivo!=="usado")?(' <button type="button" class="btn ghost sm" data-cred="editar" data-id="'+esc(c.id)+'" data-vence="'+esc(c.vence)+'">Cambiar fecha</button>'+(c.estado_efectivo==="activo"?' <button type="button" class="btn ghost sm" data-cred="anular" data-id="'+esc(c.id)+'">Anular</button>':'')):'';
+      var bt=(dueno&&c.estado_efectivo!=="usado")?(' <button type="button" class="btn ghost sm" data-cred="editar" data-id="'+esc(c.id)+'" data-vence="'+esc(c.vence)+'">Cambiar fecha</button>'+(c.estado_efectivo==="activo"?' <button type="button" class="btn ghost sm" data-cred="anular" data-id="'+esc(c.id)+'" data-vence="'+esc(c.vence)+'">Anular</button>':'')):'';
       return '<div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid var(--line);"><div style="flex:1;min-width:0;"><b>'+nombres[c.estado_efectivo]+'</b> <span class="hint" style="margin:0;">'+det+'</span></div>'+bt+'</div>';
     }).join("");
     if(dueno) h+='<div style="margin-top:6px;"><button type="button" class="btn ghost sm" data-cred="crear" data-al="'+esc(a.id)+'">Dar un crédito a mano</button></div>';
@@ -9510,11 +9518,14 @@ if(el("ovAlumno")) el("ovAlumno").addEventListener("click",function(e){
       if(nv===null) return;
       cuerpoC.vence=String(nv).trim();
     } else {
-      if(!confirm("¿Anular este crédito? La alumna ya no podrá usarlo.")) return;
-      cuerpoC.id=bcr.dataset.id;
+      cuerpoC.id=bcr.dataset.id; cuerpoC.__deshacer={id:bcr.dataset.id,vence:bcr.dataset.vence||""};
     }
     bcr.disabled=true;
-    apiPost("/app/api/admin/credito",cuerpoC).then(function(){ toast("Listo"); return fichaRefrescar(); })
+    var undoC=cuerpoC.__deshacer; delete cuerpoC.__deshacer;
+    apiPost("/app/api/admin/credito",cuerpoC).then(function(){
+        if(undoC) snackDeshacer("Crédito anulado",function(){ return apiPost("/app/api/admin/credito",{accion:"editar",id:undoC.id,vence:undoC.vence,reactivar:true}).then(function(){ return fichaRefrescar(); }); });
+        else toast("Listo");
+        return fichaRefrescar(); })
       .catch(function(err){ toast((err&&err.message)||"No se pudo"); }).finally(function(){ bcr.disabled=false; });
     return;
   }
@@ -10707,11 +10718,8 @@ document.body.addEventListener("click",function(e){
   var dr=e.target.closest("[data-delrec]");
   if(!dr) return;
   var r=(db.recursos||[]).find(function(x){return x.id===dr.dataset.delrec;});
-  if(r && confirm('¿Borrar el recurso "'+r.titulo+'"?')){
-    apiPost("/app/api/admin/recurso",{accion:"borrar",id:r.id})
-      .then(function(){ return recargar(); })
-      .then(function(){ toast("Recurso borrado"); })
-      .catch(function(err){ toast((err&&err.message)||"No se pudo borrar"); });
+  if(r){
+    borrarConDeshacer('Recurso "'+r.titulo+'" borrado',"recursos",r.id,function(){ return apiPost("/app/api/admin/recurso",{accion:"borrar",id:r.id}).then(function(){ return recargar(); }); });
   }
 });
 
@@ -10784,11 +10792,8 @@ el("btnSubirCarpeta").addEventListener("click",function(){
 document.body.addEventListener("click",function(e){
   var de=e.target.closest("[data-delej]"); if(!de) return;
   var ej=(db.ejercicios||[]).find(function(x){return x.id===de.dataset.delej;});
-  if(ej && confirm('¿Borrar el ejercicio "'+ej.titulo+'" de tu biblioteca?\n(Las clases donde ya lo mandaste lo conservan.)')){
-    apiPost("/app/api/admin/ejercicio",{accion:"borrar",id:ej.id})
-      .then(function(){ return recargar(); })
-      .then(function(){ toast("Ejercicio borrado"); })
-      .catch(function(err){ toast((err&&err.message)||"No se pudo borrar"); });
+  if(ej){
+    borrarConDeshacer('Ejercicio "'+ej.titulo+'" borrado',"ejercicios",ej.id,function(){ return apiPost("/app/api/admin/ejercicio",{accion:"borrar",id:ej.id}).then(function(){ return recargar(); }); });
   }
 });
 
@@ -10807,16 +10812,12 @@ function postAudio(fd){
 document.body.addEventListener("click",function(e){
   var ac=e.target.closest("[data-audiocambiar]"), aq=e.target.closest("[data-audioquitar]");
   if(ac){ audioRegId=ac.dataset.audiocambiar; el("fileAudio").value=""; el("fileAudio").click(); }
-  if(aq && confirm("¿Quitar este adjunto?")){
-    var fd=new FormData(); fd.append("registro_id",aq.dataset.audioquitar); fd.append("accion","borrar");
-    fd.append("url",aq.dataset.audiourl||"");
-    postAudio(fd)
-      .then(function(){ return recargar(); })
-      .then(function(){ toast("Adjunto quitado"); })
-      .catch(function(err){
-        if(err&&err.auth){ irALogin(); }
-        toast((err&&err.message)||"No se pudo quitar");
-      });
+  if(aq){
+    var chip=aq.closest(".adj")||aq.parentElement, regIdA=aq.dataset.audioquitar, urlA=aq.dataset.audiourl||"";
+    esconderConDeshacer("Adjunto quitado",function(){ chip.style.display="none"; },function(){ chip.style.display=""; },function(){
+      var fd=new FormData(); fd.append("registro_id",regIdA); fd.append("accion","borrar"); fd.append("url",urlA);
+      return postAudio(fd).then(function(){ return recargar(); });
+    });
   }
 });
 el("fileAudio").addEventListener("change",function(e){
@@ -13888,7 +13889,7 @@ window.batutaInit = batutaInit;
     if(acc==="add"){ var l=getR(WEB,r); if(!Array.isArray(l)){ l=[]; setR(WEB,r,l); } l.push(nuevoItem(r)); render(); pintar(); return; }
     var m=r.match(/^(.*)\.(\d+)$/); if(!m) return;
     var l2=getR(WEB,m[1]), i=Number(m[2]); if(!Array.isArray(l2)) return;
-    if(acc==="del"){ if(!confirm("¿Borrar esto de tu web?")) return; l2.splice(i,1); render(); pintar(); return; }
+    if(acc==="del"){ var quitado=l2.splice(i,1)[0]; render(); pintar(); snackDeshacer("Quitado de tu web",function(){ l2.splice(Math.min(i,l2.length),0,quitado); render(); pintar(); }); return; }
     if(acc==="up"&&i>0){ l2.splice(i-1,0,l2.splice(i,1)[0]); render(); pintar(); return; }
     if(acc==="down"&&i<l2.length-1){ l2.splice(i+1,0,l2.splice(i,1)[0]); render(); pintar(); return; }
   });

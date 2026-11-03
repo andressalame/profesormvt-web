@@ -483,6 +483,21 @@
   .side nav a span{font-size:10px;font-weight:600;}
   .side nav a svg{width:21px;height:21px;}
 }
+
+/* Celular: 5 pestañas, no 7 (2-nov-2026). Recursos, Beneficios y Mi cuenta pasan a «Más». */
+.mas-tab,.mas-menu{display:none;}
+@media (max-width:859px){
+  .side nav a[data-v="recursos"],.side nav a[data-v="referidos"],.side nav a[data-v="cuenta"]{display:none;}
+  .side nav .mas-tab{display:flex;flex:1;flex-direction:column;justify-content:center;align-items:center;background:transparent;border:0;border-top:3px solid transparent;color:inherit;font:inherit;cursor:pointer;padding:6px 0;}
+  .side nav .mas-tab.active{border-top-color:var(--accent-ink);}
+  .side nav .mas-tab span{display:block;font-size:10px;font-weight:600;line-height:1.1;margin-top:3px;}
+  .side nav .mas-tab svg{width:21px;height:21px;}
+  .mas-menu{position:fixed;right:10px;bottom:78px;z-index:80;flex-direction:column;min-width:200px;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:6px;box-shadow:0 8px 28px rgba(0,0,0,.25);}
+  .mas-menu.abierto{display:flex;}
+  .mas-menu a{display:flex;align-items:center;gap:12px;min-height:48px;padding:0 14px;border-radius:10px;color:var(--ink);text-decoration:none;font-size:16px;font-weight:600;}
+  .mas-menu a:hover,.mas-menu a.active{background:var(--panel-2,rgba(0,0,0,.06));}
+  .mas-menu svg{width:22px;height:22px;stroke:currentColor;stroke-width:1.8;fill:none;stroke-linecap:round;stroke-linejoin:round;}
+}
 </style>
 </head>
 <body>
@@ -3530,5 +3545,35 @@ window.initAlumno = initAlumno;
 })();
 </script>
 <script>(function(){var b=document.getElementById("temaBtn");if(!b)return;b.addEventListener("click",function(){var d=document.documentElement,n=d.getAttribute("data-theme")==="dark"?"light":"dark";d.setAttribute("data-theme",n);try{localStorage.setItem("batuta-theme",n)}catch(e){}try{window.aplicarAcento(null)}catch(e){}var m=document.querySelector("meta[name=theme-color]");if(m)m.content=n==="dark"?"#12100e":"#F7F3EB";});})();</script>
+
+<script>
+/* «Más» en el celular: junta Recursos, Beneficios y Mi cuenta para que la barra de abajo tenga 5 pestañas. */
+(function(){
+  function armar(){
+    var nav=document.querySelector(".side nav"); if(!nav||nav.querySelector(".mas-tab")) return;
+    var grupo=["recursos","referidos","cuenta"].map(function(v){ return nav.querySelector('a[data-v="'+v+'"]'); }).filter(Boolean);
+    if(grupo.length<3) return;
+    var btn=document.createElement("button"); btn.type="button"; btn.className="mas-tab"; btn.setAttribute("aria-haspopup","true"); btn.setAttribute("aria-expanded","false");
+    btn.innerHTML='<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="5" cy="12" r="1.2"/><circle cx="12" cy="12" r="1.2"/><circle cx="19" cy="12" r="1.2"/></svg><span>Más</span>';
+    nav.appendChild(btn);
+    var menu=document.createElement("div"); menu.className="mas-menu"; menu.setAttribute("role","menu");
+    grupo.forEach(function(a){ var c=a.cloneNode(true); c.removeAttribute("title"); c.setAttribute("role","menuitem"); menu.appendChild(c); });
+    document.body.appendChild(menu);
+    function cerrar(){ menu.classList.remove("abierto"); btn.setAttribute("aria-expanded","false"); }
+    btn.addEventListener("click",function(e){ e.stopPropagation(); var ab=menu.classList.toggle("abierto"); btn.setAttribute("aria-expanded",ab?"true":"false"); });
+    menu.addEventListener("click",cerrar);
+    document.addEventListener("click",function(e){ if(!e.target.closest(".mas-menu")&&!e.target.closest(".mas-tab")) cerrar(); });
+    function sync(){
+      var act=grupo.some(function(a){ return a.classList.contains("active"); });
+      btn.classList.toggle("active",act);
+      [].forEach.call(menu.children,function(c,i){ c.classList.toggle("active",grupo[i].classList.contains("active")); });
+    }
+    try{ new MutationObserver(sync).observe(nav,{attributes:true,subtree:true,attributeFilter:["class"]}); }catch(e){}
+    sync();
+  }
+  if(document.readyState==="loading") document.addEventListener("DOMContentLoaded",armar); else armar();
+  window.addEventListener("load",armar);
+})();
+</script>
 </body>
 </html>
