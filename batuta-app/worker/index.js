@@ -8440,6 +8440,9 @@ async function sedesDeTenant(env, tid){
    cada una su marca. Y la marca que se guarda es la que el cliente VIO, no "ahora":
    si entra un pago entre que se pinta la lista y se marca leído, no se pierde. */
 const NOVEDADES = [
+  { id: "2026-11-03-falta-adelantada", fecha: "2026-11-03",
+    titulo: "Marcar una falta por adelantado ya no gasta dos clases",
+    texto: "Si marcas «Ausente» una clase que todavía no pasó, la alumna pierde una sola clase (antes perdía dos). La falta queda anotada en su historial cuando la clase pasa." },
   { id: "2026-11-03-portal", fecha: "2026-11-03",
     titulo: "Portal de tus alumnos más fácil de leer y tocar",
     texto: "Letras y botones más grandes, y si aún no publicaste paquetes, tus alumnos ven un botón para escribirte por WhatsApp." },
