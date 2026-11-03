@@ -3478,7 +3478,7 @@ function recargar(){
     renderAll(); pintarLinkAlumnos(); setSync("Conectado ✓","ok");
     /* la campanita se llena aparte y DESPUÉS: si su endpoint falla o tarda, el panel ya
        está en pantalla. Nunca al revés. */
-    try{ campCargar(); }catch(e){}
+    setTimeout(function(){ try{ campCargar(); }catch(e){} }, 5000);  // los avisos no hacen falta en el primer pintado
   });
 }
 /* ---------- Multi-profesor: rol del actor y vistas por rol ---------- */
@@ -4871,7 +4871,9 @@ function renderAjustes(){
   if(el("cfg_wa_seguimiento")) el("cfg_wa_seguimiento").value=(db.config&&db.config.wa_seguimiento)||"";
   if(el("cfg_wa_no_tocar")) el("cfg_wa_no_tocar").value=(db.config&&db.config.wa_no_tocar)||"";
   if(el("cfg_wa_phone_id")) el("cfg_wa_phone_id").value=(db.config&&db.config.wa_phone_id)||"";
-  renderWaCupo(); cargarWaSugerencias(); cargarWaChats();
+  renderWaCupo(); cargarWaSugerencias();
+  /* Velocidad (3-nov-2026): la bandeja de WhatsApp tarda ~3 s y no hace falta para pintar el calendario ni las listas. Entra 6 s después de abrir. */
+  setTimeout(cargarWaChats, 6000);
   var offModsR=modulosOff();
   MODULOS_DEF.forEach(function(m){
     var s=el("cfg_mod_"+m.id); if(s) s.value=offModsR.indexOf(m.id)!==-1?"off":"";
@@ -4899,7 +4901,7 @@ function renderAjustes(){
   el("cfg_gcal_client_secret").value=(db.config&&db.config.gcal_client_secret)||"";
   el("cfg_gcal_calendar_id").value=(db.config&&db.config.gcal_calendar_id)||"primary";
   if(el("cfg_gcal_meet")) el("cfg_gcal_meet").value=(db.config&&db.config.gcal_meet)||"";
-  gcalRefrescarEstado();
+  setTimeout(gcalRefrescarEstado, 6000);  // pide un token de verdad a Google (~1,3 s): que no compita con lo que el dueño ve primero
 }
 
 /* ---------- Asistente WhatsApp: cupo, sugerencias y prueba en seco ---------- */
