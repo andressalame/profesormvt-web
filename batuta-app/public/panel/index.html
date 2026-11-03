@@ -3588,8 +3588,19 @@ function vincularSubSiVuelveDeMP(){
       if(d && d.estado==="activo"){ try{ alert("Tu suscripción quedó activa. Bienvenido a Batuta!"); }catch(e){} }
     }).catch(function(){ history.replaceState(null,"",location.pathname); });
 }
+/* Velocidad (3-nov-2026): el panel pedía /app/api/t/me hasta 4 veces al abrir (trial, cupo de IA,
+   plan, packs) y cada una tardaba 2 s o más. Ahora las lecturas de menos de 8 s de antigüedad
+   comparten UNA sola respuesta. Se invalida al cambiar el plan o comprar un pack (ver invalidarMe). */
+var __ME = null;
+function fetchMe(){
+  if(!__ME || Date.now()-__ME.t > 8000){
+    __ME = { t: Date.now(), p: fetch("/app/api/t/me",{headers:hdr()}) };
+  }
+  return __ME.p.then(function(r){ return r.clone(); });
+}
+function invalidarMe(){ __ME = null; }
 function cargarTrialInfo(){
-  return fetch("/app/api/t/me",{headers:hdr()}).then(function(r){
+  return fetchMe().then(function(r){
     if(r.status===401){ irALogin(); return null; }
     if(r.status===402){ mostrarPaywall(); return null; }
     if(!r.ok) return null;
@@ -4907,7 +4918,7 @@ function renderWaCupo(){
     box.innerHTML="<b>Conversaciones del asistente:</b> "+(c.usados||0)+" de "+(c.cap||0)+" "+lapso+" · quedan "+restan+"."+top;
   }
   if(window.__WA_CUPO){ pinta(window.__WA_CUPO); return; }
-  fetch('/app/api/t/me',{headers:hdr()}).then(function(r){return r.json().catch(function(){return {};});})
+  fetchMe().then(function(r){return r.json().catch(function(){return {};});})
     .then(function(d){ if(d&&d.wa_cupo){ window.__WA_CUPO=d.wa_cupo; pinta(d.wa_cupo); } else pinta(null); }).catch(function(){ pinta(null); });
 }
 /* ---------- Bandeja de WhatsApp de la academia (6-set-2026) ---------- */
@@ -13291,7 +13302,7 @@ function packsPintarPie(){
 }
 function refrescarPlan(){
   if(!el("packsCat")) return;
-  fetch('/app/api/t/me',{headers:hdr()}).then(function(r){return r.json().catch(function(){return {};});}).then(function(d){
+  fetchMe().then(function(r){return r.json().catch(function(){return {};});}).then(function(d){
     if(!d || d.error || !d.packs) return;
     PACKS_CAT=d.packs.catalogo||{}; PACKS_BASE=d.packs.base||{};
     PACKS_TENIDOS=JSON.parse(JSON.stringify(d.packs.comprados||{}));
@@ -13331,7 +13342,7 @@ function refrescarPlan(){
       } else {
         toast(d && d.modo==="base" ? "Listo: volviste a la Batuta gratis" : "Listo: tu cobro queda en S/"+monto+" al mes");
       }
-      refrescarPlan();
+      invalidarMe(); refrescarPlan();
     }).catch(function(e){ toast((e&&e.message)||"No se pudo aplicar"); b.disabled=false; });
   });
 })();

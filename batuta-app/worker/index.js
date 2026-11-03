@@ -14502,33 +14502,33 @@ const WORKER_BATUTA = {
         if (!actorMe) return json({ error: "Sesión expirada" }, 401);
         const t = actorMe.tenant;
         const diasRestantes = Math.max(0, Math.ceil((Date.parse(t.trial_hasta) - Date.now()) / 86400000));
+        /* Velocidad (3-nov-2026): estas consultas a D1 eran independientes pero corrían una tras otra
+           (~2 s en total, y el panel llama a /t/me varias veces al abrir). Ahora van en paralelo.
+           Mismo resultado: los fallos que antes se tragaban con try/catch siguen dando null/false. */
+        const FALLO = Symbol("fallo");
+        const tragar = (pr) => Promise.resolve(pr).catch(() => FALLO);
+        const [nPMe, maxProfesMe, activosMe, totalMe, packsMe, waMe, capAlumMe, capConvMe, fAvisoMe] = await Promise.all([
+          tragar(env.DB.prepare("SELECT COUNT(*) AS n FROM profesores WHERE tenant_id = ?1 AND estado != 'suspendido'").bind(t.id).first()),
+          tragar(maxProfesDe(env, t.id, t.plan)),
+          contarAlumnosActivos(env, t.id),
+          totalAlumnosDe(env, t.id),
+          packsDe(env, t.id),
+          tragar(waUsoActual(env, t.id, waPlanEfectivo(t))),
+          capAlumnosDe(env, t.id, t.plan),
+          convCapDe(env, t.id, false, t.plan),
+          tragar(env.DB.prepare("SELECT valor FROM config WHERE tenant_id = ?1 AND clave = 'aviso_packs_email'").bind(t.id).first())
+        ]);
         // Asientos de profesor del plan (suspendidos no ocupan asiento).
         let asientos = null;
-        try {
-          const nP = await env.DB.prepare("SELECT COUNT(*) AS n FROM profesores WHERE tenant_id = ?1 AND estado != 'suspendido'").bind(t.id).first();
-          asientos = { usados: Number(nP && nP.n) || 1, max: await maxProfesDe(env, t.id, t.plan) };
-        } catch (e) {}
-        const activosMe = await contarAlumnosActivos(env, t.id);
-        /* El medidor de "Tu Batuta" cuenta LO MISMO que el candado: el total cargado. */
-        const totalMe = await totalAlumnosDe(env, t.id);
-        // Cupo del asistente de WhatsApp con IA por plan (freemium 23-jul-2026): el panel muestra
-        // "X de N conversaciones" y avisa "sube de plan" al toparse (usados >= cap).
-        const packsMe = await packsDe(env, t.id);
-        let wa_cupo = null;
-        try {
-          // Se muestra siempre (aunque la IA este apagada) para que el dueno vea su cupo del plan.
-          wa_cupo = await waUsoActual(env, t.id, waPlanEfectivo(t));
-        } catch (e) {}
+        if (nPMe !== FALLO && maxProfesMe !== FALLO) asientos = { usados: Number(nPMe && nPMe.n) || 1, max: maxProfesMe };
+        // Cupo del asistente de WhatsApp con IA por plan (freemium 23-jul-2026): se muestra siempre.
+        const wa_cupo = waMe === FALLO ? null : waMe;
         const limitesPacksMe = {
-          alumnos: await capAlumnosDe(env, t.id, t.plan),
+          alumnos: capAlumMe,
           profes: asientos ? asientos.max : packsMe.profes,
-          ia: await convCapDe(env, t.id, false, t.plan)
+          ia: capConvMe
         };
-        let avisoPacksEmail = false;
-        try {
-          const f = await env.DB.prepare("SELECT valor FROM config WHERE tenant_id = ?1 AND clave = 'aviso_packs_email'").bind(t.id).first();
-          avisoPacksEmail = !!(f && f.valor === "on");
-        } catch (e) {}
+        const avisoPacksEmail = fAvisoMe !== FALLO && !!(fAvisoMe && fAvisoMe.valor === "on");
         const alertasPacksMe = actorMe.esDueno ? alertasPacksDe({
           alumnos: totalMe,
           profes: (asientos && asientos.usados) || 1,
