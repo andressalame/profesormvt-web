@@ -10228,6 +10228,22 @@ async function caducarPlanesSinArrancar(env){
    cierran solas como 'completada' N horas despues de terminar. Apagado = como siempre, a mano.
    El margen existe para que el profe alcance a marcar la falta antes de que se cierre. */
 const ASISTENCIA_HORAS_DEF = 6;
+/* Faltas marcadas por adelantado: la reserva 'falta' ya consumió la clase; cuando la clase pasa se le escribe su fila
+   «Falta» en el historial (idempotente: anotarClaseDictada no duplica). La clase cancelada por la academia no cuenta. */
+async function anotarFaltasPasadas(env){
+  await ensureCreditosSchema(env);
+  const { results } = await env.DB.prepare(
+    "SELECT r.id, r.tenant_id, r.alumno_id, r.inicio_utc, COALESCE(r.curso,'') AS curso, COALESCE(r.ciclo,1) AS ciclo, COALESCE(r.profesor_id,'') AS profesor_id, COALESCE(r.sala,'') AS sala " +
+    "FROM reservas r WHERE r.estado = 'falta' AND r.tipo NOT IN ('bloqueo','aparta') AND COALESCE(r.alumno_id,'') != '' AND COALESCE(r.cancel_tipo,'') != 'profe' AND r.fin_utc <= ?1 " +
+    "AND NOT EXISTS (SELECT 1 FROM registro g WHERE g.tenant_id = r.tenant_id AND g.alumno_id = r.alumno_id AND g.fecha = date(r.inicio_utc,'-5 hours') AND g.estado = 'Falta') LIMIT 300"
+  ).bind(new Date().toISOString()).all();
+  let n = 0;
+  for (const rv of (results || [])){
+    try { if (await anotarClaseDictada(env, rv.tenant_id, rv.alumno_id, rv.inicio_utc, rv.curso, rv.ciclo, "Falta", { sala: rv.sala, grilla: rv.profesor_id, fallback: rv.profesor_id })) n++; }
+    catch (e) { console.error("anotar falta pasada", rv.id, e); }
+  }
+  return n;
+}
 async function cerrarAsistenciasAuto(env){
   let tenants = [];
   try {
@@ -19728,9 +19744,10 @@ export default {
              anotaba nunca. Se arregló la función compartida y la copia se quedó rota: por eso ya
              no hay copia. La bitácora se escribe con la MISMA función que el cierre automático.
              `anotarClaseDictada` es idempotente, así que va después del batch sin riesgo. */
-          /* una cancelación tardía de una clase que AÚN NO pasó no escribe fila de bitácora: la reserva 'falta' ya
-             consume, y una fila con fecha futura la contaría dos veces. Cuando la clase pasa, consume igual. */
-          if ((nuevo === "completada" || nuevo === "falta") && rv.tipo !== "bloqueo" && rv.alumno_id && !(tardeM && Date.parse(rv.inicio_utc) > Date.now())){
+          /* una falta (ausente o cancelación tardía) de una clase que AÚN NO pasó no escribe fila de bitácora: la
+             reserva 'falta' ya consume, y una fila con fecha futura la contaría DOS veces (la alumna perdía 2 clases
+             por una). La fila se escribe sola cuando la clase pasa (anotarFaltasPasadas, en el cron). */
+          if ((nuevo === "completada" || nuevo === "falta") && rv.tipo !== "bloqueo" && rv.alumno_id && !(nuevo === "falta" && Date.parse(rv.inicio_utc) > Date.now())){
             try { await anotarClaseDictada(env, tid, rv.alumno_id, rv.inicio_utc, rv.curso, rv.ciclo,
                                            nuevo === "completada" ? "Asistió" : "Falta",
                                            { sala: rv.sala, grilla: rv.profesor_id, fallback: rv.profesor_id }); }
@@ -22003,6 +22020,7 @@ export default {
        del alumno mentiria hasta el dia siguiente. */
     try { await cerrarAsistenciasAuto(env); } catch (e) { console.error("asistencia auto", e); }
     try { await credCronTodos(env); } catch (e) { console.error("creditos recuperacion", e); }
+    try { await anotarFaltasPasadas(env); } catch (e) { console.error("faltas pasadas", e); }
     /* Demos privadas vencidas (19-ago-2026): cada visitante de /app/demo tiene la suya y
        vive 24h. Va en CADA corrida y no en la diaria para que la base no cargue un día
        entero de copias muertas. */

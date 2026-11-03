@@ -27,12 +27,12 @@ def http(metodo, ruta, token=None, cuerpo=None):
         try: return e.code, json.loads(e.read() or b"{}")
         except Exception: return e.code, {}
 def limpiar():
-    tablas = ["creditos_recup","espera","reservas","disponibilidad","cuentas","alumnos","profesores","precios","config","registro","bonos_log","api_cambios","ausencias_profe","sustituciones"]
+    tablas = ["creditos_recup","espera","reservas","disponibilidad","cuentas","alumnos","profesores","precios","config","registro","bonos_log","api_cambios","ausencias_profe","sustituciones","compras"]
     hay = {r["name"] for r in d1("SELECT name FROM sqlite_master WHERE type='table'")}
     d1("; ".join(f"DELETE FROM {t} WHERE tenant_id = '{T}'" for t in tablas if t in hay) + f"; DELETE FROM sesiones WHERE cuenta_id LIKE 'LZ-%' OR cuenta_id = 'P:LZ-P'; DELETE FROM tenants WHERE id = '{T}'")
     q = d1(f"SELECT (SELECT COUNT(*) FROM tenants WHERE id='{T}') t,(SELECT COUNT(*) FROM alumnos WHERE tenant_id='{T}') a,(SELECT COUNT(*) FROM reservas WHERE tenant_id='{T}') r")
     print("   quedan:", q[0] if q else "?")
-def sembrar(paquete='[{"n":"2 clases","c":2,"r":0,"u":false,"t":[],"d":0,"i":"compra"}]', nombres=("ANA",)):
+def sembrar(paquete='[{"n":"2 clases","c":2,"r":0,"u":false,"t":[],"d":0,"i":"compra"}]', nombres=("ANA",), pk="2 clases"):
     limpiar()
     lote = []
     ins = lote.append
@@ -45,7 +45,7 @@ def sembrar(paquete='[{"n":"2 clases","c":2,"r":0,"u":false,"t":[],"d":0,"i":"co
     ins(f"INSERT INTO sesiones (token,cuenta_id,expira) VALUES ('{admin}','P:{P}','{exp}')")
     portal = {}
     for n in nombres:
-        ins(f"INSERT INTO alumnos (id,tenant_id,codigo,nombre,apellido,curso,paquete,pago,ciclo,profesor_id,fecha) VALUES ('LZ-{n}','{T}','C{n}','{n}','Prueba','Ballet','2 clases','Pagado',1,'{P}','2026-11-01')")
+        ins(f"INSERT INTO alumnos (id,tenant_id,codigo,nombre,apellido,curso,paquete,pago,ciclo,profesor_id,fecha) VALUES ('LZ-{n}','{T}','C{n}','{n}','Prueba','Ballet','{pk}','Pagado',1,'{P}','2026-11-01')")
         ins(f"INSERT INTO cuentas (id,tenant_id,email,nombre,whatsapp,pass_hash,pass_salt,marketing,alumno_id,creada,ref_code,ref_por,credito) VALUES ('LZ-C{n}','{T}','{n}@ejemplo.invalid','{n} Prueba','','x','x',0,'LZ-{n}','2026-11-01','','',0)")
         tk = secrets.token_hex(32); portal[n] = tk
         ins(f"INSERT INTO sesiones (token,cuenta_id,expira) VALUES ('{tk}','LZ-C{n}','{exp}')")
@@ -271,13 +271,73 @@ def etapa_avisos():
     st3, r3 = http("GET", "/app/api/admin/avisos", admin)
     ver(st2 == 200 and [a["id"] for a in r3.get("avisos", [])] == ["2026-11-02-creditos"], "deshacer devuelve el aviso borrado y solo ese", f"restaurar: {st2} {[a['id'] for a in r3.get('avisos', [])]}")
 
-ETAPAS = {"avisos": etapa_avisos, "semana": etapa_semana, "profe": etapa_profe, "tardia": etapa_tardia, "prueba": etapa_prueba, "creditos": etapa_creditos, "asistencia": etapa_asistencia}
+def etapa_video():
+    """Recorrido de los 6 procesos del video para Laura, en una academia de prueba (LZ-T). Con KEEP=1 no la borra al final."""
+    admin, portal = sembrar(paquete='[{"n":"8 clases","c":8,"r":2,"u":false,"t":[],"d":0,"i":"compra"}]', nombres=("ANA", "BEA", "CAL", "NUEVA"), pk="8 clases")
+    r = http("GET", "/app/api/admin/data", admin)[1]
+    st, _ = http("PUT", "/app/api/admin/data", admin, {"alumnos": r["alumnos"], "registro": [], "precios": {"8 clases": 360, "Clase de prueba": 50}})
+    ver(st == 200, "precios puestos (8 clases S/360, prueba S/50)", f"PUT precios {st}")
+    http("POST", "/app/api/admin/config", admin, {"cred_on": "1", "cred_max_mes": "1", "cred_vence_dias": "30", "prueba_plazas": "2", "espera_auto": "1", "agenda_cupo": "1",
+        "pago_numero": "999000111", "pago_titular": "Academia Demo", "wizard_hecho": "1", "anticipacion_h": "1", "reprog_min_h": "4"})
+    http("GET", "/app/api/agenda/slots", portal["ANA"])
+    for d in (2, 3, 4, 9): horario(slot(d), cupo=1)
+    iso = {d: slot(d)[0] for d in (2, 3, 4, 9)}
+    rid = lambda alumno, dia: (d1(f"SELECT id FROM reservas WHERE tenant_id='{T}' AND alumno_id='LZ-{alumno}' AND inicio_utc='{iso[dia]}' AND estado='reservada'") or [{}])[0].get("id")
+    creditos = lambda n: http("GET", "/app/api/agenda/creditos", portal[n])[1]
+    # 1
+    st, r = http("POST", "/app/api/agenda/reservar", portal["ANA"], {"inicio_utc": iso[2], "tipo": "suelta"}); ver(st == 200, "1 · ANA reserva la clase de pasado mañana", f"{st} {r}")
+    st, r = http("POST", "/app/api/admin/agenda/marcar", admin, {"id": rid("ANA", 2), "estado": "falta"}); ver(st == 200, "1 · la dueña la marca Ausente", f"{st} {r}")
+    c = creditos("ANA"); ver(c.get("activos") == 1, f"1 · ANA tiene 1 crédito, vence {c.get('proximo_vence')}", f"{c}")
+    # 2
+    st, r = http("POST", "/app/api/agenda/reservar", portal["ANA"], {"inicio_utc": iso[9], "tipo": "suelta"}); ver(st == 200, "2 · ANA reserva otra clase del mismo mes", f"{st} {r}")
+    http("POST", "/app/api/admin/agenda/marcar", admin, {"id": rid("ANA", 9), "estado": "falta"})
+    c = creditos("ANA"); ver(c.get("activos") == 1, "2 · la segunda falta del mes NO da otro crédito (sigue 1)", f"{c}")
+    st, r = http("POST", "/app/api/agenda/reservar", portal["ANA"], {"inicio_utc": iso[3], "tipo": "suelta", "usar_credito": True}); ver(st == 200 and r.get("con_credito"), "2 · ANA usa su crédito para recuperar (reserva con crédito)", f"{st} {r}")
+    c = creditos("ANA"); ver(c.get("activos") == 0, "2 · el crédito queda usado", f"{c}")
+    # 3
+    st, r = http("POST", "/app/api/agenda/reservar", portal["BEA"], {"inicio_utc": iso[4], "tipo": "suelta"}); ver(st == 200, "3 · BEA reserva la única plaza de ese horario", f"{st} {r}")
+    st, r = http("POST", "/app/api/agenda/reservar", portal["CAL"], {"inicio_utc": iso[4], "tipo": "suelta"}); ver(st == 409, "3 · CAL intenta y está llena", f"{st} {r}")
+    st, r = http("POST", "/app/api/agenda/espera", portal["CAL"], {"inicio_utc": iso[4]}); ver(st == 200, "3 · CAL entra a la lista de espera", f"{st} {r}")
+    st, r = http("POST", "/app/api/agenda/cancelar", portal["BEA"], {"id": rid("BEA", 4)}); ver(st == 200, "3 · BEA cancela a tiempo", f"{st} {r}")
+    ver(rid("CAL", 4) is not None, "3 · CAL queda reservada sola en esa plaza", "CAL no quedó reservada")
+    # 4
+    st, r = http("POST", "/app/api/admin/alumno/prueba", admin, {"alumno_id": "LZ-NUEVA", "es_prueba": True}); ver(st == 200, "4 · NUEVA marcada como alumna de prueba", f"{st} {r}")
+    st, r = http("GET", "/app/api/agenda/slots", portal["NUEVA"]); fr = (r.get("franjas") or {}).get(iso[4], [{}])[0]
+    ver(fr.get("estado") == "libre" and fr.get("cupo") == 2, f"4 · NUEVA ve libre la plaza de prueba aunque la regular esté llena ({fr})", f"{fr}")
+    st, r = http("POST", "/app/api/agenda/reservar", portal["NUEVA"], {"inicio_utc": iso[4], "tipo": "suelta"}); ver(st == 200, "4 · NUEVA reserva en plaza de prueba", f"{st} {r}")
+    # 5
+    st, r = http("POST", "/app/api/admin/ausencia/avisar", admin, {"profesor_id": P, "desde": slot(4)[0][:10], "hasta": slot(4)[0][:10], "motivo": "enferma"}); ver(st == 200, f"5 · la profesora avisa su ausencia ({r.get('clases_afectadas')} clases)", f"{st} {r}")
+    st, r = http("POST", "/app/api/admin/ausencia/resolver", admin, {"accion": "cancelar", "ausencia_id": r.get("id"), "avisar": False}); ver(st == 200 and r.get("creditos_dados", 0) >= 1, f"5 · la dueña cancela: {r}", f"{st} {r}")
+    c = creditos("CAL"); ver(c.get("activos") == 1, f"5 · CAL recibe su crédito por la ausencia ({c.get('proximo_vence')})", f"{c}")
+    # 6
+    st, r = http("POST", "/app/api/comprar", portal["ANA"], {"paquete": "8 clases", "metodo": "Yape/Plin/Sip", "op_numero": "123456"}); ver(st == 200, "6 · ANA paga con Yape y toca «Ya pagué» (queda pendiente)", f"{st} {r}")
+    cid = (d1(f"SELECT id, estado FROM compras WHERE tenant_id='{T}' ORDER BY rowid DESC LIMIT 1") or [{}])[0]
+    st, r = http("POST", "/app/api/admin/compra", admin, {"id": cid.get("id"), "accion": "confirmar"}); ver(st == 200, "6 · la dueña confirma el pago en Cobros", f"{st} {r}")
+    al = d1(f"SELECT paquete, ciclo FROM alumnos WHERE id='LZ-ANA'")[0]; ver(al["ciclo"] >= 2, f"6 · la ficha de ANA queda con plan nuevo {al}", f"{al}")
+    print("TOKENS", json.dumps({"admin": admin, **{k: v for k, v in portal.items()}}))
+
+def etapa_faltafutura():
+    admin, portal = sembrar(nombres=("ANA",))   # paquete de 2 clases
+    http("GET", "/app/api/agenda/slots", portal["ANA"])
+    horario(slot(2)); horario(slot(3))
+    iso2, iso3 = slot(2)[0], slot(3)[0]
+    st, r = http("POST", "/app/api/agenda/reservar", portal["ANA"], {"inicio_utc": iso2, "tipo": "suelta"}); ver(st == 200, "ANA reserva la clase de pasado mañana", f"{st} {r}")
+    rid = d1(f"SELECT id FROM reservas WHERE tenant_id='{T}' AND alumno_id='LZ-ANA' AND estado='reservada'")[0]["id"]
+    st, r = http("POST", "/app/api/admin/agenda/marcar", admin, {"id": rid, "estado": "falta"}); ver(st == 200, "la dueña la marca Ausente por adelantado", f"{st} {r}")
+    filas = d1(f"SELECT COUNT(*) n FROM registro WHERE tenant_id='{T}' AND alumno_id='LZ-ANA'")[0]["n"]
+    ver(filas == 0, "no se escribió una fila de historial con fecha futura", f"filas {filas}")
+    st, r = http("POST", "/app/api/agenda/reservar", portal["ANA"], {"inicio_utc": iso3, "tipo": "suelta"})
+    ver(st == 200, "con 2 clases en el paquete, tras perder 1 todavía puede reservar la segunda (antes se quedaba en 0)", f"segunda reserva: {st} {r}")
+
+ETAPAS = {"faltafutura": etapa_faltafutura, "video": etapa_video, "avisos": etapa_avisos, "semana": etapa_semana, "profe": etapa_profe, "tardia": etapa_tardia, "prueba": etapa_prueba, "creditos": etapa_creditos, "asistencia": etapa_asistencia}
 if __name__ == "__main__":
     if len(sys.argv) < 2 or sys.argv[1] == "limpiar":
         limpiar(); sys.exit(0)
     try:
         for a in sys.argv[1:]: ETAPAS[a]()
     finally:
-        print("— limpiando —"); limpiar()
+        if os.environ.get("KEEP") == "1": print("— KEEP=1: la academia LZ-T se queda para grabar/revisar; bórrala con «limpiar» —")
+        else:
+            print("— limpiando —"); limpiar()
     print("\n🟢 todo en verde" if not fallos else f"\n🔴 {fallos} fallo(s)")
     sys.exit(1 if fallos else 0)
