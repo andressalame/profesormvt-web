@@ -994,6 +994,8 @@ table.acc-fija tbody tr:hover td:last-child{background:var(--panel2);}
 .acc-mas-m[hidden]{display:none;}
 .acc-mas-m>.btn,.acc-mas-m>a{justify-content:flex-start;width:100%;border:0;background:transparent;color:var(--cream);text-align:left;min-height:var(--ctl-sm);}
 .acc-mas-m>.btn:hover,.acc-mas-m>a:hover{background:var(--panel2);}
+.acc-mas-m>.adj{display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding:4px 6px;max-width:320px;}
+.acc-mas-m>.adj audio{max-width:100%;height:34px;}
 .acc-mas-m>.acc-borrar{color:var(--bad);}
 .pill{border-radius:999px;font-size:12px;font-weight:600;padding:3px 10px;}
 .pestanas button{min-height:var(--ctl-sm);border-radius:999px;font-size:var(--fs-sm);}
@@ -1142,6 +1144,80 @@ table.acc-fija tbody tr:hover td:last-child{background:var(--panel2);}
   table.tcards td.plan{border-left:0;}
   .tablewrap:has(table.tcards)+.tabmas{display:none;}
 }
+
+/* ═══ Escala para +45 (2-nov-2026, auditoría de diseño con la skill diseno-producto) ═══
+   Los controles medían 32-40 px y la letra 11-13 px. Una sola fuente de verdad: los tokens de arriba.
+   Celular o pantalla táctil: 44/48 px. Escritorio con mouse: 36/44 px (las tablas siguen compactas). */
+:root{--ctl-sm:40px;--ctl-md:48px;--fs-sm:14px;--fs-md:16px;}
+@media (pointer:fine){:root{--ctl-sm:36px;--ctl-md:44px;--fs-sm:14px;--fs-md:15px;}}
+.hint,.cfgrow .pk,.mini,td.notes,td.plan{font-size:14px;line-height:1.5;}
+th{font-size:13px;}
+.cfgrow input:not([type=checkbox]):not([type=radio]):not([type=color]):not([type=file]),.cfgrow select{min-height:var(--ctl-md);font-size:var(--fs-md);}
+#avisoWebCard{max-width:none!important;padding:0!important;border:0!important;background:transparent!important;}
+/* piso de letra para lo que trae el tamaño escrito a mano en la etiqueta (editor de paquetes, ayudas): nada por debajo de 13 px */
+:is(p,span,b,summary,small,label,div)[style*="font-size:10px"],:is(p,span,b,summary,small,label,div)[style*="font-size:10.5px"],:is(p,span,b,summary,small,label,div)[style*="font-size:11px"],:is(p,span,b,summary,small,label,div)[style*="font-size:11.5px"],:is(p,span,b,summary,small,label,div)[style*="font-size:12px"],:is(p,span,b,summary,small,label,div)[style*="font-size:12.5px"],summary{font-size:13px!important;}
+p.hint[style*="font-size"]{font-size:13px!important;}
+.aviso-franja{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:10px 14px;border:1px solid var(--line);border-left:3px solid var(--warn);border-radius:10px;background:var(--panel);}
+.aviso-franja .af-tx{flex:1;min-width:220px;font-size:14px;line-height:1.45;color:var(--muted);}
+.aviso-franja .af-tx b{color:var(--cream);}
+.aviso-franja .af-bt{display:flex;gap:8px;flex-wrap:wrap;}
+@media (max-width:820px){
+  /* los dos botones flotantes (+ y ?) tapaban el final de cada pantalla: se deja aire abajo y se achican */
+  .content{padding-bottom:150px;}
+  .oia-fab,.mas-fab{width:48px;height:48px;right:14px;}
+  .mas-fab{bottom:80px;}
+}
+
+/* ═══ Barra inferior en celular (2-nov-2026, auditoría de diseño) ═══
+   Lo que espera quien usa una app: los 5 lugares de siempre al alcance del pulgar. Cada botón le hace clic al
+   botón del menú lateral correspondiente, así que no hay una segunda lógica de navegación que mantener. */
+.bnav{display:none;}
+@media (max-width:820px){
+  .bnav{display:flex;position:fixed;left:0;right:0;bottom:0;z-index:260;background:var(--panel);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom);}
+  .bnav button{flex:1;min-width:0;min-height:60px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;background:transparent;border:0;color:var(--muted);font:600 12px/1.1 var(--sans,inherit);cursor:pointer;padding:6px 2px;}
+  .bnav button svg{width:24px;height:24px;stroke:currentColor;stroke-width:1.8;fill:none;stroke-linecap:round;stroke-linejoin:round;}
+  .bnav button.on{color:var(--accent);}
+  .bnav button.on span{font-weight:700;}
+  .content{padding-bottom:230px;}
+  .oia-fab{bottom:calc(76px + env(safe-area-inset-bottom));}
+  .mas-fab{bottom:calc(132px + env(safe-area-inset-bottom));}
+  .toast{bottom:calc(84px + env(safe-area-inset-bottom));}
+}
+
+/* campanita: borrar avisos (2-nov-2026) */
+.camp-row{position:relative;}
+.camp-row .camp-it{padding-right:46px;}
+.camp-del{position:absolute;top:6px;right:6px;width:36px;height:36px;display:inline-flex;align-items:center;justify-content:center;background:transparent;border:0;border-radius:8px;color:var(--muted);cursor:pointer;}
+.camp-del:hover{background:var(--panel2);color:var(--cream);}
+.camp-del svg{width:16px;height:16px;stroke:currentColor;stroke-width:2;fill:none;stroke-linecap:round;}
+.camp-borrar{margin-left:auto;margin-right:8px;background:transparent;border:1px solid var(--line);border-radius:8px;color:var(--cream);font:600 12.5px/1 var(--sans,inherit);padding:8px 10px;cursor:pointer;}
+.camp-borrar:hover{background:var(--panel2);}
+.camp-borrar[hidden]{display:none;}
+
+/* Mis clases > Agenda en secciones (2-nov-2026): antes eran 6 bloques apilados (~1.800 px). Una pregunta por pantalla. */
+.agpills{display:flex;gap:8px;flex-wrap:wrap;margin:4px 0 16px;}
+.agpills button{min-height:var(--ctl-md);padding:0 16px;border-radius:999px;border:1px solid var(--line);background:transparent;color:var(--cream);font:600 var(--fs-md)/1 var(--sans,inherit);cursor:pointer;}
+.agpills button.on{background:var(--accent);border-color:var(--accent);color:var(--on-accent,#111);}
+#panel-agenda[data-sub] .group:not([data-agsub]){display:none;}
+#panel-agenda[data-sub="cal"] .group:not([data-agsub="cal"]),#panel-agenda[data-sub="horario"] .group:not([data-agsub="horario"]),
+#panel-agenda[data-sub="ausencia"] .group:not([data-agsub="ausencia"]),#panel-agenda[data-sub="compartir"] .group:not([data-agsub="compartir"]){display:none;}
+
+/* Ajustes > Reservas en secciones que se abren y cierran (2-nov-2026) */
+.ajsec{border:1px solid var(--line);border-radius:12px;margin:0 0 12px;background:var(--panel);}
+.ajsec>summary{cursor:pointer;list-style:none;padding:14px 16px;font-weight:700;font-size:16px;min-height:48px;display:flex;align-items:center;gap:10px;}
+.ajsec>summary::-webkit-details-marker{display:none;}
+.ajsec>summary::after{content:"+";margin-left:auto;font-size:22px;color:var(--muted);}
+.ajsec[open]>summary::after{content:"\2212";}
+.ajsec>.ajsec-d{margin:-4px 16px 12px;}
+.ajsec>.cfgrow,.ajsec>.hint:not(.ajsec-d){margin-left:16px;margin-right:16px;}
+.ajsec>.cfgrow:last-child,.ajsec>.hint:last-child{margin-bottom:14px;}
+
+/* secciones genéricas (Perfil): solo se ve el bloque elegido */
+.panel[data-subs]>.group[data-ssub]:not(.ssub-on){display:none;}
+
+.snack-undo{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(24px + env(safe-area-inset-bottom));z-index:700;display:flex;align-items:center;gap:14px;background:var(--cream);color:var(--bg);padding:10px 12px 10px 16px;border-radius:12px;font-size:15px;box-shadow:0 6px 24px rgba(0,0,0,.35);max-width:calc(100vw - 24px);}
+.snack-undo button{min-height:40px;padding:0 14px;border-radius:8px;border:0;background:var(--accent);color:var(--on-accent,#111);font-weight:700;font-size:15px;cursor:pointer;}
+@media (max-width:820px){ .snack-undo{bottom:calc(80px + env(safe-area-inset-bottom));} }
 </style>
 </head>
 <body>
@@ -1238,7 +1314,7 @@ table.acc-fija tbody tr:hover td:last-child{background:var(--panel2);}
           <span class="camp-pt" id="campPunto" hidden></span>
         </button>
         <div class="camp-panel" id="campPanel" hidden>
-          <div class="camp-cab"><span>Novedades</span><button class="camp-x" id="btnCampCerrar" type="button" aria-label="Cerrar">&times;</button></div>
+          <div class="camp-cab"><span>Novedades</span><button class="camp-borrar" id="btnCampBorrarTodas" type="button" title="Borra todos los avisos de esta lista" hidden>Borrar todas</button><button class="camp-x" id="btnCampCerrar" type="button" aria-label="Cerrar">&times;</button></div>
           <div class="camp-lista" id="campLista"></div>
         </div>
       </div>
@@ -1781,7 +1857,7 @@ table.acc-fija tbody tr:hover td:last-child{background:var(--panel2);}
   </section>
 
   <section class="panel" id="panel-agenda">
-    <p class="hint quees"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg><b>Esto es el FUTURO: tu horario y lo que ya está reservado.</b> Aquí armas en qué días y horas dictas, con qué tipo de clase y cuánta gente entra. ¿Buscas anotar una clase que YA diste? Eso es <b><a href="#" data-ira="registro">Asistencia</a></b>.</p>
+    <p class="hint quees"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg><b>Aquí ves lo que viene: tu horario y lo que ya está reservado.</b> Aquí armas en qué días y horas dictas, con qué tipo de clase y cuánta gente entra. ¿Buscas anotar una clase que YA diste? Eso es <b><a href="#" data-ira="registro">Asistencia</a></b>.</p>
     <!-- Calendario del mes (10-ago-2026, reunión Elevate): la vista mensual que José extraña
          de Punchpass. Día a día: cuántas clases del horario + cuántas reservas. Clic en un
          día = detalle con la gente, y desde ahí se bloquea o siembra con la fecha puesta. -->
@@ -1846,6 +1922,17 @@ table.acc-fija tbody tr:hover td:last-child{background:var(--panel2);}
       <button class="btn" id="btnVinoSinReserva">Contarle la clase</button>
     </div>
 
+    <div class="group" id="grpAusencia">
+      <h2>Ausencia de profesora</h2>
+      <p class="hint">Si una profesora no puede dictar, avísalo aquí. La administración decide: <b>cancelar las clases</b> (las alumnas reciben un aviso y, si tienes créditos prendidos, un crédito de recuperación) o <b>asignar una sustituta</b> sin tocar ninguna reserva.</p>
+      <div class="cfgrow solo-dueno hidden" id="ausProfeWrap"><span class="pk">Profesora</span><select id="aus_profe"></select></div>
+      <div class="cfgrow"><span class="pk">Desde</span><input id="aus_desde" type="date" /></div>
+      <div class="cfgrow"><span class="pk">Hasta</span><input id="aus_hasta" type="date" data-ayuda="Déjalo igual que Desde si es un solo día. Una semana = 7 días." /></div>
+      <div class="cfgrow"><span class="pk">Motivo</span><input id="aus_motivo" type="text" maxlength="160" placeholder="Ej. enferma, viaje" /></div>
+      <button class="btn" id="btnAusAvisar" type="button">Avisar ausencia</button>
+      <div id="ausLista" style="margin-top:12px;"></div>
+    </div>
+
     <div class="group">
       <h2 id="dispTitulo">Tu horario de todas las semanas <button class="btn ghost sm" type="button" style="margin-left:8px;" onclick="lanzarTourModulo('agenda')">? Cómo funciona</button></h2>
       <p class="hint">Este es el horario que se repite <b>todas las semanas</b>. Prende las horas en las que dictas: un clic la prende o la apaga; clic en una hora prendida abre su <b>tipo de clase y aforo</b>. Los alumnos solo ven lo que esté prendido. Hora de Lima. ¿Quieres cambiar <b>una sola semana</b>? Hazlo desde el calendario de arriba.</p>
@@ -1880,10 +1967,11 @@ table.acc-fija tbody tr:hover td:last-child{background:var(--panel2);}
         <input id="disp_vista" type="date" />
         <button class="btn ghost sm" id="btnVistaHoy" type="button">Hoy</button>
         <button class="btn sm" id="btnDispDuplicar" type="button">Copiar este horario a otras fechas</button>
+        <button class="btn sm" id="btnDispCopiarSemana" type="button" title="Copia todas las clases de una semana a otra, con sus aforos, profesoras y salas">Copiar una semana a otra</button>
       </div>
       <p class="hint" id="vistaTx" style="margin-top:-2px;"></p>
       <div id="vistaChips" style="display:flex;flex-wrap:wrap;gap:8px;margin:0 0 10px;"></div>
-      <p class="hint" style="margin-top:-2px;">La grilla es solo tu vista: cambia el rango o el paso para poner clases a las 7:15 o cada media hora. Nunca borra franjas que ya guardaste fuera de este rango.</p>
+      <p class="hint" style="margin-top:-2px;">La grilla es solo tu vista: cambia el rango o el paso para poner clases a las 7:15 o cada media hora. Nunca borra clases que ya guardaste fuera de este rango.</p>
       <div class="tablewrap" id="dispGrid"></div>
       <button class="btn" id="btnGuardarDisp" style="margin-top:12px;">Guardar horario</button>
       <div class="sinsave" id="dispSinGuardar" hidden>
@@ -2097,37 +2185,78 @@ table.acc-fija tbody tr:hover td:last-child{background:var(--panel2);}
     </div>
     <div class="group" data-aj="reservas">
       <h2>Cómo reservan tus alumnos</h2>
-      <p class="hint">Las reglas del portal. Tus horarios y el aforo de cada franja se arman en <b>Clases → Agenda</b>.</p>
-      <div class="cfgrow"><span class="pk">Cupo por horario (general)</span><input id="cfg_agenda_cupo" type="number" min="1" max="60" placeholder="1" /></div>
-      <p class="hint" style="margin-top:-4px;">Es el último recurso: manda el aforo que le pongas a la franja en la Agenda, luego el aforo del tipo de clase, y recién este. 1 = clases individuales.</p>
+      <p class="hint">Las reglas del portal. Tus horarios y cuántas alumnas entran a cada clase se arman en <b>Clases → Agenda</b>.</p>
+      <details class="ajsec" open><summary>Reservar y cancelar</summary><p class="hint ajsec-d">Cuándo y cómo pueden reservar y cancelar tus alumnas.</p>
+ <div class="cfgrow"><span class="pk">Cupo por horario (general)</span><input id="cfg_agenda_cupo" type="number" min="1" max="60" placeholder="1" /></div>
+      <p class="hint" style="margin-top:-4px;">Es el último recurso: manda lo que le pongas a cada horario en la Agenda, luego lo del tipo de clase, y recién este. 1 = clases individuales.</p>
+
       <div class="cfgrow"><span class="pk">Anticipación mínima para reservar</span><input id="cfg_anticipacion_h" data-ayuda="Con cuánta anticipación te tienen que reservar. 0 = pueden reservar la clase de dentro de un rato." type="number" min="0" max="168" placeholder="12" /></div>
       <p class="hint" style="margin-top:-4px;">Horas de aviso que exiges. <b>0</b> = pueden reservar la clase de dentro de un rato (lo normal en un estudio). Vacío = 12 horas.</p>
+
       <div class="cfgrow"><span class="pk">¿El alumno reprograma solo?</span><select id="cfg_reprog_activo"><option value="">Sí, desde su portal</option><option value="0">No, solo a través del profesor</option></select></div>
+
       <div class="cfgrow"><span class="pk">Horas mínimas para reprogramar</span><input id="cfg_reprog_min_h" data-ayuda="Hasta cuántas horas antes puede mover su clase sin perderla. Con menos tiempo, ya no se puede." type="number" min="1" max="72" placeholder="4" /></div>
       <p class="hint" style="margin-top:-4px;">Con esa anticipación o más, reprogramar libera el horario sin consumir la clase; con menos ya no se puede. Vacío = 4 horas.</p>
+
+      <div class="cfgrow"><span class="pk">Cancelar fuera de plazo</span><select id="cfg_cancel_tarde" data-ayuda="Qué pasa si una alumna quiere cancelar cuando ya pasó el plazo de arriba. Bloquear: no puede. Permitir: puede, pero la clase se le cuenta como usada (y solo recibe crédito si lo activas abajo)."><option value="">No puede cancelar</option><option value="pierde">Puede, y la clase se cuenta como usada</option></select></div>
+
       <div class="cfgrow"><span class="pk">Horario fijo semanal en el portal</span><select id="cfg_portal_fija_off" data-ayuda="El &quot;horario fijo semanal&quot; es para el alumno que viene siempre el mismo día y hora. Apágalo si tus clases son grupales y nadie tiene horario fijo."><option value="">Encendido — pueden apartar el mismo horario cada semana</option><option value="1">Apagado — solo reservan clase por clase</option></select></div>
       <p class="hint" style="margin-top:-4px;">Apágalo si tus alumnos no tienen horario fijo (típico en estudios con clases grupales): el portal solo ofrecerá reservar clase por clase.</p>
+
       <div class="cfgrow"><span class="pk">Lista de espera al liberarse un cupo</span><select id="cfg_espera_auto" data-ayuda="Cuando alguien cancela y queda un cupo libre: o le avisas al primero de la cola, o se lo reservas automáticamente."><option value="">Avisar al primero para que reserve</option><option value="1">Reservarle la clase automáticamente al primero</option></select></div>
       <p class="hint" style="margin-top:-4px;">Con el modo automático, apenas alguien cancela, el primero de la cola queda <b>dentro</b> de la clase (si su plan tiene saldo) y le llega el aviso por correo y notificación. Si su plan no alcanza, se le avisa como siempre.</p>
+      </details>
+
+            <details class="ajsec"><summary>Clases de prueba y créditos de recuperación</summary><p class="hint ajsec-d">Plazas aparte para alumnas de prueba y créditos cuando una alumna falta.</p>
+
+      <div class="cfgrow"><span class="pk">Plazas de prueba por clase</span><input id="cfg_prueba_plazas" data-ayuda="Lugares aparte, solo para alumnas de prueba, que no le quitan cupo a tus alumnas regulares. Vacío = no hay plazas de prueba." type="number" min="1" max="20" placeholder="0" /></div>
+
+      <div class="cfgrow"><span class="pk">Créditos de recuperación</span><select id="cfg_cred_on" data-ayuda="Cuando una alumna inscrita falta a su clase, se le da un crédito para recuperarla en otra clase. Tú puedes anularlo o cambiarlo a mano desde su ficha."><option value="">Apagados</option><option value="1">Dar un crédito cuando falta</option></select></div>
+
+      <div class="cfgrow"><span class="pk">Máximo de créditos por alumna al mes</span><input id="cfg_cred_max_mes" data-ayuda="Cuántos créditos puede ganar una misma alumna por las faltas de un mismo mes." type="number" min="1" max="10" placeholder="1" /></div>
+
+      <div class="cfgrow"><span class="pk">Días que dura un crédito</span><input id="cfg_cred_vence_dias" data-ayuda="Se cuentan desde la clase que faltó. Pasa al mes siguiente si todavía no vence: una falta del 25 de enero con 30 días vale hasta el 24 de febrero." type="number" min="1" max="365" placeholder="30" /></div>
+
+      <div class="cfgrow"><span class="pk">¿La cancelación tardía también da crédito?</span><select id="cfg_cred_en_tardia" data-ayuda="Si una alumna cancela cuando ya pasó el plazo, la clase se le cuenta como usada. Aquí decides si igual recibe un crédito."><option value="">No, la pierde</option><option value="1">Sí, recibe crédito</option></select></div>
+      <p class="hint" style="margin-top:-4px;">El crédito suma una clase a la alumna y queda anotado con qué clase se usó. Solo cuenta desde el día que lo prendes: no se regalan créditos por faltas antiguas.</p>
+      </details>
+
+            <details class="ajsec"><summary>Lo que ve el alumno en su portal</summary><p class="hint ajsec-d">Profesores visibles y chat.</p>
+
       <div class="cfgrow"><span class="pk">Nombres de profesores en el portal</span><select id="cfg_portal_sin_profe" data-ayuda="Si tus clases son grupales y nadie tiene profesor fijo, mejor que el portal no diga nombres de profesores."><option value="">Mostrarlos ("Tu clase con Ana")</option><option value="1">Ocultarlos ("Tu clase en tu academia")</option></select></div>
       <p class="hint" style="margin-top:-4px;">Ocúltalos si tus clases son grupales y ningún alumno tiene profesor fijo.</p>
+
       <div class="cfgrow"><span class="pk">Chat del portal</span><select id="cfg_portal_chat_off"><option value="">Encendido</option><option value="1">Apagado — botón directo a tu WhatsApp</option></select></div>
       <p class="hint" style="margin-top:-4px;">Apagado: en vez del chat, el alumno ve un botón que abre tu WhatsApp (el número de tu Perfil).</p>
+      </details>
+
+            <details class="ajsec"><summary>Avisos automáticos</summary><p class="hint ajsec-d">Correos que salen solos para que no tengas que escribir uno por uno.</p>
+
       <div class="cfgrow"><span class="pk">Recordatorio de clase (24h y 1h)</span><select id="cfg_recordatorios_clase"><option value="">Activado</option><option value="off">Apagado</option></select></div>
       <p class="hint" style="margin-top:-4px;">Correo automático al alumno 24 horas y 1 hora antes de su reserva. Menos faltas sin que muevas un dedo.</p>
+
       <div class="cfgrow"><span class="pk">Recordatorio de renovación</span><select id="cfg_recordatorio_renovacion"><option value="">Activado</option><option value="off">Apagado</option></select></div>
       <p class="hint" style="margin-top:-4px;">Correo automático cuando el paquete del alumno está por vencer (o venció), con link para renovar desde su portal.</p>
+
       <div class="cfgrow"><span class="pk">Aviso de plan activo</span><select id="cfg_aviso_plan_activo" data-ayuda="Cuando le cargas o le renuevas el plan a un alumno desde su ficha, le llega un correo avisándole. Útil si te pagó por Yape fuera de la app."><option value="">Activado</option><option value="off">Apagado</option></select></div>
+      <p class="hint" style="margin-top:-4px;">Cuando le cargas o le renuevas el plan a un alumno <b>desde su ficha</b> (típico si te pagó por Yape fuera de la app), le llega un correo con su plan y el link a su portal. El que paga por internet ya recibe el suyo al confirmarse el pago.</p>
+      </details>
+
+            <details class="ajsec"><summary>Reseñas y compras a medias</summary><p class="hint ajsec-d">Pedir reseñas de Google y rescatar a quien dejó una compra a medias.</p>
+
       <div class="cfgrow"><span class="pk">Pedir reseñas de Google</span><select id="cfg_resena_activa" data-ayuda="Al alumno que ya lleva varias clases le llega un correo: del 1 al 5, ¿cómo van tus clases? Si responde 4 o 5 lo mandamos a dejar tu reseña en Google. Si responde 3 o menos NO le pedimos nada público y te avisamos a ti al toque, para que lo llames antes de que se vaya."><option value="">Activado</option><option value="off">Apagado</option></select></div>
+
       <div class="cfgrow"><span class="pk">Tu link de reseñas de Google</span><input id="cfg_review_link" placeholder="https://g.page/r/..." data-ayuda="Pega acá el link donde tus alumnos dejan la reseña (Google Business → Pedir reseñas). Si lo dejas vacío no se manda ningún correo: nunca inventamos un link por ti."></div>
       <!-- 21-ago-2026: "Pedir reseñas" sale como Activado aunque falte el link, y sin link no
            se manda un solo correo. Resultado: cero reseñas pedidas en toda la historia de
            Batuta, con el dueño creyendo que estaba funcionando. -->
       <p class="hint" id="avisoResenaSinLink" style="display:none;margin:2px 0 0;color:var(--amber,#E8A13D);">Dice <b>Activado</b>, pero sin tu link no se manda ningún correo. Lo sacas de Google Business → Pedir reseñas y lo pegas acá.</p>
+
       <div class="cfgrow"><span class="pk">Clases antes de pedirla</span><input id="cfg_resena_min_clases" type="number" min="1" placeholder="4" data-ayuda="Cuántas clases tiene que haber tomado el alumno antes de que le pidamos su opinión. Por defecto 4: pedírsela al que fue una vez es pedirle que opine de lo que todavía no conoce."></div>
-      <div class="cfgrow"><span class="pk">Rescatar compras a medias</span><select id="cfg_rescate_activo" data-ayuda="Si alguien abre el checkout y no llega a pagar, al día siguiente le llega un correo para retomarlo. Nunca se le escribe al que ya pagó por Yape y espera que confirmes."><option value="">Activado</option><option value="off">Apagado</option></select></div>
+
+      <div class="cfgrow"><span class="pk">Rescatar compras a medias</span><select id="cfg_rescate_activo" data-ayuda="Si alguien empieza a pagar y no termina, al día siguiente le llega un correo para retomarlo. Nunca se le escribe al que ya pagó por Yape y espera que confirmes."><option value="">Activado</option><option value="off">Apagado</option></select></div>
       <p class="hint" style="margin-top:-4px;">Cuando alguien empieza a comprar y no termina, esa venta hoy se pierde en silencio. Con esto le llega un correo al día siguiente para retomarla desde su portal. <b>Nunca</b> le escribe a quien ya te pagó por Yape y espera tu confirmación.</p>
-      <p class="hint" style="margin-top:-4px;">Cuando le cargas o le renuevas el plan a un alumno <b>desde su ficha</b> (típico si te pagó por Yape fuera de la app), le llega un correo con su plan y el link a su portal. El que paga por internet ya recibe el suyo al confirmarse el pago.</p>
+      </details>
 
       <h2 style="margin-top:22px;">Asistencia</h2>
       <div class="cfgrow"><span class="pk">Pedir fecha de nacimiento al comprar</span><select id="cfg_campos_alumno" data-ayuda="Solo si de verdad la usas. Es un dato personal, y si el alumno resulta menor de 14 años el formulario le exige al que compra declarar que es su apoderado.">
@@ -2830,6 +2959,23 @@ table.acc-fija tbody tr:hover td:last-child{background:var(--panel2);}
     </div>
   </div>
 </div>
+<!-- Modal copiar semana (2-nov-2026, pedido de Laura) -->
+<div class="overlay" id="ovCopiarSemana">
+  <div class="modal">
+    <h3>Copiar una semana a <em>otra semana</em></h3>
+    <div class="frow">
+      <div class="field"><label>Semana que copias (cualquier día de esa semana)</label><input id="cs_origen" type="date" /></div>
+      <div class="field"><label>Semana a la que la copias (cualquier día)</label><input id="cs_destino" type="date" /></div>
+    </div>
+    <p class="hint" id="cs_txt"></p>
+    <p class="hint">Se copian todas las clases de esa semana (hora, tipo de clase, aforo, profesora y sala). La semana de destino queda igual que la de origen; <b>las reservas ya hechas no se tocan</b> y el resto de tus semanas queda como está.</p>
+    <div class="modal-actions">
+      <button class="btn ghost" data-close>Cancelar</button>
+      <button class="btn ghost" id="btnCopiarSemanaSig" type="button">La semana que viene</button>
+      <button class="btn" id="btnCopiarSemanaOk">Copiar semana</button>
+    </div>
+  </div>
+</div>
 <div class="overlay" id="ovCopiarDia">
   <div class="modal">
     <h3>Copiar un <em>día</em></h3>
@@ -3442,8 +3588,19 @@ function vincularSubSiVuelveDeMP(){
       if(d && d.estado==="activo"){ try{ alert("Tu suscripción quedó activa. Bienvenido a Batuta!"); }catch(e){} }
     }).catch(function(){ history.replaceState(null,"",location.pathname); });
 }
+/* Velocidad (3-nov-2026): el panel pedía /app/api/t/me hasta 4 veces al abrir (trial, cupo de IA,
+   plan, packs) y cada una tardaba 2 s o más. Ahora las lecturas de menos de 8 s de antigüedad
+   comparten UNA sola respuesta. Se invalida al cambiar el plan o comprar un pack (ver invalidarMe). */
+var __ME = null;
+function fetchMe(){
+  if(!__ME || Date.now()-__ME.t > 8000){
+    __ME = { t: Date.now(), p: fetch("/app/api/t/me",{headers:hdr()}) };
+  }
+  return __ME.p.then(function(r){ return r.clone(); });
+}
+function invalidarMe(){ __ME = null; }
 function cargarTrialInfo(){
-  return fetch("/app/api/t/me",{headers:hdr()}).then(function(r){
+  return fetchMe().then(function(r){
     if(r.status===401){ irALogin(); return null; }
     if(r.status===402){ mostrarPaywall(); return null; }
     if(!r.ok) return null;
@@ -4727,6 +4884,7 @@ function renderAjustes(){
   if(el("cfg_interbank_cci")) el("cfg_interbank_cci").value=(db.config&&db.config.interbank_cci)||"";
   if(el("cfg_mp_solo_tarjeta")) el("cfg_mp_solo_tarjeta").value=(db.config&&db.config.mp_solo_tarjeta)||"";
   if(el("cfg_espera_auto")) el("cfg_espera_auto").value=(db.config&&db.config.espera_auto)||"";
+  ["cred_on","cred_max_mes","cred_vence_dias","cred_en_tardia","prueba_plazas","cancel_tarde"].forEach(function(k){ if(el("cfg_"+k)) el("cfg_"+k).value=(db.config&&db.config[k])||""; });
   if(el("cfg_portal_fija_off")) el("cfg_portal_fija_off").value=(db.config&&db.config.portal_fija_off)||"";
   if(el("cfg_directorio")) el("cfg_directorio").value=(db.config&&db.config.directorio)||"";
   if(el("cfg_portal_chat_off")) el("cfg_portal_chat_off").value=(db.config&&db.config.portal_chat_off)||"";
@@ -4760,7 +4918,7 @@ function renderWaCupo(){
     box.innerHTML="<b>Conversaciones del asistente:</b> "+(c.usados||0)+" de "+(c.cap||0)+" "+lapso+" · quedan "+restan+"."+top;
   }
   if(window.__WA_CUPO){ pinta(window.__WA_CUPO); return; }
-  fetch('/app/api/t/me',{headers:hdr()}).then(function(r){return r.json().catch(function(){return {};});})
+  fetchMe().then(function(r){return r.json().catch(function(){return {};});})
     .then(function(d){ if(d&&d.wa_cupo){ window.__WA_CUPO=d.wa_cupo; pinta(d.wa_cupo); } else pinta(null); }).catch(function(){ pinta(null); });
 }
 /* ---------- Bandeja de WhatsApp de la academia (6-set-2026) ---------- */
@@ -4937,9 +5095,9 @@ el("perfilFotoInput").addEventListener("change",function(e){
 });
 el("btnPerfilFotoQuitar").addEventListener("click",function(){
   if(!(db.config&&db.config.profe_foto)){ toast("No hay foto"); return; }
-  if(!confirm("¿Quitar la foto de perfil?")) return;
-  apiPost("/app/api/admin/config",{profe_foto:""}).then(function(){ db.config.profe_foto=""; renderPerfil(); toast("Foto quitada"); })
-    .catch(function(){ toast("No se pudo quitar"); });
+  var fotoAntes=db.config.profe_foto;
+  esconderConDeshacer("Foto quitada",function(){ db.config.profe_foto=""; renderPerfil(); },function(){ db.config.profe_foto=fotoAntes; renderPerfil(); },
+    function(){ return apiPost("/app/api/admin/config",{profe_foto:""}); });
 });
 
 function renderRecursos(){
@@ -5156,10 +5314,9 @@ if(el("panel-leads")) el("panel-leads").addEventListener("click",function(e){
   var ed=e.target.closest("[data-leadedit]");
   if(ed){ var l=(db.leads||[]).find(function(x){return x.id===ed.dataset.leadedit;}); if(l) abrirLead(l); return; }
   var dl=e.target.closest("[data-leaddel]");
-  if(dl && confirm("¿Borrar a este interesado?")){
-    apiPost("/app/api/admin/lead",{accion:"borrar",id:dl.dataset.leaddel})
-      .then(function(){ toast("Borrado"); return recargar(); })
-      .catch(function(err){ toast((err&&err.message)||"No se pudo"); });
+  if(dl){
+    var idL=dl.dataset.leaddel;
+    borrarConDeshacer("Interesado borrado","leads",idL,function(){ return apiPost("/app/api/admin/lead",{accion:"borrar",id:idL}).then(function(){ return recargar(); }); });
   }
 });
 if(el("panel-leads")) el("panel-leads").addEventListener("change",function(e){
@@ -5233,10 +5390,9 @@ if(el("btnGuardarGasto")) el("btnGuardarGasto").addEventListener("click",functio
 });
 if(el("panel-caja")) el("panel-caja").addEventListener("click",function(e){
   var d=e.target.closest("[data-gastodel]");
-  if(d && confirm("¿Borrar este gasto?")){
-    apiPost("/app/api/admin/gasto",{accion:"borrar",id:d.dataset.gastodel})
-      .then(function(){ toast("Gasto borrado"); return recargar(); })
-      .catch(function(err){ toast((err&&err.message)||"No se pudo"); });
+  if(d){
+    var idG=d.dataset.gastodel;
+    borrarConDeshacer("Gasto borrado","gastos",idG,function(){ return apiPost("/app/api/admin/gasto",{accion:"borrar",id:idG}).then(function(){ return recargar(); }); });
   }
 });
 /* ---------- Reportes por mes (ingresos + asistencia), calculados del histórico ya cargado ---------- */
@@ -5395,6 +5551,23 @@ function recortarVigencia(filas, d, h){
   return out;
 }
 
+/* Copiar UNA SEMANA a otra (2-nov-2026): de cada franja que existía en la semana de origen se saca una copia
+   con la vigencia de la semana de destino (lunes a domingo). La franja ya trae su día de la semana, así que
+   la copia solo vale ese día. Quien llama recorta antes el destino con recortarVigencia() para no pisar a ciegas. */
+function copiarSemanaFranjas(filas, origenLunes, destinoLunes){
+  const destinoDomingo = vigDiaMas(destinoLunes, 6);
+  const out = [];
+  for (const r of (filas || [])){
+    if (!r || r.activo === 0) continue;
+    const dow = Number(r.dia_semana);
+    const fecha = vigDiaMas(origenLunes, (dow + 6) % 7);   /* el día de la semana de origen en que cae esta franja */
+    const d = String(r.vdesde || ""), h = String(r.vhasta || "");
+    if ((d && fecha < d) || (h && fecha > h)) continue;    /* esa semana no la tenía */
+    out.push({ ...r, vdesde: destinoLunes, vhasta: destinoDomingo });
+  }
+  return out;
+}
+
 /* ---- Qué horario estoy mirando (29-oct-2026) ----
    Una franja puede tener varias filas con fechas distintas. La grilla enseña UNA por celda: la
    que vale en la fecha que miras (por defecto hoy; en "una sola semana", el lunes de esa semana). */
@@ -5431,6 +5604,104 @@ function pintarSelectProfeAgenda(){
     AG_PROFE=yo?yo.id:""; sel.value=AG_PROFE;
   }
 }
+/* Ausencia de profesora (2-nov-2026): avisar, y (solo el dueño) cancelar clases o asignar sustituta. */
+function cargarAusencias(){
+  var dueno=esDuenoPanel();
+  var wrap=el("ausProfeWrap"), sel=el("aus_profe");
+  var listo=(dueno&&AG_PROFES===null)?fetch("/app/api/admin/profesores",{headers:hdr()}).then(function(r){return r.json();}).then(function(d){ AG_PROFES=(d&&d.profesores)||[]; }).catch(function(){}):Promise.resolve();
+  listo.then(function(){
+    var lista=(AG_PROFES||[]).filter(function(p){ return p.estado!=="suspendido"; });
+    if(wrap&&sel){
+      if(dueno&&lista.length){ wrap.classList.remove("hidden"); var prev=sel.value; sel.innerHTML=lista.map(function(p){ return '<option value="'+esc(p.id)+'">'+esc(p.nombre)+(p.rol==="dueno"?" (tú)":"")+'</option>'; }).join(""); if(prev) sel.value=prev; }
+      else wrap.classList.add("hidden");
+    }
+    return fetch("/app/api/admin/ausencias",{headers:hdr()}).then(function(r){return r.json();});
+  }).then(function(d){
+    var box=el("ausLista"); if(!box) return;
+    var l=(d&&d.ausencias)||[];
+    if(!l.length){ box.innerHTML='<p class="hint">No hay avisos de ausencia.</p>'; return; }
+    box.innerHTML=l.map(function(x){
+      var cuando=x.desde===x.hasta?x.desde:(x.desde+" al "+x.hasta);
+      var pend=x.estado==="avisada";
+      var botones=(dueno&&pend)?(' <button type="button" class="btn ghost sm" data-aus="cancelar" data-id="'+esc(x.id)+'">Cancelar sus clases</button> <button type="button" class="btn ghost sm" data-aus="sustituir" data-id="'+esc(x.id)+'">Asignar sustituta…</button> <button type="button" class="btn ghost sm" data-aus="descartar" data-id="'+esc(x.id)+'">Descartar</button>'):'';
+      return '<div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--line);"><div style="flex:1;min-width:200px;"><b>'+esc(x.profesora)+'</b> · '+esc(cuando)+(x.motivo?' · '+esc(x.motivo):'')+
+        '<br><span class="hint" style="margin:0;">'+(pend?(x.clases_afectadas+' clase(s) con alumnas · pendiente'):(x.estado==="atendida"?'Atendida':'Descartada'))+'</span></div>'+botones+'</div>';
+    }).join("");
+  }).catch(function(){});
+}
+if(el("btnAusAvisar")) el("btnAusAvisar").addEventListener("click",function(){
+  var cuerpo={desde:el("aus_desde").value,hasta:el("aus_hasta").value||el("aus_desde").value,motivo:el("aus_motivo").value.trim()};
+  if(esDuenoPanel()&&el("aus_profe")&&el("aus_profe").value) cuerpo.profesor_id=el("aus_profe").value;
+  if(!cuerpo.desde){ toast("Elige desde qué día"); return; }
+  var b=this; b.disabled=true;
+  apiPost("/app/api/admin/ausencia/avisar",cuerpo).then(function(r){ toast("Aviso enviado · "+r.clases_afectadas+" clase(s) con alumnas"); el("aus_motivo").value=""; cargarAusencias(); })
+    .catch(function(err){ toast((err&&err.message)||"No se pudo avisar"); }).finally(function(){ b.disabled=false; });
+});
+if(el("ausLista")) el("ausLista").addEventListener("click",function(e){
+  var b=e.target.closest("[data-aus]"); if(!b) return;
+  e.preventDefault();
+  var acc=b.dataset.aus, cuerpo={accion:acc,ausencia_id:b.dataset.id};
+  if(acc==="cancelar"&&!confirm("¿Cancelar las clases de esa profesora en esas fechas? Se cierra el horario, se avisa por correo a cada alumna"+(db.config&&db.config.cred_on==="1"?" y cada una recibe un crédito de recuperación":" y la clase vuelve a su saldo")+".")) return;
+  if(acc==="sustituir"){
+    var otras=(AG_PROFES||[]).filter(function(p){ return p.estado!=="suspendido"; });
+    var nom=prompt("¿Qué profesora la reemplaza? Escribe su nombre:\n\n"+otras.map(function(p){return p.nombre;}).join("\n"),"");
+    if(nom===null) return;
+    var q=String(nom).trim().toLowerCase();
+    var hit=otras.filter(function(p){ return String(p.nombre||"").toLowerCase()===q; })[0]||otras.filter(function(p){ return String(p.nombre||"").toLowerCase().indexOf(q)>=0; })[0];
+    if(!q||!hit){ toast("No encuentro a esa profesora"); return; }
+    cuerpo.sustituta_id=hit.id;
+  }
+  b.disabled=true;
+  apiPost("/app/api/admin/ausencia/resolver",cuerpo).then(function(r){
+    toast(acc==="cancelar"?(r.clases_canceladas+" clase(s) canceladas · "+r.avisadas_por_correo+" alumnas avisadas"):(acc==="sustituir"?("Sustituta asignada · "+r.clases_con_sustituta+" clase(s)"):"Listo"));
+    cargarAusencias();
+  }).catch(function(err){ toast((err&&err.message)||"No se pudo"); }).finally(function(){ b.disabled=false; });
+});
+
+/* Secciones de Mis clases > Agenda: se arman con los bloques que ya existen (no se mueve ni se borra ninguno). */
+var AG_SUB="cal";
+function agSub(n){
+  var p=el("panel-agenda"); if(!p) return;
+  AG_SUB=n; p.setAttribute("data-sub",n);
+  [].forEach.call(p.querySelectorAll(".agpills button"),function(b){ b.classList.toggle("on",b.getAttribute("data-s")===n); });
+  if(n==="horario"){ try{ renderAgendaAdmin(); arreglarTablas(); }catch(e){} }
+  if(n==="ausencia"){ try{ cargarAusencias(); }catch(e){} }
+}
+(function(){
+  var p=el("panel-agenda"); if(!p||p.querySelector(".agpills")) return;
+  var asig=function(g,s){ if(g) g.setAttribute("data-agsub",s); };
+  [].forEach.call(p.querySelectorAll(":scope > .group"),function(g){
+    var h=g.querySelector("h2"), t=(h?h.textContent:"").toLowerCase();
+    if(g.id==="grpAusencia") asig(g,"ausencia");
+    else if(g.querySelector("#dispGrid")) asig(g,"horario");
+    else if(t.indexOf("link de cupos")>=0) asig(g,"compartir");
+    else asig(g,"cal");   /* calendario del mes, apartar un horario, vino sin reservar */
+  });
+  var bar=document.createElement("div"); bar.className="agpills"; bar.setAttribute("role","tablist");
+  bar.innerHTML='<button type="button" data-s="cal">Calendario</button><button type="button" data-s="horario">Mi horario</button><button type="button" data-s="ausencia">Ausencias</button><button type="button" data-s="compartir">Compartir cupos</button>';
+  bar.addEventListener("click",function(e){ var b=e.target.closest("button[data-s]"); if(b) agSub(b.getAttribute("data-s")); });
+  var primero=p.querySelector(":scope > .group"); p.insertBefore(bar,primero);
+  agSub("cal");
+})();
+
+/* Perfil en tres secciones (2-nov-2026): Mis datos, Mi plan de Batuta, Recomendar. Mismos bloques de siempre. */
+(function(){
+  var p=el("panel-perfil"); if(!p||p.querySelector(".agpills")) return;
+  var gs=[].slice.call(p.querySelectorAll(":scope > .group")); if(gs.length<2) return;
+  var defs=[["Mis datos","tu perfil"],["Mi plan de Batuta","tu batuta"],["Recomendar Batuta","recomienda batuta"]];
+  var usados=0;
+  gs.forEach(function(g){
+    var h=g.querySelector("h2"), t=(h?h.textContent:"").trim().toLowerCase(), k=-1;
+    defs.forEach(function(d,i){ if(t.indexOf(d[1])===0) k=i; });
+    if(k<0) k=0;
+    g.setAttribute("data-ssub",String(k)); usados++;
+  });
+  var bar=document.createElement("div"); bar.className="agpills"; bar.setAttribute("role","tablist");
+  bar.innerHTML=defs.map(function(d,i){ return '<button type="button" data-ss="'+i+'">'+d[0]+'</button>'; }).join("");
+  function ir(n){ p.setAttribute("data-subs",String(n)); gs.forEach(function(g){ g.classList.toggle("ssub-on",g.getAttribute("data-ssub")===String(n)); }); [].forEach.call(bar.querySelectorAll("button"),function(b){ b.classList.toggle("on",b.getAttribute("data-ss")===String(n)); }); }
+  bar.addEventListener("click",function(e){ var b=e.target.closest("button[data-ss]"); if(b) ir(b.getAttribute("data-ss")); });
+  p.insertBefore(bar,gs[0]); ir(0);
+})();
 function cargarAgenda(){
   el("dispGrid").innerHTML = '<p class="hint">Cargando…</p>';
   /* La lista de profesores se pide UNA vez y se cachea: la agenda se recarga en cada guardado. */
@@ -5764,9 +6035,10 @@ function filaClaseDia(fkey,hora,titulo,rs,pasado,sala,cupo,curso){
     if(r.estado==="reservada" && anon){
       btns=(pasado?'':'<button class="btn ghost sm" data-ag-marcar="cancelada" data-id="'+esc(r.id)+'">Liberar</button>');
     } else if(r.estado==="reservada"){
-      btns='<button class="btn ghost sm" data-ag-marcar="completada" data-id="'+esc(r.id)+'">Vino</button> '+
-           '<button class="btn ghost sm" data-ag-marcar="falta" data-id="'+esc(r.id)+'">Faltó</button>'+
-           (pasado?'':' <button class="btn ghost sm" data-ag-marcar="cancelada" data-id="'+esc(r.id)+'">Quitar</button>');
+      btns='<button class="btn ghost sm" data-ag-marcar="completada" data-id="'+esc(r.id)+'">Asistió</button> '+
+           '<button class="btn ghost sm" data-ag-marcar="falta" data-id="'+esc(r.id)+'" title="No vino y no avisó">Ausente</button> '+
+           '<button class="btn ghost sm" data-ag-marcar="cancelo_tarde" data-id="'+esc(r.id)+'" title="Avisó fuera de plazo: la clase se le cuenta como usada">Canceló tarde</button>'+
+           (pasado?'':' <button class="btn ghost sm" data-ag-marcar="cancelada" data-id="'+esc(r.id)+'" title="Avisó a tiempo: la clase vuelve a su saldo">Canceló a tiempo</button>');
     }
     return '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:5px 0;">'+
            '<span style="flex:1 1 auto;font-size:13px;">'+nom+estado+'</span>'+
@@ -5987,6 +6259,7 @@ function pintarSemanaBanner(){
   b.hidden=false;
 }
 function entrarModoSemana(fkey){
+  if(typeof agSub==="function") agSub("horario");
   SEMANA_EDIT=lunesYDomingoDe(fkey);
   pintarSemanaBanner();
   var grupo=el("dispGrid") && el("dispGrid").closest(".group");
@@ -6452,6 +6725,36 @@ if(el("btnDispDuplicar")) el("btnDispDuplicar").addEventListener("click",functio
   if(el("dup_origen")) el("dup_origen").textContent="Se copia el horario que vale el "+fechaBonita(fv);
   el("dup_desde").value=""; el("dup_hasta").value="";
   openOv("ovDuplicar");
+});
+if(el("btnDispCopiarSemana")) el("btnDispCopiarSemana").addEventListener("click",function(){
+  sincronizarGrillaEnMemoria();
+  var fv=fechaVista();
+  el("cs_origen").value=fv; el("cs_destino").value=vigDiaMas(lunesYDomingoDe(fv).desde,7);
+  actualizarTxtCopiarSemana();
+  openOv("ovCopiarSemana");
+});
+function actualizarTxtCopiarSemana(){
+  var o=el("cs_origen").value, d=el("cs_destino").value, t=el("cs_txt");
+  if(!o||!d){ t.textContent=""; return; }
+  var a=lunesYDomingoDe(o), b=lunesYDomingoDe(d);
+  t.innerHTML="Copias la semana del <b>"+esc(fechaBonita(a.desde))+" al "+esc(fechaBonita(a.hasta))+"</b> a la del <b>"+esc(fechaBonita(b.desde))+" al "+esc(fechaBonita(b.hasta))+"</b>.";
+}
+if(el("cs_origen")) el("cs_origen").addEventListener("change",actualizarTxtCopiarSemana);
+if(el("cs_destino")) el("cs_destino").addEventListener("change",actualizarTxtCopiarSemana);
+if(el("btnCopiarSemanaSig")) el("btnCopiarSemanaSig").addEventListener("click",function(){
+  el("cs_destino").value=vigDiaMas(lunesYDomingoDe(el("cs_origen").value||fechaVista()).desde,7); actualizarTxtCopiarSemana();
+});
+if(el("btnCopiarSemanaOk")) el("btnCopiarSemanaOk").addEventListener("click",function(){
+  var o=el("cs_origen").value, d=el("cs_destino").value;
+  if(!o||!d){ toast("Elige las dos semanas"); return; }
+  var a=lunesYDomingoDe(o), b=lunesYDomingoDe(d);
+  if(a.desde===b.desde){ toast("Elige una semana distinta a la de origen"); return; }
+  var copias=copiarSemanaFranjas(AG_DISP||[],a.desde,b.desde);
+  if(!copias.length){ toast("Esa semana no tiene clases para copiar"); return; }
+  AG_DISP=recortarVigencia(AG_DISP,b.desde,b.hasta).concat(copias);
+  closeOv("ovCopiarSemana");
+  VISTA_FECHA=b.desde; renderAgendaAdmin();
+  guardarHorario("Listo: copiaste la semana del "+fechaBonita(a.desde)+" a la del "+fechaBonita(b.desde)+". Las reservas ya hechas siguen igual ✓");
 });
 if(el("btnDuplicarOk")) el("btnDuplicarOk").addEventListener("click",function(){
   var nd=el("dup_desde").value||"", nh=el("dup_hasta").value||"";
@@ -7083,24 +7386,76 @@ function campPintar(){
         (a.items||[]).map(function(x){
           return '<span class="camp-d" style="display:block;margin-top:6px;"><b>'+esc(x.alumno||"Alumno")+'</b> · '+esc(campFecha(x.dia))+(x.curso?(' · '+esc(x.curso)):'')+'<br>'+
             '<button type="button" class="btn ghost sm" data-cierre="dicto" data-id="'+esc(x.id)+'">Se dictó</button> '+
-            '<button type="button" class="btn ghost sm" data-cierre="falta" data-id="'+esc(x.id)+'">Falta</button> '+
+            '<button type="button" class="btn ghost sm" data-cierre="falta" data-id="'+esc(x.id)+'" title="No vino y no avisó">Ausente</button> '+
+            '<button type="button" class="btn ghost sm" data-cierre="cancelo_tarde" data-id="'+esc(x.id)+'" title="Avisó fuera de plazo: se le cuenta como usada">Canceló tarde</button> '+
             '<button type="button" class="btn ghost sm" data-cierre="reprogramada" data-id="'+esc(x.id)+'">Reprogramada a…</button> '+
-            '<button type="button" class="btn ghost sm" data-cierre="cancelada" data-id="'+esc(x.id)+'" title="Se cancela y la clase vuelve al saldo del alumno">Cancelada (devolver clase)</button></span>';
+            '<button type="button" class="btn ghost sm" data-cierre="cancelada" data-id="'+esc(x.id)+'" title="Se cancela y la clase vuelve al saldo del alumno">Canceló a tiempo</button></span>';
         }).join("")+mas+
         '<span class="camp-f">'+esc(campFecha(a.fecha))+'</span></div>';
     }
     var esPago=a.tipo==="pago";
-    /* los pagos llevan a Cobros; una novedad no lleva a ningún lado */
-    return '<'+(esPago?'button type="button" class="camp-it click'+(a.nuevo?" nuevo":"")+'" data-ira="pagos"':
+    /* los pagos llevan a Cobros; una novedad no lleva a ningún lado. Cada aviso se puede borrar con su X. */
+    return '<div class="camp-row">'+'<'+(esPago?'button type="button" class="camp-it click'+(a.nuevo?" nuevo":"")+'" data-ira="pagos"':
                        'div class="camp-it'+(a.nuevo?" nuevo":"")+'"')+'>'+
       /* 🔴 nada de emojis (regla de la casa): un punto dibujado, ámbar si falta confirmarlo
          y verde si ya entró. Con `title` para quien no distingue los colores. */
       '<span class="camp-t">'+(esPago?'<i class="camp-dot'+(a.pendiente?' pend':' ok')+'" title="'+(a.pendiente?'Falta confirmarlo':'Confirmado')+'"></i>':'')+esc(a.titulo)+'</span>'+
       (a.texto?'<span class="camp-d">'+esc(a.texto)+'</span>':'')+
       '<span class="camp-f">'+esc(campFecha(a.fecha))+'</span>'+
-      '</'+(esPago?'button':'div')+'>';
+      '</'+(esPago?'button':'div')+'>'+
+      '<button type="button" class="camp-del" data-avdel="'+esc(a.id)+'" aria-label="Borrar este aviso" title="Borrar este aviso"><svg viewBox="0 0 24 24" aria-hidden="true"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg></button></div>';
   }).join("");
+  var bt=el("btnCampBorrarTodas"); if(bt) bt.hidden=!CAMP.avisos.some(function(a){ return a.tipo!=="cierre"; });
 }
+/* Borrar avisos (2-nov-2026): se quita al instante de la pantalla y se avisa al servidor; si falla, vuelve. */
+
+/* Deshacer en vez de «¿estás seguro?» (principio 13 de la casa): una barra de 8 segundos con el botón Deshacer. */
+function snackDeshacer(texto,alDeshacer){
+  var v=el("snackUndo"); if(v) v.remove();
+  v=document.createElement("div"); v.id="snackUndo"; v.className="snack-undo"; v.setAttribute("role","status");
+  v.innerHTML='<span></span><button type="button">Deshacer</button>'; v.firstChild.textContent=texto;
+  var t=setTimeout(function(){ v.remove(); },8000);
+  v.querySelector("button").addEventListener("click",function(){ clearTimeout(t); v.remove(); try{ Promise.resolve(alDeshacer()).catch(function(){}); }catch(e){} });
+  document.body.appendChild(v);
+}
+
+/* Borrar con DESHACER (principio 13): el elemento desaparece de la pantalla al instante y el borrado de verdad se
+   manda a los 8 segundos, salvo que la persona toque «Deshacer». Si cierra la página antes, no se borra nada. */
+function borrarConDeshacer(texto,clave,id,enviar){
+  var arr=db[clave]||[]; var i=-1; arr.forEach(function(x,k){ if(i<0&&x.id===id) i=k; });
+  if(i<0) return;
+  var item=arr[i]; arr.splice(i,1); try{ renderAll(); }catch(e){}
+  function restaurar(){ var a=db[clave]||(db[clave]=[]); if(!a.some(function(x){ return x.id===id; })) a.splice(Math.min(i,a.length),0,item); try{ renderAll(); }catch(e){} }
+  var timer=setTimeout(function(){ Promise.resolve().then(enviar).catch(function(){ restaurar(); toast("No se pudo borrar. Intenta de nuevo."); }); },8000);
+  snackDeshacer(texto,function(){ clearTimeout(timer); restaurar(); });
+}
+/* lo mismo para algo que solo se esconde en pantalla (adjunto, foto, mensaje): se esconde, se manda a los 8 s, o vuelve */
+function esconderConDeshacer(texto,esconder,mostrar,enviar){
+  esconder();
+  var timer=setTimeout(function(){ Promise.resolve().then(enviar).catch(function(){ mostrar(); toast("No se pudo borrar. Intenta de nuevo."); }); },8000);
+  snackDeshacer(texto,function(){ clearTimeout(timer); mostrar(); });
+}
+function campBorrar(ids,todos){
+  var antes=CAMP.avisos.slice();
+  CAMP.avisos=CAMP.avisos.filter(function(a){ return a.tipo==="cierre"||(todos?false:ids.indexOf(a.id)<0); });
+  CAMP.nuevos=CAMP.avisos.filter(function(a){ return a.nuevo; }).length;
+  campPintar();
+  return fetch("/app/api/admin/avisos/borrar",{method:"POST",headers:hdr(),body:JSON.stringify(todos?{todos:true}:{ids:ids})})
+    .then(function(r){ if(!r.ok) throw new Error("x"); return r.json(); })
+    .then(function(d){ snackDeshacer(todos?"Borraste todos los avisos":"Aviso borrado",function(){
+      return fetch("/app/api/admin/avisos/restaurar",{method:"POST",headers:hdr(),body:JSON.stringify({ids:(d&&d.ids)||ids})}).then(function(){ return campCargar(); });
+    }); })
+    .catch(function(){ CAMP.avisos=antes; CAMP.nuevos=antes.filter(function(a){ return a.nuevo; }).length; campPintar(); toast("No se pudo borrar. Intenta de nuevo."); });
+}
+if(el("campLista")) el("campLista").addEventListener("click",function(e){
+  var d=e.target.closest("[data-avdel]"); if(!d) return;
+  e.preventDefault(); e.stopPropagation();
+  campBorrar([d.getAttribute("data-avdel")],false);
+});
+if(el("btnCampBorrarTodas")) el("btnCampBorrarTodas").addEventListener("click",function(e){
+  e.stopPropagation();
+  campBorrar([],true);   /* sin «¿estás seguro?»: se puede deshacer 8 segundos */
+});
 /* "hoy" / "ayer" / "hace 3 días" y, más allá, la fecha. Un ISO pelado no le dice
    nada a nadie de un vistazo. */
 function campFecha(f){
@@ -7342,7 +7697,7 @@ function aplicarPermisosPropios(){
      El permiso se marcaba y no escondia nada. Los reales son los cuatro de la caja
      "Datos y respaldo". Y estos dos de abajo no tenian regla ninguna. */
   if(negados.indexOf("pagos_ver")>=0) css.push('.tab[data-tab="pagos"]');
-  if(negados.indexOf("agenda_editar")>=0) css.push("#btnGuardarDisp,#btnDispFila,#btnDispCopiar");
+  if(negados.indexOf("agenda_editar")>=0) css.push("#btnGuardarDisp,#btnDispFila,#btnDispCopiar,#btnDispCopiarSemana,#btnDispDuplicar");
   if(css.length){
     var st=document.getElementById("permCss")||document.createElement("style");
     st.id="permCss"; st.textContent=css.join(",")+"{display:none !important;}";
@@ -7519,7 +7874,7 @@ document.querySelectorAll(".tab").forEach(function(t){
     var ti=TITULOS[t.dataset.tab]||"Panel";
     if(el("pageTitle")) el("pageTitle").textContent=ti;
     if(el("topTitle")) el("topTitle").textContent=ti;
-    if(t.dataset.tab==="agenda") cargarAgenda();
+    if(t.dataset.tab==="agenda"){ cargarAgenda(); cargarAusencias(); }
     if(t.dataset.tab==="perfil") renderPerfil();
     if(t.dataset.tab==="feedback") cargarFeedback();
     if(t.dataset.tab==="profesores"){ cargarProfesores(); cargarLiquidacion(); }
@@ -7685,7 +8040,8 @@ function tbPreparar(){
       if(!t.classList.contains("acc-fija")) return;
       t.querySelectorAll("tbody tr > td:last-child > .rowact:not([data-accmas])").forEach(function(ra){
         ra.setAttribute("data-accmas","1");
-        var its=[].slice.call(ra.children).filter(function(n){ return n.matches("button,a"); });
+        /* los adjuntos (.adj: chip con reproductor <audio>, ~300 px cada uno) también van al menú ⋯: dejados en la fila inflaban la columna sticky a ~990 px y tapaban toda la tabla de Asistencia */
+        var its=[].slice.call(ra.children).filter(function(n){ return n.matches("button,a,.adj"); });
         if(its.length<=2) return;
         var prim=its.filter(function(n){ return n.classList.contains("btn")&&!n.classList.contains("ghost"); })[0]||its[0];
         var wrap=document.createElement("div"); wrap.className="acc-mas";
@@ -7970,12 +8326,9 @@ document.body.addEventListener("click",function(e){
         .catch(function(){ toast("No se pudo borrar. Revisa tu conexión e intenta de nuevo."); dl.disabled=false; });
     }
   }
-  if(dr){ if(confirm("¿Borrar este registro de clase?")){
-      dr.disabled=true;
-      db.registro=db.registro.filter(function(x){return x.id!==dr.dataset.delreg;});
-      apiPut().then(function(){ renderAll(); toast("Registro borrado"); })
-        .catch(function(){ toast("No se pudo borrar. Revisa tu conexión e intenta de nuevo."); dr.disabled=false; });
-    }
+  if(dr){
+    /* el registro viaja dentro del guardado general: a los 8 s se guarda sin esa fila */
+    borrarConDeshacer("Registro de clase borrado","registro",dr.dataset.delreg,function(){ return apiPut().then(function(){ renderAll(); }); });
   }
   if(er){ var rg=db.registro.find(function(x){return x.id===er.dataset.editreg;}); if(!rg)return;
     /* 14-ago-2026: este botón ahora también vive DENTRO de la ficha del alumno ("Ya tomadas").
@@ -8238,10 +8591,8 @@ if(el("tablaGrupos")) el("tablaGrupos").addEventListener("click",function(e){
   var b=e.target.closest("button"); if(!b) return;
   if(b.dataset.geditar){ var g=(db.grupos||[]).find(function(x){return x.id===b.dataset.geditar;}); if(g) abrirGrupo(g); }
   if(b.dataset.gborrar){ var g2=(db.grupos||[]).find(function(x){return x.id===b.dataset.gborrar;});
-    if(g2 && confirm('¿Borrar el grupo "'+g2.nombre+'"? (Los alumnos y sus clases no se tocan.)')){
-      apiPost("/app/api/admin/grupo",{accion:"borrar",id:g2.id})
-        .then(function(){ toast("Grupo borrado"); return recargar(); })
-        .catch(function(err){ toast(err.message||"No se pudo borrar"); });
+    if(g2){
+      borrarConDeshacer('Grupo "'+g2.nombre+'" borrado',"grupos",g2.id,function(){ return apiPost("/app/api/admin/grupo",{accion:"borrar",id:g2.id}).then(function(){ return recargar(); }); });
     }
   }
   if(b.dataset.gclase){ var g3=(db.grupos||[]).find(function(x){return x.id===b.dataset.gclase;}); if(g3) registrarClaseGrupo(g3); }
@@ -8545,11 +8896,9 @@ document.querySelectorAll(".tab").forEach(function(t){
 el("chatAdmMsgs").addEventListener("click",function(e){
   var b=e.target.closest("[data-chatdel]");
   if(!b) return;
-  if(confirm("¿Borrar este mensaje?")){
-    apiPost("/app/api/admin/chat/borrar",{id:b.dataset.chatdel})
-      .then(function(){ chatAdmIniciar(); toast("Mensaje borrado"); })
-      .catch(function(err){ toast((err&&err.message)||"No se pudo borrar"); });
-  }
+  var filaM=b.parentElement, idM=b.dataset.chatdel;
+  esconderConDeshacer("Mensaje borrado",function(){ filaM.style.display="none"; },function(){ filaM.style.display=""; },
+    function(){ return apiPost("/app/api/admin/chat/borrar",{id:idM}).then(function(){ chatAdmIniciar(); }); });
 });
 function chatAdmEnviarMsg(){
   var t=el("chatAdmTexto").value.trim();
@@ -8999,10 +9348,11 @@ function pintarClasesDeAlumno(a){
     h+='<div style="margin-top:2px;">'+titulo("Ya pasaron y están sin marcar", sinMarcar.length, "var(--accent)")+
       lista(sinMarcar.map(function(r){
         return fila(esc(fmtLima(r.inicio_utc))+(r.curso?(' · '+esc(r.curso)):''),
-          '<button type="button" class="btn ghost sm" data-ficha-marcar="completada" data-id="'+esc(r.id)+'">Vino</button> '+
-          '<button type="button" class="btn ghost sm" data-ficha-marcar="falta" data-id="'+esc(r.id)+'">Faltó</button> '+
-          '<button type="button" class="btn ghost sm" data-ficha-cerrar="reprogramada" data-id="'+esc(r.id)+'">Reprogramada a…</button> '+
-          '<button type="button" class="btn ghost sm" data-ficha-cerrar="cancelada" data-id="'+esc(r.id)+'" title="Se cancela y la clase vuelve a su saldo">Cancelada</button>');
+          '<button type="button" class="btn ghost sm" data-ficha-marcar="completada" data-id="'+esc(r.id)+'">Asistió</button> '+
+          '<button type="button" class="btn ghost sm" data-ficha-marcar="falta" data-id="'+esc(r.id)+'" title="No vino y no avisó">Ausente</button> '+
+          '<button type="button" class="btn ghost sm" data-ficha-cerrar="cancelo_tarde" data-id="'+esc(r.id)+'" title="Avisó fuera de plazo: la clase se le cuenta como usada">Canceló tarde</button> '+
+          '<button type="button" class="btn ghost sm" data-ficha-cerrar="cancelada" data-id="'+esc(r.id)+'" title="Avisó a tiempo: la clase vuelve a su saldo">Canceló a tiempo</button> '+
+          '<button type="button" class="btn ghost sm" data-ficha-cerrar="reprogramada" data-id="'+esc(r.id)+'">Reprogramada a…</button>');
       }).join(""))+
       '<p class="hint" style="margin:4px 0 0;">'+sinMarcar.length+(sinMarcar.length===1?' pendiente de cerrar':' pendientes de cerrar')+
       ': mientras sigan «reservadas» cuentan como usadas en su saldo. Ciérralas y el saldo cuadra.</p></div>';
@@ -9012,9 +9362,10 @@ function pintarClasesDeAlumno(a){
   if(!futuras.length) h+='<p class="hint" style="margin:3px 0 0;">No tiene ninguna clase reservada.</p>';
   else h+=lista(futuras.map(function(r){
     return fila(esc(fmtLima(r.inicio_utc))+(r.curso?(' · '+esc(r.curso)):''),
-      '<button type="button" class="btn ghost sm" data-ficha-marcar="completada" data-id="'+esc(r.id)+'">Vino</button> '+
-      '<button type="button" class="btn ghost sm" data-ficha-marcar="falta" data-id="'+esc(r.id)+'">Faltó</button> '+
-      '<button type="button" class="btn ghost sm" data-ficha-marcar="cancelada" data-id="'+esc(r.id)+'">Quitar</button>');
+      '<button type="button" class="btn ghost sm" data-ficha-marcar="completada" data-id="'+esc(r.id)+'">Asistió</button> '+
+      '<button type="button" class="btn ghost sm" data-ficha-marcar="falta" data-id="'+esc(r.id)+'" title="No vino y no avisó">Ausente</button> '+
+      '<button type="button" class="btn ghost sm" data-ficha-marcar="cancelo_tarde" data-id="'+esc(r.id)+'" title="Avisó fuera de plazo: la clase se le cuenta como usada">Canceló tarde</button> '+
+      '<button type="button" class="btn ghost sm" data-ficha-marcar="cancelada" data-id="'+esc(r.id)+'" title="Avisó a tiempo: la clase vuelve a su saldo">Canceló a tiempo</button>');
   }).join(""));
   h+='</div>';
 
@@ -9054,6 +9405,43 @@ function pintarClasesDeAlumno(a){
   }
   box.innerHTML=h;
   wrap.style.display="";
+  fichaCreditos(a,box);
+  fichaPrueba(a,box);
+}
+/* Alumna de prueba (2-nov-2026): marcarla, y pasarla a regular en la MISMA ficha (sin perfil nuevo). Solo el dueño. */
+function fichaPrueba(a,box){
+  if(typeof esDuenoPanel!=="function"||!esDuenoPanel()) return;
+  var pr=Number(a.es_prueba)===1;
+  var cfgOn=db.config&&Number(db.config.prueba_plazas)>0;
+  if(!pr&&!cfgOn) return;
+  var h='<div id="fichaPrueba" style="margin-top:12px;"><b style="font-size:12.5px;">Alumna de prueba</b>'+
+    (pr?'<p class="hint" style="margin:3px 0 4px;">Está en plazas de prueba. Cuando se quede, pásala a regular: conserva su ficha y su historial.</p>'+
+        '<button type="button" class="btn ghost sm" data-prueba="convertir" data-al="'+esc(a.id)+'">Pasar a alumna regular…</button> <button type="button" class="btn ghost sm" data-prueba="quitar" data-al="'+esc(a.id)+'">Ya no es de prueba</button>'
+       :'<p class="hint" style="margin:3px 0 4px;">Es alumna regular.</p><button type="button" class="btn ghost sm" data-prueba="marcar" data-al="'+esc(a.id)+'">Marcar como alumna de prueba</button>')+'</div>';
+  var viejo=box.querySelector("#fichaPrueba"); if(viejo) viejo.remove();
+  box.insertAdjacentHTML("beforeend",h);
+}
+/* Créditos de recuperación en la ficha (2-nov-2026): la lista de la alumna, con anular / editar a mano.
+   Se pide aparte para no frenar la ficha; si la academia no los usa y no hay ninguno, no aparece nada. */
+function fichaCreditos(a,box){
+  fetch("/app/api/admin/creditos?alumno_id="+encodeURIComponent(a.id),{headers:hdr()}).then(function(r){ return r.ok?r.json():null; }).then(function(d){
+    if(!d||FICHA_AL!==a.id) return;
+    var lista=d.creditos||[], on=d.config&&d.config.on, dueno=(typeof esDuenoPanel==="function"&&esDuenoPanel());
+    if(!on&&!lista.length&&!dueno) return;
+    if(!on&&!lista.length) return;
+    var nombres={activo:"Disponible",usado:"Usado",anulado:"Anulado",vencido:"Vencido"};
+    var h='<div id="fichaCred" style="margin-top:12px;"><b style="font-size:12.5px;">Créditos de recuperación</b> <span class="hint" style="margin:0;">('+lista.filter(function(c){return c.estado_efectivo==="activo";}).length+' disponibles)</span>';
+    if(!lista.length) h+='<p class="hint" style="margin:3px 0;">Todavía no tiene créditos.</p>';
+    h+=lista.map(function(c){
+      var det=(c.estado_efectivo==="usado"?'se usó en una clase':'vence el '+esc(c.vence))+(c.nota?' · '+esc(c.nota):'')+(c.motivo==="manual"?' · dado a mano':c.motivo==="cancelo_tarde"?' · cancelación tardía':c.motivo==="profe_ausente"?' · profesora ausente':' · por falta');
+      var bt=(dueno&&c.estado_efectivo!=="usado")?(' <button type="button" class="btn ghost sm" data-cred="editar" data-id="'+esc(c.id)+'" data-vence="'+esc(c.vence)+'">Cambiar fecha</button>'+(c.estado_efectivo==="activo"?' <button type="button" class="btn ghost sm" data-cred="anular" data-id="'+esc(c.id)+'" data-vence="'+esc(c.vence)+'">Anular</button>':'')):'';
+      return '<div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid var(--line);"><div style="flex:1;min-width:0;"><b>'+nombres[c.estado_efectivo]+'</b> <span class="hint" style="margin:0;">'+det+'</span></div>'+bt+'</div>';
+    }).join("");
+    if(dueno) h+='<div style="margin-top:6px;"><button type="button" class="btn ghost sm" data-cred="crear" data-al="'+esc(a.id)+'">Dar un crédito a mano</button></div>';
+    h+='</div>';
+    var viejo=box.querySelector("#fichaCred"); if(viejo) viejo.remove();
+    box.insertAdjacentHTML("beforeend",h);
+  }).catch(function(){});
 }
 /* qué alumno está abierto en la ficha, para repintar su lista sin cerrar la ventana */
 var FICHA_AL=null;
@@ -9103,6 +9491,53 @@ if(el("ovAlumno")) el("ovAlumno").addEventListener("click",function(e){
     cerrarReserva(bc.dataset.id,bc.dataset.fichaCerrar).then(function(ok){
       bc.disabled=false; if(ok) fichaRefrescar();
     });
+    return;
+  }
+  var bpr=e.target.closest("[data-prueba]");
+  if(bpr){
+    e.preventDefault();
+    var ap=bpr.dataset.prueba, idp=bpr.dataset.al;
+    var llamada;
+    if(ap==="convertir"){
+      var nombres=Object.keys(db.precios||{}).filter(function(n){ return n!=="Clase de prueba"; });
+      var elegido=prompt("¿A qué paquete la pasas?\n\n"+nombres.join("\n")+"\n\nEscribe el nombre tal cual:","");
+      if(elegido===null) return;
+      llamada=apiPost("/app/api/admin/alumno/convertir",{alumno_id:idp,paquete:String(elegido).trim()});
+    } else {
+      llamada=apiPost("/app/api/admin/alumno/prueba",{alumno_id:idp,es_prueba:ap==="marcar"});
+    }
+    bpr.disabled=true;
+    llamada.then(function(r){ toast((r&&r.aviso)||"Listo"); return apiGet().then(function(d){ if(d&&d.alumnos) db.alumnos=d.alumnos; return fichaRefrescar(); }); })
+      .catch(function(err){ toast((err&&err.message)||"No se pudo"); }).finally(function(){ bpr.disabled=false; });
+    return;
+  }
+  var bcr=e.target.closest("[data-cred]");
+  if(bcr){
+    e.preventDefault();
+    var acc=bcr.dataset.cred, cuerpoC={accion:acc};
+    if(acc==="crear"){
+      cuerpoC.alumno_id=bcr.dataset.al;
+      var nt=prompt("¿Por qué le das este crédito? (queda anotado)","");
+      if(nt===null) return;
+      cuerpoC.nota=String(nt||"").trim()||"Dado a mano";
+      var vv=prompt("¿Hasta cuándo vale? (año-mes-día, ej. 2026-12-15). Déjalo vacío para usar los días de tus ajustes.","");
+      if(vv===null) return;
+      if(String(vv).trim()) cuerpoC.vence=String(vv).trim();
+    } else if(acc==="editar"){
+      cuerpoC.id=bcr.dataset.id;
+      var nv=prompt("Nueva fecha de caducidad (año-mes-día):",bcr.dataset.vence||"");
+      if(nv===null) return;
+      cuerpoC.vence=String(nv).trim();
+    } else {
+      cuerpoC.id=bcr.dataset.id; cuerpoC.__deshacer={id:bcr.dataset.id,vence:bcr.dataset.vence||""};
+    }
+    bcr.disabled=true;
+    var undoC=cuerpoC.__deshacer; delete cuerpoC.__deshacer;
+    apiPost("/app/api/admin/credito",cuerpoC).then(function(){
+        if(undoC) snackDeshacer("Crédito anulado",function(){ return apiPost("/app/api/admin/credito",{accion:"editar",id:undoC.id,vence:undoC.vence,reactivar:true}).then(function(){ return fichaRefrescar(); }); });
+        else toast("Listo");
+        return fichaRefrescar(); })
+      .catch(function(err){ toast((err&&err.message)||"No se pudo"); }).finally(function(){ bcr.disabled=false; });
     return;
   }
   var bb=e.target.closest("[data-bono]");
@@ -9507,6 +9942,12 @@ el("btnGuardarAjustes").addEventListener("click",function(){
             /* interruptores de la reunión Elevate (7-ago-2026) */
             mp_solo_tarjeta:(el("cfg_mp_solo_tarjeta")?el("cfg_mp_solo_tarjeta").value:""),
             espera_auto:(el("cfg_espera_auto")?el("cfg_espera_auto").value:""),
+            prueba_plazas:(el("cfg_prueba_plazas")?el("cfg_prueba_plazas").value.trim():""),
+            cancel_tarde:(el("cfg_cancel_tarde")?el("cfg_cancel_tarde").value:""),
+            cred_on:(el("cfg_cred_on")?el("cfg_cred_on").value:""),
+            cred_max_mes:(el("cfg_cred_max_mes")?el("cfg_cred_max_mes").value.trim():""),
+            cred_vence_dias:(el("cfg_cred_vence_dias")?el("cfg_cred_vence_dias").value.trim():""),
+            cred_en_tardia:(el("cfg_cred_en_tardia")?el("cfg_cred_en_tardia").value:""),
             portal_fija_off:(el("cfg_portal_fija_off")?el("cfg_portal_fija_off").value:""),
             directorio:(el("cfg_directorio")?el("cfg_directorio").value:""),
             portal_chat_off:(el("cfg_portal_chat_off")?el("cfg_portal_chat_off").value:""),
@@ -10012,7 +10453,7 @@ function bsIr(it){
   closeOv("ovBuscar");
   var t=document.querySelector('.tab[data-tab="'+it.tab+'"]');
   if(t) t.click();
-  if(it.aj) setTimeout(function(){ try{ ajTab(it.aj); }catch(e){} },30);
+  if(it.aj) setTimeout(function(){ try{ ajTab(it.aj); [].forEach.call(document.querySelectorAll(".ajsec"),function(d){ d.open=true; }); }catch(e){} },30);   /* desde el buscador se abren todas las secciones: el ajuste buscado puede estar en una cerrada */
   /* 31-ago-2026: las 7 páginas de Mi web se navegan con `pg`. No hay función
      global que las abra (irA() vive dentro del módulo del editor), así que se le
      da click al botón real de #webPages, que es justo lo que el editor escucha.
@@ -10288,11 +10729,8 @@ document.body.addEventListener("click",function(e){
   var dr=e.target.closest("[data-delrec]");
   if(!dr) return;
   var r=(db.recursos||[]).find(function(x){return x.id===dr.dataset.delrec;});
-  if(r && confirm('¿Borrar el recurso "'+r.titulo+'"?')){
-    apiPost("/app/api/admin/recurso",{accion:"borrar",id:r.id})
-      .then(function(){ return recargar(); })
-      .then(function(){ toast("Recurso borrado"); })
-      .catch(function(err){ toast((err&&err.message)||"No se pudo borrar"); });
+  if(r){
+    borrarConDeshacer('Recurso "'+r.titulo+'" borrado',"recursos",r.id,function(){ return apiPost("/app/api/admin/recurso",{accion:"borrar",id:r.id}).then(function(){ return recargar(); }); });
   }
 });
 
@@ -10365,11 +10803,8 @@ el("btnSubirCarpeta").addEventListener("click",function(){
 document.body.addEventListener("click",function(e){
   var de=e.target.closest("[data-delej]"); if(!de) return;
   var ej=(db.ejercicios||[]).find(function(x){return x.id===de.dataset.delej;});
-  if(ej && confirm('¿Borrar el ejercicio "'+ej.titulo+'" de tu biblioteca?\n(Las clases donde ya lo mandaste lo conservan.)')){
-    apiPost("/app/api/admin/ejercicio",{accion:"borrar",id:ej.id})
-      .then(function(){ return recargar(); })
-      .then(function(){ toast("Ejercicio borrado"); })
-      .catch(function(err){ toast((err&&err.message)||"No se pudo borrar"); });
+  if(ej){
+    borrarConDeshacer('Ejercicio "'+ej.titulo+'" borrado',"ejercicios",ej.id,function(){ return apiPost("/app/api/admin/ejercicio",{accion:"borrar",id:ej.id}).then(function(){ return recargar(); }); });
   }
 });
 
@@ -10388,16 +10823,12 @@ function postAudio(fd){
 document.body.addEventListener("click",function(e){
   var ac=e.target.closest("[data-audiocambiar]"), aq=e.target.closest("[data-audioquitar]");
   if(ac){ audioRegId=ac.dataset.audiocambiar; el("fileAudio").value=""; el("fileAudio").click(); }
-  if(aq && confirm("¿Quitar este adjunto?")){
-    var fd=new FormData(); fd.append("registro_id",aq.dataset.audioquitar); fd.append("accion","borrar");
-    fd.append("url",aq.dataset.audiourl||"");
-    postAudio(fd)
-      .then(function(){ return recargar(); })
-      .then(function(){ toast("Adjunto quitado"); })
-      .catch(function(err){
-        if(err&&err.auth){ irALogin(); }
-        toast((err&&err.message)||"No se pudo quitar");
-      });
+  if(aq){
+    var chip=aq.closest(".adj")||aq.parentElement, regIdA=aq.dataset.audioquitar, urlA=aq.dataset.audiourl||"";
+    esconderConDeshacer("Adjunto quitado",function(){ chip.style.display="none"; },function(){ chip.style.display=""; },function(){
+      var fd=new FormData(); fd.append("registro_id",regIdA); fd.append("accion","borrar"); fd.append("url",urlA);
+      return postAudio(fd).then(function(){ return recargar(); });
+    });
   }
 });
 el("fileAudio").addEventListener("change",function(e){
@@ -12697,6 +13128,7 @@ var _bCuD=el("btnCulqiDesconectar"); if(_bCuD) _bCuD.addEventListener("click",fu
 "   - Si las alumnas pueden cancelar o reprogramar solas y con cuántas horas de anticipación como mínimo.",
 "   - Con cuántas horas de anticipación como mínimo se puede reservar una clase.",
 "   - Cuántos meses dura un paquete de clases antes de vencer (0 si no vence).",
+"   - Si la alumna que falta recibe un crédito para recuperar la clase, cuántos como máximo por alumna al mes y cuántos días le duran (creditos_recuperacion, creditos_max_por_mes, creditos_vigencia_dias, creditos_por_cancelacion_tardia).",
 "   - Mis paquetes: cuáles ofrezco (nombre, cuántas clases incluye, precio y, si quiero, cuántos días dura). Usa listar_precios para ver los que ya existen y crea los que falten con crear_paquete.",
 "   - Mis horarios semanales: en qué días y a qué hora empiezan las clases, de qué curso es cada una y cuántas alumnas entran. Cárgalos con agregar_horario.",
 "3. Cuando tengas las respuestas, hazme un resumen con lo que vas a cambiar (antes → después) y espera mi «sí» antes de aplicar nada.",
@@ -12870,7 +13302,7 @@ function packsPintarPie(){
 }
 function refrescarPlan(){
   if(!el("packsCat")) return;
-  fetch('/app/api/t/me',{headers:hdr()}).then(function(r){return r.json().catch(function(){return {};});}).then(function(d){
+  fetchMe().then(function(r){return r.json().catch(function(){return {};});}).then(function(d){
     if(!d || d.error || !d.packs) return;
     PACKS_CAT=d.packs.catalogo||{}; PACKS_BASE=d.packs.base||{};
     PACKS_TENIDOS=JSON.parse(JSON.stringify(d.packs.comprados||{}));
@@ -12910,7 +13342,7 @@ function refrescarPlan(){
       } else {
         toast(d && d.modo==="base" ? "Listo: volviste a la Batuta gratis" : "Listo: tu cobro queda en S/"+monto+" al mes");
       }
-      refrescarPlan();
+      invalidarMe(); refrescarPlan();
     }).catch(function(e){ toast((e&&e.message)||"No se pudo aplicar"); b.disabled=false; });
   });
 })();
@@ -12944,7 +13376,7 @@ try {
   if(_stQ){
     setTimeout(function(){
       if(_stQ==="ok") toast("Stripe: revisa tu estado de conexión en Configuración");
-      else toast("Retomaste el onboarding de Stripe. Complétalo para activar los cobros");
+      else toast("Retomaste la activación de Stripe. Complétala para activar los cobros");
       try{ MP_ESTADO_CARGADO=false; renderAjustes(); }catch(e){}
     }, 600);
     try { history.replaceState(null, "", location.pathname); } catch(e){}
@@ -13080,11 +13512,11 @@ function pintarAvisoWeb(p){
     :(faltaPrecios?"todos tus paquetes están sin precio (S/0)":"aún no conectaste un medio de cobro (Yape o Mercado Pago)");
   var btns=(faltaPrecios?'<button class="btn sm" data-acttab="ajustes" data-actaj="clases">Ponerles precio</button>':"")+
            (faltaCobro?'<button class="btn ghost sm" data-acttab="ajustes" data-actaj="cobros">Conectar mi cobro</button>':"");
-  card.innerHTML='<div style="display:flex;gap:10px;align-items:flex-start;">'+
-    '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--amber,#d99a3c)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex:0 0 auto;margin-top:2px;" aria-hidden="true"><path d="M10.3 3.9 1.9 18a2 2 0 0 0 1.7 3h16.8a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>'+
-    '<div style="flex:1;"><b style="color:var(--amber,#d99a3c);">Tu web NO muestra precios</b>'+
-    '<p class="hint" style="margin:6px 0 10px;">Porque '+motivo+'. Quien entra a tu página no ve tus planes ni un botón para comprar: no te puede pagar por ahí.</p>'+
-    '<div style="display:flex;gap:8px;flex-wrap:wrap;">'+btns+'</div></div></div>';
+  /* una sola franja, no una tarjeta: se repite en varias pantallas y no debe empujar el contenido (auditoría de diseño, 2-nov-2026) */
+  card.innerHTML='<div class="aviso-franja">'+
+    '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--amber,#d99a3c)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex:0 0 auto;" aria-hidden="true"><path d="M10.3 3.9 1.9 18a2 2 0 0 0 1.7 3h16.8a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>'+
+    '<div class="af-tx"><b>Tu web no muestra precios.</b> Porque '+motivo+', no te pueden comprar por ahí.</div>'+
+    '<div class="af-bt">'+btns+'</div></div>';
   wireIrPantalla(card);
   gW.style.display="";
 }
@@ -13468,7 +13900,7 @@ window.batutaInit = batutaInit;
     if(acc==="add"){ var l=getR(WEB,r); if(!Array.isArray(l)){ l=[]; setR(WEB,r,l); } l.push(nuevoItem(r)); render(); pintar(); return; }
     var m=r.match(/^(.*)\.(\d+)$/); if(!m) return;
     var l2=getR(WEB,m[1]), i=Number(m[2]); if(!Array.isArray(l2)) return;
-    if(acc==="del"){ if(!confirm("¿Borrar esto de tu web?")) return; l2.splice(i,1); render(); pintar(); return; }
+    if(acc==="del"){ var quitado=l2.splice(i,1)[0]; render(); pintar(); snackDeshacer("Quitado de tu web",function(){ l2.splice(Math.min(i,l2.length),0,quitado); render(); pintar(); }); return; }
     if(acc==="up"&&i>0){ l2.splice(i-1,0,l2.splice(i,1)[0]); render(); pintar(); return; }
     if(acc==="down"&&i<l2.length-1){ l2.splice(i+1,0,l2.splice(i,1)[0]); render(); pintar(); return; }
   });
@@ -14345,6 +14777,31 @@ el("wzSalir").onclick=function(){
   el("wzVeil").hidden=true;
   toast("Tranquila, lo retomamos la próxima vez que entres.");
 };
+})();
+</script>
+<nav class="bnav" id="bottomNav" aria-label="Menú principal"></nav>
+<script>
+/* Barra inferior (celular): se arma con los mismos íconos del menú lateral y le hace clic al botón de allá. */
+(function(){
+  var NOM={hoy:"Hoy",alumnos:"Alumnos",clases:"Clases",cobros:"Cobros",academia:"Más"};
+  function armar(){
+    var nav=document.getElementById("bottomNav"); if(!nav||nav.children.length) return;
+    var bigs=[].slice.call(document.querySelectorAll(".navbig[data-nav]"));
+    if(!bigs.length) return;
+    bigs.forEach(function(b){
+      var k=b.getAttribute("data-nav"), svg=b.querySelector(".nb-ico svg");
+      var x=document.createElement("button"); x.type="button"; x.setAttribute("data-bn",k);
+      x.setAttribute("aria-label",NOM[k]||k);
+      x.innerHTML=(svg?svg.outerHTML:"")+"<span>"+(NOM[k]||k)+"</span>";
+      x.addEventListener("click",function(){ b.click(); window.scrollTo(0,0); var c=document.querySelector(".content"); if(c&&c.scrollTo) c.scrollTo(0,0); });
+      nav.appendChild(x);
+    });
+    function sync(){ [].forEach.call(nav.children,function(x){ var b=document.querySelector('.navbig[data-nav="'+x.getAttribute("data-bn")+'"]'); x.classList.toggle("on",!!(b&&b.classList.contains("active"))); }); }
+    try{ new MutationObserver(sync).observe(document.querySelector(".nav")||document.body,{attributes:true,subtree:true,attributeFilter:["class"]}); }catch(e){}
+    sync();
+  }
+  if(document.readyState==="loading") document.addEventListener("DOMContentLoaded",armar); else armar();
+  window.addEventListener("load",armar);
 })();
 </script>
 </body>

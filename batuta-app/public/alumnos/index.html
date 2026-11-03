@@ -272,7 +272,7 @@
   tr:last-child td{border-bottom:0;}
   td.mono{font-family:var(--mono);font-size:12px;color:var(--muted);white-space:nowrap;}
   td.mut,span.mut{color:var(--muted);font-size:13.5px;}
-  .empty{color:var(--muted);font-family:var(--mono);font-size:12px;text-transform:uppercase;letter-spacing:.08em;padding:10px 0;}
+  .empty{color:var(--muted);font-size:16px;line-height:1.5;text-transform:none;letter-spacing:0;padding:10px 0;}
   .tarea{border-left:5px solid var(--accent);}
   .tarea .t{font-family:var(--display);font-size:20px;line-height:1.35;}
   .tarea .meta{font-family:var(--mono);font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;margin-top:8px;}
@@ -474,6 +474,38 @@
   .oia-send{flex:0 0 auto;padding:0 13px;border:none;border-radius:6px;cursor:pointer;background:var(--accent);color:var(--sobre-acento);font-family:var(--mono);font-weight:700;font-size:12px;}
   .oia-send:disabled{opacity:.5;cursor:default;}
   #app.hidden ~ .oia-fab,#app.hidden ~ .oia-panel{display:none!important;}
+
+/* Celular (2-nov-2026, auditoría de diseño): el botón de tema tapaba la primera pestaña de la barra de abajo y las
+   etiquetas de las pestañas medían 8.5 px. El botón sube a la esquina y las etiquetas crecen. */
+@media (max-width:859px){
+  #temaBtn{position:fixed;top:10px;right:12px;z-index:60;width:40px;height:40px;}
+  .main{padding-top:56px;}
+  .side nav a span{font-size:10px;font-weight:600;}
+  .side nav a svg{width:21px;height:21px;}
+}
+
+/* Celular: 5 pestañas, no 7 (2-nov-2026). Recursos, Beneficios y Mi cuenta pasan a «Más». */
+.mas-tab,.mas-menu{display:none;}
+@media (max-width:859px){
+  .side nav a[data-v="recursos"],.side nav a[data-v="referidos"],.side nav a[data-v="cuenta"]{display:none;}
+  .side nav .mas-tab{display:flex;flex:1;flex-direction:column;justify-content:center;align-items:center;background:transparent;border:0;border-top:3px solid transparent;color:inherit;font:inherit;cursor:pointer;padding:6px 0;}
+  .side nav .mas-tab.active{border-top-color:var(--accent-ink);}
+  .side nav .mas-tab span{display:block;font-size:10px;font-weight:600;line-height:1.1;margin-top:3px;}
+  .side nav .mas-tab svg{width:21px;height:21px;}
+  .mas-menu{position:fixed;right:10px;bottom:78px;z-index:80;flex-direction:column;min-width:200px;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:6px;box-shadow:0 8px 28px rgba(0,0,0,.25);}
+  .mas-menu.abierto{display:flex;}
+  .mas-menu a{display:flex;align-items:center;gap:12px;min-height:48px;padding:0 14px;border-radius:10px;color:var(--ink);text-decoration:none;font-size:16px;font-weight:600;}
+  .mas-menu a:hover,.mas-menu a.active{background:var(--panel-2,rgba(0,0,0,.06));}
+  .mas-menu svg{width:22px;height:22px;stroke:currentColor;stroke-width:1.8;fill:none;stroke-linecap:round;stroke-linejoin:round;}
+}
+
+/* Letra y botones del portal (2-nov-2026, auditoría de diseño): había etiquetas de 10 a 11.5 px y botones de 11.5 px.
+   Piso de 13 px para todo lo que se lee, y botones de 44 px (48 en celular) para que se toquen sin errar. */
+.eyebrow,.lab,.sub,.stubcap,.pill,.ministat,.note,label,.main h3{font-size:13px;}
+.btn,.main .btn{font-size:13px;}
+.btn{min-height:44px;}
+.main .btn.sm{min-height:44px;}
+@media (max-width:859px){ .btn,.main .btn.sm{min-height:48px;} }
 </style>
 </head>
 <body>
@@ -724,6 +756,11 @@
               <button class="btn ghost sm" type="button" id="calCopiar" style="margin-top:8px;">Copiar enlace</button>
             </div>
           </div>
+        </div>
+
+        <div class="card" id="agCredCard" style="margin-bottom:16px;display:none;">
+          <h3>// TUS CRÉDITOS DE RECUPERACIÓN</h3>
+          <div id="agCred"></div>
         </div>
 
         <div class="card" id="agEsperaCard" style="margin-bottom:16px;display:none;">
@@ -1771,7 +1808,8 @@ function renderComprar(){
   // Estado vacío: si el profe aún no publicó precios, el alumno vería una caja en blanco.
   // Le explicamos qué pasa y a quién escribir, en vez de dejarlo perdido.
   $("tiers").innerHTML = tiersHtml || '<div class="empty" style="grid-column:1/-1;text-align:center;padding:32px 16px;opacity:.85">'+
-    'Tu profesor todavía no publicó los paquetes de clases aquí.<br>Escríbele y los coordinan directo.</div>';
+    'Tu profesor todavía no publicó los paquetes de clases aquí.<br>Escríbele y los coordinan directo.'+
+    ((ME && ME.portal && ME.portal.whatsapp) ? '<br><a class="btn" style="margin-top:16px" target="_blank" rel="noopener" href="https://wa.me/'+String(ME.portal.whatsapp).replace(/\D/g,"")+'">Escribirle por WhatsApp</a>' : '')+'</div>';
 }
 $("tiers").addEventListener("click",function(e){
   var b=e.target.closest("[data-comprar]");
@@ -1811,7 +1849,7 @@ try {
   if(_pagoQ){
     setTimeout(function(){
       try {
-        if(_pagoQ==="ok") toast("Pago recibido: tu paquete se activa en unos segundos 🎉");
+        if(_pagoQ==="ok") toast("Pago recibido: tu paquete se activa en unos segundos.");
         else if(_pagoQ==="pendiente") toast("Tu pago quedó en proceso; se confirma solo apenas apruebe.");
         else toast("El pago no se completó. Puedes intentar de nuevo o pagar por Yape.");
       } catch(e){}
@@ -2055,7 +2093,7 @@ function renderPaybox(){
       var cc = calc(pk);
       var soloTarjMP = (m === "Tarjeta (Mercado Pago)") && !!cf.mp_solo_tarjeta;
       var lab = (m === "Tarjeta (Stripe)") ? "Tarjeta internacional" : (soloTarjMP ? "Tarjeta" : "Tarjeta o Yape");
-      var nota = (m === "Tarjeta (Stripe)") ? "Te llevamos al checkout seguro de Stripe. Al terminar, tu paquete se activa solo."
+      var nota = (m === "Tarjeta (Stripe)") ? "Te llevamos a la página de pago segura de Stripe. Al terminar, tu paquete se activa solo."
         : (m === "Tarjeta/Yape (Culqi)") ? "Paga con tarjeta o Yape sin salir de aquí. Se confirma solo."
         : (soloTarjMP ? "Te llevamos a Mercado Pago (solo tarjeta). Al terminar, tu paquete se activa solo."
         : "Te llevamos a Mercado Pago (tarjeta o Yape). Al terminar, tu paquete se activa solo.");
@@ -2089,7 +2127,7 @@ function pagarConAuto(){
   if(paquete==="Clase de prueba" && !COMPRA_SLOT){ irAWizPaso(2); $("wizErr2").textContent="Elige un horario para tu clase de prueba."; return; }
   if(metodo === "Tarjeta/Yape (Culqi)"){ pagarConCulqi(paquete, curso, btn, txtOrig); return; }
   var endpoint = (metodo === "Tarjeta (Stripe)") ? "/app/api/stripe/crear-alumno" : "/app/api/mp/crear-alumno";
-  if(btn){ btn.disabled=true; btn.textContent="Abriendo checkout…"; }
+  if(btn){ btn.disabled=true; btn.textContent="Abriendo la página de pago…"; }
   api(endpoint,{method:"POST",body:JSON.stringify({paquete:paquete,curso:curso,slot_deseado:(paquete==="Clase de prueba"?COMPRA_SLOT:"")})})
     .then(function(r){
       if(r && r.init_point){ window.location.href = r.init_point; }
@@ -2761,7 +2799,7 @@ function renderAgenda(){
 
   var prox = ME.proximasClases || [];
   if(prox.length===0){
-    $("agProx").innerHTML = '<p class="note" style="margin:0">Todavía no tienes clases agendadas. Reserva abajo 👇</p>';
+    $("agProx").innerHTML = '<p class="note" style="margin:0">Todavía no tienes clases agendadas. Reserva abajo.</p>';
   } else {
     $("agProx").innerHTML = prox.map(function(r){
       var badge = '<span class="rtag">'+(r.tipo==="fija"?"FIJA":"SUELTA")+'</span>';
@@ -2825,7 +2863,7 @@ function cargarSlots(){
     AG_PROFE = (d && d.profe) || null;
     pintarProfe();
     pintarSlots();
-    cargarEspera();
+    cargarEspera(); cargarCreditos();
   }).catch(function(){
     $("agSlots").innerHTML = '<p class="note" style="margin:0 0 8px">No pude cargar los horarios.</p>'+
       '<button class="btn ghost" id="agReintentar" type="button">Reintentar</button>';
@@ -2974,6 +3012,21 @@ function pintarSlots(){
     '<div class="agslotsdia">'+slotsHtml+'</div>';
 }
 
+// ---- Créditos de recuperación (2-nov-2026) ----
+var AG_USAR_CRED=false;
+function cargarCreditos(){
+  api("/app/api/agenda/creditos").then(function(d){
+    var card=$("agCredCard"), box=$("agCred"); if(!card||!box) return;
+    var n=(d&&d.activos)||0;
+    if(!n){ card.style.display="none"; box.innerHTML=""; AG_USAR_CRED=false; return; }
+    card.style.display="";
+    box.innerHTML='<p style="margin:0 0 8px;">Tienes <b>'+n+' crédito'+(n===1?'':'s')+'</b> para recuperar una clase. '+(d.proximo_vence?'El primero vence el <b>'+esc(d.proximo_vence)+'</b>.':'')+'</p>'+
+      '<label style="display:flex;gap:8px;align-items:center;cursor:pointer;"><input type="checkbox" id="chkCred"'+(AG_USAR_CRED?' checked':'')+' /> Usar un crédito en la próxima clase que reserve</label>'+
+      '<p class="note" style="margin:6px 0 0;">Solo para clases sueltas. Si cancelas esa clase a tiempo, el crédito te vuelve.</p>';
+    var c=$("chkCred"); if(c) c.addEventListener("change",function(){ AG_USAR_CRED=c.checked; });
+  }).catch(function(){});
+}
+
 // ---- Lista de espera (clases llenas) ----
 function cargarEspera(){
   api("/app/api/agenda/espera").then(function(d){ renderEspera((d&&d.espera)||[]); }).catch(function(){ renderEspera([]); });
@@ -2987,7 +3040,7 @@ function renderEspera(list){
     return '<div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--line);">'+
       '<div style="flex:1;min-width:0;">'+
         '<div style="font-weight:600;text-transform:capitalize;">'+esc(fmtFechaLocal(e.inicio_utc))+' · '+esc(fmtHoraLocal(e.inicio_utc))+(e.curso?' · '+esc(e.curso):'')+(e.sala?' · '+esc(e.sala):'')+'</div>'+
-        '<div class="note" style="margin:0;">'+(av?'<span style="color:var(--accent-ink,#905A14);font-weight:700;">¡Se liberó un cupo! Resérvalo abajo 👇</span>':'En lista de espera · te aviso si se libera un cupo')+'</div>'+
+        '<div class="note" style="margin:0;">'+(av?'<span style="color:var(--accent-ink,#905A14);font-weight:700;">¡Se liberó un cupo! Resérvalo abajo.</span>':'En lista de espera · te aviso si se libera un cupo')+'</div>'+
       '</div>'+
       '<button class="btn ghost sm" data-salir-espera="'+esc(e.id)+'">Salir</button>'+
     '</div>';
@@ -3015,7 +3068,7 @@ function reservarSlot(iso, sala){
     ? "Vas a reservar el horario fijo de "+label+" las próximas 4 semanas. ¿Confirmas?"
     : "Vas a reservar tu clase del "+label+". ¿Confirmas?";
   if(!confirm(msg)) return;
-  api("/app/api/agenda/reservar",{method:"POST",body:JSON.stringify({inicio_utc:iso, tipo:AG_TIPO, sala:sala||""})})
+  api("/app/api/agenda/reservar",{method:"POST",body:JSON.stringify({inicio_utc:iso, tipo:AG_TIPO, sala:sala||"", usar_credito:(AG_USAR_CRED&&AG_TIPO!=="fija")})})
     .then(function(r){
       if(r.tipo==="fija"){
         var m = vz("Listo, aparté ","Listo, apartamos ")+r.reservadas+" clase"+(r.reservadas===1?"":"s");
@@ -3025,23 +3078,28 @@ function reservarSlot(iso, sala){
         }
         toast(m);
       } else {
-        toast("Clase reservada");
+        toast(r.con_credito?"Clase reservada con tu crédito de recuperación":"Clase reservada");
+        if(r.con_credito) AG_USAR_CRED=false;
       }
+      cargarCreditos();
       return api("/app/api/me");
     })
     .then(function(d){ ME=d; renderAgenda(); })
     .catch(function(e){ toast(e.message || "No se pudo reservar."); cargarSlots(); });
 }
 
-function cancelarClase(id){
-  if(!confirm("¿Reprogramar esta clase? Se libera tu horario actual y eliges uno nuevo. Solo se puede con al menos "+AG_CANCELA_MIN_H+"h de anticipación.")) return;
-  api("/app/api/agenda/cancelar",{method:"POST",body:JSON.stringify({id:id})})
-    .then(function(r){ toast(r.mensaje || "Clase liberada."); return api("/app/api/me"); })
+function cancelarClase(id, confirmarTarde){
+  if(!confirmarTarde && !confirm("¿Reprogramar esta clase? Se libera tu horario actual y eliges uno nuevo. Solo se puede con al menos "+AG_CANCELA_MIN_H+"h de anticipación.")) return;
+  api("/app/api/agenda/cancelar",{method:"POST",body:JSON.stringify({id:id, confirmar_tarde:!!confirmarTarde})})
+    .then(function(r){ toast(r.mensaje || "Clase liberada."); cargarCreditos(); return api("/app/api/me"); })
     .then(function(d){
       ME=d; renderAgenda();
       var slots=$("agSlots"); if(slots) slots.scrollIntoView({behavior:"smooth",block:"start"});
     })
-    .catch(function(e){ toast(e.message || "No se pudo reprogramar."); });
+    .catch(function(e){
+      if(e && e.data && e.data.requiere_confirmar_tarde){ if(confirm(e.message)) cancelarClase(id, true); return; }
+      toast(e.message || "No se pudo reprogramar.");
+    });
 }
 
 /* Suscripción al calendario (17-ago-2026). El token se pide al servidor la primera vez y
@@ -3496,5 +3554,35 @@ window.initAlumno = initAlumno;
 })();
 </script>
 <script>(function(){var b=document.getElementById("temaBtn");if(!b)return;b.addEventListener("click",function(){var d=document.documentElement,n=d.getAttribute("data-theme")==="dark"?"light":"dark";d.setAttribute("data-theme",n);try{localStorage.setItem("batuta-theme",n)}catch(e){}try{window.aplicarAcento(null)}catch(e){}var m=document.querySelector("meta[name=theme-color]");if(m)m.content=n==="dark"?"#12100e":"#F7F3EB";});})();</script>
+
+<script>
+/* «Más» en el celular: junta Recursos, Beneficios y Mi cuenta para que la barra de abajo tenga 5 pestañas. */
+(function(){
+  function armar(){
+    var nav=document.querySelector(".side nav"); if(!nav||nav.querySelector(".mas-tab")) return;
+    var grupo=["recursos","referidos","cuenta"].map(function(v){ return nav.querySelector('a[data-v="'+v+'"]'); }).filter(Boolean);
+    if(grupo.length<3) return;
+    var btn=document.createElement("button"); btn.type="button"; btn.className="mas-tab"; btn.setAttribute("aria-haspopup","true"); btn.setAttribute("aria-expanded","false");
+    btn.innerHTML='<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="5" cy="12" r="1.2"/><circle cx="12" cy="12" r="1.2"/><circle cx="19" cy="12" r="1.2"/></svg><span>Más</span>';
+    nav.appendChild(btn);
+    var menu=document.createElement("div"); menu.className="mas-menu"; menu.setAttribute("role","menu");
+    grupo.forEach(function(a){ var c=a.cloneNode(true); c.removeAttribute("title"); c.setAttribute("role","menuitem"); menu.appendChild(c); });
+    document.body.appendChild(menu);
+    function cerrar(){ menu.classList.remove("abierto"); btn.setAttribute("aria-expanded","false"); }
+    btn.addEventListener("click",function(e){ e.stopPropagation(); var ab=menu.classList.toggle("abierto"); btn.setAttribute("aria-expanded",ab?"true":"false"); });
+    menu.addEventListener("click",cerrar);
+    document.addEventListener("click",function(e){ if(!e.target.closest(".mas-menu")&&!e.target.closest(".mas-tab")) cerrar(); });
+    function sync(){
+      var act=grupo.some(function(a){ return a.classList.contains("active"); });
+      btn.classList.toggle("active",act);
+      [].forEach.call(menu.children,function(c,i){ c.classList.toggle("active",grupo[i].classList.contains("active")); });
+    }
+    try{ new MutationObserver(sync).observe(nav,{attributes:true,subtree:true,attributeFilter:["class"]}); }catch(e){}
+    sync();
+  }
+  if(document.readyState==="loading") document.addEventListener("DOMContentLoaded",armar); else armar();
+  window.addEventListener("load",armar);
+})();
+</script>
 </body>
 </html>

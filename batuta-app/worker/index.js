@@ -2272,6 +2272,8 @@ async function loadConfig(env, tenantId){
                  portal_sin_profe = "1" -> el portal no nombra profesores ("Tu clase en {academia}") */
               interbank_cuenta: "", interbank_cci: "",
               mp_solo_tarjeta: "", espera_auto: "",
+              /* créditos de recuperación (2-nov-2026): ver el bloque «CRÉDITOS DE RECUPERACIÓN» */
+              cred_on: "", cred_max_mes: "", cred_vence_dias: "", cred_en_tardia: "", cred_desde: "", prueba_plazas: "", cancel_tarde: "",
               portal_fija_off: "", portal_chat_off: "", portal_sin_profe: "",
               /* Beneficios / convenios (10-ago-2026, reunión Elevate): JSON [{t,d,l}] con los
                  convenios de la academia (ej. descuento en X). Los ven los alumnos con cuenta
@@ -3904,6 +3906,10 @@ async function confirmarCompra(env, tenantId, tenant, compra){
     return { ok: false, error: "No se pudo aplicar la compra. Intenta de nuevo.", status: 500 };
   }
 
+  if (!renovado && alumnoIdNuevo && compra.paquete === "Clase de prueba"){
+    try { await ensureCreditosSchema(env); await env.DB.prepare("UPDATE alumnos SET es_prueba = 1 WHERE id = ?1 AND tenant_id = ?2").bind(alumnoIdNuevo, tenantId).run(); }
+    catch (e) { console.error("marcar alumna de prueba", e); }
+  }
   /* Horario elegido ANTES de pagar (calendario publico de ProfesorMVT): "ISO" o "ISO;2" para
      dos horas seguidas. Se reserva con cualquier paquete, no solo con la clase de prueba. */
   if (!renovado && alumnoIdNuevo && compra.slot_deseado) {
@@ -6442,7 +6448,19 @@ function salasDeCfg(cfg){
    sala (03-ago-2026): con salas, la ocupacion se cuenta POR SALA (la clase de Mat llena
    no bloquea la de Maquinas de la misma hora). Un "bloqueo" cierra la hora ENTERA
    (todas las salas): es el profe cerrando su horario, no un ocupante mas. */
-async function ocupacionSlot(env, tenantId, iso, prof, sala){
+/* ═══ PLAZAS DE PRUEBA (2-nov-2026, etapa 3 del pedido de Laura) ═══════════════════════════════════
+   Cada clase tiene sus plazas REGULARES (el cupo de siempre) y, aparte, N plazas de prueba
+   (config `prueba_plazas`, 0 = no hay, y todo funciona como antes). Una alumna de prueba
+   (`alumnos.es_prueba = 1`) solo ocupa plazas de prueba; las regulares nunca se las quita una prueba.
+   La reserva guarda de cuál tomó (`reservas.plaza`). Pasar a regular conserva su ficha: ver /alumno/convertir. */
+function pruebaPlazasDe(cfg){
+  const n = parseInt(cfg && cfg.prueba_plazas, 10);
+  return (Number.isFinite(n) && n >= 1 && n <= 20) ? n : 0;
+}
+function condPlaza(plaza){
+  return plaza === "prueba" ? "(tipo = 'bloqueo' OR COALESCE(plaza,'') = 'prueba')" : "(tipo = 'bloqueo' OR COALESCE(plaza,'') != 'prueba')";
+}
+async function ocupacionSlot(env, tenantId, iso, prof, sala, plaza){
   const pid = prof && prof.id ? prof.id : "";
   const esD = !!(prof && prof.esDueno);
   const salaK = String(sala || "");
@@ -6450,7 +6468,7 @@ async function ocupacionSlot(env, tenantId, iso, prof, sala){
   try {
     results = ((await env.DB.prepare(
       "SELECT tipo, COALESCE(sala,'') AS sala, COUNT(*) AS n FROM reservas WHERE tenant_id = ?1 AND inicio_utc = ?2 AND estado IN ('reservada','completada') " +
-      "AND (profesor_id = ?3 OR (?4 = 1 AND profesor_id IS NULL)) GROUP BY tipo, sala"
+      "AND (profesor_id = ?3 OR (?4 = 1 AND profesor_id IS NULL)) AND " + condPlaza(plaza) + " GROUP BY tipo, sala"
     ).bind(tenantId, iso, pid, esD ? 1 : 0).all()).results) || [];
   } catch (e) {
     /* columna sala aun no existe en esta D1: conteo viejo, todo junto */
@@ -6639,7 +6657,7 @@ async function generarSlotsDetalle(env, tenantId, prof, opts){
   let tomadas = [];
   try {
     tomadas = ((await env.DB.prepare(
-      "SELECT inicio_utc, tipo, COALESCE(sala,'') AS sala FROM reservas WHERE tenant_id = ?1 AND estado IN ('reservada','completada') AND inicio_utc >= ?2 AND inicio_utc <= ?3 " +
+      "SELECT inicio_utc, tipo, COALESCE(sala,'') AS sala, COALESCE(plaza,'') AS plaza FROM reservas WHERE tenant_id = ?1 AND estado IN ('reservada','completada') AND inicio_utc >= ?2 AND inicio_utc <= ?3 " +
       "AND (profesor_id = ?4 OR (?5 = 1 AND profesor_id IS NULL))"
     ).bind(tenantId, new Date(now).toISOString(), new Date(hastaMs).toISOString(), pid, esD ? 1 : 0).all()).results) || [];
   } catch (e) {
@@ -6649,13 +6667,16 @@ async function generarSlotsDetalle(env, tenantId, prof, opts){
     ).bind(tenantId, new Date(now).toISOString(), new Date(hastaMs).toISOString(), pid, esD ? 1 : 0).all()).results) || [];
   }
   /* Ocupacion POR SALA (iso|sala); un bloqueo cierra la hora entera, todas las salas. */
-  const conteo = new Map(); const bloqueados = new Set();
+  const conteo = new Map(), conteoP = new Map(); const bloqueados = new Set();
   for (const r of (tomadas || [])){
     if (r.tipo === "bloqueo"){ bloqueados.add(r.inicio_utc + "|" + (r.sala || "")); continue; }   // 9-oct-2026: el cierre es por sala; sala '' = todas
     const k = r.inicio_utc + "|" + (r.sala || "");
-    conteo.set(k, (conteo.get(k) || 0) + 1);
+    const m = (r.plaza === "prueba") ? conteoP : conteo;   // las plazas de prueba se cuentan aparte de las regulares
+    m.set(k, (m.get(k) || 0) + 1);
   }
   const cfgT = await loadConfig(env, tenantId);
+  const plazasP = pruebaPlazasDe(cfgT);
+  const verComoPrueba = !!(opts && opts.prueba) && plazasP > 0;
   /* Aforo efectivo, en orden: el de la celda (1-60) > el AFORO DEL TIPO DE CLASE
      (Maquinas 3 / Mat 8, definido una sola vez en Ajustes) > el cupo general > 1 sin definir.
      Una sola fuente: aforoResuelto(). */
@@ -6693,11 +6714,12 @@ async function generarSlotsDetalle(env, tenantId, prof, opts){
       if (reg.maxDias > 0 && ms > now + reg.maxDias * 86400000) continue;
       const iso = new Date(ms).toISOString();
       if (bloqueados.has(iso + "|") || bloqueados.has(iso + "|" + (h.sala || ""))) continue;   // hora (o sala) cerrada por el profe: ni libre ni espera
-      const cupo = cupoEff(h.cupo, h.curso);
+      const cupo = verComoPrueba ? plazasP : cupoEff(h.cupo, h.curso);
       /* Comodin de transicion (igual que ocupacionSlot): las reservas sin sala ('')
          ocupan TODAS las salas de esa hora, para no sobrevender mientras haya
          reservas viejas sin backfillear. */
-      const ocupados = (conteo.get(iso + "|" + (h.sala || "")) || 0) + (h.sala ? (conteo.get(iso + "|") || 0) : 0);
+      const cm = verComoPrueba ? conteoP : conteo;
+      const ocupados = (cm.get(iso + "|" + (h.sala || "")) || 0) + (h.sala ? (cm.get(iso + "|") || 0) : 0);
       const enPlan = !(pk && !paqueteCubre(pk, h.curso));
       const estado = !enPlan ? "fuera" : (ocupados < cupo ? "libre" : "lleno");
       (franjas[iso] = franjas[iso] || []).push({
@@ -8418,6 +8440,39 @@ async function sedesDeTenant(env, tid){
    cada una su marca. Y la marca que se guarda es la que el cliente VIO, no "ahora":
    si entra un pago entre que se pinta la lista y se marca leído, no se pierde. */
 const NOVEDADES = [
+  { id: "2026-11-03-portal", fecha: "2026-11-03",
+    titulo: "Portal de tus alumnos más fácil de leer y tocar",
+    texto: "Letras y botones más grandes, y si aún no publicaste paquetes, tus alumnos ven un botón para escribirte por WhatsApp." },
+  { id: "2026-11-02-deshacer-todo", fecha: "2026-11-02",
+    titulo: "Deshacer al borrar",
+    texto: "Al borrar un interesado, un gasto, un grupo, un recurso, un ejercicio, un registro de clase, un adjunto, un mensaje, la foto de perfil, algo de tu web o anular un crédito, ya no te preguntan «¿estás seguro?»: tienes 8 segundos para tocar Deshacer. En el portal de tus alumnos, en el celular, la barra de abajo ahora tiene 5 pestañas y «Más»." },
+  { id: "2026-11-02-deshacer", fecha: "2026-11-02",
+    titulo: "Deshacer en la campanita y portal más claro en el celular",
+    texto: "Si borras un aviso de la campanita tienes 8 segundos para deshacerlo. Perfil tiene tres secciones. En el portal de tus alumnos, las pestañas de abajo se leen mejor y el botón de tema ya no tapa nada." },
+  { id: "2026-11-02-secciones", fecha: "2026-11-02",
+    titulo: "Mis clases y Ajustes más ordenados",
+    texto: "Mis clases ahora tiene cuatro secciones (Calendario, Mi horario, Ausencias y Compartir cupos). En Ajustes → Reservas las opciones están en secciones que se abren y se cierran." },
+  { id: "2026-11-02-creditos", fecha: "2026-11-02",
+    titulo: "Créditos de recuperación",
+    texto: "Si una alumna falta, puede recibir un crédito para recuperar la clase. Tú eliges cuántos al mes y cuántos días duran, y puedes anular o cambiar cada uno desde su ficha. Se prende en Ajustes → Reservas." },
+  { id: "2026-11-02-asistencia", fecha: "2026-11-02",
+    titulo: "Asistencia con cuatro estados",
+    texto: "Ahora marcas si la alumna asistió, estuvo ausente, canceló a tiempo o canceló tarde, y cada uno aplica su regla (clase devuelta, usada o crédito)." },
+  { id: "2026-11-02-prueba", fecha: "2026-11-02",
+    titulo: "Plazas de prueba separadas",
+    texto: "Elige cuántas plazas de prueba tiene cada clase en Ajustes → Reservas. No le quitan lugar a tus alumnas regulares, y cuando una se queda la pasas a regular desde su ficha sin crear un perfil nuevo." },
+  { id: "2026-11-02-tardia", fecha: "2026-11-02",
+    titulo: "Cancelar fuera de plazo",
+    texto: "Decide si una alumna puede cancelar cuando ya pasó el plazo. Si puede, la clase se le cuenta como usada y ella confirma antes de cancelar. Está en Ajustes → Reservas." },
+  { id: "2026-11-02-ausencia", fecha: "2026-11-02",
+    titulo: "Ausencia de profesora",
+    texto: "La profesora avisa desde Mis clases. Tú cancelas sus clases (se cierra el horario, se avisa a las alumnas y reciben su crédito) o asignas una sustituta sin tocar ninguna reserva." },
+  { id: "2026-11-02-copiar-semana", fecha: "2026-11-02",
+    titulo: "Copiar una semana de horario a otra",
+    texto: "En Mis clases, «Copiar una semana a otra» repite todas las clases de una semana en otra, con sus cupos, profesoras y salas. Las reservas ya hechas no se tocan." },
+  { id: "2026-11-02-diseno", fecha: "2026-11-02",
+    titulo: "Botones y letra más grandes, y menú abajo en el celular",
+    texto: "Los botones y los textos ahora se leen y se tocan mejor. En el celular tienes una barra abajo con Hoy, Alumnos, Clases, Cobros y Más." },
   { id: "2026-08-23-direccion", fecha: "2026-08-23",
     titulo: "Tu página web ya dice dónde queda tu academia",
     texto: "Carga la dirección de tu local en Ajustes → Mi academia y sale en tu página, con enlace a Google Maps. Si prefieres no publicarla, ahí mismo la apagas: tus alumnos la siguen viendo en su portal." },
@@ -8457,8 +8512,10 @@ async function ensureAvisosSchema(env){
 function avisosVistoDe(profesor){
   /* `d` (29-set-2026) = el último DÍA de Lima en que se vio el aviso de clases sin cerrar: ese aviso
      se enciende una vez al día mientras haya algo pendiente, y no se queda prendido para siempre. */
-  try { const j = JSON.parse((profesor && profesor.avisos_visto) || "{}") || {}; return { n: String(j.n || ""), c: Number(j.c) || 0, d: String(j.d || "") }; }
-  catch (e) { return { n: "", c: 0, d: "" }; }
+  /* `x` (2-nov-2026) = ids de avisos que esta persona BORRÓ de su campanita (uno por uno o todos). Es por persona. */
+  try { const j = JSON.parse((profesor && profesor.avisos_visto) || "{}") || {};
+    return { n: String(j.n || ""), c: Number(j.c) || 0, d: String(j.d || ""), x: Array.isArray(j.x) ? j.x.map(String).slice(-300) : [] }; }
+  catch (e) { return { n: "", c: 0, d: "", x: [] }; }
 }
 /* ═══ CIERRE DIARIO DE RESERVAS PASADAS (29-set-2026, pedido de Andrés) ═══════════════════════
    Caso real: un alumno pide reprogramar, se acepta, y nadie lo marca en el portal. La reserva pasada
@@ -8518,7 +8575,7 @@ async function listarSinCerrar(env, tid, alcance){
      reprogramada → completada + fila «Reprogramó»       (la fila empareja la reserva: NO consume;
                                                           cuenta en la cuota de reprogramaciones)
      cancelada    → cancelada                            (devuelve la clase)                      */
-const CIERRES_RESERVA = ["dicto", "falta", "reprogramada", "cancelada"];
+const CIERRES_RESERVA = ["dicto", "falta", "reprogramada", "cancelada", "cancelo_tarde"];
 /* PURO: qué columnas cambian al dar `clases` de regalo a `alR`, y (si las regala otro alumno, `alD`) al
    descontárselas a él. Recibir = `bonus_clases` del ciclo de quien recibe; descontar = `migrado_usadas`
    del ciclo de quien regala (las «ya consumidas» que compute() resta del saldo). Si el bono o el
@@ -8535,11 +8592,362 @@ function bonoAplicar(alR, alD, clases){
   }
   return out;
 }
+/* ═══ CRÉDITOS DE RECUPERACIÓN (2-nov-2026, pedido de Laura / academia de danza) ═══════════════════
+   Cuando una alumna inscrita FALTA, la academia puede darle un crédito para recuperar esa clase.
+   Un libro aparte (`creditos_recup`) guarda cada crédito con su porqué, su caducidad y la clase en que
+   se usó; así se puede anular o editar a mano y nunca se usa dos veces.
+   Reglas (todas por academia, apagadas por defecto: nadie cambia de comportamiento sin pedirlo):
+     cred_on          "1"  → se generan solos al marcar una falta
+     cred_max_mes     tope por alumna y MES de la clase faltada (default 1)
+     cred_vence_dias  días de vida desde la clase faltada (default 30). Cruza el fin de mes: un crédito
+                      de enero sigue valiendo en febrero hasta su fecha.
+     cred_desde       día desde el que rige (se sella solo al prender): no regala créditos por faltas viejas
+     cred_en_tardia   "1"  → la cancelación tardía (etapa 4) también da crédito
+   Canje: el crédito suma UNA clase al `bonus_clases` del ciclo (el mismo mecanismo de los regalos) y la
+   reserva queda atada a él (`reservas.credito_id`). Si esa reserva se cancela, el crédito vuelve. */
+const CRED_MAX_MES_DEF = 1, CRED_VENCE_DIAS_DEF = 30;
+let CRED_OK = false;
+async function ensureCreditosSchema(env){
+  if (CRED_OK) return;
+  try {
+    await env.DB.prepare(
+      "CREATE TABLE IF NOT EXISTS creditos_recup (id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, alumno_id TEXT NOT NULL, " +
+      "motivo TEXT DEFAULT 'falta', origen_reserva_id TEXT DEFAULT '', mes TEXT DEFAULT '', creado TEXT DEFAULT '', " +
+      "vence TEXT DEFAULT '', estado TEXT DEFAULT 'activo', usado_reserva_id TEXT DEFAULT '', usado_utc TEXT DEFAULT '', " +
+      "nota TEXT DEFAULT '', por TEXT DEFAULT '')"
+    ).run();
+  } catch (e) { /* ya existe */ }
+  try { await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_cred_alumno ON creditos_recup (tenant_id, alumno_id, estado)").run(); } catch (e) {}
+  try { await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_cred_origen ON creditos_recup (tenant_id, origen_reserva_id)").run(); } catch (e) {}
+  for (const col of ["credito_id TEXT DEFAULT ''", "cancel_tipo TEXT DEFAULT ''", "plaza TEXT DEFAULT ''"]){
+    try { await env.DB.prepare("ALTER TABLE reservas ADD COLUMN " + col).run(); } catch (e) { /* ya existe */ }
+  }
+  /* plazas de prueba (etapa 3): la alumna de prueba lleva la marca en su ficha */
+  try { await env.DB.prepare("ALTER TABLE alumnos ADD COLUMN es_prueba INTEGER DEFAULT 0").run(); } catch (e) { /* ya existe */ }
+  CRED_OK = true;
+}
+/* ¿la academia deja cancelar fuera de plazo (y cobra la clase)? Por defecto NO: se bloquea, como siempre. */
+function cancelTardePermitida(cfg){ return String((cfg && cfg.cancel_tarde) || "") === "pierde"; }
+function limpiarEnteroCfg(v, min, max){
+  const n = parseInt(String(v == null ? "" : v).trim(), 10);
+  return (Number.isFinite(n) && n >= min && n <= max) ? String(n) : "";
+}
+/* PURO: las reglas de la academia ya normalizadas */
+function credCfg(cfg){
+  const c = cfg || {};
+  const mx = parseInt(c.cred_max_mes, 10), dv = parseInt(c.cred_vence_dias, 10);
+  return {
+    on: String(c.cred_on || "") === "1",
+    maxMes: (Number.isFinite(mx) && mx >= 1 && mx <= 10) ? mx : CRED_MAX_MES_DEF,
+    dias: (Number.isFinite(dv) && dv >= 1 && dv <= 365) ? dv : CRED_VENCE_DIAS_DEF,
+    desde: /^\d{4}-\d{2}-\d{2}$/.test(String(c.cred_desde || "")) ? String(c.cred_desde) : "",
+    enTardia: String(c.cred_en_tardia || "") === "1"
+  };
+}
+/* PURO: ¿se le puede dar otro crédito por una clase faltada ese día? `existentes` = los créditos de esa
+   alumna (cualquier estado). Los anulados cuentan: anular a mano no abre cupo para otro crédito del mes. */
+function credDecidir(cfg, existentes, claseYMD, origenReservaId){
+  const k = credCfg(cfg);
+  if (!k.on) return { ok: false, motivo: "apagado" };
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(claseYMD || ""))) return { ok: false, motivo: "fecha" };
+  if (k.desde && claseYMD < k.desde) return { ok: false, motivo: "anterior" };
+  const lista = existentes || [];
+  if (origenReservaId && lista.some(c => c.origen_reserva_id === origenReservaId)) return { ok: false, motivo: "ya_tiene" };
+  const mes = claseYMD.slice(0, 7);
+  /* los anulados SÍ cuentan: si la academia anuló un crédito a mano, esa decisión no se "repone" sola con otra falta */
+  const delMes = lista.filter(c => c.mes === mes).length;
+  if (delMes >= k.maxMes) return { ok: false, motivo: "tope_mes" };
+  return { ok: true, mes, vence: sumarDias(claseYMD, k.dias) };
+}
+/* PURO: el estado que se muestra. «vencido» no se guarda: se deduce del día (un crédito no necesita cron). */
+function credEstadoEfectivo(c, hoyYMD){
+  if (!c) return "";
+  if (c.estado === "activo" && c.vence && c.vence < hoyYMD) return "vencido";
+  return c.estado;
+}
+async function credLeerDe(env, tid, alumnoId){
+  await ensureCreditosSchema(env);
+  const { results } = await env.DB.prepare(
+    "SELECT id, alumno_id, motivo, origen_reserva_id, mes, creado, vence, estado, usado_reserva_id, usado_utc, nota, por " +
+    "FROM creditos_recup WHERE tenant_id = ?1 AND alumno_id = ?2 ORDER BY creado DESC LIMIT 200"
+  ).bind(tid, alumnoId).all();
+  const hoy = fechaLimaDe(new Date().toISOString());
+  return (results || []).map(c => Object.assign({}, c, { estado_efectivo: credEstadoEfectivo(c, hoy) }));
+}
+async function credInsertar(env, tid, alumnoId, d){
+  const id = crypto.randomUUID();
+  await env.DB.prepare(
+    "INSERT INTO creditos_recup (id,tenant_id,alumno_id,motivo,origen_reserva_id,mes,creado,vence,estado,nota,por) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,'activo',?9,?10)"
+  ).bind(id, tid, alumnoId, d.motivo || "falta", d.origen || "", d.mes || "", new Date().toISOString(), d.vence || "", String(d.nota || "").slice(0, 200), d.por || "auto").run();
+  return id;
+}
+/* Genera los créditos que correspondan a las faltas ya marcadas. Idempotente: una reserva da a lo sumo un
+   crédito (la guarda es `origen_reserva_id`), así que se puede llamar desde cualquier camino que cierre una
+   clase como falta —marcar, cerrar, bitácora, cron— sin miedo a duplicar. Devuelve cuántos creó. */
+async function credGenerarDeFaltas(env, tid, cfgIn, soloAlumnoId){
+  let cfg = cfgIn || await loadConfig(env, tid).catch(() => ({}));
+  let k = credCfg(cfg);
+  if (!k.on) return 0;
+  await ensureCreditosSchema(env);
+  if (!k.desde){   // primera vez: se sella el día de hoy, nada retroactivo
+    const hoy = fechaLimaDe(new Date().toISOString());
+    try { await env.DB.prepare("INSERT INTO config (tenant_id, clave, valor) VALUES (?1,'cred_desde',?2) ON CONFLICT(tenant_id, clave) DO UPDATE SET valor = ?2").bind(tid, hoy).run(); } catch (e) {}
+    cfg = Object.assign({}, cfg, { cred_desde: hoy }); k = credCfg(cfg);
+  }
+  const { results: faltas } = await env.DB.prepare(
+    "SELECT id, alumno_id, inicio_utc, COALESCE(cancel_tipo,'') AS cancel_tipo FROM reservas WHERE tenant_id = ?1 AND estado = 'falta' " +
+    "AND COALESCE(alumno_id,'') != '' AND tipo NOT IN ('bloqueo','aparta') AND COALESCE(credito_id,'') = '' AND date(inicio_utc,'-5 hours') >= ?2 " +
+    (soloAlumnoId ? "AND alumno_id = ?3 " : "") + "ORDER BY inicio_utc ASC LIMIT 300"
+  ).bind(...(soloAlumnoId ? [tid, k.desde, soloAlumnoId] : [tid, k.desde])).all();
+  let creados = 0;
+  const cache = new Map();
+  for (const f of (faltas || [])){
+    if (f.cancel_tipo === "tarde" && !k.enTardia) continue;
+    if (f.cancel_tipo === "a_tiempo") continue;   // avisó a tiempo: no perdió la clase
+    let ex = cache.get(f.alumno_id);
+    if (!ex){
+      ex = ((await env.DB.prepare("SELECT origen_reserva_id, mes, estado FROM creditos_recup WHERE tenant_id = ?1 AND alumno_id = ?2").bind(tid, f.alumno_id).all()).results) || [];
+      cache.set(f.alumno_id, ex);
+    }
+    const dia = fechaLimaDe(f.inicio_utc);
+    /* la clase que canceló la ACADEMIA (profesora ausente) no fue falta de la alumna: da crédito sin tope mensual */
+    const dec = f.cancel_tipo === "profe"
+      ? (ex.some(c => c.origen_reserva_id === f.id) ? { ok: false } : { ok: true, mes: dia.slice(0, 7), vence: sumarDias(dia, k.dias) })
+      : credDecidir(cfg, ex, dia, f.id);
+    if (!dec.ok) continue;
+    await credInsertar(env, tid, f.alumno_id, { motivo: f.cancel_tipo === "tarde" ? "cancelo_tarde" : (f.cancel_tipo === "profe" ? "profe_ausente" : "falta"), origen: f.id, mes: dec.mes, vence: dec.vence, por: "auto" });
+    ex.push({ origen_reserva_id: f.id, mes: dec.mes, estado: "activo" });
+    creados++;
+  }
+  return creados;
+}
+/* Canje. Reclama el crédito con un UPDATE condicionado (dos pestañas a la vez no lo gastan dos veces) y le
+   suma la clase al bono del ciclo. Devuelve true si lo reclamó. */
+async function credCanjear(env, tid, alumno, credId, reservaId){
+  const hoy = fechaLimaDe(new Date().toISOString());
+  const r = await env.DB.prepare(
+    "UPDATE creditos_recup SET estado = 'usado', usado_reserva_id = ?1, usado_utc = ?2 WHERE id = ?3 AND tenant_id = ?4 AND alumno_id = ?5 AND estado = 'activo' AND vence >= ?6"
+  ).bind(reservaId, new Date().toISOString(), credId, tid, alumno.id, hoy).run();
+  if (!((r && r.meta && (r.meta.changes ?? 0)) || 0)) return false;
+  const plan = bonoAplicar(alumno, null, 1);
+  await env.DB.batch([
+    env.DB.prepare("UPDATE alumnos SET bonus_clases = ?1, bonus_ciclo = ?2 WHERE id = ?3 AND tenant_id = ?4").bind(plan.recibe.bonus_clases, plan.recibe.bonus_ciclo, alumno.id, tid),
+    env.DB.prepare("UPDATE reservas SET credito_id = ?1 WHERE id = ?2 AND tenant_id = ?3").bind(credId, reservaId, tid)
+  ]);
+  return true;
+}
+/* Si la reserva se pagó con un crédito y se cancela, el crédito vuelve a estar activo y se le quita la clase
+   al bono. Tolerante: nunca rompe la cancelación. */
+async function credDevolverDeReserva(env, tid, reservaId){
+  try {
+    await ensureCreditosSchema(env);
+    const c = await env.DB.prepare("SELECT id, alumno_id FROM creditos_recup WHERE tenant_id = ?1 AND usado_reserva_id = ?2 AND estado = 'usado'").bind(tid, reservaId).first();
+    if (!c) return false;
+    const r = await env.DB.prepare("UPDATE creditos_recup SET estado = 'activo', usado_reserva_id = '', usado_utc = '' WHERE id = ?1 AND tenant_id = ?2 AND estado = 'usado'").bind(c.id, tid).run();
+    if (!((r && r.meta && (r.meta.changes ?? 0)) || 0)) return false;
+    const al = await env.DB.prepare("SELECT ciclo, COALESCE(bonus_clases,0) AS bc, COALESCE(bonus_ciclo,0) AS bcl FROM alumnos WHERE id = ?1 AND tenant_id = ?2").bind(c.alumno_id, tid).first();
+    if (al && Number(al.bcl) === (Number(al.ciclo) || 1) && Number(al.bc) > 0)
+      await env.DB.prepare("UPDATE alumnos SET bonus_clases = ?1 WHERE id = ?2 AND tenant_id = ?3").bind(Number(al.bc) - 1, c.alumno_id, tid).run();
+    await env.DB.prepare("UPDATE reservas SET credito_id = '' WHERE id = ?1 AND tenant_id = ?2").bind(reservaId, tid).run();
+    return true;
+  } catch (e) { console.error("credito: no se pudo devolver", reservaId, e); return false; }
+}
+/* El primer crédito vigente (el que vence antes) de una alumna, o null */
+async function credPrimeroVigente(env, tid, alumnoId){
+  await ensureCreditosSchema(env);
+  const hoy = fechaLimaDe(new Date().toISOString());
+  return await env.DB.prepare(
+    "SELECT id, vence FROM creditos_recup WHERE tenant_id = ?1 AND alumno_id = ?2 AND estado = 'activo' AND vence >= ?3 ORDER BY vence ASC, creado ASC LIMIT 1"
+  ).bind(tid, alumnoId, hoy).first();
+}
+/* ═══ ASISTENCIA CON CUATRO ESTADOS (2-nov-2026, etapa 2 del pedido de Laura) ═══════════════════
+   asistió · ausente · canceló a tiempo · canceló tarde. No hay una columna nueva de «estado»: se deducen
+   del estado que Batuta ya sabe leer (completada / falta / cancelada) y de `cancel_tipo`, así el saldo y
+   la liquidación siguen contando igual:
+     asistió           → completada                       (consume)
+     ausente           → falta, cancel_tipo ''            (consume; da crédito si la academia lo prendió)
+     canceló a tiempo  → cancelada, cancel_tipo 'a_tiempo' (la clase vuelve al saldo)
+     canceló tarde     → falta, cancel_tipo 'tarde'        (consume; crédito solo si cred_en_tardia)
+     cancelada por la academia / profesora ausente → cancel_tipo 'profe' (la clase vuelve + crédito, etapa 5)
+   PURO: acepta la fila de `reservas`. */
+function estadoAsistencia(rv){
+  if (!rv) return "";
+  const ct = String(rv.cancel_tipo || "");
+  if (rv.estado === "completada") return "asistio";
+  if (rv.estado === "falta") return ct === "tarde" ? "cancelo_tarde" : (ct === "profe" ? "cancelada_academia" : "ausente");
+  if (rv.estado === "cancelada") return ct === "profe" ? "cancelada_academia" : (ct === "tarde" ? "cancelo_tarde" : "cancelo_a_tiempo");
+  return "pendiente";   // reservada
+}
+const ASISTENCIA_ETIQUETA = { asistio: "Asistió", ausente: "Ausente", cancelo_a_tiempo: "Canceló a tiempo", cancelo_tarde: "Canceló tarde", cancelada_academia: "La academia canceló la clase", pendiente: "Pendiente" };
+/* PURO: cuenta por alumna. `filas` = reservas con alumno_id. */
+function resumenAsistencia(filas){
+  const por = new Map();
+  for (const rv of (filas || [])){
+    if (!rv.alumno_id || rv.tipo === "bloqueo" || rv.tipo === "aparta") continue;
+    const e = estadoAsistencia(rv);
+    if (!por.has(rv.alumno_id)) por.set(rv.alumno_id, { alumno_id: rv.alumno_id, asistio: 0, ausente: 0, cancelo_a_tiempo: 0, cancelo_tarde: 0, cancelada_academia: 0, pendiente: 0 });
+    por.get(rv.alumno_id)[e]++;
+  }
+  return [...por.values()];
+}
+/* ═══ AUSENCIA DE PROFESORA (2-nov-2026, etapa 5 del pedido de Laura) ═══════════════════════════════
+   1 · La profesora AVISA desde la plataforma (ausencias_profe, estado 'avisada'); el dueño recibe el aviso.
+   2 · La administración CANCELA una clase o un rango (hasta 31 días): se bloquea el horario para que nadie
+       reserve encima, se cancelan las reservas vivas y se avisa por correo a cada alumna.
+         - con créditos prendidos: la clase de cada alumna pasa a «falta» etiquetada 'profe' y recibe un crédito
+           de recuperación (sin tope mensual: no fue su falta); si la clase se había pagado con un crédito, ese
+           crédito vuelve y no se genera otro;
+         - sin créditos: la clase simplemente vuelve a su saldo (cancelada, 'profe').
+   3 · SUSTITUCIÓN: se asigna otra profesora a esas fechas SIN tocar reservas; `profeQueDicta` devuelve a la
+       sustituta (bitácora y liquidación), y las alumnas siguen con la misma reserva. */
+let AUS_OK = false;
+async function ensureAusenciasSchema(env){
+  await ensureCreditosSchema(env);
+  if (AUS_OK) return;
+  try {
+    await env.DB.prepare("CREATE TABLE IF NOT EXISTS ausencias_profe (id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, profesor_id TEXT NOT NULL, desde TEXT NOT NULL, hasta TEXT NOT NULL, " +
+      "motivo TEXT DEFAULT '', estado TEXT DEFAULT 'avisada', reportada_por TEXT DEFAULT '', creado TEXT DEFAULT '', resuelto TEXT DEFAULT '', sustituta_id TEXT DEFAULT '')").run();
+    await env.DB.prepare("CREATE TABLE IF NOT EXISTS sustituciones (id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, profe_original TEXT NOT NULL, profe_sustituta TEXT NOT NULL, " +
+      "desde_utc TEXT NOT NULL, hasta_utc TEXT NOT NULL, ausencia_id TEXT DEFAULT '', creado TEXT DEFAULT '', por TEXT DEFAULT '')").run();
+    await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_sust_tenant ON sustituciones (tenant_id, profe_original, desde_utc)").run();
+  } catch (e) { /* ya existen */ }
+  AUS_OK = true;
+}
+/* PURO: el rango de días de Lima [desde, hasta] como instantes UTC [ini, fin). Devuelve null si algo no es fecha. */
+function rangoUtcDeDias(desdeYMD, hastaYMD){
+  const ok = (v) => /^\d{4}-\d{2}-\d{2}$/.test(String(v || "")) && Number.isFinite(Date.parse(v + "T00:00:00Z"));
+  if (!ok(desdeYMD)) return null;
+  const hasta = ok(hastaYMD) ? hastaYMD : desdeYMD;
+  if (hasta < desdeYMD) return null;
+  const dias = Math.round((Date.parse(hasta + "T00:00:00Z") - Date.parse(desdeYMD + "T00:00:00Z")) / 86400000) + 1;
+  if (dias > 31) return null;
+  return { desde: desdeYMD, hasta, dias, ini: new Date(Date.parse(desdeYMD + "T05:00:00Z")).toISOString(), fin: new Date(Date.parse(hasta + "T05:00:00Z") + 86400000).toISOString() };
+}
+/* Las clases con alumna de UNA profesora en ese rango: quien dicta sale del horario (franja.profe), no de la agenda. */
+async function clasesDeProfe(env, tid, profeId, rango){
+  const { results } = await env.DB.prepare(
+    "SELECT id, alumno_id, inicio_utc, COALESCE(sala,'') AS sala, COALESCE(profesor_id,'') AS profesor_id, COALESCE(credito_id,'') AS credito_id, COALESCE(curso,'') AS curso " +
+    "FROM reservas WHERE tenant_id = ?1 AND estado = 'reservada' AND COALESCE(alumno_id,'') != '' AND tipo NOT IN ('bloqueo','aparta') AND inicio_utc >= ?2 AND inicio_utc < ?3 ORDER BY inicio_utc ASC LIMIT 600"
+  ).bind(tid, rango.ini, rango.fin).all();
+  const out = [];
+  for (const r of (results || [])){
+    const quien = await profeQueDictaBase(env, tid, r.inicio_utc, { sala: r.sala, grilla: r.profesor_id, fallback: r.profesor_id });
+    if (quien === profeId) out.push(r);
+  }
+  return out;
+}
+/* Cierra los horarios de esa profesora en el rango (una fila `bloqueo` por franja y fecha), para que nadie reserve. */
+async function bloquearFranjasDeProfe(env, tid, profeId, rango, motivo){
+  const { results: franjas } = await env.DB.prepare(
+    "SELECT dia_semana, hora, COALESCE(sala,'') AS sala, COALESCE(profesor_id,'') AS profesor_id, COALESCE(vigente_desde,'') AS vd, COALESCE(vigente_hasta,'') AS vh FROM disponibilidad " +
+    "WHERE tenant_id = ?1 AND activo = 1 AND (COALESCE(profe,'') = ?2 OR (COALESCE(profe,'') = '' AND COALESCE(profesor_id,'') = ?2))"
+  ).bind(tid, profeId).all();
+  let n = 0;
+  for (let i = 0; i < rango.dias; i++){
+    const dia = new Date(Date.parse(rango.desde + "T12:00:00Z") + i * 86400000).toISOString().slice(0, 10);
+    const dow = new Date(dia + "T12:00:00Z").getUTCDay();
+    for (const f of (franjas || [])){
+      if (Number(f.dia_semana) !== dow || !vigenciaCubre(f.vd, f.vh, dia)) continue;
+      const t0 = Date.parse(dia + "T" + f.hora + ":00-05:00");
+      if (!Number.isFinite(t0) || t0 < Date.now()) continue;
+      const iso = new Date(t0).toISOString();
+      const ya = await env.DB.prepare("SELECT 1 AS x FROM reservas WHERE tenant_id = ?1 AND inicio_utc = ?2 AND tipo = 'bloqueo' AND estado = 'reservada' AND COALESCE(sala,'') = ?3").bind(tid, iso, f.sala).first();
+      if (ya) continue;
+      await env.DB.prepare(
+        "INSERT INTO reservas (id,tenant_id,alumno_id,inicio_utc,fin_utc,tipo,serie_id,estado,curso,nota,ciclo,creada,profesor_id,sala) VALUES (?1,?2,NULL,?3,?4,'bloqueo','','reservada','',?5,1,?6,?7,?8)"
+      ).bind(crypto.randomUUID(), tid, iso, new Date(t0 + CLASE_MIN * 60000).toISOString(), motivo || "Profesora ausente", new Date().toISOString(), f.profesor_id || null, f.sala).run();
+      n++;
+    }
+  }
+  return n;
+}
+async function correosDeAlumnas(env, tid, ids){
+  const out = new Map();
+  for (let i = 0; i < ids.length; i += 50){
+    const lote = ids.slice(i, i + 50);
+    const ph = lote.map((_, k) => "?" + (k + 2)).join(",");
+    const { results } = await env.DB.prepare(
+      "SELECT a.id, TRIM(COALESCE(a.nombre,'')) AS nombre, COALESCE(NULLIF((SELECT c.email FROM cuentas c WHERE c.alumno_id = a.id AND c.tenant_id = a.tenant_id LIMIT 1),''), a.email, '') AS email " +
+      "FROM alumnos a WHERE a.tenant_id = ?1 AND a.id IN (" + ph + ")"
+    ).bind(tid, ...lote).all();
+    for (const r of (results || [])) out.set(r.id, r);
+  }
+  return out;
+}
+/* Cancela las clases de una profesora ausente. `t` = fila de tenants. Devuelve un resumen para mostrar. */
+async function cancelarPorAusenciaDeProfe(env, t, a){
+  await ensureAusenciasSchema(env);
+  const tid = t.id;
+  const rango = a.inicioUtc ? { desde: fechaLimaDe(a.inicioUtc), hasta: fechaLimaDe(a.inicioUtc), dias: 1, ini: a.inicioUtc, fin: new Date(Date.parse(a.inicioUtc) + 60000).toISOString() } : rangoUtcDeDias(a.desde, a.hasta);
+  if (!rango) return { error: "Elige las fechas (máximo 31 días seguidos)." };
+  const cfg = await loadConfig(env, tid).catch(() => ({}));
+  const k = credCfg(cfg);
+  const clases = await clasesDeProfe(env, tid, a.profesorId, rango);
+  const motivo = String(a.motivo || "").slice(0, 160) || "Profesora ausente";
+  const ahora = new Date().toISOString();
+  let bloqueos = 0;
+  if (a.bloquear !== false) bloqueos = await bloquearFranjasDeProfe(env, tid, a.profesorId, rango, motivo);   // primero el bloqueo: nadie reserva encima
+  let canceladas = 0, conCredito = 0;
+  for (const c of clases){
+    if (c.credito_id){
+      await env.DB.prepare("UPDATE reservas SET estado = 'cancelada', cancel_tipo = 'profe', cancelada_utc = ?1, cancelada_por = ?2 WHERE id = ?3 AND tenant_id = ?4 AND estado = 'reservada'")
+        .bind(ahora, "academia:" + a.por, c.id, tid).run();
+      await credDevolverDeReserva(env, tid, c.id);   // el crédito que gastó vuelve; no se le da otro
+    } else if (k.on){
+      await env.DB.prepare("UPDATE reservas SET estado = 'falta', cancel_tipo = 'profe', cancelada_utc = ?1, cancelada_por = ?2 WHERE id = ?3 AND tenant_id = ?4 AND estado = 'reservada'")
+        .bind(ahora, "academia:" + a.por, c.id, tid).run();
+      conCredito++;
+    } else {
+      await env.DB.prepare("UPDATE reservas SET estado = 'cancelada', cancel_tipo = 'profe', cancelada_utc = ?1, cancelada_por = ?2 WHERE id = ?3 AND tenant_id = ?4 AND estado = 'reservada'")
+        .bind(ahora, "academia:" + a.por, c.id, tid).run();
+    }
+    canceladas++;
+  }
+  if (conCredito) await credGenerarDeFaltas(env, tid, cfg).catch(e => console.error("creditos por ausencia de profesora", e));
+  /* aviso por correo a cada alumna (una vez por persona, con todas sus clases) */
+  let avisadas = 0;
+  if (a.avisar !== false && clases.length){
+    const porAlumna = new Map();
+    for (const c of clases) (porAlumna.get(c.alumno_id) || porAlumna.set(c.alumno_id, []).get(c.alumno_id)).push(c);
+    const datos = await correosDeAlumnas(env, tid, [...porAlumna.keys()]);
+    for (const [aid, lista] of porAlumna){
+      const d = datos.get(aid);
+      if (!d || !d.email) continue;
+      if (avisadas >= 80) break;
+      const fechas = lista.map(c => fmtLima(c.inicio_utc) + (c.curso ? " · " + c.curso : "")).join("<br>");
+      const cola = k.on ? "Te dimos un <b>crédito de recuperación</b> para que recuperes la clase cuando puedas (míralo en tu portal)." : "La clase vuelve a tu saldo: puedes reservar otra cuando quieras.";
+      const ok = await enviarCorreo(env, { to: d.email, tenantId: tid, subject: "Se canceló tu clase en " + (t.academia || "tu academia"),
+        html: "<p>Hola " + escHtmlSrv(d.nombre) + ",</p><p>Tu profesora no podrá dictar " + (lista.length === 1 ? "tu clase" : "tus clases") + ":</p><p style=\"padding:10px;background:#f4f4f4;border-radius:6px\">" + fechas + "</p><p>" + cola + "</p><p>Disculpa la molestia.</p>" }).catch(() => false);
+      if (ok) avisadas++;
+    }
+  }
+  if (a.ausenciaId) await env.DB.prepare("UPDATE ausencias_profe SET estado = 'atendida', resuelto = ?1 WHERE id = ?2 AND tenant_id = ?3").bind(ahora, a.ausenciaId, tid).run();
+  return { ok: true, clases_canceladas: canceladas, alumnas: new Set(clases.map(c => c.alumno_id)).size, creditos_dados: conCredito, horarios_cerrados: bloqueos, avisadas_por_correo: avisadas, credito: k.on };
+}
+function escHtmlSrv(x){ return String(x == null ? "" : x).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])); }
+/* PURO: lo que cambia en la ficha cuando una alumna de prueba pasa a regular. MISMA ficha (mismo id, historial,
+   cuenta del portal): no se crea ningún perfil nuevo. El ciclo sube como en una renovación, así la clase de
+   prueba que ya tomó no se descuenta del paquete que acaba de elegir. */
+function planConvertirPrueba(alumno, pk, hoyYMD){
+  const ciclo = (Number(alumno && alumno.ciclo) || 1) + 1;
+  const ficha = { es_prueba: 0, paquete: pk && pk.nombre ? pk.nombre : (alumno && alumno.paquete) || "", ciclo, fecha: hoyYMD, activado: "", caducado: 0, aviso_vence_ciclo: 0 };
+  ficha.vence = calcularVence(pk || {}, { fecha: hoyYMD, activado: "" }, "");
+  return ficha;
+}
+/* El cron barre las academias que prendieron los créditos: cubre la falta que se anotó por la bitácora
+   o por cualquier otro camino que no llama a credGenerarDeFaltas. Sin academias prendidas = 1 consulta. */
+async function credCronTodos(env){
+  const { results } = await env.DB.prepare("SELECT tenant_id FROM config WHERE clave = 'cred_on' AND valor = '1' LIMIT 200").all();
+  for (const r of (results || [])){
+    try { await credGenerarDeFaltas(env, r.tenant_id); } catch (e) { console.error("creditos", r.tenant_id, e); }
+  }
+}
 async function avisosDe(env, actor){
   await ensureAvisosSchema(env);
   const visto = avisosVistoDe(actor.profesor);
   const lista = [];
-  for (const nv of NOVEDADES.slice(0, 12)){
+  const borrados = new Set(visto.x);
+  for (const nv of NOVEDADES.slice(0, 25)){
     lista.push({ tipo: "novedad", id: nv.id, fecha: nv.fecha, titulo: nv.titulo, texto: nv.texto,
                  nuevo: nv.fecha > visto.n });
   }
@@ -8585,9 +8993,10 @@ async function avisosDe(env, actor){
     }
   } catch (e) { console.error("avisos: clases sin cerrar", e && e.message); }   // la campanita nunca se cae por esto
   /* por fecha, y a igualdad de fecha primero lo que hay que hacer algo */
+  for (let i = lista.length - 1; i >= 0; i--) if (lista[i].tipo !== "cierre" && borrados.has(lista[i].id)) lista.splice(i, 1);   // lo que la persona borró no vuelve
   lista.sort((a, b) => (b.fecha || "").localeCompare(a.fecha || "") || (b.pendiente ? 1 : 0) - (a.pendiente ? 1 : 0));
   const topeN = NOVEDADES.length ? NOVEDADES.map(x => x.fecha).sort().slice(-1)[0] : visto.n;
-  return { avisos: lista.slice(0, 25), nuevos: lista.filter(x => x.nuevo).length, tope: { n: topeN, c: topeC, d: topeD } };
+  return { avisos: lista.slice(0, 25), borrables: true, nuevos: lista.filter(x => x.nuevo).length, tope: { n: topeN, c: topeC, d: topeD } };
 }
 
 /* ── ¿A QUÉ LOCAL TIENE QUE IR? Una sola regla para TODAS las superficies ──────
@@ -9906,13 +10315,26 @@ function sqlCerrarReservasAnotadas(){
    o `alumnos.profesor_id` —como hacía la liquidación— contestaría "José" siempre, que es
    justo el bug. `grilla` es de quién es la agenda (para encontrar la franja), `fallback` lo
    que se usa si el horario no dice nada, y vacío significa honestamente "no lo sé". */
-async function profeQueDicta(env, tenantId, inicioUtc, quien){
+async function profeQueDictaBase(env, tenantId, inicioUtc, quien){
   try {
     const { franja } = await resolverFranja(env, tenantId, inicioUtc,
       { id: (quien && quien.grilla) || "", esDueno: true }, (quien && quien.sala) || "");
     if (franja && franja.profe) return String(franja.profe);
   } catch (e) { /* sin horario resuelto se cae al fallback */ }
   return String((quien && quien.fallback) || "");
+}
+/* Con una SUSTITUCIÓN vigente (etapa 5), quien dicta es la sustituta: las reservas no se tocan, solo cambia
+   quién figura al dictar (bitácora, liquidación). Si la tabla aún no existe, rige el horario de siempre. */
+async function profeQueDicta(env, tenantId, inicioUtc, quien){
+  const base = await profeQueDictaBase(env, tenantId, inicioUtc, quien);
+  if (!base) return base;
+  try {
+    const sus = await env.DB.prepare(
+      "SELECT profe_sustituta FROM sustituciones WHERE tenant_id = ?1 AND profe_original = ?2 AND desde_utc <= ?3 AND hasta_utc > ?3 ORDER BY creado DESC LIMIT 1"
+    ).bind(tenantId, base, inicioUtc).first();
+    if (sus && sus.profe_sustituta) return String(sus.profe_sustituta);
+  } catch (e) { /* sin tabla: sin sustituciones */ }
+  return base;
 }
 /* `quien` = {sala, grilla, fallback}: de ahí sale QUIÉN DICTÓ. Se pasa un objeto y no un
    parámetro suelto a propósito: los positionales de este archivo ya me costaron un bug.
@@ -9951,7 +10373,7 @@ async function anotarClaseDictada(env, tenantId, alumnoId, inicioUtc, curso, cic
    entera una demo privada al vencer. ⚠️ Tabla nueva con `tenant_id` = agregarla ACÁ,
    o la demo acumula basura de cada visitante para siempre (`campanas` se sumó el
    15-ago-2026 tras verlo pasar). */
-const TABLAS_TENANT = ["alumnos", "registro", "pausas", "precios", "config", "disponibilidad", "reservas", "grupos", "sedes", "cuentas", "compras", "recursos", "ejercicios", "chat_mensajes", "push_subs", "leads", "feedback", "gastos", "comprobantes", "campanas", "espera", "reset_tokens", "mensajes_extra", "soporte_ia_log", "referidos", "chat_leido", "liquidaciones", "api_cambios", "bonos_log"];
+const TABLAS_TENANT = ["alumnos", "registro", "pausas", "precios", "config", "disponibilidad", "reservas", "grupos", "sedes", "cuentas", "compras", "recursos", "ejercicios", "chat_mensajes", "push_subs", "leads", "feedback", "gastos", "comprobantes", "campanas", "espera", "reset_tokens", "mensajes_extra", "soporte_ia_log", "referidos", "chat_leido", "liquidaciones", "api_cambios", "bonos_log", "creditos_recup", "ausencias_profe", "sustituciones"];
 /* Fuera de la lista a propósito: `afiliados` y `comisiones` tienen tenant_id pero la fila es
    de OTRA persona (el afiliado que trajo al tenant, y su ledger de pagos). Borrar por
    tenant_id ahí sería borrarle su registro y su historial de comisiones a un tercero.
@@ -10539,6 +10961,9 @@ async function apiVerConfiguracion(env, t){
     plazo_cancelacion_horas: (Number.isFinite(plazo) && plazo >= 1) ? plazo : CANCELA_MIN_H,
     anticipacion_reserva_horas: String(cfg.anticipacion_h || "") === "" ? "por defecto" : Number(cfg.anticipacion_h),
     vigencia_clases_meses: String(cfg.caduca_meses || "") === "" ? "por defecto" : Number(cfg.caduca_meses),
+    cancelacion_fuera_de_plazo: cancelTardePermitida(cfg) ? "permitida (la clase se cuenta como usada)" : "bloqueada",
+    plazas_de_prueba_por_clase: pruebaPlazasDe(cfg),
+    creditos_recuperacion: (function(){ const k = credCfg(cfg); return { activo: k.on, max_por_mes: k.maxMes, vigencia_dias: k.dias, tambien_por_cancelacion_tardia: k.enTardia }; })(),
     paquetes: await apiPreciosDe(env, t),
     horario_semanal: await apiResumenHorario(env, t),
     enlaces: { panel: MARCA.dominio + "/app/panel#ajustes", horarios_y_paquetes: MARCA.dominio + "/app/panel#academia" }
@@ -10586,7 +11011,42 @@ async function apiConfigurarAcademia(env, t, a, origen){
     if (n === null) errores.push("vigencia_clases_meses: un número entre 0 y 60 (0 = sin vencimiento).");
     else poner("caduca_meses", "vigencia de las clases (meses)", cfg.caduca_meses || "por defecto", n);
   }
-  if (!cambios.length) return { error: errores.length ? errores.join(" ") : "No me pasaste ningún ajuste para cambiar.", ...(errores.length ? {} : { ajustes_posibles: ["cursos", "cupo_por_clase", "cancelacion_activa", "plazo_cancelacion_horas", "anticipacion_reserva_horas", "vigencia_clases_meses"] }) };
+  /* Créditos de recuperación (2-nov-2026): mismas reglas que Ajustes > Reservas */
+  const siNo = (v) => { const x = String(v).toLowerCase(); return ["si", "sí", "true"].includes(x) ? "1" : (["no", "false"].includes(x) ? "" : null); };
+  if (a.cancelacion_tardia != null && a.cancelacion_tardia !== ""){
+    const v = String(a.cancelacion_tardia).toLowerCase();
+    if (!["bloquear", "permitir"].includes(v)) errores.push("cancelacion_tardia: «bloquear» (no se puede cancelar fuera de plazo) o «permitir» (se puede, pero la clase se cuenta como usada).");
+    else poner("cancel_tarde", "cancelación fuera de plazo", cancelTardePermitida(cfg) ? "permitir" : "bloquear", v === "permitir" ? "pierde" : "");
+  }
+  if (a.plazas_de_prueba != null && a.plazas_de_prueba !== ""){
+    const n = entero(a.plazas_de_prueba, 0, 20);
+    if (n === null) errores.push("plazas_de_prueba: un número entre 0 y 20 (0 = sin plazas de prueba).");
+    else poner("prueba_plazas", "plazas de prueba por clase", pruebaPlazasDe(cfg), n === 0 ? "" : n);
+  }
+  if (a.creditos_recuperacion != null && a.creditos_recuperacion !== ""){
+    const v = siNo(a.creditos_recuperacion);
+    if (v === null) errores.push("creditos_recuperacion: «si» o «no».");
+    else {
+      poner("cred_on", "créditos de recuperación por falta", credCfg(cfg).on ? "si" : "no", v);
+      if (v === "1" && !credCfg(cfg).desde) poner("cred_desde", "rige desde", "", fechaLimaDe(new Date().toISOString()));
+    }
+  }
+  if (a.creditos_max_por_mes != null && a.creditos_max_por_mes !== ""){
+    const n = entero(a.creditos_max_por_mes, 1, 10);
+    if (n === null) errores.push("creditos_max_por_mes: un número entre 1 y 10.");
+    else poner("cred_max_mes", "créditos máximos por alumna al mes", credCfg(cfg).maxMes, n);
+  }
+  if (a.creditos_vigencia_dias != null && a.creditos_vigencia_dias !== ""){
+    const n = entero(a.creditos_vigencia_dias, 1, 365);
+    if (n === null) errores.push("creditos_vigencia_dias: un número entre 1 y 365.");
+    else poner("cred_vence_dias", "días que dura un crédito", credCfg(cfg).dias, n);
+  }
+  if (a.creditos_por_cancelacion_tardia != null && a.creditos_por_cancelacion_tardia !== ""){
+    const v = siNo(a.creditos_por_cancelacion_tardia);
+    if (v === null) errores.push("creditos_por_cancelacion_tardia: «si» o «no».");
+    else poner("cred_en_tardia", "la cancelación tardía también da crédito", credCfg(cfg).enTardia ? "si" : "no", v);
+  }
+  if (!cambios.length) return { error: errores.length ? errores.join(" ") : "No me pasaste ningún ajuste para cambiar.", ...(errores.length ? {} : { ajustes_posibles: ["cursos", "cupo_por_clase", "cancelacion_activa", "plazo_cancelacion_horas", "anticipacion_reserva_horas", "vigencia_clases_meses", "cancelacion_tardia", "plazas_de_prueba", "creditos_recuperacion", "creditos_max_por_mes", "creditos_vigencia_dias", "creditos_por_cancelacion_tardia"] }) };
   if (await chatbotPasoTope(env, "apiw:" + t.id, API_ESCRITURAS_HORA)) return { error: "Demasiados cambios esta hora (máximo " + API_ESCRITURAS_HORA + "). Intenta más tarde." };
   await ensureApiCambiosSchema(env);
   const ahora = new Date().toISOString();
@@ -11004,7 +11464,7 @@ const API_TOOLS = [
   { name: "pagos_recientes", desc: "Pagos de los ultimos dias con su estado y metodo, y el total confirmado.", args: { dias: "cuantos dias hacia atras (max 120, por defecto 30)" } },
   { name: "listar_precios", desc: "Los precios de los paquetes de la academia (en soles) y los enlaces para verlos. Úsala antes de cambiar un precio para tomar el nombre exacto del paquete.", args: {} },
   { name: "ver_configuracion", desc: "Cómo está configurada la academia hoy: cursos, cupo por clase, reglas de cancelación, anticipación de reserva, vigencia de las clases y paquetes con precio. Úsala SIEMPRE antes de cambiar ajustes y al terminar para confirmar.", args: {} },
-  { name: "configurar_academia", escribe: true, desc: "Cambia ajustes de la academia (solo los que se pasan): cursos (nombres separados por coma), cupo_por_clase (1-60), cancelacion_activa (si/no), plazo_cancelacion_horas (1-72), anticipacion_reserva_horas (0-168), vigencia_clases_meses (0-60, 0 = no vencen). Devuelve lo anterior y lo nuevo de cada uno. No toca precios (usa actualizar_precio) ni horarios ni alumnos.", args: { cursos: "ej. Ballet, Jazz, Hip hop", cupo_por_clase: "alumnas máximo por clase", cancelacion_activa: "si o no", plazo_cancelacion_horas: "horas antes de la clase", anticipacion_reserva_horas: "horas mínimas antes para reservar", vigencia_clases_meses: "meses de vigencia de un paquete" } },
+  { name: "configurar_academia", escribe: true, desc: "Cambia ajustes de la academia (solo los que se pasan): cursos (nombres separados por coma), cupo_por_clase (1-60), cancelacion_activa (si/no), plazo_cancelacion_horas (1-72), anticipacion_reserva_horas (0-168), vigencia_clases_meses (0-60, 0 = no vencen), cancelacion_tardia (bloquear | permitir: permitir deja cancelar fuera de plazo pero la clase se cuenta como usada), plazas_de_prueba (0-20 por clase: lugares aparte, solo para alumnas de prueba; 0 = ninguno), creditos_recuperacion (si/no: la alumna que falta recibe un crédito para recuperar la clase), creditos_max_por_mes (1-10 por alumna), creditos_vigencia_dias (1-365, desde la clase faltada; pasa al mes siguiente), creditos_por_cancelacion_tardia (si/no). Devuelve lo anterior y lo nuevo de cada uno. No toca precios (usa actualizar_precio) ni horarios ni alumnos.", args: { cursos: "ej. Ballet, Jazz, Hip hop", cupo_por_clase: "alumnas máximo por clase", cancelacion_activa: "si o no", plazo_cancelacion_horas: "horas antes de la clase", anticipacion_reserva_horas: "horas mínimas antes para reservar", vigencia_clases_meses: "meses de vigencia de un paquete", cancelacion_tardia: "bloquear o permitir", plazas_de_prueba: "plazas de prueba por clase, aparte de las regulares", creditos_recuperacion: "si o no", creditos_max_por_mes: "créditos máximos por alumna al mes", creditos_vigencia_dias: "días que dura un crédito", creditos_por_cancelacion_tardia: "si o no" } },
   { name: "crear_paquete", escribe: true, desc: "Crea un paquete NUEVO de clases con su precio (no borra ni cambia los que ya existen). Devuelve el paquete creado y los enlaces. Revisa antes con listar_precios para no repetir nombres.", args: { nombre: "ej. 8 clases de Ballet", clases: "cuántas clases incluye (1-500)", precio: "en soles, ej. 280", vigencia_dias: "opcional: días que dura (vacío = no vence)", cambios_incluidos: "opcional: cambios de horario por ciclo (por defecto 2)" } },
   { name: "agregar_horario", escribe: true, desc: "Agrega horarios semanales a la agenda de la academia (SOLO agrega: no borra ni reemplaza los que ya hay; quitar se hace en el panel). Crea una franja por cada combinación de día y hora. Si pasas curso, tiene que ser uno de los cursos de la academia (míralos con ver_configuracion).", args: { dias: "ej. lunes, miércoles o 1,3 (0=domingo ... 6=sábado)", horas: "hora de inicio en formato 24 h, ej. 18:00, 19:00", curso: "opcional: a qué curso corresponde", cupo: "opcional: alumnas máximo en esas clases (vacío = el cupo general)" } },
   { name: "actualizar_precio", escribe: true, desc: "Cambia el precio de UN paquete que ya existe (no crea ni borra paquetes). Devuelve el precio anterior, el nuevo y los enlaces para chequearlo. Solo funciona si el dueño activó el permiso de escritura.", args: { paquete: "nombre exacto del paquete, tal como sale en listar_precios", precio: "precio nuevo en soles, por ejemplo 280", confirmar: "escribe si solo cuando el cambio sea de más de 3 veces o menos de un tercio del precio actual" } },
@@ -11033,9 +11493,55 @@ async function ejecutarHerramientaApi(env, t, nombre, args){
 /* ═══════════════════════════════════════════════════════════════════════════
    FETCH principal
    ═══════════════════════════════════════════════════════════════════════════ */
+/* Velocidad de las consultas PÚBLICAS (2-nov-2026): /app/api/publico y /app/api/agenda/slots-publicos
+   tardaban de 1 a 4 s (varias consultas a D1 y, en los horarios, Google Calendar) y las usan la web de
+   Elevate, la de ProfesorMVT y el portal del alumno. No dependen de quién pregunta: solo de los
+   parámetros. Se guarda la respuesta en la caché del borde y se sirve al instante; pasado 1 minuto se
+   renueva por detrás (la visita que la encuentra vieja igual la recibe rápido). Nada de esto toca una
+   reserva: reservar y pagar vuelven a comprobar el horario en el servidor, así que lo peor que pasa
+   es ver libre un horario recién tomado hasta 1 minuto. Solo se guardan respuestas 200. */
+const RUTAS_PUBLICAS_CACHEADAS = new Set(["/app/api/publico", "/app/api/agenda/slots-publicos"]);
+async function respuestaPublicaCacheada(request, ctx, url, correr){
+  const params = [...url.searchParams.entries()].filter(([k]) => k !== "_").sort((x, y) => x[0].localeCompare(y[0]) || x[1].localeCompare(y[1]));
+  const qs = new URLSearchParams(params).toString();
+  const llave = new Request(url.origin + url.pathname.replace(/\/+$/, "") + "?" + qs + "&cache=pub1");
+  const cache = caches.default;
+  const refrescar = async () => {
+    const r = await correr();
+    if (r.status === 200){
+      const copia = new Response(r.clone().body, r);
+      copia.headers.set("X-Pub-Gen", String(Date.now()));
+      copia.headers.set("Cache-Control", "public, s-maxage=600");
+      await cache.put(llave, copia).catch(() => {});
+    }
+    return r;
+  };
+  const guardado = await cache.match(llave).catch(() => null);
+  if (guardado){
+    const edad = Date.now() - Number(guardado.headers.get("X-Pub-Gen") || 0);
+    if (edad > 60000 && ctx && ctx.waitUntil) ctx.waitUntil(refrescar().catch(() => {}));
+    const rc = new Response(guardado.body, guardado);
+    rc.headers.set("Cache-Control", "no-cache");
+    rc.headers.delete("Expires");
+    rc.headers.set("X-Pub-Cache", edad > 60000 ? "STALE" : "HIT");
+    return rc;
+  }
+  const r = await refrescar();
+  r.headers.set("Cache-Control", "no-cache");
+  r.headers.set("X-Pub-Cache", "MISS");
+  return r;
+}
+
 export default {
   async fetch(request, env, ctx){
     try { env.__ctx = ctx; } catch (e) {}
+    if (request.method === "GET" && !request.headers.has("x-sin-cache-publica") && typeof caches !== "undefined" && caches.default){
+      const u0 = new URL(request.url);
+      if (RUTAS_PUBLICAS_CACHEADAS.has(u0.pathname.replace(/\/+$/, ""))){
+        const h2 = new Headers(request.headers); h2.set("x-sin-cache-publica", "1");
+        return respuestaPublicaCacheada(request, ctx, u0, () => this.fetch(new Request(request, { headers: h2 }), env, ctx));
+      }
+    }
     const url = new URL(request.url);
     /* Una barra de mas no puede botar a nadie: hasta el 11-ago-2026 "/app/panel/" daba 404
        porque TODAS las rutas de abajo comparan con === contra el pathname pelado. El que
@@ -13999,33 +14505,33 @@ export default {
         if (!actorMe) return json({ error: "Sesión expirada" }, 401);
         const t = actorMe.tenant;
         const diasRestantes = Math.max(0, Math.ceil((Date.parse(t.trial_hasta) - Date.now()) / 86400000));
+        /* Velocidad (3-nov-2026): estas consultas a D1 eran independientes pero corrían una tras otra
+           (~2 s en total, y el panel llama a /t/me varias veces al abrir). Ahora van en paralelo.
+           Mismo resultado: los fallos que antes se tragaban con try/catch siguen dando null/false. */
+        const FALLO = Symbol("fallo");
+        const tragar = (pr) => Promise.resolve(pr).catch(() => FALLO);
+        const [nPMe, maxProfesMe, activosMe, totalMe, packsMe, waMe, capAlumMe, capConvMe, fAvisoMe] = await Promise.all([
+          tragar(env.DB.prepare("SELECT COUNT(*) AS n FROM profesores WHERE tenant_id = ?1 AND estado != 'suspendido'").bind(t.id).first()),
+          tragar(maxProfesDe(env, t.id, t.plan)),
+          contarAlumnosActivos(env, t.id),
+          totalAlumnosDe(env, t.id),
+          packsDe(env, t.id),
+          tragar(waUsoActual(env, t.id, waPlanEfectivo(t))),
+          capAlumnosDe(env, t.id, t.plan),
+          convCapDe(env, t.id, false, t.plan),
+          tragar(env.DB.prepare("SELECT valor FROM config WHERE tenant_id = ?1 AND clave = 'aviso_packs_email'").bind(t.id).first())
+        ]);
         // Asientos de profesor del plan (suspendidos no ocupan asiento).
         let asientos = null;
-        try {
-          const nP = await env.DB.prepare("SELECT COUNT(*) AS n FROM profesores WHERE tenant_id = ?1 AND estado != 'suspendido'").bind(t.id).first();
-          asientos = { usados: Number(nP && nP.n) || 1, max: await maxProfesDe(env, t.id, t.plan) };
-        } catch (e) {}
-        const activosMe = await contarAlumnosActivos(env, t.id);
-        /* El medidor de "Tu Batuta" cuenta LO MISMO que el candado: el total cargado. */
-        const totalMe = await totalAlumnosDe(env, t.id);
-        // Cupo del asistente de WhatsApp con IA por plan (freemium 23-jul-2026): el panel muestra
-        // "X de N conversaciones" y avisa "sube de plan" al toparse (usados >= cap).
-        const packsMe = await packsDe(env, t.id);
-        let wa_cupo = null;
-        try {
-          // Se muestra siempre (aunque la IA este apagada) para que el dueno vea su cupo del plan.
-          wa_cupo = await waUsoActual(env, t.id, waPlanEfectivo(t));
-        } catch (e) {}
+        if (nPMe !== FALLO && maxProfesMe !== FALLO) asientos = { usados: Number(nPMe && nPMe.n) || 1, max: maxProfesMe };
+        // Cupo del asistente de WhatsApp con IA por plan (freemium 23-jul-2026): se muestra siempre.
+        const wa_cupo = waMe === FALLO ? null : waMe;
         const limitesPacksMe = {
-          alumnos: await capAlumnosDe(env, t.id, t.plan),
+          alumnos: capAlumMe,
           profes: asientos ? asientos.max : packsMe.profes,
-          ia: await convCapDe(env, t.id, false, t.plan)
+          ia: capConvMe
         };
-        let avisoPacksEmail = false;
-        try {
-          const f = await env.DB.prepare("SELECT valor FROM config WHERE tenant_id = ?1 AND clave = 'aviso_packs_email'").bind(t.id).first();
-          avisoPacksEmail = !!(f && f.valor === "on");
-        } catch (e) {}
+        const avisoPacksEmail = fAvisoMe !== FALLO && !!(fAvisoMe && fAvisoMe.valor === "on");
         const alertasPacksMe = actorMe.esDueno ? alertasPacksDe({
           alumnos: totalMe,
           profes: (asientos && asientos.usados) || 1,
@@ -17200,14 +17706,15 @@ export default {
         const cu = await cuentaDeSesion(env, request);
         if (!cu) return json({ error: "Sesión expirada" }, 401);
         // El alumno ve la agenda de SU profesor (multi-profesor); sin ficha aun -> la del dueno.
-        const alS = cu.alumno_id ? await env.DB.prepare("SELECT profesor_id, paquete, ciclo, COALESCE(pases,'') AS pases FROM alumnos WHERE id = ?1 AND tenant_id = ?2").bind(cu.alumno_id, cu.tenant_id).first() : null;
+        await ensureCreditosSchema(env);
+        const alS = cu.alumno_id ? await env.DB.prepare("SELECT profesor_id, paquete, ciclo, COALESCE(pases,'') AS pases, COALESCE(es_prueba,0) AS es_prueba FROM alumnos WHERE id = ?1 AND tenant_id = ?2").bind(cu.alumno_id, cu.tenant_id).first() : null;
         const profS = await profeDeAlumno(env, cu.tenant_id, alS);
         /* El alumno solo ve lo que SU plan cubre (27-jul-2026, Elevate): un plan de Mat no
            muestra Maquinas. Lo de fuera se devuelve aparte para poder explicarlo, no ocultarlo.
            Con VARIOS pases (11-ago-2026): ve la UNIÓN de lo que cubren sus pases vigentes. */
         const pasesS = alS ? pasesDe(alS) : null;
         const pkS = alS ? (pasesS ? pkUnionPases(pasesS, (await loadPaquetes(env, cu.tenant_id)).map) : resolverPk((await loadPaquetes(env, cu.tenant_id)).map, alS.paquete)) : null;
-        const det = await generarSlotsDetalle(env, cu.tenant_id, profS, { pk: pkS });
+        const det = await generarSlotsDetalle(env, cu.tenant_id, profS, { pk: pkS, prueba: !!(alS && Number(alS.es_prueba) === 1) });
         /* portal_sin_profe (7-ago-2026, Elevate): clases grupales sin profe fijo por alumno.
            No se nombra al profesor; el portal dice "Tu clase en {academia}". */
         const sinProfeS = String(((await loadConfig(env, cu.tenant_id).catch(() => ({}))).portal_sin_profe) || "") === "1";
@@ -17230,6 +17737,7 @@ export default {
            existe pero no está enlazada a una ficha de alumno — no es un tema de saldo. */
         if (!cu.alumno_id) return json({ error: "Tu cuenta aún no está conectada a una ficha de alumno. Pídele a tu academia que registre tu paquete con este mismo correo y listo." }, 403);
         const tid = cu.tenant_id;
+        await ensureCreditosSchema(env);   // columnas de plazas/créditos antes de leer la ficha
 
         const b = await request.json().catch(() => ({}));
         const tipo = b.tipo === "fija" ? "fija" : "suelta";
@@ -17243,6 +17751,25 @@ export default {
 
         const alumno = await env.DB.prepare("SELECT * FROM alumnos WHERE id = ?1 AND tenant_id = ?2").bind(cu.alumno_id, tid).first();
         if (!alumno) return json({ error: "No encuentro tu ficha de alumno." }, 400);
+        /* Crédito de recuperación (2-nov-2026): reservar CON el crédito. Por ahora solo clase suelta y
+           alumnos de un solo paquete. En memoria se le suma la clase al bono para que las validaciones de
+           abajo la vean; el crédito se reclama de verdad (y el bono se escribe) después del INSERT. */
+        await ensureCreditosSchema(env);
+        const cfgPl = await loadConfig(env, tid).catch(() => ({}));
+        const plazasPr = pruebaPlazasDe(cfgPl);
+        const esPrueba = Number(alumno.es_prueba) === 1 && plazasPr > 0;   // sin plazas de prueba configuradas, todo sigue como antes
+        if (esPrueba && tipo === "fija") return json({ error: "Con una clase de prueba se reserva clase por clase, no horario fijo." }, 400);
+        const usarCred = b.usar_credito === true || b.usar_credito === 1 || b.usar_credito === "1";
+        let credito = null;
+        const alumnoBD = Object.assign({}, alumno);
+        if (usarCred){
+          if (tipo === "fija") return json({ error: "Un crédito de recuperación sirve para una clase suelta, no para el horario fijo." }, 400);
+          if (pasesDe(alumno)) return json({ error: "Tu academia aún no canjea créditos con varios pases. Escríbele para que lo haga por ti." }, 400);
+          credito = await credPrimeroVigente(env, tid, alumno.id);
+          if (!credito) return json({ error: "No tienes créditos de recuperación vigentes." }, 409);
+          const planC = bonoAplicar(alumno, null, 1);
+          alumno.bonus_clases = planC.recibe.bonus_clases; alumno.bonus_ciclo = planC.recibe.bonus_ciclo;
+        }
         // La reserva vive en la agenda del profesor del alumno (multi-profesor).
         const profR = await profeDeAlumno(env, tid, alumno);
         if (!(await slotValido(env, tid, iso, null, profR))) return json({ error: "Ese horario ya no está disponible. Elige otro." }, 400);
@@ -17340,7 +17867,8 @@ export default {
         const startMs = Date.parse(iso);
 
         /* cupo por franja: el de la celda de disponibilidad si es >0, si no el aforo del tipo, si no el global */
-        const cupoT = await cupoDeSlot(env, tid, iso, profR, await loadConfig(env, tid), salaR);
+        const cupoT = esPrueba ? plazasPr : await cupoDeSlot(env, tid, iso, profR, await loadConfig(env, tid), salaR);
+        const plazaR = esPrueba ? "prueba" : "";
         /* el mismo alumno no puede reservar dos veces la misma hora (en ninguna sala: nadie
            esta en dos salones a la vez; con cupo > 1 el conteo solo no lo impide) */
         const yaMia = await env.DB.prepare(
@@ -17352,22 +17880,27 @@ export default {
            por tipo de clase se aplican sobre lo que realmente reservo, no sobre su ficha. */
         const cursoR = frR.curso || alumno.curso || "";
         if (tipo === "suelta"){
-          const oc = await ocupacionSlot(env, tid, iso, profR, salaR);
-          if (oc.bloqueado || oc.n >= cupoT) return json({ error: "Ese horario ya se lleno. Elige otro." }, 409);
+          const oc = await ocupacionSlot(env, tid, iso, profR, salaR, plazaR);
+          if (oc.bloqueado || oc.n >= cupoT) return json({ error: esPrueba ? "Ya no quedan plazas de prueba en esa clase. Elige otra." : "Ese horario ya se lleno. Elige otro." }, 409);
           const fin = new Date(startMs + CLASE_MIN * 60000).toISOString();
           const rid = crypto.randomUUID();
           await env.DB.prepare(
-            "INSERT INTO reservas (id,tenant_id,alumno_id,inicio_utc,fin_utc,tipo,serie_id,estado,curso,ciclo,creada,profesor_id,sala) VALUES (?1,?2,?3,?4,?5,'suelta','','reservada',?6,?7,?8,?9,?10)"
-          ).bind(rid, tid, alumno.id, iso, fin, cursoR, ciclo, nowIso, profR.id || null, salaR).run();
+            "INSERT INTO reservas (id,tenant_id,alumno_id,inicio_utc,fin_utc,tipo,serie_id,estado,curso,ciclo,creada,profesor_id,sala,plaza) VALUES (?1,?2,?3,?4,?5,'suelta','','reservada',?6,?7,?8,?9,?10,?11)"
+          ).bind(rid, tid, alumno.id, iso, fin, cursoR, ciclo, nowIso, profR.id || null, salaR, plazaR).run();
           /* re-verificacion optimista: si una carrera paso el cupo, se deshace esta reserva */
-          const oc2 = await ocupacionSlot(env, tid, iso, profR, salaR);
+          const oc2 = await ocupacionSlot(env, tid, iso, profR, salaR, plazaR);
           if (oc2.bloqueado || oc2.n > cupoT){
             await env.DB.prepare("DELETE FROM reservas WHERE id = ?1 AND tenant_id = ?2").bind(rid, tid).run();
             return json({ error: "Justo se lleno ese horario. Elige otro." }, 409);
           }
+          if (usarCred && !(await credCanjear(env, tid, alumnoBD, credito.id, rid))){
+            await env.DB.prepare("DELETE FROM reservas WHERE id = ?1 AND tenant_id = ?2").bind(rid, tid).run();
+            return json({ error: "Ese crédito ya se usó o venció. Revisa tus créditos." }, 409);
+          }
           /* 🔴 22-ago-2026 · y la misma re-verificación para el SALDO. Sin esto, dos peticiones
              simultáneas del MISMO alumno con una sola clase disponible pasaban las dos. */
           if (await sobregiroTrasReservar(env, tid, alumno.id)){
+            if (usarCred) await credDevolverDeReserva(env, tid, rid);
             await env.DB.prepare("DELETE FROM reservas WHERE id = ?1 AND tenant_id = ?2").bind(rid, tid).run();
             return json({ error: "Se te acabaron las clases justo ahora. Renueva para reservar más." }, 409);
           }
@@ -17375,7 +17908,7 @@ export default {
           gcalAvisar(env, ctx, tid);
           await leadAvanzar(env, tid, { email: cu.email || alumno.email, whatsapp: cu.whatsapp || alumno.whatsapp }, "prueba");
           try { const tR = await env.DB.prepare("SELECT * FROM tenants WHERE id = ?1").bind(tid).first(); if (tR) await avisarProfeDeAlumno(env, tR, { tipo: "reserva", alumnoId: alumno.id, nombre: cu.nombre || alumno.nombre, extra: fmtLima(iso) + (cursoR ? " · " + cursoR : "") }); } catch (e) {}
-          return json({ ok: true, reservadas: 1, tipo: "suelta" });
+          return json({ ok: true, reservadas: 1, tipo: "suelta", con_credito: !!usarCred });
         }
 
         /* 🔴 5-set-2026 · acá decía `restantes` a secas, una variable que NO EXISTE en este
@@ -17436,8 +17969,19 @@ export default {
            reformer con 12h y mat con 2h conviven sin pelearse. Sin regla propia, la general. */
         const regCancel = reglasDeClase(cfgCancel, r.curso || "");
         const horas = (Date.parse(r.inicio_utc) - Date.now()) / 3600000;
-        if (horas < regCancel.cancelH){
-          return json({ error: "Ya no se puede reprogramar: falta menos de " + regCancel.cancelH + " horas para tu clase." }, 400);
+        /* Cancelación TARDÍA (2-nov-2026, etapa 4): fuera del plazo, o se bloquea (como siempre) o la academia
+           permite cancelar igual y la clase se cuenta como usada (cancel_tarde = "pierde"). A tiempo la clase
+           vuelve al saldo; tarde NO vuelve, y solo da crédito si la academia lo decidió (cred_en_tardia). */
+        const tardio = horas < regCancel.cancelH;
+        if (tardio){
+          if (!cancelTardePermitida(cfgCancel) || horas <= 0){
+            return json({ error: "Ya no se puede reprogramar: falta menos de " + regCancel.cancelH + " horas para tu clase." }, 400);
+          }
+          if (!(b.confirmar_tarde === true || b.confirmar_tarde === 1)){
+            const kT = credCfg(cfgCancel);
+            return json({ requiere_confirmar_tarde: true,
+              error: "Faltan menos de " + regCancel.cancelH + " horas para tu clase: si cancelas ahora la clase se te cuenta como usada" + (kT.on && kT.enTardia ? ", pero recibes un crédito de recuperación." : ".") + " ¿Cancelar igual?" }, 409);
+          }
         }
         /* 🔴 22-ago-2026 · el candado que faltaba. El portal le promete al alumno "X de Y
            reprogramaciones" y hasta hoy ese número no bajaba nunca: podía cambiar de horario
@@ -17446,7 +17990,7 @@ export default {
         const cicloCancel = Number(alCancel && alCancel.ciclo) || 1;
         const pkCancel = resolverPk((await loadPaquetes(env, tid)).map, (alCancel && alCancel.paquete) || "");
         const cuotaCancel = Number(pkCancel && pkCancel.reprog) || 0;
-        if (cuotaCancel > 0){
+        if (cuotaCancel > 0 && !tardio){
           const yaPortal = await reprogPortalDe(env, tid, cu.alumno_id, cicloCancel);
           const { results: regsCancel } = await env.DB.prepare(SQL_REGS_CICLO).bind(tid, cu.alumno_id, cicloCancel).all();
           const yaDueno = (regsCancel || []).filter(g => g.estado === "Reprogramó").length;
@@ -17460,16 +18004,18 @@ export default {
            pero el cierre automático corre cada 15 minutos: si le cae justo encima, el alumno
            cancelaba una clase que el cron acababa de marcar como dictada. Se reclama la fila. */
         const canc = await env.DB.prepare(
-          "UPDATE reservas SET estado = 'cancelada', cancelada_utc = ?1, cancelada_por = ?2 " +
+          "UPDATE reservas SET estado = ?5, cancel_tipo = ?6, cancelada_utc = ?1, cancelada_por = ?2 " +
           "WHERE id = ?3 AND tenant_id = ?4 AND estado = 'reservada'"
-        ).bind(new Date().toISOString(), "alumno:" + cu.alumno_id, r.id, tid).run();
+        ).bind(new Date().toISOString(), "alumno:" + cu.alumno_id, r.id, tid, tardio ? "falta" : "cancelada", tardio ? "tarde" : "a_tiempo").run();
         if (!((canc && canc.meta && (canc.meta.changes ?? 0)) || 0)){
           return json({ error: "Esa clase ya se dio por dictada. Escríbele a tu profesor si hubo un error." }, 409);
         }
         await promoverEspera(env, tid, r.inicio_utc, r.sala || "");   // se libero un cupo EN ESA SALA: avisar a su lista de espera
+        if (!tardio) await credDevolverDeReserva(env, tid, r.id);   // si se pagó con un crédito de recuperación, el crédito vuelve (tarde no: la perdió)
+        else await credGenerarDeFaltas(env, tid, cfgCancel, cu.alumno_id).catch(e => console.error("creditos: cancelación tardía", e));
         gcalAvisar(env, ctx, tid);
         try { const tC = await env.DB.prepare("SELECT * FROM tenants WHERE id = ?1").bind(tid).first(); if (tC) await avisarProfeDeAlumno(env, tC, { tipo: "cancelo", alumnoId: cu.alumno_id, nombre: cu.nombre, extra: fmtLima(r.inicio_utc) + (r.curso ? " · " + r.curso : "") }); } catch (e) {}
-        return json({ ok: true, mensaje: "Listo, libere tu horario. Elige tu nuevo horario abajo." });
+        return json({ ok: true, tarde: tardio, mensaje: tardio ? "Cancelada fuera de plazo: la clase se te cuenta como usada." : "Listo, libere tu horario. Elige tu nuevo horario abajo." });
       }
 
       /* ---- Lista de espera (clases llenas): entrar / salir / ver la mia ---- */
@@ -17478,6 +18024,19 @@ export default {
          libero un cupo, reservalo abajo"— de clases ya pasadas. Habia 3 vivas: dos del
          4-ago (18 dias) y una alumna de Elevate esperando el 15-ago (7 dias). El mismo
          WHERE en las DOS consultas, que antes estaba escrito dos veces. */
+      /* ---- Créditos de recuperación de la alumna (2-nov-2026) ---- */
+      if (path === "/app/api/agenda/creditos" && request.method === "GET"){
+        const cu = await cuentaDeSesion(env, request);
+        if (!cu || !cu.alumno_id) return json({ error: "Sesión expirada" }, 401);
+        const cfgCr = await loadConfig(env, cu.tenant_id).catch(() => ({}));
+        const kCr = credCfg(cfgCr);
+        await credGenerarDeFaltas(env, cu.tenant_id, cfgCr, cu.alumno_id).catch(() => 0);
+        const lista = await credLeerDe(env, cu.tenant_id, cu.alumno_id);
+        const vivos = lista.filter(c => c.estado_efectivo === "activo");
+        return json({ activo: kCr.on, activos: vivos.length, proximo_vence: vivos.length ? vivos.map(c => c.vence).sort()[0] : "",
+          creditos: lista.map(c => ({ id: c.id, estado: c.estado_efectivo, vence: c.vence, motivo: c.motivo, creado: c.creado })) });
+      }
+
       if (path === "/app/api/agenda/espera" && request.method === "GET"){
         const cu = await cuentaDeSesion(env, request);
         if (!cu || !cu.alumno_id) return json({ error: "Sesión expirada" }, 401);
@@ -18841,6 +19400,211 @@ export default {
            POST /reserva/cerrar       → una de CIERRES_RESERVA sobre UNA reserva pasada. Solo cierra lo
                                         que sigue 'reservada' (nunca pisa una clase ya cerrada) y un
                                         profesor solo cierra las de SU agenda, igual que /agenda/marcar. */
+        /* ---- Créditos de recuperación (2-nov-2026) ----
+           GET  /creditos?alumno_id=  → los créditos de una alumna (o los vigentes de todas, sin alumno_id)
+           POST /credito {accion: crear|anular|editar}  → solo el dueño: a mano manda la academia. */
+        /* ---- Resumen de asistencia con los cuatro estados (2-nov-2026) ----
+           GET /asistencia?desde=AAAA-MM-DD&hasta=AAAA-MM-DD[&alumno_id=]  (por defecto, los últimos 30 días) */
+        if (path === "/app/api/admin/asistencia" && request.method === "GET"){
+          await ensureCreditosSchema(env);
+          const hoyA = fechaLimaDe(new Date().toISOString());
+          const ok = (v) => /^\d{4}-\d{2}-\d{2}$/.test(String(v || ""));
+          const hasta = ok(url.searchParams.get("hasta")) ? url.searchParams.get("hasta") : hoyA;
+          const desde = ok(url.searchParams.get("desde")) ? url.searchParams.get("desde") : sumarDias(hasta, -30);
+          const aidA = String(url.searchParams.get("alumno_id") || "");
+          const { results } = await env.DB.prepare(
+            "SELECT r.id, r.alumno_id, r.inicio_utc, r.estado, r.tipo, COALESCE(r.cancel_tipo,'') AS cancel_tipo, COALESCE(r.curso,'') AS curso, COALESCE(a.nombre,'') AS alumno " +
+            "FROM reservas r LEFT JOIN alumnos a ON a.id = r.alumno_id AND a.tenant_id = r.tenant_id " +
+            "WHERE r.tenant_id = ?1 AND COALESCE(r.alumno_id,'') != '' AND date(r.inicio_utc,'-5 hours') BETWEEN ?2 AND ?3 " +
+            "AND (?4 = 1 OR r.profesor_id = ?5) AND (?6 = '' OR r.alumno_id = ?6) ORDER BY r.inicio_utc DESC LIMIT 2000"
+          ).bind(tid, desde, hasta, esDueno ? 1 : 0, profeActorId || "", aidA).all();
+          const filas = results || [];
+          const nombres = new Map(filas.map(f => [f.alumno_id, f.alumno]));
+          return json({ desde, hasta, etiquetas: ASISTENCIA_ETIQUETA,
+            resumen: resumenAsistencia(filas).map(x => Object.assign({ alumno: nombres.get(x.alumno_id) || "" }, x)),
+            clases: aidA ? filas.map(f => ({ id: f.id, inicio_utc: f.inicio_utc, curso: f.curso, estado: estadoAsistencia(f), etiqueta: ASISTENCIA_ETIQUETA[estadoAsistencia(f)] })) : undefined });
+        }
+        /* ---- Ausencia de profesora (2-nov-2026, etapa 5) ----
+           POST /ausencia/avisar   → la profesora (o el dueño por ella) avisa desde la plataforma
+           GET  /ausencias         → la lista (el dueño ve todas; la profesora, las suyas)
+           POST /ausencia/resolver → SOLO el dueño: cancelar una clase o un rango · sustituir · descartar */
+        if (path === "/app/api/admin/ausencia/avisar" && request.method === "POST"){
+          await ensureAusenciasSchema(env);
+          const b = await request.json().catch(() => ({}));
+          const pid = (esDueno && b.profesor_id) ? String(b.profesor_id) : String(profeActorId || "");
+          if (!pid) return json({ error: "No sé qué profesora avisa." }, 400);
+          const rango = rangoUtcDeDias(String(b.desde || ""), String(b.hasta || ""));
+          if (!rango) return json({ error: "Elige desde qué día y hasta qué día (máximo 31 días)." }, 400);
+          const pr = await env.DB.prepare("SELECT nombre FROM profesores WHERE id = ?1 AND tenant_id = ?2").bind(pid, tid).first();
+          if (!pr) return json({ error: "Esa profesora no existe." }, 404);
+          const id = crypto.randomUUID();
+          const motivo = String(b.motivo || "").trim().slice(0, 200);
+          await env.DB.prepare("INSERT INTO ausencias_profe (id,tenant_id,profesor_id,desde,hasta,motivo,estado,reportada_por,creado) VALUES (?1,?2,?3,?4,?5,?6,'avisada',?7,?8)")
+            .bind(id, tid, pid, rango.desde, rango.hasta, motivo, profeActorId || "dueno", new Date().toISOString()).run();
+          const afectadas = (await clasesDeProfe(env, tid, pid, rango)).length;
+          const cuando = rango.desde === rango.hasta ? rango.desde : rango.desde + " al " + rango.hasta;
+          try {
+            await avisarPush(env, tid, { title: (pr.nombre || "Una profesora") + " avisa que no podrá dictar", body: cuando + (motivo ? " · " + motivo : "") + " · " + afectadas + " clase(s) con alumnas", url: MARCA.dominio + "/app/panel" });
+            if (t.email) await enviarCorreo(env, { to: t.email, tenantId: tid, subject: (pr.nombre || "Una profesora") + " avisa que no podrá dictar (" + cuando + ")",
+              html: "<p>" + escHtmlSrv(pr.nombre) + " avisó que no podrá dictar clases: <b>" + escHtmlSrv(cuando) + "</b>." + (motivo ? " Motivo: " + escHtmlSrv(motivo) + "." : "") + "</p><p>Tiene " + afectadas + " clase(s) con alumnas en esas fechas. Decide si cancelas o asignas una sustituta:</p><p><a href=\"" + MARCA.dominio + "/app/panel\">Abrir mi panel</a></p>" }).catch(() => false);
+          } catch (e) { console.error("aviso de ausencia", e); }
+          return json({ ok: true, id, clases_afectadas: afectadas });
+        }
+        if (path === "/app/api/admin/ausencias" && request.method === "GET"){
+          await ensureAusenciasSchema(env);
+          const { results } = await env.DB.prepare(
+            "SELECT x.id, x.profesor_id, COALESCE(p.nombre,'') AS profesora, x.desde, x.hasta, x.motivo, x.estado, x.creado, x.sustituta_id " +
+            "FROM ausencias_profe x LEFT JOIN profesores p ON p.id = x.profesor_id AND p.tenant_id = x.tenant_id " +
+            "WHERE x.tenant_id = ?1 AND (?2 = 1 OR x.profesor_id = ?3) ORDER BY CASE x.estado WHEN 'avisada' THEN 0 ELSE 1 END, x.creado DESC LIMIT 60"
+          ).bind(tid, esDueno ? 1 : 0, profeActorId || "").all();
+          const lista = [];
+          for (const x of (results || [])){
+            const rg = rangoUtcDeDias(x.desde, x.hasta);
+            lista.push(Object.assign({}, x, { clases_afectadas: (rg && x.estado === "avisada") ? (await clasesDeProfe(env, tid, x.profesor_id, rg)).length : 0 }));
+          }
+          return json({ ausencias: lista });
+        }
+        if (path === "/app/api/admin/ausencia/resolver" && request.method === "POST"){
+          if (!esDueno) return json({ error: "Esto lo decide el dueño." }, 403);
+          await ensureAusenciasSchema(env);
+          const b = await request.json().catch(() => ({}));
+          const accion = String(b.accion || "");
+          let aus = null;
+          if (b.ausencia_id) aus = await env.DB.prepare("SELECT * FROM ausencias_profe WHERE id = ?1 AND tenant_id = ?2").bind(String(b.ausencia_id), tid).first();
+          const pid = String(b.profesor_id || (aus && aus.profesor_id) || "");
+          if (accion === "descartar"){
+            if (!aus) return json({ error: "No encuentro ese aviso." }, 404);
+            await env.DB.prepare("UPDATE ausencias_profe SET estado = 'descartada', resuelto = ?1 WHERE id = ?2 AND tenant_id = ?3").bind(new Date().toISOString(), aus.id, tid).run();
+            return json({ ok: true });
+          }
+          if (!pid) return json({ error: "Elige la profesora." }, 400);
+          const desde = String(b.desde || (aus && aus.desde) || ""), hasta = String(b.hasta || (aus && aus.hasta) || "");
+          if (accion === "cancelar"){
+            const r = await cancelarPorAusenciaDeProfe(env, t, { profesorId: pid, desde, hasta, inicioUtc: b.inicio_utc ? new Date(Date.parse(String(b.inicio_utc))).toISOString() : "",
+              motivo: b.motivo || (aus && aus.motivo) || "", por: profeActorId || "dueno", ausenciaId: aus ? aus.id : "", avisar: b.avisar !== false });
+            return json(r, r.error ? 400 : 200);
+          }
+          if (accion === "sustituir"){
+            const sid = String(b.sustituta_id || "");
+            if (!sid || sid === pid) return json({ error: "Elige a otra profesora como sustituta." }, 400);
+            const su = await env.DB.prepare("SELECT id, nombre, estado FROM profesores WHERE id = ?1 AND tenant_id = ?2").bind(sid, tid).first();
+            if (!su || su.estado === "suspendido") return json({ error: "Esa profesora no está disponible." }, 400);
+            const rango = rangoUtcDeDias(desde, hasta);
+            if (!rango) return json({ error: "Elige las fechas (máximo 31 días seguidos)." }, 400);
+            await env.DB.prepare("INSERT INTO sustituciones (id,tenant_id,profe_original,profe_sustituta,desde_utc,hasta_utc,ausencia_id,creado,por) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9)")
+              .bind(crypto.randomUUID(), tid, pid, sid, rango.ini, rango.fin, aus ? aus.id : "", new Date().toISOString(), profeActorId || "dueno").run();
+            if (aus) await env.DB.prepare("UPDATE ausencias_profe SET estado = 'atendida', sustituta_id = ?1, resuelto = ?2 WHERE id = ?3 AND tenant_id = ?4").bind(sid, new Date().toISOString(), aus.id, tid).run();
+            const clases = await clasesDeProfe(env, tid, pid, rango);
+            let avisadas = 0;
+            if (b.avisar !== false && clases.length){
+              const datos = await correosDeAlumnas(env, tid, [...new Set(clases.map(c => c.alumno_id))]);
+              const porAl = new Map();
+              for (const c of clases) (porAl.get(c.alumno_id) || porAl.set(c.alumno_id, []).get(c.alumno_id)).push(c);
+              for (const [aid, lista] of porAl){
+                const d = datos.get(aid); if (!d || !d.email || avisadas >= 80) continue;
+                const ok = await enviarCorreo(env, { to: d.email, tenantId: tid, subject: "Tu clase tendrá otra profesora",
+                  html: "<p>Hola " + escHtmlSrv(d.nombre) + ",</p><p>" + escHtmlSrv(su.nombre) + " dictará " + (lista.length === 1 ? "tu clase" : "tus clases") + " en lugar de tu profesora habitual:</p><p style=\"padding:10px;background:#f4f4f4;border-radius:6px\">" + lista.map(c => fmtLima(c.inicio_utc) + (c.curso ? " · " + escHtmlSrv(c.curso) : "")).join("<br>") + "</p><p>Tu reserva sigue igual: no tienes que hacer nada.</p>" }).catch(() => false);
+                if (ok) avisadas++;
+              }
+            }
+            return json({ ok: true, sustituta: su.nombre, clases_con_sustituta: clases.length, alumnas: new Set(clases.map(c => c.alumno_id)).size, avisadas_por_correo: avisadas });
+          }
+          return json({ error: "Acción inválida" }, 400);
+        }
+
+        /* ---- Alumnas de prueba (2-nov-2026, etapa 3) ----
+           POST /alumno/prueba    {alumno_id, es_prueba}   → marca / desmarca a mano
+           POST /alumno/convertir {alumno_id, paquete}     → pasa a regular en la MISMA ficha */
+        if ((path === "/app/api/admin/alumno/prueba" || path === "/app/api/admin/alumno/convertir") && request.method === "POST"){
+          if (!esDueno) return json({ error: "Esto lo maneja el dueño." }, 403);
+          await ensureCreditosSchema(env);
+          const b = await request.json().catch(() => ({}));
+          const al = await env.DB.prepare("SELECT * FROM alumnos WHERE id = ?1 AND tenant_id = ?2").bind(String(b.alumno_id || ""), tid).first();
+          if (!al) return json({ error: "Ese alumno no existe." }, 404);
+          if (path.endsWith("/prueba")){
+            const v = (b.es_prueba === true || b.es_prueba === 1 || b.es_prueba === "1") ? 1 : 0;
+            await env.DB.prepare("UPDATE alumnos SET es_prueba = ?1 WHERE id = ?2 AND tenant_id = ?3").bind(v, al.id, tid).run();
+            return json({ ok: true, es_prueba: v });
+          }
+          if (Number(al.es_prueba) !== 1) return json({ error: "Esa alumna ya es regular." }, 409);
+          const paqMapC = (await loadPaquetes(env, tid)).map;
+          const pkC = resolverPk(paqMapC, String(b.paquete || ""));
+          if (!pkC || !b.paquete) return json({ error: "Elige uno de tus paquetes para pasarla a regular." }, 400);
+          const nombreC = (Object.keys(paqMapC).find(n => n === b.paquete) || String(b.paquete));
+          const ficha = planConvertirPrueba(al, Object.assign({}, pkC, { nombre: nombreC }), fechaLimaDe(new Date().toISOString()));
+          await env.DB.prepare("UPDATE alumnos SET es_prueba = 0, paquete = ?1, ciclo = ?2, fecha = ?3, activado = ?4, caducado = 0, vence = ?5, aviso_vence_ciclo = 0 WHERE id = ?6 AND tenant_id = ?7")
+            .bind(ficha.paquete, ficha.ciclo, ficha.fecha, ficha.activado, ficha.vence, al.id, tid).run();
+          /* sus clases ya reservadas pasan al ciclo nuevo y, si hay lugar regular, a plaza regular */
+          const cfgCv = await loadConfig(env, tid).catch(() => ({}));
+          const { results: fut } = await env.DB.prepare(
+            "SELECT id, inicio_utc, COALESCE(profesor_id,'') AS profesor_id, COALESCE(sala,'') AS sala FROM reservas WHERE tenant_id = ?1 AND alumno_id = ?2 AND estado = 'reservada' AND inicio_utc >= ?3 ORDER BY inicio_utc ASC"
+          ).bind(tid, al.id, new Date().toISOString()).all();
+          let aRegular = 0, enPrueba = 0;
+          for (const rv of (fut || [])){
+            const profCv = { id: rv.profesor_id, esDueno: !rv.profesor_id };
+            let plazaNueva = "";
+            try {
+              const cupoCv = await cupoDeSlot(env, tid, rv.inicio_utc, profCv, cfgCv, rv.sala);
+              const ocCv = await ocupacionSlot(env, tid, rv.inicio_utc, profCv, rv.sala, "");
+              if (ocCv.bloqueado || ocCv.n >= cupoCv) plazaNueva = "prueba";
+            } catch (e) { plazaNueva = "prueba"; }
+            await env.DB.prepare("UPDATE reservas SET ciclo = ?1, plaza = ?2 WHERE id = ?3 AND tenant_id = ?4").bind(ficha.ciclo, plazaNueva, rv.id, tid).run();
+            if (plazaNueva === "prueba") enPrueba++; else aRegular++;
+          }
+          return json({ ok: true, alumno_id: al.id, paquete: ficha.paquete, ciclo: ficha.ciclo, vence: ficha.vence, clases_pasadas_a_plaza_regular: aRegular, clases_que_siguen_en_plaza_de_prueba: enPrueba,
+            aviso: enPrueba ? enPrueba + " de sus clases ya reservadas no tienen lugar regular: siguen en plaza de prueba hasta que se libere cupo." : "" });
+        }
+        if (path === "/app/api/admin/creditos" && request.method === "GET"){
+          await ensureCreditosSchema(env);
+          const aid = String(url.searchParams.get("alumno_id") || "");
+          const hoyC = fechaLimaDe(new Date().toISOString());
+          if (aid){
+            await credGenerarDeFaltas(env, tid, null, aid).catch(() => 0);
+            return json({ creditos: await credLeerDe(env, tid, aid), config: credCfg(await loadConfig(env, tid).catch(() => ({}))) });
+          }
+          await credGenerarDeFaltas(env, tid).catch(() => 0);
+          const { results } = await env.DB.prepare(
+            "SELECT c.id, c.alumno_id, c.motivo, c.mes, c.creado, c.vence, c.estado, c.nota, COALESCE(a.nombre,'') AS alumno FROM creditos_recup c " +
+            "LEFT JOIN alumnos a ON a.id = c.alumno_id AND a.tenant_id = c.tenant_id WHERE c.tenant_id = ?1 AND c.estado = 'activo' AND c.vence >= ?2 ORDER BY c.vence ASC LIMIT 300"
+          ).bind(tid, hoyC).all();
+          return json({ creditos: results || [] });
+        }
+        if (path === "/app/api/admin/credito" && request.method === "POST"){
+          if (!esDueno) return json({ error: "Los créditos los maneja el dueño." }, 403);
+          await ensureCreditosSchema(env);
+          const b = await request.json().catch(() => ({}));
+          const accion = String(b.accion || "");
+          const hoyC = fechaLimaDe(new Date().toISOString());
+          const venceOk = (v) => /^\d{4}-\d{2}-\d{2}$/.test(String(v || "")) && !Number.isNaN(Date.parse(String(v) + "T00:00:00Z"));
+          if (accion === "crear"){
+            const al = await env.DB.prepare("SELECT id FROM alumnos WHERE id = ?1 AND tenant_id = ?2").bind(String(b.alumno_id || ""), tid).first();
+            if (!al) return json({ error: "Ese alumno no existe." }, 404);
+            const kC = credCfg(await loadConfig(env, tid).catch(() => ({})));
+            const vence = venceOk(b.vence) ? String(b.vence) : sumarDias(hoyC, kC.dias);
+            if (vence < hoyC) return json({ error: "La fecha de caducidad ya pasó." }, 400);
+            const id = await credInsertar(env, tid, al.id, { motivo: "manual", mes: hoyC.slice(0, 7), vence, nota: b.nota || "Dado a mano", por: profeActorId || "dueno" });
+            return json({ ok: true, id, vence });
+          }
+          const c = await env.DB.prepare("SELECT * FROM creditos_recup WHERE id = ?1 AND tenant_id = ?2").bind(String(b.id || ""), tid).first();
+          if (!c) return json({ error: "Ese crédito no existe." }, 404);
+          if (accion === "anular"){
+            if (c.estado === "usado") return json({ error: "Ese crédito ya se usó en una clase. Si quieres devolverlo, cancela primero esa reserva." }, 409);
+            if (c.estado === "anulado") return json({ ok: true, sin_cambios: true });
+            await env.DB.prepare("UPDATE creditos_recup SET estado = 'anulado', nota = ?1 WHERE id = ?2 AND tenant_id = ?3 AND estado = 'activo'")
+              .bind(String(b.nota || c.nota || "Anulado por la academia").slice(0, 200), c.id, tid).run();
+            return json({ ok: true });
+          }
+          if (accion === "editar"){
+            if (c.estado === "usado") return json({ error: "Ese crédito ya se usó: no se puede editar." }, 409);
+            const vence = venceOk(b.vence) ? String(b.vence) : c.vence;
+            const nota = (b.nota != null) ? String(b.nota).slice(0, 200) : c.nota;
+            /* editar a mano también revive un crédito anulado o vencido, si se le da una fecha vigente */
+            const nuevoEstado = (c.estado === "anulado" && b.reactivar === true && vence >= hoyC) ? "activo" : c.estado;
+            await env.DB.prepare("UPDATE creditos_recup SET vence = ?1, nota = ?2, estado = ?3 WHERE id = ?4 AND tenant_id = ?5").bind(vence, nota, nuevoEstado, c.id, tid).run();
+            return json({ ok: true, vence, estado: nuevoEstado });
+          }
+          return json({ error: "Acción inválida" }, 400);
+        }
         if (path === "/app/api/admin/reservas/sin-cerrar" && request.method === "GET"){
           return json(await listarSinCerrar(env, tid, { esDueno, profeId: profeActorId || "" }));
         }
@@ -18857,9 +19621,11 @@ export default {
           if (rv.estado !== "reservada") return json({ error: "Esa clase ya está cerrada." }, 409);
           if (!(Date.parse(rv.inicio_utc) < Date.now())) return json({ error: "Esa clase todavía no pasa." }, 400);
           const quien = (esDueno ? "dueno" : "profesor") + ":" + (profeActorId || "");
+          await ensureCreditosSchema(env);
           if (accion === "cancelada"){
-            await env.DB.prepare("UPDATE reservas SET estado = 'cancelada', cancelada_utc = ?1, cancelada_por = ?2 WHERE id = ?3 AND tenant_id = ?4 AND estado = 'reservada'")
+            await env.DB.prepare("UPDATE reservas SET estado = 'cancelada', cancel_tipo = 'a_tiempo', cancelada_utc = ?1, cancelada_por = ?2 WHERE id = ?3 AND tenant_id = ?4 AND estado = 'reservada'")
               .bind(new Date().toISOString(), quien + ":cierre", id, tid).run();
+            await credDevolverDeReserva(env, tid, id);
           } else if (accion === "reprogramada"){
             /* la fila 'Reprogramó' EMPAREJA esta reserva (ver eventosConsumo): sin fila, la reserva
                seguiría contando como clase dictada. Idempotente por día + curso. La fecha nueva, si se
@@ -18874,11 +19640,12 @@ export default {
             await env.DB.prepare("UPDATE reservas SET estado = 'completada' WHERE id = ?1 AND tenant_id = ?2 AND estado = 'reservada'").bind(id, tid).run();
           } else {
             const est = accion === "dicto" ? "completada" : "falta";
-            await env.DB.prepare("UPDATE reservas SET estado = ?1 WHERE id = ?2 AND tenant_id = ?3 AND estado = 'reservada'").bind(est, id, tid).run();
+            await env.DB.prepare("UPDATE reservas SET estado = ?1, cancel_tipo = ?2 WHERE id = ?3 AND tenant_id = ?4 AND estado = 'reservada'").bind(est, accion === "cancelo_tarde" ? "tarde" : "", id, tid).run();
             try { await anotarClaseDictada(env, tid, rv.alumno_id, rv.inicio_utc, rv.curso, rv.ciclo,
                                            accion === "dicto" ? "Asistió" : "Falta",
                                            { sala: rv.sala, grilla: rv.profesor_id, fallback: rv.profesor_id }); }
             catch (e) { console.error("cerrar: no se pudo anotar la clase", id, e); }
+            if (accion === "falta" || accion === "cancelo_tarde") await credGenerarDeFaltas(env, tid, null, rv.alumno_id).catch(e => console.error("creditos: cerrar falta", e));
           }
           const resto = await listarSinCerrar(env, tid, { esDueno, profeId: profeActorId || "" }).catch(() => null);
           return json({ ok: true, accion, pendientes: resto ? resto.total : null });
@@ -18935,8 +19702,11 @@ export default {
         if (path === "/app/api/admin/agenda/marcar" && request.method === "POST"){
           const b = await request.json().catch(() => ({}));
           const id = String(b.id || "");
-          const nuevo = String(b.estado || "");
-          if (!["completada", "falta", "cancelada"].includes(nuevo)) return json({ error: "Estado inválido" }, 400);
+          const pedido = String(b.estado || "");
+          if (!["completada", "falta", "cancelada", "cancelo_tarde"].includes(pedido)) return json({ error: "Estado inválido" }, 400);
+          const tardeM = pedido === "cancelo_tarde";          // «canceló tarde» = la clase se pierde como una falta, con su etiqueta
+          const nuevo = tardeM ? "falta" : pedido;
+          await ensureCreditosSchema(env);
           /* un profesor solo marca clases de SU agenda */
           const rv = await env.DB.prepare(
             "SELECT * FROM reservas WHERE id = ?1 AND tenant_id = ?2 AND (?3 = 1 OR profesor_id = ?4)"
@@ -18946,8 +19716,9 @@ export default {
           if (nuevo === "cancelada"){
             stmts.push(env.DB.prepare("UPDATE reservas SET estado = 'cancelada', cancelada_utc = ?1, cancelada_por = ?2 WHERE id = ?3 AND tenant_id = ?4")
               .bind(new Date().toISOString(), (esDueno ? "dueno" : "profesor") + ":" + (profeActorId || ""), id, tid));
+            stmts.push(env.DB.prepare("UPDATE reservas SET cancel_tipo = 'a_tiempo' WHERE id = ?1 AND tenant_id = ?2").bind(id, tid));
           } else {
-            stmts.push(env.DB.prepare("UPDATE reservas SET estado = ?1 WHERE id = ?2 AND tenant_id = ?3").bind(nuevo, id, tid));
+            stmts.push(env.DB.prepare("UPDATE reservas SET estado = ?1, cancel_tipo = ?2 WHERE id = ?3 AND tenant_id = ?4").bind(nuevo, tardeM ? "tarde" : "", id, tid));
           }
           await env.DB.batch(stmts);
           /* 🔴 22-ago-2026 · acá vivía una COPIA A MANO de la guarda de `anotarClaseDictada`, y
@@ -18957,14 +19728,19 @@ export default {
              anotaba nunca. Se arregló la función compartida y la copia se quedó rota: por eso ya
              no hay copia. La bitácora se escribe con la MISMA función que el cierre automático.
              `anotarClaseDictada` es idempotente, así que va después del batch sin riesgo. */
-          if ((nuevo === "completada" || nuevo === "falta") && rv.tipo !== "bloqueo" && rv.alumno_id){
+          /* una cancelación tardía de una clase que AÚN NO pasó no escribe fila de bitácora: la reserva 'falta' ya
+             consume, y una fila con fecha futura la contaría dos veces. Cuando la clase pasa, consume igual. */
+          if ((nuevo === "completada" || nuevo === "falta") && rv.tipo !== "bloqueo" && rv.alumno_id && !(tardeM && Date.parse(rv.inicio_utc) > Date.now())){
             try { await anotarClaseDictada(env, tid, rv.alumno_id, rv.inicio_utc, rv.curso, rv.ciclo,
                                            nuevo === "completada" ? "Asistió" : "Falta",
                                            { sala: rv.sala, grilla: rv.profesor_id, fallback: rv.profesor_id }); }
             catch (e) { console.error("marcar: no se pudo anotar la clase", id, e); }
           }
           if (nuevo === "cancelada" && rv.tipo !== "bloqueo") await promoverEspera(env, tid, rv.inicio_utc, rv.sala || "");   // cupo liberado en esa sala: avisar lista de espera
-          return json({ ok: true });
+          if (nuevo === "cancelada" && rv.tipo !== "bloqueo") await credDevolverDeReserva(env, tid, rv.id);   // si se pagó con un crédito de recuperación, vuelve
+          if (nuevo === "falta" && rv.alumno_id) await credGenerarDeFaltas(env, tid, null, rv.alumno_id).catch(e => console.error("creditos: marcar falta", e));
+          if (tardeM && rv.tipo !== "bloqueo") await promoverEspera(env, tid, rv.inicio_utc, rv.sala || "");   // la clase pasó a falta: su cupo queda libre
+          return json({ ok: true, estado_asistencia: tardeM ? "cancelo_tarde" : (nuevo === "falta" ? "ausente" : (nuevo === "cancelada" ? "cancelo_a_tiempo" : "asistio")) });
         }
 
         /* ---- "Anular la clase: que no haya pasado y se le devuelva el crédito" ----
@@ -19224,9 +20000,50 @@ export default {
              pantallas no se contradigan.
              El 1 a 1 (MVT) no se toca: ahí `disponibilidad.profe` está vacío, `mias` queda en
              cero y el resultado es idéntico al de siempre. */
-          const todosAl = (await env.DB.prepare(
+          /* Velocidad (3-nov-2026): las ~20 consultas de abajo eran independientes pero corrían una tras otra
+             (3 s o más). Se lanzan TODAS juntas aquí y cada lugar de abajo solo espera su resultado. Mismo
+             contenido: los try/catch de cada bloque siguen atrapando los fallos porque el await sigue donde estaba. */
+          const P = {};
+          P.alumnos = env.DB.prepare(
             "SELECT * FROM alumnos WHERE tenant_id = ?1" + ORDEN_NOMBRE
-          ).bind(tid).all()).results || [];
+          ).bind(tid).all();
+          P.registro = env.DB.prepare("SELECT * FROM registro WHERE tenant_id = ?1 ORDER BY fecha DESC, id DESC").bind(tid).all();
+          P.resv = env.DB.prepare(
+            "SELECT id, alumno_id, inicio_utc, COALESCE(curso,'') AS curso, COALESCE(tipo,'') AS tipo, COALESCE(ciclo,1) AS ciclo, estado " +
+            "FROM reservas WHERE tenant_id = ?1 AND estado IN ('reservada','completada','falta') ORDER BY inicio_utc ASC"
+          ).bind(tid).all();
+          P.canc = env.DB.prepare(
+              "SELECT alumno_id, COALESCE(ciclo,1) AS ciclo, COUNT(*) AS n FROM reservas " +
+              "WHERE tenant_id = ?1 AND estado = 'cancelada' AND COALESCE(cancelada_por,'') LIKE 'alumno:%' " +
+              "GROUP BY alumno_id, COALESCE(ciclo,1)"
+            ).bind(tid).all();
+          P.cuentas = env.DB.prepare(
+            "SELECT id,email,nombre,whatsapp,marketing,alumno_id,creada,ref_code,ref_por,credito FROM cuentas WHERE tenant_id = ?1 ORDER BY creada DESC"
+          ).bind(tid).all();
+          P.compras = env.DB.prepare("SELECT * FROM compras WHERE tenant_id = ?1 AND estado != 'iniciada' ORDER BY CASE estado WHEN 'pendiente' THEN 0 ELSE 1 END, fecha DESC").bind(tid).all();
+          P.recursos = env.DB.prepare("SELECT * FROM recursos WHERE tenant_id = ?1 ORDER BY fecha DESC, rowid DESC").bind(tid).all();
+          P.ejercicios = env.DB.prepare("SELECT * FROM ejercicios WHERE tenant_id = ?1 ORDER BY fecha DESC, rowid DESC").bind(tid).all();
+          P.fijas = env.DB.prepare(
+            "SELECT alumno_id, serie_id, id, inicio_utc FROM reservas " +
+            "WHERE tenant_id = ?1 AND tipo='fija' AND estado='reservada' AND inicio_utc >= ?2 ORDER BY inicio_utc ASC"
+          ).bind(tid, new Date().toISOString()).all();
+          P.grupos = env.DB.prepare(
+            "SELECT * FROM grupos WHERE tenant_id = ?1 AND (?2 = 1 OR profesor_id = ?3) ORDER BY creado DESC, rowid DESC"
+          ).bind(tid, esDueno ? 1 : 0, profeActorId || "").all();
+          P.equipo = env.DB.prepare(
+              "SELECT id, nombre, email, rol, estado, foto, COALESCE(sede_id,'') AS sede_id FROM profesores WHERE tenant_id = ?1 ORDER BY CASE rol WHEN 'dueno' THEN 0 ELSE 1 END, " + sinTildesSQL("COALESCE(nombre,'')") + ", nombre"
+            ).bind(tid).all();
+          P.gastos = esDueno ? env.DB.prepare("SELECT id,fecha,concepto,categoria,monto FROM gastos WHERE tenant_id = ?1 ORDER BY fecha DESC, rowid DESC LIMIT 2000").bind(tid).all() : Promise.resolve({ results: [] });
+          P.comprobantes = esDueno ? env.DB.prepare("SELECT compra_id, serie, numero, enlace_pdf, aceptada, COALESCE(estado,'emitida') AS estado FROM comprobantes WHERE tenant_id = ?1 ORDER BY rowid DESC LIMIT 2000").bind(tid).all() : Promise.resolve({ results: [] });
+          P.precios1 = loadPrecios(env, tid);
+          P.precios2 = loadPrecios(env, tid);
+          P.config1 = loadConfig(env, tid);
+          P.config2 = loadConfig(env, tid);
+          P.paquetes1 = loadPaquetes(env, tid);
+          P.paquetes2 = loadPaquetes(env, tid);
+          P.sedes1 = sedesDeTenant(env, tid);
+          for (const k in P){ if (P[k] && P[k].catch) P[k].catch(() => {}); }  // sin "unhandled rejection" si un bloque aborta antes de esperarla
+          const todosAl = (await P.alumnos).results || [];
           let alumnos = todosAl;
           if (!esDueno){
             const miasAl = new Set();
@@ -19254,10 +20071,7 @@ export default {
             alumnos = todosAl.filter(a => a.profesor_id === profeActorId || deSusFranjas.has(a.id));
           }
           const idsScope = new Set(alumnos.map(a => a.id));
-          const { results: fijasRows } = await env.DB.prepare(
-            "SELECT alumno_id, serie_id, id, inicio_utc FROM reservas " +
-            "WHERE tenant_id = ?1 AND tipo='fija' AND estado='reservada' AND inicio_utc >= ?2 ORDER BY inicio_utc ASC"
-          ).bind(tid, new Date().toISOString()).all();
+          const { results: fijasRows } = await P.fijas;
           const fijasPorAlumno = {}, seriesVistas = {};
           for (const r of (fijasRows || [])){
             const aid = r.alumno_id; if (!aid) continue;
@@ -19271,7 +20085,7 @@ export default {
             if (fijasPorAlumno[aid].indexOf(label) === -1) fijasPorAlumno[aid].push(label);
           }
           for (const a of alumnos){ a.horarioFijo = fijasPorAlumno[a.id] || []; }
-          const registroAll = (await env.DB.prepare("SELECT * FROM registro WHERE tenant_id = ?1 ORDER BY fecha DESC, id DESC").bind(tid).all()).results || [];
+          const registroAll = (await P.registro).results || [];
           const registro = esDueno ? registroAll : registroAll.filter(r => idsScope.has(r.alumno_id));
 
           /* SALDO CALCULADO EN EL SERVIDOR (12-ago-2026) — el arreglo de fondo del desajuste
@@ -19281,19 +20095,12 @@ export default {
              Ahora sale del MISMO computeMulti/compute que usa el portal. Barato: una consulta
              más para TODAS las reservas del tenant (Elevate: 80 filas para 1,447 alumnos) y el
              resto en memoria — cero consultas por alumno. */
-          const resvAll = (await env.DB.prepare(
-            "SELECT id, alumno_id, inicio_utc, COALESCE(curso,'') AS curso, COALESCE(tipo,'') AS tipo, COALESCE(ciclo,1) AS ciclo, estado " +
-            "FROM reservas WHERE tenant_id = ?1 AND estado IN ('reservada','completada','falta') ORDER BY inicio_utc ASC"
-          ).bind(tid).all()).results || [];
+          const resvAll = (await P.resv).results || [];
           /* cancelaciones que hizo el ALUMNO desde su portal, en lote: sin esto el panel
              mostraría "3 de 3 cambios" y el portal "0 de 3" para la misma persona. */
           const reprogPortalPor = new Map();
           try {
-            const { results: cancAll } = await env.DB.prepare(
-              "SELECT alumno_id, COALESCE(ciclo,1) AS ciclo, COUNT(*) AS n FROM reservas " +
-              "WHERE tenant_id = ?1 AND estado = 'cancelada' AND COALESCE(cancelada_por,'') LIKE 'alumno:%' " +
-              "GROUP BY alumno_id, COALESCE(ciclo,1)"
-            ).bind(tid).all();
+            const { results: cancAll } = await P.canc;
             for (const c of (cancAll || [])) reprogPortalPor.set(c.alumno_id + "|" + c.ciclo, Number(c.n) || 0);
           } catch (e) { /* si falla, el panel muestra lo de siempre */ }
           const resvPorAlumno = new Map(), regsPorAlumno = new Map();
@@ -19309,9 +20116,9 @@ export default {
             /* OJO: loadPaquetes devuelve {map, list} — va el `.map`, como en los otros 10 sitios.
                Sin él, resolverPk no encuentra NINGÚN paquete propio de la academia y devuelve
                0 clases: los 1,447 de Elevate saldrían "Completado — renovar" en rojo. */
-            const paqMapP = (await loadPaquetes(env, tid)).map;
-            const preciosP = await loadPrecios(env, tid);
-            const modoSaldo = (await loadConfig(env, tid)).saldo_modo || "";
+            const paqMapP = (await P.paquetes1).map;
+            const preciosP = await P.precios1;
+            const modoSaldo = (await P.config1).saldo_modo || "";
             for (const a of alumnos){
               const ciA = Number(a.ciclo) || 1;
               const rv = (resvPorAlumno.get(a.id) || []).filter(r => (Number(r.ciclo) || 1) === ciA);
@@ -19342,12 +20149,10 @@ export default {
                 .map(r => ({ id: r.id, inicio_utc: r.inicio_utc, curso: r.curso || "", estado: r.estado, ciclo: r.ciclo }));
             }
           } catch (e) { console.error("saldo panel", e && e.message); }   // el panel cae a su cálculo viejo
-          const cuentasAll = (await env.DB.prepare(
-            "SELECT id,email,nombre,whatsapp,marketing,alumno_id,creada,ref_code,ref_por,credito FROM cuentas WHERE tenant_id = ?1 ORDER BY creada DESC"
-          ).bind(tid).all()).results || [];
+          const cuentasAll = (await P.cuentas).results || [];
           const cuentas = esDueno ? cuentasAll : cuentasAll.filter(c => c.alumno_id && idsScope.has(c.alumno_id));
           const idsCuentasScope = new Set(cuentas.map(c => c.id));
-          const comprasAll = (await env.DB.prepare("SELECT * FROM compras WHERE tenant_id = ?1 AND estado != 'iniciada' ORDER BY CASE estado WHEN 'pendiente' THEN 0 ELSE 1 END, fecha DESC").bind(tid).all()).results || [];
+          const comprasAll = (await P.compras).results || [];
           /* pagos_ver (1-set-2026): el permiso vivia en el catalogo desde el 28-jul y no lo
              miraba NADIE — ni el worker ni el panel. El dueno lo marcaba y no pasaba nada.
              Un profe sin el permiso ya no recibe las compras: se le mandan vacias, que es
@@ -19356,8 +20161,8 @@ export default {
           const compras = esDueno
             ? comprasAll
             : (permisosDe(profeActor).puede("pagos_ver") ? comprasAll.filter(c => c.profesor_id === profeActorId || idsCuentasScope.has(c.cuenta_id)) : []);
-          const recursos = (await env.DB.prepare("SELECT * FROM recursos WHERE tenant_id = ?1 ORDER BY fecha DESC, rowid DESC").bind(tid).all()).results || [];
-          const ejercicios = (await env.DB.prepare("SELECT * FROM ejercicios WHERE tenant_id = ?1 ORDER BY fecha DESC, rowid DESC").bind(tid).all()).results || [];
+          const recursos = (await P.recursos).results || [];
+          const ejercicios = (await P.ejercicios).results || [];
           /* URLs firmadas para el panel (11-ago-2026): tambien pinta <audio src> y <a href>,
              que van sin header Authorization. Aqui ya se comprobo quien pregunta. */
           for (const r of recursos) r.url = await firmarRuta(env, r.url, "m");
@@ -19385,18 +20190,18 @@ export default {
           let gastos = [];
           if (esDueno){
             try {
-              gastos = (await env.DB.prepare("SELECT id,fecha,concepto,categoria,monto FROM gastos WHERE tenant_id = ?1 ORDER BY fecha DESC, rowid DESC LIMIT 2000").bind(tid).all()).results || [];
+              gastos = (await P.gastos).results || [];
             } catch (e) { gastos = []; }
           }
           /* comprobantes SUNAT emitidos (para pintar el link de la boleta en Pagos): solo el dueno */
           let comprobantes = [];
           if (esDueno){
             try {
-              comprobantes = (await env.DB.prepare("SELECT compra_id, serie, numero, enlace_pdf, aceptada, COALESCE(estado,'emitida') AS estado FROM comprobantes WHERE tenant_id = ?1 ORDER BY rowid DESC LIMIT 2000").bind(tid).all()).results || [];
+              comprobantes = (await P.comprobantes).results || [];
             } catch (e) { comprobantes = []; }
           }
-          const precios  = await loadPrecios(env, tid);
-          const config   = await loadConfig(env, tid);
+          const precios  = await P.precios2;
+          const config   = await P.config2;
           /* cobro_on (28-jul-2026): misma formula que armarWebCtx. Se calcula ACA, ANTES de
              borrarle los datos bancarios al rol profesor, si no el flag saldria falso para el
              profe aunque la academia si cobre. Lo consume el editor de "Mi web" para avisar
@@ -19416,21 +20221,17 @@ export default {
               if (kSec in config) delete config[kSec];
             }
           }
-          const grupos   = ((await env.DB.prepare(
-            "SELECT * FROM grupos WHERE tenant_id = ?1 AND (?2 = 1 OR profesor_id = ?3) ORDER BY creado DESC, rowid DESC"
-          ).bind(tid, esDueno ? 1 : 0, profeActorId || "").all()).results || [])
+          const grupos   = ((await P.grupos).results || [])
             .map(g => { let m = []; try { m = JSON.parse(g.miembros || "[]"); } catch (e) {} return Object.assign({}, g, { miembros: Array.isArray(m) ? m : [] }); });
           /* equipo: al dueno le sirve para asignar; al profesor, para pintar nombres */
           let equipo = [];
           try {
-            const { results: eqRows } = await env.DB.prepare(
-              "SELECT id, nombre, email, rol, estado, foto, COALESCE(sede_id,'') AS sede_id FROM profesores WHERE tenant_id = ?1 ORDER BY CASE rol WHEN 'dueno' THEN 0 ELSE 1 END, " + sinTildesSQL("COALESCE(nombre,'')") + ", nombre"
-            ).bind(tid).all();
+            const { results: eqRows } = await P.equipo;
             equipo = eqRows || [];
           } catch (e) {}
-          const sedes = await sedesDeTenant(env, tid);
+          const sedes = await P.sedes1;
           return json({ alumnos, registro, precios, cuentas, compras, recursos, ejercicios, leads, gastos, comprobantes, config, grupos, sedes,
-                        paquetes_venta: paquetesEnVenta(t, (await loadPaquetes(env, tid)).list),
+                        paquetes_venta: paquetesEnVenta(t, (await P.paquetes2).list),
                         slug: t.slug, academia: t.academia, estado: t.estado, demo: esTenantDemo(t),
                         rol: esDueno ? "dueno" : "profesor", profe_id: profeActorId || "", equipo,
                         cobro_on: cobroOnPanel,
@@ -19499,6 +20300,44 @@ export default {
         if (path === "/app/api/admin/avisos" && request.method === "GET"){
           return json(await avisosDe(env, actor));
         }
+        /* Borrar avisos de la campanita (2-nov-2026): uno por uno ({ids:[...]}) o todos ({todos:true}). Por persona:
+           lo que borra una profesora no desaparece de la campanita del dueño. Las clases sin cerrar no se borran
+           (se van solas al cerrarlas). Todo avisa lo que hizo para que la pantalla no mienta. */
+        if (path === "/app/api/admin/avisos/borrar" && request.method === "POST"){
+          await ensureAvisosSchema(env);
+          if (!profeActorId) return json({ ok: true, borrados: 0 });
+          const bB = await request.json().catch(() => ({}));
+          const prev = avisosVistoDe(profeActor);
+          let ids = [];
+          if (bB && bB.todos === true){
+            ids = (await avisosDe(env, actor)).avisos.filter(a => a.tipo !== "cierre").map(a => a.id).concat(NOVEDADES.map(n => n.id));
+          } else if (bB && Array.isArray(bB.ids)){
+            ids = bB.ids.map(x => String(x).slice(0, 80)).filter(Boolean).slice(0, 50);
+          }
+          const x = [...new Set(prev.x.concat(ids))].slice(-300);
+          const base = (function(){ try { return JSON.parse((profeActor && profeActor.avisos_visto) || "{}") || {}; } catch (e) { return {}; } })();
+          const guardar = Object.assign({}, base, { x });
+          try {
+            await env.DB.prepare("UPDATE profesores SET avisos_visto = ?1 WHERE id = ?2 AND tenant_id = ?3").bind(JSON.stringify(guardar), profeActorId, tid).run();
+            if (profeActor) profeActor.avisos_visto = JSON.stringify(guardar);
+          } catch (e) { return json({ error: "No se pudo borrar" }, 500); }
+          return json({ ok: true, borrados: ids.length, ids });
+        }
+        /* Deshacer el borrado (8 s en pantalla): saca esos ids de la lista de borrados de la persona */
+        if (path === "/app/api/admin/avisos/restaurar" && request.method === "POST"){
+          await ensureAvisosSchema(env);
+          if (!profeActorId) return json({ ok: true });
+          const bR = await request.json().catch(() => ({}));
+          const quitar = new Set((Array.isArray(bR.ids) ? bR.ids : []).map(x => String(x).slice(0, 80)).slice(0, 300));
+          const prev = avisosVistoDe(profeActor);
+          const base = (function(){ try { return JSON.parse((profeActor && profeActor.avisos_visto) || "{}") || {}; } catch (e) { return {}; } })();
+          const guardar = Object.assign({}, base, { x: prev.x.filter(id => !quitar.has(id)) });
+          try {
+            await env.DB.prepare("UPDATE profesores SET avisos_visto = ?1 WHERE id = ?2 AND tenant_id = ?3").bind(JSON.stringify(guardar), profeActorId, tid).run();
+            if (profeActor) profeActor.avisos_visto = JSON.stringify(guardar);
+          } catch (e) { return json({ error: "No se pudo deshacer" }, 500); }
+          return json({ ok: true });
+        }
         if (path === "/app/api/admin/avisos/visto" && request.method === "POST"){
           await ensureAvisosSchema(env);
           if (!profeActorId) return json({ ok: true });   /* sin ficha de profesor no hay dónde guardar */
@@ -19511,7 +20350,7 @@ export default {
           const prev = avisosVistoDe(profeActor);
           const dAv = /^\d{4}-\d{2}-\d{2}$/.test(String((bAv && bAv.d) || "")) ? String(bAv.d) : "";
           /* nunca hacia atrás: dos pestañas abiertas no pueden "des-leer" lo ya leído */
-          const guardar = { n: nAv > prev.n ? nAv : prev.n, c: Math.max(cAv, prev.c), d: dAv > prev.d ? dAv : prev.d };
+          const guardar = { n: nAv > prev.n ? nAv : prev.n, c: Math.max(cAv, prev.c), d: dAv > prev.d ? dAv : prev.d, x: prev.x };
           try {
             await env.DB.prepare("UPDATE profesores SET avisos_visto = ?1 WHERE id = ?2 AND tenant_id = ?3")
               .bind(JSON.stringify(guardar), profeActorId, tid).run();
@@ -19693,6 +20532,7 @@ export default {
              Con la lista enumerada, cada columna nueva nacía condenada — así se borraban en
              silencio las bajas de correo, el consentimiento de marketing y las clases de
              regalo. `memoria: leccion-columna-nueva-no-llega-por-select-enumerado` */
+          await ensureCreditosSchema(env);   // es_prueba tiene que existir ANTES de este guardado, o el INSERT de abajo revienta
           try {
             prevRows = (await env.DB.prepare(
               "SELECT * FROM alumnos WHERE tenant_id = ?1 AND (?2 = 1 OR profesor_id = ?3)"
@@ -19927,7 +20767,7 @@ export default {
               }
             }
             stmts.push(env.DB.prepare(
-              "INSERT INTO alumnos (id,tenant_id,codigo,nombre,whatsapp,curso,paquete,fecha,pago,horario,notas,ciclo,vence,aviso_vence_ciclo,recordatorio_fecha,recordatorio_ciclo,winback_ciclo,profesor_id,sede_id,migrado_usadas,migrado_ciclo,activado,caducado,apellido,email,nacimiento,pases,vence_manual,invitado_el,invitado_canal,no_email,bonus_clases,bonus_ciclo,mkt_ok,mkt_fecha,mkt_origen,mkt_token,resena_pedida,cal_token) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,?22,?23,?24,?25,?26,?27,?28,?29,?30,?31,?32,?33,?34,?35,?36,?37,?38,?39)"
+              "INSERT INTO alumnos (id,tenant_id,codigo,nombre,whatsapp,curso,paquete,fecha,pago,horario,notas,ciclo,vence,aviso_vence_ciclo,recordatorio_fecha,recordatorio_ciclo,winback_ciclo,profesor_id,sede_id,migrado_usadas,migrado_ciclo,activado,caducado,apellido,email,nacimiento,pases,vence_manual,invitado_el,invitado_canal,no_email,bonus_clases,bonus_ciclo,mkt_ok,mkt_fecha,mkt_origen,mkt_token,resena_pedida,cal_token,es_prueba) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,?22,?23,?24,?25,?26,?27,?28,?29,?30,?31,?32,?33,?34,?35,?36,?37,?38,?39,?40)"
             ).bind(
               a.id, tid, String(a.codigo || "").toUpperCase() || randHex(3).toUpperCase(), a.nombre,
               a.whatsapp || "", a.curso || "", a.paquete || "",
@@ -19949,7 +20789,8 @@ export default {
               (pr && Number(pr.bonus_clases)) || 0, (pr && Number(pr.bonus_ciclo)) || 0,
               (pr && Number(pr.mkt_ok)) || 0, (pr && pr.mkt_fecha) || "", (pr && pr.mkt_origen) || "",
               (pr && pr.mkt_token) || "", (pr && Number(pr.resena_pedida)) || 0,
-              (pr && pr.cal_token) || ""
+              (pr && pr.cal_token) || "",
+              (pr && Number(pr.es_prueba)) || 0     // la marca de alumna de prueba vive en el servidor: el panel no la manda
             ));
           }
           for (const r of body.registro){
@@ -20228,7 +21069,7 @@ export default {
           /* config del tenant (cobros, marca, cupo, cursos): SOLO el dueno */
           if (!esDueno) return json({ error: "Los ajustes de la academia los maneja el dueño." }, 403);
           const b = await request.json().catch(() => ({}));
-          const claves = ["pago_numero", "pago_titular", "bcp_cuenta", "bcp_cci", "scotia_cuenta", "scotia_cci", "crypto_moneda", "crypto_red", "crypto_wallet", "stripe_moneda", "profe_nombre", "profe_marca", "profe_foto", "whatsapp_profe", "cursos", "brand_color", "brand_font", "agenda_cupo", "recordatorios_clase", "recordatorio_renovacion", "nubefact_ruta", "nubefact_token", "fact_serie_boleta", "fact_igv", "fact_proximo_numero", "wa_phone_id", "wa_enabled", "wa_modo", "wa_tono", "wa_instrucciones", "wa_kb", "wa_seguimiento", "wa_no_tocar", "wa_url_horarios", "wa_url_portal", "reprog_activo", "reprog_min_h", "paquetes", "modulos_off", "clases", "anticipacion_h", "web_direccion_off",
+          const claves = ["pago_numero", "pago_titular", "bcp_cuenta", "bcp_cci", "scotia_cuenta", "scotia_cci", "crypto_moneda", "crypto_red", "crypto_wallet", "stripe_moneda", "profe_nombre", "profe_marca", "profe_foto", "whatsapp_profe", "cursos", "brand_color", "brand_font", "agenda_cupo", "recordatorios_clase", "recordatorio_renovacion", "nubefact_ruta", "nubefact_token", "fact_serie_boleta", "fact_igv", "fact_proximo_numero", "wa_phone_id", "wa_enabled", "wa_modo", "wa_tono", "wa_instrucciones", "wa_kb", "wa_seguimiento", "wa_no_tocar", "wa_url_horarios", "wa_url_portal", "reprog_activo", "reprog_min_h", "cred_on", "cred_max_mes", "cred_vence_dias", "cred_en_tardia", "prueba_plazas", "cancel_tarde", "paquetes", "modulos_off", "clases", "anticipacion_h", "web_direccion_off",
                           /* Elevate (28-jul-2026) */
                           "caduca_meses", "asistencia_auto", "asistencia_horas", "mensajes",
                           /* que datos extra pide el formulario publico de compra (02-ago-2026) */
@@ -20457,6 +21298,11 @@ export default {
                   .filter((s, i, a) => a.indexOf(s) === i).join(",");
               }
               if (k === "reprog_activo" && valor && valor !== "0") valor = "";
+              if (k === "cred_on" || k === "cred_en_tardia") valor = (valor === "1") ? "1" : "";
+              if (k === "cred_max_mes") valor = limpiarEnteroCfg(valor, 1, 10);
+              if (k === "prueba_plazas") valor = limpiarEnteroCfg(valor, 1, 20);
+              if (k === "cancel_tarde") valor = (valor === "pierde") ? "pierde" : "";
+              if (k === "cred_vence_dias") valor = limpiarEnteroCfg(valor, 1, 365);
               if (k === "reprog_min_h" && valor){
                 const nh = parseInt(valor, 10);
                 valor = (Number.isFinite(nh) && nh >= 1 && nh <= 72) ? String(nh) : "";
@@ -20490,6 +21336,11 @@ export default {
             }
           }
           if (stmts.length) await env.DB.batch(stmts);
+          /* créditos de recuperación: al PRENDERLOS se sella el día de hoy; no se regalan créditos por faltas viejas */
+          if (b.cred_on === "1"){
+            try { await env.DB.prepare("INSERT INTO config (tenant_id, clave, valor) VALUES (?1,'cred_desde',?2) ON CONFLICT(tenant_id, clave) DO UPDATE SET valor = CASE WHEN COALESCE(valor,'') = '' THEN ?2 ELSE valor END")
+              .bind(tid, fechaLimaDe(new Date().toISOString())).run(); } catch (e) {}
+          }
           /* ---- El arrastre del renombrado de planes (29-sep-2026) ----
              Va DESPUÉS de guardar el catálogo nuevo. Solo se cambia el nombre del plan en
              `alumnos.paquete` y `alumnos.pases`; `compras` y el registro son historia y no se tocan. */
@@ -21151,6 +22002,7 @@ export default {
        al cron de las 9am, la clase de las 7pm quedaria "reservada" toda la noche y el saldo
        del alumno mentiria hasta el dia siguiente. */
     try { await cerrarAsistenciasAuto(env); } catch (e) { console.error("asistencia auto", e); }
+    try { await credCronTodos(env); } catch (e) { console.error("creditos recuperacion", e); }
     /* Demos privadas vencidas (19-ago-2026): cada visitante de /app/demo tiene la suya y
        vive 24h. Va en CADA corrida y no en la diaria para que la base no cargue un día
        entero de copias muertas. */
