@@ -18,7 +18,7 @@ function cortar(nombre){
    ANTES de correr una sola prueba. O sea que llevaba días sin verificar nada y no se notaba:
    un suite que revienta al arrancar se ve tan callado como uno que pasa. Lo usa fechaLimaDe().
    Ver `memoria: leccion-verificar-que-el-dato-venga`. */
-const FN = ["categoriaDe","paqueteCubre","resolverPk","venceVencido","pasesDe","pasesOrdenConsumo",
+const FN = ["categoriaDe","normPaqNombre","paqueteCubre","resolverPk","venceVencido","pasesDe","pasesOrdenConsumo",
             "vencidoAl","atribuirPases","limaParts","fechaLimaDe","diaVecino","eventosConsumo","computeMulti"];
 /* las constantes que esas funciones usan, cortadas del mismo archivo */
 function cortarConst(nombre){
