@@ -8179,7 +8179,8 @@ el("btnNuevoAlumno").addEventListener("click",function(){
   el("a_nombre").value=""; el("a_whatsapp").value="";
   ["a_apellido","a_email","a_nacimiento"].forEach(function(k){ if(el(k)) el(k).value=""; });
   setCursosAlumno(MARCA.cursoDefault,true); fillSelects(); el("a_paquete").value=pkNombres()[0]||"";
-  try{ el("a_mas").open=false; }catch(e){}
+  /* plegado solo para academias nuevas; quien ya tiene alumnos (Elevate pidió estos datos) lo ve abierto */
+  try{ el("a_mas").open=!!(db&&db.alumnos&&db.alumnos.length); }catch(e){}
   el("a_fecha").value=hoyLima(); el("a_pago").value="Pagado";
   el("a_horario").value=""; el("a_notas").value=""; el("a_horario_derivado").textContent=""; pintarClasesDeAlumno(null);
   fillProfeSelect("");
@@ -11231,7 +11232,7 @@ function abrirImportador(opts){
      toque de más justo donde se caen las academias nuevas: va directo a pegar la lista, y el
      enlace "Vengo de otro sistema" sigue ahí. */
   var sinAlumnos=!(db&&db.alumnos&&db.alumnos.length);
-  if(IMP_PLAT || opts.resultado || opts.encadena || sinAlumnos){ impIrPaso1(); }   // ya nos dijo de dónde viene: no se pregunta dos veces
+  if(!opts.elegir && (IMP_PLAT || opts.resultado || opts.encadena || sinAlumnos)){ impIrPaso1(); }   // opts.elegir: pidió ver los sistemas   // ya nos dijo de dónde viene: no se pregunta dos veces
   else{
     el("impPaso0").style.display=""; el("impPaso1").style.display="none"; el("impPaso2").style.display="none";
     el("impTitulo").innerHTML='¿De dónde traes a tus <em>alumnos</em>?';
@@ -11562,7 +11563,7 @@ function renderSinPlanBanner(){
 el("btnImpOtroSistema").addEventListener("click",function(){
   try{ localStorage.removeItem(impPlatKey()); }catch(e){}
   IMP_PLAT=null; IMP_ARCHIVO_N=1;
-  abrirImportador();
+  abrirImportador({elegir:true});
 });
 el("btnPlantillaCsv").addEventListener("click",function(){
   /* "Clases restantes" y "Vence" (28-jul-2026) son para migrar de otro sistema con el saldo
