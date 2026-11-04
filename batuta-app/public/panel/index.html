@@ -2727,12 +2727,14 @@ p.hint[style*="font-size"]{font-size:13px!important;}
     </div>
     <!-- Datos que pidió Elevate en el alta (28-jul-2026). Opcionales: quien no los use ni
          los llena, y quien los use los tiene sin pedir nada a nadie. -->
+    <details id="a_mas" style="margin:2px 0 10px;"><summary style="cursor:pointer;color:var(--muted);font-size:14px;padding:6px 0;">Más datos (apellido, correo, cumpleaños). Opcional</summary>
     <div class="frow">
       <div class="field"><label>Apellido</label><input id="a_apellido" type="text" placeholder="Opcional" /></div>
       <div class="field"><label>Correo</label><input id="a_email" type="email" placeholder="Opcional" /></div>
       <div class="field"><label>Fecha de nacimiento</label><input id="a_nacimiento" type="date" />
         <p class="hint" style="margin:5px 0 0;">Sirve para saludarlo en su cumpleaños y para tus reportes. Si tienes alumnos menores de edad, recuerda pedirle permiso al padre o apoderado.</p></div>
     </div>
+    </details>
     <div class="frow">
       <div class="field"><label>Curso(s)</label>
         <div id="a_cursos" style="display:flex;flex-wrap:wrap;gap:14px;padding:4px 0;"></div>
@@ -4360,7 +4362,7 @@ function renderAlumnos(){
       fsel.style.display="";
     } else { fsel.style.display="none"; fsel.value=""; }
   }
-  if(db.alumnos.length===0){ tb.innerHTML='<tr><td colspan="9"><div class="hint" style="border:1px dashed var(--line);border-radius:8px;padding:18px 14px;margin:8px 0;text-align:center;">Aún no tienes alumnos. Agrega el primero y su portal se crea solo.<br /><button class="btn" style="margin-top:10px;" onclick="el(\'btnNuevoAlumno\').click()">+ Agregar mi primer alumno</button> <button class="btn ghost" style="margin-top:10px;" onclick="el(\'btnImportCsv\').click()">Traer mis alumnos</button></div></td></tr>'; return; }
+  if(db.alumnos.length===0){ tb.innerHTML='<tr><td colspan="9"><div class="hint" style="border:1px dashed var(--line);border-radius:8px;padding:18px 14px;margin:8px 0;text-align:center;">Aún no tienes alumnos. <b>Pega tu lista</b> (de WhatsApp, Excel o tu libreta; con el nombre basta) y todos quedan listos de una vez, cada uno con su portal.<br /><button class="btn" style="margin-top:10px;" onclick="el(\'btnImportCsv\').click()">Pegar mi lista de alumnos</button> <button class="btn ghost" style="margin-top:10px;" onclick="el(\'btnNuevoAlumno\').click()">Agregar uno solo</button></div></td></tr>'; return; }
   var fs=(fsel&&fsel.value)||"";
   var listaAl=fs?db.alumnos.filter(function(a){return (a.sede_id||"")===fs;}):db.alumnos;
   if(!listaAl.length){ tb.innerHTML='<tr><td colspan="9" class="empty">Sin alumnos en esa sede</td></tr>'; return; }
@@ -8177,6 +8179,7 @@ el("btnNuevoAlumno").addEventListener("click",function(){
   el("a_nombre").value=""; el("a_whatsapp").value="";
   ["a_apellido","a_email","a_nacimiento"].forEach(function(k){ if(el(k)) el(k).value=""; });
   setCursosAlumno(MARCA.cursoDefault,true); fillSelects(); el("a_paquete").value=pkNombres()[0]||"";
+  try{ el("a_mas").open=false; }catch(e){}
   el("a_fecha").value=hoyLima(); el("a_pago").value="Pagado";
   el("a_horario").value=""; el("a_notas").value=""; el("a_horario_derivado").textContent=""; pintarClasesDeAlumno(null);
   fillProfeSelect("");
@@ -8301,7 +8304,7 @@ document.body.addEventListener("click",function(e){
     return;
   }
   if(ed){ var a=db.alumnos.find(function(x){return x.id===ed.dataset.edit;}); if(!a)return;
-    el("alumnoTitulo").innerHTML='Editar <em>alumno</em>'; fillSelects();
+    el("alumnoTitulo").innerHTML='Editar <em>alumno</em>'; fillSelects(); try{ el("a_mas").open=true; }catch(e){}
     el("btnGuardarAlumnoOtro").style.display="none";
     el("a_id").value=a.id; el("a_codigo").value=a.codigo||""; el("a_ciclo").value=a.ciclo||1;
     el("a_nombre").value=a.nombre; el("a_whatsapp").value=a.whatsapp||"";
@@ -11127,7 +11130,8 @@ function impIrPaso1(){
   var conRuta=!!(IMP_PLAT && !IMP_PLAT.simple && IMP_PLAT.verificado && impNumArchivos(IMP_PLAT));
   el("impPegaWrap").style.display=conRuta?"none":"";
   el("impHint2Arch").style.display=conRuta?"none":"";   // la guía ya lo explica mejor y a medida
-  el("btnImpOtroSistema").style.display=IMP_PLAT?"":"none";
+  el("btnImpOtroSistema").style.display="";
+  el("btnImpOtroSistema").textContent=IMP_PLAT?"Elegir otro sistema":"Vengo de otro sistema (Punchpass, Mindbody…)";
   el("btnImpCerrar").textContent=(IMP_PLAT&&IMP_ARCHIVO_N>1)?"Lo subo después":"Cancelar";
   var pasoAhora=conRuta?IMP_PLAT.pasos[Math.min(IMP_ARCHIVO_N,IMP_PLAT.pasos.length)-1]:null;
   el("impFileLab").textContent=conRuta
@@ -11222,7 +11226,12 @@ function abrirImportador(opts){
   IMP_ARCHIVO_N=(opts.archivo>1 && nTotAbrir>1)?Math.min(opts.archivo,nTotAbrir):1;
   /* `opts.encadena`: a mitad de cola JAMÁS se vuelve a preguntar de dónde viene — el paso 0
      quedaría montado encima de la vista previa del 2º archivo (12-ago-2026). */
-  if(IMP_PLAT || opts.resultado || opts.encadena){ impIrPaso1(); }   // ya nos dijo de dónde viene: no se pregunta dos veces
+  /* Academia sin un solo alumno (04-nov-2026): casi nadie viene de Punchpass o Mindbody, viene de
+     WhatsApp o una libreta. Preguntarle "¿de dónde traes?" entre 10 sistemas que no conoce era un
+     toque de más justo donde se caen las academias nuevas: va directo a pegar la lista, y el
+     enlace "Vengo de otro sistema" sigue ahí. */
+  var sinAlumnos=!(db&&db.alumnos&&db.alumnos.length);
+  if(IMP_PLAT || opts.resultado || opts.encadena || sinAlumnos){ impIrPaso1(); }   // ya nos dijo de dónde viene: no se pregunta dos veces
   else{
     el("impPaso0").style.display=""; el("impPaso1").style.display="none"; el("impPaso2").style.display="none";
     el("impTitulo").innerHTML='¿De dónde traes a tus <em>alumnos</em>?';
@@ -13496,6 +13505,9 @@ function wireIrPantalla(root){
       if(t) t.click();
       var aj=b.getAttribute("data-actaj");
       if(aj) setTimeout(function(){ try{ ajTab(aj); }catch(e){} },30);
+      /* data-actclic: además de ir a la pantalla, abre la acción (ej. el importador) */
+      var ck=b.getAttribute("data-actclic");
+      if(ck) setTimeout(function(){ var c=el(ck); if(c) c.click(); },60);
     });
   });
 }
@@ -13607,10 +13619,13 @@ function cargarActivacion(){
       else if(("cobro_conectado" in p)&&!p.cobro_conectado) ajTab("cobros");
     }catch(e){}
     /* [clave, texto, tab, sub-pestaña de Ajustes] — el "Ir" aterriza en la pantalla EXACTA */
+    /* 04-nov-2026: "alumnos" va PRIMERO. Medido en producción: 6 de 7 academias nunca cargaron
+       uno, y los precios y el cobro estaban antes en la lista, así que la dueña los hacía (o se
+       rendía) sin haber sentido todavía que Batuta sirve. Con su gente adentro, lo demás se entiende. */
     var defs=[
+      ["alumnos","Trae a tus alumnos: pega tu lista de WhatsApp o Excel","alumnos",""],
       ["precios","Pon tus clases, tus paquetes y sus precios","ajustes","clases"],
       ["cobro_conectado","Conecta cómo te pagan (Yape o Mercado Pago)","ajustes","cobros"],
-      ["alumnos","Trae a tus alumnos (a mano o importando tu Excel/CSV)","alumnos",""],
       ["disponibilidad","Arma tu horario semanal","agenda",""],
       ["cobro","Registra o recibe tu primer cobro","pagos",""]
     ];
@@ -13625,7 +13640,9 @@ function cargarActivacion(){
       row.style.cssText="display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--line);";
       row.innerHTML="<span style='font-size:15px;color:"+(ok?"var(--green)":"var(--muted)")+"'>"+(ok?"✓":"○")+"</span>"+
         "<span style='flex:1;"+(ok?"opacity:.55;text-decoration:line-through;":"")+"'>"+x[1]+"</span>"+
-        (ok?"":"<button class='btn ghost sm' data-acttab='"+x[2]+"' data-actaj='"+(x[3]||"")+"'>Ir</button>");
+        (ok?"":(x[0]==="alumnos"
+          ?"<button class='btn sm' data-acttab='alumnos' data-actclic='btnImportCsv'>Pegar mi lista</button>"
+          :"<button class='btn ghost sm' data-acttab='"+x[2]+"' data-actaj='"+(x[3]||"")+"'>Ir</button>"));
       box.appendChild(row);
     });
     wireIrPantalla(box);

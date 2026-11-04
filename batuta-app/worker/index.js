@@ -8440,6 +8440,9 @@ async function sedesDeTenant(env, tid){
    cada una su marca. Y la marca que se guarda es la que el cliente VIO, no "ahora":
    si entra un pago entre que se pinta la lista y se marca leído, no se pierde. */
 const NOVEDADES = [
+  { id: "2026-11-04-alumnos-mas-facil", fecha: "2026-11-04",
+    titulo: "Traer a tus alumnos ahora es más corto",
+    texto: "Si aún no tienes alumnos, «Traer mis alumnos» abre directo la caja para pegar tu lista (de WhatsApp, Excel o tu libreta). La lista de pasos de Inicio empieza por tus alumnos, y en «Nuevo alumno» lo opcional (apellido, correo, cumpleaños) queda plegado." },
   { id: "2026-11-03-falta-adelantada", fecha: "2026-11-03",
     titulo: "Marcar una falta por adelantado ya no gasta dos clases",
     texto: "Si marcas «Ausente» una clase que todavía no pasó, la alumna pierde una sola clase (antes perdía dos). La falta queda anotada en su historial cuando la clase pasa." },
