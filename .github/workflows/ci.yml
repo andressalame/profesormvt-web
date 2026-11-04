@@ -8,6 +8,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # gitleaks-action arma su rango con el commit anterior; con el checkout superficial fallaba con «unknown revision» y no escaneaba nada
       - uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc
