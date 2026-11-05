@@ -1,0 +1,103 @@
+---
+/*
+  Regala canto (borrador 5-nov-2026, rama regala-canto-5nov, SIN publicar).
+  Página estática: no toca el worker ni los pagos. El certificado se pide por WhatsApp
+  y Andrés envía el enlace de pago y el certificado a mano. Precios = los vigentes
+  (Paquete 4 = S/320, Paquete 8 = S/580). Sin descuento, sin clase de prueba, sin piano.
+*/
+import Layout from '../layouts/Layout.astro';
+
+const wa = (t: string) => 'https://wa.me/51989077928?text=' + encodeURIComponent(t);
+const regalos = [
+  { n: 'Esencial', clases: '4 clases de 1 hora', precio: 320, det: 'Para empezar con calma: una por semana durante un mes.',
+    msg: 'Hola! quiero regalar el paquete de 4 clases (S/320)' },
+  { n: 'Intensivo', clases: '8 clases de 1 hora', precio: 580, det: 'Dos por semana. Para quien ya quiere ver avance.',
+    msg: 'Hola! quiero regalar el paquete de 8 clases (S/580)' },
+];
+---
+
+<Layout
+  title="Regala canto | ProfesorMVT"
+  description="Regala clases de canto o composición con ProfesorMVT. Paquete de 4 clases por S/320 o de 8 por S/580, con certificado listo para entregar."
+>
+  <main class="rg">
+    <section class="rg-hero">
+      <div class="container-narrow">
+        <p class="label">Para Navidad</p>
+        <h1>Regala <em>canto</em></h1>
+        <p class="lead">
+          Un paquete de clases 1 a 1 con Andrés para alguien que siempre dijo
+          «algún día aprendo a cantar» o «quiero escribir mis canciones».
+          Tú pagas ahora. La persona elige cuándo empezar.
+        </p>
+        <a class="btn" href={wa('Hola! quiero regalar clases de canto')} target="_blank" rel="noopener">Pedir mi certificado</a>
+      </div>
+    </section>
+
+    <section class="rg-opciones">
+      <div class="container-narrow">
+        <h2>Elige el regalo</h2>
+        <div class="rg-grid">
+          {regalos.map((r) => (
+            <article class="rg-card">
+              <p class="rg-n">{r.n}</p>
+              <p class="rg-precio">S/{r.precio}</p>
+              <p class="rg-clases">{r.clases}</p>
+              <p class="rg-det">{r.det}</p>
+              <a class="btn btn-ghost" href={wa(r.msg)} target="_blank" rel="noopener">Regalar este</a>
+            </article>
+          ))}
+        </div>
+        <p class="rg-nota">
+          La persona escoge el curso al canjear: <b>vocal coaching</b> o <b>composición y teoría</b>.
+          Presencial u online.
+        </p>
+      </div>
+    </section>
+
+    <section class="rg-como">
+      <div class="container-narrow">
+        <h2>Cómo funciona</h2>
+        <ol class="rg-pasos">
+          <li><b>Me escribes por WhatsApp</b> con el paquete y el nombre de quien lo recibe.</li>
+          <li><b>Pagas</b> con el enlace de pago que te envío.</li>
+          <li><b>Recibes el certificado</b> en PDF, con su nombre y un mensaje tuyo, para imprimir o reenviar.</li>
+          <li><b>La persona me escribe</b> para canjearlo y agenda su primera clase. El diagnóstico va incluido en esa primera clase.</li>
+        </ol>
+      </div>
+    </section>
+
+    <section class="rg-reglas">
+      <div class="container-narrow">
+        <h2>Lo que conviene saber</h2>
+        <ul>
+          <li>Las clases tienen <b>60 días de vigencia desde el canje</b>, no desde la compra.</li>
+          <li>Se reprograma con 6 horas de aviso, como en cualquier paquete. Mira las <a href="/politicas/">políticas</a>.</li>
+          <li>El certificado es para <b>mayores de 18 años</b>. No hace falta que tenga experiencia.</li>
+          <li>No se devuelve en efectivo. Sí se puede pasar a otra persona.</li>
+        </ul>
+        <p class="rg-cierre">¿Dudas antes de regalar? <a href={wa('Hola! tengo una duda sobre Regala canto')} target="_blank" rel="noopener">Escríbeme</a>.</p>
+      </div>
+    </section>
+  </main>
+</Layout>
+
+<style>
+  .rg-hero{padding:clamp(48px,9vw,110px) 0 clamp(32px,6vw,64px);}
+  .rg h1{font-family:var(--display);font-size:clamp(2.6rem,7vw,4.6rem);line-height:1.04;margin:.2em 0 .35em;}
+  .rg h1 em{font-style:normal;color:var(--acento);}
+  .rg h2{font-family:var(--display);font-size:clamp(1.5rem,3.4vw,2.1rem);margin:0 0 .7em;}
+  .rg .lead{max-width:34em;margin-bottom:1.6em;}
+  .rg section{padding-bottom:clamp(32px,6vw,64px);}
+  .rg-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:20px;}
+  .rg-card{background:var(--lamina);border:1px solid var(--linea-fuerte);padding:28px 24px;display:flex;flex-direction:column;gap:6px;}
+  .rg-n{font-size:.78rem;letter-spacing:.14em;text-transform:uppercase;color:var(--acento);margin:0;}
+  .rg-precio{font-family:var(--display);font-size:2.6rem;margin:0;line-height:1;}
+  .rg-clases{margin:0;font-weight:600;}
+  .rg-det{margin:0 0 14px;color:var(--tinta-media);}
+  .rg-card .btn{margin-top:auto;align-self:flex-start;}
+  .rg-nota{margin-top:20px;color:var(--tinta-media);}
+  .rg-pasos{padding-left:1.2em;display:grid;gap:12px;max-width:40em;}
+  .rg-reglas ul{padding-left:1.2em;display:grid;gap:8px;max-width:40em;}
+  .rg-cierre{margin-top:20px;}
+</style>
