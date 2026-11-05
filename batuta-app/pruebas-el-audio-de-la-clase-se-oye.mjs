@@ -95,7 +95,7 @@ comprobar("y deja constancia en el log", gritos.length === 1 && gritos[0].indexO
 
 console.log("\n── 4. la firma no se puede inventar ni estirar ──");
 comprobar("firma alterada → rechazada",
-  (await M.verificarFirma(env, KEY, urlDe(firmada.replace(/sig=./, "sig=0")))) === null);
+  (await M.verificarFirma(env, KEY, urlDe(firmada.replace(/sig=(.)/, (m, c) => "sig=" + (c === "0" ? "1" : "0"))))) === null);
 comprobar("otra key con la misma firma → rechazada",
   (await M.verificarFirma(env, "00000000-0000-0000-0000-000000000000.mp3", urlDe(firmada))) === null);
 comprobar("el alcance no se cambia a mano (material ≠ comprobante)",

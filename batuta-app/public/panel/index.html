@@ -153,6 +153,8 @@
 
   .overlay{position:fixed;inset:0;background:rgba(0,0,0,.78);display:none;align-items:flex-start;justify-content:center;padding:30px 16px;z-index:50;overflow-y:auto;}
   .overlay.open{display:flex;}
+  /* 5-nov-2026: con una ventana abierta, los botones flotantes «+» y «?» (z-index 300) tapaban el botón de guardar en el celular */
+  body:has(.overlay.open) .mas-fab, body:has(.overlay.open) .oia-fab, body:has(.overlay.open) .mas-menu{display:none !important;}
   .modal{background:var(--panel);border:1px solid var(--accent);border-radius:4px;max-width:560px;width:100%;padding:26px;}
   /* resalte al arrastrar un archivo sobre el panel (9-ago-2026: importador drag & drop) */
   #ovImport .modal.arrastrando{outline:3px dashed var(--accent);outline-offset:6px;}
@@ -1688,7 +1690,8 @@ p.hint[style*="font-size"]{font-size:13px!important;}
   </section>
 
   <section class="panel" id="panel-pagos">
-    <p class="hint quees"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="5" width="20" height="14" rx="2"/><circle cx="12" cy="12" r="3"/><line x1="6" y1="12" x2="6.01" y2="12"/><line x1="18" y1="12" x2="18.01" y2="12"/></svg><b>Aquí confirmas la plata que entra.</b> Cuando un alumno paga por su portal, su comprobante te llega acá: le das <b>Confirmar</b> y su paquete se activa solo. También puedes anotar a mano lo que te pagaron en efectivo o por Yape. Cada pago confirmado tiene su botón <b>Recibo</b>.</p>
+    <p class="hint quees"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="5" width="20" height="14" rx="2"/><circle cx="12" cy="12" r="3"/><line x1="6" y1="12" x2="6.01" y2="12"/><line x1="18" y1="12" x2="18.01" y2="12"/></svg><b>Aquí confirmas la plata que entra.</b> Cuando un alumno paga por su portal, su comprobante te llega acá: le das <b>Confirmar</b> y su paquete se activa solo. Si te pagaron en efectivo, por Yape, Plin o transferencia, toca <b>Anotar un pago</b>. Cada pago confirmado tiene su botón <b>Recibo</b>.</p>
+    <div style="margin:0 0 12px;"><button class="btn" id="btnAnotarPago" type="button">Anotar un pago</button></div>
     <div class="group">
       <h2>Pendientes de confirmar <button class="btn ghost sm" type="button" style="margin-left:8px;" onclick="lanzarTourModulo('pagos')">? Cómo funciona</button></h2>
       <p class="hint">Verifica en tu app de Yape/Plin que el monto llegó y dale Confirmar: el paquete se activa solo (primera compra crea al alumno; renovación abre nuevo ciclo).</p>
@@ -3065,9 +3068,10 @@ p.hint[style*="font-size"]{font-size:13px!important;}
 <!-- Modal renovar manual -->
 <div class="overlay" id="ovRenovar">
   <div class="modal">
-    <h3>Registrar <em>renovación</em></h3>
-    <div class="mlab">Pago recibido fuera del portal (Yape directo, efectivo, etc.)</div>
+    <h3>Anotar un <em>pago</em></h3>
+    <div class="mlab">Pago recibido fuera del portal (Yape, Plin, efectivo o transferencia)</div>
     <input type="hidden" id="rn_id" />
+    <div class="field" id="rn_alumno_wrap" style="display:none;"><label>¿Quién pagó?</label><select id="rn_alumno"></select></div>
     <div class="field"><label>Paquete comprado</label><select id="rn_paquete"></select>
       <p class="hint" style="margin:6px 0 0;">Puede ser igual o distinto al que tenía antes.</p></div>
     <!-- V2 multi-pase (11-ago-2026): con pases vivos, renovar puede SUMAR uno más en vez de
@@ -3087,14 +3091,19 @@ p.hint[style*="font-size"]{font-size:13px!important;}
       <p class="hint" style="margin:6px 0 0;" id="rn_modo_hint"></p>
     </div>
     <div class="frow">
-      <div class="field"><label>Fecha de compra</label><input id="rn_fecha" type="date" /></div>
-      <div class="field"><label>Estado de pago</label><select id="rn_pago"><option>Pagado</option><option>Pendiente</option></select></div>
+      <div class="field"><label>Monto que te pagó (S/)</label><input id="rn_monto" type="number" min="0" step="0.01" inputmode="decimal" /></div>
+      <div class="field"><label>¿Cómo te pagó?</label><select id="rn_medio"><option value="yape">Yape</option><option value="plin">Plin</option><option value="efectivo">Efectivo</option><option value="transferencia">Transferencia</option></select></div>
     </div>
+    <div class="frow">
+      <div class="field"><label>Fecha del pago</label><input id="rn_fecha" type="date" /></div>
+      <div class="field" style="display:none;"><label>Estado de pago</label><select id="rn_pago"><option>Pagado</option><option>Pendiente</option></select></div>
+    </div>
+    <p class="hint" id="rn_hint_primera" style="display:none;">Este pago confirma el plan que ya tiene: <b>no se le agrega otro mes ni otro plan</b>.</p>
     <p class="hint" id="rn_hint_ciclo">Esto abre un ciclo nuevo: las clases restantes se recalculan desde cero con el paquete elegido. El historial de clases anteriores se conserva, no se borra.</p>
     <p class="hint" id="rn_hint_suma" style="display:none;">Se le agrega este plan a los que ya tiene. <b>No pierde ninguna clase</b>: lo que le quedaba sigue igual y cada plan gasta solo las clases de su tipo.</p>
     <div class="modal-actions">
       <button class="btn ghost" data-close>Cancelar</button>
-      <button class="btn" id="btnGuardarRenovar">Guardar renovación</button>
+      <button class="btn" id="btnGuardarRenovar">Anotar pago</button>
     </div>
   </div>
 </div>
@@ -4010,6 +4019,10 @@ function cuentaDeAlumno(alumnoId){
   return db.cuentas.find(function(c){ return c.alumno_id===alumnoId; }) || null;
 }
 function nombreCuenta(cuentaId){
+  if(String(cuentaId||"").indexOf("A:")===0){   /* pago anotado a mano a un alumno sin cuenta de portal */
+    var al=(db.alumnos||[]).find(function(x){return "A:"+x.id===cuentaId;});
+    return al ? (al.nombre+(al.apellido?" "+al.apellido:"")+" · anotado a mano") : "(alumno borrado)";
+  }
   var c=db.cuentas.find(function(x){return x.id===cuentaId;});
   return c ? (c.nombre+" · "+c.email) : "(cuenta borrada)";
 }
@@ -4285,6 +4298,7 @@ function hoyPintarActividad(){
   if(verPlata) (db.compras||[]).forEach(function(c){
     if(c.estado!=="confirmada"&&c.estado!=="pendiente") return;
     var cu=cuPorId[c.cuenta_id], a=cu&&cu.alumno_id?alPorId[cu.alumno_id]:null;
+    if(!a && String(c.cuenta_id||"").indexOf("A:")===0) a=alPorId[String(c.cuenta_id).slice(2)]||null;
     ev.push({f:c.fecha||"", q:a?alumnoEtiqueta(a):(cu?cu.nombre:"Alumno"),
       t:(c.estado==="pendiente"?"Mandó un pago por confirmar: ":"Pagó ")+(c.paquete||""), m:Number(c.monto)||0, p:c.estado==="pendiente"});
   });
@@ -9640,13 +9654,60 @@ function pasesDelAlumno(a){
   }catch(e){}
   return null;
 }
+/* 5-nov-2026 · «Anotar un pago». Se abre desde Cobros y desde el «+» SIN alumno (se elige ahí) o
+   desde la fila de un alumno (ya viene elegido). Sirve para una primera compra y para renovar.
+   Si el plan del alumno nunca se usó y nunca tuvo un pago anotado, el pago CONFIRMA ese plan: no
+   se le suma otro (era el bug de «2 pases activos» tras anotar su primer pago). */
+function rnClaveAlumno(a){ return "A:"+a.id; }
+function rnPrimerPago(a){
+  if(!a||!String(a.paquete||"").trim()) return false;
+  if(String(a.paquete)!==el("rn_paquete").value) return false;
+  if(pasesDelAlumno(a)) return false;
+  var ids={}; ids[rnClaveAlumno(a)]=1;
+  (db.cuentas||[]).forEach(function(c){ if(c.alumno_id===a.id) ids[c.id]=1; });
+  var conPago=(db.compras||[]).some(function(c){ return c.estado==="confirmada" && ids[c.cuenta_id]; });
+  if(conPago) return false;
+  var ciclo=Number(a.ciclo)||1;
+  var usoClases=(db.registro||[]).some(function(r){ return (r.alumnoId||r.alumno_id)===a.id && (Number(r.ciclo)||1)===ciclo; });
+  if(usoClases) return false;
+  if(Number(a.migrado_usadas)>0) return false;
+  return true;
+}
+function rnPintarModo(){
+  var a=db.alumnos.find(function(x){return x.id===el("rn_id").value;});
+  var prim=!!(a&&rnPrimerPago(a));
+  var w=el("rn_modo_wrap"); if(w&&prim) w.style.display="none";
+  if(a&&!prim){ var ps=pasesDelAlumno(a); if(w&&(ps||String(a.paquete||"").trim())) w.style.display=""; }
+  var hp=el("rn_hint_primera"); if(hp) hp.style.display=prim?"":"none";
+  if(prim){ el("rn_hint_ciclo").style.display="none"; el("rn_hint_suma").style.display="none"; }
+  else rnPintarHint();
+}
+function rnPrecioSugerido(){
+  var n=el("rn_paquete").value, pr=db.precios&&db.precios[n];
+  var m=el("rn_monto");
+  if(m && !m.dataset.tocado) m.value=(Number(pr)>0)?String(Number(pr)):"";
+}
+function abrirPago(alumnoId){
+  var sel=el("rn_alumno"), wrap=el("rn_alumno_wrap");
+  if(alumnoId){ wrap.style.display="none"; abrirRenovar(alumnoId); return; }
+  var lista=(db.alumnos||[]).slice().sort(function(x,y){return String(x.nombre||"").localeCompare(String(y.nombre||""),"es");});
+  if(!lista.length){ toast("Primero agrega un alumno para anotarle un pago"); return; }
+  sel.innerHTML=lista.map(function(a){return '<option value="'+esc(a.id)+'">'+esc(a.nombre+(a.apellido?" "+a.apellido:""))+'</option>';}).join("");
+  wrap.style.display="";
+  abrirRenovar(lista[0].id);
+  wrap.style.display="";
+  sel.value=lista[0].id;
+}
 function abrirRenovar(alumnoId){
   var a=db.alumnos.find(function(x){return x.id===alumnoId;}); if(!a) return;
   el("rn_id").value=a.id;
+  if(el("rn_alumno_wrap").style.display==="none" && el("rn_alumno")) el("rn_alumno").innerHTML="";
   el("rn_paquete").innerHTML=opcionesPaquete(a.paquete);
-  el("rn_paquete").value=a.paquete;
+  el("rn_paquete").value=a.paquete||pkNombres()[0]||"";
   el("rn_fecha").value=hoyLima();
   el("rn_pago").value="Pagado";
+  el("rn_monto").dataset.tocado=""; el("rn_monto").value=""; el("rn_medio").value="yape";
+  rnPrecioSugerido();
   /* V2: si tiene pases activos, se pregunta si SUMA o REEMPLAZA (por defecto suma: es lo
      que pasa de verdad cuando alguien compra teniendo clases sin usar).
      14-ago-2026: también con UN solo plan. Comprar un 2º plan teniendo clases sin usar es lo
@@ -9664,8 +9725,12 @@ function abrirRenovar(alumnoId){
     } else { w.style.display="none"; }
   }
   rnPintarHint();
+  rnPintarModo();
   openOv("ovRenovar");
 }
+if(el("rn_alumno")) el("rn_alumno").addEventListener("change",function(){ var wrap=el("rn_alumno_wrap"); abrirRenovar(el("rn_alumno").value); wrap.style.display=""; });
+if(el("rn_paquete")) el("rn_paquete").addEventListener("change",function(){ rnPrecioSugerido(); rnPintarModo(); });
+if(el("rn_monto")) el("rn_monto").addEventListener("input",function(){ el("rn_monto").dataset.tocado="1"; });
 /* El aviso de abajo tiene que decir lo que de verdad va a pasar: "esto abre un ciclo nuevo"
    es falso (y asusta) cuando lo que eligió fue sumar un pase. */
 function rnPintarHint(){
@@ -9682,7 +9747,19 @@ el("btnGuardarRenovar").addEventListener("click",function(){
   var psAct=pasesDelAlumno(a);
   var modo=(el("rn_modo") && el("rn_modo_wrap").style.display!=="none") ? el("rn_modo").value : "reemplaza";
   var obj, msgOk;
-  if(modo==="suma"){
+  /* 5-nov-2026: el monto y el medio son obligatorios: es plata que tiene que cuadrar en Cobros,
+     Ingresos y Reportes. Se valida ANTES de tocar la ficha. */
+  var montoPago=Number(el("rn_monto").value);
+  if(!(el("rn_monto").value!=="" && isFinite(montoPago) && montoPago>=0)){ toast("Escribe el monto que te pagaron"); return; }
+  var primerPago=rnPrimerPago(a), sinPlan=!String(a.paquete||"").trim();
+  if(primerPago){
+    /* el pago confirma el plan que ya tiene: no se agrega otro pase ni se abre otro ciclo */
+    obj=Object.assign({},a,{ fecha:el("rn_fecha").value, pago:"Pagado" });
+    msgOk="Pago anotado";
+  } else if(sinPlan){
+    obj=Object.assign({},a,{ paquete:el("rn_paquete").value, fecha:el("rn_fecha").value, pago:"Pagado" });
+    msgOk="Pago anotado";
+  } else if(modo==="suma"){
     /* V2: un pase MÁS. El ciclo NO sube (los pases viven atados a él) y los suyos quedan
        intactos; el nuevo entra sin clases usadas. La ficha sigue espejando al principal. */
     var ciclo=Number(a.ciclo)||1;
@@ -9702,7 +9779,7 @@ el("btnGuardarRenovar").addEventListener("click",function(){
       fecha:el("rn_fecha").value, pago:el("rn_pago").value,
       pases:JSON.stringify({c:ciclo,p:lista}), pases_set:true
     });
-    msgOk="Plan agregado — ahora tiene "+lista.length;
+    msgOk="Pago anotado — plan agregado, ahora tiene "+lista.length;
   } else {
     var nuevoCiclo=(Number(a.ciclo)||1)+1;
     obj=Object.assign({},a,{
@@ -9712,14 +9789,23 @@ el("btnGuardarRenovar").addEventListener("click",function(){
       ciclo:nuevoCiclo,
       pases:""   // ciclo nuevo = época de cobro nueva: los pases viejos se van
     });
-    msgOk="Renovación registrada — ciclo "+nuevoCiclo;
+    msgOk="Pago anotado — ciclo "+nuevoCiclo;
   }
-  db.alumnos=db.alumnos.map(function(x){return x.id===id?obj:x;});
+  var fichaAntes=a;
   var btnRen=el("btnGuardarRenovar"); btnRen.disabled=true;
-  apiPut().then(function(){ renderAll(); closeOv("ovRenovar"); toast(msgOk); })
-    .catch(function(){ toast("No se pudo guardar. Revisa tu conexión e intenta de nuevo."); })
+  var clavePago=(el("rn_id").dataset.clave=el("rn_id").dataset.clave||uid());
+  /* La plata se asienta PRIMERO (con la misma clave en cada reintento: no se duplica) y la ficha
+     después. Al revés, un rechazo del servidor dejaba la ficha en «Pagado» sin ningún cobro anotado:
+     justo el bug que esto arregla. Si algo falla, la ficha vuelve a como estaba. */
+  apiPost("/app/api/admin/pago-manual",{ clave:clavePago, alumno_id:id, paquete:el("rn_paquete").value,
+    monto:montoPago, metodo:el("rn_medio").value, fecha:el("rn_fecha").value }).then(function(){
+    db.alumnos=db.alumnos.map(function(x){return x.id===id?obj:x;});
+    return apiPut();
+  }).then(function(){ el("rn_id").dataset.clave=""; closeOv("ovRenovar"); toast(msgOk); recargar(); })
+    .catch(function(e){ db.alumnos=db.alumnos.map(function(x){return x.id===id?fichaAntes:x;}); toast((e&&e.message)||"No se pudo guardar. Revisa tu conexión e intenta de nuevo."); })
     .finally(function(){ btnRen.disabled=false; });
 });
+if(el("btnAnotarPago")) el("btnAnotarPago").addEventListener("click",function(){ abrirPago(""); });
 
 /* ---------- Referidos: el ejemplo en vivo (15-ago-2026) ----------
    Cuatro selectores y dos números no le dicen a nadie qué va a pasar el martes. Acá abajo
@@ -14106,7 +14192,7 @@ window.batutaInit = batutaInit;
 <button class="mas-fab" id="masFab" aria-label="Agregar" aria-expanded="false" title="Agregar (alumno, pago, clase, asistencia)">+</button>
 <div class="mas-menu" id="masMenu" hidden>
   <button type="button" data-ira="alumnos" data-iract="btnNuevoAlumno"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/></svg>Agregar un alumno</button>
-  <button type="button" data-ira="pagos"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="5" width="20" height="14" rx="2"/><circle cx="12" cy="12" r="3"/><line x1="6" y1="12" x2="6.01" y2="12"/><line x1="18" y1="12" x2="18.01" y2="12"/></svg>Anotar un pago</button>
+  <button type="button" data-ira="pagos" data-iract="btnAnotarPago"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="5" width="20" height="14" rx="2"/><circle cx="12" cy="12" r="3"/><line x1="6" y1="12" x2="6.01" y2="12"/><line x1="18" y1="12" x2="18.01" y2="12"/></svg>Anotar un pago</button>
   <button type="button" data-ira="agenda"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>Programar una clase</button>
   <button type="button" data-ira="registro" data-iract="btnNuevoRegistro"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>Anotar asistencia</button>
 </div>

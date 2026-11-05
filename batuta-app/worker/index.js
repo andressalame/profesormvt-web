@@ -8296,9 +8296,36 @@ async function marcarPassPuesta(env, cuentaId){
    tal cual venia del Excel ("  Jose.Perez@Gmail.com  ") y el registro lo baja a minusculas,
    asi que sin normalizar las dos puntas el enganche no pegaba casi nunca.
    ============================================================ */
-async function fichaLibrePorCorreo(env, tenantId, email){
+/* 5-nov-2026 · TAMBIÉN POR TELÉFONO. Una alumna anotada solo con WhatsApp creaba su cuenta con
+   ese mismo WhatsApp y entraba a «SIN PAQUETE ACTIVO» mientras el panel decía «Sin cuenta»:
+   la ficha no tenía correo y el enganche solo miraba el correo. Reglas, las mismas de arriba:
+   solo dentro de ESTA academia (todas las consultas llevan tenant_id), una sola ficha con ese
+   número y esa ficha sin cuenta. El teléfono solo se mira si el correo NO encontró ninguna
+   ficha: un correo ambiguo o ya enlazado sigue sin enlazar (no se «rescata» por teléfono). */
+function telefonoClave(raw){
+  let d = String(raw || "").replace(/\D/g, "");
+  if (d.length === 11 && d.startsWith("51")) d = d.slice(2);   // +51 987 654 321 = 987654321
+  return d.length >= 7 ? d : "";
+}
+async function fichaLibrePorTelefono(env, tenantId, whatsapp){
+  const clave = telefonoClave(whatsapp);
+  if (!clave) return null;
+  try {
+    const cola = clave.slice(-7);
+    const { results } = await env.DB.prepare(
+      "SELECT a.id AS id, a.whatsapp AS wa, " +
+      "(SELECT COUNT(*) FROM cuentas c WHERE c.tenant_id = a.tenant_id AND c.alumno_id = a.id) AS tiene_cuenta " +
+      "FROM alumnos a WHERE a.tenant_id = ?1 AND REPLACE(REPLACE(REPLACE(REPLACE(COALESCE(a.whatsapp,''),' ',''),'-',''),'+',''),'(','') LIKE ?2 LIMIT 40"
+    ).bind(tenantId, "%" + cola + "%").all();
+    const coinciden = (results || []).filter(r => telefonoClave(r.wa) === clave);
+    if (coinciden.length !== 1) return null;                 // 0 = ninguna · 2+ = ambiguo (hermanos con el celular de la mamá)
+    if (Number(coinciden[0].tiene_cuenta) > 0) return null;  // ya tiene su portal
+    return coinciden[0].id;
+  } catch (e) { return null; }
+}
+async function fichaLibrePorCorreo(env, tenantId, email, whatsapp){
   const mail = String(email || "").trim().toLowerCase();
-  if (!mail || !emailOk(mail)) return null;
+  if (!mail || !emailOk(mail)) return whatsapp ? await fichaLibrePorTelefono(env, tenantId, whatsapp) : null;
   try {
     await ensureAlumnoExtraSchema(env);   /* alumnos.email lo agrega este mismo ensure */
     /* LIMIT 2 a proposito: no interesa cuantas fichas comparten el correo, solo si es una
@@ -8309,6 +8336,7 @@ async function fichaLibrePorCorreo(env, tenantId, email){
       "FROM alumnos a WHERE a.tenant_id = ?1 AND LOWER(TRIM(COALESCE(a.email,''))) = ?2 LIMIT 2"
     ).bind(tenantId, mail).all();
     const filas = results || [];
+    if (filas.length === 0 && whatsapp) return await fichaLibrePorTelefono(env, tenantId, whatsapp);   // el correo no encontró ficha: se prueba el teléfono
     if (filas.length !== 1) return null;                  // 0 = no tiene ficha · 2+ = ambiguo
     if (Number(filas[0].tiene_cuenta) > 0) return null;   // ya tiene su portal: no se le roba
     return filas[0].id;
@@ -8452,6 +8480,9 @@ async function sedesDeTenant(env, tid){
    cada una su marca. Y la marca que se guarda es la que el cliente VIO, no "ahora":
    si entra un pago entre que se pinta la lista y se marca leído, no se pierde. */
 const NOVEDADES = [
+  { id: "2026-11-05-pago-anotado", fecha: "2026-11-05",
+    titulo: "Anotar un pago ahora suma de verdad",
+    texto: "En Cobros y en el «+» hay un botón «Anotar un pago»: eliges quién pagó, cuánto y cómo (Yape, Plin, efectivo o transferencia). El pago aparece en Cobros, en Ingresos del mes y en Reportes, y el primer pago de un plan ya no le suma un segundo pase. Si tu alumna crea su cuenta con el mismo WhatsApp que tú anotaste, ahora su portal sale con su paquete, sin que tengas que pedirle correo." },
   { id: "2026-11-05-33-alumnos", fecha: "2026-11-05",
     titulo: "Tu Batuta gratis ahora llega a 33 alumnos",
     texto: "El tope de la Batuta gratis sube de 30 a 33 alumnos activos. Los packs no cambian: alumnos +200 por S/25, +500 por S/49, +1,000 por S/89; profesores +5 por S/29, +20 por S/59. Si ya tenías capacidad extra, la conservas igual." },
@@ -15709,7 +15740,7 @@ export default {
            Si no hay ficha, o hay dos con el mismo correo, o la ficha ya tiene cuenta ->
            null, y la cuenta queda suelta igual que siempre (el dueno la vincula desde su
            panel). Ver fichaLibrePorCorreo() para el detalle de las dos reglas. */
-        const alumnoVinc = await fichaLibrePorCorreo(env, t.id, email);
+        const alumnoVinc = await fichaLibrePorCorreo(env, t.id, email, whatsapp);
 
         const salt = randHex(16);
         const hash = await hashPass(password, salt);
@@ -16199,7 +16230,7 @@ export default {
           }
         }
         if (!cu.alumno_id){
-          const vincTardio = await fichaLibrePorCorreo(env, tid, cu.email);
+          const vincTardio = await fichaLibrePorCorreo(env, tid, cu.email, cu.whatsapp);
           if (vincTardio){
             await env.DB.prepare(
               "UPDATE cuentas SET alumno_id = ?1 WHERE id = ?2 AND tenant_id = ?3 AND (alumno_id IS NULL OR alumno_id = '')"
@@ -16591,7 +16622,7 @@ export default {
              creaba una ficha NUEVA al confirmar el pago — el alumno duplicado, su historial
              partido en dos y su saldo viejo huerfano. Vinculado, procesarCompra() entra por
              la rama de RENOVACION y le sube el ciclo a la ficha que ya tenia. */
-          const alumnoVincPd = await fichaLibrePorCorreo(env, t.id, email);
+          const alumnoVincPd = await fichaLibrePorCorreo(env, t.id, email, whatsapp);
           await ensurePassPuestaSchema(env);   /* clave aleatoria: ver comentario en canjear */
           await env.DB.prepare(
             "INSERT INTO cuentas (id,tenant_id,email,nombre,whatsapp,pass_hash,pass_salt,marketing,alumno_id,creada,ref_code,ref_por,credito,apellido,nacimiento) VALUES (?1,?2,?3,?4,?5,?6,?7,0,?8,?9,?10,?13,0,?11,?12)"
@@ -21947,6 +21978,41 @@ export default {
             url: MARCA.dominio + "/app/a/" + t.slug
           });
           return json({ ok: true, enviados });
+        }
+
+        /* 5-nov-2026 · ANOTAR UN PAGO A MANO (Yape, Plin, efectivo, transferencia). Antes el panel
+           prometía «puedes anotar a mano lo que te pagaron» y no había dónde; el camino real era
+           «+ Renovar», que solo cambiaba la ficha y NO dejaba ninguna fila en `compras`: Ingresos
+           del mes, Procesadas y Reportes salían en cero. Este endpoint deja UNA fila confirmada
+           con su monto real. El plan de la ficha lo ajusta el panel (misma lógica de renovación de
+           siempre); acá solo se asienta la plata. `clave` la manda el panel y hace la anotación
+           idempotente: un reintento por mala conexión no duplica el cobro. */
+        if (path === "/app/api/admin/pago-manual" && request.method === "POST"){
+          const b = await request.json().catch(() => ({}));
+          const alumnoId = String(b.alumno_id || "");
+          const alP = alumnoId ? await env.DB.prepare("SELECT id, profesor_id FROM alumnos WHERE id = ?1 AND tenant_id = ?2").bind(alumnoId, tid).first() : null;
+          if (!alP) return json({ error: "No encuentro a ese alumno." }, 404);
+          if (!esDueno && alP.profesor_id !== profeActorId) return json({ error: "Ese alumno no está asignado a ti." }, 403);
+          const paqMapP = (await loadPaquetes(env, tid)).map;
+          const paquete = String(b.paquete || "");
+          if (!paquete || !paqMapP[paquete]) return json({ error: "Ese plan no existe en tu academia." }, 400);
+          const monto = Math.round(Number(b.monto) * 100) / 100;
+          if (!Number.isFinite(monto) || monto < 0 || monto > 100000) return json({ error: "Escribe el monto que te pagaron." }, 400);
+          const MEDIOS = { yape: "Yape", plin: "Plin", efectivo: "Efectivo", transferencia: "Transferencia" };
+          const metodo = MEDIOS[String(b.metodo || "").toLowerCase()];
+          if (!metodo) return json({ error: "Elige cómo te pagaron: Yape, Plin, efectivo o transferencia." }, 400);
+          const fechaP = /^\d{4}-\d{2}-\d{2}$/.test(String(b.fecha || "")) ? String(b.fecha) : hoyLima();
+          const clave = String(b.clave || "").replace(/[^A-Za-z0-9_-]/g, "").slice(0, 40);
+          const idCompra = "pm_" + (clave || crypto.randomUUID());
+          /* a la cuenta del portal si ya tiene una; si no, marca «A:<alumno>» para que el panel
+             sepa a quién pertenece sin inventar una cuenta */
+          const cuP = await env.DB.prepare("SELECT id FROM cuentas WHERE alumno_id = ?1 AND tenant_id = ?2 LIMIT 1").bind(alumnoId, tid).first();
+          const cuentaId = cuP ? cuP.id : ("A:" + alumnoId);
+          const ins = await env.DB.prepare(
+            "INSERT OR IGNORE INTO compras (id,tenant_id,cuenta_id,curso,paquete,monto,op_numero,estado,fecha,metodo,profesor_id) VALUES (?1,?2,?3,'',?4,?5,'','confirmada',?6,?7,?8)"
+          ).bind(idCompra, tid, cuentaId, paquete, monto, fechaP, metodo, esDueno ? (alP.profesor_id || null) : profeActorId).run();
+          const filas = (ins && ins.meta && (ins.meta.changes ?? ins.meta.rows_written)) || 0;
+          return json({ ok: true, id: idCompra, duplicado: !filas });
         }
 
         if (path === "/app/api/admin/compra" && request.method === "POST"){
