@@ -17,11 +17,11 @@ let a = M.alertasPacksDe({ alumnos: 15, profes: 0, ia: 3 }, { alumnos: 20, profe
 t("79% no dispara", a.length === 0, JSON.stringify(a));
 a = M.alertasPacksDe({ alumnos: 16, profes: 0, ia: 4 }, { alumnos: 20, profes: 1, ia: 5 });
 t("80% dispara alumnos e IA", a.map(x => x.fam).join(",") === "alumnos,ia", JSON.stringify(a));
-t("alumnos recomienda +100 por S/29", a[0] && a[0].pack_id === "alum_100" && a[0].precio === 29);
+t("alumnos recomienda +200 por S/25", a[0] && a[0].pack_id === "alum_200" && a[0].precio === 25);
 t("IA recomienda 500 por S/29", a[1] && a[1].pack_id === "ia_500" && a[1].precio === 29);
 a = M.alertasPacksDe({ alumnos: 20, profes: 1, ia: 5 }, { alumnos: 20, profes: 1, ia: 5 });
-t("un profesor ocupa el 100% y recomienda +5 por S/49",
-  a.some(x => x.fam === "profes" && x.pack_id === "profes_5" && x.precio === 49));
+t("un profesor ocupa el 100% y recomienda +5 por S/29",
+  a.some(x => x.fam === "profes" && x.pack_id === "profes_5_v2" && x.precio === 29));
 t("no alerta por un tope de cortesía enorme al 7%",
   M.alertasPacksDe({ alumnos: 75, profes: 7, ia: 0 }, { alumnos: 2020, profes: 11, ia: 3005 }).length === 0);
 

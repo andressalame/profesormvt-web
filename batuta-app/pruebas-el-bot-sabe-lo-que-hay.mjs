@@ -87,12 +87,12 @@ const MP = await cargarMotor(["textoPacks", "packChico"]);
 for (const fam of ["alumnos", "profes", "ia"]){
   DUENO.includes('textoPacks("' + fam + '")') ? ok("el manual recita los packs de " + fam + " desde el código") : no("el manual NO llama a textoPacks(\"" + fam + "\")");
 }
-const PACKS = ["+100 por s/29", "+300 por s/59", "+1,000 por s/129", "+5 por s/49", "+20 por s/99", "500 por s/29", "2,000 por s/99", "5,000 por s/229"];
+const PACKS = ["+200 por s/25", "+500 por s/49", "+1,000 por s/89", "+5 por s/29", "+20 por s/59", "500 por s/29", "2,000 por s/99", "5,000 por s/229"];
 const RECITADO = pelar(["alumnos", "profes", "ia"].map(f => MP.textoPacks(f)).join(" · "));
 for (const p of PACKS){
   RECITADO.includes(p) ? ok("recita «" + p + "»") : no("perdió el pack «" + p + "»");
 }
-for (const viejo of ["+50 por s/39", "+150 por s/89", "+500 por s/199", "+5 por s/59", "+20 por s/189", "300 conversaciones por s/29", "10,000 por s/449"]){
+for (const viejo of ["+100 por s/29", "+300 por s/59", "+1,000 por s/129", "+5 por s/49", "+20 por s/99", "+50 por s/39", "+150 por s/89", "+500 por s/199", "+5 por s/59", "+20 por s/189", "300 conversaciones por s/29", "10,000 por s/449"]){
   RECITADO.includes(viejo) ? no("sigue recitando el precio viejo «" + viejo + "»") : ok("ya no dice «" + viejo + "»");
 }
 DUENO_P.includes("cuenta solo a los activos") ? ok("y explica que el tope cuenta solo alumnos activos") : no("no explica que el tope cuenta solo activos");

@@ -53,19 +53,19 @@ console.log("\n── Y por eso pagar un pack no regala las otras dos familias �
 const env1 = envCon({ packs: { ia_500: 1 } });
 const capAlum = await capAlumnosDe(env1, "t-1", plan);
 const capIA   = await convCapDe(env1, "t-1", false, plan);
-t("no le da alumnos ilimitados: se queda en los 20 de la base", capAlum === 20, capAlum + " alumnos");
+t("no le da alumnos ilimitados: se queda en los 30 de la base", capAlum === 30, capAlum + " alumnos");
 t("le da 505 conversaciones (5 de base + 500 del pack), no 6,000", capIA === 505, capIA + " conversaciones");
 t("el cobro mensual es el del pack comprado, S/29",
   limitesDePacks({ ia_500: 1 }, null).monto === 29, "S/" + limitesDePacks({ ia_500: 1 }, null).monto);
 
 console.log("\n── El que sí compra alumnos los recibe ──");
 const env2 = envCon({ packs: { alum_300: 1, profes_5: 1 } });
-t("+300 alumnos sobre la base = 320", await capAlumnosDe(env2, "t-2", "") === 320);
+t("+300 alumnos (pack legado) sobre la base = 330", await capAlumnosDe(env2, "t-2", "") === 330);
 t("y su cobro es S/59 + S/49 = S/108", limitesDePacks({ alum_300: 1, profes_5: 1 }, null).monto === 108);
 
 console.log("\n── La cortesía y los planes viejos siguen intactos ──");
 const env3 = envCon({ packs_cortesia: { alum_500: 4, profes_5: 2, ia_3000: 1 } });   // Elevate
-t("Elevate conserva sus 2,020 alumnos de cortesía", await capAlumnosDe(env3, "t-3", "base") === 2020);
+t("Elevate conserva sus 2,030 alumnos de cortesía (2,000 + base de 30)", await capAlumnosDe(env3, "t-3", "base") === 2030);
 t("y su cortesía no le cobra nada",
   limitesDePacks({}, { alum_500: 4, profes_5: 2, ia_3000: 1 }).monto === 0);
 t("un tenant que siga en el plan viejo 'academia' no pierde su cupo de IA",

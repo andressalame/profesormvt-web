@@ -26,9 +26,9 @@ echo "$ME" | python3 -c "
 import sys,json
 d=json.load(sys.stdin); p=d['packs']; l=p['limites']
 assert d['estado']=='activo', 'estado '+d['estado']
-assert l=={'alumnos':20,'profes':1,'ia':5}, l
+assert l=={'alumnos':30,'profes':1,'ia':5}, l
 assert p['monto_mensual']==0
-print('  ✓ estado activo · límites 20/1/5 · cobro S/0')
+print('  ✓ estado activo · límites 30/1/5 · cobro S/0')
 "
 
 echo "2. Los endpoints del modelo viejo están cerrados"
@@ -40,12 +40,12 @@ done
 echo "3. El tope frena, pero no borra"
 python3 -c "
 import json
-al=[{'id':'a%d'%i,'codigo':'A%03d'%i,'nombre':'Alumno %d'%i,'curso':'Canto','paquete':'Paquete 4','fecha':'2026-08-20','pago':'Pagado','horario':'','notas':'','ciclo':1} for i in range(1,22)]
-print(json.dumps({'alumnos':al,'registro':[]}))" > /tmp/a21.json
+al=[{'id':'a%d'%i,'codigo':'A%03d'%i,'nombre':'Alumno %d'%i,'curso':'Canto','paquete':'Paquete 4','fecha':'2026-08-20','pago':'Pagado','horario':'','notas':'','ciclo':1} for i in range(1,32)]
+print(json.dumps({'alumnos':al,'registro':[]}))" > /tmp/a31.json
 C=$(curl -s -X POST $B/app/api/t/packs -H "authorization: Bearer $TOK" -H "content-type: application/json" -d '{"packs":{}}' -o /dev/null -w "%{http_code}")
-R21=$(curl -s -X PUT $B/app/api/admin/data -H "authorization: Bearer $TOK" -H "content-type: application/json" --data @/tmp/a21.json)
-echo "$R21" | grep -q "upgrade" && ok "el alumno 21 se frena con mensaje de packs" || bad "tope de alumnos" "$R21"
-echo "$R21" | grep -q "pack de +50 alumnos" && ok "el mensaje habla de packs, no de planes" || bad "mensaje" "viejo"
+R21=$(curl -s -X PUT $B/app/api/admin/data -H "authorization: Bearer $TOK" -H "content-type: application/json" --data @/tmp/a31.json)
+echo "$R21" | grep -q "upgrade" && ok "el alumno 31 se frena con mensaje de packs" || bad "tope de alumnos" "$R21"
+echo "$R21" | grep -q "pack de +200 alumnos" && ok "el mensaje habla de packs, no de planes" || bad "mensaje" "viejo"
 
 echo "4. Volver a la base no bloquea el panel"
 ME2=$(curl -s $B/app/api/t/me -H "authorization: Bearer $TOK")
