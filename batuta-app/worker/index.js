@@ -15156,6 +15156,14 @@ export default {
         if (!t) return json({ error: "Academia no encontrada" }, 404);
         const precios = await loadPrecios(env, t.id);
         const cfg = await loadConfig(env, t.id);
+        /* Planes que la web publica de afuera (p. ej. elevate.pe) puede mostrar: en venta y NO ocultos
+           (o=1), igual que "Mi web" (paqPub). Campo aparte: `precios` no cambia, lo usan MVT y el portal.
+           null si no se pudo leer: quien consume debe tratarlo como "no se sabe", nunca como "ninguno". */
+        let paquetes_publicos = null;
+        try {
+          const paqPubl = await loadPaquetes(env, t.id);
+          paquetes_publicos = paquetesEnVenta({ id: t.id, slug }, paqPubl.list).filter(n => !(paqPubl.map[n] && paqPubl.map[n].oculto));
+        } catch (e) {}
         // Multi-profesor: lista publica (id, nombre, foto) para elegir profe al reservar
         // la prueba. Academia de 1 profesor -> lista de 1 y el front salta ese paso.
         // Los INVITADOS tambien salen (03-ago-2026, caso Elevate: 3 de 4 profes sin activar
@@ -15169,7 +15177,7 @@ export default {
           profesoresPub = (profs || []).map(p => ({ id: p.id, nombre: p.nombre || "", foto: p.foto || "" }));
         } catch (e) {}
         return json({
-          academia: t.academia, whatsapp: t.whatsapp || "", precios: preciosEnVenta({ id: t.id, slug }, precios),
+          academia: t.academia, whatsapp: t.whatsapp || "", precios: preciosEnVenta({ id: t.id, slug }, precios), paquetes_publicos,
           profesores: profesoresPub,
           cursos: cursosDeCfg(cfg),
           /* Voz del portal ANTES de entrar (11-ago-2026): la pantalla de login tambien dice
