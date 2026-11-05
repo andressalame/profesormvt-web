@@ -15,24 +15,24 @@ const eq = (t, a, b) => (JSON.stringify(a) === JSON.stringify(b)) ? ok(t + " · 
 
 console.log("── 1. Control positivo: la Batuta gratis ──");
 const base = M.limitesDePacks({}, null);
-eq("sin packs", { a: base.alumnos, p: base.profes, i: base.ia, m: base.monto }, { a: 30, p: 1, i: 5, m: 0 });
+eq("sin packs", { a: base.alumnos, p: base.profes, i: base.ia, m: base.monto }, { a: 33, p: 1, i: 5, m: 0 });
 
 console.log("\n── 2. Los precios del 7-set (packs a la mitad) se cobran tal cual ──");
 const casos = [
-  [{ alum_200: 1 }, 25, 230, 1, 5],
-  [{ alum_500_v2: 1 }, 49, 530, 1, 5],
-  [{ alum_1000_v2: 1 }, 89, 1030, 1, 5],
-  [{ profes_5_v2: 1 }, 29, 30, 6, 5],
-  [{ profes_20_v2: 1 }, 59, 30, 21, 5],
-  [{ ia_500: 1 }, 29, 30, 1, 505],
-  [{ ia_5000: 1 }, 229, 30, 1, 5005],
+  [{ alum_200: 1 }, 25, 233, 1, 5],
+  [{ alum_500_v2: 1 }, 49, 533, 1, 5],
+  [{ alum_1000_v2: 1 }, 89, 1033, 1, 5],
+  [{ profes_5_v2: 1 }, 29, 33, 6, 5],
+  [{ profes_20_v2: 1 }, 59, 33, 21, 5],
+  [{ ia_500: 1 }, 29, 33, 1, 505],
+  [{ ia_5000: 1 }, 229, 33, 1, 5005],
   /* claves legado: quien las tuviera sigue pagando el precio de entonces */
-  [{ alum_100: 1 }, 29, 130, 1, 5],
-  [{ alum_300: 1 }, 59, 330, 1, 5],
-  [{ alum_1000: 1 }, 129, 1030, 1, 5],
-  [{ profes_5: 1 }, 49, 30, 6, 5],
-  [{ profes_20: 1 }, 99, 30, 21, 5],
-  [{ alum_500: 4, profes_5: 2, ia_3000: 1 }, 199 * 4 + 49 * 2 + 169, 2030, 11, 3005]  // el trato de Elevate, con claves legado
+  [{ alum_100: 1 }, 29, 133, 1, 5],
+  [{ alum_300: 1 }, 59, 333, 1, 5],
+  [{ alum_1000: 1 }, 129, 1033, 1, 5],
+  [{ profes_5: 1 }, 49, 33, 6, 5],
+  [{ profes_20: 1 }, 99, 33, 21, 5],
+  [{ alum_500: 4, profes_5: 2, ia_3000: 1 }, 199 * 4 + 49 * 2 + 169, 2033, 11, 3005]  // el trato de Elevate, con claves legado
 ];
 for (const [p, m, a, pr, i] of casos){
   const l = M.limitesDePacks(p, null);
@@ -42,11 +42,11 @@ for (const [p, m, a, pr, i] of casos){
 console.log("\n── 3. La cortesía suma capacidad y NO cobra ──");
 const cort = M.limitesDePacks({}, { alum_500: 4, profes_5: 2, ia_3000: 1 });
 eq("solo cortesía (el caso Elevate)", { a: cort.alumnos, p: cort.profes, i: cort.ia, m: cort.monto },
-   { a: 2030, p: 11, i: 3005, m: 0 });
+   { a: 2033, p: 11, i: 3005, m: 0 });
 eq("y no aparece en la factura", cort.items.length, 0);
 const mix = M.limitesDePacks({ alum_100: 1 }, { alum_500: 1 });
 eq("comprado + cortesía: capacidad suma, cobro solo lo comprado",
-   { a: mix.alumnos, m: mix.monto, items: mix.items.length }, { a: 630, m: 29, items: 1 });
+   { a: mix.alumnos, m: mix.monto, items: mix.items.length }, { a: 633, m: 29, items: 1 });
 
 console.log("\n── 4. Basura en la bolsa no cobra de más ──");
 for (const [b, m] of [[{ no_existe: 3 }, 0], [{ alum_100: "abc" }, 0], [{ alum_100: -5 }, 0],

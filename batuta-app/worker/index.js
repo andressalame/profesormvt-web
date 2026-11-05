@@ -360,14 +360,14 @@ function webJsonDe(cfg){
    `config.packs_cortesia`, con la MISMA forma, que suma límites pero NO cobra:
    ahí viven los planes viejos migrados y los tratos especiales (Elevate).
    ═══════════════════════════════════════════════════════════════════════════ */
-const BASE_LIMITES = { alumnos: 30, profes: 1, ia: 5 };   // 30 desde el 5-nov-2026 (antes 20)
+const BASE_LIMITES = { alumnos: 33, profes: 1, ia: 5 };   // 33 desde el 5-nov-2026 (30 por la mañana, 20 antes)
 /* 7-set-2026 · PACKS A LA MITAD (decisión de Andrés del 6-set, nota «Batuta - packs baratos»):
    alumnos e IA a la mitad por unidad, profesores +5 S/49 · +20 S/99. Los packs viejos se
    quedan como LEGADO: no se venden (el POST /t/packs los rechaza) pero siguen sumando
    capacidad, porque la cortesía de Elevate, MVT, Park Kids, Rodasli y Julio los nombra
    por su clave vieja. Todo texto que nombre un precio sale de aquí (textoPacks / packChico),
    nunca escrito a mano: `memoria: leccion-el-hueco-de-precio-no-calla-niega`. */
-/* 5-nov-2026 · PRECIOS NUEVOS (aprobados por Andrés, nota «Competencia Kumaly»): gratis 30 alumnos;
+/* 5-nov-2026 · PRECIOS NUEVOS (aprobados por Andrés, nota «Competencia Kumaly»): gratis 30 alumnos (luego 33, mismo día);
    alumnos +200 S/25 · +500 S/49 · +1,000 S/89; profesores +5 S/29 · +20 S/59; IA sin cambio.
    Nadie tenía packs pagados ni suscripción en MP al migrar (medido 5-nov). Los packs de antes quedan
    como LEGADO por si una cortesía los nombra; `alum_500` (+500 S/199) es legado, por eso el +500 nuevo
@@ -8452,6 +8452,9 @@ async function sedesDeTenant(env, tid){
    cada una su marca. Y la marca que se guarda es la que el cliente VIO, no "ahora":
    si entra un pago entre que se pinta la lista y se marca leído, no se pierde. */
 const NOVEDADES = [
+  { id: "2026-11-05-33-alumnos", fecha: "2026-11-05",
+    titulo: "Tu Batuta gratis ahora llega a 33 alumnos",
+    texto: "El tope de la Batuta gratis sube de 30 a 33 alumnos activos. Los packs no cambian: alumnos +200 por S/25, +500 por S/49, +1,000 por S/89; profesores +5 por S/29, +20 por S/59. Si ya tenías capacidad extra, la conservas igual." },
   { id: "2026-11-05-precios-nuevos", fecha: "2026-11-05",
     titulo: "Batuta gratis ahora llega a 30 alumnos, y los packs bajan",
     texto: "Tu Batuta gratis incluye 30 alumnos activos (antes 20). Alumnos: +200 por S/25, +500 por S/49, +1,000 por S/89. Profesores: +5 por S/29, +20 por S/59. El asistente con IA no cambia. Si ya tenías capacidad extra, la conservas igual." },
