@@ -1,0 +1,83 @@
+---
+/*
+  Herramienta privada de Andrés (6-nov-2026): arma el enlace de la tarjeta de regalo.
+  Todo ocurre en el navegador, no envía datos a ningún servidor. NO está enlazada desde
+  ninguna página pública ni en el sitemap. No es secreta (solo genera enlaces).
+*/
+import Layout from '../../../../layouts/Layout.astro';
+---
+
+<Layout
+  title="Crear tarjeta | ProfesorMVT"
+  description="Herramienta interna."
+  noindex={true}
+  privada={true}
+  calendarOnly={true}
+>
+  <main class="cr">
+    <div class="cr-caja">
+      <h1>Crear tarjeta de regalo</h1>
+      <p class="cr-nota">Solo para Andrés. Anota primero el código en la lista y confirma el pago antes de enviar el enlace.</p>
+      <form id="f" autocomplete="off">
+        <label>Para (quien recibe)<input name="para" maxlength="40" required /></label>
+        <label>De (quien regala, opcional)<input name="de" maxlength="40" /></label>
+        <label>Mensaje (opcional)<textarea name="msg" maxlength="140" rows="3"></textarea><small id="cuenta">0 / 140</small></label>
+        <label>Paquete
+          <select name="plan"><option value="esencial">Plan Esencial · 4 clases</option><option value="intensivo">Plan Intensivo · 8 clases</option></select>
+        </label>
+        <label>Código (lo escribes tú, por ejemplo RC-0042)<input name="cod" maxlength="14" required pattern="[A-Za-z0-9][A-Za-z0-9\-]{2,13}" /></label>
+      </form>
+      <div id="sal" hidden>
+        <label>Enlace listo<textarea id="url" rows="4" readonly></textarea></label>
+        <div class="cr-bot">
+          <button id="copiar" class="btn" type="button">Copiar enlace</button>
+          <a id="abrir" class="btn btn-ghost" href="#" target="_blank" rel="noopener">Ver tarjeta</a>
+        </div>
+        <p id="av" class="cr-nota" role="status"></p>
+      </div>
+    </div>
+  </main>
+</Layout>
+
+<script is:inline>
+(function () {
+  var f = document.getElementById('f'), sal = document.getElementById('sal'), url = document.getElementById('url');
+  function limpia(s, max) {
+    s = String(s || '').replace(/[\u0000-\u001F\u007F-\u009F​-‏‪-‮⁦-⁩﻿]/g, ' ').replace(/\s+/g, ' ').trim();
+    return Array.from(s).slice(0, max).join('').trim();
+  }
+  function arma() {
+    var d = new FormData(f);
+    var para = limpia(d.get('para'), 40), de = limpia(d.get('de'), 40), msg = limpia(d.get('msg'), 140);
+    var cod = limpia(d.get('cod'), 14).toUpperCase();
+    document.getElementById('cuenta').textContent = Array.from(String(d.get('msg') || '')).length + ' / 140';
+    if (!para || !/^[A-Z0-9][A-Z0-9-]{2,13}$/.test(cod)) { sal.hidden = true; return; }
+    var u = new URL('/regala-canto/tarjeta/', location.origin);
+    u.searchParams.set('para', para);
+    if (de) u.searchParams.set('de', de);
+    if (msg) u.searchParams.set('msg', msg);
+    u.searchParams.set('plan', d.get('plan') === 'intensivo' ? 'intensivo' : 'esencial');
+    u.searchParams.set('cod', cod);
+    url.value = u.href; document.getElementById('abrir').href = u.href; sal.hidden = false;
+  }
+  f.addEventListener('input', arma); f.addEventListener('change', arma);
+  document.getElementById('copiar').addEventListener('click', function () {
+    var av = document.getElementById('av');
+    function ok() { av.textContent = 'Copiado.'; }
+    function no() { url.select(); av.textContent = 'Selecciona el texto y cópialo.'; }
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(url.value).then(ok, no); else no();
+  });
+})();
+</script>
+
+<style>
+  .cr{min-height:100vh;display:grid;place-items:start center;padding:clamp(20px,5vw,56px) 16px;background:var(--fondo);}
+  .cr-caja{width:100%;max-width:520px;display:grid;gap:16px;}
+  .cr h1{font-family:var(--display);font-size:1.8rem;margin:0;}
+  .cr label{display:grid;gap:6px;font-size:.92rem;}
+  .cr form{display:grid;gap:16px;}
+  .cr input,.cr textarea,.cr select{font:inherit;color:var(--texto);background:var(--lamina);border:1px solid var(--linea-fuerte);border-radius:0;padding:10px 12px;width:100%;box-sizing:border-box;}
+  .cr small,.cr-nota{color:var(--texto-2);font-size:.88rem;margin:0;}
+  .cr-bot{display:flex;flex-wrap:wrap;gap:12px;margin-top:12px;}
+  .cr [hidden]{display:none;}
+</style>

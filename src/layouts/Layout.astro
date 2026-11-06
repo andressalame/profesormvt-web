@@ -22,6 +22,8 @@ export interface Props {
   noindex?: boolean;
   /** Texto alternativo de la imagen que se ve al compartir el enlace. */
   imageAlt?: string;
+  /** true = sin Meta Pixel ni referrer (páginas con datos personales en la URL). */
+  privada?: boolean;
 }
 
 const {
@@ -35,6 +37,7 @@ const {
   extraSchema,
   noindex = false,
   imageAlt = 'ProfesorMVT: clases de canto y composición para adultos en Lima',
+  privada = false,
 } = Astro.props;
 
 // URL canónica: debe coincidir EXACTO con la URL servida y la del sitemap (con
@@ -131,7 +134,8 @@ const baseSchema = { "@context":"https://schema.org", "@graph":[localBusinessSch
   <link rel="canonical" href={canonicalURL} />
   <meta name="robots" content={noindex ? 'noindex, follow' : 'index, follow'} />
 
-  <!-- Meta Pixel Code (is:inline: Astro NO debe empaquetar/diferir el pixel, o no
+  {privada && <meta name="referrer" content="no-referrer" />}
+  {!privada && <Fragment set:html={`  <!-- Meta Pixel Code (is:inline: Astro NO debe empaquetar/diferir el pixel, o no
        trackea confiable; debe ir inline en el head como en la home standalone) -->
   <script is:inline>
     !function(f,b,e,v,n,t,s)
@@ -147,7 +151,7 @@ const baseSchema = { "@context":"https://schema.org", "@graph":[localBusinessSch
   </script>
   <noscript><img height="1" width="1" style="display:none"
     src="https://www.facebook.com/tr?id=1281275673536185&ev=PageView&noscript=1"/></noscript>
-  <!-- End Meta Pixel Code -->
+  <!-- End Meta Pixel Code -->`} />}
 
   <!-- Open Graph -->
   <meta property="og:title" content={title} />

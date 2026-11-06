@@ -12,6 +12,6 @@ export default defineConfig({
   },
   integrations: [
     // /pagar es una pantalla de pago (noindex): no va en el sitemap.
-    sitemap({ filter: (page) => !page.includes('/pagar') }),
+    sitemap({ filter: (page) => !page.includes('/pagar') && !page.includes('/regala-canto/tarjeta') }),
   ],
 });
