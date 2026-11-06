@@ -1,0 +1,182 @@
+---
+/*
+  Tarjeta de regalo virtual (6-nov-2026). Página estática: no toca el worker ni los pagos.
+  Lee para, de, msg, plan y cod de la URL, los sanea y los pinta SOLO con textContent.
+  La validez NO la da esta página sino el código en la lista de Andrés. Sin analítica
+  (Layout privada = sin Meta Pixel) y sin enviar nada a ningún servidor.
+*/
+import Layout from '../../../layouts/Layout.astro';
+---
+
+<Layout
+  title="Tarjeta de regalo | ProfesorMVT"
+  description="Un regalo de clases 1 a 1 con ProfesorMVT."
+  noindex={true}
+  privada={true}
+  calendarOnly={true}
+>
+  <main class="tj">
+    <div class="tj-envoltura">
+      <article id="tarjeta" class="tj-tarjeta" hidden>
+        <svg class="tj-icono" viewBox="0 0 24 24" aria-hidden="true"><path id="ico" d="M4 10h16v10H4zM3 7h18v3H3zM12 7v13M12 7C9 7 8 3.5 10.5 3.5S12 7 12 7zm0 0c3 0 4-3.5 1.5-3.5S12 7 12 7z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="miter"/></svg>
+        <p class="tj-sello">ProfesorMVT</p>
+        <h1 id="titulo">Regalo de clases de canto</h1>
+        <p class="tj-sub">o de composición y teoría, a elección de quien lo recibe</p>
+        <hr />
+        <p class="tj-para"><span class="tj-et">Para</span> <b id="v-para"></b></p>
+        <p class="tj-msg" id="v-msg" hidden></p>
+        <p class="tj-de" id="v-de" hidden><span class="tj-et">De</span> <b id="v-de-n"></b></p>
+        <hr />
+        <p class="tj-paq"><b id="v-paq"></b> <span id="v-det"></span></p>
+        <p class="tj-cod"><span class="tj-et">Código</span> <b id="v-cod"></b></p>
+        <p class="tj-hasta">Canjeable hasta el 31 de marzo de 2027</p>
+        <p class="tj-canje">Para canjear escribe por WhatsApp con tu código.</p>
+        <p class="tj-legal">Las clases tienen 60 días de vigencia desde el canje. Se reprograma con 6 horas de aviso. El paquete no se devuelve en dinero. La tarjeta vale solo si el código figura en la lista de ProfesorMVT.</p>
+      </article>
+
+      <div id="acciones" class="tj-acciones" hidden>
+        <a id="wa" class="btn" href="https://wa.me/51989077928" target="_blank" rel="noopener">Canjear por WhatsApp</a>
+        <button id="bajar" class="btn btn-ghost" type="button">Descargar imagen</button>
+        <p id="aviso" class="tj-aviso" role="status"></p>
+      </div>
+
+      <section id="invalida" class="tj-invalida" hidden>
+        <h1>Esta tarjeta no se pudo abrir</h1>
+        <p>Al enlace le faltan datos o está incompleto. Pídele a quien te regaló que te lo envíe de nuevo, o escríbenos con tu código.</p>
+        <a class="btn" href="https://wa.me/51989077928?text=Hola!%20no%20pude%20abrir%20mi%20tarjeta%20de%20regalo" target="_blank" rel="noopener">Escribir por WhatsApp</a>
+      </section>
+    </div>
+  </main>
+</Layout>
+
+<script is:inline>
+(function () {
+  var PLANES = {
+    esencial: { n: 'Plan Esencial', c: '4 clases de 1 hora' },
+    intensivo: { n: 'Plan Intensivo', c: '8 clases de 1 hora' }
+  };
+  // Limpia: quita controles y marcas bidireccionales, junta espacios y recorta.
+  function limpia(s, max) {
+    s = String(s == null ? '' : s)
+      .replace(/[\u0000-\u001F\u007F-\u009F​-‏‪-‮⁦-⁩﻿]/g, ' ')
+      .replace(/\s+/g, ' ').trim();
+    return Array.from(s).slice(0, max).join('').trim();
+  }
+  var q = new URLSearchParams(location.search);
+  var para = limpia(q.get('para'), 40);
+  var de = limpia(q.get('de'), 40);
+  var msg = limpia(q.get('msg'), 140);
+  var plan = limpia(q.get('plan'), 12).toLowerCase();
+  var cod = limpia(q.get('cod'), 14).toUpperCase();
+  var okCod = /^[A-Z0-9][A-Z0-9-]{2,13}$/.test(cod);
+  var P = Object.prototype.hasOwnProperty.call(PLANES, plan) ? PLANES[plan] : null;
+
+  var $ = function (id) { return document.getElementById(id); };
+  if (!para || !P || !okCod) { $('invalida').hidden = false; return; }
+
+  $('v-para').textContent = para;
+  if (msg) { $('v-msg').textContent = '“' + msg + '”'; $('v-msg').hidden = false; }
+  if (de) { $('v-de-n').textContent = de; $('v-de').hidden = false; }
+  $('v-paq').textContent = P.n;
+  $('v-det').textContent = P.c;
+  $('v-cod').textContent = cod;
+  $('wa').href = 'https://wa.me/51989077928?text=' + encodeURIComponent('Hola! quiero canjear mi tarjeta de regalo. Mi código es ' + cod);
+  $('tarjeta').hidden = false;
+  $('acciones').hidden = false;
+
+  // ---- PNG con canvas (1080 x 1350) ----
+  function envuelve(ctx, texto, ancho) {
+    var pal = texto.split(' '), lin = [], act = '';
+    pal.forEach(function (w) {
+      var t = act ? act + ' ' + w : w;
+      if (ctx.measureText(t).width > ancho && act) { lin.push(act); act = w; } else act = t;
+    });
+    if (act) lin.push(act);
+    return lin;
+  }
+  function dibuja() {
+    var W = 1080, H = 1350, c = document.createElement('canvas');
+    c.width = W; c.height = H;
+    var x = c.getContext('2d');
+    var cs = getComputedStyle(document.documentElement);
+    var COB = '#2F5AA0', PAP = '#E9E8DD', F = '"Shippori Mincho","Hiragino Mincho ProN",Georgia,serif';
+    x.fillStyle = COB; x.fillRect(0, 0, W, H);
+    x.strokeStyle = PAP; x.lineWidth = 3; x.strokeRect(48, 48, W - 96, H - 96);
+    x.fillStyle = PAP; x.strokeStyle = PAP; x.textAlign = 'center'; x.textBaseline = 'alphabetic';
+    var y = 150;
+    x.save(); x.translate(W / 2 - 40, y - 20); x.scale(3.33, 3.33); x.lineWidth = 1.4 / 1;
+    x.stroke(new Path2D($('ico').getAttribute('d'))); x.restore();
+    y += 100;
+    x.font = '500 26px ' + F; if ('letterSpacing' in x) x.letterSpacing = '6px';
+    x.fillText('PROFESORMVT', W / 2, y); if ('letterSpacing' in x) x.letterSpacing = '0px';
+    y += 90; x.font = '800 66px ' + F; x.fillText('Regalo de clases de canto', W / 2, y);
+    y += 46; x.font = '400 27px ' + F; x.fillText('o de composición y teoría, a elección de quien lo recibe', W / 2, y);
+    y += 60; x.fillRect(W / 2 - 60, y, 120, 2);
+    y += 80; x.font = '400 28px ' + F; x.fillText('Para', W / 2, y);
+    y += 62; x.font = '800 56px ' + F; x.fillText(para, W / 2, y);
+    if (msg) {
+      x.font = '400 34px ' + F;
+      var ls = envuelve(x, '“' + msg + '”', 800);
+      y += 30; ls.forEach(function (l) { y += 48; x.fillText(l, W / 2, y); });
+    }
+    if (de) { y += 56; x.font = '400 30px ' + F; x.fillText('De ' + de, W / 2, y); }
+    y += 56; x.fillRect(W / 2 - 60, y, 120, 2);
+    y += 70; x.font = '800 42px ' + F; x.fillText(P.n + ' · ' + P.c, W / 2, y);
+    y += 40; x.fillRect(W / 2 - 60, y, 120, 2); y += 90; x.font = '800 54px ' + F; if ('letterSpacing' in x) x.letterSpacing = '4px';
+    x.fillText(cod, W / 2, y); if ('letterSpacing' in x) x.letterSpacing = '0px';
+    y += 52; x.font = '400 28px ' + F; x.fillText('Canjeable hasta el 31 de marzo de 2027', W / 2, y);
+    y += 44; x.fillText('Para canjear escribe por WhatsApp al +51 989 077 928 con tu código.', W / 2, y);
+    x.font = '400 21px ' + F;
+    var lg = envuelve(x, 'Las clases tienen 60 días de vigencia desde el canje. Se reprograma con 6 horas de aviso. El paquete no se devuelve en dinero. La tarjeta vale solo si el código figura en la lista de ProfesorMVT.', 840);
+    var yl = H - 100 - (lg.length - 1) * 30;
+    lg.forEach(function (l, i) { x.fillText(l, W / 2, yl + i * 30); });
+    return c;
+  }
+  $('bajar').addEventListener('click', function () {
+    var av = $('aviso'); av.textContent = '';
+    try {
+      var go = (document.fonts && document.fonts.load)
+        ? Promise.all([document.fonts.load('800 40px "Shippori Mincho"'), document.fonts.load('400 40px "Shippori Mincho"')]).catch(function () {})
+        : Promise.resolve();
+      go.then(function () {
+        dibuja().toBlob(function (b) {
+          if (!b) { av.textContent = 'No se pudo crear la imagen. Haz una captura de pantalla de la tarjeta.'; return; }
+          var a = document.createElement('a');
+          a.href = URL.createObjectURL(b); a.download = 'tarjeta-regalo-' + cod + '.png';
+          document.body.appendChild(a); a.click(); a.remove();
+          setTimeout(function () { URL.revokeObjectURL(a.href); }, 4000);
+        }, 'image/png');
+      });
+    } catch (e) { av.textContent = 'No se pudo crear la imagen. Haz una captura de pantalla de la tarjeta.'; }
+  });
+})();
+</script>
+
+<style>
+  .tj{min-height:100vh;display:grid;place-items:start center;padding:clamp(20px,5vw,56px) 16px;background:var(--fondo);}
+  .tj-envoltura{width:100%;max-width:520px;}
+  .tj-tarjeta{background:#2F5AA0;color:#E9E8DD;outline:1px solid #E9E8DD;outline-offset:-12px;padding:44px 36px;text-align:center;}
+  .tj-tarjeta[hidden],.tj [hidden]{display:none;}
+  .tj-icono{width:44px;height:44px;color:#E9E8DD;}
+  .tj-sello{font-size:.74rem;letter-spacing:.3em;text-transform:uppercase;margin:10px 0 18px;}
+  .tj-tarjeta h1{color:#E9E8DD;font-family:var(--display);font-weight:800;font-size:clamp(1.7rem,7vw,2.2rem);line-height:1.1;margin:0 0 8px;}
+  .tj-sub{margin:0;font-size:.92rem;opacity:.9;}
+  .tj-tarjeta hr{border:0;height:2px;width:56px;background:#E9E8DD;margin:22px auto;}
+  .tj-et{display:block;font-size:.82rem;letter-spacing:.12em;text-transform:uppercase;opacity:.85;}
+  .tj-para b{display:block;font-family:var(--display);font-size:clamp(1.6rem,7vw,2rem);line-height:1.15;overflow-wrap:anywhere;}
+  .tj-msg{font-size:1.08rem;line-height:1.45;margin:14px 0 0;overflow-wrap:anywhere;}
+  .tj-de{margin:16px 0 0;}
+  .tj-de b{font-size:1.1rem;overflow-wrap:anywhere;}
+  .tj-paq{margin:0 0 14px;font-size:1.1rem;}
+  .tj-paq b,.tj-paq span{display:block;}
+  .tj-cod b{display:block;font-family:var(--display);font-size:1.7rem;letter-spacing:.14em;}
+  .tj-hasta{margin:16px 0 4px;font-size:.95rem;}
+  .tj-canje{margin:0 0 20px;font-size:.95rem;}
+  .tj-legal{margin:0;font-size:.74rem;line-height:1.5;opacity:.85;}
+  .tj-acciones{display:flex;flex-wrap:wrap;gap:12px;margin-top:20px;}
+  .tj-acciones .btn{flex:1 1 200px;text-align:center;justify-content:center;}
+  .tj-aviso{flex-basis:100%;margin:0;font-size:.9rem;color:var(--texto-2);}
+  .tj-invalida{background:var(--lamina);border:1px solid var(--linea-fuerte);padding:32px 24px;}
+  .tj-invalida h1{font-family:var(--display);font-size:1.7rem;margin:0 0 .5em;}
+  .tj-invalida p{margin:0 0 18px;color:var(--texto-2);}
+</style>

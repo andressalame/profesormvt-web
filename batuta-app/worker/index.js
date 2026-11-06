@@ -1886,9 +1886,22 @@ function atribuirPases(lista, paqMap, eventos, reprogTotal){
        Empate: se respeta el orden de siempre (empezado primero, luego el que vence antes). */
     if (candidatos.length > 1){
       const universal = (e) => !((e.tipos || []).length);
-      const cabeEn = (e, o) => universal(o) || (e.tipos || []).every(t => (o.tipos || []).includes(t));
+      /* 3-nov-2026: un plan universal (sin tipos) NO cabe dentro de uno específico. `[].every()` da
+         true y el universal pasaba por «contenido», o sea que el de Coro nunca se gastaba antes. */
+      const cabeEn = (e, o) => universal(o) || (!universal(e) && (e.tipos || []).every(t => (o.tipos || []).includes(t)));
       const contenido = (e) => !universal(e) && candidatos.some(o => o !== e && cabeEn(e, o) && !cabeEn(o, e));
+      /* 3-nov-2026 (José/Elevate, audio de las 9:34 PM): lo de «Mat primero» vale para TODAS las
+         clases que ambos planes cubren (Barré, Yoga, Fuerza, Cardio HIIT, Pilates Mat), no solo
+         Pilates Mat. Antes dependía de contar tipos o de que uno cupiera dentro del otro: si el
+         plan de Pilates de una alumna cubría tantos tipos como el de Mat (o más sin contenerlo),
+         Barré o Yoga salían del plan de Pilates. Regla explícita y primera: el plan que ABRE las
+         máquinas (cubre «Máquinas» o sirve para todo) se conserva; se gasta antes el que no las
+         abre. Una clase de Máquinas nunca llega acá con un plan de Mat (paqueteCubre ya lo
+         descarta), y entre planes que abren todos las máquinas esta llave no decide nada. */
+      const abreMaquinas = (e) => universal(e) || (e.tipos || []).some(t => /maquina/.test(normPaqNombre(t)));
       candidatos = candidatos.slice().sort((x, y) => {
+        const mx = abreMaquinas(x) ? 1 : 0, my = abreMaquinas(y) ? 1 : 0;
+        if (mx !== my) return mx - my;
         const cx = contenido(x) ? 0 : 1, cy = contenido(y) ? 0 : 1;
         if (cx !== cy) return cx - cy;
         const nx = universal(x) ? 9999 : (x.tipos || []).length;
