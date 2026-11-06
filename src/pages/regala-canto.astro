@@ -3,15 +3,15 @@
   Regala canto (borrador 5-nov-2026, rama regala-canto-5nov, SIN publicar).
   Página estática: no toca el worker ni los pagos. El certificado se pide por WhatsApp
   y Andrés envía el enlace de pago y el certificado a mano. Precios = los vigentes
-  (Paquete 4 = S/320, Paquete 8 = S/580). Sin descuento, sin clase de prueba, sin piano.
+  (Plan Esencial (4 clases) = S/320, Plan Intensivo (8 clases) = S/580). Sin descuento, sin clase de prueba, sin piano.
 */
 import Layout from '../layouts/Layout.astro';
 
 const wa = (t: string) => 'https://wa.me/51989077928?text=' + encodeURIComponent(t);
 const regalos = [
-  { n: 'Esencial', clases: '4 clases de 1 hora', precio: 320, det: 'Para empezar con calma: una por semana durante un mes.',
+  { n: 'Plan Esencial', clases: '4 clases de 1 hora', precio: 320, det: 'Para empezar con calma: una por semana durante un mes.',
     msg: 'Hola! quiero regalar el paquete de 4 clases (S/320)' },
-  { n: 'Intensivo', clases: '8 clases de 1 hora', precio: 580, det: 'Dos por semana. Para quien ya quiere ver avance.',
+  { n: 'Plan Intensivo', clases: '8 clases de 1 hora', precio: 580, det: 'Dos por semana. Para quien ya quiere ver avance.',
     msg: 'Hola! quiero regalar el paquete de 8 clases (S/580)' },
 ];
 ---
@@ -62,7 +62,7 @@ const regalos = [
           <li><b>Me escribes por WhatsApp</b> con el paquete y el nombre de quien lo recibe.</li>
           <li><b>Pagas</b> con el enlace de pago que te envío.</li>
           <li><b>Recibes el certificado</b> en PDF, con su nombre y un mensaje tuyo, para imprimir o reenviar.</li>
-          <li><b>La persona me escribe</b> para canjearlo y agenda su primera clase. El diagnóstico va incluido en esa primera clase.</li>
+          <li><b>La persona me escribe</b> para canjearlo, a más tardar el 31 de marzo de 2027, y agenda su primera clase. El diagnóstico va incluido en esa primera clase.</li>
         </ol>
       </div>
     </section>
@@ -71,10 +71,9 @@ const regalos = [
       <div class="container-narrow">
         <h2>Lo que conviene saber</h2>
         <ul>
-          <li>Las clases tienen <b>60 días de vigencia desde el canje</b>, no desde la compra.</li>
+          <li>El certificado se puede canjear <b>hasta el 31 de marzo de 2027</b>. Desde el canje, las clases tienen <b>60 días de vigencia</b>.</li>
           <li>Se reprograma con 6 horas de aviso, como en cualquier paquete. Mira las <a href="/politicas/">políticas</a>.</li>
-          <li>El certificado es para <b>mayores de 18 años</b>. No hace falta que tenga experiencia.</li>
-          <li>No se devuelve en efectivo. Sí se puede pasar a otra persona.</li>
+          <li>El paquete no se devuelve en dinero, como todos los paquetes.</li>
         </ul>
         <p class="rg-cierre">¿Dudas antes de regalar? <a href={wa('Hola! tengo una duda sobre Regala canto')} target="_blank" rel="noopener">Escríbeme</a>.</p>
       </div>
