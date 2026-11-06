@@ -20,7 +20,9 @@ t("80% dispara alumnos e IA", a.map(x => x.fam).join(",") === "alumnos,ia", JSON
 t("alumnos recomienda +200 por S/25", a[0] && a[0].pack_id === "alum_200" && a[0].precio === 25);
 t("IA recomienda 500 por S/29", a[1] && a[1].pack_id === "ia_500" && a[1].precio === 29);
 a = M.alertasPacksDe({ alumnos: 20, profes: 1, ia: 5 }, { alumnos: 20, profes: 1, ia: 5 });
-t("un profesor ocupa el 100% y recomienda +5 por S/29",
+t("un profesor solo no recibe aviso de profesores", !a.some(x => x.fam === "profes"));
+a = M.alertasPacksDe({ alumnos: 20, profes: 5, ia: 5 }, { alumnos: 20, profes: 5, ia: 5 });
+t("un profesor solo NO dispara pack de profesores; con equipo (5 de 5) sí +5 por S/29",
   a.some(x => x.fam === "profes" && x.pack_id === "profes_5_v2" && x.precio === 29));
 t("no alerta por un tope de cortesía enorme al 7%",
   M.alertasPacksDe({ alumnos: 75, profes: 7, ia: 0 }, { alumnos: 2020, profes: 11, ia: 3005 }).length === 0);

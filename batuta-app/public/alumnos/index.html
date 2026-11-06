@@ -661,7 +661,7 @@
 
       <div class="card empty-state hidden" id="iVacio">
         <span class="pill amber">Bienvenido</span>
-        <h2 style="margin-top:12px;">¡Tu cuenta está lista! 🤘</h2>
+        <h2 style="margin-top:12px;">¡Tu cuenta está lista!</h2>
         <p>Este es tu portal: acá manejas tus clases, pagos y material. Para arrancar son 3 pasos:</p>
         <ol class="onb-steps">
           <li><b>1 · Compra tu paquete.</b> <span id="txtOnbPaso1">Elige canto, piano o composición (o combínalos).</span> Con tarjeta se activa al instante; con Yape, Plin o transferencia el mismo día.</li>
@@ -669,17 +669,6 @@
           <li><b>3 · Aprende y avanza.</b> Aquí verás tus clases restantes, tu tarea de la semana y el material exclusivo.</li>
         </ol>
         <a class="btn full" href="#comprar">Comprar mi primer paquete →</a>
-        <div class="onb-guide">
-          <div class="onb-h">// Cómo moverte por el portal</div>
-          <ul>
-            <li><b>Inicio</b> — tu plan, clases restantes y horarios de un vistazo.</li>
-            <li><b>Mis clases</b> — tu historial y la tarea de la semana.</li>
-            <li><b>Recursos</b> — PDFs y audios (se desbloquean al activar tu paquete).</li>
-            <li><b>Comprar</b> — paquetes y renovaciones.</li>
-            <li><b>Beneficios</b> — tus convenios, y trae un amigo para ganar <span id="txtOnbRef">S/50</span>.</li>
-            <li><b>Mi cuenta</b> — tus datos y sesión.</li>
-          </ul>
-        </div>
       </div>
 
       <div class="card hidden" id="iCalWrap">
@@ -3213,7 +3202,7 @@ function cargarMe(){
         vc.appendChild(bt);
       }
     } catch(e){}
-    if(!tourVisto()) setTimeout(function(){ try{ startTour(); }catch(e){} }, 800);
+    /* 6-nov-2026: el recorrido ya no salta solo; queda el botón "Ver el tour del portal" en Mi cuenta. */
   }).catch(function(e){
     // Academia inactiva (trial vencido): NO cerrar sesión en loop; mostrar el motivo real.
     if(e.status===402 || e.code==="trial_vencido"){

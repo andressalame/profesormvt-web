@@ -1358,7 +1358,7 @@ p.hint[style*="font-size"]{font-size:13px!important;}
         a la derecha el mes y las próximas clases. En celular la columna derecha baja al final. -->
    <div class="hoy-layout">
    <div class="hoy-main">
-    <div class="card ia-banner" id="iaBanner">
+    <div class="card ia-banner hidden" id="iaBanner" hidden>
       <div class="ia-ico" aria-hidden="true">✨</div>
       <div class="ia-txt"><b>Configura tu academia fácilmente hablando con ChatGPT o Claude</b>
         <span>Te hace unas preguntas y deja listos tus cursos, paquetes, horarios, cupos, reglas de cancelación y precios. Sin formularios.</span></div>
@@ -2034,7 +2034,7 @@ p.hint[style*="font-size"]{font-size:13px!important;}
   </section>
 
   <section class="panel" id="panel-perfil">
-    <p class="hint quees"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg><b>Tu cuenta y tu plan de Batuta.</b> Acá cambias tu foto y tu nombre, subes o bajas de plan cuando quieras, y encuentras tu link para recomendar Batuta. Ojo: los datos de tu ACADEMIA (logo, clases, precios, cobros) están en <b><a href="#" data-ira="ajustes">Ajustes</a></b>.</p>
+    <p class="hint quees"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg><b>Tu cuenta y tu plan de Batuta.</b> Acá cambias tu foto y tu nombre, y encuentras tu link para recomendar Batuta. Ojo: los datos de tu ACADEMIA (logo, clases, precios, cobros) están en <b><a href="#" data-ira="ajustes">Ajustes</a></b>.</p>
     <div class="group">
       <h2>Tu perfil</h2>
       <p class="hint">Tu nombre y foto aparecen en el menú y, más adelante, en el portal de tus alumnos. Es la cara de tu academia.</p>
@@ -13037,6 +13037,11 @@ el("btnImpConfirmar").addEventListener("click",function(){
          había metido las filas en db.alumnos en memoria, y si no se guardaron no pueden quedar
          ahí colgadas — mucho menos en la demo, que es justo lo que no debe conservarlas. */
       if(e && e.servidor && e.message){ alert(e.message); IMP_ROWS=[]; recargar().catch(function(){}); }
+      else if(e && e.paywall){
+        /* 6-nov-2026 · el 402 del tope ya mostró su aviso (avisoTope) con el motivo real; decir además
+           "revisa tu conexión" era falso. Las filas no se guardaron: se recarga desde el servidor. */
+        IMP_ROWS=[]; recargar().catch(function(){});
+      }
       else {
         /* 🐛 12-ago-2026: el .finally vaciaba IMP_ROWS SIEMPRE, también al fallar. El toast
            decía "intenta de nuevo", José volvía a apretar Importar y el handler encontraba
@@ -13345,13 +13350,14 @@ function packsPintarUso(){
   ];
   cont.innerHTML=filas.map(function(f){
     var pct=f.max?Math.min(100,Math.round(f.usa*100/f.max)):0;
-    return '<div class="pu'+(f.usa>=f.max?' lleno':'')+'"><b>'+f.usa+' de '+f.max+'</b><span>'+f.t+(f.mes?' este mes':'')+'</span><i><em style="width:'+pct+'%"></em></i></div>';
+    return '<div class="pu'+((f.usa>=f.max&&!(f.t==="Profesores"&&f.max<=1))?' lleno':'')+'"><b>'+f.usa+' de '+f.max+'</b><span>'+f.t+(f.mes?' este mes':'')+'</span><i><em style="width:'+pct+'%"></em></i></div>';
   }).join("");
 }
 function packsPintarAlertas(alertas){
   var cont=el("packsAlertas"); if(!cont) return;
   cont.innerHTML=(alertas||[]).map(function(a){
-    return '<div class="pack-alerta"><div><b>Ya usas '+a.uso+' de '+a.tope+'.</b> Para seguir sumando '+({alumnos:'alumnos',profes:'profesores',ia:'conversaciones del asistente'}[a.fam]||'capacidad')+', el pack que mejor calza es <b>'+esc(a.pack)+' por S/'+a.precio+'</b>.</div>'+
+    var q=a.uso>a.tope?('Tienes '+a.uso+' de '+a.tope+' '+({alumnos:'alumnos activos',profes:'profesores',ia:'conversaciones del asistente'}[a.fam]||'capacidad')+'. Lo que ya creaste sigue igual; solo se bloquea dar de alta más.'):a.uso===a.tope?('Llegaste a '+a.uso+' de '+a.tope+' '+({alumnos:'alumnos activos',profes:'profesores',ia:'conversaciones del asistente'}[a.fam]||'capacidad')+'. Lo que ya creaste sigue igual; para dar de alta más, agrega un pack.'):('Usas '+a.uso+' de '+a.tope+' '+({alumnos:'alumnos activos',profes:'profesores',ia:'conversaciones del asistente'}[a.fam]||'capacidad')+'. Te quedan '+(a.tope-a.uso)+'.');
+    return '<div class="pack-alerta"><div><b>'+q+'</b> El pack que mejor calza es <b>'+esc(a.pack)+' por S/'+a.precio+'</b>.</div>'+
       '<button class="btn ghost sm" type="button" data-pack-recomendado="'+esc(a.pack_id)+'">Ver packs</button></div>';
   }).join("");
   Array.prototype.forEach.call(cont.querySelectorAll("[data-pack-recomendado]"),function(b){
@@ -14678,7 +14684,7 @@ function wzPintar(){
       var exist=wzClasesExistentes();
       WZ.marcadas={};
       exist.forEach(function(c){ WZ.marcadas[c]=true; });
-      if(!exist.length) WZ.sugeridas.forEach(function(c){ WZ.marcadas[c]=true; });
+      if(!exist.length && WZ.sugeridas.length) WZ.marcadas[WZ.sugeridas[0]]=true;   // una sola de entrada: un solo precio que pedir
       wzIr(2);
     };
   }

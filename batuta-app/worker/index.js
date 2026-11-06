@@ -420,6 +420,7 @@ function alertasPacksDe(uso, limites){
     const usados = Math.max(0, Number((uso || {})[fam]) || 0);
     const tope = Math.max(0, Number((limites || {})[fam]) || 0);
     if (!tope || usados < Math.ceil(tope * 0.8)) continue;
+    if (fam === "profes" && usados <= 1) continue;   // quien trabaja sola no necesita un pack de profesores
     const faltan = Math.max(1, tope - usados + 1);
     const disponibles = packsEnVenta(fam);
     const pack = disponibles.find(p => p.suma >= faltan) || disponibles[disponibles.length - 1];
@@ -553,6 +554,25 @@ async function totalAlumnosDe(env, tenantId){
     ).bind(tenantId, hoy, desde.slice(0, 10), desde).first();
     return Number(r && r.n) || 0;
   } catch (e) { return 0; }
+}
+/* 6-nov-2026 · El tope gratis cuenta alumnos ACTIVOS (plan vigente o clase en 60 días), nunca fichas.
+   Una ficha nueva sin pago ni vigencia (un cuaderno de gente por atender) todavía no es activa y no
+   cuenta contra el tope: antes se contaba como activa y 36 fichas pendientes daban un falso
+   «llegaste al tope» con 3 activos. Pura y sin base de datos para poder probarla con 32, 33 y 34. */
+function fichasNuevasQueCuentan(alumnos, existentes, hoy){
+  let n = 0;
+  for (const a of (Array.isArray(alumnos) ? alumnos : [])){
+    if (a && a.id && existentes && existentes.has(a.id)) continue;      // la que ya estaba nunca topa
+    const pagado = String((a && a.pago) || "").trim().toLowerCase() === "pagado";
+    const vigente = String((a && a.vence) || "") >= String(hoy || "") && String((a && a.vence) || "") !== "";
+    if (pagado || vigente) n++;
+  }
+  return n;
+}
+/* Solo se bloquea el ALTA de nuevos: pasa el tope únicamente si los activos de hoy más los nuevos que
+   cuentan superan el cupo. Estar ya por encima del tope nunca bloquea guardar lo que ya existe. */
+function altaPasaElTope(activosHoy, nuevasQueCuentan, tope){
+  return nuevasQueCuentan > 0 && (Number(activosHoy) || 0) + nuevasQueCuentan > (Number(tope) || 0);
 }
 /* El vencido (suscripción caída) baja al cupo base, no se queda con lo que compró. */
 async function convCapDe(env, tenantId, vencido, plan){
@@ -7315,19 +7335,7 @@ function paginaRegistro(googleOn){
       "<label>Nombre de tu academia</label><input id=\"academia\" required>" +
       "<label>Tu nombre</label><input id=\"nombre\" required>" +
       "<label>Email</label><input id=\"email\" type=\"email\" required>" +
-      "<label>WhatsApp</label><input id=\"whatsapp\" placeholder=\"51987654321\" required>" +
-      "<label>¿Qué enseñas?</label>" +
-      "<select id=\"rubro\" required style=\"width:100%;background:var(--campo);border:1px solid var(--linea-campo);border-radius:8px;padding:11px 12px;color:var(--texto);font-family:inherit;font-size:15px\">" +
-        "<option value=\"\" disabled selected>Elige tu rubro</option>" +
-        "<option>Música</option><option>Idiomas</option><option>Danza</option><option>Refuerzo escolar</option><option>Ajedrez</option><option>Arte</option><option>Deporte</option><option>Otro</option>" +
-      "</select>" +
-      "<label>¿Cuántos alumnos tienes hoy?</label>" +
-      "<select id=\"tam\" required style=\"width:100%;background:var(--campo);border:1px solid var(--linea-campo);border-radius:8px;padding:11px 12px;color:var(--texto);font-family:inherit;font-size:15px\">" +
-        "<option value=\"\" disabled selected>Elige un rango</option>" +
-        "<option>Recién empiezo</option><option>1-10</option><option>11-30</option><option>31-80</option><option>Más de 80</option>" +
-      "</select>" +
-      "<label>Contraseña</label><input id=\"pass\" type=\"password\" required>" +
-      "<label>Repite tu contraseña</label><input id=\"pass2\" type=\"password\" required>" +
+      "<label>Contraseña (mínimo 8 caracteres)</label><input id=\"pass\" type=\"password\" minlength=\"8\" autocomplete=\"new-password\" required>" +
       "<button type=\"submit\">Empezar gratis</button>" +
       "<div class=\"err\" id=\"err\"></div>" +
     "</form>" +
@@ -7352,7 +7360,7 @@ function paginaRegistro(googleOn){
     "if(!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(em))return;" +
     "if(em===abandonoEmail)return;" +
     "abandonoEmail=em;" +
-    "navigator.sendBeacon('/app/api/registro-abandono',JSON.stringify({email:em,whatsapp:document.getElementById('whatsapp').value.trim(),rubro:document.getElementById('rubro').value,fuente:fuente}));" +
+    "navigator.sendBeacon('/app/api/registro-abandono',JSON.stringify({email:em,whatsapp:'',rubro:'',fuente:fuente}));" +
     "}catch(e){}}" +
     "document.addEventListener('visibilitychange',function(){if(document.visibilityState==='hidden')beaconAbandono();});" +
     "window.addEventListener('pagehide',beaconAbandono);" +
@@ -7364,14 +7372,9 @@ function paginaRegistro(googleOn){
     "var academia=document.getElementById('academia').value.trim();" +
     "var nombre=document.getElementById('nombre').value.trim();" +
     "var email=document.getElementById('email').value.trim();" +
-    "var whatsapp=document.getElementById('whatsapp').value.trim();" +
-    "var rubro=document.getElementById('rubro').value;" +
-    "var tam=document.getElementById('tam').value;" +
     "var pass=document.getElementById('pass').value;" +
-    "var pass2=document.getElementById('pass2').value;" +
-    "if(pass!==pass2){err.textContent='Las contraseñas no coinciden.'; btn.disabled=false; regEnviado=false; return;}" +
     "try{" +
-    "var r=await fetch('/app/api/t/registro',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({academia:academia,nombre:nombre,email:email,whatsapp:whatsapp,pass:pass,rubro:rubro,tam:tam,fuente:fuente,ref:refc,plan:planReg})});" +
+    "var r=await fetch('/app/api/t/registro',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({academia:academia,nombre:nombre,email:email,pass:pass,fuente:fuente,ref:refc,plan:planReg})});" +
     "var d=await r.json();" +
     "if(!r.ok){err.textContent=d.error||'No se pudo crear tu cuenta.'; btn.disabled=false; regEnviado=false; return;}" +
     "localStorage.setItem('batuta_t', d.token);" +
@@ -7384,7 +7387,7 @@ function paginaRegistro(googleOn){
     "location.href='/app/panel';" +
     "}catch(ex){err.textContent='Error de conexión. Intenta de nuevo.'; btn.disabled=false; regEnviado=false;}" +
     "});";
-  return paginaBase("Crea tu academia — Batuta", cuerpo, script);
+  return paginaBase("Crea tu academia — Batuta", cuerpo, script, { css: ".card,input,select,button,.pill,.gbtn{border-radius:0!important}" });
 }
 
 const GOOGLE_BTN_CSS =
@@ -20644,15 +20647,14 @@ export default {
             const totActual = await totalAlumnosDe(env, tid);
             /* 7-set-2026: como el tope cuenta activos, lo que topa es activos + fichas NUEVAS
                (ids que no existían). Guardar lo que ya estaba nunca se bloquea. */
-            const nuevas = body.alumnos.filter(a => !a || !a.id || !prev.has(a.id)).length;
-            const totNuevo = totActual + nuevas;
-            if (nuevas > 0 && totNuevo > capAl){
+            const nuevas = fichasNuevasQueCuentan(body.alumnos, prev, hoyLima());
+            if (altaPasaElTope(totActual, nuevas, capAl)){
               /* "un pack" la primera vez, "otro pack" si ya compró: se decide por lo que tiene,
                  no por un plan que ya no existe. */
               const yaTienePacks = Object.keys((await packsDe(env, tid)).comprados || {}).length > 0;
               const msgCap = yaTienePacks
-                ? "Tu Batuta llega hasta " + capAl + " alumnos activos. Agrega otro pack en Perfil > Tu Batuta (" + textoPacks("alumnos", ", ") + " al mes)."
-                : "Tu Batuta llega hasta " + capAl + " alumnos activos. Agrega un pack de " + packChico("alumnos").nombre + " (S/" + packChico("alumnos").precio + " al mes) en Perfil > Tu Batuta y sigues creciendo hoy mismo.";
+                ? "Tienes " + totActual + " alumnos activos y tu Batuta llega hasta " + capAl + ". Lo que ya creaste sigue igual. Para dar de alta más, agrega otro pack en Mi academia > Mi cuenta y mi plan (" + textoPacks("alumnos", ", ") + " al mes)."
+                : "Tienes " + totActual + " alumnos activos y tu Batuta gratis llega hasta " + capAl + ". Lo que ya creaste sigue igual. Para dar de alta más, agrega un pack de " + packChico("alumnos").nombre + " (S/" + packChico("alumnos").precio + " al mes) en Mi academia > Mi cuenta y mi plan y sigues hoy mismo.";
               return json({ error: msgCap, upgrade: true, cap: capAl }, 402);
             }
           }
