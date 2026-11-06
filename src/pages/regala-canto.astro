@@ -9,7 +9,7 @@ import Layout from '../layouts/Layout.astro';
 
 const wa = (t: string) => 'https://wa.me/51989077928?text=' + encodeURIComponent(t);
 const regalos = [
-  { n: 'Plan Esencial', clases: '4 clases de 1 hora', precio: 320, det: 'Para empezar con calma: una por semana durante un mes.',
+  { n: 'Plan Esencial', clases: '4 clases de 1 hora', precio: 320, det: 'Para empezar con calma, una por semana durante un mes.',
     msg: 'Hola! quiero regalar el paquete de 4 clases (S/320)' },
   { n: 'Plan Intensivo', clases: '8 clases de 1 hora', precio: 580, det: 'Dos por semana. Para quien ya quiere ver avance.',
     msg: 'Hola! quiero regalar el paquete de 8 clases (S/580)' },
@@ -75,7 +75,7 @@ const regalos = [
           <li>Se reprograma con 6 horas de aviso, como en cualquier paquete. Mira las <a href="/politicas/">políticas</a>.</li>
           <li>El paquete no se devuelve en dinero, como todos los paquetes.</li>
         </ul>
-        <p class="rg-cierre">¿Dudas antes de regalar? <a href={wa('Hola! tengo una duda sobre Regala canto')} target="_blank" rel="noopener">Escríbeme</a>.</p>
+        <p class="rg-cierre">Si tienes dudas antes de regalar, <a href={wa('Hola! tengo una duda sobre Regala canto')} target="_blank" rel="noopener">escríbeme</a>.</p>
       </div>
     </section>
   </main>
