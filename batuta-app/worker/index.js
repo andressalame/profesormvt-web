@@ -116,7 +116,12 @@ function parsePaquetes(valor){
        "no aplica a promociones especiales"). Sin esto, la promo de temporada se lleva encima
        el descuento del amigo y el premio del que refiere, y el plan se vende bajo costo. */
     const sr = !!(p && p.sr);
-    map[n] = { clases: c, reprog: r, ilim: u, tipos: t, dias: d, inicio: i, oculto: o, congela: g, congelaBloques: gb, sinRef: sr };
+    /* ri = 1 -> reprogramaciones ILIMITADAS en este plan (6-nov-2026, pedido de José/Elevate:
+       quien compra el plan cambia de horario cuantas veces quiera mientras esté vigente).
+       Bandera APARTE de `r`: el 0 de `r` sigue sin ser ilimitado y ningún valor existente
+       cambia de significado. No quita el aviso mínimo ni la vigencia (ver reprogLimite). */
+    const ri = !!(p && p.ri);
+    map[n] = { clases: c, reprog: r, ilim: u, tipos: t, dias: d, inicio: i, oculto: o, congela: g, congelaBloques: gb, sinRef: sr, reprogIlim: ri };
     list.push(n);
     /* Tope de 20 planes por academia. 11-ago-2026: antes esto era un `break` MUDO — la
        academia con 25 planes guardaba 20 y los otros 5 desaparecian sin que nadie se
@@ -1689,7 +1694,8 @@ function compute(alumno, regs, precios, reservasUsadas, pk){
     else if (r.estado === "Reprogramó") reprogramo++;
     else if (r.estado === "Falta") falta++;
   }
-  const exceso = Math.max(0, reprogramo - pk.reprog);
+  /* plan con reprogramaciones ilimitadas: nunca hay exceso (reprogramar no consume clase) */
+  const exceso = pk.reprogIlim ? 0 : Math.max(0, reprogramo - pk.reprog);
   /* Saldo migrado (28-jul-2026): clases que el alumno YA habia consumido en el sistema del
      que viene la academia (Punchpass y compania). Se guarda como "usadas de arranque" y no
      como historial falso: asi el saldo sale bien sin inventar clases dictadas que ensucien
@@ -1710,7 +1716,7 @@ function compute(alumno, regs, precios, reservasUsadas, pk){
   if (pk.ilim){
     return { compradas: null, ilim: true, usadas, restantes: 9999, bonus, pendientesCerrar: ru.pendientes,
       reprogPermitidas: pk.reprog, reprogUsadas: reprogramo,
-      reprogRestantes: pk.reprog ? Math.max(0, pk.reprog - reprogramo) : 9999,
+      reprogRestantes: (pk.reprog && !pk.reprogIlim) ? Math.max(0, pk.reprog - reprogramo) : 9999,
       saldo: 9999, monto };
   }
   const saldo = pk.clases + bonus - usadas;
@@ -1741,7 +1747,7 @@ function compute(alumno, regs, precios, reservasUsadas, pk){
     vence: (alumno && alumno.vence) || "",
     reprogPermitidas: pk.reprog,
     reprogUsadas: reprogramo,
-    reprogRestantes: Math.max(0, pk.reprog - reprogramo),
+    reprogRestantes: pk.reprogIlim ? 9999 : Math.max(0, pk.reprog - reprogramo),
     saldo: muerto ? 0 : saldo,
     /* El plan del alumno ya no está en el catálogo (renombrado o borrado). Sin esto el panel
        le muestra un 0/0 mudo, que es exactamente lo que hizo que el bug del 20-ago (9 alumnas
@@ -1918,13 +1924,15 @@ function atribuirPases(lista, paqMap, eventos, reprogTotal){
   };
   for (const ev of eventos) cobrar(ev.tipo, !!ev.futuro, ev.cuando, true);
   const permitidas = est.reduce((s, e) => s + (e.pk.reprog || 0), 0);
-  const exceso = Math.max(0, (Number(reprogTotal) || 0) - permitidas);
+  /* si algún pase del alumno tiene reprogramaciones ilimitadas, no hay exceso que cobrar */
+  const reprogIlim = est.some(e => e.pk && e.pk.reprogIlim);
+  const exceso = reprogIlim ? 0 : Math.max(0, (Number(reprogTotal) || 0) - permitidas);
   /* el exceso de reprogramaciones consume saldo pero NO es una clase: no entra en el detalle */
   for (let i = 0; i < exceso; i++) cobrar("", false, "", false);
   for (const e of est){
     e.restantes = e.vencido ? 0 : (e.ilim ? 9999 : Math.max(0, (e.compradas || 0) - e.usadas));
   }
-  return { pases: est, reprogPermitidas: permitidas, cargos };
+  return { pases: est, reprogPermitidas: permitidas, reprogIlim, cargos };
 }
 /* ¿Con qué puede reservar ESTE tipo de clase? Devuelve el detalle para dar el error justo. */
 function multiParaTipo(cm, tipo){
@@ -2041,6 +2049,24 @@ function conReprogPortal(c, nPortal){
     reprogUsadas: usadas,
     reprogRestantes: (c.reprogRestantes === 9999) ? 9999 : Math.max(0, permit - usadas)
   });
+}
+/* ─── Tope de cambios de horario de UN plan (6-nov-2026) ───────────────────────
+   Una sola función decide cuántos cambios tiene el alumno, para el candado del portal y
+   para quien lo pruebe. `r` (cuota) NO cambia de significado: 0 sigue sin ser «ilimitado»
+   (ahí el candado del portal no cuenta, como siempre). Lo ilimitado es la bandera `ri` del
+   plan, y solo vale MIENTRAS el plan esté vigente: vencido o caducado, no hay más cambios.
+   El aviso mínimo antes de la clase NO se mira acá: lo sigue haciendo el endpoint. */
+function reprogLimite(pk, alumno, usadas){
+  const cuota = Number(pk && pk.reprog) || 0;
+  const ilimitada = !!(pk && pk.reprogIlim);
+  const vencido = venceVencido(alumno && alumno.vence) || !!(alumno && Number(alumno.caducado));
+  if (ilimitada){
+    return vencido
+      ? { ilimitada, cuota, bloquea: true, motivo: "vencido" }
+      : { ilimitada, cuota, bloquea: false, motivo: "" };
+  }
+  const bloquea = cuota > 0 && (Number(usadas) || 0) >= cuota;
+  return { ilimitada, cuota, bloquea, motivo: bloquea ? "cuota" : "" };
 }
 /* ─── ¿Quedó sobregirado tras reservar? (22-ago-2026) ─────────────────────────
    El cupo de la sala ya tenía re-verificación optimista tras el INSERT, pero el
@@ -2214,7 +2240,7 @@ async function computeMulti(env, tid, alumno, paqMap, precios, excluirReservaId,
     vence: (alumno && alumno.vence) || "",
     reprogPermitidas: at.reprogPermitidas,
     reprogUsadas: reprogTotal,
-    reprogRestantes: Math.max(0, at.reprogPermitidas - reprogTotal),
+    reprogRestantes: at.reprogIlim ? 9999 : Math.max(0, at.reprogPermitidas - reprogTotal),
     saldo: restantes,
     monto: precios && precios[alumno.paquete] != null ? precios[alumno.paquete] : 0
   };
@@ -11144,6 +11170,7 @@ function apiSerializarPaquetes(parsed){
     const out = { n: n, c: p.clases, r: p.reprog, u: p.ilim, t: p.tipos || [], d: p.dias || 0, i: p.inicio || "compra" };
     if (p.oculto) out.o = 1;
     if (p.sinRef) out.sr = 1;
+    if (p.reprogIlim) out.ri = 1;   // reprogramaciones ilimitadas (6-nov-2026)
     if (p.congela !== null && p.congela !== undefined) out.g = p.congela;
     if (p.congelaBloques !== 2) out.gb = p.congelaBloques;
     return out;
@@ -18041,7 +18068,7 @@ export default {
         const r = await env.DB.prepare("SELECT * FROM reservas WHERE id = ?1 AND tenant_id = ?2").bind(String(b.id || ""), tid).first();
         if (!r || r.alumno_id !== cu.alumno_id) return json({ error: "No encuentro esa clase." }, 404);
         if (r.estado !== "reservada") return json({ error: "Esa clase ya no se puede cancelar." }, 400);
-        const alCancel = await env.DB.prepare("SELECT ciclo, paquete FROM alumnos WHERE id = ?1 AND tenant_id = ?2").bind(cu.alumno_id, tid).first();
+        const alCancel = await env.DB.prepare("SELECT ciclo, paquete, vence, caducado FROM alumnos WHERE id = ?1 AND tenant_id = ?2").bind(cu.alumno_id, tid).first();
         const cfgCancel = await loadConfig(env, tid).catch(() => ({}));
         const rcfgB = reprogCfg(cfgCancel);
         if (!rcfgB.activo){
@@ -18072,7 +18099,13 @@ export default {
         const cicloCancel = Number(alCancel && alCancel.ciclo) || 1;
         const pkCancel = resolverPk((await loadPaquetes(env, tid)).map, (alCancel && alCancel.paquete) || "");
         const cuotaCancel = Number(pkCancel && pkCancel.reprog) || 0;
-        if (cuotaCancel > 0 && !tardio){
+        if (pkCancel && pkCancel.reprogIlim && !tardio){
+          /* plan con cambios ilimitados (Elevate, 6-nov-2026): no hay tope, pero SOLO mientras el plan vive */
+          if (reprogLimite(pkCancel, alCancel, 0).bloquea){
+            return json({ error: "Tu plan ya venció, así que no puedes cambiar de horario. Escríbele a tu profesor para renovarlo.",
+              plan_vencido: true }, 403);
+          }
+        } else if (cuotaCancel > 0 && !tardio){
           const yaPortal = await reprogPortalDe(env, tid, cu.alumno_id, cicloCancel);
           const { results: regsCancel } = await env.DB.prepare(SQL_REGS_CICLO).bind(tid, cu.alumno_id, cicloCancel).all();
           const yaDueno = (regsCancel || []).filter(g => g.estado === "Reprogramó").length;
@@ -21229,6 +21262,18 @@ export default {
               /* paquetes por tenant: valida el JSON y lo reescribe canónico (o "" = usa el default) */
               if (k === "paquetes"){
                 const parsed = parsePaquetes(valor);
+                /* 6-nov-2026 · `ri` (reprogramaciones ilimitadas) lo pone soporte, no hay casilla en el
+                   panel: el panel reenvía el catálogo SIN esa bandera y borraría el beneficio en el primer
+                   guardado de Ajustes (mismo modo de fallar que `o`/`g`/`gb` el 11-ago). Se conserva por
+                   nombre de plan salvo que el envío la traiga explícita. */
+                if (parsed){
+                  let crudo = []; try { crudo = JSON.parse(valor); } catch (e) {}
+                  const sinClave = new Set((Array.isArray(crudo) ? crudo : []).filter(x => x && !("ri" in x)).map(x => String(x.n || "").trim().slice(0, 40)));
+                  const antesP = await loadPaquetes(env, tid).catch(() => null);
+                  if (antesP && antesP.map) for (const n of parsed.list){
+                    if (sinClave.has(n) && antesP.map[n] && antesP.map[n].reprogIlim) parsed.map[n].reprogIlim = true;
+                  }
+                }
                 /* 🐛 11-ago-2026: este reescribe canónico se COMÍA tres campos que sí se leen en
                    el resto del worker — `o` (plan oculto), `g` (días de congelamiento) y `gb`
                    (en cuántos bloques se parte). Son justo las perillas que salieron de la
@@ -21242,6 +21287,7 @@ export default {
                   const out = { n: n, c: p.clases, r: p.reprog, u: p.ilim, t: p.tipos || [], d: p.dias || 0, i: p.inicio || "compra" };
                   if (p.oculto) out.o = 1;
                   if (p.sinRef) out.sr = 1;   // fuera del programa de referidos (15-ago-2026)
+                  if (p.reprogIlim) out.ri = 1;   // reprogramaciones ilimitadas (6-nov-2026)
                   if (p.congela !== null && p.congela !== undefined) out.g = p.congela;
                   if (p.congelaBloques !== 2) out.gb = p.congelaBloques;
                   return out;
